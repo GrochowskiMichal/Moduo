@@ -89,7 +89,6 @@
         --destructive: oklch(0.66 0.22 25);
         --warning: oklch(0.82 0.15 75);
         --info: oklch(0.7 0.14 230);
-        --ai: oklch(0.71 0.2 350);
 
         --font-ui: Geist, Inter, system-ui, -apple-system, sans-serif;
         --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -676,14 +675,57 @@
         justify-self: start;
         display: inline-flex;
         align-items: center;
-        gap: 0.5625rem;
-        font-size: 1.1875rem;
-        font-weight: 600;
-        letter-spacing: -0.03em;
+        color: var(--foreground);
       }
-      .brand .mark {
-        width: 1.875rem;
-        height: 1.875rem;
+      /* The lockup artwork (brand brief §5): two layers on the same viewBox, so the mark
+         can reveal itself and the wordmark can arrive on their own. */
+      .lockup {
+        position: relative;
+        display: block;
+        width: 6.1208rem;
+        height: 1.375rem;
+      }
+      .mk-l {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        fill: currentColor;
+        overflow: visible;
+      }
+      .mk-w {
+        transition:
+          opacity var(--motion-slow) var(--ease-out),
+          filter var(--motion-slow) var(--ease-out);
+      }
+      /* First visit (set before paint in <head>): the mark reveals itself out of nothing,
+         then the wordmark arrives (brief §10). The script runs the slide, then drops these. */
+      .mk-rv {
+        display: none;
+      }
+      .mk-intro .brand .mk-rv {
+        display: inline;
+        opacity: 0;
+      }
+      .mk-intro .brand .mk-m {
+        visibility: hidden;
+      }
+      .mk-intro .brand .mk-w {
+        opacity: 0;
+        filter: blur(var(--blur-veil));
+      }
+      .mk-intro.mk-word-in .brand .mk-w {
+        opacity: 1;
+        filter: none;
+      }
+      /* Reduced motion: no slide; the finished lockup fades in */
+      .mk-fade .brand .lockup {
+        animation: mk-fade var(--motion-fade) var(--ease-out) both;
+      }
+      @keyframes mk-fade {
+        from {
+          opacity: 0;
+        }
       }
       .nav-now {
         display: none;
@@ -1247,7 +1289,7 @@
       }
       /* The workspace takes shape as the apps arrive: faint outlines while they fly,
          then the real lines, fill and glow once everything has landed. Lines stay
-         solid and only their colour changes, so nothing switches style mid-way. */
+         solid and only their color changes, so nothing switches style mid-way. */
       .asm[data-state="on"] .ws,
       .asm.is-built .ws {
         opacity: 1;
@@ -1816,7 +1858,7 @@
         overflow: visible;
         pointer-events: none;
       }
-      /* Same line language as the story below: quiet grey threads, a small travelling pulse */
+      /* Same line language as the story below: quiet gray threads, a small traveling pulse */
       .ws-spine path {
         fill: none;
         stroke: var(--border-strong);
@@ -3109,7 +3151,7 @@
         font-size: clamp(1.125rem, 1.7vw, 1.375rem);
         text-wrap: balance;
       }
-      /* The grid centres items at their own width, which squeezed the form; give it the hero's width */
+      /* The grid centers items at their own width, which squeezed the form; give it the hero's width */
       .close .hero-cta {
         width: min(100%, 33rem);
       }
@@ -4911,7 +4953,7 @@
         color: var(--muted-foreground);
       }
       /* Native option lists: Windows draws them on a white system background unless the
-         options carry their own colours, and the font pill is see-through, so there's
+         options carry their own colors, and the font pill is see-through, so there's
          nothing to inherit. Both pickers follow whatever theme they sit in. */
       .dk-font option,
       .wb-sel option {
@@ -5773,7 +5815,7 @@
       }
 
       /* ─── v7 sections ───────────────────────────────────────────────────── */
-      /* Section heads are left-aligned and one colour everywhere but the close */
+      /* Section heads are left-aligned and one color everywhere but the close */
       .section-head .h-section {
         max-width: 22ch;
       }
@@ -6229,7 +6271,7 @@
       .yo-lead {
         color: var(--foreground);
       }
-      /* Inline-block keeps the pill on the sentence's baseline; the icon is centred on the
+      /* Inline-block keeps the pill on the sentence's baseline; the icon is centered on the
          text's optical middle (about a third of an em above the baseline) */
       .yo-pill {
         display: inline-block;
@@ -6804,8 +6846,16 @@
         grid-area: st;
         display: flex;
         flex-direction: column;
-        justify-content: space-between;
         gap: 2rem;
+      }
+      .ft-lockup {
+        display: block;
+        width: 6.1208rem;
+        height: 1.375rem;
+        fill: var(--foreground);
+      }
+      .ft-state .ft-lede {
+        margin-top: auto;
       }
       .ft-pr {
         grid-area: pr;
@@ -7345,11 +7395,6 @@
         }
         .nav-inner {
           gap: 0.75rem;
-        }
-      }
-      @media (max-width: 640px) {
-        .brand-name {
-          display: none;
         }
       }
       @media (max-width: 900px) {
@@ -8754,7 +8799,31 @@
       }
     </style>
     <script>
-      document.documentElement.classList.add("js");
+      (function () {
+        var r = document.documentElement;
+        var entry;
+        var again;
+        var inside;
+        r.classList.add("js");
+        // The mark reveals itself once, on a first visit (brand brief §10). Nothing is stored:
+        // it plays when you arrive from outside, and not on a reload, back or forward, a link
+        // to a section, or coming back from another page of the site.
+        try {
+          entry = performance.getEntriesByType("navigation")[0];
+          again = entry && (entry.type === "reload" || entry.type === "back_forward");
+          inside = document.referrer && new URL(document.referrer).origin === location.origin;
+          if (again || inside || location.hash) return;
+          if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
+            r.classList.add("mk-fade");
+            return;
+          }
+          r.classList.add("mk-intro");
+          // If the page script never starts the reveal, show the logo anyway.
+          setTimeout(function () {
+            if (!r.classList.contains("mk-run")) r.classList.remove("mk-intro");
+          }, 4000);
+        } catch (e) {}
+      })();
     </script>
     <!-- PostHog (EU cloud): landing analytics. Public project token, safe to ship. Skipped on localhost. -->
     <script>
@@ -8850,6 +8919,13 @@
             d="M621.122 228.124C634.336 227.102 647.241 232.464 655.842 242.551C665.755 254.176 665.755 279.231 665.755 329.34V363.215L746.907 282.348C782.394 246.985 800.138 229.303 815.367 228.125C828.58 227.103 841.485 232.465 850.087 242.552C859.999 254.177 860 279.232 860 329.341V472.45C860 482.617 860 487.701 858.849 492.483C857.829 496.723 856.147 500.776 853.864 504.491C851.289 508.681 847.688 512.268 840.488 519.443L641.582 717.653C606.095 753.016 588.351 770.698 573.122 771.876C559.909 772.898 547.004 767.535 538.403 757.449C528.49 745.824 528.489 720.769 528.489 670.66V637.249L653.561 512.616C661.367 504.838 665.755 494.268 665.755 483.245V363.679L540.684 488.312C532.878 496.091 528.489 506.661 528.489 517.683V636.785L447.338 717.653C411.85 753.016 394.106 770.697 378.878 771.875C365.664 772.897 352.759 767.534 344.158 757.448C334.245 745.823 334.245 720.769 334.245 670.66V636.785L253.093 717.653C217.606 753.016 199.862 770.698 184.633 771.876C171.42 772.898 158.515 767.535 149.913 757.449C140.001 745.824 140 720.769 140 670.66V527.551C140 517.385 140 512.3 141.151 507.518C142.171 503.278 143.853 499.226 146.136 495.511C148.711 491.32 152.312 487.732 159.512 480.557L358.418 282.348C393.905 246.985 411.649 229.303 426.878 228.125C440.091 227.103 452.996 232.465 461.597 242.552C471.51 254.177 471.511 279.232 471.511 329.341V363.214L552.662 282.347C588.15 246.984 605.894 229.302 621.122 228.124ZM346.439 487.848C338.633 495.627 334.245 506.197 334.245 517.219V636.785L459.316 512.152C467.122 504.373 471.511 493.804 471.511 482.781V363.214L346.439 487.848Z"
           />
         </symbol>
+        <!-- The lockup (brand/exports/svg/lockup-current.svg from the BRAND-1 masters) as its two
+             paths, so the nav can reveal the mark on its own. Use inside viewBox="271.18 225.36 2445.96 549.48". -->
+        <path id="mk-mark" fill-rule="evenodd" clip-rule="evenodd" d="M760.747 225.492C774.192 224.46 787.323 229.877 796.075 240.065C806.162 251.806 806.162 277.113 806.162 327.726V361.941L888.737 280.262C924.846 244.543 942.901 226.683 958.397 225.493C971.842 224.461 984.973 229.878 993.725 240.066C1003.81 251.808 1003.81 277.114 1003.81 327.727V472.274C1003.81 482.543 1003.81 487.678 1002.64 492.509C1001.6 496.791 999.892 500.884 997.569 504.637C994.949 508.869 991.285 512.492 983.959 519.739L781.566 719.941C745.456 755.66 727.401 773.52 711.905 774.71C698.46 775.742 685.329 770.325 676.577 760.137C666.49 748.396 666.49 723.089 666.49 672.476V638.729L793.754 512.844C801.697 504.987 806.162 494.311 806.162 483.178V362.41L678.898 488.296C670.955 496.153 666.49 506.828 666.49 517.962V638.26L583.915 719.941C547.806 755.66 529.751 773.519 514.255 774.708C500.81 775.741 487.679 770.324 478.927 760.136C468.84 748.394 468.84 723.088 468.84 672.476V638.26L386.265 719.941C350.156 755.66 332.101 773.52 316.605 774.71C303.16 775.742 290.029 770.325 281.277 760.137C271.19 748.396 271.189 723.089 271.189 672.476V527.929C271.189 517.66 271.19 512.525 272.36 507.694C273.398 503.412 275.11 499.319 277.433 495.566C280.053 491.334 283.717 487.709 291.043 480.462L493.436 280.262C529.546 244.543 547.601 226.683 563.097 225.493C576.542 224.461 589.673 229.878 598.425 240.066C608.512 251.808 608.512 277.114 608.512 327.727V361.94L691.087 280.26C727.196 244.542 745.251 226.682 760.747 225.492ZM481.248 487.827C473.305 495.684 468.84 506.36 468.84 517.493V638.26L596.104 512.375C604.047 504.518 608.512 493.842 608.512 482.709V361.94L481.248 487.827Z" />
+        <path id="mk-word" d="M1204.06 661.101V417.277H1261.11L1266.17 448.1C1273.22 436.445 1283.65 426.938 1297.45 419.577C1311.25 412.216 1327.2 408.536 1345.3 408.536C1361.86 408.536 1376.27 412.216 1388.54 419.577C1401.11 426.938 1410.78 437.519 1417.52 451.32C1424.27 439.052 1434.7 428.931 1448.81 420.957C1463.22 412.676 1479.78 408.536 1498.49 408.536C1523.64 408.536 1543.73 416.817 1558.76 433.378C1573.78 449.94 1581.3 472.175 1581.3 500.085V661.101H1510.45V503.765C1510.45 493.031 1507.38 484.597 1501.25 478.463C1495.42 472.022 1487.45 468.802 1477.33 468.802C1462.91 468.802 1451.11 473.096 1441.91 481.683C1432.7 489.964 1428.1 500.698 1428.1 513.886V661.101H1357.26V503.765C1357.26 493.031 1354.19 484.597 1348.06 478.463C1342.23 472.022 1334.25 468.802 1324.13 468.802C1309.72 468.802 1297.91 473.096 1288.71 481.683C1279.51 489.964 1274.91 500.698 1274.91 513.886V661.101H1204.06ZM1742.33 669.381C1716.26 669.381 1693.26 663.861 1673.33 652.82C1653.7 641.472 1638.52 625.83 1627.78 605.895C1617.35 585.653 1612.14 562.804 1612.14 537.348C1612.14 511.586 1617.66 489.044 1628.7 469.722C1639.74 450.093 1655.08 435.065 1674.71 424.637C1694.33 413.903 1716.88 408.536 1742.33 408.536C1768.4 408.536 1791.25 414.056 1810.88 425.098C1830.51 436.139 1845.69 451.473 1856.42 471.102C1867.16 490.424 1872.53 512.506 1872.53 537.348C1872.53 563.724 1867 586.88 1855.96 606.815C1844.92 626.751 1829.59 642.239 1809.96 653.28C1790.33 664.014 1767.79 669.381 1742.33 669.381ZM1742.33 610.036C1760.12 610.036 1774.38 603.442 1785.12 590.254C1795.85 577.066 1801.22 559.431 1801.22 537.348C1801.22 516.186 1795.85 499.318 1785.12 486.744C1774.38 474.169 1760.12 467.882 1742.33 467.882C1724.54 467.882 1710.28 474.169 1699.55 486.744C1688.81 499.318 1683.45 516.186 1683.45 537.348C1683.45 559.431 1688.81 577.066 1699.55 590.254C1710.28 603.442 1724.54 610.036 1742.33 610.036ZM2009.3 669.381C1987.22 669.381 1967.43 663.861 1949.95 652.82C1932.47 641.472 1918.67 625.83 1908.55 605.895C1898.73 585.96 1893.83 563.264 1893.83 537.809C1893.83 512.659 1898.58 490.271 1908.09 470.642C1917.9 451.013 1931.24 435.832 1948.11 425.098C1965.29 414.056 1984.61 408.536 2006.08 408.536C2021.72 408.536 2035.98 411.45 2048.86 417.277C2061.74 422.797 2072.32 430.618 2080.61 440.739V316.067H2151.45V661.101H2094.41L2088.43 621.997C2082.29 636.718 2072.32 648.373 2058.52 656.96C2044.72 665.241 2028.31 669.381 2009.3 669.381ZM2023.1 611.416C2039.97 611.416 2053.77 604.668 2064.5 591.174C2075.24 577.372 2080.61 559.584 2080.61 537.809C2080.61 516.953 2075.24 499.931 2064.5 486.744C2053.77 473.556 2039.97 466.962 2023.1 466.962C2006.23 466.962 1992.43 473.709 1981.7 487.204C1970.96 500.392 1965.59 517.567 1965.59 538.729C1965.59 560.197 1970.96 577.679 1981.7 591.174C1992.43 604.668 2006.23 611.416 2023.1 611.416ZM2284.76 669.381C2256.85 669.381 2234.92 661.101 2218.97 644.539C2203.02 627.977 2195.05 605.742 2195.05 577.832V417.277H2265.9V574.152C2265.9 584.58 2269.27 592.861 2276.02 598.995C2282.76 605.128 2291.97 608.195 2303.62 608.195C2317.73 608.195 2329.23 604.055 2338.12 595.774C2347.32 587.493 2351.92 576.759 2351.92 563.571V417.277H2422.77V661.101H2365.73L2360.21 627.517C2353.76 640.092 2343.8 650.213 2330.3 657.88C2316.81 665.548 2301.63 669.381 2284.76 669.381ZM2586.95 669.381C2560.88 669.381 2537.87 663.861 2517.94 652.82C2498.31 641.472 2483.13 625.83 2472.4 605.895C2461.97 585.653 2456.75 562.804 2456.75 537.348C2456.75 511.586 2462.27 489.044 2473.32 469.722C2484.36 450.093 2499.69 435.065 2519.32 424.637C2538.95 413.903 2561.49 408.536 2586.95 408.536C2613.02 408.536 2635.86 414.056 2655.49 425.098C2675.12 436.139 2690.3 451.473 2701.04 471.102C2711.77 490.424 2717.14 512.506 2717.14 537.348C2717.14 563.724 2711.62 586.88 2700.58 606.815C2689.54 626.751 2674.2 642.239 2654.57 653.28C2634.94 664.014 2612.4 669.381 2586.95 669.381ZM2586.95 610.036C2604.73 610.036 2619 603.442 2629.73 590.254C2640.46 577.066 2645.83 559.431 2645.83 537.348C2645.83 516.186 2640.46 499.318 2629.73 486.744C2619 474.169 2604.73 467.882 2586.95 467.882C2569.16 467.882 2554.9 474.169 2544.16 486.744C2533.43 499.318 2528.06 516.186 2528.06 537.348C2528.06 559.431 2533.43 577.066 2544.16 590.254C2554.9 603.442 2569.16 610.036 2586.95 610.036Z" />
+        <!-- One stroke of the mark (the middle one, in the mark's 1000 box). Three copies drawn by the
+             mark's own rule, (left ∪ right) XOR middle, are the reveal: stacked, they draw nothing. -->
+        <path id="mk-stroke" d="M334.245 527.551C334.245 517.385 334.245 512.3 335.395 507.518C336.415 503.278 338.097 499.226 340.38 495.511C342.956 491.32 346.557 487.732 353.756 480.557L552.663 282.348C588.149 246.985 605.894 229.303 621.122 228.125C634.336 227.103 647.24 232.465 655.841 242.552C665.755 254.177 665.755 279.232 665.755 329.341V472.45C665.755 482.617 665.755 487.701 664.605 492.483C663.584 496.723 661.903 500.776 659.62 504.491C657.044 508.681 653.443 512.268 646.244 519.443L447.337 717.653C411.851 753.016 394.106 770.698 378.877 771.876C365.664 772.898 352.76 767.535 344.158 757.449C334.245 745.824 334.245 720.769 334.245 670.66Z" />
         <symbol id="i-inbox" viewBox="0 0 24 24">
           <path d="M3.5 13.5h5l1.5 2.5h4l1.5-2.5h5" />
           <path d="M5.5 5h13l2 8.5V19a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1v-5.5z" />
@@ -9047,8 +9123,29 @@
         <span class="nav-light" aria-hidden="true"></span>
         <div class="nav-inner">
           <a class="brand" href="#top" aria-label="Moduo home">
-            <svg class="mark" aria-hidden="true"><use href="#mark" /></svg>
-            <span class="brand-name">moduo</span>
+            <span class="lockup" aria-hidden="true">
+              <svg class="mk-l" viewBox="271.18 225.36 2445.96 549.48" aria-hidden="true">
+                <use class="mk-m" href="#mk-mark" />
+                <!-- First visit only: the mark's reveal, in the mark's 1000 box mapped onto the lockup's mark -->
+                <g class="mk-rv" transform="matrix(1.017529 0 0 1.010049 128.735 -4.924)">
+                  <mask id="mk-rv-mid" maskUnits="userSpaceOnUse" x="-300" y="0" width="1600" height="1000">
+                    <rect x="-300" width="1600" height="1000" fill="#fff" />
+                    <use href="#mk-stroke" fill="#000" />
+                  </mask>
+                  <mask id="mk-rv-sides" maskUnits="userSpaceOnUse" x="-300" y="0" width="1600" height="1000">
+                    <rect x="-300" width="1600" height="1000" fill="#fff" />
+                    <use class="mk-rv-l" href="#mk-stroke" fill="#000" />
+                    <use class="mk-rv-r" href="#mk-stroke" fill="#000" />
+                  </mask>
+                  <g mask="url(#mk-rv-mid)">
+                    <use class="mk-rv-l" href="#mk-stroke" />
+                    <use class="mk-rv-r" href="#mk-stroke" />
+                  </g>
+                  <use href="#mk-stroke" mask="url(#mk-rv-sides)" />
+                </g>
+              </svg>
+              <svg class="mk-l mk-w" viewBox="271.18 225.36 2445.96 549.48" aria-hidden="true"><use href="#mk-word" /></svg>
+            </span>
           </a>
           <nav class="nav-links" aria-label="Sections">
             <a href="#story" data-nav="story">How it connects</a>
@@ -9979,7 +10076,8 @@
       <div class="ft-frame">
         <div class="ft-grid">
           <div class="ft-cell ft-state">
-            <h2 class="ft-h" id="ft-title">The last productivity app you’ll ever set&nbsp;up.</h2>
+            <svg class="ft-lockup" viewBox="271.18 225.36 2445.96 549.48" role="img" aria-label="Moduo"><use href="#mk-mark" /><use href="#mk-word" /></svg>
+            <h2 class="ft-h" id="ft-title">One window for the whole working&nbsp;life.</h2>
             <p class="ft-lede">
               Email, tasks, notes, calendar, contacts and chat in one connected workspace. Close the
               other nine tabs.
@@ -10231,6 +10329,56 @@
             document.documentElement.classList.add("is-ready");
           });
         });
+
+        // ── Brand: on a first visit the mark reveals itself out of nothing ──
+        // Three copies of one stroke are drawn by the mark's own rule, (left ∪ right) XOR
+        // middle, so stacked they draw nothing. The sides slide out one offset each and the
+        // mark appears; then the real lockup takes over. Once, with the hero; never loops.
+        (function () {
+          if (!root.classList.contains("mk-intro")) return;
+          root.classList.add("mk-run");
+          var group = nav.querySelector(".mk-rv");
+          var sides = nav.querySelectorAll(".mk-rv-l, .mk-rv-r");
+          var OFFSET = 194.2445; // between strokes, in the mark's 1000 box
+          var DUR = 800;
+          var bezier = function (x1, y1, x2, y2) {
+            var at = function (t, a, b) {
+              var u = 1 - t;
+              return 3 * u * u * t * a + 3 * u * t * t * b + t * t * t;
+            };
+            return function (p) {
+              var lo = 0;
+              var hi = 1;
+              var t = p;
+              var k;
+              for (k = 0; k < 24; k++) {
+                t = (lo + hi) / 2;
+                if (at(t, x1, x2) < p) lo = t;
+                else hi = t;
+              }
+              return at(t, y1, y2);
+            };
+          };
+          var ease = bezier(0.16, 1, 0.3, 1);
+          var t0 = 0;
+          var step = function (now) {
+            if (!t0) t0 = now;
+            var p = Math.min(1, (now - t0) / DUR);
+            var d = OFFSET * ease(p);
+            each(sides, function (el) {
+              el.setAttribute("transform", "translate(" + (el.classList.contains("mk-rv-l") ? -d : d) + " 0)");
+            });
+            // Edges that still coincide would antialias into a faint outline, so the first
+            // pixel of travel fades in.
+            group.style.opacity = Math.min(1, d / 24);
+            if (p > 0.4) root.classList.add("mk-word-in");
+            if (p < 1) requestAnimationFrame(step);
+            else root.classList.remove("mk-intro", "mk-run", "mk-word-in");
+          };
+          setTimeout(function () {
+            requestAnimationFrame(step);
+          }, 120);
+        })();
 
         // ── Palette: one search across every module ──
         var MOD = {
@@ -10967,7 +11115,7 @@
           });
         });
 
-        // One frame loop: edge geometry, labels, travelling pulses.
+        // One frame loop: edge geometry, labels, traveling pulses.
         var foundEl = $("rel-found");
         var found = 0;
         var inView = false;
@@ -13524,7 +13672,7 @@
           cells[ci] = cells[sw];
           cells[sw] = tmp;
         }
-        // Ten apps get a hand-placed scatter, positioned by each window's centre
+        // Ten apps get a hand-placed scatter, positioned by each window's center
         // so the pile sits around the middle of the mockup.
         var TEN = [
           [21, 23, -5],
@@ -14028,7 +14176,7 @@
             ay = ra.top - o.top;
             svg.setAttribute("viewBox", "0 0 " + o.width.toFixed(1) + " " + o.height.toFixed(1));
             // Each link gets its own shape: it leaves from its own spot on the card (fanned toward
-            // its target), lands off-centre, and bends asymmetrically. Seeded per pair, so it's stable.
+            // its target), lands off-center, and bends asymmetrically. Seeded per pair, so it's stable.
             var rels = REL[mod].slice().sort(function (m1, m2) {
               return byMod[m1].getBoundingClientRect().left - byMod[m2].getBoundingClientRect().left;
             });
@@ -14322,7 +14470,7 @@
       })();
     </script>
     <script>
-      // ── Analytics: behaviour the autocapture can't name. Never sends an email address. ──
+      // ── Analytics: behavior the autocapture can't name. Never sends an email address. ──
       (function () {
         "use strict";
         var track = window.mTrack;
