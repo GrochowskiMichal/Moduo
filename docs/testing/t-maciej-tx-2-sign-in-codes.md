@@ -38,4 +38,5 @@
 ## Known gaps / not-yet-testable
 - Nothing has run against Supabase Auth or Resend for real: the hook was exercised with signed fake requests and a fake Resend in `auth-email-hook/handler.test.ts`.
 - The "Confirm your address" invite link and how GoTrue redirects after it are verified from GoTrue's documented behaviour, not live.
+- The panel's reload case (Auth's "wait" opens the code step) is covered by unit tests that render the real panel, not by a live run: trying it live means sending real code emails through Hostinger's 30-an-hour cap. The reload item above covers it.
 - With the hook on, the code lifetime is whatever the dashboard says; the email and the screen say 10 minutes, so step 4 (600 s) must run before step 6.
