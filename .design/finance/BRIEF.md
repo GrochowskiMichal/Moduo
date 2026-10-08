@@ -1,6 +1,6 @@
 # Moduo — Finance (Midday-lite, CSV-first) Brief
 
-> **Status:** Planned — alpha. Founder's #1 personal pain; the all-in-one's commercial proof.
+> **Status:** ✖ **Not planned** (Maciej, 2026-10-07) — there is no finance module on the roadmap; not soon, possibly never. Kept for reference only: don't plan, design for, or cite it as upcoming work. *(Was: "Planned — alpha", then post-alpha from 2026-07-04.)*
 > **Pairs with:** [PRODUCT_BRIEF.md](../../docs/PRODUCT_BRIEF.md), [ROADMAP.md](../../docs/ROADMAP.md), [data-layers.md](../../docs/data-layers.md), [moduo-module-contract.md](../../docs/moduo-module-contract.md). Depends on Contacts (the spine proof), Email metadata (`email_refs`), and the revived Time-tracking engine.
 
 ## 1. What it is & the job-to-be-done

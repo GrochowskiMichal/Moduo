@@ -2,6 +2,25 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index.
 
+- **2026-10-08 · Tasks v2 calls answered: saved views are personal and synced; buckets get Archive, "Delete the tasks too" and a 30-day Recently deleted** (Maciej, answering the `/s1` open questions).
+  - **Saved views** ship in this wave (TV-U8). They're personal and sync across your devices (`task_views`, own rows). Sharing a view with the workspace comes later, on top of PERM sharing.
+  - **Buckets** can be archived: hidden everywhere, restorable any time. Deleting one asks whether to move its tasks to Inbox or delete them too, and anything deleted (tasks, buckets, files) stays in **Recently deleted** for 30 days.
+  - **Mike's rebuild** is the agent setup (Harness v2), not Tasks code, `runtime.web.ts`, migrations or the MCP function, so the Tasks blocks need no extra sequencing with him.
+
+  → [specs/tasks-v2.md](../../specs/tasks-v2.md)
+
+- **2026-10-07 · Tasks v2 planned: the team model, a personal Queue, Focus as a queue run** (`/s1` with Maciej + Mike, from the dogfood review).
+  - **Assignee:** one optional assignee (`tasks.assignee_id`, nullable = Unassigned); `owner_id` goes back to meaning the creator and becomes immutable. No multiple assignees — queue "claims" cover "who's on it".
+  - **Queue:** personal and not tied to a date (`task_queue`), replacing the workspace-wide `committed_for`. A task leaves every queue when it's done, archived or deleted.
+  - **Focus:** a *run* of your Queue. No Plan/Focus switch, pomodoro per run, `focus_runs` persisted, "In flight" for handed-off work.
+  - **Time:** recorded as append-only `task_time_entries`. These ops write no `module_activity` rows — the entry table is the attributed log.
+  - **Saves:** task edits send only the changed fields.
+  - **Live updates:** tasks get Supabase Realtime.
+  - **Migrations:** expand → migrate → contract, with shims for old desktop builds; cleanup in TV-D7.
+  - **Landing:** `maciej` only, not `develop`, until Maciej says otherwise.
+
+  → [specs/tasks-v2.md](../../specs/tasks-v2.md) · working notes: [.design/tasks-dogfood/REVIEW.md](../../.design/tasks-dogfood/REVIEW.md)
+
 - **2026-07-11 · DF-22: Tasks unifies to ONE app-level `DndContext`, but the Timeline deliberately keeps its own nested one.** The ratified scope was "one app-level DndContext; per-module contexts become `useDndMonitor` consumers." Applied to the List + Board (they now render as `dndMode="external"` monitor consumers so a center-pane task drag reaches the right-pane DF-8 hub → link). The **Timeline was left as a nested context** on purpose: its only dnd-kit draggable is the tray→axis chip, whose drop is pointer-derived and **requires `autoScroll={false}`** and a **keyboard-disabled** sensor — both genuinely conflict with the shared context the Board wants (autoScroll-on, sortable-keyboard), and the Timeline has no cross-pane drop target (bars are custom pointer engines, not dnd-kit). A nested context is isolated (the inner claims tray drags; the hub handler never sees them), so the Timeline is byte-for-byte unchanged and the tray→hub gesture is simply out of scope (marginal). The one shared collision (`appCollision`) must branch per surface to stay byte-for-byte: hub wins pointer-first over `link:*`, else **Board=`closestCorners`, Queue reorder=`closestCenter`, nest=`pointerFirstCollision`** — Queue must NOT use pointer-first (whole-row activator → off-center grabs make the dragged-rect-centre and the pointer diverge, changing the drop index). → `src/features/tasks/ui/tasks-plan-view.tsx`, `docs/gotchas.md §Drag-to-link`.
 
 - **2026-07-03 · Tasks TL-3 timeline dependency creation landed — Timeline view complete.** The connector-dot gesture (AC8) on top of TL-1's arrow rendering. Block decisions: **(a)** **cycle drops are silent no-ops like self/duplicate** — `resolveConnectorDrop` rejects them pre-flight (no highlight, no write, no modal; mid-gesture is no place for an error), while the List picker's explicit cycle toast stays; **(b)** **done bars offer no connector dot** — a completed task can never block (`blockedTaskIds` counts open blockers only), so the gesture would draw an arrow with zero effect and no lock: an inert-affordance trap; **(c)** **connector drops re-hit-test at release**, not from move-time state (the TL-2 wheel-scroll lesson generalizes to every pointer-resolved target), and the browser's follow-up click is swallowed one-shot so no connector gesture doubles as a selection; **(d)** the gesture is pointerId-filtered with second-press teardown (multi-touch can't leak document listeners or ghost-commit), and its Escape cancel runs capture-first + consumes the key so it never also dismisses an open overlay; **(e)** beside-the-bar label clusters are drop targets too (`data-timeline-drop` on both; `data-timeline-bar` stays unique per task for e2e); **(f)** within-view dependency **removal** stays in the detail panel at v1, per spec. → [specs/tasks-timeline.md](../../specs/tasks-timeline.md)

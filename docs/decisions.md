@@ -166,6 +166,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Data layer, Supabase, contracts → [decisions/data.md](decisions/data.md)
 
+- 2026-10-07 · Attachments are attachments-only, private, and pooled per workspace owner; HEIC converts only where the app can read it.
 - 2026-10-08 · Deployed Edge Functions must match `supabase/functions/`, checked by `bun run functions:reconcile`; the Stripe Sync Engine's three functions are the only allowed exceptions.
 - 2026-10-01 · Profile pictures and workspace marks live in the public `avatars` bucket.
 - 2026-08-30 · ZE-11 — hosted Edge Functions now run the Zod parsers.
@@ -179,6 +180,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Spine: links, activity, notifications, inbox → [decisions/spine.md](decisions/spine.md)
 
+- 2026-10-08 · One reference grammar: `@` mentions anything, `#` is tags, `/` is commands; `#tag` inside text is a link and never applies the tag.
 - 2026-07-13 · DF-21 (Universal Inbox — spine lane) /s1 PLANNED — spec DoR-ready, 6 sub-blocks, no code yet.
 - 2026-07-13 · DF-9 notification-generation trigger APPLIED TO PROD
 - 2026-07-12 · DF-19f-notif (held Notifications toggles sub-slice) landed
@@ -196,6 +198,8 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Tasks and Timeline → [decisions/tasks.md](decisions/tasks.md)
 
+- 2026-10-08 · Tasks v2 calls answered: saved views are personal and synced; buckets get Archive, "Delete the tasks too" and a 30-day Recently deleted.
+- 2026-10-07 · Tasks v2 planned: one optional assignee, a personal Queue not tied to a date, Focus as a run of your Queue, time entries and live updates.
 - 2026-07-11 · DF-22: Tasks unifies to ONE app-level `DndContext`, but the Timeline deliberately keeps its own nested one.
 - 2026-07-03 · Tasks TL-3 timeline dependency creation landed — Timeline view complete.
 - 2026-07-03 · Tasks TL-2 timeline drag interactions landed.
@@ -206,6 +210,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Design system and UI → [decisions/design-system.md](decisions/design-system.md)
 
+- 2026-10-07 · A state layer of tokens; selection becomes tint-only (R5 rewrite lands in DS-2).
 - 2026-08-14 · DF-18 (eyebrow / detail-title / toolbar standardization) landed
 - 2026-07-27 · The app accent is MONOCHROME by default; hues are opt-in; pre-workspace surfaces are always monochrome
 - 2026-07-27 · Onboarding is ONE screen, on the design system
@@ -219,6 +224,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Product scope, alpha, settings, cross-cutting fixes → [decisions/product.md](decisions/product.md)
 
+- 2026-10-07 · Finance is not planned — not soon, possibly never.
 - 2026-10-02 · Chat + calls becomes a planned module (Duo/Team plans only), reversing "no chat module, keep Slack"; whiteboard not planned; Mindmap stays hidden
 - 2026-07-29 · Mindmap is OUT of alpha scope
 - 2026-07-12 · DF-19e (Settings → Workspace: management inlined; standalone modal retired) landed
