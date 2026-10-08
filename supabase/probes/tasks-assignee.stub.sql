@@ -2,7 +2,7 @@
 -- The repo can't bootstrap a database (supabase/AGENTS.md), so this recreates
 -- what 20261008150000_tasks_assignee_creator.sql touches, as production has it
 -- on 2026-10-08 (project wtoonrvuqumihpkbvwvs), after PRIV-2a
--- (20261008013000):
+-- (20261008013000) and key_writes_act_as_creator (20261008020039):
 --   * tables and their delete rules, from the PRIV-2a stub (read from the
 --     catalog), with the columns TV-D1 reads: every tasks column, activity
 --     timestamps, API-key scopes;
@@ -312,9 +312,12 @@ CREATE TABLE public.comments (
   entity_type text NOT NULL,
   entity_id uuid NOT NULL,
   body text NOT NULL DEFAULT '',
-  created_by uuid,
+  created_by uuid NOT NULL DEFAULT auth.uid(),
   created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
   deleted_at timestamptz,
+  author_kind text NOT NULL DEFAULT 'user',
+  author_label text,
   FOREIGN KEY (workspace_id, entity_type, entity_id)
     REFERENCES public.entities (workspace_id, entity_type, entity_id) ON DELETE CASCADE
 );
@@ -847,18 +850,35 @@ DECLARE
   v_mentions jsonb := to_jsonb(coalesce(p_mentioned_user_ids, '{}'::uuid[]));
   v_owner uuid;
   v_notify jsonb;
+  v_key uuid := public.module_api_key_id();
+  v_key_label text;
 BEGIN
   PERFORM public.spine_op__guard(p_workspace_id);
   IF trim(v_body) = '' THEN
     RAISE EXCEPTION 'A comment can''t be empty.';
   END IF;
 
+  -- Ensure the target exists in the registry (satisfies the FK) without
+  -- reviving a tombstone or clobbering an authoritative label.
   PERFORM public.entities_op_ensure(p_workspace_id, p_entity_type, p_entity_id, p_entity_label, p_entity_icon);
 
-  INSERT INTO public.comments (workspace_id, entity_type, entity_id, body, created_by)
-  VALUES (p_workspace_id, p_entity_type, p_entity_id, v_body, auth.uid())
+  -- A key's comment belongs to its creator (created_by is NOT NULL, and the
+  -- creator's access governs it) but reads as the app that wrote it.
+  IF v_key IS NOT NULL THEN
+    SELECT k.name INTO v_key_label FROM public.workspace_api_keys k WHERE k.id = v_key;
+  END IF;
+  INSERT INTO public.comments
+    (workspace_id, entity_type, entity_id, body, created_by, author_kind, author_label)
+  VALUES (
+    p_workspace_id, p_entity_type, p_entity_id, v_body, public.perm_actor_id(),
+    CASE WHEN v_key IS NULL THEN 'user' ELSE 'api_key' END,
+    CASE WHEN v_key IS NULL THEN NULL ELSE coalesce(v_key_label, 'App') END)
   RETURNING * INTO v_comment;
 
+  -- Resolve the entity owner for the types that have one. Owner-less entities
+  -- (contact/company/event) leave v_owner NULL → only participants notify. A
+  -- soft-deleted (trashed) task/note resolves to NULL too — don't ping an owner
+  -- about a comment on something in their trash.
   IF p_entity_type = 'task' THEN
     SELECT t.owner_id INTO v_owner FROM public.tasks t
       WHERE t.id = p_entity_id AND t.workspace_id = p_workspace_id AND t.deleted_at IS NULL;
@@ -867,6 +887,10 @@ BEGIN
       WHERE n.id = p_entity_id AND n.workspace_id = p_workspace_id AND n.deleted_at IS NULL;
   END IF;
 
+  -- notify_user_ids = (owner ∪ prior participants) − the actor. De-duped; TEXT
+  -- ids to match the predicate's `@> jsonb_build_array(auth.uid()::text)`.
+  -- New here: a key's comment reads as the app, not as its creator, so it
+  -- notifies the creator like anyone else's comment would (Maciej, 2026-10-08).
   SELECT coalesce(jsonb_agg(DISTINCT s.uid::text), '[]'::jsonb) INTO v_notify
   FROM (
     SELECT c.created_by AS uid
@@ -879,12 +903,13 @@ BEGIN
     SELECT v_owner
     WHERE v_owner IS NOT NULL
   ) s
-  WHERE s.uid IS DISTINCT FROM auth.uid();
+  WHERE v_key IS NOT NULL OR s.uid IS DISTINCT FROM public.perm_actor_id();
 
   PERFORM public.module_activity_log(
     p_workspace_id, 'comments', p_entity_type, p_entity_id, 'comments.add',
     jsonb_build_object(
       'comment_id', v_comment.id,
+      -- A short excerpt for the notification card — never the full body.
       'excerpt', left(v_body, 140),
       'mentioned_user_ids', v_mentions,
       'notify_user_ids', v_notify)

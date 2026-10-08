@@ -27,7 +27,8 @@
 -- Expand only: owner_id keeps its column, and the shim stays until TV-D7.
 -- The functions redefined below are production's bodies as of 2026-10-08,
 -- read from the catalog, with only the TV-D1 changes. account_erase_workspace_data
--- and share_member_removed come from PRIV-2a (20261008013000, PR #251).
+-- and share_member_removed come from PRIV-2a (20261008013000, PR #251);
+-- comments_op_add from key_writes_act_as_creator (20261008020039, PR #247).
 
 -- ── 1. Columns ───────────────────────────────────────────────────────────────
 
@@ -535,18 +536,35 @@ DECLARE
   v_owner uuid;
   v_creator uuid;  -- tasks: the creator, when known (TV-D1)
   v_notify jsonb;
+  v_key uuid := public.module_api_key_id();
+  v_key_label text;
 BEGIN
   PERFORM public.spine_op__guard(p_workspace_id);
   IF trim(v_body) = '' THEN
     RAISE EXCEPTION 'A comment can''t be empty.';
   END IF;
 
+  -- Ensure the target exists in the registry (satisfies the FK) without
+  -- reviving a tombstone or clobbering an authoritative label.
   PERFORM public.entities_op_ensure(p_workspace_id, p_entity_type, p_entity_id, p_entity_label, p_entity_icon);
 
-  INSERT INTO public.comments (workspace_id, entity_type, entity_id, body, created_by)
-  VALUES (p_workspace_id, p_entity_type, p_entity_id, v_body, auth.uid())
+  -- A key's comment belongs to its creator (created_by is NOT NULL, and the
+  -- creator's access governs it) but reads as the app that wrote it.
+  IF v_key IS NOT NULL THEN
+    SELECT k.name INTO v_key_label FROM public.workspace_api_keys k WHERE k.id = v_key;
+  END IF;
+  INSERT INTO public.comments
+    (workspace_id, entity_type, entity_id, body, created_by, author_kind, author_label)
+  VALUES (
+    p_workspace_id, p_entity_type, p_entity_id, v_body, public.perm_actor_id(),
+    CASE WHEN v_key IS NULL THEN 'user' ELSE 'api_key' END,
+    CASE WHEN v_key IS NULL THEN NULL ELSE coalesce(v_key_label, 'App') END)
   RETURNING * INTO v_comment;
 
+  -- Resolve the entity owner for the types that have one. Owner-less entities
+  -- (contact/company/event) leave v_owner NULL → only participants notify. A
+  -- soft-deleted (trashed) task/note resolves to NULL too — don't ping an owner
+  -- about a comment on something in their trash.
   IF p_entity_type = 'task' THEN
     -- A task comment reaches its assignee and its creator (TV-D1: owner_id is
     -- the creator; left out when unknown), plus everyone who commented before.
@@ -558,6 +576,10 @@ BEGIN
       WHERE n.id = p_entity_id AND n.workspace_id = p_workspace_id AND n.deleted_at IS NULL;
   END IF;
 
+  -- notify_user_ids = (owner ∪ prior participants) − the actor. De-duped; TEXT
+  -- ids to match the predicate's `@> jsonb_build_array(auth.uid()::text)`.
+  -- New here: a key's comment reads as the app, not as its creator, so it
+  -- notifies the creator like anyone else's comment would (Maciej, 2026-10-08).
   SELECT coalesce(jsonb_agg(DISTINCT s.uid::text), '[]'::jsonb) INTO v_notify
   FROM (
     SELECT c.created_by AS uid
@@ -573,12 +595,13 @@ BEGIN
     SELECT v_creator
     WHERE v_creator IS NOT NULL
   ) s
-  WHERE s.uid IS DISTINCT FROM auth.uid();
+  WHERE v_key IS NOT NULL OR s.uid IS DISTINCT FROM public.perm_actor_id();
 
   PERFORM public.module_activity_log(
     p_workspace_id, 'comments', p_entity_type, p_entity_id, 'comments.add',
     jsonb_build_object(
       'comment_id', v_comment.id,
+      -- A short excerpt for the notification card — never the full body.
       'excerpt', left(v_body, 140),
       'mentioned_user_ids', v_mentions,
       'notify_user_ids', v_notify)
