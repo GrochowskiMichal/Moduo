@@ -618,11 +618,14 @@ function DetailBody({
           {/* Claims (TV-D4): who else has this lined up. Runs stay private. */}
           {claim.names.length > 0 ? (
             <p className="flex items-center gap-2 font-sans text-xs text-muted-foreground">
-              <ClaimAvatar assignee={claim.first} />
+              <span aria-hidden className="flex">
+                <ClaimAvatar assignee={claim.first} />
+              </span>
               {queued ? alsoInLabel(claim.names) : claimLabel(claim.names)}
             </p>
           ) : null}
-          {canEdit ? (
+          {/* Done and archived tasks can't be queued (they leave every queue). */}
+          {canEdit && task.status !== "done" && task.status !== "archived" ? (
             <Button
               type="button"
               variant={queued ? "secondary" : "default"}
@@ -867,7 +870,7 @@ function SubtaskRow({
         {subtask.title || "Untitled"}
       </button>
       {/* individually queueable — start a scary task via its smallest step */}
-      {canEdit || queued ? (
+      {(canEdit && !done) || queued ? (
         <Tooltip>
           <TooltipTrigger asChild>
             <button

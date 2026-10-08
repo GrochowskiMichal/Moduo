@@ -241,10 +241,10 @@ describe("useTasksModule: my queue (TV-D4)", () => {
     );
   });
 
-  it("an older op's late answer never overwrites a newer one", async () => {
+  it("sends queue ops one at a time, and an older answer never puts back a newer edit", async () => {
     const { api, hook, serverAdd } = await mount([task("t1"), task("t2")], []);
     let releaseFirst: (rows: TaskQueueEntry[]) => void = () => {};
-    // The server takes the first add at once but its answer arrives last.
+    // The server takes the first add but answers slowly.
     api.opQueueAdd.mockImplementationOnce(() => {
       serverAdd("t1", "000000mh34");
       return new Promise<TaskQueueEntry[]>((resolve) => {
@@ -253,11 +253,44 @@ describe("useTasksModule: my queue (TV-D4)", () => {
     });
     act(() => hook.result.current.toggleQueue("t1"));
     act(() => hook.result.current.toggleQueue("t2"));
-    await waitFor(() => expect(api.opQueueAdd).toHaveBeenCalledTimes(2));
-    await waitFor(() => expect(hook.result.current.queuedTaskIds.size).toBe(2));
-    // The first op's answer (only t1) lands last.
+    expect(hook.result.current.queuedTaskIds.size).toBe(2);
+    await waitFor(() => expect(api.opQueueAdd).toHaveBeenCalledTimes(1));
+    // The second op waits for the first, so the server sees them in order.
+    await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
+    expect(api.opQueueAdd).toHaveBeenCalledTimes(1);
+    // The first answer (only t1) is older than the pending t2: not applied.
     await act(async () => releaseFirst([row(ME, "t1", "000000mh34")]));
     expect([...hook.result.current.queuedTaskIds].sort()).toEqual(["t1", "t2"]);
+    await waitFor(() => expect(api.opQueueAdd).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(hook.result.current.queuedTasks.map((t) => t.id)).toEqual(["t1", "t2"]),
+    );
+  });
+
+  it("never sends a queue op for a task that's still saving", async () => {
+    const { api, hook } = await mount([], []);
+    let finishSave: (t: Task) => void = () => {};
+    (api as unknown as { upsertTask: unknown }).upsertTask = rs.fn(
+      () =>
+        new Promise<Task>((resolve) => {
+          finishSave = resolve;
+        }),
+    );
+    act(() => hook.result.current.captureToQueue("Call the bank"));
+    const tempId = hook.result.current.queuedTasks[0].id;
+    expect(tempId.startsWith("tmp-")).toBe(true);
+    act(() => hook.result.current.moveQueuedToEnd(tempId));
+    act(() => hook.result.current.toggleQueue(tempId));
+    expect(api.opQueueMoveToEnd).not.toHaveBeenCalled();
+    expect(api.opQueueRemove).not.toHaveBeenCalled();
+    expect(toasts.errors).toEqual([
+      "Still saving that task — try again in a moment.",
+      "Still saving that task — try again in a moment.",
+    ]);
+    await act(async () => finishSave(task("t-new", { title: "Call the bank" })));
+    await waitFor(() =>
+      expect(api.opQueueAdd).toHaveBeenCalledWith({ workspaceId: "w1", taskId: "t-new" }),
+    );
   });
 
   it("captures a new task straight into my queue", async () => {

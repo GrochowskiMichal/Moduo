@@ -356,9 +356,11 @@ export function TaskRow({
         <ContextMenuItem onSelect={() => api.toggleDone(task)}>
           {done ? "Mark not done" : "Mark done"}
         </ContextMenuItem>
-        <ContextMenuItem onSelect={() => api.toggleQueue(task.id)}>
-          {queued ? "Remove from queue" : "Add to queue"}
-        </ContextMenuItem>
+        {!done && task.status !== "archived" ? (
+          <ContextMenuItem onSelect={() => api.toggleQueue(task.id)}>
+            {queued ? "Remove from queue" : "Add to queue"}
+          </ContextMenuItem>
+        ) : null}
         {task.recurrence && !done && task.status !== "archived" ? (
           <ContextMenuItem onSelect={() => api.skipOccurrence(task.id)}>
             Skip occurrence

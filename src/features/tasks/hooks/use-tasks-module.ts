@@ -111,8 +111,11 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
   /** My rows for tasks completed since the last load: the server has dropped
    *  them, but the Queue keeps showing them, done, where they were (§6). */
   const [keptRows, setKeptRows] = useState<TaskQueueEntry[]>([]);
-  /** Only the newest queue op's answer is applied (each returns my whole queue). */
+  /** Queue ops go to the server one at a time, in the order they were made,
+   *  so each answer (my whole queue) includes every earlier op; only the newest
+   *  answer is applied, so pending optimistic edits aren't put back meanwhile. */
   const queueSeq = useRef(0);
+  const queueChain = useRef<Promise<unknown>>(Promise.resolve());
   const [timeBlocks, setTimeBlocksState] = useState<TimeBlockMap>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -497,6 +500,25 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     [runtime, workspaceId, canEdit, liveTasks, userId],
   );
 
+  /** Send one queue op after the ones before it; apply its answer if it's the newest. */
+  const sendQueueOp = useCallback(
+    (ws: string, me: string, op: () => Promise<TaskQueueEntry[]>) => {
+      const seq = ++queueSeq.current;
+      const run = queueChain.current.then(op);
+      queueChain.current = run.catch(() => {});
+      void run
+        .then((own) => {
+          if (queueSeq.current === seq) setQueueRows((prev) => withOwnQueue(prev, ws, me, own));
+          setActivityStamp((s) => s + 1);
+        })
+        .catch((e) => {
+          toast.error(e instanceof Error ? e.message : "Couldn't update your queue.");
+          void load();
+        });
+    },
+    [load],
+  );
+
   /**
    * Run a queue op (TV-D2): apply `optimistic` to my line-up at once, then the
    * RPC, which answers with my whole queue in order. Only the newest op's answer
@@ -512,9 +534,9 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
         toast.error("You don't have edit access to Tasks in this workspace.");
         return false;
       }
+      const rt = runtime;
       const ws = workspaceId;
       const me = userId;
-      const seq = ++queueSeq.current;
       setQueueRows((prev) =>
         withOwnQueue(
           prev,
@@ -528,18 +550,10 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
           ),
         ),
       );
-      void op(runtime, ws)
-        .then((own) => {
-          if (queueSeq.current === seq) setQueueRows((prev) => withOwnQueue(prev, ws, me, own));
-          setActivityStamp((s) => s + 1);
-        })
-        .catch((e) => {
-          toast.error(e instanceof Error ? e.message : "Couldn't update your queue.");
-          void load();
-        });
+      sendQueueOp(ws, me, () => op(rt, ws));
       return true;
     },
-    [runtime, workspaceId, canEdit, userId, load],
+    [runtime, workspaceId, canEdit, userId, sendQueueOp],
   );
 
   /** A placeholder row for my queue until the server's answer replaces it. */
@@ -598,6 +612,10 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
   const removeFromQueue = useCallback(
     (id: string) => {
       if (!queuedTaskIds.has(id)) return;
+      if (isTempId(id)) {
+        toast.error("Still saving that task — try again in a moment.");
+        return;
+      }
       runQueueOp(
         (mine) => mine.filter((e) => e.taskId !== id),
         (rt, ws) => rt.tasks.opQueueRemove({ workspaceId: ws, taskId: id }),
@@ -619,6 +637,10 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
   const moveQueuedToEnd = useCallback(
     (id: string) => {
       if (!queuedTaskIds.has(id)) return;
+      if (isTempId(id)) {
+        toast.error("Still saving that task — try again in a moment.");
+        return;
+      }
       runQueueOp(
         (mine) => {
           const rest = mine.filter((e) => e.taskId !== id);
@@ -643,6 +665,10 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
         orderedIds,
       );
       if (!move) return;
+      if (isTempId(move.taskId) || (move.afterTaskId && isTempId(move.afterTaskId))) {
+        toast.error("Still saving that task — try again in a moment.");
+        return;
+      }
       runQueueOp(
         (mine) =>
           mine.map((e) =>
@@ -701,18 +727,8 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
           setQueueRows((prev) =>
             prev.map((e) => (e.taskId === tempId ? { ...e, taskId: saved.id } : e)),
           );
-          const seq = ++queueSeq.current;
-          rt.tasks
-            .opQueueAdd({ workspaceId: ws, taskId: saved.id })
-            .then((own) => {
-              if (queueSeq.current === seq) setQueueRows((prev) => withOwnQueue(prev, ws, me, own));
-              setActivityStamp((s) => s + 1);
-            })
-            .catch((e) => {
-              // The task exists; only queuing it failed.
-              toast.error(e instanceof Error ? e.message : "Couldn't add the task to your queue.");
-              void load();
-            });
+          // The task exists now; queuing it waits behind earlier queue ops.
+          sendQueueOp(ws, me, () => rt.tasks.opQueueAdd({ workspaceId: ws, taskId: saved.id }));
         },
         (e) => {
           setBundle((prev) => ({ ...prev, tasks: prev.tasks.filter((t) => t.id !== tempId) }));
@@ -730,7 +746,7 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
       liveTasks,
       myQueueEntries,
       optimisticEntry,
-      load,
+      sendQueueOp,
     ],
   );
 

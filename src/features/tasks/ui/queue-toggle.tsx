@@ -18,7 +18,7 @@ export function useQueueClaim(
   const { byId } = useAssignees();
   const ids = api.queueClaims.get(taskId) ?? [];
   return {
-    names: ids.map((id) => byId(id)?.name ?? "a teammate"),
+    names: ids.map((id) => byId(id)?.name || "a teammate"),
     first: ids.length > 0 ? byId(ids[0]) : null,
   };
 }
@@ -34,7 +34,7 @@ export function ClaimAvatar({
   return (
     <AssigneeAvatar
       assignee={assignee}
-      className={cn("size-4 ring-1 ring-foreground/35 ring-offset-1 ring-offset-card", className)}
+      className={cn("size-4 ring-1 ring-foreground/35", className)}
     />
   );
 }
@@ -42,8 +42,9 @@ export function ClaimAvatar({
 /**
  * The queue mark on a row or card: my queue toggle (accent when queued), or,
  * when someone else has the task queued and I don't, their ringed avatar ("In
- * Mike's queue"), which still adds it to mine on click. View-only members see
- * the marks without the action.
+ * Mike's queue"), which still adds it to mine on click. When we both have it,
+ * their avatar sits beside my toggle. View-only members see the marks without
+ * the action. Done and archived tasks can't be queued, so they get no mark.
  */
 export function QueueToggle({
   task,
@@ -58,6 +59,15 @@ export function QueueToggle({
   const claim = useQueueClaim(task.id, api);
   const claimed = claim.names.length > 0;
   const showClaim = claimed && !queued;
+  if (task.status === "done" || task.status === "archived") return null;
+  // Both of us: their claim stays visible next to my toggle (the toggle's
+  // label already says "Also in Mike's queue", so the avatar is decoration).
+  const besideClaim =
+    claimed && queued ? (
+      <span aria-hidden className="flex items-center">
+        <ClaimAvatar assignee={claim.first} />
+      </span>
+    ) : null;
 
   const mark = showClaim ? (
     <ClaimAvatar assignee={claim.first} />
@@ -67,60 +77,70 @@ export function QueueToggle({
 
   if (!canEdit) {
     if (!queued && !claimed) return null;
-    const label = queued ? "In your queue" : claimLabel(claim.names);
+    const label = queued
+      ? claimed
+        ? `In your queue. ${alsoInLabel(claim.names)}`
+        : "In your queue"
+      : claimLabel(claim.names);
     return (
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span
-            role="img"
-            className={cn("flex items-center", queued && "text-primary")}
-            aria-label={label}
-          >
-            {mark}
-          </span>
-        </TooltipTrigger>
-        <TooltipContent>{label}</TooltipContent>
-      </Tooltip>
+      <>
+        {besideClaim}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span
+              role="img"
+              className={cn("flex items-center", queued && "text-primary")}
+              aria-label={label}
+            >
+              {mark}
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>{label}</TooltipContent>
+        </Tooltip>
+      </>
     );
   }
 
   const action = queued ? "Remove from queue" : "Add to queue";
   const note = queued ? alsoInLabel(claim.names) : claimLabel(claim.names);
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button
-          type="button"
-          aria-label={note ? `${action}. ${note}` : action}
-          aria-pressed={queued}
-          onClick={(e) => {
-            e.stopPropagation();
-            api.toggleQueue(task.id);
-          }}
-          className={cn(
-            "flex size-icon items-center justify-center rounded transition-colors duration-(--motion-fade) ease-(--ease-out)",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-            queued
-              ? "text-primary"
-              : showClaim
-                ? "text-muted-foreground"
-                : "text-muted-foreground/40 hover:text-foreground",
+    <>
+      {besideClaim}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            aria-label={note ? `${action}. ${note}` : action}
+            aria-pressed={queued}
+            onClick={(e) => {
+              e.stopPropagation();
+              api.toggleQueue(task.id);
+            }}
+            className={cn(
+              "flex size-icon items-center justify-center rounded transition-colors duration-(--motion-fade) ease-(--ease-out)",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+              queued
+                ? "text-primary"
+                : showClaim
+                  ? "text-muted-foreground"
+                  : "text-muted-foreground/40 hover:text-foreground",
+            )}
+          >
+            {mark}
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>
+          {note ? (
+            <>
+              {note}
+              <br />
+              {queued ? action : "Add to your queue"}
+            </>
+          ) : (
+            action
           )}
-        >
-          {mark}
-        </button>
-      </TooltipTrigger>
-      <TooltipContent>
-        {note ? (
-          <>
-            {note}
-            <br />
-            {queued ? action : "Add to your queue"}
-          </>
-        ) : (
-          action
-        )}
-      </TooltipContent>
-    </Tooltip>
+        </TooltipContent>
+      </Tooltip>
+    </>
   );
 }

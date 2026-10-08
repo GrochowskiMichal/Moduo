@@ -136,9 +136,11 @@ export function TaskCard({
         <ContextMenuItem onSelect={() => api.toggleDone(task)}>
           {task.status === "done" ? "Mark not done" : "Mark done"}
         </ContextMenuItem>
-        <ContextMenuItem onSelect={() => api.toggleQueue(task.id)}>
-          {api.queuedTaskIds.has(task.id) ? "Remove from queue" : "Add to queue"}
-        </ContextMenuItem>
+        {task.status !== "done" && task.status !== "archived" ? (
+          <ContextMenuItem onSelect={() => api.toggleQueue(task.id)}>
+            {api.queuedTaskIds.has(task.id) ? "Remove from queue" : "Add to queue"}
+          </ContextMenuItem>
+        ) : null}
         {task.recurrence && task.status !== "done" && task.status !== "archived" ? (
           <ContextMenuItem onSelect={() => api.skipOccurrence(task.id)}>
             Skip occurrence
