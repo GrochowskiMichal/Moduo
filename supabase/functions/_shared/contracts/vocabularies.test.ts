@@ -362,3 +362,65 @@ describe("chat vocabularies", () => {
     expect(v.planHasChat("garbage")).toBe(false);
   });
 });
+
+describe("MCP key scopes: modules, maps and strict parses", () => {
+  it("lists the key modules in key-card order, Links last", async () => {
+    const v = await import("./vocabularies.ts");
+    expect([...v.MCP_KEY_MODULES]).toEqual([
+      "tasks",
+      "notes",
+      "calendar",
+      "email",
+      "contacts",
+      "chat",
+      "links",
+    ]);
+    expect(v.isMcpKeyModule("links")).toBe(true);
+    expect(v.isMcpKeyModule("finance")).toBe(false);
+    expect(v.isMcpKeyModule(undefined)).toBe(false);
+  });
+
+  it("isMcpKeyScope / parseMcpKeyScope are strict: exactly none, view, edit", async () => {
+    const v = await import("./vocabularies.ts");
+    expect(v.isMcpKeyScope("view")).toBe(true);
+    expect(v.isMcpKeyScope("VIEW")).toBe(false);
+    expect(v.isMcpKeyScope("admin")).toBe(false);
+    expect(v.parseMcpKeyScope("edit").success).toBe(true);
+    expect(v.parseMcpKeyScope("admin").success).toBe(false);
+  });
+
+  it("normalizeMcpKeyScopes spells out every module and reads anything odd as none", async () => {
+    const v = await import("./vocabularies.ts");
+    expect(v.normalizeMcpKeyScopes({ tasks: "EDIT", notes: "admin", finance: "edit" })).toEqual({
+      tasks: "edit",
+      notes: "none",
+      calendar: "none",
+      email: "none",
+      contacts: "none",
+      chat: "none",
+      links: "none",
+    });
+    expect(v.normalizeMcpKeyScopes(null)).toEqual(v.normalizeMcpKeyScopes({}));
+    expect(v.normalizeMcpKeyScopes(["view"])).toEqual(v.normalizeMcpKeyScopes({}));
+  });
+
+  it("parseMcpKeyScopes takes only a complete map of known modules", async () => {
+    const v = await import("./vocabularies.ts");
+    const full = v.normalizeMcpKeyScopes({ tasks: "view" });
+    expect(v.parseMcpKeyScopes(full).success).toBe(true);
+    expect(v.parseMcpKeyScopes({ tasks: "view" }).success).toBe(false); // modules missing
+    expect(v.parseMcpKeyScopes({ ...full, finance: "edit" }).success).toBe(false);
+    expect(v.parseMcpKeyScopes({ ...full, tasks: "admin" }).success).toBe(false);
+  });
+});
+
+describe("content author kinds (chat messages and comments)", () => {
+  it("are a person or an app over an API key, and unknown reads as a person", async () => {
+    const v = await import("./vocabularies.ts");
+    expect([...v.CONTENT_AUTHOR_KINDS]).toEqual(["user", "api_key"]);
+    expect(v.normalizeContentAuthorKind("api_key")).toBe("api_key");
+    expect(v.normalizeContentAuthorKind(undefined)).toBe("user");
+    expect(v.normalizeContentAuthorKind("bot")).toBe("user");
+    expect(v.isContentAuthorKind("bot")).toBe(false);
+  });
+});
