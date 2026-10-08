@@ -8,6 +8,7 @@
 
 import {
   activityRowSchema,
+  attachmentRowSchema,
   bucketRowSchema,
   calendarAccountRowSchema,
   calendarEventRowSchema,
@@ -34,7 +35,7 @@ import {
   tagRowSchema,
   taskRelationRowSchema,
 } from "@contracts/rows";
-import { normalizeContentAuthorKind } from "@contracts/vocabularies";
+import { normalizeAttachmentStatus, normalizeContentAuthorKind } from "@contracts/vocabularies";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import * as Y from "yjs";
 import type { CalendarAccountModel, CalendarEventModel } from "../features/calendar/events";
@@ -83,6 +84,7 @@ import {
 import { createRequestCache } from "./request-cache";
 import { webChatRuntime } from "./runtime.chat.web";
 import type {
+  AttachmentRecord,
   AuthChangeEvent,
   AuthListener,
   EmailAccountRef,
@@ -287,6 +289,26 @@ function mapHabitRow(raw: unknown): HabitRow {
     checks: Array.isArray(r.checks) ? (r.checks as string[]) : [],
     createdAt: (r.created_at as string) ?? "",
     updatedAt: (r.updated_at as string) ?? "",
+  };
+}
+
+/** Map a raw `attachments` row (AT-1). Untyped client: keep in lockstep with
+ * 20261008210500_attachments_storage.sql. */
+function mapAttachmentRow(raw: unknown): AttachmentRecord {
+  const r = requireRow(attachmentRowSchema, raw, "attachment");
+  return {
+    id: r.id,
+    entityType: r.entity_type,
+    entityId: r.entity_id,
+    uploaderId: r.uploader_id ?? null,
+    fileName: r.file_name,
+    mime: r.mime,
+    sizeBytes: Number(r.size_bytes),
+    width: r.width ?? null,
+    height: r.height ?? null,
+    status: normalizeAttachmentStatus(r.status),
+    deletedAt: r.deleted_at ?? null,
+    createdAt: r.created_at,
   };
 }
 
@@ -1427,6 +1449,32 @@ export const webRuntime: ModuoRuntime = {
         { onConflict: "user_id,workspace_id,layout_key" },
       );
       if (error) throw new Error(error.message);
+    },
+  },
+
+  attachments: {
+    async list(workspaceId) {
+      const res = await selectCapped<any>({
+        scope: "attachments",
+        cap: READ_CAPS.attachments,
+        build: (opts) =>
+          supabaseClient
+            .from("attachments")
+            .select(
+              "id, entity_type, entity_id, uploader_id, file_name, mime, size_bytes, width, height, status, deleted_at, created_at",
+              opts,
+            )
+            .eq("workspace_id", workspaceId),
+        order: (q) => q.order("created_at").order("id"),
+      });
+      if (res.error) {
+        // Before AT-1's migration the table doesn't exist: nothing to list.
+        if (res.error.code === "42P01" || res.error.code === "PGRST205") {
+          return { attachments: [], truncation: null };
+        }
+        throw new Error(res.error.message);
+      }
+      return { attachments: mapKnownRows(res.rows, mapAttachmentRow), truncation: res.truncation };
     },
   },
 

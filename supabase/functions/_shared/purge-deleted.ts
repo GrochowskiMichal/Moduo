@@ -21,7 +21,7 @@
  * purge-deleted.test.ts can run it. The real supabase-js client satisfies PurgeDb.
  */
 
-import { ATTACHMENTS_BUCKET } from "./contracts/vocabularies.ts";
+import { ATTACHMENTS_BUCKET } from "./contracts/attachments.ts";
 
 export type PurgeDbError = { message: string; code?: string };
 

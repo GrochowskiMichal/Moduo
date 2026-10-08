@@ -80,3 +80,30 @@ describe("spineActivityLine", () => {
     expect(spineActivityLine(entry("links.future_op"))).toBe("links.future_op");
   });
 });
+
+describe("storage alerts (AT-1)", () => {
+  it("says which level the uploader's file crossed, with the pool's numbers", () => {
+    expect(
+      spineActivityLine(
+        entry("attachments.storage_80", {
+          level: 80,
+          used_bytes: 1.65 * 1073741824,
+          total_bytes: 2 * 1073741824,
+        }),
+      ),
+    ).toBe("filled storage past 80% (1.7 of 2 GB)");
+    expect(
+      spineActivityLine(
+        entry("attachments.storage_95", {
+          level: 95,
+          used_bytes: 47.6 * 1073741824,
+          total_bytes: 50 * 1073741824,
+        }),
+      ),
+    ).toBe("filled storage past 95% (48 of 50 GB)");
+  });
+
+  it("still reads without the numbers", () => {
+    expect(spineActivityLine(entry("attachments.storage_95"))).toBe("filled storage past 95%");
+  });
+});

@@ -3,7 +3,7 @@
  * Implementations live in runtime.tauri.ts (desktop) and runtime.web.ts (web).
  */
 
-import type { ContentAuthorKind } from "@contracts/vocabularies";
+import type { AttachmentStatus, ContentAuthorKind } from "@contracts/vocabularies";
 import type {
   CalendarAccountModel,
   CalendarEventModel,
@@ -175,6 +175,25 @@ export type HabitRow = {
   checks: string[];
   createdAt: string;
   updatedAt: string;
+};
+
+/** One file on a task (AT-1). The bytes live in the private `attachments`
+ * Storage bucket; this is the row. */
+export type AttachmentRecord = {
+  id: string;
+  entityType: string;
+  entityId: string;
+  /** Null once the uploader's account is deleted. */
+  uploaderId: string | null;
+  fileName: string;
+  mime: string;
+  sizeBytes: number;
+  width: number | null;
+  height: number | null;
+  status: AttachmentStatus;
+  /** Set while the file is in the trash (restorable for 30 days). */
+  deletedAt: string | null;
+  createdAt: string;
 };
 
 export type ModuoRuntime = {
@@ -519,6 +538,19 @@ export type ModuoRuntime = {
     }): Promise<HabitRow>;
     setChecks(input: { id: string; checks: string[] }): Promise<void>;
     remove(id: string): Promise<void>;
+  };
+
+  /**
+   * Attachments (AT-1) — files on tasks. AT-1 ships the listing the workspace
+   * export reads; upload, delete and restore arrive with the panel (AT-2).
+   * `list` returns every row this person can see (trash included), and [] until
+   * the migration reaches the database.
+   */
+  attachments: {
+    list(workspaceId: string): Promise<{
+      attachments: AttachmentRecord[];
+      truncation: Truncation | null;
+    }>;
   };
 
   window: {

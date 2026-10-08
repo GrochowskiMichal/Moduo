@@ -14,7 +14,10 @@
  *   2. stripe_mirror  our stripe.* copy of those customers and their saved cards
  *                     (PRIV-2b, SQL account_scrub_stripe_mirror). Invoices stay.
  *   3. storage        profiles/{uid}/… and workspaces/{owned workspace}/… in the public
- *                     `avatars` bucket. Public files stay readable by URL until removed.
+ *                     `avatars` bucket (public files stay readable by URL until removed),
+ *                     and {owned workspace}/… in the private `attachments` bucket (AT-1:
+ *                     the cascade takes those rows, never the objects). Files the user
+ *                     put in other people's workspaces stay, uploader cleared by the FK.
  *   4. booking        the user's booking links, the bookings and busy windows tied to
  *                     them, and their co-host seats on other people's links. No FK.
  *   5. integrations   user_integrations: the encrypted Google / Zoom tokens. No FK.
@@ -33,6 +36,7 @@
  * Stripe clients satisfy the small interfaces below.
  */
 
+import { ATTACHMENTS_BUCKET } from "./contracts/attachments.ts";
 import type { ErasurePostHog } from "./posthog-erasure.ts";
 
 // ── The slices of supabase-js and Stripe this module uses ────────────────────
@@ -467,10 +471,30 @@ async function removeStoredImages(deps: ErasureDeps, userId: string): Promise<vo
   const owned = await selectAll<{ id: string }>(deps, "workspaces", "id", (q) =>
     q.eq("owner_id", userId),
   );
-  const bucket = deps.db.storage.from(AVATAR_BUCKET);
+  await removeFolders(deps.db.storage.from(AVATAR_BUCKET), [
+    `profiles/${userId}`,
+    ...owned.map((w) => `workspaces/${w.id}`),
+  ]);
+  // Attachments live at {workspace}/{attachment}/…. Before AT-1's migration the
+  // bucket doesn't exist, which means there is nothing to remove.
+  await removeFolders(
+    deps.db.storage.from(ATTACHMENTS_BUCKET),
+    owned.map((w) => w.id),
+    { missingBucketIsEmpty: true },
+  );
+}
+
+async function removeFolders(
+  bucket: StorageBucket,
+  prefixes: string[],
+  options: { missingBucketIsEmpty?: boolean } = {},
+): Promise<void> {
   const paths: string[] = [];
-  for (const prefix of [`profiles/${userId}`, ...owned.map((w) => `workspaces/${w.id}`)]) {
-    paths.push(...(await listFiles(bucket, prefix)));
+  try {
+    for (const prefix of prefixes) paths.push(...(await listFiles(bucket, prefix)));
+  } catch (err) {
+    if (options.missingBucketIsEmpty && err instanceof MissingBucketError) return;
+    throw err;
   }
   for (const batch of chunks(paths, STORAGE_PAGE)) {
     const { error } = await bucket.remove(batch);
@@ -478,12 +502,15 @@ async function removeStoredImages(deps: ErasureDeps, userId: string): Promise<vo
   }
 }
 
+class MissingBucketError extends Error {}
+
 /** Every file under a folder. Listing (not guessing avatar.{ext}) also catches
  *  files a future upload path adds. */
 async function listFiles(bucket: StorageBucket, prefix: string): Promise<string[]> {
   const files: string[] = [];
   for (let offset = 0; ; offset += STORAGE_PAGE) {
     const { data, error } = await bucket.list(prefix, { limit: STORAGE_PAGE, offset });
+    if (error && /bucket not found/i.test(error.message)) throw new MissingBucketError(error.message);
     if (error) throw new Error(`storage list ${prefix}: ${error.message}`);
     const entries = data ?? [];
     for (const entry of entries) {
