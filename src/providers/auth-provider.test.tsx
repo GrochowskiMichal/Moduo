@@ -4,11 +4,11 @@ import { act, render, waitFor } from "@testing-library/react";
 import { type AuthContextValue, AuthProvider, useAuth } from "./auth-provider";
 
 // A runtime whose auth events the test fires by hand, as auth-js would. `profile` is what
-// the server answers for the signed-in account: null once the account is deleted.
+// the profile read answers for the signed-in account (see the answers below).
 const fake = rs.hoisted(() => {
   const state = {
     emit: null as null | ((event: string, session: unknown) => void),
-    profile: { plan_tier: "free" } as unknown,
+    profile: { data: { plan_tier: "free" }, error: null } as { data: unknown; error: unknown },
     profileGate: null as null | Promise<void>,
   };
   const session = { user: { id: "u1", email: "u1@example.com" }, access_token: "token-u1" };
@@ -26,7 +26,7 @@ const fake = rs.hoisted(() => {
     workspace: {
       getProfile: rs.fn(async (_userId: string) => {
         if (state.profileGate) await state.profileGate;
-        return { data: state.profile };
+        return state.profile;
       }),
     },
   };
@@ -73,9 +73,15 @@ async function settle() {
 const startedFor = (userId: string) =>
   analytics.setAnalyticsUser.mock.calls.some(([id]) => id === userId);
 
+// What the profile read answers: the account's row; no row (the account was deleted, which
+// PostgREST reports as PGRST116 for `.single()`); or a failure that says nothing either way.
+const EXISTS = { data: { plan_tier: "free" }, error: null };
+const DELETED = { data: null, error: { code: "PGRST116", message: "no rows" } };
+const OFFLINE = { data: null, error: { code: "", message: "TypeError: Failed to fetch" } };
+
 beforeEach(() => {
   fake.state.emit = null;
-  fake.state.profile = { plan_tier: "free" };
+  fake.state.profile = EXISTS;
   fake.state.profileGate = null;
   rs.clearAllMocks();
 });
@@ -117,7 +123,7 @@ describe("AuthProvider — analytics starts only for an account the server still
   });
 
   it("never starts for a cached session whose account was deleted elsewhere", async () => {
-    fake.state.profile = null; // what the server answers for a deleted account
+    fake.state.profile = DELETED;
     await renderAuth();
     await settle();
 
@@ -127,6 +133,28 @@ describe("AuthProvider — analytics starts only for an account the server still
     expect(startedFor("u1")).toBe(false);
     expect(analytics.setAnalyticsUser).toHaveBeenCalledWith(null);
     expect(analytics.signedIn).not.toHaveBeenCalled();
+  });
+
+  it("keeps analytics running when a later profile read fails, rather than resetting the person", async () => {
+    await renderAuth();
+    await waitFor(() => expect(startedFor("u1")).toBe(true));
+
+    fake.state.profile = OFFLINE;
+    act(() => fake.state.emit?.("SIGNED_IN", fake.session));
+    await settle();
+
+    expect(analytics.setAnalyticsUser).not.toHaveBeenCalledWith(null);
+  });
+
+  it("doesn't start on a failed read at launch, and starts once a later read confirms the account", async () => {
+    fake.state.profile = OFFLINE;
+    await renderAuth();
+    await settle();
+    expect(startedFor("u1")).toBe(false);
+
+    fake.state.profile = EXISTS;
+    act(() => fake.state.emit?.("INITIAL_SESSION", fake.session));
+    await waitFor(() => expect(startedFor("u1")).toBe(true));
   });
 
   it("ignores a profile answer that arrives after the person signed out", async () => {

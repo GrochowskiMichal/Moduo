@@ -43,22 +43,37 @@ export const AuthContext = createContext<AuthContextValue>({
   refreshPlanTier: async () => {},
 });
 
+/** What a profile read says about the account: there (a row), gone (the read worked and
+ *  found no row, PostgREST's PGRST116 for `.single()`), or unknown (offline, an outage). */
+type AccountCheck = "exists" | "gone" | "unknown";
+
+function accountCheck(result: { data: unknown; error: unknown }): AccountCheck {
+  if (result.data) return "exists";
+  return (result.error as { code?: unknown } | null)?.code === "PGRST116" ? "gone" : "unknown";
+}
+
 /**
  * Analytics knows the person by user id only (never email) and stays off unless they opted
  * in — see lib/analytics.ts. It also starts only for an account the server still has: a
  * session cached on this device outlives an account deleted elsewhere by up to an hour, and
  * identifying it would bring the erased PostHog person back (PRIV-3). A deleted account has
- * no profile, so the profile read the plan tier needs anyway is the check. Nothing happens
- * if the session changed while it ran. Returns whether analytics started for `userId`.
+ * no profile, so the profile read the plan tier needs anyway is the check. A confirmed
+ * absence stops analytics; a failed read leaves it as it is, so a blip mid-session never
+ * resets a consenting person's PostHog identity. Nothing happens if the session changed
+ * while it ran. Returns whether analytics started for `userId`.
  */
 function startAnalyticsIfAccountExists(
   sessionUser: { current: string | null },
   userId: string,
-  profile: unknown,
+  check: AccountCheck,
 ): boolean {
   if (sessionUser.current !== userId) return false;
-  void setAnalyticsUser(profile ? userId : null);
-  return Boolean(profile);
+  if (check === "exists") {
+    void setAnalyticsUser(userId);
+    return true;
+  }
+  if (check === "gone") void setAnalyticsUser(null);
+  return false;
 }
 
 export function AuthProvider({ children }: PropsWithChildren) {
@@ -95,14 +110,17 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
       // Non-critical: fetch plan tier from profile. The same read decides analytics.
       let profile: { plan_tier?: string | null } | null = null;
+      let check: AccountCheck = "unknown";
       try {
-        ({ data: profile } = await client.workspace.getProfile(uid));
+        const result = await client.workspace.getProfile(uid);
+        profile = result.data;
+        check = accountCheck(result);
       } catch {
-        // ignore — keep "free" default, and analytics off until the next launch
+        // ignore — keep "free" default, and analytics off until a later read works
       }
       if (!active) return;
       if (profile?.plan_tier) setPlanTier(normalizePlanTier(profile.plan_tier));
-      if (startAnalyticsIfAccountExists(sessionUser, uid, profile)) {
+      if (startAnalyticsIfAccountExists(sessionUser, uid, check)) {
         void Analytics.app.signedIn("cloud");
       }
     };
@@ -138,10 +156,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
       if ((event === "SIGNED_IN" || event === "INITIAL_SESSION") && uid) {
         rt.workspace
           .getProfile(uid)
-          .then(({ data: profile }) => {
+          .then((result) => {
             if (!active) return;
-            if (profile?.plan_tier) setPlanTier(normalizePlanTier(profile.plan_tier));
-            startAnalyticsIfAccountExists(sessionUser, uid, profile);
+            if (result.data?.plan_tier) setPlanTier(normalizePlanTier(result.data.plan_tier));
+            startAnalyticsIfAccountExists(sessionUser, uid, accountCheck(result));
           })
           .catch(() => {});
       }
