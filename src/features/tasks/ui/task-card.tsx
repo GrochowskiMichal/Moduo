@@ -82,8 +82,10 @@ export function TaskCard({
         // column (the old bg-background was the inverted-elevation bug).
         "group flex items-start gap-2 rounded-md border px-2 py-1.5 text-sm transition-colors duration-(--motion-fade) ease-(--ease-out)",
         "select-none",
+        // Selection = the accent tint + the 32% ring a card always carries
+        // (R5). The old bright accent border read as a white ring on mono.
         selected
-          ? "border-(--selected-border) bg-(--selected-bg)"
+          ? "border-transparent bg-state-selected ring-1 ring-inset ring-state-selected"
           : "border-border bg-card hover:border-foreground/30",
         // whole card is the drag handle (grip removed)
         canEdit && "cursor-grab active:cursor-grabbing",

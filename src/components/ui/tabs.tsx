@@ -59,13 +59,15 @@ function TabsTrigger({ className, ...props }: React.ComponentProps<typeof TabsPr
     <TabsPrimitive.Trigger
       data-slot="tabs-trigger"
       className={cn(
-        "relative inline-flex items-center justify-center gap-2 rounded-md px-3 py-1.5 font-sans text-sm font-medium whitespace-nowrap transition-colors outline-none",
+        "relative inline-flex items-center justify-center gap-2 rounded-md px-3 py-1.5 font-sans text-sm font-medium whitespace-nowrap outline-none",
+        "transition-[color,background-color,box-shadow] duration-(--motion-fade) ease-(--ease-out)",
         "text-muted-foreground hover:text-foreground",
         "group-data-[orientation=vertical]/tabs:w-full group-data-[orientation=vertical]/tabs:justify-start",
         "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
         "disabled:pointer-events-none disabled:opacity-50",
-        "data-[state=active]:bg-card data-[state=active]:text-foreground",
-        "group-data-[variant=line]/tabs-list:rounded-none group-data-[variant=line]/tabs-list:data-[state=active]:bg-transparent",
+        // Raised plate on the bg-muted list (--control-raised, tokens.css §5b).
+        "data-[state=active]:bg-control-raised data-[state=active]:text-foreground data-[state=active]:shadow-control-raised",
+        "group-data-[variant=line]/tabs-list:rounded-none group-data-[variant=line]/tabs-list:data-[state=active]:bg-transparent group-data-[variant=line]/tabs-list:data-[state=active]:shadow-none",
         "group-data-[variant=line]/tabs-list:data-[state=active]:shadow-[inset_0_-2px_0_0_var(--primary)]",
         "[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className,

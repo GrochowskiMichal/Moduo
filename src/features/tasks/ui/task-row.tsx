@@ -148,17 +148,15 @@ export function TaskRow({
         dropActive
           ? "bg-accent/50 ring-1 ring-inset ring-ring/50"
           : selected
-            ? "bg-(--selected-bg)"
-            : "hover:bg-accent/60",
+            ? // Tint-only selection (R5): the accent tint + the row hairline
+              // switch (--state-selected-edge). No bar.
+              "bg-state-selected ring-1 ring-inset ring-state-selected-edge"
+            : "hover:bg-state-hover",
         nested && "ml-10",
       )}
       // height rides the density setting; py is only a multiline guard
       style={{ minHeight: "var(--row-h)" }}
     >
-      {/* selected marker — a quiet accent bar, distinct from the lighter hover fill */}
-      {selected ? (
-        <span className="absolute inset-y-1 left-0.5 w-0.5 rounded-full bg-primary" aria-hidden />
-      ) : null}
       {/* nested subtask indent guide — a quiet vertical hairline in the indent gutter */}
       {nested ? (
         <span className="absolute inset-y-0 -left-4 w-px bg-border/60" aria-hidden />

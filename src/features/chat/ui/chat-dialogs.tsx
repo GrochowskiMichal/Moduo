@@ -192,7 +192,7 @@ export function CreateChannelDialog({
                       className={cn(
                         "inline-flex h-(--ctrl-h-sm) items-center gap-1.5 rounded-full border pr-2.5 pl-0.5 text-xs transition-colors",
                         on
-                          ? "border-(--selected-border) bg-(--selected-bg) text-foreground"
+                          ? "border-transparent bg-state-selected ring-1 ring-inset ring-state-selected text-foreground"
                           : "border-border text-muted-foreground hover:text-foreground",
                       )}
                     >
@@ -307,7 +307,7 @@ export function PeoplePickerDialog({
                 return (
                   <span
                     key={id}
-                    className="inline-flex h-(--ctrl-h-sm) items-center gap-1 rounded-full bg-(--selected-bg) pr-1 pl-2.5 text-xs text-foreground"
+                    className="inline-flex h-(--ctrl-h-sm) items-center gap-1 rounded-full bg-state-selected pr-1 pl-2.5 text-xs text-foreground"
                   >
                     {p?.name ?? "Member"}
                     <button
@@ -365,7 +365,9 @@ export function PeoplePickerDialog({
                     onClick={() => toggle(p.userId)}
                     className={cn(
                       "flex min-h-(--row-h) items-center gap-2.5 rounded-md px-2 text-left transition-colors",
-                      on ? "bg-(--selected-bg)" : "hover:bg-accent",
+                      on
+                        ? "bg-state-selected ring-1 ring-inset ring-state-selected-edge"
+                        : "hover:bg-state-hover",
                     )}
                   >
                     <PersonAvatar person={p} size="sm" online={isOnline(p.userId)} />

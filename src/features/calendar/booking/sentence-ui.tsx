@@ -209,7 +209,7 @@ export function Chip({ selected = false, className, ...props }: ChipProps) {
         "inline-flex h-[var(--ctrl-h-lg)] items-center gap-2 rounded-full border px-4 font-sans text-md tabular-nums",
         "transition-colors duration-[var(--motion-fade)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         selected
-          ? "border-[var(--selected-border)] bg-[var(--selected-bg)] text-foreground"
+          ? "border-transparent bg-state-selected ring-1 ring-inset ring-state-selected text-foreground"
           : "border-border text-foreground hover:border-foreground",
         className,
       )}
@@ -288,7 +288,7 @@ export function DayStrip({ days, selected, onPick }: DayStripProps) {
                 "flex w-16 shrink-0 snap-start flex-col items-center gap-0.5 rounded-lg border py-2.5",
                 "transition-colors duration-[var(--motion-fade)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 on
-                  ? "border-[var(--selected-border)] bg-[var(--selected-bg)]"
+                  ? "border-transparent bg-state-selected ring-1 ring-inset ring-state-selected"
                   : "border-border hover:border-foreground",
               )}
             >

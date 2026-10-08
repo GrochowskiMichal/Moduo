@@ -605,7 +605,7 @@ export function BookPage() {
                         "flex flex-col items-start gap-1 rounded-lg border px-4 py-3 text-left",
                         "transition-colors duration-[var(--motion-fade)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                         choice === chosen
-                          ? "border-[var(--selected-border)] bg-[var(--selected-bg)]"
+                          ? "border-transparent bg-state-selected ring-1 ring-inset ring-state-selected"
                           : "border-border hover:border-foreground",
                       )}
                     >

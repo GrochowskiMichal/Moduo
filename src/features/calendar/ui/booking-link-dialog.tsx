@@ -215,7 +215,7 @@ export function BookingLinkDialog({
                         }
                         className={
                           on
-                            ? "rounded-full border border-(--selected-border) bg-(--selected-bg) px-2.5 py-1 text-xs text-foreground"
+                            ? "rounded-full border border-transparent bg-state-selected ring-1 ring-inset ring-state-selected px-2.5 py-1 text-xs text-foreground"
                             : "rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground"
                         }
                       >
@@ -325,7 +325,7 @@ export function BookingLinkDialog({
                           choice.disabled
                             ? "text-muted-foreground"
                             : "cursor-pointer text-foreground",
-                          draft.video === choice.id && "bg-[var(--selected-bg)]",
+                          draft.video === choice.id && "bg-state-selected",
                         )}
                       >
                         <RadioGroupItem

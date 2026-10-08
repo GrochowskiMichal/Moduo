@@ -18,9 +18,13 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default: "bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/80",
-        secondary: "bg-secondary text-secondary-foreground hover:bg-accent",
-        outline: "border border-border bg-transparent text-foreground hover:bg-accent",
-        ghost: "bg-transparent text-foreground hover:bg-accent",
+        // Neutral variants ride the state layer (tokens.css §5b): each hover
+        // is one step up from its rest fill on every shade. The old
+        // bg-secondary → hover:bg-accent pair was one grey on dark (a no-op).
+        secondary: "bg-state-active text-foreground hover:bg-state-active-hover",
+        outline:
+          "border border-hairline bg-transparent text-foreground hover:bg-state-hover active:bg-state-active",
+        ghost: "bg-transparent text-foreground hover:bg-state-hover active:bg-state-active",
         destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
         link: "bg-transparent text-primary underline-offset-4 hover:underline",
       },
