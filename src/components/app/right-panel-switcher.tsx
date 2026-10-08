@@ -23,9 +23,16 @@ type Props = {
   onChange: (id: string) => void;
 };
 
-/** The panel-header control + the active variant's body. */
+/**
+ * The panel-header control + the active variant's body. With one variant there
+ * is nothing to switch, so only its body renders (a module lists its variants
+ * here from the start, so adding a second one brings the switcher back).
+ */
 export function RightPanelSwitcher({ variants, activeId, onChange }: Props) {
   const active = variants.find((v) => v.id === activeId) ?? variants[0];
+  if (variants.length <= 1) {
+    return <div className="flex h-full min-h-0 flex-col">{active?.render()}</div>;
+  }
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
       <SegmentedControl
