@@ -31,10 +31,10 @@ import { artworkShare } from "./measure";
 import { CANVAS, ICON_BLACK, ICON_WHITE, INK, PAPER } from "./palette";
 import {
   AVATAR_MARK_SHARE,
-  EMAIL_LIGHT_HALO_PX,
   EMAIL_LOCKUP_CANVAS,
   EMAIL_MARK_SIZE,
-  markForTile,
+  FAVICON_TAB_PX,
+  markForDisplay,
   TILE_RADIUS,
 } from "./spec";
 
@@ -109,20 +109,23 @@ for (const [m, baseWidth] of artwork) {
 }
 
 // ── Favicons (prod: black tile; staging: inverted) ──────────────────────
+// Each file is drawn for the size it is *displayed* at (CSS px), which picks
+// the small master: browser tabs show favicons at 16 px, even from the 32 px
+// file meant for 2× screens; .ico's 32 and 48 serve Windows at 32/48 px.
 function faviconSet(dir: string, background: string, fill: string): void {
-  const tile = (px: number, radius = TILE_RADIUS) =>
-    tileSvg({ mark: markForTile(px, mark, markSmall), background, fill, radius });
-  const at32 = png(tile(32), 32);
-  write(`${dir}/favicon.svg`, tile(32));
+  const tile = (displayPx: number, radius = TILE_RADIUS) =>
+    tileSvg({ mark: markForDisplay(displayPx, mark, markSmall), background, fill, radius });
+  const tab = tile(FAVICON_TAB_PX);
+  write(`${dir}/favicon.svg`, tab);
   write(
     `${dir}/favicon.ico`,
     packIco([
-      { size: 16, png: png(tile(16), 16) },
-      { size: 32, png: at32 },
+      { size: 16, png: png(tab, 16) },
+      { size: 32, png: png(tile(32), 32) },
       { size: 48, png: png(tile(48), 48) },
     ]),
   );
-  write(`${dir}/favicon-32x32.png`, at32);
+  write(`${dir}/favicon-32x32.png`, png(tab, 32));
   write(`${dir}/icon-192.png`, png(tile(192), 192));
   write(`${dir}/icon-512.png`, png(tile(512), 512));
   // iOS masks its own corners, so the touch icon is a full square.
@@ -154,21 +157,19 @@ write("brand/exports/og/og-base.png", png(og, 1200));
 
 // ── Email logos (the email kit's contract: spec.ts, TX-1 assets.ts) ─────
 // "light" = for light emails (Ink artwork); "dark" = for dark mode (Paper).
-const lockupCanvas = (fill: string, haloPx = 0) =>
-  canvasSvg({ master: lockup, fill, ...EMAIL_LOCKUP_CANVAS, haloPx, haloFill: PAPER });
-const markCanvas = (fill: string, haloPx = 0) =>
+// No halo (decision 74a): emails pick the file that matches the reader's mode.
+const lockupCanvas = (fill: string) => canvasSvg({ master: lockup, fill, ...EMAIL_LOCKUP_CANVAS });
+const markCanvas = (fill: string) =>
   canvasSvg({
-    master: markForTile(EMAIL_MARK_SIZE, mark, markSmall),
+    master: markForDisplay(EMAIL_MARK_SIZE / 2, mark, markSmall),
     fill,
     width: EMAIL_MARK_SIZE,
     height: EMAIL_MARK_SIZE,
-    haloPx,
-    haloFill: PAPER,
   });
 const emailSvgs: [string, string, number][] = [
-  ["lockup-light", lockupCanvas(INK, EMAIL_LIGHT_HALO_PX), EMAIL_LOCKUP_CANVAS.width],
+  ["lockup-light", lockupCanvas(INK), EMAIL_LOCKUP_CANVAS.width],
   ["lockup-dark", lockupCanvas(PAPER), EMAIL_LOCKUP_CANVAS.width],
-  ["mark-light", markCanvas(INK, EMAIL_LIGHT_HALO_PX), EMAIL_MARK_SIZE],
+  ["mark-light", markCanvas(INK), EMAIL_MARK_SIZE],
   ["mark-dark", markCanvas(PAPER), EMAIL_MARK_SIZE],
 ];
 const emailLogos: [string, Uint8Array][] = [];

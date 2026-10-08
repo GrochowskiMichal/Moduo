@@ -19,10 +19,10 @@ import { parseMaster } from "./masters";
 import { CANVAS, ICON_BLACK, ICON_WHITE, INK, oklchGrayToHex, PAPER } from "./palette";
 import {
   AVATAR_MARK_SHARE,
-  EMAIL_LIGHT_HALO_PX,
   EMAIL_LOCKUP_CANVAS,
   EMAIL_MARK_SIZE,
-  markForTile,
+  FAVICON_TAB_PX,
+  markForDisplay,
   TILE_RADIUS,
 } from "./spec";
 
@@ -114,17 +114,6 @@ describe("compose", () => {
     expect(svg).toContain('viewBox="0 0 200 50" width="200" height="50"');
     expect(svg).toContain('transform="translate(0 5) scale(2)"');
     expect(svg).not.toContain("stroke=");
-    const haloed = canvasSvg({
-      master: m,
-      fill: "#000",
-      width: 200,
-      height: 50,
-      haloPx: 2,
-      haloFill: "#fff",
-    });
-    // Inset by the halo so the canvas edge never clips it: (200 − 4) / 100.
-    expect(haloed).toContain('transform="translate(2 5.4) scale(1.96)"');
-    expect(haloed).toContain('stroke="#fff"');
   });
 
   it("centres a scaled mark on its tile", () => {
@@ -203,7 +192,12 @@ describe("exports match the masters", () => {
 
   it("the favicons follow the masters and the tile rules", () => {
     const tile = (background: string, fill: string) =>
-      tileSvg({ mark: markForTile(32, mark, small), background, fill, radius: TILE_RADIUS });
+      tileSvg({
+        mark: markForDisplay(FAVICON_TAB_PX, mark, small),
+        background,
+        fill,
+        radius: TILE_RADIUS,
+      });
     expect(text("brand/exports/favicon/prod/favicon.svg")).toBe(tile(CANVAS, PAPER));
     expect(text("brand/exports/favicon/staging/favicon.svg")).toBe(tile(PAPER, CANVAS));
     expect(text("public/favicon.svg")).toBe(tile(CANVAS, PAPER));
@@ -232,20 +226,17 @@ describe("exports match the masters", () => {
   });
 
   it("ships the email logos on the email kit's exact canvases", () => {
-    const lockupSvg = (fill: string, haloPx = 0) =>
-      canvasSvg({ master: lockup, fill, ...EMAIL_LOCKUP_CANVAS, haloPx, haloFill: PAPER });
-    const markSvg = (fill: string, haloPx = 0) =>
+    const lockupSvg = (fill: string) => canvasSvg({ master: lockup, fill, ...EMAIL_LOCKUP_CANVAS });
+    const markSvg = (fill: string) =>
       canvasSvg({
-        master: markForTile(EMAIL_MARK_SIZE, mark, small),
+        master: markForDisplay(EMAIL_MARK_SIZE / 2, mark, small),
         fill,
         width: EMAIL_MARK_SIZE,
         height: EMAIL_MARK_SIZE,
-        haloPx,
-        haloFill: PAPER,
       });
-    expect(text("brand/exports/email/lockup-light.svg")).toBe(lockupSvg(INK, EMAIL_LIGHT_HALO_PX));
+    expect(text("brand/exports/email/lockup-light.svg")).toBe(lockupSvg(INK));
     expect(text("brand/exports/email/lockup-dark.svg")).toBe(lockupSvg(PAPER));
-    expect(text("brand/exports/email/mark-light.svg")).toBe(markSvg(INK, EMAIL_LIGHT_HALO_PX));
+    expect(text("brand/exports/email/mark-light.svg")).toBe(markSvg(INK));
     expect(text("brand/exports/email/mark-dark.svg")).toBe(markSvg(PAPER));
     for (const tone of ["light", "dark"]) {
       expect(pngSize(read(`public/email/lockup-${tone}@2x.png`))).toEqual(EMAIL_LOCKUP_CANVAS);
@@ -271,11 +262,12 @@ describe("the small master", () => {
     '<svg viewBox="0 0 10 10"><path d="M2 2H8V8Z"/></svg>',
   );
 
-  it("takes over for tiles of 32 px and below once it exists", () => {
-    expect(markForTile(16, mark, small)).toBe(small);
-    expect(markForTile(32, mark, small)).toBe(small);
-    expect(markForTile(48, mark, small)).toBe(mark);
-    expect(markForTile(16, mark, null)).toBe(mark);
+  it("is only for marks displayed under 24 px, once it exists", () => {
+    expect(markForDisplay(13, mark, small)).toBe(small);
+    expect(markForDisplay(23, mark, small)).toBe(small);
+    expect(markForDisplay(24, mark, small)).toBe(mark);
+    expect(markForDisplay(32, mark, small)).toBe(mark);
+    expect(markForDisplay(13, mark, null)).toBe(mark);
   });
 
   it("feeds ModuoMark's small drawing, falling back to the standard mark", () => {

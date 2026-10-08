@@ -12,8 +12,9 @@ import {
 type Props = React.SVGProps<SVGSVGElement> & {
   title?: string;
   /**
-   * Use the small-size drawing (opened windows) for a mark drawn 24 px or
-   * smaller. Identical to the standard mark until the small master exists.
+   * Use the small-size drawing (opened windows). Only for a mark displayed
+   * under 24 px (brand decision 13); identical to the standard mark until the
+   * small master exists.
    */
   small?: boolean;
 };

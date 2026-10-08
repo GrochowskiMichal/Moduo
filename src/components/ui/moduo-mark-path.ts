@@ -10,7 +10,7 @@ export const MODUO_MARK_PATHS: readonly { d: string; fillRule: "evenodd" | "nonz
   },
 ];
 
-/** The small-size drawing, for marks drawn 24 px or smaller. */
+/** The small-size drawing, only for marks displayed under 24 px. */
 export const MODUO_MARK_SMALL_VIEWBOX = "0 0 1000 1000";
 
 export const MODUO_MARK_SMALL_PATHS: readonly { d: string; fillRule: "evenodd" | "nonzero" }[] = [
