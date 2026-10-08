@@ -12,7 +12,7 @@
 
 import { RELATION_KINDS } from "../../_shared/contracts/vocabularies.ts";
 import type { ConnectorModule, ToolContext } from "../registry.ts";
-import { visibleIds } from "../share.ts";
+import { assertLiveLinkInScope, assertReach, linksInScope, visibleIds } from "../share.ts";
 
 type Row = Record<string, any>;
 
@@ -156,7 +156,8 @@ export const contactsConnectorModule: ConnectorModule = {
             .order("created_at", { ascending: false }),
         );
         const entity = type === "company" ? shapeCompany(found[0]) : shapeContact(found[0]);
-        return { entity, links: links.map(shapeLink) };
+        // Links into modules this key can't see are left out.
+        return { entity, links: linksInScope(ctx, links).map(shapeLink) };
       },
     },
     {
@@ -307,6 +308,8 @@ export const contactsConnectorModule: ConnectorModule = {
         required: ["contact_type", "contact_id", "target_type", "target_id"],
       },
       handler: async (args, ctx) => {
+        await assertReach(ctx, str(args, "contact_type"), str(args, "contact_id"));
+        await assertReach(ctx, str(args, "target_type"), str(args, "target_id"));
         const link = await callOp(ctx, "contacts_op_link", {
           p_contact_type: str(args, "contact_type"),
           p_contact_id: str(args, "contact_id"),
@@ -328,6 +331,7 @@ export const contactsConnectorModule: ConnectorModule = {
         required: ["link_id"],
       },
       handler: async (args, ctx) => {
+        await assertLiveLinkInScope(ctx, str(args, "link_id"));
         const link = await callOp(ctx, "contacts_op_unlink", { p_link_id: str(args, "link_id") });
         return link?.id ? shapeLink(link) : { ok: true };
       },

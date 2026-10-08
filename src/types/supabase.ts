@@ -226,6 +226,8 @@ export type Database = {
       }
       comments: {
         Row: {
+          author_kind: string
+          author_label: string | null
           body: string
           created_at: string
           created_by: string
@@ -237,6 +239,8 @@ export type Database = {
           workspace_id: string
         }
         Insert: {
+          author_kind?: string
+          author_label?: string | null
           body?: string
           created_at?: string
           created_by?: string
@@ -248,6 +252,8 @@ export type Database = {
           workspace_id: string
         }
         Update: {
+          author_kind?: string
+          author_label?: string | null
           body?: string
           created_at?: string
           created_by?: string
@@ -4632,6 +4638,10 @@ export type Database = {
       workspace_api_keys_revoke: {
         Args: { p_key_id: string }
         Returns: undefined
+      }
+      workspace_api_keys_set_scopes: {
+        Args: { p_key_id: string; p_scopes: Json }
+        Returns: Json
       }
       workspace_op_accept_invite: {
         Args: { p_token: string }

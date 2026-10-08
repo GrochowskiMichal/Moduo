@@ -27,8 +27,8 @@ t/maciej/* t/mike/* ← task / milestone branches. Short-lived.
 | --- | --- | --- |
 | `main` | shared | `develop` only, at release time, both devs sign off |
 | `develop` | shared | `mike` and `maciej`, via PR, self-merge OK (review optional) |
-| `maciej` | Maciej | `t/maciej/*` task branches, via PR or fast-forward |
-| `mike` | Mike | `t/mike/*` task branches, via PR or fast-forward |
+| `maciej` | Maciej | `t/maciej/*` task branches, via PR with a merge commit (never fast-forward) |
+| `mike` | Mike | `t/mike/*` task branches, via PR with a merge commit (never fast-forward) |
 
 Nobody pushes directly to `main`. Agents **do** merge into `develop` via PR
 as part of `/s3` when the chunk should show on Entire (standing
@@ -61,8 +61,9 @@ task branch  →  personal branch  →  develop  →  main
 ```
 
 - **Task → personal**: as soon as the task is complete and passes its own
-  testing. Squash-merge or rebase-merge, your choice. Delete the task branch
-  after merge.
+  testing. Open a PR and merge it with a **merge commit — never fast-forward**
+  (personal branches are hot; parallel sessions need the merge boundary). Delete
+  the task branch after merge.
 - **Personal → develop**: **do this often.** GitHub's default branch is
   `develop`. Entire.io repo Overview/Analytics only count checkpoints that
   have landed there, so bigger chunks (a finished `/s2` block, any
@@ -171,7 +172,7 @@ the dev whose work caused the conflict resolves and re-requests review.
 These apply to every AI session in this repo regardless of tool:
 
 1. **Default base branch is the user's personal branch.** Unless told otherwise,
-   `git checkout -b <owner>/<task> <owner>` is the right starting point. Never
+   `git checkout -b t/<owner>/<task> <owner>` is the right starting point. Never
    branch from `main`. Never branch from `develop` unless explicitly
    instructed.
 2. **Never push to `main` or `develop` directly.** Always go through a PR.
@@ -197,7 +198,7 @@ The first thing an LLM session should do, before any other action:
    is Maciej" by default; Mike's AGENTS.md fork or session prompt overrides.)
 2. `git fetch && git checkout <owner>` to land on the correct personal branch.
 3. `git pull` to refresh.
-4. `git checkout -b <owner>/<task>` for new work.
+4. `git checkout -b t/<owner>/<task>` for new work.
 5. Skim AGENTS.md + this file's "Rules for LLM agents" + DESIGN_SYSTEM.md
    if the task is UI.
 

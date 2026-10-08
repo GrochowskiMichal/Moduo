@@ -1,0 +1,179 @@
+{
+  "theme": ["src/styles/tokens.css", "src/global.css"],
+  "components": [
+    {
+      "name": "Avatar",
+      "entrypoint": "src/components/ui/avatar.tsx",
+      "sourceFiles": ["src/components/ui/avatar.tsx"],
+      "supportingFiles": ["src/components/ui/avatar.stories.tsx"]
+    },
+    {
+      "name": "Badge",
+      "entrypoint": "src/components/ui/badge.tsx",
+      "sourceFiles": ["src/components/ui/badge.tsx"],
+      "supportingFiles": ["src/components/ui/badge.stories.tsx"]
+    },
+    {
+      "name": "Calendar",
+      "entrypoint": "src/components/ui/calendar.tsx",
+      "sourceFiles": ["src/components/ui/calendar.tsx"],
+      "supportingFiles": ["src/components/ui/calendar.stories.tsx"]
+    },
+    {
+      "name": "Card",
+      "entrypoint": "src/components/ui/card.tsx",
+      "sourceFiles": ["src/components/ui/card.tsx"],
+      "supportingFiles": ["src/components/ui/card.stories.tsx"]
+    },
+    {
+      "name": "Command",
+      "entrypoint": "src/components/ui/command.tsx",
+      "sourceFiles": ["src/components/ui/command.tsx"],
+      "supportingFiles": ["src/components/ui/command.stories.tsx"]
+    },
+    {
+      "name": "CompleteToggle",
+      "entrypoint": "src/components/ui/complete-toggle.tsx",
+      "sourceFiles": ["src/components/ui/complete-toggle.tsx"],
+      "supportingFiles": ["src/components/ui/complete-toggle.stories.tsx"]
+    },
+    {
+      "name": "ContextMenu",
+      "entrypoint": "src/components/ui/context-menu.tsx",
+      "sourceFiles": ["src/components/ui/context-menu.tsx"],
+      "supportingFiles": ["src/components/ui/context-menu.stories.tsx"]
+    },
+    {
+      "name": "DateField",
+      "entrypoint": "src/components/ui/date-field.tsx",
+      "sourceFiles": ["src/components/ui/date-field.tsx"],
+      "supportingFiles": ["src/components/ui/date-field.stories.tsx"]
+    },
+    {
+      "name": "DropdownMenu",
+      "entrypoint": "src/components/ui/dropdown-menu.tsx",
+      "sourceFiles": ["src/components/ui/dropdown-menu.tsx"],
+      "supportingFiles": ["src/components/ui/dropdown-menu.stories.tsx"]
+    },
+    {
+      "name": "EmptyState",
+      "entrypoint": "src/components/ui/empty-state.tsx",
+      "sourceFiles": ["src/components/ui/empty-state.tsx"],
+      "supportingFiles": ["src/components/ui/empty-state.stories.tsx"]
+    },
+    {
+      "name": "Field",
+      "entrypoint": "src/components/ui/field.tsx",
+      "sourceFiles": ["src/components/ui/field.tsx"],
+      "supportingFiles": []
+    },
+    {
+      "name": "IconButton",
+      "entrypoint": "src/components/ui/icon-button.tsx",
+      "sourceFiles": ["src/components/ui/icon-button.tsx"],
+      "supportingFiles": ["src/components/ui/icon-button.stories.tsx"]
+    },
+    {
+      "name": "Icon",
+      "entrypoint": "src/components/ui/icon.tsx",
+      "sourceFiles": ["src/components/ui/icon.tsx"],
+      "supportingFiles": ["src/components/ui/icon.stories.tsx"]
+    },
+    {
+      "name": "Kbd",
+      "entrypoint": "src/components/ui/kbd.tsx",
+      "sourceFiles": ["src/components/ui/kbd.tsx"],
+      "supportingFiles": ["src/components/ui/kbd.stories.tsx"]
+    },
+    {
+      "name": "Label",
+      "entrypoint": "src/components/ui/label.tsx",
+      "sourceFiles": ["src/components/ui/label.tsx"],
+      "supportingFiles": ["src/components/ui/label.stories.tsx"]
+    },
+    {
+      "name": "ModuoMark",
+      "entrypoint": "src/components/ui/moduo-mark.tsx",
+      "sourceFiles": ["src/components/ui/moduo-mark.tsx"],
+      "supportingFiles": []
+    },
+    {
+      "name": "Popover",
+      "entrypoint": "src/components/ui/popover.tsx",
+      "sourceFiles": ["src/components/ui/popover.tsx"],
+      "supportingFiles": ["src/components/ui/popover.stories.tsx"]
+    },
+    {
+      "name": "PropertyRow",
+      "entrypoint": "src/components/ui/property-row.tsx",
+      "sourceFiles": ["src/components/ui/property-row.tsx"],
+      "supportingFiles": ["src/components/ui/property-row.stories.tsx"]
+    },
+    {
+      "name": "RadioGroup",
+      "entrypoint": "src/components/ui/radio-group.tsx",
+      "sourceFiles": ["src/components/ui/radio-group.tsx"],
+      "supportingFiles": ["src/components/ui/radio-group.stories.tsx"]
+    },
+    {
+      "name": "Resizable",
+      "entrypoint": "src/components/ui/resizable.tsx",
+      "sourceFiles": ["src/components/ui/resizable.tsx"],
+      "supportingFiles": ["src/components/ui/resizable.stories.tsx"]
+    },
+    {
+      "name": "ScrollArea",
+      "entrypoint": "src/components/ui/scroll-area.tsx",
+      "sourceFiles": ["src/components/ui/scroll-area.tsx"],
+      "supportingFiles": ["src/components/ui/scroll-area.stories.tsx"]
+    },
+    {
+      "name": "SegmentedControl",
+      "entrypoint": "src/components/ui/segmented-control.tsx",
+      "sourceFiles": ["src/components/ui/segmented-control.tsx"],
+      "supportingFiles": ["src/components/ui/segmented-control.stories.tsx"]
+    },
+    {
+      "name": "Separator",
+      "entrypoint": "src/components/ui/separator.tsx",
+      "sourceFiles": ["src/components/ui/separator.tsx"],
+      "supportingFiles": ["src/components/ui/separator.stories.tsx"]
+    },
+    {
+      "name": "Sheet",
+      "entrypoint": "src/components/ui/sheet.tsx",
+      "sourceFiles": ["src/components/ui/sheet.tsx"],
+      "supportingFiles": ["src/components/ui/sheet.stories.tsx"]
+    },
+    {
+      "name": "Sonner",
+      "entrypoint": "src/components/ui/sonner.tsx",
+      "sourceFiles": ["src/components/ui/sonner.tsx"],
+      "supportingFiles": ["src/components/ui/sonner.stories.tsx"]
+    },
+    {
+      "name": "Tabs",
+      "entrypoint": "src/components/ui/tabs.tsx",
+      "sourceFiles": ["src/components/ui/tabs.tsx"],
+      "supportingFiles": ["src/components/ui/tabs.stories.tsx"]
+    },
+    {
+      "name": "TagInput",
+      "entrypoint": "src/components/ui/tag-input.tsx",
+      "sourceFiles": ["src/components/ui/tag-input.tsx"],
+      "supportingFiles": ["src/components/ui/tag-input.stories.tsx"]
+    },
+    {
+      "name": "Toolbar",
+      "entrypoint": "src/components/ui/toolbar.tsx",
+      "sourceFiles": ["src/components/ui/toolbar.tsx"],
+      "supportingFiles": ["src/components/ui/toolbar.stories.tsx"]
+    },
+    {
+      "name": "Tooltip",
+      "entrypoint": "src/components/ui/tooltip.tsx",
+      "sourceFiles": ["src/components/ui/tooltip.tsx"],
+      "supportingFiles": ["src/components/ui/tooltip.stories.tsx"]
+    }
+  ]
+}

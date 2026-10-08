@@ -3,6 +3,7 @@
  * Implementations live in runtime.tauri.ts (desktop) and runtime.web.ts (web).
  */
 
+import type { ContentAuthorKind } from "@contracts/vocabularies";
 import type {
   CalendarAccountModel,
   CalendarEventModel,
@@ -58,7 +59,12 @@ export type SpineComment = {
   entityType: string;
   entityId: string;
   body: string;
+  /** Who it belongs to. For an app's comment, the person whose API key wrote it. */
   createdBy: string | null;
+  /** "api_key" = written by an app over MCP: show `authorLabel`, never the person. */
+  authorKind: ContentAuthorKind;
+  /** The key's name when the comment was written (api_key authors only). */
+  authorLabel: string | null;
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
@@ -112,8 +118,9 @@ export type IntegrationStatusItem = {
  * A workspace-scoped API key for the Moduo MCP connector
  * (docs/moduo-mcp-connector.md). The secret is returned exactly once from
  * `createApiKey` and never readable again — only the prefix is stored in
- * clear. `scopes` maps module → "none" | "view" | "edit" (view by default;
- * admin is never key-grantable).
+ * clear. `scopes` maps module → "none" | "view" | "edit" (admin is never
+ * key-grantable). The key acts as `createdBy` and never gets more than that
+ * person can do (PERM-0).
  */
 export type WorkspaceApiKey = {
   id: string;
@@ -121,6 +128,8 @@ export type WorkspaceApiKey = {
   name: string;
   keyPrefix: string;
   scopes: Record<string, string>;
+  /** The person the key acts as. Null for keys from before creators were recorded (they can't connect). */
+  createdBy: string | null;
   createdAt: string;
   lastUsedAt: string | null;
 };
@@ -297,7 +306,7 @@ export type ModuoRuntime = {
     listNotifications(): Promise<any[]>;
     markNotificationRead(notificationId: string): Promise<void>;
     markAllNotificationsRead(): Promise<void>;
-    /** Live (unrevoked) MCP connector keys. Owner/admin only (RLS-enforced). */
+    /** Live (unrevoked) MCP connector keys. Needs ws.api_keys (RLS-enforced). */
     listApiKeys(workspaceId: string): Promise<WorkspaceApiKey[]>;
     /** Create a key; the returned `secret` is shown once and never again. */
     createApiKey(input: {
@@ -305,6 +314,12 @@ export type ModuoRuntime = {
       name: string;
       scopes: Record<string, string>;
     }): Promise<WorkspaceApiKey & { secret: string }>;
+    /**
+     * Change a live key's per-module scopes without rotating its secret;
+     * resolves to the key's scopes after the change. Merges: modules missing
+     * from `scopes` keep their level. Only the key's creator can raise a level.
+     */
+    setApiKeyScopes(keyId: string, scopes: Record<string, string>): Promise<Record<string, string>>;
     revokeApiKey(keyId: string): Promise<void>;
     /** The Moduo MCP connector URL agents connect to (same on web + desktop). */
     getMcpEndpoint(): string;

@@ -81,7 +81,7 @@ export const TOOL_ARG_SCHEMAS: Record<string, z.ZodType<Record<string, unknown>>
   }),
   contacts_set_status: z.object({ contact_id: nonempty, status: nonempty }),
   contacts_link: z.object({
-    contact_type: nonempty,
+    contact_type: z.enum(["contact", "company"]),
     contact_id: nonempty,
     target_type: nonempty,
     target_id: nonempty,
