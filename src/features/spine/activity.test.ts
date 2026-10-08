@@ -35,6 +35,11 @@ describe("spineActorName", () => {
 });
 
 describe("spineActivityLine", () => {
+  it("renders the task notifications (DF-9, TV-D1) in the card voice", () => {
+    expect(spineActivityLine(entry("tasks.assigned"))).toBe("assigned this to you");
+    expect(spineActivityLine(entry("tasks.completed"))).toBe("completed this");
+  });
+
   it("renders link creation, by kind", () => {
     expect(spineActivityLine(entry("links.create", { relation_kind: "references" }))).toBe(
       "linked this",

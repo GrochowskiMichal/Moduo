@@ -24,8 +24,9 @@ export function followupTitle(contactName: string): string {
 }
 
 /**
- * Build the plain Task for a follow-up. `id`/`ownerId` are minted by the runtime
- * on upsert (makeTask leaves them empty); status is the ordinary "todo".
+ * Build the plain Task for a follow-up. The runtime mints the id and the server
+ * records the creator on create (makeTask leaves both empty, and the assignee
+ * unchosen = the creator); status is the ordinary "todo".
  */
 export function buildFollowupTask(input: BuildFollowupInput): Task {
   return makeTask({

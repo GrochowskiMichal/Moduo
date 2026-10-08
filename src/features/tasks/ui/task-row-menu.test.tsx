@@ -36,7 +36,9 @@ function task(id: string, title: string, extra: Partial<Task> = {}): Task {
   return {
     id,
     workspaceId: "w",
-    ownerId: "u1",
+    creatorId: "u1",
+    creatorUnknown: false,
+    assigneeId: "u1",
     bucketId: "b1",
     parentId: null,
     title,
