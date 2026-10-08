@@ -3,7 +3,14 @@
 
 export const MAX_BOOKING_GUESTS = 10;
 
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// No spaces, brackets, quotes or list separators: a booker's address goes
+// straight into Resend's `to`, where "Name <a@b>" or "a@b, c@d" would be
+// read as a display name or several recipients.
+const EMAIL = /^[^\s@<>()[\],;:"]+@[^\s@<>()[\],;:"]+\.[^\s@<>()[\],;:"]+$/;
+
+export function isEmailAddress(value: string): boolean {
+  return EMAIL.test(value);
+}
 
 export function parseGuestEmails(
   raw: unknown,

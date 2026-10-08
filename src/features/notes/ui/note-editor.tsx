@@ -393,7 +393,7 @@ export function NoteEditor({
   }
 
   return (
-    <div className="notes-editor-v2 relative h-full min-h-0 overflow-auto bg-background">
+    <div className="pane-scroll notes-editor-v2 relative h-full min-h-0 overflow-auto bg-background">
       <NotesEditorBridgeContext.Provider value={bridge}>
         <LexicalCollaboration key={`collab-${noteId}`}>
           <LexicalComposer initialConfig={initialConfig} key={noteId}>

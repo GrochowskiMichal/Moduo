@@ -78,7 +78,7 @@ export function EmailRail({
   const inboxView = activeView === "inbox";
 
   return (
-    <div className="scrollbar-thin flex h-full min-h-0 flex-col gap-3 overflow-y-auto">
+    <div className="pane-scroll scrollbar-thin flex h-full min-h-0 flex-col gap-3 overflow-y-auto">
       {/* Unified — the default scope. */}
       <div className="flex flex-col gap-0.5">
         <button

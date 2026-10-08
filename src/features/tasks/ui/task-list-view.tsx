@@ -568,7 +568,7 @@ export function TaskListView({
         }}
         role="grid"
         aria-label={`${scopeTitle} tasks`}
-        className="min-h-0 flex-1 overflow-auto rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="pane-scroll min-h-0 flex-1 overflow-auto rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         {tasks.length === 0 ? (
           <EmptyState canEdit={canEdit} onRequestCapture={onRequestCapture} />

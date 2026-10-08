@@ -72,7 +72,7 @@ These are real app tokens. They must not become landing buttons, section backgro
 | Warning | `#fcb442` | `--warning` | Slippage, due soon — never a wall of red |
 | Danger | `#fc4447` | `--destructive` | Destructive confirm only |
 | Info | `#00ade4` | `--info` | Informational status |
-| Label pink | `#f862b3` | `--pink-base` | Tag chip, and the single AI disc if an AI moment is shown |
+| Label pink | `#f862b3` | `--pink-base` | Tag chip (one ordinary tag hue, not a brand or AI colour) |
 | Label violet | `#9e71fd` | `--violet-base` | Tag chip |
 | Label blue | `#0099f7` | `--blue-base` | Tag chip |
 | Label green | `#3fc168` | `--green-base` | Tag chip |
@@ -286,7 +286,7 @@ A single horizontal row of plain words, Geist 14px / 500, color `#7a7a7a`, gap 3
 - Do not use Geist Mono for headlines or manifesto copy
 - Do not invent customer logos, prices, or testimonials
 - Do not draw a node graph. Links are a task row that mentions a person, an email, a time block
-- Do not add emoji, sparkles, or an "AI" badge on the page chrome. If a screenshot includes the AI disc, it is one small pink circle inside the product, not a section theme
+- Do not add emoji, sparkles, or an "AI" badge on the page chrome. There is no AI colour or AI disc anywhere (brand decision 40); an assistant shows up by name, like a person
 - Do not build a light theme for this page
 
 ---

@@ -3,8 +3,8 @@
 // quietly reappear at the feature layer.
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "@rstest/core";
+import { cleanup, render, screen } from "@testing-library/react";
 
 import { Eyebrow, eyebrowVariants } from "./eyebrow";
 
@@ -113,9 +113,8 @@ describe("eyebrow drift guard", () => {
     const root = path.resolve(__dirname, "../../..");
     const srcRoot = path.join(root, "src");
 
-    // Skipped wholesale: src/ui is Subframe-generated (it carries Subframe's own
-    // theme idioms, same exemption lint:tw grants), src/tw is the RN shim.
-    const skipDirs = new Set([path.join(srcRoot, "ui"), path.join(srcRoot, "tw")]);
+    // Skipped wholesale: src/tw is the RN shim (same exemption lint:tw grants).
+    const skipDirs = new Set([path.join(srcRoot, "tw")]);
 
     const walk = async (dir: string): Promise<string[]> => {
       const out: string[] = [];
