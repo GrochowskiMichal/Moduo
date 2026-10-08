@@ -34,6 +34,7 @@ import {
   tagRowSchema,
   taskRelationRowSchema,
 } from "@contracts/rows";
+import { normalizeContentAuthorKind } from "@contracts/vocabularies";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import * as Y from "yjs";
 import type { CalendarAccountModel, CalendarEventModel } from "../features/calendar/events";
@@ -67,9 +68,11 @@ import {
   type Tag,
   type TagLink,
   type Task,
+  type TaskQueueEntry,
   type TaskRelation,
 } from "../features/tasks/model";
 import { toMemberPerm, toMemberRole } from "../features/workspaces/workspace-mappers";
+import { clearIgnoredAuthLink, SUPABASE_AUTH_OPTIONS } from "./auth-url";
 import type { EntityLink, EntityRecord } from "./entity-links";
 import { collectTruncations, READ_CAPS, readPaged, type Truncation } from "./paged-select";
 import {
@@ -97,10 +100,13 @@ import {
   editableTaskFields,
   isMissingColumnError,
   isMissingFunctionError,
+  isMissingTableError,
+  sortQueueEntries,
   type TaskFieldPatch,
   taskCreateRow,
   taskCreateRowLegacy,
   taskPatchToColumns,
+  taskQueueRowToModel,
   taskRowToModel,
 } from "./task-rows";
 
@@ -113,12 +119,10 @@ const SUPABASE_PUBLISHABLE_KEY: string =
   (import.meta.env.PUBLIC_SUPABASE_PUBLISHABLE_KEY as string | undefined) ||
   "sb_publishable_NAVl-rzFzPOi5ZU84aC3pA_SOIR00so";
 
+// No session ever comes from the URL (login CSRF): see auth-url.ts. The boot
+// scrub of a leftover token fragment runs from main.tsx, before the router.
 export const supabaseClient: SupabaseClient = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
-  },
+  auth: SUPABASE_AUTH_OPTIONS,
 });
 
 // ── Boot-time read coalescer (DF-12) ─────────────────────────────────────────────
@@ -167,6 +171,7 @@ async function getAuthedUser() {
 // it through INITIAL_SESSION and TOKEN_REFRESHED (same user), so those never
 // re-trigger the storm — only a real sign-in/out / user-update clears it.
 supabaseClient.auth.onAuthStateChange((event) => {
+  if (event === "SIGNED_IN") clearIgnoredAuthLink();
   if (event === "SIGNED_IN" || event === "SIGNED_OUT" || event === "USER_UPDATED") {
     bootReads.clear();
   }
@@ -504,8 +509,10 @@ export const webRuntime: ModuoRuntime = {
       try {
         const { error } = await supabaseClient.auth.signInWithOtp({
           email,
-          // Invite-only: sign-ups are off on the Supabase project, so only existing
-          // or dashboard-invited users get a code. Never create a user from here.
+          // Invite-only: sign-ups are off on the Supabase project, so only confirmed
+          // users get a code. A dashboard invitee is confirmed by clicking the invite
+          // link once; before that, GoTrue routes them through sign-up and refuses
+          // ("Signups not allowed for this instance"). Never create a user from here.
           options: { shouldCreateUser: false },
         });
         if (error) return { data: {}, error: toError(error) };
@@ -803,7 +810,7 @@ export const webRuntime: ModuoRuntime = {
     async listApiKeys(workspaceId) {
       const { data, error } = await supabaseClient
         .from("workspace_api_keys")
-        .select("id, workspace_id, name, key_prefix, scopes, created_at, last_used_at")
+        .select("id, workspace_id, name, key_prefix, scopes, created_by, created_at, last_used_at")
         .eq("workspace_id", workspaceId)
         .is("revoked_at", null)
         .order("created_at", { ascending: false });
@@ -814,6 +821,7 @@ export const webRuntime: ModuoRuntime = {
         name: row.name,
         keyPrefix: row.key_prefix,
         scopes: (row.scopes ?? {}) as Record<string, string>,
+        createdBy: row.created_by ?? null,
         createdAt: row.created_at,
         lastUsedAt: row.last_used_at ?? null,
       }));
@@ -833,10 +841,28 @@ export const webRuntime: ModuoRuntime = {
         name: row.name,
         keyPrefix: row.key_prefix,
         scopes: (row.scopes ?? {}) as Record<string, string>,
+        createdBy: (await getAuthedUser())?.id ?? null,
         createdAt: row.created_at,
         lastUsedAt: null,
         secret: row.secret,
       };
+    },
+    async setApiKeyScopes(keyId, scopes) {
+      const { data, error } = await supabaseClient.rpc("workspace_api_keys_set_scopes", {
+        p_key_id: keyId,
+        p_scopes: scopes,
+      });
+      if (error) {
+        // PGRST202 = the RPC isn't on this backend yet. User-triggered, so say
+        // so plainly rather than fail opaquely.
+        if (error.code === "PGRST202") {
+          throw new Error(
+            "Changing a key's access isn't available on this server yet. Create a new key instead.",
+          );
+        }
+        throw new Error(error.message);
+      }
+      return (data ?? {}) as Record<string, string>;
     },
     async revokeApiKey(keyId) {
       const { error } = await supabaseClient.rpc("workspace_api_keys_revoke", { p_key_id: keyId });
@@ -2367,6 +2393,55 @@ export const webRuntime: ModuoRuntime = {
       });
     },
 
+    // ── personal queues (TV-D2) ──────────────────────────────────────────
+    async listQueue(workspaceId) {
+      const res = await selectCapped<any>({
+        scope: "queued tasks",
+        cap: READ_CAPS.taskQueue,
+        build: (opts?: SelectOpts) =>
+          supabaseClient.from("task_queue").select("*", opts).eq("workspace_id", workspaceId),
+        order: (q) => q.order("user_id").order("position").order("id"),
+      });
+      // Until the migration reaches the database there are no queues: an
+      // empty list keeps every surface working (the old commit columns still
+      // drive the queue until TV-D4).
+      if (res.error) {
+        if (isMissingTableError(res.error, "task_queue")) return [];
+        throw new Error(res.error.message);
+      }
+      return sortQueueEntries(mapKnownRows(res.rows, taskQueueRowToModel));
+    },
+
+    async opQueueAdd({ workspaceId, taskId, at }) {
+      return queueOpRpc("tasks_op_queue_add", {
+        p_workspace_id: workspaceId,
+        p_task_id: taskId,
+        p_at: at ?? "end",
+      });
+    },
+
+    async opQueueRemove({ workspaceId, taskId }) {
+      return queueOpRpc("tasks_op_queue_remove", {
+        p_workspace_id: workspaceId,
+        p_task_id: taskId,
+      });
+    },
+
+    async opQueueReorder({ workspaceId, taskId, afterTaskId }) {
+      return queueOpRpc("tasks_op_queue_reorder", {
+        p_workspace_id: workspaceId,
+        p_task_id: taskId,
+        p_after_task_id: afterTaskId,
+      });
+    },
+
+    async opQueueMoveToEnd({ workspaceId, taskId }) {
+      return queueOpRpc("tasks_op_queue_move_to_end", {
+        p_workspace_id: workspaceId,
+        p_task_id: taskId,
+      });
+    },
+
     async opSetStatus({ workspaceId, taskId, status, recurrence, position }) {
       return taskOpRpc("tasks_op_set_status", {
         p_workspace_id: workspaceId,
@@ -2598,9 +2673,9 @@ export const webRuntime: ModuoRuntime = {
     async listComments({ workspaceId, entityType, entityId }) {
       const { data, error } = await supabaseClient
         .from("comments")
-        .select(
-          "id, workspace_id, entity_type, entity_id, body, created_by, created_at, updated_at, deleted_at",
-        )
+        // `*`, not a column list: author_kind / author_label arrive with
+        // 20261008123000, and naming them would fail this read until it applies.
+        .select("*")
         .eq("workspace_id", workspaceId)
         .eq("entity_type", entityType)
         .eq("entity_id", entityId)
@@ -3137,6 +3212,13 @@ async function taskOpRpc(fn: string, args: Record<string, unknown>): Promise<Tas
   return taskRowToModel(row);
 }
 
+/** Call a tasks_op_queue_* RPC: each returns the caller's queue, in order. */
+async function queueOpRpc(fn: string, args: Record<string, unknown>): Promise<TaskQueueEntry[]> {
+  const { data, error } = await supabaseClient.rpc(fn, args);
+  if (error) throw new Error(error.message);
+  return sortQueueEntries(mapKnownRows(Array.isArray(data) ? data : [], taskQueueRowToModel));
+}
+
 function activityRowToModel(raw: unknown): ActivityEntry {
   const r = requireRow(activityRowSchema, raw, "activity");
   return {
@@ -3344,6 +3426,8 @@ function commentRowToModel(raw: unknown): SpineComment {
     entityId: r.entity_id,
     body: r.body ?? "",
     createdBy: r.created_by ?? null,
+    authorKind: normalizeContentAuthorKind(r.author_kind),
+    authorLabel: r.author_label ?? null,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
     deletedAt: r.deleted_at ?? null,

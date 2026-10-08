@@ -3,6 +3,7 @@
  * Implementations live in runtime.tauri.ts (desktop) and runtime.web.ts (web).
  */
 
+import type { ContentAuthorKind } from "@contracts/vocabularies";
 import type {
   CalendarAccountModel,
   CalendarEventModel,
@@ -38,10 +39,12 @@ import type { RawLinkSuggestion } from "../features/spine/suggest";
 import type {
   ActivityEntry,
   Bucket,
+  QueuePlacement,
   RecurrenceRule,
   Tag,
   TagLink,
   Task,
+  TaskQueueEntry,
   TaskRelation,
   TaskStatus,
   TasksCatchUpItem,
@@ -59,7 +62,12 @@ export type SpineComment = {
   entityType: string;
   entityId: string;
   body: string;
+  /** Who it belongs to. For an app's comment, the person whose API key wrote it. */
   createdBy: string | null;
+  /** "api_key" = written by an app over MCP: show `authorLabel`, never the person. */
+  authorKind: ContentAuthorKind;
+  /** The key's name when the comment was written (api_key authors only). */
+  authorLabel: string | null;
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
@@ -113,8 +121,9 @@ export type IntegrationStatusItem = {
  * A workspace-scoped API key for the Moduo MCP connector
  * (docs/moduo-mcp-connector.md). The secret is returned exactly once from
  * `createApiKey` and never readable again — only the prefix is stored in
- * clear. `scopes` maps module → "none" | "view" | "edit" (view by default;
- * admin is never key-grantable).
+ * clear. `scopes` maps module → "none" | "view" | "edit" (admin is never
+ * key-grantable). The key acts as `createdBy` and never gets more than that
+ * person can do (PERM-0).
  */
 export type WorkspaceApiKey = {
   id: string;
@@ -122,6 +131,8 @@ export type WorkspaceApiKey = {
   name: string;
   keyPrefix: string;
   scopes: Record<string, string>;
+  /** The person the key acts as. Null for keys from before creators were recorded (they can't connect). */
+  createdBy: string | null;
   createdAt: string;
   lastUsedAt: string | null;
 };
@@ -298,7 +309,7 @@ export type ModuoRuntime = {
     listNotifications(): Promise<any[]>;
     markNotificationRead(notificationId: string): Promise<void>;
     markAllNotificationsRead(): Promise<void>;
-    /** Live (unrevoked) MCP connector keys. Owner/admin only (RLS-enforced). */
+    /** Live (unrevoked) MCP connector keys. Needs ws.api_keys (RLS-enforced). */
     listApiKeys(workspaceId: string): Promise<WorkspaceApiKey[]>;
     /** Create a key; the returned `secret` is shown once and never again. */
     createApiKey(input: {
@@ -306,6 +317,12 @@ export type ModuoRuntime = {
       name: string;
       scopes: Record<string, string>;
     }): Promise<WorkspaceApiKey & { secret: string }>;
+    /**
+     * Change a live key's per-module scopes without rotating its secret;
+     * resolves to the key's scopes after the change. Merges: modules missing
+     * from `scopes` keep their level. Only the key's creator can raise a level.
+     */
+    setApiKeyScopes(keyId: string, scopes: Record<string, string>): Promise<Record<string, string>>;
     revokeApiKey(keyId: string): Promise<void>;
     /** The Moduo MCP connector URL agents connect to (same on web + desktop). */
     getMcpEndpoint(): string;
@@ -852,9 +869,42 @@ export type ModuoRuntime = {
      * invariants, write, and an attributed activity row in one transaction.
      * Each returns the updated row(s) for optimistic reconciliation.
      */
+    /**
+     * The day's commit queue, kept for builds from before TV-D4: since TV-D2
+     * these also add the task to (commit) or take it out of (uncommit, skip)
+     * the caller's personal queue, and skip no longer counts as a reschedule.
+     * Removed in TV-D7.
+     */
     opCommit(input: { workspaceId: string; taskId: string; forDate: string }): Promise<Task>;
     opUncommit(input: { workspaceId: string; taskId: string }): Promise<Task>;
     opSkipToday(input: { workspaceId: string; taskId: string }): Promise<Task>;
+    /**
+     * Personal queues (TV-D2): every queue row the caller can see in the
+     * workspace — their own line-up and other people's claims on tasks they
+     * can see — sorted by person, then position. Empty until the migration
+     * reaches the database.
+     */
+    listQueue(workspaceId: string): Promise<TaskQueueEntry[]>;
+    /**
+     * Queue ops (TV-D2). Each acts on the caller's own queue (an API key on
+     * its creator's) and returns that queue in order. Adding puts a task at
+     * the end (or the top) and leaves an already-queued task where it is
+     * unless asked for the top; reorder places it right after `afterTaskId`,
+     * or first when that is null; move-to-end is Skip in a run. Adding and
+     * removing are logged; moves are not, and none counts as a reschedule.
+     */
+    opQueueAdd(input: {
+      workspaceId: string;
+      taskId: string;
+      at?: QueuePlacement;
+    }): Promise<TaskQueueEntry[]>;
+    opQueueRemove(input: { workspaceId: string; taskId: string }): Promise<TaskQueueEntry[]>;
+    opQueueReorder(input: {
+      workspaceId: string;
+      taskId: string;
+      afterTaskId: string | null;
+    }): Promise<TaskQueueEntry[]>;
+    opQueueMoveToEnd(input: { workspaceId: string; taskId: string }): Promise<TaskQueueEntry[]>;
     /**
      * Assign (or, with null, unassign) through `tasks_op_assign`: the person
      * has to be a member who can work on tasks. Assigning someone else

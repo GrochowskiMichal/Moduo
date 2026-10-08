@@ -56,6 +56,12 @@ export function activityLine(entry: Pick<ActivityEntry, "op" | "payload">): stri
       return "removed this from the queue";
     case "tasks.skip_today":
       return "skipped this for the day";
+    // TV-D2: personal queues; the queue is always the actor's own, so the
+    // line reads right after "You" and after a name alike.
+    case "tasks.queue_add":
+      return p.at === "top" ? "queued this first" : "queued this";
+    case "tasks.queue_remove":
+      return "removed this from the queue";
     case "tasks.set_status": {
       const from = str(p.from) as TaskStatus | null;
       const to = str(p.to) as TaskStatus | null;

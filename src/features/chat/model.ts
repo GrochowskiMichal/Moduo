@@ -4,9 +4,9 @@
 // migration 20261006150000_chat_module). Closed vocabularies live in
 // @contracts/vocabularies; this file only shapes rows for the UI.
 
-import type { ChatChannelKind, ChatNotifyLevel } from "@contracts/vocabularies";
+import type { ChatChannelKind, ChatNotifyLevel, ContentAuthorKind } from "@contracts/vocabularies";
 
-export type { ChatChannelKind, ChatNotifyLevel };
+export type { ChatChannelKind, ChatNotifyLevel, ContentAuthorKind };
 
 export type ChatChannel = {
   id: string;
@@ -45,7 +45,7 @@ export type ChatMessage = {
   parentId: string | null;
   authorId: string | null;
   /** "api_key" = posted by an app/agent over MCP (authorId is null). */
-  authorKind: "user" | "api_key";
+  authorKind: ContentAuthorKind;
   /** The app's name at post time, for api_key authors. */
   authorLabel: string | null;
   body: string;

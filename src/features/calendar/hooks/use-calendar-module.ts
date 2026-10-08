@@ -3,7 +3,7 @@
 // locally first (<200ms perceived), reconcile with the server row, roll back
 // + quiet toast on error. Reads degrade to empty pre-migration (deploy gap).
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { Truncation } from "../../../lib/paged-select";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
@@ -52,13 +52,51 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
   const { userId, workspaceId, modulePermission = "none" } = params;
   const canRead = modulePermission !== "none";
   const canEdit = modulePermission === "edit" || modulePermission === "admin";
+  /** The workspace whose calendar this hook shows: null whenever `load` can't read one. */
+  const scope = runtime && userId && canRead ? workspaceId : null;
 
-  const [events, setEvents] = useState<CalendarEventModel[]>([]);
+  // The event list is stored WITH the scope it was read for. When the scope
+  // changes (a workspace switch, or read access going away), everything the
+  // last `listModule` read returned is reset during render, like the window
+  // below. The old workspace's rows then never show in the new one, not even
+  // for a frame, and its still-saving creates are left behind. Writes that
+  // settle later go through `setEventsIn`, which drops them once the list has
+  // moved on.
+  const [list, setList] = useState<{ scope: string | null; events: CalendarEventModel[] }>(() => ({
+    scope,
+    events: [],
+  }));
   const [busy, setBusy] = useState<CalendarEventModel[]>([]);
   const [accounts, setAccounts] = useState<CalendarAccountModel[]>([]);
   const [degraded, setDegraded] = useState(false);
   const [truncated, setTruncated] = useState<Truncation[]>([]);
   const [loading, setLoading] = useState(true);
+  if (list.scope !== scope) {
+    setList({ scope, events: [] });
+    setAccounts([]);
+    setDegraded(false);
+    setTruncated([]);
+    // Effects that wait for `loading` (the `?event=` deep link, the Google
+    // calendar linker) must not read the emptied list as this scope's.
+    setLoading(scope !== null);
+  }
+  const events = list.events;
+
+  /**
+   * Change the event list only while it still belongs to `forScope`, the scope
+   * a write started in. A write that settles after a switch has still saved in
+   * its own workspace; it just never lands in another workspace's list.
+   * Nothing lands while there is no scope at all.
+   */
+  const setEventsIn = useCallback(
+    (forScope: string | null, next: (events: CalendarEventModel[]) => CalendarEventModel[]) =>
+      setList((current) => {
+        if (forScope === null || current.scope !== forScope) return current;
+        const nextEvents = next(current.events);
+        return nextEvents === current.events ? current : { scope: forScope, events: nextEvents };
+      }),
+    [],
+  );
   const reqRef = useRef(0);
   const aliveRef = useRef(true); // the load effect clears it; only unmount leaves it false
   // SCALE-1: the events read is windowed instead of "all history". The window
@@ -92,8 +130,11 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
   const load = useCallback(async () => {
     if (!aliveRef.current) return; // a late `reload()` after unmount reads nothing
     if (!runtime || !userId || !workspaceId || !canRead) {
-      setEvents([]);
+      setList({ scope, events: [] });
       setAccounts([]);
+      setBusy([]);
+      setDegraded(false);
+      setTruncated([]);
       setLoading(false);
       return;
     }
@@ -105,9 +146,14 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
     // navigation (window widening), so it can land between a create's
     // optimistic row and its server row — which would otherwise drop the
     // event until the next reload (the tmp-id reconcile finds nothing).
-    setEvents((prev) => {
-      const pending = prev.filter((e) => isTempId(e.id));
-      return pending.length > 0 ? [...bundle.events, ...pending] : bundle.events;
+    // Only this scope's own: a create still saving in the workspace you just
+    // left stays there.
+    setList((prev) => {
+      const pending = prev.scope === scope ? prev.events.filter((e) => isTempId(e.id)) : [];
+      return {
+        scope,
+        events: pending.length > 0 ? [...bundle.events, ...pending] : bundle.events,
+      };
     });
     setAccounts(bundle.accounts);
     setDegraded(bundle.degraded);
@@ -154,7 +200,7 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
         if (reqRef.current === req) setBusy([]);
       }
     })();
-  }, [runtime, userId, workspaceId, canRead, fetchWindow]);
+  }, [runtime, userId, workspaceId, canRead, fetchWindow, scope]);
 
   useEffect(() => {
     aliveRef.current = true;
@@ -169,6 +215,16 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
       reqRef.current++;
     };
   }, [load]);
+
+  // `reload` always runs the CURRENT `load`. Callers hold it across awaits (a
+  // sync finishing, an account removal, a push to Google), and by the time it
+  // fires the user may have switched workspace: the `load` they captured would
+  // read the old workspace into this one's list, and orphan this one's read.
+  const loadRef = useRef(load);
+  useLayoutEffect(() => {
+    loadRef.current = load;
+  }, [load]);
+  const reload = useCallback(() => loadRef.current(), []);
 
   /**
    * Tell the hook which days are actually on screen. Widens the fetch window
@@ -197,9 +253,16 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
     });
   }, [setFetchWindow]);
 
+  // The busy overlay lands after `loading` settles (it must never hold the
+  // calendar up), so right after a workspace switch `busy` still holds the
+  // previous workspace's blocks until the new reply lands. Each row carries the
+  // workspace it was fetched for, so show only the current scope's: a switch
+  // hides the old blocks at once, so does losing read access or signing out
+  // (scope goes null in that same render), and a same-workspace reload (a
+  // widened window) keeps them up instead of flashing them off and on.
   const liveEvents = useMemo(
-    () => [...events.filter((e) => !e.deletedAt), ...busy],
-    [events, busy],
+    () => [...events.filter((e) => !e.deletedAt), ...busy.filter((b) => b.workspaceId === scope)],
+    [events, busy, scope],
   );
 
   const guardEdit = useCallback((): boolean => {
@@ -235,7 +298,7 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
         updatedAt: nowIso,
         deletedAt: null,
       };
-      setEvents((prev) => [...prev, optimistic]);
+      setEventsIn(scope, (prev) => [...prev, optimistic]);
       try {
         const saved = await (runtime as ModuoRuntime).calendar.createEvent({
           workspaceId: workspaceId as string,
@@ -249,64 +312,55 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
         // Filter-then-append, not map: a widen-triggered reload can land
         // between the optimistic row and this reconcile, in which case the
         // bundle ALREADY holds the server row and a map would leave two.
-        setEvents((prev) => [...prev.filter((e) => e.id !== tempId && e.id !== saved.id), saved]);
+        setEventsIn(scope, (prev) => [
+          ...prev.filter((e) => e.id !== tempId && e.id !== saved.id),
+          saved,
+        ]);
         return saved;
       } catch (err) {
-        setEvents((prev) => prev.filter((e) => e.id !== tempId));
+        setEventsIn(scope, (prev) => prev.filter((e) => e.id !== tempId));
         toast.error(err instanceof Error ? err.message : "Couldn't save the event.");
         return null;
       }
     },
-    [guardEdit, runtime, workspaceId, userId],
+    [guardEdit, runtime, workspaceId, userId, scope, setEventsIn],
   );
 
+  // updateEvent and deleteEvent take their snapshot from the rendered list,
+  // the way the Tasks hook does. They used to take it inside the state updater
+  // and return early while it was still empty, but React doesn't promise to
+  // run an updater before setState returns (it only does when nothing else is
+  // queued on the component). A delete from the confirm dialog, which queues
+  // four setStates first, never reached the server, and edits often didn't.
+  // The rendered row is only stale for a second edit made inside the same
+  // handler as the first, and nothing does that.
   const updateEvent = useCallback(
     async (eventId: string, patch: CalendarEventPatch): Promise<void> => {
       if (!guardEdit() || isTempId(eventId) || isBusyId(eventId)) return;
-      // Snapshot INSIDE the updater — a stale closure snapshot would roll a
-      // rapid second edit back past the first one's success.
-      let before: CalendarEventModel | undefined;
-      setEvents((prev) =>
-        prev.map((e) => {
-          if (e.id !== eventId) return e;
-          before = e;
-          return applyPatch(e, patch);
-        }),
-      );
-      if (!before) return;
-      const snapshot = before;
+      const snapshot = events.find((e) => e.id === eventId);
+      if (!snapshot) return;
+      setEventsIn(scope, (prev) => prev.map((e) => (e.id === eventId ? applyPatch(e, patch) : e)));
       try {
         const saved = await (runtime as ModuoRuntime).calendar.updateEvent({
           workspaceId: workspaceId as string,
           eventId,
           patch,
         });
-        setEvents((prev) => prev.map((e) => (e.id === eventId ? saved : e)));
+        setEventsIn(scope, (prev) => prev.map((e) => (e.id === eventId ? saved : e)));
       } catch (err) {
-        setEvents((prev) => prev.map((e) => (e.id === eventId ? snapshot : e)));
+        setEventsIn(scope, (prev) => prev.map((e) => (e.id === eventId ? snapshot : e)));
         toast.error(err instanceof Error ? err.message : "Couldn't update the event.");
       }
     },
-    [guardEdit, runtime, workspaceId],
+    [guardEdit, runtime, workspaceId, events, scope, setEventsIn],
   );
 
   const deleteEvent = useCallback(
     async (eventId: string): Promise<void> => {
       if (!guardEdit() || isTempId(eventId) || isBusyId(eventId)) return;
-      // Surgical rollback: re-insert only the removed row — restoring a whole
-      // snapshot would resurrect tmp-ids reconciled while the RPC flew.
-      let removed: CalendarEventModel | undefined;
-      setEvents((prev) =>
-        prev.filter((e) => {
-          if (e.id === eventId) {
-            removed = e;
-            return false;
-          }
-          return true;
-        }),
-      );
-      if (!removed) return;
-      const snapshot = removed;
+      const snapshot = events.find((e) => e.id === eventId);
+      if (!snapshot) return;
+      setEventsIn(scope, (prev) => prev.filter((e) => e.id !== eventId));
       try {
         await (runtime as ModuoRuntime).calendar.removeEvent({
           workspaceId: workspaceId as string,
@@ -322,7 +376,7 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
                 workspaceId: workspaceId as string,
                 eventId,
               });
-              setEvents((prev) =>
+              setEventsIn(scope, (prev) =>
                 prev.some((e) => e.id === restored.id) ? prev : [...prev, restored],
               );
             })().catch((err) =>
@@ -331,11 +385,15 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
           },
         });
       } catch (err) {
-        setEvents((prev) => (prev.some((e) => e.id === eventId) ? prev : [...prev, snapshot]));
+        // Surgical rollback: re-insert only the removed row — restoring a whole
+        // list snapshot would resurrect tmp-ids reconciled while the RPC flew.
+        setEventsIn(scope, (prev) =>
+          prev.some((e) => e.id === eventId) ? prev : [...prev, snapshot],
+        );
         toast.error(err instanceof Error ? err.message : "Couldn't delete the event.");
       }
     },
-    [guardEdit, runtime, workspaceId],
+    [guardEdit, runtime, workspaceId, events, scope, setEventsIn],
   );
 
   return {
@@ -348,7 +406,7 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
     isAllTimeWindow,
     loading,
     canEdit,
-    reload: load,
+    reload,
     createEvent,
     updateEvent,
     deleteEvent,

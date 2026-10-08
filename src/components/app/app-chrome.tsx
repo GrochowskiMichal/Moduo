@@ -47,7 +47,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { UserMenu } from "../user-menu";
 import { WorkspaceSwitcher } from "../workspace-switcher";
 import { AnalyticsConsentPrompt } from "./analytics-consent-prompt";
-import { baseModulesNavItems, hiddenReachableRoutes } from "./app-chrome-constants";
+import { baseModulesNavItems } from "./app-chrome-constants";
 import type { ModuleNavItem } from "./app-chrome-types";
 import { dispatchCreateNew } from "./create-events";
 import { FocusSessionChip } from "./focus-session-chip";
@@ -55,6 +55,7 @@ import { GlobalBottomBar } from "./global-bottom-bar";
 import { GlobalCaptureBar } from "./global-capture-bar";
 import { GlobalCommandPalette } from "./global-command-palette";
 import { GlobalShortcutsDialog } from "./global-shortcuts-dialog";
+import { useUnknownRouteRedirect } from "./use-unknown-route-redirect";
 
 type ModuleTabProps = {
   item: ModuleNavItem;
@@ -270,19 +271,8 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
     ],
   );
 
-  useEffect(() => {
-    // Bounce genuinely-unknown/removed routes to the first nav tab — but exempt
-    // /settings and any hidden-but-reachable route (e.g. /mindmap, hidden from
-    // the nav in DF-4 yet kept reachable for its rethink). Without this exemption
-    // a direct visit to a hidden route gets silently redirected to Home.
-    if (
-      !isSettingsRoute &&
-      !hiddenReachableRoutes.includes(pathname) &&
-      !modulesNavItems.some((tab) => tab.href === pathname)
-    ) {
-      void navigate({ to: modulesNavItems[0]?.href ?? "/", replace: true });
-    }
-  }, [isSettingsRoute, navigate, pathname, modulesNavItems]);
+  const navHrefs = useMemo(() => modulesNavItems.map((tab) => tab.href), [modulesNavItems]);
+  useUnknownRouteRedirect(navHrefs);
 
   // ⌘1..⌘6 navigate to the Nth visible module tab. Fixed useShortcut calls
   // keep hook order stable across renders; handlers no-op when the index

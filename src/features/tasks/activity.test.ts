@@ -63,6 +63,14 @@ describe("activityLine", () => {
     );
   });
 
+  it("describes personal-queue adds and removals in the actor's voice (TV-D2)", () => {
+    expect(activityLine(entry("tasks.queue_add", { at: "end" }))).toBe("queued this");
+    expect(activityLine(entry("tasks.queue_add", { at: "top" }))).toBe("queued this first");
+    expect(activityLine(entry("tasks.queue_add"))).toBe("queued this");
+    expect(activityLine(entry("tasks.queue_remove"))).toBe("removed this from the queue");
+    expect(isTrailEntry(entry("tasks.queue_add"))).toBe(true);
+  });
+
   it("describes the recurrence ops factually", () => {
     expect(activityLine(entry("tasks.skip_occurrence", { to: "2099-06-14T07:00:00Z" }))).toMatch(
       /^skipped an occurrence — next /,

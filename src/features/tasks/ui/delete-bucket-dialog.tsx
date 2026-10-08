@@ -40,6 +40,7 @@ export function DeleteBucketDialog({
   openCount,
   onConfirm,
   onClose,
+  onCloseAutoFocus,
 }: {
   /** Kept while the dialog closes, so its title doesn't blank mid-exit. */
   bucket: Bucket | null;
@@ -50,10 +51,12 @@ export function DeleteBucketDialog({
   openCount: number;
   onConfirm: (bucket: Bucket) => void;
   onClose: () => void;
+  /** Where focus goes on close: the dialog has no trigger to return to (the rail). */
+  onCloseAutoFocus?: (event: Event) => void;
 }) {
   return (
     <Dialog open={open && bucket !== null} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="max-w-sm" onCloseAutoFocus={onCloseAutoFocus}>
         <DialogHeader>
           <DialogTitle>Delete “{bucket?.name}”?</DialogTitle>
           <DialogDescription>{bucketTasksLine(taskCount, openCount)}</DialogDescription>

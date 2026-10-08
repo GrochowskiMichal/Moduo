@@ -138,6 +138,17 @@ export const taskRelationRowSchema = z.object({
   created_at: z.string(),
 });
 
+/** A person's queue row (TV-D2, `public.task_queue`). */
+export const taskQueueRowSchema = z.object({
+  id,
+  workspace_id: id,
+  user_id: id,
+  task_id: id,
+  position: z.string().min(1),
+  queued_at: z.string(),
+  updated_at: z.string(),
+});
+
 export const activityRowSchema = z.object({
   id,
   workspace_id: id,
@@ -192,6 +203,9 @@ export const commentRowSchema = z.object({
   entity_id: id,
   body: z.string().optional(),
   created_by: optStr,
+  // Absent before 20261008123000; normalizeContentAuthorKind reads that as "user".
+  author_kind: optStr,
+  author_label: optStr,
   created_at: z.string(),
   updated_at: z.string(),
   deleted_at: optStr,

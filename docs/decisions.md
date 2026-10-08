@@ -23,7 +23,12 @@ One line per locked product or architecture decision, grouped by area, newest fi
 ## Permissions, sharing, privacy and erasure → [decisions/permissions.md](decisions/permissions.md)
 
 - 2026-10-08 · SECURITY DEFINER functions that hand out an item's data check the item, not just its type or module: `links_suggest`, `notes_list_unmaterialized`, `notes_op_duplicate`, `notes_op_mention`, `share_assign_preview`.
+- 2026-10-08 · A contact can point only at a company you can open, and the refusal never says whether a private company exists.
+- 2026-10-08 · A SECURITY DEFINER helper that only other definer functions call is never client-callable, and "Delete forever" works again for edited notes and sub-notes.
+- 2026-10-08 · PRIV-2b: deleting an account also wipes our Stripe copy and what the user leaves in other people's workspaces, and the Danger zone and sign-in page say so
+- 2026-10-08 · PRIV-2a built: one SQL function erases what a deleted account leaves in other people's workspaces, and member removal is fixed
 - 2026-10-08 · PRIV-3: switching app analytics off, or deleting the account, deletes what PostHog holds for the person.
+- 2026-10-08 · API keys get None / View / Edit per module, inside the permission model: a key never gets more than its creator, and only its creator can widen it.
 - 2026-10-07 · PRIV-2 planned: what a deleted account leaves in other people's workspaces, its Stripe copy, and a privacy@ admin command
 - 2026-10-07 · App analytics (PostHog) is opt-in per person: asked after sign-in until answered, off until you say yes, tagged `surface: "app"` in the shared PostHog project, and in the privacy policy.
 - 2026-10-07 · Deleting an account also deletes the user's private items in other people's workspaces, and the Danger zone says the plan ends
@@ -105,12 +110,14 @@ One line per locked product or architecture decision, grouped by area, newest fi
 ## MCP connector → [decisions/mcp.md](decisions/mcp.md)
 
 - 2026-10-08 · The "Moduo for Claude Code" mod was dropped; the connector improvements it came with stay.
+- 2026-10-08 · A key's tool list is honest per module: tools that also touch another module need it too, and None means none across modules.
 - 2026-07-04 · Notes NO-9 + NO-10 landed — publish-to-web + the DoD (MCP manifest/connector + Recent-notes widget); Wave 3 (Notes) COMPLETE.
 - 2026-06-27 · Contacts CO-5 MCP manifest + "Needs attention" widget landed — Wave 1 (Contacts) complete.
 - 2026-06-27 · Spine CT-7 Tasks adoption + MCP manifest + dashboard widget landed (Wave 0 spine complete).
 
 ## Calendar and booking links → [decisions/calendar.md](decisions/calendar.md)
 
+- 2026-10-08 · Google and Zoom connects are finished by the signed-in app, not by the OAuth callback.
 - 2026-10-07 · Emailed links use fixed, allow-listed origins, and public booking is rate-limited.
 - 2026-10-02 · A booked meeting is one event, and booking links can be deleted.
 - 2026-10-02 · A booking link's video is Google Meet, Zoom, or "Their choice".
@@ -177,6 +184,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Data layer, Supabase, contracts → [decisions/data.md](decisions/data.md)
 
+- 2026-10-08 · The app never takes a Supabase session from the URL (`detectSessionInUrl: false`); sign-in is the typed 6-digit code only; the dashboard invite link still confirms the address but no longer signs anyone in.
 - 2026-10-07 · Attachments are attachments-only, private, and pooled per workspace owner; HEIC converts only where the app can read it.
 - 2026-10-08 · Deployed Edge Functions must match `supabase/functions/`, checked by `bun run functions:reconcile`; the Stripe Sync Engine's three functions are the only allowed exceptions.
 - 2026-10-01 · Profile pictures and workspace marks live in the public `avatars` bucket.
@@ -209,6 +217,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Tasks and Timeline → [decisions/tasks.md](decisions/tasks.md)
 
+- 2026-10-08 · TV-D2: each person has their own Queue, not tied to a date (`task_queue` + `tasks_op_queue_*`); old builds' commits land in the committer's queue, skip is no longer a reschedule, MCP `tasks_queue*` with the old tools as aliases.
 - 2026-10-08 · TV-D1 landed: task edits save field by field, a task has its own assignee (`assignee_id`), and `owner_id` is the creator again.
 - 2026-10-08 · TV-F1: Focus keeps time by the wall clock, survives reloads, and asks about away time.
 - 2026-10-08 · TV-Q1: the List leaves modified keys alone, a row's buttons keep Space/Enter, the bucket pill shows only where the bucket isn't implied, and deleting a bucket confirms, then commits when its Undo toast closes.
@@ -224,6 +233,8 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Design system and UI → [decisions/design-system.md](decisions/design-system.md)
 
+- 2026-10-08 · DS-3 landed: NavRow (count ⇄ ⋯ in one slot, one menu for ⋯ and right-click) and MetaCount; the Tasks rail runs on NavRow and hands focus back to itself when a row dialog closes.
+- 2026-10-08 · DS-4 landed: FilterBar, DisplayMenu, the drag visuals and the view-prefs helper are generic primitives; Tasks adopts them in TV-U2/TV-U4.
 - 2026-10-08 · DS-2 landed: primitives use the state layer, selection is tint-only, hover ≠ current everywhere it collided.
 - 2026-10-08 · DS-1 landed: the state layer re-resolves in every appearance scope, thin token scrollbars are the global default, and Storybook switches every appearance axis.
 - 2026-10-07 · A state layer of tokens; selection becomes tint-only (R5 rewrite lands in DS-2).
@@ -240,12 +251,14 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Brand: logo, colour, type, motion, voice → [decisions/brand.md](decisions/brand.md)
 
+- 2026-10-08 · BRAND-4: the landing uses the lockup artwork, and the mark reveals itself in the nav on a first visit.
 - 2026-10-08 · BRAND-1: every brand file is generated from `brand/masters/` by `bun run brand:export`.
 - 2026-10-08 · Pink is not Moduo's accent and there is no "AI disc"; pink stays only as one ordinary accent/tag option.
 - 2026-10-08 · Brand system planned: the product is the brand; drawn wordmark; no brand hue; pink isn't a brand colour; the mark reveals itself out of nothing.
 
 ## Product scope, alpha, settings, cross-cutting fixes → [decisions/product.md](decisions/product.md)
 
+- 2026-10-08 · TX-1: the email kit is plain TypeScript at `supabase/functions/_shared/email/`, and its logo images come from the brand pipeline, not from the kit
 - 2026-10-08 · Every email Moduo sends goes through one system: Resend, one template kit, one outbox; invite-only becomes an allow-list
 
 - 2026-10-07 · Finance is not planned — not soon, possibly never.

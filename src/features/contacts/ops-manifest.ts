@@ -5,8 +5,8 @@
 // (src/lib/module-registry.ts) and mirrored connector-side by
 // supabase/functions/moduo-mcp/modules/contacts.ts. Keep in sync with the
 // contacts RPCs (supabase/migrations/2026062612…contacts_module.sql +
-// 2026062714…contacts_import.sql). Contacts rides the Tasks permission lane at
-// alpha (permissionKey "tasks"; CO-1 decision a).
+// 2026062714…contacts_import.sql). Its own permission lane since PERM-1
+// (CO-1's alpha call rode the Tasks lane).
 
 import type { ModuleManifest } from "../../lib/module-manifest";
 
@@ -14,9 +14,7 @@ export const contactsModuleManifest: ModuleManifest = {
   module: "contacts",
   summary:
     "A light CRM: people and companies as hub entities whose pages roll up every linked task, note, email, and payment — zero manual logging.",
-  // Alpha: Contacts rides the Tasks permission lane (permissions_tasks). A
-  // dedicated permissions_contacts is a one-line future migration (CO-1).
-  permissionKey: "tasks",
+  permissionKey: "contacts",
   activityEntityTypes: ["contact", "company"],
   ops: [
     {

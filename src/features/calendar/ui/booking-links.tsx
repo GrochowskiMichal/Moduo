@@ -14,6 +14,11 @@ import { busyIdsFromJson, questionsFromJson, slugFor } from "../booking/model";
 import { bookingPublicUrl } from "../booking/public-origin";
 import { DEFAULT_WEEKLY_HOURS, normalizeWeeklyHours } from "../booking/slots";
 import { videoSetting } from "../booking/video";
+import {
+  CONNECT_FINISHED_EVENT,
+  finishConnectReturn,
+  rememberConnectStart,
+} from "../connect-return";
 import type { CalendarAccountModel } from "../events";
 import { startWebGoogleConnect } from "../google-web";
 import { BookingLinkDialog, type LinkDraft } from "./booking-link-dialog";
@@ -146,6 +151,8 @@ export function BookingLinks({ runtime, workspaceId, userId, accounts }: Props) 
   const [copied, setCopied] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
+    // Back from Google or Zoom: let the connect finish before reading status.
+    await finishConnectReturn();
     const [rows, connected] = await Promise.all([
       supabaseClient
         .from("exposed_slot_links")
@@ -197,7 +204,9 @@ export function BookingLinks({ runtime, workspaceId, userId, accounts }: Props) 
     void refresh();
   }, [refresh]);
 
-  // Back from Zoom (web), or back in the desktop window after connecting in the browser.
+  // Back in the desktop window after connecting in the browser. `?zoom=` is the
+  // old callback's result, before the app finished the connect itself; drop it
+  // once booking-zoom-connect with the finish step is deployed.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const result = params.get("zoom");
@@ -213,7 +222,11 @@ export function BookingLinks({ runtime, workspaceId, userId, accounts }: Props) 
     }
     const onFocus = () => void refresh();
     window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
+    window.addEventListener(CONNECT_FINISHED_EVENT, onFocus);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener(CONNECT_FINISHED_EVENT, onFocus);
+    };
   }, [refresh]);
 
   const connectZoom = async () => {
@@ -230,7 +243,10 @@ export function BookingLinks({ runtime, workspaceId, userId, accounts }: Props) 
         );
       }
       if (isTauriRuntime() && runtime) await runtime.window.openExternalUrl(url);
-      else window.location.href = url;
+      else {
+        rememberConnectStart(url);
+        window.location.href = url;
+      }
     } catch (e) {
       setError(errorText(e, "Could not connect Zoom."));
     } finally {

@@ -24,6 +24,7 @@ import {
   orderByBucket,
   pageOf,
   parseAssignee,
+  queueTaskIds,
   shapeTask,
   subtaskCounts,
   topLevelOnly,
@@ -78,14 +79,18 @@ async function rows(query: PromiseLike<{ data: Row[] | null; error: { message: s
 async function loadWorkspace(ctx: ToolContext) {
   const ws = ctx.key.workspaceId;
   const visible = await visibleIds(ctx, "task");
-  const [allTasks, relations, tags, tagLinks, members] = await Promise.all([
+  const [allTasks, relations, tags, tagLinks, members, queueRows] = await Promise.all([
     rows(ctx.db.from("tasks").select("*").eq("workspace_id", ws).is("deleted_at", null)),
     rows(ctx.db.from("task_relations").select("*").eq("workspace_id", ws)),
     rows(ctx.db.from("tags").select("id, name, color").eq("workspace_id", ws).is("deleted_at", null)),
     rows(ctx.db.from("tag_links").select("tag_id, entity_type, entity_id").eq("workspace_id", ws).eq("entity_type", "task")),
     workspaceMembers(ctx),
+    myQueueRows(ctx),
   ]);
   const tasks = allTasks.filter((t) => visible.has(t.id));
+  // TV-D2: the key creator's own queue, in order (live, visible tasks only).
+  const queue = queueTaskIds(queueRows as { id: string; task_id: string; position: string }[],
+    new Set(tasks.map((t) => t.id)));
   const byId = new Map(tasks.map((t) => [t.id, t]));
   const open = (id: string) => {
     const t = byId.get(id);
@@ -106,8 +111,43 @@ async function loadWorkspace(ctx: ToolContext) {
     list.push(name);
     taskTags.set(link.entity_id, list);
   }
-  // names: shapeTask's assignee/creator (TV-D1); subtaskCounts: MCC-1's subtask_count.
-  return { tasks, relations, tags, byId, blockedIds, taskTags, names, subtaskCounts: subtaskCounts(tasks) };
+  // names: shapeTask's assignee/creator (TV-D1); subtaskCounts: MCC-1's subtask_count;
+  // queue/queuedByMe: the key creator's queue (TV-D2).
+  return {
+    tasks, relations, tags, byId, blockedIds, taskTags, names,
+    subtaskCounts: subtaskCounts(tasks),
+    queue,
+    queuedByMe: new Set(queue),
+  };
+}
+
+/** The key creator's queue rows here (TV-D2). Before the migration: none. */
+async function myQueueRows(ctx: ToolContext): Promise<Row[]> {
+  const { data, error } = await ctx.db.from("task_queue")
+    .select("id, task_id, position")
+    .eq("workspace_id", ctx.key.workspaceId).eq("user_id", ctx.key.createdBy);
+  if (error) {
+    // PostgREST's "no such table" (PGRST205) or Postgres's (42P01): the
+    // migration isn't there yet. Anything else is a real failure.
+    const code = (error as { code?: string }).code;
+    if ((code === "PGRST205" || code === "42P01") && /task_queue/.test(error.message ?? "")) return [];
+    throw new Error(error.message);
+  }
+  return data ?? [];
+}
+
+/** The key creator's queue, shaped, in order. */
+async function shapedQueue(ctx: ToolContext): Promise<Row[]> {
+  const data = await loadWorkspace(ctx);
+  const now = new Date();
+  return data.queue.map((id) => shapeTask(data.byId.get(id)!, data, now));
+}
+
+/** Call a tasks_op_queue_* RPC (acts on the key creator's queue), then read it back. */
+async function callQueueOp(ctx: ToolContext, fn: string, args: Row): Promise<{ queue: Row[] }> {
+  const { error } = await ctx.db.rpc(fn, { p_workspace_id: ctx.key.workspaceId, ...args });
+  if (error) throw new Error(error.message);
+  return { queue: await shapedQueue(ctx) };
 }
 
 /** The workspace's members (the owner is one too), with names and permissions. */
@@ -242,24 +282,27 @@ export const tasksConnectorModule: ConnectorModule = {
       },
     },
     {
+      name: "tasks_queue",
+      description:
+        "Your queue: the tasks the key's creator lined up to do next, in order. It's personal (other people's queues are theirs) and not tied to a date; completing, archiving or deleting a task takes it out.",
+      access: "view",
+      inputSchema: { type: "object", properties: {} },
+      handler: async (_args, ctx) => ({ queue: await shapedQueue(ctx) }),
+    },
+    {
       name: "tasks_today",
       description:
-        "The day's ordered commit queue — what the user decided to do that day ('commit' is queue membership, not a promise of completion).",
+        "Older name for tasks_queue, kept for existing agents: the key creator's queue. The queue isn't tied to a day any more, so date is accepted but doesn't filter.",
       access: "view",
       inputSchema: {
         type: "object",
-        properties: { date: { type: "string", description: "Queue date YYYY-MM-DD (default: today, UTC)." } },
+        properties: { date: { type: "string", description: "Ignored (YYYY-MM-DD; echoed back). Default: today, UTC." } },
       },
       handler: async (args, ctx) => {
         const date = args.date
           ? dayOrThrow(str(args, "date"), "date")
           : new Date().toISOString().slice(0, 10);
-        const data = await loadWorkspace(ctx);
-        const now = new Date();
-        const queue = data.tasks
-          .filter((t) => t.committed_for === date)
-          .sort((a, b) => (a.commit_order ?? 0) - (b.commit_order ?? 0));
-        return { date, queue: queue.map((t) => shapeTask(t, data, now)) };
+        return { date, queue: await shapedQueue(ctx) };
       },
     },
     {
@@ -415,9 +458,75 @@ export const tasksConnectorModule: ConnectorModule = {
 
     // ── writes (edit scope) — Session 8 intent ops, never raw row writes ──
     {
+      name: "tasks_queue_add",
+      description:
+        "Add a task to your queue (the key creator's): at the end, or at the top. A task already queued stays where it is unless you ask for the top. Done and archived tasks can't be queued. Returns your queue.",
+      access: "edit",
+      inputSchema: {
+        type: "object",
+        properties: {
+          task_id: { type: "string", description: "Task uuid." },
+          at: { type: "string", enum: ["end", "top"], description: "Where it goes: 'end' (default) or 'top'." },
+        },
+        required: ["task_id"],
+      },
+      handler: async (args, ctx) => {
+        const task = await fetchTask(ctx, str(args, "task_id"));
+        return callQueueOp(ctx, "tasks_op_queue_add", {
+          p_task_id: task.id,
+          p_at: args.at === "top" ? "top" : "end",
+        });
+      },
+    },
+    {
+      name: "tasks_queue_remove",
+      description: "Take a task out of your queue. Doing it twice is fine. Returns your queue.",
+      access: "edit",
+      inputSchema: taskIdSchema,
+      handler: async (args, ctx) => {
+        const task = await fetchTask(ctx, str(args, "task_id"));
+        return callQueueOp(ctx, "tasks_op_queue_remove", { p_task_id: task.id });
+      },
+    },
+    {
+      name: "tasks_queue_reorder",
+      description:
+        "Move a task that's in your queue: to the top, to the end, or right after another task in your queue. Moving never counts as a reschedule. Returns your queue.",
+      access: "edit",
+      inputSchema: {
+        type: "object",
+        properties: {
+          task_id: { type: "string", description: "Task uuid (must be in your queue)." },
+          position: {
+            type: "string",
+            enum: ["top", "end", "after"],
+            description: "'top', 'end', or 'after' (then give after_task_id).",
+          },
+          after_task_id: {
+            type: "string",
+            description: "With position 'after': the queued task it should follow.",
+          },
+        },
+        required: ["task_id", "position"],
+      },
+      handler: async (args, ctx) => {
+        const task = await fetchTask(ctx, str(args, "task_id"));
+        const position = str(args, "position");
+        if (position === "end") {
+          return callQueueOp(ctx, "tasks_op_queue_move_to_end", { p_task_id: task.id });
+        }
+        if (position === "top") {
+          return callQueueOp(ctx, "tasks_op_queue_reorder", { p_task_id: task.id, p_after_task_id: null });
+        }
+        if (position !== "after") throw new Error("position must be 'top', 'end' or 'after'.");
+        const after = await fetchTask(ctx, str(args, "after_task_id"));
+        return callQueueOp(ctx, "tasks_op_queue_reorder", { p_task_id: task.id, p_after_task_id: after.id });
+      },
+    },
+    {
       name: "tasks_commit",
       description:
-        "Add a task to a day's commit queue ('doing this today'); recommitting moves it to the end of the queue.",
+        "Older name for tasks_queue_add, kept for existing agents: puts the task at the end of your queue (again: moves it there) and marks it for the day in app versions from before personal queues.",
       access: "edit",
       inputSchema: {
         type: "object",
@@ -437,7 +546,8 @@ export const tasksConnectorModule: ConnectorModule = {
     },
     {
       name: "tasks_uncommit",
-      description: "Remove a task from its commit queue. Idempotent, never intercepted.",
+      description:
+        "Older name for tasks_queue_remove, kept for existing agents: takes the task out of your queue (and off the day in older app versions). Doing it twice is fine.",
       access: "edit",
       inputSchema: taskIdSchema,
       handler: (args, ctx) =>
@@ -446,7 +556,7 @@ export const tasksConnectorModule: ConnectorModule = {
     {
       name: "tasks_skip_today",
       description:
-        "Skip a committed task out of the day's queue; atomically increments the ambient reschedule counter.",
+        "Older name, kept for existing agents: takes the task out of your queue (and off the day in older app versions). It no longer counts as a reschedule.",
       access: "edit",
       inputSchema: taskIdSchema,
       handler: (args, ctx) =>
