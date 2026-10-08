@@ -80,7 +80,7 @@ Authentication → Users → "Send invitation" still works: the hook sends "You'
 
 Steps 1–3 are agent steps that need Maciej's OK in the session; step 4 is Maciej's, in the Resend dashboard and his own terminal. None of this touches the TX-2 go-live steps above, and none of it needs the Send Email Hook to be on.
 
-1. **Functions** (agent, with OK):
+1. ✅ (2026-10-09, both v1) **Functions** (agent, with OK):
    ```bash
    supabase functions deploy email-worker --project-ref wtoonrvuqumihpkbvwvs --no-verify-jwt --import-map supabase/functions/deno.json --use-api
    ```
@@ -88,12 +88,12 @@ Steps 1–3 are agent steps that need Maciej's OK in the session; step 4 is Maci
    supabase functions deploy resend-webhook --project-ref wtoonrvuqumihpkbvwvs --no-verify-jwt --import-map supabase/functions/deno.json --use-api
    ```
    then `bun run functions:reconcile`. Deploy before the migration, so the first kick finds the worker.
-2. **Migration** `20261008233000_email_outbox_worker.sql` (agent, with OK). Check:
+2. ✅ (2026-10-09, history version `20261008233000`) **Migration** `20261008233000_email_outbox_worker.sql` (agent, with OK). Check:
    ```sql
    select jobname, schedule, active from cron.job where jobname like 'email-outbox-%' order by 1;
    ```
    Expect three rows: `email-outbox-health` `*/5 * * * *`, `email-outbox-purge` `17 3 * * *`, `email-outbox-worker` `* * * * *`. And `select count(*) from vault.secrets where name = 'email_worker_secret';` returns 1.
-3. **Test send** (with OK; it emails hello@moduo.app):
+3. ✅ (2026-10-09: `sent` on attempt 1, 2.6 s after the insert) **Test send** (with OK; it emails hello@moduo.app):
    ```sql
    select public.email_enqueue('ops_alert', 'hello@moduo.app', null,
      jsonb_build_object('reason', 'test', 'requested_at', now()),

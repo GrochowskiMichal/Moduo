@@ -1,6 +1,6 @@
 # Manual test checklist — TX-3 outbox worker + deliverability
 
-> Generated 2026-10-09 · branch `t/maciej/tx-3-outbox-worker` · **Live-verified:** partial. The SQL was run end to end on a local Postgres 17 replica (87 checks + a two-session claim, below); the worker and webhook logic by unit tests. Nothing has run on prod yet: the migration and both functions wait for Maciej's OK, and the Resend webhook for his dashboard steps (docs/email-runbook.md §TX-3).
+> Generated 2026-10-09 · branch `t/maciej/tx-3-outbox-worker` · **Live-verified:** partial. The SQL was run end to end on a local Postgres 17 replica (87 checks + a two-session claim, below); the worker and webhook logic by unit tests. On prod (Maciej's OK, 2026-10-09): both functions deployed, the migration applied and checked, and one outbox test sent end to end. The Resend webhook waits for Maciej's dashboard step (docs/email-runbook.md §TX-3 step 4).
 > Run top-to-bottom; check off as you go. Each item is a step → what you should see → where.
 
 ## Done in the session (agent)
@@ -11,7 +11,10 @@
 
 ## Live, after the prod steps (runbook §TX-3 steps 1–3)
 
-- [ ] **Do:** queue the outbox test (runbook step 3) → **Expect:** "Email test: the outbox works" in hello@moduo.app within a minute; the row reads `sent` with a `provider_id` _(Supabase SQL editor + the inbox)_
+- [x] **Do (agent, 2026-10-09):** outside probes of both functions → **Expect:** `GET` 405; unsigned `POST` 401 (`unauthorized` / `invalid_signature`); a malformed worker secret 401 without a database call.
+- [x] **Do (agent, 2026-10-09):** catalog checks after the apply → **Expect:** 14 functions, none executable by anon or authenticated; `email_suppressions`, `email_outbox_runner` and `email_outbox` closed to both (SELECT/INSERT/TRUNCATE); RLS on; one 64-hex Vault secret; the kick trigger; jobs `email-outbox-worker` `* * * * *`, `email-outbox-health` `*/5 * * * *`, `email-outbox-purge` `17 3 * * *` (now `SELECT public.email_outbox__purge()`); history row `20261008233000 email_outbox_worker`. All as expected.
+- [x] **Do (agent, 2026-10-09):** queue the outbox test (runbook step 3) → **Seen:** the row went `sent` on attempt 1 with a Resend id 2.6 s after the insert; pg_net's kick got `202 {"accepted":true}`; the run lease was released. `bun run functions:reconcile` OK.
+- [ ] **Do (Maciej):** look in hello@moduo.app → **Expect:** "Email test: the outbox works", in light and dark _(the inbox)_
 - [ ] **Do:** queue a test with `send_after` two minutes ahead → **Expect:** it arrives about two minutes later, not before (AC15) _(inbox)_
 - [ ] **Do:** queue a test with `send_after` five minutes ahead, then `select public.email_cancel('<its key>');` → **Expect:** returns 1; nothing arrives; the row reads `cancelled` (AC15)
 - [ ] **Do:** queue the same dedupe key twice → **Expect:** one row, one email (AC14)

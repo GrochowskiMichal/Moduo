@@ -24,8 +24,9 @@
 --
 -- Only one worker run at a time holds the run lease (email_outbox_runner); a
 -- kick that arrives during a run exits, and the running loop or the next
--- minute picks its rows up. A claimed row is 'sending' with a 5-minute lease. A worker that dies mid-send
--- leaves it there until the lease ends; the next run claims it again and sends
+-- minute picks its rows up. A claimed row is 'sending' with a 5-minute lease.
+-- A worker that dies mid-send leaves it there until the lease ends; the next
+-- run claims it again and sends
 -- it with the same Idempotency-Key, which Resend answers with the first send
 -- (keys live 24 h), so a crash never sends twice. Temporary failures go back to
 -- 'queued' with a growing delay (1, 5, 15, 60 minutes); the 5th failed attempt,
