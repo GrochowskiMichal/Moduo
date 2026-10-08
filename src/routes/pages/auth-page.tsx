@@ -3,11 +3,21 @@ import { useEffect } from "react";
 
 import { EmailAuthPanel } from "@/components/auth/email-auth-panel";
 import { IS_STAGING_PORTAL } from "@/features/settings/about";
+import { ignoredAuthLink } from "@/lib/auth-url";
 import { useAuth } from "@/providers/auth-provider";
 
 export function AuthPage() {
   const { isSignedIn, loading } = useAuth();
   const navigate = useNavigate();
+  // An emailed auth link landed here and was dropped at boot (auth-url.ts). An
+  // invite link still confirms the address server-side; the code does the rest.
+  const ignoredLink = ignoredAuthLink();
+  const linkNotice =
+    ignoredLink === "session"
+      ? "Links don't sign you in here. Enter your email to get a 6-digit code."
+      : ignoredLink === "error"
+        ? "That link has expired or was already used. Enter your email to get a 6-digit code."
+        : null;
 
   useEffect(() => {
     if (loading || !isSignedIn) return;
@@ -53,7 +63,7 @@ export function AuthPage() {
         )}
 
         <div className="w-full rounded-xl border border-border bg-card px-6 py-7 shadow-xl sm:px-7 sm:py-8">
-          <EmailAuthPanel />
+          <EmailAuthPanel notice={linkNotice} />
         </div>
       </div>
     </div>

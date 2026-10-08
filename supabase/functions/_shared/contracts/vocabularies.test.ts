@@ -3,6 +3,8 @@ import { describe, expect, it } from "@rstest/core";
 import { Constants } from "@/types/supabase";
 
 import {
+  EMAIL_KINDS,
+  isEmailKind,
   ACTIVITY_ACTOR_TYPES,
   CALENDAR_ACCOUNT_STATUSES,
   CALENDAR_PROVIDERS,
@@ -114,6 +116,35 @@ describe("vocabulary value sets", () => {
     expect(isWaitlistSource("hero")).toBe(true);
     expect(isWaitlistSource("sidebar")).toBe(false);
     expect(isWaitlistSource(undefined)).toBe(false);
+  });
+
+  it("email kinds: the catalog in specs/transactional-email.md T11, in order", () => {
+    expect(EMAIL_KINDS).toEqual([
+      "auth_code",
+      "account_deleted",
+      "waitlist_invite",
+      "updates_confirm",
+      "workspace_invite",
+      "workspace_owner",
+      "workspace_removed",
+      "booking_guest_confirmed",
+      "booking_guest_added",
+      "booking_host_new",
+      "booking_host_guest_cancelled",
+      "booking_guest_cancelled",
+      "booking_guest_host_cancelled",
+      "booking_guest_reminder",
+      "welcome",
+      "trial_ending",
+      "trial_ended",
+      "founder_access",
+      "founder_access_ending",
+      "announcement",
+      "build_update",
+      "ops_alert",
+    ]);
+    expect(isEmailKind("auth_code")).toBe(true);
+    expect(isEmailKind("newsletter")).toBe(false);
   });
 
   it("email vocabularies pin the code spellings (not the stale migration comment)", () => {
