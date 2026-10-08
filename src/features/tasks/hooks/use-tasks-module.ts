@@ -3,7 +3,7 @@
 // snappy, keyboard-driven editing; on error they reload from the source of truth
 // and surface a toast. Drift is computed client-side via isDrifted().
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { TAG_LINKS_SCOPE } from "../../../lib/paged-select";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
@@ -21,9 +21,11 @@ import {
   toggleTag,
   useTagView,
 } from "../../tags/store";
+import { WorkspaceContext } from "../../workspaces/workspace-context";
 import { setBucketTimeBlock } from "../default-view";
 import { writeTaskTimeTotal } from "../focus-time-write";
 import {
+  betweenPositions,
   blockedTaskIds as computeBlockedTaskIds,
   subtasksByParent as computeSubtasksByParent,
   endPosition,
@@ -32,7 +34,6 @@ import {
   makeTask,
   type NewTaskFields,
   subtaskProgress,
-  todayStr,
   wouldCreateCycle,
 } from "../helpers";
 import { hideBucket, unhideBucket, useHiddenBuckets } from "../hidden-buckets";
@@ -41,22 +42,36 @@ import {
   type Bucket,
   INBOX_BUCKET_NAME,
   isDrifted,
+  type QueuePlacement,
   type RecurrenceRule,
   type Tag,
   type Task,
+  type TaskQueueEntry,
   type TaskRelation,
+  type TaskStatus,
   type TasksCatchUpItem,
   type TasksModuleBundle,
   type TimeBlockMap,
   type TimeBlockSlot,
 } from "../model";
 import {
+  alsoInLabel,
+  claimsByTask,
+  endOfQueue,
+  movedPosition,
+  openQueueCount,
+  queueEntriesOf,
+  queueMove,
+  queueTasks,
+  withOwnQueue,
+  withoutTask,
+} from "../queue";
+import {
   catchUpItem,
   catchUpPatch,
   recurrenceOnStatusChange,
   skipOccurrencePatch,
 } from "../recurrence-engine";
-import { commitOrderUpdates } from "../reorder";
 
 type Params = {
   userId: string | null;
@@ -86,6 +101,16 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
   const canEdit = modulePermission === "edit" || modulePermission === "admin";
 
   const [bundle, setBundle] = useState<TasksModuleBundle>(EMPTY_BUNDLE);
+  /** Every queue row I can see here (TV-D2): my line-up and others' claims. */
+  const [queueRows, setQueueRows] = useState<TaskQueueEntry[]>([]);
+  /** My rows for tasks completed since the last load: the server has dropped
+   *  them, but the Queue keeps showing them, done, where they were (§6). */
+  const [keptRows, setKeptRows] = useState<TaskQueueEntry[]>([]);
+  /** Queue ops go to the server one at a time, in the order they were made,
+   *  so each answer (my whole queue) includes every earlier op; only the newest
+   *  answer is applied, so pending optimistic edits aren't put back meanwhile. */
+  const queueSeq = useRef(0);
+  const queueChain = useRef<Promise<unknown>>(Promise.resolve());
   const [timeBlocks, setTimeBlocksState] = useState<TimeBlockMap>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -107,6 +132,8 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
   const load = useCallback(async () => {
     if (!runtime || !userId || !workspaceId || !canRead) {
       setBundle(EMPTY_BUNDLE);
+      setQueueRows([]);
+      setKeptRows([]);
       setLoadedFrom(null);
       setTimeBlocksState({});
       setLoading(false);
@@ -117,13 +144,17 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     setLoading(true);
     try {
       // Time-blocks ride along with the bundle but never block it — a failed
-      // read just means the default view skips the time-block step.
-      const [next, blocks] = await Promise.all([
+      // read just means the default view skips the time-block step. The
+      // queues are part of the list: a failed read fails the load.
+      const [next, queue, blocks] = await Promise.all([
         runtime.tasks.list(workspaceId),
+        runtime.tasks.listQueue(workspaceId),
         runtime.tasks.getTimeBlocks(workspaceId).catch((): TimeBlockMap => ({})),
       ]);
       if (reqRef.current === req) {
         setBundle(next);
+        setQueueRows(queue);
+        setKeptRows([]);
         // Tags live in the workspace tag store, shared by every surface (TV-T1).
         seedTags(workspaceId, {
           tags: next.tags,
@@ -298,16 +329,62 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     return counts;
   }, [tagView, liveTasks]);
 
-  // ── today's commit queue ─────────────────────────────────────────────────────
-  const today = todayStr();
-  /** Tasks committed for today, ordered by commitOrder (the Execute queue). */
-  const committedTasks = useMemo(
+  // ── personal queues (TV-D4) ─────────────────────────────────────────────────
+  // Each person has their own Queue, not tied to a date (tasks-v2 §2). Rows of
+  // other people are claims ("In Mike's queue"). Rows are read with the
+  // workspace they belong to, so a late answer from the last workspace never
+  // shows here.
+  const liveQueueRows = useMemo(
+    () => queueRows.filter((e) => e.workspaceId === workspaceId),
+    [queueRows, workspaceId],
+  );
+  /** My line-up, in order (what the server holds, plus optimistic edits). */
+  const myQueueEntries = useMemo(
+    () => queueEntriesOf(liveQueueRows, userId),
+    [liveQueueRows, userId],
+  );
+  const queuedTaskIds = useMemo(
+    () => new Set(myQueueEntries.map((e) => e.taskId)),
+    [myQueueEntries],
+  );
+  /** Who else has each task queued (user ids, earliest first). */
+  const queueClaims = useMemo(() => claimsByTask(liveQueueRows, userId), [liveQueueRows, userId]);
+  /** My queue's tasks in order, with the ones I just completed still in place. */
+  const queuedTasks = useMemo(
     () =>
-      liveTasks
-        .filter((t) => t.committedFor === today && t.status !== "archived")
-        .slice()
-        .sort((a, b) => (a.commitOrder ?? 0) - (b.commitOrder ?? 0)),
-    [liveTasks, today],
+      queueTasks(
+        myQueueEntries,
+        keptRows.filter((e) => e.workspaceId === workspaceId),
+        liveTasks,
+      ),
+    [myQueueEntries, keptRows, workspaceId, liveTasks],
+  );
+  /** The rail's Queue count: my open queued tasks. */
+  const queueCount = useMemo(() => openQueueCount(queuedTasks), [queuedTasks]);
+
+  // Names for the "Also in Mike's queue" note. Read without `useWorkspace` so
+  // the hook still works where no workspace provider is mounted (tests).
+  const members = useContext(WorkspaceContext)?.members;
+  const memberName = useCallback(
+    (id: string) => members?.find((m) => m.userId === id)?.displayName?.trim() || "a teammate",
+    [members],
+  );
+
+  /** Mirror the server: done, archived or deleted leaves every queue. A done
+   *  task of mine stays on show (kept) until the next load; reopening drops it. */
+  const queueFollowStatus = useCallback(
+    (taskId: string, status: TaskStatus | "deleted") => {
+      if (status === "todo" || status === "in_progress") {
+        setKeptRows((prev) => prev.filter((e) => e.taskId !== taskId));
+        return;
+      }
+      const mine = myQueueEntries.find((e) => e.taskId === taskId);
+      if (status === "done" && mine) {
+        setKeptRows((prev) => [...prev.filter((e) => e.taskId !== taskId), mine]);
+      }
+      setQueueRows((prev) => withoutTask(prev, taskId));
+    },
+    [myQueueEntries],
   );
 
   // ── helpers ──────────────────────────────────────────────────────────────────
@@ -422,53 +499,254 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     [runtime, workspaceId, canEdit, liveTasks, userId],
   );
 
+  /** Send one queue op after the ones before it; apply its answer if it's the newest. */
+  const sendQueueOp = useCallback(
+    (ws: string, me: string, op: () => Promise<TaskQueueEntry[]>) => {
+      const seq = ++queueSeq.current;
+      const run = queueChain.current.then(op);
+      queueChain.current = run.catch(() => {});
+      void run
+        .then((own) => {
+          if (queueSeq.current === seq) setQueueRows((prev) => withOwnQueue(prev, ws, me, own));
+          setActivityStamp((s) => s + 1);
+        })
+        .catch((e) => {
+          toast.error(e instanceof Error ? e.message : "Couldn't update your queue.");
+          void load();
+        });
+    },
+    [load],
+  );
+
   /**
-   * Capture a new task straight into today's commit queue (Focus empty-queue
-   * affordance, DF-11). Mirrors {@link createTask} but sets `committedFor`/
-   * `commitOrder` on the create payload, so the task lands in Execute's queue
-   * immediately — no temp-id round-trip before a separate commit (which would be
-   * rejected). Created in the Inbox. Like `createTask`, the raw upsert path logs
-   * no attributed create/commit activity (consistent with capture).
+   * Run a queue op (TV-D2): apply `optimistic` to my line-up at once, then the
+   * RPC, which answers with my whole queue in order. Only the newest op's answer
+   * is applied, so two quick toggles can't put back an older line-up. On error:
+   * toast and reload. Returns false when it couldn't start (no access).
    */
-  const commitNewTaskToday = useCallback(
+  const runQueueOp = useCallback(
+    (
+      optimistic: (mine: TaskQueueEntry[]) => TaskQueueEntry[],
+      op: (rt: ModuoRuntime, ws: string) => Promise<TaskQueueEntry[]>,
+    ): boolean => {
+      if (!runtime || !workspaceId || !canEdit || !userId) {
+        toast.error("You don't have edit access to Tasks in this workspace.");
+        return false;
+      }
+      const rt = runtime;
+      const ws = workspaceId;
+      const me = userId;
+      setQueueRows((prev) =>
+        withOwnQueue(
+          prev,
+          ws,
+          me,
+          optimistic(
+            queueEntriesOf(
+              prev.filter((e) => e.workspaceId === ws),
+              me,
+            ),
+          ),
+        ),
+      );
+      sendQueueOp(ws, me, () => op(rt, ws));
+      return true;
+    },
+    [runtime, workspaceId, canEdit, userId, sendQueueOp],
+  );
+
+  /** A placeholder row for my queue until the server's answer replaces it. */
+  const optimisticEntry = useCallback(
+    (taskId: string, position: string): TaskQueueEntry => {
+      const now = new Date().toISOString();
+      return {
+        id: `tmp-${crypto.randomUUID()}`,
+        workspaceId: workspaceId ?? "",
+        userId: userId ?? "",
+        taskId,
+        position,
+        queuedAt: now,
+        updatedAt: now,
+      };
+    },
+    [workspaceId, userId],
+  );
+
+  /**
+   * Add a task to my queue: the end, or the top (Calendar's "Start focus").
+   * Queuing a task someone else has queued too is fine, with a quiet note.
+   */
+  const addToQueue = useCallback(
+    (id: string, at: QueuePlacement = "end") => {
+      const task = liveTasks.find((t) => t.id === id);
+      if (!task) return;
+      if (isTempId(id)) {
+        toast.error("Still saving that task — try again in a moment.");
+        return;
+      }
+      if (task.status === "done" || task.status === "archived") {
+        toast.error(
+          task.status === "done"
+            ? "Done tasks can't be queued."
+            : "Archived tasks can't be queued.",
+        );
+        return;
+      }
+      if (queuedTaskIds.has(id) && at === "end") return;
+      const started = runQueueOp(
+        (mine) => {
+          const rest = mine.filter((e) => e.taskId !== id);
+          const position =
+            at === "top" ? betweenPositions(null, rest[0]?.position ?? null) : endOfQueue(rest);
+          return [...rest, optimisticEntry(id, position)];
+        },
+        (rt, ws) => rt.tasks.opQueueAdd({ workspaceId: ws, taskId: id, at }),
+      );
+      const others = queueClaims.get(id) ?? [];
+      if (started && others.length > 0) toast(alsoInLabel(others.map(memberName)));
+    },
+    [liveTasks, queuedTaskIds, runQueueOp, optimisticEntry, queueClaims, memberName],
+  );
+
+  const removeFromQueue = useCallback(
+    (id: string) => {
+      if (!queuedTaskIds.has(id)) return;
+      if (isTempId(id)) {
+        toast.error("Still saving that task — try again in a moment.");
+        return;
+      }
+      runQueueOp(
+        (mine) => mine.filter((e) => e.taskId !== id),
+        (rt, ws) => rt.tasks.opQueueRemove({ workspaceId: ws, taskId: id }),
+      );
+    },
+    [queuedTaskIds, runQueueOp],
+  );
+
+  /** In or out of my queue: the row/card toggle, `q`, the menus, the panel. */
+  const toggleQueue = useCallback(
+    (id: string) => {
+      if (queuedTaskIds.has(id)) removeFromQueue(id);
+      else addToQueue(id);
+    },
+    [queuedTaskIds, removeFromQueue, addToQueue],
+  );
+
+  /** Skip in Focus: the task goes to the end of my queue. Not a reschedule. */
+  const moveQueuedToEnd = useCallback(
+    (id: string) => {
+      if (!queuedTaskIds.has(id)) return;
+      if (isTempId(id)) {
+        toast.error("Still saving that task — try again in a moment.");
+        return;
+      }
+      runQueueOp(
+        (mine) => {
+          const rest = mine.filter((e) => e.taskId !== id);
+          const moved = mine.find((e) => e.taskId === id);
+          return moved ? [...rest, { ...moved, position: endOfQueue(rest) }] : mine;
+        },
+        (rt, ws) => rt.tasks.opQueueMoveToEnd({ workspaceId: ws, taskId: id }),
+      );
+    },
+    [queuedTaskIds, runQueueOp],
+  );
+
+  /**
+   * A drag in the Queue: `orderedIds` is the list as it now looks. One task
+   * moved; it goes right after the queued task it now follows (or to the top).
+   */
+  const reorderQueue = useCallback(
+    (orderedIds: string[]) => {
+      if (!canEdit) return;
+      const move = queueMove(
+        myQueueEntries.map((e) => e.taskId),
+        orderedIds,
+      );
+      if (!move) return;
+      if (isTempId(move.taskId) || (move.afterTaskId && isTempId(move.afterTaskId))) {
+        toast.error("Still saving that task — try again in a moment.");
+        return;
+      }
+      runQueueOp(
+        (mine) =>
+          mine.map((e) =>
+            e.taskId === move.taskId
+              ? { ...e, position: movedPosition(mine, move.taskId, move.afterTaskId) }
+              : e,
+          ),
+        (rt, ws) =>
+          rt.tasks.opQueueReorder({
+            workspaceId: ws,
+            taskId: move.taskId,
+            afterTaskId: move.afterTaskId,
+          }),
+      );
+    },
+    [canEdit, myQueueEntries, runQueueOp],
+  );
+
+  /**
+   * Capture a new task straight into my queue (Focus's empty-queue affordance,
+   * DF-11). Created in the Inbox, assigned to me, shown queued at once; once
+   * the server has it, it's added to the end of my queue.
+   */
+  const captureToQueue = useCallback(
     (title: string) => {
       const trimmed = title.trim();
       if (!trimmed) return;
-      if (!runtime || !workspaceId || !canEdit || !inbox) {
+      if (!runtime || !workspaceId || !canEdit || !inbox || !userId) {
         if (!canEdit) toast.error("You don't have edit access to Tasks in this workspace.");
         return;
       }
+      const rt = runtime;
+      const ws = workspaceId;
+      const me = userId;
       const bucketId = inbox.id;
-      const bucketTasks = liveTasks.filter((t) => t.bucketId === bucketId);
-      const position = endPosition(bucketTasks);
-      const maxOrder = committedTasks.reduce((m, t) => Math.max(m, t.commitOrder ?? 0), 0);
+      const position = endPosition(liveTasks.filter((t) => t.bucketId === bucketId));
       const optimistic = makeTask({
         bucketId,
         title: trimmed,
-        workspaceId,
+        workspaceId: ws,
         position,
-        assigneeId: userId,
+        assigneeId: me,
       });
-      optimistic.creatorId = userId ?? "";
-      optimistic.committedFor = today;
-      optimistic.commitOrder = maxOrder + 1;
+      optimistic.creatorId = me;
       const tempId = `tmp-${crypto.randomUUID()}`;
       optimistic.id = tempId;
+      const placeholder = optimisticEntry(tempId, endOfQueue(myQueueEntries));
       setBundle((prev) => ({ ...prev, tasks: [...prev.tasks, optimistic] }));
-      void runtime.tasks
-        .upsertTask({ ...optimistic, id: "" })
-        .then((saved) => {
+      setQueueRows((prev) => [...prev, placeholder]);
+      void rt.tasks.upsertTask({ ...optimistic, id: "" }).then(
+        (saved) => {
           setBundle((prev) => ({
             ...prev,
             tasks: prev.tasks.map((t) => (t.id === tempId ? saved : t)),
           }));
-        })
-        .catch((e) => {
+          setQueueRows((prev) =>
+            prev.map((e) => (e.taskId === tempId ? { ...e, taskId: saved.id } : e)),
+          );
+          // The task exists now; queuing it waits behind earlier queue ops.
+          sendQueueOp(ws, me, () => rt.tasks.opQueueAdd({ workspaceId: ws, taskId: saved.id }));
+        },
+        (e) => {
           setBundle((prev) => ({ ...prev, tasks: prev.tasks.filter((t) => t.id !== tempId) }));
+          setQueueRows((prev) => prev.filter((row) => row.id !== placeholder.id));
           toast.error(e instanceof Error ? e.message : "Couldn't create task.");
-        });
+        },
+      );
     },
-    [runtime, workspaceId, canEdit, inbox, liveTasks, committedTasks, today, userId],
+    [
+      runtime,
+      workspaceId,
+      canEdit,
+      inbox,
+      userId,
+      liveTasks,
+      myQueueEntries,
+      optimisticEntry,
+      sendQueueOp,
+    ],
   );
 
   const patchTask = useCallback(
@@ -488,6 +766,9 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
           }
         }
       }
+      // Done or archived leaves every queue on the server (TV-D2); follow it
+      // here so the rail count and claims agree right away.
+      if (patch.status && canEdit && !isTempId(id)) queueFollowStatus(id, patch.status);
       // Assignment is an intent op (tasks.assign): the RPC checks the person can
       // take tasks, and the server notifies them. The rest of the patch, if
       // any, saves as usual below.
@@ -541,7 +822,16 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
         setBundle((prev) => ({ ...prev, tasks: prev.tasks.map((t) => (t.id === id ? saved : t)) }));
       });
     },
-    [bundle.tasks, patchTaskLocal, guard, runtime, workspaceId, applyOp, canEdit],
+    [
+      bundle.tasks,
+      patchTaskLocal,
+      guard,
+      runtime,
+      workspaceId,
+      applyOp,
+      canEdit,
+      queueFollowStatus,
+    ],
   );
 
   // ── recurrence catch-up (spec §5d) ──────────────────────────────────────────
@@ -787,40 +1077,6 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     [applyOp, runtime, workspaceId],
   );
 
-  /** Toggle a task in/out of today's commit queue (commit = "doing this today"). */
-  const toggleCommit = useCallback(
-    (id: string) => {
-      const existing = bundle.tasks.find((t) => t.id === id);
-      if (!existing) return;
-      if (existing.committedFor === today) {
-        applyOp(id, { committedFor: null, commitOrder: null }, () =>
-          runtime!.tasks.opUncommit({ workspaceId: workspaceId!, taskId: id }),
-        );
-        return;
-      }
-      // Optimistic order; the op recomputes it under a row lock (race-safe).
-      const maxOrder = committedTasks.reduce((m, t) => Math.max(m, t.commitOrder ?? 0), 0);
-      applyOp(id, { committedFor: today, commitOrder: maxOrder + 1 }, () =>
-        runtime!.tasks.opCommit({ workspaceId: workspaceId!, taskId: id, forDate: today }),
-      );
-    },
-    [bundle.tasks, today, committedTasks, applyOp, runtime, workspaceId],
-  );
-
-  /** Skip: take a committed task out of today's queue (and, since TV-D2, out
-   * of my personal queue). Leaving the queue isn't a slip, so the reschedule
-   * count stays as it is (tasks-v2 decision 4); the op clears the commit. */
-  const rescheduleFromToday = useCallback(
-    (id: string) => {
-      const existing = bundle.tasks.find((t) => t.id === id);
-      if (!existing) return;
-      applyOp(id, { committedFor: null, commitOrder: null }, () =>
-        runtime!.tasks.opSkipToday({ workspaceId: workspaceId!, taskId: id }),
-      );
-    },
-    [bundle.tasks, applyOp, runtime, workspaceId],
-  );
-
   /**
    * Skip-occurrence (spec §5d): jump a recurring task to its next occurrence
    * without done-credit. Does NOT touch rescheduleCount — a skipped occurrence
@@ -848,23 +1104,6 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     [bundle.tasks, applyOp, runtime, workspaceId],
   );
 
-  /**
-   * Reorder the committed queue to `orderedIds` (drag-to-reorder). Renumbers the
-   * affected rows' commitOrder through the normal save path — only the rows whose
-   * rank changed are written. Queue order rides the lightweight `commit_order`
-   * column rather than an intent op: a high-frequency, low-stakes personal
-   * ordering, the same call shape as the board's `position` drag.
-   */
-  const reorderQueue = useCallback(
-    (orderedIds: string[]) => {
-      if (!canEdit) return;
-      for (const u of commitOrderUpdates(orderedIds, committedTasks)) {
-        patchTask(u.id, { commitOrder: u.commitOrder });
-      }
-    },
-    [canEdit, committedTasks, patchTask],
-  );
-
   const deleteTask = useCallback(
     (id: string) => {
       const existing = bundle.tasks.find((t) => t.id === id);
@@ -880,6 +1119,8 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
           .filter((t) => t.id !== id)
           .map((t) => (t.parentId === id ? { ...t, parentId: null } : t)),
       }));
+      // A deleted task leaves every queue; Undo doesn't put it back (TV-D2).
+      if (canEdit) queueFollowStatus(id, "deleted");
       guard(async () => {
         await runtime!.tasks.deleteTask({ workspaceId: workspaceId!, taskId: id });
         // Same guarantee as deleting the task from a note (DF-5): soft delete =
@@ -908,7 +1149,7 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
         });
       });
     },
-    [bundle.tasks, guard, runtime, workspaceId, load],
+    [bundle.tasks, guard, runtime, workspaceId, load, canEdit, queueFollowStatus],
   );
 
   // ── subtask mutations (one level — spec §11) ─────────────────────────────────
@@ -1278,11 +1519,17 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     driftCountByBucket,
     timeBlocks,
     setTimeBlock,
-    today,
-    committedTasks,
+    /** My queue's tasks in line-up order (TV-D4). */
+    queuedTasks,
+    /** Tasks in my queue (open ones; a task leaves queues when done). */
+    queuedTaskIds,
+    /** Who else has each task queued: task id → user ids (claims). */
+    queueClaims,
+    /** My open queued tasks — the rail's Queue count. */
+    queueCount,
     reload: load,
     createTask,
-    commitNewTaskToday,
+    captureToQueue,
     patchTask,
     toggleDone,
     markDone,
@@ -1293,8 +1540,10 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     rescheduleScheduledAt,
     unscheduleTask,
     scheduleTaskAt,
-    toggleCommit,
-    rescheduleFromToday,
+    toggleQueue,
+    addToQueue,
+    removeFromQueue,
+    moveQueuedToEnd,
     skipOccurrence,
     reorderQueue,
     deleteTask,

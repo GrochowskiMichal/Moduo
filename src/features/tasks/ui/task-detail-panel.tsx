@@ -83,7 +83,9 @@ import {
   recurrenceFromPreset,
   recurrenceLabel,
 } from "../parse/recurrence";
+import { alsoInLabel, claimLabel } from "../queue";
 import { AssigneeAvatar } from "./assignee-avatar";
+import { ClaimAvatar, useQueueClaim } from "./queue-toggle";
 
 type Props = {
   task: Task | null;
@@ -186,7 +188,8 @@ function DetailBody({
   const [timeSpentEditing, setTimeSpentEditing] = useState(false);
 
   const drifted = isDrifted(task);
-  const committed = !!task.committedFor && task.committedFor === api.today;
+  const queued = api.queuedTaskIds.has(task.id);
+  const claim = useQueueClaim(task.id, api);
   const bucketOptions = inbox ? [inbox, ...buckets.filter((b) => b.id !== inbox.id)] : buckets;
   const taskTags = api.tagsByTask.get(task.id) ?? [];
   // Subtasks, one level (spec §11): a live parent makes this a subtask; only
@@ -612,16 +615,26 @@ function DetailBody({
             </Field>
           ) : null}
 
-          {canEdit ? (
+          {/* Claims (TV-D4): who else has this lined up. Runs stay private. */}
+          {claim.names.length > 0 ? (
+            <p className="flex items-center gap-2 font-sans text-xs text-muted-foreground">
+              <span aria-hidden className="flex">
+                <ClaimAvatar assignee={claim.first} />
+              </span>
+              {queued ? alsoInLabel(claim.names) : claimLabel(claim.names)}
+            </p>
+          ) : null}
+          {/* Done and archived tasks can't be queued (they leave every queue). */}
+          {canEdit && task.status !== "done" && task.status !== "archived" ? (
             <Button
               type="button"
-              variant={committed ? "secondary" : "default"}
+              variant={queued ? "secondary" : "default"}
               size="sm"
               className="w-full justify-center"
-              onClick={() => api.toggleCommit(task.id)}
+              onClick={() => api.toggleQueue(task.id)}
             >
               <ListChecks aria-hidden />
-              {committed ? "Remove from queue" : "Commit to Queue"}
+              {queued ? "Remove from queue" : "Add to queue"}
             </Button>
           ) : null}
         </div>
@@ -842,7 +855,7 @@ function SubtaskRow({
   api: TasksModuleApi;
 }) {
   const done = subtask.status === "done";
-  const committed = !!subtask.committedFor && subtask.committedFor === api.today;
+  const queued = api.queuedTaskIds.has(subtask.id);
   return (
     <div className="group flex min-h-7 items-center gap-2 rounded px-1 hover:bg-accent/60">
       <CompleteToggle done={done} disabled={!canEdit} onToggle={() => api.toggleDone(subtask)} />
@@ -856,19 +869,19 @@ function SubtaskRow({
       >
         {subtask.title || "Untitled"}
       </button>
-      {/* individually committable — start a scary task via its smallest step */}
-      {canEdit || committed ? (
+      {/* individually queueable — start a scary task via its smallest step */}
+      {(canEdit && !done) || queued ? (
         <Tooltip>
           <TooltipTrigger asChild>
             <button
               type="button"
               disabled={!canEdit}
-              aria-label={committed ? "Remove from queue" : "Add to queue"}
-              onClick={() => api.toggleCommit(subtask.id)}
+              aria-label={queued ? "Remove from queue" : "Add to queue"}
+              onClick={() => api.toggleQueue(subtask.id)}
               className={cn(
                 "flex size-5 shrink-0 items-center justify-center rounded transition-opacity",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:opacity-100",
-                committed
+                queued
                   ? "text-primary"
                   : "text-muted-foreground opacity-0 hover:text-foreground group-hover:opacity-100",
               )}
@@ -876,7 +889,7 @@ function SubtaskRow({
               <ListChecks className="size-3.5" aria-hidden />
             </button>
           </TooltipTrigger>
-          <TooltipContent>{committed ? "Queued — click to remove" : "Add to queue"}</TooltipContent>
+          <TooltipContent>{queued ? "Queued — click to remove" : "Add to queue"}</TooltipContent>
         </Tooltip>
       ) : null}
     </div>

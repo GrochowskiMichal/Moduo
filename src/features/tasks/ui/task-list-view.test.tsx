@@ -28,7 +28,6 @@ beforeAll(() => {
 });
 afterEach(cleanup);
 
-const TODAY = "2026-10-08";
 const NOW = "2026-10-01T00:00:00.000Z";
 
 function task(id: string, title: string, extra: Partial<Task> = {}): Task {
@@ -76,21 +75,17 @@ const inbox: Bucket = {
 
 /** The real list over three tasks; `queue` renders the reorderable Queue. */
 function renderList({ queue = false }: { queue?: boolean } = {}) {
-  const extra = queue ? { committedFor: TODAY } : {};
-  const tasks = [
-    task("a", "Alpha", { ...extra, commitOrder: 1 }),
-    task("b", "Beta", { ...extra, commitOrder: 2 }),
-    task("c", "Gamma", { ...extra, commitOrder: 3 }),
-  ];
+  const tasks = [task("a", "Alpha"), task("b", "Beta"), task("c", "Gamma")];
   const api = {
     tasks,
-    today: TODAY,
+    queuedTaskIds: new Set(queue ? ["a", "b", "c"] : []),
+    queueClaims: new Map(),
     subtasksByParent: new Map(),
     subtaskProgressByTask: new Map(),
     tagsByTask: new Map(),
     blockedTaskIds: new Set(),
     toggleDone: rs.fn(),
-    toggleCommit: rs.fn(),
+    toggleQueue: rs.fn(),
     patchTask: rs.fn(),
     deleteTask: rs.fn(),
     setTaskParent: rs.fn(),

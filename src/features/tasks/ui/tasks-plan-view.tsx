@@ -26,8 +26,15 @@ import { HubDropZone } from "../../contacts/ui/hub-drop-zone";
 import { flushFocusSession, registerFocusFlushSink } from "../../focus/engine";
 import { consumeFocusViewRequest, FOCUS_VIEW_REQUEST_EVENT } from "../../focus/view-request";
 import { createLinkWithToast } from "../../spine/ui/drop-link-toast";
-import { timeBlockByBucket as invertTimeBlocks, resolveDefaultSelection } from "../default-view";
-import { type GroupBy, taskMatchesTagFilter } from "../helpers";
+import { useAssignees } from "../assignees";
+import {
+  timeBlockByBucket as invertTimeBlocks,
+  myTasksScope,
+  openCount,
+  resolveDefaultSelection,
+  showsMyTasks,
+} from "../default-view";
+import { type GroupBy, groupsByBucket, taskMatchesTagFilter } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import { isDrifted, type Task } from "../model";
 import { resolveTasksDeepLink } from "../search";
@@ -121,7 +128,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   // Triage opens from a rail row and has no trigger to hand focus back to.
   const railNavRef = useRef<HTMLElement | null>(null);
   const triageFromRef = useRef<string | null>(null);
-  // Committing a blocked task offers its unblocked frontier first (spec §5c).
+  // Queuing a blocked task offers its unblocked frontier first (spec §5c).
   const [frontierOfferTaskId, setFrontierOfferTaskId] = useState<string | null>(null);
   // Task-level selection (distinct from `selection`, which is the bucket scope).
   // Lifted here so the right-rail detail panel can bind to it across List/Board.
@@ -229,10 +236,10 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     [workspaceId, collapsedSections],
   );
 
-  // Remember the last concrete bucket scope (never "all" / "today") so the next
-  // open can land back on it (spec §9.2).
+  // Remember the last concrete bucket scope (never "all" / "mine" / "today") so
+  // the next open can land back on it (spec §9.2).
   useEffect(() => {
-    if (selection === "all" || selection === "today") return;
+    if (selection === "all" || selection === "mine" || selection === "today") return;
     writeLS(workspaceId, "lastBucket", selection);
   }, [workspaceId, selection]);
 
@@ -267,16 +274,27 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     );
   }, [api.loading, workspaceId, inboxId, buckets, timeBlocks, inboundPending]);
 
+  // "My tasks" is only in the rail of workspaces with two or more members
+  // (tasks-v2 §1): with fewer, every task is yours, so All says the same.
+  const { assignees, currentUserId } = useAssignees();
+  const showMyTasks = showsMyTasks(assignees.length);
+
   // Keep selection valid; "inbox" resolves against the seeded Inbox bucket.
   useEffect(() => {
     if (selection === "all" || selection === "inbox" || selection === "today") return;
+    if (selection === "mine") {
+      // Members load with the workspace; wait for them before ruling.
+      if (!showMyTasks && assignees.length > 0) setSelection("inbox");
+      return;
+    }
     if (inboxId && selection === inboxId) return;
     if (!buckets.some((b) => b.id === selection)) setSelection("inbox");
-  }, [selection, buckets, inboxId]);
+  }, [selection, buckets, inboxId, showMyTasks, assignees.length]);
 
-  // "All" implies bucket grouping in List; a single bucket flattens it. Nudge
-  // groupBy on scope changes so the control stays meaningful (user can override).
-  const isAll = selection === "all";
+  // All and My tasks imply bucket grouping in List; a single bucket flattens
+  // it. Nudge groupBy on scope changes so the control stays meaningful (user
+  // can override).
+  const isAll = groupsByBucket(selection);
   useEffect(() => {
     if (isAll && groupBy === "none") setGroupBy("bucket");
     if (!isAll && groupBy === "bucket") setGroupBy("none");
@@ -292,12 +310,13 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   );
 
   const scopeTasksAll = useMemo(() => {
-    if (selection === "today") return api.committedTasks;
+    if (selection === "today") return api.queuedTasks;
     if (selection === "all") return tasks.filter((t) => t.status !== "archived");
+    if (selection === "mine") return myTasksScope(tasks, currentUserId);
     const bucketId = selection === "inbox" ? inboxId : selection;
     if (!bucketId) return [];
     return tasks.filter((t) => t.bucketId === bucketId && t.status !== "archived");
-  }, [selection, tasks, inboxId, api.committedTasks]);
+  }, [selection, tasks, inboxId, api.queuedTasks, currentUserId]);
 
   // Apply the tag filter on top of the bucket scope (center only; rail counts
   // stay whole). OR/union — a task matches if it carries any selected tag.
@@ -311,15 +330,18 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     );
   }, [scopeTasksAll, liveFilterTagIds, api.tagsByTask]);
 
-  const scopeTitle = isAll
-    ? "All"
-    : selection === "today"
-      ? "Queue"
-      : selection === "inbox"
-        ? "Inbox"
-        : bucketNameById(selection);
+  const scopeTitle =
+    selection === "all"
+      ? "All"
+      : selection === "mine"
+        ? "My tasks"
+        : selection === "today"
+          ? "Queue"
+          : selection === "inbox"
+            ? "Inbox"
+            : bucketNameById(selection);
 
-  // The commit queue is inherently ordered, so Today List view is never grouped.
+  // The Queue is one ordered line-up, so its List view is never grouped.
   const effectiveGroupBy = selection === "today" ? "none" : groupBy;
 
   // Where a captured task lands: the selected bucket, else Inbox.
@@ -330,7 +352,10 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     () => tasks.filter((t) => t.status !== "done" && t.status !== "archived").length,
     [tasks],
   );
-  const committedCount = api.committedTasks.length;
+  const myOpenCount = useMemo(
+    () => (showMyTasks ? openCount(myTasksScope(tasks, currentUserId)) : 0),
+    [showMyTasks, tasks, currentUserId],
+  );
 
   const timeBlocksByBucket = useMemo(() => invertTimeBlocks(timeBlocks), [timeBlocks]);
 
@@ -351,31 +376,29 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
 
   const exitExecute = useCallback(() => setMode("plan"), []);
 
-  // ── blocked-by: frontier offer on commit (spec §5c) ─────────────────────────
-  // One interception point for every commit affordance (row/card context menus,
-  // detail panel, list keyboard): committing a *blocked* task opens the quiet
-  // frontier dialog instead — with "Commit anyway" as the escape hatch (never a
-  // wall). Removing from Today always goes straight through.
-  const guardedToggleCommit = useCallback(
+  // ── blocked-by: frontier offer on queuing (spec §5c) ────────────────────────
+  // One interception point for every queue affordance (row/card toggles and
+  // context menus, detail panel, list keyboard): queuing a *blocked* task opens
+  // the quiet frontier dialog instead — with "Queue anyway" as the escape hatch
+  // (never a wall). Removing from the queue always goes straight through.
+  const guardedToggleQueue = useCallback(
     (id: string) => {
-      const task = tasks.find((t) => t.id === id);
       if (
-        task &&
-        task.committedFor !== api.today &&
+        !api.queuedTaskIds.has(id) &&
         api.blockedTaskIds.has(id) &&
         api.frontierFor(id).length > 0
       ) {
         setFrontierOfferTaskId(id);
         return;
       }
-      api.toggleCommit(id);
+      api.toggleQueue(id);
     },
-    [tasks, api],
+    [api],
   );
-  // The views see the guarded commit through an otherwise-unchanged api facade.
+  // The views see the guarded toggle through an otherwise-unchanged api facade.
   const viewApi = useMemo<TasksModuleApi>(
-    () => ({ ...api, toggleCommit: guardedToggleCommit }),
-    [api, guardedToggleCommit],
+    () => ({ ...api, toggleQueue: guardedToggleQueue }),
+    [api, guardedToggleQueue],
   );
 
   const frontierOfferTask = useMemo(
@@ -425,7 +448,8 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       taskCountByBucket={api.taskCountByBucket}
       driftCountByBucket={api.driftCountByBucket}
       totalOpenCount={totalOpenCount}
-      committedCount={committedCount}
+      queueCount={api.queueCount}
+      myTasksCount={showMyTasks ? myOpenCount : null}
       canEdit={canEdit}
       onCreateBucket={api.createBucket}
       onRenameBucket={api.renameBucket}
@@ -613,12 +637,12 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     mode === "execute" ? (
       <ExecuteView
         workspaceId={workspaceId}
-        committedTasks={api.committedTasks}
+        queuedTasks={api.queuedTasks}
         bucketNameById={bucketNameById}
         parentTitleFor={parentTitleFor}
         blockedNoteFor={blockedNoteFor}
         onMarkDone={api.markDone}
-        onSkip={api.rescheduleFromToday}
+        onSkip={api.moveQueuedToEnd}
         onAddTime={api.addTimeSpent}
         onSetTime={api.setTimeSpent}
         tagsFor={(id) => api.tagsByTask.get(id) ?? []}
@@ -627,7 +651,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
         onExit={exitExecute}
         loading={api.loading}
         canEdit={canEdit}
-        onCaptureToQueue={api.commitNewTaskToday}
+        onCaptureToQueue={api.captureToQueue}
       />
     ) : view === "board" ? (
       <TaskBoardView
@@ -646,7 +670,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
         onGroupByChange={setGroupBy}
         reorderable={selection === "today"}
         onReorder={api.reorderQueue}
-        nestable={selection !== "today" && selection !== "all"}
+        nestable={selection !== "today" && !groupsByBucket(selection)}
         revealRequest={revealRequest}
       />
     );
@@ -848,9 +872,9 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
         task={frontierOfferTask}
         frontier={frontierOffer}
         bucketNameById={bucketNameById}
-        onCommitTask={api.toggleCommit}
-        onCommitAnyway={() => {
-          if (frontierOfferTaskId) api.toggleCommit(frontierOfferTaskId);
+        onQueueTask={api.addToQueue}
+        onQueueAnyway={() => {
+          if (frontierOfferTaskId) api.addToQueue(frontierOfferTaskId);
         }}
       />
     </>

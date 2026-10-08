@@ -39,6 +39,8 @@
     "supabase/functions/_shared/oauth-connect.test.ts",
     "supabase/functions/_shared/posthog-erasure.ts",
     "supabase/functions/_shared/posthog-erasure.test.ts",
+    "supabase/functions/_shared/purge-deleted.ts",
+    "supabase/functions/_shared/purge-deleted.test.ts",
     "supabase/functions/auth-email-hook/handler.ts",
     "supabase/functions/auth-email-hook/handler.test.ts",
     "supabase/functions/_shared/standard-webhooks.ts",

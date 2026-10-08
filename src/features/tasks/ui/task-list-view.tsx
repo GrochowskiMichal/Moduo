@@ -25,6 +25,7 @@ import { cn } from "../../../lib/utils";
 import {
   canNestUnder,
   type GroupBy,
+  groupsByBucket,
   groupTasks,
   nestedSubtaskIds,
   showBucketPill,
@@ -47,7 +48,7 @@ import { type RowCommand, TaskRow } from "./task-row";
 type Props = {
   tasks: Task[];
   scopeTitle: string;
-  selection: string; // "all" | "inbox" | bucketId
+  selection: string; // "all" | "mine" | "today" | "inbox" | bucketId
   view: PlanView;
   onViewChange: (view: PlanView) => void;
   groupBy: GroupBy;
@@ -133,8 +134,12 @@ export function TaskListView({
   const nestSensors = useTaskDndSensors({ sortable: false });
 
   const showBucketTag = showBucketPill(selection, groupBy);
-  // Grouping by bucket only makes sense across buckets (the "All" view).
-  const groupOptions = GROUP_OPTIONS.filter((o) => o.value !== "bucket" || selection === "all");
+  // Grouping by bucket only makes sense across buckets (All, My tasks).
+  const groupOptions = GROUP_OPTIONS.filter(
+    (o) => o.value !== "bucket" || groupsByBucket(selection),
+  );
+  // In My tasks every row is mine, so rows leave the avatar out (D4-4).
+  const showAssignee = selection !== "mine";
 
   // Subtasks nest under their parent (hidden from the top level) except in
   // Today — the commit queue is an ordered flat list, and subtasks are
@@ -319,7 +324,7 @@ export function TaskListView({
           // `t` from when the queue was "Today"; the rename makes `q` canonical).
           if (!selectedTask || !canEdit) return;
           e.preventDefault();
-          api.toggleCommit(selectedTask.id);
+          api.toggleQueue(selectedTask.id);
           return;
         case "expand":
           // expand the selected parent's subtasks
@@ -380,6 +385,7 @@ export function TaskListView({
       buckets,
       inboxId: inbox?.id ?? null,
       showBucket: showBucketTag,
+      showAssignee,
       selected: t.id === selectedId,
       editing: t.id === editingId,
       command: command?.taskId === t.id ? command.kind : null,
@@ -410,6 +416,7 @@ export function TaskListView({
       buckets,
       inbox,
       showBucketTag,
+      showAssignee,
       selectedId,
       editingId,
       command,
@@ -483,7 +490,7 @@ export function TaskListView({
     nestable &&
     canEdit &&
     groupBy === "none" &&
-    selection !== "all" &&
+    !groupsByBucket(selection) &&
     selection !== "today" &&
     nestTasks.length > 1;
 

@@ -12,13 +12,69 @@
 // ── Data export ──────────────────────────────────────────────────────────────
 
 /** The modules a workspace export gathers (Assumption 6). */
-export type ExportModuleKey = "tasks" | "notes" | "contacts" | "calendar" | "habits";
+export type ExportModuleKey =
+  | "tasks"
+  | "notes"
+  | "contacts"
+  | "calendar"
+  | "habits"
+  | "attachments";
 
 /** One module's read outcome — the impure gather wraps every runtime read in a
  * try/catch and reports failures here rather than throwing the whole export. */
 export type ModuleReadResult =
   | { module: ExportModuleKey; ok: true; data: unknown }
   | { module: ExportModuleKey; ok: false; error: string };
+
+/** One attachment as the export lists it (AT-1, AT1-8). */
+export type AttachmentManifestInput = {
+  id: string;
+  entityType: string;
+  entityId: string;
+  uploaderId: string | null;
+  fileName: string;
+  mime: string;
+  sizeBytes: number;
+  width: number | null;
+  height: number | null;
+  status: string;
+  deletedAt: string | null;
+  createdAt: string;
+};
+
+/**
+ * `attachments.json`: a manifest of the workspace's files, not the files
+ * themselves (they can be hundreds of megabytes; each opens from its task).
+ * Only finished uploads are listed; unfinished ones never held a file. A cut
+ * read says so instead of looking complete.
+ */
+export function attachmentsManifest(
+  records: AttachmentManifestInput[],
+  truncation: { shown: number; total: number | null } | null,
+) {
+  const files = records
+    .filter((r) => r.status === "ready")
+    .map((r) => ({
+      id: r.id,
+      attached_to: { type: r.entityType, id: r.entityId },
+      name: r.fileName,
+      type: r.mime,
+      size_bytes: r.sizeBytes,
+      width: r.width,
+      height: r.height,
+      added_at: r.createdAt,
+      uploaded_by: r.uploaderId,
+      in_trash: r.deletedAt !== null,
+    }));
+  return {
+    about:
+      "Files attached in this workspace. The files themselves aren't in this export: open the task in Moduo to download one.",
+    count: files.length,
+    total_bytes: files.reduce((sum, f) => sum + f.size_bytes, 0),
+    truncated: truncation ? { shown: truncation.shown, total: truncation.total } : null,
+    files,
+  };
+}
 
 /** Metadata stamped into the export's `_manifest.json`. */
 export type ExportMeta = {
