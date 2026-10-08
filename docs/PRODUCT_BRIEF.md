@@ -8,7 +8,7 @@
 
 ## 1. What Moduo is
 
-**Moduo is a lightweight, all-in-one workspace that unifies tasks, notes, calendar, contacts, finance, and email into one fast app — and links them all together.** It competes with Notion/ClickUp on breadth, but deliberately *without* their heaviness (no Notion-style databases to build, no setup project). The bet is not "another notes app" or "another task app" — it is the **one place a solo operator or a ≤5-person team runs their whole working life**, where an email becomes a task that's linked to a client who has an unpaid invoice that shows up on your calendar.
+**Moduo is a lightweight, all-in-one workspace that unifies tasks, notes, calendar, contacts, and email into one fast app — and links them all together.** It competes with Notion/ClickUp on breadth, but deliberately *without* their heaviness (no Notion-style databases to build, no setup project). The bet is not "another notes app" or "another task app" — it is the **one place a solo operator or a ≤5-person team runs their whole working life**, where an email becomes a task that's linked to a client who has an unpaid invoice that shows up on your calendar.
 
 **The thesis is validated, not speculative.** Users articulate this exact product unprompted and repeatedly:
 
@@ -24,9 +24,9 @@ The market is asking for Moduo by name. **The work is execution and trust, not m
 
 | Segment | Why Moduo | Priority |
 | --- | --- | --- |
-| **Solo business owners / freelancers** | Run the whole business in one app; replace a duct-taped stack (Spark + Morgen + Notion + Linear + a finance app + a spreadsheet CRM). The dogfood persona — *this is the founder.* | **Primary** |
+| **Solo business owners / freelancers** | Run the whole business in one app; replace a duct-taped stack (Spark + Morgen + Notion + Linear + a spreadsheet CRM). The dogfood persona — *this is the founder.* | **Primary** |
 | **Partner / founder pairs & ≤5-person teams** | Shared workspace, light async multiplayer, ambient "who's on what." | **Primary (close 2nd)** |
-| **Students (free tier)** | Tasks + calendar + notes + light finance, free, fast, works offline-ish later. Top-of-funnel + goodwill. | **Free tier** |
+| **Students (free tier)** | Tasks + calendar + notes, free, fast, works offline-ish later. Top-of-funnel + goodwill. | **Free tier** |
 
 Moduo is **modular enough to serve several groups** (a calendar-only user can hide Tasks), but the alpha is tuned for the solo/partner operator. Mobile, large teams, and enterprise are out of scope.
 
@@ -77,7 +77,7 @@ The existential risk (see §11) is the **weakest-leg trap**: if one module is me
 | **Notes** | Notion-ease minus databases / Obsidian-minus-local-first (markdown, embeds, `/task` `/note` refs) | Note checkboxes that are real, schedulable tasks |
 | **Calendar** | Morgen-lite (time-blocking + drag-to-schedule) + Calendly-like booking links | **Close the loop**: complete a task from inside its time-block; done/push/shrink/drop when a block elapses |
 | **Contacts** | Folk-lite (people/companies as hubs) | Click a contact → see *everything* linked (auto-rolled-up, zero logging) |
-| **Finance** | Midday-lite, **CSV-first, no bank layer at alpha** | One widget: "You made $X last month — here's where it went" |
+| ~~**Finance**~~ | **Not planned** (2026-10-07) — no finance module; not soon, possibly never. Old brief kept for reference: `.design/finance/BRIEF.md` | — |
 | **Email** | Spark replacement, **desktop-first hybrid** (Rust IMAP engine; metadata→cloud) | Convert email → task auto-linked to the contact, never leave the inbox |
 | **Dashboard** | iPadOS-style live, interactive, cross-module widgets | Pre-populated on first open; cross-module/entity tiles |
 
@@ -124,7 +124,7 @@ Carried from the original brief, sharpened by research:
 The crowded center is **tasks + calendar + notes**. Moduo's open seams, from the landscape analysis:
 
 1. **The schedule-to-completion loop** — bridge a scheduled block to actual completion (only possible because tasks and calendar share one app).
-2. **The full cross-module entity graph** — including email, finance, contacts (the pack can't reach this).
+2. **The full cross-module entity graph** — including email and contacts (the pack can't reach this).
 3. **Native speed** (Tauri vs Electron).
 4. **A real free / no-minimum price.**
 
