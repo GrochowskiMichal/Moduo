@@ -339,4 +339,7 @@ export const tauriRuntime: ModuoRuntime = {
   // Habits — Supabase-direct (preference-class), identical on both platforms,
   // so the desktop delegates wholesale (DB-7).
   habits: webRuntime.habits,
+
+  // Attachments — Supabase-direct on both platforms (AT-1).
+  attachments: webRuntime.attachments,
 };

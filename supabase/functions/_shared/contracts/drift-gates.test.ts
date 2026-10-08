@@ -6,8 +6,12 @@ import { describe, expect, it } from "@rstest/core";
 
 import { Constants } from "@/types/supabase";
 
+import { ATTACHMENTS_BUCKET } from "./attachments.ts";
 import { TOOL_ARG_SCHEMAS } from "./mcp-tool-args.ts";
 import {
+  ATTACHMENT_DELETED_REASONS,
+  ATTACHMENT_PREVIEW_MIMES,
+  ATTACHMENT_STATUSES,
   CALENDAR_ACCOUNT_STATUSES,
   CONTENT_AUTHOR_KINDS,
   EMAIL_KINDS,
@@ -78,6 +82,19 @@ describe("cross-runtime drift guards", () => {
     expect(read("20261008123000_key_writes_act_as_creator.sql")).toContain(
       `author_kind IN (${list(CONTENT_AUTHOR_KINDS, ",")})`,
     );
+  });
+
+  it("attachment vocabularies match the attachments CHECKs and the ops (AT-1)", () => {
+    const sql = readFileSync(
+      resolve(MIGRATIONS_DIR, "20261008210500_attachments_storage.sql"),
+      "utf8",
+    );
+    const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(",");
+    expect(sql).toContain(`status IN (${inList(ATTACHMENT_STATUSES)})`);
+    expect(sql).toContain(`deleted_reason IN (${inList(ATTACHMENT_DELETED_REASONS)})`);
+    expect(sql).toContain(`preview_mime IN (${inList(ATTACHMENT_PREVIEW_MIMES)})`);
+    expect(sql).toContain(`p_preview_mime NOT IN (${inList(ATTACHMENT_PREVIEW_MIMES)})`);
+    expect(sql).toContain(`bucket_id = '${ATTACHMENTS_BUCKET}'`);
   });
 
   it("task statuses stay the closed set used by MCP parsers", () => {

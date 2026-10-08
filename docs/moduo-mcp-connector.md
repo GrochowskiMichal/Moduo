@@ -130,6 +130,7 @@ Read (view scope) — mirror the manifest's resources
 | `tasks_list_tags` | workspace tags + task usage counts |
 | `tasks_search` | title/description substring search |
 | `tasks_get` | one task in full: edges, subtasks, recent trail |
+| `tasks_attachments_list` | a task's files (AT-1): name, type, size, when added, and a download `url` signed for 5 minutes (`link_lifetime_seconds`); only tasks the key's creator can see |
 | `tasks_activity` | the attributed trail (one task, or workspace-recent) |
 | `tasks_list_assignees` | who a task can be assigned to: members with `is_me` and `can_be_assigned` (TV-D1) |
 

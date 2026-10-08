@@ -69,6 +69,11 @@ const NOTIFICATION_ROWS: ReadonlyArray<{
     title: "Task unblocked",
     description: "When the last thing blocking a task is finished.",
   },
+  {
+    type: "storage",
+    title: "Storage almost full",
+    description: "When files take your workspaces past 80% and 95% of your storage. Owners only.",
+  },
 ];
 
 /** Day-to-day behaviour: per-type notification mutes, what opens on launch,

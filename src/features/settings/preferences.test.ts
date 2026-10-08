@@ -34,6 +34,7 @@ describe("DEFAULT_PREFERENCES", () => {
         dueFollowUp: true,
         unblocked: true,
         overdueTasks: false,
+        storage: true,
       },
       confirmBeforeQuit: false,
     });
@@ -63,7 +64,7 @@ describe("sanitizePreferences", () => {
       soundEnabled: false,
       motion: "reduced",
       // overdueTasks absent from input → coerced to its opt-in default (off);
-      // completed (added in TV-D1) absent → on, like every other mute.
+      // completed (added in TV-D1) and storage (AT-1) absent → on, like every other mute.
       notifications: {
         mention: false,
         assigned: true,
@@ -71,6 +72,7 @@ describe("sanitizePreferences", () => {
         dueFollowUp: false,
         unblocked: true,
         overdueTasks: false,
+        storage: true,
       },
       confirmBeforeQuit: true,
     });
@@ -104,6 +106,7 @@ describe("sanitizePreferences", () => {
       dueFollowUp: true,
       unblocked: false,
       overdueTasks: false,
+      storage: true,
     });
   });
 
@@ -122,6 +125,8 @@ describe("notificationTypeForOp", () => {
     expect(notificationTypeForOp("email.snooze_due")).toBe("dueFollowUp");
     expect(notificationTypeForOp("email.follow_up_due")).toBe("dueFollowUp");
     expect(notificationTypeForOp("tasks.unblocked")).toBe("unblocked");
+    expect(notificationTypeForOp("attachments.storage_80")).toBe("storage");
+    expect(notificationTypeForOp("attachments.storage_95")).toBe("storage");
   });
 
   it("returns null for ops outside the quiet set (legacy / future)", () => {
@@ -140,8 +145,10 @@ describe("isNotificationEnabled", () => {
       dueFollowUp: true,
       unblocked: false,
       overdueTasks: false,
+      storage: false,
     };
     expect(isNotificationEnabled("comments.add", prefs)).toBe(true);
+    expect(isNotificationEnabled("attachments.storage_95", prefs)).toBe(false);
     expect(isNotificationEnabled("tasks.assigned", prefs)).toBe(false);
     expect(isNotificationEnabled("tasks.completed", prefs)).toBe(false);
     expect(isNotificationEnabled("email.follow_up_due", prefs)).toBe(true);
@@ -156,6 +163,7 @@ describe("isNotificationEnabled", () => {
       dueFollowUp: false,
       unblocked: false,
       overdueTasks: false,
+      storage: false,
     };
     expect(isNotificationEnabled("workspace.invite_accepted", allOff)).toBe(true);
     expect(isNotificationEnabled("note_shared", allOff)).toBe(true);

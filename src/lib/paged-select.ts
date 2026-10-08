@@ -44,6 +44,7 @@ export const READ_CAPS = {
   calendarAccounts: 200,
   emailAccounts: 200,
   emailRefs: 5000,
+  attachments: 10000,
 } as const;
 
 /** One collection that hit its cap. `null` everywhere else = nothing was cut. */
