@@ -5,6 +5,7 @@ import {
   blockingWorkspaces,
   DANGER_ZONE_COPY,
   finishAccountDeletion,
+  isAccountDeletedMarked,
   matchesDeleteConfirm,
   type OwnedWorkspace,
   validateAuthSearch,
@@ -18,10 +19,12 @@ describe("finishAccountDeletion (PRIV-2 AC11)", () => {
       release = resolve;
     });
 
+    window.sessionStorage.clear();
     const done = finishAccountDeletion({
       forgetOnDevice: () => calls.push("forget on device"),
       goToSignInWithNotice: async () => {
-        calls.push("go to /auth?deleted=1");
+        // The sign-in page only shows the notice for a deletion this tab marked.
+        calls.push(isAccountDeletedMarked() ? "go to /auth?deleted=1" : "unmarked");
         await landed;
         calls.push("landed");
       },

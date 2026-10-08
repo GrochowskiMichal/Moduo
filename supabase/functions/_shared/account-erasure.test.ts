@@ -150,6 +150,8 @@ class FakeDb implements ErasureDb {
   rpcFails: string | null = null;
   rpcPreviewFails: string | null = null;
   rpcAnswersPreview: string | null = null;
+  /** Extra fields a function's answer carries, by function. */
+  rpcAnswer: Record<string, Record<string, unknown>> = {};
   /** Runs before each SQL function call: lets a test look at the world at that moment. */
   beforeRpc: ((fn: string) => void) | null = null;
   fail: { table: string; op: "select" | "delete" } | null = null;
@@ -194,7 +196,7 @@ class FakeDb implements ErasureDb {
       }
       const preview = asked || this.rpcAnswersPreview === fn;
       if (!preview) this.log.push(`rpc ${fn}`);
-      return { data: { preview }, error: null };
+      return { data: { ...this.rpcAnswer[fn], preview }, error: null };
     });
   }
 
@@ -759,7 +761,10 @@ describe("deleteAccount — the SQL side (PRIV-2b)", () => {
       // Dry runs first, before anything irreversible.
       { fn: "account_scrub_stripe_mirror", args: { p_user: ME, p_preview: true } },
       { fn: "account_erase_workspace_data", args: { p_user: ME, p_preview: true } },
-      { fn: "account_scrub_stripe_mirror", args: { p_user: ME, p_preview: false } },
+      {
+        fn: "account_scrub_stripe_mirror",
+        args: { p_customer_ids: ["cus_me"], p_user: ME, p_preview: false },
+      },
       { fn: "account_erase_workspace_data", args: { p_user: ME, p_preview: false } },
     ]);
     const at = (entry: string) => db.log.indexOf(entry);
@@ -826,6 +831,44 @@ describe("deleteAccount — the SQL side (PRIV-2b)", () => {
       expect(db.log).toEqual([]);
       expect(db.users.has(ME)).toBe(true);
     }
+  });
+
+  it("hands the wipe every customer of theirs that is gone at Stripe, and none that isn't theirs", async () => {
+    const { db, stripe, deps } = world();
+    stripe.addCustomer("cus_orphan", ME); // tagged, but the profile lost track of it
+    stripe.addCustomer("cus_stolen", OTHER); // the profile points at someone else's
+    db.tables.profiles[0].stripe_customer_id = "cus_stolen";
+
+    await deleteAccount(deps, me);
+
+    const wipe = db.rpcCalls.find(
+      (call) => call.fn === "account_scrub_stripe_mirror" && call.args.p_preview === false,
+    );
+    expect([...(wipe?.args.p_customer_ids as string[])].sort()).toEqual(["cus_me", "cus_orphan"]);
+  });
+
+  it("on a retry, still hands the wipe the customer an earlier run deleted", async () => {
+    const { db, stripe, deps } = world();
+    db.rpcFails = "account_scrub_stripe_mirror";
+    await deleteAccount(deps, me).catch(() => null);
+    db.rpcFails = null;
+
+    await deleteAccount(deps, me);
+
+    const wipes = db.rpcCalls.filter(
+      (call) => call.fn === "account_scrub_stripe_mirror" && call.args.p_preview === false,
+    );
+    expect(wipes.map((call) => call.args.p_customer_ids)).toEqual([["cus_me"], ["cus_me"]]);
+    expect(stripe.log.filter((entry) => entry.startsWith("del "))).toEqual(["del cus_me"]);
+  });
+
+  it("warns when there is no Stripe copy to wipe", async () => {
+    const { db, deps } = world();
+    db.rpcAnswer.account_scrub_stripe_mirror = { stripe_mirror: false };
+
+    const result = await deleteAccount(deps, me);
+
+    expect(result).toEqual({ status: "deleted", warnings: ["stripe_mirror_missing"] });
   });
 
   it("asks nothing of the SQL side when a sole owner is blocked", async () => {

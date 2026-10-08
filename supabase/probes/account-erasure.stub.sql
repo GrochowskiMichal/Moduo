@@ -881,6 +881,31 @@ CREATE TABLE stripe.payment_methods (
     END) STORED,
   type text GENERATED ALWAYS AS ((_raw_data ->> 'type')) STORED
 );
+-- Payment records, kept by the wipe; what they point at finds detached cards.
+CREATE TABLE stripe.payment_intents (
+  _raw_data jsonb NOT NULL,
+  _last_synced_at timestamptz,
+  _account_id text NOT NULL REFERENCES stripe.accounts (id),
+  id text GENERATED ALWAYS AS ((_raw_data ->> 'id')) STORED PRIMARY KEY,
+  customer text GENERATED ALWAYS AS ((_raw_data ->> 'customer')) STORED,
+  payment_method text GENERATED ALWAYS AS ((_raw_data ->> 'payment_method')) STORED
+);
+CREATE TABLE stripe.setup_intents (
+  _raw_data jsonb NOT NULL,
+  _last_synced_at timestamptz,
+  _account_id text NOT NULL REFERENCES stripe.accounts (id),
+  id text GENERATED ALWAYS AS ((_raw_data ->> 'id')) STORED PRIMARY KEY,
+  customer text GENERATED ALWAYS AS ((_raw_data ->> 'customer')) STORED,
+  payment_method text GENERATED ALWAYS AS ((_raw_data ->> 'payment_method')) STORED
+);
+CREATE TABLE stripe.subscriptions (
+  _raw_data jsonb NOT NULL,
+  _last_synced_at timestamptz,
+  _account_id text NOT NULL REFERENCES stripe.accounts (id),
+  id text GENERATED ALWAYS AS ((_raw_data ->> 'id')) STORED PRIMARY KEY,
+  customer text GENERATED ALWAYS AS ((_raw_data ->> 'customer')) STORED,
+  default_payment_method text GENERATED ALWAYS AS ((_raw_data ->> 'default_payment_method')) STORED
+);
 -- Kept by the wipe (billing records); only here to show it stays.
 CREATE TABLE stripe.invoices (
   _raw_data jsonb NOT NULL,

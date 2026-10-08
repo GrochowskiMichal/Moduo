@@ -170,7 +170,7 @@ A founder runs one command in Terminal, with the admin secret from their passwor
 
   `workspace_data` must run before the auth delete: afterwards the user's rows can't be identified (`notes.created_by` goes NULL). It runs after PRIV-1's own deletes, so nothing it counts is double-handled.
 - **The Stripe mirror wipe is a second function, `account_scrub_stripe_mirror(p_user uuid, p_preview boolean DEFAULT true)`.**
-  - It finds the user's customers by `metadata->>'supabase_user_id'` or by `profiles.stripe_customer_id`.
+  - It finds the user's customers by `metadata->>'supabase_user_id'` or by `profiles.stripe_customer_id`. Added in PRIV-2b's review: also by the ids the Stripe step deleted (a stub row is inserted when our copy doesn't have the customer yet), and saved cards detached earlier through the user's payment intents, setup intents and subscriptions.
   - It replaces `_raw_data` with a stub (`{id, object, deleted:true}` for customers; `{id, object, type}` for payment methods) and sets `_last_synced_at = now()`. On 1.0.32 every typed column is generated from `_raw_data`.
   - The sync rejects any update older than `_last_synced_at`, so the later `customer.deleted` webhook (full snapshot) can't restore the data.
   - Invoices, charges, payment intents, checkout sessions and subscriptions are kept (billing records, designer's call). The weekly re-list would re-import them anyway.

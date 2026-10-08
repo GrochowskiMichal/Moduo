@@ -216,9 +216,9 @@ export async function deleteAccount(
   const warnings: string[] = [];
   // Analytics first: an outage there leaves everything else, billing included, untouched.
   await step("posthog", () => eraseAnalytics(deps, user.id, warnings));
-  await step("stripe", () => closeStripeBilling(deps, user.id, warnings));
+  const stripeCustomers = await step("stripe", () => closeStripeBilling(deps, user.id, warnings));
   // After the Stripe delete, so the webhooks it causes are older than the wipe.
-  await step("stripe_mirror", () => runErasureSql(deps.db, "account_scrub_stripe_mirror", user.id));
+  await step("stripe_mirror", () => wipeStripeCopy(deps.db, user.id, stripeCustomers, warnings));
   await step("storage", () => removeStoredImages(deps, user.id));
   await step("booking", () => deleteBookingData(deps, user.id));
   await step("integrations", () =>
@@ -273,11 +273,13 @@ async function eraseAnalytics(
 
 const ENDED_SUBSCRIPTION = new Set(["canceled", "incomplete_expired"]);
 
+/** Returns the user's customers that are gone at Stripe now (deleted here, or by an
+ *  earlier run), for the wipe of our copy. */
 async function closeStripeBilling(
   deps: ErasureDeps,
   userId: string,
   warnings: string[],
-): Promise<void> {
+): Promise<string[]> {
   const { data, error } = await deps.db
     .from("profiles")
     .select("stripe_customer_id")
@@ -291,7 +293,7 @@ async function closeStripeBilling(
     // than report a deletion that left the billing record behind.
     if (stored) throw new Error("STRIPE_SECRET_KEY is not configured");
     warnings.push("stripe_not_configured");
-    return;
+    return [];
   }
 
   const customerIds = new Set<string>(stored ? [stored] : []);
@@ -305,7 +307,11 @@ async function closeStripeBilling(
     if (!isPermanentStripeError(err)) throw err;
     warnings.push(`stripe_search_failed: ${errorMessage(err)}`);
   }
-  for (const id of customerIds) await deleteCustomer(stripe, id, userId, warnings);
+  const gone: string[] = [];
+  for (const id of customerIds) {
+    if (await deleteCustomer(stripe, id, userId, warnings)) gone.push(id);
+  }
+  return gone;
 }
 
 /** Customers getOrCreateCustomer tagged with this user (_shared/billing.ts). */
@@ -325,12 +331,13 @@ async function customersTaggedWith(stripe: ErasureStripe, userId: string): Promi
   return ids;
 }
 
+/** True when the customer is the user's and is gone at Stripe afterwards. */
 async function deleteCustomer(
   stripe: ErasureStripe,
   id: string,
   userId: string,
   warnings: string[],
-): Promise<void> {
+): Promise<boolean> {
   let customer: Awaited<ReturnType<ErasureStripe["customers"]["retrieve"]>>;
   try {
     customer = await stripe.customers.retrieve(id);
@@ -338,9 +345,9 @@ async function deleteCustomer(
     if (!isMissingStripeObject(err)) throw err;
     // Not in this Stripe account (e.g. an id from the other mode): nothing to delete.
     warnings.push(`stripe_customer_missing: ${id}`);
-    return;
+    return false;
   }
-  if (customer.deleted === true) return; // a retry: already gone
+  if (customer.deleted === true) return true; // a retry: already gone
 
   // profiles.stripe_customer_id was client-writable until 20261006120000, and
   // recompute_entitlement copies it from any subscription tagged with the user.
@@ -348,7 +355,7 @@ async function deleteCustomer(
   const owner = customer.metadata?.supabase_user_id;
   if (owner && owner !== userId) {
     warnings.push(`stripe_customer_not_theirs: ${id}`);
-    return;
+    return false;
   }
 
   // Deleting a customer cancels its subscriptions too; cancelling first is explicit
@@ -375,6 +382,7 @@ async function deleteCustomer(
   } catch (err) {
     if (!isMissingStripeObject(err)) throw err;
   }
+  return true;
 }
 
 function stripeErrorFields(err: unknown): {
@@ -421,12 +429,31 @@ async function runErasureSql(
   db: ErasureDb,
   fn: (typeof ERASURE_SQL)[number],
   userId: string,
-): Promise<void> {
-  const { data, error } = await db.rpc(fn, { p_user: userId, p_preview: false });
+  args: Record<string, unknown> = {},
+): Promise<Record<string, unknown>> {
+  const { data, error } = await db.rpc(fn, { ...args, p_user: userId, p_preview: false });
   if (error) throw new Error(`${fn}: ${error.message}`);
-  if ((data as { preview?: unknown } | null)?.preview !== false) {
+  const result = (data ?? {}) as Record<string, unknown>;
+  if (result.preview !== false) {
     throw new Error(`${fn}: answered as a preview, nothing was deleted`);
   }
+  return result;
+}
+
+/** Our stripe.* copy of the customers the Stripe step deleted, and of any others it
+ *  holds for the user. */
+async function wipeStripeCopy(
+  db: ErasureDb,
+  userId: string,
+  deletedCustomers: string[],
+  warnings: string[],
+): Promise<void> {
+  const result = await runErasureSql(db, "account_scrub_stripe_mirror", userId, {
+    p_customer_ids: deletedCustomers,
+  });
+  // No stripe.customers table: a project without the Stripe sync, or one that lost it.
+  // Nothing to wipe, but it shouldn't pass unnoticed.
+  if (result.stripe_mirror === false) warnings.push("stripe_mirror_missing");
 }
 
 // ── Storage ──────────────────────────────────────────────────────────────────

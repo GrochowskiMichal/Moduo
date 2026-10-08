@@ -18,6 +18,35 @@ export function validateAuthSearch(search: Record<string, unknown>): { deleted?:
   return search.deleted === 1 || search.deleted === "1" ? { deleted: 1 } : {};
 }
 
+/** This tab just deleted its account. The flag in the URL alone doesn't show the
+ *  notice: a reload, or a link someone shares, would claim a deletion that didn't
+ *  happen there. */
+const DELETED_MARKER = "moduo:account-deleted";
+
+export function markAccountDeleted(): void {
+  try {
+    window.sessionStorage.setItem(DELETED_MARKER, "1");
+  } catch {
+    // Storage blocked: the notice just doesn't show.
+  }
+}
+
+export function isAccountDeletedMarked(): boolean {
+  try {
+    return window.sessionStorage.getItem(DELETED_MARKER) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function clearAccountDeletedMarker(): void {
+  try {
+    window.sessionStorage.removeItem(DELETED_MARKER);
+  } catch {
+    // Nothing to clear.
+  }
+}
+
 /**
  * What the Danger zone does once the server has deleted the account. What this device
  * keeps for the account goes first, analytics included (signing out would track an
@@ -32,6 +61,7 @@ export async function finishAccountDeletion(steps: {
   signOut: () => Promise<unknown>;
 }): Promise<void> {
   steps.forgetOnDevice();
+  markAccountDeleted();
   await steps.goToSignInWithNotice();
   await steps.signOut();
 }

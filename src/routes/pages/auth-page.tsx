@@ -1,19 +1,30 @@
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 import { EmailAuthPanel } from "@/components/auth/email-auth-panel";
 import { IS_STAGING_PORTAL } from "@/features/settings/about";
-import { ACCOUNT_DELETED_NOTICE } from "@/features/settings/delete-account";
+import {
+  ACCOUNT_DELETED_NOTICE,
+  clearAccountDeletedMarker,
+  isAccountDeletedMarked,
+} from "@/features/settings/delete-account";
 import { useAuth } from "@/providers/auth-provider";
 
 export function AuthPage() {
   const { isSignedIn, loading } = useAuth();
   const navigate = useNavigate();
   const { deleted } = useSearch({ from: "/auth" });
+  // Only for the deletion this tab just made (finishAccountDeletion marks it): the
+  // flag alone, from a reload or a shared link, shows nothing.
+  const [justDeleted] = useState(() => deleted === 1 && isAccountDeletedMarked());
 
   useEffect(() => {
-    // `deleted`: the Danger zone lands here a moment before it signs out.
-    if (loading || !isSignedIn || deleted) return;
+    if (justDeleted && !loading && !isSignedIn) clearAccountDeletedMarker();
+  }, [justDeleted, loading, isSignedIn]);
+
+  useEffect(() => {
+    // The Danger zone lands here a moment before it signs out.
+    if (loading || !isSignedIn || justDeleted) return;
     if (window.sessionStorage.getItem("moduo:auth_resolving") === "1") return;
 
     // Resume a workspace invite the user opened while signed out (DF-24).
@@ -25,7 +36,7 @@ export function AuthPage() {
     }
 
     void navigate({ to: "/", replace: true });
-  }, [isSignedIn, loading, navigate, deleted]);
+  }, [isSignedIn, loading, navigate, justDeleted]);
 
   if (loading) {
     return (
@@ -55,7 +66,7 @@ export function AuthPage() {
           </div>
         )}
 
-        {deleted ? (
+        {justDeleted ? (
           <div role="status" className="w-full rounded-md border border-border bg-muted px-4 py-3">
             <p className="text-sm leading-5 text-muted-foreground">{ACCOUNT_DELETED_NOTICE}</p>
           </div>
