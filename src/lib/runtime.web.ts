@@ -2463,15 +2463,19 @@ export const webRuntime: ModuoRuntime = {
 
     // ── tracked time (TV-D3) ─────────────────────────────────────────────
     async trackTime(input) {
-      const { data, error } = await supabaseClient.rpc("tasks_op_track_time", {
-        p_workspace_id: input.workspaceId,
-        p_task_id: input.taskId,
-        p_action: input.action,
-        p_seconds: input.action === "undo" ? null : Math.round(input.seconds ?? 0),
-        p_ended_at: input.endedAt ?? null,
-        p_client_key: input.key ?? null,
-        p_entry_id: input.entryId ?? null,
-      });
+      // A request that hangs fails after 30 s, so the task's next write isn't
+      // stuck behind it; a Focus save is resent with its key, safely.
+      const { data, error } = await supabaseClient
+        .rpc("tasks_op_track_time", {
+          p_workspace_id: input.workspaceId,
+          p_task_id: input.taskId,
+          p_action: input.action,
+          p_seconds: input.action === "undo" ? null : Math.round(input.seconds ?? 0),
+          p_ended_at: input.endedAt ?? null,
+          p_client_key: input.key ?? null,
+          p_entry_id: input.entryId ?? null,
+        })
+        .abortSignal(AbortSignal.timeout(TIME_WRITE_TIMEOUT_MS));
       // Until the migration reaches the database there are no entries: write
       // the old total column, as builds before TV-D3 did. Remove in TV-D7.
       if (isMissingFunctionError(error, "tasks_op_track_time")) return trackTimeLegacy(input);
@@ -3258,6 +3262,9 @@ async function taskOpRpc(fn: string, args: Record<string, unknown>): Promise<Tas
   if (!row) throw new Error("The operation returned nothing.");
   return taskRowToModel(row);
 }
+
+/** How long a time write may take before it counts as failed. */
+const TIME_WRITE_TIMEOUT_MS = 30_000;
 
 /**
  * Tracked time on a database without TV-D3's entries: read the task's total and

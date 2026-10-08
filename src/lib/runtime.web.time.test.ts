@@ -14,6 +14,7 @@ const recorded = rs.hoisted(() => ({
   results: {} as Record<string, Result[]>,
   rpcs: [] as Array<{ fn: string; args: Record<string, unknown> }>,
   rpcResults: {} as Record<string, Result>,
+  signals: [] as AbortSignal[],
 }));
 
 rs.mock("@supabase/supabase-js", () => {
@@ -44,7 +45,13 @@ rs.mock("@supabase/supabase-js", () => {
       },
       rpc: (fn: string, args: Record<string, unknown>) => {
         recorded.rpcs.push({ fn, args });
-        return Promise.resolve(recorded.rpcResults[fn] ?? { data: null, error: null });
+        const result = Promise.resolve(recorded.rpcResults[fn] ?? { data: null, error: null });
+        return Object.assign(result, {
+          abortSignal: (signal: AbortSignal) => {
+            recorded.signals.push(signal);
+            return result;
+          },
+        });
       },
       auth: new Proxy({ onAuthStateChange: noop }, { get: (t, p) => (t as never)[p] ?? noop }),
     },
@@ -68,6 +75,7 @@ beforeEach(() => {
   recorded.rpcs.length = 0;
   recorded.results = {};
   recorded.rpcResults = {};
+  recorded.signals.length = 0;
 });
 
 describe("trackTime (TV-D3)", () => {
@@ -114,6 +122,7 @@ describe("trackTime (TV-D3)", () => {
       myWaitingSeconds: 0,
     });
     expect(recorded.queries).toHaveLength(0); // never a task-row write
+    expect(recorded.signals).toHaveLength(1); // a hung request times out
   });
 
   it("undoes an adjustment by its entry, and a gone task has no totals", async () => {
