@@ -197,7 +197,7 @@ The mark's own rule is that overlapping parts cancel. So:
 ### Where it plays (55)
 - Once per app launch, while the session loads. It replaces today's static mark + "Loading…" on sign-in.
 - The first frame of videos and demos.
-- The landing hero, once, on a first visit.
+- On the landing, once, on a first visit: the nav lockup reveals itself with the hero's entrance (BRAND-4). A first visit means arriving from outside the site; nothing is stored for it.
 - Never on route changes, never as a looping spinner.
 
 ### The rest (56–58)
