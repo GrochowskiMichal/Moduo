@@ -466,13 +466,14 @@ describe("T1-2 · create-or-attach by name", () => {
     const release = server.hold();
     const made = createOrAttachByName(ctx, "later", { entityType: "task", entityId: "t1" }) as Tag;
 
+    const lastToast = () => toastMock.mock.calls.at(-1)?.[1] as ToastOpts;
     deleteTag(ctx, made.id);
     expect(getTagView(WS).tags).toEqual([]);
-    (toastMock.mock.calls.at(-1)?.[1] as ToastOpts).action?.onClick();
+    lastToast().action?.onClick();
     expect(names(getTagView(WS).tags)).toEqual(["later"]);
 
     deleteTag(ctx, made.id);
-    (toastMock.mock.calls.at(-1)?.[1] as ToastOpts).onAutoClose?.();
+    lastToast().onAutoClose?.();
     await act(async () => release());
     await waitFor(() => expect(server.api.deleteTag).toHaveBeenCalledTimes(1));
     expect(server.calls.indexOf("upsertTag:done")).toBeLessThan(
