@@ -1,0 +1,1103 @@
+<!doctype html>
+<html lang="en" data-density="comfortable" data-shade="black" data-accent="mono" data-radius="soft" data-count="swap" data-select="tint">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Tasks UI proposal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+/* biome-ignore-all lint/style/noDescendingSpecificity: a static design mock, ordered for readability */
+/* ── Tokens: values copied from src/styles/tokens.css (dark theme) ───────── */
+:root {
+  --neutral-50: oklch(0.985 0 0); --neutral-400: oklch(0.72 0 0);
+  --neutral-800: oklch(0.22 0 0); --neutral-850: oklch(0.18 0 0); --neutral-900: oklch(0.14 0 0);
+  --background: oklch(0 0 0); --foreground: var(--neutral-50);
+  --card: var(--neutral-900); --popover: var(--neutral-850); --muted: var(--neutral-850);
+  --muted-foreground: var(--neutral-400);
+  --accent: var(--neutral-800); --secondary: var(--neutral-800); --border: var(--neutral-800);
+  --primary: oklch(0.95 0 0); --primary-foreground: oklch(0.10 0 0);
+  --label-gray: var(--neutral-400); --label-blue: oklch(0.66 0.18 245); --label-green: oklch(0.72 0.17 150);
+  --label-amber: oklch(0.80 0.16 75); --label-red: oklch(0.66 0.22 25); --label-violet: oklch(0.66 0.20 295);
+  --label-teal: oklch(0.72 0.13 200); --label-pink: oklch(0.71 0.20 350);
+  --motion-fade: 120ms; --ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --font: "Geist", "Inter", system-ui, -apple-system, sans-serif;
+
+  /* ── PROPOSED: one state layer, derived from the surface it sits on ──────
+     Every interactive surface (rows, rail items, ghost buttons, pills)
+     uses these overlays instead of fixed neutral steps, so hover/active/
+     selected stay distinct on all 6 shades, any accent, and light mode. */
+  --state-hover:    color-mix(in oklab, var(--foreground) 5%, transparent);
+  --state-active:   color-mix(in oklab, var(--foreground) 9%, transparent);
+  --state-selected: color-mix(in oklab, var(--primary) 13%, transparent);
+  --state-selected-ring: color-mix(in oklab, var(--primary) 32%, transparent);
+  --hairline:       color-mix(in oklab, var(--foreground) 10%, transparent);
+  --control-raised: color-mix(in oklab, var(--foreground) 14%, var(--muted));
+  --scroll-thumb:   color-mix(in oklab, var(--foreground) 16%, transparent);
+  --scroll-thumb-hover: color-mix(in oklab, var(--foreground) 32%, transparent);
+}
+/* Shades (tokens.css §4b) */
+[data-shade="warm"]   { --background: oklch(0.13 0.020 60);  --card: oklch(0.185 0.026 60);  --popover: oklch(0.225 0.029 60);  --muted: oklch(0.225 0.029 60);  --accent: oklch(0.27 0.032 60);  --secondary: oklch(0.27 0.032 60);  --border: oklch(0.27 0.032 60);  --muted-foreground: oklch(0.72 0.035 60); }
+[data-shade="cool"]   { --background: oklch(0.13 0.018 245); --card: oklch(0.185 0.024 245); --popover: oklch(0.225 0.026 245); --muted: oklch(0.225 0.026 245); --accent: oklch(0.27 0.028 245); --secondary: oklch(0.27 0.028 245); --border: oklch(0.27 0.028 245); --muted-foreground: oklch(0.72 0.030 245); }
+[data-shade="slate"]  { --background: oklch(0.13 0.010 260); --card: oklch(0.185 0.013 260); --popover: oklch(0.225 0.015 260); --muted: oklch(0.225 0.015 260); --accent: oklch(0.27 0.016 260); --secondary: oklch(0.27 0.016 260); --border: oklch(0.27 0.016 260); --muted-foreground: oklch(0.72 0.014 260); }
+[data-shade="plum"]   { --background: oklch(0.13 0.018 325); --card: oklch(0.185 0.024 325); --popover: oklch(0.225 0.027 325); --muted: oklch(0.225 0.027 325); --accent: oklch(0.27 0.030 325); --secondary: oklch(0.27 0.030 325); --border: oklch(0.27 0.030 325); --muted-foreground: oklch(0.72 0.028 325); }
+[data-shade="forest"] { --background: oklch(0.13 0.014 160); --card: oklch(0.185 0.019 160); --popover: oklch(0.225 0.022 160); --muted: oklch(0.225 0.022 160); --accent: oklch(0.27 0.024 160); --secondary: oklch(0.27 0.024 160); --border: oklch(0.27 0.024 160); --muted-foreground: oklch(0.72 0.025 160); }
+/* Accents (tokens.css §5) */
+[data-accent="pink"]   { --primary: oklch(0.71 0.20 350); }
+[data-accent="violet"] { --primary: oklch(0.66 0.20 295); }
+[data-accent="blue"]   { --primary: oklch(0.66 0.18 245); }
+[data-accent="green"]  { --primary: oklch(0.72 0.17 150); }
+[data-accent="amber"]  { --primary: oklch(0.80 0.16 75); }
+[data-accent="red"]    { --primary: oklch(0.66 0.22 25); }
+[data-accent="teal"]   { --primary: oklch(0.72 0.13 200); }
+/* Density (tokens.css §7) */
+:root, [data-density="comfortable"] { --row-h: 2.25rem; --ctrl-h: 2rem; --ctrl-h-sm: 1.625rem; --icon-xs: .75rem; --icon-sm: .875rem; --icon: 1rem; }
+[data-density="compact"] { --row-h: 2rem; --ctrl-h: 1.875rem; --ctrl-h-sm: 1.5rem; --icon-xs: .75rem; --icon-sm: .875rem; --icon: .9375rem; }
+[data-density="dense"]   { --row-h: 1.75rem; --ctrl-h: 1.625rem; --ctrl-h-sm: 1.375rem; --icon-xs: .6875rem; --icon-sm: .78125rem; --icon: .875rem; }
+/* Radius (tokens.css §8) */
+:root, [data-radius="soft"] { --radius-sm: .25rem; --radius-md: .5rem; --radius-lg: .75rem; --radius-xl: 1rem; --avatar-radius: 9999px; }
+[data-radius="sharp"] { --radius-sm: 0; --radius-md: 0; --radius-lg: 0; --radius-xl: 0; --avatar-radius: 0; }
+[data-radius="round"] { --radius-sm: .5rem; --radius-md: 1rem; --radius-lg: 1.25rem; --radius-xl: 1.5rem; --avatar-radius: 9999px; }
+
+/* ── PROPOSED: thin, token-routed scrollbars as the global default ───────── */
+* { scrollbar-width: thin; scrollbar-color: var(--scroll-thumb) transparent; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border-radius: 9999px; border: 3px solid transparent; background-clip: content-box; }
+::-webkit-scrollbar-thumb:hover { background-color: var(--scroll-thumb-hover); }
+
+* { box-sizing: border-box; margin: 0; }
+html, body { background: var(--background); color: var(--foreground); }
+body { font: 400 14px/1.4 var(--font); -webkit-font-smoothing: antialiased; padding: 0 0 48px; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+.ic { width: var(--icon-sm); height: var(--icon-sm); stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+.ic-xs { width: var(--icon-xs); height: var(--icon-xs); }
+.ic-md { width: var(--icon); height: var(--icon); }
+.muted { color: var(--muted-foreground); }
+.num { font-variant-numeric: tabular-nums; }
+
+/* ── page chrome (not part of the proposal) ──────────────────────────────── */
+.page-head { position: sticky; top: 0; z-index: 50; background: color-mix(in oklab, var(--background) 88%, transparent); backdrop-filter: blur(10px); border-bottom: 1px solid var(--hairline); padding: 10px 20px; display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
+.page-head h1 { font-size: 14px; font-weight: 600; margin-right: 6px; }
+.knob { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted-foreground); }
+.swatches { display: inline-flex; gap: 6px; }
+.swatches button { width: 16px; height: 16px; border-radius: 9999px; background: var(--sw); box-shadow: inset 0 0 0 1px var(--hairline); }
+.swatches button.on { box-shadow: 0 0 0 2px var(--background), 0 0 0 3.5px var(--foreground); }
+.wrap { padding: 20px; }
+.note { font-size: 12px; color: var(--muted-foreground); max-width: 900px; line-height: 1.55; }
+.note b { color: var(--foreground); font-weight: 500; }
+h2.sec { font-size: 15px; font-weight: 600; margin: 34px 0 6px; }
+
+/* ── PROPOSED primitives ─────────────────────────────────────────────────── */
+/* Segmented control — active plate is RAISED (lighter than the track on dark). */
+.seg { display: inline-flex; align-items: center; gap: 2px; padding: 2px; height: var(--ctrl-h-sm); background: var(--muted); border-radius: var(--radius-md); }
+.seg button { height: 100%; padding: 0 8px; display: inline-flex; align-items: center; gap: 6px; border-radius: max(calc(var(--radius-md) - 2px), 0px); color: var(--muted-foreground); font-size: 13px; font-weight: 500; transition: background-color var(--motion-fade) var(--ease-out), color var(--motion-fade) var(--ease-out); }
+.seg button:hover { color: var(--foreground); }
+.seg button.on { background: var(--control-raised); color: var(--foreground); }
+.seg.icons button { padding: 0 6px; }
+
+/* Ghost button — the ONE toolbar control language (same rung, radius, font). */
+.btn { height: var(--ctrl-h-sm); padding: 0 8px; display: inline-flex; align-items: center; gap: 6px; border-radius: var(--radius-md); font-size: 14px; font-weight: 500; color: var(--muted-foreground); transition: background-color var(--motion-fade) var(--ease-out), color var(--motion-fade) var(--ease-out); white-space: nowrap; }
+.btn:hover { background: var(--state-hover); color: var(--foreground); }
+.btn.on { background: var(--state-active); color: var(--foreground); }
+.btn .pip { min-width: 16px; height: 16px; padding: 0 4px; border-radius: 9999px; background: var(--foreground); color: var(--background); font-size: 11px; font-weight: 600; display: inline-grid; place-items: center; }
+.btn.icon { width: var(--ctrl-h-sm); padding: 0; justify-content: center; }
+.btn.primary { background: var(--primary); color: var(--primary-foreground); padding: 0 10px; }
+.btn.primary:hover { background: color-mix(in oklab, var(--primary) 90%, var(--background)); }
+.btn.secondary { background: var(--state-active); color: var(--foreground); }
+.kbd { font-size: 11px; color: var(--muted-foreground); border: 1px solid var(--hairline); border-radius: 4px; padding: 0 4px; line-height: 16px; }
+
+/* Avatar + stack */
+.ava { width: var(--icon); height: var(--icon); border-radius: var(--avatar-radius); display: inline-grid; place-items: center; font-size: 7.5px; font-weight: 600; letter-spacing: .02em; color: var(--foreground); background: color-mix(in oklab, var(--foreground) 20%, var(--card)); flex-shrink: 0; }
+.ava.mike { background: color-mix(in oklab, var(--label-teal) 45%, var(--card)); }
+.ava.sm { width: var(--icon-sm); height: var(--icon-sm); font-size: 6.5px; }
+
+/* Checkbox (CompleteToggle) */
+.cb { width: var(--icon); height: var(--icon); border-radius: 9999px; border: 1.5px solid color-mix(in oklab, var(--foreground) 32%, transparent); display: grid; place-items: center; flex-shrink: 0; transition: border-color var(--motion-fade); }
+.cb:hover { border-color: color-mix(in oklab, var(--foreground) 60%, transparent); }
+.cb.done { background: var(--primary); border-color: var(--primary); color: var(--primary-foreground); }
+.cb.done .ic { width: 70%; height: 70%; stroke-width: 3; }
+
+/* Priority glyph — fixed footprint, ghost bars show the scale */
+.pri { width: var(--icon-sm); height: var(--icon-sm); color: var(--muted-foreground); }
+.pri rect { fill: currentColor; opacity: .25; }
+.pri[data-l="1"] rect:nth-child(-n+1), .pri[data-l="2"] rect:nth-child(-n+2), .pri[data-l="3"] rect:nth-child(-n+3) { opacity: 1; }
+
+/* ── Comp: three panes ───────────────────────────────────────────────────── */
+.app { display: flex; gap: 12px; height: 760px; min-width: 1180px; }
+.panel { background: var(--card); border: 1px solid var(--hairline); border-radius: var(--radius-lg); min-height: 0; }
+.rail { width: 236px; flex-shrink: 0; padding: 10px 8px; display: flex; flex-direction: column; gap: 1px; }
+.center { flex: 1; min-width: 0; display: flex; flex-direction: column; position: relative; }
+.detail { width: 360px; flex-shrink: 0; display: flex; flex-direction: column; overflow: auto; }
+
+/* Rail rows — NavRow primitive */
+.nav { height: var(--row-h); display: flex; align-items: center; gap: 10px; padding: 0 6px 0 8px; border-radius: var(--radius-md); color: var(--muted-foreground); font-weight: 500; cursor: pointer; transition: background-color var(--motion-fade) var(--ease-out), color var(--motion-fade) var(--ease-out); }
+.nav:hover { background: var(--state-hover); color: var(--foreground); }
+.nav.active { background: var(--state-active); color: var(--foreground); }
+.nav .slot { width: var(--icon); display: grid; place-items: center; flex-shrink: 0; }
+.nav .lbl { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dot { width: 8px; height: 8px; border-radius: max(calc(var(--radius-sm) - 1px), 1.5px); background: var(--c, var(--label-gray)); }
+.trail { position: relative; display: flex; align-items: center; justify-content: flex-end; flex-shrink: 0; height: 20px; }
+.count { font-size: 12px; color: var(--muted-foreground); transition: opacity var(--motion-fade) var(--ease-out); }
+.more { width: 20px; height: 20px; border-radius: var(--radius-sm); display: grid; place-items: center; color: var(--muted-foreground); opacity: 0; transition: opacity var(--motion-fade) var(--ease-out), width 160ms var(--ease-out); }
+.more:hover { background: var(--state-active); color: var(--foreground); }
+/* SWAP: count and "…" share one slot — nothing moves (R6: reveal reserves space) */
+[data-count="swap"] .trail { min-width: 20px; }
+[data-count="swap"] .more { position: absolute; right: 0; top: 0; }
+[data-count="swap"] .nav:hover .count, [data-count="swap"] .nav:focus-within .count { opacity: 0; }
+[data-count="swap"] .nav:hover .more, [data-count="swap"] .nav:focus-within .more { opacity: 1; }
+/* SHIFT: count slides left, "…" grows in beside it (the label re-truncates) */
+[data-count="shift"] .trail { gap: 2px; }
+[data-count="shift"] .more { width: 0; overflow: hidden; }
+[data-count="shift"] .nav:hover .more, [data-count="shift"] .nav:focus-within .more { width: 20px; opacity: 1; }
+.rail .eyebrow { display: flex; align-items: center; justify-content: space-between; height: 28px; margin-top: 10px; padding: 0 6px 0 8px; font-size: 11px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: var(--muted-foreground); }
+.rail .eyebrow .more { opacity: 0; }
+.rail .eyebrow:hover .more { opacity: 1; }
+.live { width: 6px; height: 6px; border-radius: 9999px; background: var(--primary); box-shadow: 0 0 0 3px color-mix(in oklab, var(--primary) 25%, transparent); }
+
+/* Toolbar */
+.toolbar { display: flex; align-items: center; gap: 4px; padding: 12px 12px 8px 16px; }
+.toolbar h3 { font-size: 18px; font-weight: 600; letter-spacing: -.01em; }
+.toolbar .title { display: flex; align-items: baseline; gap: 8px; margin-right: auto; }
+.toolbar .sep { width: 1px; height: 16px; background: var(--hairline); margin: 0 4px; }
+.chips { display: none; flex-wrap: wrap; align-items: center; gap: 6px; padding: 0 12px 10px 16px; }
+.center.filtered .chips { display: flex; }
+.fchip { height: 24px; display: inline-flex; align-items: center; border-radius: var(--radius-md); background: var(--state-active); font-size: 13px; overflow: hidden; }
+.fchip span { padding: 0 7px; height: 100%; display: inline-flex; align-items: center; gap: 5px; }
+.fchip span + span { box-shadow: -1px 0 0 var(--hairline); }
+.fchip .op { color: var(--muted-foreground); }
+.fchip .x { padding: 0 6px; color: var(--muted-foreground); }
+.fchip .x:hover { color: var(--foreground); background: var(--state-hover); }
+
+/* Display popover */
+.pop { position: absolute; top: 46px; right: 92px; width: 312px; z-index: 20; background: var(--popover); border: 1px solid var(--hairline); border-radius: var(--radius-lg); box-shadow: 0 16px 40px rgb(0 0 0 / .55); padding: 6px; display: none; }
+.center.display-open .pop { display: block; }
+.pop .row2 { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: var(--ctrl-h); padding: 0 8px; font-size: 13px; color: var(--muted-foreground); }
+.pop .row2 > :last-child { color: var(--foreground); }
+.pop .sel { height: var(--ctrl-h-sm); display: inline-flex; align-items: center; gap: 4px; padding: 0 8px; border-radius: var(--radius-md); background: var(--state-active); font-size: 13px; }
+.pop hr { border: 0; height: 1px; background: var(--hairline); margin: 6px 0; }
+.props-toggle { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px 8px 8px; }
+.props-toggle span { height: 24px; padding: 0 8px; display: inline-flex; align-items: center; border-radius: var(--radius-md); font-size: 12px; color: var(--muted-foreground); box-shadow: inset 0 0 0 1px var(--hairline); }
+.props-toggle span.on { background: var(--state-active); color: var(--foreground); box-shadow: none; }
+.pop .foot { display: flex; justify-content: flex-end; padding: 4px 8px 4px; font-size: 12px; }
+
+/* List + rows */
+.list { flex: 1; min-height: 0; overflow: auto; padding: 0 8px 8px; }
+.ghead { position: sticky; top: 0; z-index: 2; background: var(--card); height: 30px; display: flex; align-items: center; gap: 6px; padding: 0 8px; font-size: 11px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: var(--muted-foreground); }
+.ghead .num { letter-spacing: 0; }
+.row { position: relative; height: var(--row-h); display: grid; grid-template-columns: var(--icon) minmax(0, 1fr) var(--icon-sm) 4.75rem var(--icon) var(--icon-sm); align-items: center; column-gap: 12px; padding: 0 10px 0 8px; border-radius: var(--radius-md); cursor: default; transition: background-color var(--motion-fade) var(--ease-out); }
+.row:hover { background: var(--state-hover); }
+.row.sel { background: var(--state-selected); }
+[data-select="ring"] .row.sel { box-shadow: inset 0 0 0 1px var(--state-selected-ring); }
+[data-select="bar"] .row.sel { background: color-mix(in oklab, var(--primary) 14%, var(--card)); }
+[data-select="bar"] .row.sel::before { content: ""; position: absolute; left: 2px; top: 4px; bottom: 4px; width: 2px; border-radius: 2px; background: var(--primary); }
+.tcell { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.t { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.ind { display: inline-flex; align-items: center; gap: 10px; flex-shrink: 0; color: var(--muted-foreground); font-size: 12px; }
+.ind span { display: inline-flex; align-items: center; gap: 3px; }
+.date { font-size: 12px; color: var(--muted-foreground); white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; justify-self: end; }
+.date.drift { color: var(--foreground); }
+.qcol { display: grid; place-items: center; color: color-mix(in oklab, var(--foreground) 30%, transparent); opacity: 0; transition: opacity var(--motion-fade) var(--ease-out); }
+.row:hover .qcol, .row.sel .qcol { opacity: 1; }
+.qcol.on { color: var(--primary); opacity: 1; }
+.qcol.claim { opacity: 1; }
+.claim-ava { width: var(--icon-sm); height: var(--icon-sm); border-radius: var(--avatar-radius); box-shadow: 0 0 0 1.5px var(--card), 0 0 0 2.5px color-mix(in oklab, var(--foreground) 35%, transparent); font-size: 6px; }
+.row.done > :not(.cb) { opacity: .42; }
+.row.done .t { text-decoration: line-through; }
+.row.blocked .t { color: var(--muted-foreground); }
+.completed-line { height: 30px; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 10px; font-size: 12px; color: var(--muted-foreground); }
+.completed-line button:hover { color: var(--foreground); }
+
+/* Detail panel */
+.dhead { display: flex; align-items: center; gap: 4px; padding: 10px 12px 0 16px; }
+.crumb { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted-foreground); margin-right: auto; }
+.crumb:hover { color: var(--foreground); }
+.dbody { padding: 10px 16px 16px; display: flex; flex-direction: column; gap: 16px; }
+.dtitle { display: flex; gap: 10px; align-items: flex-start; }
+.dtitle .cb { margin-top: 3px; }
+.dtitle h4 { font-size: 18px; font-weight: 600; line-height: 1.3; letter-spacing: -.01em; }
+.desc { font-size: 14px; line-height: 1.55; color: color-mix(in oklab, var(--foreground) 86%, transparent); margin-left: calc(var(--icon) + 10px); }
+.props { display: grid; grid-template-columns: 92px minmax(0, 1fr); align-items: center; row-gap: 1px; }
+.plabel { font-size: 13px; color: var(--muted-foreground); height: var(--ctrl-h-sm); display: flex; align-items: center; }
+.pval { justify-self: start; max-width: 100%; height: var(--ctrl-h-sm); display: inline-flex; align-items: center; gap: 8px; padding: 0 6px; margin-left: -6px; border-radius: var(--radius-md); font-size: 14px; color: var(--foreground); transition: background-color var(--motion-fade) var(--ease-out); }
+.pval:hover { background: var(--state-hover); }
+.pval .ic, .pval .pri { color: var(--muted-foreground); }
+.pval.empty { color: var(--muted-foreground); }
+.bar { width: 56px; height: 3px; border-radius: 9999px; background: var(--hairline); overflow: hidden; }
+.bar i { display: block; height: 100%; width: 0%; background: var(--muted-foreground); }
+.tag { display: inline-flex; align-items: center; font-size: 13px; color: var(--foreground); }
+.tag b { font-weight: 500; color: var(--c); margin-right: 1px; }
+.tags { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; min-height: var(--ctrl-h-sm); padding-left: 0; }
+.shead { display: flex; align-items: center; gap: 6px; height: var(--ctrl-h-sm); font-size: 13px; font-weight: 500; }
+.shead .num { color: var(--muted-foreground); font-weight: 400; }
+.shead .btn { margin-left: auto; }
+.empty-hint { font-size: 12px; color: var(--muted-foreground); padding-left: 0; }
+.thumbs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 4px; }
+.thumb { border-radius: var(--radius-md); overflow: hidden; box-shadow: inset 0 0 0 1px var(--hairline); }
+.thumb .img { aspect-ratio: 4 / 3; background: var(--g); }
+.thumb .cap { display: flex; justify-content: space-between; gap: 6px; padding: 5px 7px; font-size: 11px; color: var(--muted-foreground); }
+.thumb.uploading .img { position: relative; opacity: .55; }
+.thumb.uploading .img::after { content: ""; position: absolute; left: 8px; right: 8px; bottom: 8px; height: 3px; border-radius: 9999px; background: linear-gradient(90deg, var(--foreground) 62%, var(--hairline) 62%); }
+.divider { height: 1px; background: var(--hairline); }
+.feed { display: flex; flex-direction: column; gap: 10px; }
+.ev { display: flex; gap: 8px; align-items: center; font-size: 12px; color: var(--muted-foreground); }
+.ev b { color: var(--foreground); font-weight: 500; }
+.comment { border-radius: var(--radius-lg); box-shadow: inset 0 0 0 1px var(--hairline); padding: 10px 12px; font-size: 13px; line-height: 1.5; }
+.comment .who { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted-foreground); margin-bottom: 4px; }
+.comment .who b { color: var(--foreground); font-weight: 500; }
+.composer { border-radius: var(--radius-lg); box-shadow: inset 0 0 0 1px var(--hairline); padding: 9px 12px; font-size: 13px; color: var(--muted-foreground); display: flex; align-items: center; justify-content: space-between; }
+.metaline { font-size: 11px; color: var(--muted-foreground); }
+
+/* States strip */
+.states { width: 760px; padding: 8px; }
+.states .lbl { font-size: 11px; color: var(--muted-foreground); padding: 8px 8px 2px; letter-spacing: .02em; }
+.forced-hover { background: var(--state-hover); }
+.drop-line { position: relative; height: 0; }
+.drop-line::before { content: ""; position: absolute; left: 30px; right: 8px; top: -1px; height: 2px; border-radius: 2px; background: var(--primary); }
+.drop-line::after { content: ""; position: absolute; left: 24px; top: -4px; width: 8px; height: 8px; border-radius: 9999px; box-shadow: inset 0 0 0 2px var(--primary); background: var(--card); }
+.nest-target { background: var(--state-hover); }
+.ghost-sub { margin-left: 30px; height: var(--row-h); border-radius: var(--radius-md); box-shadow: inset 0 0 0 1px dashed; outline: 1px dashed color-mix(in oklab, var(--primary) 55%, transparent); outline-offset: -1px; display: flex; align-items: center; gap: 10px; padding: 0 10px; color: var(--muted-foreground); font-size: 13px; }
+
+/* Capture modal */
+.modal { width: 600px; background: var(--popover); border: 1px solid var(--hairline); border-radius: var(--radius-xl); box-shadow: 0 24px 60px rgb(0 0 0 / .6); }
+.modal .in { padding: 18px 18px 10px; display: flex; flex-direction: column; gap: 8px; }
+.modal .ttl { font-size: 20px; font-weight: 500; letter-spacing: -.01em; }
+.tok { border-radius: 4px; padding: 0 3px; margin: 0 1px; background: var(--state-active); }
+.tok.tagt { color: var(--label-blue); }
+.tok.datet { color: var(--foreground); }
+.modal .dsc { font-size: 14px; color: var(--muted-foreground); }
+.pills { display: flex; gap: 6px; flex-wrap: wrap; padding-top: 6px; }
+.pill { height: var(--ctrl-h-sm); padding: 0 8px; display: inline-flex; align-items: center; gap: 6px; border-radius: var(--radius-md); font-size: 14px; font-weight: 500; color: var(--muted-foreground); box-shadow: inset 0 0 0 1px var(--hairline); }
+.pill.set { background: var(--state-active); color: var(--foreground); box-shadow: none; }
+.pill.set .ic { color: var(--muted-foreground); }
+.modal .ft { display: flex; align-items: center; gap: 16px; padding: 10px 12px 10px 18px; border-top: 1px solid var(--hairline); font-size: 13px; color: var(--muted-foreground); }
+.sw { width: 26px; height: 16px; border-radius: 9999px; background: var(--state-active); position: relative; flex-shrink: 0; }
+.sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 9999px; background: var(--muted-foreground); transition: transform var(--motion-fade); }
+.sw.on { background: var(--primary); }
+.sw.on::after { transform: translateX(10px); background: var(--primary-foreground); }
+.swl { display: inline-flex; align-items: center; gap: 8px; }
+
+/* Board card */
+.cards { display: flex; gap: 12px; align-items: flex-start; }
+.col { width: 300px; }
+.col .chead { display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 4px; font-size: 11px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: var(--muted-foreground); }
+.card { background: var(--card); border-radius: var(--radius-lg); box-shadow: inset 0 0 0 1px var(--hairline); padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+.card:hover { background: color-mix(in oklab, var(--foreground) 3%, var(--card)); }
+.card.sel { background: color-mix(in oklab, var(--primary) 10%, var(--card)); box-shadow: inset 0 0 0 1px var(--state-selected-ring); }
+.card .ct { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; line-height: 1.4; }
+.card .ct .cb { margin-top: 2px; }
+.card .cm { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--muted-foreground); padding-left: calc(var(--icon) + 10px); }
+.card .cm .ava { margin-left: auto; }
+.card.done { opacity: .5; }
+
+.grid2 { display: flex; gap: 28px; flex-wrap: wrap; align-items: flex-start; }
+ol.changes { margin: 10px 0 0 18px; font-size: 12.5px; line-height: 1.6; color: var(--muted-foreground); max-width: 1180px; columns: 2; column-gap: 40px; }
+ol.changes li { break-inside: avoid; margin-bottom: 4px; }
+ol.changes b { color: var(--foreground); font-weight: 500; }
+
+/* ── 4 · Focus = running the Queue ───────────────────────────────────────── */
+.appbar { display: flex; align-items: center; gap: 12px; height: 36px; margin-bottom: 10px; min-width: 1180px; font-size: 13px; color: var(--muted-foreground); }
+.appbar .tabs { display: flex; gap: 2px; margin: 0 auto; }
+.appbar .tab { height: 28px; padding: 0 10px; display: inline-flex; align-items: center; border-radius: var(--radius-md); }
+.appbar .tab.on { background: var(--state-active); color: var(--foreground); }
+.runchip { height: 28px; display: inline-flex; align-items: center; gap: 8px; padding: 0 10px; border-radius: var(--radius-md); background: var(--card); box-shadow: inset 0 0 0 1px var(--hairline); color: var(--foreground); font-size: 12px; max-width: 280px; }
+.runchip .t2 { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--muted-foreground); }
+.ring { width: 14px; height: 14px; border-radius: 9999px; flex-shrink: 0; background: conic-gradient(var(--foreground) var(--p), color-mix(in oklab, var(--foreground) 18%, transparent) 0); -webkit-mask: radial-gradient(circle 4.5px, transparent 97%, black 100%); mask: radial-gradient(circle 4.5px, transparent 97%, black 100%); }
+.runbar { display: flex; align-items: center; gap: 6px; padding: 12px 12px 12px 16px; }
+.runbar h3 { font-size: 18px; font-weight: 600; letter-spacing: -.01em; }
+.runstate { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted-foreground); margin: 0 auto 0 10px; }
+.phase { height: var(--ctrl-h-sm); display: inline-flex; align-items: center; gap: 8px; padding: 0 10px; border-radius: var(--radius-md); background: var(--state-active); font-size: 13px; font-weight: 500; white-space: nowrap; }
+.nowwrap { padding: 0 16px; }
+.now { background: var(--popover); border-radius: var(--radius-xl); box-shadow: inset 0 0 0 1px var(--hairline); padding: 18px 20px 14px; display: flex; flex-direction: column; gap: 12px; }
+.now .meta { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--muted-foreground); }
+.now .meta > span { display: inline-flex; align-items: center; gap: 5px; }
+.now .meta .sp { margin-left: auto; }
+.now h5 { font-size: 22px; font-weight: 600; letter-spacing: -.015em; line-height: 1.25; }
+.now .ndesc { font-size: 14px; line-height: 1.55; color: color-mix(in oklab, var(--foreground) 78%, transparent); max-width: 64ch; }
+.check { display: flex; flex-direction: column; }
+.check .it { display: flex; align-items: center; gap: 10px; height: 28px; font-size: 14px; }
+.check .it.done span:last-child { color: var(--muted-foreground); text-decoration: line-through; }
+.linkchips { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.lchip { height: 26px; display: inline-flex; align-items: center; gap: 6px; padding: 0 9px; border-radius: var(--radius-md); box-shadow: inset 0 0 0 1px var(--hairline); font-size: 13px; color: var(--foreground); white-space: nowrap; }
+.lchip .ic { color: var(--muted-foreground); }
+.minithumbs { display: inline-flex; gap: 6px; margin-left: 4px; }
+.minithumbs i { width: 46px; height: 26px; border-radius: var(--radius-sm); box-shadow: inset 0 0 0 1px var(--hairline); background: var(--g); display: block; }
+.nowfoot { display: flex; align-items: center; gap: 6px; padding-top: 12px; box-shadow: 0 -1px 0 var(--hairline); }
+.kbdin { opacity: .6; font-weight: 400; }
+.upnext { padding: 14px 8px 8px; }
+.sublabel { display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px 0 8px; font-size: 11px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: var(--muted-foreground); }
+.sublabel .num { letter-spacing: 0; }
+.sublabel .sum { margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: 400; }
+.qrow { height: var(--row-h); display: grid; grid-template-columns: 14px minmax(0, 1fr) auto auto; align-items: center; column-gap: 12px; padding: 0 10px 0 8px; border-radius: var(--radius-md); }
+.qrow:hover { background: var(--state-hover); }
+.qrow .n { font-size: 12px; color: var(--muted-foreground); text-align: right; }
+.qrow .tt { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 10px; min-width: 0; }
+.qrow .tt .x1 { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.qrow .est { font-size: 12px; color: var(--muted-foreground); }
+.qrow.dim { opacity: .55; }
+.qrow .n .g { display: none; color: var(--muted-foreground); }
+.qrow:hover .n b { display: none; }
+.qrow:hover .n .g { display: inline-block; }
+.qrow .n b { font-weight: 400; }
+.addrow { height: var(--row-h); display: flex; align-items: center; gap: 10px; padding: 0 10px 0 8px; color: var(--muted-foreground); border-radius: var(--radius-md); font-size: 14px; }
+.addrow:hover { background: var(--state-hover); color: var(--foreground); }
+.addrow .kbd { margin-left: auto; }
+.rtabs { padding: 12px 12px 4px; }
+.rtabs .seg { width: 100%; }
+.rtabs .seg button { flex: 1; justify-content: center; }
+.flight { padding: 8px 12px 12px; display: flex; flex-direction: column; gap: 8px; }
+.fcard { border-radius: var(--radius-lg); box-shadow: inset 0 0 0 1px var(--hairline); padding: 12px; display: flex; flex-direction: column; gap: 10px; cursor: pointer; }
+.fcard:hover { background: var(--state-hover); }
+.fcard.open { background: color-mix(in oklab, var(--foreground) 4%, transparent); cursor: default; }
+.fcard.due { box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--foreground) 34%, transparent); }
+.fcard .ft1 { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; font-weight: 500; line-height: 1.35; }
+.fcard .ft1 .ic { margin-top: 2px; color: var(--muted-foreground); }
+.fcard .fmeta { display: flex; align-items: center; gap: 12px; font-size: 12px; color: var(--muted-foreground); padding-left: calc(var(--icon-sm) + 8px); }
+.fcard .fmeta > span { display: inline-flex; align-items: center; gap: 6px; }
+.fcard .fmeta .duetxt { color: var(--foreground); font-weight: 500; }
+.fcard .more-only { display: none; }
+.fcard.open .more-only { display: flex; }
+.fcard .note2 { font-size: 13px; line-height: 1.5; color: color-mix(in oklab, var(--foreground) 85%, transparent); box-shadow: inset 2px 0 0 var(--hairline); padding-left: 10px; margin-left: calc(var(--icon-sm) + 8px); }
+.fcard .facts { display: flex; flex-wrap: wrap; gap: 6px; padding-left: calc(var(--icon-sm) + 8px); }
+.fcard .acts { display: flex; gap: 6px; padding-left: calc(var(--icon-sm) + 8px); }
+.dotlive { width: 6px; height: 6px; border-radius: 9999px; background: var(--foreground); }
+.fhint { font-size: 12px; color: var(--muted-foreground); padding: 6px 4px 0; line-height: 1.55; }
+.nav .runct { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--foreground); }
+.frames { display: grid; grid-template-columns: repeat(2, 580px); gap: 22px 16px; }
+.frame .panel { height: 100%; }
+.frame .box { height: 452px; }
+.cap2 { font-size: 12px; color: var(--muted-foreground); margin: 8px 2px 0; line-height: 1.55; max-width: 580px; }
+.cap2 b { color: var(--foreground); font-weight: 500; }
+.staleline { margin: 0 16px 4px; padding: 8px 12px; border-radius: var(--radius-md); background: var(--state-hover); font-size: 13px; color: var(--muted-foreground); display: flex; gap: 6px; align-items: center; }
+.staleline button { color: var(--foreground); font-weight: 500; }
+.breakbar { display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 12px; border-radius: var(--radius-lg); background: var(--state-active); font-size: 13px; }
+.breakbar b { font-weight: 600; }
+.now.resting > :not(.breakbar) { opacity: .45; }
+.summary { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 12px; padding: 44px 24px 24px; }
+.summary .big { width: 40px; height: 40px; border-radius: 9999px; display: grid; place-items: center; background: var(--state-active); }
+.summary h5 { font-size: 20px; font-weight: 600; letter-spacing: -.01em; }
+.stats { display: flex; gap: 28px; font-size: 12px; color: var(--muted-foreground); }
+.stats b { display: block; color: var(--foreground); font-weight: 600; font-size: 16px; }
+.sugg { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+.schip { height: 26px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; border-radius: 9999px; box-shadow: inset 0 0 0 1px var(--hairline); font-size: 13px; color: var(--foreground); }
+.schip .num { color: var(--muted-foreground); }
+.schip .ic { color: var(--muted-foreground); }
+
+/* ── 5 · Empty properties ───────────────────────────────────────────────── */
+.trio { display: grid; grid-template-columns: repeat(3, 340px); gap: 16px; align-items: start; }
+.vlabel { font-size: 12px; font-weight: 600; margin: 0 0 8px; }
+.vlabel span { color: var(--muted-foreground); font-weight: 400; }
+.trio .panel { padding: 0 0 6px; }
+.attstrip { display: flex; gap: 6px; margin: 10px 0 0 calc(var(--icon) + 10px); }
+.attstrip i { width: 64px; height: 44px; border-radius: var(--radius-md); box-shadow: inset 0 0 0 1px var(--hairline); background: var(--g); display: block; }
+.attstrip .addtile { width: 44px; height: 44px; border-radius: var(--radius-md); box-shadow: inset 0 0 0 1px var(--hairline); display: grid; place-items: center; color: var(--muted-foreground); }
+.addprop { justify-self: start; grid-column: 1 / -1; height: var(--ctrl-h-sm); display: inline-flex; align-items: center; gap: 8px; padding: 0 6px; margin-left: -6px; border-radius: var(--radius-md); color: var(--muted-foreground); font-size: 13px; }
+.addprop:hover { background: var(--state-hover); color: var(--foreground); }
+.minimenu { grid-column: 1 / -1; margin: 2px 0 4px; background: var(--popover); border-radius: var(--radius-lg); box-shadow: inset 0 0 0 1px var(--hairline), 0 12px 30px rgb(0 0 0 / .5); padding: 4px; width: 210px; }
+.minimenu div { height: 28px; display: flex; align-items: center; gap: 8px; padding: 0 8px; border-radius: var(--radius-sm); font-size: 13px; color: var(--foreground); }
+.minimenu div .ic, .minimenu div .pri { color: var(--muted-foreground); }
+.minimenu div:first-child { background: var(--state-hover); }
+
+/* ── 6 · Attachment mark everywhere ─────────────────────────────────────── */
+.spec { display: grid; grid-template-columns: repeat(3, 380px); gap: 12px; }
+.spec .panel { padding: 12px; }
+.cap3 { font-size: 11px; color: var(--muted-foreground); margin: 0 0 10px; letter-spacing: .02em; }
+.clip { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; color: var(--muted-foreground); }
+.tbar { height: 26px; border-radius: var(--radius-md); background: color-mix(in oklab, var(--foreground) 11%, var(--card)); display: flex; align-items: center; gap: 8px; padding: 0 10px; font-size: 13px; margin-bottom: 8px; }
+.tbar .x1 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.cblock { border-radius: var(--radius-md); background: var(--state-active); box-shadow: inset 2px 0 0 var(--muted-foreground); padding: 6px 8px 6px 10px; font-size: 12px; display: flex; flex-direction: column; gap: 3px; width: 220px; }
+.cblock .x1 { font-size: 13px; font-weight: 500; color: var(--foreground); }
+.cblock .x2 { display: flex; gap: 10px; color: var(--muted-foreground); }
+.wrow { display: flex; align-items: center; gap: 10px; height: 30px; font-size: 13px; }
+.wrow .x1 { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nline { display: flex; align-items: center; gap: 8px; font-size: 14px; line-height: 1.7; }
+.attchip { height: var(--ctrl-h-sm); display: inline-flex; align-items: center; gap: 6px; padding: 0 4px; border-radius: var(--radius-md); background: var(--state-active); font-size: 13px; color: var(--foreground); }
+.attchip i { width: 18px; height: 18px; border-radius: 4px; background: var(--g); display: block; }
+.attchip .x { display: grid; place-items: center; width: 18px; height: 18px; color: var(--muted-foreground); }
+.prow { height: 34px; display: flex; align-items: center; gap: 10px; padding: 0 8px; border-radius: var(--radius-md); background: var(--state-hover); font-size: 13px; }
+.prow .x1 { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.prow .where { font-size: 12px; color: var(--muted-foreground); }
+</style>
+</head>
+<body>
+
+<!-- lucide-style icon sprite -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></symbol>
+  <symbol id="i-queue" viewBox="0 0 24 24"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></symbol>
+  <symbol id="i-inbox" viewBox="0 0 24 24"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-filter" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M7 12h10"/><path d="M10 18h4"/></symbol>
+  <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M21 4h-7"/><path d="M10 4H3"/><path d="M21 12h-9"/><path d="M8 12H3"/><path d="M21 20h-5"/><path d="M12 20H3"/><path d="M14 2v4"/><path d="M8 10v4"/><path d="M16 18v4"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></symbol>
+  <symbol id="i-cols" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="M15 3v18"/></symbol>
+  <symbol id="i-gantt" viewBox="0 0 24 24"><path d="M10 6h8"/><path d="M12 16h6"/><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M8 11h7"/></symbol>
+  <symbol id="i-chev-d" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-chev-r" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></symbol>
+  <symbol id="i-cal" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="i-repeat" viewBox="0 0 24 24"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></symbol>
+  <symbol id="i-clip" viewBox="0 0 24 24"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></symbol>
+  <symbol id="i-msg" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+  <symbol id="i-sub" viewBox="0 0 24 24"><path d="M21 12h-8"/><path d="M21 6H8"/><path d="M21 18h-8"/><path d="M3 6v4c0 1.1.9 2 2 2h3"/><path d="M3 10v6c0 1.1.9 2 2 2h3"/></symbol>
+  <symbol id="i-dashed" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke-dasharray="3.4 3.4"/></symbol>
+  <symbol id="i-zap" viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></symbol>
+  <symbol id="i-timer" viewBox="0 0 24 24"><path d="M10 2h4"/><path d="M12 14l3-3"/><circle cx="12" cy="14" r="8"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+  <symbol id="i-hash" viewBox="0 0 24 24"><path d="M4 9h16"/><path d="M4 15h16"/><path d="M10 3 8 21"/><path d="M16 3l-2 18"/></symbol>
+  <symbol id="i-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4.5"/><path d="M20 21a8 8 0 0 0-16 0"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4v16l13-8z"/></symbol>
+  <symbol id="i-image" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></symbol>
+  <symbol id="i-corner" viewBox="0 0 24 24"><path d="m15 10 5 5-5 5"/><path d="M4 4v7a4 4 0 0 0 4 4h12"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/></symbol>
+  <symbol id="i-mail" viewBox="0 0 24 24"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></symbol>
+  <symbol id="i-note" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/></symbol>
+  <symbol id="i-handoff" viewBox="0 0 24 24"><path d="M3 5v14"/><path d="M21 12H7"/><path d="m15 18 6-6-6-6"/></symbol>
+  <symbol id="i-coffee" viewBox="0 0 24 24"><path d="M10 2v2"/><path d="M14 2v2"/><path d="M6 2v2"/><path d="M16 8a1 1 0 0 1 1 1v8a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1h14a4 4 0 1 1 0 8h-1"/></symbol>
+  <symbol id="i-ext" viewBox="0 0 24 24"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></symbol>
+  <symbol id="i-grip" viewBox="0 0 24 24"><circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="18" r="1"/></symbol>
+</svg>
+
+<header class="page-head">
+  <h1>Tasks — UI proposal</h1>
+  <span class="knob">Density
+    <span class="seg" data-set="density"><button type="button" data-v="comfortable" class="on">Comfortable</button><button type="button" data-v="compact">Compact</button><button type="button" data-v="dense">Dense</button></span></span>
+  <span class="knob">Shade
+    <span class="seg" data-set="shade"><button type="button" data-v="black" class="on">Black</button><button type="button" data-v="warm">Warm</button><button type="button" data-v="cool">Cool</button><button type="button" data-v="slate">Slate</button><button type="button" data-v="plum">Plum</button><button type="button" data-v="forest">Forest</button></span></span>
+  <span class="knob">Accent
+    <span class="swatches" data-set="accent">
+      <button type="button" data-v="mono" class="on" style="--sw: oklch(0.95 0 0)" title="Mono"></button>
+      <button type="button" data-v="pink" style="--sw: oklch(0.71 0.20 350)" title="Pink"></button>
+      <button type="button" data-v="violet" style="--sw: oklch(0.66 0.20 295)" title="Violet"></button>
+      <button type="button" data-v="blue" style="--sw: oklch(0.66 0.18 245)" title="Blue"></button>
+      <button type="button" data-v="green" style="--sw: oklch(0.72 0.17 150)" title="Green"></button>
+      <button type="button" data-v="amber" style="--sw: oklch(0.80 0.16 75)" title="Amber"></button>
+      <button type="button" data-v="red" style="--sw: oklch(0.66 0.22 25)" title="Red"></button>
+      <button type="button" data-v="teal" style="--sw: oklch(0.72 0.13 200)" title="Teal"></button>
+    </span></span>
+  <span class="knob">Radius
+    <span class="seg" data-set="radius"><button type="button" data-v="soft" class="on">Soft</button><button type="button" data-v="sharp">Sharp</button><button type="button" data-v="round">Round</button></span></span>
+  <span class="knob">Rail count on hover
+    <span class="seg" data-set="count"><button type="button" data-v="swap" class="on">Swap</button><button type="button" data-v="shift">Shift</button></span></span>
+  <span class="knob">Selected row
+    <span class="seg" data-set="select"><button type="button" data-v="tint" class="on">Tint</button><button type="button" data-v="ring">Tint + hairline</button><button type="button" data-v="bar">Today's bar</button></span></span>
+</header>
+
+<div class="wrap">
+  <p class="note">A proposal comp, not the app. Built on the real token values from <b>tokens.css</b> (dark theme, 6 shades, 8 accents, 3 densities, 3 radii), plus a handful of <b>proposed tokens</b> (a state layer, a hairline, a raised control plate, scrollbar). Hover things — rows, rail items, toolbar controls and properties all have live states. Click a row to select it. Click <b>Filter</b> and <b>Display</b>.</p>
+
+  <h2 class="sec">1 · The module</h2>
+  <div class="app">
+    <!-- RAIL -->
+    <aside class="panel rail">
+      <div class="nav active"><span class="slot"><svg aria-hidden="true" class="ic ic-md"><use href="#i-layers"/></svg></span><span class="lbl">All</span><span class="trail"><span class="count num">76</span><button type="button" class="more"><svg aria-hidden="true" class="ic"><use href="#i-more"/></svg></button></span></div>
+      <div class="nav"><span class="slot"><svg aria-hidden="true" class="ic ic-md"><use href="#i-queue"/></svg></span><span class="lbl">Queue</span><span class="trail"><span class="count num">4</span><button type="button" class="more"><svg aria-hidden="true" class="ic"><use href="#i-more"/></svg></button></span></div>
+      <div class="nav"><span class="slot"><svg aria-hidden="true" class="ic ic-md"><use href="#i-inbox"/></svg></span><span class="lbl">Inbox</span><span class="trail"><span class="count num">2</span><button type="button" class="more"><svg aria-hidden="true" class="ic"><use href="#i-more"/></svg></button></span></div>
+      <div class="eyebrow">Buckets <button type="button" class="more" title="New bucket"><svg aria-hidden="true" class="ic"><use href="#i-plus"/></svg></button></div>
+      <div class="nav"><span class="slot"><span class="dot" style="--c: var(--label-blue)"></span></span><span class="lbl">Moduo App</span><span class="trail"><span class="count num">64</span><button type="button" class="more"><svg aria-hidden="true" class="ic"><use href="#i-more"/></svg></button></span></div>
+      <div class="nav"><span class="slot"><span class="dot" style="--c: var(--label-violet)"></span></span><span class="lbl">OP</span><span class="trail"><span class="count num">5</span><button type="button" class="more"><svg aria-hidden="true" class="ic"><use href="#i-more"/></svg></button></span></div>
+      <div class="nav"><span class="slot"><span class="dot" style="--c: var(--label-amber)"></span></span><span class="lbl">Marketing</span><span class="trail"><span class="count num">1</span><button type="button" class="more"><svg aria-hidden="true" class="ic"><use href="#i-more"/></svg></button></span></div>
+      <div class="nav"><span class="slot"><span class="dot"></span></span><span class="lbl">Moduo Landing — pricing &amp; booking pages</span><span class="trail"><span class="count num">6</span><button type="button" class="more"><svg aria-hidden="true" class="ic"><use href="#i-more"/></svg></button></span></div>
+    </aside>
+
+    <!-- CENTER -->
+    <section class="panel center" id="center">
+      <div class="toolbar">
+        <div class="title"><h3>All</h3><span class="muted num">76</span></div>
+        <button type="button" class="btn icon" title="Search  /"><svg aria-hidden="true" class="ic"><use href="#i-search"/></svg></button>
+        <button type="button" class="btn" id="filterBtn"><svg aria-hidden="true" class="ic"><use href="#i-filter"/></svg>Filter</button>
+        <button type="button" class="btn" id="displayBtn"><svg aria-hidden="true" class="ic"><use href="#i-sliders"/></svg>Display</button>
+        <span class="sep"></span>
+        <span class="seg icons" data-local="view"><button type="button" class="on" title="List"><svg aria-hidden="true" class="ic"><use href="#i-list"/></svg></button><button type="button" title="Board"><svg aria-hidden="true" class="ic"><use href="#i-cols"/></svg></button><button type="button" title="Timeline"><svg aria-hidden="true" class="ic"><use href="#i-gantt"/></svg></button></span>
+        <span class="sep"></span>
+        <button type="button" class="btn primary"><svg aria-hidden="true" class="ic"><use href="#i-plus"/></svg>New</button>
+      </div>
+      <div class="chips">
+        <span class="fchip"><span><svg aria-hidden="true" class="ic ic-xs"><use href="#i-user"/></svg>Assignee</span><span class="op">is</span><span>Me</span><button type="button" class="x"><svg aria-hidden="true" class="ic ic-xs"><use href="#i-x"/></svg></button></span>
+        <span class="fchip"><span><svg aria-hidden="true" class="ic ic-xs"><use href="#i-hash"/></svg>Tag</span><span class="op">is any of</span><span>UI, fix</span><button type="button" class="x"><svg aria-hidden="true" class="ic ic-xs"><use href="#i-x"/></svg></button></span>
+        <button type="button" class="btn" style="height:24px;font-size:13px"><svg aria-hidden="true" class="ic ic-xs"><use href="#i-plus"/></svg>Filter</button>
+        <span class="muted" style="font-size:12px;margin-left:auto">23 of 76 · <button type="button" class="muted" style="font-size:12px">Clear</button></span>
+      </div>
+
+      <!-- Display popover -->
+      <div class="pop">
+        <div class="row2"><span>Layout</span><span class="seg icons"><button type="button" class="on"><svg aria-hidden="true" class="ic"><use href="#i-list"/></svg></button><button type="button"><svg aria-hidden="true" class="ic"><use href="#i-cols"/></svg></button><button type="button"><svg aria-hidden="true" class="ic"><use href="#i-gantt"/></svg></button></span></div>
+        <div class="row2"><span>Group by</span><span class="sel">Bucket <svg aria-hidden="true" class="ic ic-xs"><use href="#i-chev-d"/></svg></span></div>
+        <div class="row2"><span>Order by</span><span class="sel">Manual <svg aria-hidden="true" class="ic ic-xs"><use href="#i-chev-d"/></svg></span></div>
+        <div class="row2"><span>Completed</span><span class="seg"><button type="button" class="on">Hidden</button><button type="button">7 days</button><button type="button">All</button></span></div>
+        <div class="row2"><span>Subtasks</span><span class="seg"><button type="button" class="on">Nested</button><button type="button">Flat</button></span></div>
+        <hr />
+        <div class="row2" style="min-height:24px"><span>Show on rows</span><span></span></div>
+        <div class="props-toggle"><span class="on">Priority</span><span>Energy</span><span class="on">Due</span><span class="on">Scheduled</span><span class="on">Assignee</span><span class="on"># Tags</span><span class="on">Attachments</span><span class="on">Comments</span><span>Estimate</span><span>Bucket (auto)</span></div>
+        <div class="foot"><button type="button" class="muted">Reset to default</button></div>
+      </div>
+
+      <div class="list" id="list">
+        <div class="ghead"><svg aria-hidden="true" class="ic ic-xs"><use href="#i-chev-d"/></svg>Moduo App <span class="num">64</span></div>
+
+        <div class="row sel" data-title="Task Module UI/UX Review">
+          <span class="cb"></span>
+          <div class="tcell"><span class="t">Task Module UI/UX Review</span><span class="ind"><span><svg aria-hidden="true" class="ic ic-xs"><use href="#i-hash"/></svg>3</span><span><svg aria-hidden="true" class="ic ic-xs"><use href="#i-clip"/></svg>2</span><span><svg aria-hidden="true" class="ic ic-xs"><use href="#i-msg"/></svg>1</span></span></div>
+          <svg aria-hidden="true" class="pri" data-l="2" viewBox="0 0 16 16"><rect x="2" y="9" width="3" height="5" rx="1"/><rect x="6.5" y="6" width="3" height="8" rx="1"/><rect x="11" y="3" width="3" height="11" rx="1"/></svg>
+          <span class="date num">Thu</span>
+          <span class="ava">MA</span>
+          <span class="qcol on" title="In your queue"><svg aria-hidden="true" class="ic"><use href="#i-queue"/></svg></span>
+        </div>
+
+        <div class="row" data-title="Assignee selector in task creation modal is too big">
+          <span class="cb"></span>
+          <div class="tcell"><span class="t">Assignee selector in task creation modal is too big</span><span class="ind"><span><svg aria-hidden="true" class="ic ic-xs"><use href="#i-hash"/></svg>2</span></span></div>
+          <svg aria-hidden="true" class="pri" data-l="3" viewBox="0 0 16 16"><rect x="2" y="9" width="3" height="5" rx="1"/><rect x="6.5" y="6" width="3" height="8" rx="1"/><rect x="11" y="3" width="3" height="11" rx="1"/></svg>
+          <span class="date num"></span>
+          <span class="ava">MA</span>
+          <span class="qcol"><svg aria-hidden="true" class="ic"><use href="#i-queue"/></svg></span>
+        </div>
+
+        <div class="row" data-title="Explore multiple accounts (and account-related workspaces) on one app">
+          <span class="cb"></span>
+          <div class="tcell"><span class="t">Explore multiple accounts (and account-related workspaces) on one app</span><span class="ind"><span><svg aria-hidden="true" class="ic ic-xs"><use href="#i-hash"/></svg>3</span></span></div>
+          <svg aria-hidden="true" class="pri" data-l="1" viewBox="0 0 16 16"><rect x="2" y="9" width="3" height="5" rx="1"/><rect x="6.5" y="6" width="3" height="8" rx="1"/><rect x="11" y="3" width="3" height="11" rx="1"/></svg>
+          <span class="date num">Oct 14</span>
+          <span class="ava mike">MI</span>
+          <span class="qcol claim" title="In Mike's queue — he's on it"><span class="ava mike claim-ava">MI</span></span>
+        </div>
+
+        <div class="row" data-title="Notes: fix broken task-line / checkbox rendering (oversized, clipped text)">
+          <span class="cb"></span>
+          <div class="tcell"><span class="t">Notes: fix broken task-line / checkbox rendering (oversized, clipped text)</span><span class="ind"><span><svg aria-hidden="true" class="ic ic-xs"><use href="#i-hash"/></svg>4</span><span><svg aria-hidden="true" class="ic ic-xs"><use href="#i-clip"/></svg>1</span></span></div>
+          <svg aria-hidden="true" class="pri" data-l="2" viewBox="0 0 16 16"><rect x="2" y="9" width="3" height="5" rx="1"/><rect x="6.5" y="6" width="3" height="8" rx="1"/><rect x="11" y="3" width="3" height="11" rx="1"/></svg>
+          <span class="date num">Fri</span>
+          <span class="ava">MA</span>
+          <span class="qcol on"><svg aria-hidden="true" class="ic"><use href="#i-queue"/></svg></span>
+        </div>
+
+        <div class="row blocked" data-title="Fully rebuild UI and UX of the scheduling modal in the calendar">
+          <span class="cb"></span>
+          <div class="tcell"><span class="t">Fully rebuild UI and UX of the scheduling modal in the calendar</span><span class="ind"><span title="Blocked by 1"><svg aria-hidden="true" class="ic ic-xs"><use href="#i-dashed"/></svg></span><span><svg aria-hidden="true" class="ic ic-xs"><use href="#i-sub"/></svg>0/1</span><span><svg aria-hidden="true" class="ic ic-xs"><use href="#i-hash"/></svg>4</span></span></div>
+          <span></span>
+          <span class="date num"></span>
+          <span class="ava">MA</span>
+          <span class="qcol"><svg aria-hidden="true" class="ic"><use href="#i-queue"/></svg></span>
+        </div>
+
+        <div class="row" data-title="Write cookie policy, terms of service and privacy policy">
+          <span class="cb"></span>
+          <div class="tcell"><span class="t">Write cookie policy, terms of service and privacy policy (cover Stripe and PostHog)</span><span class="ind"><span><svg aria-hidden="true" class="ic ic-xs"><use href="#i-hash"/></svg>2</span></span></div>
+          <span></span>
+          <span class="date drift num" title="Scheduled time has passed — quiet, never red"><svg aria-hidden="true" class="ic ic-xs"><use href="#i-clock"/></svg>Mon 10:00</span>
+          <span class="ava">MA</span>
+          <span class="qcol"><svg aria-hidden="true" class="ic"><use href="#i-queue"/></svg></span>
+        </div>
+
+        <div class="row" data-title="Settings / workspace: fix icon & logo modal UI">
+          <span class="cb"></span>
+          <div class="tcell"><span class="t">Settings / workspace: fix icon &amp; logo modal UI; replace emoji picker with custom palette</span><span class="ind"><span><svg aria-hidden="true" class="ic ic-xs"><use href="#i-hash"/></svg>4</span></span></div>
+          <svg aria-hidden="true" class="pri" data-l="2" viewBox="0 0 16 16"><rect x="2" y="9" width="3" height="5" rx="1"/><rect x="6.5" y="6" width="3" height="8" rx="1"/><rect x="11" y="3" width="3" height="11" rx="1"/></svg>
+          <span class="date num"></span>
+          <span class="ava">MA</span>
+          <span class="qcol"><svg aria-hidden="true" class="ic"><use href="#i-queue"/></svg></span>
+        </div>
+        <div class="completed-line"><svg aria-hidden="true" class="ic ic-xs"><use href="#i-check"/></svg><button type="button">5 completed · show</button></div>
+
+        <div class="ghead" style="margin-top:6px"><svg aria-hidden="true" class="ic ic-xs"><use href="#i-chev-d"/></svg>Moduo Landing <span class="num">6</span></div>
+        <div class="row" data-title="Landing: &quot;Book a call&quot; section">
+          <span class="cb"></span>
+          <div class="tcell"><span class="t">Landing: "Book a call" section</span><span class="ind"><span><svg aria-hidden="true" class="ic ic-xs"><use href="#i-hash"/></svg>3</span></span></div>
+          <span></span>
+          <span class="date num">Oct 12</span>
+          <span class="ava mike">MI</span>
+          <span class="qcol"><svg aria-hidden="true" class="ic"><use href="#i-queue"/></svg></span>
+        </div>
+        <div class="row" data-title="Landing pricing: state clearly that Free plan access is desktop-only">
+          <span class="cb"></span>
+          <div class="tcell"><span class="t">Landing pricing: state clearly that Free plan access is desktop-only (if so)</span><span class="ind"><span><svg aria-hidden="true" class="ic ic-xs"><use href="#i-hash"/></svg>3</span></span></div>
+          <svg aria-hidden="true" class="pri" data-l="1" viewBox="0 0 16 16"><rect x="2" y="9" width="3" height="5" rx="1"/><rect x="6.5" y="6" width="3" height="8" rx="1"/><rect x="11" y="3" width="3" height="11" rx="1"/></svg>
+          <span class="date num"></span>
+          <span class="ava">MA</span>
+          <span class="qcol"><svg aria-hidden="true" class="ic"><use href="#i-queue"/></svg></span>
+        </div>
+        <div class="row" data-title="Early-founders discount code">
+          <span class="cb"></span>
+          <div class="tcell"><span class="t">Early-founders discount code: pitch your idea, get 100% off for a set period</span><span class="ind"><span><svg aria-hidden="true" class="ic ic-xs"><use href="#i-hash"/></svg>3</span></span></div>
+          <span></span>
+          <span class="date num"></span>
+          <span class="ava">MA</span>
+          <span class="qcol"><svg aria-hidden="true" class="ic"><use href="#i-queue"/></svg></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- DETAIL -->
+    <aside class="panel detail">
+      <div class="dhead">
+        <span class="crumb"><span class="dot" style="--c: var(--label-blue)"></span>Moduo App</span>
+        <button type="button" class="btn secondary" title="Remove from queue  Q" style="font-size:13px"><svg aria-hidden="true" class="ic" style="color:var(--primary)"><use href="#i-queue"/></svg>In queue</button>
+        <button type="button" class="btn icon" title="Copy link"><svg aria-hidden="true" class="ic"><use href="#i-link"/></svg></button>
+        <button type="button" class="btn icon" title="More"><svg aria-hidden="true" class="ic"><use href="#i-more"/></svg></button>
+      </div>
+      <div class="dbody">
+        <div>
+          <div class="dtitle"><span class="cb"></span><h4 id="dtitle">Task Module UI/UX Review</h4></div>
+          <p class="desc" style="margin-top:6px">Full review — UX against competitors, then the UI pass.</p>
+        </div>
+
+        <div class="props">
+          <span class="plabel">Status</span><span class="pval"><svg aria-hidden="true" class="ic"><use href="#i-circle"/></svg>Todo</span>
+          <span class="plabel">Assignee</span><span class="pval"><span class="ava sm">MA</span>Me</span>
+          <span class="plabel">Priority</span><span class="pval"><svg aria-hidden="true" class="pri" data-l="2" viewBox="0 0 16 16"><rect x="2" y="9" width="3" height="5" rx="1"/><rect x="6.5" y="6" width="3" height="8" rx="1"/><rect x="11" y="3" width="3" height="11" rx="1"/></svg>Medium</span>
+          <span class="plabel">Energy</span><span class="pval"><svg aria-hidden="true" class="ic"><use href="#i-zap"/></svg>High</span>
+          <span class="plabel">Due</span><span class="pval">  <svg aria-hidden="true" class="ic"><use href="#i-cal"/></svg>Thu, Oct 9</span>
+          <span class="plabel">Scheduled</span><span class="pval empty"><svg aria-hidden="true" class="ic"><use href="#i-clock"/></svg>Set time</span>
+          <span class="plabel">Time</span><span class="pval"><svg aria-hidden="true" class="ic"><use href="#i-timer"/></svg><span class="num">0m</span><span class="muted num">of ~4h</span><span class="bar"><i></i></span></span>
+          <span class="plabel">Repeat</span><span class="pval empty"><svg aria-hidden="true" class="ic"><use href="#i-repeat"/></svg>Doesn’t repeat</span>
+          <span class="plabel">Tags</span><span class="tags"><span class="tag" style="--c: var(--label-violet)"><b>#</b>tasks</span><span class="tag" style="--c: var(--label-green)"><b>#</b>UI</span><span class="tag" style="--c: var(--label-amber)"><b>#</b>UX</span><button type="button" class="btn icon" style="width:22px;height:22px" title="Add tag"><svg aria-hidden="true" class="ic ic-xs"><use href="#i-plus"/></svg></button></span>
+        </div>
+
+        <div>
+          <div class="shead">Subtasks <span class="num">0</span><button type="button" class="btn icon" title="Add subtask"><svg aria-hidden="true" class="ic"><use href="#i-plus"/></svg></button></div>
+          <div class="shead">Blocked by <span class="num">0</span><button type="button" class="btn icon" title="Add blocker"><svg aria-hidden="true" class="ic"><use href="#i-plus"/></svg></button></div>
+          <div class="shead">Attachments <span class="num">2</span><button type="button" class="btn icon" title="Attach file"><svg aria-hidden="true" class="ic"><use href="#i-plus"/></svg></button></div>
+          <div class="thumbs">
+            <div class="thumb"><div class="img" style="--g: linear-gradient(135deg, oklch(0.32 0.03 260), oklch(0.2 0.02 260) 60%, oklch(0.42 0.06 245))"></div><div class="cap"><span>rail-hover.png</span><span class="num">212 KB</span></div></div>
+            <div class="thumb uploading"><div class="img" style="--g: linear-gradient(160deg, oklch(0.3 0.02 60), oklch(0.18 0.01 60))"></div><div class="cap"><span>row-states.png</span><span>Uploading…</span></div></div>
+          </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="feed">
+          <div class="ev"><span class="ava sm">MA</span><span><b>You</b> created this · Oct 6</span></div>
+          <div class="ev"><span class="ava sm">MA</span><span><b>You</b> added it to your queue · 7:20 PM</span></div>
+          <div class="comment"><div class="who"><span class="ava mike sm">MI</span><b>Mike</b> · 8:02 PM</div>Let's start with the rail counts and the scrollbars — both are tiny.</div>
+          <div class="composer"><span>Leave a comment…  <span class="kbd">@</span> to mention</span><svg aria-hidden="true" class="ic"><use href="#i-clip"/></svg></div>
+          <div class="metaline">Created by Maciej · Oct 6, 12:07 PM · Updated 7:20 PM</div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <ol class="changes">
+    <li><b>No Plan/Focus switch in the rail.</b> The rail looks the same in every module. Focus starts from the Queue (a ▶ in the Queue view's header).</li>
+    <li><b>Rail rows:</b> buckets get an icon slot (a dot, optionally coloured) so their labels line up with All / Queue / Inbox. Counts sit flush right; try <b>Swap</b> vs <b>Shift</b> in the bar above. Active and hover are now clearly different.</li>
+    <li><b>Toolbar = one control language.</b> Ghost buttons on one rung. Search · Filter · Display, then the view switch, with a properly <b>raised</b> active plate (today it's darker than its track on dark). "Group: Bucket" moves into Display. <b>New</b> stays the one primary.</li>
+    <li><b>Display</b> holds layout, group, order, completed (Hidden · 7 days · All), subtasks and which properties show on rows.</li>
+    <li><b>Filter chips</b> read as sentences (Assignee · is · Me ×), with a match count and Clear.</li>
+    <li><b>Rows:</b> no left bar; selection = tint (try Tint + hairline). Fixed right-hand columns (priority · date · assignee · queue) so meta lines up down the list. Title is followed by quiet <b>counts</b>: # tags, 📎, 💬, subtasks, blocked. No bucket pill inside a bucket group. The queue toggle only appears on hover, unless the task is queued. "In Mike's queue" shows his ringed avatar.</li>
+    <li><b>Priority glyph</b> has a fixed footprint with ghost bars (the level is read by fill, not by count). Energy is off on rows by default (Display), and on in the panel.</li>
+    <li><b>Completed:</b> hidden by default, with a quiet "5 completed · show" line at the end of each group.</li>
+    <li><b>Detail panel:</b>
+      <ul>
+        <li>The header now has a breadcrumb, the queue toggle, link and ⋯.</li>
+        <li>A checkbox sits next to the title. The description has no empty box below it.</li>
+        <li>Every property value starts at the same x, behind a 14px icon slot. No chevrons; hover shows the field. Placeholders are muted.</li>
+        <li>Estimate and time spent merge into one <b>Time</b> row with a hairline progress bar.</li>
+        <li>Tags become a property.</li>
+        <li>Collections share one header style (label · count · +). <b>Attachments</b> show as thumbnails.</li>
+        <li>Activity and comments sit at the bottom with a composer. "Created by" is in the last line.</li>
+      </ul>
+    </li>
+    <li><b>Scrollbars:</b> thin and token-coloured by default everywhere (scroll the list).</li>
+  </ol>
+
+  <h2 class="sec">2 · Row states (incl. drag-and-drop)</h2>
+  <div class="panel states">
+    <div class="lbl">Default</div>
+    <div class="row"><span class="cb"></span><div class="tcell"><span class="t">Brand-customize all Supabase auth and Resend email templates</span><span class="ind"><span><svg aria-hidden="true" class="ic ic-xs"><use href="#i-hash"/></svg>3</span></span></div><span></span><span class="date num"></span><span class="ava">MA</span><span class="qcol"><svg aria-hidden="true" class="ic"><use href="#i-queue"/></svg></span></div>
+    <div class="lbl">Hover — faint state layer; queue toggle appears</div>
+    <div class="row forced-hover"><span class="cb"></span><div class="tcell"><span class="t">Improve CI/CD, promotions, deployments and releases logic</span><span class="ind"><span><svg aria-hidden="true" class="ic ic-xs"><use href="#i-hash"/></svg>3</span></span></div><span></span><span class="date num"></span><span class="ava">MA</span><span class="qcol" style="opacity:1"><svg aria-hidden="true" class="ic"><use href="#i-queue"/></svg></span></div>
+    <div class="lbl">Selected (open in the panel) — follows the “Selected row” switch above</div>
+    <div class="row sel"><span class="cb"></span><div class="tcell"><span class="t">Refactor the auto-updater to ship through Fastlane</span><span class="ind"><span><svg aria-hidden="true" class="ic ic-xs"><use href="#i-hash"/></svg>3</span></span></div><span></span><span class="date num"></span><span class="ava">MA</span><span class="qcol"><svg aria-hidden="true" class="ic"><use href="#i-queue"/></svg></span></div>
+    <div class="lbl">Completed (only visible with Display → Completed: 7 days / All)</div>
+    <div class="row done"><span class="cb done"><svg aria-hidden="true" class="ic"><use href="#i-check"/></svg></span><div class="tcell"><span class="t">Lock production signup to Supabase invites</span><span class="ind"><span><svg aria-hidden="true" class="ic ic-xs"><use href="#i-hash"/></svg>3</span></span></div><span></span><span class="date num">Oct 5</span><span class="ava">MA</span><span class="qcol"></span></div>
+    <div class="lbl">Drag — pointer LEFT of the indent: reorder (insertion line)</div>
+    <div class="row"><span class="cb"></span><div class="tcell"><span class="t">Desktop auto-updater: GitHub-driven changelog</span></div><span></span><span class="date num"></span><span class="ava">MA</span><span class="qcol"></span></div>
+    <div class="drop-line"></div>
+    <div class="row"><span class="cb"></span><div class="tcell"><span class="t">Make the GitHub Actions Windows build faster</span></div><span></span><span class="date num"></span><span class="ava">MA</span><span class="qcol"></span></div>
+    <div class="lbl">Drag — pointer RIGHT of the indent: make subtask (target tints, indented preview)</div>
+    <div class="row nest-target"><span class="cb"></span><div class="tcell"><span class="t">Landing subpages per feature tab</span></div><span></span><span class="date num"></span><span class="ava">MA</span><span class="qcol"></span></div>
+    <div class="ghost-sub"><svg aria-hidden="true" class="ic ic-xs"><use href="#i-corner"/></svg>Add technical documentation and update README<span style="margin-left:auto;font-size:11px">Make subtask</span></div>
+  </div>
+
+  <h2 class="sec">3 · Capture, board card</h2>
+  <div class="grid2">
+    <div class="modal">
+      <div class="in">
+        <div class="ttl">Fix notes black background <span class="tok tagt">#notes</span> <span class="tok tagt">#UI</span> <span class="tok datet">tomorrow</span></div>
+        <div class="dsc">Add description…  (paste a screenshot to attach it)</div>
+        <div class="pills">
+          <span class="pill set"><svg aria-hidden="true" class="ic"><use href="#i-inbox"/></svg>Inbox</span>
+          <span class="pill set"><span class="ava sm">MA</span>Me</span>
+          <span class="pill set"><svg aria-hidden="true" class="ic"><use href="#i-cal"/></svg>Tomorrow</span>
+          <span class="pill set"><svg aria-hidden="true" class="ic"><use href="#i-hash"/></svg>notes, UI</span>
+          <span class="pill"><svg aria-hidden="true" class="pri" data-l="0" viewBox="0 0 16 16"><rect x="2" y="9" width="3" height="5" rx="1"/><rect x="6.5" y="6" width="3" height="8" rx="1"/><rect x="11" y="3" width="3" height="11" rx="1"/></svg>Priority</span>
+          <span class="pill"><svg aria-hidden="true" class="ic"><use href="#i-more"/></svg>More</span>
+        </div>
+      </div>
+      <div class="ft">
+        <span class="swl"><span class="sw on"></span>Add to my queue</span>
+        <span class="swl"><span class="sw"></span>Create more</span>
+        <button type="button" class="btn primary" style="margin-left:auto">Create <span style="opacity:.6">⌘↵</span></button>
+      </div>
+    </div>
+
+    <div class="cards">
+      <div class="col">
+        <div class="chead">Todo <span class="num" style="letter-spacing:0">74</span></div>
+        <div class="card sel"><div class="ct"><span class="cb"></span><span>Task Module UI/UX Review</span></div><div class="cm"><svg aria-hidden="true" class="pri" data-l="2" viewBox="0 0 16 16"><rect x="2" y="9" width="3" height="5" rx="1"/><rect x="6.5" y="6" width="3" height="8" rx="1"/><rect x="11" y="3" width="3" height="11" rx="1"/></svg><span class="num">Thu</span><span><svg aria-hidden="true" class="ic ic-xs" style="vertical-align:-1px"><use href="#i-hash"/></svg> 3</span><span><svg aria-hidden="true" class="ic ic-xs" style="vertical-align:-1px"><use href="#i-clip"/></svg> 2</span><span class="ava">MA</span></div></div>
+        <div class="card"><div class="ct"><span class="cb"></span><span>Notes: fix broken task-line / checkbox rendering (oversized, clipped text)</span></div><div class="cm"><span class="dot" style="--c: var(--label-blue)"></span><span>Moduo App</span><span><svg aria-hidden="true" class="ic ic-xs" style="vertical-align:-1px"><use href="#i-hash"/></svg> 4</span><span class="ava mike">MI</span></div></div>
+      </div>
+      <div class="col">
+        <div class="chead">Done <span class="num" style="letter-spacing:0">5</span></div>
+        <div class="card done"><div class="ct"><span class="cb done"><svg aria-hidden="true" class="ic"><use href="#i-check"/></svg></span><span style="text-decoration:line-through">Reflect payment plans as actual Stripe plans</span></div><div class="cm"><span class="num">Oct 5</span><span><svg aria-hidden="true" class="ic ic-xs" style="vertical-align:-1px"><use href="#i-hash"/></svg> 2</span><span class="ava">MA</span></div></div>
+      </div>
+    </div>
+  </div>
+  <p class="note" style="margin-top:10px">Capture: the title highlights what the parser understood (<b>#tags</b>, dates). The pills show what's set, and a set pill looks different from an unset one in exactly one way. Rarely-used properties sit under <b>More</b>, so the row never wraps, and the assignee avatar uses the icon size, so its pill can't grow. <b>Add to my queue</b> sits right next to Create. Board: cards carry one quiet meta line. The bucket shows as a dot + name only where it isn't already implied (here: the All view, grouped by status). Done cards fade as a whole.</p>
+
+  <!-- ═════════════════════════ 4 · FOCUS = RUNNING THE QUEUE ═════════════════════════ -->
+  <h2 class="sec">4 · Focus = running your Queue</h2>
+  <p class="note" style="margin-bottom:12px">The sidebar never changes. Focus is a state of the <b>Queue</b> view: line tasks up, press <b>▶ Start run</b>. While a run is on, the centre holds only what you're doing (<b>Now</b>) and what's next. Anything you hand off goes to the <b>right panel</b> under <b>In flight</b>, so the centre doesn't get busier as things pile up. Leave Tasks and the run follows you in the top-bar chip. Click the in-flight cards.</p>
+
+  <div class="appbar">
+    <span class="tabs"><span class="tab">Home</span><span class="tab">Notes</span><span class="tab on">Tasks</span><span class="tab">Calendar</span><span class="tab">Email</span><span class="tab">Contacts</span><span class="tab">Chat</span></span>
+    <span class="runchip" title="The run follows you around the app"><span class="ring" style="--p: 26%"></span><span class="num">18:42</span><span class="t2">Notes: fix broken task-line…</span></span>
+  </div>
+  <div class="app" style="height: 800px">
+    <aside class="panel rail">
+      <div class="nav"><span class="slot"><svg aria-hidden="true" class="ic ic-md"><use href="#i-layers"/></svg></span><span class="lbl">All</span><span class="trail"><span class="count num">76</span><button type="button" class="more"><svg aria-hidden="true" class="ic"><use href="#i-more"/></svg></button></span></div>
+      <div class="nav active"><span class="slot"><svg aria-hidden="true" class="ic ic-md"><use href="#i-queue"/></svg></span><span class="lbl">Queue</span><span class="trail"><span class="runct num" title="Run in progress · 2 of 7 done"><span class="live"></span>2/7</span></span></div>
+      <div class="nav"><span class="slot"><svg aria-hidden="true" class="ic ic-md"><use href="#i-inbox"/></svg></span><span class="lbl">Inbox</span><span class="trail"><span class="count num">2</span><button type="button" class="more"><svg aria-hidden="true" class="ic"><use href="#i-more"/></svg></button></span></div>
+      <div class="eyebrow">Buckets <button type="button" class="more" title="New bucket"><svg aria-hidden="true" class="ic"><use href="#i-plus"/></svg></button></div>
+      <div class="nav"><span class="slot"><span class="dot" style="--c: var(--label-blue)"></span></span><span class="lbl">Moduo App</span><span class="trail"><span class="count num">64</span><button type="button" class="more"><svg aria-hidden="true" class="ic"><use href="#i-more"/></svg></button></span></div>
+      <div class="nav"><span class="slot"><span class="dot" style="--c: var(--label-violet)"></span></span><span class="lbl">OP</span><span class="trail"><span class="count num">5</span><button type="button" class="more"><svg aria-hidden="true" class="ic"><use href="#i-more"/></svg></button></span></div>
+      <div class="nav"><span class="slot"><span class="dot" style="--c: var(--label-amber)"></span></span><span class="lbl">Marketing</span><span class="trail"><span class="count num">1</span><button type="button" class="more"><svg aria-hidden="true" class="ic"><use href="#i-more"/></svg></button></span></div>
+      <div class="nav"><span class="slot"><span class="dot"></span></span><span class="lbl">Moduo Landing</span><span class="trail"><span class="count num">6</span><button type="button" class="more"><svg aria-hidden="true" class="ic"><use href="#i-more"/></svg></button></span></div>
+    </aside>
+
+    <section class="panel center">
+      <div class="runbar">
+        <h3>Queue</h3>
+        <span class="runstate"><span class="live"></span>Running · <span class="num">2 of 7 done</span></span>
+        <span class="phase" title="Pomodoro runs per queue run, not per task"><span class="ring" style="--p: 26%"></span>Focus <span class="num">18:42</span><svg aria-hidden="true" class="ic ic-xs"><use href="#i-chev-d"/></svg></span>
+        <button type="button" class="btn icon" title="Pause run"><svg aria-hidden="true" class="ic"><use href="#i-pause"/></svg></button>
+        <button type="button" class="btn">End run</button>
+      </div>
+      <div class="nowwrap">
+        <div class="now">
+          <div class="meta">
+            <span><span class="dot" style="--c: var(--label-blue)"></span>Moduo App</span>
+            <span><svg aria-hidden="true" class="pri" data-l="3" viewBox="0 0 16 16"><rect x="2" y="9" width="3" height="5" rx="1"/><rect x="6.5" y="6" width="3" height="8" rx="1"/><rect x="11" y="3" width="3" height="11" rx="1"/></svg>High</span>
+            <span><svg aria-hidden="true" class="ic ic-xs"><use href="#i-cal"/></svg>Due Thu</span>
+            <span><svg aria-hidden="true" class="ic ic-xs"><use href="#i-timer"/></svg><span class="num">18m of ~45m</span></span>
+            <span><svg aria-hidden="true" class="ic ic-xs"><use href="#i-hash"/></svg>3</span>
+            <span><svg aria-hidden="true" class="ic ic-xs"><use href="#i-clip"/></svg>2</span>
+          </div>
+          <h5>Notes: fix broken task-line / checkbox rendering</h5>
+          <p class="ndesc">The checkbox in task lines renders oversized and long titles get clipped in narrow notes. Repro steps are in the QA checklist note.</p>
+          <div class="check">
+            <div class="it done"><span class="cb done"><svg aria-hidden="true" class="ic"><use href="#i-check"/></svg></span><span>Reproduce in Storybook</span></div>
+            <div class="it"><span class="cb"></span><span>Fix line-height and checkbox size</span></div>
+            <div class="it"><span class="cb"></span><span>Check compact and dense</span></div>
+          </div>
+          <div class="linkchips">
+            <span class="lchip"><svg aria-hidden="true" class="ic"><use href="#i-mail"/></svg>Re: Notes rendering bug</span>
+            <span class="lchip"><svg aria-hidden="true" class="ic"><use href="#i-note"/></svg>QA checklist</span>
+            <span class="minithumbs"><i style="--g: linear-gradient(135deg, oklch(0.32 0.03 260), oklch(0.2 0.02 260) 60%, oklch(0.42 0.06 245))"></i><i style="--g: linear-gradient(160deg, oklch(0.3 0.02 60), oklch(0.18 0.01 60))"></i></span>
+          </div>
+          <div class="nowfoot">
+            <button type="button" class="btn primary"><svg aria-hidden="true" class="ic"><use href="#i-check"/></svg>Done <span class="kbdin">⏎</span></button>
+            <button type="button" class="btn secondary" title="Moves it to the end of the queue">Skip</button>
+            <button type="button" class="btn" title="Keep it running in the background — it moves to In flight"><svg aria-hidden="true" class="ic"><use href="#i-handoff"/></svg>Hand off <span class="kbd">W</span></button>
+            <button type="button" class="btn icon" style="margin-left:auto" title="Not today · Open in Plan · …"><svg aria-hidden="true" class="ic"><use href="#i-more"/></svg></button>
+          </div>
+        </div>
+      </div>
+      <div class="upnext">
+        <div class="sublabel">Up next <span class="num">4</span><span class="sum num">~2h 05m</span></div>
+        <div class="qrow"><span class="n num"><b>1</b><svg aria-hidden="true" class="ic ic-xs g"><use href="#i-grip"/></svg></span><span class="tt"><span class="x1">Assignee selector in task creation modal is too big</span></span><span class="est num">~15m</span><span class="ava">MA</span></div>
+        <div class="qrow"><span class="n num"><b>2</b><svg aria-hidden="true" class="ic ic-xs g"><use href="#i-grip"/></svg></span><span class="tt"><span class="x1">Settings / workspace: fix icon &amp; logo modal UI</span><span class="clip"><svg aria-hidden="true" class="ic ic-xs"><use href="#i-clip"/></svg>1</span></span><span class="est num">~30m</span><span class="ava">MA</span></div>
+        <div class="qrow dim"><span class="n num"><b>3</b><svg aria-hidden="true" class="ic ic-xs g"><use href="#i-grip"/></svg></span><span class="tt"><span class="x1">Landing pricing: state clearly that Free plan access is desktop-only</span></span><span class="est num">~20m</span><span class="ava mike claim-ava" title="Also in Mike's queue">MI</span></div>
+        <div class="qrow dim"><span class="n num"><b>4</b><svg aria-hidden="true" class="ic ic-xs g"><use href="#i-grip"/></svg></span><span class="tt"><span class="x1">Early-founders discount code: pitch your idea</span></span><span class="est num">~1h</span><span class="ava">MA</span></div>
+        <div class="addrow"><svg aria-hidden="true" class="ic"><use href="#i-plus"/></svg>Add to queue…<span class="kbd">C</span></div>
+        <div class="completed-line"><svg aria-hidden="true" class="ic ic-xs"><use href="#i-check"/></svg><button type="button">2 done this run · 1h 12m · show</button></div>
+      </div>
+    </section>
+
+    <aside class="panel detail">
+      <div class="rtabs"><span class="seg" data-local="rt"><button type="button" class="on">In flight&nbsp;<span class="muted num">2</span></button><button type="button">Task</button></span></div>
+      <div class="flight" id="flight">
+        <div class="fcard open">
+          <div class="ft1"><svg aria-hidden="true" class="ic"><use href="#i-handoff"/></svg><span>Refactor the auto-updater to ship through Fastlane</span></div>
+          <div class="fmeta"><span class="num">in flight 18m</span><span><span class="ring" style="--p: 78%"></span>check in 4m</span></div>
+          <div class="note2 more-only">Agent is wiring the Fastlane lane — check CI logs, then review the PR.</div>
+          <div class="facts more-only"><span class="lchip"><svg aria-hidden="true" class="ic"><use href="#i-ext"/></svg>github.com/…/pull/221</span><span class="clip"><svg aria-hidden="true" class="ic ic-xs"><use href="#i-sub"/></svg>1/3</span><span class="clip"><svg aria-hidden="true" class="ic ic-xs"><use href="#i-clip"/></svg>1</span></div>
+          <div class="acts more-only"><button type="button" class="btn secondary">Pick up</button><button type="button" class="btn">Done</button><button type="button" class="btn" style="margin-left:auto">Open details</button></div>
+        </div>
+        <div class="fcard due">
+          <div class="ft1"><svg aria-hidden="true" class="ic"><use href="#i-handoff"/></svg><span>Desktop auto-updater: GitHub-driven changelog</span></div>
+          <div class="fmeta"><span class="num">in flight 32m</span><span class="duetxt"><span class="dotlive"></span>Check now</span></div>
+          <div class="note2 more-only">Waiting on the release build to finish; then verify the changelog renders.</div>
+          <div class="acts more-only"><button type="button" class="btn secondary">Pick up</button><button type="button" class="btn">Done</button><button type="button" class="btn" style="margin-left:auto">Open details</button></div>
+        </div>
+        <p class="fhint">Press <span class="kbd">W</span> to hand off what you're on while an agent, a build or a reply runs. A check-back time is optional. When it's due, the card brightens (never red) and you get one quiet notification. <b style="color:var(--foreground);font-weight:500">Task</b> (tab above) shows the Now task's comments and activity.</p>
+      </div>
+    </aside>
+  </div>
+
+  <div class="frames" style="margin-top:22px">
+    <div class="frame">
+      <div class="box"><section class="panel center">
+        <div class="runbar">
+          <h3>Queue</h3>
+          <span class="runstate num">7 · ~5h 20m lined up</span>
+          <span class="seg" data-local="mode"><button type="button" class="on">Pomodoro</button><button type="button">Stopwatch</button></span>
+          <button type="button" class="btn primary" style="margin-left:6px"><svg aria-hidden="true" class="ic"><use href="#i-play"/></svg>Start run</button>
+        </div>
+        <div class="staleline">Lined up 3 days ago — still want all of these? <button type="button">Keep all</button>·<button type="button">Review</button></div>
+        <div class="upnext" style="padding-top:4px">
+          <div class="qrow"><span class="n num"><b>1</b><svg aria-hidden="true" class="ic ic-xs g"><use href="#i-grip"/></svg></span><span class="tt"><span class="x1">Notes: fix broken task-line / checkbox rendering</span><span class="clip"><svg aria-hidden="true" class="ic ic-xs"><use href="#i-clip"/></svg>2</span></span><span class="est num">~45m</span><span class="ava">MA</span></div>
+          <div class="qrow"><span class="n num"><b>2</b><svg aria-hidden="true" class="ic ic-xs g"><use href="#i-grip"/></svg></span><span class="tt"><span class="x1">Refactor the auto-updater to ship through Fastlane</span></span><span class="est num">~2h</span><span class="ava">MA</span></div>
+          <div class="qrow"><span class="n num"><b>3</b><svg aria-hidden="true" class="ic ic-xs g"><use href="#i-grip"/></svg></span><span class="tt"><span class="x1">Assignee selector in task creation modal is too big</span></span><span class="est num">~15m</span><span class="ava">MA</span></div>
+          <div class="qrow"><span class="n num"><b>4</b><svg aria-hidden="true" class="ic ic-xs g"><use href="#i-grip"/></svg></span><span class="tt"><span class="x1">Settings / workspace: fix icon &amp; logo modal UI</span></span><span class="est num">~30m</span><span class="ava">MA</span></div>
+          <div class="qrow"><span class="n num"><b>5</b><svg aria-hidden="true" class="ic ic-xs g"><use href="#i-grip"/></svg></span><span class="tt"><span class="x1">Landing pricing: state clearly that Free plan access is desktop-only</span></span><span class="est num">~20m</span><span class="ava mike claim-ava" title="Also in Mike's queue">MI</span></div>
+          <div class="qrow"><span class="n num"><b>6</b><svg aria-hidden="true" class="ic ic-xs g"><use href="#i-grip"/></svg></span><span class="tt"><span class="x1">Desktop auto-updater: GitHub-driven changelog</span></span><span class="est num">~1h</span><span class="ava">MA</span></div>
+          <div class="addrow"><svg aria-hidden="true" class="ic"><use href="#i-plus"/></svg>Add to queue…<span class="kbd">C</span></div>
+        </div>
+      </section></div>
+      <p class="cap2"><b>Before a run.</b> The Queue is your line-up: drag to reorder, <b>Q</b> from any list to add, <b>C</b> to capture straight in. The total estimate is a quiet mirror. The "still want these?" line only shows when the line-up is days old. Pick Pomodoro or Stopwatch once per run.</p>
+    </div>
+
+    <div class="frame">
+      <div class="box"><section class="panel center">
+        <div class="runbar">
+          <h3>Queue</h3>
+          <span class="runstate"><span class="live"></span>Running · <span class="num">2 of 7 done</span></span>
+          <span class="phase"><svg aria-hidden="true" class="ic ic-xs"><use href="#i-coffee"/></svg>Break <span class="num">4:12</span></span>
+          <button type="button" class="btn icon" title="Pause run"><svg aria-hidden="true" class="ic"><use href="#i-pause"/></svg></button>
+          <button type="button" class="btn">End run</button>
+        </div>
+        <div class="nowwrap">
+          <div class="now resting">
+            <div class="breakbar"><svg aria-hidden="true" class="ic"><use href="#i-coffee"/></svg><span><b>Break.</b> Your task is waiting.</span><button type="button" class="btn" style="margin-left:auto">+5 min focus</button><button type="button" class="btn">Skip break</button></div>
+            <div class="meta"><span><span class="dot" style="--c: var(--label-blue)"></span>Moduo App</span><span><svg aria-hidden="true" class="ic ic-xs"><use href="#i-timer"/></svg><span class="num">25m of ~45m</span></span></div>
+            <h5>Notes: fix broken task-line / checkbox rendering</h5>
+            <p class="ndesc">The checkbox in task lines renders oversized and long titles get clipped in narrow notes.</p>
+          </div>
+        </div>
+        <div class="upnext">
+          <div class="sublabel">In flight · good moment to check</div>
+          <div class="qrow"><span class="n"><svg aria-hidden="true" class="ic ic-xs" style="color:var(--muted-foreground)"><use href="#i-handoff"/></svg></span><span class="tt"><span class="x1">Refactor the auto-updater to ship through Fastlane</span></span><span class="est num">25m</span><button type="button" class="btn" style="height:22px;font-size:12px">Pick up</button></div>
+          <div class="qrow"><span class="n"><svg aria-hidden="true" class="ic ic-xs" style="color:var(--muted-foreground)"><use href="#i-handoff"/></svg></span><span class="tt"><span class="x1">Desktop auto-updater: GitHub-driven changelog</span></span><span class="est num" style="color:var(--foreground)">check now</span><button type="button" class="btn" style="height:22px;font-size:12px">Pick up</button></div>
+        </div>
+      </section></div>
+      <p class="cap2"><b>Break (pomodoro per run).</b> A work block ending mid-task becomes a soft break, never a hard stop: +5 min to finish the thought. Nothing is tracked on the task during the break. In-flight time keeps running, which makes the break a natural moment to check on those tasks.</p>
+    </div>
+
+    <div class="frame">
+      <div class="box"><section class="panel center">
+        <div class="summary">
+          <span class="big"><svg aria-hidden="true" class="ic ic-md"><use href="#i-check"/></svg></span>
+          <h5>Run complete</h5>
+          <div class="stats"><span><b class="num">6 / 7</b>done</span><span><b class="num">2h 14m</b>focused</span><span><b class="num">5</b>focus blocks</span></div>
+          <p class="muted" style="font-size:13px">1 still in flight — kept at the top of your queue.</p>
+          <div style="display:flex; gap:6px"><button type="button" class="btn secondary"><svg aria-hidden="true" class="ic"><use href="#i-plus"/></svg>Add more</button><button type="button" class="btn primary"><svg aria-hidden="true" class="ic"><use href="#i-play"/></svg>Start another run</button></div>
+          <div class="sugg" style="margin-top:6px"><span class="schip"><svg aria-hidden="true" class="ic ic-xs"><use href="#i-clock"/></svg>Drifted <span class="num">2</span></span><span class="schip"><svg aria-hidden="true" class="ic ic-xs"><use href="#i-cal"/></svg>Due this week <span class="num">3</span></span><span class="schip"><svg aria-hidden="true" class="ic ic-xs"><use href="#i-timer"/></svg>Quick, under 15m <span class="num">4</span></span></div>
+        </div>
+      </section></div>
+      <p class="cap2"><b>End of run.</b> A plain summary (no streaks), then an easy way to keep going. Each chip lines those tasks up (you can review before adding). Starting another run within ~15 minutes continues the pomodoro rhythm.</p>
+    </div>
+
+    <div class="frame">
+      <div class="box"><section class="panel center">
+        <div class="runbar"><h3>Queue</h3><span class="runstate"></span><button type="button" class="btn primary" style="opacity:.35;pointer-events:none"><svg aria-hidden="true" class="ic"><use href="#i-play"/></svg>Start run</button></div>
+        <div class="summary" style="padding-top:40px">
+          <span class="big"><svg aria-hidden="true" class="ic ic-md"><use href="#i-queue"/></svg></span>
+          <h5>Nothing lined up</h5>
+          <p class="muted" style="font-size:13px;max-width:46ch">Press <span class="kbd">Q</span> on any task, drag tasks onto <b style="color:var(--foreground);font-weight:500">Queue</b> in the sidebar, or capture straight in.</p>
+          <div class="addrow" style="width:340px;box-shadow:inset 0 0 0 1px var(--hairline)"><svg aria-hidden="true" class="ic"><use href="#i-plus"/></svg>Add to queue…<span class="kbd">C</span></div>
+          <div class="sugg"><span class="schip"><svg aria-hidden="true" class="ic ic-xs"><use href="#i-clock"/></svg>Drifted <span class="num">2</span></span><span class="schip"><svg aria-hidden="true" class="ic ic-xs"><use href="#i-cal"/></svg>Due this week <span class="num">3</span></span><span class="schip">High priority <span class="num">5</span></span></div>
+        </div>
+      </section></div>
+      <p class="cap2"><b>Empty queue.</b> An invitation, not today's "0 / 0 Done ✓".</p>
+    </div>
+  </div>
+
+  <!-- ═════════════════════════ 5 · EMPTY PROPERTIES ═════════════════════════ -->
+  <h2 class="sec">5 · Empty properties: what you'd be deciding</h2>
+  <p class="note" style="margin-bottom:12px">The same task in all three. <b>Status, Assignee, Due and Tags are set</b>; Priority, Energy, Scheduled, Time and Repeat are empty. The question is what the panel does with the empty ones. Attachments sit right under the description (attachments-only, see the images note in chat).</p>
+  <div class="trio">
+    <div>
+      <p class="vlabel">A · Always show everything <span>— today's behaviour</span></p>
+      <div class="panel">
+        <div class="dhead"><span class="crumb"><span class="dot"></span>Moduo Landing</span><button type="button" class="btn icon"><svg aria-hidden="true" class="ic"><use href="#i-more"/></svg></button></div>
+        <div class="dbody" style="gap:14px">
+          <div><div class="dtitle"><span class="cb"></span><h4>Landing: "Book a call" section</h4></div>
+          <div class="attstrip"><i style="--g: linear-gradient(135deg, oklch(0.32 0.03 260), oklch(0.2 0.02 260) 60%, oklch(0.42 0.06 245))"></i><i style="--g: linear-gradient(120deg, oklch(0.26 0.04 150), oklch(0.16 0.02 150))"></i><span class="addtile"><svg aria-hidden="true" class="ic"><use href="#i-plus"/></svg></span></div></div>
+          <div class="props">
+            <span class="plabel">Status</span><span class="pval"><svg aria-hidden="true" class="ic"><use href="#i-circle"/></svg>Todo</span>
+            <span class="plabel">Assignee</span><span class="pval"><span class="ava sm mike">MI</span>Mike</span>
+            <span class="plabel">Priority</span><span class="pval empty"><svg aria-hidden="true" class="pri" data-l="0" viewBox="0 0 16 16"><rect x="2" y="9" width="3" height="5" rx="1"/><rect x="6.5" y="6" width="3" height="8" rx="1"/><rect x="11" y="3" width="3" height="11" rx="1"/></svg>Set priority</span>
+            <span class="plabel">Energy</span><span class="pval empty"><svg aria-hidden="true" class="ic"><use href="#i-zap"/></svg>Set energy</span>
+            <span class="plabel">Due</span><span class="pval"><svg aria-hidden="true" class="ic"><use href="#i-cal"/></svg>Sun, Oct 12</span>
+            <span class="plabel">Scheduled</span><span class="pval empty"><svg aria-hidden="true" class="ic"><use href="#i-clock"/></svg>Set time</span>
+            <span class="plabel">Time</span><span class="pval empty"><svg aria-hidden="true" class="ic"><use href="#i-timer"/></svg>Add estimate</span>
+            <span class="plabel">Repeat</span><span class="pval empty"><svg aria-hidden="true" class="ic"><use href="#i-repeat"/></svg>Doesn’t repeat</span>
+            <span class="plabel">Tags</span><span class="tags"><span class="tag" style="--c: var(--label-amber)"><b>#</b>landing</span><span class="tag" style="--c: var(--label-teal)"><b>#</b>scheduling</span></span>
+          </div>
+        </div>
+      </div>
+      <p class="cap2">9 rows, 5 of them placeholders. Everything is discoverable and always in the same spot. You also scan past five empty rows on every task.</p>
+    </div>
+
+    <div>
+      <p class="vlabel">B · Hide until set</p>
+      <div class="panel">
+        <div class="dhead"><span class="crumb"><span class="dot"></span>Moduo Landing</span><button type="button" class="btn icon"><svg aria-hidden="true" class="ic"><use href="#i-more"/></svg></button></div>
+        <div class="dbody" style="gap:14px">
+          <div><div class="dtitle"><span class="cb"></span><h4>Landing: "Book a call" section</h4></div>
+          <div class="attstrip"><i style="--g: linear-gradient(135deg, oklch(0.32 0.03 260), oklch(0.2 0.02 260) 60%, oklch(0.42 0.06 245))"></i><i style="--g: linear-gradient(120deg, oklch(0.26 0.04 150), oklch(0.16 0.02 150))"></i><span class="addtile"><svg aria-hidden="true" class="ic"><use href="#i-plus"/></svg></span></div></div>
+          <div class="props">
+            <span class="plabel">Status</span><span class="pval"><svg aria-hidden="true" class="ic"><use href="#i-circle"/></svg>Todo</span>
+            <span class="plabel">Assignee</span><span class="pval"><span class="ava sm mike">MI</span>Mike</span>
+            <span class="plabel">Due</span><span class="pval"><svg aria-hidden="true" class="ic"><use href="#i-cal"/></svg>Sun, Oct 12</span>
+            <span class="plabel">Tags</span><span class="tags"><span class="tag" style="--c: var(--label-amber)"><b>#</b>landing</span><span class="tag" style="--c: var(--label-teal)"><b>#</b>scheduling</span></span>
+            <button type="button" class="addprop"><svg aria-hidden="true" class="ic"><use href="#i-plus"/></svg>Add property</button>
+            <div class="minimenu">
+              <div><svg aria-hidden="true" class="pri" data-l="0" viewBox="0 0 16 16"><rect x="2" y="9" width="3" height="5" rx="1"/><rect x="6.5" y="6" width="3" height="8" rx="1"/><rect x="11" y="3" width="3" height="11" rx="1"/></svg>Priority</div>
+              <div><svg aria-hidden="true" class="ic"><use href="#i-zap"/></svg>Energy</div>
+              <div><svg aria-hidden="true" class="ic"><use href="#i-clock"/></svg>Scheduled</div>
+              <div><svg aria-hidden="true" class="ic"><use href="#i-timer"/></svg>Time estimate</div>
+              <div><svg aria-hidden="true" class="ic"><use href="#i-repeat"/></svg>Repeat</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p class="cap2">Only what's set, plus one "Add property". Quietest. Rows appear and disappear as you edit, and a teammate may not notice that priority even exists.</p>
+    </div>
+
+    <div>
+      <p class="vlabel">C · Core always, the rest when set <span>— recommended</span></p>
+      <div class="panel">
+        <div class="dhead"><span class="crumb"><span class="dot"></span>Moduo Landing</span><button type="button" class="btn icon"><svg aria-hidden="true" class="ic"><use href="#i-more"/></svg></button></div>
+        <div class="dbody" style="gap:14px">
+          <div><div class="dtitle"><span class="cb"></span><h4>Landing: "Book a call" section</h4></div>
+          <div class="attstrip"><i style="--g: linear-gradient(135deg, oklch(0.32 0.03 260), oklch(0.2 0.02 260) 60%, oklch(0.42 0.06 245))"></i><i style="--g: linear-gradient(120deg, oklch(0.26 0.04 150), oklch(0.16 0.02 150))"></i><span class="addtile"><svg aria-hidden="true" class="ic"><use href="#i-plus"/></svg></span></div></div>
+          <div class="props">
+            <span class="plabel">Status</span><span class="pval"><svg aria-hidden="true" class="ic"><use href="#i-circle"/></svg>Todo</span>
+            <span class="plabel">Assignee</span><span class="pval"><span class="ava sm mike">MI</span>Mike</span>
+            <span class="plabel">Priority</span><span class="pval empty"><svg aria-hidden="true" class="pri" data-l="0" viewBox="0 0 16 16"><rect x="2" y="9" width="3" height="5" rx="1"/><rect x="6.5" y="6" width="3" height="8" rx="1"/><rect x="11" y="3" width="3" height="11" rx="1"/></svg>Set priority</span>
+            <span class="plabel">Due</span><span class="pval"><svg aria-hidden="true" class="ic"><use href="#i-cal"/></svg>Sun, Oct 12</span>
+            <span class="plabel">Tags</span><span class="tags"><span class="tag" style="--c: var(--label-amber)"><b>#</b>landing</span><span class="tag" style="--c: var(--label-teal)"><b>#</b>scheduling</span></span>
+            <button type="button" class="addprop"><svg aria-hidden="true" class="ic"><use href="#i-plus"/></svg>Energy · Scheduled · Time · Repeat</button>
+          </div>
+        </div>
+      </div>
+      <p class="cap2">The five properties most tasks use are always there, empty or not. The rarer four show up once set, and until then they're one quiet line that names them, so nothing is hidden by surprise.</p>
+    </div>
+  </div>
+
+  <!-- ═════════════════════════ 6 · ATTACHMENT MARK EVERYWHERE ═════════════════════════ -->
+  <h2 class="sec">6 · The attachment mark on every task surface</h2>
+  <p class="note" style="margin-bottom:12px">One mark everywhere: a 12px paperclip + count, muted. Hidden at zero, always in the same slot of the quiet-counts group (# tags · 📎 · 💬 · subtasks). Rows and cards never show thumbnails; the detail panel and Focus do.</p>
+  <div class="spec">
+    <div class="panel"><p class="cap3">List row</p>
+      <div class="row" style="grid-template-columns: var(--icon) minmax(0,1fr) var(--icon)"><span class="cb"></span><div class="tcell"><span class="t">Notes: fix black background</span><span class="ind"><span><svg aria-hidden="true" class="ic ic-xs"><use href="#i-hash"/></svg>3</span><span><svg aria-hidden="true" class="ic ic-xs"><use href="#i-clip"/></svg>2</span></span></div><span class="ava">MA</span></div>
+    </div>
+    <div class="panel"><p class="cap3">Board card</p>
+      <div class="card" style="margin:0"><div class="ct"><span class="cb"></span><span>Notes: fix black background</span></div><div class="cm"><span class="num">Fri</span><span><svg aria-hidden="true" class="ic ic-xs" style="vertical-align:-1px"><use href="#i-hash"/></svg> 3</span><span><svg aria-hidden="true" class="ic ic-xs" style="vertical-align:-1px"><use href="#i-clip"/></svg> 2</span><span class="ava">MA</span></div></div>
+    </div>
+    <div class="panel"><p class="cap3">Timeline bar: wide shows it, narrow puts it in the tooltip</p>
+      <div class="tbar" style="width:92%"><span class="cb" style="width:12px;height:12px"></span><span class="x1">Notes: fix black background</span><span class="clip" style="margin-left:auto"><svg aria-hidden="true" class="ic ic-xs"><use href="#i-clip"/></svg>2</span></div>
+      <div class="tbar" style="width:46%"><span class="cb" style="width:12px;height:12px"></span><span class="x1">Notes: fix black…</span></div>
+    </div>
+    <div class="panel"><p class="cap3">Queue · Up next · In flight</p>
+      <div class="qrow"><span class="n num"><b>2</b><svg aria-hidden="true" class="ic ic-xs g"><use href="#i-grip"/></svg></span><span class="tt"><span class="x1">Notes: fix black background</span><span class="clip"><svg aria-hidden="true" class="ic ic-xs"><use href="#i-clip"/></svg>2</span></span><span class="est num">~20m</span><span class="ava">MA</span></div>
+      <div class="qrow"><span class="n"><svg aria-hidden="true" class="ic ic-xs" style="color:var(--muted-foreground)"><use href="#i-handoff"/></svg></span><span class="tt"><span class="x1">Refactor the auto-updater…</span><span class="clip"><svg aria-hidden="true" class="ic ic-xs"><use href="#i-clip"/></svg>1</span></span><span class="est num">18m</span><span></span></div>
+    </div>
+    <div class="panel"><p class="cap3">Calendar task block</p>
+      <div class="cblock"><span class="x1">Notes: fix black background</span><span class="x2"><span class="num">10:00 – 10:45</span><span class="clip"><svg aria-hidden="true" class="ic ic-xs"><use href="#i-clip"/></svg>2</span></span></div>
+    </div>
+    <div class="panel"><p class="cap3">Home widget row</p>
+      <div class="wrow"><span class="cb"></span><span class="x1">Notes: fix black background</span><span class="clip"><svg aria-hidden="true" class="ic ic-xs"><use href="#i-clip"/></svg>2</span><span class="muted num" style="font-size:12px">Fri</span></div>
+      <div class="wrow"><span class="cb"></span><span class="x1">Landing: "Book a call" section</span><span class="muted num" style="font-size:12px">Oct 12</span></div>
+    </div>
+    <div class="panel"><p class="cap3">Task line inside a note</p>
+      <div class="nline"><span class="cb"></span><span>Fix black background in Notes</span><span class="clip"><svg aria-hidden="true" class="ic ic-xs"><use href="#i-clip"/></svg>2</span></div>
+      <div class="nline"><span class="cb"></span><span>Ship the README update</span></div>
+    </div>
+    <div class="panel"><p class="cap3">Capture: a pasted screenshot becomes a chip</p>
+      <div style="display:flex;gap:6px;flex-wrap:wrap"><span class="attchip"><i style="--g: linear-gradient(135deg, oklch(0.32 0.03 260), oklch(0.2 0.02 260) 60%, oklch(0.42 0.06 245))"></i>Screenshot 14.02.png<span class="x"><svg aria-hidden="true" class="ic ic-xs"><use href="#i-x"/></svg></span></span><span class="pill set"><svg aria-hidden="true" class="ic"><use href="#i-inbox"/></svg>Inbox</span></div>
+    </div>
+    <div class="panel"><p class="cap3">⌘K search result</p>
+      <div class="prow"><svg aria-hidden="true" class="ic" style="color:var(--muted-foreground)"><use href="#i-circle"/></svg><span class="x1">Notes: fix black background</span><span class="clip"><svg aria-hidden="true" class="ic ic-xs"><use href="#i-clip"/></svg>2</span><span class="where">Tasks · Moduo App</span></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Appearance knobs → <html data-*>
+  document.querySelectorAll('[data-set]').forEach((group) => {
+    group.addEventListener('click', (e) => {
+      var b = e.target.closest('button[data-v]');
+      if (!b) return;
+      document.documentElement.setAttribute(`data-${group.dataset.set}`, b.dataset.v);
+      group.querySelectorAll('button').forEach((x) => { x.classList.toggle('on', x === b); });
+    });
+  });
+  // Local segmented (view switch) — visual only
+  document.querySelectorAll('[data-local]').forEach((group) => {
+    group.addEventListener('click', (e) => {
+      var b = e.target.closest('button'); if (!b) return;
+      group.querySelectorAll('button').forEach((x) => { x.classList.toggle('on', x === b); });
+    });
+  });
+  // Rail selection
+  document.querySelectorAll('.rail .nav').forEach((n) => {
+    n.addEventListener('click', () => {
+      document.querySelectorAll('.rail .nav').forEach((x) => { x.classList.remove('active'); });
+      n.classList.add('active');
+    });
+  });
+  // Row selection → detail title
+  document.querySelectorAll('#list .row').forEach((r) => {
+    r.addEventListener('click', () => {
+      document.querySelectorAll('#list .row.sel').forEach((x) => { x.classList.remove('sel'); });
+      r.classList.add('sel');
+      document.getElementById('dtitle').textContent = r.dataset.title;
+    });
+  });
+  // In-flight cards: click to expand (one at a time)
+  document.querySelectorAll('#flight .fcard').forEach((c) => {
+    c.addEventListener('click', (e) => {
+      if (e.target.closest('button')) return;
+      document.querySelectorAll('#flight .fcard').forEach((x) => { x.classList.toggle('open', x === c); });
+    });
+  });
+  // Filter + Display toggles
+  var center = document.getElementById('center');
+  var fb = document.getElementById('filterBtn');
+  fb.addEventListener('click', () => {
+    var on = center.classList.toggle('filtered');
+    fb.classList.toggle('on', on);
+    fb.innerHTML = `<svg aria-hidden="true" class="ic"><use href="#i-filter"/></svg>Filter${on ? ' <span class="pip">2</span>' : ''}`;
+  });
+  var db = document.getElementById('displayBtn');
+  db.addEventListener('click', (e) => {
+    e.stopPropagation();
+    var on = center.classList.toggle('display-open');
+    db.classList.toggle('on', on);
+  });
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.pop') && !e.target.closest('#displayBtn')) {
+      center.classList.remove('display-open'); db.classList.remove('on');
+    }
+  });
+</script>
+</body>
+</html>

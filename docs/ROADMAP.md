@@ -58,8 +58,8 @@
 **The great moment:** a checkbox in a note is a first-class task that schedules and completes.
 **Drop:** Notion (for docs/notes). Enables sharing notes with a partner (multiplayer).
 
-### Wave 4 — Finance (Midday-lite, CSV-first, no bank layer) — ⏸ POST-ALPHA (out of v1, designer call 2026-07-04; kept for later, not deleted) ⚠ time-tracking + email metadata deps (Q8, Q10)
-> **⏸ Deferred out of the v1/alpha scope (2026-07-04).** Retained as the post-alpha finance leg; nothing in Waves 0–3 or the Dashboard/Mindmap reworks depends on it.
+### Wave 4 — Finance (Midday-lite, CSV-first, no bank layer) — ✖ NOT PLANNED (Maciej, 2026-10-07: no finance module, not soon, possibly never; section kept for history only) ⚠ time-tracking + email metadata deps (Q8, Q10)
+> **✖ Not planned (2026-10-07).** Superseded the 2026-07-04 "post-alpha" deferral — Finance is off the roadmap entirely. Earlier note: **⏸ Deferred out of the v1/alpha scope (2026-07-04).** Retained as the post-alpha finance leg; nothing in Waves 0–3 or the Dashboard/Mindmap reworks depends on it.
 **Goal:** answer "How much did I make last month, and where did it go?" in one app.
 **Build:** **money-flow overview widget** ("You made $X — here's where it went," zero setup) · CSV-first transaction import with column mapping (+ pre-built QuickBooks/Lunch Money/Mint mappings) · per-row business/personal + per-client tagging with bulk rules · custom categories · **invoicing with tracked lifecycle** (sent→viewed→paid/overdue, linked to the contact) · no invoice cap on free/entry tier · overdue-invoice auto-surfaces as a task/notification on the contact · time-tracking → invoice line items (revive the paused module — Q10) · tax-reserve / "safe to pay yourself" widget · retrospective clarity, **not** zero-based budgeting · native multi-currency · auto-match receipt emails to transactions (needs email metadata — Q8) · recurring/quarterly-tax dates auto-appear on the calendar.
 **The great moment:** a receipt email auto-attaches to the transaction, linked to the client and the invoice.

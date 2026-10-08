@@ -20,6 +20,10 @@
  * stray overload (the `calendar_op_account_upsert` 7→8 arg case, which needed an
  * explicit DROP to avoid PostgREST ambiguity) reads as present in query 1 and
  * drift-free in query 2. Query 3 exists to catch precisely that.
+ *
+ * Edge Functions live outside the database, so nothing here sees them. Their sibling check
+ * is `bun run functions:reconcile` (scripts/functions-reconcile.ts): deployed functions vs
+ * the folders under supabase/functions/.
  */
 
 import { createHash } from "node:crypto";

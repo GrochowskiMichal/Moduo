@@ -23,7 +23,9 @@
     "rstest.config.ts",
     "supabase/functions/_shared/contracts",
     "supabase/functions/_shared/account-erasure.ts",
-    "supabase/functions/_shared/account-erasure.test.ts"
+    "supabase/functions/_shared/account-erasure.test.ts",
+    "supabase/functions/_shared/client-ip.ts",
+    "supabase/functions/_shared/client-ip.test.ts"
   ],
   "exclude": ["node_modules", "dist", "src-tauri"]
 }
