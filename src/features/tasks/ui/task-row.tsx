@@ -132,6 +132,14 @@ export function TaskRow({
   const scheduled = formatScheduled(task.scheduledAt);
   const due = formatDue(task.dueDate);
   const tags = api.tagsByTask.get(task.id) ?? [];
+  // Menu items that hand focus to something in the row (the title editor, a
+  // chip's popover) run once the context menu has closed: Radix returns focus
+  // to the list a tick after the menu unmounts, and whatever opened sooner
+  // reads that as focus leaving it and closes again.
+  const pendingMenuAction = useRef<(() => void) | null>(null);
+  const afterMenuClose = (action: () => void) => {
+    pendingMenuAction.current = action;
+  };
   // Blocked — computed, ambient: dim + a quiet icon, never red (spec §5c).
   const blocked = api.blockedTaskIds.has(task.id);
   const { assignees, byId } = useAssignees();
@@ -290,7 +298,7 @@ export function TaskRow({
           task={task}
           canEdit={canEdit}
           open={command === "schedule"}
-          onOpenChange={(o) => !o && onClearCommand()}
+          onOpenChange={(o) => (o ? onRequestCommand("schedule") : onClearCommand())}
           label={scheduled}
           drifted={drifted}
           api={api}
@@ -300,7 +308,7 @@ export function TaskRow({
           task={task}
           canEdit={canEdit}
           open={command === "due"}
-          onOpenChange={(o) => !o && onClearCommand()}
+          onOpenChange={(o) => (o ? onRequestCommand("due") : onClearCommand())}
           label={due}
           api={api}
         />
@@ -314,7 +322,7 @@ export function TaskRow({
             showPill={showBucket}
             canEdit={canEdit}
             open={command === "bucket"}
-            onOpenChange={(o) => !o && onClearCommand()}
+            onOpenChange={(o) => (o ? onRequestCommand("bucket") : onClearCommand())}
             api={api}
           />
         ) : null}
@@ -358,8 +366,17 @@ export function TaskRow({
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>{row}</ContextMenuTrigger>
-      <ContextMenuContent className="w-48">
-        <ContextMenuItem onSelect={() => onStartEdit()}>Rename</ContextMenuItem>
+      <ContextMenuContent
+        className="w-48"
+        onCloseAutoFocus={(e) => {
+          const action = pendingMenuAction.current;
+          if (!action) return;
+          pendingMenuAction.current = null;
+          e.preventDefault(); // the editor or popover takes focus, not the list
+          action();
+        }}
+      >
+        <ContextMenuItem onSelect={() => afterMenuClose(onStartEdit)}>Rename</ContextMenuItem>
         <ContextMenuItem onSelect={() => api.toggleDone(task)}>
           {done ? "Mark not done" : "Mark done"}
         </ContextMenuItem>
@@ -372,9 +389,13 @@ export function TaskRow({
           </ContextMenuItem>
         ) : null}
         <ContextMenuSeparator />
-        <ContextMenuItem onSelect={() => onRequestCommand("schedule")}>Schedule…</ContextMenuItem>
-        <ContextMenuItem onSelect={() => onRequestCommand("due")}>Set due date…</ContextMenuItem>
-        <ContextMenuItem onSelect={() => onRequestCommand("bucket")}>
+        <ContextMenuItem onSelect={() => afterMenuClose(() => onRequestCommand("schedule"))}>
+          Schedule…
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={() => afterMenuClose(() => onRequestCommand("due"))}>
+          Set due date…
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={() => afterMenuClose(() => onRequestCommand("bucket"))}>
           Move to bucket…
         </ContextMenuItem>
         {task.parentId ? (
@@ -488,6 +509,15 @@ function TitleEditor({
 }) {
   const [value, setValue] = useState(initial);
   const ref = useRef<HTMLInputElement>(null);
+  // Enter and Esc end the edit by handing focus back to the list, and the blur
+  // that causes must not commit again (or save a draft Esc threw away).
+  const ended = useRef(false);
+  const end = (commit: boolean) => {
+    if (ended.current) return;
+    ended.current = true;
+    if (commit) onCommit(value);
+    else onCancel();
+  };
   useEffect(() => {
     ref.current?.focus();
     ref.current?.select();
@@ -500,10 +530,10 @@ function TitleEditor({
       onClick={(e) => e.stopPropagation()}
       onKeyDown={(e) => {
         e.stopPropagation();
-        if (e.key === "Enter") onCommit(value);
-        else if (e.key === "Escape") onCancel();
+        if (e.key === "Enter") end(true);
+        else if (e.key === "Escape") end(false);
       }}
-      onBlur={() => onCommit(value)}
+      onBlur={() => end(true)}
       className="h-7 px-1.5 py-0 font-display text-sm"
     />
   );
@@ -512,6 +542,11 @@ function TitleEditor({
 // LevelDots (priority/energy glyphs) now lives in ./level-icons.
 
 // ── meta popovers ─────────────────────────────────────────────────────────────
+
+// Closing a row popover hands focus back to the list (onClearCommand). Without
+// this, Radix moves it to the chip once the popover unmounts after a click on
+// the chip itself.
+const keepListFocus = (e: Event) => e.preventDefault();
 
 function MetaChip({
   active,
@@ -578,7 +613,12 @@ function SchedulePopover({
           </MetaChip>
         </button>
       </PopoverTrigger>
-      <PopoverContent className="w-auto p-3" onClick={(e) => e.stopPropagation()} align="end">
+      <PopoverContent
+        className="w-auto p-3"
+        onClick={(e) => e.stopPropagation()}
+        onCloseAutoFocus={keepListFocus}
+        align="end"
+      >
         <label className="mb-1 block text-xs font-medium text-muted-foreground">
           Scheduled time
         </label>
@@ -641,7 +681,12 @@ function DuePopover({
           </MetaChip>
         </button>
       </PopoverTrigger>
-      <PopoverContent className="w-auto p-3" onClick={(e) => e.stopPropagation()} align="end">
+      <PopoverContent
+        className="w-auto p-3"
+        onClick={(e) => e.stopPropagation()}
+        onCloseAutoFocus={keepListFocus}
+        align="end"
+      >
         <label className="mb-1 block text-xs font-medium text-muted-foreground">Due date</label>
         <Input
           type="date"
@@ -711,7 +756,12 @@ function BucketPopover({
           </Badge>
         </button>
       </PopoverTrigger>
-      <PopoverContent className="w-48 p-1" onClick={(e) => e.stopPropagation()} align="end">
+      <PopoverContent
+        className="w-48 p-1"
+        onClick={(e) => e.stopPropagation()}
+        onCloseAutoFocus={keepListFocus}
+        align="end"
+      >
         <div className="max-h-64 overflow-auto">
           {options.map((b) => (
             <button
