@@ -126,7 +126,7 @@ export function EventDetailPanel({
   const now = new Date();
 
   return (
-    <div className="scrollbar-thin flex h-full min-h-0 flex-col gap-3 overflow-y-auto">
+    <div className="pane-scroll scrollbar-thin flex h-full min-h-0 flex-col gap-3 overflow-y-auto">
       <div className="flex items-center justify-between gap-2">
         <Eyebrow>Event</Eyebrow>
         <IconButton icon={X} label="Close details" onClick={onClose} />
