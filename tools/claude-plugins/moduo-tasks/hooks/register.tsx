@@ -20,6 +20,9 @@ export const PANE = "moduo-mine";
 const PANE_TITLE = "Moduo · My tasks";
 const REFRESH_MS = 60_000;
 const OPEN_FLAG = "paneOpen";
+const OWNER_KEY = "ownerId";
+/** While the pane is closed, the band still refreshes every this many ticks (5 minutes). */
+const BAND_EVERY = 5;
 const PAGE = 200;
 
 const INITIAL: PanelState = {
@@ -36,6 +39,7 @@ type Config = { apiKey: string; endpoint: string; timeZone: string };
 type Options = { api_key?: string; endpoint?: string; time_zone?: string };
 
 let ticking = false;
+let ticks = 0;
 let seq = 0;
 
 async function callTool<T>(
@@ -45,11 +49,14 @@ async function callTool<T>(
   args: Record<string, unknown>,
 ): Promise<T> {
   if (!cfg.apiKey) throw new ConnectorError("nokey");
+  const url = cfg.endpoint || DEFAULT_ENDPOINT;
+  // The key rides this request: never send it anywhere but https.
+  if (!url.startsWith("https://")) throw new ConnectorError("endpoint");
   seq += 1;
   let status: number;
   let text: string;
   try {
-    const res = await $.http.fetch(cfg.endpoint || DEFAULT_ENDPOINT, {
+    const res = await $.http.fetch(url, {
       method: "POST",
       headers: requestHeaders(cfg.apiKey),
       body: requestBody(seq, tool, args),
@@ -60,6 +67,18 @@ async function callTool<T>(
     throw new ConnectorError("offline");
   }
   return parseAnswer<T>(status, text);
+}
+
+/** The person's user id when they have no open tasks: the store, else one of their done tasks. */
+async function findOwner($: EngineInterface, cfg: Config): Promise<string | null> {
+  const stored = await $.store.get(OWNER_KEY);
+  if (typeof stored === "string" && stored) return stored;
+  const done = await callTool<Task[]>($, cfg, "tasks_list", {
+    assignee: "me",
+    status: "done",
+    limit: 1,
+  });
+  return ownerOf(done);
 }
 
 /** Every page of `tasks_list` (a short page is the last). */
@@ -90,9 +109,21 @@ async function refresh($: EngineInterface, cfg: Config): Promise<void> {
     ]);
     const tasks =
       state.filter === "me" ? mine : await listAll($, cfg, { assignee: "anyone", top_level: true });
-    const ownerId = ownerOf(mine) ?? state.ownerId;
-    const view = buildView(tasks, buckets, today.queue ?? [], state.filter, ownerId, now);
-    await update($, panel, (s) => ({ ...s, view, ownerId, problem: null, updatedAt: now }));
+    const ownerId = ownerOf(mine) ?? state.ownerId ?? (await findOwner($, cfg));
+    if (ownerId && ownerId !== state.ownerId) await $.store.set(OWNER_KEY, ownerId);
+    const view = buildView(
+      tasks,
+      buckets,
+      today.queue ?? [],
+      state.filter,
+      ownerId,
+      now,
+      cfg.timeZone,
+    );
+    // A filter switched while this refresh ran wins: its own refresh writes the view.
+    await update($, panel, (s) =>
+      s.filter === state.filter ? { ...s, view, ownerId, problem: null, updatedAt: now } : s,
+    );
   } catch (err) {
     const problem = err instanceof ConnectorError ? err.problem : "error";
     await update($, panel, (s) => ({ ...s, problem }));
@@ -100,10 +131,13 @@ async function refresh($: EngineInterface, cfg: Config): Promise<void> {
 }
 
 async function tick($: EngineInterface, cfg: Config): Promise<void> {
+  ticks += 1;
   const isUp = (await $.ui.panes()).some((p) => p.id === PANE);
   const { problem } = await read($, panel);
   // A rejected key stops polling until the key changes (a settings change reloads the module).
-  if (isUp && problem !== "rejected") await refresh($, cfg);
+  if (problem === "rejected" || problem === "endpoint") return;
+  // Open pane: every minute. Closed: every 5 minutes, so the band line stays current.
+  if (isUp || ticks % BAND_EVERY === 0) await refresh($, cfg);
 }
 
 function startTicker($: EngineInterface, cfg: Config): void {
@@ -136,14 +170,18 @@ export const register: Register = (on, options) => {
     timeZone: resolveTimeZone(opts.time_zone),
   };
   ticking = false;
+  ticks = 0;
 
   on("session.start", async ($, e, next) => {
     await $.command.register({
       name: "mine",
       description: "Open Moduo · My tasks (your tasks across every bucket)",
     });
-    if (cfg.apiKey && (await $.store.get(OPEN_FLAG)) === true) {
-      void $.ui.open({ id: PANE, title: PANE_TITLE });
+    if (cfg.apiKey) {
+      // With a key the band line loads at once; the pane comes back only if it was open.
+      if ((await $.store.get(OPEN_FLAG)) === true) {
+        void $.ui.open({ id: PANE, title: PANE_TITLE }).catch(() => undefined);
+      }
       startTicker($, cfg);
       void refresh($, cfg);
     }
@@ -244,6 +282,11 @@ export const register: Register = (on, options) => {
                 Nothing assigned to you. Everyone's tasks are one click away.
               </Text>
             )}
+            {v.total === 0 && s.filter === "anyone" && (
+              <Text key="none-anyone" dimColor>
+                No open tasks in this workspace.
+              </Text>
+            )}
             {v.groups.map((g) => (
               <Box flexDirection="column" key={`g-${g.id}`}>
                 <Text key="name" dimColor>
@@ -279,7 +322,7 @@ export const register: Register = (on, options) => {
             ))}
             <Button
               key="done-toggle"
-              label={`${s.showDone ? "Hide" : "Show"} done today (${v.doneToday.length})`}
+              label={`Done today (${v.doneToday.length})${s.showDone ? " ▾" : " ▸"}`}
               hotkey="d"
               onPress={() => toggleDone($)}
             />

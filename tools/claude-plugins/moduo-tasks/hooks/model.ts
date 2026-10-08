@@ -30,17 +30,33 @@ export function resolveTimeZone(setting: string | undefined): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 }
 
-function driftDays(t: Task, nowMs: number): number {
-  if (!t.scheduled_at) return 1;
-  return Math.max(1, Math.floor((nowMs - new Date(t.scheduled_at).getTime()) / DAY_MS));
+/**
+ * Text that came from Moduo (titles, bucket names) is other people's input drawn on a
+ * terminal: drop control characters and bidi overrides so it can't inject escape sequences.
+ */
+export function clean(text: string | null | undefined): string {
+  let out = "";
+  for (const ch of text ?? "") {
+    const c = ch.codePointAt(0) ?? 0;
+    const isControl = c < 0x20 || (c >= 0x7f && c <= 0x9f);
+    const isBidi = (c >= 0x202a && c <= 0x202e) || (c >= 0x2066 && c <= 0x2069);
+    if (!isControl && !isBidi) out += ch;
+  }
+  return out;
 }
 
-function metaOf(t: Task, nowMs: number): { meta: string; tone: Row["tone"] } {
+/** Whole local calendar days between two instants (0 = the same local day). */
+function localDaysBetween(fromMs: number, toMs: number, timeZone: string): number {
+  const day = (ms: number) => Date.parse(`${localDate(ms, timeZone)}T00:00:00Z`);
+  return Math.round((day(toMs) - day(fromMs)) / DAY_MS);
+}
+
+function metaOf(t: Task, nowMs: number, timeZone: string): { meta: string; tone: Row["tone"] } {
   const bits: string[] = [];
   let tone: Row["tone"] = "plain";
   if (t.drifted) {
-    const d = driftDays(t, nowMs);
-    bits.push(`drifting ${d} ${d === 1 ? "day" : "days"}`);
+    const d = t.scheduled_at ? localDaysBetween(Date.parse(t.scheduled_at), nowMs, timeZone) : 0;
+    bits.push(d <= 0 ? "drifting" : `drifting ${d} ${d === 1 ? "day" : "days"}`);
     tone = "drift";
   }
   if (t.blocked) {
@@ -59,8 +75,9 @@ export function ownerOf(mine: Task[]): string | null {
 
 /**
  * Builds the panel: open tasks grouped by bucket in the app's bucket order, today's queue
- * (open items, by queue order) and "Done today" (today's queue items already done).
- * `ownerId` narrows the queue to the person's own tasks when the filter is "me".
+ * and "Done today" (today's queue items already done).
+ * Queue numbers are positions in the whole day's queue, as the app shows them; under "me"
+ * only the person's own items are listed, and nothing when their id is not known yet.
  */
 export function buildView(
   tasks: Task[],
@@ -69,45 +86,46 @@ export function buildView(
   filter: Filter,
   ownerId: string | null,
   nowMs: number,
+  timeZone: string,
 ): ViewModel {
-  const queueSource =
-    filter === "me" && ownerId ? todayQueue.filter((t) => t.assignee_id === ownerId) : todayQueue;
-  const ordered = [...queueSource].sort((a, b) => (a.commit_order ?? 0) - (b.commit_order ?? 0));
-  const openQueued = ordered.filter((t) => t.status !== "done" && t.status !== "archived");
-  const queue: QueueCard[] = openQueued.map((t, i) => ({
+  const ordered = [...todayQueue].sort((a, b) => (a.commit_order ?? 0) - (b.commit_order ?? 0));
+  const openAll = ordered.filter((t) => t.status !== "done" && t.status !== "archived");
+  const position = new Map(openAll.map((t, i) => [t.id, i + 1]));
+  const isShown = (t: Task) =>
+    filter === "anyone" || (ownerId !== null && t.assignee_id === ownerId);
+  const queue: QueueCard[] = openAll.filter(isShown).map((t) => ({
     id: t.id,
-    pos: i + 1,
-    title: t.title,
+    pos: position.get(t.id) ?? 0,
+    title: clean(t.title),
     minutes: t.duration_minutes ?? null,
   }));
-  const queuePos = new Map(queue.map((c) => [c.id, c.pos]));
   const timed = queue.filter((c) => c.minutes != null);
   const plannedMinutes = timed.length ? timed.reduce((sum, c) => sum + (c.minutes ?? 0), 0) : null;
   const doneToday = ordered
-    .filter((t) => t.status === "done")
-    .map((t) => ({ id: t.id, title: t.title }));
+    .filter((t) => t.status === "done" && isShown(t))
+    .map((t) => ({ id: t.id, title: clean(t.title) }));
 
   const byBucket = new Map<string, Row[]>();
   let drifting = 0;
   for (const t of tasks) {
-    const { meta, tone } = metaOf(t, nowMs);
+    const { meta, tone } = metaOf(t, nowMs, timeZone);
     if (t.drifted) drifting += 1;
     const key = t.bucket_id ?? "";
     const rows = byBucket.get(key) ?? [];
     rows.push({
       id: t.id,
-      title: t.title,
+      title: clean(t.title),
       meta,
       tone,
       subtasks: t.subtask_count ?? 0,
-      queuePos: queuePos.get(t.id) ?? null,
+      queuePos: position.get(t.id) ?? null,
     });
     byBucket.set(key, rows);
   }
   const groups: Group[] = [];
   for (const b of buckets) {
     const rows = byBucket.get(b.id);
-    if (rows?.length) groups.push({ id: b.id, name: b.name, rows });
+    if (rows?.length) groups.push({ id: b.id, name: clean(b.name), rows });
     byBucket.delete(b.id);
   }
   const rest = [...byBucket.values()].flat();

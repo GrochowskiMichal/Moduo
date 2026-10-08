@@ -20,6 +20,7 @@ export const PROBLEM_TEXT: Record<Problem, string> = {
   noaccess: "This key has no access to Tasks. Create one with Tasks set to view or edit.",
   offline: "Offline · retrying",
   error: "Moduo answered with an error. It will retry on the next refresh.",
+  endpoint: "The Moduo connector URL in this plugin’s settings must start with https://.",
 };
 
 /** Maps an HTTP status (null = no answer at all) and an error message to a problem. */

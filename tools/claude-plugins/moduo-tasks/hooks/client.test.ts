@@ -1,7 +1,7 @@
 import { describe, expect, test } from "claude-code/testing";
 
 import { ConnectorError, classify, parseAnswer } from "./client";
-import { localDate, resolveTimeZone } from "./model";
+import { clean, localDate, resolveTimeZone } from "./model";
 
 const ok = (payload: unknown) =>
   JSON.stringify({
@@ -49,6 +49,15 @@ describe("connector client", () => {
       problem = (err as ConnectorError).problem;
     }
     expect(problem).toBe("error");
+  });
+
+  test("strips terminal escapes from Moduo text", () => {
+    const esc = String.fromCharCode(27);
+    const rlo = String.fromCharCode(0x202e);
+    expect(clean(`${esc}[31mRed${esc}[0m title`)).toBe("[31mRed[0m title");
+    expect(clean(`a${rlo}b\nc\td`)).toBe("abcd");
+    expect(clean("Zażółć gęślą jaźń · MCP-1")).toBe("Zażółć gęślą jaźń · MCP-1");
+    expect(clean(null)).toBe("");
   });
 
   test("uses the local date", () => {

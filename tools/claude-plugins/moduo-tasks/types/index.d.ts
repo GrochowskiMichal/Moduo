@@ -21,7 +21,7 @@ export type Bucket = { id: string; name: string; is_system?: boolean };
 
 export type Filter = "me" | "anyone";
 
-export type Problem = "nokey" | "rejected" | "noaccess" | "offline" | "error";
+export type Problem = "nokey" | "rejected" | "noaccess" | "offline" | "error" | "endpoint";
 
 export type Row = {
   id: string;

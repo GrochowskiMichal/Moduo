@@ -2,7 +2,7 @@ import type { On } from "claude-code";
 import { describe, expect, mock, test } from "claude-code/testing";
 
 const ME = "u-mike";
-const NOW = Date.UTC(2026, 9, 8, 9, 0); // 11:00 in Warsaw
+const NOW = Date.UTC(2026, 9, 7, 22, 30); // 00:30 on 8 October in Warsaw
 const DAY = 86_400_000;
 
 const BUCKETS = [
@@ -28,6 +28,8 @@ const MINE = [
     status: "todo",
     assignee_id: ME,
     subtask_count: 3,
+    blocked: true,
+    recurrence: { rrule: "FREQ=WEEKLY" },
   },
   {
     id: "t3",
@@ -67,9 +69,13 @@ const QUEUE = [
 type Calls = { tools: string[]; dates: string[]; auth: string[] };
 
 /** A fake moduo-mcp: answers tools/call by tool name, records what it was asked. */
-function fakeModuo(on: On, calls: Calls, mode: "ok" | "offline" = "ok") {
+function fakeModuo(on: On, calls: Calls, mode: "ok" | "offline" | "nomine" | "rejected" = "ok") {
   on("http.fetch", (_$, e) => {
     if (mode === "offline") throw new Error("network down");
+    if (mode === "rejected") {
+      calls.tools.push("rejected");
+      return { value: { status: 401, ok: false, headers: {}, text: "Unauthorized" } } as never;
+    }
     const req = JSON.parse(e.init?.body ?? "{}") as {
       id: number;
       params: { name: string; arguments: Record<string, unknown> };
@@ -79,7 +85,10 @@ function fakeModuo(on: On, calls: Calls, mode: "ok" | "offline" = "ok") {
     calls.auth.push(e.init?.headers?.Authorization ?? "");
     let payload: unknown = null;
     if (name === "tasks_list_buckets") payload = BUCKETS;
-    if (name === "tasks_list") payload = args.assignee === "me" ? MINE : [...MINE, ...THEIRS];
+    if (name === "tasks_list") {
+      const mine = mode === "nomine" ? [] : MINE;
+      payload = args.status === "done" ? [] : args.assignee === "me" ? mine : [...mine, ...THEIRS];
+    }
     if (name === "tasks_today") {
       calls.dates.push(String(args.date));
       payload = { date: args.date, queue: QUEUE };
@@ -153,18 +162,22 @@ describe("My tasks panel", () => {
       } as never);
       const all = texts(await ui.findAll({ type: "Text" }));
       expect(all).toContain("BUILD 2");
+      expect(all.indexOf("BUILD 2")).toBeLessThan(all.indexOf("SETUP 1"));
+      expect(all).toContain("blocked · repeats");
       expect(all).toContain("SETUP 1");
       expect(all).not.toContain("INBOX");
-      expect(all).toContain("drifting 2 days");
+      // Scheduled 23:30 on 5 October Warsaw time, now 00:30 on 8 October: 3 local calendar days.
+      expect(all).toContain("drifting 3 days");
       expect(all).toContain("3 subtasks");
       expect(all).toContain("Queue #1");
       expect(all).toContain("1. MCP-1 · Connector hardening · 2 h");
       expect(all).not.toContain("Privacy policy copy");
-      expect((await ui.find({ key: "done-toggle" }))?.text ?? "").toContain("done today (1)");
+      expect((await ui.find({ key: "done-toggle" }))?.text ?? "").toContain("Done today (1)");
 
       await ui.press({ key: "filter-anyone" });
       const everyone = texts(await ui.findAll({ type: "Text" }));
       expect(everyone).toContain("INBOX 1");
+      expect(everyone.indexOf("INBOX 1")).toBeLessThan(everyone.indexOf("BUILD 2"));
       expect(everyone).toContain("Privacy policy copy");
       expect(everyone).toContain("2. Privacy policy copy");
       await ui.press({ key: "filter-me" });
@@ -240,6 +253,54 @@ describe("band and reopen", () => {
   });
 });
 
+describe("edge cases", () => {
+  test(
+    "no open tasks of mine: no one else's queue under Assigned to me",
+    OPTIONS,
+    async ($, on) => {
+      const calls: Calls = { tools: [], dates: [], auth: [] };
+      mock.clock(on, { now: NOW });
+      mock.store(on);
+      fakePanes(on);
+      fakeModuo(on, calls, "nomine");
+
+      await $.command.run({ command: "mine", args: "" } as never);
+      const ui = await $.ui.mount({
+        plugin: "moduo-tasks",
+        surface: "terminal",
+        component: "Pane",
+        requestId: "moduo-mine",
+        props: PANE_PROPS,
+      } as never);
+      const all = texts(await ui.findAll({ type: "Text" }));
+      expect(all).toContain("Nothing assigned to you");
+      expect(all).toContain("Nothing committed for today");
+      expect(all).not.toContain("Privacy policy copy");
+    },
+  );
+
+  test("a rejected key says so and stops polling", OPTIONS, async ($, on) => {
+    const calls: Calls = { tools: [], dates: [], auth: [] };
+    const clock = mock.clock(on, { now: NOW });
+    mock.store(on);
+    fakePanes(on);
+    fakeModuo(on, calls, "rejected");
+
+    await $.command.run({ command: "mine", args: "" } as never);
+    const ui = await $.ui.mount({
+      plugin: "moduo-tasks",
+      surface: "terminal",
+      component: "Pane",
+      requestId: "moduo-mine",
+      props: PANE_PROPS,
+    } as never);
+    expect(texts(await ui.findAll({ type: "Text" }))).toContain("Moduo rejected the key");
+    const before = calls.tools.length;
+    await clock.advance(5 * 60_000);
+    expect(calls.tools.length).toBe(before);
+  });
+});
+
 describe("without a key", () => {
   test("silent without a key", async ($, on) => {
     const calls: Calls = { tools: [], dates: [], auth: [] };
@@ -248,8 +309,20 @@ describe("without a key", () => {
     fakePanes(on);
     fakeModuo(on, calls);
 
+    // Stands in for the engine's own band: an empty Box the plugin passes through to.
+    on("ui.render", ($, e) => {
+      const { Box } = $.ui.resolve(e);
+      return h(Box, { key: "engine-band" }) as never;
+    });
     const answer = await $.command.run({ command: "mine", args: "" } as never);
     expect(answer.text).toContain("Add your Moduo API key");
+    const band = await $.ui.mount({
+      plugin: "moduo-tasks",
+      surface: "terminal",
+      component: "AbovePrompt",
+      props: { hasSurvey: false, isWorking: false, maxRows: 3, bodyColumns: 90 } as never,
+    } as never);
+    expect(texts(await band.findAll({ type: "Text" }))).not.toContain("Moduo");
     expect(calls.tools).toEqual([]);
   });
 });
