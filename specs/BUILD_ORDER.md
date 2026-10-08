@@ -109,7 +109,7 @@ _Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
 > - **Order:** top to bottom, every dep listed above its dependents. The lane table below shows what can run at once.
 
 - [ ] **TV-Q1 — Quick fixes** ✅ · tasks-v2 block 1 · deps: — · lane tasks-ui · ⌘K/⌘⇧K no longer swallowed by the list, DnD activator fix, no bucket pill where implied, delete-bucket confirm + Undo, shortcut sheet ⌘1–7
-- [ ] **TV-F1 — Focus engine (wall-clock, persisted, away, notifications)** ✅ · tasks-v2 block 2 · deps: — · lane focus
+- [~] **TV-F1 — Focus engine (wall-clock, persisted, away, notifications)** ✅ · tasks-v2 block 2 · deps: — · lane focus · _claimed 2026-10-08 · `t/maciej/tv-f1-focus-engine`_
 - [ ] **DS-1 — State tokens + global scrollbars + Storybook appearance** ✅ · design-state-layer block 1 · deps: — · lane design
 - [ ] **TV-D1 — Safer saves + assignee data** ✅ · tasks-v2 block 3 · deps: — · lane data · migration (expand only; shims for old desktop builds) — round-trip, then apply to prod in-session
 - [ ] **AT-1 — Attachments storage, limits, trash** ✅ · attachments block 1 · deps: — · lane attachments · migration + `purge-deleted` Edge Function; confirm the hosted upload limit ≥ 500 MB
