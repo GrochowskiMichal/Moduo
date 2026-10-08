@@ -1,19 +1,7 @@
 import type { DraggableSyntheticListeners } from "@dnd-kit/core";
-import {
-  CalendarDays,
-  Check,
-  ChevronDown,
-  ChevronRight,
-  CircleDashed,
-  Clock,
-  CornerDownRight,
-  Inbox,
-  Repeat,
-} from "lucide-react";
+import { Check, ChevronDown, ChevronRight, CornerDownRight, Inbox } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { SELECTED_ROW } from "@/components/ui/selection";
-import { TagChipList } from "../../../components/tag-chip";
-import { Badge } from "../../../components/ui/badge";
 import { CompleteToggle } from "../../../components/ui/complete-toggle";
 import {
   ContextMenu,
@@ -33,22 +21,20 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/
 import { cn } from "../../../lib/utils";
 import { assigneeLabel } from "../assignee-options";
 import { useAssignees } from "../assignees";
-import {
-  formatDue,
-  formatScheduled,
-  LEVEL_OPTIONS,
-  toDateInputValue,
-  toLocalInputValue,
-} from "../helpers";
+import { LEVEL_OPTIONS, toDateInputValue, toLocalInputValue } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
-import { type EnergyLevel, isDrifted, type PriorityLevel, type Task } from "../model";
-import { recurrenceLabel } from "../parse/recurrence";
+import type { EnergyLevel, PriorityLevel, Task } from "../model";
+import { ALL_ROW_COLUMNS, type RowColumns, type RowDate, rowDate } from "../row-layout";
 import { AssignContextMenu } from "./assign-context-menu";
 import { AssigneeAvatar } from "./assignee-avatar";
 import type { DragActivatorRef } from "./dnd/task-dnd";
-import { LevelDots } from "./level-icons";
+import { EnergyMark, PriorityMark } from "./level-icons";
 import { ROW_TITLE_ATTR } from "./list-keys";
 import { QueueToggle } from "./queue-toggle";
+import { BucketLabel, DateMark, TaskCounts } from "./task-meta";
+
+// The blocked marker moved to task-meta; the Timeline still imports it here.
+export { BlockedMarker } from "./task-meta";
 
 /** Which inline popover the keyboard asked to open on this row. */
 export type RowCommand = "bucket" | "schedule" | "due" | null;
@@ -68,8 +54,11 @@ type Props = {
   onEndEdit: () => void;
   onClearCommand: () => void;
   onRequestCommand: (command: RowCommand) => void;
-  /** Click a tag chip to toggle it in the view filter. */
-  onTagFilter?: (tagId: string) => void;
+  /**
+   * The right-hand columns this view shows (computed once per list, so every
+   * row's meta lines up). A row rendered on its own shows them all.
+   */
+  columns?: RowColumns;
   /**
    * Reserve the expand gutter so checkboxes stay aligned. The list turns this
    * on only when the scope actually nests subtasks (quiet until used).
@@ -79,8 +68,6 @@ type Props = {
   expandable?: boolean;
   expanded?: boolean;
   onToggleExpand?: () => void;
-  /** Quiet n/m subtask progress (parents only; mirror, never a wall). */
-  progress?: { done: number; total: number } | null;
   /** Render indented one level (the row is a nested subtask). */
   nested?: boolean;
   /** Parent title caption for subtasks rendered flat (Today queue, or a scope
@@ -101,6 +88,12 @@ type Props = {
   api: TasksModuleApi;
 };
 
+/**
+ * One task in the List (tasks-v2 §6): checkbox · title · quiet counts, then
+ * fixed right-hand columns (priority · [energy] · date · assignee · queue) so
+ * the meta lines up down the list. A done row dims as a whole except its
+ * checkbox; selection is the tint (DS-2), never a bar.
+ */
 export function TaskRow({
   task,
   bucketName,
@@ -116,12 +109,11 @@ export function TaskRow({
   onEndEdit,
   onClearCommand,
   onRequestCommand,
-  onTagFilter,
+  columns = ALL_ROW_COLUMNS,
   expandSlot = false,
   expandable = false,
   expanded = false,
   onToggleExpand,
-  progress = null,
   nested = false,
   parentTitle = null,
   dragListeners,
@@ -131,11 +123,8 @@ export function TaskRow({
   api,
 }: Props) {
   const done = task.status === "done";
-  const drifted = isDrifted(task);
   const queued = api.queuedTaskIds.has(task.id);
-  const scheduled = formatScheduled(task.scheduledAt);
-  const due = formatDue(task.dueDate);
-  const tags = api.tagsByTask.get(task.id) ?? [];
+  const claimed = (api.queueClaims.get(task.id)?.length ?? 0) > 0;
   // Menu items that hand focus to something in the row (the title editor, a
   // chip's popover) run once the context menu has closed: Radix returns focus
   // to the list a tick after the menu unmounts, and whatever opened sooner
@@ -149,6 +138,9 @@ export function TaskRow({
   const { assignees, byId } = useAssignees();
   const assignee = byId(task.assigneeId);
   const assigneeName = assigneeLabel(task.assigneeId, byId);
+  // Solo workspaces have nobody to tell apart — the avatar only appears with teammates.
+  const withAssignee = columns.assignee && showAssignee && assignees.length > 1;
+  const dateCommand = command === "schedule" || command === "due";
 
   const row = (
     <div
@@ -156,11 +148,13 @@ export function TaskRow({
       role="row"
       aria-selected={selected}
       data-task-id={task.id}
+      data-done={done || undefined}
       onClick={onSelect}
       {...(editing ? {} : dragListeners)}
       className={cn(
-        "group relative flex items-center gap-2 rounded-md px-2 py-0.5 text-sm",
+        "group relative flex items-center gap-3 rounded-md py-0.5 pr-2.5 pl-2 text-sm",
         "border border-transparent select-none",
+        "transition-colors duration-(--motion-fade) ease-(--ease-out)",
         // Whole-row drag (queue reorder / drag-to-nest): a grab cursor signals
         // it; a 6px activation distance keeps plain clicks selecting the row.
         dragListeners ? "cursor-grab active:cursor-grabbing" : "cursor-default",
@@ -211,6 +205,7 @@ export function TaskRow({
       ) : null}
       <CompleteToggle done={done} disabled={!canEdit} onToggle={() => api.toggleDone(task)} />
 
+      {/* A done row dims as a whole, except its checkbox (tasks-v2 §6). */}
       {editing ? (
         <div className="min-w-0 flex-1">
           <TitleEditor
@@ -224,16 +219,19 @@ export function TaskRow({
           />
         </div>
       ) : (
-        <div className="flex min-w-0 flex-1 items-center gap-2">
+        <div
+          data-slot="row-title"
+          className={cn("flex min-w-0 flex-1 items-center gap-2.5", done && "opacity-40")}
+        >
           <button
             type="button"
             // Clicking the title selects the row, so its Space/Enter stay the
             // List's (complete / edit), unlike the row's other buttons.
             {...{ [ROW_TITLE_ATTR]: "" }}
             className={cn(
-              // flex-1 so the title keeps priority; chips shrink/truncate first.
+              // The title shrinks first; the counts sit right after it.
               // Body font (content, not chrome) at 15px — quiet, Linear/Todoist-ward.
-              "min-w-0 flex-1 truncate text-left font-sans text-md",
+              "min-w-0 truncate text-left font-sans text-md",
               done
                 ? "text-muted-foreground line-through"
                 : blocked
@@ -251,88 +249,92 @@ export function TaskRow({
           >
             {task.title || "Untitled"}
           </button>
-          {progress && progress.total > 0 ? (
-            // quiet subtask progress — a mirror, never a wall (principles 4 & 5)
-            <span className="shrink-0 font-sans text-xs text-muted-foreground tabular-nums">
-              {progress.done}/{progress.total}
-            </span>
-          ) : null}
+          <TaskCounts task={task} api={api} />
           {parentTitle ? (
-            <span className="flex min-w-0 shrink items-center gap-1 truncate font-sans text-xs text-muted-foreground">
-              <CornerDownRight className="size-3 shrink-0 opacity-70" aria-hidden />
+            <span className="flex min-w-0 shrink-3 items-center gap-1 truncate font-sans text-xs text-muted-foreground">
+              <CornerDownRight className="size-icon-xs shrink-0 opacity-70" aria-hidden />
               <span className="truncate">{parentTitle}</span>
             </span>
           ) : null}
-          <TagChipList tags={tags} max={3} onTagClick={onTagFilter} className="min-w-0 shrink" />
+          {showBucket || canEdit ? (
+            <BucketPopover
+              task={task}
+              buckets={buckets}
+              inboxId={inboxId}
+              bucketName={bucketName}
+              showLabel={showBucket}
+              canEdit={canEdit}
+              open={command === "bucket"}
+              onOpenChange={(o) => (o ? onRequestCommand("bucket") : onClearCommand())}
+              api={api}
+            />
+          ) : null}
         </div>
       )}
 
-      {/* meta cluster — quiet, right-aligned */}
-      <div className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
-        {blocked ? <BlockedMarker taskId={task.id} api={api} /> : null}
-
-        {task.recurrence ? (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="flex items-center" aria-label="Recurring">
-                <Repeat className="size-3.5" aria-hidden />
-              </span>
-            </TooltipTrigger>
-            <TooltipContent>{recurrenceLabel(task.recurrence)}</TooltipContent>
-          </Tooltip>
+      {/* Fixed columns: each cell has a set width, so a column lines up down
+          the list, and an empty cell still holds its place. */}
+      <div
+        data-slot="row-columns"
+        className={cn("flex shrink-0 items-center gap-3", done && "opacity-40")}
+      >
+        {columns.priority ? (
+          <span data-col="priority" className="flex w-icon-sm shrink-0 items-center justify-center">
+            <PriorityMark level={task.priority} />
+          </span>
         ) : null}
-
-        <LevelDots task={task} />
-
-        {/* Solo workspaces have nobody to tell apart — the avatar only appears with teammates. */}
-        {showAssignee && assignees.length > 1 ? (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="flex items-center" aria-label={`Assignee: ${assigneeName}`}>
-                <AssigneeAvatar assignee={assignee} className="size-4" />
-              </span>
-            </TooltipTrigger>
-            <TooltipContent>{assigneeName}</TooltipContent>
-          </Tooltip>
+        {columns.energy ? (
+          <span data-col="energy" className="flex w-icon-sm shrink-0 items-center justify-center">
+            <EnergyMark level={task.energyLevel} />
+          </span>
         ) : null}
-
-        <SchedulePopover
-          task={task}
-          canEdit={canEdit}
-          open={command === "schedule"}
-          onOpenChange={(o) => (o ? onRequestCommand("schedule") : onClearCommand())}
-          label={scheduled}
-          drifted={drifted}
-          api={api}
-        />
-
-        <DuePopover
-          task={task}
-          canEdit={canEdit}
-          open={command === "due"}
-          onOpenChange={(o) => (o ? onRequestCommand("due") : onClearCommand())}
-          label={due}
-          api={api}
-        />
-
-        {showBucket || canEdit ? (
-          <BucketPopover
+        {columns.date || dateCommand ? (
+          <DateCell
             task={task}
-            buckets={buckets}
-            inboxId={inboxId}
-            bucketName={bucketName}
-            showPill={showBucket}
             canEdit={canEdit}
-            open={command === "bucket"}
-            onOpenChange={(o) => (o ? onRequestCommand("bucket") : onClearCommand())}
+            command={dateCommand ? command : null}
+            onRequestCommand={onRequestCommand}
+            onClearCommand={onClearCommand}
             api={api}
           />
         ) : null}
-
+        {withAssignee ? (
+          <span data-col="assignee" className="flex w-icon shrink-0 items-center justify-center">
+            {task.assigneeId ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span
+                    className="flex items-center"
+                    role="img"
+                    aria-label={`Assignee: ${assigneeName}`}
+                  >
+                    <AssigneeAvatar assignee={assignee} className="size-icon" />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>{assigneeName}</TooltipContent>
+              </Tooltip>
+            ) : null}
+          </span>
+        ) : null}
         {/* Queue mark — pinned to the far right so it has one predictable,
             targetable home (the marker IS the action): my queue toggle, or a
-            teammate's ringed avatar when it's in their queue (TV-D4). */}
-        <QueueToggle task={task} api={api} canEdit={canEdit} />
+            teammate's ringed avatar when it's in their queue (TV-D4). The
+            toggle shows on hover, focus or selection unless the task is
+            queued or claimed (the comp); it keeps its space and fades (R6). */}
+        {columns.queue ? (
+          <span
+            data-col="queue"
+            className={cn(
+              "flex shrink-0 items-center justify-end gap-1",
+              columns.queueWide ? "w-[calc(var(--icon)*2_+_0.25rem)]" : "w-icon",
+              !queued &&
+                !claimed &&
+                "opacity-0 transition-opacity duration-(--motion-fade) ease-(--ease-out) group-hover:opacity-100 group-aria-selected:opacity-100 focus-within:opacity-100",
+            )}
+          >
+            <QueueToggle task={task} api={api} canEdit={canEdit} />
+          </span>
+        ) : null}
       </div>
     </div>
   );
@@ -428,28 +430,6 @@ export function TaskRow({
   );
 }
 
-// ── blocked marker (computed, ambient — dim/quiet, never red; spec §5c) ───────
-
-export function BlockedMarker({ taskId, api }: { taskId: string; api: TasksModuleApi }) {
-  const openBlockers = (api.blockersByTask.get(taskId) ?? []).filter(
-    (b) => b.status !== "done" && b.status !== "archived",
-  );
-  const label =
-    openBlockers.length === 1
-      ? `Blocked by “${openBlockers[0].title || "Untitled"}”`
-      : `Blocked by ${openBlockers.length} tasks`;
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span className="flex items-center" aria-label={label}>
-          <CircleDashed className="size-3.5" aria-hidden />
-        </span>
-      </TooltipTrigger>
-      <TooltipContent>{label}</TooltipContent>
-    </Tooltip>
-  );
-}
-
 // ── inline title editor ───────────────────────────────────────────────────────
 
 function TitleEditor({
@@ -502,170 +482,164 @@ function TitleEditor({
 // the chip itself.
 const keepListFocus = (e: Event) => e.preventDefault();
 
-function MetaChip({
-  active,
-  drifted,
-  icon,
-  children,
+/**
+ * The date column: the one date the row shows (row-layout's `rowDate`), and
+ * the way to edit it. A click opens the editor for the date shown; `s` / `d`
+ * and the menu open the scheduled or due editor whichever is shown. An empty
+ * cell holds its place but offers nothing to click (set a date with the menu,
+ * the keys or the panel), so a stray click on the row never opens an editor.
+ */
+function DateCell({
+  task,
+  canEdit,
+  command,
+  onRequestCommand,
+  onClearCommand,
+  api,
 }: {
-  active: boolean;
-  drifted?: boolean;
-  icon: React.ReactNode;
-  children: React.ReactNode;
+  task: Task;
+  canEdit: boolean;
+  command: "schedule" | "due" | null;
+  onRequestCommand: (command: RowCommand) => void;
+  onClearCommand: () => void;
+  api: TasksModuleApi;
 }) {
+  const date = rowDate(task);
+  const cell = "flex w-19 shrink-0 items-center justify-end";
+  if (!date && !command) return <span data-col="date" className={cell} aria-hidden />;
+  const kind = command ?? (date?.kind === "due" ? "due" : "schedule");
+  const fieldLabel = kind === "due" ? "Due date" : "Scheduled time";
+  const label = date ? `${fieldLabel}: ${date.description}` : fieldLabel;
+
+  if (!canEdit) {
+    return (
+      <span data-col="date" className={cell}>
+        {date ? (
+          <DateTip date={date}>
+            <span role="img" aria-label={label} className="flex min-w-0 items-center">
+              <DateMark date={date} />
+            </span>
+          </DateTip>
+        ) : null}
+      </span>
+    );
+  }
+
+  const trigger = (
+    <PopoverTrigger asChild>
+      <button
+        type="button"
+        data-col="date"
+        onClick={(e) => e.stopPropagation()}
+        aria-label={label}
+        className={cn(
+          cell,
+          "rounded-sm px-1 transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+        )}
+      >
+        {date ? <DateMark date={date} /> : null}
+      </button>
+    </PopoverTrigger>
+  );
+
   return (
-    <span
-      className={cn(
-        "flex items-center gap-1 rounded px-1 py-0.5 font-sans transition-colors hover:bg-muted",
-        active ? "text-foreground" : "text-muted-foreground",
-        // drift is ambient — a quiet emphasis, never red / "overdue"
-        drifted && "text-foreground",
-      )}
+    <Popover
+      open={command !== null}
+      onOpenChange={(o) => (o ? onRequestCommand(kind) : onClearCommand())}
     >
-      {icon}
-      {children}
-    </span>
-  );
-}
-
-function SchedulePopover({
-  task,
-  canEdit,
-  open,
-  onOpenChange,
-  label,
-  drifted,
-  api,
-}: {
-  task: Task;
-  canEdit: boolean;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  label: string | null;
-  drifted: boolean;
-  api: TasksModuleApi;
-}) {
-  if (!canEdit && !label) return null;
-  return (
-    <Popover open={open} onOpenChange={onOpenChange}>
-      <PopoverTrigger asChild disabled={!canEdit}>
-        <button
-          type="button"
-          onClick={(e) => e.stopPropagation()}
-          aria-label="Scheduled time"
-          // Show only when a time is set (or the keyboard opened the popover).
-          // No empty hover-reveal — it flickered and shifted the row for no gain;
-          // set/clear instead via right-click, the `s` key, or the detail panel.
-          className={cn("items-center", label || open ? "flex" : "hidden")}
-        >
-          <MetaChip
-            active={!!label}
-            drifted={drifted}
-            icon={<Clock className="size-3.5" aria-hidden />}
-          >
-            {label}
-          </MetaChip>
-        </button>
-      </PopoverTrigger>
+      {date ? <DateTip date={date}>{trigger}</DateTip> : trigger}
       <PopoverContent
         className="w-auto p-3"
         onClick={(e) => e.stopPropagation()}
         onCloseAutoFocus={keepListFocus}
         align="end"
       >
-        <label className="mb-1 block text-xs font-medium text-muted-foreground">
-          Scheduled time
-        </label>
-        <Input
-          type="datetime-local"
-          autoFocus
-          defaultValue={toLocalInputValue(task.scheduledAt)}
-          className="h-8"
-          onChange={(e) => {
-            const v = e.target.value;
-            api.patchTask(task.id, { scheduledAt: v ? new Date(v).toISOString() : null });
-          }}
-        />
-        {task.scheduledAt ? (
-          <button
-            type="button"
-            className="mt-2 text-xs text-muted-foreground hover:text-foreground"
-            onClick={() => {
-              api.patchTask(task.id, { scheduledAt: null });
-              onOpenChange(false);
-            }}
-          >
-            Clear
-          </button>
-        ) : null}
+        {kind === "schedule" ? (
+          <ScheduleEditor task={task} api={api} onDone={onClearCommand} />
+        ) : (
+          <DueEditor task={task} api={api} onDone={onClearCommand} />
+        )}
       </PopoverContent>
     </Popover>
   );
 }
 
-function DuePopover({
+/** The full dates behind the short label. */
+function DateTip({ date, children }: { date: RowDate; children: React.ReactNode }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      <TooltipContent>{date.description}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+function ScheduleEditor({
   task,
-  canEdit,
-  open,
-  onOpenChange,
-  label,
   api,
+  onDone,
 }: {
   task: Task;
-  canEdit: boolean;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  label: string | null;
   api: TasksModuleApi;
+  onDone: () => void;
 }) {
-  if (!canEdit && !label) return null;
   return (
-    <Popover open={open} onOpenChange={onOpenChange}>
-      <PopoverTrigger asChild disabled={!canEdit}>
+    <>
+      <label className="mb-1 block text-xs font-medium text-muted-foreground">Scheduled time</label>
+      <Input
+        type="datetime-local"
+        autoFocus
+        defaultValue={toLocalInputValue(task.scheduledAt)}
+        className="h-8"
+        onChange={(e) => {
+          const v = e.target.value;
+          api.patchTask(task.id, { scheduledAt: v ? new Date(v).toISOString() : null });
+        }}
+      />
+      {task.scheduledAt ? (
         <button
           type="button"
-          onClick={(e) => e.stopPropagation()}
-          aria-label="Due date"
-          // Show only when a due date is set (or the keyboard opened the popover)
-          // — no empty hover-reveal. Set/clear via right-click, `d`, or the panel.
-          className={cn("items-center", label || open ? "flex" : "hidden")}
-        >
-          <MetaChip active={!!label} icon={<CalendarDays className="size-3.5" aria-hidden />}>
-            {label}
-          </MetaChip>
-        </button>
-      </PopoverTrigger>
-      <PopoverContent
-        className="w-auto p-3"
-        onClick={(e) => e.stopPropagation()}
-        onCloseAutoFocus={keepListFocus}
-        align="end"
-      >
-        <label className="mb-1 block text-xs font-medium text-muted-foreground">Due date</label>
-        <Input
-          type="date"
-          autoFocus
-          defaultValue={toDateInputValue(task.dueDate)}
-          className="h-8"
-          onChange={(e) => {
-            const v = e.target.value;
-            api.patchTask(task.id, { dueDate: v ? new Date(`${v}T00:00:00`).toISOString() : null });
+          className="mt-2 text-xs text-muted-foreground hover:text-foreground"
+          onClick={() => {
+            api.patchTask(task.id, { scheduledAt: null });
+            onDone();
           }}
-        />
-        {task.dueDate ? (
-          <button
-            type="button"
-            className="mt-2 text-xs text-muted-foreground hover:text-foreground"
-            onClick={() => {
-              api.patchTask(task.id, { dueDate: null });
-              onOpenChange(false);
-            }}
-          >
-            Clear
-          </button>
-        ) : null}
-      </PopoverContent>
-    </Popover>
+        >
+          Clear
+        </button>
+      ) : null}
+    </>
+  );
+}
+
+function DueEditor({ task, api, onDone }: { task: Task; api: TasksModuleApi; onDone: () => void }) {
+  return (
+    <>
+      <label className="mb-1 block text-xs font-medium text-muted-foreground">Due date</label>
+      <Input
+        type="date"
+        autoFocus
+        defaultValue={toDateInputValue(task.dueDate)}
+        className="h-8"
+        onChange={(e) => {
+          const v = e.target.value;
+          api.patchTask(task.id, { dueDate: v ? new Date(`${v}T00:00:00`).toISOString() : null });
+        }}
+      />
+      {task.dueDate ? (
+        <button
+          type="button"
+          className="mt-2 text-xs text-muted-foreground hover:text-foreground"
+          onClick={() => {
+            api.patchTask(task.id, { dueDate: null });
+            onDone();
+          }}
+        >
+          Clear
+        </button>
+      ) : null}
+    </>
   );
 }
 
@@ -674,7 +648,7 @@ function BucketPopover({
   buckets,
   inboxId,
   bucketName,
-  showPill,
+  showLabel,
   canEdit,
   open,
   onOpenChange,
@@ -685,8 +659,8 @@ function BucketPopover({
   inboxId: string | null;
   bucketName: string;
   /** False where the bucket is implied (Q1-3). The popover stays mounted so the
-   * `b` key can still open it; the pill then shows as its anchor. */
-  showPill: boolean;
+   * `b` key can still open it; the label then shows as its anchor. */
+  showLabel: boolean;
   canEdit: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -701,13 +675,14 @@ function BucketPopover({
         <button
           type="button"
           onClick={(e) => e.stopPropagation()}
-          aria-label="Bucket"
-          className={showPill || open ? undefined : "hidden"}
+          aria-label={`Bucket: ${bucketName}`}
+          className={cn(
+            "min-w-0 shrink-3 rounded-sm px-1 transition-colors duration-(--motion-fade) ease-(--ease-out)",
+            canEdit && "hover:bg-state-hover",
+            showLabel || open ? "flex" : "hidden",
+          )}
         >
-          <Badge variant="secondary" className="gap-1 font-normal">
-            {task.bucketId === inboxId ? <Inbox className="size-3" aria-hidden /> : null}
-            {bucketName}
-          </Badge>
+          <BucketLabel name={bucketName} isInbox={task.bucketId === inboxId} />
         </button>
       </PopoverTrigger>
       <PopoverContent
@@ -722,7 +697,7 @@ function BucketPopover({
               key={b.id}
               type="button"
               className={cn(
-                "flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-accent",
+                "flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-state-hover",
                 b.id === task.bucketId && "text-foreground",
               )}
               onClick={() => {

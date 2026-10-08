@@ -126,6 +126,7 @@ describe("TaskRow in My tasks (D4-4)", () => {
     const t = task("t1", { assigneeId: "u1" });
     const rowApi = {
       tagsByTask: new Map(),
+      subtaskProgressByTask: new Map(),
       blockedTaskIds: new Set(),
       ...api([], {}),
     };

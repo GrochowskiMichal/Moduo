@@ -22,16 +22,20 @@ import {
   SelectValue,
 } from "../../../components/ui/select";
 import { cn } from "../../../lib/utils";
+import { useAssignees } from "../assignees";
+import { type CompletedMode, partitionCompleted } from "../completed";
 import {
   canNestUnder,
   type GroupBy,
   groupsByBucket,
   groupTasks,
+  isOpen,
   nestedSubtaskIds,
   showBucketPill,
 } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { Bucket, Task } from "../model";
+import { DEFAULT_ROW_PROPERTIES, rowColumns } from "../row-layout";
 import {
   asTaskDropTarget,
   DndBoundary,
@@ -43,6 +47,7 @@ import {
 } from "./dnd/task-dnd";
 import { listKeyActionFor } from "./list-keys";
 import { type PlanView, PlanViewHeader } from "./plan-view-header";
+import { CompletedLine } from "./task-meta";
 import { type RowCommand, TaskRow } from "./task-row";
 
 type Props = {
@@ -64,8 +69,14 @@ type Props = {
   /** Tag-filter header control + active-chip row (built by the parent). */
   tagFilterControl?: ReactNode;
   activeTagFilters?: ReactNode;
-  /** Click a row's tag chip to toggle it in the filter. */
-  onTagFilter?: (tagId: string) => void;
+  /** The Display menu (built by the parent). */
+  displayControl?: ReactNode;
+  /** Display → Completed (tasks-v2 §6). Default: hidden. The Queue ignores it. */
+  completed?: CompletedMode;
+  /** Display → "Show on rows". */
+  properties?: readonly string[];
+  /** Checked off while this scope has been showing: stays until it changes. */
+  justCompletedIds?: ReadonlySet<string>;
   /** Enable drag-to-reorder (the Queue): a flat, ungrouped, ordered list. */
   reorderable?: boolean;
   /** Persist a reorder — receives the task ids in their new order. */
@@ -84,6 +95,8 @@ type Props = {
   dndMode?: "internal" | "external";
   api: TasksModuleApi;
 };
+
+const NO_IDS: ReadonlySet<string> = new Set();
 
 const GROUP_OPTIONS: Array<{ value: GroupBy; label: string }> = [
   { value: "none", label: "None" },
@@ -110,7 +123,10 @@ export function TaskListView({
   onSelectTask,
   tagFilterControl,
   activeTagFilters,
-  onTagFilter,
+  displayControl,
+  completed = "hidden",
+  properties = DEFAULT_ROW_PROPERTIES,
+  justCompletedIds = NO_IDS,
   reorderable = false,
   onReorder,
   nestable = false,
@@ -164,10 +180,34 @@ export function TaskListView({
     return parent ? parent.title || "Untitled" : null;
   };
 
-  const groups = useMemo(
-    () => groupTasks(topLevelTasks, groupBy, { bucketName: bucketNameById }),
-    [topLevelTasks, groupBy, bucketNameById],
-  );
+  // Groups whose hidden completed tasks were asked for ("· show"); reset with
+  // the collapse state when the scope or grouping changes.
+  const [revealedGroups, setRevealedGroups] = useState<ReadonlySet<string>>(NO_IDS);
+
+  // Completed tasks Display hides drop out of each group, behind its
+  // "N completed · show" line (tasks-v2 §6). The Queue keeps its own rule:
+  // done leaves it, and a task checked off there stays until the next load.
+  const groups = useMemo(() => {
+    const all = groupTasks(topLevelTasks, groupBy, { bucketName: bucketNameById });
+    if (selection === "today") return all.map((g) => ({ ...g, hidden: [] as Task[] }));
+    const now = new Date();
+    // A done parent with open subtasks stays: they nest under it.
+    const keep = (t: Task) =>
+      justCompletedIds.has(t.id) || (api.subtasksByParent.get(t.id) ?? []).some(isOpen);
+    return all.map((g) => {
+      const { shown, hidden } = partitionCompleted(g.tasks, { mode: completed, now, keep });
+      return { ...g, tasks: revealedGroups.has(g.key) ? g.tasks : shown, hidden };
+    });
+  }, [
+    topLevelTasks,
+    groupBy,
+    bucketNameById,
+    selection,
+    completed,
+    justCompletedIds,
+    revealedGroups,
+    api.subtasksByParent,
+  ]);
 
   // Reset collapse state when the scope/grouping changes. For bucket grouping,
   // open one group by default (per the "one open by default" rule); otherwise
@@ -183,7 +223,48 @@ export function TaskListView({
       setCollapsed(new Set());
     }
     setExpandedParents(new Set());
+    setRevealedGroups(NO_IDS);
   }, [groupSignature, groupBy, groups]);
+
+  const toggleRevealGroup = useCallback((key: string) => {
+    setRevealedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
+
+  // The right-hand columns, from every row the view can show (the listed
+  // rows and their subtasks), so the meta lines up and an empty column
+  // collapses (tasks-v2 §6, U1-1).
+  const { assignees } = useAssignees();
+  const columns = useMemo(() => {
+    const rows: Task[] = [];
+    for (const group of groups) {
+      for (const task of group.tasks) {
+        rows.push(task);
+        if (nest) rows.push(...(api.subtasksByParent.get(task.id) ?? []));
+      }
+    }
+    return rowColumns(rows, {
+      properties,
+      showAssignee: showAssignee && assignees.length > 1,
+      canEdit,
+      isQueued: (id) => api.queuedTaskIds.has(id),
+      isClaimed: (id) => (api.queueClaims.get(id)?.length ?? 0) > 0,
+    });
+  }, [
+    groups,
+    nest,
+    api.subtasksByParent,
+    api.queuedTaskIds,
+    api.queueClaims,
+    properties,
+    showAssignee,
+    assignees.length,
+    canEdit,
+  ]);
 
   const toggleExpandParent = useCallback((id: string) => {
     setExpandedParents((prev) => {
@@ -408,7 +489,7 @@ export function TaskListView({
         if (!leftForElsewhere) containerRef.current?.focus();
       },
       onRequestCommand: (kind: RowCommand) => setCommand({ taskId: t.id, kind }),
-      onTagFilter,
+      columns,
       api,
     }),
     [
@@ -422,7 +503,7 @@ export function TaskListView({
       command,
       canEdit,
       setSelectedId,
-      onTagFilter,
+      columns,
       api,
     ],
   );
@@ -448,7 +529,6 @@ export function TaskListView({
           expandable={children.length > 0}
           expanded={expanded}
           onToggleExpand={() => toggleExpandParent(task.id)}
-          progress={api.subtaskProgressByTask.get(task.id) ?? null}
           parentTitle={parentTitleFor(task)}
           dragListeners={drag?.dragListeners}
           dragActivatorRef={drag?.dragActivatorRef}
@@ -546,6 +626,7 @@ export function TaskListView({
         canEdit={canEdit}
         onRequestCapture={onRequestCapture}
         filterControl={tagFilterControl}
+        displayControl={displayControl}
         activeFilters={activeTagFilters}
         groupControl={
           <div className="flex items-center gap-1.5">
@@ -641,6 +722,11 @@ export function TaskListView({
                 }
               />
             ))}
+            <CompletedLine
+              count={groups[0]?.hidden.length ?? 0}
+              shown={revealedGroups.has(groups[0]?.key ?? "")}
+              onToggle={() => toggleRevealGroup(groups[0]?.key ?? "")}
+            />
             {createPortal(
               <DragOverlay>
                 {nestActiveTask ? (
@@ -673,14 +759,25 @@ export function TaskListView({
                     )}
                     {group.label}
                     <span className="font-sans text-muted-foreground/70 tabular-nums">
-                      {group.tasks.length}
+                      {revealedGroups.has(group.key)
+                        ? group.tasks.length
+                        : group.tasks.length + group.hidden.length}
                     </span>
                   </button>
                 ) : null}
 
-                {!isCollapsed
-                  ? group.tasks.map((task) => <div key={task.id}>{renderParentRow(task)}</div>)
-                  : null}
+                {!isCollapsed ? (
+                  <>
+                    {group.tasks.map((task) => (
+                      <div key={task.id}>{renderParentRow(task)}</div>
+                    ))}
+                    <CompletedLine
+                      count={group.hidden.length}
+                      shown={revealedGroups.has(group.key)}
+                      onToggle={() => toggleRevealGroup(group.key)}
+                    />
+                  </>
+                ) : null}
               </div>
             );
           })

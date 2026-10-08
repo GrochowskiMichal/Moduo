@@ -12,6 +12,7 @@ import { onCreateNew } from "../../../components/app/create-events";
 import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell";
 import { truncationNotice } from "../../../components/app/truncation-notice";
 import { Button } from "../../../components/ui/button";
+import { DisplayMenu } from "../../../components/ui/display-menu";
 import { restoreNavFocus } from "../../../components/ui/nav-row";
 import {
   asDragPayload,
@@ -22,11 +23,13 @@ import {
 import type { EntityRef } from "../../../lib/entity-links";
 import { ENTITY_OPEN_EVENT, takeEntityOpenIntent } from "../../../lib/entity-open";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
+import { useViewPrefs } from "../../../lib/view-prefs";
 import { HubDropZone } from "../../contacts/ui/hub-drop-zone";
 import { flushFocusSession, registerFocusFlushSink } from "../../focus/engine";
 import { consumeFocusViewRequest, FOCUS_VIEW_REQUEST_EVENT } from "../../focus/view-request";
 import { createLinkWithToast } from "../../spine/ui/drop-link-toast";
 import { useAssignees } from "../assignees";
+import { useJustCompleted } from "../completed";
 import {
   timeBlockByBucket as invertTimeBlocks,
   myTasksScope,
@@ -34,6 +37,12 @@ import {
   resolveDefaultSelection,
   showsMyTasks,
 } from "../default-view";
+import {
+  sanitizeTasksDisplay,
+  TASKS_DISPLAY_DEFAULTS,
+  tasksDisplayControls,
+  tasksDisplayKey,
+} from "../display";
 import { type GroupBy, groupsByBucket, taskMatchesTagFilter } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import { isDrifted, type Task } from "../model";
@@ -613,6 +622,25 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       />
     ) : undefined;
 
+  // Display (tasks-v2 §7): remembered per workspace and scope on this device.
+  // TV-U1 ships Completed and "Show on rows"; TV-U2 adds the rest.
+  const [display, setDisplay] = useViewPrefs(
+    tasksDisplayKey(workspaceId, selection),
+    TASKS_DISPLAY_DEFAULTS,
+    sanitizeTasksDisplay,
+  );
+  const displayControl = (
+    <DisplayMenu
+      controls={tasksDisplayControls(selection)}
+      value={display}
+      onValueChange={setDisplay}
+      defaultValue={TASKS_DISPLAY_DEFAULTS}
+    />
+  );
+  // A task checked off here stays in place, struck through, until the scope
+  // changes or the page reloads (tasks-v2 §6).
+  const justCompletedIds = useJustCompleted(tasks, `${workspaceId}:${selection}`);
+
   const sharedViewProps = {
     tasks: scopeTasks,
     scopeTitle,
@@ -628,8 +656,14 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     onSelectTask: setSelectedTaskId,
     tagFilterControl,
     activeTagFilters,
-    onTagFilter: toggleTagFilter,
     api: viewApi,
+  };
+  // List and Board follow Display; the Timeline keeps its own rules.
+  const displayProps = {
+    displayControl,
+    completed: display.completed,
+    properties: display.properties,
+    justCompletedIds,
   };
 
   // Execute mode is enclosed in the center panel (rails stay visible).
@@ -656,6 +690,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     ) : view === "board" ? (
       <TaskBoardView
         {...sharedViewProps}
+        {...displayProps}
         dndMode="external"
         boardGroupBy={boardGroupBy}
         onBoardGroupByChange={setBoardGroupBy}
@@ -665,6 +700,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     ) : (
       <TaskListView
         {...sharedViewProps}
+        {...displayProps}
         dndMode="external"
         groupBy={effectiveGroupBy}
         onGroupByChange={setGroupBy}
