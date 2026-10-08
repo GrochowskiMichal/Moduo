@@ -92,6 +92,12 @@ class FakeQuery implements DbFilter {
 
   private run(): DbResult {
     const op = this.mode === "delete" ? "delete" : "select";
+    if (this.db.missingTables.has(this.table)) {
+      return {
+        data: null,
+        error: { code: "PGRST205", message: `Could not find the table 'public.${this.table}'` },
+      };
+    }
     if (this.db.fail?.table === this.table && this.db.fail.op === op) {
       return { data: null, error: { message: `${op} ${this.table} failed` } };
     }
@@ -175,6 +181,7 @@ class FakeDb implements ErasureDb {
   }
 
   missingBuckets = new Set<string>();
+  missingTables = new Set<string>();
 
   bucket(name: string): FakeBucket {
     let bucket = this.buckets.get(name);
@@ -407,6 +414,11 @@ function world() {
   ]) {
     db.bucket("attachments").files.add(path);
   }
+  db.tables.attachments = [
+    { id: "att-1", workspace_id: "ws-solo", object_path: "ws-solo/att-1/original.png", preview_path: "ws-solo/att-1/preview.webp" },
+    { id: "att-2", workspace_id: "ws-trashed", object_path: "ws-trashed/att-2/original.pdf", preview_path: null },
+    { id: "att-3", workspace_id: "ws-team", object_path: "ws-team/att-3/original.png", preview_path: null },
+  ];
 
   const stripe = new FakeStripe();
   stripe.addCustomer("cus_me", ME, [
@@ -489,9 +501,9 @@ describe("deleteAccount — erasing what the FK cascade can't reach", () => {
     expect([...db.bucket("attachments").files]).toEqual(["ws-team/att-3/original.png"]);
   });
 
-  it("treats a missing attachments bucket (before AT-1's migration) as nothing to remove", async () => {
+  it("treats a missing attachments table (before AT-1's migration) as nothing to remove", async () => {
     const { db, deps } = world();
-    db.missingBuckets.add("attachments");
+    db.missingTables.add("attachments");
 
     const result = await deleteAccount(deps, me);
 

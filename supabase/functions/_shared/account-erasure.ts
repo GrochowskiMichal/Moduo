@@ -15,9 +15,10 @@
  *                     (PRIV-2b, SQL account_scrub_stripe_mirror). Invoices stay.
  *   3. storage        profiles/{uid}/… and workspaces/{owned workspace}/… in the public
  *                     `avatars` bucket (public files stay readable by URL until removed),
- *                     and {owned workspace}/… in the private `attachments` bucket (AT-1:
- *                     the cascade takes those rows, never the objects). Files the user
- *                     put in other people's workspaces stay, uploader cleared by the FK.
+ *                     and every file the owned workspaces' `attachments` rows name in the
+ *                     private `attachments` bucket (AT-1: the cascade takes the rows, never
+ *                     the objects). Files the user put in other people's workspaces stay,
+ *                     uploader cleared by the FK.
  *   4. booking        the user's booking links, the bookings and busy windows tied to
  *                     them, and their co-host seats on other people's links. No FK.
  *   5. integrations   user_integrations: the encrypted Google / Zoom tokens. No FK.
@@ -471,38 +472,50 @@ async function removeStoredImages(deps: ErasureDeps, userId: string): Promise<vo
   const owned = await selectAll<{ id: string }>(deps, "workspaces", "id", (q) =>
     q.eq("owner_id", userId),
   );
-  await removeFolders(deps.db.storage.from(AVATAR_BUCKET), [
-    `profiles/${userId}`,
-    ...owned.map((w) => `workspaces/${w.id}`),
-  ]);
-  // Attachments live at {workspace}/{attachment}/…. Before AT-1's migration the
-  // bucket doesn't exist, which means there is nothing to remove.
-  await removeFolders(
-    deps.db.storage.from(ATTACHMENTS_BUCKET),
-    owned.map((w) => w.id),
-    { missingBucketIsEmpty: true },
-  );
+  const avatars = deps.db.storage.from(AVATAR_BUCKET);
+  const paths: string[] = [];
+  for (const prefix of [`profiles/${userId}`, ...owned.map((w) => `workspaces/${w.id}`)]) {
+    paths.push(...(await listFiles(avatars, prefix)));
+  }
+  await removePaths(avatars, paths);
+  await removeAttachments(deps, owned.map((w) => w.id));
 }
 
-async function removeFolders(
-  bucket: StorageBucket,
-  prefixes: string[],
-  options: { missingBucketIsEmpty?: boolean } = {},
-): Promise<void> {
+/** Attachments of the owned workspaces (AT-1), by their rows: one select per
+ *  1000 files instead of one Storage listing per file. Anything a row doesn't
+ *  name is an orphan the daily purge-deleted sweep removes. */
+async function removeAttachments(deps: ErasureDeps, workspaceIds: string[]): Promise<void> {
+  if (workspaceIds.length === 0) return;
+  const size = deps.pageSize ?? POSTGREST_MAX_ROWS;
   const paths: string[] = [];
-  try {
-    for (const prefix of prefixes) paths.push(...(await listFiles(bucket, prefix)));
-  } catch (err) {
-    if (options.missingBucketIsEmpty && err instanceof MissingBucketError) return;
-    throw err;
+  for (const ids of chunks(workspaceIds, 100)) {
+    for (let from = 0; ; from += size) {
+      const { data, error } = await deps.db
+        .from("attachments")
+        .select("id, object_path, preview_path")
+        .in("workspace_id", ids)
+        .order("id")
+        .range(from, from + size - 1);
+      // Before AT-1's migration there is no table, so nothing to remove.
+      if (error && (error.code === "42P01" || error.code === "PGRST205")) return;
+      if (error) throw new Error(`attachments: ${error.message}`);
+      const page = (data ?? []) as { object_path: string; preview_path: string | null }[];
+      for (const row of page) {
+        paths.push(row.object_path);
+        if (row.preview_path) paths.push(row.preview_path);
+      }
+      if (page.length < size) break;
+    }
   }
+  await removePaths(deps.db.storage.from(ATTACHMENTS_BUCKET), paths);
+}
+
+async function removePaths(bucket: StorageBucket, paths: string[]): Promise<void> {
   for (const batch of chunks(paths, STORAGE_PAGE)) {
     const { error } = await bucket.remove(batch);
     if (error) throw new Error(`storage remove: ${error.message}`);
   }
 }
-
-class MissingBucketError extends Error {}
 
 /** Every file under a folder. Listing (not guessing avatar.{ext}) also catches
  *  files a future upload path adds. */
@@ -510,7 +523,6 @@ async function listFiles(bucket: StorageBucket, prefix: string): Promise<string[
   const files: string[] = [];
   for (let offset = 0; ; offset += STORAGE_PAGE) {
     const { data, error } = await bucket.list(prefix, { limit: STORAGE_PAGE, offset });
-    if (error && /bucket not found/i.test(error.message)) throw new MissingBucketError(error.message);
     if (error) throw new Error(`storage list ${prefix}: ${error.message}`);
     const entries = data ?? [];
     for (const entry of entries) {

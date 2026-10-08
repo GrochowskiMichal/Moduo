@@ -271,6 +271,9 @@ AS $$
 DECLARE
   v_changed integer;
 BEGIN
+  -- Hold every pool while recounting: a finalize running now waits, then adds
+  -- its delta on top of the recount instead of being overwritten by it.
+  PERFORM 1 FROM public.storage_usage FOR UPDATE;
   WITH actual AS (
     SELECT w.owner_id,
            coalesce(sum(public.attachments__bytes(a.status, a.deleted_at, a.size_bytes, a.preview_bytes)), 0)::bigint AS bytes
@@ -596,6 +599,10 @@ BEGIN
   IF v_row.deleted_at IS NULL THEN
     RETURN v_row;
   END IF;
+  -- Past 30 days the purge may already be removing its bytes.
+  IF v_row.deleted_at < now() - interval '30 days' THEN
+    RAISE EXCEPTION 'attachment_expired' USING ERRCODE = 'P0001';
+  END IF;
   -- A file trashed with its task comes back with the task.
   IF v_row.deleted_reason <> 'user'
      OR (v_row.entity_type = 'task' AND EXISTS (
@@ -683,7 +690,8 @@ BEGIN
   ELSIF NEW.deleted_at IS NULL AND OLD.deleted_at IS NOT NULL THEN
     UPDATE public.attachments
     SET deleted_at = NULL, deleted_reason = NULL, deleted_batch_id = NULL, updated_at = now()
-    WHERE entity_type = 'task' AND entity_id = NEW.id AND deleted_reason IN ('task', 'bucket');
+    WHERE entity_type = 'task' AND entity_id = NEW.id AND deleted_reason IN ('task', 'bucket')
+      AND deleted_at >= now() - interval '30 days';
     IF FOUND THEN
       SELECT w.owner_id INTO v_owner FROM public.workspaces w WHERE w.id = NEW.workspace_id;
       PERFORM public.attachments__alert(NEW.workspace_id, v_owner);
@@ -697,6 +705,70 @@ CREATE TRIGGER attachments_task_trash
   AFTER UPDATE OF deleted_at ON public.tasks
   FOR EACH ROW WHEN (OLD.deleted_at IS DISTINCT FROM NEW.deleted_at)
   EXECUTE FUNCTION public.attachments__task_trash();
+
+-- The trash clock is the server's. The app stamps tasks.deleted_at and
+-- buckets.deleted_at from the device clock; now that the purge hard-deletes
+-- after 30 days, a wrong (or backdated) clock would skip the restore window.
+-- A delete is stamped now(); a later write can't move the stamp.
+CREATE FUNCTION public.trash__stamp_deleted_at()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = public
+AS $$
+BEGIN
+  IF NEW.deleted_at IS NOT NULL THEN
+    IF TG_OP = 'INSERT' OR OLD.deleted_at IS NULL THEN
+      NEW.deleted_at := now();
+    ELSE
+      NEW.deleted_at := OLD.deleted_at;
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trash_stamp_deleted_at
+  BEFORE INSERT OR UPDATE OF deleted_at ON public.tasks
+  FOR EACH ROW EXECUTE FUNCTION public.trash__stamp_deleted_at();
+CREATE TRIGGER trash_stamp_deleted_at
+  BEFORE INSERT OR UPDATE OF deleted_at ON public.buckets
+  FOR EACH ROW EXECUTE FUNCTION public.trash__stamp_deleted_at();
+
+-- Once a file is finalized its bytes can't change. Policies only see writes
+-- made under the person's own role; this trigger sees every write to the
+-- bucket, whatever path it takes, and refuses any that doesn't land on a
+-- pending row's path. Deletes (the purge) aren't touched.
+CREATE FUNCTION public.attachments__guard_object()
+RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF NEW.bucket_id IS DISTINCT FROM 'attachments'
+     AND (TG_OP = 'INSERT' OR OLD.bucket_id IS DISTINCT FROM 'attachments') THEN
+    RETURN NEW;
+  END IF;
+  IF TG_OP = 'UPDATE'
+     AND NEW.bucket_id IS NOT DISTINCT FROM OLD.bucket_id
+     AND NEW.name IS NOT DISTINCT FROM OLD.name
+     AND NEW.version IS NOT DISTINCT FROM OLD.version
+     AND NEW.metadata IS NOT DISTINCT FROM OLD.metadata THEN
+    RETURN NEW;  -- bookkeeping only (timestamps): the bytes are unchanged
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.attachments a
+    WHERE (a.object_path = NEW.name OR a.preview_path = NEW.name)
+      AND a.status = 'pending')
+     OR (TG_OP = 'UPDATE' AND OLD.name IS DISTINCT FROM NEW.name) THEN
+    RAISE EXCEPTION 'attachment_object_locked' USING ERRCODE = '42501';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER attachments_guard_object
+  BEFORE INSERT OR UPDATE ON storage.objects
+  FOR EACH ROW EXECUTE FUNCTION public.attachments__guard_object();
 
 -- ── 9. Storage policies ────────────────────────────────────────────────────
 -- `storage.objects.name` is written out in full: inside the subquery a bare
@@ -939,6 +1011,8 @@ BEGIN
     'public.storage_usage__reconcile()',
     'public.attachments__alert(uuid, uuid)',
     'public.attachments__task_trash()',
+    'public.trash__stamp_deleted_at()',
+    'public.attachments__guard_object()',
     'public.attachments__purge_candidates(integer)',
     'public.attachments__purge_rows(uuid[])',
     'public.attachments__orphan_objects(integer)',

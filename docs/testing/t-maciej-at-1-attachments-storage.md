@@ -7,6 +7,8 @@
 - [ ] **Do:** after it's applied, `select id, public, file_size_limit, type from storage.buckets where id = 'attachments';` → **Expect:** one row, `public = false`, `524288000`, `STANDARD` _(SQL editor)_
 - [ ] **Do:** `select has_function_privilege('anon','public.attachments_op_begin(uuid, text, uuid, text, text, bigint, text, integer, integer)','EXECUTE'), has_function_privilege('authenticated','public.storage__limits_for_owner(uuid)','EXECUTE'), has_function_privilege('authenticated','public.tasks__purge_expired(integer)','EXECUTE');` → **Expect:** `f f f` _(SQL editor)_
 - [ ] **Do:** `bun run db:reconcile` → **Expect:** no client-callable `*__*` helpers listed for the new functions _(terminal)_
+- [ ] **Do:** `select tgname from pg_trigger where tgrelid = 'storage.objects'::regclass and not tgisinternal;` → **Expect:** `attachments_guard_object` next to Supabase's own two _(SQL editor)_
+- [ ] **Do:** delete a task in the app, then `select deleted_at from tasks where id = '<its id>';` → **Expect:** the server's time of the delete _(web + SQL editor)_
 - [ ] **Do:** replay the replica probe (command in the header of `supabase/probes/attachments.probe.sql`) → **Expect:** ends with `PASS: all` _(terminal, local Postgres 17)_
 
 ## The purge function (`purge-deleted`)
@@ -31,6 +33,8 @@
 - [ ] A size that differs from the declared one fails at finalize and still holds its stored bytes until the purge.
 - [ ] Deleting a file or its task frees the space at once; restoring always works, even over the limit; a task restore brings back its own batch only.
 - [ ] Ownership transfer moves the pool; 80% and 95% notify the owner once each and re-arm under 75%.
+- [ ] Once finalized, a file's bytes can't be replaced or moved by any role (the `storage.objects` guard trigger); nothing lands on a path no pending row names.
+- [ ] Deleting a task or bucket is stamped with the server's time, whatever the device sends; past 30 days nothing can be restored.
 
 ## Known gaps / not-yet-testable
 - Uploads from the app (AT-2), the 📎 mark and Settings → Storage (AT-3): not built yet.

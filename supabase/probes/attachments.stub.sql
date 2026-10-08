@@ -12,7 +12,9 @@
 --   * entities.updated_at;
 --   * the storage schema: storage.buckets and storage.objects with the columns
 --     the migration reads, RLS on, and the table grants Supabase gives
---     authenticated (its policies decide).
+--     authenticated (its policies decide). Production's own triggers on
+--     storage.objects (protect_objects_delete, update_objects_updated_at) are
+--     left out; the probe deletes objects directly, which production refuses.
 
 SET check_function_bodies = off;
 
@@ -68,6 +70,7 @@ CREATE TABLE storage.objects (
   created_at timestamptz DEFAULT now(),
   updated_at timestamptz DEFAULT now(),
   metadata jsonb,
+  version text,
   UNIQUE (bucket_id, name)
 );
 ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;

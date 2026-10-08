@@ -474,6 +474,31 @@ BEGIN
 END;
 $$;
 
+-- Once finalized, the bytes can't change by any path: a signed-upload-URL
+-- write runs outside the person's role (no policy sees it), so the guard
+-- trigger is what refuses it. Here as the service role, which bypasses RLS.
+DO $$
+DECLARE
+  v public.attachments := probe.att((SELECT id FROM probe.f WHERE k = 'main'));
+  e text;
+BEGIN
+  e := probe.try_as(NULL, format($q$UPDATE storage.objects SET metadata = '{"size": 52428800}', version = 'v2' WHERE name = %L$q$, v.object_path));
+  PERFORM probe.ok(e = 'attachment_object_locked', 'guard: a ready file''s bytes can''t be replaced, even outside RLS (' || e || ')');
+  e := probe.try_as(NULL, format($q$UPDATE storage.objects SET name = 'x/y/original.png' WHERE name = %L$q$, v.object_path));
+  PERFORM probe.ok(e = 'attachment_object_locked', 'guard: or moved');
+  e := probe.try_as(NULL, format($q$UPDATE storage.objects SET updated_at = now() WHERE name = %L$q$, v.object_path));
+  PERFORM probe.ok(e = 'ok', 'guard: bookkeeping that leaves the bytes alone is fine');
+  e := probe.try_as(NULL, format($q$INSERT INTO storage.objects (bucket_id, name, metadata) VALUES ('attachments', %L, '{"size": 1}')$q$,
+                                 probe.id('W')::text || '/' || gen_random_uuid()::text || '/original.png'));
+  PERFORM probe.ok(e = 'attachment_object_locked', 'guard: nothing lands on a path no pending row names');
+  INSERT INTO storage.buckets (id, name, public) VALUES ('avatars', 'avatars', true) ON CONFLICT (id) DO NOTHING;
+  e := probe.try_as(NULL, $q$INSERT INTO storage.objects (bucket_id, name, metadata) VALUES ('avatars', 'profiles/x/avatar.png', '{"size": 1}')$q$);
+  PERFORM probe.ok(e = 'ok', 'guard: other buckets are untouched');
+  PERFORM probe.ok((SELECT (metadata ->> 'size')::bigint FROM storage.objects WHERE name = v.object_path) = 5000,
+                   'guard: the stored size is still the finalized one');
+END;
+$$;
+
 -- RLS on the rows follows the task.
 DO $$
 BEGIN
@@ -540,6 +565,45 @@ BEGIN
   PERFORM probe.ok((probe.att(v_main)).deleted_at IS NULL AND (probe.att(v_np)).deleted_reason = 'user'
                AND probe.used('O') = 5700 + 50,
                    'task restore: brings back its batch, not the file deleted by hand');
+END;
+$$;
+
+-- The trash clock is the server's, and nothing comes back after 30 days.
+DO $$
+DECLARE
+  v public.attachments;
+  e text;
+  t timestamptz;
+BEGIN
+  PERFORM probe.new_task('TC clock', 'A', 'A', 'SB');
+  v := probe.attach('A', 'TC clock', 40);
+  PERFORM probe.as_user('A');
+  UPDATE public.tasks SET deleted_at = now() - interval '40 days' WHERE id = probe.id('TC clock');
+  PERFORM probe.as_system();
+  t := (probe.task('TC clock')).deleted_at;
+  PERFORM probe.ok(t > now() - interval '1 minute', 'trash clock: a backdated delete is stamped with the server''s now');
+  PERFORM probe.ok((probe.att(v.id)).deleted_at = t, 'trash clock: its files carry the same stamp');
+  PERFORM probe.as_user('A');
+  UPDATE public.tasks SET deleted_at = now() - interval '90 days' WHERE id = probe.id('TC clock');
+  PERFORM probe.as_system();
+  PERFORM probe.ok((probe.task('TC clock')).deleted_at = t, 'trash clock: a later write can''t move the stamp');
+  UPDATE public.buckets SET deleted_at = now() - interval '40 days' WHERE id = probe.id('SB2');
+  PERFORM probe.ok((SELECT deleted_at FROM public.buckets WHERE id = probe.id('SB2')) > now() - interval '1 minute',
+                   'trash clock: buckets too');
+  UPDATE public.buckets SET deleted_at = NULL WHERE id = probe.id('SB2');
+
+  -- Past 30 days (as if the stamp were old): no restore of the file, and a
+  -- task restore leaves its expired files in the trash for the purge.
+  UPDATE public.attachments SET deleted_at = now() - interval '31 days' WHERE id = v.id;
+  PERFORM probe.as_user('A');
+  UPDATE public.tasks SET deleted_at = NULL WHERE id = probe.id('TC clock');
+  PERFORM probe.as_system();
+  PERFORM probe.ok((probe.att(v.id)).deleted_at IS NOT NULL, 'restore: a task restore leaves files past 30 days in the trash');
+  UPDATE public.attachments SET deleted_reason = 'user' WHERE id = v.id;
+  e := probe.try_as('A', format('SELECT public.attachments_op_restore(%L)', v.id));
+  PERFORM probe.ok(e = 'attachment_expired', 'restore: a file past 30 days can''t come back (' || e || ')');
+  DELETE FROM public.attachments WHERE id = v.id;
+  DELETE FROM storage.objects WHERE name = v.object_path;
 END;
 $$;
 
@@ -693,9 +757,12 @@ $$;
 
 DO $$
 BEGIN
+  -- Stand-ins for objects whose rows went away (the guard refuses new ones).
+  ALTER TABLE storage.objects DISABLE TRIGGER attachments_guard_object;
   INSERT INTO storage.objects (bucket_id, name, created_at, metadata) VALUES
     ('attachments', 'old/orphan/original.png', now() - interval '2 days', '{"size": 1}'),
     ('attachments', 'new/orphan/original.png', now(), '{"size": 1}');
+  ALTER TABLE storage.objects ENABLE TRIGGER attachments_guard_object;
   PERFORM probe.ok((SELECT array_agg(name) FROM public.attachments__orphan_objects(500))
                    = ARRAY['old/orphan/original.png']
                    OR (SELECT bool_and(name <> 'new/orphan/original.png') AND bool_or(name = 'old/orphan/original.png')
@@ -725,8 +792,11 @@ BEGIN
   PERFORM probe.as_user('A');
   UPDATE public.tasks SET deleted_at = now() WHERE id IN (probe.id('P1 parent'), probe.id('P4 with file'), probe.id('P5 recent'));
   PERFORM probe.as_system();
+  -- Backdate (the server clock trigger would refuse it, as it should).
+  ALTER TABLE public.tasks DISABLE TRIGGER trash_stamp_deleted_at;
   UPDATE public.tasks SET deleted_at = now() - interval '31 days'
   WHERE id IN (probe.id('P1 parent'), probe.id('P4 with file'));
+  ALTER TABLE public.tasks ENABLE TRIGGER trash_stamp_deleted_at;
   UPDATE public.attachments SET deleted_at = now() - interval '31 days' WHERE id = v.id;
 
   PERFORM probe.ok((public.purge__preview() ->> 'tasks')::int >= 2, 'purge preview: counts without changing anything');
@@ -752,7 +822,9 @@ BEGIN
                    'purge: once its file rows are gone the task goes too');
 
   -- Buckets: one empty, one a trashed task still points at, the system one.
+  ALTER TABLE public.buckets DISABLE TRIGGER trash_stamp_deleted_at;
   UPDATE public.buckets SET deleted_at = now() - interval '31 days' WHERE id IN (probe.id('SB2'), probe.id('PB'));
+  ALTER TABLE public.buckets ENABLE TRIGGER trash_stamp_deleted_at;
   UPDATE public.tasks SET bucket_id = probe.id('SB') WHERE bucket_id = probe.id('SB2');
   r := public.tasks__purge_expired(500);
   PERFORM probe.ok(NOT EXISTS (SELECT 1 FROM public.buckets WHERE id = probe.id('SB2'))
