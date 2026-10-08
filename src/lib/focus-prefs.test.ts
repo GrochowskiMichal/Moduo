@@ -1,5 +1,5 @@
-import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "@rstest/core";
+import { act, cleanup, renderHook } from "@testing-library/react";
 
 import { DEFAULT_FOCUS_PREFS, useFocusPrefs } from "./focus-prefs";
 

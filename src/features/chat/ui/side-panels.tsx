@@ -53,7 +53,7 @@ export function ThreadPanel({
   return (
     <div className="flex h-full min-h-0 flex-col gap-2">
       <PanelHeader title="Thread" subtitle={channelLabel} onClose={onClose} />
-      <div className="scrollbar-thin flex min-h-0 flex-1 flex-col overflow-y-auto">
+      <div className="pane-scroll scrollbar-thin flex min-h-0 flex-1 flex-col overflow-y-auto">
         {children}
         {loading ? (
           <div className="flex justify-center py-4 text-muted-foreground">
@@ -144,7 +144,7 @@ export function DetailsPanel({
         }
         onClose={onClose}
       />
-      <div className="scrollbar-thin flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-1 pb-2">
+      <div className="pane-scroll scrollbar-thin flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-1 pb-2">
         {!isDm ? (
           <section className="flex flex-col gap-1.5">
             <Eyebrow as="h3">About</Eyebrow>
@@ -258,7 +258,7 @@ function highlight(text: string, q: string): ReactNode {
     <>
       {start > 0 ? "…" : ""}
       {text.slice(start, i)}
-      <mark className="rounded-sm bg-(--selected-bg) text-foreground">
+      <mark className="rounded-sm bg-primary/14 text-foreground">
         {text.slice(i, i + q.length)}
       </mark>
       {text.slice(i + q.length, i + q.length + 120)}
@@ -329,7 +329,7 @@ export function SearchPanel({
           className="pl-7"
         />
       </div>
-      <div className="scrollbar-thin flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-1">
+      <div className="pane-scroll scrollbar-thin flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-1">
         {loading ? (
           <Loader2
             className="mx-auto my-4 size-icon-sm animate-spin text-muted-foreground"

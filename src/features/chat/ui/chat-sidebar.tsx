@@ -78,7 +78,9 @@ function Row({
       aria-current={active ? "page" : undefined}
       className={cn(
         "group flex min-h-(--row-h) w-full items-center gap-2 rounded-md px-2 text-left transition-colors duration-(--motion-fade)",
-        active ? "bg-(--selected-bg)" : "hover:bg-accent",
+        // The open channel is the page you are on: the neutral current step
+        // (R5 keeps the accent for selected items in lists).
+        active ? "bg-state-active" : "hover:bg-state-hover",
         entry.muted && !active && "opacity-60",
       )}
     >
@@ -202,7 +204,7 @@ export function ChatSidebar({
         <IconButton icon={PenSquare} label="New message" size="md" onClick={onNewMessage} />
       </div>
 
-      <div className="scrollbar-thin -mx-1 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-1">
+      <div className="pane-scroll scrollbar-thin -mx-1 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-1">
         {sections.starred.length > 0 ? (
           <Section label="Starred" entries={sections.starred}>
             {renderEntry}

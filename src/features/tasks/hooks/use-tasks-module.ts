@@ -24,6 +24,7 @@ import {
   todayStr,
   wouldCreateCycle,
 } from "../helpers";
+import { hideBucket, unhideBucket, useHiddenBuckets } from "../hidden-buckets";
 import {
   type ActivityEntry,
   type Bucket,
@@ -154,16 +155,23 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
   }, [load]);
 
   // ── derived ────────────────────────────────────────────────────────────────
-  const liveTasks = useMemo(
-    () =>
-      bundle.tasks
-        .filter((t) => !t.deletedAt)
-        .slice()
-        .sort(byPosition),
-    [bundle.tasks],
+  // Buckets deleted this session drop out here, and their tasks show in Inbox,
+  // before the server delete lands (see `deleteBucket` and hidden-buckets.ts).
+  const hiddenBuckets = useHiddenBuckets();
+  const liveBuckets = useMemo(
+    () => bundle.buckets.filter((b) => !b.deletedAt && !hiddenBuckets.has(b.id)),
+    [bundle.buckets, hiddenBuckets],
   );
-  const liveBuckets = useMemo(() => bundle.buckets.filter((b) => !b.deletedAt), [bundle.buckets]);
   const inbox = useMemo(() => liveBuckets.find((b) => b.isSystem) ?? null, [liveBuckets]);
+  const liveTasks = useMemo(() => {
+    const live = bundle.tasks
+      .filter((t) => !t.deletedAt)
+      .slice()
+      .sort(byPosition);
+    const inboxId = inbox?.id;
+    if (hiddenBuckets.size === 0 || !inboxId) return live;
+    return live.map((t) => (hiddenBuckets.has(t.bucketId) ? { ...t, bucketId: inboxId } : t));
+  }, [bundle.tasks, hiddenBuckets, inbox]);
   /** User buckets (Inbox excluded — the rail pins it), position-sorted. */
   const buckets = useMemo(
     () =>
@@ -178,6 +186,17 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     const counts = new Map<string, number>();
     for (const t of liveTasks) {
       if (t.status === "done" || t.status === "archived") continue;
+      counts.set(t.bucketId, (counts.get(t.bucketId) ?? 0) + 1);
+    }
+    return counts;
+  }, [liveTasks]);
+
+  /** Every task a bucket's own list shows (open + done, not archived) — the
+   * count the delete-bucket confirm and its toast quote. */
+  const taskCountByBucket = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const t of liveTasks) {
+      if (t.status === "archived") continue;
       counts.set(t.bucketId, (counts.get(t.bucketId) ?? 0) + 1);
     }
     return counts;
@@ -884,9 +903,12 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
         toast.error("Subtasks are one level — this task is already a subtask.");
         return;
       }
-      createTask({ bucketId: parent.bucketId, title: trimmed, parentId });
+      // The parent's real bucket: a bucket delete still pending only shows its
+      // tasks in Inbox (hidden-buckets.ts), and Undo must find both together.
+      const bucketId = bundle.tasks.find((t) => t.id === parentId)?.bucketId ?? parent.bucketId;
+      createTask({ bucketId, title: trimmed, parentId });
     },
-    [liveTasks, createTask],
+    [liveTasks, bundle.tasks, createTask],
   );
 
   /**
@@ -1007,7 +1029,9 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
         if (!canEdit) toast.error("You don't have edit access to Tasks in this workspace.");
         return;
       }
-      const position = endPosition(liveBuckets);
+      // Past every bucket the server still has, including one whose delete is
+      // pending (hidden-buckets.ts) — Undo would otherwise tie their positions.
+      const position = endPosition(bundle.buckets.filter((b) => !b.deletedAt));
       const optimistic: Bucket = {
         id: `tmp-${crypto.randomUUID()}`,
         workspaceId,
@@ -1035,7 +1059,7 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
           toast.error(e instanceof Error ? e.message : "Couldn't create bucket.");
         });
     },
-    [runtime, workspaceId, canEdit, liveBuckets, userId],
+    [runtime, workspaceId, canEdit, bundle.buckets, userId],
   );
 
   const renameBucket = useCallback(
@@ -1101,25 +1125,49 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     [timeBlocks, guard, runtime, workspaceId],
   );
 
+  /**
+   * Delete a user bucket; its tasks move to Inbox. The rail confirms first
+   * (tasks-v2 Q1-4). Deferred commit, like `deleteTag`: the bucket is hidden at
+   * once (hidden-buckets.ts — every task surface agrees, and its tasks show in
+   * Inbox), the server delete waits until the Undo toast closes, and Undo
+   * un-hides it. The bundle itself is never touched, so saves made meanwhile
+   * still write the task's real bucket, and Undo has nothing to restore.
+   */
   const deleteBucket = useCallback(
     (id: string) => {
-      const existing = bundle.buckets.find((b) => b.id === id);
+      if (!runtime || !workspaceId || !canEdit) {
+        toast.error("You don't have edit access to Tasks in this workspace.");
+        return;
+      }
+      if (isTempId(id)) {
+        toast.error("Still saving that bucket — try again in a moment.");
+        return;
+      }
+      const existing = liveBuckets.find((b) => b.id === id);
       if (!existing || existing.isSystem) return;
-      const fallbackId = inbox?.id;
-      // Optimistic: drop the bucket, reassign its tasks to Inbox locally.
-      setBundle((prev) => ({
-        ...prev,
-        buckets: prev.buckets.filter((b) => b.id !== id),
-        tasks: fallbackId
-          ? prev.tasks.map((t) => (t.bucketId === id ? { ...t, bucketId: fallbackId } : t))
-          : prev.tasks,
-      }));
-      guard(async () => {
-        await runtime!.tasks.deleteBucket({ workspaceId: workspaceId!, bucketId: id });
-        await load();
+      const count = taskCountByBucket.get(id) ?? 0;
+      hideBucket(id);
+      undoToast(`“${existing.name}” deleted`, {
+        description:
+          count === 0
+            ? undefined
+            : count === 1
+              ? "Its task moved to Inbox."
+              : `Its ${count} tasks moved to Inbox.`,
+        onUndo: () => unhideBucket(id),
+        onCommit: () => {
+          void runtime.tasks
+            .deleteBucket({ workspaceId, bucketId: id })
+            .then(() => load())
+            .catch((e) => {
+              unhideBucket(id);
+              toast.error(e instanceof Error ? e.message : "Couldn't delete the bucket.");
+              void load();
+            });
+        },
       });
     },
-    [bundle.buckets, inbox, guard, runtime, workspaceId, load],
+    [runtime, workspaceId, canEdit, liveBuckets, taskCountByBucket, load],
   );
 
   // ── tag mutations (optimistic) ───────────────────────────────────────────────
@@ -1348,6 +1396,7 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     tagsByTask,
     openTaskCountByTag,
     openTaskCountByBucket,
+    taskCountByBucket,
     driftCountByBucket,
     timeBlocks,
     setTimeBlock,

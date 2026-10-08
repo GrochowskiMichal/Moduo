@@ -10,8 +10,8 @@ import { SegmentedControl } from "@/components/ui/segmented-control";
 import { ensureTrial, startCheckout } from "@/features/billing/checkout";
 import {
   type BillingInterval,
-  PLAN_CARDS,
   type PaidPlan,
+  PLAN_CARDS,
   type PlanCard as PlanCardModel,
   priceFor,
   TEAM_MIN_SEATS,

@@ -49,7 +49,7 @@ describe("writeTaskTimeTotal", () => {
       "time_spent_seconds",
       "updated_at",
     ]);
-    expect((h.calls[0]?.patch as { time_spent_seconds: number }).time_spent_seconds).toBe(160);
+    expect(h.calls[0]?.patch).toMatchObject({ time_spent_seconds: 160 });
     expect(h.calls[0]?.filters).toEqual([
       ["id", "t1"],
       ["workspace_id", "ws-1"],

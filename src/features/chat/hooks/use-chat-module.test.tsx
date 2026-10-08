@@ -1,5 +1,5 @@
-import { renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, rs } from "@rstest/core";
+import { renderHook, waitFor } from "@testing-library/react";
 import type { ModuoRuntime } from "@/lib/runtime.types";
 import type { ChatChannel, ChatMember, ChatRuntime } from "../model";
 

@@ -79,6 +79,8 @@ User preferences map to `data-*` attributes on `<html>`. The cascade does the wo
 
 (`data-text-size` was retired 2026-06-13 — density is the size axis.)
 
+Storybook's toolbar has the same six axes (theme, shade, accent, density, radius, font), built from `APPEARANCE_OPTIONS` in `src/lib/appearance.ts`, and re-applies all of them for every story. `Foundations/StateLadder` shows the state layer under whatever the toolbar is set to.
+
 The Settings page is the UI for setting these. The values persist to Tauri-backed local storage and are applied on app launch before first paint.
 
 A simple `useAppearance()` hook returns the current values and a setter for each. Pseudocode:
@@ -247,6 +249,12 @@ Use Tailwind utilities that map to semantic tokens. Common lookups:
 | Body text | `text-foreground` |
 | Secondary text | `text-muted-foreground` |
 | Hairline border | `border-border` |
+| Quiet divider / edge (state layer) | `border-hairline`, `bg-hairline` |
+| Hover fill | `hover:bg-state-hover` |
+| Current page / pressed toggle | `bg-state-active` |
+| Selected item | `bg-state-selected` (+ `ring-1 ring-inset ring-state-selected`) |
+| Current segment of a segmented control | `bg-control-raised shadow-control-raised` |
+| Hide a scrollbar · reserve a pane's gutter | `no-scrollbar` · `pane-scroll` (thin scrollbars are global) |
 | Destructive | `bg-destructive text-destructive-foreground` |
 | Control radius | `rounded-md` |
 | Card radius | `rounded-lg` |
@@ -312,9 +320,13 @@ the check-off `.check-pop`. Reveal-on-hover **reserves space + fades opacity**
 
 ### Accent-usage policy (Session 11)
 Accent (`--primary`/`--ring`) appears ONLY on: (1) one primary action per surface
-(`bg-primary` — never two competing); (2) current selection (the `--selected-bg`
-tint + bar/border recipe); (3) the focus ring; (4) the quiet done-check. Segmented
-toggles, priority/energy, and chrome stay **neutral**. Verified AA on all 8 accents.
+(`bg-primary` — never two competing); (2) current selection — **tint-only since
+DS-2** (`bg-state-selected` + the `ring-state-selected-edge` hairline on list rows,
+`ring-state-selected` on cards; no bars); (3) the focus ring; (4) the quiet
+done-check; (5) status marks (chat attention, unread, calendar focus edge, today/now,
+drop targets). The current destination of a rail or nav is neutral
+(`bg-state-active`), not selected. Segmented toggles, priority/energy, and chrome stay
+**neutral**. Verified AA on all 8 accents. Full rule: DESIGN_RULES.md R5.
 
 ## Open questions / future work
 

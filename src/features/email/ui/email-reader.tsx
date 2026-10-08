@@ -432,7 +432,7 @@ export function EmailReader({
   const lastIndex = messages.length - 1;
 
   return (
-    <div className="scrollbar-thin flex h-full min-h-0 flex-col gap-3 overflow-y-auto">
+    <div className="pane-scroll scrollbar-thin flex h-full min-h-0 flex-col gap-3 overflow-y-auto">
       <div className="flex shrink-0 items-start justify-between gap-2">
         <DetailTitle className="min-w-0 flex-1">{thread.subject}</DetailTitle>
         {onReply ? (

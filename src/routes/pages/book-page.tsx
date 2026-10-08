@@ -10,13 +10,18 @@
 import { useParams } from "@tanstack/react-router";
 import { Plus, X } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { SELECTED_OPTION } from "@/components/ui/selection";
 import { Avatar, AvatarFallback, AvatarImage } from "../../components/ui/avatar";
 import { Button } from "../../components/ui/button";
 import { Eyebrow } from "../../components/ui/eyebrow";
 import { Input } from "../../components/ui/input";
 import { ModuoMark } from "../../components/ui/moduo-mark";
 import { Textarea } from "../../components/ui/textarea";
-import { MAX_BOOKING_GUESTS, parseGuestEmails } from "../../features/calendar/booking/guests";
+import {
+  isEmailAddress,
+  MAX_BOOKING_GUESTS,
+  parseGuestEmails,
+} from "../../features/calendar/booking/guests";
 import {
   type BookingPreview,
   bookingRequest,
@@ -75,8 +80,6 @@ const PART_LABEL: Record<DayPart, string> = {
   afternoon: "Afternoon",
   evening: "Evening",
 };
-
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function detectedZone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
@@ -353,7 +356,8 @@ export function BookPage() {
     (question) => question.required === true && !(answers[question.id as string] ?? "").trim(),
   );
   const nameOk = name.trim().length > 0;
-  const emailOk = EMAIL.test(email.trim());
+  // Same check as the server, which uses this address as the email recipient.
+  const emailOk = isEmailAddress(email.trim());
 
   const openTray = (next: TrayKind | null, focusInside = false) => {
     focusTrayOnOpen.current = focusInside;
@@ -423,6 +427,27 @@ export function BookPage() {
                 }
               : null;
 
+  const bookErrorMessage = (code: unknown): string => {
+    switch (code) {
+      case "bad_guest":
+        return "Each guest needs their own email address, up to 10.";
+      case "zoom_failed":
+        return videoChoices.length > 1
+          ? "Zoom couldn't create the meeting. Try again, or pick Google Meet."
+          : "Zoom couldn't create the meeting. Try again in a moment.";
+      case "host_unavailable":
+        return `${host}'s calendar isn't connected right now. Try again later.`;
+      case "paused":
+        return `${host} isn't taking bookings on this link right now.`;
+      case "rate_limited":
+        return "Too many booking attempts from this network. Try again in an hour.";
+      case "host_busy":
+        return `${host} is getting a lot of booking requests right now. Try again in an hour.`;
+      default:
+        return "Couldn't book that time. Try again.";
+    }
+  };
+
   const book = async () => {
     if (!start) return;
     setSubmitting(true);
@@ -474,17 +499,7 @@ export function BookPage() {
         openTray("time", true);
         return;
       }
-      setFormError(
-        res.json.error === "bad_guest"
-          ? "Each guest needs their own email address, up to 10."
-          : res.json.error === "zoom_failed"
-            ? videoChoices.length > 1
-              ? "Zoom couldn't create the meeting. Try again, or pick Google Meet."
-              : "Zoom couldn't create the meeting. Try again in a moment."
-            : res.json.error === "host_unavailable"
-              ? `${host}'s calendar isn't connected right now. Try again later.`
-              : "Couldn't book that time. Try again.",
-      );
+      setFormError(bookErrorMessage(res.json.error));
       return;
     }
     setPhase({
@@ -591,8 +606,8 @@ export function BookPage() {
                         "flex flex-col items-start gap-1 rounded-lg border px-4 py-3 text-left",
                         "transition-colors duration-[var(--motion-fade)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                         choice === chosen
-                          ? "border-[var(--selected-border)] bg-[var(--selected-bg)]"
-                          : "border-border hover:border-foreground",
+                          ? SELECTED_OPTION
+                          : "border-border hover:border-foreground/30",
                       )}
                     >
                       <span className="font-sans text-xl text-foreground">

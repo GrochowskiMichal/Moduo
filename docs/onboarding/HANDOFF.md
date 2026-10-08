@@ -60,7 +60,7 @@ Also shipped along the way: the **MCP connector** now exposes **6 modules (~60 t
 
 ## 4. Architecture at a glance
 
-- **Stack:** Tauri 2 + React 19 + Rspack/Rsbuild + TanStack Router + Tailwind v4 · Lexical (rich text) · Yjs (Notes collab) · XYFlow (Mindmap) · Storybook 8 · Vitest/Playwright · Bun.
+- **Stack:** Tauri 2 + React 19 + Rspack/Rsbuild + TanStack Router + Tailwind v4 · Lexical (rich text) · Yjs (Notes collab) · XYFlow (Mindmap) · Storybook 10 · Rstest/Playwright · Bun.
 - **Two runtimes, one seam.** Everything data goes through `getRuntime()` → a `ModuoRuntime` interface. `src/lib/runtime.web.ts` is the **only** implementation with real logic (a single Supabase client; the **only** file in the app that calls `.rpc()`/`.from()`). `src/lib/runtime.tauri.ts` is a desktop composite that delegates almost everything back to the web runtime and only uses Tauri `invoke()` for genuinely-native surfaces.
 - **Cloud-first.** **Supabase is the source of truth for every new model.** redb (desktop) is **paused** — kept only for the future offline/"lite" tier and legacy modules not yet migrated. *Never make redb load-bearing for a new feature.*
 - **Writes = intent ops.** State-changing mutations go through `SECURITY DEFINER` Postgres RPCs named `<module>_op_<name>` (permission-check + activity-log + invariant-keeping, all in one transaction). **No raw client table writes for state changes.** Reads are RLS-filtered `.from()` selects.
@@ -99,7 +99,7 @@ Pillars: **Ops** (intent-op RPCs) · **Spine** (registry + links + activity) · 
 - **Primitives:** **39** components in `src/components/ui/` — mostly shadcn wrappers, plus ~12 bespoke Moduo primitives (`eyebrow`, `detail-title`, `complete-toggle`, `property-row`, `segmented-control`, `empty-state`, `icon-button`, `tag-input`, `date-field`, `kbd`, `field`, `moduo-mark`). **69 Storybook stories**, 37 of them on the primitives. *(Counts as of 2026-08-14.)*
 - **Route convergence:** the app converged from **23 exploratory routes to ~7 core features** — Home, Notes, Tasks, Calendar, Email, Contacts, Settings (Mindmap hidden). 14 page files in `src/routes/pages/`. **Don't add top-level routes without an explicit ask** (a new route needs 5 separate wirings — see gotchas).
 - **Dependency health:** a `npx madge --circular` sweep (2026-07-11) found **zero circular dependencies** across 599 modules — the import graph is clean, not tangled. (The 82 warnings are unresolved `@/` path-aliases, not cycles; pass `--ts-config tsconfig.json` to silence them.)
-- **In-flight / half-migrated:** the `src/tw/` React-Native compat shim is **gone from the app's own pages** (DF-17 rebuilt onboarding + paywall onto shadcn/tokens; remaining users are the legacy plan/brainstorm/templates trees); Subframe integration (`src/ui/`) is parked/dormant (theme deliberately not imported so it can't override the OKLCH tokens); fonts are **not installed yet** — `--font-*` fall back to system fonts (the one real code-level TODO, `tokens.css:21`).
+- **In-flight / half-migrated:** the `src/tw/` React-Native compat shim is **gone from the app's own pages** (DF-17 rebuilt onboarding + paywall onto shadcn/tokens; remaining users are the legacy plan/brainstorm/templates trees); fonts are **not installed yet** — `--font-*` fall back to system fonts (the one real code-level TODO, `tokens.css:21`).
 
 ---
 

@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react";
-import { fn } from "@storybook/test";
+import { fn } from "storybook/test";
 import type { Note } from "../model";
 import { buildNoteSections } from "../tree";
 import { NoteTreeSidebar } from "./note-tree-sidebar";

@@ -56,7 +56,7 @@ export function CalendarTasksPanel({ api, onOpenTask, onRequestCapture, review }
   const total = groups.today.length + groups.dueSoon.length + groups.backlog.length;
 
   return (
-    <div className="scrollbar-thin flex h-full min-h-0 flex-col gap-2 overflow-y-auto">
+    <div className="pane-scroll scrollbar-thin flex h-full min-h-0 flex-col gap-2 overflow-y-auto">
       {review && review.items.length > 0 ? (
         <ReviewSection review={review} canEdit={api.canEdit} />
       ) : null}

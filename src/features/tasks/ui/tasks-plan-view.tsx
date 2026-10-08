@@ -402,6 +402,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       buckets={buckets}
       inbox={inbox}
       openCountByBucket={api.openTaskCountByBucket}
+      taskCountByBucket={api.taskCountByBucket}
       driftCountByBucket={api.driftCountByBucket}
       totalOpenCount={totalOpenCount}
       committedCount={committedCount}
