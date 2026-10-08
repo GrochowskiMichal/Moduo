@@ -423,6 +423,19 @@ export function isEmailOutboxStatus(input: unknown): input is EmailOutboxStatus 
   return emailOutboxStatusSchema.safeParse(input).success;
 }
 
+/**
+ * Why an address gets no more email (T13): a hard bounce or a spam complaint
+ * reported by Resend's webhook, or added by hand. CHECK on
+ * public.email_suppressions.reason (20261008233000_email_outbox_worker.sql).
+ */
+export const EMAIL_SUPPRESSION_REASONS = ["bounce", "complaint", "manual"] as const;
+export type EmailSuppressionReason = (typeof EMAIL_SUPPRESSION_REASONS)[number];
+export const emailSuppressionReasonSchema = z.enum(EMAIL_SUPPRESSION_REASONS);
+
+export function isEmailSuppressionReason(input: unknown): input is EmailSuppressionReason {
+  return emailSuppressionReasonSchema.safeParse(input).success;
+}
+
 // ---------------------------------------------------------------------------
 // Email accounts — provider/status vocabularies.
 //

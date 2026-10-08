@@ -12,8 +12,10 @@ import type { EmailKind } from "../../contracts/vocabularies.ts";
 import type { EmailDoc } from "../blocks.ts";
 import { type RenderedEmail, type RenderOptions, renderEmail } from "../render.ts";
 import { type AuthCodeData, authCodeEmail } from "./auth-code.ts";
+import { type OpsAlertData, opsAlertEmail } from "./ops-alert.ts";
 
 export { AUTH_CODE_VALID_MINUTES } from "./auth-code.ts";
+export { EMAIL_RUNBOOK_URL, OPS_ALERT_RECIPIENT, type OpsAlertData, parseOpsAlertPayload } from "./ops-alert.ts";
 export {
   type AuthConfirmCodeData,
   type AuthInviteData,
@@ -23,15 +25,22 @@ export {
 
 export interface EmailTemplateData {
   auth_code: AuthCodeData;
+  ops_alert: OpsAlertData;
 }
 
 export type BuiltEmailKind = keyof EmailTemplateData & EmailKind;
 
 export const EMAIL_TEMPLATES: { [K in BuiltEmailKind]: (data: EmailTemplateData[K]) => EmailDoc } = {
   auth_code: authCodeEmail,
+  ops_alert: opsAlertEmail,
 };
 
 export const BUILT_EMAIL_KINDS = Object.keys(EMAIL_TEMPLATES) as BuiltEmailKind[];
+
+/** The doc one template builds. Generic, so a loop over every kind type-checks. */
+export function templateDoc<K extends BuiltEmailKind>(kind: K, data: EmailTemplateData[K]): EmailDoc {
+  return EMAIL_TEMPLATES[kind](data);
+}
 
 export function renderTemplate<K extends BuiltEmailKind>(
   kind: K,
