@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { pickTagColor } from "../../../components/tag-colors";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { UNDO_TOAST_MS, undoToast } from "../../../lib/undo-toast";
+import { formatAwaySpan } from "../../focus/away-copy";
 import type { FocusSaveContext } from "../../focus/engine";
 import { readSavedFocusTotal, writeSavedFocusTotal } from "../../focus/saved-totals";
 import { setBucketTimeBlock } from "../default-view";
@@ -82,13 +83,6 @@ function byPosition<T extends { position: string }>(a: T, b: T): number {
 
 /** Optimistic placeholder id, not yet a real server uuid. */
 const isTempId = (id: string) => id.startsWith("tmp-");
-
-/** "12 min" / "1 h 5 min" for the dropped-focus-time note. */
-function formatTrackedMinutes(seconds: number): string {
-  const minutes = Math.max(1, Math.round(seconds / 60));
-  const h = Math.floor(minutes / 60);
-  return h > 0 ? `${h} h ${minutes % 60} min` : `${minutes} min`;
-}
 
 export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
   const { userId, workspaceId, modulePermission = "none" } = params;
@@ -644,7 +638,7 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
         const complete = !bundle.truncated.some((t) => t.scope === "tasks");
         const goneFromServer = complete && !loadedFrom.taskIds.has(id);
         if (!goneFromServer || loadedFrom.at <= context.earnedAt) return false;
-        toast(`${formatTrackedMinutes(seconds)} of focus time couldn't be saved`, {
+        toast(`${formatAwaySpan(seconds)} of focus time couldn't be saved`, {
           description: "The task it was tracked on was deleted or isn't shared with you any more.",
         });
         return "gone";

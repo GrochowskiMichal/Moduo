@@ -72,7 +72,7 @@ import {
   togglePomodoro,
 } from "./engine-core";
 import { alertPhaseEnd, type FocusPhaseNext } from "./phase-alert";
-import { FOCUS_SAVED_TOTALS_PREFIX, forgetSavedFocusTotals } from "./saved-totals";
+import { forgetSavedFocusTotals } from "./saved-totals";
 
 export type {
   AwayChoice,
@@ -441,10 +441,8 @@ export function createFocusEngine(deps: FocusEngineDeps): FocusEngine {
   }
 
   function forget(userId: string): void {
-    const store = deps.storage();
     try {
-      store?.removeItem(`${FOCUS_STORAGE_PREFIX}${userId}`);
-      store?.removeItem(`${FOCUS_SAVED_TOTALS_PREFIX}${userId}`);
+      deps.storage()?.removeItem(`${FOCUS_STORAGE_PREFIX}${userId}`);
     } catch {
       /* storage unavailable — nothing to erase */
     }

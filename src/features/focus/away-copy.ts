@@ -6,7 +6,7 @@ import type { FocusAwaySummary, FocusPhaseEnd } from "./engine-core";
 
 const TIME_FMT = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
 
-/** "42m" · "1h 5m" — away spans are always over 90 s, so never under a minute. */
+/** "42m" · "1h 5m" (at least "1m"): away spans and dropped focus time. */
 export function formatAwaySpan(seconds: number): string {
   const totalMinutes = Math.max(1, Math.round(seconds / 60));
   const h = Math.floor(totalMinutes / 60);
