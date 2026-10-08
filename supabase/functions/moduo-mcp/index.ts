@@ -10,7 +10,9 @@
  * Auth:   Authorization: Bearer moduo_sk_…  (created in Workspace settings →
  *         API keys; sha256-verified against workspace_api_keys, never stored).
  * Scope:  the key's per-module none/view/edit ladder decides which tools are
- *         visible and callable (view → read tools, edit → + intent ops).
+ *         visible and callable (view → read tools, edit → + intent ops), capped
+ *         by its creator's own access; a tool that also touches another module
+ *         needs that module too (MCP_TOOL_NEEDS in contracts/mcp-key-scopes.ts).
  * Actor:  ops run as service_role with the x-moduo-key-id header; Postgres
  *         attributes every mutation to the key (actor_type 'api_key') —
  *         agents never move things silently (module contract, Pillar 2).
@@ -25,7 +27,15 @@ import { jsonRpcRequestSchema } from "../_shared/contracts/rows.ts";
 import { listingJsonSchema, parseToolArgs } from "../_shared/contracts/mcp-tool-args.ts";
 import { parseOrError } from "../_shared/contracts/errors.ts";
 import { getDefaultSecretKey } from "../_shared/secret-keys.ts";
-import { connectorModules, moduleScope, toolsForKey, type KeyContext } from "./registry.ts";
+import {
+  connectorModules,
+  findTool,
+  moduleScope,
+  toolAllowed,
+  toolRequirement,
+  toolsForKey,
+  type KeyContext,
+} from "./registry.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const DEFAULT_SECRET_KEY = getDefaultSecretKey();
@@ -100,24 +110,23 @@ async function handleInitialize(id: unknown, params: any, key: KeyContext, admin
     serverInfo: SERVER_INFO,
     instructions:
       `Moduo workspace "${workspace?.name ?? "(unknown)"}" via API key "${key.name}" ` +
-      `(scopes: ${scopeSummary}). Read tools list buckets, tasks (with computed ` +
-      `drift/blocked state), the day's commit queue, drift, tags and the attributed ` +
-      `activity trail. Write tools are Moduo intent ops — every mutation is recorded ` +
-      `and visible to the user; they appear only on edit-scoped keys.`,
+      `(access: ${scopeSummary}). The key sees only modules it has View or Edit on, ` +
+      `and changes only those it has Edit on; it never gets more than the person who ` +
+      `created it. Read tools list each module's items; write tools are Moduo intent ` +
+      `ops, and every change is recorded and attributed to this key.`,
   });
 }
 
 async function handleToolCall(id: unknown, params: any, key: KeyContext) {
   const name = typeof params?.name === "string" ? params.name : "";
-  const allowed = toolsForKey(key);
-  const tool = allowed.find((t) => t.name === name);
-  if (!tool) {
-    const exists = connectorModules.some((m) => m.tools.some((t) => t.name === name));
-    if (!exists) return rpcError(id, -32602, `Unknown tool: ${name}`);
+  const found = findTool(name);
+  if (!found) return rpcError(id, -32602, `Unknown tool: ${name}`);
+  const { module, tool } = found;
+  if (!toolAllowed(key, module, tool)) {
     return rpcResult(id, {
       content: [{
         type: "text",
-        text: `This API key's scope doesn't allow ${name}. Write tools need an edit-scoped key — created in Moduo's Workspace settings → API keys.`,
+        text: `This API key can't use ${name}: it needs ${toolRequirement(module, tool)}. Change the key's access in Moduo → Settings → API keys.`,
       }],
       isError: true,
     });

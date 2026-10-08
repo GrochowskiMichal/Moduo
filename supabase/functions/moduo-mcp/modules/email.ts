@@ -21,6 +21,7 @@
  */
 
 import type { ConnectorModule, ToolContext } from "../registry.ts";
+import { assertReach } from "../share.ts";
 
 type Row = Record<string, any>;
 
@@ -253,6 +254,7 @@ export const emailConnectorModule: ConnectorModule = {
         // thread_key. Matches the app's linkThread({ threadId: ref.id }).
         const ref = await getRef(ctx, str(args, "ref_id"), "id");
         if (!ref) throw new Error("Email thread not found in this workspace.");
+        await assertReach(ctx, str(args, "target_type"), str(args, "target_id"));
         const link = await callOp(ctx, "email_op_link", {
           p_thread_id: ref.id,
           p_target_type: str(args, "target_type"),

@@ -234,6 +234,13 @@ export function NoteCommentsPanel({
           comments.map((c) => {
             const parsed = parseQuoteComment(c.body);
             const mine = c.createdBy && c.createdBy === currentUserId;
+            // An app's comment (over an API key) is never shown as the person.
+            const author =
+              c.authorKind === "api_key"
+                ? `${c.authorLabel ?? "App"} (app)`
+                : mine
+                  ? "You"
+                  : "Teammate";
             return (
               <div key={c.id} className="rounded-lg border border-border bg-card px-3 py-2">
                 {parsed.quote ? (
@@ -251,7 +258,7 @@ export function NoteCommentsPanel({
                   {parsed.text}
                 </p>
                 <p className="mt-1 text-2xs text-muted-foreground">
-                  {mine ? "You" : "Teammate"} · {relativeTime(c.createdAt)}
+                  {author} · {relativeTime(c.createdAt)}
                 </p>
               </div>
             );
