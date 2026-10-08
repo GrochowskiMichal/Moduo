@@ -50,7 +50,7 @@ Uses the public key from `.env.local` (`PUBLIC_SUPABASE_PUBLISHABLE_KEY`). The i
 - The sharing insert path only runs in workspaces with 2+ members, and the test workspace has one. The rehearsal did run the trigger that calls `share_grant_workspace`, and that call works for a definer function whatever the member count. But the first real 2+ member insert after the change is §2's.
 - Two legacy shapes only exist in the rehearsal, because the app can't make them: a live sub-note under a trashed parent (kept, moved to the top level) and a parent cycle (both purged). Prod had neither.
 - `notes__purge_ids` was callable by any signed-in user from 2026-07-04 to 2026-10-06 and leaves no activity row. API logs only go back 7 days, so use in July–September can't be ruled out (it needed the workspace id and the trashed note ids).
-- Found and **not** fixed (see `specs/BUILD_ORDER.md` SEC-1): OPS-2 group 3; `can_access` losing the workspace when an ancestor row is gone; `booking_host_respond` un-pausing a fully-accepted collective link by id; `chat_has_cap` answering any signed-in user about another member.
+- Found and **not** fixed (see `specs/BUILD_LOG.md` SEC-1): OPS-2 group 3; `can_access` losing the workspace when an ancestor row is gone; `booking_host_respond` un-pausing a fully-accepted collective link by id; `chat_has_cap` answering any signed-in user about another member.
 
 ---
 *Convention defined in [CLAUDE.md](../../CLAUDE.md) → "Session wrap-up". One file per sprint/branch so history is preserved.*

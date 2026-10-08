@@ -7,18 +7,22 @@
  *
  * Method: POST
  * Auth:   none (public; deploy with --no-verify-jwt)
- * Body:   { email: string; source: "nav" | "hero" | "close" | "footer"; website?: string; elapsedMs?: number }
+ * Body:   { email: string; source: "nav" | "hero" | "close" | "footer"; website?: string; elapsedMs?: number; updates?: boolean }
+ *         `updates` is the optional build-updates opt-in from the success state; it is
+ *         stored as a request (updates_requested) until a confirmation email exists.
  * Returns: 200 { success: true } — also for duplicates and suspected bots, so the
  *          endpoint never reveals whether an address is already on the list.
  *          400 invalid_email · 403 origin · 413 too large · 429 rate_limited
  *
  * Abuse controls: Origin allowlist, body cap, honeypot + minimum time-on-page,
  * and a per-IP (8/hour) + global (500/10 min) limit enforced atomically in SQL.
- * IPs are never stored raw: HMAC-SHA256 keyed with the project secret key.
+ * The IP is Cloudflare's cf-connecting-ip (see _shared/client-ip.ts), never stored
+ * raw: HMAC-SHA256 keyed with the project secret key.
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=deno";
 
+import { clientIp } from "../_shared/client-ip.ts";
 import { parseJsonBody, waitlistJoinBodySchema } from "../_shared/contracts/http-bodies.ts";
 import { getDefaultSecretKey } from "../_shared/secret-keys.ts";
 
@@ -54,12 +58,6 @@ function json(body: unknown, status: number, headers: HeadersInit): Response {
     status,
     headers: { ...headers, "Content-Type": "application/json", "Cache-Control": "no-store" },
   });
-}
-
-function clientIp(req: Request): string {
-  const forwarded = req.headers.get("x-forwarded-for");
-  if (forwarded) return forwarded.split(",")[0].trim();
-  return req.headers.get("cf-connecting-ip") ?? req.headers.get("x-real-ip") ?? "unknown";
 }
 
 const hmacKey = crypto.subtle.importKey(
@@ -110,7 +108,7 @@ Deno.serve(async (req: Request) => {
     if (!parsed.success) {
       return json({ error: "invalid_email" }, 400, cors);
     }
-    const { email, source, website, elapsedMs } = parsed.data;
+    const { email, source, website, elapsedMs, updates } = parsed.data;
 
     if ((website && website.trim() !== "") || (elapsedMs !== undefined && elapsedMs < MIN_ELAPSED_MS)) {
       console.log(`[waitlist-join] dropped suspected bot (source=${source})`);
@@ -127,6 +125,7 @@ Deno.serve(async (req: Request) => {
       p_ip_hash: await hashIp(clientIp(req)),
       p_user_agent: req.headers.get("user-agent"),
       p_referrer: req.headers.get("referer"),
+      p_updates: updates ?? null,
     });
 
     if (error) {
@@ -141,7 +140,8 @@ Deno.serve(async (req: Request) => {
     }
 
     console.log(`[waitlist-join] ok (source=${source})`);
-    return json({ success: true }, 200, cors);
+    // Echo the opt-in so the page only shows "updates on" once it is really stored.
+    return json(updates === undefined ? { success: true } : { success: true, updates }, 200, cors);
   } catch (err) {
     console.error("[waitlist-join] unexpected error:", err);
     return json({ error: "server_error" }, 500, cors);

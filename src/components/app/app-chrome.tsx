@@ -46,6 +46,7 @@ import { ModuoMark } from "../ui/moduo-mark";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { UserMenu } from "../user-menu";
 import { WorkspaceSwitcher } from "../workspace-switcher";
+import { AnalyticsConsentPrompt } from "./analytics-consent-prompt";
 import { baseModulesNavItems, hiddenReachableRoutes } from "./app-chrome-constants";
 import type { ModuleNavItem } from "./app-chrome-types";
 import { dispatchCreateNew } from "./create-events";
@@ -623,6 +624,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
       <GlobalCaptureBar />
       <GlobalShortcutsDialog />
       <SettingsModal />
+      <AnalyticsConsentPrompt />
     </div>
   );
 }

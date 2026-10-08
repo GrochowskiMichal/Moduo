@@ -10,12 +10,18 @@ import {
 } from "../../../components/ui/select";
 import { Switch } from "../../../components/ui/switch";
 import {
+  isAnalyticsAvailable,
+  setAnalyticsConsent,
+  useAnalyticsConsent,
+} from "../../../lib/analytics";
+import {
   type LandingView,
   type MotionPref,
   type NotificationType,
   usePreferences,
 } from "../../../lib/preferences";
 import { isTauriRuntime } from "../../../lib/runtime";
+import { useAuth } from "../../../providers/auth-provider";
 
 import { SettingsSectionShell } from "./section-shell";
 
@@ -61,8 +67,9 @@ const NOTIFICATION_ROWS: ReadonlyArray<{
 ];
 
 /** Day-to-day behaviour: per-type notification mutes, what opens on launch,
- *  startup behaviour, and sounds & motion. All persisted to the synced
- *  `preferences` domain (usePreferences). */
+ *  startup behaviour, and sounds & motion — all persisted to the synced
+ *  `preferences` domain (usePreferences) — plus the analytics opt-in, which
+ *  stays on this device (see AnalyticsConsentGroup). */
 export function PreferencesSection() {
   const { preferences, setPreferences } = usePreferences();
 
@@ -183,7 +190,32 @@ export function PreferencesSection() {
           </Select>
         </PrefRow>
       </PrefGroup>
+
+      <AnalyticsConsentGroup />
     </SettingsSectionShell>
+  );
+}
+
+/** The per-person analytics opt-in (lib/analytics.ts). Only exists in builds that ship a
+ *  PostHog key — none do yet — and is off until the person turns it on. Unlike the rest
+ *  of this section it doesn't sync: consent is kept per account on each device. */
+function AnalyticsConsentGroup() {
+  const { userId } = useAuth();
+  const consent = useAnalyticsConsent(userId);
+  if (!userId || !isAnalyticsAvailable()) return null;
+  return (
+    <PrefGroup label="Privacy" description="Saved on this device, for your account only.">
+      <PrefRow
+        title="Share usage analytics"
+        description="Send events like opening the app, with basic device and browser details, to PostHog so we can improve Moduo. They carry your account ID, never your email or anything you write. Off unless you turn it on."
+      >
+        <Switch
+          checked={consent === "granted"}
+          onCheckedChange={(on) => void setAnalyticsConsent(userId, on ? "granted" : "denied")}
+          aria-label="Share usage analytics"
+        />
+      </PrefRow>
+    </PrefGroup>
   );
 }
 

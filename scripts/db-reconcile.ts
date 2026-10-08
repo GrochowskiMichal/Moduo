@@ -21,6 +21,10 @@
  * explicit DROP to avoid PostgREST ambiguity) reads as present in query 1 and
  * drift-free in query 2. Query 3 exists to catch precisely that. Query 4 is the one
  * grants check: internal SECURITY DEFINER helpers a client role can call.
+ *
+ * Edge Functions live outside the database, so nothing here sees them. Their sibling check
+ * is `bun run functions:reconcile` (scripts/functions-reconcile.ts): deployed functions vs
+ * the folders under supabase/functions/.
  */
 
 import { createHash } from "node:crypto";

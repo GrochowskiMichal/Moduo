@@ -1,34 +1,43 @@
 ---
 name: s3
-description: Stage 3 — Wrap. End-of-session wrap-up for Moduo — commit, push the task branch, open a PR into the personal branch AND merge it, then for bigger chunks also PR+merge personal → develop (Entire analytics; standing auth). Never main. Write the manual-test checklist, append decisions/gotchas, reconcile BUILD_ORDER, report leftovers, suggest next-session prompts.
+description: Stage 3 — Wrap. End-of-session wrap-up for Moduo — manual-test checklist, institutional memory, the review gate the diff's risk calls for, commit, push the task branch, PR + merge into the personal branch, then for bigger chunks PR + merge personal → develop (Entire analytics; standing authorization). Never main. Reconciles BUILD_ORDER/BUILD_LOG, reports leftovers and suggests next-session prompts.
+effort: medium
 ---
 
 # /s3 — wrap: finalize the session safely
 
-Close out the session so nothing is lost and the next one can pick up cleanly. **The designer runs this at the end of almost every session — never make them retype the steps.**
+Close out the session so nothing is lost and the next one picks up cleanly. **The designer runs this at the end of almost every session; never make them retype the steps.**
+
+## Rules that always hold
+- **Never push or merge to `main`.** Never push directly to `develop`; it changes only through PRs. The `guard-git.sh` hook blocks direct pushes.
+- **Merging into the personal branch (`mike`/`maciej`) is pre-authorized** (standing, 2026-06-27), with a merge commit, never a fast-forward.
+- **Merging personal → `develop` is pre-authorized for bigger chunks** (standing, 2026-08-17).
+- **The duplication guard gates every auto-merge.** If a competing open PR touches the same block, files or migrations, stop and surface it.
+- **A Tier 2 diff never merges without its deep review** (step 3).
+- Force-push only your own task branch, only with `--force-with-lease`.
 
 ## Steps
-1. **Manual-test checklist (required).** Write or update `docs/testing/<branch-or-sprint>.md` from `docs/testing/TEMPLATE.md`: group by feature/surface, one checkbox per check, each = step → expected result → surface (web/desktop/both). Cover everything the session changed incl. edge cases, migrations, likely-regressed areas. **Live-verify first** where observable (preview tooling + hosted test account) so the designer's pass is confirmation, not first-discovery; list anything you couldn't verify under "Known gaps."
-2. **Institutional memory.** Append key decisions/assumptions to `docs/decisions.md` and any footguns to `docs/gotchas.md`. Reconcile `specs/BUILD_ORDER.md` (tick any blocks completed this session — including work done outside `/s2`) and update the active plan / spec `Status:` if scope changed.
-3. **Commit.** Stage the session's work and commit with a concise present-tense imperative subject + a short body (what built / decisions / deferred). Co-Authored-By trailer for agent-authored changes.
-4. **Push the task branch** (`t/<owner>/<kebab>`), force-push only your own branch and only with `--force-with-lease`.
-5. **PR + merge into the personal branch.** Open or update a PR **into the personal branch** (`maciej` or `mike`) — never `main`. Title + body summarize the change and link the spec + test checklist (use `gh`). **Then merge it yourself** — the designer does not review PRs and has granted standing authorization (2026-06-27) to auto-merge into the personal branch as part of `/s3`. Use a **merge commit, not fast-forward** (`gh pr merge <n> --merge`), since the personal branch is hot. Merging promptly is the point: it advances `specs/BUILD_ORDER.md` on the personal branch so the **next** session doesn't re-pick a block already in flight.
-   - **Duplication guard — run BEFORE merging.** `gh pr list --base <personal> --state open` and check whether any other open PR touches the **same new files, the same migration / DB objects, or the same `BUILD_ORDER` block** as yours. If so, **do not merge** — surface the overlap and get the designer's call on which line wins (parallel sessions off the same base can each `/s2 next` the same block — this duplication bit us 2026-06-27; see `docs/gotchas.md`). Only auto-merge a PR that is conflict-free (`mergeable: MERGEABLE`) and non-overlapping. If yours conflicts with the advanced base, rebase onto the latest personal branch, resolve, re-run `bun run verify`, then merge.
-5b. **Sync personal → `develop` (standing, 2026-08-17).** GitHub's default branch is `develop`; Entire.io repo Analytics only counts work there. After the personal merge lands, if this session shipped a **bigger chunk** (a finished `/s2` block, multi-file change, user-visible UI, schema/migration, or anything the other person should build on), **open a PR `<personal> → develop` and merge it yourself** (`gh pr merge --merge`). Then `git fetch` and merge `origin/develop` back into the personal branch so they stay aligned.
-   - **Skip** only if the designer said keep it on the task branch, the chunk is a one-line typo / docs nit, or the duplication guard against **open PRs into `develop`** shows overlap — then surface and stop.
-   - Run `bun run verify` first. Do not block this sync on the full visual-snapshot / desktop golden-path suite; note in the PR if that walkthrough was not run.
-   - **Never `main`.** Never force-push `develop`.
-6. **Report.** Tell the designer: what shipped, whether `bun run verify` is green, **what merged** (PR links), **what's left undone**, **which next sessions you're suggesting (step 7) and why — one line each**, and **whether it's safe to archive the session**.
-7. **Suggest the next session(s) as ready-to-paste prompts (after the merge lands — designer-requested 2026-07-10).** Re-read `specs/BUILD_ORDER.md` on the **updated** personal branch, then suggest **at most 2** follow-up sessions. They are suggestions, not automation: nothing runs until the designer pastes one into a new session — so suggest confidently, but make each self-explanatory.
-   - **What you may suggest:** (a) the next `[ ]` block in **this session's lane**, and (b) a block whose **last unmet dependency this session's merge just satisfied**. Never another lane's queue, never a block an open PR already touches (you just ran the duplication guard — reuse it).
-   - **Explicit block IDs only** (`/s2 DF-7`), never `next` — prompts must be claim-proof. If the natural follow-up isn't DoR-ready (no ratified block/spec), suggest a **`/s1 <topic>`** planning prompt instead of `/s2`.
-   - **Format per suggestion:** a one-line **title** (`/s2 <BLOCK> — <short name>`); a 1–2 sentence plain-English **why now** — what it does and why it's ready *now* (this is what the designer reads before starting it — no file paths, no jargon); then a fenced **prompt block** that is self-contained: **first instruction is always** "verify the block is still `[ ]` in BUILD_ORDER on fresh `maciej` before building" (the staleness guard), then the block scope, spec/plan pointers, relevant gotchas, lane-contention warnings (name any files another session owns this round), and the done-gate (`bun run verify` + validator + live-verify).
-   - If nothing is genuinely ready, suggest nothing — an empty step 7 is a valid outcome.
-
-## Hard safety rules (from CONTRIBUTING.md — do not override)
-- **Never push directly to `main` or `develop`.** Always a PR. Never merge to `main` without both-devs sign-off.
-- **Merging into the personal branch (`maciej`/`mike`) is pre-authorized** (standing, 2026-06-27): `/s3` opens the PR **and merges it**, with a merge commit.
-- **Merging personal → `develop` is pre-authorized for bigger chunks** (standing, 2026-08-17) — step 5b. Entire.io analytics require it. Skip only per the skip rules above.
-- **The duplication guard gates the auto-merge** (personal and develop). If a competing open PR touches the same blocks/files/migrations, STOP and surface — never merge over it.
-- `maciej` is a hot branch: always a merge commit, never fast-forward (see `docs/gotchas.md`).
-- Force-push only your **own** task branch, only with `--force-with-lease`.
+1. **Manual-test checklist (required).** Write or update `docs/testing/<branch-or-sprint>.md` from `docs/testing/TEMPLATE.md`: grouped by feature or surface, one checkbox per check, each check as step → expected result → surface (web, desktop or both). Cover everything the session changed, including edge cases, migrations and likely-regressed areas. **Live-verify first** where you can observe the change, so the designer's pass confirms rather than discovers; list anything you couldn't verify under "Known gaps".
+2. **Institutional memory.**
+   - Add decisions as full entries at the top of `docs/decisions/<area>.md` plus one line each in `docs/decisions.md`; add traps to `docs/gotchas/<area>.md`.
+   - Reconcile the ledger: tick blocks completed this session (including work done outside `/s2`), then move finished `[x]` lines from `specs/BUILD_ORDER.md` to the same section of `specs/BUILD_LOG.md`.
+   - Update the spec's `Status:` line if scope changed.
+   - Optionally run the `retro` skill. When it proposes a harness change, note it under **🔎 Found** instead of applying it silently.
+3. **Review gate by risk.** List the changed files with `git diff --name-only origin/<personal>...HEAD`.
+   - **Tier 1 (every PR):** if `/s2` didn't already review the final diff, run `/code-review high` on it and check it against `REVIEW.md`. Fix Important findings and log the rest in the PR body.
+   - **Tier 2 (risky paths):** the diff touches `supabase/migrations/`, `supabase/functions/_shared/contracts/`, `delete-account`, `create-checkout-session`, `create-portal-session`, `moduo-mcp`, `meet-*`, `src/lib/runtime*`, updater or signing code in `src-tauri/`, or `.github/workflows/`. Run the `claude-security` skill on the branch diff. Then ask the designer to start `/code-review ultra <PR-number>` themselves: it runs in the cloud and bills usage credits after the free runs, so it needs their go-ahead. Merge only after its verified findings are fixed or explicitly accepted.
+4. **Commit.** Stage the session's work and commit with a concise present-tense imperative subject, a short body (what was built, decisions, what's deferred), and the Co-Authored-By trailer. The `guard-secrets.sh` hook scans the staged changes.
+5. **Push the task branch** (`t/<owner>/<kebab>`).
+6. **PR + merge into the personal branch.** If `/s2` opened a draft PR, mark it ready (`gh pr ready <n>`). Otherwise open one into `maciej` or `mike`, never `main`, linking the spec and the test checklist.
+   - **Duplication guard, before merging:** run `gh pr list --base <personal> --state open` and check whether another open PR touches the same new files, migrations or DB objects, or the same `BUILD_ORDER` block. If so, don't merge: surface the overlap and get the designer's call.
+   - Merge only a conflict-free (`mergeable: MERGEABLE`), non-overlapping PR, with `gh pr merge <n> --merge`. If it conflicts with the advanced base, merge the latest personal branch in, resolve, re-run `bun run verify`, then merge.
+6b. **Sync personal → `develop`** for a bigger chunk: a finished block, a multi-file change, user-visible UI, a schema change, or anything the other person should build on.
+   - Run `bun run verify`, then open `<personal> → develop` and merge it with `gh pr merge --merge`.
+   - Afterwards `git fetch` and merge `origin/develop` back into the personal branch, so the two stay aligned.
+   - Skip this step if the designer said to keep the work on the task branch, if the chunk is a one-line typo or doc nit, or if the duplication guard against open PRs into `develop` shows overlap.
+7. **Report.** Tell the designer what shipped, whether `bun run verify` is green, which gates ran and what they found, what merged (PR links), what's left undone, which next sessions you suggest and why (one line each), and whether it's safe to archive the session.
+8. **Suggest at most 2 next sessions as ready-to-paste prompts.** First re-read `specs/BUILD_ORDER.md` on the **updated** personal branch.
+   - **What qualifies:** the next `[ ]` block in this session's lane, or a block whose last unmet dependency this merge just satisfied. Never another lane's queue, and never a block an open PR already claims.
+   - **Format:** a title (`/s2 <BLOCK> — <short name>`), one plain sentence on why it's ready now, and a fenced prompt.
+   - **The prompt's first instruction is always** to verify the block is still `[ ]` and unclaimed on the fresh personal branch. Then it gives the scope, the spec and gotcha pointers, any lane contention, and the done gate.
+   - Use explicit block IDs, never `next`. If nothing is DoR-ready, suggest a `/s1 <topic>` prompt instead. If nothing is ready at all, suggest nothing.
