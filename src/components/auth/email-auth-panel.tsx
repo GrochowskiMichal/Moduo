@@ -12,6 +12,12 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 
 import defaultProfilePic from "../../../assets/icon.png";
+import {
+  describeOtpSendError,
+  formatCountdown,
+  OTP_RESEND_SECONDS,
+  OTP_VALID_MINUTES,
+} from "./otp-send-error";
 
 type DesktopFlow =
   | "entry"
@@ -53,6 +59,11 @@ export function EmailAuthPanel({ notice }: EmailAuthPanelProps) {
   const [otpEmail, setOtpEmail] = useState("");
   const [otpCode, setOtpCode] = useState("");
   const [otpSentAt, setOtpSentAt] = useState<number | null>(null);
+  // The address the last code went to, and when another may be asked for (TX-2, AC9).
+  // Kept together so a countdown never carries over to a different address.
+  const [lastSend, setLastSend] = useState<{ email: string; resendAt: number } | null>(null);
+  const [clock, setClock] = useState(() => Date.now());
+  const resendAt = lastSend?.resendAt ?? null;
 
   const [profileExists, setProfileExists] = useState(false);
   const [hasPin, setHasPin] = useState(false);
@@ -108,6 +119,20 @@ export function EmailAuthPanel({ notice }: EmailAuthPanelProps) {
     void writeStoredAvatar(runtime, avatarDataUrl).then(() => notifyProfileUpdated());
   }, [avatarDataUrl, runtime]);
 
+  // Tick once a second while the resend countdown runs.
+  useEffect(() => {
+    if (resendAt === null || resendAt <= Date.now()) return;
+    const timer = window.setInterval(() => {
+      const now = Date.now();
+      setClock(now);
+      if (now >= resendAt) window.clearInterval(timer);
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [resendAt]);
+
+  const resendSecondsLeft =
+    resendAt === null ? 0 : Math.max(0, Math.ceil((resendAt - clock) / 1000));
+
   const avatarInitial = useMemo(() => profileName.trim().slice(0, 1).toUpperCase(), [profileName]);
 
   const handleSendOtp = async () => {
@@ -118,6 +143,15 @@ export function EmailAuthPanel({ notice }: EmailAuthPanelProps) {
       return;
     }
 
+    // The code sent moments ago still works: go back to it rather than asking
+    // Auth again inside its one-a-minute limit.
+    if (flow === "email" && lastSend?.email === email && Date.now() < lastSend.resendAt) {
+      setError(null);
+      setInfo(null);
+      setFlow("otp_sent");
+      return;
+    }
+
     setBusy(true);
     setError(null);
     setInfo(null);
@@ -125,16 +159,25 @@ export function EmailAuthPanel({ notice }: EmailAuthPanelProps) {
     const { error: otpErr } = await runtime.auth.sendOtp({ email });
     setBusy(false);
     if (otpErr) {
-      // Sign-ups are closed on the project, so only confirmed people get a code. A
-      // dashboard invitee is confirmed by clicking their invite link once (auth-url.ts).
-      setError(
-        /signups? not allowed/i.test(otpErr.message)
-          ? "Moduo is invite-only right now. If you were invited, click the link in your invite email first, then ask for a code here. If that link has expired, ask for a new invite."
-          : otpErr.message,
-      );
+      const failure = describeOtpSendError(otpErr);
+      if (failure.kind === "wait") {
+        // Auth only says "wait" when a code for this address went out within the
+        // last minute, from this screen or before a reload: let them type it.
+        const now = Date.now();
+        if (lastSend?.email !== email) {
+          setOtpSentAt(now - Math.max(0, OTP_RESEND_SECONDS - failure.seconds) * 1000);
+        }
+        setLastSend({ email, resendAt: now + failure.seconds * 1000 });
+        setClock(now);
+        setFlow("otp_sent");
+        return;
+      }
+      setError(failure.message);
       return;
     }
     setOtpSentAt(sentAt);
+    setLastSend({ email, resendAt: sentAt + OTP_RESEND_SECONDS * 1000 });
+    setClock(Date.now());
     setFlow("otp_sent");
   };
 
@@ -181,6 +224,7 @@ export function EmailAuthPanel({ notice }: EmailAuthPanelProps) {
   };
 
   const handleResendOtp = async () => {
+    if (resendSecondsLeft > 0) return;
     setOtpCode("");
     setError(null);
     setInfo(null);
@@ -305,7 +349,7 @@ export function EmailAuthPanel({ notice }: EmailAuthPanelProps) {
 
   const panelSubtitle =
     cloudAuth && flow === "otp_sent"
-      ? "Enter the six-digit code we sent. It expires shortly."
+      ? `Enter the six-digit code we sent. It works for ${OTP_VALID_MINUTES} minutes.`
       : cloudAuth && flow === "email"
         ? "We’ll email you a secure code to continue."
         : cloudAuth
@@ -486,11 +530,17 @@ export function EmailAuthPanel({ notice }: EmailAuthPanelProps) {
             <Button
               variant="link"
               size="sm"
-              disabled={busy}
+              disabled={busy || resendSecondsLeft > 0}
               onClick={handleResendOtp}
-              className="mx-auto mt-8 block text-muted-foreground hover:text-foreground"
+              className="mx-auto mt-8 block text-muted-foreground tabular-nums hover:text-foreground"
             >
-              Didn't receive it? <span className="ml-1 underline">Resend code</span>
+              {resendSecondsLeft > 0 ? (
+                `Resend in ${formatCountdown(resendSecondsLeft)}`
+              ) : (
+                <>
+                  Didn't receive it? <span className="ml-1 underline">Resend code</span>
+                </>
+              )}
             </Button>
           </div>
         ) : null}

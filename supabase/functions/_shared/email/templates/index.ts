@@ -13,6 +13,14 @@ import type { EmailDoc } from "../blocks.ts";
 import { type RenderedEmail, type RenderOptions, renderEmail } from "../render.ts";
 import { type AuthCodeData, authCodeEmail } from "./auth-code.ts";
 
+export { AUTH_CODE_VALID_MINUTES } from "./auth-code.ts";
+export {
+  type AuthConfirmCodeData,
+  type AuthInviteData,
+  authConfirmCodeEmail,
+  authInviteEmail,
+} from "./auth-variants.ts";
+
 export interface EmailTemplateData {
   auth_code: AuthCodeData;
 }

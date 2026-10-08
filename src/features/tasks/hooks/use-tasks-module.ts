@@ -5,13 +5,22 @@
 
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { pickTagColor } from "../../../components/tag-colors";
+import { TAG_LINKS_SCOPE } from "../../../lib/paged-select";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { editableTaskFields } from "../../../lib/task-rows";
-import { UNDO_TOAST_MS, undoToast } from "../../../lib/undo-toast";
+import { undoToast } from "../../../lib/undo-toast";
 import { formatAwaySpan } from "../../focus/away-copy";
 import type { FocusSaveContext } from "../../focus/engine";
 import { readSavedFocusTotal, writeSavedFocusTotal } from "../../focus/saved-totals";
+import {
+  createOrAttachByName,
+  deleteTag as deleteWorkspaceTag,
+  recolorTag,
+  seedTags,
+  type TagContext,
+  toggleTag,
+  useTagView,
+} from "../../tags/store";
 import { WorkspaceContext } from "../../workspaces/workspace-context";
 import { setBucketTimeBlock } from "../default-view";
 import { writeTaskTimeTotal } from "../focus-time-write";
@@ -36,7 +45,6 @@ import {
   type QueuePlacement,
   type RecurrenceRule,
   type Tag,
-  type TagLink,
   type Task,
   type TaskQueueEntry,
   type TaskRelation,
@@ -79,19 +87,6 @@ const EMPTY_BUNDLE: TasksModuleBundle = {
   taskRelations: [],
   truncated: [],
 };
-
-function dropFailedTag<
-  P extends { tags: { id: string }[]; tagLinks: { id: string; tagId: string }[] },
->(prev: P, ids: { tempTagId: string; tempLinkId: string; orphanId: string | null }): P {
-  const { tempTagId, tempLinkId, orphanId } = ids;
-  return {
-    ...prev,
-    tags: prev.tags.filter((t) => t.id !== tempTagId && t.id !== orphanId),
-    tagLinks: prev.tagLinks.filter(
-      (l) => l.id !== tempLinkId && l.tagId !== tempTagId && l.tagId !== orphanId,
-    ),
-  };
-}
 
 function byPosition<T extends { position: string }>(a: T, b: T): number {
   return a.position < b.position ? -1 : a.position > b.position ? 1 : 0;
@@ -160,6 +155,14 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
         setBundle(next);
         setQueueRows(queue);
         setKeptRows([]);
+        // Tags live in the workspace tag store, shared by every surface (TV-T1).
+        seedTags(workspaceId, {
+          tags: next.tags,
+          links: next.tagLinks,
+          scope: { kind: "all" },
+          at: startedAt,
+          complete: !next.truncated.some((t) => t.scope === TAG_LINKS_SCOPE),
+        });
         setLoadedFrom({
           workspaceId,
           at: startedAt,
@@ -298,30 +301,20 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
   }, [liveTasks]);
 
   // ── tags (workspace-level, cross-cutting) ────────────────────────────────────
-  const liveTags = useMemo(
-    () =>
-      bundle.tags
-        .filter((t) => !t.deletedAt)
-        .slice()
-        .sort((a, b) => a.name.localeCompare(b.name)),
-    [bundle.tags],
-  );
+  // Read from the shared workspace tag store (TV-T1): every surface that hosts
+  // a task (Tasks, Calendar, Notes, Email) shows the same tags at once.
+  const tagView = useTagView(canRead ? workspaceId : null);
+  /** Live workspace tags, name-sorted. */
+  const liveTags = tagView.tags;
 
   /** Tags attached to each task (entityType "task"), name-sorted. */
   const tagsByTask = useMemo(() => {
-    const byId = new Map(liveTags.map((t) => [t.id, t]));
     const map = new Map<string, Tag[]>();
-    for (const link of bundle.tagLinks) {
-      if (link.entityType !== "task") continue;
-      const tag = byId.get(link.tagId);
-      if (!tag) continue;
-      const list = map.get(link.entityId);
-      if (list) list.push(tag);
-      else map.set(link.entityId, [tag]);
+    for (const [key, tags] of tagView.byEntity) {
+      if (key.startsWith("task:")) map.set(key.slice("task:".length), tags);
     }
-    for (const list of map.values()) list.sort((a, b) => a.name.localeCompare(b.name));
     return map;
-  }, [bundle.tagLinks, liveTags]);
+  }, [tagView]);
 
   /** Open-task count per tag — drives the filter menu (counts, hides empties). */
   const openTaskCountByTag = useMemo(() => {
@@ -329,12 +322,12 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
       liveTasks.filter((t) => t.status !== "done" && t.status !== "archived").map((t) => t.id),
     );
     const counts = new Map<string, number>();
-    for (const link of bundle.tagLinks) {
+    for (const link of tagView.links) {
       if (link.entityType !== "task" || !openIds.has(link.entityId)) continue;
       counts.set(link.tagId, (counts.get(link.tagId) ?? 0) + 1);
     }
     return counts;
-  }, [bundle.tagLinks, liveTasks]);
+  }, [tagView, liveTasks]);
 
   // ── personal queues (TV-D4) ─────────────────────────────────────────────────
   // Each person has their own Queue, not tied to a date (tasks-v2 §2). Rows of
@@ -468,11 +461,15 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
   );
 
   // ── task mutations ───────────────────────────────────────────────────────────
+  /**
+   * Create a task (shown at once). Resolves to the saved task, or null if it
+   * wasn't created — what `createTagForTask` takes to tag it before it exists.
+   */
   const createTask = useCallback(
-    (fields: Omit<NewTaskFields, "workspaceId" | "position">) => {
+    (fields: Omit<NewTaskFields, "workspaceId" | "position">): Promise<Task | null> => {
       if (!runtime || !workspaceId || !canEdit) {
         toast.error("You don't have edit access to Tasks in this workspace.");
-        return;
+        return Promise.resolve(null);
       }
       const bucketTasks = liveTasks.filter((t) => t.bucketId === fields.bucketId);
       const position = endPosition(bucketTasks);
@@ -484,17 +481,19 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
       const tempId = `tmp-${crypto.randomUUID()}`;
       optimistic.id = tempId;
       setBundle((prev) => ({ ...prev, tasks: [...prev.tasks, optimistic] }));
-      void runtime.tasks
+      return runtime.tasks
         .upsertTask({ ...optimistic, id: "" })
         .then((saved) => {
           setBundle((prev) => ({
             ...prev,
             tasks: prev.tasks.map((t) => (t.id === tempId ? saved : t)),
           }));
+          return saved;
         })
         .catch((e) => {
           setBundle((prev) => ({ ...prev, tasks: prev.tasks.filter((t) => t.id !== tempId) }));
           toast.error(e instanceof Error ? e.message : "Couldn't create task.");
+          return null;
         });
     },
     [runtime, workspaceId, canEdit, liveTasks, userId],
@@ -1438,218 +1437,70 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     [runtime, workspaceId, canEdit, liveBuckets, taskCountByBucket, load],
   );
 
-  // ── tag mutations (optimistic) ───────────────────────────────────────────────
+  // ── tag mutations (through the shared workspace tag store, TV-T1) ────────────
+
+  /** Where tag writes go, or null (with a toast) when this person can't edit Tasks. */
+  const tagContext = useCallback((): TagContext | null => {
+    if (!runtime || !workspaceId || !canEdit) {
+      toast.error("You don't have edit access to Tasks in this workspace.");
+      return null;
+    }
+    return { runtime, workspaceId, userId };
+  }, [runtime, workspaceId, canEdit, userId]);
 
   /** Attach or detach an existing tag on a task. */
   const toggleTaskTag = useCallback(
     (taskId: string, tagId: string) => {
-      if (!runtime || !workspaceId || !canEdit) {
-        toast.error("You don't have edit access to Tasks in this workspace.");
+      const ctx = tagContext();
+      if (!ctx) return;
+      if (isTempId(taskId)) {
+        toast.error("Still saving that task — try again in a moment.");
         return;
       }
-      // The tag is still being created (its id is a temp placeholder) — sending
-      // it to a uuid column would error. The create flow finishes in a beat.
-      if (isTempId(tagId)) {
-        toast.error("Still saving that tag — try again in a moment.");
-        return;
-      }
-      const rt = runtime;
-      const wsId = workspaceId;
-      const existing = bundle.tagLinks.find(
-        (l) => l.entityType === "task" && l.entityId === taskId && l.tagId === tagId,
-      );
-      if (existing) {
-        setBundle((prev) => ({
-          ...prev,
-          tagLinks: prev.tagLinks.filter((l) => l.id !== existing.id),
-        }));
-        void rt.tasks
-          .detachTag({ workspaceId: wsId, tagId, entityType: "task", entityId: taskId })
-          .catch((e) => {
-            toast.error(e instanceof Error ? e.message : "Couldn't remove tag.");
-            void load();
-          });
-        return;
-      }
-      const tempId = `tmp-${crypto.randomUUID()}`;
-      const optimistic: TagLink = {
-        id: tempId,
-        workspaceId: wsId,
-        tagId,
-        entityType: "task",
-        entityId: taskId,
-        createdAt: new Date().toISOString(),
-      };
-      setBundle((prev) => ({ ...prev, tagLinks: [...prev.tagLinks, optimistic] }));
-      void rt.tasks
-        .attachTag({ workspaceId: wsId, tagId, entityType: "task", entityId: taskId })
-        .then((saved) =>
-          setBundle((prev) => ({
-            ...prev,
-            tagLinks: prev.tagLinks.map((l) => (l.id === tempId ? saved : l)),
-          })),
-        )
-        .catch((e) => {
-          setBundle((prev) => ({
-            ...prev,
-            tagLinks: prev.tagLinks.filter((l) => l.id !== tempId),
-          }));
-          toast.error(e instanceof Error ? e.message : "Couldn't add tag.");
-        });
+      toggleTag(ctx, { entityType: "task", entityId: taskId }, tagId);
     },
-    [runtime, workspaceId, canEdit, bundle.tagLinks, load],
+    [tagContext],
   );
 
   /**
-   * Create a workspace tag (auto-colored) and attach it to a task. If a tag with
-   * the same name already exists, attach that one instead of duplicating.
+   * Attach the tag with this name, or create it (auto-coloured) and attach it,
+   * in one step. `taskId` can be the promise `createTask` returns, so a task
+   * still being created can be tagged (capture); a tag made for a task that
+   * then fails to save is removed again.
    */
   const createTagForTask = useCallback(
-    (name: string, taskId: string) => {
-      const trimmed = name.trim();
-      if (!trimmed || !runtime || !workspaceId || !canEdit) {
-        if (!canEdit) toast.error("You don't have edit access to Tasks in this workspace.");
+    (name: string, taskId: string | PromiseLike<Task | null>) => {
+      const ctx = tagContext();
+      if (!ctx) return;
+      if (typeof taskId === "string" && isTempId(taskId)) {
+        toast.error("Still saving that task — try again in a moment.");
         return;
       }
-      const rt = runtime;
-      const wsId = workspaceId;
-      const dupe = bundle.tags.find(
-        (t) => !t.deletedAt && t.name.trim().toLowerCase() === trimmed.toLowerCase(),
-      );
-      if (dupe) {
-        const linked = bundle.tagLinks.some(
-          (l) => l.entityType === "task" && l.entityId === taskId && l.tagId === dupe.id,
-        );
-        if (!linked) toggleTaskTag(taskId, dupe.id);
-        return;
-      }
-      const now = new Date().toISOString();
-      const color = pickTagColor(bundle.tags.filter((t) => !t.deletedAt));
-      const tempTagId = `tmp-${crypto.randomUUID()}`;
-      const tempLinkId = `tmp-${crypto.randomUUID()}`;
-      const optimisticTag: Tag = {
-        id: tempTagId,
-        workspaceId: wsId,
-        ownerId: userId ?? "",
-        name: trimmed,
-        color,
-        createdAt: now,
-        updatedAt: now,
-        deletedAt: null,
-      };
-      const optimisticLink: TagLink = {
-        id: tempLinkId,
-        workspaceId: wsId,
-        tagId: tempTagId,
+      createOrAttachByName(ctx, name, {
         entityType: "task",
-        entityId: taskId,
-        createdAt: now,
-      };
-      setBundle((prev) => ({
-        ...prev,
-        tags: [...prev.tags, optimisticTag],
-        tagLinks: [...prev.tagLinks, optimisticLink],
-      }));
-      void (async () => {
-        // Track the saved tag id so a failure *after* the tag is created (but
-        // before/at attach) rolls back the now-orphan tag too — by then the temp
-        // id has been swapped out, so filtering by tempTagId alone would miss it.
-        let savedTagId: string | null = null;
-        try {
-          const savedTag = await rt.tasks.upsertTag({ ...optimisticTag, id: "" });
-          savedTagId = savedTag.id;
-          setBundle((prev) => ({
-            ...prev,
-            tags: prev.tags.map((t) => (t.id === tempTagId ? savedTag : t)),
-            tagLinks: prev.tagLinks.map((l) =>
-              l.tagId === tempTagId ? { ...l, tagId: savedTag.id } : l,
-            ),
-          }));
-          const savedLink = await rt.tasks.attachTag({
-            workspaceId: wsId,
-            tagId: savedTag.id,
-            entityType: "task",
-            entityId: taskId,
-          });
-          setBundle((prev) => ({
-            ...prev,
-            tagLinks: prev.tagLinks.map((l) => (l.id === tempLinkId ? savedLink : l)),
-          }));
-        } catch (e) {
-          setBundle((prev) => dropFailedTag(prev, { tempTagId, tempLinkId, orphanId: savedTagId }));
-          // The tag was created but attaching failed — delete the orphan server-side.
-          if (savedTagId) {
-            void rt.tasks.deleteTag({ workspaceId: wsId, tagId: savedTagId }).catch(() => {});
-          }
-          toast.error(e instanceof Error ? e.message : "Couldn't create tag.");
-        }
-      })();
+        entityId:
+          typeof taskId === "string" ? taskId : Promise.resolve(taskId).then((t) => t?.id ?? null),
+      });
     },
-    [runtime, workspaceId, canEdit, bundle.tags, bundle.tagLinks, userId, toggleTaskTag],
+    [tagContext],
   );
 
   /** Recolor a workspace tag (label-palette hue name). */
   const setTagColor = useCallback(
     (tagId: string, color: string) => {
-      if (isTempId(tagId)) {
-        toast.error("Still saving that tag — try again in a moment.");
-        return;
-      }
-      const existing = bundle.tags.find((t) => t.id === tagId);
-      if (!existing || existing.color === color) return;
-      const updated = { ...existing, color, updatedAt: new Date().toISOString() };
-      setBundle((prev) => ({
-        ...prev,
-        tags: prev.tags.map((t) => (t.id === tagId ? updated : t)),
-      }));
-      guard(async () => {
-        const saved = await runtime!.tasks.upsertTag(updated);
-        setBundle((prev) => ({
-          ...prev,
-          tags: prev.tags.map((t) => (t.id === tagId ? saved : t)),
-        }));
-      });
+      const ctx = tagContext();
+      if (ctx) recolorTag(ctx, tagId, color);
     },
-    [bundle.tags, guard, runtime],
+    [tagContext],
   );
 
-  /** Delete a workspace tag — soft-deletes the tag and drops all its links. */
+  /** Delete a workspace tag everywhere, with Undo (committed when the toast closes). */
   const deleteTag = useCallback(
     (tagId: string) => {
-      if (isTempId(tagId)) {
-        toast.error("Still saving that tag — try again in a moment.");
-        return;
-      }
-      const existing = bundle.tags.find((t) => t.id === tagId);
-      if (!existing) return;
-      // Snapshot before the optimistic removal so Undo restores locally with
-      // zero network (the server was never touched — see below).
-      const prevTags = bundle.tags;
-      const prevTagLinks = bundle.tagLinks;
-      setBundle((prev) => ({
-        ...prev,
-        tags: prev.tags.filter((t) => t.id !== tagId),
-        tagLinks: prev.tagLinks.filter((l) => l.tagId !== tagId),
-      }));
-      // Deferred commit (the email-triage pattern, DF-5): the server delete
-      // hard-drops every attachment, so it only fires once the undo window
-      // closes — Undo just cancels it and puts the local snapshot back.
-      let undone = false;
-      window.setTimeout(() => {
-        if (undone) return;
-        guard(async () => {
-          await runtime!.tasks.deleteTag({ workspaceId: workspaceId!, tagId });
-        });
-      }, UNDO_TOAST_MS);
-      undoToast("Tag deleted", {
-        description: `“${existing.name}” comes off everything it was tagged on.`,
-        onUndo: () => {
-          undone = true;
-          setBundle((prev) => ({ ...prev, tags: prevTags, tagLinks: prevTagLinks }));
-        },
-      });
+      const ctx = tagContext();
+      if (ctx) deleteWorkspaceTag(ctx, tagId);
     },
-    [bundle.tags, bundle.tagLinks, guard, runtime, workspaceId],
+    [tagContext],
   );
 
   return {
