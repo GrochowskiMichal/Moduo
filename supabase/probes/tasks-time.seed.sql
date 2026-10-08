@@ -1,4 +1,4 @@
--- Data that exists before 20261008224500_tasks_time_entries.sql runs, for
+-- Data that exists before 20261008225500_tasks_time_entries.sql runs, for
 -- supabase/probes/tasks-time.probe.sql (TV-D3). It goes on top of the TV-D2
 -- probe's stub chain and seed (people O, A, B, V, N, X; workspace W with the
 -- shared buckets SB/SB2 and Bea's private PB; Nell's workspace WN; Ada's key

@@ -32,7 +32,7 @@ No screen looks different in this block: totals read the same, and "you 50m" / "
 - [ ] **Do:** In an old build (from before TV-D1), rename a task someone has just tracked time on (from a list loaded before their time) → **Expect:** the rename saves and their time stays (the stale lower total is ignored) _(desktop)_
 
 ## Migrations / data
-- [ ] **Do:** `select version, name from supabase_migrations.schema_migrations where name = 'tasks_time_entries'` → **Expect:** `20261008221907` (applied 2026-10-09; the file is `20261008224500`) _(SQL)_
+- [ ] **Do:** `select version, name from supabase_migrations.schema_migrations where name = 'tasks_time_entries'` → **Expect:** `20261008221907` (applied 2026-10-09; the file is `20261008225500`) _(SQL)_
 - [ ] **Do:** `select count(*), sum(seconds) from task_time_entries where kind = 'legacy'` right after the apply → **Expect:** one row per task that had time, adding up to the old totals (11 tasks, 15,358 s on 2026-10-08) _(SQL)_
 - [ ] **Do:** `select count(*) from tasks t where t.time_spent_seconds <> (select greatest(coalesce(sum(e.seconds),0),0) from task_time_entries e where e.task_id = t.id and e.kind <> 'waiting')` → **Expect:** 0 (every cached total matches its entries) _(SQL)_
 - [ ] **Do:** `select has_function_privilege('anon','public.tasks_op_track_time(uuid,uuid,text,integer,timestamptz,text,uuid)','EXECUTE'), has_table_privilege('authenticated','public.task_time_entries','INSERT')` → **Expect:** false, false _(SQL)_

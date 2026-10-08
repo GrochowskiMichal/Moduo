@@ -1,5 +1,5 @@
 -- What production has on tasks beyond the TV-D2 stub chain that
--- 20261008224500_tasks_time_entries.sql must coexist with (project
+-- 20261008225500_tasks_time_entries.sql must coexist with (project
 -- wtoonrvuqumihpkbvwvs, pg_get_functiondef, 2026-10-09): TV-D5's server-side
 -- updated_at stamp (applied as 20261008220401_tasks_server_updated_at, its file
 -- still on TV-D5's branch). Every insert and update of a task, bucket or tag

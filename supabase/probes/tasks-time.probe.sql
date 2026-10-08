@@ -1,4 +1,4 @@
--- Probe for supabase/migrations/20261008224500_tasks_time_entries.sql (TV-D3,
+-- Probe for supabase/migrations/20261008225500_tasks_time_entries.sql (TV-D3,
 -- specs/tasks-v2.md block 5). Run it on a throwaway Postgres 17 database that
 -- holds nothing else. The migration runs in one transaction (it locks tasks
 -- between the backfill and its triggers), like Supabase applies it:
@@ -11,7 +11,7 @@
 --     -f supabase/probes/tasks-queue.seed.sql \
 --     -f supabase/migrations/20261008171500_tasks_personal_queue.sql \
 --     -f supabase/probes/tasks-time.seed.sql
---   psql $P -1 -f supabase/migrations/20261008224500_tasks_time_entries.sql
+--   psql $P -1 -f supabase/migrations/20261008225500_tasks_time_entries.sql
 --   psql $P -f supabase/probes/tasks-time.probe.sql
 --
 -- Every check stops the run with the failing check's message. A clean run

@@ -89,7 +89,7 @@ describe("cross-runtime drift guards", () => {
 
   it("time entry kinds, actions and answers match the TV-D3 migration", () => {
     const sql = readFileSync(
-      resolve(MIGRATIONS_DIR, "20261008224500_tasks_time_entries.sql"),
+      resolve(MIGRATIONS_DIR, "20261008225500_tasks_time_entries.sql"),
       "utf8",
     );
     const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(",");
