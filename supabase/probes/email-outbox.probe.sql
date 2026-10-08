@@ -196,6 +196,18 @@ SELECT public.email_outbox__delivered('re_1', '2026-10-17T00:00:00Z');
 SELECT pg_temp.ok((SELECT delivered_at FROM public.email_outbox WHERE dedupe_key = 'c:1') = '2026-10-16T12:00:05Z', 'the first delivery time stays');
 SELECT pg_temp.ok(public.email_outbox__delivered('', NULL) = 0, 'an empty id stamps nothing');
 
+-- ===== one run at a time =====
+SELECT pg_temp.ok(public.email_outbox__run_start() IS NOT NULL, 'the first run takes the lease');
+SELECT pg_temp.ok(public.email_outbox__run_start() IS NULL, 'a second run while it holds the lease gets nothing');
+SELECT public.email_outbox__run_stop((SELECT token FROM public.email_outbox_runner));
+SELECT pg_temp.ok(public.email_outbox__run_start() IS NOT NULL, 'after it stops, the next run takes the lease');
+UPDATE public.email_outbox_runner SET locked_until = now() - interval '1 second';
+SELECT pg_temp.ok(public.email_outbox__run_start() IS NOT NULL, 'a crashed run''s lease frees itself when it ends');
+SELECT public.email_outbox__run_stop(gen_random_uuid());
+SELECT pg_temp.ok((SELECT locked_until > now() FROM public.email_outbox_runner), 'a stale token can''t release another run''s lease');
+SELECT public.email_outbox__run_stop((SELECT token FROM public.email_outbox_runner));
+SELECT pg_temp.ok(NOT has_table_privilege('anon', 'public.email_outbox_runner', 'SELECT') AND NOT has_table_privilege('authenticated', 'public.email_outbox_runner', 'UPDATE'), 'the run lease is service_role only');
+
 -- ===== health (AC19) =====
 DELETE FROM public.email_outbox;
 TRUNCATE net.calls;
@@ -204,7 +216,9 @@ INSERT INTO public.email_outbox (kind, to_email, dedupe_key, status, last_attemp
   ('welcome', 'a@b.co', 'h:2', 'failed', now() - interval '2 minutes', 'resend_http_500'),
   ('welcome', 'a@b.co', 'h:old', 'failed', now() - interval '11 minutes', 'resend_http_500'),
   ('ops_alert', 'hello@moduo.app', 'h:alert-failed', 'failed', now() - interval '1 minute', 'resend_http_500');
-SELECT pg_temp.ok(public.email_outbox__health() IS NULL, 'two recent failures (plus an old one and a failed alert) raise no alert');
+INSERT INTO public.email_outbox (kind, to_email, dedupe_key, status, attempts, last_attempt_at, last_error, send_after) VALUES
+  ('welcome', 'a@b.co', 'h:blip', 'queued', 1, now() - interval '1 minute', 'resend_http_503', now() + interval '1 minute');
+SELECT pg_temp.ok(public.email_outbox__health() IS NULL, 'two recent failures (plus an old one, a failed alert and a first-try blip) raise no alert');
 INSERT INTO public.email_outbox (kind, to_email, dedupe_key, status, last_attempt_at, last_error) VALUES
   ('welcome', 'a@b.co', 'h:3', 'failed', now() - interval '3 minutes', 'resend_http_500');
 SELECT pg_temp.ok(public.email_outbox__health() IS NOT NULL, 'three failures in 10 minutes queue an alert');
@@ -220,6 +234,18 @@ DELETE FROM public.email_outbox;
 INSERT INTO public.email_outbox (kind, to_email, dedupe_key, status, last_error) VALUES
   ('auth_code', 'tom@becker.studio', 'auth_code:w:0', 'failed', 'resend_http_500');
 SELECT pg_temp.ok(public.email_outbox__health() IS NOT NULL, 'one failed sign-in code is enough for an alert');
+SELECT pg_temp.ok((SELECT (payload ->> 'auth_code_failed')::int FROM public.email_outbox WHERE kind = 'ops_alert') = 1, 'the alert counts the sign-in code (before)');
+DELETE FROM public.email_outbox;
+INSERT INTO public.email_outbox (kind, to_email, dedupe_key, status, attempts, last_attempt_at, last_error, send_after) VALUES
+  ('welcome', 'a@b.co', 'r:1', 'queued', 2, now() - interval '1 minute', 'resend_http_503', now() + interval '4 minutes'),
+  ('welcome', 'a@b.co', 'r:2', 'queued', 3, now() - interval '2 minutes', 'resend_http_503', now() + interval '13 minutes'),
+  ('welcome', 'a@b.co', 'r:3', 'queued', 2, now() - interval '3 minutes', 'timeout', now() + interval '2 minutes');
+SELECT pg_temp.ok(public.email_outbox__health() IS NOT NULL, 'three emails still retrying after failing twice raise an alert (an outage alerts in minutes)');
+SELECT pg_temp.ok((SELECT (payload ->> 'other_failed')::int FROM public.email_outbox WHERE kind = 'ops_alert') = 3, 'retrying failures are counted');
+DELETE FROM public.email_outbox;
+INSERT INTO public.email_outbox (kind, to_email, dedupe_key, status, last_error) VALUES
+  ('auth_code', 'tom@becker.studio', 'auth_code:w:0', 'failed', 'resend_http_500');
+SELECT public.email_outbox__health();
 SELECT pg_temp.ok((SELECT (payload ->> 'auth_code_failed')::int FROM public.email_outbox WHERE kind = 'ops_alert') = 1, 'the alert counts the sign-in code');
 
 -- ===== purge (AC18) =====

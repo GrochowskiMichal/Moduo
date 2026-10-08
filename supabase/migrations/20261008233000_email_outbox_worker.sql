@@ -22,7 +22,9 @@
 -- with the Vault copy, so the secret lives in one place and nobody ever types or
 -- pastes it. (Amends T12, which had a second copy as a function secret.)
 --
--- A claimed row is 'sending' with a 5-minute lease. A worker that dies mid-send
+-- Only one worker run at a time holds the run lease (email_outbox_runner); a
+-- kick that arrives during a run exits, and the running loop or the next
+-- minute picks its rows up. A claimed row is 'sending' with a 5-minute lease. A worker that dies mid-send
 -- leaves it there until the lease ends; the next run claims it again and sends
 -- it with the same Idempotency-Key, which Resend answers with the first send
 -- (keys live 24 h), so a crash never sends twice. Temporary failures go back to
@@ -70,7 +72,7 @@ CREATE INDEX IF NOT EXISTS email_outbox_provider_idx ON public.email_outbox (pro
   WHERE provider_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS email_outbox_failed_at_idx
   ON public.email_outbox ((coalesce(last_attempt_at, created_at)))
-  WHERE status = 'failed';
+  WHERE last_error IS NOT NULL;
 
 -- ---------------------------------------------------------------------------
 -- Suppressions (T13)
@@ -96,6 +98,28 @@ COMMENT ON TABLE public.email_suppressions IS
 ALTER TABLE public.email_suppressions ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE public.email_suppressions FROM PUBLIC, anon, authenticated;
 GRANT ALL ON TABLE public.email_suppressions TO service_role;
+
+-- ---------------------------------------------------------------------------
+-- One worker run at a time. Every transaction that queues a due email kicks
+-- the worker; without this, a burst of kicks would start parallel runs whose
+-- sends add up past Resend's per-team rate limit, which sign-in codes share.
+-- A run takes the lease (email_outbox__run_start) or exits; the lease outlives
+-- the longest possible run, so a crashed run frees it on its own.
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS public.email_outbox_runner (
+  id boolean PRIMARY KEY DEFAULT true,
+  token uuid NOT NULL,
+  locked_until timestamptz NOT NULL,
+  CONSTRAINT email_outbox_runner_one_row CHECK (id)
+);
+
+COMMENT ON TABLE public.email_outbox_runner IS
+  'The email-worker run lease: one row, held by at most one run (TX-3). Service role only.';
+
+ALTER TABLE public.email_outbox_runner ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.email_outbox_runner FROM PUBLIC, anon, authenticated;
+GRANT ALL ON TABLE public.email_outbox_runner TO service_role;
 
 -- ---------------------------------------------------------------------------
 -- The worker's secret, generated in the database and kept in Vault only.
@@ -296,6 +320,39 @@ BEGIN
 END;
 $$;
 
+-- Returns a token when this run holds the lease, NULL when another run does.
+CREATE OR REPLACE FUNCTION public.email_outbox__run_start(p_lease_seconds integer DEFAULT 120)
+RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_token uuid;
+BEGIN
+  INSERT INTO public.email_outbox_runner AS r (id, token, locked_until)
+  VALUES (true, gen_random_uuid(), now() + make_interval(secs => greatest(30, least(coalesce(p_lease_seconds, 120), 600))))
+  ON CONFLICT (id) DO UPDATE
+     SET token = EXCLUDED.token, locked_until = EXCLUDED.locked_until
+   WHERE r.locked_until < now()
+  RETURNING r.token INTO v_token;
+  RETURN v_token;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.email_outbox__run_stop(p_token uuid)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+BEGIN
+  UPDATE public.email_outbox_runner r
+     SET locked_until = now() - interval '1 second'
+   WHERE r.token = p_token;
+END;
+$$;
+
 CREATE OR REPLACE FUNCTION public.email_outbox__claim(
   p_limit integer DEFAULT 10,
   p_lease_seconds integer DEFAULT 300
@@ -454,9 +511,12 @@ $$;
 -- ---------------------------------------------------------------------------
 
 -- T19: one ops_alert to hello@ when any sign-in code failed, or 3+ emails
--- failed, in the last 10 minutes; at most one alert per 30 minutes. Failed
--- alerts don't count (if Resend is down the alert fails too; its status page is
--- the backstop). Returns the alert's id, or NULL when nothing was queued.
+-- failed, in the last 10 minutes; at most one alert per 30 minutes. "Failed"
+-- includes emails still being retried after failing twice, so an outage alerts
+-- within minutes rather than after the 5th attempt (~80 minutes); a single
+-- blip that the 1-minute retry fixes doesn't. Failed alerts don't count (if
+-- Resend is down the alert fails too; its status page is the backstop).
+-- Returns the alert's id, or NULL when nothing was queued.
 CREATE OR REPLACE FUNCTION public.email_outbox__health()
 RETURNS uuid
 LANGUAGE plpgsql
@@ -476,7 +536,8 @@ BEGIN
          count(*) FILTER (WHERE o.kind <> 'auth_code')
     INTO v_auth, v_other
     FROM public.email_outbox o
-   WHERE o.status = 'failed'
+   WHERE o.last_error IS NOT NULL
+     AND (o.status = 'failed' OR (o.status = 'queued' AND o.attempts >= 2))
      AND o.kind <> 'ops_alert'
      AND coalesce(o.last_attempt_at, o.created_at) >= v_since;
 
@@ -501,7 +562,8 @@ BEGIN
       SELECT left(regexp_replace(coalesce(o.last_error, 'unknown_error'), '[^[:space:]<>"'',;:()]+@[^[:space:]<>"'',;:()]+', '[address]', 'g'), 200) AS error,
              count(*) AS n
         FROM public.email_outbox o
-       WHERE o.status = 'failed'
+       WHERE o.last_error IS NOT NULL
+         AND (o.status = 'failed' OR (o.status = 'queued' AND o.attempts >= 2))
          AND o.kind <> 'ops_alert'
          AND coalesce(o.last_attempt_at, o.created_at) >= v_since
        GROUP BY 1
@@ -567,6 +629,8 @@ BEGIN
     'public.email_outbox__after_insert()',
     'public.email_outbox__tick()',
     'public.email_outbox__authorize(text)',
+    'public.email_outbox__run_start(integer)',
+    'public.email_outbox__run_stop(uuid)',
     'public.email_outbox__claim(integer, integer)',
     'public.email_outbox__finish(uuid, text, text, text, timestamptz)',
     'public.email_suppression__add(text, text, text)',

@@ -121,7 +121,7 @@ export function opsAlertEmail(data: OpsAlertData): EmailDoc {
       paragraph(
         data.authCodeFailed > 0
           ? "People can't sign in while codes fail. If Resend is refusing them, switch the Send Email Hook off in the Supabase dashboard (Authentication → Auth Hooks): Auth goes back to the old sender at once."
-          : "Other emails are tried again on their own, 5 attempts over about 80 minutes, then stay failed in email_outbox.",
+          : "Other emails are tried again on their own, 5 attempts over about 80 minutes, then stay failed in email_outbox. Some of the ones counted here may still go out.",
       ),
       link("Open the email runbook", EMAIL_RUNBOOK_URL),
       muted("You get at most one of these every 30 minutes, so more may have failed since."),

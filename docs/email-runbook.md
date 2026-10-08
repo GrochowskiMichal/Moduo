@@ -11,9 +11,9 @@ How Moduo's own emails are switched on, checked and rolled back. The build plan 
 | Sign-in emails | Supabase Auth → Send Email Hook → Edge Function `auth-email-hook` | Since TX-2. Signed requests (Standard Webhooks). |
 | Log | `public.email_outbox` | One row per email: who, which kind, sent or failed, Resend's id. Never the code. Deleted after 30 days; rows tied to a deleted account go at the next daily run after an hour's grace, so within about 25 hours (pg_cron `email-outbox-purge`, 03:17 UTC). A failed send for an invite or first sign-in names no account, so it stays the full 30 days. |
 | Logos | `https://app.moduo.app/email/{lockup,mark}-{light,dark}@2x.png` | From BRAND-1's export in `public/email/`. Served once the web app is deployed with them. |
-| Queue | `public.email_outbox` + Edge Function `email-worker` | Since TX-3. Features call `email_enqueue(...)`; an insert trigger and the pg_cron job `email-outbox-worker` (every minute) kick the worker over pg_net. Temporary failures are tried again after 1, 5, 15 and 60 minutes, then marked failed. Every send carries `Idempotency-Key = dedupe_key`. |
+| Queue | `public.email_outbox` + Edge Function `email-worker` | Since TX-3. Features call `email_enqueue(...)`; an insert trigger and the pg_cron job `email-outbox-worker` (every minute) kick the worker over pg_net. One run at a time (`email_outbox_runner` lease). Temporary failures are tried again after 1, 5, 15 and 60 minutes, then marked failed. Every send carries `Idempotency-Key = dedupe_key`. |
 | Suppressions | `public.email_suppressions` + Edge Function `resend-webhook` | Since TX-3. Hard bounces and spam complaints from Resend; such an address gets nothing more except sign-in codes. |
-| Alerts | pg_cron `email-outbox-health` (every 5 minutes) | One `ops_alert` to hello@ when a sign-in code failed or 3+ emails failed in 10 minutes; at most one per 30 minutes. If Resend itself is down the alert can't go out either: Resend's status page is the backstop. |
+| Alerts | pg_cron `email-outbox-health` (every 5 minutes) | One `ops_alert` to hello@ when a sign-in code failed or 3+ emails failed in 10 minutes (counting emails still retrying after two failures); at most one per 30 minutes. If Resend itself is down the alert can't go out either: Resend's status page is the backstop. |
 
 ### Secrets (Edge Functions)
 

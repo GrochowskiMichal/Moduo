@@ -191,6 +191,59 @@ describe("claim, send, retry", () => {
   });
 });
 
+describe("one run at a time", () => {
+  it("runs while it holds the lease and releases it afterwards", async () => {
+    const queue = fakeQueue([row()]);
+    const calls: string[] = [];
+    const summary = await runOutbox({
+      ...queue.deps,
+      lock: {
+        start: async () => {
+          calls.push("start");
+          return "token-1";
+        },
+        stop: async (token) => {
+          calls.push(`stop:${token}`);
+        },
+      },
+    });
+    expect(summary.sent).toBe(1);
+    expect(calls).toEqual(["start", "stop:token-1"]);
+  });
+
+  it("does nothing when another run holds the lease", async () => {
+    const queue = fakeQueue([row()]);
+    const summary = await runOutbox({
+      ...queue.deps,
+      lock: { start: async () => null, stop: async () => {} },
+    });
+    expect(summary).toEqual({ claimed: 0, sent: 0, retried: 0, failed: 0, unrecorded: 0, busy: true });
+    expect(queue.claims).toEqual([]);
+  });
+
+  it("releases the lease when the run throws", async () => {
+    const released: string[] = [];
+    await expect(
+      runOutbox({
+        ...fakeQueue([]).deps,
+        claim: async () => {
+          throw new Error("rpc email_outbox__claim: 503");
+        },
+        lock: { start: async () => "t", stop: async (token) => void released.push(token) },
+      }),
+    ).rejects.toThrow("503");
+    expect(released).toEqual(["t"]);
+  });
+
+  it("keeps addresses out of its reports", async () => {
+    const events: Record<string, unknown>[] = [];
+    const queue = fakeQueue([row()], [{ ok: false, retryable: false, status: 422, error: "Invalid to: tom@becker.studio" }]);
+    await runOutbox({ ...queue.deps, report: (_event, detail) => events.push(detail) });
+    expect(JSON.stringify(events)).not.toContain("tom@becker.studio");
+    expect(JSON.stringify(events)).toContain("[address]");
+  });
+});
+
 describe("the SQL side agrees", () => {
   const sql = readFileSync(MIGRATION, "utf8");
 

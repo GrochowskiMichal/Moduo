@@ -20,6 +20,7 @@
  */
 
 import type { EmailSuppressionReason } from "../contracts/vocabularies.ts";
+import { redactAddresses } from "../escape.ts";
 import { verifyWebhook, type WebhookHeaders } from "../standard-webhooks.ts";
 
 export const MAX_WEBHOOK_BODY_BYTES = 256 * 1024;
@@ -124,7 +125,11 @@ export async function handleResendWebhook(
       await deps.markDelivered({ providerId: action.providerId, at: action.at || new Date(now()).toISOString() });
     }
   } catch (error) {
-    report("write_failed", { action: action.type, error: error instanceof Error ? error.message : String(error) });
+    // An RPC error can quote the row ("Failing row contains (…)"): never log an address.
+    report("write_failed", {
+      action: action.type,
+      error: redactAddresses(error instanceof Error ? error.message : String(error)),
+    });
     return { status: 500, body: { error: "write_failed" } };
   }
   return { status: 200, body: { ok: true, action: action.type } };

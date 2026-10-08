@@ -13,11 +13,17 @@
  * - A temporary failure (timeout, 429, 5xx) goes back to the queue after 1, 5,
  *   15, then 60 minutes; the 5th failed attempt, a permanent refusal, or a row
  *   no template can render is marked failed (the health job then alerts).
- * - Sends are paced so a burst stays well inside Resend's per-team rate limit,
- *   which sign-in codes share.
+ * - One run at a time (the database's run lease, `lock`), and its sends are
+ *   paced, so a burst stays well inside Resend's per-team rate limit, which
+ *   sign-in codes share. A kick that finds a run going exits; the running loop
+ *   or the next minute's kick picks its rows up.
+ * - A run stays short: 30 s of claiming, sends that give up after 5 s, so the
+ *   longest run (~90 s) ends inside the run lease (120 s) and the Edge
+ *   Function's wall-clock limit (150 s on the free plan).
  */
 
 import { type EmailKind, isEmailKind } from "../contracts/vocabularies.ts";
+import { redactAddresses } from "../escape.ts";
 import type { EmailDoc } from "./blocks.ts";
 import { renderEmail } from "./render.ts";
 import {
@@ -36,7 +42,9 @@ export const OUTBOX_BACKOFF_MINUTES = [1, 5, 15, 60] as const;
 export const OUTBOX_BATCH_SIZE = 10;
 export const OUTBOX_MAX_ROWS_PER_RUN = 100;
 /** Stop claiming new batches after this long; claimed rows are always finished. */
-export const OUTBOX_BUDGET_MS = 40_000;
+export const OUTBOX_BUDGET_MS = 30_000;
+/** Longest wait for one Resend request (a timeout is retried on a later run). */
+export const OUTBOX_SEND_TIMEOUT_MS = 5_000;
 /** At most ~4 sends a second from the worker (Resend's default is 10 per team). */
 export const OUTBOX_PACE_MS = 250;
 
@@ -79,12 +87,21 @@ export const OUTBOX_TEMPLATES: Partial<Record<EmailKind, QueuedTemplate>> = {
   ops_alert: (payload) => ({ doc: opsAlertEmail(parseOpsAlertPayload(payload)) }),
 };
 
+/** The run lease: `email_outbox__run_start` / `email_outbox__run_stop`. */
+export type OutboxRunLock = {
+  /** A token when this run may go ahead, null when another run holds the lease. */
+  start: () => Promise<string | null>;
+  stop: (token: string) => Promise<void>;
+};
+
 export type OutboxDeps = {
   /** `email_outbox__claim(limit)`. */
   claim: (limit: number) => Promise<OutboxRow[]>;
   /** `email_outbox__finish(...)`. May throw; the row then waits for its lease to end. */
   finish: (outcome: OutboxOutcome) => Promise<void>;
   send: (email: OutgoingEmail) => Promise<SendResult>;
+  /** Without it the run goes ahead unconditionally (tests). */
+  lock?: OutboxRunLock;
   templates?: Partial<Record<EmailKind, QueuedTemplate>>;
   render?: typeof renderEmail;
   now?: () => number;
@@ -104,6 +121,8 @@ export type OutboxRunSummary = {
   failed: number;
   /** Outcomes the database didn't take; those rows go again when their lease ends. */
   unrecorded: number;
+  /** Another run held the lease, so this one did nothing. */
+  busy?: boolean;
 };
 
 /** When a row whose attempt `attempts` just failed temporarily should be tried again, or null when it's out of attempts. */
@@ -164,6 +183,20 @@ export function outcomeFor(row: OutboxRow, result: SendResult, nowMs: number): O
 }
 
 export async function runOutbox(deps: OutboxDeps): Promise<OutboxRunSummary> {
+  if (!deps.lock) return runBatches(deps);
+  const token = await deps.lock.start();
+  if (!token) return { claimed: 0, sent: 0, retried: 0, failed: 0, unrecorded: 0, busy: true };
+  try {
+    return await runBatches(deps);
+  } finally {
+    // A failed release only means the next run waits for the lease to end.
+    await deps.lock.stop(token).catch((error: unknown) => {
+      deps.report?.("lock_release_failed", { error: error instanceof Error ? error.message : String(error) });
+    });
+  }
+}
+
+async function runBatches(deps: OutboxDeps): Promise<OutboxRunSummary> {
   const now = deps.now ?? Date.now;
   const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
   const report = deps.report ?? (() => {});
@@ -184,7 +217,7 @@ export async function runOutbox(deps: OutboxDeps): Promise<OutboxRunSummary> {
       const built = buildOutboxEmail(row, deps.templates ?? OUTBOX_TEMPLATES, deps.render ?? renderEmail);
       let outcome: OutboxOutcome;
       if (!built.ok) {
-        report("unsendable", { id: row.id, kind: row.kind, error: built.error });
+        report("unsendable", { id: row.id, kind: row.kind, error: redactAddresses(built.error) });
         outcome = { id: row.id, outcome: "failed", error: built.error };
       } else {
         if (lastSendAt !== null) {
@@ -195,7 +228,13 @@ export async function runOutbox(deps: OutboxDeps): Promise<OutboxRunSummary> {
         const result = await deps.send(built.email);
         outcome = outcomeFor(row, result, now());
         if (!result.ok) {
-          report("send_failed", { id: row.id, kind: row.kind, attempt: row.attempts, status: result.status, error: result.error });
+          report("send_failed", {
+            id: row.id,
+            kind: row.kind,
+            attempt: row.attempts,
+            status: result.status,
+            error: redactAddresses(result.error),
+          });
         }
       }
 
@@ -203,7 +242,7 @@ export async function runOutbox(deps: OutboxDeps): Promise<OutboxRunSummary> {
         await deps.finish(outcome);
       } catch (error) {
         summary.unrecorded += 1;
-        report("finish_failed", { id: row.id, error: error instanceof Error ? error.message : String(error) });
+        report("finish_failed", { id: row.id, error: redactAddresses(error instanceof Error ? error.message : String(error)) });
       }
       if (outcome.outcome === "sent") summary.sent += 1;
       else if (outcome.outcome === "retry") summary.retried += 1;

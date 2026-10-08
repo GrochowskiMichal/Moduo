@@ -17,7 +17,12 @@
  * no esm.sh import on a cold start.
  */
 
-import { type OutboxOutcome, type OutboxRow, runOutbox } from "../_shared/email/outbox.ts";
+import {
+  OUTBOX_SEND_TIMEOUT_MS,
+  type OutboxOutcome,
+  type OutboxRow,
+  runOutbox,
+} from "../_shared/email/outbox.ts";
 import { sendViaResend } from "../_shared/email/send.ts";
 import { getDefaultSecretKey } from "../_shared/secret-keys.ts";
 import { type ServiceRpcConfig, serviceRpc } from "../_shared/service-rpc.ts";
@@ -54,7 +59,14 @@ Deno.serve(async (req: Request) => {
               p_retry_at: outcome.outcome === "retry" ? outcome.retryAt : null,
             });
           },
-          send: (email) => sendViaResend(email, { apiKey: Deno.env.get("RESEND_API_KEY") }),
+          send: (email) =>
+            sendViaResend(email, { apiKey: Deno.env.get("RESEND_API_KEY"), timeoutMs: OUTBOX_SEND_TIMEOUT_MS }),
+          lock: {
+            start: () => serviceRpc<string | null>(config, "email_outbox__run_start", {}),
+            stop: async (token) => {
+              await serviceRpc<null>(config, "email_outbox__run_stop", { p_token: token });
+            },
+          },
           report,
         }),
       defer: (task) => {

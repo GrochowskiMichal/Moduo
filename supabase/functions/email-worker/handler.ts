@@ -54,7 +54,7 @@ export async function handleWorkerRequest(request: WorkerRequest, deps: WorkerDe
     .run()
     .then((result) => {
       summary = result;
-      if (result.claimed > 0) report("run", result);
+      if (result.claimed > 0 || result.busy) report("run", result);
     })
     .catch((error: unknown) => {
       report("run_failed", { error: error instanceof Error ? error.message : String(error) });
