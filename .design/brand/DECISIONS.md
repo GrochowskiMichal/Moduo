@@ -44,7 +44,7 @@ Numbered decisions from the 2026-10-08 brand grilling session. The numbers match
 29. The icon never follows the user's accent.
 30. Same opaque black-tile favicon on the landing and the web app.
 31. Staging gets an inverted favicon (white tile, black mark).
-32. Default profile picture = initials on a neutral circle. The Expo placeholders are deleted.
+32. Default profile picture = initials on a neutral circle (BRAND-2). The Expo placeholders still in `assets/` get deleted once replacements exist (76).
 33. Sender avatar for hello@moduo.app: Paper mark on black, mark at ~55% for the circle crop.
 34. Social avatars use the same file family. Personal accounts keep personal photos.
 35. Social banners: black, small lockup, brand line. No screenshots until the app UI is final.
