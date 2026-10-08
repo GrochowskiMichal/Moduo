@@ -48,15 +48,15 @@ export function bucketRanks(buckets: BucketRow[]): Map<string, number> {
   );
   const inbox = sorted.filter((b) => b.is_system);
   const rest = sorted.filter((b) => !b.is_system);
-  const ungrouped = rest.filter((b) => !b.group_label);
+  const ungrouped = rest.filter((b) => !b.group_label?.trim());
   const sections: string[] = [];
   for (const b of rest) {
-    if (b.group_label && !sections.includes(b.group_label)) sections.push(b.group_label);
+    if (b.group_label?.trim() && !sections.includes(b.group_label.trim())) sections.push(b.group_label.trim());
   }
   const ordered = [
     ...inbox,
     ...ungrouped,
-    ...sections.flatMap((label) => rest.filter((b) => b.group_label === label)),
+    ...sections.flatMap((label) => rest.filter((b) => b.group_label?.trim() === label)),
   ];
   return new Map(ordered.map((b, i) => [b.id as string, i]));
 }
