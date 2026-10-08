@@ -11,9 +11,9 @@ effort: high
 - **Don't ask the designer new questions.** Everything technical was settled in `/s1`. The only acceptable interruption is a hard blocker research can't resolve: report it under **❓ Needs you** / **⚠ Broke**.
 - **Done means:** `bun run verify` passes after the last edit, every acceptance criterion is proven by a test or a live check, and the `validator` subagent reports no BLOCKER or MAJOR.
 - **Tokens only, shadcn primitives, `docs/DESIGN_RULES.md`.** A missing value becomes a token in `src/styles/tokens.css`, never an inline literal. The design hook will wake you if you slip.
-- **Stay inside the block's scope.** Note anything else under **🔎 Found** instead of fixing it. Don't turn a finding into a task chip or a new session unless it's in the designer's current focus area or an unfixed security hole.
+- **Stay inside the block's scope.** Note anything else under **🔎 Found** instead of fixing it. Don't turn a finding into a task chip or a new session unless it's in the designer's current focus area (the **Focus** line at the top of `specs/BUILD_ORDER.md`; when that line is unset, no finding becomes a chip) or an unfixed security hole.
 - **One block per session.** When the block is built, stop. Don't claim the next block in this session; `/s3` suggests it as a fresh session with its own title.
-- **Never leave work only in the worktree.** Before any stop with unlanded work (usage limit, blocker, end of turn), commit it to the task branch and push. Exception: an unfixed security hole stays a local commit, because the repo is public; say so under **Session**.
+- **Never leave work only in the worktree.** A usage limit can end the session mid-turn, so push as you go: commit and push the task branch after the claim and after every green `bun run verify`, and again before any stop you control (blocker, end of turn). Exception: an unfixed security hole stays a local commit, because the repo is public; say so under **Session**.
 - **Use subagents for noisy work** (broad recon, long logs, big reads) so your own context stays lean.
 
 ## Running unattended
@@ -37,7 +37,7 @@ On a Max plan, `/advisor fable` adds Fable 5.1 as an advisor at decision points.
 ## Report (exactly once, this shape)
 The designer often has many sessions open and reads only this report, so it must answer at a glance: is this block done, what does it still need, and what needs them.
 
-Open with one line: **Status: Built, not landed · Blocked · Not started**, plus the PR link. (From `/s2` it is normally "Built, not landed — run `/s3`".)
+Open with one line: **Status: Built, not landed · Blocked · Not started**, plus the PR link. The four statuses, used by `/s2` and `/s3` alike: **Landed** (merged into the personal branch), **Built, not landed** (done here, `/s3` still to run), **Blocked** (stopped on something under ❓ Needs you or ⚠ Broke), **Not started** (claimed, but blocked before any building). (From `/s2` it is normally "Built, not landed — run `/s3`".)
 - **Changed**: what was built (files and behavior), tight.
 - **Test this**: concrete steps the designer runs (step → expected → surface).
 - **To finish this block**: only the steps still required for this block to count as done, numbered (a validator re-run, a prod apply, `/s3`). Write "Nothing; run `/s3`" when that's all. Never list anything outside the block here.
