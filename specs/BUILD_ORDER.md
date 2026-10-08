@@ -121,7 +121,7 @@ _Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
 - [ ] **TV-U7 — Capture v2 (`#tag`, pills, queue switch, filter seed)** · tasks-v2 block 17 · deps: DS-2, TV-T1, TV-D2, TV-U2 · lane tasks-ui
 - [ ] **TV-F4 — In flight (hand-off, check-backs, linked waits)** · tasks-v2 block 18 · deps: TV-F3, TV-U3 · lane focus · migration (`focus_in_flight`)
 - [ ] **TV-F5 — Calendar & Home on one engine** · tasks-v2 block 19 · deps: TV-F2, TV-D3 · lane focus
-- [ ] **AT-2 — Upload pipeline + panel attachments + viewer** · attachments block 2 · deps: AT-1, TV-U3 · lane attachments
+- [~] **AT-2 — Upload pipeline + panel attachments + viewer** · attachments block 2 · deps: AT-1, TV-U3 · lane attachments
 - [ ] **AT-3 — Attachments everywhere + Settings → Storage** · attachments block 3 · deps: AT-2, TV-U1, TV-U7 · lane attachments
 - [ ] **TV-U8 — Saved views** · tasks-v2 block 20 · deps: TV-U2, TV-U6 · lane tasks-ui · migration (`task_views`)
 - [ ] **DS-5 — Sweep: NavRow + state layer in every module, lint guards** · design-state-layer block 5 · deps: DS-3, DS-4 · lane design
