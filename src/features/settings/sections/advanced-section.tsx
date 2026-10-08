@@ -2,6 +2,7 @@ import { strToU8 } from "fflate";
 import { AlertTriangle, Check, Copy, Download, Loader2, RotateCcw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { closeUploadsDb, countPendingUploads, UPLOADS_DB_NAME } from "@/lib/uploads";
 import { Button } from "../../../components/ui/button";
 import {
   Dialog,
@@ -30,6 +31,7 @@ import {
   isModuoIdbName,
   type ModuleReadResult,
   moduoCacheKeysToClear,
+  resetBlockedMessage,
 } from "../advanced";
 import { SettingsSectionShell } from "./section-shell";
 
@@ -114,6 +116,7 @@ export function AdvancedSection() {
   const [checking, setChecking] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [pendingNotes, setPendingNotes] = useState(0);
+  const [pendingUploads, setPendingUploads] = useState(0);
 
   // Diagnostics.
   const [online, setOnline] = useState(typeof navigator === "undefined" ? true : navigator.onLine);
@@ -189,8 +192,9 @@ export function AdvancedSection() {
     if (checking) return;
     setChecking(true);
     try {
-      const n = await countPendingOutbox();
+      const [n, u] = await Promise.all([countPendingOutbox(), countPendingUploads()]);
       setPendingNotes(n);
+      setPendingUploads(u);
       setDiagPending(n);
       setResetOpen(true);
     } finally {
@@ -201,8 +205,9 @@ export function AdvancedSection() {
   const recheckPending = useCallback(async () => {
     setChecking(true);
     try {
-      const n = await countPendingOutbox();
+      const [n, u] = await Promise.all([countPendingOutbox(), countPendingUploads()]);
       setPendingNotes(n);
+      setPendingUploads(u);
       setDiagPending(n);
     } finally {
       setChecking(false);
@@ -219,12 +224,13 @@ export function AdvancedSection() {
         localStorage.removeItem(key);
       }
       await closeNotesDb();
+      await closeUploadsDb();
       // The meta/outbox DB is deleted by name always; per-note doc DBs are
       // enumerated via databases() (unsupported on Firefox/older Safari — there
       // only the named DB is dropped, which is harmless since the outbox is
       // already empty and the cloud is the source of truth).
       const list = (await indexedDB.databases?.()) ?? [];
-      const names = new Set<string>(["moduo-notes-v2"]);
+      const names = new Set<string>(["moduo-notes-v2", UPLOADS_DB_NAME]);
       for (const db of list) if (isModuoIdbName(db.name)) names.add(db.name as string);
       await Promise.all(
         [...names].map(
@@ -248,7 +254,7 @@ export function AdvancedSection() {
     setTimeout(() => setCopiedDebug(false), 2000);
   }, [diagnostics]);
 
-  const blocked = pendingNotes > 0;
+  const blocked = pendingNotes > 0 || pendingUploads > 0;
 
   return (
     <SettingsSectionShell
@@ -349,19 +355,20 @@ export function AdvancedSection() {
           {blocked ? (
             <>
               <DialogHeader>
-                <DialogTitle>You have unsynced note changes</DialogTitle>
+                <DialogTitle>
+                  {pendingNotes > 0
+                    ? "You have unsynced note changes"
+                    : "Files are still uploading"}
+                </DialogTitle>
                 <DialogDescription>
-                  {pendingNotes} note {pendingNotes === 1 ? "change hasn't" : "changes haven't"}{" "}
-                  synced to the cloud yet. Resetting now would lose{" "}
-                  {pendingNotes === 1 ? "it" : "them"}.
-                  {online
-                    ? " Open Notes and wait for the sync indicator to finish, then re-check."
-                    : " Reconnect to the internet so they can sync, then re-check."}
+                  {resetBlockedMessage({ pendingNotes, pendingUploads, online })}
                 </DialogDescription>
               </DialogHeader>
               <div className="flex items-start gap-2 rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-foreground">
                 <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-warning" aria-hidden />
-                <span>Reset is blocked until every note change is synced.</span>
+                <span>
+                  Reset is blocked until every change is synced and every file is uploaded.
+                </span>
               </div>
               <DialogFooter>
                 <Button variant="outline" size="sm" onClick={() => setResetOpen(false)}>

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@rstest/core";
 
-import { isModuoIdbName, moduoCacheKeysToClear } from "./advanced";
+import { isModuoIdbName, moduoCacheKeysToClear, resetBlockedMessage } from "./advanced";
 
 describe("moduoCacheKeysToClear — keys to clear (AC11)", () => {
   it("clears only moduo.* keys, never the auth session or other apps' keys", () => {
@@ -36,11 +36,29 @@ describe("isModuoIdbName — notes IndexedDB scope (AC11)", () => {
     expect(isModuoIdbName("moduo:notes-v2:doc:ws-1:note-42")).toBe(true);
   });
 
+  it("matches the upload queue's DB (AT-2)", () => {
+    expect(isModuoIdbName("moduo-uploads")).toBe(true);
+  });
+
   it("rejects unrelated databases and empty names", () => {
     expect(isModuoIdbName("some-other-db")).toBe(false);
     expect(isModuoIdbName("keyval-store")).toBe(false);
     expect(isModuoIdbName(null)).toBe(false);
     expect(isModuoIdbName(undefined)).toBe(false);
     expect(isModuoIdbName("")).toBe(false);
+  });
+});
+
+describe("resetBlockedMessage — pending uploads block the reset too (AT2-6)", () => {
+  it("counts files still uploading", () => {
+    expect(resetBlockedMessage({ pendingNotes: 0, pendingUploads: 2, online: true })).toBe(
+      "2 files haven't finished uploading. Resetting now would lose them. Wait for them to finish (notes sync in Notes; files upload on their task), then re-check.",
+    );
+  });
+
+  it("names notes and files together, offline", () => {
+    expect(resetBlockedMessage({ pendingNotes: 1, pendingUploads: 1, online: false })).toBe(
+      "1 note change hasn't synced to the cloud yet, and 1 file hasn't finished uploading. Resetting now would lose them. Reconnect to the internet so they can finish, then re-check.",
+    );
   });
 });

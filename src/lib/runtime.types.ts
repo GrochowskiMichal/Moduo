@@ -3,7 +3,11 @@
  * Implementations live in runtime.tauri.ts (desktop) and runtime.web.ts (web).
  */
 
-import type { AttachmentStatus, ContentAuthorKind } from "@contracts/vocabularies";
+import type {
+  AttachmentPreviewMime,
+  AttachmentStatus,
+  ContentAuthorKind,
+} from "@contracts/vocabularies";
 import type {
   CalendarAccountModel,
   CalendarEventModel,
@@ -200,6 +204,37 @@ export type AttachmentRecord = {
   /** Set while the file is in the trash (restorable for 30 days). */
   deletedAt: string | null;
   createdAt: string;
+  /** Storage paths in the `attachments` bucket (signed links only). */
+  objectPath: string | null;
+  previewPath: string | null;
+  previewMime: string | null;
+};
+
+/** The owner's storage pool as `storage_status` reports it (AT-1). */
+export type StorageStatus = {
+  tier: string;
+  perFileBytes: number;
+  totalBytes: number;
+  usedBytes: number;
+  pendingBytes: number;
+  /** 0, 80 or 95: the alert level the pool is at. */
+  level: number;
+  overLimit: boolean;
+  isOwner: boolean;
+  /** Only told to the owner. */
+  ownedWorkspaces: number | null;
+};
+
+export type AttachmentBeginInput = {
+  workspaceId: string;
+  entityType: "task";
+  entityId: string;
+  fileName: string;
+  mime: string;
+  sizeBytes: number;
+  previewMime: AttachmentPreviewMime | null;
+  width: number | null;
+  height: number | null;
 };
 
 export type ModuoRuntime = {
@@ -551,16 +586,38 @@ export type ModuoRuntime = {
   };
 
   /**
-   * Attachments (AT-1) — files on tasks. AT-1 ships the listing the workspace
-   * export reads; upload, delete and restore arrive with the panel (AT-2).
-   * `list` returns every row this person can see (trash included), and [] until
-   * the migration reaches the database.
+   * Attachments (AT-1 storage, AT-2 upload) — files on tasks. `list` returns
+   * every row this person can see (trash included; the workspace export reads
+   * it), and [] until the migration reaches the database. Uploads go begin →
+   * `uploadObject` (original, then preview) → finalize; refusals throw
+   * `AttachmentOpError` with AT-1's machine code and numbers.
    */
   attachments: {
     list(workspaceId: string): Promise<{
       attachments: AttachmentRecord[];
       truncation: Truncation | null;
     }>;
+    /** The ready, undeleted files on one entity, oldest first. */
+    listForEntity(input: {
+      workspaceId: string;
+      entityType: string;
+      entityId: string;
+    }): Promise<AttachmentRecord[]>;
+    begin(input: AttachmentBeginInput): Promise<AttachmentRecord>;
+    uploadObject(input: {
+      path: string;
+      blob: Blob;
+      contentType: string;
+      onProgress?: (loaded: number, total: number) => void;
+      signal?: AbortSignal;
+    }): Promise<void>;
+    finalize(id: string): Promise<AttachmentRecord>;
+    /** To the trash: the space is free at once, restorable for 30 days. */
+    remove(id: string): Promise<AttachmentRecord>;
+    restore(id: string): Promise<AttachmentRecord>;
+    status(workspaceId: string): Promise<StorageStatus>;
+    /** Signed links by path (missing paths are left out). */
+    signedUrls(paths: string[], ttlSeconds: number): Promise<Map<string, string>>;
   };
 
   window: {

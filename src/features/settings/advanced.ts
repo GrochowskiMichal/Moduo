@@ -167,14 +167,44 @@ export function moduoCacheKeysToClear(allKeys: string[]): string[] {
 }
 
 /**
- * Whether an IndexedDB database name belongs to Moduo's Notes v2 sync layer —
- * the meta/outbox DB (`moduo-notes-v2`) and every per-note y-indexeddb doc DB
- * (`moduo:notes-v2:doc:<ws>:<note>`). The reset deletes exactly these; other
- * apps' databases are left alone.
+ * Whether an IndexedDB database name is one of Moduo's own on-device stores:
+ * the notes meta/outbox DB (`moduo-notes-v2`), every per-note y-indexeddb doc DB
+ * (`moduo:notes-v2:doc:<ws>:<note>`) and the upload queue (`moduo-uploads`, AT-2).
+ * The reset deletes exactly these; other apps' databases are left alone.
  */
 export function isModuoIdbName(name: string | null | undefined): boolean {
   if (!name) return false;
-  return name === "moduo-notes-v2" || name.startsWith("moduo:notes-v2:");
+  return (
+    name === "moduo-notes-v2" || name.startsWith("moduo:notes-v2:") || name === "moduo-uploads"
+  );
+}
+
+/**
+ * Why "Reset local cache" is blocked: unsynced note changes and files still
+ * waiting to upload (AT-2) live only on this device, so a reset would lose them.
+ */
+export function resetBlockedMessage(input: {
+  pendingNotes: number;
+  pendingUploads: number;
+  online: boolean;
+}): string {
+  const { pendingNotes, pendingUploads, online } = input;
+  const parts: string[] = [];
+  if (pendingNotes > 0) {
+    parts.push(
+      `${pendingNotes} note ${pendingNotes === 1 ? "change hasn't" : "changes haven't"} synced to the cloud yet`,
+    );
+  }
+  if (pendingUploads > 0) {
+    parts.push(
+      `${pendingUploads} ${pendingUploads === 1 ? "file hasn't" : "files haven't"} finished uploading`,
+    );
+  }
+  const total = pendingNotes + pendingUploads;
+  const lead = `${parts.join(", and ")}. Resetting now would lose ${total === 1 ? "it" : "them"}.`;
+  return online
+    ? `${lead} Wait for them to finish (notes sync in Notes; files upload on their task), then re-check.`
+    : `${lead} Reconnect to the internet so they can finish, then re-check.`;
 }
 
 // ── Diagnostics ──────────────────────────────────────────────────────────────
