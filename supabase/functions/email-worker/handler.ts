@@ -14,6 +14,9 @@
 
 import type { OutboxRunSummary } from "../_shared/email/outbox.ts";
 
+/** The shape of the Vault secret 20261008233000_email_outbox_worker.sql creates. */
+export const WORKER_SECRET_SHAPE = /^[0-9a-f]{64}$/;
+
 export type WorkerRequest = { method: string; secret: string | null };
 export type WorkerResponse = { status: number; body: Record<string, unknown> };
 
@@ -30,7 +33,9 @@ export async function handleWorkerRequest(request: WorkerRequest, deps: WorkerDe
   const report = deps.report ?? (() => {});
   if (request.method !== "POST") return { status: 405, body: { error: "method_not_allowed" } };
   const secret = (request.secret ?? "").trim();
-  if (!secret) return { status: 401, body: { error: "unauthorized" } };
+  // The migration generates 64 hex characters. Anything else is refused before
+  // it costs a database call (the URL is public).
+  if (!WORKER_SECRET_SHAPE.test(secret)) return { status: 401, body: { error: "unauthorized" } };
 
   let authorized: boolean;
   try {

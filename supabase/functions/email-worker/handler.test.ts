@@ -47,6 +47,20 @@ describe("email-worker request", () => {
     expect(d.runs()).toBe(0);
   });
 
+  it("refuses a malformed secret without asking the database", async () => {
+    let asked = 0;
+    const d = deps({
+      authorize: async () => {
+        asked += 1;
+        return true;
+      },
+    });
+    for (const secret of ["short", "A".repeat(64), `${"a".repeat(63)}g`, "a".repeat(65)]) {
+      expect((await handleWorkerRequest({ method: "POST", secret }, d.value)).status).toBe(401);
+    }
+    expect(asked).toBe(0);
+  });
+
   it("answers 503 when the database can't check the secret", async () => {
     const d = deps({
       authorize: async () => {
