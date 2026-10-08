@@ -65,7 +65,8 @@ Read (view scope) — mirror the manifest's resources
 | tool | returns |
 | --- | --- |
 | `tasks_list_buckets` | buckets (Inbox flagged, group labels) |
-| `tasks_list` | tasks with computed `drifted`/`blocked`, tags, `parent_id`, recurrence; default open |
+| `tasks_list` | tasks with computed `drifted`/`blocked`, tags, `assignee_id`, `parent_id`, `subtask_count`, recurrence; default open, ordered by bucket then position. Args: `assignee` (`me` = the key creator's tasks, default `anyone`), `top_level` (no subtasks as rows), `limit` (max 200) + `offset` (a page shorter than `limit` is the last; the return stays an array) |
+| `tasks_focus_settings` | the key creator's Focus settings (work/break/long-break minutes, rhythm, auto-start, chime) with the app's defaults filled in |
 | `tasks_today` | the day's ordered commit queue |
 | `tasks_drift` | open tasks whose scheduled time passed (oldest first) |
 | `tasks_list_tags` | workspace tags + task usage counts |
