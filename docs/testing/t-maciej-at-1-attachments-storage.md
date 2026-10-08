@@ -35,7 +35,7 @@
 - [ ] Ownership transfer moves the pool; 80% and 95% notify the owner once each and re-arm under 75%.
 - [ ] Once finalized, a file's bytes can't be replaced or moved by any role (the `storage.objects` guard trigger); nothing lands on a path no pending row names.
 - [ ] Races (two psql sessions on the replica, 2026-10-08): an overwrite during finalize waits and is refused; a write that started first makes finalize wait and fail the mismatch; two begins near the limit: the second waits and gets `storage_full`.
-- [ ] Deleting a task or bucket is stamped with the server's time, whatever the device sends; past 30 days nothing can be restored.
+- [ ] Deleting a task or bucket is stamped with the server's time, whatever the device sends; past 30 days nothing can be restored (`trash_expired` for tasks and buckets, `attachment_expired` for files).
 
 ## Known gaps / not-yet-testable
 - Uploads from the app (AT-2), the 📎 mark and Settings → Storage (AT-3): not built yet.

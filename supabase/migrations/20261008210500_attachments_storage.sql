@@ -249,6 +249,12 @@ BEGIN
     INTO v_bytes
   FROM public.attachments a WHERE a.workspace_id = NEW.id;
   IF v_bytes <> 0 THEN
+    -- Both pools locked in owner_id order, like the recount, so two transfers
+    -- (or a transfer and the recount) can't deadlock.
+    PERFORM 1 FROM public.storage_usage su
+    WHERE su.owner_id IN (OLD.owner_id, NEW.owner_id)
+    ORDER BY su.owner_id
+    FOR UPDATE;
     PERFORM public.storage_usage__add(OLD.owner_id, -v_bytes);
     PERFORM public.storage_usage__add(NEW.owner_id, v_bytes);
   END IF;
@@ -273,7 +279,7 @@ DECLARE
 BEGIN
   -- Hold every pool while recounting: a finalize running now waits, then adds
   -- its delta on top of the recount instead of being overwritten by it.
-  PERFORM 1 FROM public.storage_usage FOR UPDATE;
+  PERFORM 1 FROM public.storage_usage ORDER BY owner_id FOR UPDATE;
   WITH actual AS (
     SELECT w.owner_id,
            coalesce(sum(public.attachments__bytes(a.status, a.deleted_at, a.size_bytes, a.preview_bytes)), 0)::bigint AS bytes
@@ -712,7 +718,8 @@ CREATE TRIGGER attachments_task_trash
 -- The trash clock is the server's. The app stamps tasks.deleted_at and
 -- buckets.deleted_at from the device clock; now that the purge hard-deletes
 -- after 30 days, a wrong (or backdated) clock would skip the restore window.
--- A delete is stamped now(); a later write can't move the stamp.
+-- A delete is stamped now(); a later write can't move the stamp; and past 30
+-- days nothing comes back out of the trash.
 CREATE FUNCTION public.trash__stamp_deleted_at()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -725,6 +732,9 @@ BEGIN
     ELSE
       NEW.deleted_at := OLD.deleted_at;
     END IF;
+  ELSIF TG_OP = 'UPDATE' AND OLD.deleted_at < now() - interval '30 days' THEN
+    -- Past 30 days it's the purge's: its files may already be gone.
+    RAISE EXCEPTION 'trash_expired' USING ERRCODE = 'P0001';
   END IF;
   RETURN NEW;
 END;

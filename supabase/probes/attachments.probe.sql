@@ -779,6 +779,7 @@ DO $$
 DECLARE
   v public.attachments;
   r jsonb;
+  e text;
 BEGIN
   PERFORM probe.new_task('P1 parent', 'A', 'A', 'SB2');
   PERFORM probe.new_task('P2 child', 'A', 'A', 'SB2');
@@ -803,6 +804,8 @@ BEGIN
   PERFORM probe.ok((SELECT count(*) FROM public.tasks WHERE id = probe.id('P1 parent')) = 1, 'purge preview: nothing went');
 
   r := public.tasks__purge_expired(500);
+  e := probe.try_as('A', format('UPDATE public.tasks SET deleted_at = NULL WHERE id = %L', probe.id('P4 with file')));
+  PERFORM probe.ok(e = 'trash_expired', 'trash clock: a task trashed over 30 days ago can''t be restored (' || e || ')');
   PERFORM probe.ok(NOT EXISTS (SELECT 1 FROM public.tasks WHERE id = probe.id('P1 parent'))
                AND EXISTS (SELECT 1 FROM public.tasks WHERE id = probe.id('P4 with file'))
                AND EXISTS (SELECT 1 FROM public.tasks WHERE id = probe.id('P5 recent')),
@@ -830,7 +833,10 @@ BEGIN
   PERFORM probe.ok(NOT EXISTS (SELECT 1 FROM public.buckets WHERE id = probe.id('SB2'))
                AND EXISTS (SELECT 1 FROM public.buckets WHERE id = probe.id('PB')),
                    'purge: an old empty bucket goes; one a task still points at waits');
+  -- Put PB back for the next section (past 30 days a restore is refused).
+  ALTER TABLE public.buckets DISABLE TRIGGER trash_stamp_deleted_at;
   UPDATE public.buckets SET deleted_at = NULL WHERE id = probe.id('PB');
+  ALTER TABLE public.buckets ENABLE TRIGGER trash_stamp_deleted_at;
 END;
 $$;
 
