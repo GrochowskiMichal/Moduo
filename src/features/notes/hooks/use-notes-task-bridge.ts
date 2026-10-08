@@ -230,7 +230,6 @@ export function useNotesTaskBridge({
       const { runtime: rt, workspaceId: ws, noteLabel: label, tasksApi: api } = stable.current;
       const id = noteId;
       if (!rt || !ws || !id) return;
-      const snapshot = getTask(line.taskId);
       void (async () => {
         try {
           const links = await listNoteLinks(id);
@@ -253,9 +252,14 @@ export function useNotesTaskBridge({
           undoToast("Task deleted", {
             onUndo: () => {
               void (async () => {
-                // Un-delete (soft delete = a stamp; the upsert clears it),
-                // re-link, and give the line its task back.
-                if (snapshot) await rt.tasks.upsertTask({ ...snapshot, deletedAt: null });
+                // Un-delete (soft delete = a stamp; clearing it is the only
+                // write, so edits made meanwhile survive), re-link, and give
+                // the line its task back.
+                await rt.tasks.updateTask({
+                  workspaceId: ws,
+                  taskId: line.taskId,
+                  patch: { deletedAt: null },
+                });
                 if (plan) await restoreLinks(plan.restoreLinks);
                 restoreLine();
                 void api.reload();
@@ -267,7 +271,7 @@ export function useNotesTaskBridge({
         }
       })();
     },
-    [getTask, listNoteLinks, restoreLinks],
+    [listNoteLinks, restoreLinks],
   );
 
   const revertMintIfJustMinted = useCallback(

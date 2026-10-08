@@ -164,7 +164,7 @@ export function ConversationHeader({
             size="sm"
             onClick={() => onTogglePanel("details")}
             aria-pressed={panel === "details"}
-            className={cn("gap-1.5 tabular-nums", panel === "details" && "bg-accent")}
+            className="gap-1.5 tabular-nums"
             style={{ height: "var(--ctrl-h-sm)" }}
           >
             {memberCount} {memberCount === 1 ? "member" : "members"}
@@ -179,13 +179,13 @@ export function ConversationHeader({
           icon={Search}
           label="Search messages"
           onClick={() => onTogglePanel("search")}
-          className={cn(panel === "search" && "bg-accent")}
+          aria-pressed={panel === "search"}
         />
         <IconButton
           icon={isDm ? Info : Pin}
           label={isDm ? "Details and pinned" : "Details, pinned and settings"}
           onClick={() => onTogglePanel("details")}
-          className={cn(panel === "details" && "bg-accent")}
+          aria-pressed={panel === "details"}
         />
         {member ? (
           <>

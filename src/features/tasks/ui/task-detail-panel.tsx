@@ -16,6 +16,7 @@ import {
   Repeat,
   RotateCcw,
   SkipForward,
+  User,
   X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -56,7 +57,14 @@ import { Separator } from "../../../components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import { cn } from "../../../lib/utils";
 import { EntityTextEditor } from "../../spine/editor/entity-text-editor";
-import { activityActorName, activityLine } from "../activity";
+import { activityActorName, activityLine, isTrailEntry } from "../activity";
+import {
+  assigneeLabel,
+  assigneeOptions,
+  createdByLabel,
+  fromAssigneeValue,
+  toAssigneeValue,
+} from "../assignee-options";
 import { previewAssign, useAssignees } from "../assignees";
 import { formatTimestamp, LEVEL_OPTIONS, STATUS_LABELS, wouldCreateCycle } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
@@ -415,13 +423,16 @@ function DetailBody({
 
           <PropertyRow label="Assignee">
             <AssigneeSelect
-              value={task.ownerId}
+              value={task.assigneeId}
               disabled={!canEdit}
               onChange={(id) => {
-                void previewAssign(task.bucketId, id).then((msg) => {
-                  if (msg) toast.message(msg);
-                });
-                api.patchTask(task.id, { ownerId: id });
+                if (id === task.assigneeId) return;
+                if (id) {
+                  void previewAssign(task.bucketId, id).then((msg) => {
+                    if (msg) toast.message(msg);
+                  });
+                }
+                api.patchTask(task.id, { assigneeId: id });
               }}
             />
           </PropertyRow>
@@ -669,9 +680,7 @@ function DetailBody({
 
         {/* metadata */}
         <div className="space-y-1 text-2xs text-muted-foreground/80">
-          <Meta term="Created" icon={<CalendarClock className="size-3 opacity-70" aria-hidden />}>
-            {formatTimestamp(task.createdAt)}
-          </Meta>
+          <CreatedMeta task={task} />
           <Meta term="Updated" icon={<Hourglass className="size-3 opacity-70" aria-hidden />}>
             {formatTimestamp(task.updatedAt)}
           </Meta>
@@ -698,7 +707,7 @@ function ActivitySection({ task, api }: { task: Task; api: TasksModuleApi }) {
     let cancelled = false;
     void loadActivity(task.id)
       .then((rows) => {
-        if (!cancelled) setEntries(rows);
+        if (!cancelled) setEntries(rows.filter(isTrailEntry));
       })
       .catch(() => {
         if (!cancelled) setEntries([]);
@@ -1070,16 +1079,20 @@ function AssigneeSelect({
   disabled,
   onChange,
 }: {
-  value: string;
+  value: string | null;
   disabled: boolean;
-  onChange: (next: string) => void;
+  onChange: (next: string | null) => void;
 }) {
   const { assignees, byId } = useAssignees();
-  // A previous assignee who left the workspace stays selectable-as-current so the
-  // control never renders blank.
+  // An assignee who left the workspace stays assigned and reads "Former
+  // member", so the control never renders blank.
   const known = byId(value);
   return (
-    <Select value={value || undefined} disabled={disabled} onValueChange={onChange}>
+    <Select
+      value={toAssigneeValue(value)}
+      disabled={disabled}
+      onValueChange={(v) => onChange(fromAssigneeValue(v))}
+    >
       <SelectTrigger size="sm" variant="ghost" className="w-full" aria-label="Assignee">
         <SelectValue placeholder="Unassigned">
           {known ? (
@@ -1087,22 +1100,37 @@ function AssigneeSelect({
               <AssigneeAvatar assignee={known} className="size-4" />
               <span className="truncate">{known.name}</span>
             </span>
-          ) : value ? (
-            "Former member"
-          ) : null}
+          ) : (
+            assigneeLabel(value, byId)
+          )}
         </SelectValue>
       </SelectTrigger>
       <SelectContent>
-        {assignees.map((a) => (
-          <SelectItem key={a.userId} value={a.userId} disabled={!a.canTakeTasks}>
+        {assigneeOptions(assignees).map((o) => (
+          <SelectItem key={o.value} value={o.value} disabled={o.disabled}>
             <span className="flex items-center gap-2">
-              <AssigneeAvatar assignee={a} className="size-4" />
-              {a.name}
+              {o.assignee ? (
+                <AssigneeAvatar assignee={o.assignee} className="size-4" />
+              ) : (
+                <User className="size-4 text-muted-foreground" aria-hidden />
+              )}
+              {o.label}
             </span>
           </SelectItem>
         ))}
       </SelectContent>
     </Select>
+  );
+}
+
+/** "Created by Ada · Oct 6, 2026, 7:20 PM"; without "by" when the creator isn't known. */
+function CreatedMeta({ task }: { task: Task }) {
+  const { byId } = useAssignees();
+  const by = createdByLabel(task, byId);
+  return (
+    <Meta term="Created" icon={<CalendarClock className="size-3 opacity-70" aria-hidden />}>
+      {by ? `by ${by} · ${formatTimestamp(task.createdAt)}` : formatTimestamp(task.createdAt)}
+    </Meta>
   );
 }
 

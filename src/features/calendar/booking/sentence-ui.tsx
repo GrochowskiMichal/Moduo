@@ -13,6 +13,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { SELECTED_OPTION } from "@/components/ui/selection";
 import { Button } from "../../../components/ui/button";
 import { Eyebrow } from "../../../components/ui/eyebrow";
 import { cn } from "../../../lib/utils";
@@ -208,9 +209,10 @@ export function Chip({ selected = false, className, ...props }: ChipProps) {
       className={cn(
         "inline-flex h-[var(--ctrl-h-lg)] items-center gap-2 rounded-full border px-4 font-sans text-md tabular-nums",
         "transition-colors duration-[var(--motion-fade)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        // Hover stays a quiet edge so it never outshines the 32% selected ring.
         selected
-          ? "border-[var(--selected-border)] bg-[var(--selected-bg)] text-foreground"
-          : "border-border text-foreground hover:border-foreground",
+          ? `${SELECTED_OPTION} text-foreground`
+          : "border-border text-foreground hover:border-foreground/30",
         className,
       )}
       {...props}
@@ -287,9 +289,7 @@ export function DayStrip({ days, selected, onPick }: DayStripProps) {
               className={cn(
                 "flex w-16 shrink-0 snap-start flex-col items-center gap-0.5 rounded-lg border py-2.5",
                 "transition-colors duration-[var(--motion-fade)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                on
-                  ? "border-[var(--selected-border)] bg-[var(--selected-bg)]"
-                  : "border-border hover:border-foreground",
+                on ? SELECTED_OPTION : "border-border hover:border-foreground/30",
               )}
             >
               <Eyebrow>{parts.weekday}</Eyebrow>
