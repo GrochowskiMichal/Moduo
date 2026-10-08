@@ -589,7 +589,11 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
    * the last save any tab on this device made.
    */
   const persistFocusTime = useCallback(
-    (id: string, seconds: number, context: FocusSaveContext): boolean | "gone" | Promise<boolean> => {
+    (
+      id: string,
+      seconds: number,
+      context: FocusSaveContext,
+    ): boolean | "gone" | Promise<boolean> => {
       if (!Number.isFinite(seconds) || seconds < 1) return true;
       if (loading || !runtime || !workspaceId || isTempId(id)) return false;
       if (!loadedFrom || loadedFrom.workspaceId !== workspaceId) return false;

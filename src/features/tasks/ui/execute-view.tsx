@@ -14,9 +14,9 @@ import { cn } from "../../../lib/utils";
 import {
   bindFocusTask,
   followFocusTask,
+  getFocusSession,
   previewFocusInterval,
   startFocus,
-  getFocusSession,
   stopFocus,
   toggleFocusPomodoro,
   toggleFocusRunning,
