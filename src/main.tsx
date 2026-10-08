@@ -1,3 +1,4 @@
+import "./lib/auth-url-boot";
 import { RouterProvider } from "@tanstack/react-router";
 import ReactDOM from "react-dom/client";
 import "@fontsource/nunito/400.css";

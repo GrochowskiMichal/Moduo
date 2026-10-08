@@ -19,11 +19,12 @@ Numbered decisions from the 2026-10-08 brand grilling session. The numbers match
 ## C. The mark
 11. The mark's design is kept; **Maciej is perfecting the SVG** (it isn't final yet). Construction rules and the 2026-10-08 measurement are in the brief §3.
 12. **Meaning:** three identical pieces interlock into an m; **the empty space created by the overlap symbolizes the connection between modules.** Press kit only.
-13. A small-size master (opened windows) for ≤24px, drawn by Maciej.
+13. A small-size master (opened windows), drawn by Maciej. **Only for marks displayed under 24 px** (Maciej, 2026-10-08): browser-tab favicons (16 CSS px, including the 32 px file made for 2× screens), the 13 px email footer badge, and `<ModuoMark small />` where a mark is drawn under 24 px. Everything 24 px and up (the app's 32 px marks, Windows icons at 32/48, home-screen and touch icons) keeps the standard mark.
 14. Colours: Paper on black, Ink on white, currentColor in the app. Never a hue, gradient, outline, shadow or glow.
 15. Tile only for the app icon, favicon and avatars; free-standing everywhere else.
 16. **The wireframe extruded mark ("Depth 14") is a landing one-off. Not reused anywhere.**
 17. Mark alone = everyday signature; lockup = first contact (landing nav, emails, OG, decks, press).
+    - **2026-10-08 (BRAND-4, Maciej):** the landing nav shows the full lockup at every width, phones included (it fits down to 320px).
 
 ## D. Wordmark
 18. **Wordmark = A, the drawn letters**, frozen as outlines. Not final: Maciej will redraw it to what he wants. The Geist-typed stand-ins get replaced by the artwork.
@@ -79,6 +80,7 @@ Numbered decisions from the 2026-10-08 brand grilling session. The numbers match
 53. "Things arrive, they don't perform": the app's fade + micro-blur, ≤320ms, no bounce, sparkle or glow, reduced motion honoured.
 54. **The logo animation is the reveal from nothing** (Maciej's concept): the mark's overlaps cancel, so with all three strokes in one place the logo is invisible; the side strokes then move apart and the mark reveals itself. Spec in the brief §10; prototyped 2026-10-08. "Overlap cancels, separation reveals" is the motion idea for future animated symbols (loading or other uses; none designed yet).
 55. Plays once per app launch while the session loads, as the first frame of videos, and on the landing hero on a first visit. Never on route changes, never looped.
+    - **2026-10-08 (BRAND-4, Maciej):** on the landing it plays on the nav lockup (the hero has no mark), with the hero's entrance. "First visit" means arriving from outside the site: not on a reload, back or forward, a link to a section, or coming from another page of the site. Nothing is stored in the browser for it.
 56. The footer plate's construction-draw animation is landing and press only.
 57. No brand sound.
 58. Demo videos at real speed, visible cursor, no zoom-punch, reveal at the start only.
@@ -101,7 +103,8 @@ Numbered decisions from the 2026-10-08 brand grilling session. The numbers match
 71. One recurring example cast (brief §11).
 72. `og.png` becomes the OG template, one per page.
 73. One booking badge: "Scheduled with Moduo" + mark.
-74. Emails use the lockup as a 2×/3× PNG image; the email plan's four changes are listed in the brief §13.
+74. Emails use the lockup as one PNG image (@2x, 192 × 44 canvas, 96 × 22 displayed; footer-badge mark 26 × 26, per TX-1's contract, built in BRAND-1); the email plan's four changes are listed in the brief §13.
+    - **74a. No halo** (Maciej, 2026-10-08). The email logo follows the reader's light or dark mode instead: the email shows the Ink file (`lockup-light`) in light mode and the Paper file (`lockup-dark`) in dark mode. Known limit: phone mail apps that darken emails on their own without saying so (Gmail's app especially) can't be detected, so they keep the light-mode logo.
 75. **Boilerplate has no location.** Mike isn't from Kraków, and the founders move to Japan before release. **Chat is added to the module list:** email, tasks, notes, calendar, contacts, chat.
 
 ## N. Ownership and next steps
