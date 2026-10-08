@@ -7,8 +7,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { pickTagColor } from "../../../components/tag-colors";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
+import { editableTaskFields } from "../../../lib/task-rows";
 import { UNDO_TOAST_MS, undoToast } from "../../../lib/undo-toast";
+import { formatAwaySpan } from "../../focus/away-copy";
+import type { FocusSaveContext } from "../../focus/engine";
+import { readSavedFocusTotal, writeSavedFocusTotal } from "../../focus/saved-totals";
 import { setBucketTimeBlock } from "../default-view";
+import { writeTaskTimeTotal } from "../focus-time-write";
 import {
   blockedTaskIds as computeBlockedTaskIds,
   subtasksByParent as computeSubtasksByParent,
@@ -21,6 +26,7 @@ import {
   todayStr,
   wouldCreateCycle,
 } from "../helpers";
+import { hideBucket, unhideBucket, useHiddenBuckets } from "../hidden-buckets";
 import {
   type ActivityEntry,
   type Bucket,
@@ -91,15 +97,28 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
   const reqRef = useRef(0);
   /** Bumped on every successful load — the recurrence catch-up trigger. */
   const [loadStamp, setLoadStamp] = useState(0);
+  /** Which workspace the loaded bundle is, when its request started, and which
+   *  tasks the server had then. The focus sink judges freshness and "gone" by
+   *  it; it's set with the bundle so a render sees both. */
+  const [loadedFrom, setLoadedFrom] = useState<{
+    workspaceId: string;
+    at: number;
+    taskIds: ReadonlySet<string>;
+  } | null>(null);
+  /** The ownership the focus sink last reloaded for, and when (one reload per
+   *  takeover, then at most one a minute while loads keep failing). */
+  const focusReload = useRef({ ownedSince: 0, at: 0 });
 
   const load = useCallback(async () => {
     if (!runtime || !userId || !workspaceId || !canRead) {
       setBundle(EMPTY_BUNDLE);
+      setLoadedFrom(null);
       setTimeBlocksState({});
       setLoading(false);
       return;
     }
     const req = ++reqRef.current;
+    const startedAt = Date.now();
     setLoading(true);
     try {
       // Time-blocks ride along with the bundle but never block it — a failed
@@ -110,6 +129,11 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
       ]);
       if (reqRef.current === req) {
         setBundle(next);
+        setLoadedFrom({
+          workspaceId,
+          at: startedAt,
+          taskIds: new Set(next.tasks.map((t) => t.id)),
+        });
         setTimeBlocksState(blocks);
         setError(null);
         setLoadStamp((s) => s + 1); // triggers the recurrence catch-up pass
@@ -126,16 +150,23 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
   }, [load]);
 
   // ── derived ────────────────────────────────────────────────────────────────
-  const liveTasks = useMemo(
-    () =>
-      bundle.tasks
-        .filter((t) => !t.deletedAt)
-        .slice()
-        .sort(byPosition),
-    [bundle.tasks],
+  // Buckets deleted this session drop out here, and their tasks show in Inbox,
+  // before the server delete lands (see `deleteBucket` and hidden-buckets.ts).
+  const hiddenBuckets = useHiddenBuckets();
+  const liveBuckets = useMemo(
+    () => bundle.buckets.filter((b) => !b.deletedAt && !hiddenBuckets.has(b.id)),
+    [bundle.buckets, hiddenBuckets],
   );
-  const liveBuckets = useMemo(() => bundle.buckets.filter((b) => !b.deletedAt), [bundle.buckets]);
   const inbox = useMemo(() => liveBuckets.find((b) => b.isSystem) ?? null, [liveBuckets]);
+  const liveTasks = useMemo(() => {
+    const live = bundle.tasks
+      .filter((t) => !t.deletedAt)
+      .slice()
+      .sort(byPosition);
+    const inboxId = inbox?.id;
+    if (hiddenBuckets.size === 0 || !inboxId) return live;
+    return live.map((t) => (hiddenBuckets.has(t.bucketId) ? { ...t, bucketId: inboxId } : t));
+  }, [bundle.tasks, hiddenBuckets, inbox]);
   /** User buckets (Inbox excluded — the rail pins it), position-sorted. */
   const buckets = useMemo(
     () =>
@@ -150,6 +181,17 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     const counts = new Map<string, number>();
     for (const t of liveTasks) {
       if (t.status === "done" || t.status === "archived") continue;
+      counts.set(t.bucketId, (counts.get(t.bucketId) ?? 0) + 1);
+    }
+    return counts;
+  }, [liveTasks]);
+
+  /** Every task a bucket's own list shows (open + done, not archived) — the
+   * count the delete-bucket confirm and its toast quote. */
+  const taskCountByBucket = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const t of liveTasks) {
+      if (t.status === "archived") continue;
       counts.set(t.bucketId, (counts.get(t.bucketId) ?? 0) + 1);
     }
     return counts;
@@ -357,12 +399,11 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
       }
       const bucketTasks = liveTasks.filter((t) => t.bucketId === fields.bucketId);
       const position = endPosition(bucketTasks);
-      const optimistic = makeTask({
-        ...fields,
-        ownerId: fields.ownerId || userId || undefined,
-        workspaceId,
-        position,
-      });
+      const optimistic = makeTask({ ...fields, workspaceId, position });
+      // Shown right away; the server records the same creator. An assignee
+      // left unchosen is the creator (as before TV-D1).
+      optimistic.creatorId = userId ?? "";
+      if (optimistic.assigneeId === "") optimistic.assigneeId = userId;
       const tempId = `tmp-${crypto.randomUUID()}`;
       optimistic.id = tempId;
       setBundle((prev) => ({ ...prev, tasks: [...prev.tasks, optimistic] }));
@@ -407,8 +448,9 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
         title: trimmed,
         workspaceId,
         position,
-        ownerId: userId ?? undefined,
+        assigneeId: userId,
       });
+      optimistic.creatorId = userId ?? "";
       optimistic.committedFor = today;
       optimistic.commitOrder = maxOrder + 1;
       const tempId = `tmp-${crypto.randomUUID()}`;
@@ -447,10 +489,23 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
           }
         }
       }
+      // Assignment is an intent op (tasks.assign): the RPC checks the person can
+      // take tasks, and the server notifies them. The rest of the patch, if
+      // any, saves as usual below.
+      if (patch.assigneeId !== undefined) {
+        const assigneeId = patch.assigneeId;
+        applyOp(id, { assigneeId }, () =>
+          runtime!.tasks.opAssign({ workspaceId: workspaceId!, taskId: id, assigneeId }),
+        );
+        const { assigneeId: _assigned, ...rest } = patch;
+        // Without edit access applyOp has already said so; don't say it twice.
+        if (Object.keys(rest).length === 0 || !canEdit) return;
+        patch = rest;
+      }
       // Status changes are an intent op (tasks.set_status): the RPC enforces
       // the invariants server-side and logs attributed activity. Only the
       // status cluster (status / recurrence ride-along / board position) goes
-      // that way — plain field edits below stay raw upserts (contract §1).
+      // that way — plain field edits below are field-level writes (contract §1).
       if (
         patch.status &&
         Object.keys(patch).every((k) => k === "status" || k === "recurrence" || k === "position")
@@ -469,14 +524,25 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
         );
         return;
       }
-      const updated: Task = { ...existing, ...patch, updatedAt: new Date().toISOString() };
-      patchTaskLocal(id, { ...patch, updatedAt: updated.updatedAt });
+      // Field-level save (TV-D1): only the changed columns go to the server,
+      // so this edit can't put back a field a teammate changed meanwhile.
+      const fields = editableTaskFields(patch);
+      if (Object.keys(fields).length === 0) return;
+      if (isTempId(id)) {
+        toast.error("Still saving that task — try again in a moment.");
+        return;
+      }
+      patchTaskLocal(id, { ...fields, updatedAt: new Date().toISOString() });
       guard(async () => {
-        const saved = await runtime!.tasks.upsertTask(updated);
+        const saved = await runtime!.tasks.updateTask({
+          workspaceId: workspaceId!,
+          taskId: id,
+          patch: fields,
+        });
         setBundle((prev) => ({ ...prev, tasks: prev.tasks.map((t) => (t.id === id ? saved : t)) }));
       });
     },
-    [bundle.tasks, patchTaskLocal, guard, runtime, workspaceId, applyOp],
+    [bundle.tasks, patchTaskLocal, guard, runtime, workspaceId, applyOp, canEdit],
   );
 
   // ── recurrence catch-up (spec §5d) ──────────────────────────────────────────
@@ -556,6 +622,110 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
       return true;
     },
     [bundle.tasks, patchTask],
+  );
+
+  /**
+   * The Focus engine's flush sink (TV-F1): fold `seconds` of tracked work into
+   * the task's saved total and report what happened, so the engine keeps the
+   * seconds and retries ("not saved yet", F1-7) instead of losing them. It
+   * writes only the time total (`writeTaskTimeTotal`), never the rest of the row.
+   *  - `false` right away: not now. The list is loading, was requested before
+   *    this tab took the clock (reload first: the other tab may have changed the
+   *    total), is another workspace's for a render, is capped, or doesn't have
+   *    the task yet.
+   *  - `"gone"`: the server's list for the task's workspace, requested after the
+   *    time was tracked, doesn't have it — deleted or no longer shared. The
+   *    seconds are dropped and the person is told.
+   *  - a promise: the write, `false` when it failed (the optimistic total is
+   *    put back) or when there's no edit access, so it shows as not saved.
+   * The total is absolute, so it builds on the fresher of this bundle's row and
+   * the last save any tab on this device made.
+   */
+  const persistFocusTime = useCallback(
+    (
+      id: string,
+      seconds: number,
+      context: FocusSaveContext,
+    ): boolean | "gone" | Promise<boolean> => {
+      if (!Number.isFinite(seconds) || seconds < 1) return true;
+      if (loading || !runtime || !workspaceId || isTempId(id)) return false;
+      if (!loadedFrom || loadedFrom.workspaceId !== workspaceId) return false;
+      if (loadedFrom.at < context.ownedSince) {
+        const last = focusReload.current;
+        if (last.ownedSince !== context.ownedSince || Date.now() - last.at > 60_000) {
+          focusReload.current = { ownedSince: context.ownedSince, at: Date.now() };
+          void load();
+        }
+        return false;
+      }
+      const task = bundle.tasks.find((t) => t.id === id);
+      if (!task || task.workspaceId !== workspaceId) {
+        const complete = !bundle.truncated.some((t) => t.scope === "tasks");
+        const goneFromServer = complete && !loadedFrom.taskIds.has(id);
+        if (!goneFromServer || loadedFrom.at <= context.earnedAt) return false;
+        toast(`${formatAwaySpan(seconds)} of focus time couldn't be saved`, {
+          description: "The task it was tracked on was deleted or isn't shared with you any more.",
+        });
+        return "gone";
+      }
+      if (!canEdit) return Promise.resolve(false);
+      const lastSave = userId ? readSavedFocusTotal(userId, id) : null;
+      const base =
+        lastSave && !(Date.parse(task.updatedAt) >= lastSave.at)
+          ? lastSave.total
+          : (task.timeSpentSeconds ?? 0);
+      const total = Math.max(0, base + Math.round(seconds));
+      patchTaskLocal(id, { timeSpentSeconds: total });
+      return writeTaskTimeTotal(id, workspaceId, total)
+        .then((saved) => {
+          if (!saved) {
+            // No visible row (hard-deleted, no longer shared): reload, bounded
+            // like the takeover reload, so the next try can say "gone".
+            if (Date.now() - focusReload.current.at > 60_000) {
+              focusReload.current = { ...focusReload.current, at: Date.now() };
+              void load();
+            }
+            throw new Error("task not found");
+          }
+          if (userId) {
+            writeSavedFocusTotal(userId, id, saved.timeSpentSeconds, Date.parse(saved.updatedAt));
+          }
+          setBundle((prev) => ({
+            ...prev,
+            tasks: prev.tasks.map((t) =>
+              t.id === id
+                ? { ...t, timeSpentSeconds: saved.timeSpentSeconds, updatedAt: saved.updatedAt }
+                : t,
+            ),
+          }));
+          return true;
+        })
+        .catch(() => {
+          // Put back exactly what this write added, unless something else has
+          // changed the total since.
+          setBundle((prev) => ({
+            ...prev,
+            tasks: prev.tasks.map((t) =>
+              t.id === id && t.timeSpentSeconds === total
+                ? { ...t, timeSpentSeconds: Math.max(0, base) }
+                : t,
+            ),
+          }));
+          return false;
+        });
+    },
+    [
+      loading,
+      loadedFrom,
+      load,
+      bundle.tasks,
+      bundle.truncated,
+      runtime,
+      workspaceId,
+      userId,
+      canEdit,
+      patchTaskLocal,
+    ],
   );
 
   /** Set the tracked total to an absolute value (manual "edit the value"). */
@@ -719,12 +889,25 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
       guard(async () => {
         await runtime!.tasks.deleteTask({ workspaceId: workspaceId!, taskId: id });
         // Same guarantee as deleting the task from a note (DF-5): soft delete =
-        // a stamp; Undo clears it via the upsert and restores the subtree.
+        // a stamp; Undo clears it and re-attaches the subtasks. Only those two
+        // fields are written back, so edits made meanwhile survive (TV-D1).
         undoToast("Task deleted", {
           onUndo: () => {
             void (async () => {
-              await runtime!.tasks.upsertTask({ ...existing, deletedAt: null });
-              await Promise.all(children.map((c) => runtime!.tasks.upsertTask(c)));
+              await runtime!.tasks.updateTask({
+                workspaceId: workspaceId!,
+                taskId: id,
+                patch: { deletedAt: null },
+              });
+              await Promise.all(
+                children.map((c) =>
+                  runtime!.tasks.updateTask({
+                    workspaceId: workspaceId!,
+                    taskId: c.id,
+                    patch: { parentId: id },
+                  }),
+                ),
+              );
               await load();
             })().catch(() => toast.error("Couldn't restore the task."));
           },
@@ -752,9 +935,12 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
         toast.error("Subtasks are one level — this task is already a subtask.");
         return;
       }
-      createTask({ bucketId: parent.bucketId, title: trimmed, parentId });
+      // The parent's real bucket: a bucket delete still pending only shows its
+      // tasks in Inbox (hidden-buckets.ts), and Undo must find both together.
+      const bucketId = bundle.tasks.find((t) => t.id === parentId)?.bucketId ?? parent.bucketId;
+      createTask({ bucketId, title: trimmed, parentId });
     },
-    [liveTasks, createTask],
+    [liveTasks, bundle.tasks, createTask],
   );
 
   /**
@@ -875,7 +1061,9 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
         if (!canEdit) toast.error("You don't have edit access to Tasks in this workspace.");
         return;
       }
-      const position = endPosition(liveBuckets);
+      // Past every bucket the server still has, including one whose delete is
+      // pending (hidden-buckets.ts) — Undo would otherwise tie their positions.
+      const position = endPosition(bundle.buckets.filter((b) => !b.deletedAt));
       const optimistic: Bucket = {
         id: `tmp-${crypto.randomUUID()}`,
         workspaceId,
@@ -903,7 +1091,7 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
           toast.error(e instanceof Error ? e.message : "Couldn't create bucket.");
         });
     },
-    [runtime, workspaceId, canEdit, liveBuckets, userId],
+    [runtime, workspaceId, canEdit, bundle.buckets, userId],
   );
 
   const renameBucket = useCallback(
@@ -969,25 +1157,49 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     [timeBlocks, guard, runtime, workspaceId],
   );
 
+  /**
+   * Delete a user bucket; its tasks move to Inbox. The rail confirms first
+   * (tasks-v2 Q1-4). Deferred commit, like `deleteTag`: the bucket is hidden at
+   * once (hidden-buckets.ts — every task surface agrees, and its tasks show in
+   * Inbox), the server delete waits until the Undo toast closes, and Undo
+   * un-hides it. The bundle itself is never touched, so saves made meanwhile
+   * still write the task's real bucket, and Undo has nothing to restore.
+   */
   const deleteBucket = useCallback(
     (id: string) => {
-      const existing = bundle.buckets.find((b) => b.id === id);
+      if (!runtime || !workspaceId || !canEdit) {
+        toast.error("You don't have edit access to Tasks in this workspace.");
+        return;
+      }
+      if (isTempId(id)) {
+        toast.error("Still saving that bucket — try again in a moment.");
+        return;
+      }
+      const existing = liveBuckets.find((b) => b.id === id);
       if (!existing || existing.isSystem) return;
-      const fallbackId = inbox?.id;
-      // Optimistic: drop the bucket, reassign its tasks to Inbox locally.
-      setBundle((prev) => ({
-        ...prev,
-        buckets: prev.buckets.filter((b) => b.id !== id),
-        tasks: fallbackId
-          ? prev.tasks.map((t) => (t.bucketId === id ? { ...t, bucketId: fallbackId } : t))
-          : prev.tasks,
-      }));
-      guard(async () => {
-        await runtime!.tasks.deleteBucket({ workspaceId: workspaceId!, bucketId: id });
-        await load();
+      const count = taskCountByBucket.get(id) ?? 0;
+      hideBucket(id);
+      undoToast(`“${existing.name}” deleted`, {
+        description:
+          count === 0
+            ? undefined
+            : count === 1
+              ? "Its task moved to Inbox."
+              : `Its ${count} tasks moved to Inbox.`,
+        onUndo: () => unhideBucket(id),
+        onCommit: () => {
+          void runtime.tasks
+            .deleteBucket({ workspaceId, bucketId: id })
+            .then(() => load())
+            .catch((e) => {
+              unhideBucket(id);
+              toast.error(e instanceof Error ? e.message : "Couldn't delete the bucket.");
+              void load();
+            });
+        },
       });
     },
-    [bundle.buckets, inbox, guard, runtime, workspaceId, load],
+    [runtime, workspaceId, canEdit, liveBuckets, taskCountByBucket, load],
   );
 
   // ── tag mutations (optimistic) ───────────────────────────────────────────────
@@ -1216,6 +1428,7 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     tagsByTask,
     openTaskCountByTag,
     openTaskCountByBucket,
+    taskCountByBucket,
     driftCountByBucket,
     timeBlocks,
     setTimeBlock,
@@ -1229,6 +1442,7 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     markDone,
     archiveTask,
     addTimeSpent,
+    persistFocusTime,
     setTimeSpent,
     rescheduleScheduledAt,
     unscheduleTask,

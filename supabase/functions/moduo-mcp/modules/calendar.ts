@@ -13,8 +13,13 @@
  * External (mirrored) events are structurally read-only — there is no
  * update/delete path for them (the ops reject them); the connector only exposes
  * native-event writes.
+ *
+ * Task blocks ARE tasks, so they follow the key's Tasks scope: calendar_day
+ * leaves them out for a key without Tasks View, and the four task-block tools
+ * also need Tasks Edit (MCP_TOOL_NEEDS in contracts/mcp-key-scopes.ts).
  */
 
+import { keyScopeAllows } from "../../_shared/contracts/mcp-key-scopes.ts";
 import type { ConnectorModule, ToolContext } from "../registry.ts";
 import { visibleIds } from "../share.ts";
 
@@ -142,6 +147,8 @@ export const calendarConnectorModule: ConnectorModule = {
       handler: async (args, ctx) => {
         const { startIso, endIso, startMs } = dayBounds(str(args, "date", false) || null);
         const nowIso = new Date().toISOString();
+        const seesTasks = keyScopeAllows(ctx.key.scopes, "tasks", "view");
+        const noTasks = Promise.resolve([] as Row[]);
         const [events, blocks, strip] = await Promise.all([
           rows(
             ctx.db
@@ -153,28 +160,32 @@ export const calendarConnectorModule: ConnectorModule = {
               .gte("end_time", startIso)
               .order("start_time"),
           ),
-          rows(
-            ctx.db
-              .from("tasks")
-              .select("id, title, scheduled_at, duration_minutes, status")
-              .eq("workspace_id", ctx.key.workspaceId)
-              .is("deleted_at", null)
-              .gte("scheduled_at", startIso)
-              .lt("scheduled_at", endIso)
-              .order("scheduled_at"),
-          ),
+          seesTasks
+            ? rows(
+                ctx.db
+                  .from("tasks")
+                  .select("id, title, scheduled_at, duration_minutes, status")
+                  .eq("workspace_id", ctx.key.workspaceId)
+                  .is("deleted_at", null)
+                  .gte("scheduled_at", startIso)
+                  .lt("scheduled_at", endIso)
+                  .order("scheduled_at"),
+              )
+            : noTasks,
           // The strip: open tasks scheduled in the past 7 days whose time passed.
-          rows(
-            ctx.db
-              .from("tasks")
-              .select("id, title, scheduled_at, duration_minutes, status")
-              .eq("workspace_id", ctx.key.workspaceId)
-              .is("deleted_at", null)
-              .in("status", OPEN_STATUSES)
-              .gte("scheduled_at", new Date(startMs - 7 * 86_400_000).toISOString())
-              .lt("scheduled_at", nowIso)
-              .order("scheduled_at"),
-          ),
+          seesTasks
+            ? rows(
+                ctx.db
+                  .from("tasks")
+                  .select("id, title, scheduled_at, duration_minutes, status")
+                  .eq("workspace_id", ctx.key.workspaceId)
+                  .is("deleted_at", null)
+                  .in("status", OPEN_STATUSES)
+                  .gte("scheduled_at", new Date(startMs - 7 * 86_400_000).toISOString())
+                  .lt("scheduled_at", nowIso)
+                  .order("scheduled_at"),
+              )
+            : noTasks,
         ]);
         // Match the app's strip semantics: unfinished = the block's END passed
         // (start + duration <= now), so an in-progress block isn't "unfinished".
@@ -186,7 +197,7 @@ export const calendarConnectorModule: ConnectorModule = {
         });
         const [calendars, tasks] = await Promise.all([
           visibleIds(ctx, "calendar"),
-          visibleIds(ctx, "task"),
+          seesTasks ? visibleIds(ctx, "task") : Promise.resolve(new Set<string>()),
         ]);
         return {
           date: startIso.slice(0, 10),
@@ -195,6 +206,9 @@ export const calendarConnectorModule: ConnectorModule = {
             .map(shapeEvent),
           blocks: blocks.filter((t) => tasks.has(t.id)).map(shapeBlock),
           strip: stripEnded.filter((t) => tasks.has(t.id)).map(shapeBlock),
+          ...(seesTasks
+            ? {}
+            : { note: "Task blocks are left out: this API key has no access to Tasks." }),
         };
       },
     },
@@ -354,9 +368,12 @@ export const calendarConnectorModule: ConnectorModule = {
             .gte("scheduled_at", new Date(now.getTime() - 7 * 86_400_000).toISOString())
             .lt("scheduled_at", now.toISOString()),
         );
+        // Only tasks the key's creator can see: the op would refuse the rest.
+        const visibleTasks = await visibleIds(ctx, "task");
         // Unfinished = the block's END passed (the app's strip semantics) — an
         // in-progress block is not rolled out from under the user.
         const ended = drifted.filter((t) => {
+          if (!visibleTasks.has(t.id)) return false;
           const start = Date.parse(t.scheduled_at);
           const durMs = (Number(t.duration_minutes) > 0 ? Number(t.duration_minutes) : 30) * 60_000;
           return Number.isFinite(start) && start + durMs <= now.getTime();

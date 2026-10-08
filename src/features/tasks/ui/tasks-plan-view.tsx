@@ -12,6 +12,7 @@ import { onCreateNew } from "../../../components/app/create-events";
 import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell";
 import { truncationNotice } from "../../../components/app/truncation-notice";
 import { Button } from "../../../components/ui/button";
+import { restoreNavFocus } from "../../../components/ui/nav-row";
 import {
   asDragPayload,
   asDropLinkTarget,
@@ -22,20 +23,16 @@ import type { EntityRef } from "../../../lib/entity-links";
 import { ENTITY_OPEN_EVENT, takeEntityOpenIntent } from "../../../lib/entity-open";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { HubDropZone } from "../../contacts/ui/hub-drop-zone";
+import { flushFocusSession, registerFocusFlushSink } from "../../focus/engine";
+import { consumeFocusViewRequest, FOCUS_VIEW_REQUEST_EVENT } from "../../focus/view-request";
 import { createLinkWithToast } from "../../spine/ui/drop-link-toast";
 import { timeBlockByBucket as invertTimeBlocks, resolveDefaultSelection } from "../default-view";
-import {
-  consumeFocusViewRequest,
-  FOCUS_VIEW_REQUEST_EVENT,
-  flushFocusSession,
-  registerFocusFlushSink,
-} from "../focus-session-store";
 import { type GroupBy, taskMatchesTagFilter } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import { isDrifted, type Task } from "../model";
 import { resolveTasksDeepLink } from "../search";
 import { sanitizeTimelineZoom, type TimelineZoom } from "../timeline-geometry";
-import { BucketRail, type TasksMode } from "./bucket-rail";
+import { BucketRail, parseCollapsedSections, type TasksMode } from "./bucket-rail";
 import { CaptureModal } from "./capture-modal";
 import { pointerFirstCollision, useTaskDndSensors } from "./dnd/task-dnd";
 import { DriftTriageDialog } from "./drift-triage-dialog";
@@ -107,8 +104,23 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   const [timelineZoom, setTimelineZoom] = useState<TimelineZoom>(() =>
     sanitizeTimelineZoom(readLS(workspaceId, "timelineZoom")),
   );
+  // Rail sections the user collapsed stay collapsed (tasks-v2 §11).
+  const [collapsedSections, setCollapsedSections] = useState<ReadonlySet<string>>(() =>
+    parseCollapsedSections(readLS(workspaceId, "collapsedSections")),
+  );
+  const toggleSection = useCallback((name: string) => {
+    setCollapsedSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  }, []);
   const [captureOpen, setCaptureOpen] = useState(false);
   const [triageBucketId, setTriageBucketId] = useState<string | null>(null);
+  // Triage opens from a rail row and has no trigger to hand focus back to.
+  const railNavRef = useRef<HTMLElement | null>(null);
+  const triageFromRef = useRef<string | null>(null);
   // Committing a blocked task offers its unblocked frontier first (spec §5c).
   const [frontierOfferTaskId, setFrontierOfferTaskId] = useState<string | null>(null);
   // Task-level selection (distinct from `selection`, which is the bucket scope).
@@ -164,18 +176,22 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     return filterTagIds.filter((id) => live.has(id));
   }, [filterTagIds, api.tags]);
 
-  // DF-11 — the app-level Focus session flushes tracked time through the Tasks
-  // module's write path, so register `addTimeSpent` as its sink while /tasks is
-  // mounted. A ref keeps the callback current without re-registering (which would
-  // re-drain each render); registering once drains any backlog accrued while the
-  // module was unmounted, and the cleanup banks accrued-so-far on navigation away.
+  // DF-11 / TV-F1 — the app-level Focus engine saves tracked time through the
+  // Tasks module's write path, so register `persistFocusTime` as this
+  // workspace's sink while /tasks is mounted. A ref keeps the callback current
+  // without re-registering (which would re-drain each render); registering
+  // drains any backlog accrued while the module was unmounted, and the cleanup
+  // banks accrued-so-far on navigation away.
   const apiRef = useRef(api);
   useEffect(() => {
     apiRef.current = api;
   });
   useEffect(
-    () => registerFocusFlushSink((taskId, seconds) => apiRef.current.addTimeSpent(taskId, seconds)),
-    [],
+    () =>
+      registerFocusFlushSink(workspaceId, (taskId, seconds, context) =>
+        apiRef.current.persistFocusTime(taskId, seconds, context),
+      ),
+    [workspaceId],
   );
   // Once the bundle is loaded, drain any seconds the register-time flush had to
   // retain because it fired against the still-empty bundle on remount — so time
@@ -208,6 +224,10 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   useEffect(() => writeLS(workspaceId, "groupBy", groupBy), [workspaceId, groupBy]);
   useEffect(() => writeLS(workspaceId, "boardGroupBy", boardGroupBy), [workspaceId, boardGroupBy]);
   useEffect(() => writeLS(workspaceId, "timelineZoom", timelineZoom), [workspaceId, timelineZoom]);
+  useEffect(
+    () => writeLS(workspaceId, "collapsedSections", JSON.stringify([...collapsedSections])),
+    [workspaceId, collapsedSections],
+  );
 
   // Remember the last concrete bucket scope (never "all" / "today") so the next
   // open can land back on it (spec §9.2).
@@ -402,6 +422,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       buckets={buckets}
       inbox={inbox}
       openCountByBucket={api.openTaskCountByBucket}
+      taskCountByBucket={api.taskCountByBucket}
       driftCountByBucket={api.driftCountByBucket}
       totalOpenCount={totalOpenCount}
       committedCount={committedCount}
@@ -409,10 +430,16 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       onCreateBucket={api.createBucket}
       onRenameBucket={api.renameBucket}
       onDeleteBucket={api.deleteBucket}
-      onTriageBucket={setTriageBucketId}
+      onTriageBucket={(id) => {
+        triageFromRef.current = id;
+        setTriageBucketId(id);
+      }}
       timeBlockByBucket={timeBlocksByBucket}
       onSetTimeBlock={api.setTimeBlock}
       onSetBucketGroup={api.setBucketGroup}
+      collapsedSections={collapsedSections}
+      onToggleSection={toggleSection}
+      navRef={railNavRef}
     />
   );
 
@@ -585,6 +612,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   const body =
     mode === "execute" ? (
       <ExecuteView
+        workspaceId={workspaceId}
         committedTasks={api.committedTasks}
         bucketNameById={bucketNameById}
         parentTitleFor={parentTitleFor}
@@ -810,6 +838,9 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
         onReschedule={(id, days) => api.rescheduleScheduledAt(id, days)}
         onArchive={api.archiveTask}
         onIgnore={api.unscheduleTask}
+        onCloseAutoFocus={(event) =>
+          restoreNavFocus(event, railNavRef.current, triageFromRef.current)
+        }
       />
       <FrontierOfferDialog
         open={frontierOfferTaskId !== null}

@@ -10,6 +10,7 @@
 import { useParams } from "@tanstack/react-router";
 import { Plus, X } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { SELECTED_OPTION } from "@/components/ui/selection";
 import { Avatar, AvatarFallback, AvatarImage } from "../../components/ui/avatar";
 import { Button } from "../../components/ui/button";
 import { Eyebrow } from "../../components/ui/eyebrow";
@@ -116,7 +117,7 @@ function Page({ children }: { children: ReactNode }) {
           rel="noopener"
           className="inline-flex items-center gap-2 font-sans text-sm text-muted-foreground hover:text-foreground"
         >
-          <ModuoMark aria-hidden className="size-icon-sm text-current" />
+          <ModuoMark aria-hidden small className="size-icon-sm text-current" />
           Scheduled with Moduo
         </a>
       </footer>
@@ -605,8 +606,8 @@ export function BookPage() {
                         "flex flex-col items-start gap-1 rounded-lg border px-4 py-3 text-left",
                         "transition-colors duration-[var(--motion-fade)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                         choice === chosen
-                          ? "border-[var(--selected-border)] bg-[var(--selected-bg)]"
-                          : "border-border hover:border-foreground",
+                          ? SELECTED_OPTION
+                          : "border-border hover:border-foreground/30",
                       )}
                     >
                       <span className="font-sans text-xl text-foreground">

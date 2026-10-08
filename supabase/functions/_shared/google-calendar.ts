@@ -43,6 +43,8 @@ export async function exchangeGoogleCode(input: {
   clientSecret: string;
   code: string;
   redirectUri: string;
+  /** PKCE verifier, when the consent URL carried a code_challenge. */
+  codeVerifier?: string;
 }): Promise<{ accessToken: string; refreshToken: string | null; expiresAt: string }> {
   const body = new URLSearchParams({
     grant_type: "authorization_code",
@@ -51,6 +53,7 @@ export async function exchangeGoogleCode(input: {
     client_secret: input.clientSecret,
     redirect_uri: input.redirectUri,
   });
+  if (input.codeVerifier) body.set("code_verifier", input.codeVerifier);
   const res = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },

@@ -163,12 +163,12 @@ export function SettingsModal() {
           >
             <nav
               aria-label="Settings sections"
-              className="flex h-full min-h-0 flex-col gap-4 overflow-y-auto border-r border-border bg-muted/40 p-3"
+              className="pane-scroll flex h-full min-h-0 flex-col gap-4 overflow-y-auto border-r border-border bg-muted/40 p-3"
             >
               <div className="flex items-center justify-between px-2 pt-1">
                 <Eyebrow>Settings</Eyebrow>
                 <DialogPrimitive.Close
-                  className="grid h-7 w-7 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+                  className="grid h-7 w-7 place-items-center rounded-md text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
                   aria-label="Close settings"
                 >
                   <X className="size-4" />
@@ -189,7 +189,7 @@ export function SettingsModal() {
                         <TabsTrigger
                           key={id}
                           value={id}
-                          className="flex items-center justify-start gap-2 rounded-md px-3 font-sans text-sm font-normal text-muted-foreground transition-colors hover:bg-accent hover:text-foreground data-[state=active]:bg-accent data-[state=active]:text-foreground data-[state=active]:shadow-none"
+                          className="flex items-center justify-start gap-2 rounded-md px-3 font-sans text-sm font-normal text-muted-foreground hover:bg-state-hover hover:text-foreground data-[state=active]:bg-state-active data-[state=active]:text-foreground data-[state=active]:shadow-none"
                           style={{ height: "var(--row-h)" }}
                         >
                           <Icon className="size-4" aria-hidden />
@@ -202,7 +202,7 @@ export function SettingsModal() {
               ))}
             </nav>
 
-            <div className="min-h-0 overflow-y-auto px-2 py-4">
+            <div className="pane-scroll h-full min-h-0 overflow-y-auto px-2 py-4">
               {SECTIONS.map(({ id, Component }) => (
                 <TabsContent key={id} value={id} className="data-[state=inactive]:hidden">
                   {id === section ? <Component /> : null}

@@ -658,34 +658,75 @@ body,
 
 /* ═══ Mindmap UI ═══ */
 
-/* ═══ Thin scrollbars (app-wide utility; calendar grid + rail use it) ═══ */
+/* ═══ Scrollbars — thin and token-coloured everywhere, no opt-in (DS-1) ═══
 
-/* Two mechanisms on purpose: modern engines take the standard properties
-   (when `scrollbar-width` is non-auto, Chromium ignores the ::-webkit rules
-   below and would otherwise color the native thin scrollbar from
-   `color-scheme` — white on our dark surfaces, hence the explicit
-   scrollbar-color); older WebKit (Tauri on pre-18.2 macOS WKWebView) still
-   reads the ::-webkit-scrollbar block. Both paths are token-routed. */
+   Two mechanisms on purpose, both token-routed:
+   - Modern engines take the standard properties. Once `scrollbar-width` is
+     non-auto, Chromium ignores every ::-webkit-scrollbar rule and would colour
+     the native thin bar from `color-scheme` (white on our dark surfaces), so
+     `scrollbar-color` always travels with it.
+   - Older WebKit (Tauri on pre-18.2 macOS WKWebView) reads only the
+     ::-webkit-scrollbar rules: a 10px track whose thumb has a 3px transparent
+     border clipped to the content box, i.e. a 4px pill like the native thin bar.
+
+   Base layer at zero specificity, so anything else wins: utilities, component
+   rules, Radix ScrollArea's own viewport style and `.no-scrollbar` below (all
+   unlayered). Styled scrollbars take layout width, so a pane's main scroller
+   adds `.pane-scroll` to keep its content from jumping when a bar appears.
+   Tailwind 4.3's scrollbar utilities are not used (decisions/toolchain.md). */
+@layer base {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scroll-thumb) transparent;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track,
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--scroll-thumb);
+    background-clip: content-box;
+    border: 3px solid transparent;
+    border-radius: var(--radius-full);
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--scroll-thumb-hover);
+  }
+}
+
+/* Alias for the 46 existing call sites: identical to the global default, so
+   it changes nothing. New code needs no class at all. */
 .scrollbar-thin {
   scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
+  scrollbar-color: var(--scroll-thumb) transparent;
 }
 
-.scrollbar-thin::-webkit-scrollbar {
-  width: 4px;
+/* The opt-out, for a surface designed without a visible bar (chip rows,
+   carousels). Unlayered, so it beats the base-layer default on both paths. */
+.no-scrollbar {
+  scrollbar-width: none;
 }
 
-.scrollbar-thin::-webkit-scrollbar-track {
-  background: transparent;
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }
 
-.scrollbar-thin::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 4px;
-}
-
-.scrollbar-thin::-webkit-scrollbar-thumb:hover {
-  background: var(--muted-foreground);
+/* A pane's main scroller (center list or document, rail list, inspector):
+   reserves the scrollbar's width up front, so content doesn't reflow the
+   moment it starts to overflow. Only classic scrollbars take space (Windows,
+   Linux, macOS set to "Always", styled WebKit bars); overlay bars don't.
+   Put it on the element that scrolls — never on a shell wrapper whose child
+   does the scrolling, or the pane shows a dead strip beside the real bar. */
+.pane-scroll {
+  scrollbar-gutter: stable;
 }
 
 /* React Flow overrides for the dark mindmap theme */
@@ -878,16 +919,6 @@ body,
   :root:not([data-motion="full"]) .mail-flag-wave__cloth {
     animation: none;
   }
-}
-
-
-.no-scrollbar {
-  scrollbar-width: none;
-}
-
-.no-scrollbar::-webkit-scrollbar {
-  width: 0;
-  height: 0;
 }
 
 /* Module nav: icons-only mode hides every label and collapses each tab to

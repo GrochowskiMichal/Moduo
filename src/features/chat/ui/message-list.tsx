@@ -164,7 +164,7 @@ export function MessageList({
       <div
         ref={scrollRef}
         onScroll={onScroll}
-        className="scrollbar-thin flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-2 pb-2"
+        className="pane-scroll scrollbar-thin flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-2 pb-2"
         role="log"
         aria-live="polite"
         aria-relevant="additions"
@@ -198,7 +198,7 @@ export function MessageList({
           if (row.kind === "new") {
             return (
               <div key={row.key} data-new-marker className="flex items-center gap-2 py-1">
-                <span className="h-px flex-1 bg-(--selected-border)/60" />
+                <span className="h-px flex-1 bg-primary/60" />
                 <span className="text-2xs font-medium text-foreground">
                   New<span className="sr-only"> messages below</span>
                 </span>

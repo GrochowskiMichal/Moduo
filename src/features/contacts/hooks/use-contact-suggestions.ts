@@ -88,9 +88,10 @@ export function useContactSuggestions(
     setBusy(true);
     setResolved((prev) => (prev.includes(key) ? prev : [...prev, key])); // optimistic advance
     try {
-      await runtime.contacts.link({ workspaceId, ...contactSuggestLinkArgs(focusRef, s) });
       // A works-at → company accept also sets the denormalized company_id, so the
       // accept path matches the explicit "Set company" action (AC8 writes BOTH).
+      // The company goes first: the server refuses one you can't open, and then
+      // no link is left behind.
       if (
         focusRef.type === "contact" &&
         s.other.type === "company" &&
@@ -102,6 +103,7 @@ export function useContactSuggestions(
           setCompany: { companyId: s.other.id },
         });
       }
+      await runtime.contacts.link({ workspaceId, ...contactSuggestLinkArgs(focusRef, s) });
       onLinked?.();
     } catch (err) {
       setResolved((prev) => prev.filter((k) => k !== key)); // failed → re-surface it

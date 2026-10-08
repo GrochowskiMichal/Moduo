@@ -1,36 +1,23 @@
-import {
-  ChevronDown,
-  ChevronRight,
-  Inbox,
-  Layers,
-  ListChecks,
-  MoreHorizontal,
-  Plus,
-} from "lucide-react";
-import { useEffect, useRef, useState } from "react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
-  DropdownMenuTrigger,
-} from "../../../components/ui/dropdown-menu";
-import { Eyebrow } from "../../../components/ui/eyebrow";
+import { Inbox, Layers, ListChecks, Plus } from "lucide-react";
+import { type RefObject, useEffect, useRef, useState } from "react";
 import { Input } from "../../../components/ui/input";
+import {
+  focusNavRow,
+  type MenuKit,
+  NavRow,
+  NavRowDot,
+  NavSectionHeader,
+  restoreNavFocus,
+} from "../../../components/ui/nav-row";
 import { SegmentedControl } from "../../../components/ui/segmented-control";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
-import { cn } from "../../../lib/utils";
 import { useAuth } from "../../../providers/auth-provider";
 import { useWorkspace } from "../../../providers/workspace-provider";
 import { ShareMenu } from "../../sharing/share-menu";
 import { TIME_BLOCK_LABELS, TIME_BLOCK_SLOTS, type TimeBlockSlot } from "../default-view";
 import { bucketSections } from "../helpers";
 import type { Bucket } from "../model";
+import { DeleteBucketDialog } from "./delete-bucket-dialog";
 
 export type TasksMode = "plan" | "execute";
 
@@ -42,6 +29,8 @@ type Props = {
   buckets: Bucket[];
   inbox: Bucket | null;
   openCountByBucket: Map<string, number>;
+  /** Tasks each bucket's list shows (open + done) — quoted by the delete confirm. */
+  taskCountByBucket: Map<string, number>;
   driftCountByBucket: Map<string, number>;
   totalOpenCount: number;
   committedCount: number;
@@ -57,7 +46,27 @@ type Props = {
   onSetTimeBlock: (bucketId: string, slot: TimeBlockSlot | null) => void;
   /** Assign a bucket to a presentational section, or clear it (group = null). */
   onSetBucketGroup: (bucketId: string, group: string | null) => void;
+  /** Collapsed section names (remembered per workspace by the page). */
+  collapsedSections: ReadonlySet<string>;
+  onToggleSection: (name: string) => void;
+  /**
+   * The rail's <nav>, for the page to hand focus back to it when a dialog the
+   * rail opened (triage) closes; see `focusNavRow`.
+   */
+  navRef?: RefObject<HTMLElement | null>;
 };
+
+/** Collapsed section names from storage; anything unreadable is "none collapsed". */
+export function parseCollapsedSections(raw: string | null): Set<string> {
+  if (!raw) return new Set();
+  try {
+    const value: unknown = JSON.parse(raw);
+    if (!Array.isArray(value)) return new Set();
+    return new Set(value.filter((v): v is string => typeof v === "string" && v.trim() !== ""));
+  } catch {
+    return new Set();
+  }
+}
 
 export function BucketRail({
   mode,
@@ -67,6 +76,7 @@ export function BucketRail({
   buckets,
   inbox,
   openCountByBucket,
+  taskCountByBucket,
   driftCountByBucket,
   totalOpenCount,
   committedCount,
@@ -78,95 +88,131 @@ export function BucketRail({
   timeBlockByBucket,
   onSetTimeBlock,
   onSetBucketGroup,
+  collapsedSections,
+  onToggleSection,
+  navRef,
 }: Props) {
+  const ownNavRef = useRef<HTMLElement | null>(null);
+  const nav = navRef ?? ownNavRef;
   const [adding, setAdding] = useState(false);
-  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
+  // Delete asks first (Q1-4). Bucket + counts are snapshotted on open: confirming
+  // empties the bucket at once, and the closing dialog must keep its copy.
+  const [deleting, setDeleting] = useState<{
+    bucket: Bucket;
+    taskCount: number;
+    openCount: number;
+    open: boolean;
+  } | null>(null);
+  const requestDelete = (bucket: Bucket) =>
+    setDeleting({
+      bucket,
+      taskCount: taskCountByBucket.get(bucket.id) ?? 0,
+      openCount: openCountByBucket.get(bucket.id) ?? 0,
+      open: true,
+    });
+  // A dialog or popover a row's menu opened has no trigger to hand focus back
+  // to, so it lands on the rail: the row itself if it survived (Cancel), else
+  // the current row (a confirmed delete). Not when focus already moved on.
+  const returnFocus = (bucketId: string | null) => (event: Event) =>
+    restoreNavFocus(event, nav.current, bucketId);
+  // An inline input closed by Enter/Esc unmounts with focus in it; the row it
+  // belongs to renders on the next commit.
+  const focusRowSoon = (bucketId: string | null) =>
+    setTimeout(() => focusNavRow(nav.current, bucketId), 0);
 
   const { ungrouped, sections } = bucketSections(buckets);
   const groupNames = sections.map((s) => s.name);
-  const toggleSection = (name: string) =>
-    setCollapsedSections((prev) => {
-      const next = new Set(prev);
-      if (next.has(name)) next.delete(name);
-      else next.add(name);
-      return next;
-    });
+  const inboxDrift = inbox ? (driftCountByBucket.get(inbox.id) ?? 0) : 0;
+
+  const bucketRow = (bucket: Bucket) => (
+    <BucketRow
+      key={bucket.id}
+      bucket={bucket}
+      count={openCountByBucket.get(bucket.id) ?? 0}
+      drift={driftCountByBucket.get(bucket.id) ?? 0}
+      current={selection === bucket.id}
+      canEdit={canEdit}
+      timeBlock={timeBlockByBucket.get(bucket.id) ?? null}
+      groupNames={groupNames}
+      onSelect={() => onSelect(bucket.id)}
+      onRename={(name) => onRenameBucket(bucket.id, name)}
+      onDelete={() => requestDelete(bucket)}
+      onTriage={() => onTriageBucket(bucket.id)}
+      onSetTimeBlock={(slot) => onSetTimeBlock(bucket.id, slot)}
+      onSetGroup={(group) => onSetBucketGroup(bucket.id, group)}
+      onShareCloseAutoFocus={returnFocus(bucket.id)}
+      onInputExit={() => focusRowSoon(bucket.id)}
+    />
+  );
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
       <ModeToggle mode={mode} onModeChange={onModeChange} />
 
-      <div className="min-h-0 flex-1 overflow-auto">
-        <nav className="flex flex-col gap-0.5" aria-label="Buckets">
-          <SelectionRow
-            icon={<Layers className="size-4" aria-hidden />}
+      <div className="pane-scroll min-h-0 flex-1 overflow-auto">
+        <nav ref={nav} className="flex flex-col gap-px" aria-label="Buckets">
+          <NavRow
             label="All"
+            icon={<Layers aria-hidden />}
             count={totalOpenCount}
-            active={selection === "all"}
-            reserveAction={canEdit}
-            onClick={() => onSelect("all")}
+            countLabel={`${totalOpenCount} open`}
+            current={selection === "all"}
+            onSelect={() => onSelect("all")}
           />
-          <SelectionRow
-            icon={<ListChecks className="size-4" aria-hidden />}
+          <NavRow
             label="Queue"
+            icon={<ListChecks aria-hidden />}
             count={committedCount}
-            active={selection === "today"}
-            reserveAction={canEdit}
-            onClick={() => onSelect("today")}
+            countLabel={`${committedCount} queued`}
+            current={selection === "today"}
+            onSelect={() => onSelect("today")}
           />
           {inbox ? (
-            <SelectionRow
-              icon={<Inbox className="size-4" aria-hidden />}
+            <NavRow
+              navId={inbox.id}
               label="Inbox"
+              icon={<Inbox aria-hidden />}
               count={openCountByBucket.get(inbox.id) ?? 0}
-              drift={driftCountByBucket.get(inbox.id) ?? 0}
-              active={selection === "inbox" || selection === inbox.id}
-              reserveAction={canEdit}
-              onClick={() => onSelect("inbox")}
-              onTriage={() => onTriageBucket(inbox.id)}
+              countLabel={`${openCountByBucket.get(inbox.id) ?? 0} open`}
+              current={selection === "inbox" || selection === inbox.id}
+              onSelect={() => onSelect("inbox")}
+              indicator={
+                inboxDrift > 0 ? (
+                  <DriftMark
+                    label={`${inboxDrift} drifted · triage`}
+                    onTriage={() => onTriageBucket(inbox.id)}
+                  />
+                ) : undefined
+              }
+              menu={
+                canEdit && inboxDrift > 0
+                  ? (m) => (
+                      <m.Item onSelect={m.afterClose(() => onTriageBucket(inbox.id))}>
+                        Triage {inboxDrift} drifted…
+                      </m.Item>
+                    )
+                  : undefined
+              }
             />
           ) : null}
 
-          {/* Buckets section header — hover reveals a "+" (Notion-style add). */}
-          <div className="group/sec mt-3 mb-1 flex items-center justify-between">
-            <Eyebrow className="px-2" tone="muted">
-              Buckets
-            </Eyebrow>
-            {canEdit ? (
-              <button
-                type="button"
-                aria-label="New bucket"
-                onClick={() => setAdding(true)}
-                className="mr-1 flex size-5 items-center justify-center rounded text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover/sec:opacity-100"
-              >
-                <Plus className="size-4" aria-hidden />
-              </button>
-            ) : null}
-          </div>
+          <NavSectionHeader
+            className="mt-3"
+            label="Buckets"
+            onAdd={canEdit ? () => setAdding(true) : undefined}
+            addLabel="New bucket"
+          />
 
           {adding ? (
-            <BucketAddInput onCreate={onCreateBucket} onClose={() => setAdding(false)} />
+            <BucketAddInput
+              onCreate={onCreateBucket}
+              onClose={() => setAdding(false)}
+              onKeyExit={() => focusRowSoon(null)}
+            />
           ) : null}
 
           {/* Ungrouped buckets render flat, first. */}
-          {ungrouped.map((bucket) => (
-            <BucketRow
-              key={bucket.id}
-              bucket={bucket}
-              count={openCountByBucket.get(bucket.id) ?? 0}
-              drift={driftCountByBucket.get(bucket.id) ?? 0}
-              active={selection === bucket.id}
-              canEdit={canEdit}
-              timeBlock={timeBlockByBucket.get(bucket.id) ?? null}
-              groupNames={groupNames}
-              onClick={() => onSelect(bucket.id)}
-              onRename={(name) => onRenameBucket(bucket.id, name)}
-              onDelete={() => onDeleteBucket(bucket.id)}
-              onTriage={() => onTriageBucket(bucket.id)}
-              onSetTimeBlock={(slot) => onSetTimeBlock(bucket.id, slot)}
-              onSetGroup={(group) => onSetBucketGroup(bucket.id, group)}
-            />
-          ))}
+          {ungrouped.map(bucketRow)}
 
           {/* Collapsible sections (two levels max: section → bucket). */}
           {sections.map((section) => {
@@ -176,66 +222,43 @@ export function BucketRail({
               0,
             );
             // Aggregate drift so a collapsed section still surfaces it ambiently
-            // (the per-bucket badges are hidden while collapsed).
+            // (the per-bucket marks are hidden while collapsed).
             const driftCount = section.buckets.reduce(
               (n, b) => n + (driftCountByBucket.get(b.id) ?? 0),
               0,
             );
             return (
-              <div key={section.name} className="mt-2">
-                <button
-                  type="button"
-                  onClick={() => toggleSection(section.name)}
-                  aria-expanded={!collapsed}
-                  className="group/sec flex w-full items-center gap-1 rounded px-1 py-0.5 text-left text-muted-foreground hover:text-foreground"
-                >
-                  {collapsed ? (
-                    <ChevronRight className="size-3.5 shrink-0" aria-hidden />
-                  ) : (
-                    <ChevronDown className="size-3.5 shrink-0" aria-hidden />
-                  )}
-                  <Eyebrow className="min-w-0 flex-1 truncate" tone="inherit">
-                    {section.name}
-                  </Eyebrow>
-                  <span className="flex shrink-0 items-center font-sans text-xs tabular-nums text-muted-foreground/60">
-                    {openCount}
-                    {collapsed && driftCount > 0 ? (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <span className="ml-0.5 text-muted-foreground/50">({driftCount})</span>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          {driftCount} drifted in {section.name} — expand to triage
-                        </TooltipContent>
-                      </Tooltip>
-                    ) : null}
-                  </span>
-                </button>
-                {!collapsed
-                  ? section.buckets.map((bucket) => (
-                      <BucketRow
-                        key={bucket.id}
-                        bucket={bucket}
-                        count={openCountByBucket.get(bucket.id) ?? 0}
-                        drift={driftCountByBucket.get(bucket.id) ?? 0}
-                        active={selection === bucket.id}
-                        canEdit={canEdit}
-                        timeBlock={timeBlockByBucket.get(bucket.id) ?? null}
-                        groupNames={groupNames}
-                        onClick={() => onSelect(bucket.id)}
-                        onRename={(name) => onRenameBucket(bucket.id, name)}
-                        onDelete={() => onDeleteBucket(bucket.id)}
-                        onTriage={() => onTriageBucket(bucket.id)}
-                        onSetTimeBlock={(slot) => onSetTimeBlock(bucket.id, slot)}
-                        onSetGroup={(group) => onSetBucketGroup(bucket.id, group)}
+              <div key={section.name} className="mt-2 flex flex-col gap-px">
+                <NavSectionHeader
+                  label={section.name}
+                  count={openCount}
+                  countLabel={`${openCount} open`}
+                  collapsed={collapsed}
+                  onToggle={() => onToggleSection(section.name)}
+                  indicator={
+                    collapsed && driftCount > 0 ? (
+                      <DriftMark
+                        label={`${driftCount} drifted in ${section.name} · expand to triage`}
                       />
-                    ))
-                  : null}
+                    ) : undefined
+                  }
+                />
+                {!collapsed ? section.buckets.map(bucketRow) : null}
               </div>
             );
           })}
         </nav>
       </div>
+
+      <DeleteBucketDialog
+        bucket={deleting?.bucket ?? null}
+        open={deleting?.open ?? false}
+        taskCount={deleting?.taskCount ?? 0}
+        openCount={deleting?.openCount ?? 0}
+        onConfirm={(bucket) => onDeleteBucket(bucket.id)}
+        onClose={() => setDeleting((prev) => (prev ? { ...prev, open: false } : prev))}
+        onCloseAutoFocus={returnFocus(deleting?.bucket.id ?? null)}
+      />
     </div>
   );
 }
@@ -266,169 +289,76 @@ function ModeToggle({
   );
 }
 
-// ── meta (counts + drift) — secondary font, numbers only ──────────────────────
+// ── drift mark ────────────────────────────────────────────────────────────────
 
-function CountDrift({
-  count,
-  drift,
-  onTriage,
-}: {
-  count: number;
-  drift?: number;
-  /** Clicking the drift number opens batch-triage. */
-  onTriage?: () => void;
-}) {
-  const hasDrift = !!drift && drift > 0;
-  // Fixed-width, right-aligned numeric column so counts align down the whole
-  // rail (the old variable-width "X (Y)" was the misalignment). Drift is
-  // ambient: the number emphasizes (muted → foreground) and the detail lives in
-  // the tooltip; clicking a drifted count opens triage. Never red.
-  if (count === 0 && !hasDrift) {
-    // keep the column even when empty so siblings stay aligned
-    return <span className="w-6 shrink-0" aria-hidden />;
-  }
-  const tip = hasDrift ? `${count} open · ${drift} drifted — click to triage` : `${count} open`;
-  const cls = "w-6 shrink-0 text-right font-sans text-xs tabular-nums";
+/**
+ * Drift is ambient: a quiet dot before the count, never red (tasks-v2 T7). It
+ * sits outside the count's slot, so it stays put while the count swaps for ⋯
+ * and a click on it still opens triage.
+ */
+function DriftMark({ label, onTriage }: { label: string; onTriage?: () => void }) {
+  const dot = <span aria-hidden className="size-1.5 rounded-full bg-muted-foreground" />;
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        {hasDrift ? (
+        {onTriage ? (
           <button
             type="button"
-            aria-label={tip}
-            onClick={(e) => {
-              e.stopPropagation();
-              onTriage?.();
-            }}
-            className={cn(cls, "rounded text-foreground")}
+            aria-label={label}
+            onClick={onTriage}
+            className="flex size-4 items-center justify-center rounded-sm outline-none hover:bg-state-active focus-visible:ring-2 focus-visible:ring-ring/50"
           >
-            {count}
+            {dot}
           </button>
         ) : (
-          <span className={cn(cls, "text-muted-foreground/70")} aria-label={tip}>
-            {count}
+          <span role="img" aria-label={label} className="flex size-4 items-center justify-center">
+            {dot}
           </span>
         )}
       </TooltipTrigger>
-      <TooltipContent>{tip}</TooltipContent>
+      <TooltipContent>{label}</TooltipContent>
     </Tooltip>
   );
 }
 
-// ── rows ──────────────────────────────────────────────────────────────────────
-
-function SelectionRow({
-  icon,
-  label,
-  count,
-  drift,
-  active,
-  reserveAction,
-  onClick,
-  onTriage,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  count: number;
-  drift?: number;
-  active: boolean;
-  /** Reserve a trailing slot so counts align with bucket rows' hover "…". */
-  reserveAction?: boolean;
-  onClick: () => void;
-  onTriage?: () => void;
-}) {
-  return (
-    <div
-      className={cn(
-        "group flex items-center gap-2 rounded-md px-2 py-0.5 text-sm",
-        active
-          ? "bg-accent text-foreground"
-          : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
-      )}
-      style={{ minHeight: "var(--row-h)" }}
-    >
-      <button
-        type="button"
-        onClick={onClick}
-        className="flex min-w-0 flex-1 items-center gap-2 text-left focus-visible:outline-none"
-      >
-        <span className="shrink-0">{icon}</span>
-        <span className="min-w-0 flex-1 truncate font-display">{label}</span>
-      </button>
-      <CountDrift count={count} drift={drift} onTriage={onTriage} />
-      {reserveAction ? <span className="size-5 shrink-0" aria-hidden /> : null}
-    </div>
-  );
-}
+// ── bucket row ────────────────────────────────────────────────────────────────
 
 function BucketRow({
   bucket,
   count,
   drift,
-  active,
+  current,
   canEdit,
   timeBlock,
   groupNames,
-  onClick,
+  onSelect,
   onRename,
   onDelete,
   onTriage,
   onSetTimeBlock,
   onSetGroup,
+  onShareCloseAutoFocus,
+  onInputExit,
 }: {
   bucket: Bucket;
   count: number;
   drift: number;
-  active: boolean;
+  current: boolean;
   canEdit: boolean;
   timeBlock: TimeBlockSlot | null;
   groupNames: string[];
-  onClick: () => void;
+  onSelect: () => void;
   onRename: (name: string) => void;
   onDelete: () => void;
   onTriage: () => void;
   onSetTimeBlock: (slot: TimeBlockSlot | null) => void;
   onSetGroup: (group: string | null) => void;
+  onShareCloseAutoFocus: (event: Event) => void;
+  /** The New section input closed by Enter/Esc: focus goes back to the row. */
+  onInputExit: () => void;
 }) {
-  const [renaming, setRenaming] = useState(false);
-  const [shareNonce, setShareNonce] = useState(0);
-  const { userId } = useAuth();
-  const { members } = useWorkspace();
+  const [sharing, setSharing] = useState(false);
   const [addingSection, setAddingSection] = useState(false);
-  const [value, setValue] = useState(bucket.name);
-  const ref = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    if (renaming) {
-      ref.current?.focus();
-      ref.current?.select();
-    }
-  }, [renaming]);
-
-  if (renaming) {
-    return (
-      <div className="px-2 py-0.5">
-        <Input
-          ref={ref}
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              onRename(value);
-              setRenaming(false);
-            } else if (e.key === "Escape") {
-              setValue(bucket.name);
-              setRenaming(false);
-            }
-          }}
-          onBlur={() => {
-            onRename(value);
-            setRenaming(false);
-          }}
-          className="h-7 px-1.5 py-0 text-sm"
-        />
-      </div>
-    );
-  }
 
   if (addingSection) {
     return (
@@ -438,108 +368,123 @@ function BucketRow({
           setAddingSection(false);
         }}
         onCancel={() => setAddingSection(false)}
+        onKeyExit={onInputExit}
       />
     );
   }
 
-  return (
-    <div
-      className={cn(
-        "group flex items-center gap-2 rounded-md px-2 py-0.5 text-sm",
-        active
-          ? "bg-accent text-foreground"
-          : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
-      )}
-      style={{ minHeight: "var(--row-h)" }}
-    >
-      <button
-        type="button"
-        onClick={onClick}
-        onDoubleClick={() => canEdit && setRenaming(true)}
-        className="flex min-w-0 flex-1 items-center text-left focus-visible:outline-none"
-      >
-        <span className="min-w-0 flex-1 truncate font-display">{bucket.name}</span>
-      </button>
-      <CountDrift count={count} drift={drift} onTriage={onTriage} />
-      {canEdit ? (
-        // reserves its slot always (no layout shift); just fades in on hover
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              aria-label={`${bucket.name} options`}
-              className="flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100 aria-expanded:opacity-100"
-            >
-              <MoreHorizontal className="size-4" aria-hidden />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onSelect={() => setRenaming(true)}>Rename</DropdownMenuItem>
-            {!bucket.isSystem ? (
-              <DropdownMenuItem onSelect={() => setShareNonce((n) => n + 1)}>
-                Share
-              </DropdownMenuItem>
-            ) : null}
-            {drift > 0 ? (
-              <DropdownMenuItem onSelect={onTriage}>Triage {drift} drifted…</DropdownMenuItem>
-            ) : null}
-            <DropdownMenuSub>
-              <DropdownMenuSubTrigger>Open at</DropdownMenuSubTrigger>
-              <DropdownMenuSubContent>
-                <DropdownMenuRadioGroup
-                  value={timeBlock ?? "none"}
-                  onValueChange={(v) => onSetTimeBlock(v === "none" ? null : (v as TimeBlockSlot))}
-                >
-                  <DropdownMenuRadioItem value="none">No default</DropdownMenuRadioItem>
-                  {TIME_BLOCK_SLOTS.map((slot) => (
-                    <DropdownMenuRadioItem key={slot} value={slot}>
-                      {TIME_BLOCK_LABELS[slot]}
-                    </DropdownMenuRadioItem>
-                  ))}
-                </DropdownMenuRadioGroup>
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
-            <DropdownMenuSub>
-              <DropdownMenuSubTrigger>Section</DropdownMenuSubTrigger>
-              <DropdownMenuSubContent>
-                <DropdownMenuRadioGroup
-                  value={bucket.group ?? "none"}
-                  onValueChange={(v) => onSetGroup(v === "none" ? null : v)}
-                >
-                  <DropdownMenuRadioItem value="none">No section</DropdownMenuRadioItem>
-                  {groupNames.map((name) => (
-                    <DropdownMenuRadioItem key={name} value={name}>
-                      {name}
-                    </DropdownMenuRadioItem>
-                  ))}
-                </DropdownMenuRadioGroup>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onSelect={() => setAddingSection(true)}>
-                  <Plus className="size-4" aria-hidden />
-                  New section…
-                </DropdownMenuItem>
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem variant="destructive" onSelect={onDelete}>
-              Delete bucket
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+  const menu = (m: MenuKit) => (
+    <>
+      <m.Item onSelect={m.rename}>Rename</m.Item>
+      {!bucket.isSystem ? (
+        <m.Item onSelect={m.afterClose(() => setSharing(true))}>Share</m.Item>
       ) : null}
-      {shareNonce > 0 && !bucket.isSystem ? (
-        <ShareMenu
-          key={shareNonce}
-          defaultOpen
-          resourceType="bucket"
-          resourceId={bucket.id}
-          selfUserId={userId}
-          members={members
-            .filter((m) => m.isActive && !m.removedAt)
-            .map((m) => ({ userId: m.userId, name: m.displayName?.trim() || "Member" }))}
+      {drift > 0 ? (
+        <m.Item onSelect={m.afterClose(onTriage)}>Triage {drift} drifted…</m.Item>
+      ) : null}
+      <m.Sub>
+        <m.SubTrigger>Open at</m.SubTrigger>
+        <m.SubContent>
+          <m.RadioGroup
+            value={timeBlock ?? "none"}
+            onValueChange={(v) => onSetTimeBlock(v === "none" ? null : (v as TimeBlockSlot))}
+          >
+            <m.RadioItem value="none">No default</m.RadioItem>
+            {TIME_BLOCK_SLOTS.map((slot) => (
+              <m.RadioItem key={slot} value={slot}>
+                {TIME_BLOCK_LABELS[slot]}
+              </m.RadioItem>
+            ))}
+          </m.RadioGroup>
+        </m.SubContent>
+      </m.Sub>
+      <m.Sub>
+        <m.SubTrigger>Section</m.SubTrigger>
+        <m.SubContent>
+          <m.RadioGroup
+            value={bucket.group ?? "none"}
+            onValueChange={(v) => onSetGroup(v === "none" ? null : v)}
+          >
+            <m.RadioItem value="none">No section</m.RadioItem>
+            {groupNames.map((name) => (
+              <m.RadioItem key={name} value={name}>
+                {name}
+              </m.RadioItem>
+            ))}
+          </m.RadioGroup>
+          <m.Separator />
+          <m.Item onSelect={m.afterClose(() => setAddingSection(true))}>
+            <Plus aria-hidden />
+            New section…
+          </m.Item>
+        </m.SubContent>
+      </m.Sub>
+      {!bucket.isSystem ? (
+        <>
+          <m.Separator />
+          <m.Item variant="destructive" onSelect={m.afterClose(onDelete)}>
+            Delete bucket…
+          </m.Item>
+        </>
+      ) : null}
+    </>
+  );
+
+  return (
+    // Positioned so the Share popover can anchor to the row.
+    <div className="relative">
+      <NavRow
+        navId={bucket.id}
+        label={bucket.name}
+        icon={<NavRowDot />}
+        count={count}
+        countLabel={`${count} open`}
+        current={current}
+        onSelect={onSelect}
+        indicator={
+          drift > 0 ? (
+            <DriftMark label={`${drift} drifted · triage`} onTriage={onTriage} />
+          ) : undefined
+        }
+        onRename={canEdit ? onRename : undefined}
+        menu={canEdit ? menu : undefined}
+      />
+      {sharing && !bucket.isSystem ? (
+        <BucketShare
+          bucketId={bucket.id}
+          onClose={() => setSharing(false)}
+          onCloseAutoFocus={onShareCloseAutoFocus}
         />
       ) : null}
     </div>
+  );
+}
+
+/** The Share popover, opened from the row menu and anchored to the row. */
+function BucketShare({
+  bucketId,
+  onClose,
+  onCloseAutoFocus,
+}: {
+  bucketId: string;
+  onClose: () => void;
+  onCloseAutoFocus: (event: Event) => void;
+}) {
+  const { userId } = useAuth();
+  const { members } = useWorkspace();
+  return (
+    <ShareMenu
+      defaultOpen
+      anchor="parent"
+      onOpenChange={(open) => !open && onClose()}
+      onCloseAutoFocus={onCloseAutoFocus}
+      resourceType="bucket"
+      resourceId={bucketId}
+      selfUserId={userId}
+      members={members
+        .filter((m) => m.isActive && !m.removedAt)
+        .map((m) => ({ userId: m.userId, name: m.displayName?.trim() || "Member" }))}
+    />
   );
 }
 
@@ -548,9 +493,12 @@ function BucketRow({
 function BucketAddInput({
   onCreate,
   onClose,
+  onKeyExit,
 }: {
   onCreate: (name: string) => void;
   onClose: () => void;
+  /** Esc closed it: focus goes back to the rail (a blur already moved it). */
+  onKeyExit: () => void;
 }) {
   const [value, setValue] = useState("");
   const ref = useRef<HTMLInputElement>(null);
@@ -570,6 +518,7 @@ function BucketAddInput({
     <div className="px-1 py-0.5">
       <Input
         ref={ref}
+        size="sm"
         value={value}
         placeholder="Bucket name — Enter to add"
         onChange={(e) => setValue(e.target.value)}
@@ -579,10 +528,11 @@ function BucketAddInput({
           else if (e.key === "Escape") {
             setValue("");
             onClose();
+            onKeyExit();
           }
         }}
         onBlur={() => commit(false)}
-        className="h-7 px-1.5 py-0 text-sm"
+        className="px-1.5"
       />
     </div>
   );
@@ -593,9 +543,12 @@ function BucketAddInput({
 function SectionNameInput({
   onCommit,
   onCancel,
+  onKeyExit,
 }: {
   onCommit: (name: string) => void;
   onCancel: () => void;
+  /** Enter/Esc closed it (a blur already moved focus elsewhere). */
+  onKeyExit: () => void;
 }) {
   const [value, setValue] = useState("");
   const ref = useRef<HTMLInputElement>(null);
@@ -611,21 +564,25 @@ function SectionNameInput({
   };
 
   return (
-    <div className="px-2 py-0.5">
+    <div className="px-1 py-0.5">
       <Input
         ref={ref}
+        size="sm"
         value={value}
         placeholder="Section name — Enter"
         onChange={(e) => setValue(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === "Enter") commit();
-          else if (e.key === "Escape") {
+          if (e.key === "Enter") {
+            commit();
+            onKeyExit();
+          } else if (e.key === "Escape") {
             committed.current = true;
             onCancel();
+            onKeyExit();
           }
         }}
         onBlur={commit}
-        className="h-7 px-1.5 py-0 text-sm"
+        className="px-1.5"
       />
     </div>
   );

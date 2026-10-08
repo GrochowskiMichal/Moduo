@@ -1,6 +1,17 @@
 import { mapKnownRows, requireRow, taskRowSchema } from "@contracts/rows";
 import { describe, expect, it } from "@rstest/core";
 
+import { makeTask } from "../features/tasks/helpers";
+import {
+  editableTaskFields,
+  isMissingColumnError,
+  isMissingFunctionError,
+  taskCreateRow,
+  taskCreateRowLegacy,
+  taskPatchToColumns,
+  taskRowToModel,
+} from "./task-rows";
+
 describe("runtime.web mapper boundary", () => {
   const valid = {
     id: "t1",
@@ -22,5 +33,156 @@ describe("runtime.web mapper boundary", () => {
       requireRow(taskRowSchema, row, "task"),
     );
     expect(mapped).toHaveLength(1);
+  });
+});
+
+// TV-D1 D1-1: an edit sends only what it changed, so it can't put back a field
+// a teammate changed meanwhile (a whole-row save carried every field as this
+// device last saw it).
+describe("patchTask sends only changed columns", () => {
+  const NOW = "2026-10-08T12:00:00.000Z";
+
+  it("maps exactly the patched fields, plus updated_at", () => {
+    expect(taskPatchToColumns({ priority: "high" }, NOW)).toEqual({
+      priority: "high",
+      updated_at: NOW,
+    });
+    expect(
+      taskPatchToColumns({ title: "Renamed", dueDate: null, bucketId: "b2", parentId: null }, NOW),
+    ).toEqual({
+      title: "Renamed",
+      due_date: null,
+      bucket_id: "b2",
+      parent_id: null,
+      updated_at: NOW,
+    });
+  });
+
+  it("skips undefined keys instead of nulling the column", () => {
+    expect(taskPatchToColumns({ title: "A", priority: undefined }, NOW)).toEqual({
+      title: "A",
+      updated_at: NOW,
+    });
+  });
+
+  it("never sends the creator, the assignee, the id or the workspace", () => {
+    const fields = editableTaskFields({
+      id: "t1",
+      workspaceId: "w1",
+      creatorId: "u1",
+      creatorUnknown: false,
+      assigneeId: "u2",
+      createdAt: NOW,
+      updatedAt: NOW,
+      energyLevel: "low",
+    });
+    expect(fields).toEqual({ energyLevel: "low" });
+    expect(taskPatchToColumns(fields, NOW)).toEqual({ energy_level: "low", updated_at: NOW });
+  });
+
+  it("keeps description NOT NULL (an emptied one is the empty string)", () => {
+    expect(taskPatchToColumns({ description: "" }, NOW)).toEqual({
+      description: "",
+      updated_at: NOW,
+    });
+  });
+});
+
+describe("creating a task", () => {
+  const base = {
+    ...makeTask({ workspaceId: "w1", bucketId: "b1", title: "T", position: "a" }),
+    id: "t1",
+  };
+
+  it("sends the assignee explicitly and no owner_id (the server records the creator)", () => {
+    const row = taskCreateRow({ ...base, assigneeId: "u2" }, "u1");
+    expect(row.assignee_id).toBe("u2");
+    expect(row).not.toHaveProperty("owner_id");
+  });
+
+  it("an unchosen assignee is the creator; null stays Unassigned", () => {
+    expect(taskCreateRow({ ...base, assigneeId: "" }, "u1").assignee_id).toBe("u1");
+    expect(taskCreateRow({ ...base, assigneeId: null }, "u1").assignee_id).toBeNull();
+  });
+
+  it("makeTask leaves the assignee unchosen unless told", () => {
+    expect(
+      makeTask({ workspaceId: "w", bucketId: "b", title: "x", position: "a" }).assigneeId,
+    ).toBe("");
+    expect(
+      makeTask({ workspaceId: "w", bucketId: "b", title: "x", position: "a", assigneeId: null })
+        .assigneeId,
+    ).toBeNull();
+  });
+
+  it("before the migration, the assignee goes in owner_id (the old meaning)", () => {
+    const row = taskCreateRowLegacy({ ...base, assigneeId: "u2" }, "u1");
+    expect(row.owner_id).toBe("u2");
+    expect(row).not.toHaveProperty("assignee_id");
+  });
+});
+
+describe("reading a task row", () => {
+  const row = {
+    id: "t1",
+    workspace_id: "w1",
+    bucket_id: "b1",
+    status: "todo",
+    created_at: "2026-10-01T00:00:00Z",
+    updated_at: "2026-10-01T00:00:00Z",
+  };
+
+  it("maps creator and assignee separately", () => {
+    const t = taskRowToModel({ ...row, owner_id: "u1", assignee_id: "u2", creator_unknown: false });
+    expect(t).toMatchObject({ creatorId: "u1", assigneeId: "u2", creatorUnknown: false });
+  });
+
+  it("Unassigned is a null assignee", () => {
+    const t = taskRowToModel({ ...row, owner_id: "u1", assignee_id: null, creator_unknown: false });
+    expect(t.assigneeId).toBeNull();
+  });
+
+  it("a row from before the migration shows owner_id as the assignee and claims no creator", () => {
+    const t = taskRowToModel({ ...row, owner_id: "u2" });
+    expect(t).toMatchObject({ assigneeId: "u2", creatorUnknown: true });
+  });
+
+  it("keeps the server's unknown-creator flag", () => {
+    const t = taskRowToModel({ ...row, owner_id: "u2", assignee_id: "u2", creator_unknown: true });
+    expect(t.creatorUnknown).toBe(true);
+  });
+});
+
+describe("deploy-gap detection", () => {
+  it("recognises PostgREST's missing-column and missing-function answers", () => {
+    expect(
+      isMissingColumnError(
+        {
+          code: "PGRST204",
+          message: "Could not find the 'assignee_id' column of 'tasks' in the schema cache",
+        },
+        "assignee_id",
+      ),
+    ).toBe(true);
+    expect(
+      isMissingColumnError({ code: "PGRST204", message: "… 'title' column …" }, "assignee_id"),
+    ).toBe(false);
+    expect(isMissingColumnError({ code: "23505", message: "assignee_id" }, "assignee_id")).toBe(
+      false,
+    );
+    expect(
+      isMissingFunctionError(
+        {
+          code: "PGRST202",
+          message:
+            "Could not find the function public.tasks_op_assign(p_assignee_id, …) in the schema cache",
+        },
+        "tasks_op_assign",
+      ),
+    ).toBe(true);
+    expect(
+      isMissingFunctionError({ code: "42501", message: "tasks_op_assign" }, "tasks_op_assign"),
+    ).toBe(false);
+    expect(isMissingFunctionError(null, "tasks_op_assign")).toBe(false);
   });
 });

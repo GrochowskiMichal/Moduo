@@ -13,6 +13,7 @@ import {
   type StorageBucket,
   type StorageEntry,
 } from "./account-erasure.ts";
+import type { ErasurePostHog, PostHogEraseResult } from "./posthog-erasure.ts";
 
 // ── In-memory stand-ins for supabase-js and Stripe ────────────────────────────
 
@@ -140,8 +141,19 @@ class FakeBucket implements StorageBucket {
 }
 
 class FakeDb implements ErasureDb {
-  /** Every write, in order: "delete <table>", "storage remove", "auth delete". */
+  /** Every write, in order: "delete <table>", "rpc <function>", "storage remove", "auth delete". */
   log: string[] = [];
+  /** Every call to the SQL erasure functions, with its arguments. */
+  rpcCalls: { fn: string; args: Record<string, unknown> }[] = [];
+  /** A function whose deletion run fails, one whose dry run fails, and one that answers
+   *  as a preview whatever it was asked. */
+  rpcFails: string | null = null;
+  rpcPreviewFails: string | null = null;
+  rpcAnswersPreview: string | null = null;
+  /** Extra fields a function's answer carries, by function. */
+  rpcAnswer: Record<string, Record<string, unknown>> = {};
+  /** Runs before each SQL function call: lets a test look at the world at that moment. */
+  beforeRpc: ((fn: string) => void) | null = null;
   fail: { table: string; op: "select" | "delete" } | null = null;
   storageFails = false;
   /** PostgREST's per-response row cap (1000 for real). */
@@ -172,6 +184,20 @@ class FakeDb implements ErasureDb {
         new FakeQuery(this, table, options?.head ? "count" : "select"),
       delete: () => new FakeQuery(this, table, "delete"),
     };
+  }
+
+  rpc(fn: string, args: Record<string, unknown>) {
+    return Promise.resolve().then(() => {
+      this.beforeRpc?.(fn);
+      this.rpcCalls.push({ fn, args });
+      const asked = args.p_preview !== false;
+      if ((asked ? this.rpcPreviewFails : this.rpcFails) === fn) {
+        return { data: null, error: { message: `${fn} failed` } };
+      }
+      const preview = asked || this.rpcAnswersPreview === fn;
+      if (!preview) this.log.push(`rpc ${fn}`);
+      return { data: { ...this.rpcAnswer[fn], preview }, error: null };
+    });
   }
 
   storage = { from: (name: string) => this.bucket(name) };
@@ -269,6 +295,21 @@ class FakeStripe implements ErasureStripe {
   };
 }
 
+/** PostHog's bulk delete, as account-erasure sees it. */
+class FakePostHog implements ErasurePostHog {
+  /** Every request: "erase <distinct id>". */
+  log: string[] = [];
+  /** What PostHog answers next: "throw" stands for a network error, a 429 or a 5xx. */
+  outcome: "queued" | "refused" | "throw" = "queued";
+
+  async erasePerson(distinctId: string): Promise<PostHogEraseResult> {
+    this.log.push(`erase ${distinctId}`);
+    if (this.outcome === "throw") throw new Error("PostHog 503: busy");
+    if (this.outcome === "refused") return { status: "refused", httpStatus: 403 };
+    return { status: "queued" };
+  }
+}
+
 function stripeError(message: string, statusCode: number, code?: string) {
   return Object.assign(new Error(message), { statusCode, code });
 }
@@ -359,8 +400,9 @@ function world() {
   ]);
   stripe.addCustomer("cus_other", OTHER, [["sub_other", "active"]]);
 
-  const deps: ErasureDeps = { db, stripe };
-  return { db, stripe, deps };
+  const posthog = new FakePostHog();
+  const deps: ErasureDeps = { db, stripe, posthog };
+  return { db, stripe, posthog, deps };
 }
 
 const me = { id: ME, email: MY_EMAIL };
@@ -380,7 +422,7 @@ async function failedStep(run: Promise<unknown>): Promise<ErasureStep> {
 
 describe("deleteAccount — sole-owner block (409)", () => {
   it("blocks a sole owner of a workspace with other members before touching anything", async () => {
-    const { db, stripe, deps } = world();
+    const { db, stripe, posthog, deps } = world();
     db.tables.workspace_members.push({ workspace_id: "ws-solo", user_id: OTHER });
 
     const result = await deleteAccount(deps, me);
@@ -388,6 +430,7 @@ describe("deleteAccount — sole-owner block (409)", () => {
     expect(result).toEqual({ status: "blocked", workspaces: [{ id: "ws-solo", name: "Solo" }] });
     expect(db.log).toEqual([]);
     expect(stripe.log).toEqual([]);
+    expect(posthog.log).toEqual([]);
     expect(db.users.has(ME)).toBe(true);
     expect(avatarFiles(db)).toContain(`profiles/${ME}/avatar.png`);
   });
@@ -624,16 +667,236 @@ describe("deleteAccount — Stripe records", () => {
 
   it("without a Stripe key, refuses when there is a customer and warns when there isn't", async () => {
     const withCustomer = world();
-    expect(await failedStep(deleteAccount({ db: withCustomer.db, stripe: null }, me))).toBe(
-      "stripe",
-    );
+    expect(
+      await failedStep(
+        deleteAccount({ db: withCustomer.db, stripe: null, posthog: withCustomer.posthog }, me),
+      ),
+    ).toBe("stripe");
     expect(withCustomer.db.log).toEqual([]);
     expect(withCustomer.db.users.has(ME)).toBe(true);
 
     const withoutCustomer = world();
     withoutCustomer.db.tables.profiles[0].stripe_customer_id = null;
-    const result = await deleteAccount({ db: withoutCustomer.db, stripe: null }, me);
+    const result = await deleteAccount(
+      { db: withoutCustomer.db, stripe: null, posthog: withoutCustomer.posthog },
+      me,
+    );
     expect(result).toEqual({ status: "deleted", warnings: ["stripe_not_configured"] });
+  });
+});
+
+describe("deleteAccount — the app's usage analytics at PostHog (PRIV-3)", () => {
+  it("asks PostHog to delete the person keyed by the user's id", async () => {
+    const { posthog, deps } = world();
+
+    const result = await deleteAccount(deps, me);
+
+    expect(result).toEqual({ status: "deleted", warnings: [] });
+    expect(posthog.log).toEqual([`erase ${ME}`]);
+  });
+
+  it("stops at PostHog before billing or anything in Moduo is touched, and a retry finishes", async () => {
+    const { db, stripe, posthog, deps } = world();
+    posthog.outcome = "throw";
+
+    expect(await failedStep(deleteAccount(deps, me))).toBe("posthog");
+    expect(stripe.log).toEqual([]);
+    expect(stripe.subscriptionsById.get("sub_me")?.status).toBe("trialing");
+    expect(db.log).toEqual([]);
+    expect(db.users.has(ME)).toBe(true);
+
+    posthog.outcome = "queued";
+    const result = await deleteAccount(deps, me);
+
+    expect(result.status).toBe("deleted");
+    expect(posthog.log).toEqual([`erase ${ME}`, `erase ${ME}`]);
+    expect(db.users.has(ME)).toBe(false);
+  });
+
+  it("warns, but carries on, when PostHog refuses for good (a wrong key or project)", async () => {
+    const { db, posthog, deps } = world();
+    posthog.outcome = "refused";
+
+    const result = await deleteAccount(deps, me);
+
+    expect(result).toEqual({ status: "deleted", warnings: ["posthog_refused: 403"] });
+    expect(db.users.has(ME)).toBe(false);
+  });
+
+  it("without the PostHog secrets, warns and carries on", async () => {
+    const { db, deps } = world();
+
+    const result = await deleteAccount({ ...deps, posthog: null }, me);
+
+    expect(result).toEqual({ status: "deleted", warnings: ["posthog_not_configured"] });
+    expect(db.users.has(ME)).toBe(false);
+  });
+
+  it("fails before anything is deleted when a caller forgot to pass posthog at all", async () => {
+    const { db, stripe, deps } = world();
+    // What an Edge Function entry point (not type-checked) would send without the field.
+    const { posthog: _left, ...withoutPostHog } = deps;
+
+    expect(await failedStep(deleteAccount(withoutPostHog as typeof deps, me))).toBe("posthog");
+    expect(stripe.log).toEqual([]);
+    expect(db.users.has(ME)).toBe(true);
+  });
+});
+
+describe("deleteAccount — the SQL side (PRIV-2b)", () => {
+  it("wipes our Stripe copy right after the Stripe delete, and erases workspace data before the auth user", async () => {
+    const { db, stripe, deps } = world();
+    let customerGoneAtWipe: boolean | undefined;
+    db.beforeRpc = (fn) => {
+      if (fn === "account_scrub_stripe_mirror") {
+        customerGoneAtWipe = stripe.customersById.get("cus_me")?.deleted;
+      }
+    };
+
+    const result = await deleteAccount(deps, me);
+
+    expect(result).toEqual({ status: "deleted", warnings: [] });
+    expect(customerGoneAtWipe).toBe(true);
+    expect(db.rpcCalls).toEqual([
+      // Dry runs first, before anything irreversible.
+      { fn: "account_scrub_stripe_mirror", args: { p_user: ME, p_preview: true } },
+      { fn: "account_erase_workspace_data", args: { p_user: ME, p_preview: true } },
+      {
+        fn: "account_scrub_stripe_mirror",
+        args: { p_customer_ids: ["cus_me"], p_user: ME, p_preview: false },
+      },
+      { fn: "account_erase_workspace_data", args: { p_user: ME, p_preview: false } },
+    ]);
+    const at = (entry: string) => db.log.indexOf(entry);
+    expect(at("rpc account_scrub_stripe_mirror")).toBe(0);
+    expect(at("rpc account_scrub_stripe_mirror")).toBeLessThan(at("storage remove"));
+    expect(at("rpc account_erase_workspace_data")).toBeGreaterThan(at("delete contact_private_notes"));
+    expect(at("rpc account_erase_workspace_data")).toBeLessThan(at("delete waitlist"));
+    expect(db.log.at(-1)).toBe("auth delete");
+  });
+
+  it("stops at the Stripe copy with the account still there, says it's partly deleted, and a retry finishes", async () => {
+    const { db, stripe, deps } = world();
+    db.rpcFails = "account_scrub_stripe_mirror";
+
+    expect(await failedStep(deleteAccount(deps, me))).toBe("stripe_mirror");
+    expect(erasureErrorMessage("stripe_mirror")).toBe(
+      "Your account was only partly deleted. Try again to finish.",
+    );
+    expect(db.users.has(ME)).toBe(true);
+    expect(db.log).toEqual([]);
+    expect(avatarFiles(db)).toContain(`profiles/${ME}/avatar.png`);
+
+    db.rpcFails = null;
+    const result = await deleteAccount(deps, me);
+
+    expect(result.status).toBe("deleted");
+    expect(db.users.has(ME)).toBe(false);
+    expect(stripe.log.filter((entry) => entry.startsWith("del "))).toEqual(["del cus_me"]);
+  });
+
+  it("stops at workspace data before the auth user goes, and a retry finishes", async () => {
+    const { db, deps } = world();
+    db.rpcFails = "account_erase_workspace_data";
+
+    expect(await failedStep(deleteAccount(deps, me))).toBe("workspace_data");
+    expect(erasureErrorMessage("workspace_data")).toBe(
+      "Your account was only partly deleted. Try again to finish.",
+    );
+    expect(db.users.has(ME)).toBe(true);
+    expect(db.log).not.toContain("auth delete");
+    expect(ids(db.rows("waitlist"))).toEqual(["wait-1", "wait-2"]);
+
+    db.rpcFails = null;
+    const result = await deleteAccount(deps, me);
+
+    expect(result.status).toBe("deleted");
+    expect(db.users.has(ME)).toBe(false);
+    expect(
+      db.rpcCalls.filter(
+        (call) => call.fn === "account_erase_workspace_data" && call.args.p_preview === false,
+      ),
+    ).toHaveLength(2);
+  });
+
+  it("stops before PostHog, Stripe or anything in Moduo when the SQL side isn't there yet", async () => {
+    for (const fn of ["account_scrub_stripe_mirror", "account_erase_workspace_data"]) {
+      const { db, stripe, posthog, deps } = world();
+      db.rpcPreviewFails = fn;
+
+      expect(await failedStep(deleteAccount(deps, me))).toBe("check");
+      expect(erasureErrorMessage("check")).toContain("wasn't deleted");
+      expect(posthog.log).toEqual([]);
+      expect(stripe.log).toEqual([]);
+      expect(db.log).toEqual([]);
+      expect(db.users.has(ME)).toBe(true);
+    }
+  });
+
+  it("hands the wipe every customer of theirs that is gone at Stripe, and none that isn't theirs", async () => {
+    const { db, stripe, deps } = world();
+    stripe.addCustomer("cus_orphan", ME); // tagged, but the profile lost track of it
+    stripe.addCustomer("cus_stolen", OTHER); // the profile points at someone else's
+    db.tables.profiles[0].stripe_customer_id = "cus_stolen";
+
+    await deleteAccount(deps, me);
+
+    const wipe = db.rpcCalls.find(
+      (call) => call.fn === "account_scrub_stripe_mirror" && call.args.p_preview === false,
+    );
+    expect([...(wipe?.args.p_customer_ids as string[])].sort()).toEqual(["cus_me", "cus_orphan"]);
+  });
+
+  it("on a retry, still hands the wipe the customer an earlier run deleted", async () => {
+    const { db, stripe, deps } = world();
+    db.rpcFails = "account_scrub_stripe_mirror";
+    await deleteAccount(deps, me).catch(() => null);
+    db.rpcFails = null;
+
+    await deleteAccount(deps, me);
+
+    const wipes = db.rpcCalls.filter(
+      (call) => call.fn === "account_scrub_stripe_mirror" && call.args.p_preview === false,
+    );
+    expect(wipes.map((call) => call.args.p_customer_ids)).toEqual([["cus_me"], ["cus_me"]]);
+    expect(stripe.log.filter((entry) => entry.startsWith("del "))).toEqual(["del cus_me"]);
+  });
+
+  it("warns when there is no Stripe copy to wipe", async () => {
+    const { db, deps } = world();
+    db.rpcAnswer.account_scrub_stripe_mirror = { stripe_mirror: false };
+
+    const result = await deleteAccount(deps, me);
+
+    expect(result).toEqual({ status: "deleted", warnings: ["stripe_mirror_missing"] });
+  });
+
+  it("asks nothing of the SQL side when a sole owner is blocked", async () => {
+    const { db, deps } = world();
+    db.tables.workspace_members.push({ workspace_id: "ws-solo", user_id: OTHER });
+
+    const result = await deleteAccount(deps, me);
+
+    expect(result.status).toBe("blocked");
+    expect(db.rpcCalls).toEqual([]);
+  });
+
+  it("refuses an answer that says it was only a preview", async () => {
+    for (const fn of ["account_scrub_stripe_mirror", "account_erase_workspace_data"]) {
+      const { db, deps } = world();
+      db.rpcAnswersPreview = fn;
+
+      const err = await deleteAccount(deps, me).then(
+        () => null,
+        (e: unknown) => e,
+      );
+
+      expect(err).toBeInstanceOf(ErasureError);
+      expect(((err as ErasureError).cause as Error).message).toBe(
+        `${fn}: answered as a preview, nothing was deleted`,
+      );
+      expect(db.users.has(ME)).toBe(true);
+    }
   });
 });
 
@@ -718,14 +981,16 @@ describe("deleteAccount — failures leave a retryable account", () => {
 
 describe("erasureErrorMessage", () => {
   it("says the account wasn't deleted only for the steps before any Moduo data goes", () => {
-    for (const step of ["check", "stripe"] as const) {
+    for (const step of ["check", "posthog", "stripe"] as const) {
       expect(erasureErrorMessage(step)).toContain("wasn't deleted");
     }
     for (const step of [
+      "stripe_mirror",
       "storage",
       "booking",
       "integrations",
       "contact_notes",
+      "workspace_data",
       "waitlist",
       "auth",
     ] as const) {

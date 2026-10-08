@@ -46,7 +46,7 @@ export function EmailDetailPanel({ runtime, workspaceId, refId, canEdit, onOpenE
         focus={{ type: "email_thread", id: refId }}
         canEdit={canEdit}
       />
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="pane-scroll min-h-0 flex-1 overflow-y-auto">
         <EntityHub
           variant="rail"
           status={hub.status}

@@ -18,6 +18,11 @@
  * Erasure (2026-10-07): the cascade doesn't reach Stripe, Storage, booking links,
  * integration tokens or the waitlist. ../_shared/account-erasure.ts removes those
  * first and deletes the auth user last, so a failed run can simply be retried.
+ * PRIV-2b adds two SQL steps (service role only): our stripe.* copy of the customer
+ * (account_scrub_stripe_mirror) and what the user leaves in other people's
+ * workspaces (account_erase_workspace_data).
+ * PRIV-3 adds the app's usage analytics at PostHog, first of all; without the
+ * POSTHOG_PERSONAL_API_KEY / POSTHOG_PROJECT_ID secrets that step only logs a warning.
  *
  * Returns:
  *   200 { ok: true }
@@ -34,6 +39,7 @@ import {
   erasureErrorMessage,
 } from "../_shared/account-erasure.ts";
 import { makeStripe, stripeSecretKeyConfigError } from "../_shared/billing.ts";
+import { postHogEraserFromEnv } from "../_shared/posthog-erasure.ts";
 import { getDefaultSecretKey } from "../_shared/secret-keys.ts";
 
 const CORS = {
@@ -69,6 +75,7 @@ Deno.serve(async (req: Request) => {
     // checked against ErasureDb (TS2589), so only `from` is cast; storage and auth check.
     const db: ErasureDb = {
       from: (table) => supabase.from(table) as unknown as ReturnType<ErasureDb["from"]>,
+      rpc: (fn, args) => supabase.rpc(fn, args),
       storage: supabase.storage,
       auth: supabase.auth,
     };
@@ -76,8 +83,10 @@ Deno.serve(async (req: Request) => {
     // who has a Stripe customer, instead of leaving that record behind.
     const stripe = stripeSecretKeyConfigError() ? null : makeStripe();
 
+    const posthog = postHogEraserFromEnv((name) => Deno.env.get(name));
+
     const result = await deleteAccount(
-      { db, stripe },
+      { db, stripe, posthog },
       // An unconfirmed address may be someone else's: it must not delete their waitlist rows.
       { id: user.id, email: user.email_confirmed_at ? (user.email ?? null) : null },
     );

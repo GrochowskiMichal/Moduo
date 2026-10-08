@@ -2,8 +2,8 @@
 // AI-interactable surface: native-event intent ops + the loop verbs (which ride
 // the shipped Tasks ops — the lens model) + the read resources. Registered in
 // src/lib/module-registry.ts; mirrored connector-side in
-// supabase/functions/moduo-mcp/modules/calendar.ts. Alpha: rides the Tasks
-// permission lane (same call CT-1/CO-1 made).
+// supabase/functions/moduo-mcp/modules/calendar.ts. Its own permission lane
+// since PERM-1. The loop verbs are Tasks ops, so a key also needs Tasks: Edit.
 
 import type { ModuleManifest } from "../../lib/module-manifest";
 
@@ -11,7 +11,7 @@ export const calendarModuleManifest: ModuleManifest = {
   module: "calendar",
   summary:
     "A time-blocking calendar sharing one data model with Tasks: native events plus task blocks (scheduled tasks), with the schedule-to-completion loop. External calendars are read-only.",
-  permissionKey: "tasks",
+  permissionKey: "calendar",
   activityEntityTypes: ["event"],
   ops: [
     {
@@ -53,6 +53,7 @@ export const calendarModuleManifest: ModuleManifest = {
     {
       op: "calendar.schedule_task",
       rpc: "tasks_op_reschedule",
+      alsoNeeds: ["tasks"],
       summary:
         "Place a task on the calendar at a clock time — it renders as a task block (the lens).",
       args: {
@@ -65,6 +66,7 @@ export const calendarModuleManifest: ModuleManifest = {
     {
       op: "calendar.move_block",
       rpc: "tasks_op_reschedule",
+      alsoNeeds: ["tasks"],
       summary: "Move an already-scheduled task block to a new time (its duration is preserved).",
       args: {
         p_workspace_id: "workspace uuid",
@@ -76,6 +78,7 @@ export const calendarModuleManifest: ModuleManifest = {
     {
       op: "calendar.complete_block",
       rpc: "tasks_op_set_status",
+      alsoNeeds: ["tasks"],
       summary:
         "Complete a task from its block (recurrence pointer advances) — identical to completing in Tasks.",
       args: {
@@ -89,6 +92,7 @@ export const calendarModuleManifest: ModuleManifest = {
     {
       op: "calendar.roll_forward",
       rpc: "tasks_op_reschedule",
+      alsoNeeds: ["tasks"],
       summary:
         "The strip's Move-to-today: reschedule each unfinished-from-earlier task onto today (one attributed reschedule per task).",
       args: {
