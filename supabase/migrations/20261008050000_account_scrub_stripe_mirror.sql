@@ -93,10 +93,14 @@ BEGIN
       SELECT t.tbl, t.col FROM (VALUES ('payment_intents', 'payment_method'),
                                        ('setup_intents', 'payment_method'),
                                        ('subscriptions', 'default_payment_method')) AS t(tbl, col)
+      -- Text columns only: anything else would make the comparison below raise and
+      -- block every deletion at its dry run.
       WHERE EXISTS (SELECT 1 FROM information_schema.columns ic
-                    WHERE ic.table_schema = 'stripe' AND ic.table_name = t.tbl AND ic.column_name = t.col)
+                    WHERE ic.table_schema = 'stripe' AND ic.table_name = t.tbl
+                      AND ic.column_name = t.col AND ic.data_type = 'text')
         AND EXISTS (SELECT 1 FROM information_schema.columns ic
-                    WHERE ic.table_schema = 'stripe' AND ic.table_name = t.tbl AND ic.column_name = 'customer')
+                    WHERE ic.table_schema = 'stripe' AND ic.table_name = t.tbl
+                      AND ic.column_name = 'customer' AND ic.data_type = 'text')
     LOOP
       EXECUTE format('SELECT coalesce(array_agg(DISTINCT x.%1$I), ''{}'') FROM stripe.%2$I x
                       WHERE x.customer = ANY ($1) AND x.%1$I IS NOT NULL', v_ref.col, v_ref.tbl)
@@ -124,7 +128,9 @@ BEGIN
   INSERT INTO stripe.customers (_raw_data, _last_synced_at, _account_id)
   SELECT jsonb_build_object('id', x, 'object', 'customer', 'deleted', true), now(), v_account
   FROM unnest(v_new) AS x
-  ON CONFLICT (id) DO NOTHING;
+  -- The sync may insert the full row between the check above and here: the stub wins.
+  ON CONFLICT (id) DO UPDATE
+    SET _raw_data = EXCLUDED._raw_data, _last_synced_at = EXCLUDED._last_synced_at;
 
   IF v_has_methods THEN
     UPDATE stripe.payment_methods pm

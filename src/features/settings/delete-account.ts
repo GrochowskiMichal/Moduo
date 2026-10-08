@@ -62,7 +62,13 @@ export async function finishAccountDeletion(steps: {
 }): Promise<void> {
   steps.forgetOnDevice();
   markAccountDeleted();
-  await steps.goToSignInWithNotice();
+  try {
+    await steps.goToSignInWithNotice();
+  } catch (err) {
+    // Never left standing for a later /auth?deleted=1 in this tab.
+    clearAccountDeletedMarker();
+    throw err;
+  }
   await steps.signOut();
 }
 

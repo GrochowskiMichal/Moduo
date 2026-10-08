@@ -12,6 +12,23 @@ import {
 } from "./delete-account";
 
 describe("finishAccountDeletion (PRIV-2 AC11)", () => {
+  it("leaves no marker behind when the sign-in page can't be reached", async () => {
+    window.sessionStorage.clear();
+    const signOut = async () => {};
+
+    const failed = await finishAccountDeletion({
+      forgetOnDevice: () => {},
+      goToSignInWithNotice: () => Promise.reject(new Error("navigation failed")),
+      signOut,
+    }).then(
+      () => false,
+      () => true,
+    );
+
+    expect(failed).toBe(true);
+    expect(isAccountDeletedMarked()).toBe(false);
+  });
+
   it("forgets the account on this device, lands on the sign-in page with the notice, and only then signs out", async () => {
     const calls: string[] = [];
     let release: () => void = () => {};
