@@ -36,7 +36,7 @@ export function packIco(images: IcoImage[]): Uint8Array {
   return out;
 }
 
-/** Width and height from a PNG's IHDR chunk (used by tests and as a sanity check). */
+/** Width and height from a PNG's IHDR chunk (used by the drift test). */
 export function pngSize(png: Uint8Array): { width: number; height: number } {
   const view = new DataView(png.buffer, png.byteOffset, png.byteLength);
   return { width: view.getUint32(16), height: view.getUint32(20) };

@@ -116,7 +116,7 @@ function Page({ children }: { children: ReactNode }) {
           rel="noopener"
           className="inline-flex items-center gap-2 font-sans text-sm text-muted-foreground hover:text-foreground"
         >
-          <ModuoMark aria-hidden className="size-icon-sm text-current" />
+          <ModuoMark aria-hidden small className="size-icon-sm text-current" />
           Scheduled with Moduo
         </a>
       </footer>

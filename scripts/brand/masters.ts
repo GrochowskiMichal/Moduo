@@ -37,14 +37,17 @@ function attr(tag: string, name: string): string | undefined {
 }
 
 export function parseMaster(name: string, svg: string): Master {
+  const root = svg.match(/<svg\b[^>]*>/i)?.[0];
+  // Check what's inside the root, not the root itself: design tools put
+  // presentation defaults there (Figma always writes fill="none" on it).
+  const body = root ? svg.replace(root, "") : svg;
   for (const [pattern, what] of FORBIDDEN) {
-    if (pattern.test(svg)) {
+    if (pattern.test(body)) {
       throw new Error(
         `brand/masters/${name}: contains ${what}. Masters must be flat filled paths.`,
       );
     }
   }
-  const root = svg.match(/<svg\b[^>]*>/i)?.[0];
   const viewBoxRaw = root ? attr(root, "viewBox") : undefined;
   if (!viewBoxRaw) throw new Error(`brand/masters/${name}: missing viewBox on <svg>.`);
   const box = viewBoxRaw

@@ -1,12 +1,22 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "@rstest/core";
 
 import { MODUO_MARK_PATHS, MODUO_MARK_VIEWBOX } from "../../src/components/ui/moduo-mark-path";
-import { artworkSvg, placement, tileSvg } from "./compose";
+import {
+  artworkSvg,
+  fmt,
+  glassLayerSvg,
+  macosIconSvg,
+  markModule,
+  ogBaseSvg,
+  placement,
+  tileSvg,
+} from "./compose";
 import { packIco, pngSize } from "./ico";
 import { parseMaster } from "./masters";
-import { CANVAS, INK, oklchGrayToHex, PAPER } from "./palette";
+import { CANVAS, ICON_BLACK, ICON_WHITE, INK, oklchGrayToHex, PAPER } from "./palette";
+import { EMAIL_LOCKUP_WIDTH, EMAIL_MARK_WIDTH, markForTile, TILE_RADIUS } from "./spec";
 
 const root = process.cwd();
 const read = (rel: string) => readFileSync(join(root, rel));
@@ -49,6 +59,14 @@ describe("parseMaster", () => {
     );
     expect(m.viewBox).toEqual([0, 0, 4, 4]);
     expect(m.paths[0].d).toBe("M0 0 H4 V4Z");
+  });
+
+  it('accepts Figma\'s export shape (fill="none" on the root, white paths)', () => {
+    const m = parseMaster(
+      "x.svg",
+      '<svg width="20" height="10" viewBox="0 0 20 10" fill="none" xmlns="http://www.w3.org/2000/svg">\n<title>Moduo</title>\n<path fill-rule="evenodd" clip-rule="evenodd" d="M0 0H10V10Z" fill="white"/>\n<path d="M12 0H20V10Z" fill="white"/>\n</svg>\n',
+    );
+    expect(m.paths.map((p) => p.fillRule)).toEqual(["evenodd", "nonzero"]);
   });
 
   // Structure only, never the drawing: Maciej's redraw (BRAND-0) must pass.
@@ -126,38 +144,57 @@ describe("palette", () => {
   });
 });
 
-// Drift guard: the shipped files must be what `bun run brand:export` makes
-// from today's masters. If this fails, run `bun run brand:export` and commit.
+// Drift guard: the committed files must be exactly what `bun run brand:export`
+// makes from today's masters, so a master or a rule changed without a
+// re-export fails here. PNGs are rendered from these same SVGs in the same
+// run; their bytes aren't compared because rasterisers differ by platform.
 describe("exports match the masters", () => {
   const mark = master("mark.svg");
+  const small = existsSync(join(root, "brand/masters/mark-small.svg"))
+    ? master("mark-small.svg")
+    : null;
+  const lockup = master("lockup.svg");
 
   it("the SVG exports were made from today's masters", () => {
     for (const file of ["mark.svg", "wordmark.svg", "lockup.svg"]) {
-      const exported = text(`brand/exports/svg/${file.replace(".svg", "")}-current.svg`);
-      expect(exported).toBe(artworkSvg(master(file), "currentColor"));
+      const base = `brand/exports/svg/${file.replace(".svg", "")}`;
+      expect(text(`${base}-current.svg`)).toBe(artworkSvg(master(file), "currentColor"));
+      expect(text(`${base}-paper.svg`)).toBe(artworkSvg(master(file), PAPER));
+      expect(text(`${base}-ink.svg`)).toBe(artworkSvg(master(file), INK));
     }
   });
 
-  it("ModuoMark renders the master's path", () => {
-    expect(MODUO_MARK_VIEWBOX).toBe(mark.viewBox.join(" "));
+  it("ModuoMark renders the masters, byte for byte", () => {
+    expect(text("src/components/ui/moduo-mark-path.ts")).toBe(markModule(mark, small));
+    expect(MODUO_MARK_VIEWBOX).toBe(mark.viewBox.map(fmt).join(" "));
     expect(MODUO_MARK_PATHS).toEqual(mark.paths);
   });
 
-  it("the web favicon and the macOS icon sources use the master's path", () => {
-    expect(text("public/favicon.svg")).toBe(text("brand/exports/favicon/prod/favicon.svg"));
-    for (const file of [
-      "public/favicon.svg",
-      "scripts/icons/source/macos-icon-1024.svg",
-      "scripts/icons/source/Moduo.icon/Assets/moduo-mark.svg",
-    ]) {
-      for (const p of mark.paths) expect(text(file)).toContain(p.d);
-    }
+  it("the favicons follow the masters and the tile rules", () => {
+    const tile = (background: string, fill: string) =>
+      tileSvg({ mark: markForTile(32, mark, small), background, fill, radius: TILE_RADIUS });
+    expect(text("brand/exports/favicon/prod/favicon.svg")).toBe(tile(CANVAS, PAPER));
+    expect(text("brand/exports/favicon/staging/favicon.svg")).toBe(tile(PAPER, CANVAS));
+    expect(text("public/favicon.svg")).toBe(tile(CANVAS, PAPER));
+  });
+
+  it("the macOS icon sources and the share-image base follow the masters", () => {
+    expect(text("scripts/icons/source/macos-icon-1024.svg")).toBe(
+      macosIconSvg(mark, ICON_BLACK, ICON_WHITE),
+    );
+    expect(text("scripts/icons/source/Moduo.icon/Assets/moduo-mark.svg")).toBe(
+      glassLayerSvg(mark, ICON_WHITE),
+    );
+    expect(text("brand/exports/og/og-base.svg")).toBe(ogBaseSvg(lockup, CANVAS, PAPER));
   });
 
   it("ships the email logos at the email spec's sizes", () => {
     for (const tone of ["light", "dark"]) {
-      expect(pngSize(read(`public/email/lockup-${tone}@2x.png`)).width).toBe(192);
-      expect(pngSize(read(`public/email/mark-${tone}@2x.png`))).toEqual({ width: 72, height: 72 });
+      expect(pngSize(read(`public/email/lockup-${tone}@2x.png`)).width).toBe(EMAIL_LOCKUP_WIDTH);
+      expect(pngSize(read(`public/email/mark-${tone}@2x.png`))).toEqual({
+        width: EMAIL_MARK_WIDTH,
+        height: EMAIL_MARK_WIDTH,
+      });
     }
   });
 
@@ -166,5 +203,29 @@ describe("exports match the masters", () => {
     const view = new DataView(ico.buffer, ico.byteOffset, ico.byteLength);
     expect(view.getUint16(4, true)).toBe(3);
     expect([ico[6], ico[22], ico[38]]).toEqual([16, 32, 48]);
+  });
+});
+
+describe("the small master", () => {
+  const mark = parseMaster("mark.svg", '<svg viewBox="0 0 10 10"><path d="M1 1H9V9Z"/></svg>');
+  const small = parseMaster(
+    "mark-small.svg",
+    '<svg viewBox="0 0 10 10"><path d="M2 2H8V8Z"/></svg>',
+  );
+
+  it("takes over for tiles of 32 px and below once it exists", () => {
+    expect(markForTile(16, mark, small)).toBe(small);
+    expect(markForTile(32, mark, small)).toBe(small);
+    expect(markForTile(48, mark, small)).toBe(mark);
+    expect(markForTile(16, mark, null)).toBe(mark);
+  });
+
+  it("feeds ModuoMark's small drawing, falling back to the standard mark", () => {
+    expect(markModule(mark, small)).toContain(
+      'MODUO_MARK_SMALL_PATHS: readonly { d: string; fillRule: "evenodd" | "nonzero" }[] = [\n  {\n    d: "M2 2H8V8Z"',
+    );
+    expect(markModule(mark, null)).toContain(
+      'MODUO_MARK_SMALL_PATHS: readonly { d: string; fillRule: "evenodd" | "nonzero" }[] = [\n  {\n    d: "M1 1H9V9Z"',
+    );
   });
 });

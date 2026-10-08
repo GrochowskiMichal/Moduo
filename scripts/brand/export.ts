@@ -12,7 +12,6 @@
  *   bun scripts/icons/build-macos-icon.ts && bun run icon:liquid
  */
 
-import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { Resvg } from "@resvg/resvg-js";
@@ -21,6 +20,13 @@ import { artworkSvg, glassLayerSvg, macosIconSvg, markModule, ogBaseSvg, tileSvg
 import { packIco } from "./ico";
 import { type Master, parseMaster } from "./masters";
 import { CANVAS, ICON_BLACK, ICON_WHITE, INK, PAPER } from "./palette";
+import {
+  AVATAR_MARK_SHARE,
+  EMAIL_LOCKUP_WIDTH,
+  EMAIL_MARK_WIDTH,
+  markForTile,
+  TILE_RADIUS,
+} from "./spec";
 
 const root = process.cwd();
 const written: string[] = [];
@@ -60,14 +66,11 @@ for (const m of [mark, markSmall]) {
 
 // How much of its own box the mark's artwork fills, measured from the
 // rendered shape so a redrawn master needs no hand-entered numbers.
-const markBox = new Resvg(artworkSvg(mark, CANVAS)).getBBox();
+const markBox = new Resvg(artworkSvg(mark, CANVAS), {
+  font: { loadSystemFonts: false },
+}).getBBox();
 if (!markBox) throw new Error("brand/masters/mark.svg renders empty.");
 const markFill = markBox.width / mark.viewBox[2];
-
-/** The small master below 24 px of rendered mark (brief §3), when it exists. */
-function markAt(tilePx: number): Master {
-  return markSmall && tilePx * markFill <= 24 ? markSmall : mark;
-}
 
 // ── SVG + PNG artwork ────────────────────────────────────────────────────
 const artwork: [Master, number][] = [
@@ -94,10 +97,9 @@ for (const [m, baseWidth] of artwork) {
 }
 
 // ── Favicons (prod: black tile; staging: inverted) ──────────────────────
-const TILE_RADIUS = 220; // 22% of the box, the shipped favicon's corner
 function faviconSet(dir: string, background: string, fill: string): void {
   const tile = (px: number, radius = TILE_RADIUS) =>
-    tileSvg({ mark: markAt(px), background, fill, radius });
+    tileSvg({ mark: markForTile(px, mark, markSmall), background, fill, radius });
   const at32 = png(tile(32), 32);
   write(`${dir}/favicon.svg`, tile(32));
   write(
@@ -118,7 +120,7 @@ faviconSet("brand/exports/favicon/prod", CANVAS, PAPER);
 faviconSet("brand/exports/favicon/staging", PAPER, CANVAS);
 
 // ── Avatar: paper mark at ~55% of the width on Canvas black (brief §6) ──
-const avatarScale = 0.55 / markFill;
+const avatarScale = AVATAR_MARK_SHARE / markFill;
 const avatar = tileSvg({
   mark,
   background: CANVAS,
@@ -141,10 +143,10 @@ write("brand/exports/og/og-base.png", png(og, 1200));
 // ── Email logos (names and size per specs/transactional-email.md T6) ────
 // "light" = for light emails (Ink artwork); "dark" = for dark mode (Paper).
 const emailLogos: [string, Uint8Array][] = [
-  ["lockup-light@2x.png", png(artworkSvg(lockup, INK), 192)],
-  ["lockup-dark@2x.png", png(artworkSvg(lockup, PAPER), 192)],
-  ["mark-light@2x.png", png(artworkSvg(mark, INK), 72)],
-  ["mark-dark@2x.png", png(artworkSvg(mark, PAPER), 72)],
+  ["lockup-light@2x.png", png(artworkSvg(lockup, INK), EMAIL_LOCKUP_WIDTH)],
+  ["lockup-dark@2x.png", png(artworkSvg(lockup, PAPER), EMAIL_LOCKUP_WIDTH)],
+  ["mark-light@2x.png", png(artworkSvg(mark, INK), EMAIL_MARK_WIDTH)],
+  ["mark-dark@2x.png", png(artworkSvg(mark, PAPER), EMAIL_MARK_WIDTH)],
 ];
 for (const [file, data] of emailLogos) write(`brand/exports/email/${file}`, data);
 
@@ -172,18 +174,7 @@ const iconsChanged = iconSources.some(
 for (const [rel, svg] of iconSources) write(rel, svg);
 
 const markModulePath = "src/components/ui/moduo-mark-path.ts";
-write(markModulePath, markModule(mark));
-// Long path strings: let Biome settle the generated file's formatting so
-// `bun run lint:js` stays clean without hand-matching its line rules.
-const biome = spawnSync(
-  join(root, "node_modules/.bin/biome"),
-  ["format", "--write", markModulePath],
-  {
-    cwd: root,
-    stdio: "ignore",
-  },
-);
-if (biome.status !== 0) throw new Error(`biome format failed on ${markModulePath}`);
+write(markModulePath, markModule(mark, markSmall));
 
 console.log(`brand:export wrote ${written.length} files from brand/masters/`);
 for (const rel of written) console.log(`  ${rel}`);

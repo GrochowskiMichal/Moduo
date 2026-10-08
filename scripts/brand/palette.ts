@@ -2,7 +2,7 @@
  * Brand colours as hex, for the files `brand:export` writes (SVG, PNG, ICO).
  * Image formats can't read CSS variables, so this is the one place brand
  * colours exist outside src/styles/tokens.css. Each value names the token or
- * brief entry it mirrors; palette.test.ts fails if a token-backed one drifts.
+ * brief entry it mirrors; brand.test.ts fails if a token-backed one drifts.
  * See .design/brand/BRAND_BRIEF.md §7.
  */
 

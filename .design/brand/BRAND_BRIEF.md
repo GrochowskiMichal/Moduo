@@ -83,7 +83,7 @@ The landing footer's wireframe extruded mark ("Depth 14") is a **landing one-off
 
 ## 4. Wordmark (18–19)
 
-- **The wordmark is A, the drawn letters** (18), shown in the session's comparison widget. Today's source is `assets/moduo_logo_white.svg`; Maciej is redrawing it. The Geist-typed "moduo" in the landing nav, the email set and `og.png` is a stand-in and gets replaced by the artwork.
+- **The wordmark is A, the drawn letters** (18), shown in the session's comparison widget. Today's source is `brand/masters/wordmark.svg`, a provisional copy of the shipped artwork; Maciej is redrawing it. The Geist-typed "moduo" in the landing nav, the email set and `og.png` is a stand-in and gets replaced by the artwork.
 - Always **lowercase**, always **outlined artwork**, never retyped in any font.
 - **Wordmark alone** only where the mark is already large nearby: the landing footer plate and press layouts (19). Default is the lockup.
 
@@ -321,13 +321,13 @@ Built in BRAND-1 (2026-10-08). The details live in [brand/README.md](../../brand
 
 | Destination | What |
 | --- | --- |
-| `src/components/ui/moduo-mark-path.ts` | The path `ModuoMark` renders, generated from `mark.svg` |
+| `src/components/ui/moduo-mark-path.ts` | The paths `ModuoMark` renders, generated from `mark.svg` (and `mark-small.svg` for `<ModuoMark small />`, marks drawn ≤ 24 px) |
 | `public/` | Favicons and touch icons for **both** the web app and the landing (the landing build copies the web build, so the landing needs no copies of its own) |
 | `public/email/` | Email lockup and mark PNGs, light and dark @2x (the location set by the email spec, T6) |
 | `landing/assets/brand/` | Press kit files (BRAND-5) |
 | `scripts/icons/source/` | App-icon layer (`Moduo.icon/Assets/moduo-mark.svg`) and `macos-icon-1024.svg`; then `bun scripts/icons/build-macos-icon.ts` + `bun run icon:liquid` |
 
-A test in `bun run verify` (`scripts/brand/brand.test.ts`) fails if these consumers drift from the masters. Favicons and touch icons switch to `mark-small.svg` automatically when the rendered mark is ≤ 24 px, once that master exists.
+A test in `bun run verify` (`scripts/brand/brand.test.ts`) fails if these consumers drift from the masters. Favicon tiles of 32 px and below (the mark is then ≈ 23 px) and `<ModuoMark small />` switch to `mark-small.svg` automatically once that master exists.
 
 **Deleted** (76). In BRAND-1: `assets/moduo_logo_white.svg`, `moduo_sign_white.svg`, `logo_d-w.png`, `moduo_favicon.png`, the Expo leftovers `adaptive-icon.png`, `splash-icon.png`, `favicon.png`, and `image.jpg` (§12). `assets/icon.png` goes in BRAND-2, together with the initials avatar that replaces its last use (the default profile picture). Git history keeps them.
 

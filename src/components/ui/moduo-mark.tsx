@@ -2,10 +2,20 @@ import type * as React from "react";
 
 import { cn } from "@/lib/utils";
 
-import { MODUO_MARK_PATHS, MODUO_MARK_VIEWBOX } from "./moduo-mark-path";
+import {
+  MODUO_MARK_PATHS,
+  MODUO_MARK_SMALL_PATHS,
+  MODUO_MARK_SMALL_VIEWBOX,
+  MODUO_MARK_VIEWBOX,
+} from "./moduo-mark-path";
 
 type Props = React.SVGProps<SVGSVGElement> & {
   title?: string;
+  /**
+   * Use the small-size drawing (opened windows) for a mark drawn 24 px or
+   * smaller. Identical to the standard mark until the small master exists.
+   */
+  small?: boolean;
 };
 
 /**
@@ -17,13 +27,15 @@ type Props = React.SVGProps<SVGSVGElement> & {
 export function ModuoMark({
   className,
   title = "moduo",
+  small = false,
   "aria-hidden": ariaHidden,
   ...props
 }: Props) {
   const isDecorative = ariaHidden === true || ariaHidden === "true";
+  const paths = small ? MODUO_MARK_SMALL_PATHS : MODUO_MARK_PATHS;
   return (
     <svg
-      viewBox={MODUO_MARK_VIEWBOX}
+      viewBox={small ? MODUO_MARK_SMALL_VIEWBOX : MODUO_MARK_VIEWBOX}
       xmlns="http://www.w3.org/2000/svg"
       className={cn("text-foreground", className)}
       role={isDecorative ? undefined : "img"}
@@ -32,7 +44,7 @@ export function ModuoMark({
       {...props}
     >
       {!isDecorative ? <title>{title}</title> : null}
-      {MODUO_MARK_PATHS.map((p) => (
+      {paths.map((p) => (
         <path key={p.d} fill="currentColor" fillRule={p.fillRule} clipRule={p.fillRule} d={p.d} />
       ))}
     </svg>
