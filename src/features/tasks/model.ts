@@ -116,6 +116,25 @@ export type Task = {
   deletedAt: string | null;
 };
 
+/**
+ * One task in one person's Queue (TV-D2, `public.task_queue`): the line-up of
+ * what they mean to do next, not tied to a date. Rows of other people are
+ * claims ("In Mike's queue"). Order by `position` (bytewise, like the rest of
+ * the app's fractional keys) within one person.
+ */
+export type TaskQueueEntry = {
+  id: string;
+  workspaceId: string;
+  userId: string;
+  taskId: string;
+  position: string;
+  queuedAt: string;
+  updatedAt: string;
+};
+
+/** Where `opQueueAdd` puts a task: the end (default), or the top (Calendar's "Start focus"). */
+export type QueuePlacement = "end" | "top";
+
 /** A workspace-level, cross-cutting label. Attached to entities via {@link TagLink}. */
 export type Tag = {
   id: string;

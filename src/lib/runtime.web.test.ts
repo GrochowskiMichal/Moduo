@@ -6,9 +6,12 @@ import {
   editableTaskFields,
   isMissingColumnError,
   isMissingFunctionError,
+  isMissingTableError,
+  sortQueueEntries,
   taskCreateRow,
   taskCreateRowLegacy,
   taskPatchToColumns,
+  taskQueueRowToModel,
   taskRowToModel,
 } from "./task-rows";
 
@@ -184,5 +187,68 @@ describe("deploy-gap detection", () => {
       isMissingFunctionError({ code: "42501", message: "tasks_op_assign" }, "tasks_op_assign"),
     ).toBe(false);
     expect(isMissingFunctionError(null, "tasks_op_assign")).toBe(false);
+  });
+});
+
+describe("personal queue rows (TV-D2)", () => {
+  const row = {
+    id: "q1",
+    workspace_id: "w1",
+    user_id: "u1",
+    task_id: "t1",
+    position: "000000mh34",
+    queued_at: "2026-10-08T10:00:00Z",
+    updated_at: "2026-10-08T10:00:00Z",
+  };
+
+  it("maps a task_queue row", () => {
+    expect(taskQueueRowToModel(row)).toEqual({
+      id: "q1",
+      workspaceId: "w1",
+      userId: "u1",
+      taskId: "t1",
+      position: "000000mh34",
+      queuedAt: "2026-10-08T10:00:00Z",
+      updatedAt: "2026-10-08T10:00:00Z",
+    });
+  });
+
+  it("refuses a row without a task or a position", () => {
+    expect(() => taskQueueRowToModel({ ...row, task_id: undefined })).toThrow();
+    expect(() => taskQueueRowToModel({ ...row, position: "" })).toThrow();
+  });
+
+  it("orders by person, then position bytewise, then id", () => {
+    const e = (id: string, userId: string, position: string) =>
+      taskQueueRowToModel({ ...row, id, user_id: userId, position });
+    const sorted = sortQueueEntries([
+      e("a", "u2", "000000mh34"),
+      // A subdivided key sorts right after its prefix, as in the database.
+      e("b", "u1", "000000mh34i"),
+      e("c", "u1", "000000mh34"),
+      e("d", "u1", "0000018y68"),
+      e("e", "u1", "000000mh34"),
+    ]);
+    expect(sorted.map((x) => x.id)).toEqual(["c", "e", "b", "d", "a"]);
+  });
+
+  it("recognises a queue table that isn't there yet", () => {
+    expect(
+      isMissingTableError(
+        {
+          code: "PGRST205",
+          message: "Could not find the table 'public.task_queue' in the schema cache",
+        },
+        "task_queue",
+      ),
+    ).toBe(true);
+    expect(
+      isMissingTableError(
+        { code: "42P01", message: 'relation "public.task_queue" does not exist' },
+        "task_queue",
+      ),
+    ).toBe(true);
+    expect(isMissingTableError({ code: "42501", message: "task_queue" }, "task_queue")).toBe(false);
+    expect(isMissingTableError(null, "task_queue")).toBe(false);
   });
 });

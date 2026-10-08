@@ -138,6 +138,17 @@ export const taskRelationRowSchema = z.object({
   created_at: z.string(),
 });
 
+/** A person's queue row (TV-D2, `public.task_queue`). */
+export const taskQueueRowSchema = z.object({
+  id,
+  workspace_id: id,
+  user_id: id,
+  task_id: id,
+  position: z.string().min(1),
+  queued_at: z.string(),
+  updated_at: z.string(),
+});
+
 export const activityRowSchema = z.object({
   id,
   workspace_id: id,
