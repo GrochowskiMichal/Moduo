@@ -11,21 +11,26 @@ import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import { type FocusPrefs, useFocusPrefs } from "../../../lib/focus-prefs";
 import { cn } from "../../../lib/utils";
-import { dispatchOpenSettings } from "../../settings/settings-events";
-import { EntityRichText } from "../../spine/ui/entity-rich-text";
 import {
   bindFocusTask,
+  followFocusTask,
+  getFocusSession,
   previewFocusInterval,
   startFocus,
   stopFocus,
   toggleFocusPomodoro,
   toggleFocusRunning,
   useFocusSession,
-} from "../focus-session-store";
+} from "../../focus/engine";
+import { FocusAwayPrompt } from "../../focus/ui/away-prompt";
+import { dispatchOpenSettings } from "../../settings/settings-events";
+import { EntityRichText } from "../../spine/ui/entity-rich-text";
 import { formatDue, formatScheduled } from "../helpers";
 import type { Tag, Task } from "../model";
 
 type Props = {
+  /** The workspace the tracked time is saved into (the engine flushes per workspace). */
+  workspaceId: string;
   committedTasks: Task[];
   bucketNameById: (id: string) => string;
   /** Parent title for committed subtasks — quiet "part of …" context. */
@@ -51,6 +56,7 @@ type Props = {
 };
 
 export function ExecuteView({
+  workspaceId,
   committedTasks,
   bucketNameById,
   parentTitleFor,
@@ -74,22 +80,50 @@ export function ExecuteView({
   // Pomodoro prefs (persisted) — the timer reads these; the ⋯ popover edits them.
   const { prefs: focusPrefs, setPrefs: setFocusPrefs } = useFocusPrefs();
 
-  // Keep the app-level focus session bound to the current task (DF-11). Gated on
+  // Keep the app-level focus engine on the current task (DF-11). Gated on
   // `!loading` so the transient empty bundle during a /tasks remount doesn't
-  // clear a running session; when the last task is marked done `current` goes
-  // null and the session ends (its time already flushed).
+  // clear a running session. Marking the current task done moves the session
+  // to the next one with its rhythm intact (TV-F1, F1-6); when the last one is
+  // done `current` goes null and the session ends (its time already banked).
+  // It only follows: a session another tab runs, or one on another
+  // workspace's task, is left alone.
   useEffect(() => {
     if (loading) return;
     // Never bind to an optimistic `tmp-` id (a just-captured task): flushing its
     // accrued time later would hit a row swapped to its real id and lose it.
     // The real id arrives in a beat and re-runs this effect.
     if (current && current.id.startsWith("tmp-")) return;
-    bindFocusTask(
-      current?.id ?? null,
-      current?.title || "Untitled",
-      current ? bucketNameById(current.bucketId) : null,
+    followFocusTask(
+      workspaceId,
+      current
+        ? {
+            id: current.id,
+            title: current.title || "Untitled",
+            bucketName: bucketNameById(current.bucketId),
+            workspaceId,
+          }
+        : null,
     );
-  }, [loading, current?.id, current?.title, current?.bucketId, bucketNameById]);
+  }, [loading, current?.id, current?.title, current?.bucketId, bucketNameById, workspaceId]);
+
+  // Done / Skip on the task the session is on is an action in this tab: the
+  // session moves to the next task right away (and takes the clock if another
+  // tab had it), instead of waiting for this view's follow.
+  const moveSessionPast = (id: string) => {
+    if (getFocusSession().taskId !== id) return;
+    const next = upcoming[0] ?? null;
+    if (next?.id.startsWith("tmp-")) return;
+    bindFocusTask(
+      next
+        ? {
+            id: next.id,
+            title: next.title || "Untitled",
+            bucketName: bucketNameById(next.bucketId),
+            workspaceId,
+          }
+        : null,
+    );
+  };
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -110,11 +144,18 @@ export function ExecuteView({
           <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
             <NowCard
               task={current}
+              workspaceId={workspaceId}
               bucketName={bucketNameById(current.bucketId)}
               parentTitle={parentTitleFor(current)}
               blockedNote={blockedNoteFor(current)}
-              onMarkDone={() => onMarkDone(current.id)}
-              onSkip={() => onSkip(current.id)}
+              onMarkDone={() => {
+                onMarkDone(current.id);
+                moveSessionPast(current.id);
+              }}
+              onSkip={() => {
+                onSkip(current.id);
+                moveSessionPast(current.id);
+              }}
               onAddTime={onAddTime}
               onSetTime={onSetTime}
               tags={tagsFor(current.id)}
@@ -204,6 +245,7 @@ function EndSummary({
 
 function NowCard({
   task,
+  workspaceId,
   bucketName,
   parentTitle,
   blockedNote,
@@ -218,6 +260,7 @@ function NowCard({
   onFocusPrefsChange,
 }: {
   task: Task;
+  workspaceId: string;
   bucketName: string;
   parentTitle: string | null;
   blockedNote: string | null;
@@ -293,6 +336,9 @@ function NowCard({
         <SubtaskChecklist subtasks={subtasks} onToggle={onToggleSubtask} />
       ) : null}
 
+      {/* While you were away (TV-F1): the held time waits for an answer here. */}
+      {session.away ? <FocusAwayPrompt away={session.away} className="mt-4" /> : null}
+
       <div className="mt-5 flex items-center justify-between gap-3 border-t border-border pt-4">
         {/* bottom-left — opt-in time tracking */}
         <div className="min-w-0">
@@ -323,9 +369,14 @@ function NowCard({
                         / ~{formatDuration(estimateSeconds)}
                       </span>
                     ) : null}
+                    {session.unsaved ? <span> · not saved yet</span> : null}
                   </span>
                 </TooltipTrigger>
-                <TooltipContent>Total time tracked on this task</TooltipContent>
+                <TooltipContent>
+                  {session.unsaved
+                    ? "Couldn't save the tracked time yet — retrying, nothing is lost"
+                    : "Total time tracked on this task"}
+                </TooltipContent>
               </Tooltip>
               <TimerMenu
                 task={task}
@@ -348,18 +399,30 @@ function NowCard({
                       toast.error("Still saving that task — try again in a moment.");
                       return;
                     }
-                    bindFocusTask(task.id, task.title || "Untitled", bucketName);
+                    bindFocusTask({
+                      id: task.id,
+                      title: task.title || "Untitled",
+                      bucketName,
+                      workspaceId,
+                    });
                     startFocus();
                   }}
                 >
                   <Clock className="size-icon-sm" aria-hidden />
                   {trackedTotal > 0 ? formatDuration(trackedTotal) : "Track time"}
+                  {session.unsaved ? (
+                    <span className="font-sans text-xs font-normal text-muted-foreground">
+                      · not saved yet
+                    </span>
+                  ) : null}
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                {trackedTotal > 0
-                  ? "Total time tracked · click to keep tracking"
-                  : "Start tracking time"}
+                {session.unsaved
+                  ? "Couldn't save the tracked time yet — retrying, nothing is lost"
+                  : trackedTotal > 0
+                    ? "Total time tracked · click to keep tracking"
+                    : "Start tracking time"}
               </TooltipContent>
             </Tooltip>
           )}

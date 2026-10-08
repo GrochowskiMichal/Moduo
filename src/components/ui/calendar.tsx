@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 /**
  * Token-routed calendar (react-day-picker v10). Selected day = bg-primary;
  * today = a quiet ring (NOT a chromatic fill, so it doesn't compete with the
- * selection); hover = bg-accent; outside-month days are muted. Used inside
+ * selection); hover = bg-state-hover; outside-month days are muted. Used inside
  * DateField's popover. No raw color — all surfaces/accents via tokens.
  */
 function Calendar({
@@ -27,16 +27,16 @@ function Calendar({
         caption_label: "font-display text-sm font-medium text-foreground",
         nav: "flex items-center",
         button_previous:
-          "absolute left-1 inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40",
+          "absolute left-1 inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground disabled:opacity-40",
         button_next:
-          "absolute right-1 inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40",
+          "absolute right-1 inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground disabled:opacity-40",
         month_grid: "w-full border-collapse",
         weekdays: "flex",
         weekday: "w-8 text-2xs font-normal text-muted-foreground",
         week: "mt-1 flex w-full",
         day: "relative p-0 text-center",
         day_button:
-          "inline-flex size-8 items-center justify-center rounded-md text-sm font-normal text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+          "inline-flex size-8 items-center justify-center rounded-md text-sm font-normal text-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
         selected:
           "[&>button]:bg-primary [&>button]:text-primary-foreground [&>button]:hover:bg-primary",
         today: "[&>button]:ring-1 [&>button]:ring-ring",

@@ -52,6 +52,10 @@ const ph = rs.hoisted(() => {
 
 rs.mock("posthog-js", () => ({ default: ph }));
 
+// The server call that deletes what PostHog holds (PRIV-3): true = the server took it.
+const forget = rs.hoisted(() => ({ request: rs.fn(async (_userId: string) => true) }));
+rs.mock("./analytics-forget", () => ({ requestAnalyticsForget: forget.request }));
+
 type AnalyticsModule = typeof import("./analytics");
 
 // The key and host are read when the module loads, so each test loads a fresh copy.
@@ -491,3 +495,143 @@ describe("analytics — the code itself stays off the page until consent", () =>
     expect(rsbuild).toMatch(/prefetch: \{[^}]*exclude: \[[^\]]*posthog/);
   });
 });
+
+describe("analytics — switching off deletes what was sent (PRIV-3)", () => {
+  async function optedInThenOff(a: AnalyticsModule) {
+    await a.setAnalyticsUser("u1");
+    await a.setAnalyticsConsent("u1", "granted");
+    await a.setAnalyticsConsent("u1", "denied");
+  }
+
+  const pending = (userId: string) => localStorage.getItem(`moduo:analytics-forget:${userId}`);
+
+  it("asks the server right away, while the person is still signed in", async () => {
+    const a = await loadAnalytics();
+    await optedInThenOff(a);
+    await settle();
+
+    expect(forget.request).toHaveBeenCalledTimes(1);
+    expect(forget.request).toHaveBeenCalledWith("u1");
+    expect(pending("u1")).toBeNull();
+  });
+
+  it("asks nothing for a first no: nothing was ever sent", async () => {
+    const a = await loadAnalytics();
+    await a.setAnalyticsUser("u1");
+    await a.setAnalyticsConsent("u1", "denied");
+    await settle();
+
+    expect(forget.request).not.toHaveBeenCalled();
+    expect(pending("u1")).toBeNull();
+  });
+
+  it("keeps the request until the server takes it, and sends it again when that person is back", async () => {
+    forget.request.mockResolvedValueOnce(false); // offline, or a 502/503
+    const a = await loadAnalytics();
+    await optedInThenOff(a);
+    await settle();
+    expect(pending("u1")).not.toBeNull();
+
+    // The next launch, signed in as the same person.
+    const b = await loadAnalytics();
+    await b.setAnalyticsUser("u1");
+    await rs.waitFor(() => expect(forget.request).toHaveBeenCalledTimes(2));
+    await rs.waitFor(() => expect(pending("u1")).toBeNull());
+  });
+
+  it("drops a request the server hasn't taken when the person says yes again", async () => {
+    forget.request.mockResolvedValueOnce(false);
+    const a = await loadAnalytics();
+    await optedInThenOff(a);
+    await settle();
+    await a.setAnalyticsConsent("u1", "granted");
+    expect(pending("u1")).toBeNull();
+
+    const b = await loadAnalytics();
+    await b.setAnalyticsUser("u1");
+    await settle();
+    expect(forget.request).toHaveBeenCalledTimes(1);
+  });
+
+  it("doesn't let an older request's answer clear a newer switch-off", async () => {
+    let answerFirst: (taken: boolean) => void = () => {};
+    forget.request.mockImplementationOnce(
+      () =>
+        new Promise<boolean>((resolve) => {
+          answerFirst = resolve;
+        }),
+    );
+    forget.request.mockResolvedValueOnce(false); // the newer one doesn't get through
+    const a = await loadAnalytics();
+    await optedInThenOff(a); // the first request, still waiting on the server
+    await settle();
+    await a.setAnalyticsConsent("u1", "granted");
+    await a.setAnalyticsConsent("u1", "denied");
+    await settle();
+
+    answerFirst(true);
+    await settle();
+
+    expect(forget.request).toHaveBeenCalledTimes(2);
+    expect(pending("u1")).not.toBeNull(); // the newer switch-off is still owed
+  });
+
+  it("leaves another person's pending request for their own session", async () => {
+    localStorage.setItem("moduo:analytics-forget:u2", "earlier");
+    const a = await loadAnalytics();
+    await a.setAnalyticsUser("u1");
+    await settle();
+
+    expect(forget.request).not.toHaveBeenCalled();
+    expect(pending("u2")).toBe("earlier");
+  });
+});
+
+describe("analytics — after the account is deleted (PRIV-3)", () => {
+  it("sends nothing more under the erased id, sign-out included", async () => {
+    const a = await loadAnalytics();
+    await a.setAnalyticsUser("u1");
+    await a.setAnalyticsConsent("u1", "granted");
+    const before = ph.state.sent.length;
+
+    await a.stopAnalyticsForDeletedAccount("u1");
+    // What signing out does: track, then the auth provider's SIGNED_OUT.
+    await a.Analytics.app.signedOut();
+    await a.setAnalyticsUser(null);
+
+    expect(ph.state.sent.slice(before)).toEqual([]);
+    expect(ph.state.optedIn).toBe(false);
+    // The server erased everything as part of the deletion: nothing more to ask.
+    expect(forget.request).not.toHaveBeenCalled();
+  });
+
+  it("records a no, so the question doesn't come back before the sign-out lands", async () => {
+    const a = await loadAnalytics();
+    await a.setAnalyticsUser("u1");
+    await a.setAnalyticsConsent("u1", "granted");
+
+    await a.stopAnalyticsForDeletedAccount("u1");
+
+    expect(a.getAnalyticsConsent("u1")).toBe("denied");
+  });
+
+  it("drops a deletion request still pending on this device", async () => {
+    forget.request.mockResolvedValueOnce(false);
+    const a = await loadAnalytics();
+    await a.setAnalyticsUser("u1");
+    await a.setAnalyticsConsent("u1", "granted");
+    await a.setAnalyticsConsent("u1", "denied");
+    await settle();
+    expect(localStorage.getItem("moduo:analytics-forget:u1")).not.toBeNull();
+
+    await a.stopAnalyticsForDeletedAccount("u1");
+
+    expect(localStorage.getItem("moduo:analytics-forget:u1")).toBeNull();
+    expect(forget.request).toHaveBeenCalledTimes(1); // only the switch-off's own try
+  });
+});
+
+/** Let queued promise jobs (the dynamic import, the request) run. */
+async function settle() {
+  for (let i = 0; i < 20; i++) await Promise.resolve();
+}

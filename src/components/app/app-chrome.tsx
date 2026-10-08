@@ -78,7 +78,7 @@ function ModuleTab({ item, active, index, onClick, badgeCount = 0 }: ModuleTabPr
         aria-current={active ? "page" : undefined}
         aria-label={ariaLabel}
         onClick={onClick}
-        className={`flex h-8 flex-row items-center gap-2 rounded-md px-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${active ? "bg-accent text-foreground" : "bg-transparent text-muted-foreground hover:bg-accent hover:text-foreground"}`}
+        className={`flex h-8 flex-row items-center gap-2 rounded-md px-3 transition-colors duration-(--motion-fade) ease-(--ease-out) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${active ? "bg-state-active text-foreground" : "bg-transparent text-muted-foreground hover:bg-state-hover hover:text-foreground"}`}
       >
         <span className="relative flex">
           <Icon name={item.iconName} size={14} />
@@ -567,7 +567,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
           ) : (
             <Tooltip>
               <TooltipTrigger
-                className="flex h-8 w-8 items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                className="flex h-8 w-8 items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                 onClick={toggleLeftPanel}
                 aria-label={currentPanels.left ? "Collapse left panel" : "Expand left panel"}
               >
@@ -607,7 +607,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
           ) : !isSettingsRoute ? (
             <Tooltip>
               <TooltipTrigger
-                className="flex h-8 w-8 items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                className="flex h-8 w-8 items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                 onClick={toggleRightPanel}
                 aria-label={currentPanels.right ? "Collapse right panel" : "Expand right panel"}
               >
