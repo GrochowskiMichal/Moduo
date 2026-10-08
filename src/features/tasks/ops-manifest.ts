@@ -37,6 +37,27 @@ export const tasksModuleManifest: ModuleManifest = {
       args: { p_workspace_id: "workspace uuid", p_task_id: "task uuid" },
     },
     {
+      op: "tasks.reorder_queue",
+      rpc: "tasks_op_reorder_queue",
+      summary:
+        "Set the order of a day's commit queue: the named tasks trade the queue slots they already hold, in the given order; other tasks are untouched.",
+      args: {
+        p_workspace_id: "workspace uuid",
+        p_for: "queue date (YYYY-MM-DD)",
+        p_task_ids: "task uuids in the new order (each committed for that date)",
+      },
+    },
+    {
+      op: "tasks.log_time",
+      rpc: "tasks_op_log_time",
+      summary: "Add work time to a task's time spent (1 second to 4 hours per call).",
+      args: {
+        p_workspace_id: "workspace uuid",
+        p_task_id: "task uuid",
+        p_seconds: "work seconds to add (1–14400)",
+      },
+    },
+    {
       op: "tasks.set_status",
       rpc: "tasks_op_set_status",
       summary:

@@ -164,6 +164,7 @@ export function shapeTask(t: Row, data: ShapeData, now: Date, full = false): Row
     out.committed_for = t.committed_for;
     out.commit_order = t.commit_order;
   }
+  if (t.time_spent_seconds) out.time_spent_seconds = t.time_spent_seconds;
   if (t.reschedule_count) out.reschedule_count = t.reschedule_count;
   if (t.recurrence) {
     out.recurrence = { rrule: t.recurrence.rrule, next_occurrence: t.recurrence.nextOccurrence ?? null };
@@ -175,4 +176,35 @@ export function shapeTask(t: Row, data: ShapeData, now: Date, full = false): Row
     out.updated_at = t.updated_at;
   }
   return out;
+}
+
+/** A single time log adds 1 second to 4 hours (spec AC15; the database op enforces the same range). */
+export const MIN_LOG_SECONDS = 1;
+export const MAX_LOG_SECONDS = 4 * 60 * 60;
+
+/** Whole seconds within the log range, or a plain-language error. */
+export function parseLogSeconds(value: unknown): number {
+  if (typeof value !== "number" || !Number.isInteger(value)) {
+    throw new Error("seconds must be a whole number.");
+  }
+  if (value < MIN_LOG_SECONDS) throw new Error(`seconds must be at least ${MIN_LOG_SECONDS}.`);
+  if (value > MAX_LOG_SECONDS) {
+    throw new Error(`seconds can be at most ${MAX_LOG_SECONDS} (4 hours) per log; log the rest in another call.`);
+  }
+  return value;
+}
+
+/** A reorder must name exactly the day's queued tasks the caller can see, each once. Returns the new order. */
+export function validateReorder(queueIds: string[], requested: unknown): string[] {
+  if (!Array.isArray(requested) || requested.some((id) => typeof id !== "string" || id === "")) {
+    throw new Error("task_ids must be a list of task uuids.");
+  }
+  const ids = requested as string[];
+  if (new Set(ids).size !== ids.length) throw new Error("task_ids lists a task more than once.");
+  const queued = new Set(queueIds);
+  const unknown = ids.filter((id) => !queued.has(id));
+  if (unknown.length) throw new Error(`These tasks are not in that day's queue: ${unknown.join(", ")}.`);
+  const missing = queueIds.filter((id) => !ids.includes(id));
+  if (missing.length) throw new Error(`task_ids must include every queued task; missing: ${missing.join(", ")}.`);
+  return ids;
 }

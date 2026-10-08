@@ -39,6 +39,11 @@ describe("activityActorName", () => {
 });
 
 describe("activityLine", () => {
+  it("renders queue reorders and logged time quietly", () => {
+    expect(activityLine(entry("tasks.reorder_queue", {}))).toBe("reordered the queue");
+    expect(activityLine(entry("tasks.log_time", { seconds: 1500 }))).toBe("logged 25 min");
+    expect(activityLine(entry("tasks.log_time", { seconds: 20 }))).toBe("logged a moment of time");
+  });
   it("renders commit with the queue date, and reorders as Do last", () => {
     expect(activityLine(entry("tasks.commit", { for: "2026-06-12", order: 3 }))).toMatch(
       /^committed this for /,

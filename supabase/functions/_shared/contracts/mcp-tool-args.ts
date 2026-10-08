@@ -35,6 +35,8 @@ export const TOOL_ARG_SCHEMAS: Record<string, z.ZodType<Record<string, unknown>>
   tasks_commit: z.object({ task_id: nonempty, for_date: ymd.optional() }),
   tasks_uncommit: z.object({ task_id: nonempty }),
   tasks_skip_today: z.object({ task_id: nonempty }),
+  tasks_reorder_queue: z.object({ for_date: ymd.optional(), task_ids: z.array(nonempty) }),
+  tasks_log_time: z.object({ task_id: nonempty, seconds: z.number().int().min(1).max(14400) }),
   tasks_set_status: z.object({ task_id: nonempty, status: taskStatusSchema }),
   tasks_reschedule: z.object({ task_id: nonempty, scheduled_at: iso }),
   tasks_unschedule: z.object({ task_id: nonempty }),

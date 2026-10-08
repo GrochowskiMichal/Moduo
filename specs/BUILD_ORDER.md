@@ -236,7 +236,7 @@ Two blocks with no dependency between them still **merge-conflict if they edit t
 
 > A Claude Code mod over Moduo's own connector (dogfoods `moduo-mcp`). Two lanes: connector (MCC-1 → 2 → 3, Tier 2, serialized: each adds a migration and both edit `modules/tasks.ts`) and mod (MCC-4 after MCC-1). Mod blocks' done gate adds `claude plugin test tools/claude-plugins/moduo-tasks`.
 
-- [ ] **MCC-2 — Connector: reorder queue + log time** · deps: MCC-1 · migration: `tasks_op_reorder_queue`, `tasks_op_log_time`; manifest entries; `tasks_reorder_queue`, `tasks_log_time` tools; connector doc updated; Supabase-branch round-trip; migration then redeploy. Tier 2.
+- [~] **MCC-2 — Connector: reorder queue + log time** · code done on `t/mike/mcc-2-reorder-log-time` (verify green, validator findings fixed, SQL tested on a throwaway Postgres); open: Supabase-branch round-trip, migration, `moduo-mcp` redeploy, Tier 2 review · deps: MCC-1 · migration: `tasks_op_reorder_queue`, `tasks_op_log_time`; manifest entries; `tasks_reorder_queue`, `tasks_log_time` tools; connector doc updated; Supabase-branch round-trip; migration then redeploy. Tier 2.
 - [ ] **MCC-3 — Connector: create task** · deps: MCC-2 · migration: `tasks_op_create` (Inbox default, commit option); `tasks_create` tool (due date as a local-midnight timestamp); connector doc's capture note updated; round-trip; redeploy. Tier 2.
 - [ ] **MCC-5 — Mod: queue actions + work on this** · deps: MCC-2, MCC-4 · c / ⇧c / u / s / [ ] plus buttons; `⏎` fills the prompt, In progress on send.
 - [ ] **MCC-6 — Mod: Focus** · deps: MCC-5 · Focus panel, pomodoro/stopwatch from Moduo settings, band clock, toast + chime, time logging rules, done → next, Claude context.

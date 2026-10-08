@@ -75,6 +75,12 @@ export function activityLine(entry: Pick<ActivityEntry, "op" | "payload">): stri
           : "adopted its occurrence (recurrence)";
       return to ? `caught this up to ${to} (recurrence)` : "caught this up (recurrence)";
     }
+    case "tasks.reorder_queue":
+      return "reordered the queue";
+    case "tasks.log_time": {
+      const seconds = typeof p.seconds === "number" ? p.seconds : 0;
+      return seconds >= 60 ? `logged ${Math.round(seconds / 60)} min` : "logged a moment of time";
+    }
     // ── DF-9 spine-generated task notifications, seen in the trail too ─────────
     // Logged by the tasks_notify_spine trigger (module='tasks'), so they surface
     // in this entity trail — render a neutral, third-person sentence here (the

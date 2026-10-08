@@ -2,15 +2,18 @@ import { describe, expect, it } from "@rstest/core";
 
 import {
   DEFAULT_FOCUS_SETTINGS,
+  MAX_LOG_SECONDS,
   MAX_PAGE,
   filterByAssignee,
   focusSettingsFrom,
   orderByBucket,
   pageOf,
   parseAssignee,
+  parseLogSeconds,
   shapeTask,
   subtaskCounts,
   topLevelOnly,
+  validateReorder,
 } from "./tasks-connector.ts";
 
 const task = (id: string, extra: Record<string, unknown> = {}) => ({
@@ -133,5 +136,16 @@ describe("tasks connector helpers", () => {
       long_break_minutes: 180,
       auto_start_next: true,
     });
+  });
+
+  it("validates reorder and time log input", () => {
+    expect(validateReorder(["a", "b", "c"], ["c", "a", "b"])).toEqual(["c", "a", "b"]);
+    expect(() => validateReorder(["a", "b"], ["a"])).toThrow(/missing/);
+    expect(() => validateReorder(["a", "b"], ["a", "b", "x"])).toThrow(/not in that day's queue/);
+    expect(() => validateReorder(["a", "b"], ["a", "a", "b"])).toThrow(/more than once/);
+    expect(() => validateReorder(["a"], "a")).toThrow(/list/);
+    expect(parseLogSeconds(1)).toBe(1);
+    expect(parseLogSeconds(MAX_LOG_SECONDS)).toBe(14400);
+    for (const bad of [0, -5, 14401, 1.5, "60", null]) expect(() => parseLogSeconds(bad)).toThrow();
   });
 });

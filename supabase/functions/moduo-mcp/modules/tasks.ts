@@ -23,9 +23,11 @@ import {
   orderByBucket,
   pageOf,
   parseAssignee,
+  parseLogSeconds,
   shapeTask,
   subtaskCounts,
   topLevelOnly,
+  validateReorder,
 } from "../../_shared/tasks-connector.ts";
 import type { ConnectorModule, ToolContext } from "../registry.ts";
 import { visibleIds } from "../share.ts";
@@ -404,6 +406,61 @@ export const tasksConnectorModule: ConnectorModule = {
       inputSchema: taskIdSchema,
       handler: (args, ctx) =>
         callOp(ctx, "tasks_op_skip_today", { p_task_id: str(args, "task_id") }),
+    },
+    {
+      name: "tasks_reorder_queue",
+      description:
+        "Set the order of a day's commit queue. task_ids must list every queued task the key can see, each once, in the new order.",
+      access: "edit",
+      inputSchema: {
+        type: "object",
+        properties: {
+          for_date: { type: "string", description: "Queue date YYYY-MM-DD (default: today, UTC)." },
+          task_ids: { type: "array", items: { type: "string" }, description: "The day's queued task uuids in the new order." },
+        },
+        required: ["task_ids"],
+      },
+      handler: async (args, ctx) => {
+        const date = args.for_date
+          ? dayOrThrow(str(args, "for_date"), "for_date")
+          : new Date().toISOString().slice(0, 10);
+        const ws = await loadWorkspace(ctx);
+        const queue = ws.tasks
+          .filter((t) => t.committed_for === date)
+          .sort((a, b) => (a.commit_order ?? 0) - (b.commit_order ?? 0));
+        const ids = validateReorder(queue.map((t) => t.id), args.task_ids);
+        const { data, error } = await ctx.db.rpc("tasks_op_reorder_queue", {
+          p_workspace_id: ctx.key.workspaceId,
+          p_for: date,
+          p_task_ids: ids,
+        });
+        if (error) throw new Error(error.message);
+        const now = new Date();
+        const visible = new Set(ids);
+        return ((data ?? []) as Row[])
+          .filter((t) => visible.has(t.id))
+          .map((t) => shapeTask(t, ws, now));
+      },
+    },
+    {
+      name: "tasks_log_time",
+      description:
+        "Add work time to a task's time spent. One log is 1 second to 4 hours; log longer spans in several calls.",
+      access: "edit",
+      inputSchema: {
+        type: "object",
+        properties: {
+          task_id: { type: "string", description: "Task uuid." },
+          seconds: { type: "integer", description: "Work time to add, 1 to 14400 seconds." },
+        },
+        required: ["task_id", "seconds"],
+      },
+      handler: async (args, ctx) => {
+        const seconds = parseLogSeconds(args.seconds);
+        const task = await fetchTask(ctx, str(args, "task_id"));
+        const shaped = await callOp(ctx, "tasks_op_log_time", { p_task_id: task.id, p_seconds: seconds });
+        return { ...shaped, logged_seconds: seconds };
+      },
     },
     {
       name: "tasks_set_status",
