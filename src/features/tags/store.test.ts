@@ -25,7 +25,9 @@ import { useTasksModule } from "../tasks/hooks/use-tasks-module";
 import type { Bucket, Tag, TagLink, Task } from "../tasks/model";
 import { useEntityTags } from "./hooks/use-entity-tags";
 import {
+  attachTagUser,
   createOrAttachByName,
+  deleteTag,
   getTagView,
   resetTagStore,
   seedTags,
@@ -323,6 +325,48 @@ describe("reads seed the store", () => {
     expect(tagsOf(view, { entityType: "note", entityId: "n1" })).toEqual([]);
   });
 
+  it("an older read of everything, arriving after a newer read of one item, keeps that item's links", async () => {
+    const server = fakeServer({ tags: [tag("g1", "design")] });
+    const note = { entityType: "note", entityId: "n1" };
+    seedTags(WS, { tags: server.db.tags, links: [], scope: { kind: "all" }, at: 1 });
+    const slowReadStarted = Date.now() - 1;
+    toggleTag(ctx(server), note, "g1");
+    await waitFor(() => expect(server.db.links).toHaveLength(1));
+    // The hub re-reads the note (it has the link), then the slow read lands.
+    seedTags(WS, {
+      tags: server.db.tags,
+      links: server.db.links,
+      scope: { kind: "entity", ...note },
+      at: Date.now() + 1,
+    });
+    seedTags(WS, { tags: server.db.tags, links: [], scope: { kind: "all" }, at: slowReadStarted });
+    expect(names(tagsOf(getTagView(WS), note))).toEqual(["design"]);
+  });
+
+  it("a read that hit its row cap adds what it saw and removes nothing", () => {
+    const tags = [tag("g1", "design")];
+    seedTags(WS, { tags, links: [link("g1", "note", "n1")], scope: { kind: "all" }, at: 1 });
+    seedTags(WS, {
+      tags,
+      links: [link("g1", "task", "t1")],
+      scope: { kind: "all" },
+      at: 2,
+      complete: false,
+    });
+    const view = getTagView(WS);
+    expect(names(tagsOf(view, { entityType: "note", entityId: "n1" }))).toEqual(["design"]);
+    expect(names(tagsOf(view, { entityType: "task", entityId: "t1" }))).toEqual(["design"]);
+  });
+
+  it("signing in as someone else starts from an empty store; the same person keeps it", () => {
+    attachTagUser("u1");
+    seedTags(WS, { tags: [tag("g1", "design")], links: [], scope: { kind: "all" }, at: 1 });
+    attachTagUser("u1");
+    expect(names(getTagView(WS).tags)).toEqual(["design"]);
+    attachTagUser("u2");
+    expect(getTagView(WS).tags).toEqual([]);
+  });
+
   it("writes to the same tag on the same item reach the server in order", async () => {
     const server = fakeServer({ tags: [tag("g1", "design")] });
     seedTags(WS, { tags: server.db.tags, links: [], scope: { kind: "all" }, at: 1 });
@@ -391,6 +435,50 @@ describe("T1-2 · create-or-attach by name", () => {
       server.calls.indexOf("attachTag:start"),
     );
     expect(server.db.links[0]?.tagId).toBe(created?.id);
+  });
+
+  it("a tag whose create fails isn't attached when its task is saved, and says so once", async () => {
+    const server = fakeServer();
+    server.api.upsertTag.mockRejectedValueOnce(new Error("offline"));
+    seedTags(WS, { tags: [], links: [], scope: { kind: "all" }, at: 1 });
+    let saveTask!: (id: string) => void;
+    const taskId = new Promise<string | null>((resolve) => {
+      saveTask = resolve;
+    });
+    createOrAttachByName({ runtime: server.runtime, workspaceId: WS }, "urgent", {
+      entityType: "task",
+      entityId: taskId,
+    });
+    await waitFor(() => expect(toastMock.error).toHaveBeenCalledTimes(1));
+    expect(getTagView(WS).tags).toEqual([]);
+    saveTask("t1");
+    await act(async () => {
+      await taskId;
+    });
+    expect(server.api.attachTag).not.toHaveBeenCalled();
+    expect(toastMock.error).toHaveBeenCalledTimes(1);
+  });
+
+  it("deleting a tag still being created waits for it; Undo before then keeps it", async () => {
+    const server = fakeServer();
+    seedTags(WS, { tags: [], links: [], scope: { kind: "all" }, at: 1 });
+    const ctx = { runtime: server.runtime, workspaceId: WS };
+    const release = server.hold();
+    const made = createOrAttachByName(ctx, "later", { entityType: "task", entityId: "t1" }) as Tag;
+
+    deleteTag(ctx, made.id);
+    expect(getTagView(WS).tags).toEqual([]);
+    (toastMock.mock.calls.at(-1)?.[1] as ToastOpts).action?.onClick();
+    expect(names(getTagView(WS).tags)).toEqual(["later"]);
+
+    deleteTag(ctx, made.id);
+    (toastMock.mock.calls.at(-1)?.[1] as ToastOpts).onAutoClose?.();
+    await act(async () => release());
+    await waitFor(() => expect(server.api.deleteTag).toHaveBeenCalledTimes(1));
+    expect(server.calls.indexOf("upsertTag:done")).toBeLessThan(
+      server.calls.indexOf("deleteTag:start"),
+    );
+    expect(getTagView(WS).tags).toEqual([]);
   });
 
   it("a tag made for a task that never got saved goes again", async () => {

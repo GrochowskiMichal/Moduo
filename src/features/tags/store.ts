@@ -10,7 +10,8 @@
 // - **Reads seed it.** Each read hands in what it loaded and what it covered
 //   (`seedTags`): the Tasks bundle covers every link, a hub covers one entity,
 //   the contacts directory covers contacts and companies. A seed replaces only
-//   the part it covered.
+//   the part it covered, and never a part a newer read already loaded. A read
+//   that hit its row cap only adds what it saw.
 // - **Writes go through it** (`attachTag`, `detachTag`, `toggleTag`,
 //   `createOrAttachByName`, `recolorTag`, `deleteTag`). Each is an op laid on
 //   top of what the reads loaded, so the change shows on every surface at
@@ -58,6 +59,11 @@ export type TagSeed = {
   scope: LinkScope;
   /** When the read's request started (`Date.now()`). */
   at: number;
+  /**
+   * False when the read hit its row cap (SCALE-1): it then only adds what it
+   * saw, since a missing row may just be past the cap. Default true.
+   */
+  complete?: boolean;
 };
 
 /**
@@ -107,7 +113,7 @@ const SETTLED_OP_TTL_MS = 10 * 60_000;
 
 let nextOpId = 1;
 const workspaces = new Map<string, WorkspaceTags>();
-/** Tag id → resolves true once its row exists (false: it never will). */
+/** Tag id → resolves true once its row exists (false: it never will — kept so later writes skip it). */
 const tagReady = new Map<string, Promise<boolean>>();
 /** A link or a tag → the last write queued for it (writes to one thing run in order). */
 const writeChains = new Map<string, Promise<unknown>>();
@@ -236,9 +242,19 @@ function opCoveredBy(op: Op, scope: LinkScope): boolean {
 /** Hand the store what a read loaded. */
 export function seedTags(workspaceId: string, seed: TagSeed): void {
   const ws = workspace(workspaceId);
+  if (seed.complete === false) {
+    mergeSeed(ws, seed);
+    return;
+  }
+  const newer = [...ws.seeds.values()].filter((n) => n.at > seed.at);
   // A newer read already loaded everything this one did: this one is stale.
-  for (const newer of ws.seeds.values()) {
-    if (newer.at > seed.at && covers(newer.scope, seed.scope)) return;
+  if (newer.some((n) => covers(n.scope, seed.scope))) return;
+  // Parts a newer read loaded keep that read's links.
+  const loadedSince = (link: TagLink) =>
+    newer.some((n) => inScope(n.scope, link.entityType, link.entityId));
+  // This read now stands for its scope; older reads it covers are forgotten.
+  for (const [key, old] of ws.seeds) {
+    if (old.at <= seed.at && covers(seed.scope, old.scope)) ws.seeds.delete(key);
   }
   ws.seeds.set(scopeKey(seed.scope), { scope: seed.scope, at: seed.at });
   if (seed.at >= ws.tagsAt) {
@@ -247,10 +263,12 @@ export function seedTags(workspaceId: string, seed: TagSeed): void {
   }
   const links = new Map<string, TagLink>();
   for (const [k, link] of ws.links) {
-    if (!inScope(seed.scope, link.entityType, link.entityId)) links.set(k, link);
+    if (!inScope(seed.scope, link.entityType, link.entityId) || loadedSince(link)) {
+      links.set(k, link);
+    }
   }
   for (const link of seed.links) {
-    if (inScope(seed.scope, link.entityType, link.entityId)) {
+    if (inScope(seed.scope, link.entityType, link.entityId) && !loadedSince(link)) {
       links.set(linkKey(link.tagId, link.entityType, link.entityId), link);
     }
   }
@@ -260,9 +278,20 @@ export function seedTags(workspaceId: string, seed: TagSeed): void {
   ws.ops = ws.ops.filter(
     (op) =>
       op.settledAt === null ||
-      (op.settledAt > seed.at && now - op.settledAt < SETTLED_OP_TTL_MS) ||
-      (!opCoveredBy(op, seed.scope) && now - op.settledAt < SETTLED_OP_TTL_MS),
+      (now - op.settledAt < SETTLED_OP_TTL_MS &&
+        (op.settledAt > seed.at || !opCoveredBy(op, seed.scope))),
   );
+  changed(ws);
+}
+
+/** A capped read: add what it saw, remove nothing, and don't count it as covering anything. */
+function mergeSeed(ws: WorkspaceTags, seed: TagSeed): void {
+  for (const tag of seed.tags) if (!ws.tags.has(tag.id)) ws.tags.set(tag.id, tag);
+  for (const link of seed.links) {
+    if (!inScope(seed.scope, link.entityType, link.entityId)) continue;
+    const key = linkKey(link.tagId, link.entityType, link.entityId);
+    if (!ws.links.has(key)) ws.links.set(key, link);
+  }
   changed(ws);
 }
 
@@ -414,8 +443,9 @@ function createTag(ctx: TagContext, name: string): { tag: Tag; saved: Promise<bo
     },
   );
   tagReady.set(tag.id, saved);
-  void saved.then(() => {
-    if (tagReady.get(tag.id) === saved) tagReady.delete(tag.id);
+  // Once the row exists, nothing needs to wait; a failed create stays marked.
+  void saved.then((ok) => {
+    if (ok && tagReady.get(tag.id) === saved) tagReady.delete(tag.id);
   });
   return { tag, saved };
 }
@@ -444,9 +474,14 @@ export function createOrAttachByName(ctx: TagContext, name: string, target: TagT
     return tag;
   }
   void Promise.resolve(entityId).then(
-    (id) => {
-      if (id) attachTag(ctx, { entityType, entityId: id }, tag.id);
-      else if (created) void discardIfUnused(ctx, tag.id, created.saved);
+    async (id) => {
+      if (!id) {
+        if (created) void discardIfUnused(ctx, tag.id, created.saved);
+        return;
+      }
+      // A tag whose create failed has said so already; don't attach it.
+      if (created && !(await created.saved)) return;
+      attachTag(ctx, { entityType, entityId: id }, tag.id);
     },
     () => {
       if (created) void discardIfUnused(ctx, tag.id, created.saved);
@@ -538,7 +573,18 @@ export function deleteTag(ctx: TagContext, tagId: string): void {
   });
 }
 
-/** Forget everything (tests; a fresh app session starts empty anyway). */
+/** Who the store's data was read as (undefined: not told yet). */
+let signedInAs: string | null | undefined;
+
+/** Who is signed in: another person (or signing out) starts from an empty store. */
+export function attachTagUser(userId: string | null): void {
+  const first = signedInAs === undefined;
+  if (userId === signedInAs) return;
+  signedInAs = userId;
+  if (!first) resetTagStore();
+}
+
+/** Forget everything (sign-in as someone else, sign-out, tests). */
 export function resetTagStore(): void {
   workspaces.clear();
   tagReady.clear();
