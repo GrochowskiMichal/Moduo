@@ -180,7 +180,7 @@ function DisplayMenu<V extends DisplayValues>({
                     size="sm"
                     variant="bare"
                     aria-labelledby={labelId}
-                    className="w-auto gap-1 bg-state-active px-2 text-sm hover:bg-state-active-hover"
+                    className="w-auto gap-1 bg-state-active px-2 hover:bg-state-active-hover"
                   >
                     <SelectValue />
                   </SelectTrigger>

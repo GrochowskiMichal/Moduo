@@ -276,7 +276,7 @@ function FilterChip({ dimension, condition, onChange, className }: FilterChipPro
       aria-label={sentence}
       data-slot="filter-chip"
       className={cn(
-        "inline-flex h-(--ctrl-h-sm) min-w-0 shrink-0 items-center divide-x divide-hairline overflow-hidden rounded-md bg-state-active font-sans text-sm text-foreground",
+        "inline-flex h-(--ctrl-h-sm) min-w-0 shrink-0 items-center divide-x divide-hairline overflow-hidden rounded-md bg-state-active font-display text-base text-foreground",
         className,
       )}
     >
@@ -288,7 +288,10 @@ function FilterChip({ dimension, condition, onChange, className }: FilterChipPro
       {operators.length > 1 ? (
         <DropdownMenu>
           <DropdownMenuTrigger
-            className={cn(SEGMENT_CLASS, "text-muted-foreground hover:bg-state-hover")}
+            className={cn(
+              SEGMENT_CLASS,
+              "text-muted-foreground hover:bg-state-hover data-[state=open]:bg-state-hover",
+            )}
             aria-label={`Operator: ${FILTER_OPERATOR_LABEL[condition.operator]}`}
           >
             {FILTER_OPERATOR_LABEL[condition.operator]}
@@ -314,7 +317,10 @@ function FilterChip({ dimension, condition, onChange, className }: FilterChipPro
 
       <Popover open={valuesOpen} onOpenChange={setValuesOpen}>
         <PopoverTrigger
-          className={cn(SEGMENT_CLASS, "min-w-0 hover:bg-state-hover")}
+          className={cn(
+            SEGMENT_CLASS,
+            "min-w-0 font-sans hover:bg-state-hover data-[state=open]:bg-state-hover",
+          )}
           aria-label={`${dimension.label} values: ${conditionValueText(condition, dimension)}`}
         >
           <span className="max-w-48 truncate">{conditionValueText(condition, dimension)}</span>
