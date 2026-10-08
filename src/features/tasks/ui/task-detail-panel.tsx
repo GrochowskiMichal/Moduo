@@ -66,6 +66,7 @@ import {
   toAssigneeValue,
 } from "../assignee-options";
 import { previewAssign, useAssignees } from "../assignees";
+import { onThisLabel } from "../claims";
 import { formatTimestamp, LEVEL_OPTIONS, STATUS_LABELS, wouldCreateCycle } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import {
@@ -189,7 +190,7 @@ function DetailBody({
 
   const drifted = isDrifted(task);
   const queued = api.queuedTaskIds.has(task.id);
-  const claim = useQueueClaim(task.id, api);
+  const claim = useQueueClaim(task.id, api, task.workspaceId);
   const bucketOptions = inbox ? [inbox, ...buckets.filter((b) => b.id !== inbox.id)] : buckets;
   const taskTags = api.tagsByTask.get(task.id) ?? [];
   // Subtasks, one level (spec §11): a live parent makes this a subtask; only
@@ -615,8 +616,16 @@ function DetailBody({
             </Field>
           ) : null}
 
-          {/* Claims (TV-D4): who else has this lined up. Runs stay private. */}
-          {claim.names.length > 0 ? (
+          {/* Claims (TV-D4): who else has this lined up; who is on it right
+              now (TV-F2). Nothing else about anyone's run shows. */}
+          {claim.onThis.length > 0 ? (
+            <p className="flex items-center gap-2 font-sans text-xs text-muted-foreground">
+              <span aria-hidden className="flex">
+                <ClaimAvatar assignee={claim.onThisFirst} live />
+              </span>
+              {onThisLabel(claim.onThis)}
+            </p>
+          ) : claim.names.length > 0 ? (
             <p className="flex items-center gap-2 font-sans text-xs text-muted-foreground">
               <span aria-hidden className="flex">
                 <ClaimAvatar assignee={claim.first} />

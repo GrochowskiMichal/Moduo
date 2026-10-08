@@ -42,6 +42,7 @@ import { type FocusPrefs, readLocalFocusPrefs } from "../../lib/focus-prefs";
 import { isTauriRuntime } from "../../lib/runtime";
 import {
   type AwayChoice,
+  adoptSession,
   bindTask,
   blankRecord,
   type FlushItem,
@@ -49,6 +50,7 @@ import {
   type FocusPhaseEnd,
   type FocusRecord,
   type FocusRhythm,
+  type FocusRunClock,
   type FocusSession,
   type FocusTaskRef,
   hasFailedSaves,
@@ -59,11 +61,13 @@ import {
   pauseSession,
   previewInterval,
   REST_SESSION,
+  relinquishSession,
   resolveAway,
   resumeSession,
   reviveDeadFlights,
   sameSession,
   sameTaskRef,
+  setPomodoro,
   settleFlush,
   snapshotOf,
   startSession,
@@ -79,6 +83,7 @@ export type {
   FocusAwaySummary,
   FocusPhase,
   FocusPhaseEnd,
+  FocusRunClock,
   FocusSession,
   FocusTaskRef,
 } from "./engine-core";
@@ -150,6 +155,12 @@ export interface FocusEngine {
   toggleRunning(): void;
   stop(): void;
   togglePomodoro(): void;
+  /** Pomodoro or stopwatch, for the run about to start (TV-F2). */
+  setPomodoro(on: boolean): void;
+  /** Take over a run another device was running, as its record says (TV-F2). */
+  adopt(run: FocusRunClock): void;
+  /** Another device took control at `at`: stop without crediting twice. */
+  relinquish(at: number): void;
   preview(prefs: FocusRhythm): void;
   resolveAway(choice: AwayChoice): void;
   registerSink(workspaceId: string | null, sink: FocusFlushSink): () => void;
@@ -552,6 +563,14 @@ export function createFocusEngine(deps: FocusEngineDeps): FocusEngine {
       ),
     stop: () => act((r, now, prefs) => stopSession(r, now, prefs), { flush: true }),
     togglePomodoro: () => act((r, now, prefs) => togglePomodoro(r, now, prefs)),
+    setPomodoro: (on) => act((r, now, prefs) => setPomodoro(r, on, now, prefs)),
+    adopt: (run) => act((r, now, prefs) => adoptSession(r, run, now, prefs), { flush: true }),
+    relinquish: (at) => {
+      if (user === undefined) return;
+      const r = load();
+      if (!r.tracking && !r.task) return;
+      act((cur, now, prefs) => relinquishSession(cur, at, now, prefs), { flush: true });
+    },
     preview,
     resolveAway: (choice) =>
       act((r, now, prefs) => resolveAway(r, choice, now, prefs), { flush: choice === "keep" }),
@@ -684,6 +703,29 @@ export function toggleFocusPomodoro(): void {
   engine.togglePomodoro();
 }
 
+/** Pomodoro (true) or stopwatch (false) for the run about to start (TV-F2). */
+export function setFocusPomodoro(on: boolean): void {
+  engine.setPomodoro(on);
+}
+
+/**
+ * This device takes over a run another device was running (TV-F2): the
+ * session becomes the run as its shared record says it is now, and the clock
+ * runs here from now on.
+ */
+export function adoptFocusRun(run: FocusRunClock): void {
+  engine.adopt(run);
+}
+
+/**
+ * Another device took control of the run at `at` (epoch ms): this device's
+ * session stops, and what it credited after `at` is taken back (that time is
+ * counted there). Earlier unsaved time is still saved.
+ */
+export function relinquishFocus(at: number): void {
+  engine.relinquish(at);
+}
+
 /** While paused, show an edited interval right away. No-op while running. */
 export function previewFocusInterval(prefs: FocusPrefs): void {
   engine.preview(prefs);
@@ -721,6 +763,28 @@ export function useFocusSession(): FocusSession {
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
 
+/** Follow the session outside React (the run store, TV-F2). Survives a test
+ *  reset of the engine: the listener moves to the new one. */
+const outsideListeners = new Set<() => void>();
+let outsideUnsub: (() => void) | null = null;
+function wireOutside(): void {
+  outsideUnsub?.();
+  outsideUnsub =
+    outsideListeners.size > 0
+      ? engine.subscribe(() => {
+          for (const listener of outsideListeners) listener();
+        })
+      : null;
+}
+export function subscribeFocusSession(listener: () => void): () => void {
+  outsideListeners.add(listener);
+  if (outsideListeners.size === 1) wireOutside();
+  return () => {
+    outsideListeners.delete(listener);
+    if (outsideListeners.size === 0) wireOutside();
+  };
+}
+
 /** Non-reactive read (tests, imperative callers). */
 export function getFocusSession(): FocusSession {
   return engine.getSnapshot();
@@ -734,4 +798,5 @@ export function __resetFocusEngineForTest(opts: { alert?: FocusEngineDeps["alert
   engine.dispose();
   alertImpl = opts.alert ?? alertPhaseEnd;
   engine = createFocusEngine(appDeps());
+  wireOutside();
 }

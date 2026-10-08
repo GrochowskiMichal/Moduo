@@ -6,7 +6,7 @@ import {
   type DragEndEvent,
   pointerWithin,
 } from "@dnd-kit/core";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { onCreateNew } from "../../../components/app/create-events";
 import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell";
@@ -26,7 +26,9 @@ import { HubDropZone } from "../../contacts/ui/hub-drop-zone";
 import { flushFocusSession, registerFocusFlushSink } from "../../focus/engine";
 import { consumeFocusViewRequest, FOCUS_VIEW_REQUEST_EVENT } from "../../focus/view-request";
 import { createLinkWithToast } from "../../spine/ui/drop-link-toast";
+import { WorkspaceContext } from "../../workspaces/workspace-context";
 import { useAssignees } from "../assignees";
+import { useRunClaimsPoll } from "../claims";
 import {
   timeBlockByBucket as invertTimeBlocks,
   myTasksScope,
@@ -35,17 +37,18 @@ import {
   showsMyTasks,
 } from "../default-view";
 import { type GroupBy, groupsByBucket, taskMatchesTagFilter } from "../helpers";
+import { useQueueRun } from "../hooks/use-queue-run";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import { isDrifted, type Task } from "../model";
 import { resolveTasksDeepLink } from "../search";
 import { sanitizeTimelineZoom, type TimelineZoom } from "../timeline-geometry";
-import { BucketRail, parseCollapsedSections, type TasksMode } from "./bucket-rail";
+import { BucketRail, parseCollapsedSections } from "./bucket-rail";
 import { CaptureModal } from "./capture-modal";
 import { pointerFirstCollision, useTaskDndSensors } from "./dnd/task-dnd";
 import { DriftTriageDialog } from "./drift-triage-dialog";
-import { ExecuteView } from "./execute-view";
 import { FrontierOfferDialog } from "./frontier-offer-dialog";
 import type { PlanView } from "./plan-view-header";
+import { QueueRunView } from "./queue-run-view";
 import { type BoardGroupBy, TaskBoardView } from "./task-board-view";
 import { TASK_DETAIL_REFRESH_EVENT, TaskDetailPanel } from "./task-detail-panel";
 import { TaskListView } from "./task-list-view";
@@ -65,7 +68,7 @@ type Props = {
 // The selection→URL mirror writes only at rest (see the mirror effect).
 const URL_MIRROR_DEBOUNCE_MS = 250;
 
-// Per-workspace UI state (selection / mode / view / grouping) persisted locally —
+// Per-workspace UI state (selection / view / grouping) persisted locally —
 // these are view preferences, not synced data.
 function lsKey(workspaceId: string, part: string): string {
   return `moduo:tasks:${part}:${workspaceId}`;
@@ -90,9 +93,6 @@ function writeLS(workspaceId: string, part: string, value: string): void {
 export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskIdChange }: Props) {
   const { canEdit, buckets, inbox, tasks } = api;
 
-  const [mode, setMode] = useState<TasksMode>(() =>
-    readLS(workspaceId, "mode") === "execute" ? "execute" : "plan",
-  );
   const [view, setView] = useState<PlanView>(() => {
     const stored = readLS(workspaceId, "view");
     return stored === "board" || stored === "timeline" ? stored : "list";
@@ -207,26 +207,36 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     if (!api.loading) flushFocusSession();
   }, [api.loading]);
 
-  // The chrome chip's "open Focus" request → enter Execute mode. The one-shot
-  // flag covers the fresh-mount case (chip clicked from another route, event
-  // fired before this listener existed); the event covers the already-mounted
-  // case (chip clicked while /tasks is open in Plan mode).
+  // The chrome chip's "back to the run" request → the Queue (TV-F2: Focus is a
+  // state of the Queue view, not a mode). The one-shot flag covers the
+  // fresh-mount case (chip clicked from another route, event fired before this
+  // listener existed); the event covers the already-mounted case.
+  // It also stands in for the default-scope resolution below, so that can't
+  // move the view away from the Queue once the bundle loads.
+  const workspaceRef = useRef(workspaceId);
   useEffect(() => {
-    if (consumeFocusViewRequest()) setMode("execute");
+    workspaceRef.current = workspaceId;
+  });
+  const resolvedForRef = useRef<string | null>(null);
+  useEffect(() => {
+    const showQueue = () => {
+      resolvedForRef.current = workspaceRef.current;
+      setSelection("today");
+    };
+    if (consumeFocusViewRequest()) showQueue();
     // Consume the flag here too: the event fires synchronously inside
     // requestFocusView (before navigation), so an already-mounted /tasks clears
-    // it now — otherwise a stale flag would force Execute on the next unrelated
-    // /tasks visit that reaches the mount branch above.
+    // it now — otherwise a stale flag would force the Queue on the next
+    // unrelated /tasks visit that reaches the mount branch above.
     const onRequest = () => {
       consumeFocusViewRequest();
-      setMode("execute");
+      showQueue();
     };
     window.addEventListener(FOCUS_VIEW_REQUEST_EVENT, onRequest);
     return () => window.removeEventListener(FOCUS_VIEW_REQUEST_EVENT, onRequest);
   }, []);
 
   // Persist preferences.
-  useEffect(() => writeLS(workspaceId, "mode", mode), [workspaceId, mode]);
   useEffect(() => writeLS(workspaceId, "view", view), [workspaceId, view]);
   useEffect(() => writeLS(workspaceId, "groupBy", groupBy), [workspaceId, groupBy]);
   useEffect(() => writeLS(workspaceId, "boardGroupBy", boardGroupBy), [workspaceId, boardGroupBy]);
@@ -250,7 +260,6 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
 
   // Default-view resolution (spec §9), run once per workspace after the bundle
   // loads: time-block bucket → last-opened bucket → Inbox. Never the full list.
-  const resolvedForRef = useRef<string | null>(null);
   useEffect(() => {
     if (api.loading) return;
     if (resolvedForRef.current === workspaceId) return;
@@ -374,8 +383,6 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   // cmd+n / global "+" → capture (this listener is only mounted on /tasks).
   useEffect(() => onCreateNew(openCapture), [openCapture]);
 
-  const exitExecute = useCallback(() => setMode("plan"), []);
-
   // ── blocked-by: frontier offer on queuing (spec §5c) ────────────────────────
   // One interception point for every queue affordance (row/card toggles and
   // context menus, detail panel, list keyboard): queuing a *blocked* task opens
@@ -426,7 +433,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     [api],
   );
 
-  // Quiet "↳ parent" context for committed subtasks in the Execute queue.
+  // Quiet "↳ parent" context for subtasks in the queue run.
   const parentTitleFor = useCallback(
     (task: { parentId: string | null }) => {
       if (!task.parentId) return null;
@@ -436,10 +443,30 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     [tasks],
   );
 
+  // ── the queue run (TV-F2) ───────────────────────────────────────────────────
+  // Mounted in every scope, so the run follows my queue's head wherever I am.
+  const queueRun = useQueueRun({ api, workspaceId, bucketNameById });
+  const runHere = queueRun.runHere && queueRun.run !== null;
+  // "<name> is on this": teammates' runs, for the rows and the panel.
+  const loadClaims = useMemo(
+    () => (runtime ? (ws: string) => runtime.focus.listClaims(ws) : null),
+    [runtime],
+  );
+  useRunClaimsPoll(loadClaims, workspaceId, currentUserId);
+  // A run in another workspace: the line-up says so (Start run here ends it).
+  const workspaces = useContext(WorkspaceContext)?.workspaces ?? [];
+  // During a run the right panel is the Now task's (spec §3: the Task tab).
+  const runNowId = runHere && selection === "today" ? (queueRun.nowTask?.id ?? null) : null;
+  useEffect(() => {
+    if (runNowId && !inboundPending) setSelectedTaskId(runNowId);
+  }, [runNowId, inboundPending]);
+  const otherRunWorkspaceName =
+    queueRun.run && !queueRun.runHere
+      ? (workspaces.find((w) => w.id === queueRun.run?.workspaceId)?.name ?? "another workspace")
+      : null;
+
   const left = (
     <BucketRail
-      mode={mode}
-      onModeChange={setMode}
       selection={selection}
       onSelect={setSelection}
       buckets={buckets}
@@ -449,6 +476,15 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       driftCountByBucket={api.driftCountByBucket}
       totalOpenCount={totalOpenCount}
       queueCount={api.queueCount}
+      queueRun={
+        queueRun.runHere && queueRun.run
+          ? {
+              done: queueRun.progress.done,
+              total: queueRun.progress.total,
+              running: queueRun.run.status === "running",
+            }
+          : null
+      }
       myTasksCount={showMyTasks ? myOpenCount : null}
       canEdit={canEdit}
       onCreateBucket={api.createBucket}
@@ -493,9 +529,9 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   // (a failed fetch leaves an empty bundle with api.error set; resolving
   // against that would wrongly strip a valid id — hold until Retry succeeds).
   // A fresh external open (marked by the app-chrome listener) gets the full
-  // "take me there" treatment: plan mode + tag filter cleared if it hides the
+  // "take me there" treatment: the tag filter cleared if it hides the
   // target. A mirrored id arriving back on refresh/back-forward restores the
-  // selection quietly and keeps the user's mode/filter. Scope snaps to the
+  // selection quietly and keeps the user's filter. Scope snaps to the
   // task's bucket unless the current scope already shows it. A bucket id (a
   // `project` link) scopes the rail; a stale or archived id clears quietly and
   // the backstop above picks the default (AC: no crash).
@@ -523,7 +559,6 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       onUrlTaskIdChange(null);
       return;
     }
-    if (external) setMode("plan");
     if (target.kind === "bucket") {
       setSelection(target.scope);
       // Hand the URL to the backstop's fresh pick — the mirror must not
@@ -632,26 +667,23 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     api: viewApi,
   };
 
-  // Execute mode is enclosed in the center panel (rails stay visible).
+  // The Queue is the line-up, and the run while one is on (TV-F2): Focus is a
+  // state of the Queue view, in the center panel; the rails never change.
   const body =
-    mode === "execute" ? (
-      <ExecuteView
+    selection === "today" ? (
+      <QueueRunView
+        api={viewApi}
+        queueRun={queueRun}
         workspaceId={workspaceId}
-        queuedTasks={api.queuedTasks}
+        runtime={runtime}
+        otherRunWorkspaceName={otherRunWorkspaceName}
         bucketNameById={bucketNameById}
         parentTitleFor={parentTitleFor}
         blockedNoteFor={blockedNoteFor}
-        onMarkDone={api.markDone}
-        onSkip={api.moveQueuedToEnd}
-        onAddTime={(taskId, seconds) => void api.logTimeAdjustment(taskId, seconds)}
-        onSetTime={api.setTimeSpent}
-        tagsFor={(id) => api.tagsByTask.get(id) ?? []}
-        subtasksFor={(id) => api.subtasksByParent.get(id) ?? []}
-        onToggleSubtask={api.toggleDone}
-        onExit={exitExecute}
-        loading={api.loading}
         canEdit={canEdit}
-        onCaptureToQueue={api.captureToQueue}
+        selectedTaskId={selectedTaskId}
+        onSelectTask={setSelectedTaskId}
+        onRequestCapture={openCapture}
       />
     ) : view === "board" ? (
       <TaskBoardView
@@ -851,7 +883,12 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
         buckets={buckets}
         inbox={inbox}
         defaultBucketId={captureBucketId}
-        onCreate={api.createTask}
+        // During a run, and from the Queue, a capture joins my queue (F2-5).
+        queueByDefault={runHere || selection === "today"}
+        onCreate={(fields, opts) => {
+          if (opts.queue) api.captureToQueue(fields);
+          else void api.createTask(fields);
+        }}
       />
       <DriftTriageDialog
         open={triageBucketId !== null}

@@ -677,13 +677,15 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
   );
 
   /**
-   * Capture a new task straight into my queue (Focus's empty-queue affordance,
-   * DF-11). Created in the Inbox, assigned to me, shown queued at once; once
-   * the server has it, it's added to the end of my queue.
+   * Capture a new task straight into my queue ("Add to queue…", and capture
+   * with "Add to my queue" on, TV-F2). A title alone lands in the Inbox,
+   * assigned to me; full capture fields keep their bucket and assignee. Shown
+   * queued at once; once the server has it, it's added to the end of my queue.
    */
   const captureToQueue = useCallback(
-    (title: string) => {
-      const trimmed = title.trim();
+    (input: string | Omit<NewTaskFields, "workspaceId" | "position">) => {
+      const fields = typeof input === "string" ? null : input;
+      const trimmed = (typeof input === "string" ? input : input.title).trim();
       if (!trimmed) return;
       if (!runtime || !workspaceId || !canEdit || !inbox || !userId) {
         if (!canEdit) toast.error("You don't have edit access to Tasks in this workspace.");
@@ -692,14 +694,15 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
       const rt = runtime;
       const ws = workspaceId;
       const me = userId;
-      const bucketId = inbox.id;
+      const bucketId = fields?.bucketId ?? inbox.id;
       const position = endPosition(liveTasks.filter((t) => t.bucketId === bucketId));
       const optimistic = makeTask({
+        ...fields,
         bucketId,
         title: trimmed,
         workspaceId: ws,
         position,
-        assigneeId: me,
+        assigneeId: fields && fields.assigneeId !== undefined ? fields.assigneeId : me,
       });
       optimistic.creatorId = me;
       const tempId = `tmp-${crypto.randomUUID()}`;
@@ -738,6 +741,22 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
       sendQueueOp,
     ],
   );
+
+  /**
+   * "Lined up N days ago — Keep all" (TV-F2): my line-up counts as looked at.
+   * Sent in line with the other queue ops (each answers with my whole queue).
+   */
+  const keepLineUp = useCallback(() => {
+    if (!runtime || !workspaceId || !canEdit || !userId) return;
+    const rt = runtime;
+    const ws = workspaceId;
+    const me = userId;
+    sendQueueOp(ws, me, async () => {
+      const own = await rt.focus.keepLineUp(ws);
+      // Not on the server yet: nothing changed, so answer with what it has.
+      return own ?? queueEntriesOf(await rt.tasks.listQueue(ws), me);
+    });
+  }, [runtime, workspaceId, canEdit, userId, sendQueueOp]);
 
   const patchTask = useCallback(
     (id: string, patch: Partial<Task>) => {
@@ -1573,6 +1592,9 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     queueClaims,
     /** My open queued tasks — the rail's Queue count. */
     queueCount,
+    /** My queue's rows in order (when each was queued / last moved, TV-F2). */
+    myQueueEntries,
+    keepLineUp,
     reload: load,
     createTask,
     captureToQueue,

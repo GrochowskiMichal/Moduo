@@ -27,6 +27,7 @@ import type {
 import type { NeedsAttentionItem } from "../features/contacts/needs-attention";
 import type { ReconnectItem } from "../features/contacts/reconnect";
 import type { DashboardLayout } from "../features/dashboard/engine/types";
+import type { FocusRunRuntime } from "../features/focus/run-model";
 import type {
   NoteDocPull,
   NotesImportRow,
@@ -1019,6 +1020,9 @@ export type ModuoRuntime = {
    */
   /** Chat (specs/chat.md) — Supabase-direct on both surfaces; Duo/Team/Founder workspaces. */
   chat: ChatRuntime;
+
+  /** Queue runs (TV-F2) — Supabase-direct on both surfaces. */
+  focus: FocusRunRuntime;
 
   spine: {
     /**

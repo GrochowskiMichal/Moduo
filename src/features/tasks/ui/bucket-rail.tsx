@@ -9,21 +9,17 @@ import {
   NavSectionHeader,
   restoreNavFocus,
 } from "../../../components/ui/nav-row";
-import { SegmentedControl } from "../../../components/ui/segmented-control";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import { useAuth } from "../../../providers/auth-provider";
 import { useWorkspace } from "../../../providers/workspace-provider";
+import { LiveDot } from "../../focus/ui/live-dot";
 import { ShareMenu } from "../../sharing/share-menu";
 import { TIME_BLOCK_LABELS, TIME_BLOCK_SLOTS, type TimeBlockSlot } from "../default-view";
 import { bucketSections } from "../helpers";
 import type { Bucket } from "../model";
 import { DeleteBucketDialog } from "./delete-bucket-dialog";
 
-export type TasksMode = "plan" | "execute";
-
 type Props = {
-  mode: TasksMode;
-  onModeChange: (mode: TasksMode) => void;
   selection: string; // "all" | "today" | "mine" | "inbox" | bucketId
   onSelect: (selection: string) => void;
   buckets: Bucket[];
@@ -35,6 +31,8 @@ type Props = {
   totalOpenCount: number;
   /** My open queued tasks (my personal queue, TV-D4). */
   queueCount: number;
+  /** My run in this workspace (TV-F2): the Queue row shows a live "2/7". */
+  queueRun?: { done: number; total: number; running: boolean } | null;
   /** My open assigned tasks; null hides "My tasks" (fewer than two members). */
   myTasksCount: number | null;
   canEdit: boolean;
@@ -72,8 +70,6 @@ export function parseCollapsedSections(raw: string | null): Set<string> {
 }
 
 export function BucketRail({
-  mode,
-  onModeChange,
   selection,
   onSelect,
   buckets,
@@ -83,6 +79,7 @@ export function BucketRail({
   driftCountByBucket,
   totalOpenCount,
   queueCount,
+  queueRun = null,
   myTasksCount,
   canEdit,
   onCreateBucket,
@@ -151,8 +148,6 @@ export function BucketRail({
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
-      <ModeToggle mode={mode} onModeChange={onModeChange} />
-
       <div className="pane-scroll min-h-0 flex-1 overflow-auto">
         <nav ref={nav} className="flex flex-col gap-px" aria-label="Buckets">
           <NavRow
@@ -166,10 +161,23 @@ export function BucketRail({
           <NavRow
             label="Queue"
             icon={<ListChecks aria-hidden />}
-            count={queueCount}
+            count={queueRun ? undefined : queueCount}
             countLabel={`${queueCount} queued`}
             current={selection === "today"}
             onSelect={() => onSelect("today")}
+            indicator={
+              queueRun ? (
+                <span className="flex items-center gap-1.5 font-sans text-xs tabular-nums text-foreground">
+                  {queueRun.running ? <LiveDot /> : null}
+                  <span aria-hidden>
+                    {queueRun.done}/{queueRun.total}
+                  </span>
+                  <span className="sr-only">
+                    {` · run ${queueRun.running ? "in progress" : "paused"}, ${queueRun.done} of ${queueRun.total} done`}
+                  </span>
+                </span>
+              ) : undefined
+            }
           />
           {myTasksCount !== null ? (
             <NavRow
@@ -274,31 +282,6 @@ export function BucketRail({
         onCloseAutoFocus={returnFocus(deleting?.bucket.id ?? null)}
       />
     </div>
-  );
-}
-
-// ── mode toggle ───────────────────────────────────────────────────────────────
-
-function ModeToggle({
-  mode,
-  onModeChange,
-}: {
-  mode: TasksMode;
-  onModeChange: (mode: TasksMode) => void;
-}) {
-  // Shared SegmentedControl primitive. The internal mode value stays "execute"
-  // (model-level); the label reads "Focus". TV-F2 removes the switch.
-  return (
-    <SegmentedControl
-      aria-label="Tasks mode"
-      fullWidth
-      value={mode}
-      onValueChange={(value) => onModeChange(value as TasksMode)}
-      items={[
-        { value: "plan", label: "Plan" },
-        { value: "execute", label: "Focus" },
-      ]}
-    />
   );
 }
 

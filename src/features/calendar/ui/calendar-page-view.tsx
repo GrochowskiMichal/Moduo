@@ -1187,7 +1187,10 @@ export function CalendarPageView({
         buckets={api.buckets}
         inbox={api.inbox}
         defaultBucketId={api.inbox?.id ?? null}
-        onCreate={api.createTask}
+        onCreate={(fields, opts) => {
+          if (opts.queue) api.captureToQueue(fields);
+          else void api.createTask(fields);
+        }}
       />
 
       <Dialog open={deleteEvent !== null} onOpenChange={(open) => !open && setDeleteEventId(null)}>

@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 import { attachFocusUser } from "../features/focus/engine";
+import { attachRunUser } from "../features/focus/run";
 import { attachTagUser } from "../features/tags/store";
 import { Analytics, setAnalyticsUser } from "../lib/analytics";
 import {
@@ -187,14 +188,16 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }, [rt]);
 
   // The focus session is persisted per person: resume it on sign-in, hand it
-  // back on sign-out (TV-F1). The workspace tag store starts over for another
-  // person (TV-T1). Skipped while the cached session is still loading.
+  // back on sign-out (TV-F1), with the queue run it belongs to (TV-F2). The
+  // workspace tag store starts over for another person (TV-T1). Skipped while
+  // the cached session is still loading.
   const sessionUserId = session?.user?.id ?? null;
   useEffect(() => {
     if (loading) return;
     attachFocusUser(sessionUserId);
+    attachRunUser(sessionUserId, rt);
     attachTagUser(sessionUserId);
-  }, [loading, sessionUserId]);
+  }, [loading, sessionUserId, rt]);
 
   const signOut = async () => {
     if (!rt) return;

@@ -128,6 +128,10 @@ export interface FocusRecord {
   sitMs: number;
   credits: Record<string, FocusCredit>;
   away: FocusAwayBlock[];
+  /** The end of the last stretch credited to the task as live work (a run on
+   *  another device that took control at T gets back what was credited after
+   *  T: TV-F2). Missing on records written before. */
+  creditedTo?: number;
 }
 
 export interface FocusAwaySummary {
@@ -162,6 +166,8 @@ export interface FocusSession {
   away: FocusAwaySummary | null;
   /** Saving some tracked time failed and is being retried: "not saved yet" (F1-7). */
   unsaved: boolean;
+  /** Length of the current pomodoro phase, seconds (TV-F2: the run's shared record). */
+  phaseSeconds: number;
 }
 
 export const REST_SESSION: FocusSession = {
@@ -181,6 +187,7 @@ export const REST_SESSION: FocusSession = {
   bigClock: 0,
   away: null,
   unsaved: false,
+  phaseSeconds: 0,
 };
 
 export function blankRecord(now: number): FocusRecord {
@@ -333,16 +340,16 @@ export function observe(rec: FocusRecord, now: number, p: FocusRhythm): Observed
     // The wall clock moved backwards: keep what was seen, restart the stretch here.
     const seen = creditRun(rec, runUntil(rec, rec.seenAt, p, false), rec.seenAt);
     const restarted = seen.rec.since === null ? seen.rec : { ...seen.rec, since: now };
-    return { rec: { ...restarted, seenAt: now }, liveEnds: seen.ends };
+    return { rec: { ...restarted, seenAt: now, creditedTo: rec.seenAt }, liveEnds: seen.ends };
   }
   if (now - rec.seenAt <= AWAY_GAP_MS) {
     const live = creditRun(rec, runUntil(rec, now, p, false), now);
-    return { rec: { ...live.rec, seenAt: now }, liveEnds: live.ends };
+    return { rec: { ...live.rec, seenAt: now, creditedTo: now }, liveEnds: live.ends };
   }
   // Away. Credit up to the last look, then replay the gap with its work held.
   const before = creditRun(rec, runUntil(rec, rec.seenAt, p, false), rec.seenAt);
   const gap = runUntil(before.rec, now, p, true);
-  let next: FocusRecord = { ...gap.rec, seenAt: now };
+  let next: FocusRecord = { ...gap.rec, seenAt: now, creditedTo: rec.seenAt };
   const held = rec.task ? gap.workMs : 0;
   if (held > 0 || gap.ends.length > 0) {
     next = {
@@ -459,6 +466,88 @@ export function previewInterval(r: FocusRecord, p: FocusRhythm): FocusRecord {
   return { ...r, phaseMs: len, phaseDoneMs: Math.min(r.phaseDoneMs, len) };
 }
 
+/** Set the run's mode: pomodoro or stopwatch (a run picks it once, TV-F2). */
+export function setPomodoro(r: FocusRecord, on: boolean, now: number, p: FocusRhythm): FocusRecord {
+  return r.pomodoro === on ? r : togglePomodoro(r, now, p);
+}
+
+/** A run as the shared record has it (focus_runs, TV-F2), read at `now`. */
+export interface FocusRunClock {
+  task: FocusTaskRef | null;
+  pomodoro: boolean;
+  running: boolean;
+  phase: FocusPhase;
+  longBreak: boolean;
+  blocks: number;
+  /** The current phase's length (pomodoro). */
+  phaseMs: number;
+  /** How much of the current phase has run. */
+  phaseDoneMs: number;
+  /** Focused time in the run so far. */
+  sitMs: number;
+}
+
+/**
+ * Take over a run another device was running (TV-F2: "takes control when you
+ * act on it"): this device's session becomes the run as the shared record
+ * says it is now, rhythm and all, and its clock starts from here. Unsaved
+ * credits stay; an away block from before is dropped (that time was the other
+ * device's).
+ */
+export function adoptSession(
+  r: FocusRecord,
+  run: FocusRunClock,
+  now: number,
+  p: FocusRhythm,
+): FocusRecord {
+  const phaseMs = run.pomodoro ? Math.max(MINUTE_MS, run.phaseMs) : workLength(p);
+  return {
+    ...r,
+    task: run.task,
+    tracking: true,
+    pomodoro: run.pomodoro,
+    phase: run.pomodoro ? run.phase : "work",
+    longBreak: run.pomodoro && run.phase === "break" && run.longBreak,
+    blocks: Math.max(0, Math.floor(run.blocks)),
+    phaseMs,
+    phaseDoneMs: run.pomodoro ? Math.min(phaseMs, Math.max(0, run.phaseDoneMs)) : 0,
+    since: run.running ? now : null,
+    seenAt: now,
+    creditedTo: now,
+    sitMs: Math.max(0, run.sitMs),
+    away: [],
+  };
+}
+
+/**
+ * Another device took control of the run at `at` (TV-F2): stop here without
+ * crediting twice. Work credited to the bound task after `at` is taken back
+ * from what isn't saved yet (that time was counted on the other device), held
+ * away time is dropped, and the session ends. Earlier time stays to be saved.
+ */
+export function relinquishSession(
+  r: FocusRecord,
+  at: number,
+  now: number,
+  p: FocusRhythm,
+): FocusRecord {
+  const task = r.task;
+  let credits = r.credits;
+  const credit = task ? r.credits[task.id] : undefined;
+  if (task && credit) {
+    const creditedTo = r.creditedTo ?? r.seenAt;
+    const overlap = Math.min(credit.ms, Math.max(0, creditedTo - at));
+    if (overlap > 0) {
+      const next = { ...credit, ms: credit.ms - overlap };
+      credits = { ...credits, [task.id]: next };
+      if (next.ms <= 0 && next.inFlightMs <= 0) {
+        credits = Object.fromEntries(Object.entries(credits).filter(([id]) => id !== task.id));
+      }
+    }
+  }
+  return { ...stopSession({ ...r, credits }, now, p), task: null };
+}
+
 /**
  * Answer "while you were away":
  *  - keep: the held work time goes to the task it accrued on;
@@ -482,6 +571,7 @@ export function resolveAway(
         ...next,
         credits: addCredit(next.credits, block.taskId, block.workspaceId, block.workMs, now),
         sitMs: next.sitMs + block.workMs,
+        creditedTo: Math.max(next.creditedTo ?? next.seenAt, block.to),
       };
     }
   } else if (choice === "break" && r.tracking && r.pomodoro) {
@@ -706,6 +796,7 @@ export function snapshotOf(rec: FocusRecord, now: number, p: FocusRhythm): Focus
     bigClock: r.pomodoro ? pomoLeft : sitElapsed,
     away: awaySummary(r.away),
     unsaved: hasFailedSaves(r),
+    phaseSeconds: Math.round(r.phaseMs / 1000),
   };
 }
 
@@ -738,6 +829,7 @@ export function sameSession(a: FocusSession, b: FocusSession): boolean {
     a.sitElapsed === b.sitElapsed &&
     a.accrued === b.accrued &&
     a.unsaved === b.unsaved &&
+    a.phaseSeconds === b.phaseSeconds &&
     sameAway(a.away, b.away)
   );
 }
@@ -796,6 +888,7 @@ const recordSchema = z.object({
       parked: z.boolean(),
     }),
   ),
+  creditedTo: z.number().optional(),
 });
 
 /** Parse a stored record; anything malformed or from another version is null. */

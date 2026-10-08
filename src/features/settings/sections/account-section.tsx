@@ -13,6 +13,7 @@ import { validateImageFile } from "../../branding/image-asset";
 import { ensureProfileAvatar } from "../../branding/profile-avatar";
 import { clearProfileAvatar, uploadProfileAvatar } from "../../branding/upload-image";
 import { forgetFocusUser } from "../../focus/engine";
+import { forgetRunUser } from "../../focus/run";
 import { notifyProfileUpdated, writeStoredAvatar } from "../../profile/profile-storage";
 import { isPasswordProvider, providerLabel, validateNewPassword } from "../account";
 import { DANGER_ZONE_COPY, finishAccountDeletion, matchesDeleteConfirm } from "../delete-account";
@@ -106,6 +107,7 @@ export function AccountSection() {
           if (!userId) return;
           void stopAnalyticsForDeletedAccount(userId);
           forgetFocusUser(userId);
+          forgetRunUser(userId);
         },
         goToSignInWithNotice: () => navigate({ to: "/auth", search: { deleted: 1 } }),
         signOut,
