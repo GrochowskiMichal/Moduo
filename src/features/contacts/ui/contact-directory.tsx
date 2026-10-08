@@ -31,6 +31,7 @@ import { IconButton } from "@/components/ui/icon-button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { SegmentedControl } from "@/components/ui/segmented-control";
+import { SELECTED_ROW } from "@/components/ui/selection";
 import { Toolbar } from "@/components/ui/toolbar";
 import { entityDrag } from "@/lib/drag-payload";
 import { cn } from "@/lib/utils";
@@ -104,15 +105,13 @@ function DirectoryRow({
         // scroll-mt keeps a keyboard-highlighted row clear of the sticky
         // letter header when scrolled into view.
         "group relative flex w-full scroll-mt-6 items-center gap-2.5 rounded-md px-2 py-1.5",
-        selected ? "bg-(--selected-bg)" : highlighted ? "bg-accent/50" : "hover:bg-accent/60",
+        // Tint-only selection (R5); the keyboard highlight is the current
+        // option (active step), pointer hover the lighter hover step.
+        selected ? SELECTED_ROW : highlighted ? "bg-state-active" : "hover:bg-state-hover",
         dragHandleProps && "cursor-grab active:cursor-grabbing",
         dragging && "opacity-50",
       )}
     >
-      {/* selected marker — the app-wide R5 recipe: quiet accent bar + tint */}
-      {selected ? (
-        <span className="absolute inset-y-1 left-0.5 w-0.5 rounded-full bg-primary" aria-hidden />
-      ) : null}
       <button
         type="button"
         onClick={onSelect}

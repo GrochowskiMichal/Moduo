@@ -258,7 +258,7 @@ function highlight(text: string, q: string): ReactNode {
     <>
       {start > 0 ? "…" : ""}
       {text.slice(start, i)}
-      <mark className="rounded-sm bg-(--selected-bg) text-foreground">
+      <mark className="rounded-sm bg-primary/14 text-foreground">
         {text.slice(i, i + q.length)}
       </mark>
       {text.slice(i + q.length, i + q.length + 120)}

@@ -169,7 +169,7 @@ export function EmailConnectDialog({ open, onOpenChange, isReconnect, onConnecte
                   className={
                     "rounded-md px-3 py-1.5 font-sans text-sm font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background " +
                     (provider === tab.id
-                      ? "bg-card text-foreground"
+                      ? "bg-control-raised text-foreground shadow-control-raised"
                       : "text-muted-foreground hover:text-foreground")
                   }
                 >

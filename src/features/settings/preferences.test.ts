@@ -30,6 +30,7 @@ describe("DEFAULT_PREFERENCES", () => {
       notifications: {
         mention: true,
         assigned: true,
+        completed: true,
         dueFollowUp: true,
         unblocked: true,
         overdueTasks: false,
@@ -61,10 +62,12 @@ describe("sanitizePreferences", () => {
       reopenLastWorkspace: false,
       soundEnabled: false,
       motion: "reduced",
-      // overdueTasks absent from input → coerced to its opt-in default (off).
+      // overdueTasks absent from input → coerced to its opt-in default (off);
+      // completed (added in TV-D1) absent → on, like every other mute.
       notifications: {
         mention: false,
         assigned: true,
+        completed: true,
         dueFollowUp: false,
         unblocked: true,
         overdueTasks: false,
@@ -97,6 +100,7 @@ describe("sanitizePreferences", () => {
     ).toEqual({
       mention: false,
       assigned: true,
+      completed: true,
       dueFollowUp: true,
       unblocked: false,
       overdueTasks: false,
@@ -114,6 +118,7 @@ describe("notificationTypeForOp", () => {
   it("maps each quiet-set op to its governing toggle", () => {
     expect(notificationTypeForOp("comments.add")).toBe("mention");
     expect(notificationTypeForOp("tasks.assigned")).toBe("assigned");
+    expect(notificationTypeForOp("tasks.completed")).toBe("completed");
     expect(notificationTypeForOp("email.snooze_due")).toBe("dueFollowUp");
     expect(notificationTypeForOp("email.follow_up_due")).toBe("dueFollowUp");
     expect(notificationTypeForOp("tasks.unblocked")).toBe("unblocked");
@@ -131,12 +136,14 @@ describe("isNotificationEnabled", () => {
     const prefs = {
       mention: true,
       assigned: false,
+      completed: false,
       dueFollowUp: true,
       unblocked: false,
       overdueTasks: false,
     };
     expect(isNotificationEnabled("comments.add", prefs)).toBe(true);
     expect(isNotificationEnabled("tasks.assigned", prefs)).toBe(false);
+    expect(isNotificationEnabled("tasks.completed", prefs)).toBe(false);
     expect(isNotificationEnabled("email.follow_up_due", prefs)).toBe(true);
     expect(isNotificationEnabled("tasks.unblocked", prefs)).toBe(false);
   });
@@ -145,6 +152,7 @@ describe("isNotificationEnabled", () => {
     const allOff = {
       mention: false,
       assigned: false,
+      completed: false,
       dueFollowUp: false,
       unblocked: false,
       overdueTasks: false,

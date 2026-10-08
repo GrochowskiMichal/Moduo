@@ -12,6 +12,7 @@ import { useAuth } from "../../../providers/auth-provider";
 import { validateImageFile } from "../../branding/image-asset";
 import { ensureProfileAvatar } from "../../branding/profile-avatar";
 import { clearProfileAvatar, uploadProfileAvatar } from "../../branding/upload-image";
+import { forgetFocusUser } from "../../focus/engine";
 import { notifyProfileUpdated, writeStoredAvatar } from "../../profile/profile-storage";
 import { isPasswordProvider, providerLabel, validateNewPassword } from "../account";
 import { matchesDeleteConfirm } from "../delete-account";
@@ -99,8 +100,12 @@ export function AccountSection() {
       }
       // Deleted — the session is now invalid. Sign out locally and land on /auth. Analytics
       // stops first: signing out tracks `app_signed_out`, which would bring back the
-      // PostHog person the server just erased (PRIV-3).
-      if (userId) void stopAnalyticsForDeletedAccount(userId);
+      // PostHog person the server just erased (PRIV-3). This device's focus session for
+      // the account (task titles, unsaved time) is erased too.
+      if (userId) {
+        void stopAnalyticsForDeletedAccount(userId);
+        forgetFocusUser(userId);
+      }
       await signOut();
       await navigate({ to: "/auth" });
     } catch (err) {
