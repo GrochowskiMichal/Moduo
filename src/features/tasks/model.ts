@@ -249,10 +249,10 @@ export function isDrifted(
 }
 
 /**
- * Who a task's notifications are for: its assignee, else its creator when the
- * creator is known. Mirrors the SQL that targets unblocked and comment
- * notifications (tasks_notify_spine, comments_op_add); the bell's overdue list
- * uses it too.
+ * Who a task's attention goes to: its assignee, else its creator when the
+ * creator is known. Mirrors the SQL that targets unblocked notifications
+ * (tasks_notify_spine); the bell's overdue list uses it. Comments notify the
+ * assignee and the creator both (comments_op_add).
  */
 export function taskAttentionUserId(
   task: Pick<Task, "assigneeId" | "creatorId" | "creatorUnknown">,

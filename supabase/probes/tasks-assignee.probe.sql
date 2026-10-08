@@ -439,6 +439,32 @@ DO $$ BEGIN
   RAISE NOTICE 'PASS the authenticated role runs tasks_op_assign end to end (RLS, revoked helpers)';
 END $$;
 
+-- 3d. A no-op assignment still needs access to the task (the row goes back to
+-- the caller), and a create for someone else says it came from nobody.
+DO $$
+DECLARE
+  v_msg text;
+  a public.module_activity;
+BEGIN
+  PERFORM probe.as_user('A');
+  PERFORM probe.new_task('T20 Ada private', 'A', 'PA');
+  PERFORM probe.as_user('B');
+  BEGIN
+    PERFORM public.tasks_op_assign(probe.id('W'), probe.id('T20 Ada private'), probe.id('A'));
+  EXCEPTION WHEN OTHERS THEN v_msg := SQLERRM;
+  END;
+  ASSERT v_msg = 'You don''t have access to this task.',
+    '3d: a no-op returned a task Bea can''t see: ' || coalesce(v_msg, 'no error');
+
+  PERFORM probe.as_user('A');
+  PERFORM probe.new_task('T21 Ada for Bea', 'B');
+  a := probe.last_notified('tasks.assigned', 'T21 Ada for Bea');
+  ASSERT a.payload ? 'from' AND a.payload -> 'from' = 'null'::jsonb, '3d: a create''s row has no from: null';
+  ASSERT a.payload ->> 'to' = probe.id('B')::text AND NOT (a.payload ->> 'self')::boolean, '3d: create row to/self';
+  RAISE NOTICE 'PASS a no-op assignment checks access; assignment rows always carry from/to';
+END;
+$$;
+
 -- ── 4. MCP: an API key acts as its creator (D1-9 server side) ────────────────
 
 BEGIN;
@@ -458,6 +484,12 @@ BEGIN
   ASSERT NOT EXISTS (SELECT 1 FROM public.module_activity a
                      WHERE a.op = 'tasks.assigned' AND a.entity_id = probe.id('T17 unassigned')
                        AND a.actor_type <> 'api_key'), '4: a key write was attributed to someone else';
+  -- The key handing the task to its creator is an assignment in the trail,
+  -- not "took this".
+  ASSERT EXISTS (SELECT 1 FROM public.module_activity a
+                 WHERE a.op = 'tasks.assigned' AND a.entity_id = probe.id('T17 unassigned')
+                   AND a.payload ->> 'to' = probe.id('A')::text
+                   AND NOT (a.payload ->> 'self')::boolean), '4: the key''s assignment of its creator reads as self';
   RAISE NOTICE 'PASS API key: assigns with the same check; assigning its creator is silent; attributed to the key';
 END;
 $$;
@@ -563,7 +595,7 @@ BEGIN
 END;
 $$;
 
--- ── 6. Unblocked and comments go to the assignee, else the creator (D1-6) ────
+-- ── 6. Unblocked: the assignee, else the creator; comments: both (D1-6) ──────
 
 DO $$
 DECLARE

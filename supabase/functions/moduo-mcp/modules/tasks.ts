@@ -31,6 +31,10 @@ import {
 type Row = Record<string, any>;
 
 const OPEN_STATUSES = ["todo", "in_progress"] as const;
+// The creator's "completed" notification (TV-D1). The trail already says so
+// through tasks.set_status, so agents don't get it twice (like the app's
+// isTrailEntry).
+const NOTIFICATION_ONLY_OP = "tasks.completed";
 
 function str(args: Row, name: string, required = true): string {
   const v = args?.[name];
@@ -340,6 +344,7 @@ export const tasksConnectorModule: ConnectorModule = {
             .select("op, actor_type, actor_label, payload, created_at")
             .eq("workspace_id", ctx.key.workspaceId).eq("module", "tasks")
             .eq("entity_type", "task").eq("entity_id", taskId)
+            .neq("op", NOTIFICATION_ONLY_OP)
             .order("created_at", { ascending: false }).limit(10),
         );
         return {
@@ -373,6 +378,7 @@ export const tasksConnectorModule: ConnectorModule = {
         let query = ctx.db.from("module_activity")
           .select("entity_type, entity_id, op, actor_type, actor_label, payload, created_at")
           .eq("workspace_id", ctx.key.workspaceId).eq("module", "tasks")
+          .neq("op", NOTIFICATION_ONLY_OP)
           .order("created_at", { ascending: false });
         const taskId = str(args, "task_id", false);
         if (taskId) {

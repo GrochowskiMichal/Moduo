@@ -45,6 +45,12 @@ BEGIN
   IF to_regprocedure('public.account_erase_workspace_data(uuid, boolean)') IS NULL THEN
     RAISE EXCEPTION 'PRIV-2a (20261008013000_account_erase_workspace_data) must be applied first.';
   END IF;
+  -- §8 is PR #247's comments_op_add, which writes comments.author_kind; on a
+  -- database without that column every comment would fail.
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                 WHERE table_schema = 'public' AND table_name = 'comments' AND column_name = 'author_kind') THEN
+    RAISE EXCEPTION 'PR #247 (comments.author_kind, key_writes_act_as_creator) must be applied first.';
+  END IF;
 END;
 $$;
 
@@ -397,6 +403,7 @@ AS $$
 DECLARE
   v_blocked RECORD;
   v_actor uuid := public.perm_actor_id();
+  v_key uuid := public.module_api_key_id();
   v_assigned boolean := false;
   v_from uuid;
 BEGIN
@@ -435,9 +442,14 @@ BEGIN
           'mentioned_user_ids',
             CASE WHEN NEW.assignee_id IS NOT NULL AND NEW.assignee_id IS DISTINCT FROM v_actor
                  THEN jsonb_build_array(NEW.assignee_id::text) END,
-          'title', NEW.title,
-          'from', v_from))
-        || jsonb_build_object('to', NEW.assignee_id, 'self', NEW.assignee_id IS NOT DISTINCT FROM v_actor));
+          'title', NEW.title))
+        -- from/to stay in when null (null = Unassigned). "self" is a person
+        -- taking the task; an API key assigning its creator reads as an
+        -- assignment.
+        || jsonb_build_object(
+             'from', v_from,
+             'to', NEW.assignee_id,
+             'self', v_key IS NULL AND NEW.assignee_id IS NOT DISTINCT FROM v_actor));
     EXCEPTION WHEN OTHERS THEN
       -- generation is a side-effect; it must never break completing/editing a task.
       -- Surface a WARNING (does not abort the txn) so a silent failure is debuggable.
@@ -525,7 +537,7 @@ CREATE TRIGGER tasks_notify_spine
   AFTER INSERT OR UPDATE ON public.tasks
   FOR EACH ROW EXECUTE FUNCTION public.tasks_notify_spine();
 
--- ── 8. Comment notifications: the assignee, else the creator ─────────────────
+-- ── 8. Comment notifications: the assignee, the creator, earlier commenters ──
 
 CREATE OR REPLACE FUNCTION public.comments_op_add(p_workspace_id uuid, p_entity_type text, p_entity_id uuid, p_body text, p_mentioned_user_ids uuid[] DEFAULT '{}'::uuid[], p_entity_label text DEFAULT NULL::text, p_entity_icon text DEFAULT NULL::text)
  RETURNS comments
@@ -1143,6 +1155,11 @@ BEGIN
   -- Already so: nothing to check or write (a task can stay with someone who
   -- has since left).
   IF t.assignee_id IS NOT DISTINCT FROM p_assignee_id THEN
+    -- The guard doesn't check access to this task, and the row goes back to
+    -- the caller, so check it as the write would have.
+    IF NOT public.can_access('task', t.id, 'edit', public.perm_actor_id()) THEN
+      RAISE EXCEPTION 'You don''t have access to this task.' USING ERRCODE = '42501';
+    END IF;
     RETURN t;
   END IF;
   -- NULL unassigns. Anyone else has to be a member who can work on tasks.

@@ -1,6 +1,6 @@
 # Manual test checklist — TV-D1 Safer saves + assignee data
 
-> Generated 2026-10-08 · branch `t/maciej/tv-d1-safer-saves-assignee` · **Live-verified:** partial. The UI was driven in a temporary harness (real detail panel, list rows and capture modal on an in-memory runtime): every picker offers Unassigned and disables view-only people, an edit sent only `{priority}`, assigning went through `tasks_op_assign`, "Created by …" showed and hid as expected. The SQL was round-tripped on a local copy of production's schema (`supabase/probes/tasks-assignee.*`, 24 checks). Signed-in runs against the real backend are below.
+> Generated 2026-10-08 · branch `t/maciej/tv-d1-safer-saves-assignee` · **Live-verified:** partial. The UI was driven in a temporary harness (real detail panel, list rows and capture modal on an in-memory runtime): every picker offers Unassigned and disables view-only people, an edit sent only `{priority}`, assigning went through `tasks_op_assign`, "Created by …" showed and hid as expected. The SQL was round-tripped on a local copy of production's schema (`supabase/probes/tasks-assignee.*`, 25 checks). Signed-in runs against the real backend are below.
 > Needs two accounts in one workspace (you and a teammate, both able to edit tasks) and, for the old-build checks, a desktop build from before this branch.
 
 ## Saves that don't clobber (D1-1)
@@ -35,5 +35,6 @@
 
 ## Known gaps / not-yet-testable
 - `moduo-mcp` must not be redeployed from this branch until PR #247 is merged into `maciej`: production runs #247's connector (v21), and this branch doesn't have it. Deploy from `maciej` once both are in.
+- An old desktop build can't assign a task back to the person who created it (it already shows them as the assignee). Use the web build or update the desktop build.
 - An old-model "Assign to → Me" pickup left no record, so such a task may say it was created by whoever picked it up.
 - PRIV-2 removes a departing member's assignments (AC9); tasks-v2 imagined them staying as "Former member". The live PRIV-2 rule is kept; the UI still labels a former member if one appears.
