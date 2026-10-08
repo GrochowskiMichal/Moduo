@@ -1,6 +1,6 @@
 # Spec: Design-system state layer + shared list primitives (cross-module)
 
-> Status: **DS-1 built 2026-10-08** (`t/maciej/ds-1-state-tokens`, PR #254) · DS-2 onward follow in order · Owner: maciej · Source: [`.design/tasks-dogfood/REVIEW.md`](../.design/tasks-dogfood/REVIEW.md) §UI review U1–U5, the comp [`.design/tasks-dogfood/ui-proposal.html`](../.design/tasks-dogfood/ui-proposal.html) · Rules: [`docs/DESIGN_RULES.md`](../docs/DESIGN_RULES.md) (R5 changes here), [`docs/DESIGN_SYSTEM.md`](../docs/DESIGN_SYSTEM.md) · First consumer: [`tasks-v2.md`](./tasks-v2.md)
+> Status: **DS-1 + DS-2 built 2026-10-08** (PRs #254, #275) · DS-3/DS-4 next · Owner: maciej · Source: [`.design/tasks-dogfood/REVIEW.md`](../.design/tasks-dogfood/REVIEW.md) §UI review U1–U5, the comp [`.design/tasks-dogfood/ui-proposal.html`](../.design/tasks-dogfood/ui-proposal.html) · Rules: [`docs/DESIGN_RULES.md`](../docs/DESIGN_RULES.md) (R5 changes here), [`docs/DESIGN_SYSTEM.md`](../docs/DESIGN_SYSTEM.md) · First consumer: [`tasks-v2.md`](./tasks-v2.md)
 
 ## Scope
 
@@ -26,7 +26,7 @@ This spec adds a state layer of tokens, fixes the primitives that inherit the pr
   Distinct on all 6 shades, all 8 accents, light theme (structural), and every density, radius and font.
 - **Raised controls** — the active segment of a segmented control or tab list is *lighter* than its track on dark (white + shadow on light). It reads at a glance in the icon-only view switcher.
 - **Scrollbars** — thin and token-coloured everywhere by default, no opt-in needed. `.no-scrollbar` hides them where a design wants none. Old WebKit gets the same look.
-- **Selection** — a tint, optionally with a 1 px inset hairline in the accent (designer picks in DS-2; the comp has both). **No bars anywhere.** The chat "attention" bar and the calendar focus edge are not selection and stay.
+- **Selection** — a tint, optionally with a 1 px inset hairline in the accent (designer picks in DS-2; the comp has both). *As built (DS-2):* list rows ship tint + hairline behind one token (`--state-selected-edge`; `transparent` = tint only); cards and bordered options always carry the ring; rail/nav "current" items are the neutral `--state-active`, not selection. **No bars anywhere.** The chat "attention" bar and the calendar focus edge are not selection and stay.
 - **NavRow** (sidebar row for every module):
   - **anatomy:** icon/dot slot · label · trailing slot;
   - **count ⇄ ⋯ swap:** the count sits flush right; on hover / keyboard focus / open menu it fades out and **⋯** fades in *in the same slot*, so nothing reflows (R6). ⋯ is also reachable by right-click and keyboard;

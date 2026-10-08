@@ -1,5 +1,6 @@
 import { Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { SELECTED_OPTION } from "@/components/ui/selection";
 import { Button } from "../../../components/ui/button";
 import { Checkbox } from "../../../components/ui/checkbox";
 import {
@@ -215,7 +216,7 @@ export function BookingLinkDialog({
                         }
                         className={
                           on
-                            ? "rounded-full border border-(--selected-border) bg-(--selected-bg) px-2.5 py-1 text-xs text-foreground"
+                            ? `rounded-full border px-2.5 py-1 text-xs text-foreground ${SELECTED_OPTION}`
                             : "rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground"
                         }
                       >
@@ -325,7 +326,7 @@ export function BookingLinkDialog({
                           choice.disabled
                             ? "text-muted-foreground"
                             : "cursor-pointer text-foreground",
-                          draft.video === choice.id && "bg-[var(--selected-bg)]",
+                          draft.video === choice.id && "bg-state-selected",
                         )}
                       >
                         <RadioGroupItem

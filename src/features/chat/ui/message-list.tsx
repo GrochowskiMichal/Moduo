@@ -198,7 +198,7 @@ export function MessageList({
           if (row.kind === "new") {
             return (
               <div key={row.key} data-new-marker className="flex items-center gap-2 py-1">
-                <span className="h-px flex-1 bg-(--selected-border)/60" />
+                <span className="h-px flex-1 bg-primary/60" />
                 <span className="text-2xs font-medium text-foreground">
                   New<span className="sr-only"> messages below</span>
                 </span>

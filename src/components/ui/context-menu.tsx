@@ -16,7 +16,7 @@ const contentBase = cn(
 const itemBase = cn(
   "relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-popover-foreground",
   "outline-none select-none transition-colors",
-  "focus:bg-accent focus:text-accent-foreground",
+  "focus:bg-state-active focus:text-foreground",
   "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
   "data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive/10 data-[variant=destructive]:focus:text-destructive",
   "[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
@@ -67,7 +67,7 @@ function ContextMenuSubTrigger({
       className={cn(
         itemBase,
         inset && "pl-8",
-        "data-[state=open]:bg-accent data-[state=open]:text-accent-foreground",
+        "data-[state=open]:bg-state-active data-[state=open]:text-foreground",
         className,
       )}
       {...props}

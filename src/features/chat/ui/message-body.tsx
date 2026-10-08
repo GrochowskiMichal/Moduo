@@ -69,8 +69,8 @@ function renderInline(nodes: Inline[], ctx: Ctx, keyPrefix: string): ReactNode[]
             className={cn(
               "inline rounded-sm px-0.5 font-medium transition-colors",
               isSelf
-                ? "bg-(--selected-bg) text-foreground"
-                : "bg-muted text-foreground hover:bg-accent",
+                ? "bg-primary/14 text-foreground"
+                : "bg-muted text-foreground hover:bg-state-active",
             )}
           >
             @{person?.name ?? "former member"}
@@ -79,10 +79,7 @@ function renderInline(nodes: Inline[], ctx: Ctx, keyPrefix: string): ReactNode[]
       }
       case "channel":
         return (
-          <span
-            key={key}
-            className="rounded-sm bg-(--selected-bg) px-0.5 font-medium text-foreground"
-          >
+          <span key={key} className="rounded-sm bg-primary/14 px-0.5 font-medium text-foreground">
             @channel
           </span>
         );
