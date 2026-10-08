@@ -1,5 +1,7 @@
 # Entire.io — agent playbook
 
+> **Since 2026-10-07 the repo is public, so checkpoints are local-only.** `.entire/settings.json` sets `push_sessions: false`, the 79 checkpoint refs that had been pushed were deleted from GitHub (all kept locally), and `guard-git.sh` blocks any push of `refs/entire/*`. `entire search`, `entire why` and `entire checkpoint explain` still work on each machine. To share checkpoints again, point Entire at a **private** repo: `entire configure --project --checkpoint-remote github:<owner>/<private-repo>`, then re-enable pushing.
+
 Entire captures agent sessions and links them to git commits (checkpoints). The CLI is local; [entire.io](https://entire.io) is the browser. This repo is enabled (`entire status`).
 
 ## Why it matters here

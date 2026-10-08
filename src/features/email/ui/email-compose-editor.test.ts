@@ -8,8 +8,8 @@ import { $generateHtmlFromNodes, $generateNodesFromDOM } from "@lexical/html";
 import { AutoLinkNode, LinkNode } from "@lexical/link";
 import { ListItemNode, ListNode } from "@lexical/list";
 import { HeadingNode, QuoteNode } from "@lexical/rich-text";
-import { $createParagraphNode, $getRoot, $insertNodes } from "lexical";
 import { describe, expect, it } from "@rstest/core";
+import { $createParagraphNode, $getRoot, $insertNodes } from "lexical";
 
 function roundTrip(html: string): { html: string; text: string } {
   const editor = createHeadlessEditor({
