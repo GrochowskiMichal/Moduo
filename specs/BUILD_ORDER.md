@@ -6,6 +6,8 @@
 > **How `/s3` uses this:** at session end it reconciles this file (ticks any block completed that session) and syncs each spec's `Status:` line.
 > **Invariant:** every block's dependencies appear **above** it, so strict top-to-bottom is always a valid order. Items at the same depth with disjoint deps may be built in parallel/any order.
 
+**Focus:** Tasks (TV-*, AT-*, and the DS-* blocks they need) · the website (moduo.app, PRs into `prod-landing`: BRAND-4, PRIV-2d) · transactional email templates (TX-*, plus BRAND-1's email logos), **not** the email module · set by Maciej 2026-10-08 — the designer's current focus area, edited by Mike or Maciej. `/s2` and `/s3` turn a 🔎 Found item into a chip or next-session suggestion only when it falls inside this; while it's unset, none do.
+
 Legend: `[ ]` not started · `[~]` in progress · `[x]` done (date + branch in the trailing note).
 
 > **⚠ Reading the trailing notes: "migration deploy-ready but unapplied" is HISTORY, not current state.**
@@ -107,15 +109,11 @@ _Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
 > - **DoR status:** ✅ means ready now; the rest follow their dependencies. All designer calls are answered (2026-10-08).
 > - **Order:** top to bottom, every dep listed above its dependents. The lane table below shows what can run at once.
 
-- [ ] **TV-Q1 — Quick fixes** ✅ · tasks-v2 block 1 · deps: — · lane tasks-ui · ⌘K/⌘⇧K no longer swallowed by the list, DnD activator fix, no bucket pill where implied, delete-bucket confirm + Undo, shortcut sheet ⌘1–7
-- [ ] **TV-F1 — Focus engine (wall-clock, persisted, away, notifications)** ✅ · tasks-v2 block 2 · deps: — · lane focus
-- [ ] **TV-D1 — Safer saves + assignee data** ✅ · tasks-v2 block 3 · deps: — · lane data · migration (expand only; shims for old desktop builds) — round-trip, then apply to prod in-session
 - [ ] **AT-1 — Attachments storage, limits, trash** ✅ · attachments block 1 · deps: — · lane attachments · migration + `purge-deleted` Edge Function; confirm the hosted upload limit ≥ 500 MB
-- [ ] **DS-2 — Primitives on the state layer + tint-only selection** · design-state-layer block 2 · deps: DS-1 · lane design · cross-module visual pass (all modules)
 - [ ] **TV-D2 — Personal queue (data)** · tasks-v2 block 4 · deps: TV-D1 · lane data · migration + legacy op shims + MCP queue tools
 - [ ] **TV-D3 — Time entries** · tasks-v2 block 5 · deps: TV-D1, TV-F1 · lane data · migration + legacy backfill/shim
 - [ ] **TV-T1 — Shared tag store** · tasks-v2 block 6 · deps: TV-D1 · lane data
-- [ ] **DS-3 — NavRow + MetaCount (+ Tasks rail)** · design-state-layer block 3 · deps: DS-2, TV-Q1 · lane design
+- [ ] **DS-3 — NavRow + MetaCount (+ Tasks rail)** · design-state-layer block 3 · deps: DS-2, TV-Q1 · lane design · also: return focus to the rail when a row menu's dialog closes (TV-Q1's delete-bucket confirm leaves it on the page body, like notes' Delete forever)
 - [ ] **DS-4 — FilterBar/Chip, DisplayMenu, drag visuals, view-prefs helper** · design-state-layer block 4 · deps: DS-2 · lane design
 - [ ] **TV-D4 — Queue & assignee in the UI (claims, My tasks)** · tasks-v2 block 7 · deps: TV-D2, DS-3 · lane tasks-ui
 - [ ] **TV-D5 — Live updates (Realtime)** · tasks-v2 block 8 · deps: TV-D2 · lane data · adds tables to the `supabase_realtime` publication
@@ -126,7 +124,7 @@ _Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
 - [ ] **TV-U2 — Toolbar, Filter, Display, search** · tasks-v2 block 13 · deps: DS-4, TV-U1, TV-D4 · lane tasks-ui
 - [ ] **TV-U4 — Drag and drop (reorder vs nest, sidebar drops, cross-group)** · tasks-v2 block 14 · deps: TV-U1, DS-4, TV-D4 · lane tasks-ui
 - [ ] **TV-U5 — Multi-select, bulk actions, keyboard, `?` sheet** · tasks-v2 block 15 · deps: TV-U4 · lane tasks-ui
-- [ ] **TV-U6 — Sidebar: bucket colours/reorder, archive, delete-with-tasks, Recently deleted** · tasks-v2 block 16 · deps: DS-3, TV-D4, AT-1 · lane tasks-ui · migration (`buckets.color/archived_at`, batch ids)
+- [ ] **TV-U6 — Sidebar: bucket colours/reorder, archive, delete-with-tasks, Recently deleted** · tasks-v2 block 16 · deps: DS-3, TV-D4, AT-1 · lane tasks-ui · migration (`buckets.color/archived_at`, batch ids) · note: TV-Q1 hides a deleted bucket for the whole session (`src/features/tasks/hidden-buckets.ts`), so a Restore must call `unhideBucket` or rework that store
 - [ ] **TV-U7 — Capture v2 (`#tag`, pills, queue switch, filter seed)** · tasks-v2 block 17 · deps: DS-2, TV-T1, TV-D2, TV-U2 · lane tasks-ui
 - [ ] **TV-F4 — In flight (hand-off, check-backs, linked waits)** · tasks-v2 block 18 · deps: TV-F3, TV-U3 · lane focus · migration (`focus_in_flight`)
 - [ ] **TV-F5 — Calendar & Home on one engine** · tasks-v2 block 19 · deps: TV-F2, TV-D3 · lane focus
@@ -231,20 +229,8 @@ Two blocks with no dependency between them still **merge-conflict if they edit t
 - [ ] **PRIV-2b — Wire it into delete-account, wipe our Stripe copy, in-app copy** · deps: PRIV-2a · **DoR-ready** · spec block 2 · includes the AC17 one-off (designer deletes the two leftover Stripe customers in the Stripe dashboard first). Tier 2 review.
 - [ ] **PRIV-2c — Admin command for privacy@ deletion requests** · deps: PRIV-2a, PRIV-2b · **DoR-ready** · spec block 3 · designer creates `ACCOUNT_ADMIN_SECRET`; `admin-delete-account` passes `posthog: postHogEraserFromEnv(…)` to `deleteAccount` and needs the PRIV-3 PostHog secrets. Tier 2 review.
 - [ ] **PRIV-2d — Privacy policy wording** · deps: — · **DoR-ready** · spec block 4 + appendix · landing branch flow; Mike redeploys Vercel.
-- [~] **PRIV-3 — Erase a person's PostHog analytics on account deletion and when they switch analytics off** · deps: PRIV-1 · _code + tests 2026-10-08 · `t/maciej/priv-3-posthog-erasure`_: a `posthog` step first in `deleteAccount` ([`_shared/posthog-erasure.ts`](../supabase/functions/_shared/posthog-erasure.ts)); a new `analytics-forget` function, called by the app the moment a yes turns into a no (it waits ~10 s, then deletes) and sent again each session until it answers 200; the app stops analytics before signing out of a deleted account. **Open:** (1) Mike creates the PostHog personal API key (`person:write`) and sets `POSTHOG_PERSONAL_API_KEY` + `POSTHOG_PROJECT_ID` as Edge Function secrets; (2) deploy `delete-account` + `analytics-forget` (Tier 2: `/code-review ultra` + `/claude-security` first); (3) the end-to-end check in [docs/testing/priv-3-posthog-erasure.md](../docs/testing/priv-3-posthog-erasure.md); (4) then merge the policy wording, GrochowskiMichal/Moduo#244 (draft, into `prod-landing`).
+- [~] **PRIV-3 — Erase a person's PostHog analytics on account deletion and when they switch analytics off** · deps: PRIV-1 · _merged into `maciej` and deployed 2026-10-08 (GrochowskiMichal/Moduo#245; `delete-account` v16, `analytics-forget` v1; validator, ultrareview and Claude Security passed)_: a `posthog` step first in `deleteAccount` ([`_shared/posthog-erasure.ts`](../supabase/functions/_shared/posthog-erasure.ts)); a new `analytics-forget` function, called by the app the moment a yes turns into a no (it waits ~10 s, then deletes) and sent again each session until it answers 200; the app stops analytics before signing out of a deleted account. **Open:** (1) Mike creates the PostHog personal API key (`person:write`) and sets `POSTHOG_PERSONAL_API_KEY` + `POSTHOG_PROJECT_ID` as Edge Function secrets; (2) ~~deploy~~ done; (3) the end-to-end check in [docs/testing/priv-3-posthog-erasure.md](../docs/testing/priv-3-posthog-erasure.md); (4) then merge the policy wording, GrochowskiMichal/Moduo#244 (draft, into `prod-landing`).
 - [ ] **PRIV-3b — Durable PostHog erasure backlog** · deps: PRIV-3 · **before the app's PostHog key goes on in production** · delete-account records an erasure that was refused, skipped or rate-limited in a service-role-only table before the auth user goes, and a scheduled job retries it; a 429 or timeout then becomes a backlog entry instead of a blocked deletion. Optional: a per-user cooldown on `analytics-forget`. Why: the validator and the security pass both found the logs-only gap (docs/decisions/permissions.md 2026-10-08). Tier 2 (migration + `delete-account`). Decision: [docs/decisions/permissions.md](../docs/decisions/permissions.md) 2026-10-08.
-
-## Moduo for Claude Code — My tasks, the queue, Focus · [`specs/moduo-for-claude-code.md`](./moduo-for-claude-code.md)
-
-> A Claude Code mod over Moduo's own connector (dogfoods `moduo-mcp`). Two lanes: connector (MCC-1 → 2 → 3, Tier 2, serialized: each adds a migration and both edit `modules/tasks.ts`) and mod (MCC-4 after MCC-1). Mod blocks' done gate adds `claude plugin test tools/claude-plugins/moduo-tasks`.
-
-- [ ] **MCC-1 — Connector: mine, task shape, focus settings** · deps: — · `assignee` filter, `offset` paging, `assignee_id`/`subtask_count`, top-level + bucket order, `tasks_focus_settings`; tool catalog in `docs/moduo-mcp-connector.md`; pure helpers in `_shared/tasks-connector.ts` with tests; redeploy `moduo-mcp`. Tier 2.
-- [ ] **MCC-2 — Connector: reorder queue + log time** · deps: MCC-1 · migration: `tasks_op_reorder_queue`, `tasks_op_log_time`; manifest entries; `tasks_reorder_queue`, `tasks_log_time` tools; connector doc updated; Supabase-branch round-trip; migration then redeploy. Tier 2.
-- [ ] **MCC-3 — Connector: create task** · deps: MCC-2 · migration: `tasks_op_create` (Inbox default, commit option); `tasks_create` tool (due date as a local-midnight timestamp); connector doc's capture note updated; round-trip; redeploy. Tier 2.
-- [ ] **MCC-4 — Mod: My tasks panel (read)** · deps: MCC-1 · `tools/claude-plugins/moduo-tasks`: key + endpoint settings, connector client + error mapping, `/mine` panel (filters, buckets, queue cards, done section, 60 s refresh), band line, reopen flag.
-- [ ] **MCC-5 — Mod: queue actions + work on this** · deps: MCC-2, MCC-4 · c / ⇧c / u / s / [ ] plus buttons; `⏎` fills the prompt, In progress on send.
-- [ ] **MCC-6 — Mod: Focus** · deps: MCC-5 · Focus panel, pomodoro/stopwatch from Moduo settings, band clock, toast + chime, time logging rules, done → next, Claude context.
-- [ ] **MCC-7 — Mod: quick capture** · deps: MCC-3, MCC-4 · `/task` parse (title, #bucket, today/tomorrow/weekday, !) + preview + create.
 
 ---
 

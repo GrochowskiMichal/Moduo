@@ -1,6 +1,6 @@
 # Manual test checklist — PRIV-3: delete a person's PostHog analytics
 
-> Generated 2026-10-08 · branch `t/maciej/priv-3-posthog-erasure` · **Live-verified:** no, not yet. Nothing changes until the PostHog secrets exist, and the functions aren't deployed yet. Unit tests cover the logic: the PostHog request, the account-deletion step and its failure modes, the function's answers (wait, then delete; 503 while the setup is missing or refused), the app's request with its retry, the marker race, the session check, the stop before signing out of a deleted account, and `app_signed_out` only on a sign-out the person chose.
+> Generated 2026-10-08 · branch `t/maciej/priv-3-posthog-erasure` · **Live-verified:** deployed and probed 2026-10-08 (section 3); the end-to-end check (section 4) is still to do. Nothing changes for anyone until the PostHog secrets exist. Unit tests cover the logic: the PostHog request, the account-deletion step and its failure modes, the function's answers (wait, then delete; 503 while the setup is missing or refused), the app's request with its retry, the marker race, the session check, the stop before signing out of a deleted account, and `app_signed_out` only on a sign-out the person chose.
 > Run top-to-bottom. Sections 1–2 are one-time setup; 3 is the deploy; 4 is the check.
 
 ## 1. Mike, in PostHog (one-time, about 5 minutes)
@@ -21,10 +21,10 @@
   - Leave `POSTHOG_API_HOST` unset (it defaults to `https://eu.posthog.com`).
   - → **Expect:** both listed. Use the dashboard rather than the CLI: a CLI command would leave the key in your shell history. _(Supabase)_
 
-## 3. Deploy (agent, with the designer's OK; after `/code-review ultra` on the PR)
-- [ ] **Do:** deploy `delete-account` with the Supabase connector's `deploy_edge_function`. Files: `delete-account/index.ts`, `_shared/account-erasure.ts`, `_shared/billing.ts`, `_shared/secret-keys.ts`, `_shared/posthog-erasure.ts`; `verify_jwt: false`. → **Expect:** a new version (v16). _(server)_
-- [ ] **Do:** deploy the new `analytics-forget`. Files: `analytics-forget/index.ts`, `_shared/analytics-forget.ts`, `_shared/posthog-erasure.ts`, `_shared/secret-keys.ts`; `verify_jwt: false`. _(server)_
-- [ ] **Do:** `curl -X POST https://wtoonrvuqumihpkbvwvs.supabase.co/functions/v1/analytics-forget` with no `Authorization`. → **Expect:** `401 {"error":"Unauthorized"}`. A `GET` gives `405`. Same for `delete-account`. _(server)_
+## 3. Deploy (agent, with the designer's OK; after `/code-review ultra` and `/claude-security` on the PR) — done 2026-10-08
+- [x] **Do:** `supabase functions deploy delete-account --project-ref wtoonrvuqumihpkbvwvs --no-verify-jwt --use-api` from the repo root. It uploads exactly the files the function imports: `delete-account/index.ts`, `_shared/account-erasure.ts`, `_shared/billing.ts`, `_shared/secret-keys.ts`, `_shared/posthog-erasure.ts`. → **Expect:** a new version (v16). **Done 2026-10-08: v16, `verify_jwt` false, no import map.** _(server)_
+- [x] **Do:** the same command for the new `analytics-forget`. It uploads `analytics-forget/index.ts`, `_shared/analytics-forget.ts`, `_shared/posthog-erasure.ts`, `_shared/secret-keys.ts`. **Done 2026-10-08: v1, `verify_jwt` false, no import map.** _(server)_
+- [x] **Do:** `curl -X POST https://wtoonrvuqumihpkbvwvs.supabase.co/functions/v1/analytics-forget` with no `Authorization`. → **Expect:** `401 {"error":"Unauthorized"}`. A `GET` gives `405`. Same for `delete-account`. **Done 2026-10-08 on both: no auth 401, a fake token 401, GET 405, CORS preflight 200.** _(server)_
 
 ## 4. End to end (on staging, once the app there has a PostHog key)
 - [ ] **Do:** On app.staging.moduo.app, sign in with a throwaway account, wait for the question and click **Share**. Open a few pages. → **Expect:** in PostHog → **People**, a person whose id is the account's user id, with `app_signed_in` / `$identify` events tagged `surface = app`, `environment = staging`. _(staging + PostHog)_

@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { attachFocusUser } from "../features/focus/engine";
 import { Analytics, setAnalyticsUser } from "../lib/analytics";
 import {
   initRuntime,
@@ -183,6 +184,13 @@ export function AuthProvider({ children }: PropsWithChildren) {
       subscription.unsubscribe();
     };
   }, [rt]);
+
+  // The focus session is persisted per person: resume it on sign-in, hand it
+  // back on sign-out (TV-F1). Skipped while the cached session is still loading.
+  const sessionUserId = session?.user?.id ?? null;
+  useEffect(() => {
+    if (!loading) attachFocusUser(sessionUserId);
+  }, [loading, sessionUserId]);
 
   const signOut = async () => {
     if (!rt) return;

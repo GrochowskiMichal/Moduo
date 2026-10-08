@@ -20,8 +20,12 @@ export const TOOL_ARG_SCHEMAS: Record<string, z.ZodType<Record<string, unknown>>
   tasks_list: z.object({
     bucket_id: nonempty.optional(),
     status: listStatusSchema.optional(),
+    assignee: z.enum(["me", "anyone"]).optional(),
+    top_level: z.boolean().optional(),
     limit,
+    offset: z.coerce.number().int().min(0).optional(),
   }),
+  tasks_focus_settings: z.object({}),
   tasks_today: z.object({ date: ymd.optional() }),
   tasks_drift: z.object({}),
   tasks_list_tags: z.object({}),
@@ -35,6 +39,9 @@ export const TOOL_ARG_SCHEMAS: Record<string, z.ZodType<Record<string, unknown>>
   tasks_reschedule: z.object({ task_id: nonempty, scheduled_at: iso }),
   tasks_unschedule: z.object({ task_id: nonempty }),
   tasks_skip_occurrence: z.object({ task_id: nonempty }),
+  // TV-D1: who can be assigned, and assigning (null unassigns; "me" = the key's creator).
+  tasks_list_assignees: z.object({}),
+  tasks_assign: z.object({ task_id: nonempty, assignee_id: z.union([nonempty, z.null()]) }),
 
   calendar_list_events: z.object({ from: iso, to: iso, limit: wideLimit }),
   calendar_day: z.object({ date: ymd.optional() }),

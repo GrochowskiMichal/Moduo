@@ -5,7 +5,7 @@
 // so "overdue" == the same ambient drift signal the rest of the app uses — never
 // red, never a running count (design principles 4 & 5; spec Assumption 6).
 
-import { isDrifted, type Task } from "../tasks/model";
+import { isDrifted, type Task, taskAttentionUserId } from "../tasks/model";
 
 /** A passive overdue row. Deep-links to /tasks via `moduo:entity:open`. */
 export type OverdueItem = {
@@ -16,14 +16,18 @@ export type OverdueItem = {
 };
 
 /** The minimal task slice the section needs (a subset of the Tasks bundle). */
-export type OverdueTaskInput = Pick<Task, "id" | "title" | "scheduledAt" | "status" | "ownerId">;
+export type OverdueTaskInput = Pick<
+  Task,
+  "id" | "title" | "scheduledAt" | "status" | "assigneeId" | "creatorId" | "creatorUnknown"
+>;
 
 /**
  * The passive overdue items for the bell. Empty unless `enabled` (the opt-in
  * `overdueTasks` pref) — so a user who never turns it on pays nothing and sees
- * nothing. Scoped to the current user's OWN tasks (`ownerId === userId`): the bell
- * is a personal "what needs me" surface, so a teammate's drifted work is not the
- * user's overdue (and would be noise in a shared workspace). Drifted = scheduled in
+ * nothing. Scoped to the current user's OWN tasks: assigned to them, or unassigned
+ * and created by them (`taskAttentionUserId`, TV-D1). The bell is a personal "what
+ * needs me" surface, so a teammate's drifted work is not the user's overdue (and
+ * would be noise in a shared workspace). Drifted = scheduled in
  * the past and still open (`isDrifted`). Ordered most-overdue first (oldest
  * `scheduledAt`) for a calm, stable order. A task that gets completed or rescheduled
  * simply stops being drifted → drops out on the next recompute (no stored rows).
@@ -36,7 +40,10 @@ export function selectOverdueTasks(
   const now = opts.now ?? new Date();
   return tasks
     .filter(
-      (task) => task.ownerId === opts.userId && task.scheduledAt != null && isDrifted(task, now),
+      (task) =>
+        taskAttentionUserId(task) === opts.userId &&
+        task.scheduledAt != null &&
+        isDrifted(task, now),
     )
     .map((task) => ({ id: task.id, title: task.title, scheduledAt: task.scheduledAt as string }))
     .sort((a, b) => (a.scheduledAt < b.scheduledAt ? -1 : a.scheduledAt > b.scheduledAt ? 1 : 0));
