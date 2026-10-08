@@ -4,7 +4,11 @@
  * service_role and booking_op_commit / booking_op_release.
  *
  * POST { action: "preview", slug, timeZone }
- * POST { action: "book", slug, start, timeZone, name, email, note, guests, answers, video }
+ * POST { action: "book", slug, start, timeZone, name, email, note, guests, answers, video, origin }
+ *
+ * `book` is rate-limited per IP and per host (booking_rate_check). `origin` is
+ * only a hint for which of our own hosts the guest email's cancel link uses;
+ * an unknown value gets moduo.app (see _shared/app-origin.ts).
  *
  * A link's video_provider is google_meet, zoom, or guest_choice. The guest only
  * ever sees platforms the host has connected (Google refresh token / Zoom login).
@@ -21,6 +25,8 @@ import {
   googleUserEmail,
   refreshGoogleAccess,
 } from "../_shared/google-calendar.ts";
+import { bookingCancelUrl, bookingOrigin } from "../_shared/app-origin.ts";
+import { escapeHtml, noTags, singleLine } from "../_shared/escape.ts";
 import { getDefaultSecretKey } from "../_shared/secret-keys.ts";
 import {
   createZoomMeeting,
@@ -93,19 +99,57 @@ type LinkRow = {
   workspace_id: string | null;
 };
 
-function json(body: unknown, status = 200): Response {
+function json(body: unknown, status = 200, headers: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...CORS, "content-type": "application/json; charset=utf-8" },
+    headers: { ...CORS, ...headers, "content-type": "application/json; charset=utf-8" },
   });
 }
 
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+function clientIp(req: Request): string {
+  const forwarded = req.headers.get("x-forwarded-for");
+  if (forwarded) return forwarded.split(",")[0].trim();
+  return req.headers.get("cf-connecting-ip") ?? req.headers.get("x-real-ip") ?? "unknown";
+}
+
+// IPs are never stored raw: HMAC-SHA256 keyed with the project secret key,
+// same as waitlist-join (different prefix, so the two ledgers don't correlate).
+const hmacKey = crypto.subtle.importKey(
+  "raw",
+  new TextEncoder().encode(SECRET),
+  { name: "HMAC", hash: "SHA-256" },
+  false,
+  ["sign"],
+);
+
+async function hashIp(ip: string): Promise<string> {
+  const sig = await crypto.subtle.sign(
+    "HMAC",
+    await hmacKey,
+    new TextEncoder().encode(`booking:v1:${ip}`),
+  );
+  return Array.from(new Uint8Array(sig), (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/**
+ * Counts this `book` attempt on a real link and says whether it may go ahead:
+ * 10 per IP per hour, then 30 per host per hour, enforced atomically in SQL.
+ * No platform-wide cap, so a burst can only ever throttle one host. Runs
+ * before any Google or Zoom call. Only a missing function (deployed before
+ * its migration) lets bookings through unchecked; any other error stops them.
+ */
+async function bookingGate(
+  db: SupabaseClient,
+  req: Request,
+  ownerId: string,
+): Promise<"ok" | "rate_limited" | "host_busy" | "error"> {
+  const { data, error } = await db.rpc("booking_rate_check", {
+    p_ip_hash: await hashIp(clientIp(req)),
+    p_owner_id: ownerId,
+  });
+  if (!error) return data === "rate_limited" || data === "host_busy" ? data : "ok";
+  console.error("[booking-public] rate check failed:", error.code, error.message);
+  return error.code === "PGRST202" ? "ok" : "error";
 }
 
 function busyIds(raw: unknown): string[] {
@@ -389,6 +433,7 @@ async function sendGuestEmail(input: {
   cancelUrl: string;
 }): Promise<void> {
   if (!RESEND_API_KEY) return;
+  const hostName = singleLine(input.hostName) || "Moduo";
   await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
@@ -398,9 +443,9 @@ async function sendGuestEmail(input: {
     body: JSON.stringify({
       from: RESEND_FROM,
       to: input.to,
-      subject: `Booked with ${input.hostName}`,
+      subject: `Booked with ${hostName}`,
       text: [
-        `You're booked with ${input.hostName}.`,
+        `You're booked with ${hostName}.`,
         input.when,
         `${input.platform}: ${input.meetLink}`,
         `Cancel: ${input.cancelUrl}`,
@@ -485,6 +530,13 @@ Deno.serve(async (req: Request) => {
   const slug = typeof body.slug === "string" ? body.slug.trim() : "";
   const link = slug ? await loadLink(db, slug) : null;
   if (!link || !link.workspace_id) return json({ error: "not_found" }, 404);
+  if (action === "book") {
+    const gate = await bookingGate(db, req, link.owner_user_id);
+    if (gate === "rate_limited" || gate === "host_busy") {
+      return json({ error: gate }, 429, { "Retry-After": "3600" });
+    }
+    if (gate === "error") return json({ error: "book_failed" }, 500);
+  }
   const host = await hostIdentity(db, link);
   const setting = videoSetting(link.video_provider);
   if (link.paused) return json({ ...publicLink(link, host, []), paused: true, slots: [] });
@@ -586,11 +638,13 @@ Deno.serve(async (req: Request) => {
 
   const hostEmail = access?.email || link.owner_email || "";
   if (!hostEmail) return fail("host_unavailable", 409);
+  // Google treats the event description as HTML and emails it to every
+  // invitee, so nothing the guest typed may carry a tag (a disguised link) into it.
   const lines = [
-    `Guest: ${name} <${email}>`,
-    invitedEmails.length > 0 ? `Also invited: ${invitedEmails.join(", ")}` : "",
-    note ? `Note: ${note}` : "",
-    ...answers.map((answer) => `${answer.label}: ${answer.value}`),
+    `Guest: ${noTags(name)} (${noTags(email)})`,
+    invitedEmails.length > 0 ? `Also invited: ${invitedEmails.map(noTags).join(", ")}` : "",
+    note ? `Note: ${noTags(note)}` : "",
+    ...answers.map((answer) => `${noTags(answer.label)}: ${noTags(answer.value)}`),
   ].filter(Boolean);
 
   // Zoom first (when chosen), then the Google event that invites everyone.
@@ -701,23 +755,21 @@ Deno.serve(async (req: Request) => {
     })
     .eq("id", bookingId);
 
-  const origin = typeof body.origin === "string" ? body.origin.replace(/\/$/, "") : "";
-  const cancelUrl = origin ? `${origin}/book/cancel?token=${cancelToken}` : "";
+  // Never from the request: body.origin only picks one of our own hosts.
+  const cancelUrl = bookingCancelUrl(bookingOrigin(body.origin), cancelToken);
   const when = new Intl.DateTimeFormat("en-US", {
     dateStyle: "full",
     timeStyle: "short",
     timeZone: guestZone,
   }).format(start);
-  if (cancelUrl) {
-    await sendGuestEmail({
-      to: email,
-      hostName: host.name,
-      when,
-      meetLink: meet.meetLink,
-      platform: VIDEO_LABEL[platform],
-      cancelUrl,
-    }).catch(() => {});
-  }
+  await sendGuestEmail({
+    to: email,
+    hostName: host.name,
+    when,
+    meetLink: meet.meetLink,
+    platform: VIDEO_LABEL[platform],
+    cancelUrl,
+  }).catch(() => {});
 
   return json({
     ok: true,

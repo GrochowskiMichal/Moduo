@@ -99,6 +99,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Calendar and booking links → [decisions/calendar.md](decisions/calendar.md)
 
+- 2026-10-07 · Emailed links use fixed, allow-listed origins, and public booking is rate-limited.
 - 2026-10-02 · A booked meeting is one event, and booking links can be deleted.
 - 2026-10-02 · A booking link's video is Google Meet, Zoom, or "Their choice".
 - 2026-10-01 · The public booking page is one sentence the guest finishes.

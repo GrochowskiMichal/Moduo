@@ -483,7 +483,11 @@ export function BookPage() {
               : "Zoom couldn't create the meeting. Try again in a moment."
             : res.json.error === "host_unavailable"
               ? `${host}'s calendar isn't connected right now. Try again later.`
-              : "Couldn't book that time. Try again.",
+              : res.json.error === "rate_limited"
+                ? "Too many booking attempts from this network. Try again in an hour."
+                : res.json.error === "host_busy"
+                  ? `${host} is getting a lot of booking requests right now. Try again in an hour.`
+                  : "Couldn't book that time. Try again.",
       );
       return;
     }
