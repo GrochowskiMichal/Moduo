@@ -67,7 +67,7 @@ function TabsTrigger({ className, ...props }: React.ComponentProps<typeof TabsPr
         "disabled:pointer-events-none disabled:opacity-50",
         // Raised plate on the bg-muted list (--control-raised, tokens.css §5b).
         "data-[state=active]:bg-control-raised data-[state=active]:text-foreground data-[state=active]:shadow-control-raised",
-        "group-data-[variant=line]/tabs-list:rounded-none group-data-[variant=line]/tabs-list:data-[state=active]:bg-transparent group-data-[variant=line]/tabs-list:data-[state=active]:shadow-none",
+        "group-data-[variant=line]/tabs-list:rounded-none group-data-[variant=line]/tabs-list:data-[state=active]:bg-transparent",
         "group-data-[variant=line]/tabs-list:data-[state=active]:shadow-[inset_0_-2px_0_0_var(--primary)]",
         "[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className,

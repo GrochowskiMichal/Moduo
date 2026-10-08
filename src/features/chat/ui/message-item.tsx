@@ -38,6 +38,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { IconButton } from "@/components/ui/icon-button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { SELECTED_OPTION } from "@/components/ui/selection";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { QUICK_REACTIONS } from "../emoji";
@@ -112,7 +113,7 @@ function ReactionPill({
           className={cn(
             "inline-flex h-6 items-center gap-1 rounded-full border px-2 text-xs tabular-nums transition-colors",
             mine
-              ? "border-transparent bg-state-selected ring-1 ring-inset ring-state-selected text-foreground"
+              ? `${SELECTED_OPTION} text-foreground`
               : "border-border bg-card text-muted-foreground hover:border-foreground/30 hover:text-foreground",
           )}
         >

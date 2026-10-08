@@ -44,6 +44,23 @@ describe("Button states", () => {
     }
   });
 
+  it("a pressed ghost or outline toggle stays filled and hovers one step up", () => {
+    for (const variant of ["ghost", "outline"] as const) {
+      render(
+        <Button variant={variant} aria-pressed>
+          {`${variant}-on`}
+        </Button>,
+      );
+      const className = screen.getByRole("button", { name: `${variant}-on` }).className;
+      for (const cls of [
+        "aria-pressed:bg-state-active",
+        "aria-pressed:hover:bg-state-active-hover",
+      ]) {
+        expect({ variant, cls, has: className.includes(cls) }).toEqual({ variant, cls, has: true });
+      }
+    }
+  });
+
   it("a secondary button's hover is one step above its fill", () => {
     render(<Button variant="secondary">Step</Button>);
     const { rest, hover } = fills(screen.getByRole("button", { name: "Step" }).className);

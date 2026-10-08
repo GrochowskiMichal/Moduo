@@ -1,5 +1,6 @@
 import { Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { SELECTED_OPTION } from "@/components/ui/selection";
 import { Button } from "../../../components/ui/button";
 import { Checkbox } from "../../../components/ui/checkbox";
 import {
@@ -215,7 +216,7 @@ export function BookingLinkDialog({
                         }
                         className={
                           on
-                            ? "rounded-full border border-transparent bg-state-selected ring-1 ring-inset ring-state-selected px-2.5 py-1 text-xs text-foreground"
+                            ? `rounded-full border px-2.5 py-1 text-xs text-foreground ${SELECTED_OPTION}`
                             : "rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground"
                         }
                       >

@@ -2,6 +2,7 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { CalendarDays, Clock, CornerDownRight, Inbox, ListChecks, Repeat } from "lucide-react";
 import { toast } from "sonner";
+import { SELECTED_OPTION } from "@/components/ui/selection";
 import { TagChipList } from "../../../components/tag-chip";
 import { Badge } from "../../../components/ui/badge";
 import { CompleteToggle } from "../../../components/ui/complete-toggle";
@@ -84,9 +85,7 @@ export function TaskCard({
         "select-none",
         // Selection = the accent tint + the 32% ring a card always carries
         // (R5). The old bright accent border read as a white ring on mono.
-        selected
-          ? "border-transparent bg-state-selected ring-1 ring-inset ring-state-selected"
-          : "border-border bg-card hover:border-foreground/30",
+        selected ? SELECTED_OPTION : "border-border bg-card hover:border-foreground/30",
         // whole card is the drag handle (grip removed)
         canEdit && "cursor-grab active:cursor-grabbing",
         // hide the source while the DragOverlay clone follows the cursor; the

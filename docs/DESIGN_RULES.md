@@ -33,8 +33,8 @@ Today both roles resolve to the single `data-font` family (default Geist), so th
 The accent (`--primary` / `--ring`) appears **only** on: (1) **one** primary action per surface (`bg-primary` — never two competing); (2) the current **selection**; (3) the **focus ring**; (4) the quiet **done-check**; (5) a few **status** marks that aren't selection: the chat attention bar and mention tint, the unread dot and divider, the calendar focus edge, "today" and "now" markers, drag/drop targets. Segmented toggles, priority/energy, and all other chrome stay **neutral**. (Verified AA on all 8 accents — keep it that way when adding one.)
 
 **Selection is tint-only, never a bar** (DS-2, 2026-10-08):
-- **A selected item in a list** (task row, note in the tree, email thread, contact, a picker row) gets `bg-state-selected ring-1 ring-inset ring-state-selected-edge`. That's the accent tint plus the row hairline switch: `--state-selected-edge` in tokens.css ships as the 32% ring and becomes `transparent` for tint-only.
-- **Cards and bordered options** (board cards, booking chips, option cards) always carry `ring-state-selected` on a transparent border.
+- **A selected item in a list** (task row, note in the tree, email thread, contact, a picker row) gets `SELECTED_ROW` from `src/components/ui/selection.ts` (`bg-state-selected ring-1 ring-inset ring-state-selected-edge`). That's the accent tint plus the row hairline switch: `--state-selected-edge` in tokens.css ships as the 32% ring and becomes `transparent` for tint-only.
+- **Cards and bordered options** (board cards, booking chips, option cards) use `SELECTED_OPTION`: the tint plus `ring-state-selected`, always, on a transparent border.
 - **The current destination in a rail or nav** (the module tab, the open channel, the settings section, the current workspace, the email scope) is not "selected": it takes the neutral `bg-state-active`, and hover is `bg-state-hover`.
 - **Status marks** compose `--primary` directly (`bg-primary`, `bg-primary/14`), never the selection utilities.
 - `src/components/selection-guard.test.ts` fails on an accent bar or a retired `--selected-*` use outside its status allowlist.

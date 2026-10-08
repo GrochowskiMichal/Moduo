@@ -242,7 +242,7 @@ export function FormatToolbarPlugin({ editable }: { editable: boolean }) {
             icon={icon}
             label={label}
             aria-pressed={active}
-            className={active ? "bg-accent text-foreground" : "text-muted-foreground"}
+            className={active ? "text-foreground" : "text-muted-foreground"}
             onPointerDown={(e) => {
               // Keep the editor's focus + selection through the click.
               e.preventDefault();

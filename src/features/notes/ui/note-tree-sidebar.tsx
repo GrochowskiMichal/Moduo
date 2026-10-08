@@ -60,6 +60,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Eyebrow } from "@/components/ui/eyebrow";
 import { IconButton } from "@/components/ui/icon-button";
+import { SELECTED_ROW } from "@/components/ui/selection";
 import { Toolbar } from "@/components/ui/toolbar";
 import { entityDrag } from "@/lib/drag-payload";
 import { cn } from "@/lib/utils";
@@ -259,9 +260,7 @@ export function NoteTreeSidebar(props: Props) {
                     className={cn(
                       "relative flex w-full flex-col items-start gap-0.5 rounded-md px-2 py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                       // Tint-only selection (R5): tint + the row hairline switch.
-                      r.id === props.selectedId
-                        ? "bg-state-selected ring-1 ring-inset ring-state-selected-edge"
-                        : "hover:bg-state-hover",
+                      r.id === props.selectedId ? SELECTED_ROW : "hover:bg-state-hover",
                     )}
                   >
                     <span className="flex w-full items-center gap-1.5">
@@ -537,7 +536,7 @@ function NoteRow({
         // (mirrors task-row's dropActive precedence) — otherwise the selection
         // hairline reads as a third drop mark. Tint-only selection (R5).
         selected && !hover
-          ? "bg-state-selected text-foreground ring-1 ring-inset ring-state-selected-edge"
+          ? `${SELECTED_ROW} text-foreground`
           : "text-muted-foreground hover:bg-state-hover hover:text-foreground",
         selected && hover && "text-foreground",
         hover?.zone === "into" && "ring-2 ring-primary/60",

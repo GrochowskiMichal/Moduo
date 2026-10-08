@@ -11,6 +11,7 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
+import { SELECTED_ROW } from "@/components/ui/selection";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
@@ -89,9 +90,7 @@ function InteractiveRows() {
           onClick={() => setSelected(item)}
           className={cn(
             "flex h-[var(--row-h)] items-center rounded-md px-2 text-left text-base text-foreground outline-none transition-colors duration-[var(--motion-fade)] focus-visible:ring-2 focus-visible:ring-ring",
-            item === selected
-              ? "bg-state-selected ring-1 ring-inset ring-state-selected-edge"
-              : "hover:bg-state-hover active:bg-state-active",
+            item === selected ? SELECTED_ROW : "hover:bg-state-hover active:bg-state-active",
           )}
         >
           {item}

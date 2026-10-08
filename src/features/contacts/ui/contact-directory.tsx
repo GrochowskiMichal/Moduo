@@ -31,6 +31,7 @@ import { IconButton } from "@/components/ui/icon-button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { SegmentedControl } from "@/components/ui/segmented-control";
+import { SELECTED_ROW } from "@/components/ui/selection";
 import { Toolbar } from "@/components/ui/toolbar";
 import { entityDrag } from "@/lib/drag-payload";
 import { cn } from "@/lib/utils";
@@ -106,11 +107,7 @@ function DirectoryRow({
         "group relative flex w-full scroll-mt-6 items-center gap-2.5 rounded-md px-2 py-1.5",
         // Tint-only selection (R5); the keyboard highlight is the current
         // option (active step), pointer hover the lighter hover step.
-        selected
-          ? "bg-state-selected ring-1 ring-inset ring-state-selected-edge"
-          : highlighted
-            ? "bg-state-active"
-            : "hover:bg-state-hover",
+        selected ? SELECTED_ROW : highlighted ? "bg-state-active" : "hover:bg-state-hover",
         dragHandleProps && "cursor-grab active:cursor-grabbing",
         dragging && "opacity-50",
       )}

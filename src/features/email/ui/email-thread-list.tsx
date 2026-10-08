@@ -10,6 +10,7 @@
 
 import { Check, Clock3, CornerUpLeft, MoreHorizontal, Pin, Trash2 } from "lucide-react";
 import { forwardRef, type ReactNode } from "react";
+import { SELECTED_ROW } from "@/components/ui/selection";
 import type { LabelColor } from "../../../components/tag-colors";
 import {
   DropdownMenu,
@@ -114,9 +115,7 @@ const ThreadRow = forwardRef<
       className={
         "group relative flex w-full items-start gap-2.5 rounded-md px-2.5 py-2 text-left transition-colors duration-(--motion-fade) ease-(--ease-out) " +
         // Tint-only selection (R5): tint + the row hairline switch, no bar.
-        (selected
-          ? "bg-state-selected ring-1 ring-inset ring-state-selected-edge"
-          : "hover:bg-state-hover")
+        (selected ? SELECTED_ROW : "hover:bg-state-hover")
       }
     >
       {/* Unread rail dot — a weight/presence signal, paired with type weight. */}

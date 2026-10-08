@@ -13,6 +13,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { SELECTED_OPTION } from "@/components/ui/selection";
 import { Button } from "../../../components/ui/button";
 import { Eyebrow } from "../../../components/ui/eyebrow";
 import { cn } from "../../../lib/utils";
@@ -209,7 +210,7 @@ export function Chip({ selected = false, className, ...props }: ChipProps) {
         "inline-flex h-[var(--ctrl-h-lg)] items-center gap-2 rounded-full border px-4 font-sans text-md tabular-nums",
         "transition-colors duration-[var(--motion-fade)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         selected
-          ? "border-transparent bg-state-selected ring-1 ring-inset ring-state-selected text-foreground"
+          ? `${SELECTED_OPTION} text-foreground`
           : "border-border text-foreground hover:border-foreground",
         className,
       )}
@@ -287,9 +288,7 @@ export function DayStrip({ days, selected, onPick }: DayStripProps) {
               className={cn(
                 "flex w-16 shrink-0 snap-start flex-col items-center gap-0.5 rounded-lg border py-2.5",
                 "transition-colors duration-[var(--motion-fade)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                on
-                  ? "border-transparent bg-state-selected ring-1 ring-inset ring-state-selected"
-                  : "border-border hover:border-foreground",
+                on ? SELECTED_OPTION : "border-border hover:border-foreground",
               )}
             >
               <Eyebrow>{parts.weekday}</Eyebrow>

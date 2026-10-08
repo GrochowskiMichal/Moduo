@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { SELECTED_ROW } from "@/components/ui/selection";
 import { TagChipList } from "../../../components/tag-chip";
 import { Badge } from "../../../components/ui/badge";
 import { CompleteToggle } from "../../../components/ui/complete-toggle";
@@ -150,7 +151,7 @@ export function TaskRow({
           : selected
             ? // Tint-only selection (R5): the accent tint + the row hairline
               // switch (--state-selected-edge). No bar.
-              "bg-state-selected ring-1 ring-inset ring-state-selected-edge"
+              SELECTED_ROW
             : "hover:bg-state-hover",
         nested && "ml-10",
       )}

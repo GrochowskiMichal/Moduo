@@ -22,9 +22,12 @@ const buttonVariants = cva(
         // is one step up from its rest fill on every shade. The old
         // bg-secondary → hover:bg-accent pair was one grey on dark (a no-op).
         secondary: "bg-state-active text-foreground hover:bg-state-active-hover",
+        // A toggle (aria-pressed) stays on the active step while on and
+        // hovers one step up, so call sites never force a fill by className.
         outline:
-          "border border-hairline bg-transparent text-foreground hover:bg-state-hover active:bg-state-active",
-        ghost: "bg-transparent text-foreground hover:bg-state-hover active:bg-state-active",
+          "border border-hairline bg-transparent text-foreground hover:bg-state-hover active:bg-state-active aria-pressed:bg-state-active aria-pressed:hover:bg-state-active-hover",
+        ghost:
+          "bg-transparent text-foreground hover:bg-state-hover active:bg-state-active aria-pressed:bg-state-active aria-pressed:hover:bg-state-active-hover",
         destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
         link: "bg-transparent text-primary underline-offset-4 hover:underline",
       },
