@@ -5,7 +5,7 @@ Numbered decisions from the 2026-10-08 brand grilling session. The numbers match
 ## A. What the brandbook is
 1. **Readers:** Maciej, Mike, and coding agents. Written as rules an agent can follow; a public press page comes separately (66).
 2. **Form:** `.design/brand/BRAND_BRIEF.md` + this file now; a rendered brand page once the masters exist. Not Figma-first.
-3. **Scope:** everything outside the app. Inside the app, only the logo, the app icon, the AI dot and the voice. App UI stays under DESIGN_SYSTEM / DESIGN_RULES / tokens.css.
+3. **Scope:** everything outside the app. Inside the app, only the logo, the app icon, how assistants are named, and the voice. App UI stays under DESIGN_SYSTEM / DESIGN_RULES / tokens.css.
 4. **The product is the brand.** No brand hue, display face or illustration that the app doesn't have.
 5. **One brand.** Sub-products are "Moduo <Thing>" in plain text, with no own marks.
 
@@ -54,16 +54,18 @@ Numbered decisions from the 2026-10-08 brand grilling session. The numbers match
 37. Two named blacks: **Canvas** (pure black: landing, OG, social, decks) and **Reading** (oklch 0.2: legal, manifesto, dark email).
 38. Paper (#fafafa) for type and mark on black; pure white only for light pages and emails.
 39. Black is the brand's home; light is an equal-quality secondary expression.
-40. **Pink is not a brand colour. "Absolutely not."** Maciej doesn't know how pink got into the code; it shouldn't be there.
-    ❓ **Scope to confirm:** 42–44 keep a pink AI dot, while pink also lives in the Settings accent list, the tag-label colours and the landing's accent demo. **Recommended:** pink exists *only* as the AI dot. Remove it from the accent picker (7 accents left), from tag labels (existing pink tags → violet) and from the landing.
+40. **Pink is not a brand colour, not the default accent, and not an AI colour.** Decided 2026-10-08 after tracing where it came from (Maciej: "pink was misidentified by an agent as the app's main accent many months ago and it keeps popping up").
+    - **40a. No AI dot, no AI colour.** Assistant actions are shown by name in the normal neutral style.
+    - **40b. Pink stays as an ordinary option**: one of the eight Settings accents and one of the eight tag colours, like violet or teal. Nothing more.
+    - **Provenance (so nobody revives it):** at the 2026-05-11 foundation grill, Maciej's first-draft screenshot showed a floating bottom bar with a pink circle. The grill notes say only "pink disc", and used it to make pink the default accent. The design brief Claude wrote that day relabelled it the "AI disc" and made it a rule. On 2026-05-13 it was built as a pink AI button in the bottom bar, then removed in the same PR ("retires until there's an actual AI surface"). After that it lived only as copied text: CLAUDE.md (dropped 2026-07-20), a "mindmap empty state = AI brand moment" note, PRODUCT_BRIEF §7 (2026-06-24), landing-agents-readme, the landing's unused `--ai` variable, the moduo-design-quality skill. The default accent became mono on 2026-07-27. The 2026-10-08 cleanup removed or annotated every guidance copy.
 41. Hues, status colours and theme shades never appear as marketing chrome; only inside screenshots, which always show the default look.
 
-## H. AI dot
-42. Kept, with one meaning: "an assistant was here". Homes: the connected-assistants status in Settings and assistant-made changes in activity/history.
-43. A small solid dot: no glow, gradient or loop; at most one fade-in on connect; always with a label.
-44. Its own fixed `--ai` token, independent of accent and theme.
-45. Never with the logo, in the icon, in emails or in marketing chrome.
-46. "Your assistant" or the tool's name. Never "Moduo AI".
+## H. Assistants (superseded by 40a)
+42. ~~AI dot with one meaning, "an assistant was here"~~. **Superseded by 40a:** no AI dot. Assistant actions appear by name, neutral.
+43. ~~Small solid pink dot~~. Superseded by 40a.
+44. ~~Fixed `--ai` token~~. Superseded by 40a: no token; the landing's unused `--ai` variable is deleted in BRAND-4.
+45. ~~Never with the logo, icon, emails or marketing chrome~~. Moot: nothing AI-coloured exists.
+46. "Your assistant" or the tool's name. Never "Moduo AI". (Still holds.)
 
 ## I. Typography
 47. Geist is the only face, brand included. No display face.

@@ -1,8 +1,8 @@
 # Moduo brand system: brief and plan
 
-> **Status:** planned 2026-10-08 in a grilling session with Maciej (designer, sole decision-maker on brand). Every rule here traces to a numbered decision in [DECISIONS.md](./DECISIONS.md); the numbers in brackets, like (18), point there. **Open:** ❓40 (the AI dot and where pink may still live). **In progress:** Maciej is redrawing the mark and wordmark masters (BRAND-0); everything downstream is generated from them, so it can be built now and re-exported later.
+> **Status:** planned 2026-10-08 in a grilling session with Maciej (designer, sole decision-maker on brand). Every rule here traces to a numbered decision in [DECISIONS.md](./DECISIONS.md); the numbers in brackets, like (18), point there. **Open:** none. **In progress:** Maciej is redrawing the mark and wordmark masters (BRAND-0); everything downstream is generated from them, so it can be built now and re-exported later.
 >
-> **Authority.** This file governs everything outside the app (landing, emails, social, press, store listings, decks) and, inside the app, only the logo, the app icon, the AI dot and the voice (3). The app UI stays under [docs/DESIGN_SYSTEM.md](../../docs/DESIGN_SYSTEM.md), [docs/DESIGN_RULES.md](../../docs/DESIGN_RULES.md) and [src/styles/tokens.css](../../src/styles/tokens.css). Values live in `tokens.css`; this file names them and says where they may appear. If this file and the token file disagree on a value, the token file wins and this file gets fixed.
+> **Authority.** This file governs everything outside the app (landing, emails, social, press, store listings, decks) and, inside the app, only the logo, the app icon, how assistants are named, and the voice (3). The app UI stays under [docs/DESIGN_SYSTEM.md](../../docs/DESIGN_SYSTEM.md), [docs/DESIGN_RULES.md](../../docs/DESIGN_RULES.md) and [src/styles/tokens.css](../../src/styles/tokens.css). Values live in `tokens.css`; this file names them and says where they may appear. If this file and the token file disagree on a value, the token file wins and this file gets fixed.
 
 ---
 
@@ -10,7 +10,7 @@
 
 1. **The product is the brand.** Moduo's brand is the app's own system at a louder volume: black, white, Geist, the mark. Nothing the app doesn't have: no brand hue, no second typeface, no illustration style (4).
 2. **Black is home.** Light is an equal-quality second expression, used where the reader's environment decides (39).
-3. **No hues.** Hue accents are a personal setting inside the app, never the brand (40, 41).
+3. **No hues.** Hue accents (pink included) are a personal setting inside the app, never the brand. There is no AI colour (40, 41).
 4. **Things arrive, they don't perform.** One exception: the mark revealing itself out of nothing (53, 54).
 5. **Plain, calm, direct** (59).
 
@@ -144,26 +144,23 @@ The brand palette is the app's neutral system. No brand hue (36).
 | **White** | `#ffffff` | `--card` (light) | Light pages and emails |
 | **Ink** | `oklch(0.16 0 0)` ≈ `#0d0d0d` | (marketing light) | Type and the mark on white |
 | **Neutral ramp** | `--neutral-100…975` | `tokens.css` §2 | Secondary text, hairlines, surfaces |
-| **AI dot** | `oklch(0.71 0.20 350)` | new fixed `--ai` (BRAND-2) | §8 only |
 
 **Rules**
 - **Light** is an equal-quality secondary expression: same mark, same type, Ink on White (39).
-- **Pink is not a brand colour** (40). ❓40 settles whether it survives anywhere else in the product (§8).
+- **Pink is not a brand colour, not the default accent and not an AI colour** (40). It stays only as one ordinary choice among the eight Settings accents and the eight tag colours, exactly like violet or teal.
 - **Hues, status colours and theme shades** never appear as marketing chrome. They show up only *inside product screenshots*, and screenshots always show the default look: black shade, mono accent (41).
 - Print/CMYK is defined when print happens.
 
 ---
 
-## 8. The AI dot (42–46)
+## 8. Assistants: no AI colour (40, 42–46)
 
-- **Meaning:** "an assistant was here" (42). Moduo has no built-in AI; assistants connect over MCP.
-- **Two homes, nowhere else:** (a) the connected-assistants status in Settings; (b) changes made by an assistant, shown in activity and history. Both surfaces arrive with the MCP UI work. The dot ships with them, not before.
-- **Form** (43): a small **solid** dot. No glow, gradient or loop. At most one fade-in when an assistant connects. Always paired with a label or tooltip, so colour is never the only signal.
-- **Its own token** (44): a fixed `--ai`, independent of the user's accent and theme.
-- **Never** paired with the logo, in the app icon, in emails or in marketing chrome (45).
+**There is no AI dot and no AI colour** (40a). The "pink AI disc" was never a designed feature. It began as a pink circle in Maciej's first-draft screenshot (May 2026). An agent read it as an AI button and made pink the default accent; the button existed in code for about two days, and the idea then survived only by being copied between docs. The full history is in [DECISIONS.md](./DECISIONS.md) #40.
+
+- **When an assistant changes something,** activity and history show the assistant's name in the normal neutral style ("Claude changed the due date"), like any person. No special colour, badge, glow or icon treatment (42–45, superseded).
+- **The connected-assistants list in Settings** uses the same neutral list styling as any other integration.
 - **Words** (46): "your assistant", or name the tool (Claude, ChatGPT, Cursor). Never "Moduo AI".
-
-**❓40: where else may pink live?** You said pink isn't a brand colour and "shouldn't be there", and you also kept the pink AI dot (43, 44). Today pink also appears as (1) one of the eight Settings accents, (2) one of the eight tag-label colours, (3) the landing's accent demo, and (4) the "Label pink … AI disc" row in `landing-agents-readme.md`. **Recommended:** pink exists **only** as the AI dot. Remove it from the Settings accent list (7 accents left), from tag labels (existing pink tags move to violet), and from the landing. The dot can only be the product's single deliberate pink moment if nothing else in the product is pink. (Prod had no account on the pink accent at the 2026-07-27 check.)
+- **Marketing:** AI is a trust message ("bring your own AI; Moduo never trains on your data"), never a visual theme.
 
 ---
 
@@ -345,11 +342,10 @@ Plan only. Each block is built later with `/s2` (78). Landing work ships as PRs 
 | --- | --- | --- | --- |
 | **BRAND-0** | Redraw the masters: mark (§3 construction, 45°, decide the window-corner radius), wordmark A, lockup spacing, small master. | n/a | **Maciej** |
 | **BRAND-1** | Asset pipeline: `brand/` tree, copy today's files in as provisional masters, `bun run brand:export`, every export in §14, consumers wired, old files deleted. **Unblocks the email build's logo.** Re-run after BRAND-0. | n/a (re-run after BRAND-0) | agent |
-| **BRAND-2** | App touch-points: initials as default avatar; Pilat out of the font picker (Pilat users → Geist); unused Equity Sans + Nunito fonts no longer loaded at boot (their CSS classes are dead); fixed `--ai` token; pink per ❓40; staging favicon. | ❓40, BRAND-1 | agent |
+| **BRAND-2** | App touch-points: initials as default avatar; Pilat out of the font picker (Pilat users → Geist); unused Equity Sans + Nunito fonts no longer loaded at boot (their CSS classes are dead); staging favicon. | BRAND-1 | agent |
 | **BRAND-3** | The reveal: one component, played once per launch while the session loads, reduced-motion fade; video-intro export (MP4/GIF). | BRAND-1 (better after BRAND-0) | agent |
-| **BRAND-4** | Landing alignment (PR into `prod-landing`): lockup artwork in nav/footer/OG; footer line → brand line; American spelling; drop the unused `--ai` var and (per ❓40) pink from the accent demo; reveal on first visit; `landing-agents-readme.md` updated to this brief. | BRAND-1, ❓40 | agent |
+| **BRAND-4** | Landing alignment (PR into `prod-landing`): lockup artwork in nav/footer/OG; footer line → brand line; American spelling; drop the unused `--ai` pink variable (the accent demo keeps pink as one of eight options); reveal on first visit; `landing-agents-readme.md` updated to this brief. | BRAND-1 | agent |
 | **BRAND-5** | Press kit page + zip (§13); social avatars and banners exported. | BRAND-1 | agent |
 | **BRAND-6** | Rendered brand page (the visual brandbook for humans) generated from this brief. | BRAND-0 | agent |
-| **AI dot surfaces** | Built with the MCP UI work (connected assistants, assistant changes in history), using the `--ai` token from BRAND-2. | MCP-1 | agent |
 
 **Re-export rule:** when a master changes, re-run `brand:export`, rebuild the icon (`icon:liquid`), check the four Liquid Glass modes, and re-check the landing footer plate. It is hand-drawn on the wordmark's geometry, so a changed wordmark means a changed plate.
