@@ -407,17 +407,21 @@ BEGIN
   IF (p_width IS NOT NULL AND p_width <= 0) OR (p_height IS NOT NULL AND p_height <= 0) THEN
     RAISE EXCEPTION 'invalid_dimensions' USING ERRCODE = '22023';
   END IF;
-  -- One person can't pile up unfinished uploads (pending or failed, until the
-  -- purge removes them).
-  IF (SELECT count(*) FROM public.attachments a
-      WHERE a.uploader_id = v_uid AND a.status <> 'ready') >= 50 THEN
-    RAISE EXCEPTION 'too_many_pending' USING ERRCODE = 'P0001';
-  END IF;
 
   SELECT w.owner_id INTO v_owner
   FROM public.workspaces w WHERE w.id = p_workspace_id AND w.deleted_at IS NULL;
   IF v_owner IS NULL THEN
     RAISE EXCEPTION 'entity_not_found' USING ERRCODE = 'P0002';
+  END IF;
+  -- One begin at a time per pool: the checks below then see every upload
+  -- begun before this one, so racing uploads can't all slip under the limit.
+  INSERT INTO public.storage_usage (owner_id) VALUES (v_owner) ON CONFLICT (owner_id) DO NOTHING;
+  PERFORM 1 FROM public.storage_usage su WHERE su.owner_id = v_owner FOR UPDATE;
+  -- One person can't pile up unfinished uploads (pending or failed, until the
+  -- purge removes them).
+  IF (SELECT count(*) FROM public.attachments a
+      WHERE a.uploader_id = v_uid AND a.status <> 'ready') >= 50 THEN
+    RAISE EXCEPTION 'too_many_pending' USING ERRCODE = 'P0001';
   END IF;
   SELECT * INTO v_lim FROM public.storage__limits_for_owner(v_owner);
   IF p_size_bytes > v_lim.per_file_bytes THEN
@@ -430,7 +434,6 @@ BEGIN
   FROM public.storage_usage su WHERE su.owner_id = v_owner;
   v_used := coalesce(v_used, 0);
   v_pending := public.storage__unsettled_bytes(v_owner);
-  -- No lock: two uploads racing past the limit is a small allowed overage.
   IF v_used + v_pending + p_size_bytes > v_lim.total_bytes THEN
     RAISE EXCEPTION 'storage_full' USING ERRCODE = 'P0001',
       DETAIL = jsonb_build_object('size_bytes', p_size_bytes,
@@ -755,11 +758,18 @@ BEGIN
      AND NEW.metadata IS NOT DISTINCT FROM OLD.metadata THEN
     RETURN NEW;  -- bookkeeping only (timestamps): the bytes are unchanged
   END IF;
-  IF NOT EXISTS (
-    SELECT 1 FROM public.attachments a
-    WHERE (a.object_path = NEW.name OR a.preview_path = NEW.name)
-      AND a.status = 'pending')
-     OR (TG_OP = 'UPDATE' AND OLD.name IS DISTINCT FROM NEW.name) THEN
+  IF TG_OP = 'UPDATE' AND OLD.name IS DISTINCT FROM NEW.name THEN
+    RAISE EXCEPTION 'attachment_object_locked' USING ERRCODE = '42501';
+  END IF;
+  -- Share-lock the pending row: a finalize holding it (FOR UPDATE) makes this
+  -- write wait, and once finalize commits the row is no longer pending, so the
+  -- write is refused. A write that got the lock first commits before finalize
+  -- reads the size. Either way finalize counts the bytes that stay.
+  PERFORM 1 FROM public.attachments a
+  WHERE (a.object_path = NEW.name OR a.preview_path = NEW.name)
+    AND a.status = 'pending'
+  FOR SHARE;
+  IF NOT FOUND THEN
     RAISE EXCEPTION 'attachment_object_locked' USING ERRCODE = '42501';
   END IF;
   RETURN NEW;
