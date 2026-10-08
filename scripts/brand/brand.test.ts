@@ -5,6 +5,7 @@ import { describe, expect, it } from "@rstest/core";
 import { MODUO_MARK_PATHS, MODUO_MARK_VIEWBOX } from "../../src/components/ui/moduo-mark-path";
 import {
   artworkSvg,
+  canvasSvg,
   fmt,
   glassLayerSvg,
   macosIconSvg,
@@ -16,7 +17,14 @@ import {
 import { packIco, pngSize } from "./ico";
 import { parseMaster } from "./masters";
 import { CANVAS, ICON_BLACK, ICON_WHITE, INK, oklchGrayToHex, PAPER } from "./palette";
-import { EMAIL_LOCKUP_WIDTH, EMAIL_MARK_WIDTH, markForTile, TILE_RADIUS } from "./spec";
+import {
+  AVATAR_MARK_SHARE,
+  EMAIL_LIGHT_HALO_PX,
+  EMAIL_LOCKUP_CANVAS,
+  EMAIL_MARK_SIZE,
+  markForTile,
+  TILE_RADIUS,
+} from "./spec";
 
 const root = process.cwd();
 const read = (rel: string) => readFileSync(join(root, rel));
@@ -48,6 +56,10 @@ describe("parseMaster", () => {
     ["<svg viewBox='0 0 1 1'><path d='M0 0Z' stroke='#000'/></svg>", /stroke/],
     ['<svg viewBox="0 0 1 1"><path d="M0 0Z" fill="none"/></svg>', /unfilled/],
     ['<svg viewBox="0 0 1 1"><path d="M0 0Z" fill-opacity="0.5"/></svg>', /transparency/],
+    ['<svg viewBox="0 0 1 1"><g fill-rule="evenodd"><path d="M0 0Z"/></g></svg>', /on a group/],
+    ['<svg viewBox="0 0 1 1" fill-rule="evenodd"><path d="M0 0Z"/></svg>', /root/],
+    ['<svg viewBox="0 0 1 1" opacity="0.3"><path d="M0 0Z"/></svg>', /root/],
+    ['<svg viewBox="0 0 1 1"><svg x="5"><path d="M0 0Z"/></svg></svg>', /nested/],
   ])("rejects a master that isn't flat paths (%#)", (svg, message) => {
     expect(() => parseMaster("bad.svg", svg)).toThrow(message);
   });
@@ -94,6 +106,25 @@ describe("compose", () => {
     expect(svg).toContain('viewBox="10.5 20 300 80"');
     expect(svg.match(/fill="#123456"/g)).toHaveLength(2);
     expect(placement(m, 0, 0, 600)).toBe("scale(2) translate(-10.5 -20)");
+  });
+
+  it("fits a master into a fixed canvas, left-aligned and vertically centred", () => {
+    const m = parseMaster("x.svg", '<svg viewBox="0 0 100 20"><path d="M0 0H100V20Z"/></svg>');
+    const svg = canvasSvg({ master: m, fill: "#000", width: 200, height: 50 });
+    expect(svg).toContain('viewBox="0 0 200 50" width="200" height="50"');
+    expect(svg).toContain('transform="translate(0 5) scale(2)"');
+    expect(svg).not.toContain("stroke=");
+    const haloed = canvasSvg({
+      master: m,
+      fill: "#000",
+      width: 200,
+      height: 50,
+      haloPx: 2,
+      haloFill: "#fff",
+    });
+    // Inset by the halo so the canvas edge never clips it: (200 − 4) / 100.
+    expect(haloed).toContain('transform="translate(2 5.4) scale(1.96)"');
+    expect(haloed).toContain('stroke="#fff"');
   });
 
   it("centres a scaled mark on its tile", () => {
@@ -178,6 +209,18 @@ describe("exports match the masters", () => {
     expect(text("public/favicon.svg")).toBe(tile(CANVAS, PAPER));
   });
 
+  it("the avatar follows the master and its share rule", () => {
+    const avatar = tileSvg({
+      mark,
+      background: CANVAS,
+      fill: PAPER,
+      radius: 0,
+      markScale:
+        AVATAR_MARK_SHARE / JSON.parse(text("brand/exports/measurements.json")).markArtworkShare,
+    });
+    expect(text("brand/exports/avatar/avatar.svg")).toBe(avatar);
+  });
+
   it("the macOS icon sources and the share-image base follow the masters", () => {
     expect(text("scripts/icons/source/macos-icon-1024.svg")).toBe(
       macosIconSvg(mark, ICON_BLACK, ICON_WHITE),
@@ -188,12 +231,27 @@ describe("exports match the masters", () => {
     expect(text("brand/exports/og/og-base.svg")).toBe(ogBaseSvg(lockup, CANVAS, PAPER));
   });
 
-  it("ships the email logos at the email spec's sizes", () => {
+  it("ships the email logos on the email kit's exact canvases", () => {
+    const lockupSvg = (fill: string, haloPx = 0) =>
+      canvasSvg({ master: lockup, fill, ...EMAIL_LOCKUP_CANVAS, haloPx, haloFill: PAPER });
+    const markSvg = (fill: string, haloPx = 0) =>
+      canvasSvg({
+        master: markForTile(EMAIL_MARK_SIZE, mark, small),
+        fill,
+        width: EMAIL_MARK_SIZE,
+        height: EMAIL_MARK_SIZE,
+        haloPx,
+        haloFill: PAPER,
+      });
+    expect(text("brand/exports/email/lockup-light.svg")).toBe(lockupSvg(INK, EMAIL_LIGHT_HALO_PX));
+    expect(text("brand/exports/email/lockup-dark.svg")).toBe(lockupSvg(PAPER));
+    expect(text("brand/exports/email/mark-light.svg")).toBe(markSvg(INK, EMAIL_LIGHT_HALO_PX));
+    expect(text("brand/exports/email/mark-dark.svg")).toBe(markSvg(PAPER));
     for (const tone of ["light", "dark"]) {
-      expect(pngSize(read(`public/email/lockup-${tone}@2x.png`)).width).toBe(EMAIL_LOCKUP_WIDTH);
+      expect(pngSize(read(`public/email/lockup-${tone}@2x.png`))).toEqual(EMAIL_LOCKUP_CANVAS);
       expect(pngSize(read(`public/email/mark-${tone}@2x.png`))).toEqual({
-        width: EMAIL_MARK_WIDTH,
-        height: EMAIL_MARK_WIDTH,
+        width: EMAIL_MARK_SIZE,
+        height: EMAIL_MARK_SIZE,
       });
     }
   });

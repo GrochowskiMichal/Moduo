@@ -132,6 +132,45 @@ export function ogBaseSvg(lockup: Master, background: string, fill: string): str
   ].join("\n");
 }
 
+/**
+ * A master fitted into a fixed canvas: scaled to fit, left-aligned, vertically
+ * centred, transparent around it. `haloPx` (canvas pixels) draws a `haloFill`
+ * outline under the artwork, inset so the canvas edge never clips it; 0 draws
+ * none.
+ */
+export function canvasSvg(opts: {
+  master: Master;
+  fill: string;
+  width: number;
+  height: number;
+  haloPx?: number;
+  haloFill?: string;
+}): string {
+  const [, , vw, vh] = opts.master.viewBox;
+  const halo = opts.haloPx ?? 0;
+  const scale = Math.min((opts.width - 2 * halo) / vw, (opts.height - 2 * halo) / vh);
+  const y = (opts.height - vh * scale) / 2;
+  const t = placement(opts.master, halo, y, vw * scale);
+  const haloPaths =
+    halo > 0
+      ? opts.master.paths
+          .map(
+            (p) =>
+              `    <path fill="${opts.haloFill}" stroke="${opts.haloFill}" stroke-width="${fmt((2 * halo) / scale)}" stroke-linejoin="round" fill-rule="${p.fillRule}" d="${p.d}"/>`,
+          )
+          .join("\n")
+      : "";
+  return [
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${opts.width} ${opts.height}" width="${opts.width}" height="${opts.height}">`,
+    `  <g${t ? ` transform="${t}"` : ""}>`,
+    ...(haloPaths ? [haloPaths] : []),
+    pathElements(opts.master.paths, opts.fill, "    "),
+    "  </g>",
+    "</svg>",
+    "",
+  ].join("\n");
+}
+
 function pathsLiteral(m: Master): string {
   return m.paths
     .map((p) => `  {\n    d: "${p.d}",\n    fillRule: "${p.fillRule}",\n  },`)

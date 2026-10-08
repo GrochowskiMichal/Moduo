@@ -13,7 +13,7 @@ Moduo's logo files. The rules for using them are in [.design/brand/BRAND_BRIEF.m
 
 **Agents never edit these.** Today's files are *provisional*: the shipped artwork copied in as-is (BRAND-1). Maciej is redrawing them (BRAND-0).
 
-**What a master must be** (`bun run brand:export` refuses anything else and says why): an `<svg>` with a `viewBox` and one or more filled `<path>`s. No transforms, groups with clip paths, masks, strokes, live text, gradients, images or CSS. The fill colour doesn't matter; every export recolours it. Attributes on the root `<svg>` itself are ignored (Figma always writes `fill="none"` there). When exporting from a design tool:
+**What a master must be** (`bun run brand:export` refuses anything else and says why): an `<svg>` with a `viewBox` and one or more filled `<path>`s. No transforms, groups with clip paths, masks, strokes, live text, gradients, images, CSS, nested `<svg>`s, or fill rules and opacity set on a group or the root (set them on each path). The fill colour doesn't matter; every export recolours it. Attributes on the root `<svg>` itself are ignored (Figma always writes `fill="none"` there). When exporting from a design tool:
 - Flatten the artwork and outline any strokes and text.
 - Turn off "Clip content" on the frame.
 - Export the mark, wordmark and lockup together whenever any one of them changes, so the mark inside the lockup stays the same drawing.
@@ -30,17 +30,18 @@ Run `bun run brand:export` after any master changes. It is deterministic: runnin
 | `favicon/staging/` | The same, inverted (white tile, black mark) |
 | `avatar/` | Social and email-sender avatar: paper mark at 55% of the width on Canvas black, `avatar.svg` + `avatar-1024.png` |
 | `og/` | Share-image base, 1200 × 630, lockup top-left |
-| `email/` | Email header logos (see below) |
+| `email/` | Email logos: SVG sources + the @2x PNGs (see below) |
+| `measurements.json` | The mark's measured artwork share, so the drift test rebuilds the avatar from the same number |
 
 ## Where the exports ship (written by the same command)
 
 | Destination | What |
 | --- | --- |
 | `public/` | Favicons and touch icons. `public/` serves both the web app and the landing (the landing build copies the web build). |
-| `public/email/` | `lockup-{light,dark}@2x.png` (192 px wide) and `mark-{light,dark}@2x.png` (72 px), served at `app.moduo.app/email/…`. "light" = Ink artwork for light emails; "dark" = Paper for dark mode. |
+| `public/email/` | `lockup-{light,dark}@2x.png` on an exact 192 × 44 canvas (96 × 22 displayed; artwork left-aligned, vertically centred) and `mark-{light,dark}@2x.png` on 26 × 26 (13 displayed, the footer badge), served at `app.moduo.app/email/…`. "light" = Ink artwork for light emails; "dark" = Paper for dark mode. These sizes are a contract with the email kit (`supabase/functions/_shared/email/assets.ts`); change both together. A Paper halo for the light variants exists as `EMAIL_LIGHT_HALO_PX` in `spec.ts`, off until Maciej decides. |
 | `src/components/ui/moduo-mark-path.ts` | The paths `ModuoMark` renders: the standard mark, and the small drawing for `<ModuoMark small />` (marks drawn ≤ 24 px) |
 | `scripts/icons/source/` | macOS icon sources. After a mark change, also run `bun scripts/icons/build-macos-icon.ts` and `bun run icon:liquid` (needs full Xcode). |
 
-`scripts/brand/brand.test.ts` (part of `bun run verify`) fails when a master or an export rule changed without a re-export: every generated SVG and the TS module must equal what the exporter makes from today's masters, byte for byte. PNGs are rendered from those same SVGs in the same run; their bytes aren't compared, because rasterisers differ slightly by platform. Colours come from `scripts/brand/palette.ts` (mirrors `src/styles/tokens.css`, tested against it), and sizes and placement rules from `scripts/brand/spec.ts`.
+`scripts/brand/brand.test.ts` (part of `bun run verify`) fails when a master or an export rule changed without a re-export: every generated SVG (artwork, favicons, avatar, email logos, share image, icon sources) and the TS module must equal what the exporter makes from today's masters, byte for byte. PNGs are rendered from those same SVGs in the same run; their bytes aren't compared, because rasterisers differ slightly by platform. Colours come from `scripts/brand/palette.ts` (mirrors `src/styles/tokens.css`, tested against it), and sizes and placement rules from `scripts/brand/spec.ts`.
 
 **Small master switch:** favicon tiles of 32 px and below (the mark is then ~23 px) use `mark-small.svg` automatically once it exists, and so does `<ModuoMark small />` (used for the 14 px "Scheduled with Moduo" badge).

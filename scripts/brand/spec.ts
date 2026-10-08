@@ -23,6 +23,21 @@ export function markForTile(px: number, mark: Master, small: Master | null): Mas
 /** Share of the avatar's width the mark's artwork takes (brief §6). */
 export const AVATAR_MARK_SHARE = 0.55;
 
-/** Email header logos at 2×: lockup ≈ 96 px displayed, mark 36 px displayed. */
-export const EMAIL_LOCKUP_WIDTH = 192;
-export const EMAIL_MARK_WIDTH = 72;
+/**
+ * Email logos, @2x. This is the contract with the email kit
+ * (supabase/functions/_shared/email/assets.ts, TX-1): Outlook desktop sizes
+ * images from their width/height attributes, so the canvases are exact.
+ * Header lockup: 96 × 22 displayed, artwork left-aligned, vertically centred.
+ * Footer-badge mark: 13 × 13 displayed (the mark's whole 1000-unit box).
+ * If a redrawn lockup changes its ratio, change these and assets.ts together.
+ */
+export const EMAIL_LOCKUP_CANVAS = { width: 192, height: 44 } as const;
+export const EMAIL_MARK_SIZE = 26;
+
+/**
+ * A Paper halo around the Ink ("light") email logos, in @2x pixels, so they
+ * survive mail apps that darken emails on their own (Gmail, Outlook on
+ * phones). 0 = off: brand decision 25 bans outlines and glows, so this
+ * waits for Maciej's call.
+ */
+export const EMAIL_LIGHT_HALO_PX = 0;

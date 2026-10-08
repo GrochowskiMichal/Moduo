@@ -25,6 +25,11 @@ const FORBIDDEN: [RegExp, string][] = [
   [/<(linear|radial)Gradient\b/i, "a gradient"],
   [/<filter\b|\bfilter\s*=/i, "a filter"],
   [/<style\b|\bstyle\s*=/i, "inline CSS"],
+  [/<svg\b/i, "a nested <svg>"],
+  [
+    /<g\b[^>]*\b(?:fill-rule|(?:fill-)?opacity)\s*=/i,
+    "a fill rule or opacity set on a group (set it on each path)",
+  ],
   [/\bstroke\s*=\s*["'](?!none["'])/i, "a stroke (outline strokes first)"],
   [/\bfill\s*=\s*["']none["']/i, "an unfilled path (delete invisible guides)"],
   [/\b(?:fill-)?opacity\s*=\s*["'](?!1(?:\.0*)?["'])/i, "transparency (masters are solid)"],
@@ -41,6 +46,12 @@ export function parseMaster(name: string, svg: string): Master {
   // Check what's inside the root, not the root itself: design tools put
   // presentation defaults there (Figma always writes fill="none" on it).
   const body = root ? svg.replace(root, "") : svg;
+  // …but nothing on the root that changes how the paths render.
+  if (root && /\s(?:fill-rule|(?:fill-)?opacity|transform|style)\s*=/i.test(root)) {
+    throw new Error(
+      `brand/masters/${name}: the <svg> root sets a fill rule, opacity, transform or style. Set fills on each path.`,
+    );
+  }
   for (const [pattern, what] of FORBIDDEN) {
     if (pattern.test(body)) {
       throw new Error(

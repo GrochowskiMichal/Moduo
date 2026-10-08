@@ -16,14 +16,24 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { Resvg } from "@resvg/resvg-js";
 
-import { artworkSvg, glassLayerSvg, macosIconSvg, markModule, ogBaseSvg, tileSvg } from "./compose";
+import {
+  artworkSvg,
+  canvasSvg,
+  glassLayerSvg,
+  macosIconSvg,
+  markModule,
+  ogBaseSvg,
+  tileSvg,
+} from "./compose";
 import { packIco } from "./ico";
 import { type Master, parseMaster } from "./masters";
+import { artworkShare } from "./measure";
 import { CANVAS, ICON_BLACK, ICON_WHITE, INK, PAPER } from "./palette";
 import {
   AVATAR_MARK_SHARE,
-  EMAIL_LOCKUP_WIDTH,
-  EMAIL_MARK_WIDTH,
+  EMAIL_LIGHT_HALO_PX,
+  EMAIL_LOCKUP_CANVAS,
+  EMAIL_MARK_SIZE,
   markForTile,
   TILE_RADIUS,
 } from "./spec";
@@ -65,12 +75,14 @@ for (const m of [mark, markSmall]) {
 }
 
 // How much of its own box the mark's artwork fills, measured from the
-// rendered shape so a redrawn master needs no hand-entered numbers.
-const markBox = new Resvg(artworkSvg(mark, CANVAS), {
-  font: { loadSystemFonts: false },
-}).getBBox();
-if (!markBox) throw new Error("brand/masters/mark.svg renders empty.");
-const markFill = markBox.width / mark.viewBox[2];
+// shape so a redrawn master needs no hand-entered numbers.
+// Rounded and recorded, so the drift test (which can't load the native
+// renderer) rebuilds the avatar from the same number.
+const markFill = Number(artworkShare(mark).toFixed(6));
+write(
+  "brand/exports/measurements.json",
+  `${JSON.stringify({ markArtworkShare: markFill }, null, 2)}\n`,
+);
 
 // ── SVG + PNG artwork ────────────────────────────────────────────────────
 const artwork: [Master, number][] = [
@@ -140,15 +152,37 @@ const og = ogBaseSvg(lockup, CANVAS, PAPER);
 write("brand/exports/og/og-base.svg", og);
 write("brand/exports/og/og-base.png", png(og, 1200));
 
-// ── Email logos (names and size per specs/transactional-email.md T6) ────
+// ── Email logos (the email kit's contract: spec.ts, TX-1 assets.ts) ─────
 // "light" = for light emails (Ink artwork); "dark" = for dark mode (Paper).
-const emailLogos: [string, Uint8Array][] = [
-  ["lockup-light@2x.png", png(artworkSvg(lockup, INK), EMAIL_LOCKUP_WIDTH)],
-  ["lockup-dark@2x.png", png(artworkSvg(lockup, PAPER), EMAIL_LOCKUP_WIDTH)],
-  ["mark-light@2x.png", png(artworkSvg(mark, INK), EMAIL_MARK_WIDTH)],
-  ["mark-dark@2x.png", png(artworkSvg(mark, PAPER), EMAIL_MARK_WIDTH)],
+const lockupCanvas = (fill: string, haloPx = 0) =>
+  canvasSvg({ master: lockup, fill, ...EMAIL_LOCKUP_CANVAS, haloPx, haloFill: PAPER });
+const markCanvas = (fill: string, haloPx = 0) =>
+  canvasSvg({
+    master: markForTile(EMAIL_MARK_SIZE, mark, markSmall),
+    fill,
+    width: EMAIL_MARK_SIZE,
+    height: EMAIL_MARK_SIZE,
+    haloPx,
+    haloFill: PAPER,
+  });
+const emailSvgs: [string, string, number][] = [
+  ["lockup-light", lockupCanvas(INK, EMAIL_LIGHT_HALO_PX), EMAIL_LOCKUP_CANVAS.width],
+  ["lockup-dark", lockupCanvas(PAPER), EMAIL_LOCKUP_CANVAS.width],
+  ["mark-light", markCanvas(INK, EMAIL_LIGHT_HALO_PX), EMAIL_MARK_SIZE],
+  ["mark-dark", markCanvas(PAPER), EMAIL_MARK_SIZE],
 ];
-for (const [file, data] of emailLogos) write(`brand/exports/email/${file}`, data);
+const emailLogos: [string, Uint8Array][] = [];
+for (const [base, svg, width] of emailSvgs) {
+  write(`brand/exports/email/${base}.svg`, svg);
+  const data = png(svg, width);
+  write(`brand/exports/email/${base}@2x.png`, data);
+  emailLogos.push([`${base}@2x.png`, data]);
+}
+// The email kit fixes the lockup box at 96:22. If a redrawn lockup no longer
+// fills it edge to edge, the box (and assets.ts) should follow the new ratio.
+const lockupRatio = lockup.viewBox[2] / lockup.viewBox[3];
+const boxRatio = EMAIL_LOCKUP_CANVAS.width / EMAIL_LOCKUP_CANVAS.height;
+const ratioDrift = Math.abs(lockupRatio - boxRatio) / boxRatio;
 
 // ── Consumers ───────────────────────────────────────────────────────────
 for (const file of [
@@ -179,6 +213,13 @@ write(markModulePath, markModule(mark, markSmall));
 console.log(`brand:export wrote ${written.length} files from brand/masters/`);
 for (const rel of written) console.log(`  ${rel}`);
 if (!markSmall) console.log("  (no mark-small.svg yet: small sizes use the standard mark)");
+if (ratioDrift > 0.05) {
+  console.log(
+    `\n⚠ The lockup's ratio (${lockupRatio.toFixed(2)}) no longer matches the email box (${boxRatio.toFixed(2)}).\n` +
+      "  Update EMAIL_LOCKUP_CANVAS in scripts/brand/spec.ts and LOCKUP_DISPLAY_* in\n" +
+      "  supabase/functions/_shared/email/assets.ts together.",
+  );
+}
 if (iconsChanged) {
   console.log(
     "\n⚠ The macOS icon sources changed. Rebuild the native icons and commit them:\n" +

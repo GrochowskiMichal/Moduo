@@ -101,7 +101,8 @@ Numbered decisions from the 2026-10-08 brand grilling session. The numbers match
 71. One recurring example cast (brief §11).
 72. `og.png` becomes the OG template, one per page.
 73. One booking badge: "Scheduled with Moduo" + mark.
-74. Emails use the lockup as a 2×/3× PNG image; the email plan's four changes are listed in the brief §13.
+74. Emails use the lockup as one PNG image (@2x, 192 × 44 canvas, 96 × 22 displayed; footer-badge mark 26 × 26, per TX-1's contract, built in BRAND-1); the email plan's four changes are listed in the brief §13.
+    - ❓ **74a. A Paper halo on the light email logos?** Phone mail apps that force dark mode (Gmail, Outlook) make the Ink lockup nearly invisible on its transparent canvas. A thin Paper outline fixes that, but rule 25 bans outlines and glows. Built, off until decided (`EMAIL_LIGHT_HALO_PX`).
 75. **Boilerplate has no location.** Mike isn't from Kraków, and the founders move to Japan before release. **Chat is added to the module list:** email, tasks, notes, calendar, contacts, chat.
 
 ## N. Ownership and next steps
