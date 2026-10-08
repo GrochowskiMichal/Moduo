@@ -1,11 +1,13 @@
 -- Probe for supabase/migrations/20261008013000_account_erase_workspace_data.sql
+-- and its follow-up 20261008040000_account_erasure_private_shortcut.sql
 -- (PRIV-2a, specs/privacy-account-erasure.md). Run it on a throwaway Postgres 17
--- database that holds nothing else, after the stub and the migration:
+-- database that holds nothing else, after the stub and the migrations:
 --
 --   createdb -h /tmp -p 54329 -U postgres erasure_probe
 --   psql -h /tmp -p 54329 -U postgres -d erasure_probe -v ON_ERROR_STOP=1 -q \
 --     -f supabase/probes/account-erasure.stub.sql \
 --     -f supabase/migrations/20261008013000_account_erase_workspace_data.sql \
+--     -f supabase/migrations/20261008040000_account_erasure_private_shortcut.sql \
 --     -f supabase/probes/account-erasure.probe.sql
 --
 -- Every check stops the run with the failing check's message. A clean run
@@ -204,7 +206,8 @@ DELETE FROM public.module_activity;
 INSERT INTO public.companies (id, workspace_id, owner_id, name) VALUES
   (probe.id('COP'), probe.id('W'), probe.id('X'), 'Only X private contact works here'),
   (probe.id('COS'), probe.id('W'), probe.id('X'), 'X shared contact works here'),
-  (probe.id('COB'), probe.id('W'), probe.id('B'), 'B company');
+  (probe.id('COB'), probe.id('W'), probe.id('B'), 'B company'),
+  (probe.id('COX'), probe.id('W'), probe.id('X'), 'X company, nobody works here');
 INSERT INTO public.contacts (id, workspace_id, owner_id, name, company_id) VALUES
   (probe.id('CP'), probe.id('W'), probe.id('X'), 'X private', probe.id('COP')),
   (probe.id('CP2'), probe.id('W'), probe.id('X'), 'X private, in X private group', NULL),
@@ -381,7 +384,8 @@ BEGIN
     'public.account_erasure_rank(text, uuid, uuid)',
     'public.account_erasure_new_owner(text, uuid, uuid, uuid)',
     'public.account_erasure_inbox(uuid, uuid)',
-    'public.account_erase_workspace_data(uuid, boolean)'
+    'public.account_erase_workspace_data(uuid, boolean)',
+    'public.account_erasure_only_creator(text, uuid)'
   ] LOOP
     ASSERT NOT has_function_privilege('anon', fn, 'EXECUTE'), fn || ': anon can execute';
     ASSERT NOT has_function_privilege('authenticated', fn, 'EXECUTE'), fn || ': authenticated can execute';
@@ -405,7 +409,7 @@ CREATE TABLE probe.expected AS SELECT jsonb_build_object(
   'contacts_handed_over', 2,         -- CS, CGc
   'contact_groups_deleted', 1,       -- CG2
   'contact_groups_handed_over', 1,   -- CG
-  'companies_deleted', 1,            -- COP
+  'companies_deleted', 2,            -- COP, COX
   'companies_handed_over', 1,        -- COS
   'events_deleted', 3,               -- EV1, EV2, EV3
   'calendars_deleted', 2,            -- CAL1, CAL2
@@ -476,7 +480,8 @@ BEGIN
   ASSERT NOT EXISTS (SELECT 1 FROM public.contacts
     WHERE id IN (probe.id('CP'), probe.id('CP2'), probe.id('CP3'))), 'private contacts left';
   ASSERT NOT EXISTS (SELECT 1 FROM public.contact_groups WHERE id = probe.id('CG2')), 'private group left';
-  ASSERT NOT EXISTS (SELECT 1 FROM public.companies WHERE id = probe.id('COP')), 'private company left';
+  ASSERT NOT EXISTS (SELECT 1 FROM public.companies WHERE id IN (probe.id('COP'), probe.id('COX'))),
+    'private companies left';
   ASSERT EXISTS (SELECT 1 FROM public.companies WHERE id = probe.id('COB') AND owner_id = probe.id('B')),
     'B company touched';
   ASSERT NOT EXISTS (SELECT 1 FROM public.calendars WHERE owner_id = probe.id('X')), 'X calendars left';
