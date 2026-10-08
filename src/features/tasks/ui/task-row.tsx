@@ -308,7 +308,7 @@ export function TaskRow({
                     role="img"
                     aria-label={`Assignee: ${assigneeName}`}
                   >
-                    <AssigneeAvatar assignee={assignee} className="size-icon" />
+                    <AssigneeAvatar assignee={assignee} size="icon" />
                   </span>
                 </TooltipTrigger>
                 <TooltipContent>{assigneeName}</TooltipContent>

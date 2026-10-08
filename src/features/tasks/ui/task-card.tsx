@@ -304,7 +304,7 @@ export function CardBody({
                   role="img"
                   aria-label={`Assignee: ${assigneeName}`}
                 >
-                  <AssigneeAvatar assignee={byId(task.assigneeId)} className="size-icon" />
+                  <AssigneeAvatar assignee={byId(task.assigneeId)} size="icon" />
                 </span>
               </TooltipTrigger>
               <TooltipContent>{assigneeName}</TooltipContent>

@@ -26,15 +26,19 @@ export function useQueueClaim(
 /** The small ringed avatar that marks a task in someone else's queue. */
 export function ClaimAvatar({
   assignee,
+  size = "sm",
   className,
 }: {
   assignee: Assignee | null;
+  /** `icon` on rows and cards, where it shares a column with icons. */
+  size?: "sm" | "icon";
   className?: string;
 }) {
   return (
     <AssigneeAvatar
       assignee={assignee}
-      className={cn("size-4 ring-1 ring-foreground/35", className)}
+      size={size}
+      className={cn(size === "sm" && "size-4", "ring-1 ring-foreground/35", className)}
     />
   );
 }
@@ -65,14 +69,14 @@ export function QueueToggle({
   const besideClaim =
     claimed && queued ? (
       <span aria-hidden className="flex items-center">
-        <ClaimAvatar assignee={claim.first} />
+        <ClaimAvatar assignee={claim.first} size="icon" />
       </span>
     ) : null;
 
   const mark = showClaim ? (
-    <ClaimAvatar assignee={claim.first} />
+    <ClaimAvatar assignee={claim.first} size="icon" />
   ) : (
-    <ListChecks className="size-3.5" aria-hidden />
+    <ListChecks className="size-icon-sm" aria-hidden />
   );
 
   if (!canEdit) {
