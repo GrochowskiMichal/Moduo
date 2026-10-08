@@ -78,7 +78,7 @@ export function isTaskStatus(value: unknown): value is TaskStatus {
 
 // ---------------------------------------------------------------------------
 // Task time entries (TV-D3) — mirrors task_time_entries' kind CHECK and
-// tasks_op_track_time's actions and answers in 20261008223000_tasks_time_entries.
+// tasks_op_track_time's actions and answers in 20261008224500_tasks_time_entries.
 // ---------------------------------------------------------------------------
 
 /** focus/waiting: a tracked stretch; adjustment: a signed correction; legacy:
