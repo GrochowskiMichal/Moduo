@@ -272,7 +272,7 @@ export function DayStrip({ days, selected, onPick }: DayStripProps) {
       </Button>
       <div
         ref={scroller}
-        className="-my-1 flex min-w-0 flex-1 snap-x gap-2 overflow-x-auto scroll-smooth py-1 [scrollbar-width:none]"
+        className="no-scrollbar -my-1 flex min-w-0 flex-1 snap-x gap-2 overflow-x-auto scroll-smooth py-1"
       >
         {days.map((day) => {
           const parts = dayParts(day.key);
