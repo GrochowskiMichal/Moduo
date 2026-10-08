@@ -202,3 +202,6 @@ History moved out of [BUILD_ORDER.md](./BUILD_ORDER.md) so sessions don't re-rea
 - [x] ~~**DF-18 — Eyebrow / header / toolbar standardization**~~ — **DONE 2026-08-14**, see Wave C for what shipped.
 - [x] ~~🔴 Mindmap: in or out of alpha?~~ — **DECIDED 2026-07-29: OUT of alpha.** The designer ratified "mindmap comes later, out of alpha." It stays hidden from nav but URL-reachable (DF-4), and its rethink moves to post-alpha. **This unblocks MCP-1**, whose dependency line named "the Dashboard/Mindmap reworks" — MCP-1 is now buildable with no further planning.
 
+## Brand system · [`.design/brand/BRAND_BRIEF.md`](../.design/brand/BRAND_BRIEF.md) (§16)
+
+- [x] **BRAND-1 — Asset pipeline (`brand/` tree, `bun run brand:export`, every export, consumers wired, old files deleted)** · deps: — · 2026-10-08 · `t/maciej/brand-1-asset-pipeline` · PR #278 (merged into maciej)
