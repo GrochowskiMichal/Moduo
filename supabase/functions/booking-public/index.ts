@@ -26,6 +26,7 @@ import {
   refreshGoogleAccess,
 } from "../_shared/google-calendar.ts";
 import { bookingCancelUrl, bookingOrigin } from "../_shared/app-origin.ts";
+import { clientIp } from "../_shared/client-ip.ts";
 import { escapeHtml, noTags, singleLine } from "../_shared/escape.ts";
 import { getDefaultSecretKey } from "../_shared/secret-keys.ts";
 import {
@@ -104,12 +105,6 @@ function json(body: unknown, status = 200, headers: Record<string, string> = {})
     status,
     headers: { ...CORS, ...headers, "content-type": "application/json; charset=utf-8" },
   });
-}
-
-function clientIp(req: Request): string {
-  const forwarded = req.headers.get("x-forwarded-for");
-  if (forwarded) return forwarded.split(",")[0].trim();
-  return req.headers.get("cf-connecting-ip") ?? req.headers.get("x-real-ip") ?? "unknown";
 }
 
 // IPs are never stored raw: HMAC-SHA256 keyed with the project secret key,
