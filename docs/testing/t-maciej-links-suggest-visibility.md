@@ -1,0 +1,53 @@
+# Manual test checklist — link suggestions, the note repair list, note duplicate/mention and the assign preview stop handing out other people's private items
+
+> Generated 2026-10-08 · branch `t/maciej/links-suggest-visibility` · **Live-verified:** partial (local replica + read-only prod checks; not applied to prod yet).
+> - **Server, on a local replica (not prod):** Postgres 17 built with [the API-key checklist's recipe](t-maciej-api-key-module-scopes.md#recipe-verify-migrations-on-a-local-replica-used-here): 25 tables rebuilt from prod's catalog (columns, defaults, generated columns, unique indexes, RLS flags), the 35 functions involved taken from the repo (each one identical to prod's body after db:reconcile's normalization), prod's 20 read policies, prod's function grants, and the `perm_enforce_write` triggers. The seed: a workspace owner; Anna and Ben with Notes, Tasks, Contacts and Calendar; Cara with Contacts only; private, shared (View and Edit), inherited and member-granted notes, buckets, tasks, contacts, companies, events and email threads; one tag on all of them; a ±30-minute activity window; an existing link and a declined suggestion; an API key each for Anna and Ben. The same 47 cases ran before and after the migration (writes rolled back). **Before**, every leak reproduced: Anna got "Secret Co" (Ben's private company) as a works-at suggestion, Ben's private note, task and contact and Cara's private contact through the shared tag, Ben's private note through the time window, names for a focus item she can't open, the body of Ben's private note from the repair list, a full copy of Ben's private note from `notes_op_duplicate` (also through her API key), its title echoed back from `notes_op_mention`, and the name of Ben's private bucket from `share_assign_preview`. Cara (Contacts only) got note and task names. **After**, all of those are gone and every name returned passes `entities` RLS for the caller; duplicate and mention answer "Note not found in this workspace.", exactly as for a missing note; Ben still gets his own private items; duplicating, mentioning and previewing on items you can see work as before; the API keys get exactly what their creators get; non-members, Cara on the repair list and anon are refused as before; grants, return types, SECURITY DEFINER and `search_path` are unchanged; applying the file twice works. The ranked walk in `links_suggest` returned the same rows in the same order as a filter-then-limit reference in 71 comparisons (7 callers × 8 limits, plus a 3,000-note tag × 5 limits), took 7–9 ms on the 3,000-note tag (the same as today; checking every candidate first took ~160 ms), and returns nothing if the visibility check ever answers NULL (3 checks).
+> - **Prod, read-only:** prod's bodies of all five functions match the newest repo definitions this migration starts from; grants are `anon` false, `authenticated` true, `service_role` true. Prod's registry holds only `company`, `contact`, `email_thread`, `event`, `note` and `task` rows, each of which `perm_can_see_entity` checks item by item.
+> - **Not yet:** the prod apply (waiting for Maciej's go-ahead) and the app and MCP passes below.
+>
+> Run top-to-bottom; check off as you go. Each item is a step → what you should see → where.
+
+## Link suggestions in the app (after the prod apply)
+- [ ] **Do:** Open one of your notes that shares a tag with another of your notes. → **Expect:** the suggestion strip offers the other note; accepting links them, dismissing hides it for good. _(both)_
+- [ ] **Do:** Open one of your contacts whose email domain matches one of your companies. → **Expect:** "Works at <company>" is suggested; accepting attaches it. _(both)_
+- [ ] **Do:** Open a note a teammate shared with the workspace that carries one of your tags. → **Expect:** your items with that tag are suggested, and so are their shared ones. _(both)_
+
+## A teammate's private things stay private (two accounts in one workspace)
+- [ ] **Do:** As Ben, create a company "Secret Co" with the domain `secret.example` and share nothing about it. As Anna (Contacts edit), give one of your contacts an `@secret.example` email and open it. → **Expect:** no "Works at Secret Co" suggestion. _(both)_
+- [ ] **Do:** As Ben, put a tag Anna also uses on a private note and on a task in a private list. As Anna, open her note with that tag. → **Expect:** neither of Ben's items is suggested. Then Ben shares that note with the workspace (View) → **Expect:** after reopening, Anna is offered it. _(both)_
+- [ ] **Do:** As Ben, edit a private note; within 30 minutes, as Anna, edit one of your notes and reopen it. → **Expect:** Ben's private note isn't suggested. _(both)_
+- [ ] **Do:** As Anna, in the browser console: `await supabase.rpc('links_suggest', { p_workspace_id: '<ws>', p_entity_type: 'contact', p_entity_id: '<a private contact of Ben's>' })` (ids are in `entity_links` / `tag_links`). → **Expect:** `[]`, no error. _(web)_
+- [ ] **Do:** As Ben, open his private note and his private contact. → **Expect:** his own private items are still suggested to him, as before. _(both)_
+- [ ] **Do:** As a member with Contacts only (no Notes or Tasks), open a contact that shares a tag with notes and tasks. → **Expect:** no note or task suggestions. _(both)_
+
+## Blank-note repair list
+- [ ] **Do:** As Anna, in the console: `await supabase.rpc('notes_list_unmaterialized', { p_workspace_id: '<ws>' })`. → **Expect:** only notes Anna can edit. A private note of Ben's that has a body but was never opened (an import, or one written over MCP) is not in it. _(web)_
+- [ ] **Do:** As Ben, open Notes after importing a few notes (or writing one over MCP). → **Expect:** they open with their content (his sweep still repairs his own). _(both)_
+
+## Duplicating, mentioning, assigning
+- [ ] **Do:** Duplicate one of your notes, and a note a teammate shared with you. → **Expect:** both copies appear with their content. _(both)_
+- [ ] **Do:** As Anna, in the console: `await supabase.rpc('notes_op_duplicate', { p_workspace_id: '<ws>', p_source_note_id: '<a private note of Ben's>' })`. → **Expect:** "Note not found in this workspace."; no copy appears. _(web)_
+- [ ] **Do:** @mention a teammate in one of your notes. → **Expect:** they get the notification, with the note's title. _(both)_
+- [ ] **Do:** As Anna, in the console: `await supabase.rpc('notes_op_mention', { p_workspace_id: '<ws>', p_note_id: '<a private note of Ben's>', p_mentioned_user_ids: ['<a teammate>'] })`. → **Expect:** "Note not found in this workspace."; the teammate gets nothing. _(web)_
+- [ ] **Do:** Assign a task in one of your lists to a teammate who can't see the list. → **Expect:** the picker warns "<name> can't see "<list>" — they'll only see this task." _(both)_
+- [ ] **Do:** As Anna, in the console: `await supabase.rpc('share_assign_preview', { p_bucket_id: '<a private list of Ben's>', p_user_id: '<Anna's id>' })`. → **Expect:** `null` (no list name). _(web)_
+
+## Over MCP (an MCP client, or `scripts/mcp-roundtrip.ts`)
+- [ ] **Do:** With Anna's key (Links edit), `links_suggest` on one of her notes, then on Ben's private note's id. → **Expect:** only items Anna can open; nothing for Ben's note. With Ben's key → his own private items appear. _(web)_
+
+## Edge cases
+- [ ] **Do:** As Anna, open an event-linked item where Ben's event sits in a calendar he shared with the workspace at **View**, and another in a **free/busy** calendar, both sharing a tag with your note. → **Expect:** the View one is now suggested (it used to be owner-only, and RLS already showed it); the free/busy one isn't. _(both)_
+- [ ] **Do:** `links_suggest` with `p_limit: 3` on a note whose top-ranked candidates are someone's private items. → **Expect:** three of your visible items, not fewer. _(web)_
+
+## Migrations / data (`20261008130000_definer_reads_item_visibility.sql`; **not applied to prod yet**)
+- [ ] **Do:** Apply with Maciej's go-ahead (MCP `apply_migration` as `definer_reads_item_visibility`, or `supabase db query --linked --project-ref wtoonrvuqumihpkbvwvs` with the file wrapped in a transaction plus the `schema_migrations` row). → **Expect:** all five functions' prod bodies equal this file's after normalization; one overload each; `has_function_privilege` anon false / authenticated true / service_role true for each. _(n/a)_
+- [ ] **Do:** Rolled-back probe on prod (DML only, `set_config('request.jwt.claims', …)` as two members, results only counted, nothing returned): `links_suggest` on an item one member can't open returns 0 rows; every name it returns for them has an `entities` row they can read; `notes_op_duplicate` on the other member's private note is refused. → **Expect:** all hold. _(n/a)_
+
+## Known gaps / not-yet-testable
+- **Still open on prod, not part of this change (PERM-10 in the ledger):** invites whose `created_by` / `share_payload` any `ws.invite` holder can set, so an admin can file an invite "from" a teammate that grants that teammate's private items to a second account; four task ops and `contacts_op_set_status` that return the whole row when the change is a no-op; `entities_op_tombstone` on items you can't open (hides them from their owner's search); `tasks_notify_spine` naming a private blocked task to whoever closes its blocker; `notes_op_move` under a note you can't open; `share_assign_preview` naming any profile id; mentions notifying people who can't open the note.
+- `entity_links` and `tag_links` are readable across the workspace, so the **ids** of private items (not their names) and which tags they carry are visible to every member. That is how a caller learns a private item's id; this change makes those ids useless to the functions above, but the rows themselves are a separate, lower-severity leak.
+- `notifications_list` shows the activity payload (which can carry a title) for activity explicitly aimed at you (an @mention, or `notify_user_ids`), even on an item you can't open. Left as is: the author chose to notify you.
+- The app's own reads of `entities` (search, @mention, ⌘K) already go through RLS with the same check; nothing changed there.
+
+---
+*Convention defined in [AGENTS.md](../../AGENTS.md) → "Working posture" (Wrap). One file per sprint/branch so history is preserved.*
