@@ -16,6 +16,7 @@
 import type { ModuoRuntime } from "../../lib/runtime.types";
 import {
   bucketRowToModel,
+  sortQueueEntries,
   tagLinkRowToModel,
   tagRowToModel,
   taskQueueRowToModel,
@@ -130,43 +131,23 @@ function removeRow<T extends Row>(list: T[], id: string): T[] {
   return list.some((r) => r.id === id) ? list.filter((r) => r.id !== id) : list;
 }
 
+/** Which bundle list each table lands in (the queue lives outside the bundle). */
+const BUNDLE_KEY = {
+  tasks: "tasks",
+  buckets: "buckets",
+  tags: "tags",
+  tag_links: "tagLinks",
+} as const satisfies Partial<Record<LiveTable, keyof TasksModuleBundle>>;
+
 /** Apply one change to the module bundle (queue changes leave it untouched). */
 export function mergeBundle(bundle: TasksModuleBundle, change: LiveChange): TasksModuleBundle {
-  switch (change.table) {
-    case "tasks": {
-      const tasks =
-        change.kind === "delete"
-          ? removeRow(bundle.tasks, change.id)
-          : upsertRow(bundle.tasks, change.row as Task);
-      return tasks === bundle.tasks ? bundle : { ...bundle, tasks };
-    }
-    case "buckets": {
-      const buckets =
-        change.kind === "delete"
-          ? removeRow(bundle.buckets, change.id)
-          : upsertRow(bundle.buckets, change.row as Bucket);
-      return buckets === bundle.buckets ? bundle : { ...bundle, buckets };
-    }
-    case "tags": {
-      const tags =
-        change.kind === "delete"
-          ? removeRow(bundle.tags, change.id)
-          : upsertRow(bundle.tags, change.row as Tag);
-      return tags === bundle.tags ? bundle : { ...bundle, tags };
-    }
-    case "tag_links": {
-      const tagLinks =
-        change.kind === "delete"
-          ? removeRow(bundle.tagLinks, change.id)
-          : upsertRow(bundle.tagLinks, change.row as TagLink);
-      return tagLinks === bundle.tagLinks ? bundle : { ...bundle, tagLinks };
-    }
-    case "task_queue":
-      return bundle;
-  }
+  if (change.table === "task_queue") return bundle;
+  const key = BUNDLE_KEY[change.table];
+  const list = bundle[key] as Row[];
+  const next =
+    change.kind === "delete" ? removeRow(list, change.id) : upsertRow(list, change.row as Row);
+  return next === list ? bundle : { ...bundle, [key]: next };
 }
-
-const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
 /**
  * Apply one change to the queue rows (other tables leave it untouched). A
@@ -182,10 +163,7 @@ export function mergeQueue(queue: TaskQueueEntry[], change: LiveChange): TaskQue
     (e) => e.id === row.id || (e.userId === row.userId && e.taskId === row.taskId),
   );
   if (same && !isNewer(row.updatedAt, same.updatedAt)) return queue;
-  return queue
-    .filter((e) => e !== same)
-    .concat(row)
-    .sort((a, b) => cmp(a.userId, b.userId) || cmp(a.position, b.position) || cmp(a.id, b.id));
+  return sortQueueEntries(queue.filter((e) => e !== same).concat(row));
 }
 
 /**
@@ -207,6 +185,8 @@ export function withoutHeldTags(
 
 /** How long changes keep waiting after your own last call settles. */
 export const ECHO_GRACE_MS = 1_000;
+/** The longest a change waits on calls that don't settle (a stalled request). */
+export const MAX_HOLD_MS = 10_000;
 
 /**
  * Holds live changes back while this module has its own calls in flight, and
@@ -218,12 +198,14 @@ export class LiveGate {
   private buffer: LiveChange[] = [];
   private timer: ReturnType<typeof setTimeout> | null = null;
   private idleWaiters: (() => void)[] = [];
+  private holdTimer: ReturnType<typeof setTimeout> | null = null;
   /** Bumped by every tracked write, so a refetch can tell it raced one. */
   writeSeq = 0;
 
   constructor(
     private readonly deliver: (changes: LiveChange[]) => void,
     private readonly graceMs = ECHO_GRACE_MS,
+    private readonly maxHoldMs = MAX_HOLD_MS,
   ) {}
 
   /** Whether changes are being held right now. */
@@ -249,8 +231,17 @@ export class LiveGate {
   }
 
   push(change: LiveChange): void {
-    if (this.busy) this.buffer.push(change);
-    else this.deliver([change]);
+    if (!this.busy) {
+      this.deliver([change]);
+      return;
+    }
+    this.buffer.push(change);
+    // A request that never settles must not freeze teammates' changes: after
+    // MAX_HOLD_MS what is held lands anyway (still newest-wins per row).
+    this.holdTimer ??= setTimeout(() => {
+      this.holdTimer = null;
+      this.flushBuffer();
+    }, this.maxHoldMs);
   }
 
   /** Run `fn` once nothing is held (now, if nothing is). */
@@ -262,7 +253,9 @@ export class LiveGate {
   /** Drop everything held (the module is switching workspace or unmounting). */
   reset(): void {
     if (this.timer) clearTimeout(this.timer);
+    if (this.holdTimer) clearTimeout(this.holdTimer);
     this.timer = null;
+    this.holdTimer = null;
     this.buffer = [];
     this.idleWaiters = [];
   }
@@ -273,20 +266,27 @@ export class LiveGate {
     this.timer = setTimeout(() => {
       this.timer = null;
       if (this.inFlight > 0) return;
-      const batch = this.buffer;
-      this.buffer = [];
-      if (batch.length > 0) this.deliver(batch);
+      this.flushBuffer();
       const waiters = this.idleWaiters;
       this.idleWaiters = [];
       for (const fn of waiters) fn();
     }, this.graceMs);
+  }
+
+  private flushBuffer(): void {
+    if (this.holdTimer) clearTimeout(this.holdTimer);
+    this.holdTimer = null;
+    const batch = this.buffer;
+    this.buffer = [];
+    if (batch.length > 0) this.deliver(batch);
   }
 }
 
 /**
  * The runtime with every `tasks.*` call counted by the gate, so the module's
  * own saves (and the reads that would replace its state) hold live changes
- * back. Only the `tasks` namespace is wrapped: it is all this module calls.
+ * back. A write that goes around the runtime (the focus time total,
+ * `focus-time-write.ts`) has to call `gate.begin()` itself.
  */
 export function trackTaskCalls(runtime: ModuoRuntime, gate: LiveGate): ModuoRuntime {
   const tasks = runtime.tasks;

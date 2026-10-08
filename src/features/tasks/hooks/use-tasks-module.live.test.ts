@@ -196,7 +196,7 @@ describe("useTasksModule live updates", () => {
 
     server.tasks.push(task({ id: "t9", title: "Made offline" }));
     act(() => {
-      h.listener?.({ type: "resync" });
+      h.listener?.({ type: "resync", reason: "reconnect" });
     });
     await waitFor(() => expect(result.current.tasks).toHaveLength(2));
     expect(list).toHaveBeenCalledTimes(2);
@@ -204,12 +204,29 @@ describe("useTasksModule live updates", () => {
     expect(result.current.loading).toBe(false);
 
     act(() => {
-      h.listener?.({ type: "resync" });
-      h.listener?.({ type: "resync" });
+      h.listener?.({ type: "resync", reason: "reconnect" });
+      h.listener?.({ type: "resync", reason: "reconnect" });
     });
     await sleep(300);
     expect(list).toHaveBeenCalledTimes(2); // throttled: one trailing read is waiting
   });
+
+  it("D5-3: one return to the window (focus + visibility) reads once", async () => {
+    const { runtime, list } = fakeRuntime([task()]);
+    const { result } = mount(runtime);
+    await waitFor(() => expect(result.current.tasks).toHaveLength(1));
+    await sleep(ECHO_GRACE_MS + 50);
+    act(() => {
+      h.listener?.({ type: "resync", reason: "return" });
+    });
+    await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
+    await sleep(ECHO_GRACE_MS + 50);
+    act(() => {
+      h.listener?.({ type: "resync", reason: "return" });
+    });
+    await sleep(5_200);
+    expect(list).toHaveBeenCalledTimes(2);
+  }, 15_000);
 
   it("D5-3: a refetch that raced my save is redone, never applied", async () => {
     const { runtime, server, saves, list } = fakeRuntime([task()]);
@@ -220,7 +237,7 @@ describe("useTasksModule live updates", () => {
 
     list.mockImplementationOnce(() => slow.promise);
     act(() => {
-      h.listener?.({ type: "resync" });
+      h.listener?.({ type: "resync", reason: "reconnect" });
     });
     await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
     act(() => result.current.patchTask("t1", { title: "Typed meanwhile" }));

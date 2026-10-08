@@ -147,7 +147,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
    * of our own saves started meanwhile: its snapshot could predate that save
    * and flick the optimistic edit back. It then tries again once things settle.
    */
-  const requestRefreshRef = useRef<() => void>(() => {});
+  const requestRefreshRef = useRef<(reason?: "reconnect" | "return") => void>(() => {});
   const loadImpl = useCallback(
     async (quiet: boolean) => {
       if (!baseRuntime || !userId || !workspaceId || !canRead) {
@@ -206,34 +206,41 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
 
   const load = useCallback(() => loadImpl(false), [loadImpl]);
 
-  // Refetch on focus / reconnect (D5-3): leading, then at most one trailing
-  // read per REFRESH_THROTTLE_MS, and only once our own calls have settled.
+  // Refetch on focus / reconnect (D5-3), at most once per
+  // REFRESH_THROTTLE_MS and only once our own calls have settled. Coming back
+  // to the window is leading-only (focus and visibility both fire on one
+  // return); a reconnect inside the window also gets one trailing read, since
+  // the socket may have missed changes after the last one.
   const refresh = useRef({
     lastAt: 0,
     timer: null as ReturnType<typeof setTimeout> | null,
     queued: false,
   });
-  const requestRefresh = useCallback(() => {
-    const r = refresh.current;
-    if (r.timer || r.queued) return;
-    const wait = Math.max(0, r.lastAt + REFRESH_THROTTLE_MS - Date.now());
-    r.timer = setTimeout(() => {
-      r.timer = null;
-      r.queued = true;
-      gate.whenIdle(() => {
-        r.queued = false;
-        r.lastAt = Date.now();
-        void loadImpl(true);
-      });
-    }, wait);
-  }, [gate, loadImpl]);
+  const requestRefresh = useCallback(
+    (reason: "reconnect" | "return" = "reconnect") => {
+      const r = refresh.current;
+      if (r.timer || r.queued) return;
+      const wait = Math.max(0, r.lastAt + REFRESH_THROTTLE_MS - Date.now());
+      if (wait > 0 && reason === "return") return;
+      r.timer = setTimeout(() => {
+        r.timer = null;
+        r.queued = true;
+        gate.whenIdle(() => {
+          r.queued = false;
+          r.lastAt = Date.now();
+          void loadImpl(true);
+        });
+      }, wait);
+    },
+    [gate, loadImpl],
+  );
   requestRefreshRef.current = requestRefresh;
 
   useEffect(() => {
     if (!baseRuntime || !userId || !workspaceId || !canRead) return;
     const stop = listenTasksLive(workspaceId, userId, (event) => {
       if (event.type === "resync") {
-        requestRefreshRef.current();
+        requestRefreshRef.current(event.reason);
         return;
       }
       const { change } = event;
@@ -783,7 +790,11 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
           : (task.timeSpentSeconds ?? 0);
       const total = Math.max(0, base + Math.round(seconds));
       patchTaskLocal(id, { timeSpentSeconds: total });
+      // This write goes around the runtime, so it tells the live gate itself:
+      // the echo of an earlier flush must not put an older total back.
+      const endWrite = gate.begin();
       return writeTaskTimeTotal(id, workspaceId, total)
+        .finally(endWrite)
         .then((saved) => {
           if (!saved) {
             // No visible row (hard-deleted, no longer shared): reload, bounded
@@ -832,6 +843,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       userId,
       canEdit,
       patchTaskLocal,
+      gate,
     ],
   );
 
@@ -1482,6 +1494,10 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
   /** Delete a workspace tag — soft-deletes the tag and drops all its links. */
   const deleteTag = useCallback(
     (tagId: string) => {
+      if (!runtime || !workspaceId || !canEdit) {
+        toast.error("You don't have edit access to Tasks in this workspace.");
+        return;
+      }
       if (isTempId(tagId)) {
         toast.error("Still saving that tag — try again in a moment.");
         return;
@@ -1521,7 +1537,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         },
       });
     },
-    [bundle.tags, bundle.tagLinks, guard, runtime, workspaceId],
+    [bundle.tags, bundle.tagLinks, guard, runtime, workspaceId, canEdit],
   );
 
   return {

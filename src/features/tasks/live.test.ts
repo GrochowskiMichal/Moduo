@@ -282,6 +282,18 @@ describe("LiveGate (D5-2)", () => {
     expect(gate.busy).toBe(false);
   });
 
+  it("never holds a change longer than the max hold, even on a stalled call", () => {
+    const got: LiveChange[][] = [];
+    const gate = new LiveGate((c) => got.push(c), 1_000, 10_000);
+    gate.begin(); // never ends
+    gate.push(taskChange());
+    rs.advanceTimersByTime(9_999);
+    expect(got).toHaveLength(0);
+    rs.advanceTimersByTime(1);
+    expect(got).toHaveLength(1);
+    expect(gate.busy).toBe(true);
+  });
+
   it("reset drops what it held", () => {
     const got: LiveChange[][] = [];
     const gate = new LiveGate((c) => got.push(c), 10);

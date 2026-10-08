@@ -21,7 +21,14 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 import { supabaseClient } from "@/lib/runtime.web";
 import { LIVE_TABLES, type LiveChange, type LivePayload, parseLiveChange } from "./live";
 
-export type TasksLiveEvent = { type: "change"; change: LiveChange } | { type: "resync" };
+/**
+ * `resync` asks for a refetch: `reconnect` after the socket rejoined or the
+ * network came back (changes may have been missed), `return` when the window
+ * comes back into view or focus (both fire on one return; the hook coalesces).
+ */
+export type TasksLiveEvent =
+  | { type: "change"; change: LiveChange }
+  | { type: "resync"; reason: "reconnect" | "return" };
 type Listener = (event: TasksLiveEvent) => void;
 
 class TasksLink {
@@ -71,13 +78,13 @@ class TasksLink {
       if (status !== "SUBSCRIBED") return;
       // The first join is the initial load's job; every later join is a
       // reconnect that may have missed changes.
-      if (this.joinedOnce) this.emit({ type: "resync" });
+      if (this.joinedOnce) this.emit({ type: "resync", reason: "reconnect" });
       this.joinedOnce = true;
     });
     this.channel = channel;
     if (typeof window !== "undefined") {
-      window.addEventListener("focus", this.onResync);
-      window.addEventListener("online", this.onResync);
+      window.addEventListener("focus", this.onReturn);
+      window.addEventListener("online", this.onOnline);
     }
     if (typeof document !== "undefined") {
       document.addEventListener("visibilitychange", this.onVisibility);
@@ -89,18 +96,20 @@ class TasksLink {
     this.channel = null;
     this.joinedOnce = false;
     if (typeof window !== "undefined") {
-      window.removeEventListener("focus", this.onResync);
-      window.removeEventListener("online", this.onResync);
+      window.removeEventListener("focus", this.onReturn);
+      window.removeEventListener("online", this.onOnline);
     }
     if (typeof document !== "undefined") {
       document.removeEventListener("visibilitychange", this.onVisibility);
     }
   }
 
-  private onResync = () => this.emit({ type: "resync" });
+  private onReturn = () => this.emit({ type: "resync", reason: "return" });
+
+  private onOnline = () => this.emit({ type: "resync", reason: "reconnect" });
 
   private onVisibility = () => {
-    if (document.visibilityState === "visible") this.emit({ type: "resync" });
+    if (document.visibilityState === "visible") this.onReturn();
   };
 
   private emit(event: TasksLiveEvent): void {
