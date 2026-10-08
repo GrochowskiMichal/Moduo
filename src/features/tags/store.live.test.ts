@@ -106,3 +106,69 @@ describe("applyLiveTags", () => {
     expect(tagsOf(getTagView(WS), TASK)).toEqual([]);
   });
 });
+
+/** Let the clock move on a little (stamps are compared by Date.now()). */
+const tick = () => new Promise((r) => setTimeout(r, 3));
+
+describe("applyLiveTags against reads in flight", () => {
+  beforeEach(() => {
+    resetTagStore();
+  });
+
+  it("an older read can't take back my saved attach once its echo landed", async () => {
+    seed([tag()]);
+    await tick();
+    const hubReadStarted = Date.now();
+    await tick();
+    let finish!: (l: TagLink) => void;
+    const runtime = {
+      tasks: {
+        attachTag: () =>
+          new Promise<TagLink>((r) => {
+            finish = r;
+          }),
+      },
+    } as unknown as ModuoRuntime;
+    toggleTag({ runtime, workspaceId: WS }, TASK, "g1");
+    await new Promise((r) => setTimeout(r, 0));
+    finish(link({ id: "l9" }));
+    await new Promise((r) => setTimeout(r, 0));
+    applyLiveTags(WS, [upLink(link({ id: "l9" }))]);
+    // The hub read for t1 started before all that and lands now, without the link.
+    seedTags(WS, {
+      tags: [tag()],
+      links: [],
+      scope: { kind: "entity", ...TASK },
+      at: hubReadStarted,
+    });
+    expect(tagsOf(getTagView(WS), TASK).map((t) => t.id)).toEqual(["g1"]);
+  });
+
+  it("an older read can't put back what a teammate changed live", async () => {
+    seed([tag()], [link()]);
+    await tick();
+    const readStarted = Date.now();
+    await tick();
+    applyLiveTags(WS, [
+      { table: "tag_links", kind: "delete", id: "l1" },
+      upTag(tag({ name: "Renamed", updatedAt: "2026-10-08T10:00:09Z" })),
+      upTag(tag({ id: "g2", name: "New" })),
+    ]);
+    seedTags(WS, { tags: [tag()], links: [link()], scope: { kind: "all" }, at: readStarted });
+    const view = getTagView(WS);
+    expect(tagsOf(view, TASK)).toEqual([]);
+    expect(view.tags.map((t) => t.name)).toEqual(["New", "Renamed"]);
+  });
+
+  it("a read that started after the change replaces it as usual", () => {
+    seed([tag()], [link()]);
+    applyLiveTags(WS, [{ table: "tag_links", kind: "delete", id: "l1" }]);
+    seedTags(WS, {
+      tags: [tag()],
+      links: [link({ id: "l2" })],
+      scope: { kind: "all" },
+      at: Date.now() + 1,
+    });
+    expect(tagsOf(getTagView(WS), TASK).map((t) => t.id)).toEqual(["g1"]);
+  });
+});

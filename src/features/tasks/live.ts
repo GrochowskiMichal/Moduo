@@ -289,14 +289,18 @@ export class LiveGate {
  */
 export function trackTaskCalls(runtime: ModuoRuntime, gate: LiveGate): ModuoRuntime {
   // A proxy, not a copy, so a method added to the runtime later is tracked too.
+  // Wrappers are cached per method, so `tasks.x === tasks.x` holds.
+  const wrappers = new Map<PropertyKey, { fn: unknown; wrapped: unknown }>();
   const tasks = new Proxy(runtime.tasks, {
     get(target, prop, receiver) {
       const value = Reflect.get(target, prop, receiver);
       if (typeof value !== "function") return value;
+      const cached = wrappers.get(prop);
+      if (cached && cached.fn === value) return cached.wrapped;
       // A read can't race an echo, but it can replace state: count it, without
       // marking a write (a quiet refetch only restarts after a write).
       const write = typeof prop !== "string" || !/^(list|get)/.test(prop);
-      return (...args: unknown[]) => {
+      const wrapped = (...args: unknown[]) => {
         const end = gate.begin({ write });
         try {
           const result = (value as (...a: unknown[]) => unknown).apply(target, args);
@@ -310,6 +314,8 @@ export function trackTaskCalls(runtime: ModuoRuntime, gate: LiveGate): ModuoRunt
           throw e;
         }
       };
+      wrappers.set(prop, { fn: value, wrapped });
+      return wrapped;
     },
   });
   return { ...runtime, tasks };

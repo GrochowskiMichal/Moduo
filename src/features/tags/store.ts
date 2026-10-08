@@ -107,6 +107,10 @@ type WorkspaceTags = {
   seeds: Map<string, { scope: LinkScope; at: number }>;
   /** When the read behind `tags` started. */
   tagsAt: number;
+  /** When a live change (TV-D5) last touched each link (by `linkKey`) and
+   *  tag: a read that started before it can't put back what it changed. */
+  liveLinks: Map<string, number>;
+  liveTags: Map<string, number>;
   ops: Op[];
   view: TagView | null;
 };
@@ -159,6 +163,8 @@ function workspace(workspaceId: string): WorkspaceTags {
       links: new Map(),
       seeds: new Map(),
       tagsAt: Number.NEGATIVE_INFINITY,
+      liveLinks: new Map(),
+      liveTags: new Map(),
       ops: [],
       view: null,
     };
@@ -261,13 +267,16 @@ export function seedTags(workspaceId: string, seed: TagSeed): void {
     (fullyRead !== null &&
       (fullyRead.types.has(link.entityType) ||
         fullyRead.entities.has(entityKey(link.entityType, link.entityId))));
-  // A link written since this read started is the write's to say.
+  // A link written since this read started is the write's to say, and so is
+  // one a live change touched since then.
   const changedSince = new Set<string>();
   for (const op of ws.ops) {
     if (op.kind === "link" && (op.settledAt === null || op.settledAt > seed.at)) {
       changedSince.add(linkKey(op.tagId, op.entityType, op.entityId));
     }
   }
+  forgetOldLive(ws);
+  for (const [key, at] of ws.liveLinks) if (at > seed.at) changedSince.add(key);
   if (complete) {
     // This read now stands for its scope; older reads it covers are forgotten.
     for (const [key, old] of ws.seeds) {
@@ -278,7 +287,15 @@ export function seedTags(workspaceId: string, seed: TagSeed): void {
   // Every read loads the workspace's live tags (a capped list is the same first rows each time).
   if (seed.at >= ws.tagsAt) {
     ws.tagsAt = seed.at;
-    ws.tags = new Map(seed.tags.map((t) => [t.id, t]));
+    const tags = new Map(seed.tags.map((t) => [t.id, t]));
+    // A tag a live change touched after this read started keeps that state.
+    for (const [id, at] of ws.liveTags) {
+      if (at <= seed.at) continue;
+      const live = ws.tags.get(id);
+      if (live) tags.set(id, live);
+      else tags.delete(id);
+    }
+    ws.tags = tags;
   }
   const links = new Map<string, TagLink>();
   for (const [k, link] of ws.links) {
@@ -327,6 +344,7 @@ export function seedTags(workspaceId: string, seed: TagSeed): void {
 export function applyLiveTags(workspaceId: string, changes: readonly LiveChange[]): void {
   const ws = workspaces.get(workspaceId);
   if (!ws) return;
+  const now = Date.now();
   let touched = false;
   const giveWay = (gone: (op: Op) => boolean) => {
     const before = ws.ops.length;
@@ -337,6 +355,7 @@ export function applyLiveTags(workspaceId: string, changes: readonly LiveChange[
     if (change.table === "tags") {
       if (change.kind === "delete") {
         if (ws.tags.delete(change.id)) touched = true;
+        ws.liveTags.set(change.id, now);
         giveWay((op) => op.kind === "tag" && op.tag.id === change.id);
         continue;
       }
@@ -344,6 +363,7 @@ export function applyLiveTags(workspaceId: string, changes: readonly LiveChange[
       const local = ws.tags.get(row.id);
       if (local && !isNewer(row.updatedAt, local.updatedAt)) continue;
       ws.tags.set(row.id, row);
+      ws.liveTags.set(row.id, now);
       touched = true;
       giveWay(
         (op) =>
@@ -354,6 +374,7 @@ export function applyLiveTags(workspaceId: string, changes: readonly LiveChange[
         for (const [key, link] of ws.links) {
           if (link.id === change.id) {
             ws.links.delete(key);
+            ws.liveLinks.set(key, now);
             touched = true;
           }
         }
@@ -362,6 +383,7 @@ export function applyLiveTags(workspaceId: string, changes: readonly LiveChange[
       }
       const link = change.row as TagLink;
       const key = linkKey(link.tagId, link.entityType, link.entityId);
+      ws.liveLinks.set(key, now);
       if (ws.links.get(key)?.id !== link.id) {
         ws.links.set(key, link);
         touched = true;
@@ -370,6 +392,13 @@ export function applyLiveTags(workspaceId: string, changes: readonly LiveChange[
     }
   }
   if (touched) changed(ws);
+}
+
+/** Live-change marks only matter to reads still in flight: drop old ones. */
+function forgetOldLive(ws: WorkspaceTags): void {
+  const cutoff = Date.now() - SETTLED_OP_TTL_MS;
+  for (const [key, at] of ws.liveLinks) if (at < cutoff) ws.liveLinks.delete(key);
+  for (const [id, at] of ws.liveTags) if (at < cutoff) ws.liveTags.delete(id);
 }
 
 /** The entity types and single entities that full reads (not "everything") loaded. */

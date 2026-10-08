@@ -26,6 +26,7 @@ Setup: two sessions on the same workspace. The best setup is two members. One pe
 - [ ] **Do:** Hide A's tab (or minimise the desktop app), change things in B, come back to A → **Expect:** A shows the changes right away; the list doesn't blank or flash a spinner. _(both)_
 - [ ] **Do:** Switch to A and away repeatedly → **Expect:** no visible flicker. (In the network tab, at most one reload of the task list per 5 s.) _(web)_
 - [ ] **Do:** In A, complete a task that's in your Queue, switch away and back → **Expect:** it still shows done in place in the Queue until a full reload (TV-D4 behaviour kept). _(both)_
+- [ ] **Do:** Then, in B, reopen that task → **Expect:** it leaves A's Queue (it's no longer queued) instead of showing there as open. _(both)_
 
 ## Edge cases
 - [ ] **Do:** Switch A to another workspace while B keeps editing the first → **Expect:** nothing from the first workspace appears in A's second workspace. _(both)_
@@ -41,7 +42,6 @@ Setup: two sessions on the same workspace. The best setup is two members. One pe
 - **Comment counts (D5-1) aren't live:** `comments` is published, but nothing shows a comment count yet; TV-U3 adds the listener.
 - **Attachments aren't published yet:** their table arrived with AT-1, after the publication migration; AT-2 adds it.
 - **A row that stops being visible to you** (unshared, or moved where you can't see it) sends no live change, so it stays until the next refetch.
-- **A read that started before a live tag change and lands after it** (a hub's single-item tag read) can show the older state until the next change or read.
 
 ---
 *Convention defined in [AGENTS.md](../../AGENTS.md) → "Working posture" (Wrap). One file per sprint/branch so history is preserved.*
