@@ -3,10 +3,13 @@ import { act, render, waitFor } from "@testing-library/react";
 
 import { type AuthContextValue, AuthProvider, useAuth } from "./auth-provider";
 
-// A runtime whose auth events the test fires by hand, as auth-js would.
+// A runtime whose auth events the test fires by hand, as auth-js would. `profile` is what
+// the server answers for the signed-in account: null once the account is deleted.
 const fake = rs.hoisted(() => {
   const state = {
     emit: null as null | ((event: string, session: unknown) => void),
+    profile: { plan_tier: "free" } as unknown,
+    profileGate: null as null | Promise<void>,
   };
   const session = { user: { id: "u1", email: "u1@example.com" }, access_token: "token-u1" };
   const runtime = {
@@ -20,9 +23,14 @@ const fake = rs.hoisted(() => {
         state.emit?.("SIGNED_OUT", null);
       }),
     },
-    workspace: { getProfile: rs.fn(async () => ({ data: null })) },
+    workspace: {
+      getProfile: rs.fn(async (_userId: string) => {
+        if (state.profileGate) await state.profileGate;
+        return { data: state.profile };
+      }),
+    },
   };
-  return { state, runtime };
+  return { state, session, runtime };
 });
 
 const analytics = rs.hoisted(() => ({
@@ -55,14 +63,27 @@ async function renderAuth() {
   return () => auth as unknown as AuthContextValue;
 }
 
+/** Let pending promise jobs (the profile read and what follows it) run. */
+async function settle() {
+  await act(async () => {
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+  });
+}
+
+const startedFor = (userId: string) =>
+  analytics.setAnalyticsUser.mock.calls.some(([id]) => id === userId);
+
 beforeEach(() => {
   fake.state.emit = null;
+  fake.state.profile = { plan_tier: "free" };
+  fake.state.profileGate = null;
   rs.clearAllMocks();
 });
 
 describe("AuthProvider — signing out and analytics (PRIV-3)", () => {
   it("tracks nothing when auth-js signs out on its own, like after the account was deleted elsewhere", async () => {
     await renderAuth();
+    await settle();
 
     act(() => fake.state.emit?.("SIGNED_OUT", null));
 
@@ -72,6 +93,7 @@ describe("AuthProvider — signing out and analytics (PRIV-3)", () => {
 
   it("tracks app_signed_out once when the person signs out, before the sign-out itself", async () => {
     const auth = await renderAuth();
+    await settle();
 
     await act(() => auth().signOut());
 
@@ -80,5 +102,45 @@ describe("AuthProvider — signing out and analytics (PRIV-3)", () => {
       fake.runtime.auth.signOut.mock.invocationCallOrder[0],
     );
     expect(analytics.setAnalyticsUser).toHaveBeenLastCalledWith(null);
+  });
+});
+
+describe("AuthProvider — analytics starts only for an account the server still has (PRIV-3)", () => {
+  it("starts once the profile read confirms the account, and tracks the sign-in once", async () => {
+    await renderAuth();
+    await waitFor(() => expect(startedFor("u1")).toBe(true));
+
+    act(() => fake.state.emit?.("INITIAL_SESSION", fake.session));
+    await settle();
+
+    expect(analytics.signedIn).toHaveBeenCalledTimes(1);
+  });
+
+  it("never starts for a cached session whose account was deleted elsewhere", async () => {
+    fake.state.profile = null; // what the server answers for a deleted account
+    await renderAuth();
+    await settle();
+
+    act(() => fake.state.emit?.("INITIAL_SESSION", fake.session));
+    await settle();
+
+    expect(startedFor("u1")).toBe(false);
+    expect(analytics.setAnalyticsUser).toHaveBeenCalledWith(null);
+    expect(analytics.signedIn).not.toHaveBeenCalled();
+  });
+
+  it("ignores a profile answer that arrives after the person signed out", async () => {
+    let answer: () => void = () => {};
+    fake.state.profileGate = new Promise<void>((resolve) => {
+      answer = resolve;
+    });
+    await renderAuth();
+
+    act(() => fake.state.emit?.("SIGNED_OUT", null));
+    answer();
+    await settle();
+
+    expect(startedFor("u1")).toBe(false);
+    expect(analytics.signedIn).not.toHaveBeenCalled();
   });
 });

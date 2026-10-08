@@ -7,7 +7,8 @@
 - [ ] **Do:** Open PostHog (EU cloud, the project the landing uses). Your avatar → **Settings → Personal API keys → Create personal API key**.
   - **Label:** `Moduo account erasure`
   - **Scopes:** only **Person → Write** (`person:write`)
-  - **Access:** only the Moduo project, not the whole organization.
+  - **Access:** only the Moduo project, not the whole organization. Then a wrong project id is refused instead of silently matching nobody.
+  - Create it from an account that stays in the PostHog organization: a personal key stops working when its owner leaves.
   - → **Expect:** a key starting with `phx_`, shown once. Copy it straight into the password manager. It deletes people, so it never goes into git, chat or a file. _(PostHog)_
 - [ ] **Do:** **Settings → Project → General**, copy the **Project ID** (a number; it's also in the address bar, `eu.posthog.com/project/<id>/…`). → **Expect:** something like `12345`. _(PostHog)_
 - [ ] **Do (recommended):** **Settings → Project → IP data capture configuration → turn on "Discard client IP data".** → **Expect:** PostHog still works out country and city (it does that before discarding) but no longer stores IP addresses. This affects the landing too, which is fine. _(PostHog)_
@@ -31,7 +32,7 @@
 - [ ] **Do:** Switch it back on, then off and sign out straight away. → **Expect:** the person is still gone after 15 seconds: the request left before the sign-out. _(staging + PostHog)_
 - [ ] **Do:** Switch it on, open a page, go offline (DevTools → Network → Offline), switch it off, close the tab, go back online and reopen. → **Expect:** `moduo:analytics-forget:<user id>` was in local storage while offline; on reopening the request goes again, the marker disappears, and the person is gone. _(web)_
 - [ ] **Do:** Switch it on, open a page, then delete the account (Settings → Account → Danger zone). → **Expect:** the deletion succeeds, the person is gone from PostHog, and it stays gone: no `app_signed_out` event brings it back. In Supabase → `delete-account` → Logs, no `posthog_refused` warning. _(staging + PostHog)_
-- [ ] **Do (optional, two devices):** Say yes on a second browser too, then delete the account on the first and leave the second open without clicking around. → **Expect:** when the second one signs itself out (its sign-in runs out within the hour), it sends no `app_signed_out`, and the person stays gone. _(staging + PostHog)_
+- [ ] **Do (optional, two devices):** Say yes on a second browser too, then delete the account on the first. Reload the second right away, then leave it open. → **Expect:** the reload sends nothing (no `$identify`, no `app_signed_in`), it signs itself out within the hour without an `app_signed_out`, and the person stays gone. _(staging + PostHog)_
 - [ ] **Do (failure path, optional):** Temporarily set `POSTHOG_PROJECT_ID` to a wrong number. Switch analytics on and off with another throwaway account. → **Expect:** `analytics-forget` answers `503` and logs "PostHog refused" with the user id; the marker stays. Put the right id back and reload. → **Expect:** the request goes again and the person is gone. With the wrong id, deleting an account still works and logs `posthog_refused: 404`. _(staging)_
 
 ## 5. Then the privacy policy
@@ -40,7 +41,7 @@
 ## Known gaps / not-yet-testable
 - Nothing has been run against real PostHog. The request shape (JSON body, 202) comes from PostHog's server code and is unit-tested with a fake.
 - PostHog's event deletion is weekly, so "events gone" can only be confirmed after the next Sunday run.
-- Consent is per device, the PostHog person per account. Switching off on one device erases what every device sent, and a device that still says yes keeps sending, which creates the person again. After an account deletion, another signed-in device with a yes that stays in use can send page views until its sign-in runs out (up to an hour). That recreates the person, and the id isn't anonymous: Stripe's kept billing records carry it. Delete such a person by hand (PostHog → People, search the user id).
-- A refused or missing PostHog setup during an account deletion is only logged, and Supabase keeps those logs briefly. Rerun section 4 after any change to the PostHog key or project.
+- Consent is per device, the PostHog person per account. Switching off on one device erases what every device sent, and a device that still says yes keeps sending, which creates the person again.
+- A refused or missing PostHog setup during an account deletion is only logged, and Supabase keeps those logs briefly. PRIV-3b (a durable backlog, retried on a schedule) closes this before the production key. Until then, rerun section 4 after any change to the PostHog key or project.
 - An event that reaches PostHog more than ~10 s after the switch-off (a retried send, a slow network) arrives after the deletion and survives it. The next switch-off or account deletion catches it.
 - `analytics-forget` has no per-user throttle (accepted risk, docs/decisions/permissions.md): someone looping it could use up PostHog's private-API rate limit and make account deletions fail until it stops.

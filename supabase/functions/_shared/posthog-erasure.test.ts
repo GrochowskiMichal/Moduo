@@ -88,13 +88,26 @@ describe("makePostHogEraser", () => {
     expect(await eraser.erasePerson(USER)).toEqual({ status: "refused", httpStatus: 200 });
   });
 
-  it("gives up on a request PostHog doesn't answer in time", async () => {
+  it("gives up on a request PostHog doesn't answer in time, and never follows a redirect", async () => {
     const { calls, impl } = fakeFetch(202, {});
     const eraser = makePostHogEraser({ apiKey: "phx_key", projectId: "12345", fetch: impl });
 
     await eraser.erasePerson(USER);
 
     expect(calls[0].init.signal).toBeInstanceOf(AbortSignal);
+    expect(calls[0].init.redirect).toBe("error");
+  });
+
+  it("takes another success only with PostHog's summary in it", async () => {
+    const withSummary = fakeFetch(200, { persons_found: 1, deletion_errors: [] });
+    const bare = fakeFetch(200, {}); // a proxy or a wrong host answering for PostHog
+
+    expect(
+      await makePostHogEraser({ apiKey: "k", projectId: "1", fetch: withSummary.impl }).erasePerson(USER),
+    ).toEqual({ status: "queued" });
+    expect(
+      await makePostHogEraser({ apiKey: "k", projectId: "1", fetch: bare.impl }).erasePerson(USER),
+    ).toEqual({ status: "refused", httpStatus: 200 });
   });
 
   it.each([408, 429, 500, 503])("throws on a %s, so the caller retries", async (status) => {
@@ -147,8 +160,17 @@ describe("postHogEraserFromEnv", () => {
     expect((calls[0].init.headers as Record<string, string>).Authorization).toBe("Bearer phx_key");
   });
 
-  it.each(["eu.posthog.com", "http://eu.posthog.com", "not a url"])(
-    "reads a POSTHOG_API_HOST of %j as not configured, rather than failing every deletion",
+  it.each([
+    "eu.posthog.com",
+    "http://eu.posthog.com",
+    "not a url",
+    "https://posthog.example.com",
+    "https://eu.posthog.com/#",
+    "https://proxy.example/?u=https://eu.posthog.com",
+    "https://user:pw@eu.posthog.com",
+    "https://eu.posthog.com/api",
+  ])(
+    "reads a POSTHOG_API_HOST of %j as not configured: the key only ever goes to PostHog",
     (host) => {
       expect(
         postHogEraserFromEnv(
@@ -158,19 +180,19 @@ describe("postHogEraserFromEnv", () => {
     },
   );
 
-  it("uses POSTHOG_API_HOST when it's set", async () => {
+  it("uses PostHog's US cloud when POSTHOG_API_HOST says so", async () => {
     const { calls, impl } = fakeFetch(202, {});
     const eraser = postHogEraserFromEnv(
       env({
         POSTHOG_PERSONAL_API_KEY: "phx_key",
         POSTHOG_PROJECT_ID: "12345",
-        POSTHOG_API_HOST: "https://posthog.example.com",
+        POSTHOG_API_HOST: "https://us.posthog.com/",
       }),
       impl,
     );
 
     await eraser?.erasePerson(USER);
 
-    expect(calls[0].url).toBe("https://posthog.example.com/api/projects/12345/persons/bulk_delete/");
+    expect(calls[0].url).toBe("https://us.posthog.com/api/projects/12345/persons/bulk_delete/");
   });
 });

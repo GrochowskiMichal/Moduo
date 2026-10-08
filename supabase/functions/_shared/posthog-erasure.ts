@@ -12,9 +12,10 @@
  * with, and the callers treat that as "not configured":
  *   POSTHOG_PERSONAL_API_KEY  a personal API key with the person:write scope
  *   POSTHOG_PROJECT_ID        the project's numeric id
- *   POSTHOG_API_HOST          optional; default https://eu.posthog.com, the private API.
- *                             Not eu.i.posthog.com, which only takes events. Anything
- *                             but an https URL counts as not configured.
+ *   POSTHOG_API_HOST          optional; https://eu.posthog.com (the default, the private
+ *                             API) or https://us.posthog.com. Not eu.i.posthog.com, which
+ *                             only takes events. Anything else counts as not configured:
+ *                             the key must never go anywhere but PostHog.
  *
  * Plain TypeScript with an injected fetch (no Deno globals), so the unit tests can run it.
  */
@@ -42,27 +43,21 @@ export type PostHogEraserConfig = {
   fetch?: typeof fetch;
 };
 
+/** PostHog Cloud's private API, the only places the personal key may go. */
+const POSTHOG_API_HOSTS = new Set([POSTHOG_DEFAULT_API_HOST, "https://us.posthog.com"]);
+
 /** Reads the secrets above; null when the key or the project id isn't set, or the host
- *  isn't an https URL. A broken setup must read as "not configured", never as an error
- *  that fails every account deletion. */
+ *  isn't one of PostHog's. A broken setup must read as "not configured", never as an
+ *  error that fails every account deletion. */
 export function postHogEraserFromEnv(
   env: (name: string) => string | undefined,
   fetchImpl?: typeof fetch,
 ): ErasurePostHog | null {
   const apiKey = env("POSTHOG_PERSONAL_API_KEY")?.trim();
   const projectId = env("POSTHOG_PROJECT_ID")?.trim();
-  const host = env("POSTHOG_API_HOST")?.trim() || undefined;
-  if (!apiKey || !projectId) return null;
-  if (host !== undefined && !isHttpsUrl(host)) return null;
+  const host = (env("POSTHOG_API_HOST")?.trim() || POSTHOG_DEFAULT_API_HOST).replace(/\/+$/, "");
+  if (!apiKey || !projectId || !POSTHOG_API_HOSTS.has(host)) return null;
   return makePostHogEraser({ apiKey, projectId, host, fetch: fetchImpl });
-}
-
-function isHttpsUrl(value: string): boolean {
-  try {
-    return new URL(value).protocol === "https:";
-  } catch {
-    return false;
-  }
 }
 
 /** Worth another go later: a timeout, a rate limit, or PostHog having a bad moment (5xx).
@@ -92,16 +87,21 @@ export function makePostHogEraser(config: PostHogEraserConfig): ErasurePostHog {
           delete_recordings: true,
         }),
         signal: AbortSignal.timeout(POSTHOG_TIMEOUT_MS),
+        // A redirect means the wrong place; following one could carry the key with it.
+        redirect: "error",
       });
       const text = await res.text();
       if (res.ok) {
-        const summary = parseJson(text);
-        // 202 is bulk_delete's answer, with or without a summary. Any other success must
-        // at least be JSON: an HTML page means a wrong host, which won't delete anything.
-        if (res.status !== 202 && (summary === null || typeof summary !== "object")) {
+        const summary = parseJson(text) as {
+          persons_found?: unknown;
+          deletion_errors?: unknown;
+        } | null;
+        // 202 is bulk_delete's answer, with or without a summary. Any other success counts
+        // only with PostHog's summary in it: anything else answering didn't delete anyone.
+        if (res.status !== 202 && typeof summary?.persons_found !== "number") {
           return { status: "refused", httpStatus: res.status };
         }
-        const errors = (summary as { deletion_errors?: unknown } | null)?.deletion_errors;
+        const errors = summary?.deletion_errors;
         // A person PostHog matched but couldn't finish deleting: worth another go.
         if (Array.isArray(errors) && errors.length > 0) {
           throw new Error(`PostHog couldn't finish the deletion: ${clip(text)}`);
