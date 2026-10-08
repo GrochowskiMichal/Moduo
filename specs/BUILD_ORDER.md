@@ -158,11 +158,22 @@ _Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
 - **`tokens.css` / `global.css`** — DS-1, DS-2.
 - **Migrations** — D1, D2, D3, F2, F4, U6, U8, AT-1, all with distinct timestamps. Never two sessions altering `tasks` at once: D1, D2 and D3 are sequential for that reason.
 
+## Brand system · [`.design/brand/BRAND_BRIEF.md`](../.design/brand/BRAND_BRIEF.md) (§16)
+
+> Planned 2026-10-08 (PR #274). Maciej makes every brand call; agents never edit `brand/masters/`. **BRAND-1 supplies TX-1's logo PNGs** (`public/email/`), so TX-1 takes them instead of rasterising its own. BRAND-0 is design work by Maciej; every later block re-exports when it lands.
+
+- [ ] **BRAND-0 — Redraw the masters (mark at 45° from one stroke, wordmark A, lockup spacing, small master)** · deps: — · *Maciej*
+- [ ] **BRAND-2 — App touch-points (initials default avatar, Pilat out of the picker, dead fonts, staging favicon)** · deps: BRAND-1
+- [ ] **BRAND-3 — The reveal animation (once per launch, reduced-motion fade, video intro)** · deps: BRAND-1
+- [ ] **BRAND-4 — Landing alignment (PR into `prod-landing`)** · deps: BRAND-1
+- [ ] **BRAND-5 — Press kit page + zip, social avatars and banners** · deps: BRAND-1
+- [ ] **BRAND-6 — Rendered brand page** · deps: BRAND-0
+
 ## Transactional email — every email Moduo sends · [`specs/transactional-email.md`](./transactional-email.md)
 
 > Planned 2026-10-08. Ratified copy + look: [`.design/transactional-email/email-set.html`](../.design/transactional-email/email-set.html). **TX-1 → TX-4 is the gate for sending the first waitlist invites** (Q57). After TX-3: TX-5 ∥ TX-8 ∥ TX-9a; TX-7 after TX-4; TX-6 after TX-5; TX-9b after TX-4 + TX-9a; TX-10 after TX-8. Every block has prod steps (migration round trip + apply, function deploy with Maciej's OK, and for TX-2/TX-4 a dashboard checklist Maciej runs). Shared files: `supabase/migrations/*` (distinct timestamps), `_shared/email/templates/index.ts`, `docs/email-runbook.md`.
 
-- [ ] **TX-1 — Email kit (shared templates, palette, plain text, .ics, Storybook gallery, logo PNGs, `EMAIL_KINDS`)** · deps: —
+- [ ] **TX-1 — Email kit (shared templates, palette, plain text, .ics, Storybook gallery, logo PNGs, `EMAIL_KINDS`)** · deps: — · *logo PNGs come from BRAND-1 (`public/email/`) when it has landed; see brand brief §13 for the lockup + "Scheduled with Moduo" deltas*
 - [ ] **TX-2 — Sign-in codes on Resend (Send Email Hook, `email_outbox` log, 10-min codes, resend countdown)** · deps: TX-1
 - [ ] **TX-3 — Outbox worker + deliverability (enqueue/cancel, pg_cron + pg_net, retries, suppression webhook, purge, ops alert)** · deps: TX-2
 - [ ] **TX-4 — Invite-only gate + waitlist invite from the dashboard (before-user-created hook, B1)** · deps: TX-3

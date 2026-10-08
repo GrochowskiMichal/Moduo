@@ -21,6 +21,8 @@
       "!src/types/supabase.ts",
       "!bun.lock",
       "!scripts/icons/source",
+      "!brand/masters",
+      "!brand/exports",
       "!**/*.png",
       "!**/*.ico"
     ]
