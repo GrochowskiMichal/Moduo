@@ -3,7 +3,7 @@
  * Implementations live in runtime.tauri.ts (desktop) and runtime.web.ts (web).
  */
 
-import type { ContentAuthorKind } from "@contracts/vocabularies";
+import type { AttachmentStatus, ContentAuthorKind } from "@contracts/vocabularies";
 import type {
   CalendarAccountModel,
   CalendarEventModel,
@@ -87,6 +87,9 @@ export type AuthChangeEvent = "INITIAL_SESSION" | "SIGNED_IN" | "SIGNED_OUT" | "
 export type AuthListener = (event: AuthChangeEvent, session: RuntimeSession | null) => void;
 
 export type RuntimeResult<T> = Promise<{ data: T; error: { message: string } | null }>;
+
+/** A failed code request: Auth's message plus, when it sent them, its error code and HTTP status. */
+export type OtpSendError = { message: string; code?: string; status?: number };
 
 export type LocalAuthState = {
   profileExists: boolean;
@@ -177,6 +180,25 @@ export type HabitRow = {
   updatedAt: string;
 };
 
+/** One file on a task (AT-1). The bytes live in the private `attachments`
+ * Storage bucket; this is the row. */
+export type AttachmentRecord = {
+  id: string;
+  entityType: string;
+  entityId: string;
+  /** Null once the uploader's account is deleted. */
+  uploaderId: string | null;
+  fileName: string;
+  mime: string;
+  sizeBytes: number;
+  width: number | null;
+  height: number | null;
+  status: AttachmentStatus;
+  /** Set while the file is in the trash (restorable for 30 days). */
+  deletedAt: string | null;
+  createdAt: string;
+};
+
 export type ModuoRuntime = {
   capabilities: RuntimeCapabilities;
 
@@ -219,8 +241,12 @@ export type ModuoRuntime = {
       email: string;
       password: string;
     }): RuntimeResult<{ user: RuntimeSession["user"] | null; session: RuntimeSession | null }>;
-    /** Send a magic OTP code to the given email (web primary auth). */
-    sendOtp(args: { email: string }): RuntimeResult<{}>;
+    /**
+     * Send a magic OTP code to the given email (web primary auth). The error keeps
+     * Supabase's `code` and HTTP `status` so the sign-in screen can say what went
+     * wrong in its own words (otp-send-error.ts) instead of Auth's raw text.
+     */
+    sendOtp(args: { email: string }): Promise<{ data: {}; error: OtpSendError | null }>;
     /** Verify the OTP code received by email and sign the user in. */
     verifyOtp(args: { email: string; token: string; sentAt?: number }): RuntimeResult<{
       user: RuntimeSession["user"] | null;
@@ -519,6 +545,19 @@ export type ModuoRuntime = {
     }): Promise<HabitRow>;
     setChecks(input: { id: string; checks: string[] }): Promise<void>;
     remove(id: string): Promise<void>;
+  };
+
+  /**
+   * Attachments (AT-1) — files on tasks. AT-1 ships the listing the workspace
+   * export reads; upload, delete and restore arrive with the panel (AT-2).
+   * `list` returns every row this person can see (trash included), and [] until
+   * the migration reaches the database.
+   */
+  attachments: {
+    list(workspaceId: string): Promise<{
+      attachments: AttachmentRecord[];
+      truncation: Truncation | null;
+    }>;
   };
 
   window: {

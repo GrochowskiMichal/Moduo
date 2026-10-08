@@ -131,17 +131,16 @@ function removeRow<T extends Row>(list: T[], id: string): T[] {
   return list.some((r) => r.id === id) ? list.filter((r) => r.id !== id) : list;
 }
 
-/** Which bundle list each table lands in (the queue lives outside the bundle). */
+/** Which bundle list each table lands in. Tags and links live in the
+ *  workspace tag store (`applyLiveTags`), the queue outside the bundle. */
 const BUNDLE_KEY = {
   tasks: "tasks",
   buckets: "buckets",
-  tags: "tags",
-  tag_links: "tagLinks",
 } as const satisfies Partial<Record<LiveTable, keyof TasksModuleBundle>>;
 
-/** Apply one change to the module bundle (queue changes leave it untouched). */
+/** Apply one change to the module's tasks and buckets (other tables leave it untouched). */
 export function mergeBundle(bundle: TasksModuleBundle, change: LiveChange): TasksModuleBundle {
-  if (change.table === "task_queue") return bundle;
+  if (change.table !== "tasks" && change.table !== "buckets") return bundle;
   const key = BUNDLE_KEY[change.table];
   const list = bundle[key] as Row[];
   const next =
@@ -181,23 +180,6 @@ export function swapTemp<T extends { id: string; updatedAt?: string }>(
   const keep =
     live && live.updatedAt !== undefined && isNewer(live.updatedAt, saved.updatedAt) ? live : saved;
   return list.filter((r) => r.id !== saved.id).map((r) => (r.id === tempId ? keep : r));
-}
-
-/**
- * Leave out tags whose delete is waiting on its Undo toast (and their links),
- * so a refetch or a live change in that window can't bring them back.
- */
-export function withoutHeldTags(
-  bundle: TasksModuleBundle,
-  held: ReadonlySet<string>,
-): TasksModuleBundle {
-  if (held.size === 0) return bundle;
-  const tags = bundle.tags.filter((t) => !held.has(t.id));
-  const tagLinks = bundle.tagLinks.filter((l) => !held.has(l.tagId));
-  if (tags.length === bundle.tags.length && tagLinks.length === bundle.tagLinks.length) {
-    return bundle;
-  }
-  return { ...bundle, tags, tagLinks };
 }
 
 /** How long changes keep waiting after your own last call settles. */
@@ -306,30 +288,29 @@ export class LiveGate {
  * `focus-time-write.ts`) has to call `gate.begin()` itself.
  */
 export function trackTaskCalls(runtime: ModuoRuntime, gate: LiveGate): ModuoRuntime {
-  const tasks = runtime.tasks;
-  const wrapped = {} as Record<string, unknown>;
-  for (const [name, value] of Object.entries(tasks)) {
-    if (typeof value !== "function") {
-      wrapped[name] = value;
-      continue;
-    }
-    // A read can't race an echo, but it can replace state: count it, without
-    // marking a write (a quiet refetch only restarts after a write).
-    const write = !/^(list|get)/.test(name);
-    wrapped[name] = (...args: unknown[]) => {
-      const end = gate.begin({ write });
-      try {
-        const result = (value as (...a: unknown[]) => unknown).apply(tasks, args);
-        if (result && typeof (result as Promise<unknown>).finally === "function") {
-          return (result as Promise<unknown>).finally(end);
+  // A proxy, not a copy, so a method added to the runtime later is tracked too.
+  const tasks = new Proxy(runtime.tasks, {
+    get(target, prop, receiver) {
+      const value = Reflect.get(target, prop, receiver);
+      if (typeof value !== "function") return value;
+      // A read can't race an echo, but it can replace state: count it, without
+      // marking a write (a quiet refetch only restarts after a write).
+      const write = typeof prop !== "string" || !/^(list|get)/.test(prop);
+      return (...args: unknown[]) => {
+        const end = gate.begin({ write });
+        try {
+          const result = (value as (...a: unknown[]) => unknown).apply(target, args);
+          if (result && typeof (result as Promise<unknown>).finally === "function") {
+            return (result as Promise<unknown>).finally(end);
+          }
+          end();
+          return result;
+        } catch (e) {
+          end();
+          throw e;
         }
-        end();
-        return result;
-      } catch (e) {
-        end();
-        throw e;
-      }
-    };
-  }
-  return { ...runtime, tasks: wrapped as ModuoRuntime["tasks"] };
+      };
+    },
+  });
+  return { ...runtime, tasks };
 }

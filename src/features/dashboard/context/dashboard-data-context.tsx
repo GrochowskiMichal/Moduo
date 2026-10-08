@@ -24,7 +24,7 @@ import type { ReconnectItem } from "@/features/contacts/reconnect";
 import type { RecentNoteRow } from "@/features/notes/recent";
 import type { NotificationItem } from "@/features/spine/notifications";
 import type { RecentLinkItem } from "@/features/spine/recent";
-import type { TasksModuleBundle } from "@/features/tasks/model";
+import type { TaskQueueEntry, TasksModuleBundle } from "@/features/tasks/model";
 import { getRuntime } from "@/lib/runtime";
 import type { EmailModuleBundle, HabitRow, ModuoRuntime } from "@/lib/runtime.types";
 
@@ -57,6 +57,8 @@ export interface TimetrackingBundle {
 export interface DashboardData {
   workspaceId: string | null;
   tasks: WidgetSource<TasksModuleBundle>;
+  /** Queue rows I can see (TV-D2): mine, plus others' claims. */
+  taskQueue: WidgetSource<TaskQueueEntry[]>;
   calendar: WidgetSource<CalendarModuleBundle>;
   email: WidgetSource<EmailModuleBundle>;
   recentNotes: WidgetSource<RecentNoteRow[]>;
@@ -176,6 +178,7 @@ function useSource<T>(
 const DEFAULT_DATA: DashboardData = {
   workspaceId: null,
   tasks: idleSource(EMPTY_TASKS),
+  taskQueue: idleSource<TaskQueueEntry[]>([]),
   calendar: idleSource(EMPTY_CALENDAR),
   email: idleSource(EMPTY_EMAIL),
   recentNotes: idleSource<RecentNoteRow[]>([]),
@@ -214,6 +217,10 @@ export function DashboardDataProvider({
   // either the Tasks widget or the Calendar widget (shared — one fetch).
   const tasks = useSource(has("tasks") || has("calendar"), workspaceId, EMPTY_TASKS, (rt, ws) =>
     rt.tasks.list(ws),
+  );
+  // The Tasks widget shows my queue (TV-D4).
+  const taskQueue = useSource<TaskQueueEntry[]>(has("tasks"), workspaceId, [], (rt, ws) =>
+    rt.tasks.listQueue(ws),
   );
   const calendar = useSource(has("calendar"), workspaceId, EMPTY_CALENDAR, (rt, ws) =>
     rt.calendar.listModule(ws),
@@ -264,6 +271,7 @@ export function DashboardDataProvider({
     () => ({
       workspaceId,
       tasks,
+      taskQueue,
       calendar,
       email,
       recentNotes,
@@ -277,6 +285,7 @@ export function DashboardDataProvider({
     [
       workspaceId,
       tasks,
+      taskQueue,
       calendar,
       email,
       recentNotes,

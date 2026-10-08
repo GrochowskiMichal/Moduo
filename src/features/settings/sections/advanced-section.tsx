@@ -20,6 +20,7 @@ import { downloadZip } from "../../notes/export";
 import { closeNotesDb, countPendingOutbox } from "../../notes/sync/idb";
 
 import {
+  attachmentsManifest,
   buildExportBundle,
   type Diagnostics,
   describeSyncStatus,
@@ -93,6 +94,10 @@ async function gatherExport(
     // date window (SCALE-1) — read all of history explicitly.
     read("calendar", () => runtime.calendar.listModule(workspaceId, allTimeCalendarWindow())),
     read("habits", () => runtime.habits.list(workspaceId)),
+    read("attachments", async () => {
+      const { attachments, truncation } = await runtime.attachments.list(workspaceId);
+      return attachmentsManifest(attachments, truncation);
+    }),
   ]);
 }
 

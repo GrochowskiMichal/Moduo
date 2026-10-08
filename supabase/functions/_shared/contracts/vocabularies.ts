@@ -354,7 +354,7 @@ export const waitlistStatusSchema = z.enum(WAITLIST_STATUSES);
 // ---------------------------------------------------------------------------
 // Transactional email — every kind of email Moduo sends (specs/transactional-
 // email.md T11). Defined in full up front so the TX blocks don't collide on
-// this file; the email_outbox CHECK lands with the table (TX-2). The order
+// this file; the email_outbox CHECK is in 20261008160000_email_outbox.sql (TX-2). The order
 // follows the catalog (A1…E2), then the internal ops alert.
 // ---------------------------------------------------------------------------
 
@@ -387,6 +387,40 @@ export const emailKindSchema = z.enum(EMAIL_KINDS);
 
 export function isEmailKind(input: unknown): input is EmailKind {
   return emailKindSchema.safeParse(input).success;
+}
+
+/**
+ * Which sender and reputation an email goes out on (T2): the account stream
+ * from hello@moduo.app, build updates from updates@news.moduo.app. CHECK on
+ * public.email_outbox.stream (20261008160000_email_outbox.sql).
+ */
+export const EMAIL_STREAMS = ["account", "updates"] as const;
+export type EmailStream = (typeof EMAIL_STREAMS)[number];
+export const emailStreamSchema = z.enum(EMAIL_STREAMS);
+
+export function isEmailStream(input: unknown): input is EmailStream {
+  return emailStreamSchema.safeParse(input).success;
+}
+
+/**
+ * Where one email_outbox row stands (T10). TX-2 writes only `sent` and
+ * `failed` (sign-in codes are sent before they're logged); the queue states
+ * arrive with the worker in TX-3. CHECK on public.email_outbox.status.
+ */
+export const EMAIL_OUTBOX_STATUSES = [
+  "queued",
+  "sending",
+  "sent",
+  "failed",
+  "cancelled",
+  "suppressed",
+  "skipped_pref",
+] as const;
+export type EmailOutboxStatus = (typeof EMAIL_OUTBOX_STATUSES)[number];
+export const emailOutboxStatusSchema = z.enum(EMAIL_OUTBOX_STATUSES);
+
+export function isEmailOutboxStatus(input: unknown): input is EmailOutboxStatus {
+  return emailOutboxStatusSchema.safeParse(input).success;
 }
 
 // ---------------------------------------------------------------------------
@@ -544,4 +578,43 @@ export function isContentAuthorKind(value: unknown): value is ContentAuthorKind 
 /** Read-side normalization: rows written before the column existed are a person's. */
 export function normalizeContentAuthorKind(input: unknown): ContentAuthorKind {
   return isContentAuthorKind(input) ? input : "user";
+}
+
+// ---------------------------------------------------------------------------
+// Attachments (AT-1, specs/attachments.md) — mirrors the CHECKs on
+// public.attachments in 20261008210500_attachments_storage. `pending` = begun,
+// bytes not confirmed yet; `ready` = finalize checked the stored size;
+// `failed` = finalize refused it (size mismatch, over the limit) and the daily
+// purge removes it. A deleted reason says what put the file in the trash:
+// the person (`user`), its task (`task`), or a bucket deleted with its tasks
+// (`bucket`, reserved for TV-U6). Previews are only ever these three formats.
+// ---------------------------------------------------------------------------
+
+export const ATTACHMENT_STATUSES = ["pending", "ready", "failed"] as const;
+export type AttachmentStatus = (typeof ATTACHMENT_STATUSES)[number];
+export const attachmentStatusSchema = z.enum(ATTACHMENT_STATUSES);
+export function isAttachmentStatus(value: unknown): value is AttachmentStatus {
+  return typeof value === "string" && (ATTACHMENT_STATUSES as readonly string[]).includes(value);
+}
+/** Read-side normalization: anything unknown is treated as not ready. */
+export function normalizeAttachmentStatus(input: unknown): AttachmentStatus {
+  return isAttachmentStatus(input) ? input : "pending";
+}
+
+export const ATTACHMENT_DELETED_REASONS = ["user", "task", "bucket"] as const;
+export type AttachmentDeletedReason = (typeof ATTACHMENT_DELETED_REASONS)[number];
+export const attachmentDeletedReasonSchema = z.enum(ATTACHMENT_DELETED_REASONS);
+export function isAttachmentDeletedReason(value: unknown): value is AttachmentDeletedReason {
+  return (
+    typeof value === "string" && (ATTACHMENT_DELETED_REASONS as readonly string[]).includes(value)
+  );
+}
+
+export const ATTACHMENT_PREVIEW_MIMES = ["image/webp", "image/png", "image/jpeg"] as const;
+export type AttachmentPreviewMime = (typeof ATTACHMENT_PREVIEW_MIMES)[number];
+export const attachmentPreviewMimeSchema = z.enum(ATTACHMENT_PREVIEW_MIMES);
+export function isAttachmentPreviewMime(value: unknown): value is AttachmentPreviewMime {
+  return (
+    typeof value === "string" && (ATTACHMENT_PREVIEW_MIMES as readonly string[]).includes(value)
+  );
 }

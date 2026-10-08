@@ -57,6 +57,7 @@ function fakeRuntime(tasks: Task[]) {
   const api = {
     list: rs.fn(async () => bundle),
     getTimeBlocks: rs.fn(async () => ({})),
+    listQueue: rs.fn(async () => []),
     updateTask: rs.fn(async ({ taskId, patch }: { taskId: string; patch: Partial<Task> }) => ({
       ...byId(taskId),
       ...patch,
@@ -136,13 +137,16 @@ describe("useTasksModule saves (TV-D1)", () => {
 
   it("a new task is the creator's unless an assignee (or Unassigned) is chosen", async () => {
     const { api, hook } = await mount([]);
-    act(() => hook.result.current.createTask({ bucketId: "b1", title: "Mine" }));
-    act(() =>
-      hook.result.current.createTask({ bucketId: "b1", title: "Nobody's", assigneeId: null }),
-    );
-    act(() =>
-      hook.result.current.createTask({ bucketId: "b1", title: "Theirs", assigneeId: "u2" }),
-    );
+    // createTask returns the save's promise (TV-T1); a block body keeps act synchronous.
+    act(() => {
+      hook.result.current.createTask({ bucketId: "b1", title: "Mine" });
+    });
+    act(() => {
+      hook.result.current.createTask({ bucketId: "b1", title: "Nobody's", assigneeId: null });
+    });
+    act(() => {
+      hook.result.current.createTask({ bucketId: "b1", title: "Theirs", assigneeId: "u2" });
+    });
     await waitFor(() => expect(api.upsertTask).toHaveBeenCalledTimes(3));
     const sent = api.upsertTask.mock.calls.map(([t]) => [t.title, t.assigneeId, t.creatorId]);
     expect(sent).toEqual([

@@ -8,6 +8,7 @@
 
 import {
   activityRowSchema,
+  attachmentRowSchema,
   calendarAccountRowSchema,
   calendarEventRowSchema,
   commentRowSchema,
@@ -31,7 +32,7 @@ import {
   requireRow,
   taskRelationRowSchema,
 } from "@contracts/rows";
-import { normalizeContentAuthorKind } from "@contracts/vocabularies";
+import { normalizeAttachmentStatus, normalizeContentAuthorKind } from "@contracts/vocabularies";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import * as Y from "yjs";
 import type { CalendarAccountModel, CalendarEventModel } from "../features/calendar/events";
@@ -69,7 +70,13 @@ import {
 import { toMemberPerm, toMemberRole } from "../features/workspaces/workspace-mappers";
 import { clearIgnoredAuthLink, SUPABASE_AUTH_OPTIONS } from "./auth-url";
 import type { EntityLink, EntityRecord } from "./entity-links";
-import { collectTruncations, READ_CAPS, readPaged, type Truncation } from "./paged-select";
+import {
+  collectTruncations,
+  READ_CAPS,
+  readPaged,
+  TAG_LINKS_SCOPE,
+  type Truncation,
+} from "./paged-select";
 import {
   missingOptionalPrefsDomain,
   optionalPrefsAvailable,
@@ -78,6 +85,7 @@ import {
 import { createRequestCache } from "./request-cache";
 import { webChatRuntime } from "./runtime.chat.web";
 import type {
+  AttachmentRecord,
   AuthChangeEvent,
   AuthListener,
   EmailAccountRef,
@@ -86,6 +94,7 @@ import type {
   IntegrationStatusItem,
   LocalAuthState,
   ModuoRuntime,
+  OtpSendError,
   RuntimeCapabilities,
   RuntimeSession,
   SpineComment,
@@ -227,6 +236,17 @@ function toError(error: unknown): { message: string } {
   return { message: String(error) };
 }
 
+/** toError, keeping auth-js's `code` and `status` (AuthApiError) for the sign-in screen. */
+function toOtpSendError(error: unknown): OtpSendError {
+  const base: OtpSendError = toError(error);
+  if (error && typeof error === "object") {
+    const { code, status } = error as { code?: unknown; status?: unknown };
+    if (typeof code === "string" && code) base.code = code;
+    if (typeof status === "number") base.status = status;
+  }
+  return base;
+}
+
 function desktopOnly(): { message: string } {
   return { message: "This feature is only available on the desktop app." };
 }
@@ -285,6 +305,26 @@ function mapHabitRow(raw: unknown): HabitRow {
     checks: Array.isArray(r.checks) ? (r.checks as string[]) : [],
     createdAt: (r.created_at as string) ?? "",
     updatedAt: (r.updated_at as string) ?? "",
+  };
+}
+
+/** Map a raw `attachments` row (AT-1). Untyped client: keep in lockstep with
+ * 20261008210500_attachments_storage.sql. */
+function mapAttachmentRow(raw: unknown): AttachmentRecord {
+  const r = requireRow(attachmentRowSchema, raw, "attachment");
+  return {
+    id: r.id,
+    entityType: r.entity_type,
+    entityId: r.entity_id,
+    uploaderId: r.uploader_id ?? null,
+    fileName: r.file_name,
+    mime: r.mime,
+    sizeBytes: Number(r.size_bytes),
+    width: r.width ?? null,
+    height: r.height ?? null,
+    status: normalizeAttachmentStatus(r.status),
+    deletedAt: r.deleted_at ?? null,
+    createdAt: r.created_at,
   };
 }
 
@@ -513,10 +553,10 @@ export const webRuntime: ModuoRuntime = {
           // ("Signups not allowed for this instance"). Never create a user from here.
           options: { shouldCreateUser: false },
         });
-        if (error) return { data: {}, error: toError(error) };
+        if (error) return { data: {}, error: toOtpSendError(error) };
         return { data: {}, error: null };
       } catch (error) {
-        return { data: {}, error: toError(error) };
+        return { data: {}, error: toOtpSendError(error) };
       }
     },
 
@@ -1428,6 +1468,32 @@ export const webRuntime: ModuoRuntime = {
     },
   },
 
+  attachments: {
+    async list(workspaceId) {
+      const res = await selectCapped<any>({
+        scope: "attachments",
+        cap: READ_CAPS.attachments,
+        build: (opts) =>
+          supabaseClient
+            .from("attachments")
+            .select(
+              "id, entity_type, entity_id, uploader_id, file_name, mime, size_bytes, width, height, status, deleted_at, created_at",
+              opts,
+            )
+            .eq("workspace_id", workspaceId),
+        order: (q) => q.order("created_at").order("id"),
+      });
+      if (res.error) {
+        // Before AT-1's migration the table doesn't exist: nothing to list.
+        if (res.error.code === "42P01" || res.error.code === "PGRST205") {
+          return { attachments: [], truncation: null };
+        }
+        throw new Error(res.error.message);
+      }
+      return { attachments: mapKnownRows(res.rows, mapAttachmentRow), truncation: res.truncation };
+    },
+  },
+
   habits: {
     async list(workspaceId) {
       const user = await getAuthedUser();
@@ -2007,7 +2073,7 @@ export const webRuntime: ModuoRuntime = {
           order: (q) => q.order("created_at").order("id"),
         }),
         selectCapped<any>({
-          scope: "tag assignments",
+          scope: TAG_LINKS_SCOPE,
           cap: READ_CAPS.tagLinks,
           build: all("tag_links"),
           order: (q) => q.order("id"),
@@ -2251,12 +2317,9 @@ export const webRuntime: ModuoRuntime = {
               .is("deleted_at", null),
           order: (q) => q.order("created_at").order("id"),
         }),
-        supabaseClient
-          .from("tag_links")
-          .select("*")
-          .eq("workspace_id", workspaceId)
-          .is("deleted_at", null)
-          .order("created_at"),
+        // Only this entity's links. (A stray workspace-wide read here filtered
+        // on `tag_links.deleted_at`, a column that doesn't exist, so the whole
+        // read failed and every hub's tag row stayed empty until TV-T1.)
         supabaseClient
           .from("tag_links")
           .select("*")
@@ -2289,7 +2352,7 @@ export const webRuntime: ModuoRuntime = {
           order: (q) => q.order("created_at").order("id"),
         }),
         selectCapped<any>({
-          scope: "tag assignments",
+          scope: TAG_LINKS_SCOPE,
           cap: READ_CAPS.tagLinks,
           build: (opts) => {
             const q = supabaseClient

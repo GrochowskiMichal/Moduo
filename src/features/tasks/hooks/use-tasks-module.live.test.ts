@@ -117,7 +117,7 @@ describe("useTasksModule live updates", () => {
       });
     });
     expect(result.current.tasks.map((t) => t.title).sort()).toEqual(["Draft v2", "From Mike"]);
-    expect(result.current.queue.map((e) => e.userId)).toEqual([MATE]);
+    expect(result.current.queueClaims.get("t1")).toEqual([MATE]);
   });
 
   it("D5-2: the echo of an earlier save never reverts the edit in flight", async () => {

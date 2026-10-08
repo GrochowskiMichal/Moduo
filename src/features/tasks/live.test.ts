@@ -11,7 +11,6 @@ import {
   swapTemp,
   timestampMicros,
   trackTaskCalls,
-  withoutHeldTags,
 } from "./live";
 import type { Task, TaskQueueEntry, TasksModuleBundle } from "./model";
 
@@ -136,6 +135,12 @@ describe("mergeBundle (D5-1)", () => {
     expect(mergeBundle(local, taskChange({ updated_at: "2026-10-08 10:00:09+00" }))).toBe(local);
   });
 
+  it("leaves tags, links and queue rows to their own stores", () => {
+    const local = bundleOf([task()]);
+    expect(mergeBundle(local, { table: "tag_links", kind: "delete", id: T1 })).toBe(local);
+    expect(mergeBundle(local, { table: "task_queue", kind: "delete", id: T1 })).toBe(local);
+  });
+
   it("removes a task deleted (softly or for good) by someone else", () => {
     const local = bundleOf([task()]);
     const soft = mergeBundle(
@@ -149,48 +154,6 @@ describe("mergeBundle (D5-1)", () => {
       mergeBundle(bundleOf([]), taskChange({ deleted_at: "2026-10-08 10:01:00+00" })).tasks,
     ).toEqual([]);
     expect(mergeBundle(local, { table: "tasks", kind: "delete", id: B1 })).toBe(local);
-  });
-
-  it("adds and removes tag links", () => {
-    const link = {
-      id: T1,
-      workspace_id: WS,
-      tag_id: B1,
-      entity_type: "task",
-      entity_id: T1,
-      created_at: "2026-10-08 10:00:00+00",
-    };
-    const ins = parseLiveChange("tag_links", { eventType: "INSERT", new: link })!;
-    const withLink = mergeBundle(bundleOf([]), ins);
-    expect(withLink.tagLinks).toHaveLength(1);
-    expect(mergeBundle(withLink, ins)).toBe(withLink);
-    expect(mergeBundle(withLink, { table: "tag_links", kind: "delete", id: T1 }).tagLinks).toEqual(
-      [],
-    );
-  });
-
-  it("keeps a tag whose delete waits on Undo out", () => {
-    const b = bundleOf([], {
-      tags: [
-        {
-          id: B1,
-          workspaceId: WS,
-          ownerId: U1,
-          name: "Ops",
-          color: null,
-          createdAt: "x",
-          updatedAt: "x",
-          deletedAt: null,
-        },
-      ],
-      tagLinks: [
-        { id: T1, workspaceId: WS, tagId: B1, entityType: "task", entityId: T1, createdAt: "x" },
-      ],
-    });
-    const out = withoutHeldTags(b, new Set([B1]));
-    expect(out.tags).toEqual([]);
-    expect(out.tagLinks).toEqual([]);
-    expect(withoutHeldTags(b, new Set())).toBe(b);
   });
 });
 

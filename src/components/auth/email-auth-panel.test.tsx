@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it } from "@rstest/core";
-import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, rs } from "@rstest/core";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 
 import type { ModuoRuntime } from "@/lib/runtime";
 import { AuthContext, type AuthContextValue } from "@/providers/auth-provider";
@@ -26,9 +26,9 @@ const auth: AuthContextValue = {
 
 afterEach(cleanup);
 
-function renderPanel(notice?: string | null) {
+function renderPanel(notice?: string | null, value: AuthContextValue = auth) {
   return render(
-    <AuthContext.Provider value={auth}>
+    <AuthContext.Provider value={value}>
       <EmailAuthPanel notice={notice} />
     </AuthContext.Provider>,
   );
@@ -45,5 +45,175 @@ describe("EmailAuthPanel notice", () => {
     renderPanel(null);
     expect(await screen.findByText("Log in or create account")).toBeTruthy();
     expect(screen.queryByRole("status")).toBeNull();
+  });
+});
+
+type SendOtp = ModuoRuntime["auth"]["sendOtp"];
+
+function withSendOtp(sendOtp: SendOtp): AuthContextValue {
+  return {
+    ...auth,
+    runtime: { ...cloudRuntime, auth: { sendOtp } } as unknown as ModuoRuntime,
+  };
+}
+
+async function requestCode(email = "tom@becker.studio") {
+  fireEvent.change(screen.getByPlaceholderText("you@example.com"), { target: { value: email } });
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Continue with email" }));
+  });
+}
+
+describe("EmailAuthPanel resend countdown", () => {
+  afterEach(() => {
+    rs.useRealTimers();
+  });
+
+  it("disables Resend for 60 seconds after each send, counting down, and says how long the code works", async () => {
+    let calls = 0;
+    renderPanel(
+      null,
+      withSendOtp(async () => {
+        calls += 1;
+        return { data: {}, error: null };
+      }),
+    );
+    // Wait for the email step with real timers (findBy* polls), then freeze time.
+    await screen.findByPlaceholderText("you@example.com");
+    rs.useFakeTimers();
+    await requestCode();
+
+    expect(
+      screen.getByText("Enter the six-digit code we sent. It works for 10 minutes."),
+    ).toBeTruthy();
+    const resend = () => screen.getByRole("button", { name: /Resend/ }) as HTMLButtonElement;
+    expect(resend().textContent).toBe("Resend in 1:00");
+    expect(resend().disabled).toBe(true);
+
+    await act(async () => {
+      await rs.advanceTimersByTimeAsync(1000);
+    });
+    expect(resend().textContent).toBe("Resend in 0:59");
+
+    await act(async () => {
+      await rs.advanceTimersByTimeAsync(59_000);
+    });
+    expect(resend().disabled).toBe(false);
+    expect(resend().textContent).toContain("Resend code");
+
+    await act(async () => {
+      fireEvent.click(resend());
+    });
+    expect(calls).toBe(2);
+    expect(resend().textContent).toBe("Resend in 1:00");
+  });
+
+  it("going back and continuing with the same address inside the minute reuses the sent code", async () => {
+    let calls = 0;
+    renderPanel(
+      null,
+      withSendOtp(async () => {
+        calls += 1;
+        return { data: {}, error: null };
+      }),
+    );
+    await screen.findByPlaceholderText("you@example.com");
+    await requestCode();
+    fireEvent.click(screen.getByRole("button", { name: "Back to email" }));
+    await requestCode();
+    expect(calls).toBe(1);
+    expect(screen.getByText("Check your email")).toBeTruthy();
+  });
+
+  it("after a reload, asking again inside the minute opens the code step for the code already sent", async () => {
+    let calls = 0;
+    renderPanel(
+      null,
+      withSendOtp(async () => {
+        calls += 1;
+        return {
+          data: {},
+          error: {
+            message: "For security purposes, you can only request this after 42 seconds.",
+            status: 429,
+          },
+        };
+      }),
+    );
+    await screen.findByPlaceholderText("you@example.com");
+    rs.useFakeTimers();
+    await requestCode();
+
+    expect(calls).toBe(1);
+    expect(screen.getByText("Check your email")).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
+    const resend = screen.getByRole("button", { name: /Resend/ }) as HTMLButtonElement;
+    expect(resend.textContent).toBe("Resend in 0:42");
+    expect(resend.disabled).toBe(true);
+  });
+
+  it("a countdown for one address never holds back another", async () => {
+    const sentTo: string[] = [];
+    renderPanel(
+      null,
+      withSendOtp(async ({ email }) => {
+        sentTo.push(email);
+        return email === "a@becker.studio"
+          ? {
+              data: {},
+              error: {
+                message: "For security purposes, you can only request this after 30 seconds.",
+                status: 429,
+              },
+            }
+          : { data: {}, error: null };
+      }),
+    );
+    await screen.findByPlaceholderText("you@example.com");
+    await requestCode("a@becker.studio");
+    fireEvent.click(screen.getByRole("button", { name: "Back to email" }));
+    await requestCode("b@becker.studio");
+
+    expect(sentTo).toEqual(["a@becker.studio", "b@becker.studio"]);
+    expect((screen.getByRole("button", { name: /Resend/ }) as HTMLButtonElement).textContent).toBe(
+      "Resend in 1:00",
+    );
+  });
+
+  it("shows our words, not Supabase's, for a rate limit and a failed send", async () => {
+    renderPanel(
+      null,
+      withSendOtp(async () => ({
+        data: {},
+        error: {
+          message: "email rate limit exceeded",
+          code: "over_email_send_rate_limit",
+          status: 429,
+        },
+      })),
+    );
+    await screen.findByPlaceholderText("you@example.com");
+    await requestCode();
+    expect(screen.getByRole("alert").textContent).toBe(
+      "Too many code requests right now. Try again in a few minutes.",
+    );
+    cleanup();
+
+    renderPanel(
+      null,
+      withSendOtp(async () => ({
+        data: {},
+        error: {
+          message: "Error sending magic link email",
+          code: "unexpected_failure",
+          status: 500,
+        },
+      })),
+    );
+    await screen.findByPlaceholderText("you@example.com");
+    await requestCode();
+    expect(screen.getByRole("alert").textContent).toBe(
+      "We couldn't send your code. Try again in a minute.",
+    );
   });
 });

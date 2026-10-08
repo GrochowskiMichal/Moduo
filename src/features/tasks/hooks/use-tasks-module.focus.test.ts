@@ -83,6 +83,7 @@ function fakeServer(rows: Task[], opts: { fail?: () => boolean; delayList?: numb
     tasks: {
       list,
       getTimeBlocks: rs.fn(() => Promise.resolve({})),
+      listQueue: rs.fn(() => Promise.resolve([])),
       upsertTask,
       // A delete that hasn't reached the server yet.
       deleteTask: rs.fn(() => new Promise(() => {})),

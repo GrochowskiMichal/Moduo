@@ -92,6 +92,7 @@ function makeServer(p: string) {
         truncated: [],
       })),
       getTimeBlocks: rs.fn(async () => ({})),
+      listQueue: rs.fn(async () => []),
       deleteBucket: rs.fn(async ({ bucketId }: { bucketId: string }) => {
         server.tasks = server.tasks.map((t) =>
           t.bucketId === bucketId ? { ...t, bucketId: ids.inbox } : t,
