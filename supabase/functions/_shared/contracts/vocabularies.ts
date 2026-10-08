@@ -300,6 +300,44 @@ export type WaitlistStatus = (typeof WAITLIST_STATUSES)[number];
 export const waitlistStatusSchema = z.enum(WAITLIST_STATUSES);
 
 // ---------------------------------------------------------------------------
+// Transactional email — every kind of email Moduo sends (specs/transactional-
+// email.md T11). Defined in full up front so the TX blocks don't collide on
+// this file; the email_outbox CHECK lands with the table (TX-2). The order
+// follows the catalog (A1…E2), then the internal ops alert.
+// ---------------------------------------------------------------------------
+
+export const EMAIL_KINDS = [
+  "auth_code",
+  "account_deleted",
+  "waitlist_invite",
+  "updates_confirm",
+  "workspace_invite",
+  "workspace_owner",
+  "workspace_removed",
+  "booking_guest_confirmed",
+  "booking_guest_added",
+  "booking_host_new",
+  "booking_host_guest_cancelled",
+  "booking_guest_cancelled",
+  "booking_guest_host_cancelled",
+  "booking_guest_reminder",
+  "welcome",
+  "trial_ending",
+  "trial_ended",
+  "founder_access",
+  "founder_access_ending",
+  "announcement",
+  "build_update",
+  "ops_alert",
+] as const;
+export type EmailKind = (typeof EMAIL_KINDS)[number];
+export const emailKindSchema = z.enum(EMAIL_KINDS);
+
+export function isEmailKind(input: unknown): input is EmailKind {
+  return emailKindSchema.safeParse(input).success;
+}
+
+// ---------------------------------------------------------------------------
 // Email accounts — provider/status vocabularies.
 //
 // DRIFT NOTE (live resolution): the 20260704170000_email_module migration
