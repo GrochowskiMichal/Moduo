@@ -112,7 +112,6 @@ _Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
 
 - [ ] **TV-D5 — Live updates (Realtime)** · tasks-v2 block 8 · deps: TV-D2 · lane data · adds tables to the `supabase_realtime` publication
 - [ ] **TV-U1 — Rows, board, completed** · tasks-v2 block 9 · deps: DS-3, TV-D4 · lane tasks-ui
-- [x] **TV-U3 — Detail panel + comments** · tasks-v2 block 10 · deps: DS-2, TV-D1, TV-D3 · lane tasks-ui · built 2026-10-09 on `t/maciej/tv-u3-detail-panel-comments` (PR #324; no migration; shared spine comment pieces, Notes adopts them)
 - [ ] **TV-F2 — Queue run (line-up, run, Now/Up next, claims "is on this")** · tasks-v2 block 11 · deps: TV-F1, TV-D2, TV-D3, DS-2 · lane focus · migration (`focus_runs`)
 - [ ] **TV-F3 — Pomodoro per run, break, summary, empty, Home pomodoro widget** · tasks-v2 block 12 · deps: TV-F2 · lane focus
 - [ ] **TV-U2 — Toolbar, Filter, Display, search** · tasks-v2 block 13 · deps: DS-4, TV-U1, TV-D4 · lane tasks-ui
