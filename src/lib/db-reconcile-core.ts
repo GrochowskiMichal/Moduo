@@ -50,8 +50,8 @@ export const ANON_DEFINER_ALLOWED: Record<string, string> = {
  * Query 4: SECURITY DEFINER functions in `public` that a client role can call but
  * shouldn't. `*__*` helpers are internal (only other definer functions call them, as
  * the owner), so any client EXECUTE on one is reported. Every other definer function anon
- * can run is reported unless its signature is in `allowed`. Trigger functions are skipped:
- * Postgres won't call them as RPCs.
+ * can run is reported unless its signature is in `allowed`. Trigger functions are skipped in
+ * both branches: Postgres won't call them as RPCs.
  */
 export function clientCallableDefinerQuery(
   allowed: Record<string, string> = ANON_DEFINER_ALLOWED,
@@ -59,12 +59,13 @@ export function clientCallableDefinerQuery(
   const signatures = Object.keys(allowed).sort().map(sqlQuote).join(", ");
   return `with allow(sig) as (select unnest(array[${signatures}]::text[])),
 defs as (
-  select p.oid::regprocedure::text as object, p.proname, p.prorettype,
+  select p.oid::regprocedure::text as object, p.proname,
          p.proname || '(' || oidvectortypes(p.proargtypes) || ')' as sig,
          has_function_privilege('anon', p.oid, 'EXECUTE') as anon,
          has_function_privilege('authenticated', p.oid, 'EXECUTE') as auth
   from pg_proc p join pg_namespace n on n.oid = p.pronamespace
   where n.nspname = 'public' and p.prosecdef
+    and p.prorettype not in ('trigger'::regtype, 'event_trigger'::regtype)
 )
 select 'CLIENT-EXECUTABLE INTERNAL HELPER' as issue, object,
        concat_ws(',', case when anon then 'anon' end, case when auth then 'authenticated' end) as roles
@@ -72,7 +73,6 @@ from defs where proname like '%\\_\\_%' and (anon or auth)
 union all
 select 'ANON-EXECUTABLE SECURITY DEFINER', object, 'anon'
 from defs where anon and proname not like '%\\_\\_%'
-  and prorettype not in ('trigger'::regtype, 'event_trigger'::regtype)
   and sig not in (select sig from allow)
 order by 1, 2;`;
 }

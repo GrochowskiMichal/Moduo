@@ -108,6 +108,12 @@ describe("clientCallableDefinerQuery (query 4)", () => {
     expect(sql).not.toContain("proname not in");
   });
 
+  it("skips trigger functions in both branches, `__` helpers included", () => {
+    const sql = clientCallableDefinerQuery();
+    const defs = sql.slice(sql.indexOf("defs as ("), sql.indexOf("select 'CLIENT-EXECUTABLE"));
+    expect(defs).toContain("p.prorettype not in ('trigger'::regtype, 'event_trigger'::regtype)");
+  });
+
   it("quotes signatures, and an empty allowlist is still valid SQL", () => {
     expect(clientCallableDefinerQuery({ "it's(text)": "x" })).toContain("'it''s(text)'");
     expect(clientCallableDefinerQuery({})).toContain("array[]::text[]");
