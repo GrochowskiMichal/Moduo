@@ -101,6 +101,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## MCP connector → [decisions/mcp.md](decisions/mcp.md)
 
+- 2026-10-08 · The My tasks panel (MCC-4) shows what the connector can prove, and redraws nothing it can't trust.
 - 2026-10-08 · Moduo for Claude Code: a mod over `moduo-mcp`, with three new task intent ops.
 - 2026-07-04 · Notes NO-9 + NO-10 landed — publish-to-web + the DoD (MCP manifest/connector + Recent-notes widget); Wave 3 (Notes) COMPLETE.
 - 2026-06-27 · Contacts CO-5 MCP manifest + "Needs attention" widget landed — Wave 1 (Contacts) complete.

@@ -110,7 +110,9 @@ async function refresh($: EngineInterface, cfg: Config): Promise<void> {
     const tasks =
       state.filter === "me" ? mine : await listAll($, cfg, { assignee: "anyone", top_level: true });
     const ownerId = ownerOf(mine) ?? state.ownerId ?? (await findOwner($, cfg));
-    if (ownerId && ownerId !== state.ownerId) await $.store.set(OWNER_KEY, ownerId);
+    if (ownerId && ownerId !== state.ownerId) {
+      await $.store.set(OWNER_KEY, ownerId).catch(() => undefined);
+    }
     const view = buildView(
       tasks,
       buckets,
@@ -211,6 +213,8 @@ export const register: Register = (on, options) => {
       <Box key="moduo-band">
         <Text bold>Moduo</Text>
         {problem === "offline" && <Text color="warning"> · offline</Text>}
+        {problem === "rejected" && <Text color="error"> · key rejected</Text>}
+        {problem === "endpoint" && <Text color="error"> · connector URL must be https</Text>}
         {view && <Text dimColor> · Queue {view.queue.length}</Text>}
         {view && view.drifting > 0 && <Text color="warning"> · {view.drifting} drifting</Text>}
       </Box>

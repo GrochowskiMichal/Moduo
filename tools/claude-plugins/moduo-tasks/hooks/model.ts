@@ -40,7 +40,8 @@ export function clean(text: string | null | undefined): string {
     const c = ch.codePointAt(0) ?? 0;
     const isControl = c < 0x20 || (c >= 0x7f && c <= 0x9f);
     const isBidi = (c >= 0x202a && c <= 0x202e) || (c >= 0x2066 && c <= 0x2069);
-    if (!isControl && !isBidi) out += ch;
+    if (c === 0x0a || c === 0x09 || c === 0x0d) out += " ";
+    else if (!isControl && !isBidi) out += ch;
   }
   return out;
 }

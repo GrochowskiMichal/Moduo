@@ -55,7 +55,7 @@ describe("connector client", () => {
     const esc = String.fromCharCode(27);
     const rlo = String.fromCharCode(0x202e);
     expect(clean(`${esc}[31mRed${esc}[0m title`)).toBe("[31mRed[0m title");
-    expect(clean(`a${rlo}b\nc\td`)).toBe("abcd");
+    expect(clean(`a${rlo}b\nc\td`)).toBe("ab c d");
     expect(clean("Zażółć gęślą jaźń · MCP-1")).toBe("Zażółć gęślą jaźń · MCP-1");
     expect(clean(null)).toBe("");
   });
