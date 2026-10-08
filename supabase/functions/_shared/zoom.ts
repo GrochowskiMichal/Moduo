@@ -49,11 +49,14 @@ export function exchangeZoomCode(input: {
   clientSecret: string;
   code: string;
   redirectUri: string;
+  /** PKCE verifier, when the consent URL carried a code_challenge. */
+  codeVerifier?: string;
 }): Promise<ZoomTokens> {
   return tokenRequest(input.clientId, input.clientSecret, {
     grant_type: "authorization_code",
     code: input.code,
     redirect_uri: input.redirectUri,
+    ...(input.codeVerifier ? { code_verifier: input.codeVerifier } : {}),
   });
 }
 

@@ -18,6 +18,9 @@
  * Erasure (2026-10-07): the cascade doesn't reach Stripe, Storage, booking links,
  * integration tokens or the waitlist. ../_shared/account-erasure.ts removes those
  * first and deletes the auth user last, so a failed run can simply be retried.
+ * PRIV-2b adds two SQL steps (service role only): our stripe.* copy of the customer
+ * (account_scrub_stripe_mirror) and what the user leaves in other people's
+ * workspaces (account_erase_workspace_data).
  * PRIV-3 adds the app's usage analytics at PostHog, first of all; without the
  * POSTHOG_PERSONAL_API_KEY / POSTHOG_PROJECT_ID secrets that step only logs a warning.
  *
@@ -72,6 +75,7 @@ Deno.serve(async (req: Request) => {
     // checked against ErasureDb (TS2589), so only `from` is cast; storage and auth check.
     const db: ErasureDb = {
       from: (table) => supabase.from(table) as unknown as ReturnType<ErasureDb["from"]>,
+      rpc: (fn, args) => supabase.rpc(fn, args),
       storage: supabase.storage,
       auth: supabase.auth,
     };

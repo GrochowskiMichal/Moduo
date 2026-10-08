@@ -132,6 +132,7 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
     if (!runtime || !userId || !workspaceId || !canRead) {
       setList({ scope, events: [] });
       setAccounts([]);
+      setBusy([]);
       setDegraded(false);
       setTruncated([]);
       setLoading(false);
@@ -252,9 +253,16 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
     });
   }, [setFetchWindow]);
 
+  // The busy overlay lands after `loading` settles (it must never hold the
+  // calendar up), so right after a workspace switch `busy` still holds the
+  // previous workspace's blocks until the new reply lands. Each row carries the
+  // workspace it was fetched for, so show only the current scope's: a switch
+  // hides the old blocks at once, so does losing read access or signing out
+  // (scope goes null in that same render), and a same-workspace reload (a
+  // widened window) keeps them up instead of flashing them off and on.
   const liveEvents = useMemo(
-    () => [...events.filter((e) => !e.deletedAt), ...busy],
-    [events, busy],
+    () => [...events.filter((e) => !e.deletedAt), ...busy.filter((b) => b.workspaceId === scope)],
+    [events, busy, scope],
   );
 
   const guardEdit = useCallback((): boolean => {

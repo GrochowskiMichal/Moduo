@@ -515,6 +515,26 @@ describe("useCalendarModule — busy overlay", () => {
     return reads;
   }
 
+  /** The busy blocks on screen, as `workspace@start`. */
+  const shown = (result: { current: CalendarModuleApi }) =>
+    result.current.events
+      .filter((e) => e.id.startsWith("busy:"))
+      .map((e) => `${e.workspaceId}@${e.startsAt}`);
+
+  /** Mounted on w1 with edit access; rerender with "none" to take it away. */
+  function mountWithAccess() {
+    const runtime = fakeRuntime([]);
+    return renderHook(
+      ({ permission }: { permission: "edit" | "none" }) =>
+        useCalendarModule(runtime, {
+          userId: "u1",
+          workspaceId: "w1",
+          modulePermission: permission,
+        }),
+      { initialProps: { permission: "edit" } },
+    );
+  }
+
   it("never holds loading up, and lands once its RPC replies", async () => {
     const held = holdBusy();
     const runtime = fakeRuntime([]);
@@ -549,5 +569,73 @@ describe("useCalendarModule — busy overlay", () => {
     await reload(); // e.g. a calendar sync that finishes after the page is gone
     expect(calls).toHaveLength(1);
     expect(supabaseClient.rpc).toHaveBeenCalledTimes(1);
+  });
+
+  it("hides the old workspace's blocks on a switch while the new reply is still out", async () => {
+    const held = holdBusy();
+    const runtime = fakeRuntime([]);
+    const { result, rerender } = renderHook(({ ws }) => useCalendarModule(runtime, params(ws)), {
+      initialProps: { ws: "w1" },
+    });
+    await waitFor(() => expect(held).toHaveLength(1));
+    await act(async () => held[0].resolve(BUSY));
+    expect(shown(result)).toEqual(["w1@2026-10-08T09:00:00.000Z"]);
+
+    rerender({ ws: "w2" });
+    expect(shown(result)).toEqual([]); // gone in the switch's own render
+    await waitFor(() => expect(held).toHaveLength(2)); // w2 has loaded; its busy RPC is out
+    expect(supabaseClient.rpc).toHaveBeenLastCalledWith(
+      "calendar_busy_blocks",
+      expect.objectContaining({ p_workspace_id: "w2" }),
+    );
+    expect(result.current.loading).toBe(false);
+    expect(shown(result)).toEqual([]);
+
+    await act(async () => held[1].resolve(BUSY));
+    expect(shown(result)).toEqual(["w2@2026-10-08T09:00:00.000Z"]);
+  });
+
+  it("keeps the blocks up through a same-workspace reload, then swaps them", async () => {
+    const held = holdBusy();
+    const runtime = fakeRuntime([]);
+    const { result } = renderHook(() => useCalendarModule(runtime, params("w1")));
+    await waitFor(() => expect(held).toHaveLength(1));
+    await act(async () => held[0].resolve(BUSY));
+
+    act(() => result.current.ensureAllTime()); // a wider window, same workspace → reload
+    expect(shown(result)).toEqual(["w1@2026-10-08T09:00:00.000Z"]);
+    await waitFor(() => expect(held).toHaveLength(2));
+    expect(result.current.loading).toBe(false);
+    expect(shown(result)).toEqual(["w1@2026-10-08T09:00:00.000Z"]); // no flash while it's out
+
+    const later = {
+      calendar_id: "c1",
+      start_time: "2026-10-08T14:00:00.000Z",
+      end_time: "2026-10-08T15:00:00.000Z",
+    };
+    await act(async () => held[1].resolve({ data: [later], error: null }));
+    expect(shown(result)).toEqual(["w1@2026-10-08T14:00:00.000Z"]);
+  });
+
+  it("clears the blocks when read access goes away", async () => {
+    const held = holdBusy();
+    const { result, rerender } = mountWithAccess();
+    await waitFor(() => expect(held).toHaveLength(1));
+    await act(async () => held[0].resolve(BUSY));
+    expect(shown(result)).toEqual(["w1@2026-10-08T09:00:00.000Z"]);
+
+    rerender({ permission: "none" });
+    expect(shown(result)).toEqual([]);
+    expect(result.current.loading).toBe(false);
+  });
+
+  it("drops a reply that was still out when read access went away", async () => {
+    const held = holdBusy();
+    const { result, rerender } = mountWithAccess();
+    await waitFor(() => expect(held).toHaveLength(1));
+
+    rerender({ permission: "none" });
+    await act(async () => held[0].resolve(BUSY));
+    expect(shown(result)).toEqual([]);
   });
 });
