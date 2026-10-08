@@ -42,7 +42,7 @@ export function PersonAvatar({
     // Decorative: a name always sits beside it.
     <Avatar size="sm" aria-hidden className={cn("size-4", className)}>
       {person?.avatarUrl ? <AvatarImage src={person.avatarUrl} alt="" /> : null}
-      <AvatarFallback className="text-2xs">{person ? initials(person.name) : "?"}</AvatarFallback>
+      <AvatarFallback className="text-2xs">{person ? initials(person.name) : null}</AvatarFallback>
     </Avatar>
   );
 }
@@ -175,6 +175,9 @@ export function CommentComposer({
     if (!el) return;
     el.style.height = "auto";
     el.style.height = `${el.scrollHeight}px`;
+    // Scroll only past the max height; below it a sub-pixel overflow would
+    // still draw the thin bar.
+    el.style.overflowY = el.scrollHeight > el.clientHeight + 1 ? "auto" : "hidden";
   }, [text]);
 
   // Put the caret after an inserted mention once React has rendered the text.

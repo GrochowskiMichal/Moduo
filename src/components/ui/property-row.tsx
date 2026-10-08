@@ -83,8 +83,6 @@ function PropertyValue({
   return (
     <button
       type={type}
-      data-slot="property-value"
-      data-empty={empty || undefined}
       className={cn(
         "-ml-1.5 inline-flex h-(--ctrl-h-sm) max-w-full min-w-0 items-center gap-2 rounded-md px-1.5",
         "text-left font-sans text-base text-foreground outline-none",
@@ -96,6 +94,9 @@ function PropertyValue({
         className,
       )}
       {...props}
+      // After the spread: a Radix trigger (asChild) passes its own data-slot.
+      data-slot="property-value"
+      data-empty={empty || undefined}
     >
       {icon !== undefined ? (
         <span

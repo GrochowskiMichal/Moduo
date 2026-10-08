@@ -462,7 +462,7 @@ function TimeValue({
                 {row.progress !== null ? (
                   <span
                     aria-hidden
-                    className="ml-0.5 h-0.5 w-14 shrink-0 overflow-hidden rounded-full bg-hairline"
+                    className="h-0.5 w-8 shrink-0 overflow-hidden rounded-full bg-hairline"
                   >
                     <span
                       className={cn(
@@ -603,7 +603,7 @@ function TimeEditor({
 function TagsValue({ task, api, canEdit }: { task: Task; api: TasksModuleApi; canEdit: boolean }) {
   const taskTags = api.tagsByTask.get(task.id) ?? [];
   return (
-    <div className="flex min-h-(--ctrl-h-sm) flex-wrap items-center gap-x-2.5 gap-y-1">
+    <div className="flex min-h-(--ctrl-h-sm) flex-1 flex-wrap items-center gap-x-2.5 gap-y-1">
       {taskTags.map((t) => (
         <TagChip
           key={t.id}

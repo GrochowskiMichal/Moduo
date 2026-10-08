@@ -214,6 +214,10 @@ describe("the comp layout and property rule C (U3-1)", () => {
     expect(screen.getByRole("button", { name: "Mark as done" })).toBeTruthy();
     expect(screen.getByRole("textbox", { name: "Task title" }).tagName).toBe("TEXTAREA");
     expect(screen.getByRole("button", { name: "Status: Todo" })).toBeTruthy();
+    // Values are PropertyValues even under a Radix trigger, and none has a chevron.
+    expect(document.querySelectorAll("[data-slot=property-value]").length).toBeGreaterThanOrEqual(
+      5,
+    );
     expect(document.querySelector("[data-slot=property-value] .lucide-chevron-down")).toBeNull();
   });
 
