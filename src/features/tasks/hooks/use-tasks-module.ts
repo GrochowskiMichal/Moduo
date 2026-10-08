@@ -11,6 +11,7 @@ import { UNDO_TOAST_MS, undoToast } from "../../../lib/undo-toast";
 import type { FocusSaveContext } from "../../focus/engine";
 import { readSavedFocusTotal, writeSavedFocusTotal } from "../../focus/saved-totals";
 import { setBucketTimeBlock } from "../default-view";
+import { writeTaskTimeTotal } from "../focus-time-write";
 import {
   blockedTaskIds as computeBlockedTaskIds,
   subtasksByParent as computeSubtasksByParent,
@@ -100,9 +101,17 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
   const reqRef = useRef(0);
   /** Bumped on every successful load — the recurrence catch-up trigger. */
   const [loadStamp, setLoadStamp] = useState(0);
-  /** Which workspace the loaded bundle is, and when it arrived (the focus sink
-   *  judges freshness by it). Set with the bundle so a render sees both. */
-  const [loadedFrom, setLoadedFrom] = useState<{ workspaceId: string; at: number } | null>(null);
+  /** Which workspace the loaded bundle is, when its request started, and which
+   *  tasks the server had then. The focus sink judges freshness and "gone" by
+   *  it; it's set with the bundle so a render sees both. */
+  const [loadedFrom, setLoadedFrom] = useState<{
+    workspaceId: string;
+    at: number;
+    taskIds: ReadonlySet<string>;
+  } | null>(null);
+  /** The ownership the focus sink last reloaded for, and when (one reload per
+   *  takeover, then at most one a minute while loads keep failing). */
+  const focusReload = useRef({ ownedSince: 0, at: 0 });
 
   const load = useCallback(async () => {
     if (!runtime || !userId || !workspaceId || !canRead) {
@@ -113,6 +122,7 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
       return;
     }
     const req = ++reqRef.current;
+    const startedAt = Date.now();
     setLoading(true);
     try {
       // Time-blocks ride along with the bundle but never block it — a failed
@@ -123,7 +133,11 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
       ]);
       if (reqRef.current === req) {
         setBundle(next);
-        setLoadedFrom({ workspaceId, at: Date.now() });
+        setLoadedFrom({
+          workspaceId,
+          at: startedAt,
+          taskIds: new Set(next.tasks.map((t) => t.id)),
+        });
         setTimeBlocksState(blocks);
         setError(null);
         setLoadStamp((s) => s + 1); // triggers the recurrence catch-up pass
@@ -575,14 +589,15 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
   /**
    * The Focus engine's flush sink (TV-F1): fold `seconds` of tracked work into
    * the task's saved total and report what happened, so the engine keeps the
-   * seconds and retries ("not saved yet", F1-7) instead of losing them.
-   *  - `false` right away: not now. The list is loading, was loaded before this
-   *    tab took the clock (reload first: the other tab may have edited the
-   *    task, and the write sends the whole row), is another workspace's for a
-   *    render, is capped, or simply doesn't have the task yet.
-   *  - `"gone"`: the task is missing from a complete list of its workspace
-   *    loaded after the time was tracked — deleted or no longer shared. The
-   *    seconds are dropped, and the person is told.
+   * seconds and retries ("not saved yet", F1-7) instead of losing them. It
+   * writes only the time total (`writeTaskTimeTotal`), never the rest of the row.
+   *  - `false` right away: not now. The list is loading, was requested before
+   *    this tab took the clock (reload first: the other tab may have changed the
+   *    total), is another workspace's for a render, is capped, or doesn't have
+   *    the task yet.
+   *  - `"gone"`: the server's list for the task's workspace, requested after the
+   *    time was tracked, doesn't have it — deleted or no longer shared. The
+   *    seconds are dropped and the person is told.
    *  - a promise: the write, `false` when it failed (the optimistic total is
    *    put back) or when there's no edit access, so it shows as not saved.
    * The total is absolute, so it builds on the fresher of this bundle's row and
@@ -598,13 +613,18 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
       if (loading || !runtime || !workspaceId || isTempId(id)) return false;
       if (!loadedFrom || loadedFrom.workspaceId !== workspaceId) return false;
       if (loadedFrom.at < context.ownedSince) {
-        void load();
+        const last = focusReload.current;
+        if (last.ownedSince !== context.ownedSince || Date.now() - last.at > 60_000) {
+          focusReload.current = { ownedSince: context.ownedSince, at: Date.now() };
+          void load();
+        }
         return false;
       }
       const task = bundle.tasks.find((t) => t.id === id);
       if (!task || task.workspaceId !== workspaceId) {
         const complete = !bundle.truncated.some((t) => t.scope === "tasks");
-        if (!complete || loadedFrom.at <= context.earnedAt) return false;
+        const goneFromServer = complete && !loadedFrom.taskIds.has(id);
+        if (!goneFromServer || loadedFrom.at <= context.earnedAt) return false;
         toast(`${formatTrackedMinutes(seconds)} of focus time couldn't be saved`, {
           description: "The task it was tracked on was deleted or isn't shared with you any more.",
         });
@@ -617,17 +637,20 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
           ? lastSave.total
           : (task.timeSpentSeconds ?? 0);
       const total = Math.max(0, base + Math.round(seconds));
-      const updatedAt = new Date().toISOString();
-      patchTaskLocal(id, { timeSpentSeconds: total, updatedAt });
-      return runtime.tasks
-        .upsertTask({ ...task, timeSpentSeconds: total, updatedAt })
+      patchTaskLocal(id, { timeSpentSeconds: total });
+      return writeTaskTimeTotal(id, workspaceId, total)
         .then((saved) => {
+          if (!saved) throw new Error("task not found");
           if (userId) {
             writeSavedFocusTotal(userId, id, saved.timeSpentSeconds, Date.parse(saved.updatedAt));
           }
           setBundle((prev) => ({
             ...prev,
-            tasks: prev.tasks.map((t) => (t.id === id ? saved : t)),
+            tasks: prev.tasks.map((t) =>
+              t.id === id
+                ? { ...t, timeSpentSeconds: saved.timeSpentSeconds, updatedAt: saved.updatedAt }
+                : t,
+            ),
           }));
           return true;
         })

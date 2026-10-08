@@ -72,7 +72,7 @@ import {
   togglePomodoro,
 } from "./engine-core";
 import { alertPhaseEnd, type FocusPhaseNext } from "./phase-alert";
-import { FOCUS_SAVED_TOTALS_PREFIX } from "./saved-totals";
+import { FOCUS_SAVED_TOTALS_PREFIX, forgetSavedFocusTotals } from "./saved-totals";
 
 export type {
   AwayChoice,
@@ -448,6 +448,7 @@ export function createFocusEngine(deps: FocusEngineDeps): FocusEngine {
     } catch {
       /* storage unavailable — nothing to erase */
     }
+    forgetSavedFocusTotals(userId);
     if (userId !== user) return;
     // Nothing for this person is written to this device again.
     key = null;

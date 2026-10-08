@@ -48,7 +48,6 @@
 ## Known gaps / not-yet-testable
 - **Desktop notifications and background accrual were not run here.** This Mac has no code-signing identity, and an unsigned build shares its bundle id and storage with the installed Moduo.app. The plugin is known to fail silently when signing doesn't match, and in `tauri dev` its notifications show as Terminal. If the signed build shows nothing, the spec's fallback is a small UNUserNotificationCenter command.
 - **Two browser tabs:** only the tab running the clock shows the phase-end toast, so it can land in a hidden tab.
-- **An edit made in another tab or device can be reverted** by the next focus save from the tab running the clock (whole-row write; pre-existing). A tab that takes the clock reloads first, which covers the common two-tab case. TV-D1's field-level saves fix the rest.
 - **Time on a tab without Tasks open waits.** If the tab running the clock has left Tasks, its time is held on the device (not lost) and saves when that tab opens Tasks again or you act on the session in a tab that has it open.
 - **Idle without sleep** (walking away from an awake machine) isn't detected — out of scope per the spec.
 

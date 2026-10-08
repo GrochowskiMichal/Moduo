@@ -19,6 +19,19 @@ export interface SavedFocusTotal {
 
 type SavedTotals = Record<string, SavedFocusTotal>;
 
+/** People erased from this device on this page (account deletion): a save that
+ *  settles afterwards mustn't write their map back. */
+const forgotten = new Set<string>();
+
+export function forgetSavedFocusTotals(userId: string): void {
+  forgotten.add(userId);
+  try {
+    localStorage.removeItem(`${FOCUS_SAVED_TOTALS_PREFIX}${userId}`);
+  } catch {
+    /* storage unavailable — nothing to erase */
+  }
+}
+
 function isSavedTotal(value: unknown): value is SavedFocusTotal {
   if (!value || typeof value !== "object") return false;
   const v = value as Record<string, unknown>;
@@ -48,7 +61,7 @@ export function writeSavedFocusTotal(
   total: number,
   at: number,
 ): void {
-  if (!Number.isFinite(total) || !Number.isFinite(at)) return;
+  if (forgotten.has(userId) || !Number.isFinite(total) || !Number.isFinite(at)) return;
   const all = readAll(userId);
   const prev = all[taskId];
   if (prev && prev.at > at) return;
