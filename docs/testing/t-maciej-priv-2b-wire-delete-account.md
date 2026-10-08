@@ -29,12 +29,12 @@
 - [x] **Do:** `bunx rstest run supabase/functions/_shared/account-erasure.test.ts src/routes/pages/auth-page.test.tsx src/features/settings/delete-account.test.ts src/components/app/use-unknown-route-redirect.test.tsx` → **Expect:** all pass.
 
 ## 1. Production (designer's OK first; in this order)
-- [ ] **Do:** make sure PRIV-2a's follow-up `20261008040000_account_erasure_private_shortcut.sql` is applied. delete-account now dry-runs `account_erase_workspace_data` on every deletion, so it should be fast. Then apply `20261008050000_account_scrub_stripe_mirror.sql` the same way: one transaction with its `supabase_migrations.schema_migrations` row (version `20261008050000`, name `account_scrub_stripe_mirror`). → **Expect:** no error; both rows are there.
-- [ ] **Do:** check `account_scrub_stripe_mirror(uuid, boolean, text[])`.
+- [x] **Do:** make sure PRIV-2a's follow-up `20261008040000_account_erasure_private_shortcut.sql` is applied. delete-account now dry-runs `account_erase_workspace_data` on every deletion, so it should be fast. Then apply `20261008050000_account_scrub_stripe_mirror.sql` the same way: one transaction with its `supabase_migrations.schema_migrations` row (version `20261008050000`, name `account_scrub_stripe_mirror`). → **Expect:** no error; both rows are there. **2026-10-08:** both applied, in that order, rows present.
+- [~] **Do:** check `account_scrub_stripe_mirror(uuid, boolean, text[])`. **2026-10-08:** security definer, service role only, and a preview for an unknown user answers `stripe_mirror: true` with zero counts; the preview of a real account is still open.
   - `prosecdef` is true. `has_function_privilege` is false for anon and authenticated, and true for service_role.
   - Preview an account that has a Stripe customer: `select public.account_scrub_stripe_mirror('<user id>');`
   - → **Expect:** `"preview": true` with that account's customer and card counts; nothing changes.
-- [ ] **Do:** deploy `delete-account` (verify_jwt off, as before; v17, since PRIV-3 shipped v16). Probe it without signing in. → **Expect:** POST without a token answers 401, GET answers 405.
+- [x] **Do:** deploy `delete-account` (verify_jwt off, as before; v17, since PRIV-3 shipped v16). Probe it without signing in. → **Expect:** POST without a token answers 401, GET answers 405. **2026-10-08:** v17 live; 401 and 405.
 - [ ] **AC17, designer, Stripe dashboard:** delete the two customers whose accounts are already gone (`cus_UVK1VVxLZNlTGj`, `cus_VO9nnGZB29QU0H`): Customers → the customer → Delete. Delete at Stripe first: wiping our copy before would let the deletion's own webhook write the profile back.
 - [ ] **Do (after the Stripe delete):**
   - Find the old user ids: `select id, _raw_data -> 'metadata' ->> 'supabase_user_id' from stripe.customers where id in ('cus_UVK1VVxLZNlTGj', 'cus_VO9nnGZB29QU0H');`
