@@ -31,13 +31,15 @@ import type { Tag, Task } from "../model";
 type Props = {
   /** The workspace the tracked time is saved into (the engine flushes per workspace). */
   workspaceId: string;
-  committedTasks: Task[];
+  /** My queue in line-up order; tasks done since the last load stay, done. */
+  queuedTasks: Task[];
   bucketNameById: (id: string) => string;
-  /** Parent title for committed subtasks — quiet "part of …" context. */
+  /** Parent title for queued subtasks — quiet "part of …" context. */
   parentTitleFor: (task: Task) => string | null;
-  /** Quiet "Waiting on …" note for blocked tasks committed anyway (spec §5c). */
+  /** Quiet "Waiting on …" note for blocked tasks queued anyway (spec §5c). */
   blockedNoteFor: (task: Task) => string | null;
   onMarkDone: (id: string) => void;
+  /** Skip: the task goes to the end of my queue (never a reschedule). */
   onSkip: (id: string) => void;
   /** Fold an elapsed work delta (seconds) into the task's tracked total. */
   onAddTime: (taskId: string, deltaSeconds: number) => void;
@@ -51,13 +53,13 @@ type Props = {
    *  transient empty queue on remount can't clear a live focus session (DF-11). */
   loading: boolean;
   canEdit: boolean;
-  /** Capture a new task straight into today's queue (empty-queue affordance). */
+  /** Capture a new task straight into my queue (empty-queue affordance). */
   onCaptureToQueue: (title: string) => void;
 };
 
 export function ExecuteView({
   workspaceId,
-  committedTasks,
+  queuedTasks,
   bucketNameById,
   parentTitleFor,
   blockedNoteFor,
@@ -73,10 +75,10 @@ export function ExecuteView({
   canEdit,
   onCaptureToQueue,
 }: Props) {
-  const current = committedTasks.find((t) => t.status !== "done") ?? null;
-  const upcoming = committedTasks.filter((t) => t.status !== "done").slice(1);
-  const total = committedTasks.length;
-  const doneCount = committedTasks.filter((t) => t.status === "done").length;
+  const current = queuedTasks.find((t) => t.status !== "done") ?? null;
+  const upcoming = queuedTasks.filter((t) => t.status !== "done").slice(1);
+  const total = queuedTasks.length;
+  const doneCount = queuedTasks.filter((t) => t.status === "done").length;
   // Pomodoro prefs (persisted) — the timer reads these; the ⋯ popover edits them.
   const { prefs: focusPrefs, setPrefs: setFocusPrefs } = useFocusPrefs();
 
@@ -154,7 +156,8 @@ export function ExecuteView({
               }}
               onSkip={() => {
                 onSkip(current.id);
-                moveSessionPast(current.id);
+                // Skip goes to the end of the queue: alone in it, it stays Now.
+                if (upcoming.length > 0) moveSessionPast(current.id);
               }}
               onAddTime={onAddTime}
               onSetTime={onSetTime}
@@ -213,7 +216,7 @@ function EndSummary({
       <p className="font-sans text-sm text-muted-foreground">
         {total > 0 && doneCount === total ? "Queue cleared." : "That’s the queue."}
       </p>
-      {/* Empty queue isn't a dead end — capture one more straight into today (DF-11). */}
+      {/* Empty queue isn't a dead end — capture one more straight into my queue (DF-11). */}
       {canEdit ? (
         <div className="mx-auto flex w-full max-w-sm items-center gap-2">
           <Input
@@ -226,7 +229,7 @@ function EndSummary({
               }
             }}
             placeholder="Add one more…"
-            aria-label="Add a task to today’s focus queue"
+            aria-label="Add a task to your queue"
           />
           <Button size="sm" onClick={submit} disabled={!value.trim()}>
             <Plus className="size-icon-sm" aria-hidden />

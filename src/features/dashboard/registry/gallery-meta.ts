@@ -25,7 +25,7 @@ import {
 import type { WidgetType } from "../engine/types";
 
 export const WIDGET_GALLERY_META: Record<WidgetType, { icon: LucideIcon; description: string }> = {
-  tasks: { icon: CheckSquare, description: "Today's work with inline check-off." },
+  tasks: { icon: CheckSquare, description: "Your queue, with inline check-off." },
   notes: { icon: FileText, description: "Recently touched notes." },
   calendar: { icon: CalendarDays, description: "What's left on today's schedule." },
   timetracking: { icon: Timer, description: "Time tracked today (desktop)." },

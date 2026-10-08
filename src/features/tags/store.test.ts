@@ -118,6 +118,7 @@ function fakeServer(init: { tasks?: Task[]; tags?: Tag[]; links?: TagLink[] } = 
       truncated: [],
     })),
     getTimeBlocks: rs.fn(async () => ({})),
+    listQueue: rs.fn(async () => []),
     opCatchUp: rs.fn(async () => []),
     upsertTask: rs.fn(async (t: Task) => {
       await write("upsertTask");

@@ -1,5 +1,5 @@
 // The right panel's Tasks view — the drag source (DESIGN_BRIEF §5, AC11):
-// Today · Due soon · Backlog groups + search; rows drag onto the grid via the
+// Queue · Due soon · Backlog groups + search; rows drag onto the grid via the
 // universal drag contract (the legacy TaskDragData payload, adapted by
 // asDragPayload); the checkbox completes with the same op as everywhere.
 // Already-scheduled rows show their time and sink to the bottom of their
@@ -47,13 +47,13 @@ export function CalendarTasksPanel({ api, onOpenTask, onRequestCapture, review }
     () =>
       groupPanelTasks({
         tasks: api.tasks,
-        committedTasks: api.committedTasks,
+        queuedTasks: api.queuedTasks,
         query,
       }),
-    [api.tasks, api.committedTasks, query],
+    [api.tasks, api.queuedTasks, query],
   );
 
-  const total = groups.today.length + groups.dueSoon.length + groups.backlog.length;
+  const total = groups.queue.length + groups.dueSoon.length + groups.backlog.length;
 
   return (
     <div className="pane-scroll scrollbar-thin flex h-full min-h-0 flex-col gap-2 overflow-y-auto">
@@ -92,7 +92,7 @@ export function CalendarTasksPanel({ api, onOpenTask, onRequestCapture, review }
         </span>
       ) : null}
 
-      <TaskGroup title="Today" tasks={groups.today} api={api} onOpenTask={onOpenTask} />
+      <TaskGroup title="Queue" tasks={groups.queue} api={api} onOpenTask={onOpenTask} />
       <TaskGroup title="Due soon" tasks={groups.dueSoon} api={api} onOpenTask={onOpenTask} />
       <TaskGroup title="Backlog" tasks={groups.backlog} api={api} onOpenTask={onOpenTask} />
     </div>

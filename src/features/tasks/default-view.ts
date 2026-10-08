@@ -17,7 +17,7 @@
 // here — mode / selection / grouping — is a per-device view preference and
 // stays in localStorage.
 
-import { TIME_BLOCK_SLOTS, type TimeBlockMap, type TimeBlockSlot } from "./model";
+import { type Task, TIME_BLOCK_SLOTS, type TimeBlockMap, type TimeBlockSlot } from "./model";
 
 export { TIME_BLOCK_SLOTS, type TimeBlockMap, type TimeBlockSlot };
 
@@ -101,4 +101,26 @@ export function resolveDefaultSelection({
 
   // 3. Fallback.
   return "inbox";
+}
+
+// ── My tasks (tasks-v2 §1, TV-D4) ────────────────────────────────────────────
+
+/** The "My tasks" rail row exists only where there's someone else to tell apart. */
+export function showsMyTasks(activeMemberCount: number): boolean {
+  return activeMemberCount >= 2;
+}
+
+/**
+ * The "My tasks" scope: tasks assigned to me, across buckets. Like All it
+ * leaves archived tasks out and keeps done ones (TV-U1 hides completed tasks
+ * everywhere by default).
+ */
+export function myTasksScope(tasks: Task[], userId: string | null): Task[] {
+  if (!userId) return [];
+  return tasks.filter((t) => t.assigneeId === userId && t.status !== "archived");
+}
+
+/** Open (not done, not archived) tasks in a list: a rail row's count. */
+export function openCount(tasks: Task[]): number {
+  return tasks.filter((t) => t.status !== "done" && t.status !== "archived").length;
 }
