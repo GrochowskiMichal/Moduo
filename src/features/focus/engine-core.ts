@@ -395,14 +395,18 @@ export function bindTask(
   p: FocusRhythm,
 ): FocusRecord {
   if (task === null) return { ...stopSession(r, now, p), task: null };
-  if (r.task?.id === task.id) {
-    const same =
-      r.task.title === task.title &&
-      r.task.bucketName === task.bucketName &&
-      r.task.workspaceId === task.workspaceId;
-    return same ? r : { ...r, task };
-  }
+  if (r.task && sameTaskRef(r.task, task)) return r;
   return { ...r, task };
+}
+
+/** Same task, same label: binding it again changes nothing. */
+export function sameTaskRef(a: FocusTaskRef, b: FocusTaskRef): boolean {
+  return (
+    a.id === b.id &&
+    a.title === b.title &&
+    a.bucketName === b.bucketName &&
+    a.workspaceId === b.workspaceId
+  );
 }
 
 /** Switch stopwatch ↔ pomodoro; the rhythm starts over with a work block. */

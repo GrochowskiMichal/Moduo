@@ -535,6 +535,24 @@ describe("F1-7 — tracked time is never lost", () => {
     expect(total("t1")).toBe(40); // 20 failed + 20 saved
   });
 
+  it("a retry that can't run yet (bundle reloading) keeps 'not saved yet' and keeps retrying", async () => {
+    let answer: () => boolean | Promise<boolean> = () => Promise.resolve(false);
+    const { total, sink } = recordingSink(() => answer());
+    registerFocusFlushSink(WS, sink);
+    bindFocusTask(task("t1"));
+    startFocus();
+    rs.advanceTimersByTime(30_000);
+    toggleFocusRunning(); // the save fails
+    await settle();
+    answer = () => false; // the retry finds the bundle reloading
+    await rs.advanceTimersByTimeAsync(15_000);
+    expect(getFocusSession()).toMatchObject({ accrued: 30, unsaved: true });
+    answer = () => Promise.resolve(true);
+    await rs.advanceTimersByTimeAsync(30_000); // the next retry saves it
+    expect(getFocusSession()).toMatchObject({ accrued: 0, unsaved: false });
+    expect(total("t1")).toBe(90); // failed + deferred + saved hand-offs of the same 30 s
+  });
+
   it("seconds being saved aren't shown twice, and survive a reload mid-save", async () => {
     let finish: (ok: boolean) => void = () => {};
     const { sink } = recordingSink(

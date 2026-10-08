@@ -51,6 +51,7 @@ import {
   resumeSession,
   reviveDeadFlights,
   sameSession,
+  sameTaskRef,
   settleFlush,
   snapshotOf,
   startSession,
@@ -177,8 +178,8 @@ export function createFocusEngine(deps: FocusEngineDeps): FocusEngine {
     }
   }
 
-  function publish(): void {
-    const next = snapshotOf(rec, deps.now(), deps.readPrefs());
+  function publish(prefs: FocusRhythm = deps.readPrefs()): void {
+    const next = snapshotOf(rec, deps.now(), prefs);
     if (sameSession(next, snapshot)) return;
     snapshot = next;
     for (const listener of listeners) listener();
@@ -262,9 +263,10 @@ export function createFocusEngine(deps: FocusEngineDeps): FocusEngine {
       syncTimers();
       return;
     }
-    const o = observe(claim(r), now, deps.readPrefs());
+    const prefs = deps.readPrefs();
+    const o = observe(claim(r), now, prefs);
     save(o.rec);
-    publish();
+    publish(prefs);
     syncTimers();
     announce(o.liveEnds, o.rec);
   }
@@ -279,7 +281,7 @@ export function createFocusEngine(deps: FocusEngineDeps): FocusEngine {
     const prefs = deps.readPrefs();
     const o = observe(claim(load()), now, prefs);
     save(change(o.rec, now, prefs));
-    publish();
+    publish(prefs);
     syncTimers();
     announce(o.liveEnds, o.rec);
     if (opts.flush) void flush();
@@ -314,8 +316,12 @@ export function createFocusEngine(deps: FocusEngineDeps): FocusEngine {
     if (!mayRun(first, startedAt)) return;
     flushing = true;
     let failed = false;
+    let deferred = false;
+    let saved = false;
+    let failedAt: number | null = first.failedAt;
     try {
-      const o = observe(claim(first), startedAt, deps.readPrefs());
+      const prefs = deps.readPrefs();
+      const o = observe(claim(first), startedAt, prefs);
       save(o.rec);
       announce(o.liveEnds, o.rec);
       for (const [workspaceId, sink] of [...sinks]) {
@@ -323,26 +329,30 @@ export function createFocusEngine(deps: FocusEngineDeps): FocusEngine {
         const batch = takeFlushBatch(reviveDeadFlights(load(), liveFlights, now), workspaceId, now);
         if (batch.items.length === 0) continue;
         save(batch.rec);
-        publish();
+        publish(prefs);
         for (const item of batch.items) {
           liveFlights.add(item.taskId);
           const pending = runSink(sink, item);
           const outcome = typeof pending === "string" ? pending : await pending;
           liveFlights.delete(item.taskId);
           if (outcome === "failed") failed = true;
+          else if (outcome === "later") deferred = true;
+          else saved = true;
           // Re-read: the clock kept ticking (and writing) while the save ran.
           save(settleFlush(load(), item, outcome === "saved"));
-          publish();
+          publish(prefs);
         }
       }
+      // "Not saved yet" clears only once a pass has saved everything it tried;
+      // a deferred or empty pass says nothing new about an earlier failure.
       const settled = load();
-      const failedAt = failed ? deps.now() : null;
+      failedAt = failed ? deps.now() : saved && !deferred ? null : settled.failedAt;
       if (settled.failedAt !== failedAt) save({ ...settled, failedAt });
     } finally {
       flushing = false;
     }
     publish();
-    if (failed) {
+    if (failedAt !== null) {
       scheduleRetry();
     } else {
       clearRetry();
@@ -387,11 +397,7 @@ export function createFocusEngine(deps: FocusEngineDeps): FocusEngine {
     if (task && r.task?.id === task.id) {
       // The same task again (a remount, a rename): only the running tab
       // refreshes the label, and it never takes the clock from another tab.
-      const same =
-        r.task.title === task.title &&
-        r.task.bucketName === task.bucketName &&
-        r.task.workspaceId === task.workspaceId;
-      if (same || !mayRun(r, deps.now())) return;
+      if (sameTaskRef(r.task, task) || !mayRun(r, deps.now())) return;
       act((cur, now, prefs) => bindTask(cur, task, now, prefs));
       return;
     }

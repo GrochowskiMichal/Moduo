@@ -562,10 +562,12 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
    * The Focus engine's flush sink (TV-F1): fold `seconds` of tracked work into
    * the task's saved total and report what happened, so the engine keeps the
    * seconds and retries ("not saved yet", F1-7) instead of losing them.
-   *  - `false` right away: not now (the bundle isn't loaded, or no edit access);
-   *  - `true` right away: nothing to save into (the task is gone);
+   *  - `false` right away: not now (the bundle isn't loaded yet, or the task
+   *    may sit outside a capped read);
+   *  - `true` right away: nothing to save into (the task is gone from a
+   *    complete bundle: deleted, or no longer shared);
    *  - a promise: the write, `false` when it failed (the optimistic total is
-   *    put back).
+   *    put back) or when there's no edit access, so it shows as not saved.
    * Two flushes can land before React re-renders, so the second one builds on
    * the total the first wrote, not on the stale bundle (`focusTotals`).
    */
@@ -575,8 +577,9 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
       if (!Number.isFinite(seconds) || seconds < 1) return true;
       if (loading) return false;
       const task = bundle.tasks.find((t) => t.id === id);
-      if (!task) return true;
-      if (isTempId(id) || !runtime || !workspaceId || !canEdit) return false;
+      if (!task) return !bundle.truncated.some((t) => t.scope === "tasks");
+      if (isTempId(id) || !runtime || !workspaceId) return false;
+      if (!canEdit) return Promise.resolve(false);
       const pending = focusTotals.current.get(id);
       const base =
         pending && pending.basis === task.updatedAt ? pending.total : (task.timeSpentSeconds ?? 0);
@@ -608,7 +611,7 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
           return false;
         });
     },
-    [loading, bundle.tasks, runtime, workspaceId, canEdit, patchTaskLocal],
+    [loading, bundle.tasks, bundle.truncated, runtime, workspaceId, canEdit, patchTaskLocal],
   );
 
   /** Set the tracked total to an absolute value (manual "edit the value"). */
