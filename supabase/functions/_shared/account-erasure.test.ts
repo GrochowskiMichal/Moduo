@@ -13,6 +13,7 @@ import {
   type StorageBucket,
   type StorageEntry,
 } from "./account-erasure.ts";
+import type { ErasurePostHog, PostHogEraseResult } from "./posthog-erasure.ts";
 
 // ── In-memory stand-ins for supabase-js and Stripe ────────────────────────────
 
@@ -269,6 +270,21 @@ class FakeStripe implements ErasureStripe {
   };
 }
 
+/** PostHog's bulk delete, as account-erasure sees it. */
+class FakePostHog implements ErasurePostHog {
+  /** Every request: "erase <distinct id>". */
+  log: string[] = [];
+  /** What PostHog answers next: "throw" stands for a network error, a 429 or a 5xx. */
+  outcome: "queued" | "refused" | "throw" = "queued";
+
+  async erasePerson(distinctId: string): Promise<PostHogEraseResult> {
+    this.log.push(`erase ${distinctId}`);
+    if (this.outcome === "throw") throw new Error("PostHog 503: busy");
+    if (this.outcome === "refused") return { status: "refused", httpStatus: 403 };
+    return { status: "queued" };
+  }
+}
+
 function stripeError(message: string, statusCode: number, code?: string) {
   return Object.assign(new Error(message), { statusCode, code });
 }
@@ -359,8 +375,9 @@ function world() {
   ]);
   stripe.addCustomer("cus_other", OTHER, [["sub_other", "active"]]);
 
-  const deps: ErasureDeps = { db, stripe };
-  return { db, stripe, deps };
+  const posthog = new FakePostHog();
+  const deps: ErasureDeps = { db, stripe, posthog };
+  return { db, stripe, posthog, deps };
 }
 
 const me = { id: ME, email: MY_EMAIL };
@@ -380,7 +397,7 @@ async function failedStep(run: Promise<unknown>): Promise<ErasureStep> {
 
 describe("deleteAccount — sole-owner block (409)", () => {
   it("blocks a sole owner of a workspace with other members before touching anything", async () => {
-    const { db, stripe, deps } = world();
+    const { db, stripe, posthog, deps } = world();
     db.tables.workspace_members.push({ workspace_id: "ws-solo", user_id: OTHER });
 
     const result = await deleteAccount(deps, me);
@@ -388,6 +405,7 @@ describe("deleteAccount — sole-owner block (409)", () => {
     expect(result).toEqual({ status: "blocked", workspaces: [{ id: "ws-solo", name: "Solo" }] });
     expect(db.log).toEqual([]);
     expect(stripe.log).toEqual([]);
+    expect(posthog.log).toEqual([]);
     expect(db.users.has(ME)).toBe(true);
     expect(avatarFiles(db)).toContain(`profiles/${ME}/avatar.png`);
   });
@@ -624,16 +642,79 @@ describe("deleteAccount — Stripe records", () => {
 
   it("without a Stripe key, refuses when there is a customer and warns when there isn't", async () => {
     const withCustomer = world();
-    expect(await failedStep(deleteAccount({ db: withCustomer.db, stripe: null }, me))).toBe(
-      "stripe",
-    );
+    expect(
+      await failedStep(
+        deleteAccount({ db: withCustomer.db, stripe: null, posthog: withCustomer.posthog }, me),
+      ),
+    ).toBe("stripe");
     expect(withCustomer.db.log).toEqual([]);
     expect(withCustomer.db.users.has(ME)).toBe(true);
 
     const withoutCustomer = world();
     withoutCustomer.db.tables.profiles[0].stripe_customer_id = null;
-    const result = await deleteAccount({ db: withoutCustomer.db, stripe: null }, me);
+    const result = await deleteAccount(
+      { db: withoutCustomer.db, stripe: null, posthog: withoutCustomer.posthog },
+      me,
+    );
     expect(result).toEqual({ status: "deleted", warnings: ["stripe_not_configured"] });
+  });
+});
+
+describe("deleteAccount — the app's usage analytics at PostHog (PRIV-3)", () => {
+  it("asks PostHog to delete the person keyed by the user's id", async () => {
+    const { posthog, deps } = world();
+
+    const result = await deleteAccount(deps, me);
+
+    expect(result).toEqual({ status: "deleted", warnings: [] });
+    expect(posthog.log).toEqual([`erase ${ME}`]);
+  });
+
+  it("stops at PostHog before billing or anything in Moduo is touched, and a retry finishes", async () => {
+    const { db, stripe, posthog, deps } = world();
+    posthog.outcome = "throw";
+
+    expect(await failedStep(deleteAccount(deps, me))).toBe("posthog");
+    expect(stripe.log).toEqual([]);
+    expect(stripe.subscriptionsById.get("sub_me")?.status).toBe("trialing");
+    expect(db.log).toEqual([]);
+    expect(db.users.has(ME)).toBe(true);
+
+    posthog.outcome = "queued";
+    const result = await deleteAccount(deps, me);
+
+    expect(result.status).toBe("deleted");
+    expect(posthog.log).toEqual([`erase ${ME}`, `erase ${ME}`]);
+    expect(db.users.has(ME)).toBe(false);
+  });
+
+  it("warns, but carries on, when PostHog refuses for good (a wrong key or project)", async () => {
+    const { db, posthog, deps } = world();
+    posthog.outcome = "refused";
+
+    const result = await deleteAccount(deps, me);
+
+    expect(result).toEqual({ status: "deleted", warnings: ["posthog_refused: 403"] });
+    expect(db.users.has(ME)).toBe(false);
+  });
+
+  it("without the PostHog secrets, warns and carries on", async () => {
+    const { db, deps } = world();
+
+    const result = await deleteAccount({ ...deps, posthog: null }, me);
+
+    expect(result).toEqual({ status: "deleted", warnings: ["posthog_not_configured"] });
+    expect(db.users.has(ME)).toBe(false);
+  });
+
+  it("fails before anything is deleted when a caller forgot to pass posthog at all", async () => {
+    const { db, stripe, deps } = world();
+    // What an Edge Function entry point (not type-checked) would send without the field.
+    const { posthog: _left, ...withoutPostHog } = deps;
+
+    expect(await failedStep(deleteAccount(withoutPostHog as typeof deps, me))).toBe("posthog");
+    expect(stripe.log).toEqual([]);
+    expect(db.users.has(ME)).toBe(true);
   });
 });
 
@@ -718,7 +799,7 @@ describe("deleteAccount — failures leave a retryable account", () => {
 
 describe("erasureErrorMessage", () => {
   it("says the account wasn't deleted only for the steps before any Moduo data goes", () => {
-    for (const step of ["check", "stripe"] as const) {
+    for (const step of ["check", "posthog", "stripe"] as const) {
       expect(erasureErrorMessage(step)).toContain("wasn't deleted");
     }
     for (const step of [

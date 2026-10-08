@@ -157,15 +157,16 @@ A founder runs one command in Terminal, with the admin secret from their passwor
   It is redefined with `CREATE OR REPLACE`, which keeps its grants.
 - **Order inside `deleteAccount`:**
   1. check
-  2. stripe
-  3. **stripe_mirror** (new)
-  4. storage
-  5. booking
-  6. integrations
-  7. contact_notes
-  8. **workspace_data** (new)
-  9. waitlist
-  10. auth
+  2. posthog (added by PRIV-3, 2026-10-08)
+  3. stripe
+  4. **stripe_mirror** (new)
+  5. storage
+  6. booking
+  7. integrations
+  8. contact_notes
+  9. **workspace_data** (new)
+  10. waitlist
+  11. auth
 
   `workspace_data` must run before the auth delete: afterwards the user's rows can't be identified (`notes.created_by` goes NULL). It runs after PRIV-1's own deletes, so nothing it counts is double-handled.
 - **The Stripe mirror wipe is a second function, `account_scrub_stripe_mirror(p_user uuid, p_preview boolean DEFAULT true)`.**
@@ -194,7 +195,7 @@ A founder runs one command in Terminal, with the admin secret from their passwor
 | --- | --- | --- | --- | --- |
 | 1 | **PRIV-2a · Erase what's left in other workspaces (SQL)** | Migration with `account_erase_workspace_data` + `account_erasure_new_owner` + the `share_member_removed` changes + grants; local probe for AC1–AC6, AC9, AC12; applied to prod with OK; read-only prod preview. No caller yet, so applying it is safe on its own. | AC1–AC6, AC9, AC12 (SQL side) | PRIV-1 ✓ |
 | 2 | **PRIV-2b · Wire it in, wipe the Stripe copy, in-app copy** | Migration with `account_scrub_stripe_mirror`; two new steps in `account-erasure.ts` + tests; Danger zone sentence; `/auth` deleted notice + tests; `delete-account` redeployed with OK; AC17 one-off: designer deletes the two customers in the Stripe dashboard, then the mirror is wiped with OK. | AC7, AC8, AC10, AC11, AC17 | 1 |
-| 3 | **PRIV-2c · Admin command for privacy@** | Migration with `admin_account_lookup` + `admin_transfer_workspace_owner`; `admin-delete-account` + `_shared/account-admin.ts` + tests; runbook `docs/privacy-requests.md`; designer creates `ACCOUNT_ADMIN_SECRET`; deployed with OK; one preview run on a real account. | AC12–AC15 | 1, 2 |
+| 3 | **PRIV-2c · Admin command for privacy@** | Migration with `admin_account_lookup` + `admin_transfer_workspace_owner`; `admin-delete-account` + `_shared/account-admin.ts` + tests (passes `posthog: postHogEraserFromEnv(…)` to `deleteAccount`; needs the PRIV-3 PostHog secrets); runbook `docs/privacy-requests.md`; designer creates `ACCOUNT_ADMIN_SECRET`; deployed with OK; one preview run on a real account. | AC12–AC15 | 1, 2 |
 | 4 | **PRIV-2d · Privacy policy wording** | `landing/privacy.html` updated with the appendix wording on the landing branch flow (Mike redeploys Vercel), plus the "Last updated" date. | AC16 | — |
 
 ## Out of scope
@@ -206,7 +207,7 @@ A founder runs one command in Terminal, with the admin secret from their passwor
 - Changing the landing card wording (designer's call).
 - Rewriting entity tokens inside other people's chat messages and note bodies, or dashboard widget settings that point at deleted buckets. They already render as a missing or "Private item" chip.
 - What removing a member does with private items (the owner archive stays as decided).
-- Erasing the person's PostHog analytics when the account is deleted: that is **PRIV-3** in BUILD_ORDER (planned separately with app analytics, 2026-10-07). It will add its own step to the same `deleteAccount` flow.
+- Erasing the person's PostHog analytics when the account is deleted: that is **PRIV-3** in BUILD_ORDER (built 2026-10-08). It added the `posthog` step to `deleteAccount`, right after the check, so every caller passes `posthog` (the admin command uses `postHogEraserFromEnv` and the same PostHog secrets).
 
 ---
 
