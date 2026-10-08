@@ -101,7 +101,7 @@ Closed vocabularies (plan tier, task status, roles, link origins, …) live in `
 - **Skills** (`.claude/skills/`): `/s1` plan · `/s2` build one block (inside `/goal`) · `/s3` wrap and land · `moduo-design-quality` (design audit/polish/build). Plugins add the grilling, TDD and debugging skills `/s1`–`/s3` call, language servers (Rust diagnostics, TypeScript navigation), security scanning and Supabase rules; they are enabled for the project in `.claude/settings.json`.
 - **Subagents** (`.claude/agents/`): `validator`, the skeptical staff review that gates every block.
 - **Hooks** (`.claude/hooks/`): session preflight + title, notifications, Entire capture, and the three guards above.
-- **MCP:** `supabase`, `subframe`, `vercel`, `github` in `.mcp.json` (`claude mcp login <name>` once per machine).
+- **MCP:** `supabase`, `subframe`, `vercel` in `.mcp.json` (`claude mcp login <name>` once per machine). GitHub work goes through the `gh` CLI.
 - **Parallel work:** one block per session, each session in its own worktree; dispatch background lanes with `claude agents`. Audits and migrations across many files run as dynamic workflows (`ultracode`). Agent teams stay off.
 
 ## Personal layer
