@@ -1,7 +1,8 @@
-// The header tag-chip row on contact/company cards (fix pack FX-2, AC3 —
-// designer decision: tags live in the header, under the subtitle). Chips are
-// hue + name (color never the only signal); removing detaches, never deletes;
-// the picker is the shared workspace TagPicker Tasks uses.
+// One item's tag-chip row: contact/company cards (fix pack FX-2, AC3 —
+// designer decision: tags live in the header, under the subtitle), the note
+// and email detail panels. Chips are hue + name (color never the only signal);
+// removing detaches, never deletes; the picker is the shared workspace
+// TagPicker Tasks uses, fed by the shared tag store (TV-T1).
 
 import { TagChip } from "@/components/tag-chip";
 import { TagPicker } from "@/components/tag-picker";

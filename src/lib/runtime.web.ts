@@ -74,7 +74,13 @@ import {
 import { toMemberPerm, toMemberRole } from "../features/workspaces/workspace-mappers";
 import { clearIgnoredAuthLink, SUPABASE_AUTH_OPTIONS } from "./auth-url";
 import type { EntityLink, EntityRecord } from "./entity-links";
-import { collectTruncations, READ_CAPS, readPaged, type Truncation } from "./paged-select";
+import {
+  collectTruncations,
+  READ_CAPS,
+  readPaged,
+  TAG_LINKS_SCOPE,
+  type Truncation,
+} from "./paged-select";
 import {
   missingOptionalPrefsDomain,
   optionalPrefsAvailable,
@@ -91,6 +97,7 @@ import type {
   IntegrationStatusItem,
   LocalAuthState,
   ModuoRuntime,
+  OtpSendError,
   RuntimeCapabilities,
   RuntimeSession,
   SpineComment,
@@ -227,6 +234,17 @@ function toError(error: unknown): { message: string } {
   if (error && typeof error === "object" && "message" in error)
     return { message: String((error as any).message) };
   return { message: String(error) };
+}
+
+/** toError, keeping auth-js's `code` and `status` (AuthApiError) for the sign-in screen. */
+function toOtpSendError(error: unknown): OtpSendError {
+  const base: OtpSendError = toError(error);
+  if (error && typeof error === "object") {
+    const { code, status } = error as { code?: unknown; status?: unknown };
+    if (typeof code === "string" && code) base.code = code;
+    if (typeof status === "number") base.status = status;
+  }
+  return base;
 }
 
 function desktopOnly(): { message: string } {
@@ -515,10 +533,10 @@ export const webRuntime: ModuoRuntime = {
           // ("Signups not allowed for this instance"). Never create a user from here.
           options: { shouldCreateUser: false },
         });
-        if (error) return { data: {}, error: toError(error) };
+        if (error) return { data: {}, error: toOtpSendError(error) };
         return { data: {}, error: null };
       } catch (error) {
-        return { data: {}, error: toError(error) };
+        return { data: {}, error: toOtpSendError(error) };
       }
     },
 
@@ -2009,7 +2027,7 @@ export const webRuntime: ModuoRuntime = {
           order: (q) => q.order("created_at").order("id"),
         }),
         selectCapped<any>({
-          scope: "tag assignments",
+          scope: TAG_LINKS_SCOPE,
           cap: READ_CAPS.tagLinks,
           build: all("tag_links"),
           order: (q) => q.order("id"),
@@ -2253,12 +2271,9 @@ export const webRuntime: ModuoRuntime = {
               .is("deleted_at", null),
           order: (q) => q.order("created_at").order("id"),
         }),
-        supabaseClient
-          .from("tag_links")
-          .select("*")
-          .eq("workspace_id", workspaceId)
-          .is("deleted_at", null)
-          .order("created_at"),
+        // Only this entity's links. (A stray workspace-wide read here filtered
+        // on `tag_links.deleted_at`, a column that doesn't exist, so the whole
+        // read failed and every hub's tag row stayed empty until TV-T1.)
         supabaseClient
           .from("tag_links")
           .select("*")
@@ -2291,7 +2306,7 @@ export const webRuntime: ModuoRuntime = {
           order: (q) => q.order("created_at").order("id"),
         }),
         selectCapped<any>({
-          scope: "tag assignments",
+          scope: TAG_LINKS_SCOPE,
           cap: READ_CAPS.tagLinks,
           build: (opts) => {
             const q = supabaseClient

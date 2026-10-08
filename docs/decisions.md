@@ -217,6 +217,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Tasks and Timeline → [decisions/tasks.md](decisions/tasks.md)
 
+- 2026-10-08 · TV-T1 landed: one workspace tag store feeds every surface, and a tag can be created by name and attached before its task exists.
 - 2026-10-08 · TV-D2: each person has their own Queue, not tied to a date (`task_queue` + `tasks_op_queue_*`); old builds' commits land in the committer's queue, skip is no longer a reschedule, MCP `tasks_queue*` with the old tools as aliases.
 - 2026-10-08 · TV-D1 landed: task edits save field by field, a task has its own assignee (`assignee_id`), and `owner_id` is the creator again.
 - 2026-10-08 · TV-F1: Focus keeps time by the wall clock, survives reloads, and asks about away time.
@@ -258,6 +259,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Product scope, alpha, settings, cross-cutting fixes → [decisions/product.md](decisions/product.md)
 
+- 2026-10-08 · TX-2: sign-in emails go through a Send Email Hook that keeps dashboard invites working, logs without codes, and erases its log with the account
 - 2026-10-08 · TX-1: the email kit is plain TypeScript at `supabase/functions/_shared/email/`, and its logo images come from the brand pipeline, not from the kit
 - 2026-10-08 · Every email Moduo sends goes through one system: Resend, one template kit, one outbox; invite-only becomes an allow-list
 

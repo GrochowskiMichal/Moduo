@@ -10,7 +10,7 @@ import { useEntityHub } from "../../../features/spine/hooks/use-entity-hub";
 import { EntityHub } from "../../../features/spine/ui/entity-hub";
 import type { EntityRef } from "../../../lib/entity-links";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
-import { EntityTagRow } from "../../contacts/ui/entity-tag-row";
+import { EntityTagRow } from "../../tags/ui/entity-tag-row";
 
 type Props = {
   runtime: ModuoRuntime | null;
