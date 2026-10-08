@@ -702,12 +702,16 @@ document.getElementById("groups").innerHTML = GROUPS.map((g) => `
 document.getElementById("groups").style.cssText = "display:flex;flex-direction:column;gap:72px";
 
 document.querySelectorAll(".pane").forEach((pane) => {
-  pane.querySelectorAll(".tab").forEach((tab) => tab.addEventListener("click", () => {
-    const text = tab.dataset.view === "text";
-    pane.querySelectorAll(".tab").forEach((t) => t.setAttribute("aria-selected", String(t === tab)));
-    pane.querySelector(".mail").hidden = text;
-    pane.querySelector(".plain").hidden = !text;
-  }));
+  pane.querySelectorAll(".tab").forEach((tab) => {
+    tab.addEventListener("click", () => {
+      const text = tab.dataset.view === "text";
+      pane.querySelectorAll(".tab").forEach((t) => {
+        t.setAttribute("aria-selected", String(t === tab));
+      });
+      pane.querySelector(".mail").hidden = text;
+      pane.querySelector(".plain").hidden = !text;
+    });
+  });
 });
 
 let pref = "auto";
@@ -722,13 +726,17 @@ function pageDark() {
 function applyMode() {
   const m = pref === "auto" ? (pageDark() ? "dark" : "light") : pref;
   document.querySelectorAll(".mail").forEach((el) => { el.dataset.mode = m; });
-  document.querySelectorAll(".seg button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.mode === pref)));
+  document.querySelectorAll(".seg button").forEach((b) => {
+    b.setAttribute("aria-pressed", String(b.dataset.mode === pref));
+  });
 }
-document.querySelectorAll(".seg button").forEach((b) => b.addEventListener("click", () => {
-  pref = b.dataset.mode;
-  try { localStorage.setItem("moduo-email-mode", pref); } catch (_) {}
-  applyMode();
-}));
+document.querySelectorAll(".seg button").forEach((b) => {
+  b.addEventListener("click", () => {
+    pref = b.dataset.mode;
+    try { localStorage.setItem("moduo-email-mode", pref); } catch (_) {}
+    applyMode();
+  });
+});
 mq.addEventListener?.("change", applyMode);
 new MutationObserver(applyMode).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
 applyMode();
