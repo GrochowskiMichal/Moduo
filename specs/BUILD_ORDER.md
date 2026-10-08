@@ -164,7 +164,7 @@ _Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
 
 > Planned 2026-10-08. Ratified copy + look: [`.design/transactional-email/email-set.html`](../.design/transactional-email/email-set.html). **TX-1 → TX-4 is the gate for sending the first waitlist invites** (Q57). After TX-3: TX-5 ∥ TX-8 ∥ TX-9a; TX-7 after TX-4; TX-6 after TX-5; TX-9b after TX-4 + TX-9a; TX-10 after TX-8. Every block has prod steps (migration round trip + apply, function deploy with Maciej's OK, and for TX-2/TX-4 a dashboard checklist Maciej runs). Shared files: `supabase/migrations/*` (distinct timestamps), `_shared/email/templates/index.ts`, `docs/email-runbook.md`.
 
-- [ ] **TX-1 — Email kit (shared templates, palette, plain text, .ics, Storybook gallery, logo PNGs, `EMAIL_KINDS`)** · deps: —
+- [~] **TX-1 — Email kit (shared templates, palette, plain text, .ics, Storybook gallery, logo PNGs, `EMAIL_KINDS`)** · deps: —
 - [ ] **TX-2 — Sign-in codes on Resend (Send Email Hook, `email_outbox` log, 10-min codes, resend countdown)** · deps: TX-1
 - [ ] **TX-3 — Outbox worker + deliverability (enqueue/cancel, pg_cron + pg_net, retries, suppression webhook, purge, ops alert)** · deps: TX-2
 - [ ] **TX-4 — Invite-only gate + waitlist invite from the dashboard (before-user-created hook, B1)** · deps: TX-3
