@@ -41,11 +41,16 @@ function fakeDb(
       },
       order: () => query,
       limit: () => query,
-      then<T>(resolve: (result: { data: Row[] | null; error: { message: string } | null }) => T) {
+      then<T>(
+        resolve: (result: { data: Row[] | null; error: { code?: string; message: string } | null }) => T,
+      ) {
         if (missing.includes(table)) {
           return Promise.resolve({
             data: null,
-            error: { message: `Could not find the table 'public.${table}' in the schema cache` },
+            error: {
+              code: "PGRST205",
+              message: `Could not find the table 'public.${table}' in the schema cache`,
+            },
           }).then(resolve);
         }
         const data = (tables[table] ?? []).filter((row) =>
@@ -172,8 +177,9 @@ describe("the queue tools act on the key creator's queue (TV-D2)", () => {
     const byId = new Map(list.map((t: Row) => [t.id, t]));
     expect((byId.get("t1") as Row).queued_by_me).toBe(true);
     expect("queued_by_me" in (byId.get("t3") as Row)).toBe(false);
-    // The shared day columns aren't shown any more.
-    expect("committed_for" in (byId.get("old") as Row)).toBe(false);
+    // The old shared day column is still shown, apart from the queue (until TV-D7).
+    expect((byId.get("old") as Row).committed_for).toBe("2026-10-08");
+    expect("queued_by_me" in (byId.get("old") as Row)).toBe(false);
   });
 
   it("tasks_queue_add / remove call the ops for the task and return the queue", async () => {
@@ -233,6 +239,27 @@ describe("the queue tools act on the key creator's queue (TV-D2)", () => {
     expect(await call("tasks_queue", {}, ctx)).toEqual({ queue: [] });
     const list = await call("tasks_list", {}, ctx);
     expect(list.length).toBeGreaterThan(0);
+  });
+
+  it("doesn't mistake another failure on the queue for a missing table", async () => {
+    const { ctx } = setup();
+    const db = ctx.db as unknown as { from: (t: string) => unknown };
+    const real = db.from.bind(db);
+    db.from = (table: string) =>
+      table === "task_queue"
+        ? {
+            select: () => ({
+              eq: () => ({
+                eq: () =>
+                  Promise.resolve({
+                    data: null,
+                    error: { code: "57014", message: "canceling statement due to statement timeout on task_queue" },
+                  }),
+              }),
+            }),
+          }
+        : real(table);
+    await expect(call("tasks_queue", {}, ctx)).rejects.toThrow("statement timeout");
   });
 
   it("registers the queue tools at the right levels", () => {

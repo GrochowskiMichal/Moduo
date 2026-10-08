@@ -59,10 +59,12 @@ BEGIN
   -- her as its assignee), then tomorrow's.
   ASSERT probe.queue('B') = ARRAY['C2 Bea commits', 'C8 Ada then Bea', 'C4 nobody logged', 'C10 tomorrow'],
     format('carry-over: Bea''s queue is %s', probe.queue('B'));
+  -- C12's committer left the workspace: it goes to its assignee, Olga.
+  ASSERT probe.queue('O') = ARRAY['C12 Nell for Olga'], format('carry-over: Olga''s queue is %s', probe.queue('O'));
   ASSERT NOT EXISTS (SELECT 1 FROM public.task_queue q JOIN public.tasks t ON t.id = q.task_id
-                     WHERE t.title IN ('C5 done', 'C6 last week', 'C7 deleted', 'C9 by Nell')),
-    'carry-over: a done, old, deleted or ex-member commit was carried';
-  ASSERT (SELECT count(*) FROM public.task_queue) = 6, 'carry-over: 6 rows';
+                     WHERE t.title IN ('C5 done', 'C6 last week', 'C7 deleted', 'C9 by Nell', 'C11 yesterday')),
+    'carry-over: a done, old, deleted, ownerless or not-today commit was carried';
+  ASSERT (SELECT count(*) FROM public.task_queue) = 7, 'carry-over: 7 rows';
   ASSERT probe.keys_clean(), 'carry-over: keys are clean';
   ASSERT (SELECT min(position) FROM public.task_queue WHERE user_id = probe.id('A')) = '000000mh34',
     'carry-over: the first key is 2^20 in base 36, as the app encodes it';
@@ -407,6 +409,10 @@ BEGIN
   ASSERT (probe.queue('B'))[array_length(probe.queue('B'), 1)] = 'D2 upserted',
     format('upsert commit: %s', probe.queue('B'));
 
+  -- C10 is tomorrow's here whatever the hour (a system write: no queue change).
+  PERFORM probe.as_system();
+  UPDATE public.tasks SET committed_for = current_date + 1 WHERE id = probe.id('C10 tomorrow');
+  PERFORM probe.as_user('B');
   -- Dragging the old day's queue: the app writes commit_order one task per
   -- request. Bea's today-rows are C2, C8, C4, D1, D2 (commit_order 2, 4, 5, 9,
   -- 10); she drags D2 to the front: [D2, C2, C8, C4, D1] = 1..5.
@@ -576,11 +582,30 @@ DO $$
 BEGIN
   ASSERT NOT EXISTS (SELECT 1 FROM public.task_queue WHERE task_id = probe.id('S1 unshared')),
     'unshared: still in Ada''s queue';
-  RAISE NOTICE 'PASS unshared: a task you can no longer see drops out of your queue';
 END;
 $$;
 RESET ROLE;
 COMMIT;
+-- The ops agree with the read: S1 isn't in what they return, and Ada can still
+-- take her own row out (quietly: the trail isn't hers to write in).
+DO $$
+DECLARE
+  r public.task_queue[];
+BEGIN
+  PERFORM probe.as_user('A');
+  r := ARRAY(SELECT x FROM public.tasks_op_queue_add(probe.id('W'), probe.id('L1')) x);
+  ASSERT NOT ('S1 unshared' = ANY (probe.names(r))), format('unshared: an op returned it: %s', probe.names(r));
+  ASSERT EXISTS (SELECT 1 FROM public.task_queue WHERE task_id = probe.id('S1 unshared')), 'unshared: row gone early';
+  PERFORM public.tasks_op_queue_remove(probe.id('W'), probe.id('S1 unshared'));
+  ASSERT NOT EXISTS (SELECT 1 FROM public.task_queue WHERE task_id = probe.id('S1 unshared')),
+    'unshared: Ada couldn''t remove her own row';
+  ASSERT probe.activity('tasks.queue_remove', 'S1 unshared') = 0, 'unshared: removal was logged';
+  ASSERT probe.error_of(format('SELECT public.tasks_op_queue_add(%L, %L)', probe.id('W'), probe.id('S1 unshared')))
+         = 'You don''t have access to this task.', 'unshared: could queue it again';
+  PERFORM probe.as_system();
+  RAISE NOTICE 'PASS unshared: a task you can no longer see drops out of your queue and the ops'' answers; you can still remove it';
+END;
+$$;
 
 -- anon reads nothing at all.
 BEGIN;
@@ -608,7 +633,7 @@ BEGIN
   FOREACH fn IN ARRAY ARRAY[
     'tasks_queue__key(bigint)', 'tasks_queue__num(text)', 'tasks_queue__lock(uuid, uuid)',
     'tasks_queue__renumber(uuid, uuid, uuid)', 'tasks_queue__place(uuid, uuid, uuid, text, uuid)',
-    'tasks_queue__mine(uuid, uuid)', 'tasks_queue__guard(uuid, uuid)',
+    'tasks_queue__mine(uuid, uuid)', 'tasks_queue__guard(uuid, uuid, boolean)',
     'tasks_queue_legacy()', 'tasks_queue_leave()', 'tasks_queue_member_removed()'
   ] LOOP
     ASSERT NOT has_function_privilege('anon', 'public.' || fn, 'EXECUTE'), 'grants: anon can call ' || fn;

@@ -190,7 +190,7 @@ describe("tasks connector helpers", () => {
     expect(queueTaskIds([], new Set(["t1"]))).toEqual([]);
   });
 
-  it("says queued_by_me only for the key creator's queue, and drops the shared day columns (TV-D2)", () => {
+  it("says queued_by_me only for the key creator's queue; the shared day columns stay until TV-D7 (TV-D2)", () => {
     const tasks = [
       task("queued", { committed_for: "2026-10-08", commit_order: 1 }),
       task("not-queued", { committed_for: "2026-10-08", commit_order: 2 }),
@@ -201,7 +201,8 @@ describe("tasks connector helpers", () => {
     const other = shapeTask(tasks[1]!, data, now);
     expect(queued.queued_by_me).toBe(true);
     expect("queued_by_me" in other).toBe(false);
-    expect("committed_for" in queued || "commit_order" in queued).toBe(false);
+    expect(other.committed_for).toBe("2026-10-08");
+    expect(other.commit_order).toBe(2);
     // Without a queue at all (a caller that didn't load it), nothing is claimed.
     expect("queued_by_me" in shapeTask(tasks[0]!, shapeData(tasks), now)).toBe(false);
   });

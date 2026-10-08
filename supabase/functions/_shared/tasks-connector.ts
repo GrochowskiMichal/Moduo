@@ -189,9 +189,13 @@ export function shapeTask(t: Row, data: ShapeData, now: Date, full = false): Row
   if (t.duration_minutes != null) out.duration_minutes = t.duration_minutes;
   if (t.energy_level) out.energy_level = t.energy_level;
   if (t.priority) out.priority = t.priority;
-  // TV-D2: queues are personal. The old committed_for/commit_order columns are
-  // the whole workspace's day list, kept only for app builds before TV-D4.
+  // TV-D2: queues are personal (queued_by_me). committed_for/commit_order are
+  // the old shared day list, still shown until TV-D7 removes them.
   if (data.queuedByMe?.has(t.id)) out.queued_by_me = true;
+  if (t.committed_for) {
+    out.committed_for = t.committed_for;
+    out.commit_order = t.commit_order;
+  }
   if (t.reschedule_count) out.reschedule_count = t.reschedule_count;
   if (t.recurrence) {
     out.recurrence = { rrule: t.recurrence.rrule, next_occurrence: t.recurrence.nextOccurrence ?? null };

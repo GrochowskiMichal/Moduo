@@ -106,8 +106,10 @@ BEGIN
   PERFORM probe.new_task('C6 last week', 'A', 'A');
   PERFORM probe.new_task('C7 deleted', 'A', 'A');
   PERFORM probe.new_task('C8 Ada then Bea', 'A', 'A');
-  PERFORM probe.new_task('C9 by Nell', 'A', 'A');
+  PERFORM probe.new_task('C9 by Nell', 'A', NULL);
   PERFORM probe.new_task('C10 tomorrow', 'B', 'B');
+  PERFORM probe.new_task('C11 yesterday', 'A', 'A');
+  PERFORM probe.new_task('C12 Nell for Olga', 'A', 'O');
 
   -- Ada commits C1, then the key (Ada's) commits C3, through the old op.
   PERFORM probe.as_user('A');
@@ -121,9 +123,16 @@ BEGIN
   PERFORM public.tasks_op_commit(probe.id('W'), probe.id('C8 Ada then Bea'), current_date);
   PERFORM probe.as_user('B');
   PERFORM public.tasks_op_commit(probe.id('W'), probe.id('C8 Ada then Bea'), current_date);
-  -- C10: committed by Bea for tomorrow (a teammate east of UTC).
-  PERFORM public.tasks_op_commit(probe.id('W'), probe.id('C10 tomorrow'), current_date + 1);
+  -- C10: committed by Bea for the latest date that is today anywhere (UTC+14),
+  -- last in that day's order.
+  PERFORM public.tasks_op_commit(probe.id('W'), probe.id('C10 tomorrow'),
+                                 ((now() AT TIME ZONE 'UTC') + interval '14 hours')::date);
+  -- C11: committed by Ada for the day before the earliest "today" (UTC-12).
+  PERFORM probe.as_user('A');
+  PERFORM public.tasks_op_commit(probe.id('W'), probe.id('C11 yesterday'),
+                                 ((now() AT TIME ZONE 'UTC') - interval '12 hours')::date - 1);
   PERFORM probe.as_system();
+  UPDATE public.tasks SET commit_order = 99 WHERE id = probe.id('C10 tomorrow');
   -- One transaction stamps every row with the same created_at; in production
   -- each commit is its own request. Ada's commit of C8 came first.
   UPDATE public.module_activity SET created_at = created_at - interval '1 minute'
@@ -140,11 +149,13 @@ BEGIN
   WHERE id = probe.id('C6 last week');
   UPDATE public.tasks SET committed_for = current_date, commit_order = 7, deleted_at = now()
   WHERE id = probe.id('C7 deleted');
-  -- C9: the latest commit is by Nell, who isn't in the workspace: skipped.
+  -- C9: the latest commit is by Nell, who isn't in the workspace, and it has
+  -- no assignee: skipped. C12: the same, assigned to Olga: hers.
   UPDATE public.tasks SET committed_for = current_date, commit_order = 8
-  WHERE id = probe.id('C9 by Nell');
+  WHERE id IN (probe.id('C9 by Nell'), probe.id('C12 Nell for Olga'));
   INSERT INTO public.module_activity (workspace_id, module, entity_type, entity_id, op, actor_type, actor_id, payload)
-  VALUES (probe.id('W'), 'tasks', 'task', probe.id('C9 by Nell'), 'tasks.commit', 'user', probe.id('N'), '{}');
+  VALUES (probe.id('W'), 'tasks', 'task', probe.id('C9 by Nell'), 'tasks.commit', 'user', probe.id('N'), '{}'),
+         (probe.id('W'), 'tasks', 'task', probe.id('C12 Nell for Olga'), 'tasks.commit', 'user', probe.id('N'), '{}');
 END;
 $$;
 

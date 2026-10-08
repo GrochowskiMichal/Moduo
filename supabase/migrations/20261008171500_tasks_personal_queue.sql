@@ -16,8 +16,8 @@
 --   * Anyone who can see a task can read who has it queued (claims: "In
 --     Mike's queue"). Nobody writes rows directly; the ops do.
 --   * A task leaves every queue when it is completed, archived or deleted, or
---     its bucket is deleted, and when someone leaves the workspace their queue
---     there goes. Restoring never queues anything again.
+--     deleted together with its bucket, and when someone leaves the workspace
+--     their queue there goes. Restoring never queues anything again.
 --   * Today's commits carry over once, into the queue of whoever committed
 --     them (else the assignee), in their order.
 --   * Old app versions keep working: tasks_op_commit / uncommit / skip_today
@@ -241,6 +241,8 @@ END;
 $$;
 
 -- The caller's queue in this workspace, in order: what every op returns.
+-- Like the read policy, only tasks they can still see (a task that stops
+-- being shared with them drops out of their queue).
 CREATE OR REPLACE FUNCTION public.tasks_queue__mine(p_workspace_id uuid, p_user uuid)
 RETURNS SETOF public.task_queue
 LANGUAGE sql
@@ -248,13 +250,16 @@ STABLE
 SET search_path = public
 AS $$
   SELECT q.* FROM public.task_queue q
+  JOIN public.tasks t ON t.id = q.task_id AND t.deleted_at IS NULL
   WHERE q.workspace_id = p_workspace_id AND q.user_id = p_user
+    AND public.can_access('task', q.task_id, 'view', p_user)
   ORDER BY q.position, q.id
 $$;
 
 -- The op preamble: Tasks edit access (the guard; it also locks the task row),
--- a person to act for, and a task they can see.
-CREATE OR REPLACE FUNCTION public.tasks_queue__guard(p_workspace_id uuid, p_task_id uuid)
+-- a person to act for, and (unless only their own row goes) a task they can
+-- see.
+CREATE OR REPLACE FUNCTION public.tasks_queue__guard(p_workspace_id uuid, p_task_id uuid, p_need_view boolean DEFAULT true)
 RETURNS public.tasks
 LANGUAGE plpgsql
 SET search_path = public
@@ -267,7 +272,7 @@ BEGIN
   IF v_actor IS NULL THEN
     RAISE EXCEPTION 'A queue belongs to a person: sign in, or use an API key.';
   END IF;
-  IF NOT public.can_access('task', t.id, 'view', v_actor) THEN
+  IF p_need_view AND NOT public.can_access('task', t.id, 'view', v_actor) THEN
     RAISE EXCEPTION 'You don''t have access to this task.' USING ERRCODE = '42501';
   END IF;
   PERFORM public.tasks_queue__lock(p_workspace_id, v_actor);
@@ -315,7 +320,8 @@ BEGIN
 END;
 $$;
 
--- Take a task out of your queue. Not there: nothing happens.
+-- Take a task out of your queue. Not there: nothing happens. Works on a task
+-- you can no longer see too (it's your own row), and then logs nothing.
 CREATE OR REPLACE FUNCTION public.tasks_op_queue_remove(p_workspace_id uuid, p_task_id uuid)
 RETURNS SETOF public.task_queue
 LANGUAGE plpgsql
@@ -327,10 +333,11 @@ DECLARE
   v_actor uuid := public.perm_actor_id();
   v_gone integer;
 BEGIN
-  t := public.tasks_queue__guard(p_workspace_id, p_task_id);
+  t := public.tasks_queue__guard(p_workspace_id, p_task_id, false);
   DELETE FROM public.task_queue q WHERE q.user_id = v_actor AND q.task_id = t.id;
   GET DIAGNOSTICS v_gone = ROW_COUNT;
-  IF v_gone > 0 THEN
+  -- The trail of a task you can't see isn't yours to write in.
+  IF v_gone > 0 AND public.can_access('task', t.id, 'view', v_actor) THEN
     PERFORM public.module_activity_log(
       p_workspace_id, 'tasks', 'task', t.id, 'tasks.queue_remove', '{}'::jsonb);
   END IF;
@@ -516,10 +523,20 @@ $function$
 ;
 
 -- ── 6. Carry today's commits over (once) ─────────────────────────────────────
--- "Today" is the committer's local date, so anything committed for yesterday,
--- today or tomorrow in UTC. Each open task goes to whoever committed it last
--- (an API key's commit is its creator's), else to its assignee, if they are
--- still in the workspace; their order follows the day, then commit_order.
+-- "Today" is the committer's local date: anything committed for a date that
+-- is today somewhere on Earth (UTC-12 to UTC+14) right now. Each open task
+-- goes to whoever committed it last (an API key's commit is its creator's) if
+-- they are still in the workspace, else to its assignee if they are; their
+-- order follows the day, then commit_order.
+
+CREATE FUNCTION pg_temp.tasks_queue_in_ws(p_workspace_id uuid, p_user uuid)
+RETURNS boolean LANGUAGE sql STABLE AS $$
+  SELECT p_user IS NOT NULL
+     AND EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = p_user)
+     AND (public.perm_is_owner(p_workspace_id, p_user)
+          OR EXISTS (SELECT 1 FROM public.workspace_members m
+                     WHERE m.workspace_id = p_workspace_id AND m.user_id = p_user))
+$$;
 
 INSERT INTO public.task_queue (workspace_id, user_id, task_id, position)
 SELECT c.workspace_id, c.user_id, c.task_id,
@@ -527,26 +544,28 @@ SELECT c.workspace_id, c.user_id, c.task_id,
          PARTITION BY c.workspace_id, c.user_id
          ORDER BY c.committed_for, c.commit_order NULLS LAST, c.created_at, c.task_id))
 FROM (
-  SELECT t.id AS task_id, t.workspace_id, t.committed_for, t.commit_order, t.created_at,
-         coalesce(
+  SELECT x.task_id, x.workspace_id, x.committed_for, x.commit_order, x.created_at,
+         CASE WHEN pg_temp.tasks_queue_in_ws(x.workspace_id, x.committer) THEN x.committer
+              WHEN pg_temp.tasks_queue_in_ws(x.workspace_id, x.assignee_id) THEN x.assignee_id
+         END AS user_id
+  FROM (
+    SELECT t.id AS task_id, t.workspace_id, t.committed_for, t.commit_order, t.created_at,
+           t.assignee_id,
            (SELECT CASE WHEN a.actor_type = 'api_key' THEN k.created_by ELSE a.actor_id END
             FROM public.module_activity a
             LEFT JOIN public.workspace_api_keys k ON a.actor_type = 'api_key' AND k.id = a.actor_id
             WHERE a.module = 'tasks' AND a.entity_type = 'task' AND a.entity_id = t.id
               AND a.op = 'tasks.commit'
             ORDER BY a.created_at DESC, a.id DESC
-            LIMIT 1),
-           t.assignee_id) AS user_id
-  FROM public.tasks t
-  WHERE t.committed_for BETWEEN current_date - 1 AND current_date + 1
-    AND t.deleted_at IS NULL
-    AND t.status NOT IN ('done', 'archived')
+            LIMIT 1) AS committer
+    FROM public.tasks t
+    WHERE t.committed_for BETWEEN ((now() AT TIME ZONE 'UTC') - interval '12 hours')::date
+                              AND ((now() AT TIME ZONE 'UTC') + interval '14 hours')::date
+      AND t.deleted_at IS NULL
+      AND t.status NOT IN ('done', 'archived')
+  ) x
 ) c
 WHERE c.user_id IS NOT NULL
-  AND EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = c.user_id)
-  AND (public.perm_is_owner(c.workspace_id, c.user_id)
-       OR EXISTS (SELECT 1 FROM public.workspace_members m
-                  WHERE m.workspace_id = c.workspace_id AND m.user_id = c.user_id))
 ON CONFLICT (user_id, task_id) DO NOTHING;
 
 -- ── 7. Old versions' direct writes land in the writer's queue ────────────────
@@ -555,7 +574,9 @@ ON CONFLICT (user_id, task_id) DO NOTHING;
 -- both into the writer's queue. Only additions and moves: an old build's
 -- whole-row save can write a stale NULL back, and catch-up / skip-occurrence
 -- clear the column for a date reason; neither may empty a queue. Removals
--- come through the ops. A failure here never fails the task write.
+-- come through the ops. The cost: such a stale save writing a commit back
+-- puts the task in the writer's queue, which is what their old build shows
+-- them anyway. A failure here never fails the task write.
 
 CREATE OR REPLACE FUNCTION public.tasks_queue_legacy()
 RETURNS trigger
@@ -582,8 +603,8 @@ BEGIN
   BEGIN
     IF TG_OP = 'INSERT' OR OLD.committed_for IS DISTINCT FROM NEW.committed_for THEN
       -- A commit: to the end of the writer's queue, unless it's there already.
+      PERFORM public.tasks_queue__lock(NEW.workspace_id, v_actor);
       IF NOT EXISTS (SELECT 1 FROM public.task_queue q WHERE q.user_id = v_actor AND q.task_id = NEW.id) THEN
-        PERFORM public.tasks_queue__lock(NEW.workspace_id, v_actor);
         PERFORM public.tasks_queue__place(NEW.workspace_id, v_actor, NEW.id, 'end');
       END IF;
     ELSIF OLD.commit_order IS DISTINCT FROM NEW.commit_order
@@ -633,8 +654,10 @@ CREATE TRIGGER tasks_queue_legacy_update
 
 -- ── 8. Leaving every queue ───────────────────────────────────────────────────
 -- Completed, archived or deleted: the task leaves every queue (a recurring
--- task too; its next occurrence reopens it later without queuing it).
--- Restoring or reopening never puts it back.
+-- task too; its next occurrence reopens it later without queuing it). A
+-- bucket deleted with tasks still in it (TV-U6's "Delete the tasks too") takes
+-- them out too; today's bucket delete moves its tasks to the Inbox first, and
+-- moving never touches queues. Restoring or reopening never puts it back.
 
 CREATE OR REPLACE FUNCTION public.tasks_queue_leave()
 RETURNS trigger
@@ -674,6 +697,7 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
+  PERFORM public.tasks_queue__lock(OLD.workspace_id, OLD.user_id);
   DELETE FROM public.task_queue q
   WHERE q.workspace_id = OLD.workspace_id AND q.user_id = OLD.user_id;
   RETURN OLD;
@@ -719,7 +743,7 @@ BEGIN
     'tasks_queue__renumber(uuid, uuid, uuid)',
     'tasks_queue__place(uuid, uuid, uuid, text, uuid)',
     'tasks_queue__mine(uuid, uuid)',
-    'tasks_queue__guard(uuid, uuid)',
+    'tasks_queue__guard(uuid, uuid, boolean)',
     'tasks_queue_legacy()',
     'tasks_queue_leave()',
     'tasks_queue_member_removed()'

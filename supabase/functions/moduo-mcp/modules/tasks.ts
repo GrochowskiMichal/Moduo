@@ -127,7 +127,10 @@ async function myQueueRows(ctx: ToolContext): Promise<Row[]> {
     .select("id, task_id, position")
     .eq("workspace_id", ctx.key.workspaceId).eq("user_id", ctx.key.createdBy);
   if (error) {
-    if (/task_queue/.test(error.message ?? "")) return [];
+    // PostgREST's "no such table" (PGRST205) or Postgres's (42P01): the
+    // migration isn't there yet. Anything else is a real failure.
+    const code = (error as { code?: string }).code;
+    if ((code === "PGRST205" || code === "42P01") && /task_queue/.test(error.message ?? "")) return [];
     throw new Error(error.message);
   }
   return data ?? [];
