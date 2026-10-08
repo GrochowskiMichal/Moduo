@@ -24,8 +24,24 @@ export const UNCHECKED = [
   "table COLUMN SETS — only the 29 explicit ADD COLUMNs are checked, not base CREATE TABLE columns",
   "policy DEFINITIONS — USING / WITH CHECK / target roles are never compared, only the name",
   "which TABLE a trigger is on — query 1 checks it exists on some public table and is enabled, not that it is on the declared one",
-  "grants, SECURITY DEFINER, SET search_path, RLS-enabled, constraints, defaults",
+  "grants beyond query 4 — it covers `*__*` SECURITY DEFINER helpers and anything anon can run; whether a SECURITY DEFINER function `authenticated` can call checks its caller is NOT checked",
+  "SET search_path, RLS-enabled, constraints, defaults",
 ] as const;
+
+/**
+ * SECURITY DEFINER functions anon may EXECUTE, each for a stated reason. Query 4 reports
+ * every other one (trigger functions excluded: Postgres won't call them outside a
+ * trigger). Remove an entry once its reason is gone.
+ */
+export const ANON_DEFINER_ALLOWED: Record<string, string> = {
+  calendar_public_feed: "public ICS feed; the token is the credential",
+  // OPS-2 group 3 (gotchas §Supabase): RLS policies for role `public` call these, so
+  // revoking anon turns an anonymous empty read into a permission error. Scope those
+  // policies `TO authenticated` first, then revoke and drop these entries.
+  profile_plan_tier_text: "RLS helper for `public`-role policies (OPS-2 group 3)",
+  tasks_module_can_access_workspace: "RLS helper for `public`-role policies (OPS-2 group 3)",
+  workspaces_owned_count_for_user: "RLS helper for `public`-role policies (OPS-2 group 3)",
+};
 
 /** Strip SQL comments. Both extractors run on this, so a commented-out CREATE never counts. */
 export function stripComments(sql: string): string {
