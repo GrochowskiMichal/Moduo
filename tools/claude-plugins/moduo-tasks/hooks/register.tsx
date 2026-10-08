@@ -20,7 +20,8 @@ export const PANE = "moduo-mine";
 const PANE_TITLE = "Moduo · My tasks";
 const REFRESH_MS = 60_000;
 const OPEN_FLAG = "paneOpen";
-const OWNER_KEY = "ownerId";
+/** The owner id is remembered per key (by a hash of it), so a new key never inherits it. */
+const OWNER_KEY = "owner:";
 /** While the pane is closed, the band still refreshes every this many ticks (5 minutes). */
 const BAND_EVERY = 5;
 const PAGE = 200;
@@ -41,6 +42,16 @@ type Options = { api_key?: string; endpoint?: string; time_zone?: string };
 let ticking = false;
 let ticks = 0;
 let seq = 0;
+/** Only the newest refresh may write: an older, slower one is dropped. */
+let generation = 0;
+
+/** A short, one-way fingerprint of the key: never the key itself. */
+async function keyFingerprint(apiKey: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(apiKey));
+  return [...new Uint8Array(digest).slice(0, 8)]
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
 
 async function callTool<T>(
   $: EngineInterface,
@@ -70,8 +81,12 @@ async function callTool<T>(
 }
 
 /** The person's user id when they have no open tasks: the store, else one of their done tasks. */
-async function findOwner($: EngineInterface, cfg: Config): Promise<string | null> {
-  const stored = await $.store.get(OWNER_KEY);
+async function findOwner(
+  $: EngineInterface,
+  cfg: Config,
+  storeKey: string,
+): Promise<string | null> {
+  const stored = await $.store.get(storeKey);
   if (typeof stored === "string" && stored) return stored;
   const done = await callTool<Task[]>($, cfg, "tasks_list", {
     assignee: "me",
@@ -88,7 +103,9 @@ async function listAll(
   args: Record<string, unknown>,
 ): Promise<Task[]> {
   const out: Task[] = [];
-  for (let offset = 0; offset < 5000; offset += PAGE) {
+  // Pages until a short page; the bound only stops a connector that never ends a list.
+  for (let n = 0; n < 1000; n += 1) {
+    const offset = n * PAGE;
     const page = await callTool<Task[]>($, cfg, "tasks_list", { ...args, limit: PAGE, offset });
     out.push(...page);
     if (page.length < PAGE) break;
@@ -97,6 +114,8 @@ async function listAll(
 }
 
 async function refresh($: EngineInterface, cfg: Config): Promise<void> {
+  generation += 1;
+  const gen = generation;
   const state = await read($, panel);
   try {
     const now = await $.clock.now();
@@ -109,10 +128,9 @@ async function refresh($: EngineInterface, cfg: Config): Promise<void> {
     ]);
     const tasks =
       state.filter === "me" ? mine : await listAll($, cfg, { assignee: "anyone", top_level: true });
-    const ownerId = ownerOf(mine) ?? state.ownerId ?? (await findOwner($, cfg));
-    if (ownerId && ownerId !== state.ownerId) {
-      await $.store.set(OWNER_KEY, ownerId).catch(() => undefined);
-    }
+    const storeKey = OWNER_KEY + (await keyFingerprint(cfg.apiKey));
+    const ownerId = ownerOf(mine) ?? (await findOwner($, cfg, storeKey));
+    if (ownerId) await $.store.set(storeKey, ownerId).catch(() => undefined);
     const view = buildView(
       tasks,
       buckets,
@@ -122,11 +140,11 @@ async function refresh($: EngineInterface, cfg: Config): Promise<void> {
       now,
       cfg.timeZone,
     );
-    // A filter switched while this refresh ran wins: its own refresh writes the view.
-    await update($, panel, (s) =>
-      s.filter === state.filter ? { ...s, view, ownerId, problem: null, updatedAt: now } : s,
-    );
+    // A newer refresh (a filter switch, the timer, r) started meanwhile: it writes instead.
+    if (gen !== generation) return;
+    await update($, panel, (s) => ({ ...s, view, ownerId, problem: null, updatedAt: now }));
   } catch (err) {
+    if (gen !== generation) return;
     const problem = err instanceof ConnectorError ? err.problem : "error";
     await update($, panel, (s) => ({ ...s, problem }));
   }
