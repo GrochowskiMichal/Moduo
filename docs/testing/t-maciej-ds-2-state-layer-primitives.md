@@ -11,7 +11,6 @@
 - [ ] **Do:** Tasks board, click a card → **Expect:** tint plus a soft accent ring instead of the bright white border _(web)_
 - [ ] **Do:** select a note in the notes tree and in notes search, a contact, an email thread → **Expect:** the same tint + hairline everywhere, no bars _(web; email on desktop)_
 - [ ] **Do:** switch Accent (mono, blue, amber) and Shade in Settings → **Expect:** selection stays clearly different from hover and from the current-page fill _(web)_
-- [ ] **Do (your call):** compare "tint only" and "tint + hairline" in Storybook `Foundations/StateLadder` → **Expect:** if you prefer tint only, set `--state-selected-edge: transparent` in `src/styles/tokens.css` (one line) _(Storybook)_
 
 ## Raised plates (DS-AC2)
 - [ ] **Do:** Tasks header view switcher in icon-only mode, then the right-panel switcher → **Expect:** the current icon sits on a plate that is LIGHTER than the track, on every shade _(web)_
@@ -42,7 +41,7 @@
 
 ## Known gaps / not-yet-testable
 - Signed-in module surfaces were not opened live by the agent; the tokens, primitives and class changes are covered by tests and Storybook checks.
-- ❓ **Tint vs tint + hairline is still your call.** `--state-selected-edge` ships ON (tint + hairline) because on the mono accent the tint alone sits about one step from "active". The comp's default toggle was "Tint". Flip it with the Storybook item above.
+- **Decided (Maciej, 2026-10-08): keep tint + hairline.** `--state-selected-edge` stays ON, shipped as is.
 - Visual baselines: run `bunx playwright test --project=visual tests/visual/state-ladder.spec.ts --update-snapshots` with Storybook up, review the 18 PNGs, and commit them. That's a human step by design.
 
 ---
