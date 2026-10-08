@@ -1,0 +1,735 @@
+<title>Moduo email set</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&family=Geist+Mono:wght@500;600&display=swap">
+<style>
+/* Layout: a review sheet. Left = what/when/who for each email, right = the email as it lands in the inbox.
+   Page palette mirrors src/styles/tokens.css (mono accent, neutral ramp). Email previews carry their own
+   light/dark palette, because a mail client — not the page — decides which one the reader sees. */
+:root {
+  --bg: oklch(0.985 0 0);
+  --surface: oklch(1 0 0);
+  --fg: oklch(0.14 0 0);
+  --fg-2: oklch(0.42 0 0);
+  --fg-3: oklch(0.55 0 0);
+  --line: oklch(0.91 0 0);
+  --chip: oklch(0.955 0 0);
+  --new: oklch(0.55 0.13 150);
+  --redo: oklch(0.6 0.13 70);
+  --fix: oklch(0.58 0.17 25);
+  --font: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* email: light */
+  --m-canvas-l: oklch(1 0 0);
+  --m-fg-l: oklch(0.16 0 0);
+  --m-body-l: oklch(0.3 0 0);
+  --m-muted-l: oklch(0.47 0 0);
+  --m-line-l: oklch(0.9 0 0);
+  --m-well-l: oklch(0.965 0 0);
+  --m-btn-l: oklch(0.16 0 0);
+  --m-btn-fg-l: oklch(0.98 0 0);
+  --m-fixed-l: oklch(0.16 0 0 / 0.35);
+  /* email: dark (the legal pages' off-black, not the app's pure black) */
+  --m-canvas-d: oklch(0.19 0 0);
+  --m-fg-d: oklch(0.96 0 0);
+  --m-body-d: oklch(0.86 0 0);
+  --m-muted-d: oklch(0.68 0 0);
+  --m-line-d: oklch(0.3 0 0);
+  --m-well-d: oklch(0.235 0 0);
+  --m-btn-d: oklch(0.95 0 0);
+  --m-btn-fg-d: oklch(0.13 0 0);
+  --m-fixed-d: oklch(0.96 0 0 / 0.4);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: oklch(0.07 0 0); --surface: oklch(0.12 0 0); --fg: oklch(0.97 0 0); --fg-2: oklch(0.74 0 0);
+    --fg-3: oklch(0.6 0 0); --line: oklch(0.24 0 0); --chip: oklch(0.18 0 0);
+    --new: oklch(0.75 0.13 150); --redo: oklch(0.8 0.12 75); --fix: oklch(0.72 0.15 25);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: oklch(0.07 0 0); --surface: oklch(0.12 0 0); --fg: oklch(0.97 0 0); --fg-2: oklch(0.74 0 0);
+  --fg-3: oklch(0.6 0 0); --line: oklch(0.24 0 0); --chip: oklch(0.18 0 0);
+  --new: oklch(0.75 0.13 150); --redo: oklch(0.8 0.12 75); --fix: oklch(0.72 0.15 25);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font); font-size: 15px; line-height: 1.55; -webkit-font-smoothing: antialiased; }
+.wrap { max-width: 1120px; margin: 0 auto; padding-inline: 24px; padding-block: 48px 96px; display: flex; flex-direction: column; gap: 56px; }
+a { color: inherit; }
+h1, h2, h3 { text-wrap: balance; margin: 0; font-weight: 500; letter-spacing: -0.015em; }
+p { margin: 0; }
+.eyebrow { font-size: 11px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--fg-3); }
+
+/* masthead */
+.mast { display: flex; flex-direction: column; gap: 20px; }
+.lock { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; letter-spacing: -0.015em; font-size: 16px; }
+.lock svg { width: 20px; height: 20px; }
+.mast h1 { font-size: clamp(30px, 4.4vw, 44px); font-weight: 300; letter-spacing: -0.03em; line-height: 1.12; max-width: 22ch; }
+.mast .lede { color: var(--fg-2); max-width: 64ch; }
+.controls { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; padding: 2px; background: var(--surface); }
+.seg button { font: inherit; font-size: 13px; border: 0; background: transparent; color: var(--fg-2); padding: 5px 12px; border-radius: 6px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--chip); color: var(--fg); }
+.seg button:focus-visible, .tab:focus-visible, .toc a:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; color: var(--fg-2); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+
+.pill { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: var(--fg-2); }
+.pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.pill.new { color: var(--new); } .pill.redo { color: var(--redo); } .pill.fix { color: var(--fix); }
+
+/* overview */
+.overview { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.overview > div { background: var(--surface); padding: 20px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.overview h2 { font-size: 15px; }
+.overview p, .overview li { color: var(--fg-2); font-size: 14px; }
+.overview ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+.addr { font-family: var(--mono); font-size: 13px; color: var(--fg); }
+
+.toc { display: flex; flex-wrap: wrap; gap: 8px; }
+.toc a { text-decoration: none; font-size: 13px; padding: 5px 10px; border: 1px solid var(--line); border-radius: 999px; color: var(--fg-2); background: var(--surface); }
+.toc a b { color: var(--fg); font-weight: 500; margin-right: 4px; }
+
+/* groups + cards */
+.group { display: flex; flex-direction: column; gap: 28px; scroll-margin-top: 24px; }
+.group-head { display: flex; flex-direction: column; gap: 6px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+.group-head h2 { font-size: 24px; letter-spacing: -0.02em; }
+.group-head p { color: var(--fg-2); max-width: 70ch; }
+.card { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: 32px; align-items: start; scroll-margin-top: 24px; }
+.meta { display: flex; flex-direction: column; gap: 14px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 20px); }
+.meta .top { display: flex; align-items: center; gap: 10px; }
+.meta .id { font-family: var(--mono); font-size: 12px; color: var(--fg-3); }
+.meta h3 { font-size: 19px; }
+.meta dl { margin: 0; display: flex; flex-direction: column; gap: 10px; }
+.meta dt { font-size: 11px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--fg-3); }
+.meta dd { margin: 2px 0 0; font-size: 14px; color: var(--fg-2); }
+.notes { margin: 0; padding: 12px 0 0; border-top: 1px solid var(--line); list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.notes li { font-size: 13px; color: var(--fg-2); padding-left: 14px; position: relative; }
+.notes li::before { content: ""; position: absolute; left: 0; top: 0.62em; width: 5px; height: 1px; background: var(--fg-3); }
+.notes li.ask { color: var(--fg); }
+.notes li.ask::before { width: 6px; height: 6px; border-radius: 50%; top: 0.5em; background: var(--redo); }
+
+.pane { min-width: 0; max-width: 640px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--surface); }
+.inbox { padding: 14px 18px; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 14px; font-size: 13px; border-bottom: 1px solid var(--line); }
+.inbox .k { color: var(--fg-3); }
+.inbox .v { color: var(--fg); min-width: 0; overflow-wrap: anywhere; }
+.inbox .subj { font-weight: 500; }
+.inbox .pre { color: var(--fg-2); }
+.tabs { display: flex; gap: 4px; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+.tab { font: inherit; font-size: 12px; border: 0; background: transparent; color: var(--fg-3); padding: 4px 10px; border-radius: 6px; cursor: pointer; }
+.tab[aria-selected="true"] { background: var(--chip); color: var(--fg); }
+.plain { margin: 0; padding: 24px; font-family: var(--mono); font-size: 12.5px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--fg-2); background: var(--surface); }
+
+/* ---------- the email itself ---------- */
+.mail { --c: var(--m-canvas-l); --f: var(--m-fg-l); --b: var(--m-body-l); --mu: var(--m-muted-l); --ln: var(--m-line-l); --w: var(--m-well-l); --bt: var(--m-btn-l); --btf: var(--m-btn-fg-l); --fx: var(--m-fixed-l);
+  background: var(--c); color: var(--b); padding: 40px 40px 32px; font-family: var(--font); font-size: 15px; line-height: 1.6; }
+.mail[data-mode="dark"] { --c: var(--m-canvas-d); --f: var(--m-fg-d); --b: var(--m-body-d); --mu: var(--m-muted-d); --ln: var(--m-line-d); --w: var(--m-well-d); --bt: var(--m-btn-d); --btf: var(--m-btn-fg-d); --fx: var(--m-fixed-d); }
+.mail .col { max-width: 520px; display: flex; flex-direction: column; gap: 18px; }
+.m-lock { display: inline-flex; align-items: center; gap: 7px; color: var(--f); font-weight: 600; letter-spacing: -0.015em; font-size: 15px; margin-bottom: 10px; }
+.m-lock svg { width: 18px; height: 18px; }
+.m-h { color: var(--f); font-size: 22px; font-weight: 500; letter-spacing: -0.015em; line-height: 1.3; }
+.m-sentence { color: var(--f); font-size: 26px; font-weight: 300; letter-spacing: -0.02em; line-height: 1.35; text-wrap: pretty; }
+.fx { border-bottom: 1.5px solid var(--fx); white-space: nowrap; }
+.m-p b { color: var(--f); font-weight: 500; }
+.m-muted { color: var(--mu); font-size: 14px; }
+.m-code { background: var(--w); border: 1px solid var(--ln); border-radius: 8px; padding: 18px 12px; text-align: center; font-family: var(--mono); font-size: 30px; font-weight: 600; letter-spacing: 0.35em; padding-left: calc(12px + 0.35em); color: var(--f); font-variant-numeric: tabular-nums; }
+.m-btn { align-self: flex-start; display: inline-block; background: var(--bt); color: var(--btf); text-decoration: none; font-size: 14px; font-weight: 500; padding: 11px 18px; border-radius: 8px; }
+.m-btn-sub { color: var(--mu); font-size: 13px; margin-top: -10px; }
+.m-link { color: var(--f); font-size: 14px; text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--fx); align-self: flex-start; }
+.m-rows { display: flex; flex-direction: column; gap: 12px; padding: 16px 0; border-top: 1px solid var(--ln); border-bottom: 1px solid var(--ln); }
+.m-rows .lb { font-size: 11px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--mu); }
+.m-rows .vl { color: var(--f); font-size: 14px; }
+.m-host { display: flex; align-items: center; gap: 10px; color: var(--f); font-size: 14px; font-weight: 500; margin-bottom: 6px; }
+.m-av { width: 36px; height: 36px; border-radius: 50%; background: var(--w); border: 1px solid var(--ln); display: grid; place-items: center; font-size: 12px; font-weight: 500; color: var(--f); }
+.m-ws { display: inline-flex; align-items: center; gap: 9px; color: var(--f); font-size: 14px; font-weight: 500; margin-bottom: 6px; }
+.m-ws i { font-style: normal; width: 24px; height: 24px; border-radius: 6px; background: var(--f); color: var(--c); display: grid; place-items: center; font-size: 12px; font-weight: 600; }
+.m-list { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
+.m-list li::marker { color: var(--mu); }
+.m-sign { color: var(--f); }
+.m-attach { align-self: flex-start; display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--ln); border-radius: 8px; padding: 7px 12px; font-size: 13px; color: var(--f); }
+.m-attach svg { width: 15px; height: 15px; }
+.m-attach span { color: var(--mu); }
+.m-eyebrow { font-size: 11px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--mu); margin-bottom: -8px; }
+.m-item b { color: var(--f); font-weight: 500; display: block; }
+.m-foot { margin-top: 14px; padding-top: 18px; border-top: 1px solid var(--ln); display: flex; flex-direction: column; gap: 6px; font-size: 12px; line-height: 1.55; color: var(--mu); }
+.m-foot .links a { color: var(--mu); text-underline-offset: 2px; }
+.m-foot .sent { display: inline-flex; align-items: center; gap: 6px; color: var(--f); font-weight: 600; font-size: 12.5px; letter-spacing: -0.01em; margin-bottom: 2px; }
+.m-foot .sent svg { width: 13px; height: 13px; }
+
+/* app changes + not ours */
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 32px; }
+.two section { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.two h2 { font-size: 20px; }
+.plainlist { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
+.plainlist li { padding: 12px 0; border-bottom: 1px solid var(--line); font-size: 14px; color: var(--fg-2); display: flex; flex-direction: column; gap: 2px; }
+.plainlist li b { color: var(--fg); font-weight: 500; }
+
+@media (max-width: 860px) {
+  .card { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .meta { position: static; }
+}
+@media (max-width: 520px) {
+  .wrap { padding-inline: 16px; padding-block: 32px 64px; }
+  .mail { padding: 28px 20px 24px; }
+  .m-sentence { font-size: 22px; }
+  .m-code { font-size: 26px; }
+}
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+</style>
+
+<div class="wrap">
+  <header class="mast">
+    <span class="lock" aria-label="moduo"><svg viewBox="0 0 1000 1000" aria-hidden="true"><use href="#mark"/></svg>moduo</span>
+    <h1>Every email Moduo sends, in one place</h1>
+    <p class="lede">The copy and the look of each email, ratified on 8 October 2026. The example people are made up (Tom books Anna, Anna invites Tom). Nothing here is built yet; the build plan is <span class="addr">specs/transactional-email.md</span>.</p>
+    <div class="controls">
+      <div class="seg" role="group" aria-label="Email colour mode">
+        <button type="button" id="mode-auto" data-mode="auto" aria-pressed="true">Match page</button>
+        <button type="button" id="mode-light" data-mode="light" aria-pressed="false">Light</button>
+        <button type="button" id="mode-dark" data-mode="dark" aria-pressed="false">Dark</button>
+      </div>
+      <div class="legend">
+        <span class="pill new">New</span>
+        <span class="pill redo">Redo of an existing email</span>
+        <span class="pill fix">Exists but broken</span>
+      </div>
+    </div>
+    <p class="lede" style="font-size:13px">Gmail and Outlook ignore the dark version and show the light one. Apple Mail and iOS Mail switch to dark with the device.</p>
+  </header>
+
+  <div class="overview">
+    <div>
+      <span class="eyebrow">Who it's from</span>
+      <h2>Two addresses</h2>
+      <ul>
+        <li><span class="addr">hello@moduo.app</span> for everything about your account, invites, bookings and trial. Replies reach you both.</li>
+        <li><span class="addr">updates@news.moduo.app</span> for the monthly build updates only, so spam complaints about a newsletter can never slow down sign-in codes.</li>
+      </ul>
+    </div>
+    <div>
+      <span class="eyebrow">The shell</span>
+      <h2>One frame for every email</h2>
+      <ul>
+        <li>Mark and wordmark top left, or the host's face on booking emails, like the booking page.</li>
+        <li>One heading, short paragraphs, at most one button.</li>
+        <li>Booking emails reuse the booking page's sentence, with the fixed words underlined.</li>
+        <li>Every email has a plain-text twin.</li>
+      </ul>
+    </div>
+    <div>
+      <span class="eyebrow">Footer</span>
+      <h2>Why you got it, who we are</h2>
+      <ul>
+        <li>One line saying why this email came.</li>
+        <li>Ringdove sp. z o.o. and its Kraków address, plus Privacy.</li>
+        <li>A settings link when the email can be turned off; Unsubscribe on build updates.</li>
+      </ul>
+    </div>
+  </div>
+
+  <nav class="toc" id="toc" aria-label="Email groups"></nav>
+  <div id="groups"></div>
+
+  <div class="two">
+    <section>
+      <span class="eyebrow">Comes with it</span>
+      <h2>Changes inside the app</h2>
+      <ul class="plainlist">
+        <li><b>Sign-in screen</b>"Resend code" shows a 60-second countdown instead of Supabase's raw error.</li>
+        <li><b>Settings → Notifications → Email</b>Three switches: Bookings (on), Trial and billing reminders (on), Build updates (off).</li>
+        <li><b>Each booking link</b>A "Remind guests" setting: Off, 1 hour before or 24 hours before. New links start at 24 hours.</li>
+        <li><b>Host bell notifications</b>New booking and guest cancelled, alongside the emails.</li>
+        <li><b>Booking page</b>Stops promising a calendar invite on Zoom-only links.</li>
+        <li><b>Onboarding</b>Says 14-day trial, not 7.</li>
+        <li><b>Privacy policy</b>Names Resend as the sender of sign-in emails, which Supabase sends today.</li>
+      </ul>
+    </section>
+    <section>
+      <span class="eyebrow">Not ours</span>
+      <h2>Emails other services send</h2>
+      <ul class="plainlist">
+        <li><b>Google Calendar</b>Booking invites and cancellations, sent as the host's Google account. We can't restyle these.</li>
+        <li><b>Stripe</b>Receipts, invoices, failed payments and card reminders. Styled with our logo and colours in Stripe's settings, switched on at paid launch.</li>
+        <li><b>Your own mail</b>What you send from the Moduo mail client is your email, not ours.</li>
+      </ul>
+    </section>
+  </div>
+</div>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="mark" viewBox="0 0 1000 1000"><path fill="currentColor" fill-rule="evenodd" clip-rule="evenodd" d="M621.122 228.124C634.336 227.102 647.241 232.464 655.842 242.551C665.755 254.176 665.755 279.231 665.755 329.34V363.215L746.907 282.348C782.394 246.985 800.138 229.303 815.367 228.125C828.58 227.103 841.485 232.465 850.087 242.552C859.999 254.177 860 279.232 860 329.341V472.45C860 482.617 860 487.701 858.849 492.483C857.829 496.723 856.147 500.776 853.864 504.491C851.289 508.681 847.688 512.268 840.488 519.443L641.582 717.653C606.095 753.016 588.351 770.698 573.122 771.876C559.909 772.898 547.004 767.535 538.403 757.449C528.49 745.824 528.489 720.769 528.489 670.66V637.249L653.561 512.616C661.367 504.838 665.755 494.268 665.755 483.245V363.679L540.684 488.312C532.878 496.091 528.489 506.661 528.489 517.683V636.785L447.338 717.653C411.85 753.016 394.106 770.697 378.878 771.875C365.664 772.897 352.759 767.534 344.158 757.448C334.245 745.823 334.245 720.769 334.245 670.66V636.785L253.093 717.653C217.606 753.016 199.862 770.698 184.633 771.876C171.42 772.898 158.515 767.535 149.913 757.449C140.001 745.824 140 720.769 140 670.66V527.551C140 517.385 140 512.3 141.151 507.518C142.171 503.278 143.853 499.226 146.136 495.511C148.711 491.32 152.312 487.732 159.512 480.557L358.418 282.348C393.905 246.985 411.649 229.303 426.878 228.125C440.091 227.103 452.996 232.465 461.597 242.552C471.51 254.177 471.511 279.232 471.511 329.341V363.214L552.662 282.347C588.15 246.984 605.894 229.302 621.122 228.124ZM346.439 487.848C338.633 495.627 334.245 506.197 334.245 517.219V636.785L459.316 512.152C467.122 504.373 471.511 493.804 471.511 482.781V363.214L346.439 487.848Z"/></symbol>
+  </defs>
+</svg>
+
+<script>
+const ADDR = "Moduo · Ringdove sp. z o.o., Fatimska 41A/310, 31-831 Kraków, Poland";
+const HELLO = "Moduo <hello@moduo.app>";
+const VIA = "Anna Kowalska via Moduo <hello@moduo.app>";
+
+const GROUPS = [
+  { id: "account", letter: "A", name: "Account", blurb: "Signing in and leaving. These always send; you can't turn them off." },
+  { id: "access", letter: "B", name: "Getting in", blurb: "The waitlist invite, workspace invites and the two membership changes worth an email. Everything else about membership stays in the bell." },
+  { id: "bookings", letter: "C", name: "Bookings", blurb: "What guests and hosts get when someone books, cancels or is about to meet. Guest emails come from the host, through Moduo, and replies go to the host." },
+  { id: "trial", letter: "D", name: "Trial and welcome", blurb: "A welcome note, two trial emails and founder access. Receipts and payment emails are Stripe's." },
+  { id: "news", letter: "E", name: "Announcements and build updates", blurb: "Things you write by hand and send to many people at once." },
+];
+
+const EMAILS = [
+  { g: "account", id: "A1", name: "Sign-in code", status: "redo",
+    when: "Someone types their email on the sign-in screen, on web or desktop. Also a newly invited person's first sign-in.",
+    to: "The person signing in", off: "Always sends",
+    from: HELLO, subject: "482913 is your Moduo code", pre: "It works for 10 minutes.",
+    blocks: [
+      ["h", "Your sign-in code"],
+      ["p", "Enter this code in Moduo to sign in."],
+      ["code", "482913"],
+      ["muted", "It works once, for 10 minutes. If you didn't ask for it, ignore this email. Nobody can sign in without the code."],
+    ],
+    why: "You got this email because someone asked to sign in to Moduo with tom@becker.studio.",
+    notes: ["Today it's Supabase's stock template, sent through Mike's mailbox, and capped at 30 emails an hour across all of Moduo.", "Code only, no sign-in link, so it works on desktop (Q13).", "Same email for a first sign-in (Q14)."] },
+
+  { g: "account", id: "A2", name: "Account deleted", status: "new",
+    when: "Right after someone deletes their account in Settings → Account.",
+    to: "The address that was deleted", off: "Always sends",
+    from: HELLO, subject: "Your Moduo account is deleted", pre: "This is the last email we'll send to this address.",
+    blocks: [
+      ["h", "Your account is deleted"],
+      ["p", "We deleted your Moduo account and your data on 8 October 2026, as you asked."],
+      ["p", "Things you shared in other people's workspaces stay with those workspaces. Your plan is cancelled, and you won't be charged again."],
+      ["muted", "This is the last email we'll send to tom@becker.studio, and we're removing the address from our records now. To come back later, you'd need a new invite."],
+    ],
+    why: "You got this email because the Moduo account for this address was deleted.",
+    notes: ["The wording has to match exactly what deletion erases (PRIV-1 and PRIV-2) before it ships.", "Sent last; then the address is erased from the email log too."] },
+
+  { g: "access", id: "B1", name: "Waitlist invite", status: "new",
+    when: "You mark someone invited in the Supabase dashboard: one row, or a batch with one line in the SQL editor.",
+    to: "The waitlist address", off: "Always sends",
+    from: HELLO, subject: "Your Moduo invite is ready", pre: "Sign in with this address and you're in.",
+    blocks: [
+      ["lock"],
+      ["h", "You're in"],
+      ["p", "Thanks for waiting. Your invite to Moduo is ready."],
+      ["p", "Moduo keeps your tasks, notes, calendar, email and contacts in one place, linked to each other."],
+      ["p", "Sign in with <b>tom@becker.studio</b>. We'll email you a code, so there's no password to remember."],
+      ["btn", "Open Moduo", "app.moduo.app"],
+      ["link", "On a Mac? Download the desktop app"],
+      ["p", "Your first 14 days include everything in Pro. After that you can stay on Free or pick a plan. Nothing is charged during the beta."],
+      ["p", "It's early, so some things will break. When they do, reply to this email. We read everything, and one of us writes back."],
+      ["sign", "Maciej & Mike"],
+    ],
+    why: "You got this email because you joined the Moduo waitlist on 2 October 2026.",
+    notes: ["No expiry and no reminder, which keeps the landing page's promise of one email (Q20, Q21).", "The Mac line only appears once the notarized download has a public link.", "The landing page's existing promise: \"One email when your invite is ready. No spam.\""] },
+
+  { g: "access", id: "B2", name: "Build-updates confirmation", status: "new",
+    when: "Someone ticks \"Also send me build updates\" after joining the waitlist. (Turning them on in Settings needs no confirmation: that address is already verified.)",
+    to: "That address", off: "Always sends",
+    from: HELLO, subject: "Confirm your Moduo build updates", pre: "About one email a month. One click to confirm.",
+    blocks: [
+      ["lock"],
+      ["h", "Confirm build updates"],
+      ["p", "You asked us to send you Moduo build updates: what we shipped and what's next, about once a month."],
+      ["btn", "Yes, send me updates"],
+      ["muted", "Didn't ask for this? Ignore it and you won't get any. Your place on the waitlist doesn't change."],
+    ],
+    why: "You got this email because someone asked for Moduo build updates at this address.",
+    notes: ["The privacy policy promises this confirmation before the first newsletter, and the law requires it.", "A plain waitlist join sends nothing (Q16).", "The button opens moduo.app/email, a small page with one \"Confirm\" button, so link scanners can't confirm by accident (P1, ratified)."] },
+
+  { g: "access", id: "B3", name: "Workspace invite", status: "fix",
+    when: "An owner or admin invites someone in Settings → Members and access.",
+    to: "The invited address", off: "Always sends",
+    from: VIA + " · replies go to Anna", subject: "Anna Kowalska invited you to Northwind Studio", pre: "Join as a member. The invite works until 15 October.",
+    blocks: [
+      ["ws", "N", "Northwind Studio"],
+      ["h", "Join Northwind Studio on Moduo"],
+      ["p", "Anna Kowalska (anna@northwind.studio) invited you to their workspace in Moduo."],
+      ["rows", [["Role", "Member"], ["Works until", "Thursday 15 October"]]],
+      ["btn", "Accept invite"],
+      ["muted", "New to Moduo? Accepting sets up your account. Sign in with tom@becker.studio, the address this invite was sent to."],
+      ["muted", "Not expecting this? Ignore it and nothing happens."],
+    ],
+    why: "You got this email because Anna Kowalska invited this address to a Moduo workspace.",
+    notes: ["Today every invite tries to send this and fails: the trigger calls it without its secret, and its link points to a page that doesn't exist.", "The copy-a-link option in Settings stays (Q25).", "Lets a brand-new person into Moduo without the waitlist (Q26), and only for this address (S1).", "Owners and admins only, at most 20 a day per workspace (S2). No free-text message field, and names are length-limited, so nobody can use it to send spam."] },
+
+  { g: "access", id: "B4", name: "You're the owner now", status: "new",
+    when: "An owner hands a workspace over to someone else.",
+    to: "The new owner", off: "Always sends",
+    from: HELLO, subject: "You're now the owner of Northwind Studio", pre: "Anna Kowalska handed the workspace over to you.",
+    blocks: [
+      ["ws", "N", "Northwind Studio"],
+      ["h", "You own Northwind Studio now"],
+      ["p", "Anna Kowalska made you the owner of Northwind Studio on 8 October. You can now manage its members, roles and settings, and only you can delete it."],
+      ["btn", "Open workspace settings"],
+    ],
+    why: "You got this email because ownership of a Moduo workspace moved to you.",
+    notes: ["If a plan or seats move with ownership, the email says so. To check against the billing rules at build time."] },
+
+  { g: "access", id: "B5", name: "Removed from a workspace", status: "new",
+    when: "An owner or admin removes someone from a workspace.",
+    to: "The person removed", off: "Always sends",
+    from: HELLO, subject: "You no longer have access to Northwind Studio", pre: "Your own workspaces and account aren't affected.",
+    blocks: [
+      ["lock"],
+      ["h", "You've been removed from Northwind Studio"],
+      ["p", "Anna Kowalska removed you from Northwind Studio on 8 October. Your own workspaces and your account aren't affected."],
+      ["muted", "If you think this is a mistake, ask Anna."],
+    ],
+    why: "You got this email because you were a member of Northwind Studio on Moduo.",
+    notes: ["Not sent when you leave a workspace yourself.", "Role changes stay in the bell (Q29)."] },
+
+  { g: "bookings", id: "C1", name: "Booking confirmed (guest)", status: "redo",
+    when: "A guest books time on a booking link.",
+    to: "The person who booked", off: "Always sends",
+    from: VIA + " · replies go to Anna", subject: "Booked: Anna Kowalska, Fri 16 Oct at 14:00", pre: "30 minutes on Google Meet, Warsaw time.",
+    blocks: [
+      ["host", "AK", "Anna Kowalska"],
+      ["sentence", "You're meeting Anna on {Friday 16 October} at {14:00}."],
+      ["p", "30 minutes on Google Meet, Warsaw time. Google is sending the calendar invite separately."],
+      ["rows", [["Also invited", "Sam Lee, Priya Nair"]]],
+      ["btn", "Join Google Meet"],
+      ["link", "Can't make it? Cancel the meeting"],
+      ["muted", "Questions for Anna? Reply to this email."],
+    ],
+    why: "You got this email because you booked time with Anna Kowalska through Moduo.",
+    sent: true,
+    notes: ["Today it's four lines of plain text.", "Attaches a calendar file only when Google isn't sending an invite, as on Zoom-only links (Q32).", "The guest's own note is left out on purpose, so the booking form can't be used to send someone spam.", "Times use the zone the guest picked on the booking page (Q37).", "When Moduo Meet ships, the button becomes \"Join call\"."] },
+
+  { g: "bookings", id: "C2", name: "Added to a booking (extra guest)", status: "new",
+    when: "The booker adds people, and Google isn't sending them an invite (Zoom-only links).",
+    to: "Each added guest", off: "Always sends",
+    from: VIA, subject: "Tom Becker added you: Anna Kowalska, Fri 16 Oct at 14:00", pre: "30 minutes on Zoom, Warsaw time.",
+    blocks: [
+      ["host", "AK", "Anna Kowalska"],
+      ["sentence", "Tom Becker added you to a meeting with Anna on {Friday 16 October} at {14:00}."],
+      ["p", "30 minutes on Zoom, Warsaw time."],
+      ["attach", "invite.ics"],
+      ["btn", "Join Zoom"],
+      ["muted", "Can't make it? Let Tom know."],
+    ],
+    why: "You got this email because Tom Becker added this address when booking time with Anna Kowalska.",
+    sent: true,
+    notes: ["Today these people get nothing at all on Zoom-only links (Q33).", "No cancel link: only the person who booked can cancel."] },
+
+  { g: "bookings", id: "C3", name: "New booking (host)", status: "new",
+    when: "A guest books time on one of your links.",
+    to: "The host", off: "Settings → Notifications → Bookings",
+    from: HELLO + " · replies go to Tom", subject: "New booking: Tom Becker, Fri 16 Oct at 14:00", pre: "30 minutes on Google Meet, from your Intro call link.",
+    blocks: [
+      ["lock"],
+      ["sentence", "Tom Becker booked {30 minutes} with you on {Friday 16 October} at {14:00}."],
+      ["rows", [["Email", "tom@becker.studio"], ["From your link", "Intro call"], ["Video", "Google Meet"], ["Also invited", "Sam Lee, Priya Nair"], ["Their note", "Keen to talk about the redesign."]]],
+      ["btn", "Open in Moduo"],
+      ["muted", "It's on your Moduo calendar and your Google Calendar. Reply to this email to reach Tom."],
+    ],
+    why: "You got this email because someone booked time through your Moduo booking link.",
+    settings: true,
+    notes: ["Plus a bell notification. Today the host hears nothing at all (Q30).", "Times are in the host's own zone."] },
+
+  { g: "bookings", id: "C4", name: "Guest cancelled (host)", status: "new",
+    when: "A guest uses the cancel link.",
+    to: "The host", off: "Settings → Notifications → Bookings",
+    from: HELLO + " · replies go to Tom", subject: "Cancelled: Tom Becker, Fri 16 Oct at 14:00", pre: "The time is open on your Intro call link again.",
+    blocks: [
+      ["lock"],
+      ["sentence", "Tom Becker cancelled your meeting on {Friday 16 October} at {14:00}."],
+      ["p", "We took it off your calendars, and the time is open on your Intro call link again."],
+    ],
+    why: "You got this email because a booking on your Moduo booking link was cancelled.",
+    settings: true,
+    notes: ["Plus a bell notification (Q34)."] },
+
+  { g: "bookings", id: "C5", name: "You cancelled (guest)", status: "new",
+    when: "A guest uses the cancel link.",
+    to: "The person who booked", off: "Always sends",
+    from: VIA, subject: "You cancelled your meeting with Anna Kowalska", pre: "Anna knows. Pick another time whenever suits.",
+    blocks: [
+      ["host", "AK", "Anna Kowalska"],
+      ["sentence", "You cancelled your meeting with Anna on {Friday 16 October} at {14:00}."],
+      ["p", "Anna knows."],
+      ["btn", "Pick another time"],
+    ],
+    why: "You got this email because you cancelled a meeting booked through Moduo.",
+    sent: true,
+    notes: ["The button reopens Anna's booking page."] },
+
+  { g: "bookings", id: "C6", name: "Host cancelled (guest)", status: "new",
+    when: "The host deletes the booked meeting in Moduo, or cancels it in Google Calendar.",
+    to: "The person who booked and anyone they added", off: "Always sends",
+    from: VIA + " · replies go to Anna", subject: "Anna Kowalska cancelled your meeting on Fri 16 Oct", pre: "Pick another time, or reply to reach Anna.",
+    blocks: [
+      ["host", "AK", "Anna Kowalska"],
+      ["sentence", "Anna cancelled your meeting on {Friday 16 October} at {14:00}."],
+      ["btn", "Pick another time"],
+      ["muted", "Reply to this email to reach Anna."],
+    ],
+    why: "You got this email because you had a meeting with Anna Kowalska booked through Moduo.",
+    sent: true,
+    notes: ["Sent even when Google sends its own cancellation, because only ours has the rebooking link (Q35).", "Waits 2 minutes, so undoing the delete in Moduo cancels it.", "Today nothing happens at all: the slot stays blocked and the guest hears nothing from Moduo."] },
+
+  { g: "bookings", id: "C7", name: "Meeting reminder (guest)", status: "new",
+    when: "24 hours (or 1 hour) before the meeting, if the booking link's reminder is on.",
+    to: "The person who booked and anyone they added", off: "Per booking link: Remind guests",
+    from: VIA, subject: "Tomorrow at 14:00: Anna Kowalska", pre: "30 minutes on Google Meet, Warsaw time.",
+    blocks: [
+      ["host", "AK", "Anna Kowalska"],
+      ["sentence", "You're meeting Anna {tomorrow} at {14:00}."],
+      ["p", "30 minutes on Google Meet, Warsaw time."],
+      ["btn", "Join Google Meet"],
+      ["link", "Can't make it? Cancel the meeting"],
+    ],
+    why: "You got this reminder because Anna's booking link sends one a day before each meeting.",
+    sent: true,
+    notes: ["Your Q36: the host sets it on each booking link (Off, 1 hour or 24 hours before). That's how Calendly, Cal.com and SavvyCal do it. New links start at 24 hours, the standard default.", "Skipped when the meeting is booked inside that window.", "Added guests get the cancel link only if they booked."] },
+
+  { g: "trial", id: "D1", name: "Welcome", status: "new",
+    when: "A few minutes after someone sets up their first workspace.",
+    to: "The new user", off: "Always sends (one time only)",
+    from: HELLO, subject: "Welcome to Moduo", pre: "Three things worth trying in your first week.",
+    blocks: [
+      ["lock"],
+      ["p", "Hi Tom,"],
+      ["p", "Northwind Studio is set up. Thanks for trying Moduo this early."],
+      ["p", "Three things worth trying first:"],
+      ["list", ["Press ⌘K to find anything, or to add a task from anywhere.", "Drag a task onto your calendar to give it a time.", "Type @ in a note to link a person, a task or a meeting."]],
+      ["p", "Your Pro trial runs until Thursday 22 October. Nothing is charged during the beta."],
+      ["p", "If something breaks or bugs you, reply to this email. We read everything, and one of us writes back."],
+      ["sign", "Maciej & Mike"],
+    ],
+    why: "You got this email because you set up a Moduo workspace.",
+    notes: ["Written as a note from you two, no button (Q42).", "No name on the account? The greeting line is left out.", "The three tips have to match features that exist on the day it ships."] },
+
+  { g: "trial", id: "D2", name: "Trial ends in 3 days", status: "new",
+    when: "3 days before a trial ends, unless a plan is already chosen.",
+    to: "The trial owner", off: "Settings → Notifications → Trial and billing",
+    from: HELLO, subject: "Your Pro trial ends on Thursday", pre: "After that you're on Free. Nothing is deleted.",
+    blocks: [
+      ["lock"],
+      ["h", "Your trial ends on Thursday 22 October"],
+      ["p", "After that, your account moves to Free. Nothing is deleted, and nothing is charged."],
+      ["rows", [["Free keeps", "Tasks, notes, calendar, email and contacts, all linked. 1 workspace and 1 email account."], ["Pro adds", "Unlimited workspaces and email accounts, AI keys that can edit, full history and more storage."]]],
+      ["btn", "Choose a plan"],
+      ["muted", "Happy on Free? You don't need to do anything."],
+    ],
+    why: "You got this email because your Moduo Pro trial ends soon.",
+    settings: true,
+    notes: ["Needs the real rule for a second workspace or email account after the trial (pricing v2).", "Plan lines come from the same list as the Plans page."] },
+
+  { g: "trial", id: "D3", name: "Trial ended", status: "new",
+    when: "The day a trial ends, unless a plan was chosen.",
+    to: "The trial owner", off: "Settings → Notifications → Trial and billing",
+    from: HELLO, subject: "You're on Moduo Free now", pre: "Everything you made is still here.",
+    blocks: [
+      ["lock"],
+      ["h", "You're on Free now"],
+      ["p", "Your Pro trial ended today. Everything you made is still here, and nothing was charged."],
+      ["rows", [["Free keeps", "Tasks, notes, calendar, email and contacts, all linked. 1 workspace and 1 email account."]]],
+      ["btn", "See plans"],
+    ],
+    why: "You got this email because your Moduo Pro trial ended.",
+    settings: true,
+    notes: ["Ratified (Q44): reassuring, not a sales email.", "Never sent when the trial ended because the account was deleted."] },
+
+  { g: "trial", id: "D4", name: "Founder access", status: "redo",
+    when: "You give a founder free access after they pitch to you.",
+    to: "The founder", off: "Always sends",
+    from: HELLO, subject: "Moduo Pro is on us until October 2027", pre: "It's already on. No code, no card.",
+    blocks: [
+      ["lock"],
+      ["h", "Pro is on us"],
+      ["p", "Thanks for telling us about what you're building. As promised, your Moduo account has Pro free until 8 October 2027."],
+      ["p", "It's already on. There's no code to enter and no card needed."],
+      ["btn", "Open Moduo"],
+      ["p", "If Moduo helps, tell us how. If it gets in the way, tell us that too. Just reply."],
+      ["sign", "Maciej & Mike"],
+    ],
+    why: "You got this email because we gave this address Moduo Pro.",
+    notes: ["Ratified (F1, F2): a set time you pick (default 12 months), on Pro, Duo or Team, switched on directly with no code or card.", "Replaces today's forever-free code entered at checkout, with its amber box and 🚀 subject.", "You add the founder in the Supabase dashboard; they don't need a waitlist invite."] },
+
+  { g: "trial", id: "D5", name: "Founder access ending", status: "new",
+    when: "14 days before a founder's free access ends.",
+    to: "The founder", off: "Settings → Notifications → Trial and billing",
+    from: HELLO, subject: "Your free Moduo Pro ends on 8 October", pre: "After that you move to Free. Nothing is deleted.",
+    blocks: [
+      ["lock"],
+      ["h", "Your free Pro ends on Friday 8 October"],
+      ["p", "We hope Moduo has helped while you build. Your free Pro ends on Friday 8 October 2027, and after that your account moves to Free. Nothing is deleted."],
+      ["btn", "Choose a plan"],
+      ["muted", "Want to talk about more time? Reply to this email."],
+      ["sign", "Maciej & Mike"],
+    ],
+    why: "You got this email because your free Moduo Pro ends soon.",
+    settings: true,
+    notes: ["Ratified (P2): so founders aren't caught out when it ends.", "Skipped if a paid plan is already active."] },
+
+  { g: "news", id: "E1", name: "Announcement", status: "new",
+    when: "You send it by hand: policy or terms changes, the beta ending (30 days' notice), the company handover.",
+    to: "Everyone with an account, plus the waitlist when it applies to them", off: "Can't be turned off; sent only for changes that affect you",
+    from: HELLO, subject: "We're updating our privacy policy on 1 November", pre: "What changes and what it means for you.",
+    blocks: [
+      ["lock"],
+      ["h", "Changes to our privacy policy"],
+      ["p", "On 1 November 2026 we're updating our privacy policy. Here's what changes:"],
+      ["list", ["Resend now sends our sign-in emails, as well as invites and booking emails.", "We keep a record of which emails we sent you for 30 days, to catch delivery problems."]],
+      ["p", "You don't need to do anything. If you don't agree, you can delete your account in Settings → Account before 1 November."],
+      ["link", "Read the full policy"],
+    ],
+    why: "You got this email because you have a Moduo account. We only send these for changes that affect you.",
+    notes: ["One template; you write each one.", "The example is real: moving sign-in emails to Resend needs this exact policy update."] },
+
+  { g: "news", id: "E2", name: "Build update", status: "new",
+    when: "About once a month, when you write one.",
+    to: "People who confirmed build updates", off: "Unsubscribe link, plus Settings",
+    from: "Moduo <updates@news.moduo.app> · replies go to hello@", subject: "What we built in October", pre: "Calendar booking links, faster email, and what's next.",
+    blocks: [
+      ["lock"],
+      ["eyebrow", "Build update · October 2026"],
+      ["h", "What we built in October"],
+      ["p", "A short one this month. Three things shipped, and one is coming."],
+      ["item", "Booking links", "Share a link, and people pick a time that suits you both. Google Meet or Zoom, your choice."],
+      ["item", "Faster email", "Older mail now loads in the background, so search reaches further back."],
+      ["item", "Coming next: calls", "Video calls inside Moduo, without a separate app."],
+      ["p", "Reply and tell us what you'd want next."],
+      ["sign", "Maciej & Mike"],
+    ],
+    why: "You got this email because you asked for Moduo build updates.",
+    unsub: true,
+    notes: ["Example content. Each issue is written by hand.", "One-click unsubscribe is also built into the email itself, which Gmail and Yahoo require."] },
+];
+
+const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const fx = (s) => s.replace(/\{([^}]+)\}/g, '<span class="fx">$1</span>');
+const markSvg = '<svg viewBox="0 0 1000 1000" aria-hidden="true"><use href="#mark"/></svg>';
+const calSvg = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><rect x="2" y="3" width="12" height="11" rx="2"/><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3"/></svg>';
+
+function blockHtml(b) {
+  const [t, a, c] = b;
+  switch (t) {
+    case "lock": return `<div class="m-lock">${markSvg}moduo</div>`;
+    case "h": return `<div class="m-h">${a}</div>`;
+    case "sentence": return `<div class="m-sentence">${fx(a)}</div>`;
+    case "p": return `<p class="m-p">${fx(a)}</p>`;
+    case "muted": return `<p class="m-muted">${a}</p>`;
+    case "code": return `<div class="m-code">${a}</div>`;
+    case "btn": return `<a class="m-btn" href="#" onclick="return false">${a}</a>${c ? `<div class="m-btn-sub">${c}</div>` : ""}`;
+    case "link": return `<a class="m-link" href="#" onclick="return false">${a}</a>`;
+    case "rows": return `<div class="m-rows">${a.map(([l, v]) => `<div><div class="lb">${l}</div><div class="vl">${v}</div></div>`).join("")}</div>`;
+    case "host": return `<div class="m-host"><span class="m-av">${a}</span>${c}</div>`;
+    case "ws": return `<div class="m-ws"><i>${a}</i>${c}</div>`;
+    case "list": return `<ul class="m-list">${a.map((x) => `<li>${x}</li>`).join("")}</ul>`;
+    case "sign": return `<p class="m-sign">${a}</p>`;
+    case "attach": return `<div class="m-attach">${calSvg}${a}<span>Calendar file</span></div>`;
+    case "eyebrow": return `<div class="m-eyebrow">${a}</div>`;
+    case "item": return `<p class="m-item"><b>${a}</b>${c}</p>`;
+  }
+  return "";
+}
+
+function footHtml(e) {
+  const links = ["Privacy"];
+  if (e.settings) links.unshift("Notification settings");
+  if (e.unsub) links.unshift("Unsubscribe");
+  return `<div class="m-foot">
+    ${e.sent ? `<span class="sent">${markSvg}Booked with Moduo</span>` : ""}
+    <span>${e.why}</span>
+    <span>${ADDR}</span>
+    <span class="links">${links.map((l) => `<a href="#" onclick="return false">${l}</a>`).join(" · ")}</span>
+  </div>`;
+}
+
+const strip = (s) => s.replace(/<[^>]+>/g, "").replace(/[{}]/g, "");
+function plainText(e) {
+  const out = [];
+  for (const [t, a, c] of e.blocks) {
+    if (t === "lock" || t === "attach") continue;
+    if (t === "host") { out.push(c); continue; }
+    if (t === "ws") { out.push(c); continue; }
+    if (t === "btn") { out.push(`${a}: https://app.moduo.app/…`); continue; }
+    if (t === "link") { out.push(`${a}: https://app.moduo.app/…`); continue; }
+    if (t === "rows") { out.push(a.map(([l, v]) => `${l}: ${v}`).join("\n")); continue; }
+    if (t === "list") { out.push(a.map((x) => `- ${x}`).join("\n")); continue; }
+    if (t === "item") { out.push(`${a}\n${c}`); continue; }
+    out.push(strip(a));
+  }
+  out.push("--");
+  out.push(e.why);
+  if (e.unsub) out.push("Unsubscribe: https://moduo.app/u/…");
+  if (e.settings) out.push("Notification settings: https://app.moduo.app/settings/notifications");
+  out.push(ADDR);
+  return out.join("\n\n");
+}
+
+const STATUS = { new: "New", redo: "Redo", fix: "Exists, broken" };
+
+function cardHtml(e) {
+  const notes = (e.notes || []).map((n) => n.startsWith("ask:") ? `<li class="ask">${n.slice(4)}</li>` : `<li>${n}</li>`).join("");
+  return `<article class="card" id="${e.id}">
+    <div class="meta">
+      <div class="top"><span class="id">${e.id}</span><span class="pill ${e.status}">${STATUS[e.status]}</span></div>
+      <h3>${e.name}</h3>
+      <dl>
+        <div><dt>Sent when</dt><dd>${e.when}</dd></div>
+        <div><dt>To</dt><dd>${e.to}</dd></div>
+        <div><dt>Turn off</dt><dd>${e.off}</dd></div>
+      </dl>
+      ${notes ? `<ul class="notes">${notes}</ul>` : ""}
+    </div>
+    <div class="pane">
+      <div class="inbox">
+        <span class="k">From</span><span class="v">${esc(e.from)}</span>
+        <span class="k">Subject</span><span class="v subj">${e.subject}</span>
+        <span class="k">Preview</span><span class="v pre">${e.pre}</span>
+      </div>
+      <div class="tabs" role="tablist" aria-label="${e.name} view">
+        <button type="button" class="tab" role="tab" id="${e.id}-tab-html" aria-selected="true" data-view="html">Email</button>
+        <button type="button" class="tab" role="tab" id="${e.id}-tab-text" aria-selected="false" data-view="text">Plain text</button>
+      </div>
+      <div class="mail" data-mode="light"><div class="col">${e.blocks.map(blockHtml).join("")}${footHtml(e)}</div></div>
+      <pre class="plain" hidden>${esc(plainText(e))}</pre>
+    </div>
+  </article>`;
+}
+
+document.getElementById("toc").innerHTML = GROUPS.map((g) => `<a href="#${g.id}"><b>${g.letter}</b>${g.name}</a>`).join("");
+document.getElementById("groups").innerHTML = GROUPS.map((g) => `
+  <section class="group" id="${g.id}">
+    <div class="group-head"><span class="eyebrow">${g.letter} · ${EMAILS.filter((e) => e.g === g.id).length} emails</span><h2>${g.name}</h2><p>${g.blurb}</p></div>
+    ${EMAILS.filter((e) => e.g === g.id).map(cardHtml).join("")}
+  </section>`).join("");
+document.getElementById("groups").style.cssText = "display:flex;flex-direction:column;gap:72px";
+
+document.querySelectorAll(".pane").forEach((pane) => {
+  pane.querySelectorAll(".tab").forEach((tab) => tab.addEventListener("click", () => {
+    const text = tab.dataset.view === "text";
+    pane.querySelectorAll(".tab").forEach((t) => t.setAttribute("aria-selected", String(t === tab)));
+    pane.querySelector(".mail").hidden = text;
+    pane.querySelector(".plain").hidden = !text;
+  }));
+});
+
+let pref = "auto";
+try { pref = localStorage.getItem("moduo-email-mode") || "auto"; } catch (_) {}
+const mq = matchMedia("(prefers-color-scheme: dark)");
+function pageDark() {
+  const t = document.documentElement.getAttribute("data-theme");
+  if (t === "dark") return true;
+  if (t === "light") return false;
+  return mq.matches;
+}
+function applyMode() {
+  const m = pref === "auto" ? (pageDark() ? "dark" : "light") : pref;
+  document.querySelectorAll(".mail").forEach((el) => { el.dataset.mode = m; });
+  document.querySelectorAll(".seg button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.mode === pref)));
+}
+document.querySelectorAll(".seg button").forEach((b) => b.addEventListener("click", () => {
+  pref = b.dataset.mode;
+  try { localStorage.setItem("moduo-email-mode", pref); } catch (_) {}
+  applyMode();
+}));
+mq.addEventListener?.("change", applyMode);
+new MutationObserver(applyMode).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+applyMode();
+</script>
