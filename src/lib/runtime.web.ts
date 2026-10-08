@@ -71,6 +71,7 @@ import {
   type TaskRelation,
 } from "../features/tasks/model";
 import { toMemberPerm, toMemberRole } from "../features/workspaces/workspace-mappers";
+import { SUPABASE_AUTH_OPTIONS, scrubAuthCallbackFromUrl } from "./auth-url";
 import type { EntityLink, EntityRecord } from "./entity-links";
 import { collectTruncations, READ_CAPS, readPaged, type Truncation } from "./paged-select";
 import {
@@ -104,12 +105,10 @@ const SUPABASE_PUBLISHABLE_KEY: string =
   (import.meta.env.PUBLIC_SUPABASE_PUBLISHABLE_KEY as string | undefined) ||
   "sb_publishable_NAVl-rzFzPOi5ZU84aC3pA_SOIR00so";
 
+// No session ever comes from the URL (login CSRF): see auth-url.ts.
+scrubAuthCallbackFromUrl();
 export const supabaseClient: SupabaseClient = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
-  },
+  auth: SUPABASE_AUTH_OPTIONS,
 });
 
 // ── Boot-time read coalescer (DF-12) ─────────────────────────────────────────────

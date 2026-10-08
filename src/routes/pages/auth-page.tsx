@@ -3,11 +3,14 @@ import { useEffect } from "react";
 
 import { EmailAuthPanel } from "@/components/auth/email-auth-panel";
 import { IS_STAGING_PORTAL } from "@/features/settings/about";
+import { authLinkWasIgnored } from "@/lib/auth-url";
 import { useAuth } from "@/providers/auth-provider";
 
 export function AuthPage() {
   const { isSignedIn, loading } = useAuth();
   const navigate = useNavigate();
+  // An emailed sign-in link (old invite or magic link) landed here and was dropped.
+  const linkIgnored = authLinkWasIgnored();
 
   useEffect(() => {
     if (loading || !isSignedIn) return;
@@ -50,6 +53,12 @@ export function AuthPage() {
               </span>
             </div>
           </div>
+        )}
+
+        {linkIgnored && (
+          <p role="status" className="w-full text-center text-sm text-muted-foreground">
+            Sign-in links don't work here. Enter your email to get a 6-digit code.
+          </p>
         )}
 
         <div className="w-full rounded-xl border border-border bg-card px-6 py-7 shadow-xl sm:px-7 sm:py-8">

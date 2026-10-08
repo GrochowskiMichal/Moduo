@@ -174,6 +174,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Data layer, Supabase, contracts → [decisions/data.md](decisions/data.md)
 
+- 2026-10-08 · The app never takes a Supabase session from the URL (`detectSessionInUrl: false`); sign-in is the typed 6-digit code only, and emailed auth links send people to the sign-in page.
 - 2026-10-07 · Attachments are attachments-only, private, and pooled per workspace owner; HEIC converts only where the app can read it.
 - 2026-10-08 · Deployed Edge Functions must match `supabase/functions/`, checked by `bun run functions:reconcile`; the Stripe Sync Engine's three functions are the only allowed exceptions.
 - 2026-10-01 · Profile pictures and workspace marks live in the public `avatars` bucket.
