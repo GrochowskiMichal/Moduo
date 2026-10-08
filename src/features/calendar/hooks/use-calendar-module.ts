@@ -85,12 +85,13 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
   /**
    * Change the event list only while it still belongs to `forScope`, the scope
    * a write started in. A write that settles after a switch has still saved in
-   * its own workspace; it just never lands in another workspace's list.
+   * its own workspace; it just never lands in another workspace's list. Nothing lands
+   * while there is no scope at all.
    */
   const setEventsIn = useCallback(
     (forScope: string | null, next: (events: CalendarEventModel[]) => CalendarEventModel[]) =>
       setList((current) => {
-        if (current.scope !== forScope) return current;
+        if (forScope === null || current.scope !== forScope) return current;
         const nextEvents = next(current.events);
         return nextEvents === current.events ? current : { scope: forScope, events: nextEvents };
       }),
