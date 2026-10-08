@@ -63,6 +63,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Toolchain and libraries → [decisions/toolchain.md](decisions/toolchain.md)
 
+- 2026-10-08 · Subframe is removed.
 - 2026-10-08 · Storybook is 10.6.1, with `@storybook/addon-mcp`.
 - 2026-10-08 · Claude Code gets TypeScript code intelligence from TypeScript 7's own language server, through a project plugin.
 - 2026-10-07 · Biome doesn't lint `landing/**`, and `bun run lint:js` gates CI.
@@ -101,12 +102,14 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## MCP connector → [decisions/mcp.md](decisions/mcp.md)
 
+- 2026-10-08 · Moduo for Claude Code: a mod over `moduo-mcp`, with three new task intent ops.
 - 2026-07-04 · Notes NO-9 + NO-10 landed — publish-to-web + the DoD (MCP manifest/connector + Recent-notes widget); Wave 3 (Notes) COMPLETE.
 - 2026-06-27 · Contacts CO-5 MCP manifest + "Needs attention" widget landed — Wave 1 (Contacts) complete.
 - 2026-06-27 · Spine CT-7 Tasks adoption + MCP manifest + dashboard widget landed (Wave 0 spine complete).
 
 ## Calendar and booking links → [decisions/calendar.md](decisions/calendar.md)
 
+- 2026-10-07 · Emailed links use fixed, allow-listed origins, and public booking is rate-limited.
 - 2026-10-02 · A booked meeting is one event, and booking links can be deleted.
 - 2026-10-02 · A booking link's video is Google Meet, Zoom, or "Their choice".
 - 2026-10-01 · The public booking page is one sentence the guest finishes.
@@ -216,6 +219,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Design system and UI → [decisions/design-system.md](decisions/design-system.md)
 
+- 2026-10-08 · DS-1 landed: the state layer re-resolves in every appearance scope, thin token scrollbars are the global default, and Storybook switches every appearance axis.
 - 2026-10-07 · A state layer of tokens; selection becomes tint-only (R5 rewrite lands in DS-2).
 - 2026-08-14 · DF-18 (eyebrow / detail-title / toolbar standardization) landed
 - 2026-07-27 · The app accent is MONOCHROME by default; hues are opt-in; pre-workspace surfaces are always monochrome
@@ -229,6 +233,8 @@ One line per locked product or architecture decision, grouped by area, newest fi
 - Theme shades.
 
 ## Product scope, alpha, settings, cross-cutting fixes → [decisions/product.md](decisions/product.md)
+
+- 2026-10-08 · Every email Moduo sends goes through one system: Resend, one template kit, one outbox; invite-only becomes an allow-list
 
 - 2026-10-07 · Finance is not planned — not soon, possibly never.
 - 2026-10-02 · Chat + calls becomes a planned module (Duo/Team plans only), reversing "no chat module, keep Slack"; whiteboard not planned; Mindmap stays hidden

@@ -97,7 +97,7 @@ export function ExecuteView({
         <h1 className="font-display text-lg text-foreground">Focus</h1>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto">
+      <div className="pane-scroll min-h-0 flex-1 overflow-auto">
         {!current ? (
           <EndSummary
             doneCount={doneCount}

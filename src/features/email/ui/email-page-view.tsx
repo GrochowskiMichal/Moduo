@@ -1145,7 +1145,7 @@ export function EmailPageView({
     const hasAny =
       email.snoozed.length > 0 || email.followUps.length > 0 || recentLinked.length > 0;
     return (
-      <div className="flex h-full min-h-0 flex-col gap-4 overflow-y-auto p-4">
+      <div className="pane-scroll flex h-full min-h-0 flex-col gap-4 overflow-y-auto p-4">
         <div className="rounded-lg border border-border bg-card p-4">
           <div className="flex items-center gap-2 text-sm text-foreground">
             <Mail className="size-icon-sm text-muted-foreground" aria-hidden />
