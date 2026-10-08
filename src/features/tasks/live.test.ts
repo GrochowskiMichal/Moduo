@@ -8,6 +8,7 @@ import {
   mergeBundle,
   mergeQueue,
   parseLiveChange,
+  swapTemp,
   timestampMicros,
   trackTaskCalls,
   withoutHeldTags,
@@ -190,6 +191,15 @@ describe("mergeBundle (D5-1)", () => {
     expect(out.tags).toEqual([]);
     expect(out.tagLinks).toEqual([]);
     expect(withoutHeldTags(b, new Set())).toBe(b);
+  });
+});
+
+describe("swapTemp", () => {
+  it("never leaves two copies when the insert's echo landed before the response", () => {
+    const echoed = task({ id: "real-1" });
+    const list = [task({ id: "tmp-1" }), echoed];
+    expect(swapTemp(list, "tmp-1", echoed).map((t) => t.id)).toEqual(["real-1"]);
+    expect(swapTemp([task({ id: "tmp-1" })], "tmp-1", echoed).map((t) => t.id)).toEqual(["real-1"]);
   });
 });
 

@@ -27,7 +27,14 @@ import {
   wouldCreateCycle,
 } from "../helpers";
 import { hideBucket, unhideBucket, useHiddenBuckets } from "../hidden-buckets";
-import { LiveGate, mergeBundle, mergeQueue, trackTaskCalls, withoutHeldTags } from "../live";
+import {
+  LiveGate,
+  mergeBundle,
+  mergeQueue,
+  swapTemp,
+  trackTaskCalls,
+  withoutHeldTags,
+} from "../live";
 import {
   type ActivityEntry,
   type Bucket,
@@ -147,6 +154,11 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
    * of our own saves started meanwhile: its snapshot could predate that save
    * and flick the optimistic edit back. It then tries again once things settle.
    */
+  const refresh = useRef({
+    lastAt: 0,
+    timer: null as ReturnType<typeof setTimeout> | null,
+    queued: false,
+  });
   const requestRefreshRef = useRef<(reason?: "reconnect" | "return") => void>(() => {});
   const loadImpl = useCallback(
     async (quiet: boolean) => {
@@ -193,6 +205,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
           setTimeBlocksState(blocks);
           setError(null);
           setLoadStamp((s) => s + 1); // triggers the recurrence catch-up pass
+          refresh.current.lastAt = Date.now(); // a full read counts for the refetch throttle
         }
       } catch (e) {
         if (reqRef.current === req && !quiet) setError(e instanceof Error ? e.message : String(e));
@@ -211,11 +224,6 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
   // to the window is leading-only (focus and visibility both fire on one
   // return); a reconnect inside the window also gets one trailing read, since
   // the socket may have missed changes after the last one.
-  const refresh = useRef({
-    lastAt: 0,
-    timer: null as ReturnType<typeof setTimeout> | null,
-    queued: false,
-  });
   const requestRefresh = useCallback(
     (reason: "reconnect" | "return" = "reconnect") => {
       const r = refresh.current;
@@ -526,7 +534,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         .then((saved) => {
           setBundle((prev) => ({
             ...prev,
-            tasks: prev.tasks.map((t) => (t.id === tempId ? saved : t)),
+            tasks: swapTemp(prev.tasks, tempId, saved),
           }));
         })
         .catch((e) => {
@@ -575,7 +583,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         .then((saved) => {
           setBundle((prev) => ({
             ...prev,
-            tasks: prev.tasks.map((t) => (t.id === tempId ? saved : t)),
+            tasks: swapTemp(prev.tasks, tempId, saved),
           }));
         })
         .catch((e) => {
@@ -1197,7 +1205,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         .then((saved) => {
           setBundle((prev) => ({
             ...prev,
-            buckets: prev.buckets.map((b) => (b.id === tempId ? saved : b)),
+            buckets: swapTemp(prev.buckets, tempId, saved),
           }));
         })
         .catch((e) => {
@@ -1364,7 +1372,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         .then((saved) =>
           setBundle((prev) => ({
             ...prev,
-            tagLinks: prev.tagLinks.map((l) => (l.id === tempId ? saved : l)),
+            tagLinks: swapTemp(prev.tagLinks, tempId, saved),
           })),
         )
         .catch((e) => {
@@ -1438,7 +1446,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
           savedTagId = savedTag.id;
           setBundle((prev) => ({
             ...prev,
-            tags: prev.tags.map((t) => (t.id === tempTagId ? savedTag : t)),
+            tags: swapTemp(prev.tags, tempTagId, savedTag),
             tagLinks: prev.tagLinks.map((l) =>
               l.tagId === tempTagId ? { ...l, tagId: savedTag.id } : l,
             ),
@@ -1451,7 +1459,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
           });
           setBundle((prev) => ({
             ...prev,
-            tagLinks: prev.tagLinks.map((l) => (l.id === tempLinkId ? savedLink : l)),
+            tagLinks: swapTemp(prev.tagLinks, tempLinkId, savedLink),
           }));
         } catch (e) {
           setBundle((prev) => dropFailedTag(prev, { tempTagId, tempLinkId, orphanId: savedTagId }));
@@ -1506,7 +1514,6 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       if (!existing) return;
       // Snapshot before the optimistic removal so Undo restores locally with
       // zero network (the server was never touched — see below).
-      const prevTags = bundle.tags;
       const prevTagLinks = bundle.tagLinks;
       setBundle((prev) => ({
         ...prev,
@@ -1533,7 +1540,16 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         onUndo: () => {
           undone = true;
           heldTags.current.delete(tagId);
-          setBundle((prev) => ({ ...prev, tags: prevTags, tagLinks: prevTagLinks }));
+          // Put back only this tag and its links: other tag changes (a
+          // teammate's, arriving live during the Undo window) stay.
+          setBundle((prev) => ({
+            ...prev,
+            tags: prev.tags.some((t) => t.id === tagId) ? prev.tags : [...prev.tags, existing],
+            tagLinks: [
+              ...prev.tagLinks.filter((l) => l.tagId !== tagId),
+              ...prevTagLinks.filter((l) => l.tagId === tagId),
+            ],
+          }));
         },
       });
     },

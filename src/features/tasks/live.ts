@@ -167,6 +167,15 @@ export function mergeQueue(queue: TaskQueueEntry[], change: LiveChange): TaskQue
 }
 
 /**
+ * Swap an optimistic row for the saved one. The saved row may already be
+ * there, when its insert's live echo landed first (a response slower than
+ * the gate's max hold), so drop that copy rather than show it twice.
+ */
+export function swapTemp<T extends { id: string }>(list: T[], tempId: string, saved: T): T[] {
+  return list.filter((r) => r.id !== saved.id).map((r) => (r.id === tempId ? saved : r));
+}
+
+/**
  * Leave out tags whose delete is waiting on its Undo toast (and their links),
  * so a refetch or a live change in that window can't bring them back.
  */
@@ -296,8 +305,11 @@ export function trackTaskCalls(runtime: ModuoRuntime, gate: LiveGate): ModuoRunt
       wrapped[name] = value;
       continue;
     }
+    // A read can't race an echo, but it can replace state: count it, without
+    // marking a write (a quiet refetch only restarts after a write).
+    const write = !/^(list|get)/.test(name);
     wrapped[name] = (...args: unknown[]) => {
-      const end = gate.begin();
+      const end = gate.begin({ write });
       try {
         const result = (value as (...a: unknown[]) => unknown).apply(tasks, args);
         if (result && typeof (result as Promise<unknown>).finally === "function") {

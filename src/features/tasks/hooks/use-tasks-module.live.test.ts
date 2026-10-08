@@ -195,10 +195,14 @@ describe("useTasksModule live updates", () => {
     expect(list).toHaveBeenCalledTimes(1);
 
     server.tasks.push(task({ id: "t9", title: "Made offline" }));
+    // The first load counts for the throttle: a reconnect inside its 5 s
+    // window reads once the window ends (trailing), not straight away.
     act(() => {
       h.listener?.({ type: "resync", reason: "reconnect" });
     });
-    await waitFor(() => expect(result.current.tasks).toHaveLength(2));
+    await sleep(300);
+    expect(list).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(result.current.tasks).toHaveLength(2), { timeout: 6_000 });
     expect(list).toHaveBeenCalledTimes(2);
     // A quiet refetch never flips the loading flag.
     expect(result.current.loading).toBe(false);
@@ -209,13 +213,13 @@ describe("useTasksModule live updates", () => {
     });
     await sleep(300);
     expect(list).toHaveBeenCalledTimes(2); // throttled: one trailing read is waiting
-  });
+  }, 15_000);
 
   it("D5-3: one return to the window (focus + visibility) reads once", async () => {
     const { runtime, list } = fakeRuntime([task()]);
     const { result } = mount(runtime);
     await waitFor(() => expect(result.current.tasks).toHaveLength(1));
-    await sleep(ECHO_GRACE_MS + 50);
+    await sleep(5_100); // past the first load's refetch throttle
     act(() => {
       h.listener?.({ type: "resync", reason: "return" });
     });
@@ -226,14 +230,14 @@ describe("useTasksModule live updates", () => {
     });
     await sleep(5_200);
     expect(list).toHaveBeenCalledTimes(2);
-  }, 15_000);
+  }, 20_000);
 
   it("D5-3: a refetch that raced my save is redone, never applied", async () => {
     const { runtime, server, saves, list } = fakeRuntime([task()]);
     const slow = deferred<TasksModuleBundle>();
     const { result } = mount(runtime);
     await waitFor(() => expect(result.current.tasks).toHaveLength(1));
-    await sleep(ECHO_GRACE_MS + 50);
+    await sleep(5_100); // past the first load's refetch throttle
 
     list.mockImplementationOnce(() => slow.promise);
     act(() => {
@@ -255,5 +259,5 @@ describe("useTasksModule live updates", () => {
     });
     expect(list).toHaveBeenCalledTimes(3);
     expect(result.current.tasks[0]!.title).toBe("Typed meanwhile");
-  }, 15_000);
+  }, 20_000);
 });

@@ -1,10 +1,18 @@
--- Stub of production for supabase/probes/tasks-realtime.probe.sql (TV-D5).
+-- Stub of production for supabase/probes/tasks-realtime.probe.sql (TV-D5),
+-- for 20261008223000_tasks_realtime_publication.sql and
+-- 20261008224500_tasks_server_updated_at.sql.
 -- The `supabase_realtime` publication exactly as production has it
 -- (pg_publication, project wtoonrvuqumihpkbvwvs, 2026-10-08: not FOR ALL
 -- TABLES; insert, update, delete, truncate; publish_via_partition_root off;
 -- chat_channels, chat_members, chat_messages), and the nine tables involved,
 -- columns + primary keys read from the catalog the same day. Row-level
 -- security is on everywhere, replica identity default, as in production.
+
+-- Supabase's API roles (the stamp probe writes as a signed-in user).
+DO $$ BEGIN
+  CREATE ROLE anon NOLOGIN; CREATE ROLE authenticated NOLOGIN; CREATE ROLE service_role NOLOGIN;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
 
 CREATE TABLE public.buckets (id uuid NOT NULL, workspace_id uuid NOT NULL, owner_id uuid, name text NOT NULL, is_system boolean NOT NULL, "position" text NOT NULL, created_at timestamp with time zone NOT NULL, updated_at timestamp with time zone NOT NULL, deleted_at timestamp with time zone, group_label text, PRIMARY KEY (id));
 CREATE TABLE public.chat_channels (id uuid NOT NULL, workspace_id uuid NOT NULL, kind text NOT NULL, name text, topic text NOT NULL, is_private boolean NOT NULL, dm_key text, created_by uuid, created_at timestamp with time zone NOT NULL, updated_at timestamp with time zone NOT NULL, archived_at timestamp with time zone, last_message_at timestamp with time zone, managers_only boolean NOT NULL, PRIMARY KEY (id));
@@ -21,6 +29,9 @@ DECLARE t text;
 BEGIN
   FOREACH t IN ARRAY ARRAY['buckets','chat_channels','chat_members','chat_messages','comments','tag_links','tags','task_queue','tasks'] LOOP
     EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);
+    -- The probe checks the stamp, not RLS: let the signed-in role write.
+    EXECUTE format('GRANT SELECT, INSERT, UPDATE ON public.%I TO authenticated', t);
+    EXECUTE format('CREATE POLICY probe_all ON public.%I TO authenticated USING (true) WITH CHECK (true)', t);
   END LOOP;
 END $$;
 
