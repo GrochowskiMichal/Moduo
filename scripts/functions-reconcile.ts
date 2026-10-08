@@ -105,7 +105,8 @@ function fromCli(projectRef: string): unknown {
       cwd: ROOT,
       encoding: "utf8",
       timeout: 60_000,
-      // Without this the CLI's update check rewrites the tracked supabase/.temp/cli-latest.
+      // Skips the CLI's update check: a network call this read doesn't need, and a write to
+      // supabase/.temp/cli-latest (untracked since #252, but still a write into the repo).
       env: { ...process.env, SUPABASE_NO_UPDATE_NOTIFIER: "1" },
     },
   );

@@ -52,6 +52,9 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
 
+      - name: Biome (JS/TS lint + format)
+        run: bun run lint:js
+
       - name: Tailwind arbitrary-value gate
         run: bun run lint:tw
 

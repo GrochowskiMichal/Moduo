@@ -4,9 +4,9 @@
  * (switch a trial in place, open the portal, or open Checkout); this just carries it out.
  */
 
-import { openStripeUrl } from "./stripe-url";
 import { SUPABASE_URL } from "../../lib/runtime.web";
 import type { BillingInterval, PaidPlan } from "./plans";
+import { openStripeUrl } from "./stripe-url";
 
 export type CheckoutOutcome = "redirected" | "switched";
 

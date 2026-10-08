@@ -4,10 +4,11 @@
 // `ensureAllTime` that silently does nothing (stranding the deep link that
 // waits on it). Everything else about the hook is covered by its page tests.
 
+import { afterEach, beforeEach, describe, expect, it, rs } from "@rstest/core";
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { describe, expect, it, rs } from "@rstest/core";
 
 import type { ModuoRuntime } from "../../../lib/runtime.types";
+import { supabaseClient } from "../../../lib/runtime.web";
 import { allTimeCalendarWindow, defaultCalendarWindow } from "../window";
 import { useCalendarModule } from "./use-calendar-module";
 
@@ -32,6 +33,19 @@ const params = (workspaceId: string) => ({
   modulePermission: "edit" as const,
 });
 
+// The hook fetches the busy overlay straight from the Supabase client, not through the
+// runtime faked above. Unstubbed, every test here called prod's `calendar_busy_blocks`, and
+// a reply that landed after the test environment was torn down ran setBusy without a
+// `window`, killing the worker: `bun run test` failed at random with every test passing.
+beforeEach(() => {
+  rs.spyOn(supabaseClient, "rpc").mockImplementation((() =>
+    Promise.resolve({ data: [], error: null })) as never);
+});
+
+afterEach(() => {
+  rs.restoreAllMocks();
+});
+
 describe("useCalendarModule — fetch window", () => {
   it("reads exactly once on mount, with the default window", async () => {
     const calls: Call[] = [];
@@ -39,6 +53,11 @@ describe("useCalendarModule — fetch window", () => {
     const { result } = renderHook(() => useCalendarModule(runtime, params("w1")));
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(calls).toHaveLength(1);
+    // The busy overlay went to the stub, not the network.
+    expect(supabaseClient.rpc).toHaveBeenCalledWith(
+      "calendar_busy_blocks",
+      expect.objectContaining({ p_workspace_id: "w1" }),
+    );
     const expected = defaultCalendarWindow();
     // Same day either side of "now" — the exact ms differs per render.
     expect(calls[0].fromIso.slice(0, 10)).toBe(expected.fromIso.slice(0, 10));
