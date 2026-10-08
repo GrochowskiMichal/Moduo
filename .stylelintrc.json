@@ -1,13 +1,7 @@
 {
   "extends": ["stylelint-config-standard"],
   "plugins": ["stylelint-declaration-strict-value"],
-  "ignoreFiles": [
-    "node_modules/**",
-    "dist/**",
-    "src-tauri/**",
-    "src/styles/tokens.css",
-    "src/ui/**"
-  ],
+  "ignoreFiles": ["node_modules/**", "dist/**", "src-tauri/**", "src/styles/tokens.css"],
   "defaultSeverity": "warning",
   "rules": {
     "color-no-hex": [true, { "severity": "error" }],
