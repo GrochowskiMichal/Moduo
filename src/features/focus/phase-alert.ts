@@ -1,7 +1,7 @@
 // What happens when a pomodoro phase ends while someone is looking (TV-F1, F1-5):
-// the chime, and — only when Moduo is in the background — one OS notification
-// on desktop or one in-app toast on the web. Phase ends caught up after an away
-// gap never alert; the away prompt tells that story instead.
+// the chime, and — only when Moduo is in the background — one in-app toast that
+// waits for you, plus one OS notification on desktop. Phase ends caught up after
+// an away gap never alert; the away prompt tells that story instead.
 //
 // The plugin can't schedule on desktop, so the engine calls this at the
 // computed phase end; `backgroundThrottling: "disabled"` keeps its timers on
@@ -62,10 +62,11 @@ export function alertPhaseEnd(end: FocusPhaseEnd, next: FocusPhaseNext): void {
   if (prefs.soundEnabled && areSoundsEnabled()) playChime();
   if (!isAppInBackground()) return;
   const copy = phaseEndCopy(end, next);
+  // The in-app note waits for you: Sonner holds a toast's timer while the page
+  // is hidden. On desktop it's also the layer we can count on, because the
+  // notification plugin swallows delivery failures.
+  toast(copy.title, { description: copy.body });
   if (isTauriRuntime()) void notifyDesktop(copy);
-  // Sonner holds a toast's timer while the page is hidden, so it's still there
-  // when you come back.
-  else toast(copy.title, { description: copy.body });
 }
 
 async function notifyDesktop(copy: FocusAlertCopy): Promise<void> {
@@ -73,15 +74,10 @@ async function notifyDesktop(copy: FocusAlertCopy): Promise<void> {
     const notification = await import("@tauri-apps/plugin-notification");
     let granted = await notification.isPermissionGranted();
     if (!granted) granted = (await notification.requestPermission()) === "granted";
-    if (granted) {
-      notification.sendNotification({ title: copy.title, body: copy.body });
-      return;
-    }
+    if (granted) notification.sendNotification({ title: copy.title, body: copy.body });
   } catch (error) {
     console.warn("[focus] desktop notification failed", error);
   }
-  // No OS notification: leave the same note in the app for when you're back.
-  toast(copy.title, { description: copy.body });
 }
 
 /** A short end-of-interval chime via Web Audio: no asset. Silent where Web Audio

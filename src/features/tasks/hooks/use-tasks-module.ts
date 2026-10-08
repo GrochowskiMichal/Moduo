@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { pickTagColor } from "../../../components/tag-colors";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { UNDO_TOAST_MS, undoToast } from "../../../lib/undo-toast";
+import { readSavedFocusTotal, writeSavedFocusTotal } from "../../focus/saved-totals";
 import { setBucketTimeBlock } from "../default-view";
 import {
   blockedTaskIds as computeBlockedTaskIds,
@@ -562,34 +563,36 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
    * The Focus engine's flush sink (TV-F1): fold `seconds` of tracked work into
    * the task's saved total and report what happened, so the engine keeps the
    * seconds and retries ("not saved yet", F1-7) instead of losing them.
-   *  - `false` right away: not now (the bundle isn't loaded yet, or the task
-   *    may sit outside a capped read);
-   *  - `true` right away: nothing to save into (the task is gone from a
-   *    complete bundle: deleted, or no longer shared);
+   *  - `false` right away: not now. The bundle isn't loaded, or the task isn't
+   *    in it: a bundle can be another workspace's for a render, capped, or
+   *    older than the task. It's never read as "gone": tracked time is kept.
    *  - a promise: the write, `false` when it failed (the optimistic total is
    *    put back) or when there's no edit access, so it shows as not saved.
-   * Two flushes can land before React re-renders, so the second one builds on
-   * the total the first wrote, not on the stale bundle (`focusTotals`).
+   * The total is absolute, so it builds on the fresher of this bundle's row and
+   * the last save any tab on this device made (another tab may have saved
+   * since this bundle loaded, or a save may have settled before the re-render).
    */
-  const focusTotals = useRef(new Map<string, { basis: string; total: number }>());
   const persistFocusTime = useCallback(
     (id: string, seconds: number): boolean | Promise<boolean> => {
       if (!Number.isFinite(seconds) || seconds < 1) return true;
-      if (loading) return false;
+      if (loading || !runtime || !workspaceId || isTempId(id)) return false;
       const task = bundle.tasks.find((t) => t.id === id);
-      if (!task) return !bundle.truncated.some((t) => t.scope === "tasks");
-      if (isTempId(id) || !runtime || !workspaceId) return false;
+      if (!task || task.workspaceId !== workspaceId) return false;
       if (!canEdit) return Promise.resolve(false);
-      const pending = focusTotals.current.get(id);
+      const lastSave = userId ? readSavedFocusTotal(userId, id) : null;
       const base =
-        pending && pending.basis === task.updatedAt ? pending.total : (task.timeSpentSeconds ?? 0);
+        lastSave && !(Date.parse(task.updatedAt) >= lastSave.at)
+          ? lastSave.total
+          : (task.timeSpentSeconds ?? 0);
       const total = Math.max(0, base + Math.round(seconds));
       const updatedAt = new Date().toISOString();
-      focusTotals.current.set(id, { basis: task.updatedAt, total });
       patchTaskLocal(id, { timeSpentSeconds: total, updatedAt });
       return runtime.tasks
         .upsertTask({ ...task, timeSpentSeconds: total, updatedAt })
         .then((saved) => {
+          if (userId) {
+            writeSavedFocusTotal(userId, id, saved.timeSpentSeconds, Date.parse(saved.updatedAt));
+          }
           setBundle((prev) => ({
             ...prev,
             tasks: prev.tasks.map((t) => (t.id === id ? saved : t)),
@@ -607,11 +610,10 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
                 : t,
             ),
           }));
-          focusTotals.current.delete(id);
           return false;
         });
     },
-    [loading, bundle.tasks, bundle.truncated, runtime, workspaceId, canEdit, patchTaskLocal],
+    [loading, bundle.tasks, runtime, workspaceId, userId, canEdit, patchTaskLocal],
   );
 
   /** Set the tracked total to an absolute value (manual "edit the value"). */

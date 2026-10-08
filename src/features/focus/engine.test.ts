@@ -12,6 +12,8 @@ import {
   type FocusFlushSink,
   type FocusPhaseEnd,
   flushFocusSession,
+  followFocusTask,
+  forgetFocusUser,
   getFocusSession,
   previewFocusInterval,
   registerFocusFlushSink,
@@ -321,6 +323,28 @@ describe("F1-3 — away", () => {
     });
   });
 
+  it("Count as break leaves a session you paused paused", () => {
+    bindFocusTask(task("t1"));
+    toggleFocusPomodoro();
+    startFocus();
+    rs.advanceTimersByTime(10 * MIN);
+    sleepThrough(5 * MIN);
+    toggleFocusRunning(); // paused before answering
+    resolveFocusAway("break");
+    expect(getFocusSession()).toMatchObject({ running: false, phase: "work", pomoLeft: 25 * 60 });
+  });
+
+  it("Count as break after a catch-up that left the clock waiting starts the fresh block", () => {
+    bindFocusTask(task("t1"));
+    toggleFocusPomodoro();
+    startFocus();
+    rs.advanceTimersByTime(10 * MIN);
+    sleepThrough(50 * MIN); // the block ended while away; the clock waits at the break
+    expect(getFocusSession().running).toBe(false);
+    resolveFocusAway("break");
+    expect(getFocusSession()).toMatchObject({ running: true, phase: "work", pomoLeft: 25 * 60 });
+  });
+
   it("an unanswered away block is discarded when the session stops", () => {
     const { sink, total } = recordingSink();
     registerFocusFlushSink(WS, sink);
@@ -484,6 +508,25 @@ describe("F1-6 — the rhythm belongs to the session", () => {
     expect(getFocusSession()).toMatchObject({ taskId: "t2", sitElapsed: 40, accrued: 10 });
   });
 
+  it("the Focus view follows Done to the next task, and an emptied queue ends the session", () => {
+    bindFocusTask(task("t1"));
+    startFocus();
+    rs.advanceTimersByTime(5000);
+    followFocusTask(WS, task("t2"));
+    expect(getFocusSession()).toMatchObject({ taskId: "t2", running: true });
+    followFocusTask(WS, null);
+    expect(getFocusSession().tracking).toBe(false);
+  });
+
+  it("the Focus view of another workspace never moves or stops the running session", () => {
+    bindFocusTask(task("t1"));
+    startFocus();
+    rs.advanceTimersByTime(5000);
+    followFocusTask("ws-2", task("t9", "ws-2"));
+    followFocusTask("ws-2", null);
+    expect(getFocusSession()).toMatchObject({ taskId: "t1", tracking: true, running: true });
+  });
+
   it("binding null ends the session (queue emptied) but keeps the pomodoro choice", () => {
     const { sink, total } = recordingSink();
     registerFocusFlushSink(WS, sink);
@@ -553,7 +596,7 @@ describe("F1-7 — tracked time is never lost", () => {
     expect(total("t1")).toBe(90); // failed + deferred + saved hand-offs of the same 30 s
   });
 
-  it("seconds being saved aren't shown twice, and survive a reload mid-save", async () => {
+  it("seconds being saved aren't shown twice, and a save cut off by a reload is sent again (at-least-once)", async () => {
     let finish: (ok: boolean) => void = () => {};
     const { sink } = recordingSink(
       () =>
@@ -631,6 +674,40 @@ describe("F1-7 — tracked time is never lost", () => {
     expect(there.calls).toEqual([{ taskId: "t9", seconds: 30 }]);
   });
 
+  it("signing out mid-save settles it for the right person, so nothing is sent twice", async () => {
+    let finish: (ok: boolean) => void = () => {};
+    const first = recordingSink(
+      () =>
+        new Promise<boolean>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const unregister = registerFocusFlushSink(WS, first.sink);
+    bindFocusTask(task("t1"));
+    startFocus();
+    rs.advanceTimersByTime(30_000);
+    toggleFocusRunning(); // the save is in flight
+    attachFocusUser(null); // sign out
+    finish(true); // the server took it
+    await settle();
+    unregister();
+    attachFocusUser(USER); // sign back in on the same page
+    rs.advanceTimersByTime(121_000);
+    const again = recordingSink();
+    registerFocusFlushSink(WS, again.sink);
+    expect(again.calls).toHaveLength(0);
+    expect(parseRecord(localStorage.getItem(KEY))?.credits.t1).toBeUndefined();
+  });
+
+  it("forgetting a person (account deletion) erases their record from this device", () => {
+    bindFocusTask(task("t1"));
+    startFocus();
+    rs.advanceTimersByTime(5000);
+    forgetFocusUser(USER);
+    expect(localStorage.getItem(KEY)).toBeNull();
+    expect(getFocusSession().tracking).toBe(false);
+  });
+
   it("the 60 s safety net saves while running", () => {
     const { total, sink } = recordingSink();
     registerFocusFlushSink(WS, sink);
@@ -650,6 +727,9 @@ describe("focus engine — several tabs", () => {
       getItem: (k: string) => data.get(k) ?? null,
       setItem: (k: string, v: string) => {
         data.set(k, v);
+      },
+      removeItem: (k: string) => {
+        data.delete(k);
       },
     };
   }
@@ -725,5 +805,38 @@ describe("focus engine — several tabs", () => {
     a.dispose();
     rs.advanceTimersByTime(30_000);
     expect(b.getSnapshot()).toMatchObject({ running: true, sitElapsed: 60, away: null });
+  });
+
+  it("a mirror tab's Focus view never stops or moves the running clock", () => {
+    const storage = memoryStorage();
+    const a = openTab(storage, "a");
+    const b = openTab(storage, "b");
+    tabs = [a, b];
+    a.bind(task("t3"));
+    a.start();
+    b.storageChanged(KEY);
+    rs.advanceTimersByTime(30_000);
+    b.follow(WS, null); // B's view: an empty or stale queue
+    b.follow(WS, task("t1")); // B's view: a stale first task
+    rs.advanceTimersByTime(1000);
+    expect(a.getSnapshot()).toMatchObject({ taskId: "t3", tracking: true, running: true });
+    b.bind(task("t1")); // choosing a task in B is an action: it takes the clock
+    rs.advanceTimersByTime(1000);
+    expect(a.getSnapshot()).toMatchObject({ taskId: "t1", running: true });
+  });
+
+  it("a tab that can save takes the clock from a tab that can't", () => {
+    const storage = memoryStorage();
+    const a = openTab(storage, "a"); // runs the clock, but has left Tasks (no sink)
+    const b = openTab(storage, "b"); // has Tasks open
+    tabs = [a, b];
+    const sb = recordingSink();
+    b.registerSink(WS, sb.sink);
+    a.bind(task("t1"));
+    a.start();
+    b.storageChanged(KEY);
+    rs.advanceTimersByTime(2 * MIN);
+    expect(sb.total("t1")).toBeGreaterThanOrEqual(60);
+    expect(sb.total("t1") + b.getSnapshot().accrued).toBe(120);
   });
 });

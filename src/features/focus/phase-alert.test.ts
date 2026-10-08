@@ -94,7 +94,7 @@ describe("F1-5 — phase-end alert", () => {
     expect(h.notification.sendNotification).not.toHaveBeenCalled();
   });
 
-  it("on desktop in the background it sends one OS notification", async () => {
+  it("on desktop in the background it sends one OS notification and leaves the in-app note", async () => {
     (window as Win).__TAURI_INTERNALS__ = {};
     inBackground(true);
     alertPhaseEnd(workEnd, next);
@@ -104,10 +104,10 @@ describe("F1-5 — phase-end alert", () => {
       title: "Focus block done",
       body: "Your 5-min break has started.",
     });
-    expect(h.toast).not.toHaveBeenCalled();
+    expect(h.toast).toHaveBeenCalledTimes(1);
   });
 
-  it("on desktop, a refused notification falls back to the in-app toast", async () => {
+  it("on desktop, a refused notification still leaves the in-app note", async () => {
     (window as Win).__TAURI_INTERNALS__ = {};
     inBackground(true);
     h.notification.isPermissionGranted.mockReturnValueOnce(Promise.resolve(false));

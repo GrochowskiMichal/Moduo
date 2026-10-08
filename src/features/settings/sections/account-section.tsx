@@ -11,6 +11,7 @@ import { useAuth } from "../../../providers/auth-provider";
 import { validateImageFile } from "../../branding/image-asset";
 import { ensureProfileAvatar } from "../../branding/profile-avatar";
 import { clearProfileAvatar, uploadProfileAvatar } from "../../branding/upload-image";
+import { forgetFocusUser } from "../../focus/engine";
 import { notifyProfileUpdated, writeStoredAvatar } from "../../profile/profile-storage";
 import { isPasswordProvider, providerLabel, validateNewPassword } from "../account";
 import { matchesDeleteConfirm } from "../delete-account";
@@ -96,7 +97,9 @@ export function AccountSection() {
       if (!res.ok || !payload?.ok) {
         throw new Error(payload?.error || "Couldn't delete your account. Try again.");
       }
-      // Deleted — the session is now invalid. Sign out locally and land on /auth.
+      // Deleted — erase this device's focus session for the account (task
+      // titles, unsaved time), then sign out locally and land on /auth.
+      if (userId) forgetFocusUser(userId);
       await signOut();
       await navigate({ to: "/auth" });
     } catch (err) {

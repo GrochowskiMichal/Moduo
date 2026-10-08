@@ -64,6 +64,8 @@ export interface FocusAwayBlock {
    *  work phase it was in (pomodoro), or all of it (stopwatch). */
   workMs: number;
   phaseEnds: FocusPhaseEnd[];
+  /** The catch-up left the clock waiting (a phase ended and nothing auto-started). */
+  parked: boolean;
 }
 
 export interface FocusCredit {
@@ -74,7 +76,12 @@ export interface FocusCredit {
   inFlightMs: number;
   /** When that hand-off started. */
   inFlightAt: number | null;
+  /** When saving this task's time last failed; cleared once it's saved. */
+  failedAt: number | null;
 }
+
+/** How a hand-off to the sink ended: saved, not now (silent), or failed. */
+export type FlushOutcome = "saved" | "later" | "failed";
 
 /** A hand-off still unconfirmed after this long died with its page. */
 export const FLIGHT_STALE_MS = 120_000;
@@ -103,8 +110,9 @@ export interface FocusRecord {
   sitMs: number;
   credits: Record<string, FocusCredit>;
   away: FocusAwayBlock[];
-  /** When the last flush failed; null once a flush succeeds. */
-  failedAt: number | null;
+  /** Workspaces the owner tab can save into right now (it has their sink). A
+   *  tab that can save a workspace the owner can't takes the clock over. */
+  sinkWorkspaces: string[];
 }
 
 export interface FocusAwaySummary {
@@ -137,7 +145,7 @@ export interface FocusSession {
   bigClock: number;
   /** Pending "while you were away" answer, or null. */
   away: FocusAwaySummary | null;
-  /** A flush failed and is being retried: "not saved yet" (F1-7). */
+  /** Saving some tracked time failed and is being retried: "not saved yet" (F1-7). */
   unsaved: boolean;
 }
 
@@ -177,7 +185,7 @@ export function blankRecord(now: number): FocusRecord {
     sitMs: 0,
     credits: {},
     away: [],
-    failedAt: null,
+    sinkWorkspaces: [],
   };
 }
 
@@ -212,6 +220,7 @@ function addCredit(
       ms: (prev?.ms ?? 0) + ms,
       inFlightMs: prev?.inFlightMs ?? 0,
       inFlightAt: prev?.inFlightAt ?? null,
+      failedAt: prev?.failedAt ?? null,
     },
   };
 }
@@ -329,6 +338,7 @@ export function observe(rec: FocusRecord, now: number, p: FocusRhythm): Observed
           workspaceId: rec.task?.workspaceId ?? null,
           workMs: held,
           phaseEnds: gap.ends,
+          parked: gap.rec.since === null,
         },
       ],
     };
@@ -436,7 +446,8 @@ export function previewInterval(r: FocusRecord, p: FocusRhythm): FocusRecord {
  *  - keep: the held work time goes to the task it accrued on;
  *  - discard: nothing is credited;
  *  - break: nothing is credited, the away time was the break, and a pomodoro
- *    starts a fresh work block now.
+ *    gets a fresh work block — running now if the clock was running or the
+ *    catch-up left it waiting, paused if you paused it yourself since.
  */
 export function resolveAway(
   r: FocusRecord,
@@ -456,13 +467,15 @@ export function resolveAway(
       };
     }
   } else if (choice === "break" && r.tracking && r.pomodoro) {
+    // Still waiting where the catch-up parked it (nothing ran since)?
+    const parked = r.away.some((b) => b.parked) && r.since === null && r.phaseDoneMs === 0;
     next = {
       ...next,
       phase: "work",
       longBreak: false,
       phaseMs: workLength(p),
       phaseDoneMs: 0,
-      since: now,
+      since: isRunning(r) || parked ? now : null,
       seenAt: now,
     };
   }
@@ -497,17 +510,27 @@ export function takeFlushBatch(
   return items.length ? { rec: { ...r, credits }, items } : { rec: r, items };
 }
 
-/** Settle one flushed item: confirmed → gone; not persisted → back to unsaved. */
-export function settleFlush(r: FocusRecord, item: FlushItem, persisted: boolean): FocusRecord {
+/**
+ * Settle one flushed item. Saved → gone, and the task's failure mark clears.
+ * Not now → back to unsaved, mark unchanged. Failed → back to unsaved, marked
+ * (that's what shows "not saved yet").
+ */
+export function settleFlush(
+  r: FocusRecord,
+  item: FlushItem,
+  outcome: FlushOutcome,
+  now: number,
+): FocusRecord {
   const c = r.credits[item.taskId];
   if (!c) return r;
   const flight = Math.min(c.inFlightMs, item.seconds * 1000);
   const inFlightMs = c.inFlightMs - flight;
   const next: FocusCredit = {
     ...c,
-    ms: persisted ? c.ms : c.ms + flight,
+    ms: outcome === "saved" ? c.ms : c.ms + flight,
     inFlightMs,
     inFlightAt: inFlightMs > 0 ? c.inFlightAt : null,
+    failedAt: outcome === "saved" ? null : outcome === "failed" ? now : c.failedAt,
   };
   const credits = Object.fromEntries(
     Object.entries(r.credits).filter(([id]) => id !== item.taskId),
@@ -539,8 +562,18 @@ export function reviveDeadFlights(
   return changed ? { ...r, credits } : r;
 }
 
-export function hasUnsaved(r: FocusRecord): boolean {
-  return Object.values(r.credits).some((c) => c.ms >= 1000 || c.inFlightMs > 0);
+/** Some task's time failed to save and is still waiting: "not saved yet". */
+export function hasFailedSaves(r: FocusRecord): boolean {
+  return Object.values(r.credits).some(
+    (c) => c.failedAt !== null && (c.ms >= 1000 || c.inFlightMs > 0),
+  );
+}
+
+/** Workspaces with whole seconds waiting to be saved. */
+export function workspacesWithUnsaved(r: FocusRecord): Set<string | null> {
+  const out = new Set<string | null>();
+  for (const c of Object.values(r.credits)) if (c.ms >= 1000) out.add(c.workspaceId);
+  return out;
 }
 
 // ── reading ───────────────────────────────────────────────────────────────────
@@ -594,7 +627,7 @@ export function snapshotOf(rec: FocusRecord, now: number, p: FocusRhythm): Focus
     phaseLabel: phaseLabelOf(r.phase, r.longBreak),
     bigClock: r.pomodoro ? pomoLeft : sitElapsed,
     away: awaySummary(r.away),
-    unsaved: r.failedAt !== null && hasUnsaved(r),
+    unsaved: hasFailedSaves(r),
   };
 }
 
@@ -668,6 +701,7 @@ const recordSchema = z.object({
       ms: z.number().nonnegative(),
       inFlightMs: z.number().nonnegative(),
       inFlightAt: z.number().nullable(),
+      failedAt: z.number().nullable(),
     }),
   ),
   away: z.array(
@@ -678,9 +712,10 @@ const recordSchema = z.object({
       workspaceId: z.string().nullable(),
       workMs: z.number().nonnegative(),
       phaseEnds: z.array(phaseEndSchema),
+      parked: z.boolean(),
     }),
   ),
-  failedAt: z.number().nullable(),
+  sinkWorkspaces: z.array(z.string()),
 });
 
 /** Parse a stored record; anything malformed or from another version is null. */

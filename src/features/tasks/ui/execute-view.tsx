@@ -13,6 +13,7 @@ import { type FocusPrefs, useFocusPrefs } from "../../../lib/focus-prefs";
 import { cn } from "../../../lib/utils";
 import {
   bindFocusTask,
+  followFocusTask,
   previewFocusInterval,
   startFocus,
   stopFocus,
@@ -78,18 +79,21 @@ export function ExecuteView({
   // Pomodoro prefs (persisted) — the timer reads these; the ⋯ popover edits them.
   const { prefs: focusPrefs, setPrefs: setFocusPrefs } = useFocusPrefs();
 
-  // Keep the app-level focus engine bound to the current task (DF-11). Gated on
+  // Keep the app-level focus engine on the current task (DF-11). Gated on
   // `!loading` so the transient empty bundle during a /tasks remount doesn't
   // clear a running session. Marking the current task done moves the session
   // to the next one with its rhythm intact (TV-F1, F1-6); when the last one is
   // done `current` goes null and the session ends (its time already banked).
+  // It only follows: a session another tab runs, or one on another
+  // workspace's task, is left alone.
   useEffect(() => {
     if (loading) return;
     // Never bind to an optimistic `tmp-` id (a just-captured task): flushing its
     // accrued time later would hit a row swapped to its real id and lose it.
     // The real id arrives in a beat and re-runs this effect.
     if (current && current.id.startsWith("tmp-")) return;
-    bindFocusTask(
+    followFocusTask(
+      workspaceId,
       current
         ? {
             id: current.id,
@@ -380,12 +384,19 @@ function NowCard({
                 >
                   <Clock className="size-icon-sm" aria-hidden />
                   {trackedTotal > 0 ? formatDuration(trackedTotal) : "Track time"}
+                  {session.unsaved ? (
+                    <span className="font-sans text-xs font-normal text-muted-foreground">
+                      · not saved yet
+                    </span>
+                  ) : null}
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                {trackedTotal > 0
-                  ? "Total time tracked · click to keep tracking"
-                  : "Start tracking time"}
+                {session.unsaved
+                  ? "Couldn't save the tracked time yet — retrying, nothing is lost"
+                  : trackedTotal > 0
+                    ? "Total time tracked · click to keep tracking"
+                    : "Start tracking time"}
               </TooltipContent>
             </Tooltip>
           )}

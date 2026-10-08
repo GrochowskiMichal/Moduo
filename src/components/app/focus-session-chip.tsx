@@ -12,13 +12,34 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
  * to Focus. It never pauses or stops the clock (the live tracker stays
  * Focus-only per the 2026-06-16 lock); the one thing it answers is "while you
  * were away" (TV-F1, spec §5), so held time can be kept from any screen.
- * Renders nothing when no session is being tracked.
+ * Renders nothing when no session is being tracked, unless tracked time is
+ * still waiting to be saved.
  */
 export function FocusSessionChip() {
   const session = useFocusSession();
   const navigate = useNavigate();
+  const openFocus = () => {
+    requestFocusView();
+    void navigate({ to: "/tasks" });
+  };
 
-  if (!session.taskId || !session.tracking) return null;
+  if (!session.tracking) {
+    // Stopped, but some tracked time hasn't saved yet: keep that visible (F1-7).
+    if (!session.unsaved) return null;
+    return (
+      <Tooltip>
+        <TooltipTrigger
+          onClick={openFocus}
+          aria-label="Focus time not saved yet · retrying, nothing is lost · click to open"
+          className="flex h-8 items-center gap-1.5 rounded-md bg-card px-2.5 font-sans text-xs text-muted-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+        >
+          Focus time not saved yet
+        </TooltipTrigger>
+        <TooltipContent>Retrying — nothing is lost · click to open Focus</TooltipContent>
+      </Tooltip>
+    );
+  }
+  if (!session.taskId) return null;
 
   const label = session.taskTitle || "Untitled";
   const phase = session.pomodoro ? `${session.phaseLabel} · ` : "";
@@ -30,10 +51,7 @@ export function FocusSessionChip() {
     <>
       <Tooltip>
         <TooltipTrigger
-          onClick={() => {
-            requestFocusView();
-            void navigate({ to: "/tasks" });
-          }}
+          onClick={openFocus}
           aria-label={tip}
           className="flex h-8 max-w-[16rem] items-center gap-1.5 rounded-md bg-card px-2.5 text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         >

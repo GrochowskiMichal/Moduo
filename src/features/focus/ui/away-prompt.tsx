@@ -1,7 +1,31 @@
+import { useEffect, useSyncExternalStore } from "react";
+
 import { Button } from "../../../components/ui/button";
 import { cn } from "../../../lib/utils";
 import { awayPromptCopy } from "../away-copy";
 import { type FocusAwaySummary, resolveFocusAway } from "../engine";
+
+// The full prompt (the Focus view's Now card) and the compact one (beside the
+// chrome chip) can be on screen together; while a full one is mounted the
+// compact one stays hidden, so the question is asked once.
+let fullPromptsMounted = 0;
+const listeners = new Set<() => void>();
+
+function subscribe(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+function isFullPromptMounted(): boolean {
+  return fullPromptsMounted > 0;
+}
+
+function setFullPromptMounted(delta: number): void {
+  fullPromptsMounted += delta;
+  for (const listener of listeners) listener();
+}
 
 /**
  * "You were away 42m — Keep · Discard · Count as break" (spec §5, F1-3). Quiet
@@ -18,6 +42,14 @@ export function FocusAwayPrompt({
   compact?: boolean;
   className?: string;
 }) {
+  const fullShown = useSyncExternalStore(subscribe, isFullPromptMounted, isFullPromptMounted);
+  useEffect(() => {
+    if (compact) return;
+    setFullPromptMounted(1);
+    return () => setFullPromptMounted(-1);
+  }, [compact]);
+  if (compact && fullShown) return null;
+
   const copy = awayPromptCopy(away);
   return (
     <div

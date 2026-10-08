@@ -2,6 +2,23 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index.
 
+- **2026-10-08 · TV-F1: Focus keeps time by the wall clock, survives reloads, and asks about away time** (`/s2` TV-F1).
+  - **One engine.** `src/features/focus/engine.ts` (pure model: `engine-core.ts`) replaces the tick-counting `tasks/focus-session-store.ts`. Elapsed time is `Date.now()` arithmetic; the 1 Hz tick only repaints and looks. TV-F2 builds the queue run on it, TV-D3 swaps its save path; neither changes the engine's API (bind, start, pause/resume, stop, pomodoro, resolve away, register a sink, flush, read the session).
+  - **Persisted per person** in localStorage under `moduo:tasks:focus:<user id>`: outside the `moduo.*` keys Settings → Advanced → Reset local cache clears. The AuthProvider attaches the engine to whoever is signed in.
+  - **One clock per device.** Only one tab runs the clock (credits, saves, alerts); other tabs mirror it and take over when you act in them, when that tab closes (pagehide hands it over), or after 75 s without a heartbeat. 75 s is under the 90 s away gap, so a takeover never reads as away. The desktop webview always runs it. *Rejected:* Web Locks / BroadcastChannel leader election — more machinery for a web-only, two-tab case.
+  - **Away** = more than 90 s between two looks at a running clock (sleep, a suspended webview). The gap's work time is held, never credited, until you answer:
+    - **Keep** credits it to the task it accrued on — in pomodoro only up to the scheduled end of the block it was in;
+    - **Discard** credits nothing and leaves the rhythm as caught up;
+    - **Count as break** credits nothing and, in pomodoro, starts a fresh focus block at the moment you answer.
+    - Unanswered when the session ends (Stop, the queue empties) → dropped.
+  - **Pomodoro catch-up:** phase ends inside a gap are computed from timestamps, a work block never starts by itself while away, and caught-up ends don't chime or notify. The prompt says what happened ("Your 25-min focus ended at 2:25 PM").
+  - **The rhythm belongs to the session.** Binding another task (Done or Skip moves Now) keeps phase, block count, pomodoro and running; the stopwatch keeps counting the sitting across tasks.
+  - **Saving.** Unsaved seconds are kept per task and handed to the workspace's sink: `true` = saved, `false` = not now (silent; a task missing from the bundle is never read as gone), a promise = the write. A failed write marks that task "not saved yet" and retries (15 s doubling to 2 min) until it saves. The absolute total builds on the fresher of the bundle row and the last save any tab made (`moduo:tasks:focus:saved:<user>`). Saving is at-least-once; TV-D3 should add an idempotency key. The Focus view only *follows* its current task: it never takes the clock from another tab or moves a session on another workspace's task. Account deletion erases the device's focus record.
+  - **Desktop:** `backgroundThrottling: "disabled"` on the main window, `tauri-plugin-notification` 2.5.1 with `notification:default`. The plugin can't schedule, so the engine fires the alert at the computed time. A background phase end leaves one in-app toast that waits for you, plus one OS notification on desktop (the plugin swallows delivery failures, so the toast is the reliable layer); in front, only the chime.
+  - **Not verified here:** OS-notification delivery on a signed build (this Mac has no signing identity) — on the manual checklist, with the spec's UNUserNotificationCenter fallback if it fails.
+
+  → [specs/tasks-v2.md](../../specs/tasks-v2.md) §3, §5 · [src/features/focus/engine.ts](../../src/features/focus/engine.ts) · checklist [docs/testing/t-maciej-tv-f1-focus-engine.md](../testing/t-maciej-tv-f1-focus-engine.md)
+
 - **2026-10-08 · Tasks v2 calls answered: saved views are personal and synced; buckets get Archive, "Delete the tasks too" and a 30-day Recently deleted** (Maciej, answering the `/s1` open questions).
   - **Saved views** ship in this wave (TV-U8). They're personal and sync across your devices (`task_views`, own rows). Sharing a view with the workspace comes later, on top of PERM sharing.
   - **Buckets** can be archived: hidden everywhere, restorable any time. Deleting one asks whether to move its tasks to Inbox or delete them too, and anything deleted (tasks, buckets, files) stays in **Recently deleted** for 30 days.

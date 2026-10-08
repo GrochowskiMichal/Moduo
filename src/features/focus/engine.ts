@@ -6,9 +6,12 @@
 // API, in the spec's terms (specs/tasks-v2.md §3, §5; the pure model is in
 // engine-core.ts):
 //  - attachFocusUser(userId): scope the persisted session to the signed-in
-//    person. Called by the AuthProvider.
-//  - bindFocusTask(task | null): the task that gets the work time. Switching
-//    tasks keeps the session's rhythm; null ends the session.
+//    person. Called by the AuthProvider. forgetFocusUser(userId) erases it.
+//  - bindFocusTask(task | null): you chose the task that gets the work time.
+//    Switching tasks keeps the session's rhythm; null ends the session.
+//  - followFocusTask(workspaceId, task | null): the Focus view's current task
+//    changed (Done, Skip, a load). It moves the session along, but never takes
+//    the clock from another open tab or from another workspace's session.
 //  - startFocus · toggleFocusRunning (pause/resume) · stopFocus ·
 //    toggleFocusPomodoro · previewFocusInterval.
 //  - resolveFocusAway("keep" | "discard" | "break"): answer "while you were away".
@@ -21,10 +24,15 @@
 // (Settings → Advanced → Reset local cache clears only `moduo.*`, so a cache
 // reset never kills a live session). It survives a reload, crash or restart.
 //
-// Tabs: only one tab runs the clock — it credits, flushes and alerts. Others
+// Tabs: only one tab runs the clock — it credits, saves and alerts. Others
 // mirror the record and take over when you act in them, when the running tab
-// closes, or when it stops looking for OWNER_STALE_MS. So two tabs never save
-// the same seconds twice. The desktop app has one webview and always runs it.
+// closes, when it stops looking for OWNER_STALE_MS, or when they can save a
+// workspace the running tab can't. So two tabs never save the same seconds
+// twice. The desktop app has one webview and always runs it.
+//
+// Saving is at-least-once: a save confirmed by the server but not by the page
+// (a reload or crash mid-save) is sent again once it's stale. TV-D3's time
+// entries should carry an idempotency key.
 
 import { useSyncExternalStore } from "react";
 
@@ -35,11 +43,13 @@ import {
   bindTask,
   blankRecord,
   type FlushItem,
+  type FlushOutcome,
   type FocusPhaseEnd,
   type FocusRecord,
   type FocusRhythm,
   type FocusSession,
   type FocusTaskRef,
+  hasFailedSaves,
   isRunning,
   OWNER_STALE_MS,
   observe,
@@ -58,8 +68,10 @@ import {
   stopSession,
   takeFlushBatch,
   togglePomodoro,
+  workspacesWithUnsaved,
 } from "./engine-core";
 import { alertPhaseEnd, type FocusPhaseNext } from "./phase-alert";
+import { FOCUS_SAVED_TOTALS_PREFIX } from "./saved-totals";
 
 export type {
   AwayChoice,
@@ -82,15 +94,18 @@ const RETRY_MAX_MS = 120_000;
 /**
  * Where tracked time is saved. The Tasks module registers one per workspace
  * while it's mounted. Return:
- *  - `true`: saved, or there's nothing to save it to any more (the task is gone);
- *  - `false`: not now (e.g. the bundle hasn't loaded) — offered again later;
+ *  - `true`: saved;
+ *  - `false`: not now (the bundle hasn't loaded, the task isn't in it) — kept
+ *    and offered again later, silently;
  *  - a promise for the write: resolving `false` or rejecting keeps the seconds,
  *    shows "not saved yet" and retries (F1-7).
  */
 export type FocusFlushSink = (taskId: string, seconds: number) => boolean | Promise<boolean>;
 
+type FocusStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
+
 export interface FocusEngineDeps {
-  storage: () => Pick<Storage, "getItem" | "setItem"> | null;
+  storage: () => FocusStorage | null;
   now: () => number;
   readPrefs: () => FocusRhythm;
   alert: (end: FocusPhaseEnd, next: FocusPhaseNext) => void;
@@ -101,7 +116,10 @@ export interface FocusEngineDeps {
 
 export interface FocusEngine {
   attach(userId: string | null): void;
+  /** Erase a person's persisted session (account deletion). */
+  forget(userId: string): void;
   bind(task: FocusTaskRef | null): void;
+  follow(workspaceId: string, task: FocusTaskRef | null): void;
   start(): void;
   toggleRunning(): void;
   stop(): void;
@@ -120,8 +138,6 @@ export interface FocusEngine {
   getSnapshot(): FocusSession;
   dispose(): void;
 }
-
-type Outcome = "saved" | "later" | "failed";
 
 export function createFocusEngine(deps: FocusEngineDeps): FocusEngine {
   /** undefined until the first attach; null = signed out. */
@@ -178,6 +194,24 @@ export function createFocusEngine(deps: FocusEngineDeps): FocusEngine {
     }
   }
 
+  /** Apply a change to the record stored under `atKey` — the current person's
+   *  (through memory), or one who has since signed out (straight to storage). */
+  function saveAt(atKey: string | null, change: (r: FocusRecord) => FocusRecord): void {
+    if (atKey === key) {
+      save(change(load()));
+      return;
+    }
+    if (disposed || !atKey) return;
+    const store = deps.storage();
+    if (!store) return;
+    try {
+      const stored = parseRecord(store.getItem(atKey));
+      if (stored) store.setItem(atKey, JSON.stringify(change(stored)));
+    } catch {
+      /* storage unavailable — nothing to settle against */
+    }
+  }
+
   function publish(prefs: FocusRhythm = deps.readPrefs()): void {
     const next = snapshotOf(rec, deps.now(), prefs);
     if (sameSession(next, snapshot)) return;
@@ -196,8 +230,26 @@ export function createFocusEngine(deps: FocusEngineDeps): FocusEngine {
     );
   }
 
+  function sinkWorkspaces(): string[] {
+    return [...sinks.keys()].filter((ws): ws is string => ws !== null).sort();
+  }
+
+  /** Take the clock, recording which workspaces this tab can save into. */
   function claim(r: FocusRecord): FocusRecord {
-    return r.owner === deps.tabId ? r : { ...r, owner: deps.tabId };
+    const mine = sinkWorkspaces();
+    const same =
+      r.owner === deps.tabId &&
+      r.sinkWorkspaces.length === mine.length &&
+      r.sinkWorkspaces.every((ws, i) => ws === mine[i]);
+    return same ? r : { ...r, owner: deps.tabId, sinkWorkspaces: mine };
+  }
+
+  /** This tab can save time the running tab can't (it has no sink for it). */
+  function canSaveForOwner(r: FocusRecord): boolean {
+    for (const ws of workspacesWithUnsaved(r)) {
+      if (sinks.has(ws) && (ws === null || !r.sinkWorkspaces.includes(ws))) return true;
+    }
+    return false;
   }
 
   // ── timers ────────────────────────────────────────────────────────────────
@@ -291,13 +343,13 @@ export function createFocusEngine(deps: FocusEngineDeps): FocusEngine {
 
   /** Hand one item to the sink. A synchronous answer settles synchronously, so a
    *  flush with a synchronous sink (or none) finishes before it returns. */
-  function runSink(sink: FocusFlushSink, item: FlushItem): Outcome | Promise<Outcome> {
+  function runSink(sink: FocusFlushSink, item: FlushItem): FlushOutcome | Promise<FlushOutcome> {
     try {
       const result = sink(item.taskId, item.seconds);
       if (typeof result === "boolean") return result ? "saved" : "later";
       return result.then(
-        (ok): Outcome => (ok ? "saved" : "failed"),
-        (): Outcome => "failed",
+        (ok): FlushOutcome => (ok ? "saved" : "failed"),
+        (): FlushOutcome => "failed",
       );
     } catch {
       return "failed";
@@ -312,19 +364,19 @@ export function createFocusEngine(deps: FocusEngineDeps): FocusEngine {
     }
     const startedAt = deps.now();
     const first = load();
-    // Only the tab that runs the clock saves it, so no second is saved twice.
-    if (!mayRun(first, startedAt)) return;
+    // Only the tab that runs the clock saves it, so no second is saved twice —
+    // unless it can't save a workspace this tab can; then this tab takes over.
+    if (!mayRun(first, startedAt) && !canSaveForOwner(first)) return;
+    // The person whose time this is, even if they sign out mid-save.
+    const flushKey = key;
     flushing = true;
-    let failed = false;
-    let deferred = false;
-    let saved = false;
-    let failedAt: number | null = first.failedAt;
     try {
       const prefs = deps.readPrefs();
       const o = observe(claim(first), startedAt, prefs);
       save(o.rec);
       announce(o.liveEnds, o.rec);
       for (const [workspaceId, sink] of [...sinks]) {
+        if (key !== flushKey) break;
         const now = deps.now();
         const batch = takeFlushBatch(reviveDeadFlights(load(), liveFlights, now), workspaceId, now);
         if (batch.items.length === 0) continue;
@@ -335,26 +387,19 @@ export function createFocusEngine(deps: FocusEngineDeps): FocusEngine {
           const pending = runSink(sink, item);
           const outcome = typeof pending === "string" ? pending : await pending;
           liveFlights.delete(item.taskId);
-          if (outcome === "failed") failed = true;
-          else if (outcome === "later") deferred = true;
-          else saved = true;
           // Re-read: the clock kept ticking (and writing) while the save ran.
-          save(settleFlush(load(), item, outcome === "saved"));
-          publish(prefs);
+          saveAt(flushKey, (r) => settleFlush(r, item, outcome, deps.now()));
+          if (key === flushKey) publish(prefs);
         }
       }
-      // "Not saved yet" clears only once a pass has saved everything it tried;
-      // a deferred or empty pass says nothing new about an earlier failure.
-      const settled = load();
-      failedAt = failed ? deps.now() : saved && !deferred ? null : settled.failedAt;
-      if (settled.failedAt !== failedAt) save({ ...settled, failedAt });
     } finally {
       flushing = false;
     }
     publish();
-    if (failedAt !== null) {
+    // Keep retrying while some task's save has failed; stop once none has.
+    if (key === flushKey && hasFailedSaves(load())) {
       scheduleRetry();
-    } else {
+    } else if (key === flushKey) {
       clearRetry();
       retryDelay = RETRY_MIN_MS;
     }
@@ -371,6 +416,7 @@ export function createFocusEngine(deps: FocusEngineDeps): FocusEngine {
     if (user) release();
     stopTimers();
     clearRetry();
+    retryDelay = RETRY_MIN_MS;
     user = userId;
     key = userId ? `${FOCUS_STORAGE_PREFIX}${userId}` : null;
     lastRaw = null;
@@ -380,6 +426,22 @@ export function createFocusEngine(deps: FocusEngineDeps): FocusEngine {
     // Catch up whatever happened while the app was closed (an away gap, phase
     // ends), and start the clock again if it's running.
     tick();
+  }
+
+  function forget(userId: string): void {
+    const store = deps.storage();
+    try {
+      store?.removeItem(`${FOCUS_STORAGE_PREFIX}${userId}`);
+      store?.removeItem(`${FOCUS_SAVED_TOTALS_PREFIX}${userId}`);
+    } catch {
+      /* storage unavailable — nothing to erase */
+    }
+    if (userId !== user) return;
+    stopTimers();
+    clearRetry();
+    lastRaw = null;
+    rec = blankRecord(deps.now());
+    publish();
   }
 
   function release(): void {
@@ -403,6 +465,16 @@ export function createFocusEngine(deps: FocusEngineDeps): FocusEngine {
     }
     // A different task (or none): bank the previous one's time.
     act((cur, now, prefs) => bindTask(cur, task, now, prefs), { flush: true });
+  }
+
+  function follow(workspaceId: string, task: FocusTaskRef | null): void {
+    if (user === undefined) return;
+    const r = load();
+    // Another open tab runs this clock: its own view decides.
+    if (!mayRun(r, deps.now())) return;
+    // A session on another workspace's task keeps going; it isn't this view's.
+    if (r.tracking && r.task && r.task.workspaceId !== workspaceId) return;
+    bind(task);
   }
 
   function preview(prefs: FocusRhythm): void {
@@ -434,7 +506,9 @@ export function createFocusEngine(deps: FocusEngineDeps): FocusEngine {
 
   return {
     attach,
+    forget,
     bind,
+    follow,
     start: () => act((r, now, prefs) => startSession(r, now, prefs)),
     toggleRunning: () =>
       act(
@@ -521,14 +595,28 @@ export function attachFocusUser(userId: string | null): void {
   engine.attach(userId);
 }
 
+/** Erase a person's persisted focus data from this device (account deletion). */
+export function forgetFocusUser(userId: string): void {
+  engine.forget(userId);
+}
+
 /**
- * Bind the task that gets the work time (the Execute view's current task).
+ * You chose the task that gets the work time ("Track time" on a card).
  * Same task → refresh its label. A different task → the previous one's time is
  * banked and the session carries on (rhythm, pomodoro, running) on the new one.
  * Null → the session ends. Never auto-starts.
  */
 export function bindFocusTask(task: FocusTaskRef | null): void {
   engine.bind(task);
+}
+
+/**
+ * The Focus view's current task in `workspaceId` changed (Done, Skip, a load):
+ * the session follows it, like bindFocusTask, except it never takes the clock
+ * from another open tab and never moves a session on another workspace's task.
+ */
+export function followFocusTask(workspaceId: string, task: FocusTaskRef | null): void {
+  engine.follow(workspaceId, task);
 }
 
 /** Start tracking (opt-in, never auto-called). Needs a bound task. */
