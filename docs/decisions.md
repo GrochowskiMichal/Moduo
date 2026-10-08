@@ -22,6 +22,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Permissions, sharing, privacy and erasure → [decisions/permissions.md](decisions/permissions.md)
 
+- 2026-10-08 · SECURITY DEFINER functions that hand out an item's data check the item, not just its type or module: `links_suggest`, `notes_list_unmaterialized`, `notes_op_duplicate`, `notes_op_mention`, `share_assign_preview`.
 - 2026-10-08 · A contact can point only at a company you can open, and the refusal never says whether a private company exists.
 - 2026-10-08 · A SECURITY DEFINER helper that only other definer functions call is never client-callable, and "Delete forever" works again for edited notes and sub-notes.
 - 2026-10-08 · PRIV-2b: deleting an account also wipes our Stripe copy and what the user leaves in other people's workspaces, and the Danger zone and sign-in page say so
