@@ -841,6 +841,58 @@ BEGIN
 END;
 $function$;
 
+-- ── The Stripe Sync Engine's mirror (production 2026-10-08, engine 1.0.32) ────
+-- Every typed column is generated from _raw_data; only the columns the wipe and
+-- the probe read are recreated, with production's expressions.
+CREATE SCHEMA stripe;
+CREATE TABLE stripe.accounts (id text PRIMARY KEY);
+CREATE FUNCTION stripe.set_updated_at() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  NEW := jsonb_populate_record(NEW, jsonb_build_object('updated_at', now(), '_updated_at', now()));
+  RETURN NEW;
+END;
+$$;
+CREATE TABLE stripe.customers (
+  _raw_data jsonb NOT NULL,
+  _last_synced_at timestamptz,
+  _updated_at timestamptz NOT NULL DEFAULT now(),
+  _account_id text NOT NULL REFERENCES stripe.accounts (id),
+  id text GENERATED ALWAYS AS ((_raw_data ->> 'id')) STORED PRIMARY KEY,
+  address jsonb GENERATED ALWAYS AS ((_raw_data -> 'address')) STORED,
+  deleted boolean GENERATED ALWAYS AS ((NULLIF((_raw_data ->> 'deleted'), ''))::boolean) STORED,
+  email text GENERATED ALWAYS AS ((_raw_data ->> 'email')) STORED,
+  metadata jsonb GENERATED ALWAYS AS ((_raw_data -> 'metadata')) STORED,
+  name text GENERATED ALWAYS AS ((_raw_data ->> 'name')) STORED,
+  phone text GENERATED ALWAYS AS ((_raw_data ->> 'phone')) STORED
+);
+CREATE TABLE stripe.payment_methods (
+  _raw_data jsonb NOT NULL,
+  _last_synced_at timestamptz,
+  _updated_at timestamptz NOT NULL DEFAULT now(),
+  _account_id text NOT NULL REFERENCES stripe.accounts (id),
+  id text GENERATED ALWAYS AS ((_raw_data ->> 'id')) STORED PRIMARY KEY,
+  billing_details jsonb GENERATED ALWAYS AS ((_raw_data -> 'billing_details')) STORED,
+  card jsonb GENERATED ALWAYS AS ((_raw_data -> 'card')) STORED,
+  customer text GENERATED ALWAYS AS (
+    CASE
+      WHEN jsonb_typeof(_raw_data -> 'customer') = 'object' AND (_raw_data -> 'customer') ? 'id'
+        THEN (_raw_data -> 'customer') ->> 'id'
+      ELSE _raw_data ->> 'customer'
+    END) STORED,
+  type text GENERATED ALWAYS AS ((_raw_data ->> 'type')) STORED
+);
+-- Kept by the wipe (billing records); only here to show it stays.
+CREATE TABLE stripe.invoices (
+  _raw_data jsonb NOT NULL,
+  _last_synced_at timestamptz,
+  _account_id text NOT NULL REFERENCES stripe.accounts (id),
+  id text GENERATED ALWAYS AS ((_raw_data ->> 'id')) STORED PRIMARY KEY
+);
+CREATE TRIGGER handle_updated_at BEFORE UPDATE ON stripe.customers
+  FOR EACH ROW EXECUTE FUNCTION stripe.set_updated_at();
+CREATE TRIGGER handle_updated_at BEFORE UPDATE ON stripe.payment_methods
+  FOR EACH ROW EXECUTE FUNCTION stripe.set_updated_at();
+
 -- ── Rows production already has, for the migration's one-time fix ───────────
 -- Workspace W0: its owner has no member row, M0 is a member, G0 was removed
 -- before the migration and still has a task assigned (a frozen task).

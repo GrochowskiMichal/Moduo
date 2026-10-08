@@ -1,16 +1,19 @@
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useEffect } from "react";
 
 import { EmailAuthPanel } from "@/components/auth/email-auth-panel";
 import { IS_STAGING_PORTAL } from "@/features/settings/about";
+import { ACCOUNT_DELETED_NOTICE } from "@/features/settings/delete-account";
 import { useAuth } from "@/providers/auth-provider";
 
 export function AuthPage() {
   const { isSignedIn, loading } = useAuth();
   const navigate = useNavigate();
+  const { deleted } = useSearch({ from: "/auth" });
 
   useEffect(() => {
-    if (loading || !isSignedIn) return;
+    // `deleted`: the Danger zone lands here a moment before it signs out.
+    if (loading || !isSignedIn || deleted) return;
     if (window.sessionStorage.getItem("moduo:auth_resolving") === "1") return;
 
     // Resume a workspace invite the user opened while signed out (DF-24).
@@ -22,7 +25,7 @@ export function AuthPage() {
     }
 
     void navigate({ to: "/", replace: true });
-  }, [isSignedIn, loading, navigate]);
+  }, [isSignedIn, loading, navigate, deleted]);
 
   if (loading) {
     return (
@@ -51,6 +54,12 @@ export function AuthPage() {
             </div>
           </div>
         )}
+
+        {deleted ? (
+          <div role="status" className="w-full rounded-md border border-border bg-muted px-4 py-3">
+            <p className="text-sm leading-5 text-muted-foreground">{ACCOUNT_DELETED_NOTICE}</p>
+          </div>
+        ) : null}
 
         <div className="w-full rounded-xl border border-border bg-card px-6 py-7 shadow-xl sm:px-7 sm:py-8">
           <EmailAuthPanel />

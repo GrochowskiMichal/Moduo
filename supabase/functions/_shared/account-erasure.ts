@@ -11,13 +11,18 @@
  *   1. stripe         every Stripe customer for this user: live subscriptions are
  *                     cancelled, then the customer is deleted (Stripe drops its saved
  *                     cards with it).
- *   2. storage        profiles/{uid}/… and workspaces/{owned workspace}/… in the public
+ *   2. stripe_mirror  our stripe.* copy of those customers and their saved cards
+ *                     (PRIV-2b, SQL account_scrub_stripe_mirror). Invoices stay.
+ *   3. storage        profiles/{uid}/… and workspaces/{owned workspace}/… in the public
  *                     `avatars` bucket. Public files stay readable by URL until removed.
- *   3. booking        the user's booking links, the bookings and busy windows tied to
+ *   4. booking        the user's booking links, the bookings and busy windows tied to
  *                     them, and their co-host seats on other people's links. No FK.
- *   4. integrations   user_integrations: the encrypted Google / Zoom tokens. No FK.
- *   5. contact_notes  the user's private notes on contacts, in any workspace. No FK.
- *   6. waitlist       public.waitlist + founders_interest rows for the account email.
+ *   5. integrations   user_integrations: the encrypted Google / Zoom tokens. No FK.
+ *   6. contact_notes  the user's private notes on contacts, in any workspace. No FK.
+ *   7. workspace_data what they leave in other people's workspaces (PRIV-2a, SQL
+ *                     account_erase_workspace_data): private items go with every
+ *                     trace, shared ones get a new owner, their tasks are unassigned.
+ *   8. waitlist       public.waitlist + founders_interest rows for the account email.
  *
  * Every step is idempotent and the auth delete runs last, so a failure leaves the
  * account in place and a retry finishes the job. PostHog and Stripe run first: when
@@ -61,6 +66,7 @@ export interface ErasureDb {
     select(columns: string, options?: { count: "exact"; head: true }): DbFilter;
     delete(): DbFilter;
   };
+  rpc(fn: string, args: Record<string, unknown>): PromiseLike<{ data: unknown; error: DbError | null }>;
   storage: { from(bucket: string): StorageBucket };
   auth: {
     admin: {
@@ -114,10 +120,12 @@ export type ErasureStep =
   | "check"
   | "posthog"
   | "stripe"
+  | "stripe_mirror"
   | "storage"
   | "booking"
   | "integrations"
   | "contact_notes"
+  | "workspace_data"
   | "waitlist"
   | "auth";
 
@@ -201,11 +209,16 @@ export async function deleteAccount(
 ): Promise<DeleteAccountResult> {
   const blocking = await step("check", () => findBlockingWorkspaces(deps, user.id));
   if (blocking.length > 0) return { status: "blocked", workspaces: blocking };
+  // The SQL side runs after Stripe, which can't be undone: a dry run of both functions
+  // now fails the deletion while nothing is gone (e.g. a migration not yet applied).
+  await step("check", () => previewErasureSql(deps.db, user.id));
 
   const warnings: string[] = [];
   // Analytics first: an outage there leaves everything else, billing included, untouched.
   await step("posthog", () => eraseAnalytics(deps, user.id, warnings));
   await step("stripe", () => closeStripeBilling(deps, user.id, warnings));
+  // After the Stripe delete, so the webhooks it causes are older than the wipe.
+  await step("stripe_mirror", () => runErasureSql(deps.db, "account_scrub_stripe_mirror", user.id));
   await step("storage", () => removeStoredImages(deps, user.id));
   await step("booking", () => deleteBookingData(deps, user.id));
   await step("integrations", () =>
@@ -215,6 +228,10 @@ export async function deleteAccount(
   // workspaces would go with the contacts anyway; these are the ones elsewhere.
   await step("contact_notes", () =>
     deleteRows(deps.db, "contact_private_notes", (q) => q.eq("user_id", user.id)),
+  );
+  // Before the auth delete: afterwards their rows can't be told apart (created_by goes NULL).
+  await step("workspace_data", () =>
+    runErasureSql(deps.db, "account_erase_workspace_data", user.id),
   );
   await step("waitlist", () => deleteWaitlistEntries(deps, user.email));
   // Last, so every step above can be retried: the FK cascade takes the profile,
@@ -381,6 +398,35 @@ function isMissingStripeObject(err: unknown): boolean {
 function isPermanentStripeError(err: unknown): boolean {
   const { statusCode } = stripeErrorFields(err);
   return statusCode === 400 || statusCode === 403;
+}
+
+// ── The SQL side (PRIV-2) ────────────────────────────────────────────────────
+
+const ERASURE_SQL = ["account_scrub_stripe_mirror", "account_erase_workspace_data"] as const;
+
+async function previewErasureSql(db: ErasureDb, userId: string): Promise<void> {
+  for (const fn of ERASURE_SQL) {
+    const { data, error } = await db.rpc(fn, { p_user: userId, p_preview: true });
+    if (error) throw new Error(`${fn}: ${error.message}`);
+    if ((data as { preview?: unknown } | null)?.preview !== true) {
+      throw new Error(`${fn}: no preview answer`);
+    }
+  }
+}
+
+/** Both functions preview unless told otherwise, so a deletion run passes false and
+ *  refuses an answer that says it was only a preview. Each is one transaction and a
+ *  retry finds nothing left to do. */
+async function runErasureSql(
+  db: ErasureDb,
+  fn: (typeof ERASURE_SQL)[number],
+  userId: string,
+): Promise<void> {
+  const { data, error } = await db.rpc(fn, { p_user: userId, p_preview: false });
+  if (error) throw new Error(`${fn}: ${error.message}`);
+  if ((data as { preview?: unknown } | null)?.preview !== false) {
+    throw new Error(`${fn}: answered as a preview, nothing was deleted`);
+  }
 }
 
 // ── Storage ──────────────────────────────────────────────────────────────────

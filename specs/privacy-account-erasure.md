@@ -181,7 +181,7 @@ A founder runs one command in Terminal, with the admin secret from their passwor
   - It transfers ownership with `admin_transfer_workspace_owner(p_workspace uuid, p_new_owner uuid)`. That mirrors `workspace_op_transfer_ownership` (`20261006200000_perm1_roles_overrides.sql:1124`) without the caller check, which can't work without a signed-in owner.
   - Both functions are `service_role` only.
   - *Rejected:* the project secret key as the credential (too much power to paste into Terminal). Also rejected: a founder JWT (hard for a non-engineer to obtain).
-- **The deleted notice** is driven by a `deleted` search flag on `/auth`, validated with `validateSearch`. The Danger zone sends `navigate({ to: "/auth", search: { deleted: 1 } })` after sign-out. The copy strings live in pure modules so they can be unit-tested.
+- **The deleted notice** is driven by a `deleted` search flag on `/auth`, validated with `validateSearch`. The Danger zone sends `navigate({ to: "/auth", search: { deleted: 1 } })` and only then signs out (changed in PRIV-2b: signing out first lets the app gate's own redirect to a plain `/auth` drop the flag; the sign-in page doesn't bounce a still-signed-in visitor while the flag is set). The copy strings live in pure modules so they can be unit-tested.
 - **How SQL is verified.**
   - Locally: a throwaway Postgres 17 (Homebrew `postgresql@17` if missing) with a stub schema of only the touched tables and functions. The probe `supabase/probes/account-erasure.probe.sql` is committed so it can be re-run (`supabase/AGENTS.md`).
   - Then on production, with the designer's OK: apply, check the catalog and grants (`has_function_privilege` false for anon and authenticated), then run a read-only preview for a real account.
