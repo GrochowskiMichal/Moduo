@@ -526,7 +526,7 @@ export function ContactHub(props: ContactHubProps) {
   }
 
   return (
-    <div className="h-full min-h-0 overflow-y-auto scrollbar-thin">
+    <div className="pane-scroll h-full min-h-0 overflow-y-auto scrollbar-thin">
       <div className="mx-auto flex max-w-2xl flex-col gap-5 p-6">
         {/* Header */}
         <div className="flex items-start gap-3">

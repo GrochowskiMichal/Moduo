@@ -4,7 +4,11 @@
  * service_role and booking_op_commit / booking_op_release.
  *
  * POST { action: "preview", slug, timeZone }
- * POST { action: "book", slug, start, timeZone, name, email, note, guests, answers, video }
+ * POST { action: "book", slug, start, timeZone, name, email, note, guests, answers, video, origin }
+ *
+ * `book` is rate-limited per IP and per host (booking_rate_check). `origin` is
+ * only a hint for which of our own hosts the guest email's cancel link uses;
+ * an unknown value gets moduo.app (see _shared/app-origin.ts).
  *
  * A link's video_provider is google_meet, zoom, or guest_choice. The guest only
  * ever sees platforms the host has connected (Google refresh token / Zoom login).
@@ -21,6 +25,9 @@ import {
   googleUserEmail,
   refreshGoogleAccess,
 } from "../_shared/google-calendar.ts";
+import { bookingCancelUrl, bookingOrigin } from "../_shared/app-origin.ts";
+import { clientIp } from "../_shared/client-ip.ts";
+import { escapeHtml, singleLine } from "../_shared/escape.ts";
 import { getDefaultSecretKey } from "../_shared/secret-keys.ts";
 import {
   createZoomMeeting,
@@ -31,7 +38,7 @@ import {
   zoomMeetingIdFromLink,
 } from "../_shared/zoom.ts";
 import { decryptToken, encryptToken } from "../_shared/token-cipher.ts";
-import { parseGuestEmails } from "../../../src/features/calendar/booking/guests.ts";
+import { isEmailAddress, parseGuestEmails } from "../../../src/features/calendar/booking/guests.ts";
 import {
   computeOpenSlots,
   normalizeWeeklyHours,
@@ -93,19 +100,67 @@ type LinkRow = {
   workspace_id: string | null;
 };
 
-function json(body: unknown, status = 200): Response {
+function json(body: unknown, status = 200, headers: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...CORS, "content-type": "application/json; charset=utf-8" },
+    headers: { ...CORS, ...headers, "content-type": "application/json; charset=utf-8" },
   });
 }
 
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+// IPs are never stored raw: HMAC-SHA256 keyed with the project secret key,
+// same as waitlist-join (different prefix, so the two ledgers don't correlate).
+const hmacKey = crypto.subtle.importKey(
+  "raw",
+  new TextEncoder().encode(SECRET),
+  { name: "HMAC", hash: "SHA-256" },
+  false,
+  ["sign"],
+);
+
+async function hashIp(ip: string): Promise<string> {
+  const sig = await crypto.subtle.sign(
+    "HMAC",
+    await hmacKey,
+    new TextEncoder().encode(`booking:v1:${ip}`),
+  );
+  return Array.from(new Uint8Array(sig), (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/**
+ * Counts this booking and says whether it may go ahead: 10 per IP per hour,
+ * then 30 per host per hour, enforced atomically in SQL. No platform-wide
+ * cap, so a burst can only ever throttle one host. Called once the request is
+ * a valid booking of an offered slot, just before anything is created or
+ * sent, so junk requests and a guest's own typos don't use up anyone's
+ * budget. Only a missing function (deployed before its migration) lets
+ * bookings through unchecked; any other error or answer stops them.
+ */
+async function bookingGate(
+  db: SupabaseClient,
+  req: Request,
+  ownerId: string,
+): Promise<"ok" | "rate_limited" | "host_busy" | "error"> {
+  const { data, error } = await db.rpc("booking_rate_check", {
+    p_ip_hash: await hashIp(clientIp(req)),
+    p_owner_id: ownerId,
+  });
+  if (!error) {
+    if (data === "ok" || data === "rate_limited" || data === "host_busy") return data;
+    console.error("[booking-public] rate check returned", data);
+    return "error";
+  }
+  console.error("[booking-public] rate check failed:", error.code, error.message);
+  return error.code === "PGRST202" ? "ok" : "error";
+}
+
+function validTimeZone(value: unknown): string | null {
+  if (typeof value !== "string" || !value) return null;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: value });
+    return value;
+  } catch {
+    return null;
+  }
 }
 
 function busyIds(raw: unknown): string[] {
@@ -389,6 +444,7 @@ async function sendGuestEmail(input: {
   cancelUrl: string;
 }): Promise<void> {
   if (!RESEND_API_KEY) return;
+  const hostName = singleLine(input.hostName) || "Moduo";
   await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
@@ -398,9 +454,9 @@ async function sendGuestEmail(input: {
     body: JSON.stringify({
       from: RESEND_FROM,
       to: input.to,
-      subject: `Booked with ${input.hostName}`,
+      subject: `Booked with ${hostName}`,
       text: [
-        `You're booked with ${input.hostName}.`,
+        `You're booked with ${hostName}.`,
         input.when,
         `${input.platform}: ${input.meetLink}`,
         `Cancel: ${input.cancelUrl}`,
@@ -487,7 +543,12 @@ Deno.serve(async (req: Request) => {
   if (!link || !link.workspace_id) return json({ error: "not_found" }, 404);
   const host = await hostIdentity(db, link);
   const setting = videoSetting(link.video_provider);
-  if (link.paused) return json({ ...publicLink(link, host, []), paused: true, slots: [] });
+  // A `book` on a link that can't take bookings is an error, never the preview
+  // payload: the guest page treats any 200 as booked.
+  if (link.paused) {
+    if (action === "book") return json({ error: "paused" }, 409);
+    return json({ ...publicLink(link, host, []), paused: true, slots: [] });
+  }
 
   const now = new Date();
   const horizonEnd = new Date(now.getTime() + Math.max(1, link.date_range_days) * 86_400_000);
@@ -504,9 +565,15 @@ Deno.serve(async (req: Request) => {
       ? false
       : await zoomConnected(db, link.owner_user_id).catch(() => false);
   const video = videoOptions(setting, { google_meet: access != null, zoom: zoomOn });
-  if (video.length === 0) return json({ ...publicLink(link, host, video), slots: [] });
+  if (video.length === 0) {
+    if (action === "book") return json({ error: "host_unavailable" }, 409);
+    return json({ ...publicLink(link, host, video), slots: [] });
+  }
   const collective = await collectiveOpenSlots(db, link, now, horizonEnd);
-  if (collective === "paused") return json({ ...publicLink(link, host, video), paused: true, slots: [] });
+  if (collective === "paused") {
+    if (action === "book") return json({ error: "paused" }, 409);
+    return json({ ...publicLink(link, host, video), paused: true, slots: [] });
+  }
   const slots = collective;
 
   if (action === "preview") {
@@ -526,9 +593,11 @@ Deno.serve(async (req: Request) => {
   const offered = slots.some((slot) => Math.abs(slot.getTime() - start.getTime()) < 1000);
   if (!offered) return json({ error: "slot_taken" }, 409);
 
-  const name = typeof body.name === "string" ? body.name.trim() : "";
+  // One line: the name lands in an email subject line and in Google's invite.
+  const name = typeof body.name === "string" ? singleLine(body.name, 120) : "";
+  // Strict, like the extra guests: this address is Resend's `to`.
   const email = typeof body.email === "string" ? body.email.trim() : "";
-  if (!name || !email.includes("@")) return json({ error: "bad_guest" }, 400);
+  if (!name || !isEmailAddress(email)) return json({ error: "bad_guest" }, 400);
   const note = link.note_enabled && typeof body.note === "string" ? body.note.trim() : "";
   const guests = link.guests_enabled
     ? parseGuestEmails(body.guests, email)
@@ -552,9 +621,19 @@ Deno.serve(async (req: Request) => {
     if (id && value) answers.push({ id, label, value });
   }
 
+  // An unknown zone would make Intl throw after the booking is committed.
+  const guestZone = validTimeZone(body.timeZone) ?? "UTC";
+  const hostEmail = access?.email || link.owner_email || "";
+  if (!hostEmail) return json({ error: "host_unavailable" }, 409);
+
+  const gate = await bookingGate(db, req, link.owner_user_id);
+  if (gate === "rate_limited" || gate === "host_busy") {
+    return json({ error: gate }, 429, { "Retry-After": "3600" });
+  }
+  if (gate === "error") return json({ error: "book_failed" }, 500);
+
   const end = new Date(start.getTime() + link.duration_minutes * 60_000);
   const cancelToken = crypto.randomUUID();
-  const guestZone = typeof body.timeZone === "string" ? body.timeZone : "UTC";
   const pending = await db
     .from("slot_bookings")
     .insert({
@@ -584,10 +663,8 @@ Deno.serve(async (req: Request) => {
     return json({ error }, status);
   };
 
-  const hostEmail = access?.email || link.owner_email || "";
-  if (!hostEmail) return fail("host_unavailable", 409);
   const lines = [
-    `Guest: ${name} <${email}>`,
+    `Guest: ${name} (${email})`,
     invitedEmails.length > 0 ? `Also invited: ${invitedEmails.join(", ")}` : "",
     note ? `Note: ${note}` : "",
     ...answers.map((answer) => `${answer.label}: ${answer.value}`),
@@ -619,7 +696,11 @@ Deno.serve(async (req: Request) => {
       meet = await createGoogleMeetEvent({
         accessToken: access.accessToken,
         summary: link.name || "Meeting",
-        description: lines.join("\n"),
+        // Google renders the description as HTML and emails it to every
+        // invitee, so what the guest typed is escaped (no disguised links).
+        // Paragraphs, not newlines: calendar sync copies this back into the
+        // Moduo event, which only decodes it when it starts with a tag.
+        description: lines.map((line) => `<p>${escapeHtml(line)}</p>`).join(""),
         start: start.toISOString(),
         end: end.toISOString(),
         timeZone: link.host_timezone || "UTC",
@@ -701,23 +782,21 @@ Deno.serve(async (req: Request) => {
     })
     .eq("id", bookingId);
 
-  const origin = typeof body.origin === "string" ? body.origin.replace(/\/$/, "") : "";
-  const cancelUrl = origin ? `${origin}/book/cancel?token=${cancelToken}` : "";
+  // Never from the request: body.origin only picks one of our own hosts.
+  const cancelUrl = bookingCancelUrl(bookingOrigin(body.origin), cancelToken);
   const when = new Intl.DateTimeFormat("en-US", {
     dateStyle: "full",
     timeStyle: "short",
     timeZone: guestZone,
   }).format(start);
-  if (cancelUrl) {
-    await sendGuestEmail({
-      to: email,
-      hostName: host.name,
-      when,
-      meetLink: meet.meetLink,
-      platform: VIDEO_LABEL[platform],
-      cancelUrl,
-    }).catch(() => {});
-  }
+  await sendGuestEmail({
+    to: email,
+    hostName: host.name,
+    when,
+    meetLink: meet.meetLink,
+    platform: VIDEO_LABEL[platform],
+    cancelUrl,
+  }).catch(() => {});
 
   return json({
     ok: true,

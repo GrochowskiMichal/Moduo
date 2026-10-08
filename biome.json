@@ -18,7 +18,6 @@
       "!storybook-static",
       "!coverage",
       "!**/*.css",
-      "!src/ui",
       "!src/types/supabase.ts",
       "!bun.lock",
       "!scripts/icons/source",
@@ -114,6 +113,12 @@
       "includes": ["scripts/**", "rsbuild.config.ts", "playwright.config.ts"],
       "linter": {
         "rules": {}
+      }
+    },
+    {
+      "includes": ["landing/**"],
+      "linter": {
+        "enabled": false
       }
     }
   ]

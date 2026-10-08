@@ -2,8 +2,8 @@
 // entity's own name) rendered at 13px / 14px / 15px / 24px / 30px across six
 // surfaces, half of them on the display face.
 
-import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "@rstest/core";
+import { cleanup, render, screen } from "@testing-library/react";
 
 import { DetailTitle, detailTitleVariants } from "./detail-title";
 import { Input } from "./input";
