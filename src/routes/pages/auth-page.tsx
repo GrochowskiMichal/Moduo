@@ -8,6 +8,7 @@ import {
   clearAccountDeletedMarker,
   isAccountDeletedMarked,
 } from "@/features/settings/delete-account";
+import { ignoredAuthLink } from "@/lib/auth-url";
 import { useAuth } from "@/providers/auth-provider";
 
 export function AuthPage() {
@@ -17,6 +18,15 @@ export function AuthPage() {
   // Only for the deletion this tab just made (finishAccountDeletion marks it): the
   // flag alone, from a reload or a shared link, shows nothing.
   const [justDeleted] = useState(() => deleted === 1 && isAccountDeletedMarked());
+  // An emailed auth link landed here and was dropped at boot (auth-url.ts). An
+  // invite link still confirms the address server-side; the code does the rest.
+  const ignoredLink = ignoredAuthLink();
+  const linkNotice =
+    ignoredLink === "session"
+      ? "Links don't sign you in here. Enter your email to get a 6-digit code."
+      : ignoredLink === "error"
+        ? "That link has expired or was already used. Enter your email to get a 6-digit code."
+        : null;
 
   useEffect(() => {
     if (justDeleted && !loading && !isSignedIn) clearAccountDeletedMarker();
@@ -73,7 +83,7 @@ export function AuthPage() {
         ) : null}
 
         <div className="w-full rounded-xl border border-border bg-card px-6 py-7 shadow-xl sm:px-7 sm:py-8">
-          <EmailAuthPanel />
+          <EmailAuthPanel notice={linkNotice} />
         </div>
       </div>
     </div>
