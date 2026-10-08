@@ -201,6 +201,13 @@ describe("swapTemp", () => {
     expect(swapTemp(list, "tmp-1", echoed).map((t) => t.id)).toEqual(["real-1"]);
     expect(swapTemp([task({ id: "tmp-1" })], "tmp-1", echoed).map((t) => t.id)).toEqual(["real-1"]);
   });
+
+  it("keeps a teammate's newer copy over the older saved row", () => {
+    const saved = task({ id: "real-1", title: "Mine", updatedAt: "2026-10-08T10:00:00Z" });
+    const edited = task({ id: "real-1", title: "Mike's", updatedAt: "2026-10-08T10:00:05Z" });
+    const out = swapTemp([task({ id: "tmp-1" }), edited], "tmp-1", saved);
+    expect(out.map((t) => t.title)).toEqual(["Mike's"]);
+  });
 });
 
 describe("mergeQueue", () => {

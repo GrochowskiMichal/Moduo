@@ -169,10 +169,18 @@ export function mergeQueue(queue: TaskQueueEntry[], change: LiveChange): TaskQue
 /**
  * Swap an optimistic row for the saved one. The saved row may already be
  * there, when its insert's live echo landed first (a response slower than
- * the gate's max hold), so drop that copy rather than show it twice.
+ * the gate's max hold): keep one copy, the newer of the two, so a teammate's
+ * edit that arrived meanwhile isn't replaced by the older saved row.
  */
-export function swapTemp<T extends { id: string }>(list: T[], tempId: string, saved: T): T[] {
-  return list.filter((r) => r.id !== saved.id).map((r) => (r.id === tempId ? saved : r));
+export function swapTemp<T extends { id: string; updatedAt?: string }>(
+  list: T[],
+  tempId: string,
+  saved: T,
+): T[] {
+  const live = list.find((r) => r.id === saved.id);
+  const keep =
+    live && live.updatedAt !== undefined && isNewer(live.updatedAt, saved.updatedAt) ? live : saved;
+  return list.filter((r) => r.id !== saved.id).map((r) => (r.id === tempId ? keep : r));
 }
 
 /**

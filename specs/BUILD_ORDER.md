@@ -113,7 +113,7 @@ _Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
 - [ ] **TV-D3 — Time entries** · tasks-v2 block 5 · deps: TV-D1, TV-F1 · lane data · migration + legacy backfill/shim
 - [ ] **TV-T1 — Shared tag store** · tasks-v2 block 6 · deps: TV-D1 · lane data
 - [ ] **TV-D4 — Queue & assignee in the UI (claims, My tasks)** · tasks-v2 block 7 · deps: TV-D2, DS-3 · lane tasks-ui · note: until this ships the app shows the old shared day list while commits also collect, dateless, in personal queues; the switch shows all of it, so the stale-line-up prompt needs a "last touched" source (removals delete rows; see the TV-D2 decision)
-- [~] **TV-D5 — Live updates (Realtime)** · tasks-v2 block 8 · deps: TV-D2 · lane data · adds tables to the `supabase_realtime` publication
+- [x] **TV-D5 — Live updates (Realtime)** · tasks-v2 block 8 · deps: TV-D2 · lane data · adds tables to the `supabase_realtime` publication · **done 2026-10-09 · `t/maciej/tv-d5-realtime` (PR #315)**: both migrations applied to production 2026-10-08 (publication + server-stamped `updated_at`); manual two-browser check pending
 - [ ] **TV-U1 — Rows, board, completed** · tasks-v2 block 9 · deps: DS-3, TV-D4 · lane tasks-ui
 - [ ] **TV-U3 — Detail panel + comments** · tasks-v2 block 10 · deps: DS-2, TV-D1, TV-D3 · lane tasks-ui · note: listen to `comments` live (TV-D5 published the table; D5-1's comment count lands here)
 - [ ] **TV-F2 — Queue run (line-up, run, Now/Up next, claims "is on this")** · tasks-v2 block 11 · deps: TV-F1, TV-D2, TV-D3, DS-2 · lane focus · migration (`focus_runs`)

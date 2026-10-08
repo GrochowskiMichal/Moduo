@@ -1550,6 +1550,9 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
               ...prevTagLinks.filter((l) => l.tagId === tagId),
             ],
           }));
+          // A teammate's edit to this tag during the window was held out:
+          // catch up on it (quietly, throttled).
+          requestRefreshRef.current("reconnect");
         },
       });
     },

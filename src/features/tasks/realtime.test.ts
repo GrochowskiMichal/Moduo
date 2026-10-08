@@ -101,8 +101,15 @@ describe("listenTasksLive", () => {
       { type: "resync", reason: "reconnect" },
     ]);
 
+    Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
+    document.dispatchEvent(new Event("visibilitychange"));
+    expect(got).toHaveLength(3);
+    Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
+    document.dispatchEvent(new Event("visibilitychange"));
+    expect(got.at(-1)).toEqual({ type: "resync", reason: "return" });
+
     stop();
     window.dispatchEvent(new Event("focus"));
-    expect(got).toHaveLength(3);
+    expect(got).toHaveLength(4);
   });
 });
