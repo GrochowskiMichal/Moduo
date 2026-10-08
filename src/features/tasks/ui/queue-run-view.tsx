@@ -11,6 +11,7 @@ import {
   Calendar,
   Check,
   ChevronDown,
+  CornerDownLeft,
   GripVertical,
   Hash,
   MoreHorizontal,
@@ -852,7 +853,9 @@ function NowCard({
             <Button size="md" onClick={onDone} aria-keyshortcuts="Enter">
               <Check aria-hidden />
               Done
-              <Kbd className="ml-1">⏎</Kbd>
+              <kbd className="flex items-center opacity-80">
+                <CornerDownLeft className="size-3" aria-hidden />
+              </kbd>
             </Button>
             <Button size="md" variant="secondary" onClick={onSkip} disabled={!canSkip}>
               Skip
