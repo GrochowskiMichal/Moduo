@@ -34,7 +34,12 @@ function normalizePhrase(value: string) {
     .join(" ");
 }
 
-export function EmailAuthPanel() {
+export type EmailAuthPanelProps = {
+  /** Shown on the email step only, e.g. after an emailed auth link was dropped at boot. */
+  notice?: string | null;
+};
+
+export function EmailAuthPanel({ notice }: EmailAuthPanelProps) {
   const { runtime, configError } = useAuth();
   // Cloud auth (email OTP) is the default on web AND desktop (cloud-first).
   // The vault flows below only activate on runtimes that expose a local
@@ -398,6 +403,14 @@ export function EmailAuthPanel() {
         {panelSubtitle ? (
           <p className="mx-auto mt-2 max-w-[300px] text-center text-sm leading-5 text-muted-foreground">
             {panelSubtitle}
+          </p>
+        ) : null}
+        {notice && cloudAuth && flow === "email" ? (
+          <p
+            role="status"
+            className="mx-auto mt-4 max-w-[300px] rounded-md bg-muted px-3 py-2 text-center text-sm leading-5 text-foreground"
+          >
+            {notice}
           </p>
         ) : null}
       </div>

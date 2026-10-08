@@ -71,7 +71,7 @@ import {
   type TaskRelation,
 } from "../features/tasks/model";
 import { toMemberPerm, toMemberRole } from "../features/workspaces/workspace-mappers";
-import { SUPABASE_AUTH_OPTIONS, scrubAuthCallbackFromUrl } from "./auth-url";
+import { SUPABASE_AUTH_OPTIONS } from "./auth-url";
 import type { EntityLink, EntityRecord } from "./entity-links";
 import { collectTruncations, READ_CAPS, readPaged, type Truncation } from "./paged-select";
 import {
@@ -105,8 +105,8 @@ const SUPABASE_PUBLISHABLE_KEY: string =
   (import.meta.env.PUBLIC_SUPABASE_PUBLISHABLE_KEY as string | undefined) ||
   "sb_publishable_NAVl-rzFzPOi5ZU84aC3pA_SOIR00so";
 
-// No session ever comes from the URL (login CSRF): see auth-url.ts.
-scrubAuthCallbackFromUrl();
+// No session ever comes from the URL (login CSRF): see auth-url.ts. The boot
+// scrub of a leftover token fragment runs from main.tsx, before the router.
 export const supabaseClient: SupabaseClient = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: SUPABASE_AUTH_OPTIONS,
 });
@@ -494,8 +494,10 @@ export const webRuntime: ModuoRuntime = {
       try {
         const { error } = await supabaseClient.auth.signInWithOtp({
           email,
-          // Invite-only: sign-ups are off on the Supabase project, so only existing
-          // or dashboard-invited users get a code. Never create a user from here.
+          // Invite-only: sign-ups are off on the Supabase project, so only confirmed
+          // users get a code. A dashboard invitee is confirmed by clicking the invite
+          // link once; before that, GoTrue routes them through sign-up and refuses
+          // ("Signups not allowed for this instance"). Never create a user from here.
           options: { shouldCreateUser: false },
         });
         if (error) return { data: {}, error: toError(error) };

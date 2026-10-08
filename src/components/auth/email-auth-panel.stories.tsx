@@ -24,3 +24,8 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Primary: Story = {};
+
+/** After an emailed auth link was dropped at boot (src/lib/auth-url.ts). */
+export const WithLinkNotice: Story = {
+  args: { notice: "Links don't sign you in here. Enter your email to get a 6-digit code." },
+};

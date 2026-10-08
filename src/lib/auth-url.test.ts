@@ -2,8 +2,8 @@ import { afterEach, describe, expect, it } from "@rstest/core";
 import { createClient } from "@supabase/supabase-js";
 
 import {
-  authLinkWasIgnored,
-  isAuthCallbackFragment,
+  authCallbackKind,
+  ignoredAuthLink,
   SUPABASE_AUTH_OPTIONS,
   scrubAuthCallbackFromUrl,
 } from "./auth-url";
@@ -27,15 +27,6 @@ function setUrl(path: string) {
   window.history.replaceState(null, "", path);
 }
 
-function memoryStorage() {
-  const items = new Map<string, string>();
-  return {
-    getItem: (key: string) => items.get(key) ?? null,
-    setItem: (key: string, value: string) => void items.set(key, value),
-    removeItem: (key: string) => void items.delete(key),
-  };
-}
-
 /** A client wired like runtime.web's, against a fetch that answers /auth/v1/user as the attacker. */
 async function sessionAfterBoot(detectSessionInUrl: boolean) {
   const calls: string[] = [];
@@ -54,13 +45,15 @@ async function sessionAfterBoot(detectSessionInUrl: boolean) {
     auth: {
       ...SUPABASE_AUTH_OPTIONS,
       detectSessionInUrl,
-      autoRefreshToken: false, // no refresh timer in a test
-      storage: memoryStorage(),
-      storageKey: `auth-url-test-${detectSessionInUrl}`,
+      // In-memory session, no refresh timer, no cross-tab channel: nothing to
+      // leak between tests. Neither setting affects reading the URL.
+      autoRefreshToken: false,
+      persistSession: false,
     },
     global: { fetch: fetchStub as typeof fetch },
   });
   const { data } = await client.auth.getSession();
+  await client.auth.stopAutoRefresh(); // also drops the visibilitychange listener
   return { session: data.session, calls };
 }
 
@@ -87,39 +80,41 @@ describe("SUPABASE_AUTH_OPTIONS", () => {
   });
 });
 
-describe("isAuthCallbackFragment", () => {
-  it("matches token and link-error fragments", () => {
-    expect(isAuthCallbackFragment(FORGED_FRAGMENT)).toBe(true);
-    expect(isAuthCallbackFragment("#refresh_token=x")).toBe(true);
+describe("authCallbackKind", () => {
+  it("tells session fragments from link errors", () => {
+    expect(authCallbackKind(FORGED_FRAGMENT)).toBe("session");
+    expect(authCallbackKind("#refresh_token=x")).toBe("session");
     expect(
-      isAuthCallbackFragment(
+      authCallbackKind(
         "#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid",
       ),
-    ).toBe(true);
+    ).toBe("error");
   });
 
   it("leaves ordinary fragments alone", () => {
-    expect(isAuthCallbackFragment("")).toBe(false);
-    expect(isAuthCallbackFragment("#")).toBe(false);
-    expect(isAuthCallbackFragment("#section-2")).toBe(false);
-    expect(isAuthCallbackFragment("#token=abc")).toBe(false);
+    expect(authCallbackKind("")).toBeNull();
+    expect(authCallbackKind("#")).toBeNull();
+    expect(authCallbackKind("#section-2")).toBeNull();
+    expect(authCallbackKind("#token=abc")).toBeNull();
+    expect(authCallbackKind("#error=x")).toBeNull();
   });
 });
 
 describe("scrubAuthCallbackFromUrl", () => {
   it("drops a sign-in fragment and keeps the path and query", () => {
     setUrl(`/join?invite=abc${FORGED_FRAGMENT}`);
-    expect(scrubAuthCallbackFromUrl()).toBe(true);
+    expect(scrubAuthCallbackFromUrl()).toBe("session");
     expect(window.location.pathname).toBe("/join");
     expect(window.location.search).toBe("?invite=abc");
     expect(window.location.hash).toBe("");
     expect(window.location.href).not.toContain("access_token");
-    expect(authLinkWasIgnored()).toBe(true);
+    expect(ignoredAuthLink()).toBe("session");
   });
 
   it("does nothing to other URLs", () => {
     setUrl("/calendar?connect=google#section");
-    expect(scrubAuthCallbackFromUrl()).toBe(false);
+    expect(scrubAuthCallbackFromUrl()).toBeNull();
     expect(window.location.hash).toBe("#section");
+    expect(ignoredAuthLink()).toBeNull();
   });
 });
