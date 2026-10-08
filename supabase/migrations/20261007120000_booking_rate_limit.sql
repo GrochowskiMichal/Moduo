@@ -6,12 +6,13 @@
 -- address. Same shape as waitlist_join (20261001160000): a server-only ledger
 -- of HMAC'd client IPs, counted under advisory locks.
 --
--- Limits: 10 attempts per IP per hour, then 30 per host (the link owner) per
+-- Limits: 10 bookings per IP per hour, then 30 per host (the link owner) per
 -- hour. There is deliberately no platform-wide cap: one would let a handful of
 -- IPs switch booking off for every host. The per-host cap is the backstop when
--- IPs rotate, and it only ever throttles that one host's links. Every attempt
--- on a real link counts, including ones that later fail (slot taken, bad
--- guest). Rows are pruned after 2 days and cascade with the host's account.
+-- IPs rotate, and it only ever throttles that one host's links. booking-public
+-- calls this only for a valid booking of an offered slot, right before it
+-- creates anything, so junk requests don't count. Rows are pruned after
+-- 2 days and cascade with the host's account.
 
 BEGIN;
 
@@ -30,6 +31,8 @@ CREATE INDEX IF NOT EXISTS booking_attempts_created_idx
 ALTER TABLE public.booking_attempts ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE public.booking_attempts FROM PUBLIC, anon, authenticated;
 GRANT ALL ON TABLE public.booking_attempts TO service_role;
+-- The identity sequence gets Supabase's default grants on its own.
+REVOKE ALL ON SEQUENCE public.booking_attempts_id_seq FROM PUBLIC, anon, authenticated;
 
 -- Returns 'ok' (attempt recorded) | 'rate_limited' (this IP) | 'host_busy'
 -- (this host); limited attempts are not recorded. Raises 22023 on bad input.

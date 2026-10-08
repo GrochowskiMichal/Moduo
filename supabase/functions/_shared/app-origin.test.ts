@@ -32,6 +32,8 @@ describe("bookingOrigin", () => {
       "https://moduo.app:8443",
       "http://moduo.app",
       "http://localhost:3000",
+      "http://localhost:8081",
+      "http://127.0.0.1:8081",
       "https://app.moduo.app",
       "//evil.example",
       "javascript:alert(1)",
@@ -71,16 +73,24 @@ describe("appOrigin", () => {
     expect(appOrigin("")).toBe(CANONICAL_APP_ORIGIN);
   });
 
-  it("uses a configured https origin, without its path", () => {
+  it("uses a configured app host, without its path", () => {
+    for (const origin of APP_ORIGINS) expect(appOrigin(origin)).toBe(origin);
     expect(appOrigin("https://app.staging.moduo.app/")).toBe("https://app.staging.moduo.app");
     expect(appOrigin("https://app.moduo.app/settings")).toBe("https://app.moduo.app");
   });
 
-  it("allows plain http only for the listed dev server", () => {
-    for (const origin of APP_ORIGINS) expect(appOrigin(origin)).toBe(origin);
-    expect(appOrigin("http://evil.example")).toBe(CANONICAL_APP_ORIGIN);
-    expect(appOrigin("not a url")).toBe(CANONICAL_APP_ORIGIN);
-    expect(appOrigin("javascript:alert(1)")).toBe(CANONICAL_APP_ORIGIN);
+  it("ignores anything that isn't an app host, including the marketing site", () => {
+    for (const configured of [
+      "https://moduo.app",
+      "https://staging.moduo.app",
+      "https://evil.example",
+      "http://evil.example",
+      "http://localhost:3000",
+      "not a url",
+      "javascript:alert(1)",
+    ]) {
+      expect(appOrigin(configured)).toBe(CANONICAL_APP_ORIGIN);
+    }
   });
 });
 

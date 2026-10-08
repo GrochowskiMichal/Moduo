@@ -8,13 +8,16 @@
  * Add a host here (and to vercel.json for /book) before linking to it.
  */
 
-/** Public hosts that serve /book (vercel.json rewrites it to the app shell), plus the dev server. */
+/**
+ * Public hosts that serve /book (vercel.json rewrites it to the app shell).
+ * No dev server: production would otherwise mail a localhost link to anyone.
+ * A local booking gets a moduo.app Cancel link, which works against the same
+ * hosted backend.
+ */
 export const BOOKING_ORIGINS: readonly string[] = [
   "https://moduo.app",
   "https://www.moduo.app",
   "https://staging.moduo.app",
-  "http://localhost:8081",
-  "http://127.0.0.1:8081",
 ];
 export const CANONICAL_BOOKING_ORIGIN = "https://moduo.app";
 
@@ -47,19 +50,12 @@ export function bookingOrigin(hint: unknown): string {
 }
 
 /**
- * Where app links (invites) point. `configured` is the APP_URL secret, which
- * only project admins set, so any https origin is trusted (same rule as
- * billing's safeRedirect); plain http only for the listed dev server.
+ * Where app links (invites) point: the APP_URL secret when it is one of the
+ * app hosts above, else app.moduo.app. A secret set to the marketing site
+ * (which has no /join) is ignored rather than mailed.
  */
 export function appOrigin(configured: string | null | undefined): string {
-  if (!configured) return CANONICAL_APP_ORIGIN;
-  try {
-    const url = new URL(configured.trim());
-    if (url.protocol === "https:" || APP_ORIGINS.includes(url.origin)) return url.origin;
-  } catch {
-    // fall through
-  }
-  return CANONICAL_APP_ORIGIN;
+  return allowListedOrigin(configured, APP_ORIGINS) ?? CANONICAL_APP_ORIGIN;
 }
 
 export function bookingCancelUrl(origin: string, token: string): string {

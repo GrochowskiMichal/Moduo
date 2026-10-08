@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@rstest/core";
 
-import { escapeHtml, noTags, singleLine } from "./escape.ts";
+import { escapeHtml, singleLine } from "./escape.ts";
 
 describe("escapeHtml", () => {
   it("escapes the five HTML-significant characters", () => {
@@ -19,25 +19,27 @@ describe("escapeHtml", () => {
   });
 });
 
-describe("noTags", () => {
-  it("removes angle brackets so no tag survives", () => {
-    expect(noTags('Hi <a href="https://evil.example">confirm here</a>')).toBe(
-      'Hi a href="https://evil.example"confirm here/a',
-    );
-    expect(noTags("<script>alert(1)</script>")).not.toMatch(/[<>]/);
-  });
-
-  it("leaves ordinary text, including &, alone", () => {
-    expect(noTags("Tom & Jerry's agenda: Q4 > Q3")).toBe("Tom & Jerry's agenda: Q4  Q3");
-    expect(noTags("ana@example.com")).toBe("ana@example.com");
-  });
-});
-
 describe("singleLine", () => {
   it("turns line breaks and control characters into single spaces", () => {
     expect(singleLine("Eve\r\nBcc: someone@example.com")).toBe("Eve Bcc: someone@example.com");
     expect(singleLine("a\u0000b\tc\u2028d")).toBe("a b c d");
     expect(singleLine("  lots   of\n\n space  ")).toBe("lots of space");
+  });
+
+  it("drops C1 controls, bidi overrides and the BOM, but keeps emoji joiners", () => {
+    expect(singleLine("a\u0085b")).toBe("a b");
+    expect(singleLine("\u202etnuocca ruoy yfirev")).toBe("tnuocca ruoy yfirev");
+    expect(singleLine("x\u2066y\u2069z\ufeff")).toBe("x y z");
+    expect(singleLine("👩\u200d💻 team")).toBe("👩\u200d💻 team");
+  });
+
+  it("never splits an emoji when it cuts", () => {
+    const out = singleLine(`${"a".repeat(78)}😀😀`, 80);
+    expect(out).toBe(`${"a".repeat(78)}😀😀`);
+    const cut = singleLine(`${"a".repeat(78)}😀😀😀`, 80);
+    expect(cut).toBe(`${"a".repeat(78)}😀…`);
+    // encodeURIComponent throws on a lone surrogate.
+    expect(() => encodeURIComponent(cut)).not.toThrow();
   });
 
   it("cuts long values with an ellipsis", () => {
