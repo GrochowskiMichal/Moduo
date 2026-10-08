@@ -216,6 +216,10 @@ One line per locked product or architecture decision, grouped by area, newest fi
 - Control-sizing rung contract.
 - Theme shades.
 
+## Brand: logo, colour, type, motion, voice → [decisions/brand.md](decisions/brand.md)
+
+- 2026-10-08 · Brand system planned: the product is the brand; drawn wordmark; no brand hue; pink isn't a brand colour; the mark reveals itself out of nothing.
+
 ## Product scope, alpha, settings, cross-cutting fixes → [decisions/product.md](decisions/product.md)
 
 - 2026-10-02 · Chat + calls becomes a planned module (Duo/Team plans only), reversing "no chat module, keep Slack"; whiteboard not planned; Mindmap stays hidden
