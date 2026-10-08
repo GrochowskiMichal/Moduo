@@ -231,6 +231,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Design system and UI → [decisions/design-system.md](decisions/design-system.md)
 
+- 2026-10-08 · DS-3 landed: NavRow (count ⇄ ⋯ in one slot, one menu for ⋯ and right-click) and MetaCount; the Tasks rail runs on NavRow and hands focus back to itself when a row dialog closes.
 - 2026-10-08 · DS-4 landed: FilterBar, DisplayMenu, the drag visuals and the view-prefs helper are generic primitives; Tasks adopts them in TV-U2/TV-U4.
 - 2026-10-08 · DS-2 landed: primitives use the state layer, selection is tint-only, hover ≠ current everywhere it collided.
 - 2026-10-08 · DS-1 landed: the state layer re-resolves in every appearance scope, thin token scrollbars are the global default, and Storybook switches every appearance axis.
