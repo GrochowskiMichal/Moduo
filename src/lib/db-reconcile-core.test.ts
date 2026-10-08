@@ -5,6 +5,8 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "@rstest/core";
 
 import {
+  ANON_DEFINER_ALLOWED,
+  clientCallableDefinerQuery,
   dedupeDecls,
   normalizeBody,
   parseDeclarations,
@@ -88,6 +90,40 @@ describe("parseFunctionBodies", () => {
 describe("sqlQuote", () => {
   it("escapes embedded quotes so a policy name cannot break the generated SQL", () => {
     expect(sqlQuote("user's own")).toBe("'user''s own'");
+  });
+});
+
+describe("clientCallableDefinerQuery (query 4)", () => {
+  it("escapes the `__` LIKE pattern, so `_` is not a one-character wildcard", () => {
+    const sql = clientCallableDefinerQuery();
+    expect(sql).toContain("proname like '%\\_\\_%'");
+    expect(sql).toContain("proname not like '%\\_\\_%'");
+    expect(sql).not.toContain("'%__%'");
+  });
+
+  it("allows by signature, not by name, so a new overload is still reported", () => {
+    const sql = clientCallableDefinerQuery({ "f(uuid)": "why" });
+    expect(sql).toContain("array['f(uuid)']::text[]");
+    expect(sql).toContain("sig not in (select sig from allow)");
+    expect(sql).not.toContain("proname not in");
+  });
+
+  it("skips trigger functions in both branches, `__` helpers included", () => {
+    const sql = clientCallableDefinerQuery();
+    const defs = sql.slice(sql.indexOf("defs as ("), sql.indexOf("select 'CLIENT-EXECUTABLE"));
+    expect(defs).toContain("p.prorettype not in ('trigger'::regtype, 'event_trigger'::regtype)");
+  });
+
+  it("quotes signatures, and an empty allowlist is still valid SQL", () => {
+    expect(clientCallableDefinerQuery({ "it's(text)": "x" })).toContain("'it''s(text)'");
+    expect(clientCallableDefinerQuery({})).toContain("array[]::text[]");
+  });
+
+  it("keys every allowed entry by a full signature and gives a reason", () => {
+    for (const [sig, why] of Object.entries(ANON_DEFINER_ALLOWED)) {
+      expect(sig).toMatch(/^[a-z0-9_]+\([\w, [\]]*\)$/);
+      expect(why.length).toBeGreaterThan(0);
+    }
   });
 });
 
