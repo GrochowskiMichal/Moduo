@@ -37,7 +37,12 @@ const jsonRecord = z.record(z.string(), z.unknown());
 export const taskRowSchema = z.object({
   id,
   workspace_id: id,
+  /** The creator since TV-D1 (it held the assignee before). */
   owner_id: optStr,
+  /** NULL = Unassigned. Absent on a row read before the TV-D1 migration. */
+  assignee_id: optStr,
+  /** Absent before the TV-D1 migration. */
+  creator_unknown: z.boolean().optional(),
   bucket_id: id,
   parent_id: optStr,
   title: z.string().optional(),

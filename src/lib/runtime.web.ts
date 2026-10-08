@@ -33,7 +33,6 @@ import {
   tagLinkRowSchema,
   tagRowSchema,
   taskRelationRowSchema,
-  taskRowSchema,
 } from "@contracts/rows";
 import { normalizeContentAuthorKind } from "@contracts/vocabularies";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
@@ -95,6 +94,16 @@ import type {
   SpineComment,
   UserPreferences,
 } from "./runtime.types";
+import {
+  editableTaskFields,
+  isMissingColumnError,
+  isMissingFunctionError,
+  type TaskFieldPatch,
+  taskCreateRow,
+  taskCreateRowLegacy,
+  taskPatchToColumns,
+  taskRowToModel,
+} from "./task-rows";
 
 // ── Supabase client ────────────────────────────────────────────────────────────
 
@@ -2084,42 +2093,51 @@ export const webRuntime: ModuoRuntime = {
     },
 
     async upsertTask(task) {
-      const id = task.id?.trim() || crypto.randomUUID();
       const user = await getAuthedUser();
       const now = new Date().toISOString();
-      // Every task lives in exactly one bucket; an empty/unknown/deleted/cross-
-      // workspace bucket falls back to Inbox (spec §6/§7).
-      let bucketId = task.bucketId;
-      let bucketOk = false;
-      if (bucketId) {
-        const { data: b } = await supabaseClient
-          .from("buckets")
-          .select("workspace_id, deleted_at")
-          .eq("id", bucketId)
+      const bucketId = await liveBucketOrInbox(task.workspaceId, task.bucketId);
+      // Re-saving a task that already exists writes its editable fields only,
+      // never its creator or assignee (TV-D1).
+      if (task.id?.trim()) {
+        const { data: prev } = await supabaseClient
+          .from("tasks")
+          .select("id")
+          .eq("id", task.id)
           .maybeSingle();
-        bucketOk = !!b && b.workspace_id === task.workspaceId && !b.deleted_at;
+        if (prev) return updateTaskRow(task.id, { ...editableTaskFields(task), bucketId });
       }
-      if (!bucketOk) bucketId = (await ensureWebInbox(task.workspaceId)).id;
-      const { data: prev } = await supabaseClient
-        .from("tasks")
-        .select("created_at")
-        .eq("id", id)
-        .maybeSingle();
-      const row = taskModelToRow({
+      const created = {
         ...task,
-        id,
+        id: task.id?.trim() || crypto.randomUUID(),
         bucketId,
-        ownerId: task.ownerId || user?.id || "",
-        createdAt: prev ? prev.created_at : task.createdAt || now,
+        createdAt: task.createdAt || now,
         updatedAt: now,
-      });
-      const { data, error } = await supabaseClient
+      };
+      const actorId = user?.id ?? null;
+      let { data, error } = await supabaseClient
         .from("tasks")
-        .upsert(row, { onConflict: "id" })
+        .upsert(taskCreateRow(created, actorId), { onConflict: "id" })
         .select()
         .single();
+      // Until the TV-D1 migration reaches the database there is no
+      // assignee_id, and owner_id still holds the assignee. Remove in TV-D7.
+      if (isMissingColumnError(error, "assignee_id")) {
+        ({ data, error } = await supabaseClient
+          .from("tasks")
+          .upsert(taskCreateRowLegacy(created, actorId), { onConflict: "id" })
+          .select()
+          .single());
+      }
       if (error) throw new Error(error.message);
       return taskRowToModel(data);
+    },
+
+    async updateTask({ workspaceId, taskId, patch }) {
+      const fields: TaskFieldPatch =
+        patch.bucketId === undefined
+          ? patch
+          : { ...patch, bucketId: await liveBucketOrInbox(workspaceId, patch.bucketId) };
+      return updateTaskRow(taskId, fields);
     },
 
     async deleteTask({ taskId }) {
@@ -2377,6 +2395,23 @@ export const webRuntime: ModuoRuntime = {
         p_recurrence: recurrence ?? null,
         p_position: position ?? null,
       });
+    },
+
+    async opAssign({ workspaceId, taskId, assigneeId }) {
+      const { data, error } = await supabaseClient.rpc("tasks_op_assign", {
+        p_workspace_id: workspaceId,
+        p_task_id: taskId,
+        p_assignee_id: assigneeId,
+      });
+      // Until the TV-D1 migration reaches the database there is no op, and
+      // owner_id is the assignee: write that instead. Remove in TV-D7.
+      if (isMissingFunctionError(error, "tasks_op_assign")) {
+        return updateTaskRowLegacyOwner(taskId, assigneeId);
+      }
+      if (error) throw new Error(error.message);
+      const row = Array.isArray(data) ? data[0] : data;
+      if (!row) throw new Error("The operation returned nothing.");
+      return taskRowToModel(row);
     },
 
     async opReschedule({ workspaceId, taskId, scheduledAt, days }) {
@@ -3193,59 +3228,47 @@ function bucketRowToModel(raw: unknown): Bucket {
   };
 }
 
-function taskRowToModel(raw: unknown): Task {
-  const r = requireRow(taskRowSchema, raw, "task");
-  return {
-    id: r.id,
-    workspaceId: r.workspace_id,
-    ownerId: r.owner_id ?? "",
-    bucketId: r.bucket_id,
-    parentId: r.parent_id ?? null,
-    title: r.title ?? "",
-    description: r.description ?? "",
-    dueDate: r.due_date ?? null,
-    scheduledAt: r.scheduled_at ?? null,
-    durationMinutes: r.duration_minutes ?? null,
-    timeSpentSeconds: r.time_spent_seconds ?? 0,
-    recurrence: (r.recurrence as Task["recurrence"]) ?? null,
-    energyLevel: r.energy_level ?? null,
-    priority: r.priority ?? null,
-    status: r.status ?? "todo",
-    committedFor: r.committed_for ?? null,
-    commitOrder: r.commit_order ?? null,
-    rescheduleCount: r.reschedule_count ?? 0,
-    position: r.position ?? "",
-    createdAt: r.created_at,
-    updatedAt: r.updated_at,
-    deletedAt: r.deleted_at ?? null,
-  };
+/** A field-level task edit: only the changed columns go to the server (TV-D1). */
+async function updateTaskRow(taskId: string, patch: TaskFieldPatch): Promise<Task> {
+  const { data, error } = await supabaseClient
+    .from("tasks")
+    .update(taskPatchToColumns(patch, new Date().toISOString()))
+    .eq("id", taskId)
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+  return taskRowToModel(data);
 }
 
-function taskModelToRow(t: Task): Record<string, unknown> {
-  return {
-    id: t.id,
-    workspace_id: t.workspaceId,
-    owner_id: t.ownerId || null,
-    bucket_id: t.bucketId,
-    parent_id: t.parentId ?? null,
-    title: t.title,
-    description: t.description ?? "",
-    due_date: t.dueDate ?? null,
-    scheduled_at: t.scheduledAt ?? null,
-    duration_minutes: t.durationMinutes ?? null,
-    time_spent_seconds: t.timeSpentSeconds ?? 0,
-    recurrence: t.recurrence ?? null,
-    energy_level: t.energyLevel ?? null,
-    priority: t.priority ?? null,
-    status: t.status,
-    committed_for: t.committedFor ?? null,
-    commit_order: t.commitOrder ?? null,
-    reschedule_count: t.rescheduleCount ?? 0,
-    position: t.position ?? "",
-    created_at: t.createdAt,
-    updated_at: t.updatedAt,
-    deleted_at: t.deletedAt ?? null,
-  };
+/** Assign the pre-TV-D1 way (owner_id), for a database the migration hasn't reached. */
+async function updateTaskRowLegacyOwner(taskId: string, assigneeId: string | null): Promise<Task> {
+  const { data, error } = await supabaseClient
+    .from("tasks")
+    .update({ owner_id: assigneeId, updated_at: new Date().toISOString() })
+    .eq("id", taskId)
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+  return taskRowToModel(data);
+}
+
+/**
+ * Every task lives in exactly one bucket; an empty, unknown, deleted or
+ * cross-workspace bucket falls back to the Inbox (spec §6/§7).
+ */
+async function liveBucketOrInbox(
+  workspaceId: string,
+  bucketId: string | null | undefined,
+): Promise<string> {
+  if (bucketId) {
+    const { data: b } = await supabaseClient
+      .from("buckets")
+      .select("workspace_id, deleted_at")
+      .eq("id", bucketId)
+      .maybeSingle();
+    if (b && b.workspace_id === workspaceId && !b.deleted_at) return bucketId;
+  }
+  return (await ensureWebInbox(workspaceId)).id;
 }
 
 function tagRowToModel(raw: unknown): Tag {

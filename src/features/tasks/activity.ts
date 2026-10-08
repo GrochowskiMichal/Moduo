@@ -29,6 +29,17 @@ function formatQueueDate(v: unknown): string | null {
 }
 
 /**
+ * Ops that are notifications rather than trail entries. `tasks.completed`
+ * (TV-D1) tells a task's creator that a teammate finished it; the trail
+ * already says so through `tasks.set_status`.
+ */
+const NOTIFICATION_ONLY_OPS = new Set(["tasks.completed"]);
+
+export function isTrailEntry(entry: Pick<ActivityEntry, "op">): boolean {
+  return !NOTIFICATION_ONLY_OPS.has(entry.op);
+}
+
+/**
  * The action sentence (lowercase start — rendered after the actor name).
  * Unknown ops fall back to the raw op name so the trail never lies by
  * omission when a newer client adds ops.
@@ -80,7 +91,12 @@ export function activityLine(entry: Pick<ActivityEntry, "op" | "payload">): stri
     // in this entity trail — render a neutral, third-person sentence here (the
     // notification-card voice "…to you" would be wrong in a trail anyone reads).
     case "tasks.assigned":
+      // TV-D1 rows say where it went: unassigned, taken by the actor, or handed on.
+      if ("to" in p && p.to === null) return "unassigned this";
+      if (p.self === true) return "took this";
       return "assigned this";
+    case "tasks.completed":
+      return "completed this";
     case "tasks.unblocked": {
       const blocker = str(p.blocker_title);
       return blocker ? `finished “${blocker}”, unblocking this` : "unblocked this";

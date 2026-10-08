@@ -35,7 +35,7 @@ export type SegmentedControlProps = {
  * One segmented toggle for the whole app — replaces the hand-rolled View
  * switcher, the rail Plan/Queue toggle, and the Execute Pomodoro/Duration
  * toggle. Single-select, always one active. Active segment is a NEUTRAL raised
- * plate (bg-card) on a bg-muted track — no accent (accent budget is spent on
+ * plate (bg-control-raised) on a bg-muted track — no accent (accent budget is spent on
  * primary actions + selection, not chrome toggles). Height tracks the control
  * rung; font/icon match the Button on the same rung so they stack.
  */
@@ -94,7 +94,13 @@ function SegmentedControl({
               "hover:text-foreground",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
               "disabled:pointer-events-none disabled:opacity-50",
-              "data-[state=on]:bg-card data-[state=on]:text-foreground data-[state=on]:shadow-sm",
+              // Raised plate: lighter than the bg-muted track on dark, the
+              // white card + shadow on light (--control-raised, tokens.css §5b).
+              // Keyed on aria-checked, NOT data-state: an icon-only segment sits
+              // in a TooltipTrigger asChild, which overwrites the item's
+              // data-state with the tooltip's ("closed"), so a data-[state=on]
+              // style never showed on the icon-only view switcher.
+              "aria-checked:bg-control-raised aria-checked:text-foreground aria-checked:shadow-control-raised",
               fullWidth && "flex-1",
               iconOnly ? "aspect-square" : "px-2.5",
               "[&_svg]:size-icon-sm [&_svg]:shrink-0",

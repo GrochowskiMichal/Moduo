@@ -46,7 +46,9 @@ function task(id: string, bucketId: string, status: Task["status"] = "todo"): Ta
   return {
     id,
     workspaceId: WS,
-    ownerId: "u1",
+    creatorId: "u1",
+    creatorUnknown: false,
+    assigneeId: "u1",
     bucketId,
     parentId: null,
     title: id,
@@ -94,6 +96,12 @@ function makeServer(p: string) {
         server.buckets = server.buckets.map((b) =>
           b.id === bucketId ? { ...b, deletedAt: NOW } : b,
         );
+      }),
+      // TV-D1: an edit sends only the fields it changed.
+      updateTask: rs.fn(async ({ taskId, patch }: { taskId: string; patch: Partial<Task> }) => {
+        const saved = { ...(server.tasks.find((s) => s.id === taskId) as Task), ...patch };
+        server.tasks = server.tasks.map((s) => (s.id === taskId ? saved : s));
+        return { ...saved };
       }),
       upsertTask: rs.fn(async (t: Task) => {
         const saved = { ...t, id: t.id || `${p}new-${server.tasks.length}` };

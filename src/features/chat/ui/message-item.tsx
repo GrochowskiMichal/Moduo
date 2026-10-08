@@ -38,6 +38,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { IconButton } from "@/components/ui/icon-button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { SELECTED_OPTION } from "@/components/ui/selection";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { QUICK_REACTIONS } from "../emoji";
@@ -112,7 +113,7 @@ function ReactionPill({
           className={cn(
             "inline-flex h-6 items-center gap-1 rounded-full border px-2 text-xs tabular-nums transition-colors",
             mine
-              ? "border-(--selected-border) bg-(--selected-bg) text-foreground"
+              ? `${SELECTED_OPTION} text-foreground`
               : "border-border bg-card text-muted-foreground hover:border-foreground/30 hover:text-foreground",
           )}
         >
@@ -217,14 +218,16 @@ function MessageItemImpl({
       className={cn(
         "group/message relative grid grid-cols-[2.25rem_minmax(0,1fr)] gap-x-3 rounded-md px-2 transition-colors duration-(--motion-fade)",
         grouped ? "py-0.5" : "pt-2 pb-0.5",
-        mentionsMe && !deleted ? "bg-(--selected-bg)/60" : "hover:bg-accent/40",
-        highlighted && "bg-(--selected-bg)",
+        // Mentions and the deep-linked message are STATUS accents (R5), not
+        // selection, so they compose --primary directly.
+        mentionsMe && !deleted ? "bg-primary/8" : "hover:bg-state-hover",
+        highlighted && "bg-primary/14",
         editing && "bg-accent/40",
       )}
     >
       {mentionsMe && !deleted ? (
         <span
-          className="absolute top-1 bottom-1 left-0 w-0.5 rounded-full bg-(--selected-border)"
+          className="absolute top-1 bottom-1 left-0 w-0.5 rounded-full bg-primary"
           aria-hidden
         />
       ) : null}

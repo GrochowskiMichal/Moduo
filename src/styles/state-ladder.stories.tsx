@@ -1,11 +1,18 @@
-// DS-1 — the state layer (tokens.css §5b) at token level, before any primitive
-// adopts it (DS-2). Switch Theme, Shade, Accent and Density in the toolbar:
-// hover, active and selected must stay distinct from each other on every
-// surface. The "Before" column shows the legacy tokens that collapse into one
-// grey on dark. Reference comp: .design/tasks-dogfood/ui-proposal.html.
+// The state layer (tokens.css §5b; DS-1 tokens, DS-2 primitives). Switch Theme,
+// Shade, Accent and Density in the toolbar: hover, active and selected must
+// stay distinct from each other on every surface, and the current segment of a
+// segmented control must read lighter than its track on dark. The "Before"
+// column shows the legacy tokens that collapse into one grey on dark.
+// Reference comp: .design/tasks-dogfood/ui-proposal.html. Visual baselines:
+// tests/visual/state-ladder.spec.ts (captured by a human).
 import type { Meta, StoryObj } from "@storybook/react";
+import { ChartGantt, Columns3, List } from "lucide-react";
 import { useState } from "react";
 
+import { Button } from "@/components/ui/button";
+import { SegmentedControl } from "@/components/ui/segmented-control";
+import { SELECTED_ROW } from "@/components/ui/selection";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
 const SURFACES = [
@@ -19,9 +26,11 @@ const STATES = [
   { name: "Rest", className: "" },
   { name: "Hover", className: "bg-state-hover" },
   { name: "Active · current page", className: "bg-state-active" },
-  { name: "Selected", className: "bg-state-selected" },
+  // Both selection looks, side by side. List rows ship whichever one
+  // --state-selected-edge picks (tokens.css); the live rows below use it.
+  { name: "Selected · tint only", className: "bg-state-selected" },
   {
-    name: "Selected + hairline",
+    name: "Selected · tint + hairline",
     className: "bg-state-selected ring-1 ring-inset ring-state-selected",
   },
 ] as const;
@@ -81,7 +90,7 @@ function InteractiveRows() {
           onClick={() => setSelected(item)}
           className={cn(
             "flex h-[var(--row-h)] items-center rounded-md px-2 text-left text-base text-foreground outline-none transition-colors duration-[var(--motion-fade)] focus-visible:ring-2 focus-visible:ring-ring",
-            item === selected ? "bg-state-selected" : "hover:bg-state-hover active:bg-state-active",
+            item === selected ? SELECTED_ROW : "hover:bg-state-hover active:bg-state-active",
           )}
         >
           {item}
@@ -91,26 +100,49 @@ function InteractiveRows() {
   );
 }
 
-function RaisedPlate() {
-  const [current, setCurrent] = useState("Board");
+function RaisedPlates() {
+  const [view, setView] = useState("board");
+  const [icon, setIcon] = useState("board");
   return (
-    <div className="inline-flex h-[var(--ctrl-h-sm)] items-center gap-0.5 rounded-md bg-muted p-0.5">
-      {["List", "Board", "Timeline"].map((view) => (
-        <button
-          key={view}
-          type="button"
-          aria-pressed={view === current}
-          onClick={() => setCurrent(view)}
-          className={cn(
-            "inline-flex h-full items-center rounded-sm px-2 font-display text-sm font-medium outline-none transition-colors duration-[var(--motion-fade)] focus-visible:ring-2 focus-visible:ring-ring",
-            view === current
-              ? "bg-control-raised text-foreground shadow-control-raised"
-              : "text-muted-foreground hover:text-foreground",
-          )}
-        >
-          {view}
-        </button>
-      ))}
+    <div className="flex flex-col items-start gap-3">
+      <SegmentedControl
+        aria-label="View"
+        value={view}
+        onValueChange={setView}
+        items={[
+          { value: "list", label: "List" },
+          { value: "board", label: "Board" },
+          { value: "timeline", label: "Timeline" },
+        ]}
+      />
+      <SegmentedControl
+        aria-label="View (icons)"
+        iconOnly
+        value={icon}
+        onValueChange={setIcon}
+        items={[
+          { value: "list", icon: List, ariaLabel: "List" },
+          { value: "board", icon: Columns3, ariaLabel: "Board" },
+          { value: "timeline", icon: ChartGantt, ariaLabel: "Timeline" },
+        ]}
+      />
+      <Tabs defaultValue="details">
+        <TabsList>
+          <TabsTrigger value="details">Details</TabsTrigger>
+          <TabsTrigger value="comments">Comments</TabsTrigger>
+        </TabsList>
+      </Tabs>
+    </div>
+  );
+}
+
+function ButtonStates() {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <Button variant="secondary">Secondary</Button>
+      <Button variant="outline">Outline</Button>
+      <Button variant="ghost">Ghost</Button>
+      <Button>Primary</Button>
     </div>
   );
 }
@@ -155,13 +187,18 @@ function StateLadder() {
         </Panel>
       </div>
 
-      <div className="grid grid-cols-3 gap-6">
+      <div className="grid grid-cols-4 gap-6">
         <Panel title="Live rows" note="hover, press, click" className="bg-card">
           <InteractiveRows />
         </Panel>
-        <Panel title="Raised plate" note="segmented control in DS-2" className="bg-card">
+        <Panel title="Raised plates" note="segmented control, tabs" className="bg-card">
           <div className="px-2 py-1">
-            <RaisedPlate />
+            <RaisedPlates />
+          </div>
+        </Panel>
+        <Panel title="Buttons" note="hover each: one step up" className="bg-card">
+          <div className="px-2 py-1">
+            <ButtonStates />
           </div>
         </Panel>
         <Panel title="Hairline vs border" note="divider and card edge" className="bg-card">
