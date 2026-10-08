@@ -12,7 +12,7 @@ import { onCreateNew } from "../../../components/app/create-events";
 import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell";
 import { truncationNotice } from "../../../components/app/truncation-notice";
 import { Button } from "../../../components/ui/button";
-import { focusNavRow } from "../../../components/ui/nav-row";
+import { restoreNavFocus } from "../../../components/ui/nav-row";
 import {
   asDragPayload,
   asDropLinkTarget,
@@ -838,10 +838,9 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
         onReschedule={(id, days) => api.rescheduleScheduledAt(id, days)}
         onArchive={api.archiveTask}
         onIgnore={api.unscheduleTask}
-        onCloseAutoFocus={(event) => {
-          event.preventDefault();
-          focusNavRow(railNavRef.current, triageFromRef.current);
-        }}
+        onCloseAutoFocus={(event) =>
+          restoreNavFocus(event, railNavRef.current, triageFromRef.current)
+        }
       />
       <FrontierOfferDialog
         open={frontierOfferTaskId !== null}

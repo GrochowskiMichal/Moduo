@@ -7,8 +7,17 @@
 import { afterEach, beforeAll, describe, expect, it, rs } from "@rstest/core";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { Layers } from "lucide-react";
+import { useState } from "react";
 
-import { focusNavRow, type MenuKit, NavRow, NavRowDot, NavSectionHeader } from "./nav-row";
+import {
+  focusNavRow,
+  type MenuKit,
+  NavRow,
+  NavRowDot,
+  NavSectionHeader,
+  restoreNavFocus,
+} from "./nav-row";
+import { Popover, PopoverAnchor, PopoverContent } from "./popover";
 import { TooltipProvider } from "./tooltip";
 
 beforeAll(() => {
@@ -108,12 +117,38 @@ describe("NavRow", () => {
     expect(more.className).toContain("aria-expanded:opacity-100");
   });
 
-  it("opens the same menu on right-click", async () => {
+  it("opens the same menu on right-click, and the open menu holds the swap", async () => {
     renderRows();
-    fireEvent.contextMenu(rowOf(main(/^Marketing,/)));
+    const row = rowOf(main(/^Marketing,/));
+    fireEvent.contextMenu(row);
     await settle();
     expect(screen.getByRole("menuitem", { name: "Rename" })).toBeTruthy();
     expect(screen.getByRole("menuitem", { name: "Delete…" })).toBeTruthy();
+    // The row is the context-menu trigger: its open state keeps ⋯ in and the count out.
+    expect(row.dataset.state).toBe("open");
+    const count = row.querySelector('[data-slot="nav-row-count"]') as HTMLElement;
+    const more = row.querySelector('[data-slot="nav-row-action"]') as HTMLElement;
+    expect(count.className).toContain("group-data-[state=open]/nav:opacity-0");
+    expect(more.className).toContain("group-data-[state=open]/nav:opacity-100");
+  });
+
+  it("keeps the same row when its menu comes and goes (Inbox's, with drift)", () => {
+    const menu = (m: MenuKit) => <m.Item>Triage…</m.Item>;
+    const { rerender } = render(
+      <TooltipProvider>
+        <NavRow label="Inbox" count={2} />
+      </TooltipProvider>,
+    );
+    const before = main(/^Inbox,/);
+    before.focus();
+    rerender(
+      <TooltipProvider>
+        <NavRow label="Inbox" count={2} menu={menu} />
+      </TooltipProvider>,
+    );
+    expect(main(/^Inbox,/)).toBe(before);
+    expect(document.activeElement).toBe(before);
+    expect(screen.getByRole("button", { name: "Inbox options" })).toBeTruthy();
   });
 
   it("runs an afterClose action only once the menu has closed", async () => {
@@ -224,6 +259,61 @@ describe("NavSectionHeader", () => {
     // The swap keys on the ACTION's aria-expanded, never the toggle's.
     expect(count.className).toContain("[data-slot=nav-row-action][aria-expanded=true]");
     expect(count.className).not.toContain("group-has-[[aria-expanded=true]]");
+  });
+});
+
+describe("restoreNavFocus", () => {
+  // A row-menu popover with no trigger (Share): anchored to the row, closed by
+  // Esc or by clicking somewhere else.
+  function renderPopover() {
+    function Harness() {
+      const [open, setOpen] = useState(true);
+      return (
+        <>
+          <nav aria-label="Rail">
+            <div className="relative">
+              <NavRow navId="mkt" label="Marketing" />
+              <Popover open={open} onOpenChange={setOpen}>
+                <PopoverAnchor asChild>
+                  <span />
+                </PopoverAnchor>
+                <PopoverContent
+                  onCloseAutoFocus={(e) => restoreNavFocus(e, document.querySelector("nav"), "mkt")}
+                >
+                  <button type="button">Can edit</button>
+                </PopoverContent>
+              </Popover>
+            </div>
+          </nav>
+          <input aria-label="Task title" />
+        </>
+      );
+    }
+    render(<Harness />);
+  }
+
+  it("hands focus back to the row when the popover closes on Esc", async () => {
+    renderPopover();
+    await settle();
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
+    await settle();
+    expect(document.querySelector('[data-slot="popover-content"]')).toBeNull();
+    expect(document.activeElement).toBe(main("Marketing"));
+  });
+
+  it("leaves focus in the field the person clicked into to close it", async () => {
+    renderPopover();
+    await settle();
+    const field = screen.getByRole("textbox", { name: "Task title" });
+    fireEvent.pointerDown(field);
+    fireEvent.mouseDown(field);
+    field.focus();
+    fireEvent.pointerUp(field);
+    fireEvent.mouseUp(field);
+    fireEvent.click(field);
+    await settle();
+    expect(document.querySelector('[data-slot="popover-content"]')).toBeNull();
+    expect(document.activeElement).toBe(field);
   });
 });
 

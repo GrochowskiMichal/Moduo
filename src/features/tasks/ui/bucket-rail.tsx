@@ -7,6 +7,7 @@ import {
   NavRow,
   NavRowDot,
   NavSectionHeader,
+  restoreNavFocus,
 } from "../../../components/ui/nav-row";
 import { SegmentedControl } from "../../../components/ui/segmented-control";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
@@ -111,11 +112,13 @@ export function BucketRail({
     });
   // A dialog or popover a row's menu opened has no trigger to hand focus back
   // to, so it lands on the rail: the row itself if it survived (Cancel), else
-  // the current row (a confirmed delete).
-  const returnFocus = (bucketId: string | null) => (event: Event) => {
-    event.preventDefault();
-    focusNavRow(nav.current, bucketId);
-  };
+  // the current row (a confirmed delete). Not when focus already moved on.
+  const returnFocus = (bucketId: string | null) => (event: Event) =>
+    restoreNavFocus(event, nav.current, bucketId);
+  // An inline input closed by Enter/Esc unmounts with focus in it; the row it
+  // belongs to renders on the next commit.
+  const focusRowSoon = (bucketId: string | null) =>
+    setTimeout(() => focusNavRow(nav.current, bucketId), 0);
 
   const { ungrouped, sections } = bucketSections(buckets);
   const groupNames = sections.map((s) => s.name);
@@ -138,6 +141,7 @@ export function BucketRail({
       onSetTimeBlock={(slot) => onSetTimeBlock(bucket.id, slot)}
       onSetGroup={(group) => onSetBucketGroup(bucket.id, group)}
       onShareCloseAutoFocus={returnFocus(bucket.id)}
+      onInputExit={() => focusRowSoon(bucket.id)}
     />
   );
 
@@ -200,7 +204,11 @@ export function BucketRail({
           />
 
           {adding ? (
-            <BucketAddInput onCreate={onCreateBucket} onClose={() => setAdding(false)} />
+            <BucketAddInput
+              onCreate={onCreateBucket}
+              onClose={() => setAdding(false)}
+              onKeyExit={() => focusRowSoon(null)}
+            />
           ) : null}
 
           {/* Ungrouped buckets render flat, first. */}
@@ -330,6 +338,7 @@ function BucketRow({
   onSetTimeBlock,
   onSetGroup,
   onShareCloseAutoFocus,
+  onInputExit,
 }: {
   bucket: Bucket;
   count: number;
@@ -345,6 +354,8 @@ function BucketRow({
   onSetTimeBlock: (slot: TimeBlockSlot | null) => void;
   onSetGroup: (group: string | null) => void;
   onShareCloseAutoFocus: (event: Event) => void;
+  /** The New section input closed by Enter/Esc: focus goes back to the row. */
+  onInputExit: () => void;
 }) {
   const [sharing, setSharing] = useState(false);
   const [addingSection, setAddingSection] = useState(false);
@@ -357,6 +368,7 @@ function BucketRow({
           setAddingSection(false);
         }}
         onCancel={() => setAddingSection(false)}
+        onKeyExit={onInputExit}
       />
     );
   }
@@ -481,9 +493,12 @@ function BucketShare({
 function BucketAddInput({
   onCreate,
   onClose,
+  onKeyExit,
 }: {
   onCreate: (name: string) => void;
   onClose: () => void;
+  /** Esc closed it: focus goes back to the rail (a blur already moved it). */
+  onKeyExit: () => void;
 }) {
   const [value, setValue] = useState("");
   const ref = useRef<HTMLInputElement>(null);
@@ -513,6 +528,7 @@ function BucketAddInput({
           else if (e.key === "Escape") {
             setValue("");
             onClose();
+            onKeyExit();
           }
         }}
         onBlur={() => commit(false)}
@@ -527,9 +543,12 @@ function BucketAddInput({
 function SectionNameInput({
   onCommit,
   onCancel,
+  onKeyExit,
 }: {
   onCommit: (name: string) => void;
   onCancel: () => void;
+  /** Enter/Esc closed it (a blur already moved focus elsewhere). */
+  onKeyExit: () => void;
 }) {
   const [value, setValue] = useState("");
   const ref = useRef<HTMLInputElement>(null);
@@ -553,10 +572,13 @@ function SectionNameInput({
         placeholder="Section name — Enter"
         onChange={(e) => setValue(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === "Enter") commit();
-          else if (e.key === "Escape") {
+          if (e.key === "Enter") {
+            commit();
+            onKeyExit();
+          } else if (e.key === "Escape") {
             committed.current = true;
             onCancel();
+            onKeyExit();
           }
         }}
         onBlur={commit}

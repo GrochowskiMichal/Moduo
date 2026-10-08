@@ -345,16 +345,18 @@ function NavRow({
     </div>
   );
 
-  if (!menu) return row;
-
+  // Always wrapped, so a menu that comes and goes (Inbox's, while it has
+  // drift) never remounts the row and drops its focus.
   return (
     <ContextMenu>
-      <ContextMenuTrigger asChild disabled={editing}>
+      <ContextMenuTrigger asChild disabled={editing || !menu}>
         {row}
       </ContextMenuTrigger>
-      <ContextMenuContent onCloseAutoFocus={runPending}>
-        {menu(kit(CONTEXT_KIT))}
-      </ContextMenuContent>
+      {menu ? (
+        <ContextMenuContent onCloseAutoFocus={runPending}>
+          {menu(kit(CONTEXT_KIT))}
+        </ContextMenuContent>
+      ) : null}
     </ContextMenu>
   );
 }
@@ -548,5 +550,22 @@ function focusNavRow(container: ParentNode | null | undefined, navId?: string | 
   return true;
 }
 
+/**
+ * The `onCloseAutoFocus` for a dialog or popover a row's menu opened. It has no
+ * trigger to return to, so focus goes back to the rail with `focusNavRow`,
+ * unless the person already put it somewhere else: a non-modal popover closed
+ * by clicking into a field must leave the caret in that field.
+ */
+function restoreNavFocus(
+  event: Event,
+  container: ParentNode | null | undefined,
+  navId?: string | null,
+): void {
+  event.preventDefault();
+  const active = document.activeElement;
+  if (active && active !== document.body && active.isConnected) return;
+  focusNavRow(container, navId);
+}
+
 export type { NavRowProps, NavSectionHeaderProps };
-export { focusNavRow, NavRow, NavRowDot, NavSectionHeader };
+export { focusNavRow, NavRow, NavRowDot, NavSectionHeader, restoreNavFocus };

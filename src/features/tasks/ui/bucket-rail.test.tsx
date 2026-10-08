@@ -165,6 +165,22 @@ describe("BucketRail on NavRow", () => {
     expect(document.activeElement).not.toBe(document.body);
   });
 
+  it("hands focus back to the row when New section… is closed with Esc", async () => {
+    renderRail();
+    fireEvent.contextMenu(main(/^Marketing,/).closest('[data-slot="nav-row"]') as Element);
+    await settle();
+    fireEvent.pointerMove(screen.getByRole("menuitem", { name: "Section" }));
+    fireEvent.keyDown(screen.getByRole("menuitem", { name: "Section" }), { key: "ArrowRight" });
+    await settle();
+    fireEvent.click(screen.getByRole("menuitem", { name: "New section…" }));
+    await settle();
+    const input = screen.getByPlaceholderText("Section name — Enter");
+    expect(document.activeElement).toBe(input);
+    fireEvent.keyDown(input, { key: "Escape", code: "Escape" });
+    await settle();
+    expect(document.activeElement).toBe(main(/^Marketing,/));
+  });
+
   it("shows drift as a mark outside the count's slot that opens triage", () => {
     const { onTriageBucket } = renderRail({ drift: new Map([["op", 2]]) });
     const mark = screen.getByRole("button", { name: "2 drifted · triage" });
