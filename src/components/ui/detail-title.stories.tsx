@@ -26,6 +26,17 @@ export const Rail: Story = {
   ),
 };
 
+/** A redesigned inspector's title (Tasks detail panel): 18px semibold, wraps. */
+export const Lead: Story = {
+  render: () => (
+    <div className="w-80 rounded-lg border border-border bg-card p-3">
+      <DetailTitle size="lead">
+        Landing pricing: state clearly that the Free plan is desktop-only
+      </DetailTitle>
+    </div>
+  ),
+};
+
 export const Page: Story = {
   render: () => (
     <div className="max-w-2xl space-y-1">
