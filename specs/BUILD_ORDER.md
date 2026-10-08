@@ -163,7 +163,6 @@ _Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
 - [ ] **BRAND-0 — Redraw the masters (mark at 45° from one stroke, wordmark A, lockup spacing, small master)** · deps: — · *Maciej*
 - [ ] **BRAND-2 — App touch-points (initials default avatar, Pilat out of the picker, dead fonts, staging favicon)** · deps: BRAND-1
 - [ ] **BRAND-3 — The reveal animation (once per launch, reduced-motion fade, video intro)** · deps: BRAND-1
-- [ ] **BRAND-4 — Landing alignment (PR into `prod-landing`)** · deps: BRAND-1
 - [ ] **BRAND-5 — Press kit page + zip, social avatars and banners** · deps: BRAND-1
 - [ ] **BRAND-6 — Rendered brand page** · deps: BRAND-0
 
