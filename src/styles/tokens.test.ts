@@ -18,8 +18,11 @@ const read = (rel: string) => fs.readFile(path.join(process.cwd(), rel), "utf8")
 const STATE_LAYER: Record<string, string> = {
   "--state-hover": "color-mix(in oklab, var(--foreground) 5%, transparent)",
   "--state-active": "color-mix(in oklab, var(--foreground) 9%, transparent)",
+  "--state-active-hover": "color-mix(in oklab, var(--foreground) 14%, transparent)",
   "--state-selected": "color-mix(in oklab, var(--primary) 13%, transparent)",
   "--state-selected-ring": "color-mix(in oklab, var(--primary) 32%, transparent)",
+  // The tint-only vs tint + hairline switch (DS-2): on by default.
+  "--state-selected-edge": "var(--state-selected-ring)",
   "--hairline": "color-mix(in oklab, var(--foreground) 10%, transparent)",
   "--control-raised": "color-mix(in oklab, var(--foreground) 14%, var(--muted))",
   "--scroll-thumb": "color-mix(in oklab, var(--foreground) 16%, transparent)",
@@ -93,8 +96,10 @@ describe("tokens.css state layer (DS-1)", () => {
       {
         "--color-state-hover": "var(--state-hover)",
         "--color-state-active": "var(--state-active)",
+        "--color-state-active-hover": "var(--state-active-hover)",
         "--color-state-selected": "var(--state-selected)",
         "--ring-color-state-selected": "var(--state-selected-ring)",
+        "--ring-color-state-selected-edge": "var(--state-selected-edge)",
         "--color-hairline": "var(--hairline)",
         "--color-control-raised": "var(--control-raised)",
         "--shadow-control-raised": "var(--shadow-control-raised)",
@@ -108,8 +113,10 @@ describe("tokens.css state layer (DS-1)", () => {
     const css = compiler.build([
       "bg-state-hover",
       "bg-state-active",
+      "bg-state-active-hover",
       "bg-state-selected",
       "ring-state-selected",
+      "ring-state-selected-edge",
       "border-hairline",
       "bg-control-raised",
       "shadow-control-raised",
@@ -121,7 +128,13 @@ describe("tokens.css state layer (DS-1)", () => {
     };
     expect(utility("bg-state-hover").get("background-color")).toBe("var(--state-hover)");
     expect(utility("bg-state-active").get("background-color")).toBe("var(--state-active)");
+    expect(utility("bg-state-active-hover").get("background-color")).toBe(
+      "var(--state-active-hover)",
+    );
     expect(utility("bg-state-selected").get("background-color")).toBe("var(--state-selected)");
+    expect(utility("ring-state-selected-edge").get("--tw-ring-color")).toBe(
+      "var(--state-selected-edge)",
+    );
     // The ring namespace wins over --color-*: the selected ring is the 32% mix.
     expect(utility("ring-state-selected").get("--tw-ring-color")).toBe(
       "var(--state-selected-ring)",

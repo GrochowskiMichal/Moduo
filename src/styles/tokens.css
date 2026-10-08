@@ -399,7 +399,13 @@
  *
  *     Added BESIDE the old tokens. Never redefine --accent / --secondary /
  *     --border in place: they back ~300 hovers and their /60-style variants.
- *     Primitives move onto these in DS-2.
+ *     The primitives and every selection moved onto these in DS-2.
+ *
+ *     The ladder: rest → hover (5%) → active / current / pressed (9%) →
+ *     active-hover (14%, hovering a control that is already filled, e.g. a
+ *     secondary button or an "on" toggle). Selected is the accent tint, kept
+ *     apart from the neutral steps: list rows add the --state-selected-edge
+ *     hairline, cards always carry the --state-selected-ring.
  *
  *     Scoping: a custom property that uses var() is computed where it is
  *     declared and inherits already resolved — declared only on :root, a
@@ -413,17 +419,24 @@
  *     light --control-raised below wins wherever the two blocks sit in the file.
  *
  *     Utilities (via @theme below): bg-state-hover · bg-state-active ·
- *     bg-state-selected · ring-state-selected (the 32% ring) · border-hairline
- *     (also bg-/ring-/divide-hairline) · bg-control-raised with
- *     shadow-control-raised. --scroll-thumb / --scroll-thumb-hover are
+ *     bg-state-active-hover · bg-state-selected · ring-state-selected (the 32%
+ *     ring) · ring-state-selected-edge (the row hairline switch) ·
+ *     border-hairline (also bg-/ring-/divide-hairline) · bg-control-raised
+ *     with shadow-control-raised. --scroll-thumb / --scroll-thumb-hover are
  *     var()-only (global.css scrollbars, the ScrollArea thumb).
  * ==========================================================================*/
 
 :where(:root, [data-theme], [data-shade], [data-accent]) {
   --state-hover:         color-mix(in oklab, var(--foreground) 5%, transparent);
   --state-active:        color-mix(in oklab, var(--foreground) 9%, transparent);
+  --state-active-hover:  color-mix(in oklab, var(--foreground) 14%, transparent);
   --state-selected:      color-mix(in oklab, var(--primary) 13%, transparent);
   --state-selected-ring: color-mix(in oklab, var(--primary) 32%, transparent);
+  /* The 1px inset hairline a selected LIST ROW draws with its tint. The
+     designer's switch between the two selection looks: keep it for
+     "tint + hairline", set it to `transparent` for "tint only". On the mono
+     accent the tint alone sits close to --state-active, so it ships on. */
+  --state-selected-edge: var(--state-selected-ring);
   --hairline:            color-mix(in oklab, var(--foreground) 10%, transparent);
   /* The current segment of a segmented control / tab list sits on a --muted
      track and must read LIGHTER than it on dark (the old bg-card plate
@@ -432,10 +445,10 @@
   --scroll-thumb:        color-mix(in oklab, var(--foreground) 16%, transparent);
   --scroll-thumb-hover:  color-mix(in oklab, var(--foreground) 32%, transparent);
 
-  /* Legacy selection recipe (task rows, board cards, rail items): an opaque
-     accent tint + an accent border. Value unchanged; it moved here so it
-     re-resolves in scoped wrappers too. Superseded by --state-selected (+
-     --state-selected-ring); DS-2 migrates its consumers one surface at a time. */
+  /* DEPRECATED legacy selection recipe (an opaque accent tint + an accent
+     bar/border). DS-2 moved every consumer to the state layer and
+     src/components/selection-guard.test.ts fails on any new use. Kept only so
+     a branch cut before DS-2 still renders until it merges; delete in DS-5. */
   --selected-bg:     color-mix(in oklab, var(--primary) 14%, var(--card));
   --selected-border: var(--primary);
 }
@@ -829,8 +842,10 @@
      so it is the 32% ring while bg-state-selected is the 13% tint. */
   --color-state-hover:          var(--state-hover);
   --color-state-active:         var(--state-active);
+  --color-state-active-hover:   var(--state-active-hover);
   --color-state-selected:       var(--state-selected);
   --ring-color-state-selected:  var(--state-selected-ring);
+  --ring-color-state-selected-edge: var(--state-selected-edge);
   --color-hairline:             var(--hairline);
   --color-control-raised:       var(--control-raised);
 

@@ -183,6 +183,8 @@ History moved out of [BUILD_ORDER.md](./BUILD_ORDER.md) so sessions don't re-rea
 
 - [x] **DS-1 — State tokens + global scrollbars + Storybook appearance** ✅ · design-state-layer block 1 · deps: — · lane design · _done 2026-10-08 · `t/maciej/ds-1-state-tokens` (PR #254)_
 - [x] **TV-Q1 — Quick fixes** ✅ · tasks-v2 block 1 · deps: — · lane tasks-ui · ⌘K/⌘⇧K no longer swallowed by the list, DnD activator fix, no bucket pill where implied, delete-bucket confirm + Undo, shortcut sheet ⌘1–7 · _done 2026-10-08 · `t/maciej/tv-q1-quick-fixes` (deferred-commit bucket delete; decision in [docs/decisions/tasks.md](../docs/decisions/tasks.md))_
+- [x] **DS-2 — Primitives on the state layer + tint-only selection** · design-state-layer block 2 · deps: DS-1 · lane design · cross-module visual pass (all modules) · _done 2026-10-08 · `t/maciej/ds-2-state-layer-primitives` (PR #275)_
+- [x] **TV-D1 — Safer saves + assignee data** ✅ · tasks-v2 block 3 · deps: — · lane data · field-level task saves, `tasks.assignee_id` (null = Unassigned), `owner_id` = immutable creator with a legacy shim for old builds, `tasks_op_assign`, completed-by-someone-else notification (one-off tasks only), MCP assignee/creator + `tasks_assign` · migration `20261008150000_tasks_assignee_creator` APPLIED to prod 2026-10-08 (dry run + probes) · _done 2026-10-08 · `t/maciej/tv-d1-safer-saves-assignee` (PR #257; `moduo-mcp` redeploy waits for #247; decision in [docs/decisions/tasks.md](../docs/decisions/tasks.md))_
 
 ## Wave D — Dogfood & alpha readiness · _added 2026-07-29 from the whole-project state audit_
 
