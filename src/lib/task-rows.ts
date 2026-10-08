@@ -5,8 +5,8 @@
 // a whole-row save carried every other field as this device last saw it, so
 // one person's edit could put back a field a teammate had just changed.
 
-import { requireRow, taskRowSchema } from "@contracts/rows";
-import type { Task } from "../features/tasks/model";
+import { requireRow, taskQueueRowSchema, taskRowSchema } from "@contracts/rows";
+import type { Task, TaskQueueEntry } from "../features/tasks/model";
 
 /**
  * The fields an edit can change. The id, workspace, creator and timestamps
@@ -147,6 +147,42 @@ export function isMissingFunctionError(
   return (
     (error.code === "PGRST202" || error.code === "42883") && (error.message ?? "").includes(fn)
   );
+}
+
+/** PostgREST's answer when a table doesn't exist (yet). */
+export function isMissingTableError(
+  error: { code?: string; message?: string } | null | undefined,
+  table: string,
+): boolean {
+  if (!error) return false;
+  return (
+    (error.code === "PGRST205" || error.code === "42P01") && (error.message ?? "").includes(table)
+  );
+}
+
+/** A `task_queue` row (TV-D2) → the model. */
+export function taskQueueRowToModel(raw: unknown): TaskQueueEntry {
+  const r = requireRow(taskQueueRowSchema, raw, "task queue entry");
+  return {
+    id: r.id,
+    workspaceId: r.workspace_id,
+    userId: r.user_id,
+    taskId: r.task_id,
+    position: r.position,
+    queuedAt: r.queued_at,
+    updatedAt: r.updated_at,
+  };
+}
+
+/**
+ * Queue rows in line-up order: by person, then by position compared bytewise
+ * (the database column is `COLLATE "C"`), then by id.
+ */
+export function sortQueueEntries(entries: TaskQueueEntry[]): TaskQueueEntry[] {
+  const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+  return entries
+    .slice()
+    .sort((a, b) => cmp(a.userId, b.userId) || cmp(a.position, b.position) || cmp(a.id, b.id));
 }
 
 export function taskRowToModel(raw: unknown): Task {

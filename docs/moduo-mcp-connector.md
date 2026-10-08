@@ -124,7 +124,8 @@ Read (view scope) — mirror the manifest's resources
 | `tasks_list_buckets` | buckets (Inbox flagged, group labels) |
 | `tasks_list` | tasks with computed `drifted`/`blocked`, tags, `parent_id`, `subtask_count`, recurrence, `assignee` (`{id, name}`, null = Unassigned), `assignee_id` (the same assignee's id, null = Unassigned; before TV-D1 it carried the creator's `owner_id`) and `creator` (left out when unknown); default open, ordered by bucket then position. Args: `assignee` (`me` = tasks assigned to the key's creator, by `assignee_id`: not ones they only created, never Unassigned ones; default `anyone`), `top_level` (no subtasks as rows), `limit` (max 200) + `offset` (a page shorter than `limit` is the last; the return stays an array) |
 | `tasks_focus_settings` | the key creator's Focus settings (work/break/long-break minutes, rhythm, auto-start, chime) with the app's defaults filled in |
-| `tasks_today` | the day's ordered commit queue |
+| `tasks_queue` | the key creator's own queue, in order (TV-D2): personal, not tied to a date; every task anywhere carries `queued_by_me: true` when it's in it |
+| `tasks_today` | older name for `tasks_queue`, kept until TV-D7: the same queue; `date` is echoed back, not a filter |
 | `tasks_drift` | open tasks whose scheduled time passed (oldest first) |
 | `tasks_list_tags` | workspace tags + task usage counts |
 | `tasks_search` | title/description substring search |
@@ -132,9 +133,15 @@ Read (view scope) — mirror the manifest's resources
 | `tasks_activity` | the attributed trail (one task, or workspace-recent) |
 | `tasks_list_assignees` | who a task can be assigned to: members with `is_me` and `can_be_assigned` (TV-D1) |
 
-Write (edit scope) — **exactly the Session 8 intent ops**, same RPCs the app
-calls: `tasks_commit`, `tasks_uncommit`, `tasks_skip_today`,
-`tasks_set_status`, `tasks_reschedule`, `tasks_unschedule`,
+Write (edit scope) — **exactly the intent ops**, same RPCs the app calls.
+The queue (TV-D2) is always the key creator's: `tasks_queue_add` (`at`: `end`
+default, or `top`), `tasks_queue_remove`, `tasks_queue_reorder` (`position`:
+`top`, `end`, or `after` with `after_task_id`); each returns the queue. The
+older `tasks_commit` / `tasks_uncommit` / `tasks_skip_today` stay as aliases
+until TV-D7: they now add to or take out of the creator's queue too (and still
+write the shared day columns old app builds read), and skipping no longer
+counts as a reschedule. Then `tasks_set_status`, `tasks_reschedule`,
+`tasks_unschedule`,
 `tasks_skip_occurrence`, and `tasks_assign` (TV-D1: `tasks_op_assign`; a
 member id, `"me"` for the key's creator, or `null` to unassign; the same
 membership check as the app, and the assignee is notified unless it's the

@@ -39,10 +39,12 @@ import type { RawLinkSuggestion } from "../features/spine/suggest";
 import type {
   ActivityEntry,
   Bucket,
+  QueuePlacement,
   RecurrenceRule,
   Tag,
   TagLink,
   Task,
+  TaskQueueEntry,
   TaskRelation,
   TaskStatus,
   TasksCatchUpItem,
@@ -874,9 +876,42 @@ export type ModuoRuntime = {
      * invariants, write, and an attributed activity row in one transaction.
      * Each returns the updated row(s) for optimistic reconciliation.
      */
+    /**
+     * The day's commit queue, kept for builds from before TV-D4: since TV-D2
+     * these also add the task to (commit) or take it out of (uncommit, skip)
+     * the caller's personal queue, and skip no longer counts as a reschedule.
+     * Removed in TV-D7.
+     */
     opCommit(input: { workspaceId: string; taskId: string; forDate: string }): Promise<Task>;
     opUncommit(input: { workspaceId: string; taskId: string }): Promise<Task>;
     opSkipToday(input: { workspaceId: string; taskId: string }): Promise<Task>;
+    /**
+     * Personal queues (TV-D2): every queue row the caller can see in the
+     * workspace — their own line-up and other people's claims on tasks they
+     * can see — sorted by person, then position. Empty until the migration
+     * reaches the database.
+     */
+    listQueue(workspaceId: string): Promise<TaskQueueEntry[]>;
+    /**
+     * Queue ops (TV-D2). Each acts on the caller's own queue (an API key on
+     * its creator's) and returns that queue in order. Adding puts a task at
+     * the end (or the top) and leaves an already-queued task where it is
+     * unless asked for the top; reorder places it right after `afterTaskId`,
+     * or first when that is null; move-to-end is Skip in a run. Adding and
+     * removing are logged; moves are not, and none counts as a reschedule.
+     */
+    opQueueAdd(input: {
+      workspaceId: string;
+      taskId: string;
+      at?: QueuePlacement;
+    }): Promise<TaskQueueEntry[]>;
+    opQueueRemove(input: { workspaceId: string; taskId: string }): Promise<TaskQueueEntry[]>;
+    opQueueReorder(input: {
+      workspaceId: string;
+      taskId: string;
+      afterTaskId: string | null;
+    }): Promise<TaskQueueEntry[]>;
+    opQueueMoveToEnd(input: { workspaceId: string; taskId: string }): Promise<TaskQueueEntry[]>;
     /**
      * Assign (or, with null, unassign) through `tasks_op_assign`: the person
      * has to be a member who can work on tasks. Assigning someone else

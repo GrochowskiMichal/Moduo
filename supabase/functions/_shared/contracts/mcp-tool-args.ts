@@ -26,12 +26,25 @@ export const TOOL_ARG_SCHEMAS: Record<string, z.ZodType<Record<string, unknown>>
     offset: z.coerce.number().int().min(0).optional(),
   }),
   tasks_focus_settings: z.object({}),
+  tasks_queue: z.object({}),
   tasks_today: z.object({ date: ymd.optional() }),
   tasks_drift: z.object({}),
   tasks_list_tags: z.object({}),
   tasks_search: z.object({ q: nonempty, limit }),
   tasks_get: z.object({ task_id: nonempty }),
   tasks_activity: z.object({ task_id: nonempty.optional(), limit }),
+  tasks_queue_add: z.object({ task_id: nonempty, at: z.enum(["end", "top"]).optional() }),
+  tasks_queue_remove: z.object({ task_id: nonempty }),
+  tasks_queue_reorder: z
+    .object({
+      task_id: nonempty,
+      position: z.enum(["top", "end", "after"]),
+      after_task_id: nonempty.optional(),
+    })
+    .refine((a) => a.position !== "after" || !!a.after_task_id, {
+      message: "after_task_id is required with position 'after'",
+      path: ["after_task_id"],
+    }),
   tasks_commit: z.object({ task_id: nonempty, for_date: ymd.optional() }),
   tasks_uncommit: z.object({ task_id: nonempty }),
   tasks_skip_today: z.object({ task_id: nonempty }),
