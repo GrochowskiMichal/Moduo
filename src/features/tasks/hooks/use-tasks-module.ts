@@ -809,20 +809,15 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     [bundle.tasks, today, committedTasks, applyOp, runtime, workspaceId],
   );
 
-  /** Skip: reschedule a committed task out of today — ambient count++ (no wall).
-   * The op clears the commit and increments the counter atomically. */
+  /** Skip: take a committed task out of today's queue (and, since TV-D2, out
+   * of my personal queue). Leaving the queue isn't a slip, so the reschedule
+   * count stays as it is (tasks-v2 decision 4); the op clears the commit. */
   const rescheduleFromToday = useCallback(
     (id: string) => {
       const existing = bundle.tasks.find((t) => t.id === id);
       if (!existing) return;
-      applyOp(
-        id,
-        {
-          committedFor: null,
-          commitOrder: null,
-          rescheduleCount: existing.rescheduleCount + 1,
-        },
-        () => runtime!.tasks.opSkipToday({ workspaceId: workspaceId!, taskId: id }),
+      applyOp(id, { committedFor: null, commitOrder: null }, () =>
+        runtime!.tasks.opSkipToday({ workspaceId: workspaceId!, taskId: id }),
       );
     },
     [bundle.tasks, applyOp, runtime, workspaceId],

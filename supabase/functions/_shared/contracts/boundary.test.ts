@@ -84,6 +84,26 @@ describe("MCP tool args", () => {
     expect(type?.enum).toEqual(["contact", "company"]);
   });
 
+  it("takes the queue tools' arguments, and 'after' needs the task to follow (TV-D2)", () => {
+    expect(parseToolArgs("tasks_queue", {}).success).toBe(true);
+    expect(parseToolArgs("tasks_queue_add", { task_id: "t1" }).success).toBe(true);
+    expect(parseToolArgs("tasks_queue_add", { task_id: "t1", at: "top" }).success).toBe(true);
+    expect(parseToolArgs("tasks_queue_add", { task_id: "t1", at: "middle" }).success).toBe(false);
+    expect(parseToolArgs("tasks_queue_remove", {}).success).toBe(false);
+    expect(parseToolArgs("tasks_queue_reorder", { task_id: "t1", position: "end" }).success).toBe(true);
+    expect(parseToolArgs("tasks_queue_reorder", { task_id: "t1" }).success).toBe(false);
+    expect(parseToolArgs("tasks_queue_reorder", { task_id: "t1", position: "after" }).success).toBe(
+      false,
+    );
+    expect(
+      parseToolArgs("tasks_queue_reorder", { task_id: "t1", position: "after", after_task_id: "t2" })
+        .success,
+    ).toBe(true);
+    const listed = listingJsonSchema("tasks_queue_reorder");
+    const position = (listed.properties as Record<string, { enum?: string[] }>).position;
+    expect(position?.enum).toEqual(["top", "end", "after"]);
+  });
+
   it("rejects a non-canonical date on tasks_today", () => {
     const parsed = parseToolArgs("tasks_today", { date: "17/08/2026" });
     expect(parsed.success).toBe(false);

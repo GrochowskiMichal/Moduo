@@ -35,11 +35,12 @@
   - Preview an account that has a Stripe customer: `select public.account_scrub_stripe_mirror('<user id>');`
   - → **Expect:** `"preview": true` with that account's customer and card counts; nothing changes.
 - [x] **Do:** deploy `delete-account` (verify_jwt off, as before; v17, since PRIV-3 shipped v16). Probe it without signing in. → **Expect:** POST without a token answers 401, GET answers 405. **2026-10-08:** v17 live; 401 and 405.
-- [ ] **AC17, designer, Stripe dashboard:** delete the two customers whose accounts are already gone (`cus_UVK1VVxLZNlTGj`, `cus_VO9nnGZB29QU0H`): Customers → the customer → Delete. Delete at Stripe first: wiping our copy before would let the deletion's own webhook write the profile back.
-- [ ] **Do (after the Stripe delete):**
+- [x] **AC17, designer, Stripe dashboard:** delete the two customers whose accounts are already gone (`cus_UVK1VVxLZNlTGj`, `cus_VO9nnGZB29QU0H`): Customers → the customer → Delete. Delete at Stripe first: wiping our copy before would let the deletion's own webhook write the profile back.
+- [x] **Do (after the Stripe delete):**
   - Find the old user ids: `select id, _raw_data -> 'metadata' ->> 'supabase_user_id' from stripe.customers where id in ('cus_UVK1VVxLZNlTGj', 'cus_VO9nnGZB29QU0H');`
   - Wipe each: `select public.account_scrub_stripe_mirror('<old user id>', false, array['<its customer id>']);`
   - → **Expect:** `customers_wiped: 1` each. Both rows' `email`, `name` and `address` read NULL, and `deleted` is true.
+  - **2026-10-08:** both deletion webhooks had landed (deleted, email still set). Preview, then wipe: `customers_wiped: 1` each, no cards. Both rows now hold only `id`, `object` and `deleted`.
 
 ## 2. In the app, after §1 (a throwaway account; designer)
 - [ ] **Do:** Settings → Account → Danger zone. → **Expect:** "Permanently delete your account and your personal data. This also cancels your Moduo plan. Things you shared with others stay with them, without your name. This can't be undone."
