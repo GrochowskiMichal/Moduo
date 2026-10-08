@@ -109,7 +109,6 @@ _Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
 
 - [ ] **TV-Q1 — Quick fixes** ✅ · tasks-v2 block 1 · deps: — · lane tasks-ui · ⌘K/⌘⇧K no longer swallowed by the list, DnD activator fix, no bucket pill where implied, delete-bucket confirm + Undo, shortcut sheet ⌘1–7
 - [ ] **TV-F1 — Focus engine (wall-clock, persisted, away, notifications)** ✅ · tasks-v2 block 2 · deps: — · lane focus
-- [ ] **DS-1 — State tokens + global scrollbars + Storybook appearance** ✅ · design-state-layer block 1 · deps: — · lane design
 - [ ] **TV-D1 — Safer saves + assignee data** ✅ · tasks-v2 block 3 · deps: — · lane data · migration (expand only; shims for old desktop builds) — round-trip, then apply to prod in-session
 - [ ] **AT-1 — Attachments storage, limits, trash** ✅ · attachments block 1 · deps: — · lane attachments · migration + `purge-deleted` Edge Function; confirm the hosted upload limit ≥ 500 MB
 - [ ] **DS-2 — Primitives on the state layer + tint-only selection** · design-state-layer block 2 · deps: DS-1 · lane design · cross-module visual pass (all modules)
@@ -137,6 +136,8 @@ _Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
 - [ ] **DS-5 — Sweep: NavRow + state layer in every module, lint guards** · design-state-layer block 5 · deps: DS-3, DS-4 · lane design
 - [ ] 🔴 **TV-D7 — Contract cleanup (drop legacy columns, view, shims, MCP aliases)** · tasks-v2 block 21 · deps: all TV-* above + ≥2 desktop releases and 14 days after TV-D3 ships
 - [ ] **GR-0 — `/s1` the app-wide reference grammar (`@` / `#` / `/`)** · own spec, not written yet · deps: — · `#tag` in text = Link (decided 2026-10-08)
+
+_Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
 
 ### Tasks v2 lanes (parallel once merged into `maciej`)
 
@@ -231,6 +232,18 @@ Two blocks with no dependency between them still **merge-conflict if they edit t
 - [ ] **PRIV-2c — Admin command for privacy@ deletion requests** · deps: PRIV-2a, PRIV-2b · **DoR-ready** · spec block 3 · designer creates `ACCOUNT_ADMIN_SECRET`. Tier 2 review.
 - [ ] **PRIV-2d — Privacy policy wording** · deps: — · **DoR-ready** · spec block 4 + appendix · landing branch flow; Mike redeploys Vercel.
 - [ ] **PRIV-3 — Erase a person's PostHog analytics on account deletion and when they switch analytics off** · deps: PRIV-1 · **Do before setting `PUBLIC_POSTHOG_KEY` on a live build (recommended).** App analytics ([src/lib/analytics.ts](../src/lib/analytics.ts), opt-in) are keyed by the Supabase user id, and `$identify` creates a PostHog person. Today nothing deletes them: `delete-account`'s erasure steps (`supabase/functions/_shared/account-erasure.ts`) skip PostHog, and switching analytics off only stops collection. The privacy policy (GrochowskiMichal/Moduo#232) says deletion is on request via privacy@moduo.app until this lands; update it to "automatic" when it does. Add a `posthog` erasure step that deletes the person and their events by distinct id. That needs a PostHog personal API key with person-delete scope, stored as a Supabase secret (Maciej creates it in PostHog), and it's a Tier-2 path (`delete-account`): `/code-review ultra` + `/claude-security`. Withdrawal needs a small signed-in endpoint doing the same, called from `setAnalyticsConsent(…, "denied")`. Context: [docs/decisions/permissions.md](../docs/decisions/permissions.md) 2026-10-07.
+
+## Moduo for Claude Code — My tasks, the queue, Focus · [`specs/moduo-for-claude-code.md`](./moduo-for-claude-code.md)
+
+> A Claude Code mod over Moduo's own connector (dogfoods `moduo-mcp`). Two lanes: connector (MCC-1 → 2 → 3, Tier 2, serialized: each adds a migration and both edit `modules/tasks.ts`) and mod (MCC-4 after MCC-1). Mod blocks' done gate adds `claude plugin test tools/claude-plugins/moduo-tasks`.
+
+- [ ] **MCC-1 — Connector: mine, task shape, focus settings** · deps: — · `assignee` filter, `offset` paging, `assignee_id`/`subtask_count`, top-level + bucket order, `tasks_focus_settings`; tool catalog in `docs/moduo-mcp-connector.md`; pure helpers in `_shared/tasks-connector.ts` with tests; redeploy `moduo-mcp`. Tier 2.
+- [ ] **MCC-2 — Connector: reorder queue + log time** · deps: MCC-1 · migration: `tasks_op_reorder_queue`, `tasks_op_log_time`; manifest entries; `tasks_reorder_queue`, `tasks_log_time` tools; connector doc updated; Supabase-branch round-trip; migration then redeploy. Tier 2.
+- [ ] **MCC-3 — Connector: create task** · deps: MCC-2 · migration: `tasks_op_create` (Inbox default, commit option); `tasks_create` tool (due date as a local-midnight timestamp); connector doc's capture note updated; round-trip; redeploy. Tier 2.
+- [ ] **MCC-4 — Mod: My tasks panel (read)** · deps: MCC-1 · `tools/claude-plugins/moduo-tasks`: key + endpoint settings, connector client + error mapping, `/mine` panel (filters, buckets, queue cards, done section, 60 s refresh), band line, reopen flag.
+- [ ] **MCC-5 — Mod: queue actions + work on this** · deps: MCC-2, MCC-4 · c / ⇧c / u / s / [ ] plus buttons; `⏎` fills the prompt, In progress on send.
+- [ ] **MCC-6 — Mod: Focus** · deps: MCC-5 · Focus panel, pomodoro/stopwatch from Moduo settings, band clock, toast + chime, time logging rules, done → next, Claude context.
+- [ ] **MCC-7 — Mod: quick capture** · deps: MCC-3, MCC-4 · `/task` parse (title, #bucket, today/tomorrow/weekday, !) + preview + create.
 
 ---
 
