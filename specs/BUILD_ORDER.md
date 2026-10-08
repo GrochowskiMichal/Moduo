@@ -112,7 +112,7 @@ _Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
 - [ ] **AT-1 — Attachments storage, limits, trash** ✅ · attachments block 1 · deps: — · lane attachments · migration + `purge-deleted` Edge Function; confirm the hosted upload limit ≥ 500 MB
 - [ ] **TV-D3 — Time entries** · tasks-v2 block 5 · deps: TV-D1, TV-F1 · lane data · migration + legacy backfill/shim
 - [ ] **TV-T1 — Shared tag store** · tasks-v2 block 6 · deps: TV-D1 · lane data
-- [~] **TV-D4 — Queue & assignee in the UI (claims, My tasks)** · tasks-v2 block 7 · deps: TV-D2, DS-3 · lane tasks-ui · note: until this ships the app shows the old shared day list while commits also collect, dateless, in personal queues; the switch shows all of it, so the stale-line-up prompt needs a "last touched" source (removals delete rows; see the TV-D2 decision)
+- [x] **TV-D4 — Queue & assignee in the UI (claims, My tasks)** · tasks-v2 block 7 · deps: TV-D2, DS-3 · lane tasks-ui · done 2026-10-08 on `t/maciej/tv-d4-queue-assignee-ui` (no migration): every queue surface reads my `task_queue`, claims, My tasks; the stale-line-up prompt's "last touched" source is left to TV-F2 (removals delete rows; see the TV-D2 and TV-D4 decisions)
 - [ ] **TV-D5 — Live updates (Realtime)** · tasks-v2 block 8 · deps: TV-D2 · lane data · adds tables to the `supabase_realtime` publication
 - [ ] **TV-U1 — Rows, board, completed** · tasks-v2 block 9 · deps: DS-3, TV-D4 · lane tasks-ui
 - [ ] **TV-U3 — Detail panel + comments** · tasks-v2 block 10 · deps: DS-2, TV-D1, TV-D3 · lane tasks-ui
