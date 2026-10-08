@@ -145,6 +145,12 @@ describe("odd responses and long keys", () => {
     });
   });
 
+  it("doesn't retry a 2xx without an id when there's no idempotency key", async () => {
+    const { fn } = fakeFetch([{ status: 200, body: {} }]);
+    const result = await sendViaResend({ ...EMAIL, idempotencyKey: undefined }, { apiKey: "k", fetch: fn });
+    expect(result).toMatchObject({ ok: false, retryable: false, error: "resend_no_id" });
+  });
+
   it("hashes an idempotency key past 256 characters instead of cutting it", async () => {
     const short = await idempotencyKeyHeader("auth_code:abc");
     expect(short).toBe("auth_code:abc");

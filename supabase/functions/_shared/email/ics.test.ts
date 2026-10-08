@@ -76,6 +76,10 @@ describe("calendar files", () => {
     expect(ics.split("ATTENDEE").length - 1).toBe(20);
   });
 
+  it("refuses a UID too long to keep whole", () => {
+    expect(() => buildIcs({ ...EVENT, method: "REQUEST", uid: "u".repeat(300) })).toThrow("uid too long");
+  });
+
   it("formats dates in UTC basic form", () => {
     expect(icsDate(new Date("2026-01-02T03:04:05.678Z"))).toBe("20260102T030405Z");
   });

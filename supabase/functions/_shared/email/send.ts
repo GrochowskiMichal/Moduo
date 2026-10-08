@@ -79,11 +79,6 @@ export function base64Utf8(value: string): string {
 }
 
 /**
- * Whether trying again could help. Resend answers 409 both for two requests
- * racing on one idempotency key (worth retrying) and for a key reused with a
- * different payload (never succeeds), and tells them apart by `name`.
- */
-/**
  * Resend accepts keys up to 256 characters. A longer key is hashed rather than
  * cut, so two different keys sharing their first 256 characters never collide.
  */
@@ -94,6 +89,11 @@ export async function idempotencyKeyHeader(key: string): Promise<string> {
   return `sha256:${hex}`;
 }
 
+/**
+ * Whether trying again could help. Resend answers 409 both for two requests
+ * racing on one idempotency key (worth retrying) and for a key reused with a
+ * different payload (never succeeds), and tells them apart by `name`.
+ */
 function retryableStatus(status: number, name: string | null): boolean {
   if (status === 409) return name === "concurrent_idempotent_requests";
   return status === 408 || status === 429 || status >= 500;
@@ -167,12 +167,12 @@ export async function sendViaResend(email: OutgoingEmail, deps: SendDeps): Promi
         ? payload.id
         : "";
     if (id) return { ok: true, id };
-    // A 2xx whose body timed out or didn't parse: Resend may well have sent it, so
-    // report it as retryable. With an idempotency key (every caller passes one),
-    // the retry returns the original send instead of a second email.
+    // A 2xx whose body timed out or didn't parse: Resend may well have sent it.
+    // Retrying is safe only with an idempotency key (the retry then returns the
+    // original send); without one a retry could send a second email.
     return {
       ok: false,
-      retryable: true,
+      retryable: Boolean(email.idempotencyKey),
       status: response.status,
       error: controller.signal.aborted ? "timeout" : "resend_no_id",
     };

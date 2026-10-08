@@ -50,25 +50,28 @@ const DARK = paletteHex("dark");
 
 const SUBJECT_MAX = 200;
 
-/** Only links we would be happy to send: https, mailto, or a local dev server. Anything else becomes "#". */
 /** Longest link we put in an email; anything longer is refused rather than cut (a cut URL is a broken one). */
 export const MAX_URL_LENGTH = 2048;
 
+/**
+ * Only links we would be happy to send: https, mailto, or a local dev server,
+ * within MAX_URL_LENGTH once encoded. Anything else becomes "#".
+ */
 export function safeHref(url: string): string {
   if (url.length > MAX_URL_LENGTH) return "#";
+  let href: string;
   try {
     const parsed = new URL(url);
-    if (parsed.protocol === "https:" || parsed.protocol === "mailto:") return parsed.toString();
-    if (
-      parsed.protocol === "http:" &&
-      (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1")
-    ) {
-      return parsed.toString();
+    const local = parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1";
+    if (parsed.protocol !== "https:" && parsed.protocol !== "mailto:" && !(parsed.protocol === "http:" && local)) {
+      return "#";
     }
+    href = parsed.toString();
   } catch {
-    // fall through
+    return "#";
   }
-  return "#";
+  // Parsing percent-encodes non-ASCII, so check the length of what we'd actually send.
+  return href.length <= MAX_URL_LENGTH ? href : "#";
 }
 
 /** Length caps (in characters) for the strings a doc carries; user-typed text lands in most of them. */

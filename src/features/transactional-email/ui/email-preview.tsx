@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
 import { Eyebrow } from "@/components/ui/eyebrow";
 
@@ -23,7 +23,7 @@ export function EmailPreview({ title, html, text, mode }: EmailPreviewProps) {
 
   // Narrowing the canvas re-wraps the email, so measure again whenever the
   // frame's width changes. A ref callback, so it attaches whenever the frame mounts.
-  const observeFrame = (el: HTMLIFrameElement | null) => {
+  const observeFrame = useCallback((el: HTMLIFrameElement | null) => {
     frame.current = el;
     if (!el || typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(() => {
@@ -32,7 +32,7 @@ export function EmailPreview({ title, html, text, mode }: EmailPreviewProps) {
     });
     observer.observe(el);
     return () => observer.disconnect();
-  };
+  }, []);
 
   const fitToContent = () => {
     const el = frame.current;

@@ -88,9 +88,10 @@ function cap(value: string, max: number): string {
 }
 
 export function buildIcs(input: IcsEvent): string {
+  // A cut UID could merge two meetings into one calendar event, so refuse instead.
+  if (input.uid.length > ICS_LIMITS.uid) throw new Error("ics: uid too long");
   const event: IcsEvent = {
     ...input,
-    uid: cap(input.uid, ICS_LIMITS.uid),
     summary: cap(input.summary, ICS_LIMITS.summary),
     description: input.description === undefined ? undefined : cap(input.description, ICS_LIMITS.description),
     url: input.url && input.url.length <= ICS_LIMITS.url ? input.url : undefined,

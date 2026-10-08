@@ -178,6 +178,8 @@ describe("user text is inert", () => {
     expect(safeHref("https://app.moduo.app/join?invite=a%2Bb")).toBe("https://app.moduo.app/join?invite=a%2Bb");
     expect(safeHref("http://localhost:8081/x")).toBe("http://localhost:8081/x");
     expect(safeHref(`https://app.moduo.app/${"a".repeat(3000)}`)).toBe("#");
+    // Short as typed, long once percent-encoded: still refused.
+    expect(safeHref(`https://app.moduo.app/${"é".repeat(2000)}`)).toBe("#");
     const { html } = renderEmail(doc({ blocks: [link("Open", "javascript:alert(1)")] }));
     expect(html).not.toContain("javascript:");
   });
