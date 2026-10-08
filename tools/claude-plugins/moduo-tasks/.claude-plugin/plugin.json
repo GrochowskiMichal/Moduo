@@ -1,0 +1,30 @@
+{
+  "name": "moduo-tasks",
+  "version": "0.1.0",
+  "description": "Moduo for Claude Code: your Moduo tasks, today's queue and focus, inside Claude Code. Needs a Moduo API key.",
+  "author": { "name": "Moduo" },
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "api_key": {
+      "type": "string",
+      "title": "Moduo API key",
+      "description": "Create one in Moduo: Workspace settings → API keys, Tasks set to edit, every other module none.",
+      "sensitive": true,
+      "required": false
+    },
+    "endpoint": {
+      "type": "string",
+      "title": "Moduo connector URL",
+      "description": "Leave as is unless you run your own Moduo.",
+      "default": "https://wtoonrvuqumihpkbvwvs.supabase.co/functions/v1/moduo-mcp",
+      "required": false
+    },
+    "time_zone": {
+      "type": "string",
+      "title": "Time zone for \"today\"",
+      "description": "An IANA name like Europe/Warsaw. Empty uses this computer's time zone.",
+      "default": "",
+      "required": false
+    }
+  }
+}

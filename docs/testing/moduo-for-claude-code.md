@@ -14,6 +14,21 @@
 ## Smoke test after redeploy
 - [ ] **Do:** call the calendar tools that were waiting on a redeploy (e.g. `calendar_day`, `calendar_list_events`) → **Expect:** normal answers, no errors. _(whole connector)_
 
+## My tasks panel (MCC-4) — terminal and the desktop Code tab
+Setup once: after this is on `develop`, open Claude Code in the repo, run `/plugin`, find **moduo-tasks** (marketplace `moduo-local`) and paste your Moduo **edit** key (Workspace settings → API keys, Tasks = edit, everything else none) into its *Moduo API key* field. Leave *Time zone* empty unless "today" looks wrong.
+- [ ] **Do:** without a key, type `/mine` → **Expect:** one line on how to add a key; no panel, no "Moduo" line above the prompt. _(AC13)_
+- [ ] **Do:** with the key, start a session → **Expect:** within a few seconds a line above the prompt: "Moduo · Queue N" (plus "· N drifting" in amber when any). _(band)_
+- [ ] **Do:** `/mine` → **Expect:** "Moduo · My tasks" opens beside the conversation: your open tasks by bucket in the same order as the app's bucket list, drifting ones in amber with "drifting N days", "blocked", "repeats", "N subtasks", "Queue #n" on queued tasks; today's queue on top with the planned total. _(AC1)_
+- [ ] **Do:** compare with the Moduo app → **Expect:** the same tasks, the same queue numbers. _(AC1)_
+- [ ] **Do:** press `e` (Everyone), then `m` (Assigned to me) → **Expect:** Everyone adds other people's tasks and their queue items; Assigned to me shows only yours. _(AC2)_
+- [ ] **Do:** press `d` → **Expect:** "Done today (N)" opens the tasks from today's queue you've finished; `d` again closes it. _(AC1)_
+- [ ] **Do:** change a task in the app (rename it, or commit it), wait a minute with the panel open → **Expect:** the panel shows the change without pressing anything; `r` refreshes at once. _(AC3)_
+- [ ] **Do:** turn off Wi-Fi with the panel open → **Expect:** "Offline · retrying" and the list stays, greyed; turn Wi-Fi on → it recovers within a minute. _(AC13)_
+- [ ] **Do:** close the panel, quit, start a new session → **Expect:** the panel stays closed; open it, quit with it open, start again → it reopens. _(reopen)_
+- [ ] **Do:** after midnight (or set *Time zone* to a zone where it's already tomorrow) → **Expect:** the queue shown is that day's. _(AC14)_
+- [ ] **Do:** revoke the key in Moduo, wait a minute → **Expect:** "Moduo rejected the key…", and it stops retrying. _(AC13)_
+
 ## Known gaps / not-yet-testable
 - Calendar smoke test not run: the check key was Tasks-only, so calendar tools are hidden from it. Run it with a key that has Calendar view.
-- "blocked by <title>" and "Done today" data for the panel are decided in MCC-4 (see PR #271 validator notes).
+- The panel says "blocked" without the blocker's title (the connector doesn't return it), and "Done today" lists today's queue items that are done; a task finished today without being committed isn't there. Both decided in MCC-4.
+- The mod's live panel needs your edit key in the plugin settings, so its live check is the section above, run by you.
