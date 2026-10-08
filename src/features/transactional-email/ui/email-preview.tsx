@@ -21,6 +21,19 @@ export function EmailPreview({ title, html, text, mode }: EmailPreviewProps) {
   const frame = useRef<HTMLIFrameElement>(null);
   const [height, setHeight] = useState(480);
 
+  // Narrowing the canvas re-wraps the email, so measure again whenever the
+  // frame's width changes. A ref callback, so it attaches whenever the frame mounts.
+  const observeFrame = (el: HTMLIFrameElement | null) => {
+    frame.current = el;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => {
+      const body = el.contentDocument?.body;
+      if (body) setHeight(body.scrollHeight + el.offsetHeight - el.clientHeight);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  };
+
   const fitToContent = () => {
     const el = frame.current;
     const doc = el?.contentDocument;
@@ -44,7 +57,7 @@ export function EmailPreview({ title, html, text, mode }: EmailPreviewProps) {
         </pre>
       ) : (
         <iframe
-          ref={frame}
+          ref={observeFrame}
           title={title}
           srcDoc={html}
           // Same-origin so the frame can be measured; no scripts run inside it.

@@ -79,7 +79,26 @@ export function foldLine(line: string): string {
   return out.join(`${CRLF} `);
 }
 
-export function buildIcs(event: IcsEvent): string {
+/** Field caps, so user-typed booking text can't grow the attachment without bound. */
+const ICS_LIMITS = { summary: 200, description: 2000, name: 80, url: 2048, uid: 200, attendees: 20 } as const;
+
+function cap(value: string, max: number): string {
+  const chars = Array.from(value);
+  return chars.length <= max ? value : `${chars.slice(0, max - 1).join("")}…`;
+}
+
+export function buildIcs(input: IcsEvent): string {
+  const event: IcsEvent = {
+    ...input,
+    uid: cap(input.uid, ICS_LIMITS.uid),
+    summary: cap(input.summary, ICS_LIMITS.summary),
+    description: input.description === undefined ? undefined : cap(input.description, ICS_LIMITS.description),
+    url: input.url && input.url.length <= ICS_LIMITS.url ? input.url : undefined,
+    organizer: { ...input.organizer, name: input.organizer.name ? cap(input.organizer.name, ICS_LIMITS.name) : input.organizer.name },
+    attendees: input.attendees
+      .slice(0, ICS_LIMITS.attendees)
+      .map((who) => ({ ...who, name: who.name ? cap(who.name, ICS_LIMITS.name) : who.name })),
+  };
   const cancelled = event.method === "CANCEL";
   const lines = [
     "BEGIN:VCALENDAR",

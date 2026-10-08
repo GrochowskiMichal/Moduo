@@ -63,6 +63,19 @@ describe("calendar files", () => {
     expect(folded.replace(/\r\n /g, "")).toBe(line);
   });
 
+  it("caps user-typed fields so the file stays small", () => {
+    const ics = buildIcs({
+      ...EVENT,
+      method: "REQUEST",
+      summary: "s".repeat(1000),
+      description: "d".repeat(10_000),
+      attendees: Array.from({ length: 50 }, (_, i) => ({ email: `g${i}@x.test` })),
+    }).replace(/\r\n /g, "");
+    expect(ics).not.toContain("s".repeat(201));
+    expect(ics).not.toContain("d".repeat(2001));
+    expect(ics.split("ATTENDEE").length - 1).toBe(20);
+  });
+
   it("formats dates in UTC basic form", () => {
     expect(icsDate(new Date("2026-01-02T03:04:05.678Z"))).toBe("20260102T030405Z");
   });

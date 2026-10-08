@@ -42,6 +42,8 @@ export function usableTimeZone(zone: unknown, fallback = "UTC"): string {
 }
 
 const formatters = new Map<string, Intl.DateTimeFormat>();
+/** Bounds the cache even if callers pass zones straight from a request (variants of one zone each get a key). */
+const MAX_FORMATTERS = 512;
 
 /** One formatter per zone and shape, reused across calls (building one is the expensive part). */
 function formatter(zone: string, shape: string, options: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
@@ -49,6 +51,7 @@ function formatter(zone: string, shape: string, options: Intl.DateTimeFormatOpti
   let fmt = formatters.get(key);
   if (!fmt) {
     fmt = new Intl.DateTimeFormat(LOCALE, { ...options, timeZone: zone });
+    if (formatters.size >= MAX_FORMATTERS) formatters.clear();
     formatters.set(key, fmt);
   }
   return fmt;

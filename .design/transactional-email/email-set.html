@@ -453,8 +453,7 @@ const EMAILS = [
       ["btn", "Pick another time"],
     ],
     why: "You got this email because you canceled a meeting booked through Moduo.",
-    sent: true,
-    notes: ["The button reopens Anna's booking page."] },
+    notes: ["The button reopens Anna's booking page.", "No \"Scheduled with Moduo\" badge: nothing is scheduled any more."] },
 
   { g: "bookings", id: "C6", name: "Host canceled (guest)", status: "new",
     when: "The host deletes the booked meeting in Moduo, or cancels it in Google Calendar.",
@@ -467,7 +466,6 @@ const EMAILS = [
       ["muted", "Reply to this email to reach Anna."],
     ],
     why: "You got this email because you had a meeting with Anna Carter booked through Moduo.",
-    sent: true,
     notes: ["Sent even when Google sends its own cancellation, because only ours has the rebooking link (Q35).", "Waits 2 minutes, so undoing the delete in Moduo cancels it.", "Today nothing happens at all: the slot stays blocked and the guest hears nothing from Moduo."] },
 
   { g: "bookings", id: "C7", name: "Meeting reminder (guest)", status: "new",

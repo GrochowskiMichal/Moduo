@@ -51,7 +51,11 @@ const DARK = paletteHex("dark");
 const SUBJECT_MAX = 200;
 
 /** Only links we would be happy to send: https, mailto, or a local dev server. Anything else becomes "#". */
+/** Longest link we put in an email; anything longer is refused rather than cut (a cut URL is a broken one). */
+export const MAX_URL_LENGTH = 2048;
+
 export function safeHref(url: string): string {
+  if (url.length > MAX_URL_LENGTH) return "#";
   try {
     const parsed = new URL(url);
     if (parsed.protocol === "https:" || parsed.protocol === "mailto:") return parsed.toString();

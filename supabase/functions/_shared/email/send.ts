@@ -83,6 +83,17 @@ export function base64Utf8(value: string): string {
  * racing on one idempotency key (worth retrying) and for a key reused with a
  * different payload (never succeeds), and tells them apart by `name`.
  */
+/**
+ * Resend accepts keys up to 256 characters. A longer key is hashed rather than
+ * cut, so two different keys sharing their first 256 characters never collide.
+ */
+export async function idempotencyKeyHeader(key: string): Promise<string> {
+  if (key.length <= 256) return key;
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(key));
+  const hex = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return `sha256:${hex}`;
+}
+
 function retryableStatus(status: number, name: string | null): boolean {
   if (status === 409) return name === "concurrent_idempotent_requests";
   return status === 408 || status === 429 || status >= 500;
@@ -97,7 +108,7 @@ export async function sendViaResend(email: OutgoingEmail, deps: SendDeps): Promi
     Authorization: `Bearer ${deps.apiKey}`,
     "Content-Type": "application/json",
   };
-  if (email.idempotencyKey) headers["Idempotency-Key"] = email.idempotencyKey.slice(0, 256);
+  if (email.idempotencyKey) headers["Idempotency-Key"] = await idempotencyKeyHeader(email.idempotencyKey);
 
   const body = {
     from: email.from,
@@ -155,7 +166,16 @@ export async function sendViaResend(email: OutgoingEmail, deps: SendDeps): Promi
       payload && typeof payload === "object" && "id" in payload && typeof payload.id === "string"
         ? payload.id
         : "";
-    return { ok: true, id };
+    if (id) return { ok: true, id };
+    // A 2xx whose body timed out or didn't parse: Resend may well have sent it, so
+    // report it as retryable. With an idempotency key (every caller passes one),
+    // the retry returns the original send instead of a second email.
+    return {
+      ok: false,
+      retryable: true,
+      status: response.status,
+      error: controller.signal.aborted ? "timeout" : "resend_no_id",
+    };
   }
 
   const message =

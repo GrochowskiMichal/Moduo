@@ -3,6 +3,7 @@ import { describe, expect, it } from "@rstest/core";
 import {
   base64Utf8,
   formatFrom,
+  idempotencyKeyHeader,
   type OutgoingEmail,
   RESEND_ENDPOINT,
   sendViaResend,
@@ -95,7 +96,12 @@ describe("sendViaResend", () => {
       error: "busy",
     });
     const limited = fakeFetch([{ status: 429, body: { message: "slow down" } }]);
-    expect((await sendViaResend(EMAIL, { apiKey: "k", fetch: limited.fn })).ok).toBe(false);
+    expect(await sendViaResend(EMAIL, { apiKey: "k", fetch: limited.fn })).toEqual({
+      ok: false,
+      retryable: true,
+      status: 429,
+      error: "slow down",
+    });
     expect(await sendViaResend(EMAIL, { apiKey: "k", fetch: fakeFetch([{ status: 422, body: { message: "bad from" } }]).fn })).toEqual({
       ok: false,
       retryable: false,
@@ -125,6 +131,27 @@ describe("sendViaResend", () => {
     expect(JSON.parse(String(calls[0].init.body)).attachments).toEqual([
       { filename: "invite.ics", content: "QQ==", content_type: "text/calendar" },
     ]);
+  });
+});
+
+describe("odd responses and long keys", () => {
+  it("treats a 2xx without an id as retryable, not as sent", async () => {
+    const { fn } = fakeFetch([{ status: 200, body: { nope: true } }]);
+    expect(await sendViaResend(EMAIL, { apiKey: "k", fetch: fn })).toEqual({
+      ok: false,
+      retryable: true,
+      status: 200,
+      error: "resend_no_id",
+    });
+  });
+
+  it("hashes an idempotency key past 256 characters instead of cutting it", async () => {
+    const short = await idempotencyKeyHeader("auth_code:abc");
+    expect(short).toBe("auth_code:abc");
+    const a = await idempotencyKeyHeader(`${"k".repeat(256)}-a`);
+    const b = await idempotencyKeyHeader(`${"k".repeat(256)}-b`);
+    expect(a).toMatch(/^sha256:[0-9a-f]{64}$/);
+    expect(a).not.toBe(b);
   });
 });
 

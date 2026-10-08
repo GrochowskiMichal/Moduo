@@ -127,7 +127,11 @@ describe("user text is inert", () => {
           { type: "workspace", name: HOSTILE },
           { type: "list", items: [[HOSTILE]] },
           { type: "item", title: HOSTILE, body: HOSTILE },
-          button(HOSTILE, "https://app.moduo.app/x"),
+          button(HOSTILE, "https://app.moduo.app/x", HOSTILE),
+          { type: "code", code: HOSTILE },
+          { type: "signoff", text: HOSTILE },
+          { type: "attachment", filename: HOSTILE, label: HOSTILE },
+          { type: "eyebrow", text: HOSTILE },
         ],
         footer: { reason: HOSTILE, links: [{ label: HOSTILE, href: "https://app.moduo.app/s" }] },
       }),
@@ -173,6 +177,7 @@ describe("user text is inert", () => {
     expect(safeHref("not a url")).toBe("#");
     expect(safeHref("https://app.moduo.app/join?invite=a%2Bb")).toBe("https://app.moduo.app/join?invite=a%2Bb");
     expect(safeHref("http://localhost:8081/x")).toBe("http://localhost:8081/x");
+    expect(safeHref(`https://app.moduo.app/${"a".repeat(3000)}`)).toBe("#");
     const { html } = renderEmail(doc({ blocks: [link("Open", "javascript:alert(1)")] }));
     expect(html).not.toContain("javascript:");
   });
