@@ -23,6 +23,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 - 2026-10-08 · A contact can point only at a company you can open, and the refusal never says whether a private company exists.
 - 2026-10-08 · API keys get None / View / Edit per module, inside the permission model: a key never gets more than its creator, and only its creator can widen it.
+- 2026-10-08 · PRIV-3: switching app analytics off, or deleting the account, deletes what PostHog holds for the person.
 - 2026-10-07 · PRIV-2 planned: what a deleted account leaves in other people's workspaces, its Stripe copy, and a privacy@ admin command
 - 2026-10-07 · App analytics (PostHog) is opt-in per person: asked after sign-in until answered, off until you say yes, tagged `surface: "app"` in the shared PostHog project, and in the privacy policy.
 - 2026-10-07 · Deleting an account also deletes the user's private items in other people's workspaces, and the Danger zone says the plan ends
@@ -233,6 +234,11 @@ One line per locked product or architecture decision, grouped by area, newest fi
 - 2026-06-11 · Density is a customization axis, not a fixed value.
 - Control-sizing rung contract.
 - Theme shades.
+
+## Brand: logo, colour, type, motion, voice → [decisions/brand.md](decisions/brand.md)
+
+- 2026-10-08 · Pink is not Moduo's accent and there is no "AI disc"; pink stays only as one ordinary accent/tag option.
+- 2026-10-08 · Brand system planned: the product is the brand; drawn wordmark; no brand hue; pink isn't a brand colour; the mark reveals itself out of nothing.
 
 ## Product scope, alpha, settings, cross-cutting fixes → [decisions/product.md](decisions/product.md)
 
