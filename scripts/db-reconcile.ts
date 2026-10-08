@@ -1,7 +1,7 @@
 /**
  * OPS-2 — prod-schema ↔ migration-file reconciliation (CLI shell).
  *
- * `bun run db:reconcile` prints two read-only SQL queries. Paste each into the
+ * `bun run db:reconcile` prints four read-only SQL queries. Paste each into the
  * Supabase MCP `execute_sql` — each returns ONLY mismatches, so a clean database
  * answers with an empty result.
  *
@@ -19,7 +19,8 @@
  * UNCHECKED list printed in the header. Notably functions are matched by NAME, so a
  * stray overload (the `calendar_op_account_upsert` 7→8 arg case, which needed an
  * explicit DROP to avoid PostgREST ambiguity) reads as present in query 1 and
- * drift-free in query 2. Query 3 exists to catch precisely that.
+ * drift-free in query 2. Query 3 exists to catch precisely that. Query 4 is the one
+ * grants check: internal SECURITY DEFINER helpers a client role can call.
  *
  * Edge Functions live outside the database, so nothing here sees them. Their sibling check
  * is `bun run functions:reconcile` (scripts/functions-reconcile.ts): deployed functions vs
@@ -32,6 +33,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
+  clientCallableDefinerQuery,
   dedupeByLastDefiner,
   dedupeDecls,
   normalizeBody,
@@ -131,3 +133,12 @@ join pg_proc p on p.proname = f.name
 join pg_namespace n on n.oid = p.pronamespace and n.nspname = 'public'
 group by f.name having count(*) > 1
 order by 2;`);
+
+console.log(
+  `\n\n-- ===== QUERY 4: SECURITY DEFINER functions a client can call but shouldn't =====\n`,
+);
+console.log(`-- \`*__*\` helpers are internal: only other SECURITY DEFINER functions call them, as
+-- the owner, so no client role needs EXECUTE. anon gets no definer function outside
+-- ANON_DEFINER_ALLOWED (db-reconcile-core.ts). Supabase grants anon and authenticated
+-- EXECUTE directly, so a REVOKE naming only PUBLIC leaves both (gotchas/supabase.md).
+${clientCallableDefinerQuery()}`);
