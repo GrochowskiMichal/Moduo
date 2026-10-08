@@ -8,6 +8,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Agent workflow, branching, Entire, docs → [decisions/workflow.md](decisions/workflow.md)
 
+- 2026-10-08 · Every `/s2` and `/s3` report opens with a Status line and keeps "to finish this block" apart from findings; one block per session; unlanded work is always pushed.
 - 2026-10-08 · `main` and `develop` change only through a pull request whose `static-checks` job passed, and a weekly cloud routine gardens the knowledge files.
 - 2026-10-07 · The repo is public, so Entire checkpoints are local-only and never pushed.
 - 2026-10-07 · Claude Code is the only harness, on Anthropic models, and AGENTS.md is the single instruction file.
@@ -102,7 +103,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## MCP connector → [decisions/mcp.md](decisions/mcp.md)
 
-- 2026-10-08 · Moduo for Claude Code: a mod over `moduo-mcp`, with three new task intent ops.
+- 2026-10-08 · The "Moduo for Claude Code" mod was dropped; the connector improvements it came with stay.
 - 2026-07-04 · Notes NO-9 + NO-10 landed — publish-to-web + the DoD (MCP manifest/connector + Recent-notes widget); Wave 3 (Notes) COMPLETE.
 - 2026-06-27 · Contacts CO-5 MCP manifest + "Needs attention" widget landed — Wave 1 (Contacts) complete.
 - 2026-06-27 · Spine CT-7 Tasks adoption + MCP manifest + dashboard widget landed (Wave 0 spine complete).

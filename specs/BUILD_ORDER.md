@@ -6,6 +6,8 @@
 > **How `/s3` uses this:** at session end it reconciles this file (ticks any block completed that session) and syncs each spec's `Status:` line.
 > **Invariant:** every block's dependencies appear **above** it, so strict top-to-bottom is always a valid order. Items at the same depth with disjoint deps may be built in parallel/any order.
 
+**Focus:** Tasks (TV-*, AT-*, and the DS-* blocks they need) · the website (moduo.app, PRs into `prod-landing`: BRAND-4, PRIV-2d) · transactional email templates (TX-*, plus BRAND-1's email logos), **not** the email module · set by Maciej 2026-10-08 — the designer's current focus area, edited by Mike or Maciej. `/s2` and `/s3` turn a 🔎 Found item into a chip or next-session suggestion only when it falls inside this; while it's unset, none do.
+
 Legend: `[ ]` not started · `[~]` in progress · `[x]` done (date + branch in the trailing note).
 
 > **⚠ Reading the trailing notes: "migration deploy-ready but unapplied" is HISTORY, not current state.**
@@ -229,18 +231,6 @@ Two blocks with no dependency between them still **merge-conflict if they edit t
 - [ ] **PRIV-2d — Privacy policy wording** · deps: — · **DoR-ready** · spec block 4 + appendix · landing branch flow; Mike redeploys Vercel.
 - [~] **PRIV-3 — Erase a person's PostHog analytics on account deletion and when they switch analytics off** · deps: PRIV-1 · _merged into `maciej` and deployed 2026-10-08 (GrochowskiMichal/Moduo#245; `delete-account` v16, `analytics-forget` v1; validator, ultrareview and Claude Security passed)_: a `posthog` step first in `deleteAccount` ([`_shared/posthog-erasure.ts`](../supabase/functions/_shared/posthog-erasure.ts)); a new `analytics-forget` function, called by the app the moment a yes turns into a no (it waits ~10 s, then deletes) and sent again each session until it answers 200; the app stops analytics before signing out of a deleted account. **Open:** (1) Mike creates the PostHog personal API key (`person:write`) and sets `POSTHOG_PERSONAL_API_KEY` + `POSTHOG_PROJECT_ID` as Edge Function secrets; (2) ~~deploy~~ done; (3) the end-to-end check in [docs/testing/priv-3-posthog-erasure.md](../docs/testing/priv-3-posthog-erasure.md); (4) then merge the policy wording, GrochowskiMichal/Moduo#244 (draft, into `prod-landing`).
 - [ ] **PRIV-3b — Durable PostHog erasure backlog** · deps: PRIV-3 · **before the app's PostHog key goes on in production** · delete-account records an erasure that was refused, skipped or rate-limited in a service-role-only table before the auth user goes, and a scheduled job retries it; a 429 or timeout then becomes a backlog entry instead of a blocked deletion. Optional: a per-user cooldown on `analytics-forget`. Why: the validator and the security pass both found the logs-only gap (docs/decisions/permissions.md 2026-10-08). Tier 2 (migration + `delete-account`). Decision: [docs/decisions/permissions.md](../docs/decisions/permissions.md) 2026-10-08.
-
-## Moduo for Claude Code — My tasks, the queue, Focus · [`specs/moduo-for-claude-code.md`](./moduo-for-claude-code.md)
-
-> A Claude Code mod over Moduo's own connector (dogfoods `moduo-mcp`). Two lanes: connector (MCC-1 → 2 → 3, Tier 2, serialized: each adds a migration and both edit `modules/tasks.ts`) and mod (MCC-4 after MCC-1). Mod blocks' done gate adds `claude plugin test tools/claude-plugins/moduo-tasks`.
-
-- [ ] **MCC-1 — Connector: mine, task shape, focus settings** · deps: — · `assignee` filter, `offset` paging, `assignee_id`/`subtask_count`, top-level + bucket order, `tasks_focus_settings`; tool catalog in `docs/moduo-mcp-connector.md`; pure helpers in `_shared/tasks-connector.ts` with tests; redeploy `moduo-mcp`. Tier 2.
-- [ ] **MCC-2 — Connector: reorder queue + log time** · deps: MCC-1 · migration: `tasks_op_reorder_queue`, `tasks_op_log_time`; manifest entries; `tasks_reorder_queue`, `tasks_log_time` tools; connector doc updated; Supabase-branch round-trip; migration then redeploy. Tier 2.
-- [ ] **MCC-3 — Connector: create task** · deps: MCC-2 · migration: `tasks_op_create` (Inbox default, commit option); `tasks_create` tool (due date as a local-midnight timestamp); connector doc's capture note updated; round-trip; redeploy. Tier 2.
-- [ ] **MCC-4 — Mod: My tasks panel (read)** · deps: MCC-1 · `tools/claude-plugins/moduo-tasks`: key + endpoint settings, connector client + error mapping, `/mine` panel (filters, buckets, queue cards, done section, 60 s refresh), band line, reopen flag.
-- [ ] **MCC-5 — Mod: queue actions + work on this** · deps: MCC-2, MCC-4 · c / ⇧c / u / s / [ ] plus buttons; `⏎` fills the prompt, In progress on send.
-- [ ] **MCC-6 — Mod: Focus** · deps: MCC-5 · Focus panel, pomodoro/stopwatch from Moduo settings, band clock, toast + chime, time logging rules, done → next, Claude context.
-- [ ] **MCC-7 — Mod: quick capture** · deps: MCC-3, MCC-4 · `/task` parse (title, #bucket, today/tomorrow/weekday, !) + preview + create.
 
 ---
 

@@ -65,7 +65,8 @@ Read (view scope) — mirror the manifest's resources
 | tool | returns |
 | --- | --- |
 | `tasks_list_buckets` | buckets (Inbox flagged, group labels) |
-| `tasks_list` | tasks with computed `drifted`/`blocked`, tags, `parent_id`, recurrence, `assignee` (`{id, name}`, null = Unassigned) and `creator` (left out when unknown); default open |
+| `tasks_list` | tasks with computed `drifted`/`blocked`, tags, `parent_id`, `subtask_count`, recurrence, `assignee` (`{id, name}`, null = Unassigned), `assignee_id` (the same assignee's id, null = Unassigned; before TV-D1 it carried the creator's `owner_id`) and `creator` (left out when unknown); default open, ordered by bucket then position. Args: `assignee` (`me` = tasks assigned to the key's creator, by `assignee_id`: not ones they only created, never Unassigned ones; default `anyone`), `top_level` (no subtasks as rows), `limit` (max 200) + `offset` (a page shorter than `limit` is the last; the return stays an array) |
+| `tasks_focus_settings` | the key creator's Focus settings (work/break/long-break minutes, rhythm, auto-start, chime) with the app's defaults filled in |
 | `tasks_today` | the day's ordered commit queue |
 | `tasks_drift` | open tasks whose scheduled time passed (oldest first) |
 | `tasks_list_tags` | workspace tags + task usage counts |

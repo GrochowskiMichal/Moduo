@@ -39,6 +39,15 @@ export function taskPeople(
 }
 
 /**
+ * The assignee's id (null = Unassigned), by taskPeople's rule: a row from
+ * before the TV-D1 migration has no assignee_id, and owner_id was the assignee.
+ * tasks_list's `assignee: "me"` filters on this.
+ */
+export function assigneeIdOf(row: TaskPeopleRow): string | null {
+  return (row.assignee_id === undefined ? row.owner_id : row.assignee_id) ?? null;
+}
+
+/**
  * tasks_assign's assignee argument: null unassigns, "me" is the key's
  * creator, anything else is a member id (the op checks it).
  */
