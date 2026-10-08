@@ -1,4 +1,4 @@
-import { Inbox, Layers, ListChecks, Plus } from "lucide-react";
+import { Inbox, Layers, ListChecks, Plus, UserRound } from "lucide-react";
 import { type RefObject, useEffect, useRef, useState } from "react";
 import { Input } from "../../../components/ui/input";
 import {
@@ -24,7 +24,7 @@ export type TasksMode = "plan" | "execute";
 type Props = {
   mode: TasksMode;
   onModeChange: (mode: TasksMode) => void;
-  selection: string; // "all" | "today" | "inbox" | bucketId
+  selection: string; // "all" | "today" | "mine" | "inbox" | bucketId
   onSelect: (selection: string) => void;
   buckets: Bucket[];
   inbox: Bucket | null;
@@ -33,7 +33,10 @@ type Props = {
   taskCountByBucket: Map<string, number>;
   driftCountByBucket: Map<string, number>;
   totalOpenCount: number;
-  committedCount: number;
+  /** My open queued tasks (my personal queue, TV-D4). */
+  queueCount: number;
+  /** My open assigned tasks; null hides "My tasks" (fewer than two members). */
+  myTasksCount: number | null;
   canEdit: boolean;
   onCreateBucket: (name: string) => void;
   onRenameBucket: (id: string, name: string) => void;
@@ -79,7 +82,8 @@ export function BucketRail({
   taskCountByBucket,
   driftCountByBucket,
   totalOpenCount,
-  committedCount,
+  queueCount,
+  myTasksCount,
   canEdit,
   onCreateBucket,
   onRenameBucket,
@@ -162,11 +166,21 @@ export function BucketRail({
           <NavRow
             label="Queue"
             icon={<ListChecks aria-hidden />}
-            count={committedCount}
-            countLabel={`${committedCount} queued`}
+            count={queueCount}
+            countLabel={`${queueCount} queued`}
             current={selection === "today"}
             onSelect={() => onSelect("today")}
           />
+          {myTasksCount !== null ? (
+            <NavRow
+              label="My tasks"
+              icon={<UserRound aria-hidden />}
+              count={myTasksCount}
+              countLabel={`${myTasksCount} open`}
+              current={selection === "mine"}
+              onSelect={() => onSelect("mine")}
+            />
+          ) : null}
           {inbox ? (
             <NavRow
               navId={inbox.id}
@@ -273,8 +287,7 @@ function ModeToggle({
   onModeChange: (mode: TasksMode) => void;
 }) {
   // Shared SegmentedControl primitive. The internal mode value stays "execute"
-  // (model-level); only the label reads "Queue" (UI rename — keeps the
-  // committed_for model intact).
+  // (model-level); the label reads "Focus". TV-F2 removes the switch.
   return (
     <SegmentedControl
       aria-label="Tasks mode"

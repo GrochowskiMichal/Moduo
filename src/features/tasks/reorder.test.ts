@@ -1,53 +1,7 @@
 import { describe, expect, it } from "@rstest/core";
 
 import { betweenPositions, endPosition, positionsAfter } from "./helpers";
-import { commitOrderUpdates, moveItem, positionForReorder } from "./reorder";
-
-describe("commitOrderUpdates", () => {
-  const queue = [
-    { id: "a", commitOrder: 1 },
-    { id: "b", commitOrder: 2 },
-    { id: "c", commitOrder: 3 },
-  ];
-
-  it("returns only the rows whose rank changed (1-based, contiguous)", () => {
-    // move c to the front: c→1, a→2, b→3 (every row moved)
-    expect(commitOrderUpdates(["c", "a", "b"], queue)).toEqual([
-      { id: "c", commitOrder: 1 },
-      { id: "a", commitOrder: 2 },
-      { id: "b", commitOrder: 3 },
-    ]);
-  });
-
-  it("writes nothing when the order is unchanged", () => {
-    expect(commitOrderUpdates(["a", "b", "c"], queue)).toEqual([]);
-  });
-
-  it("only persists the moved span on a small move", () => {
-    // swap b and c: a stays 1, c→2, b→3
-    expect(commitOrderUpdates(["a", "c", "b"], queue)).toEqual([
-      { id: "c", commitOrder: 2 },
-      { id: "b", commitOrder: 3 },
-    ]);
-  });
-
-  it("self-heals sparse / legacy numbering to a contiguous 1..N", () => {
-    const sparse = [
-      { id: "a", commitOrder: 5 },
-      { id: "b", commitOrder: 9 },
-      { id: "c", commitOrder: null },
-    ];
-    expect(commitOrderUpdates(["a", "b", "c"], sparse)).toEqual([
-      { id: "a", commitOrder: 1 },
-      { id: "b", commitOrder: 2 },
-      { id: "c", commitOrder: 3 },
-    ]);
-  });
-
-  it("ignores ids not in the current queue", () => {
-    expect(commitOrderUpdates(["a", "ghost", "b", "c"], queue)).toEqual([]);
-  });
-});
+import { moveItem, positionForReorder } from "./reorder";
 
 describe("positionForReorder", () => {
   // a stable, sorted position ladder

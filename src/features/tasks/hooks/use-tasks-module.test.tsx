@@ -54,6 +54,7 @@ function fakeRuntime(tasks: Task[]) {
   const api = {
     list: rs.fn(async () => bundle),
     getTimeBlocks: rs.fn(async () => ({})),
+    listQueue: rs.fn(async () => []),
     updateTask: rs.fn(async ({ taskId, patch }: { taskId: string; patch: Partial<Task> }) => ({
       ...byId(taskId),
       ...patch,

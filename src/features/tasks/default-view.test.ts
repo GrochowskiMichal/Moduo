@@ -2,11 +2,15 @@ import { describe, expect, it } from "@rstest/core";
 
 import {
   currentTimeBlockSlot,
+  myTasksScope,
+  openCount,
   resolveDefaultSelection,
   setBucketTimeBlock,
+  showsMyTasks,
   timeBlockByBucket,
 } from "./default-view";
-import { sanitizeTimeBlocks } from "./model";
+import { groupsByBucket, makeTask, showBucketPill } from "./helpers";
+import { sanitizeTimeBlocks, type Task } from "./model";
 
 const at = (hour: number) => new Date(2026, 5, 6, hour, 30);
 
@@ -133,5 +137,45 @@ describe("sanitizeTimeBlocks", () => {
     expect(sanitizeTimeBlocks(null)).toEqual({});
     expect(sanitizeTimeBlocks("nope")).toEqual({});
     expect(sanitizeTimeBlocks(undefined)).toEqual({});
+  });
+});
+
+describe("My tasks (TV-D4, D4-3)", () => {
+  const task = (id: string, over: Partial<Task>): Task => ({
+    ...makeTask({ workspaceId: "w1", bucketId: "b1", title: id, position: id }),
+    id,
+    ...over,
+  });
+
+  it("shows the row only in workspaces with two or more members", () => {
+    expect(showsMyTasks(0)).toBe(false);
+    expect(showsMyTasks(1)).toBe(false);
+    expect(showsMyTasks(2)).toBe(true);
+    expect(showsMyTasks(5)).toBe(true);
+  });
+
+  it("scopes to tasks assigned to me across buckets, archived left out like All", () => {
+    const tasks = [
+      task("mine", { assigneeId: "me", bucketId: "b1" }),
+      task("mine-elsewhere", { assigneeId: "me", bucketId: "b2" }),
+      task("mine-done", { assigneeId: "me", status: "done" }),
+      task("mine-archived", { assigneeId: "me", status: "archived" }),
+      task("made-by-me", { assigneeId: "mike", creatorId: "me" }),
+      task("nobody", { assigneeId: null }),
+    ];
+    const scope = myTasksScope(tasks, "me");
+    expect(scope.map((t) => t.id)).toEqual(["mine", "mine-elsewhere", "mine-done"]);
+    // The rail counts the open ones.
+    expect(openCount(scope)).toBe(2);
+    expect(myTasksScope(tasks, null)).toEqual([]);
+  });
+
+  it("groups by bucket and shows bucket pills like All", () => {
+    expect(groupsByBucket("mine")).toBe(true);
+    expect(groupsByBucket("all")).toBe(true);
+    expect(groupsByBucket("today")).toBe(false);
+    expect(groupsByBucket("b1")).toBe(false);
+    expect(showBucketPill("mine", "none")).toBe(true);
+    expect(showBucketPill("mine", "bucket")).toBe(false);
   });
 });

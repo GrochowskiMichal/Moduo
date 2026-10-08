@@ -1,6 +1,6 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { CalendarDays, Clock, CornerDownRight, Inbox, ListChecks, Repeat } from "lucide-react";
+import { CalendarDays, Clock, CornerDownRight, Inbox, Repeat } from "lucide-react";
 import { useCallback } from "react";
 import { SELECTED_OPTION } from "@/components/ui/selection";
 import { TagChipList } from "../../../components/tag-chip";
@@ -29,6 +29,7 @@ import { AssignContextMenu } from "./assign-context-menu";
 import { AssigneeAvatar } from "./assignee-avatar";
 import { taskDrag } from "./dnd/task-dnd";
 import { LevelDots } from "./level-icons";
+import { QueueToggle } from "./queue-toggle";
 import { BlockedMarker } from "./task-row";
 
 type Props = {
@@ -38,6 +39,8 @@ type Props = {
   inboxId: string | null;
   /** Show the bucket tag (when columns are grouped by status, not bucket). */
   showBucket: boolean;
+  /** False in My tasks, where every card is mine (D4-4). */
+  showAssignee?: boolean;
   canEdit: boolean;
   /** Selection drives the detail rail; available to view-only users too. */
   selected: boolean;
@@ -55,6 +58,7 @@ export function TaskCard({
   buckets,
   inboxId,
   showBucket,
+  showAssignee = true,
   canEdit,
   selected,
   onSelect,
@@ -115,6 +119,7 @@ export function TaskCard({
         bucketName={bucketName}
         inboxId={inboxId}
         showBucket={showBucket}
+        showAssignee={showAssignee}
         canEdit={canEdit}
         onTagFilter={onTagFilter}
         api={api}
@@ -131,8 +136,8 @@ export function TaskCard({
         <ContextMenuItem onSelect={() => api.toggleDone(task)}>
           {task.status === "done" ? "Mark not done" : "Mark done"}
         </ContextMenuItem>
-        <ContextMenuItem onSelect={() => api.toggleCommit(task.id)}>
-          {task.committedFor === api.today ? "Remove from queue" : "Add to queue"}
+        <ContextMenuItem onSelect={() => api.toggleQueue(task.id)}>
+          {api.queuedTaskIds.has(task.id) ? "Remove from queue" : "Add to queue"}
         </ContextMenuItem>
         {task.recurrence && task.status !== "done" && task.status !== "archived" ? (
           <ContextMenuItem onSelect={() => api.skipOccurrence(task.id)}>
@@ -212,6 +217,7 @@ export function CardBody({
   bucketName,
   inboxId,
   showBucket,
+  showAssignee = true,
   canEdit,
   onTagFilter,
   api,
@@ -220,26 +226,30 @@ export function CardBody({
   bucketName: string;
   inboxId: string | null;
   showBucket: boolean;
+  /** False in My tasks, where every card is mine (D4-4). */
+  showAssignee?: boolean;
   canEdit: boolean;
   onTagFilter?: (tagId: string) => void;
   api: TasksModuleApi;
 }) {
   const done = task.status === "done";
   const drifted = isDrifted(task);
-  const committed = !!task.committedFor && task.committedFor === api.today;
+  const queued = api.queuedTaskIds.has(task.id);
+  const claimed = (api.queueClaims.get(task.id)?.length ?? 0) > 0;
   const scheduled = formatScheduled(task.scheduledAt);
   const due = formatDue(task.dueDate);
   const tags = api.tagsByTask.get(task.id) ?? [];
   // Blocked — computed, ambient: dim + a quiet icon, never red (spec §5c).
   const blocked = api.blockedTaskIds.has(task.id);
   const { assignees, byId } = useAssignees();
-  const assignee = assignees.length > 1 ? byId(task.assigneeId) : null;
+  const assignee = showAssignee && assignees.length > 1 ? byId(task.assigneeId) : null;
   // Quiet subtask mirrors: n/m progress on a parent; a parent caption on a
   // subtask card rendered flat (Today, or its parent is off this board).
   const progress = api.subtaskProgressByTask.get(task.id) ?? null;
   const parent = task.parentId ? (api.tasks.find((t) => t.id === task.parentId) ?? null) : null;
   const hasMeta =
-    committed ||
+    queued ||
+    claimed ||
     blocked ||
     task.recurrence ||
     scheduled ||
@@ -288,33 +298,10 @@ export function CardBody({
             </span>
           ) : null}
           {blocked ? <BlockedMarker taskId={task.id} api={api} /> : null}
-          {/* Queue toggle — always visible + quiet (marker IS the action). */}
-          {canEdit ? (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  aria-label={committed ? "Remove from queue" : "Add to queue"}
-                  aria-pressed={committed}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    api.toggleCommit(task.id);
-                  }}
-                  className={cn(
-                    "flex size-icon items-center justify-center rounded transition-colors duration-(--motion-fade) ease-(--ease-out)",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-                    committed ? "text-primary" : "text-muted-foreground/40 hover:text-foreground",
-                  )}
-                >
-                  <ListChecks className="size-3.5" aria-hidden />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent>{committed ? "Remove from queue" : "Add to queue"}</TooltipContent>
-            </Tooltip>
-          ) : committed ? (
-            <span className="flex items-center text-primary" aria-label="Queued">
-              <ListChecks className="size-3.5" aria-hidden />
-            </span>
+          {/* Queue mark — always visible + quiet (marker IS the action): my
+              toggle, or a teammate's ringed avatar for their queue (TV-D4). */}
+          {canEdit || queued || claimed ? (
+            <QueueToggle task={task} api={api} canEdit={canEdit} />
           ) : null}
           {task.recurrence ? (
             <Tooltip>

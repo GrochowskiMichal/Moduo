@@ -57,11 +57,13 @@ function renderRail({
   selection: initialSelection = "mkt",
   drift = new Map<string, number>(),
   collapsed = new Set<string>(),
+  myTasks = null,
 }: {
   canEdit?: boolean;
   selection?: string;
   drift?: Map<string, number>;
   collapsed?: Set<string>;
+  myTasks?: number | null;
 } = {}) {
   const onDeleteBucket = rs.fn();
   const onTriageBucket = rs.fn();
@@ -72,7 +74,9 @@ function renderRail({
     const ids = new Set(buckets.map((b) => b.id));
     // The page's "keep selection valid" effect, inline.
     const current =
-      ["all", "today", "inbox"].includes(selection) || ids.has(selection) ? selection : "inbox";
+      ["all", "today", "mine", "inbox"].includes(selection) || ids.has(selection)
+        ? selection
+        : "inbox";
     return (
       <TooltipProvider>
         <BucketRail
@@ -94,7 +98,8 @@ function renderRail({
           taskCountByBucket={new Map([["mkt", 5]])}
           driftCountByBucket={drift}
           totalOpenCount={14}
-          committedCount={2}
+          queueCount={2}
+          myTasksCount={myTasks}
           canEdit={canEdit}
           onCreateBucket={() => {}}
           onRenameBucket={() => {}}
@@ -210,6 +215,27 @@ describe("BucketRail on NavRow", () => {
     expect(screen.getByRole("img", { name: /1 drifted in Clients/ })).toBeTruthy();
     fireEvent.click(header);
     expect(onToggleSection).toHaveBeenCalledWith("Clients");
+  });
+});
+
+describe("BucketRail: Queue and My tasks (TV-D4)", () => {
+  it("counts my queue on the Queue row", () => {
+    renderRail();
+    expect(main(/^Queue, 2 queued$/)).toBeTruthy();
+  });
+
+  it("shows My tasks only when the page passes a count (two or more members)", () => {
+    renderRail();
+    expect(screen.queryByRole("button", { name: /^My tasks/ })).toBeNull();
+    cleanup();
+    renderRail({ myTasks: 3 });
+    expect(main(/^My tasks, 3 open$/)).toBeTruthy();
+  });
+
+  it("selects My tasks as the 'mine' scope", () => {
+    renderRail({ myTasks: 3 });
+    fireEvent.click(main(/^My tasks, 3 open$/));
+    expect(main(/^My tasks, 3 open$/).getAttribute("aria-current")).toBe("page");
   });
 });
 
