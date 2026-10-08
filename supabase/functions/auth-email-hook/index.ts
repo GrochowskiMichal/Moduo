@@ -49,8 +49,10 @@ async function logToOutbox(row: AuthEmailLogRow): Promise<void> {
 }
 
 Deno.serve(async (req: Request) => {
+  const receivedAt = Date.now();
   const result = await handleAuthEmailHook(
     {
+      receivedAt,
       method: req.method,
       body: await req.text(),
       headers: {

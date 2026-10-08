@@ -19,7 +19,8 @@
 --
 -- Retention and erasure: a daily pg_cron job deletes rows older than 30 days
 -- (the privacy policy's promise) and rows whose account no longer exists, so a
--- deleted account's log is gone within a day. Rows for addresses that never had
+-- deleted account's log is gone within a day. (The hour's grace keeps a row
+-- written while Auth is still committing a new user.) Rows for addresses that never had
 -- an account (waitlist invites, from TX-4) are erased by address in
 -- delete-account (TX-8, T25). TX-3 adds its other purge jobs next to this one.
 --
@@ -78,7 +79,7 @@ GRANT ALL ON TABLE public.email_outbox TO service_role;
 SELECT cron.schedule(
   'email-outbox-purge',
   '17 3 * * *',
-  $job$DELETE FROM public.email_outbox o WHERE o.created_at < now() - interval '30 days' OR (o.to_user_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM auth.users u WHERE u.id = o.to_user_id))$job$
+  $job$DELETE FROM public.email_outbox o WHERE o.created_at < now() - interval '30 days' OR (o.to_user_id IS NOT NULL AND o.created_at < now() - interval '1 hour' AND NOT EXISTS (SELECT 1 FROM auth.users u WHERE u.id = o.to_user_id))$job$
 );
 
 COMMIT;

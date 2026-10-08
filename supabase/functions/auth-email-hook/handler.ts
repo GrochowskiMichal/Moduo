@@ -37,7 +37,10 @@ import { verifyWebhook, type WebhookHeaders } from "./webhook.ts";
 
 /** A sanity cap on what we hash and parse. Auth's payload is a user object and a few tokens. */
 export const MAX_HOOK_BODY_BYTES = 256 * 1024;
-/** Answer within this long of the request arriving: Auth's budget is 5 s, cold start and gateway included. */
+/**
+ * Answer within this long of the request reaching the function. Auth's 5 s also
+ * covers the gateway and a cold boot before that, which the last 0.5 s absorbs.
+ */
 export const HOOK_DEADLINE_MS = 4500;
 /** Longest wait for one Resend request. */
 export const HOOK_SEND_TIMEOUT_MS = 2000;
@@ -46,6 +49,12 @@ export const HOOK_RETRY_DELAY_MS = 300;
 export const HOOK_MIN_RETRY_WINDOW_MS = 1200;
 
 const SIGN_IN_ACTIONS = new Set(["signup", "magiclink", "email"]);
+/**
+ * Actions where Auth may be creating the user in the same transaction. If the
+ * send fails, Auth rolls that user back, so a failure row names nobody
+ * (to_user_id null) and the purge's deleted-account rule leaves it alone.
+ */
+const MAY_CREATE_USER = new Set(["signup", "invite"]);
 const CONFIRM_ACTIONS = new Set(["recovery", "reauthentication"]);
 
 /** A row for public.email_outbox (TX-2 writes the log role only). Never the code. */
@@ -92,6 +101,8 @@ export type HookRequest = {
   method: string;
   body: string;
   headers: WebhookHeaders;
+  /** When the request arrived (ms), taken before reading the body; the deadline counts from here. */
+  receivedAt?: number;
 };
 
 export type HookResponse = { status: number; body: Record<string, unknown> };
@@ -257,7 +268,7 @@ export async function handleAuthEmailHook(request: HookRequest, deps: HookDeps):
   }
 
   const now = deps.now ?? Date.now;
-  const startedAt = now();
+  const startedAt = request.receivedAt ?? now();
   const check = await verifyWebhook(request.body, request.headers, deps.hookSecret, Math.floor(now() / 1000));
   if (!check.ok) {
     report("signature_rejected", { reason: check.reason });
@@ -314,12 +325,13 @@ export async function handleAuthEmailHook(request: HookRequest, deps: HookDeps):
         startedAt,
       );
 
-      const write = deps
-        .log({
+      const write = Promise.resolve()
+        .then(() =>
+          deps.log({
           kind: "auth_code",
           stream: "account",
           to_email: item.to,
-          to_user_id: userId,
+          to_user_id: result.ok || !MAY_CREATE_USER.has(action) ? userId : null,
           payload: { action, variant: item.variant, fallback },
           dedupe_key: dedupeKey,
           status: result.ok ? "sent" : "failed",
@@ -327,7 +339,8 @@ export async function handleAuthEmailHook(request: HookRequest, deps: HookDeps):
           last_error: result.ok ? null : result.error.slice(0, 1000),
           provider_id: result.ok ? result.id : null,
           sent_at: result.ok ? new Date(now()).toISOString() : null,
-        })
+        }),
+        )
         .catch((error: unknown) => {
           report("log_failed", { action, error: error instanceof Error ? error.message : String(error) });
         });

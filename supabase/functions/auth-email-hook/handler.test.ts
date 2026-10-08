@@ -167,6 +167,13 @@ describe("auth-email-hook · dashboard invite keeps its confirmation link", () =
     );
   });
 
+  it("logs a failed invite without the user's id, since Auth rolls that user back", async () => {
+    const { deps, logs } = setup([500, 500]);
+    const response = await handleAuthEmailHook(await signed(payload("invite")), deps);
+    expect(response.status).toBe(500);
+    expect(logs[0]).toMatchObject({ status: "failed", to_user_id: null, to_email: "tom@becker.studio" });
+  });
+
   it("refuses an invite without a token hash", async () => {
     const { deps, sent } = setup();
     const response = await handleAuthEmailHook(await signed(payload("invite", { email_data: { token_hash: "" } })), deps);
@@ -280,6 +287,17 @@ describe("auth-email-hook · falls back to plain text", () => {
     expect(response.status).toBe(500);
     expect(sent).toHaveLength(0);
     expect(logs[0].last_error).toBe("resend_not_configured");
+  });
+
+  it("still answers 200 when the log write throws synchronously", async () => {
+    const { deps, reports } = setup([], {
+      log: () => {
+        throw new Error("sync bug");
+      },
+    });
+    const response = await handleAuthEmailHook(await signed(payload("magiclink")), deps);
+    expect(response.status).toBe(200);
+    expect(reports.map((r) => r.event)).toEqual(["log_failed"]);
   });
 
   it("still answers 200 when the log write fails after the email went out", async () => {
