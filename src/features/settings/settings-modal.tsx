@@ -202,7 +202,7 @@ export function SettingsModal() {
               ))}
             </nav>
 
-            <div className="pane-scroll min-h-0 overflow-y-auto px-2 py-4">
+            <div className="pane-scroll h-full min-h-0 overflow-y-auto px-2 py-4">
               {SECTIONS.map(({ id, Component }) => (
                 <TabsContent key={id} value={id} className="data-[state=inactive]:hidden">
                   {id === section ? <Component /> : null}

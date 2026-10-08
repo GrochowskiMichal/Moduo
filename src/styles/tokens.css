@@ -408,7 +408,9 @@
  *     re-declared on every element that carries an appearance attribute and
  *     re-resolves against that scope's own --primary / --foreground / --muted.
  *     A new scoped wrapper must set one of these attributes; setting --primary
- *     any other way leaves the derived tokens on the outer value.
+ *     any other way leaves the derived tokens on the outer value. The list is
+ *     wrapped in :where() (zero specificity), so a theme override such as the
+ *     light --control-raised below wins wherever the two blocks sit in the file.
  *
  *     Utilities (via @theme below): bg-state-hover · bg-state-active ·
  *     bg-state-selected · ring-state-selected (the 32% ring) · border-hairline
@@ -417,10 +419,7 @@
  *     var()-only (global.css scrollbars, the ScrollArea thumb).
  * ==========================================================================*/
 
-:root,
-[data-theme],
-[data-shade],
-[data-accent] {
+:where(:root, [data-theme], [data-shade], [data-accent]) {
   --state-hover:         color-mix(in oklab, var(--foreground) 5%, transparent);
   --state-active:        color-mix(in oklab, var(--foreground) 9%, transparent);
   --state-selected:      color-mix(in oklab, var(--primary) 13%, transparent);

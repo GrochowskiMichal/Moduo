@@ -32,7 +32,9 @@ const LEGACY_SELECTION: Record<string, string> = {
   "--selected-border": "var(--primary)",
 };
 
-const SCOPES = [":root", "[data-theme]", "[data-shade]", "[data-accent]"];
+// Zero specificity on purpose: a theme override (the light --control-raised)
+// must win no matter where the two blocks sit in the file.
+const SCOPES = [":where(:root, [data-theme], [data-shade], [data-accent])"];
 const LIGHT_SCOPES = [
   '[data-theme="light"]',
   '[data-theme="light"] [data-shade]',
@@ -131,7 +133,7 @@ describe("tokens.css state layer (DS-1)", () => {
     );
   });
 
-  it("re-resolves inside preWorkspace()'s scoped accent, which must stay a data-accent wrapper", async () => {
+  it("keeps preWorkspace()'s scoped accent a data-accent wrapper, which the scope block covers", async () => {
     // The [data-accent] scope above is what makes the derived tokens follow the
     // mono wrapper. If the wrapper stops being a data-accent element, they
     // silently fall back to the person's own accent on auth/onboarding/book.

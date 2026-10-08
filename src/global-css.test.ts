@@ -96,6 +96,22 @@ describe("global.css scrollbars (DS-1)", () => {
     // them would draw a dead strip beside the child's own bar.
     const shell = await read("src/components/app/feature-panels-shell.tsx");
     expect(shell).not.toContain("pane-scroll");
+
+    // Every pane-scroll must sit on an element that really scrolls: it owns
+    // the overflow AND its height is tied to its parent (h-full / flex-1).
+    // Without the height cap it just grows, and the gutter is a dead strip
+    // (the notes Outline panel was exactly that).
+    const offenders: string[] = [];
+    for (const rel of await sourceFiles("src", /(?<!\.stories)\.tsx$/)) {
+      for (const [, classes] of (await read(rel)).matchAll(
+        /["'`]([^"'`]*\bpane-scroll\b[^"'`]*)["'`]/g,
+      )) {
+        const scrolls = /\boverflow(-y)?-auto\b/.test(classes);
+        const capped = /\b(h-full|flex-1)\b/.test(classes);
+        if (!scrolls || !capped) offenders.push(`${rel}: "${classes}"`);
+      }
+    }
+    expect(offenders).toEqual([]);
   });
 
   it("hides scrollbars only through .no-scrollbar", async () => {
