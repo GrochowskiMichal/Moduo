@@ -25,6 +25,17 @@ describe("Standard Webhooks check", () => {
     expect(await verifyWebhook(BODY, both, OTHER, NOW)).toEqual({ ok: true });
   });
 
+  it("reads Supabase's own multi-signature header, joined with \", \" during rotation", async () => {
+    const id = "msg_rot";
+    const timestamp = String(NOW);
+    const [a] = parseHookSecrets(SECRET);
+    const [b] = parseHookSecrets(OTHER);
+    const header = `v1,${await signWebhook(a, id, timestamp, BODY)}, v1,${await signWebhook(b, id, timestamp, BODY)}`;
+    // A function holding only the first (old) secret, and one holding only the new one.
+    expect(await verifyWebhook(BODY, { id, timestamp, signature: header }, SECRET, NOW)).toEqual({ ok: true });
+    expect(await verifyWebhook(BODY, { id, timestamp, signature: header }, OTHER, NOW)).toEqual({ ok: true });
+  });
+
   it("refuses a body changed after signing", async () => {
     const headers = await headersFor(BODY);
     expect(await verifyWebhook(`${BODY} `, headers, SECRET, NOW)).toEqual({ ok: false, reason: "bad_signature" });

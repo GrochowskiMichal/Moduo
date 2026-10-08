@@ -6,7 +6,9 @@
  * Supabase signs `${webhook-id}.${webhook-timestamp}.${body}` with HMAC-SHA256.
  * The secret is `v1,whsec_<base64>`; several can be configured, separated by
  * `|`, while one is rotated out. `webhook-signature` lists one or more
- * `v1,<base64 signature>` entries separated by spaces; any match passes.
+ * `v1,<base64 signature>` entries; the spec separates them with spaces and
+ * Supabase Auth joins them with ", " (hookshttp.go), so both are read. Any
+ * match passes.
  */
 
 /** How far the timestamp may be from now, either way (the library's default). */
@@ -81,9 +83,11 @@ export async function verifyWebhook(
   if (Math.abs(nowSeconds - Number(timestamp)) > WEBHOOK_TOLERANCE_SECONDS) {
     return { ok: false, reason: "stale_timestamp" };
   }
+  // "v1,<sig> v1,<sig>" or "v1,<sig>, v1,<sig>": split on whitespace, then drop
+  // the separator comma (base64 never ends in one).
   const offered = signature
-    .split(" ")
-    .map((entry) => entry.trim())
+    .split(/\s+/)
+    .map((entry) => entry.trim().replace(/,$/, ""))
     .filter((entry) => entry.startsWith("v1,"))
     .map((entry) => entry.slice(3));
   if (offered.length === 0) return { ok: false, reason: "bad_signature" };

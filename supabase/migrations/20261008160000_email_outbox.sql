@@ -11,13 +11,17 @@
 -- (REVOKE FROM PUBLIC does not cover anon). Only the service role (Edge
 -- Functions) and SECURITY DEFINER helpers read or write it.
 --
--- Erasure: rows tied to an account go with it (ON DELETE CASCADE on
--- to_user_id), so deleting an account never leaves its email log behind.
--- Rows for addresses without an account (waitlist invites, from TX-4) are
--- erased by address in delete-account (TX-8, T25).
+-- to_user_id has deliberately NO foreign key to auth.users. Auth calls the
+-- Send Email Hook inside the transaction that creates a new user (a dashboard
+-- invite now, every first sign-in once TX-4 opens sign-ups), and the hook logs
+-- over another connection, which can't see that uncommitted row: a foreign key
+-- would refuse exactly those log rows.
 --
--- Retention: a daily pg_cron job deletes rows older than 30 days (the privacy
--- policy's promise). TX-3 adds its other purge jobs next to it.
+-- Retention and erasure: a daily pg_cron job deletes rows older than 30 days
+-- (the privacy policy's promise) and rows whose account no longer exists, so a
+-- deleted account's log is gone within a day. Rows for addresses that never had
+-- an account (waitlist invites, from TX-4) are erased by address in
+-- delete-account (TX-8, T25). TX-3 adds its other purge jobs next to this one.
 --
 -- Closed vocabularies live in @contracts (EMAIL_KINDS, EMAIL_STREAMS,
 -- EMAIL_OUTBOX_STATUSES); drift-gates.test.ts checks these IN-lists.
@@ -29,7 +33,7 @@ CREATE TABLE IF NOT EXISTS public.email_outbox (
   kind text NOT NULL,
   stream text NOT NULL DEFAULT 'account',
   to_email text NOT NULL,
-  to_user_id uuid REFERENCES auth.users (id) ON DELETE CASCADE,
+  to_user_id uuid,
   payload jsonb NOT NULL DEFAULT '{}'::jsonb,
   dedupe_key text NOT NULL,
   send_after timestamptz NOT NULL DEFAULT now(),
@@ -69,12 +73,12 @@ ALTER TABLE public.email_outbox ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE public.email_outbox FROM PUBLIC, anon, authenticated;
 GRANT ALL ON TABLE public.email_outbox TO service_role;
 
--- 30-day retention. cron.schedule with a job name replaces an existing job of
--- that name, so re-running this is safe.
+-- 30-day retention + the log of deleted accounts. cron.schedule with a job
+-- name replaces an existing job of that name, so re-running this is safe.
 SELECT cron.schedule(
   'email-outbox-purge',
   '17 3 * * *',
-  $job$DELETE FROM public.email_outbox WHERE created_at < now() - interval '30 days'$job$
+  $job$DELETE FROM public.email_outbox o WHERE o.created_at < now() - interval '30 days' OR (o.to_user_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM auth.users u WHERE u.id = o.to_user_id))$job$
 );
 
 COMMIT;

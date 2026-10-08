@@ -8,12 +8,14 @@
  *   it is the only way an invitee's address gets confirmed (auth-variants.ts).
  *   `recovery`, `email_change` and `reauthentication` get a neutral code. The
  *   `*_notification` types are ignored: answered 200, nothing sent.
- * - Sending is synchronous with one quick retry; Supabase gives the whole hook
- *   about five seconds. If the designed email fails to render, a plain-text one
- *   carrying the same code goes out instead, so a template bug never blocks
- *   sign-in.
- * - Each send is logged in email_outbox without the code or its hash. Logging
- *   never fails the hook: the email is already out.
+ * - Sending is synchronous, with one quick retry only while it still fits:
+ *   Supabase gives the whole call five seconds, and answering late is worse than
+ *   failing, because Auth then rolls back and the code that did go out never
+ *   works. If the designed email fails to render, a plain-text one carrying the
+ *   same code goes out instead, so a template bug never blocks sign-in.
+ * - Each send is logged in email_outbox without the code or its hash, after the
+ *   answer when the runtime allows it (`defer`). Logging never fails the hook:
+ *   the email is already out.
  *
  * Plain TypeScript with injected dependencies (no Deno globals, no URL imports)
  * so the unit tests run it; index.ts wires the real ones.
@@ -22,16 +24,26 @@
 import { allowListedOrigin, APP_ORIGINS, CANONICAL_APP_ORIGIN } from "../_shared/app-origin.ts";
 import { escapeHtml } from "../_shared/escape.ts";
 import { type RenderedEmail, renderEmail } from "../_shared/email/render.ts";
-import { ACCOUNT_SENDER_ADDRESS, formatFrom, type SendResult, sendWithRetry } from "../_shared/email/send.ts";
+import {
+  ACCOUNT_SENDER_ADDRESS,
+  formatFrom,
+  type OutgoingEmail,
+  type SendResult,
+  sendViaResend,
+} from "../_shared/email/send.ts";
 import { AUTH_CODE_VALID_MINUTES, authCodeEmail } from "../_shared/email/templates/auth-code.ts";
 import { authConfirmCodeEmail, authInviteEmail } from "../_shared/email/templates/auth-variants.ts";
 import { verifyWebhook, type WebhookHeaders } from "./webhook.ts";
 
-/** Supabase's payload limit for HTTP hooks; anything bigger isn't from Auth. */
-export const MAX_HOOK_BODY_BYTES = 20 * 1024;
-/** Per Resend request, so a retry still fits in Auth's five-second budget. */
-export const HOOK_SEND_TIMEOUT_MS = 1800;
+/** A sanity cap on what we hash and parse. Auth's payload is a user object and a few tokens. */
+export const MAX_HOOK_BODY_BYTES = 256 * 1024;
+/** Answer within this long of the request arriving: Auth's budget is 5 s, cold start and gateway included. */
+export const HOOK_DEADLINE_MS = 4500;
+/** Longest wait for one Resend request. */
+export const HOOK_SEND_TIMEOUT_MS = 2000;
 export const HOOK_RETRY_DELAY_MS = 300;
+/** Retry only when at least this much time is left for the second request. */
+export const HOOK_MIN_RETRY_WINDOW_MS = 1200;
 
 const SIGN_IN_ACTIONS = new Set(["signup", "magiclink", "email"]);
 const CONFIRM_ACTIONS = new Set(["recovery", "reauthentication"]);
@@ -61,6 +73,11 @@ export type HookDeps = {
   supabaseUrl: string | null | undefined;
   /** Writes one log row; may throw (the hook carries on). */
   log: (row: AuthEmailLogRow) => Promise<void>;
+  /**
+   * Runs a task after the answer has gone (EdgeRuntime.waitUntil), so the log
+   * write doesn't spend Auth's time. Without it the log is awaited (tests).
+   */
+  defer?: (task: Promise<void>) => void;
   fetch?: typeof fetch;
   sleep?: (ms: number) => Promise<void>;
   /** Milliseconds since the epoch. */
@@ -209,6 +226,29 @@ export function fallbackEmail(item: Outgoing): RenderedEmail {
   };
 }
 
+/**
+ * One Resend request, and a second after a short pause when the first failed in
+ * a way worth retrying and there is still time before the deadline.
+ */
+async function sendBeforeDeadline(
+  email: OutgoingEmail,
+  deps: HookDeps,
+  startedAt: number,
+): Promise<{ result: SendResult; attempts: number }> {
+  const now = deps.now ?? Date.now;
+  const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  const deadline = startedAt + HOOK_DEADLINE_MS;
+  const sendDeps = (timeoutMs: number) => ({ apiKey: deps.resendApiKey, fetch: deps.fetch, timeoutMs });
+
+  const first = await sendViaResend(email, sendDeps(Math.max(500, Math.min(HOOK_SEND_TIMEOUT_MS, deadline - now()))));
+  if (first.ok || !first.retryable) return { result: first, attempts: 1 };
+  const left = deadline - now() - HOOK_RETRY_DELAY_MS;
+  if (left < HOOK_MIN_RETRY_WINDOW_MS) return { result: first, attempts: 1 };
+  await sleep(HOOK_RETRY_DELAY_MS);
+  const second = await sendViaResend(email, sendDeps(Math.min(HOOK_SEND_TIMEOUT_MS, left)));
+  return { result: second, attempts: 2 };
+}
+
 export async function handleAuthEmailHook(request: HookRequest, deps: HookDeps): Promise<HookResponse> {
   const report = deps.report ?? (() => {});
   if (request.method !== "POST") return errorResponse(405, "method_not_allowed");
@@ -217,6 +257,7 @@ export async function handleAuthEmailHook(request: HookRequest, deps: HookDeps):
   }
 
   const now = deps.now ?? Date.now;
+  const startedAt = now();
   const check = await verifyWebhook(request.body, request.headers, deps.hookSecret, Math.floor(now() / 1000));
   if (!check.ok) {
     report("signature_rejected", { reason: check.reason });
@@ -257,7 +298,7 @@ export async function handleAuthEmailHook(request: HookRequest, deps: HookDeps):
       }
 
       const dedupeKey = `auth_code:${webhookId}:${index}`;
-      const result: SendResult = await sendWithRetry(
+      const { result, attempts } = await sendBeforeDeadline(
         {
           from: formatFrom("Moduo", ACCOUNT_SENDER_ADDRESS),
           to: item.to,
@@ -265,15 +306,16 @@ export async function handleAuthEmailHook(request: HookRequest, deps: HookDeps):
           html: rendered.html,
           text: rendered.text,
           tags: [{ name: "kind", value: "auth_code" }],
-          // A redelivered hook (same webhook-id) can't send the same email twice.
+          // Makes our own retry safe: Resend returns the first send instead of a
+          // second email. (Auth's retries carry a new webhook-id, so they don't share it.)
           idempotencyKey: dedupeKey,
         },
-        { apiKey: deps.resendApiKey, fetch: deps.fetch, timeoutMs: HOOK_SEND_TIMEOUT_MS },
-        { attempts: 2, delayMs: HOOK_RETRY_DELAY_MS, sleep: deps.sleep },
+        deps,
+        startedAt,
       );
 
-      try {
-        await deps.log({
+      const write = deps
+        .log({
           kind: "auth_code",
           stream: "account",
           to_email: item.to,
@@ -281,14 +323,16 @@ export async function handleAuthEmailHook(request: HookRequest, deps: HookDeps):
           payload: { action, variant: item.variant, fallback },
           dedupe_key: dedupeKey,
           status: result.ok ? "sent" : "failed",
-          attempts: 1,
+          attempts,
           last_error: result.ok ? null : result.error.slice(0, 1000),
           provider_id: result.ok ? result.id : null,
           sent_at: result.ok ? new Date(now()).toISOString() : null,
+        })
+        .catch((error: unknown) => {
+          report("log_failed", { action, error: error instanceof Error ? error.message : String(error) });
         });
-      } catch (error) {
-        report("log_failed", { action, error: error instanceof Error ? error.message : String(error) });
-      }
+      if (deps.defer) deps.defer(write);
+      else await write;
       return result;
     }),
   );

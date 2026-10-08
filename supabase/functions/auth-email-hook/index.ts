@@ -24,7 +24,10 @@
 import { getDefaultSecretKey } from "../_shared/secret-keys.ts";
 import { type AuthEmailLogRow, handleAuthEmailHook } from "./handler.ts";
 
-const LOG_TIMEOUT_MS = 1500;
+/** Supabase's background-task hook: work that may finish after the response. */
+declare const EdgeRuntime: { waitUntil(task: Promise<unknown>): void } | undefined;
+
+const LOG_TIMEOUT_MS = 3000;
 
 async function logToOutbox(row: AuthEmailLogRow): Promise<void> {
   const base = Deno.env.get("SUPABASE_URL");
@@ -61,6 +64,10 @@ Deno.serve(async (req: Request) => {
       resendApiKey: Deno.env.get("RESEND_API_KEY"),
       supabaseUrl: Deno.env.get("SUPABASE_URL"),
       log: logToOutbox,
+      // Write the log after answering, so it never eats into Auth's 5 s.
+      defer: (task) => {
+        if (typeof EdgeRuntime !== "undefined") EdgeRuntime.waitUntil(task);
+      },
       // Never the payload: it carries the code.
       report: (event, detail) => console.error(`[auth-email-hook] ${event}`, JSON.stringify(detail)),
     },

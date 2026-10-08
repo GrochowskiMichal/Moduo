@@ -131,7 +131,7 @@ describe("auth-email-hook · verifies signature", () => {
   it("refuses anything but POST and oversized bodies", async () => {
     const { deps } = setup();
     expect((await handleAuthEmailHook({ ...(await signed("{}")), method: "GET" }, deps)).status).toBe(405);
-    expect((await handleAuthEmailHook(await signed("x".repeat(21 * 1024)), deps)).status).toBe(413);
+    expect((await handleAuthEmailHook(await signed("x".repeat(257 * 1024)), deps)).status).toBe(413);
   });
 });
 
@@ -147,7 +147,12 @@ describe("auth-email-hook · dashboard invite keeps its confirmation link", () =
     expect(text).toContain(link);
     expect(html).toContain(link.replaceAll("&", "&amp;"));
     expect(text).not.toContain(CODE);
-    expect(logs[0].payload).toEqual({ action: "invite", variant: "invite", fallback: false });
+    // Logged with the new user's id even though Auth hasn't committed that user yet
+    // (the table has no foreign key for exactly this reason).
+    expect(logs[0]).toMatchObject({
+      to_user_id: "8484b834-f29e-4af2-bf42-80644d154f76",
+      payload: { action: "invite", variant: "invite", fallback: false },
+    });
   });
 
   it("only ever redirects to one of our app hosts", () => {
@@ -222,7 +227,43 @@ describe("auth-email-hook · falls back to plain text", () => {
     const response = await handleAuthEmailHook(await signed(payload("magiclink")), deps);
     expect(response.status).toBe(200);
     expect(sent).toHaveLength(2);
-    expect(logs[0].status).toBe("sent");
+    expect(logs[0]).toMatchObject({ status: "sent", attempts: 2 });
+  });
+
+  it("doesn't retry when the retry wouldn't finish inside Auth's five seconds", async () => {
+    // The first Resend request took 3.2 s: 1.3 s are left, less than a retry needs.
+    let calls = 0;
+    const { deps, sent, logs } = setup([503, 200], {
+      now: () => (calls++ === 0 ? NOW_MS : NOW_MS + 3200),
+    });
+    const response = await handleAuthEmailHook(await signed(payload("magiclink")), deps);
+    expect(response.status).toBe(500);
+    expect(sent).toHaveLength(1);
+    expect(logs[0]).toMatchObject({ status: "failed", attempts: 1 });
+  });
+
+  it("hands the log write to `defer` instead of waiting for it", async () => {
+    const deferred: Promise<void>[] = [];
+    let release: () => void = () => {};
+    const { deps, logs } = setup([], {
+      log: (row) =>
+        new Promise<void>((resolve) => {
+          release = () => {
+            logs.push(row);
+            resolve();
+          };
+        }),
+      defer: (task) => {
+        deferred.push(task);
+      },
+    });
+    const response = await handleAuthEmailHook(await signed(payload("magiclink")), deps);
+    expect(response.status).toBe(200);
+    expect(deferred).toHaveLength(1);
+    expect(logs).toHaveLength(0);
+    release();
+    await deferred[0];
+    expect(logs).toHaveLength(1);
   });
 
   it("returns the hook error shape and records the failure when Resend fails", async () => {
