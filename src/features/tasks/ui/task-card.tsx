@@ -29,7 +29,7 @@ import { AssigneeAvatar } from "./assignee-avatar";
 import { taskDrag } from "./dnd/task-dnd";
 import { EnergyMark, PriorityMark } from "./level-icons";
 import { QueueToggle } from "./queue-toggle";
-import { BucketLabel, DateMark, TaskCounts } from "./task-meta";
+import { BucketLabel, DateMark, hasTaskCounts, TaskCounts } from "./task-meta";
 
 type Props = {
   task: Task;
@@ -257,6 +257,15 @@ export function CardBody({
   const priority = on.has("priority") ? task.priority : null;
   const energy = on.has("energy") ? task.energyLevel : null;
   const showQueue = !done && task.status !== "archived" && (canEdit || queued || claimed);
+  const hasMeta =
+    !!priority ||
+    !!energy ||
+    !!date ||
+    hasTaskCounts(task, api) ||
+    showBucket ||
+    !!parent ||
+    showQueue ||
+    withAssignee;
 
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-2">
@@ -267,8 +276,9 @@ export function CardBody({
         <span
           className={cn(
             "min-w-0 flex-1 break-words font-sans text-base leading-snug",
+            // A done card fades as a whole; no muted colour on top.
             done
-              ? "text-muted-foreground line-through"
+              ? "text-foreground line-through"
               : blocked
                 ? "text-muted-foreground"
                 : "text-foreground",
@@ -278,40 +288,46 @@ export function CardBody({
         </span>
       </div>
 
-      <div className="flex min-w-0 items-center gap-2.5 overflow-hidden pl-6 font-sans text-xs whitespace-nowrap text-muted-foreground">
-        <PriorityMark level={priority} />
-        <EnergyMark level={energy} />
-        {date ? <DateMark date={date} className="shrink-0" /> : null}
-        <TaskCounts task={task} api={api} />
-        {showBucket ? (
-          <BucketLabel name={bucketName} isInbox={task.bucketId === inboxId} className="shrink-3" />
-        ) : null}
-        {parent ? (
-          <span className="flex min-w-0 shrink-3 items-center gap-1">
-            <CornerDownRight className="size-icon-xs shrink-0 opacity-70" aria-hidden />
-            <span className="truncate">{parent.title || "Untitled"}</span>
-          </span>
-        ) : null}
-        <span className="ml-auto flex shrink-0 items-center gap-1.5">
-          {/* Queue mark — always visible + quiet (marker IS the action): my
-              toggle, or a teammate's ringed avatar for their queue (TV-D4). */}
-          {showQueue ? <QueueToggle task={task} api={api} canEdit={canEdit} /> : null}
-          {withAssignee ? (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span
-                  className="flex items-center"
-                  role="img"
-                  aria-label={`Assignee: ${assigneeName}`}
-                >
-                  <AssigneeAvatar assignee={byId(task.assigneeId)} size="icon" />
-                </span>
-              </TooltipTrigger>
-              <TooltipContent>{assigneeName}</TooltipContent>
-            </Tooltip>
+      {hasMeta ? (
+        <div className="flex min-w-0 items-center gap-2.5 overflow-hidden pl-6 font-sans text-xs whitespace-nowrap text-muted-foreground">
+          <PriorityMark level={priority} />
+          <EnergyMark level={energy} />
+          {date ? <DateMark date={date} className="shrink-0" /> : null}
+          <TaskCounts task={task} api={api} />
+          {showBucket ? (
+            <BucketLabel
+              name={bucketName}
+              isInbox={task.bucketId === inboxId}
+              className="shrink-3"
+            />
           ) : null}
-        </span>
-      </div>
+          {parent ? (
+            <span className="flex min-w-0 shrink-3 items-center gap-1">
+              <CornerDownRight className="size-icon-xs shrink-0 opacity-70" aria-hidden />
+              <span className="truncate">{parent.title || "Untitled"}</span>
+            </span>
+          ) : null}
+          <span className="ml-auto flex shrink-0 items-center gap-1.5">
+            {/* Queue mark — always visible + quiet (marker IS the action): my
+              toggle, or a teammate's ringed avatar for their queue (TV-D4). */}
+            {showQueue ? <QueueToggle task={task} api={api} canEdit={canEdit} /> : null}
+            {withAssignee ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span
+                    className="flex items-center"
+                    role="img"
+                    aria-label={`Assignee: ${assigneeName}`}
+                  >
+                    <AssigneeAvatar assignee={byId(task.assigneeId)} size="icon" />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>{assigneeName}</TooltipContent>
+              </Tooltip>
+            ) : null}
+          </span>
+        </div>
+      ) : null}
     </div>
   );
 }

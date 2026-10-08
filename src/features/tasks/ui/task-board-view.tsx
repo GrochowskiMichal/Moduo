@@ -5,7 +5,7 @@ import {
   type DragStartEvent,
   useDroppable,
 } from "@dnd-kit/core";
-import { arrayMove, SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { type ReactNode, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { Eyebrow } from "../../../components/ui/eyebrow";
@@ -18,10 +18,16 @@ import {
 } from "../../../components/ui/select";
 import { cn } from "../../../lib/utils";
 import { type CompletedMode, partitionCompleted } from "../completed";
-import { groupsByBucket, nestedSubtaskIds, STATUS_LABELS, showBucketPill } from "../helpers";
+import {
+  groupsByBucket,
+  isOpen,
+  nestedSubtaskIds,
+  STATUS_LABELS,
+  showBucketPill,
+} from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { Bucket, Task, TaskStatus } from "../model";
-import { positionForReorder } from "../reorder";
+import { boardDropPosition } from "../reorder";
 import { DEFAULT_ROW_PROPERTIES } from "../row-layout";
 import { DndBoundary, useTaskDndSensors } from "./dnd/task-dnd";
 import type { PlanView } from "./plan-view-header";
@@ -74,6 +80,9 @@ type Column = {
   value: string;
   /** The cards the column lists. */
   tasks: Task[];
+  /** Every task in the column, in order: drops are placed among these, so a
+   * new position never collides with a hidden completed task's. */
+  all: Task[];
   /** Completed tasks Display hides, behind the column's "N completed" line. */
   hidden: Task[];
 };
@@ -134,17 +143,16 @@ export function TaskBoardView({
 
   const columns = useMemo<Column[]>(() => {
     const now = new Date();
-    // A done parent with open subtasks stays (they live on its card's n/m).
+    // Kept even when done: just checked off; the selected card (a deep link
+    // or the panel must never point at a card that isn't there); a parent
+    // with open subtasks (they live on its card's n/m).
     const keep = (t: Task) =>
       justCompletedIds.has(t.id) ||
-      (api.subtasksByParent.get(t.id) ?? []).some(
-        (c) => c.status !== "done" && c.status !== "archived",
-      );
+      t.id === selectedTaskId ||
+      (api.subtasksByParent.get(t.id) ?? []).some(isOpen);
     const column = (id: string, label: string, dim: BoardGroupBy, value: string, all: Task[]) => {
       const { shown, hidden } = partitionCompleted(all, { mode: completed, now, keep });
-      return revealed.has(id)
-        ? { id, label, dim, value, tasks: all, hidden }
-        : { id, label, dim, value, tasks: shown, hidden };
+      return { id, label, dim, value, tasks: revealed.has(id) ? all : shown, all, hidden };
     };
     if (groupDim === "bucket") {
       const ordered: Bucket[] = inbox ? [inbox, ...buckets] : buckets;
@@ -175,6 +183,7 @@ export function TaskBoardView({
     bucketNameById,
     completed,
     justCompletedIds,
+    selectedTaskId,
     revealed,
     api.subtasksByParent,
   ]);
@@ -214,24 +223,20 @@ export function TaskBoardView({
       : columns.find((c) => c.tasks.some((t) => t.id === overId));
     if (!task || !sourceCol || !destCol) return;
 
+    // Positions are worked out among EVERY task in the column, hidden
+    // completed ones included (TV-U1, boardDropPosition).
+    const position = boardDropPosition({
+      activeId,
+      overId: overIsColumn ? null : overId,
+      source: sourceCol.all,
+      dest: destCol.all,
+    });
+    if (position === null) return;
     if (sourceCol.id === destCol.id) {
-      // within-column reorder
-      if (overIsColumn) return; // dropped on own column gutter — no move
-      const ids = sourceCol.tasks.map((t) => t.id);
-      const from = ids.indexOf(activeId);
-      const to = ids.indexOf(overId);
-      if (from < 0 || to < 0 || from === to) return;
-      const reordered = arrayMove(sourceCol.tasks, from, to);
-      api.patchTask(activeId, { position: positionForReorder(reordered, to) });
+      api.patchTask(activeId, { position });
       return;
     }
-
-    // cross-column move — insert before the hovered card, or at the column end
-    const destTasks = destCol.tasks; // excludes the active card (other column)
-    const overIdx = overIsColumn ? destTasks.length : destTasks.findIndex((t) => t.id === overId);
-    const at = Math.max(0, Math.min(destTasks.length, overIdx < 0 ? destTasks.length : overIdx));
-    const ordered = [...destTasks.slice(0, at), task, ...destTasks.slice(at)];
-    const patch: Partial<Task> = { position: positionForReorder(ordered, at) };
+    const patch: Partial<Task> = { position };
     if (destCol.dim === "status") patch.status = destCol.value as TaskStatus;
     else patch.bucketId = destCol.value;
     api.patchTask(activeId, patch);
@@ -306,7 +311,7 @@ export function TaskBoardView({
           ? createPortal(
               <DragOverlay>
                 {activeTask ? (
-                  <div className="w-72 rounded-lg border border-border bg-background px-3 py-2.5 shadow-lg">
+                  <div className="w-full rounded-lg border border-border bg-background px-3 py-2.5 shadow-lg">
                     <CardBody
                       task={activeTask}
                       bucketName={bucketNameById(activeTask.bucketId)}

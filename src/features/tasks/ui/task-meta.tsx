@@ -60,22 +60,34 @@ function Tip({ label, children }: { label: string; children: ReactNode }) {
  * and comments (💬) join between tags and subtasks when their data lands
  * (AT-3, TV-U3).
  */
+type CountsApi = Pick<
+  TasksModuleApi,
+  "tagsByTask" | "subtaskProgressByTask" | "blockedTaskIds" | "blockersByTask"
+>;
+
+/** Whether `TaskCounts` has anything to show for this task. */
+export function hasTaskCounts(task: Task, api: CountsApi): boolean {
+  return (
+    (api.tagsByTask.get(task.id)?.length ?? 0) > 0 ||
+    (api.subtaskProgressByTask.get(task.id)?.total ?? 0) > 0 ||
+    api.blockedTaskIds.has(task.id) ||
+    !!task.recurrence
+  );
+}
+
 export function TaskCounts({
   task,
   api,
   className,
 }: {
   task: Task;
-  api: Pick<
-    TasksModuleApi,
-    "tagsByTask" | "subtaskProgressByTask" | "blockedTaskIds" | "blockersByTask"
-  >;
+  api: CountsApi;
   className?: string;
 }) {
+  if (!hasTaskCounts(task, api)) return null;
   const tags = api.tagsByTask.get(task.id) ?? [];
   const progress = api.subtaskProgressByTask.get(task.id) ?? null;
   const blocked = api.blockedTaskIds.has(task.id);
-  if (tags.length === 0 && !progress?.total && !blocked && !task.recurrence) return null;
   return (
     <MetaCounts className={className}>
       {tags.length > 0 ? (

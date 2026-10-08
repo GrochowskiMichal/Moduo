@@ -248,7 +248,7 @@ describe("TaskRow popovers: the other ways in", () => {
   it("a click on a chip opens its popover; Esc hands focus back to the list", async () => {
     const { grid } = renderList();
     await settle();
-    const chip = rowOf("Beta").querySelector<HTMLElement>('[aria-label^="Due date"]')!;
+    const chip = rowOf("Beta").querySelector<HTMLElement>('[aria-label^="Due "]')!;
 
     chip.focus(); // Chromium focuses a clicked button
     fireEvent.click(chip);
@@ -265,7 +265,7 @@ describe("TaskRow popovers: the other ways in", () => {
   it("a second click on the chip closes its popover, and focus stays with the list", async () => {
     const { grid } = renderList();
     await settle();
-    const chip = rowOf("Beta").querySelector<HTMLElement>('[aria-label^="Due date"]')!;
+    const chip = rowOf("Beta").querySelector<HTMLElement>('[aria-label^="Due "]')!;
     fireEvent.click(chip);
     await settle();
     expect(popover()).not.toBeNull();
@@ -287,7 +287,7 @@ describe("TaskRow popovers: the other ways in", () => {
   it("clicking into another field closes the popover and leaves focus there", async () => {
     renderList();
     await settle();
-    const chip = rowOf("Beta").querySelector<HTMLElement>('[aria-label^="Due date"]')!;
+    const chip = rowOf("Beta").querySelector<HTMLElement>('[aria-label^="Due "]')!;
     fireEvent.click(chip);
     await settle();
     const elsewhere = screen.getByRole("textbox", { name: "Elsewhere" });
@@ -309,7 +309,7 @@ describe("TaskRow read-only", () => {
   it("a chip opens nothing and right-click opens no menu", async () => {
     renderList({ canEdit: false });
     await settle();
-    const chip = rowOf("Beta").querySelector<HTMLElement>('[aria-label^="Due date"]')!;
+    const chip = rowOf("Beta").querySelector<HTMLElement>('[aria-label^="Due "]')!;
 
     fireEvent.click(chip);
     fireEvent.contextMenu(rowOf("Beta"));

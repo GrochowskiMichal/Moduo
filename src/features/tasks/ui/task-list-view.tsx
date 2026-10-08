@@ -191,9 +191,13 @@ export function TaskListView({
     const all = groupTasks(topLevelTasks, groupBy, { bucketName: bucketNameById });
     if (selection === "today") return all.map((g) => ({ ...g, hidden: [] as Task[] }));
     const now = new Date();
-    // A done parent with open subtasks stays: they nest under it.
+    // Kept even when done: just checked off; the selected task (a deep link or
+    // the panel must never point at a row that isn't there); a parent with
+    // open subtasks (they nest under it).
     const keep = (t: Task) =>
-      justCompletedIds.has(t.id) || (api.subtasksByParent.get(t.id) ?? []).some(isOpen);
+      justCompletedIds.has(t.id) ||
+      t.id === selectedId ||
+      (api.subtasksByParent.get(t.id) ?? []).some(isOpen);
     return all.map((g) => {
       const { shown, hidden } = partitionCompleted(g.tasks, { mode: completed, now, keep });
       return { ...g, tasks: revealedGroups.has(g.key) ? g.tasks : shown, hidden };
@@ -205,6 +209,7 @@ export function TaskListView({
     selection,
     completed,
     justCompletedIds,
+    selectedId,
     revealedGroups,
     api.subtasksByParent,
   ]);

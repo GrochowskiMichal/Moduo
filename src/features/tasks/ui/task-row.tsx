@@ -124,7 +124,6 @@ export function TaskRow({
 }: Props) {
   const done = task.status === "done";
   const queued = api.queuedTaskIds.has(task.id);
-  const claimed = (api.queueClaims.get(task.id)?.length ?? 0) > 0;
   // Menu items that hand focus to something in the row (the title editor, a
   // chip's popover) run once the context menu has closed: Radix returns focus
   // to the list a tick after the menu unmounts, and whatever opened sooner
@@ -184,7 +183,10 @@ export function TaskRow({
                 type="button"
                 aria-expanded={expanded}
                 aria-label={expanded ? "Collapse subtasks" : "Expand subtasks"}
-                className="flex size-4 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className={cn(
+                  "flex size-4 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  done && "opacity-40",
+                )}
                 onClick={(e) => {
                   e.stopPropagation();
                   onToggleExpand?.();
@@ -232,8 +234,10 @@ export function TaskRow({
               // The title shrinks first; the counts sit right after it.
               // Body font (content, not chrome) at 15px — quiet, Linear/Todoist-ward.
               "min-w-0 truncate text-left font-sans text-md",
+              // Done dims through the cell's opacity, like the comp; a muted
+              // colour on top would dim it twice.
               done
-                ? "text-muted-foreground line-through"
+                ? "text-foreground line-through"
                 : blocked
                   ? "text-muted-foreground"
                   : "text-foreground",
@@ -320,19 +324,16 @@ export function TaskRow({
             targetable home (the marker IS the action): my queue toggle, or a
             teammate's ringed avatar when it's in their queue (TV-D4). The
             toggle shows on hover, focus or selection unless the task is
-            queued or claimed (the comp); it keeps its space and fades (R6). */}
+            queued or claimed (QueueToggle's revealOnHover, the comp). */}
         {columns.queue ? (
           <span
             data-col="queue"
             className={cn(
               "flex shrink-0 items-center justify-end gap-1",
               columns.queueWide ? "w-[calc(var(--icon)*2_+_0.25rem)]" : "w-icon",
-              !queued &&
-                !claimed &&
-                "opacity-0 transition-opacity duration-(--motion-fade) ease-(--ease-out) group-hover:opacity-100 group-aria-selected:opacity-100 focus-within:opacity-100",
             )}
           >
-            <QueueToggle task={task} api={api} canEdit={canEdit} />
+            <QueueToggle task={task} api={api} canEdit={canEdit} revealOnHover />
           </span>
         ) : null}
       </div>
@@ -508,8 +509,8 @@ function DateCell({
   const cell = "flex w-19 shrink-0 items-center justify-end";
   if (!date && !command) return <span data-col="date" className={cell} aria-hidden />;
   const kind = command ?? (date?.kind === "due" ? "due" : "schedule");
-  const fieldLabel = kind === "due" ? "Due date" : "Scheduled time";
-  const label = date ? `${fieldLabel}: ${date.description}` : fieldLabel;
+  // With a date, its description names it ("Scheduled …", "Due …").
+  const label = date ? date.description : kind === "due" ? "Due date" : "Scheduled time";
 
   if (!canEdit) {
     return (

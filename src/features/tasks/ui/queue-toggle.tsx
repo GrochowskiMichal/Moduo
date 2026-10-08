@@ -54,10 +54,17 @@ export function QueueToggle({
   task,
   api,
   canEdit,
+  revealOnHover = false,
 }: {
   task: Task;
   api: Pick<TasksModuleApi, "queuedTaskIds" | "queueClaims" | "toggleQueue">;
   canEdit: boolean;
+  /**
+   * List rows (TV-U1, the comp): my plain toggle stays invisible until the row
+   * is hovered, selected or the toggle is focused. It keeps its space and
+   * fades (R6). A queued or claimed mark always shows.
+   */
+  revealOnHover?: boolean;
 }) {
   const queued = api.queuedTaskIds.has(task.id);
   const claim = useQueueClaim(task.id, api);
@@ -121,13 +128,17 @@ export function QueueToggle({
               api.toggleQueue(task.id);
             }}
             className={cn(
-              "flex size-icon items-center justify-center rounded transition-colors duration-(--motion-fade) ease-(--ease-out)",
+              "flex size-icon items-center justify-center rounded transition-[color,opacity] duration-(--motion-fade) ease-(--ease-out)",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
               queued
                 ? "text-primary"
                 : showClaim
                   ? "text-muted-foreground"
                   : "text-muted-foreground/40 hover:text-foreground",
+              revealOnHover &&
+                !queued &&
+                !claimed &&
+                "opacity-0 group-hover:opacity-100 group-aria-selected:opacity-100 focus-visible:opacity-100",
             )}
           >
             {mark}

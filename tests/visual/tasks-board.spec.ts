@@ -3,8 +3,8 @@ import { expect, test } from "@playwright/test";
 /**
  * Tasks Board — visual regression (TV-U1: U1-4, U1-5). Column widths (280–400
  * px), one meta line per card, tint selection, faded done cards and each
- * column's "N completed" line, under every density and a spread of shades
- * and accents.
+ * column's "N completed" line, under every density × radius, every dark shade
+ * and every accent.
  *
  * Baselines are captured by a human, never by an agent (DESIGN_SYSTEM §5):
  *   bun run storybook
@@ -13,12 +13,9 @@ import { expect, test } from "@playwright/test";
 
 const STORIES = ["by-status", "recent-completed", "by-bucket"];
 const DENSITIES = ["comfortable", "compact", "dense"] as const;
-const LOOKS = [
-  "shade:black;accent:mono",
-  "shade:warm;accent:amber",
-  "shade:cool;accent:blue",
-  "shade:forest;accent:green",
-] as const;
+const RADII = ["sharp", "soft", "round"] as const;
+const SHADES = ["black", "warm", "cool", "slate", "plum", "forest"] as const;
+const ACCENTS = ["pink", "violet", "blue", "green", "amber", "red", "teal", "mono"] as const;
 
 async function snap(
   page: import("@playwright/test").Page,
@@ -42,14 +39,25 @@ test.describe("tasks board — visual snapshots", () => {
     });
   }
   for (const density of DENSITIES) {
-    test(`tasks-board-${density}`, async ({ page }) => {
-      await snap(page, "by-status", `theme:dark;density:${density}`, `tasks-board-${density}`);
+    for (const radius of RADII) {
+      test(`tasks-board-${density}-${radius}`, async ({ page }) => {
+        await snap(
+          page,
+          "by-status",
+          `theme:dark;density:${density};radius:${radius}`,
+          `tasks-board-${density}-${radius}`,
+        );
+      });
+    }
+  }
+  for (const shade of SHADES) {
+    test(`tasks-board-shade-${shade}`, async ({ page }) => {
+      await snap(page, "by-status", `theme:dark;shade:${shade}`, `tasks-board-shade-${shade}`);
     });
   }
-  for (const look of LOOKS) {
-    const name = `tasks-board-${look.replace(/[:;]/g, "-")}`;
-    test(name, async ({ page }) => {
-      await snap(page, "by-status", `theme:dark;${look}`, name);
+  for (const accent of ACCENTS) {
+    test(`tasks-board-accent-${accent}`, async ({ page }) => {
+      await snap(page, "by-status", `theme:dark;accent:${accent}`, `tasks-board-accent-${accent}`);
     });
   }
 });

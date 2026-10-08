@@ -191,12 +191,28 @@ describe("Row anatomy (U1-1, U1-2)", () => {
     expect(bucket.querySelector('[data-slot="nav-row-dot"]')).not.toBeNull();
   });
 
-  it("the queue toggle hides until hover, focus or selection, unless the task is queued", () => {
-    renderList([task("a"), task("b")], {}, { queuedTaskIds: new Set(["b"]) });
-    const cell = (title: string) => rowOf(title).querySelector('[data-col="queue"]') as HTMLElement;
-    expect(cell("Task a").className).toContain("opacity-0");
-    expect(cell("Task a").className).toContain("group-hover:opacity-100");
-    expect(cell("Task b").className).not.toContain("opacity-0");
+  it("the queue toggle hides until hover, focus or selection, unless queued or claimed", () => {
+    renderList(
+      [task("a"), task("b"), task("c")],
+      {},
+      {
+        queuedTaskIds: new Set(["b"]),
+        queueClaims: new Map([["c", ["u2"]]]),
+      },
+    );
+    const toggle = (title: string) =>
+      rowOf(title).querySelector('[data-col="queue"] button') as HTMLElement;
+    expect(toggle("Task a").className).toContain("opacity-0");
+    expect(toggle("Task a").className).toContain("group-hover:opacity-100");
+    expect(toggle("Task a").className).toContain("group-aria-selected:opacity-100");
+    expect(toggle("Task b").className).not.toContain("opacity-0");
+    expect(toggle("Task c").className).not.toContain("opacity-0");
+  });
+
+  it("the date cell is named by its dates", () => {
+    renderList([task("a", { dueDate: "2026-10-20T00:00:00.000Z" })]);
+    const cell = rowOf("Task a").querySelector('[data-col="date"]') as HTMLElement;
+    expect(cell.getAttribute("aria-label")).toMatch(/^Due \S+ \d+, 2026$/);
   });
 });
 
@@ -238,6 +254,18 @@ describe("Done and completed (U1-3)", () => {
     expect(row.dataset.done).toBe("true");
   });
 
+  it("a selected or deep-linked completed task stays listed (no fallback to another task)", () => {
+    const onSelectTask = rs.fn();
+    renderList([task("a"), task("b", { status: "done" })], {
+      selectedTaskId: "b",
+      onSelectTask,
+      revealRequest: { id: "b", seq: 1 },
+    });
+    expect(rowOf("Task b")).toBeTruthy();
+    expect(onSelectTask).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: /completed/ })).toBeNull();
+  });
+
   it("a done row dims as a whole except its checkbox", () => {
     renderList(tasks(), { completed: "all" });
     const row = rowOf("Task old-done");
@@ -245,6 +273,10 @@ describe("Done and completed (U1-3)", () => {
     const columns = row.querySelector('[data-slot="row-columns"]') as HTMLElement;
     expect(title.className).toContain("opacity-40");
     expect(columns.className).toContain("opacity-40");
+    // Dimmed once, by opacity: the title keeps its colour (the comp).
+    expect(screen.getByRole("button", { name: "Task old-done" }).className).not.toContain(
+      "text-muted-foreground",
+    );
     expect(row.className).not.toContain("opacity-40");
     const check = within(row).getByRole("button", { name: "Mark as not done" });
     expect(title.contains(check) || columns.contains(check)).toBe(false);
@@ -336,5 +368,15 @@ describe("Board (U1-4)", () => {
     fireEvent.click(screen.getByRole("button", { name: "1 completed, show" }));
     expect(card("Task d").className).toContain("opacity-50");
     act(() => {});
+  });
+
+  it("keeps the selected card even when Display hides completed ones", () => {
+    renderBoard([task("a"), task("d", { status: "done" })], { selectedTaskId: "d" });
+    expect(card("Task d")).toBeTruthy();
+  });
+
+  it("a card with nothing to show has no empty meta line", () => {
+    renderBoard([task("d", { status: "done" })], { completed: "all", canEdit: false });
+    expect(card("Task d").querySelector(".whitespace-nowrap")).toBeNull();
   });
 });

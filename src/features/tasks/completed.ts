@@ -27,26 +27,38 @@ export function completedWithin(task: CompletedTask, now: Date, days: number): b
   return now.getTime() - at <= days * 86_400_000;
 }
 
+export type CompletedOptions<T> = {
+  mode: CompletedMode;
+  now: Date;
+  /**
+   * Done tasks that stay anyway: the ones just checked off, the selected one
+   * (a deep link or the detail panel must never point at a row that isn't
+   * there), and a parent with open subtasks (they nest under it).
+   */
+  keep: (task: T) => boolean;
+};
+
+/** Whether Display hides this task: done, outside the window, not kept. */
+export function isCompletedHidden<T extends CompletedTask>(
+  task: T,
+  options: CompletedOptions<T>,
+): boolean {
+  if (task.status !== "done" || options.mode === "all") return false;
+  if (options.keep(task)) return false;
+  return !(options.mode === "week" && completedWithin(task, options.now, COMPLETED_WINDOW_DAYS));
+}
+
 /**
  * Splits one list or group into the rows it shows and the completed tasks
- * Display hides. Open tasks always show. `keep` names done tasks that stay
- * anyway: the ones just checked off, and a parent with open subtasks (its
- * subtasks nest under it, so hiding it would hide them).
+ * Display hides, keeping their order. Open tasks always show.
  */
 export function partitionCompleted<T extends CompletedTask>(
   tasks: readonly T[],
-  options: { mode: CompletedMode; now: Date; keep: (task: T) => boolean },
+  options: CompletedOptions<T>,
 ): { shown: T[]; hidden: T[] } {
-  if (options.mode === "all") return { shown: [...tasks], hidden: [] };
   const shown: T[] = [];
   const hidden: T[] = [];
-  for (const task of tasks) {
-    const visible =
-      task.status !== "done" ||
-      options.keep(task) ||
-      (options.mode === "week" && completedWithin(task, options.now, COMPLETED_WINDOW_DAYS));
-    (visible ? shown : hidden).push(task);
-  }
+  for (const task of tasks) (isCompletedHidden(task, options) ? hidden : shown).push(task);
   return { shown, hidden };
 }
 
