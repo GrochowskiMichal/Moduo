@@ -37,6 +37,17 @@ export const tasksModuleManifest: ModuleManifest = {
       args: { p_workspace_id: "workspace uuid", p_task_id: "task uuid" },
     },
     {
+      op: "tasks.assign",
+      rpc: "tasks_op_assign",
+      summary:
+        "Assign a task to a member who can work on tasks, or unassign it (null). Assigning someone else notifies them once (TV-D1).",
+      args: {
+        p_workspace_id: "workspace uuid",
+        p_task_id: "task uuid",
+        p_assignee_id: "member uuid, or null to unassign",
+      },
+    },
+    {
       op: "tasks.set_status",
       rpc: "tasks_op_set_status",
       summary:

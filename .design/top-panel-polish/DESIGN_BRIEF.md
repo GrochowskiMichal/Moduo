@@ -41,7 +41,7 @@ Visually, the bar continues to sit flat on `bg-background` with no hairline, mat
 ## Aesthetic Direction
 
 - **Philosophy**: Inherited from the foundation. Refined, content-first, dark-canvas operator's tool. The chrome is the picture frame, not the picture.
-- **Tone**: Calm, confident, intentional. No celebratory hover states on the module nav, no decorative accents on the workspace trigger. The single confident pink accent that the foundation reserves for the AI disc and `--primary` interactions stays exactly where the foundation put it.
+- **Tone**: Calm, confident, intentional. No celebratory hover states on the module nav, no decorative accents on the workspace trigger. The accent stays on `--primary` interactions only, where the foundation put it. *(Updated 2026-10-08: the accent is mono by default and there is no AI disc; pink is just one optional accent. See brand decision 40 in `.design/brand/DECISIONS.md`.)*
 - **Reference points**: Linear's top-left identity stack; Notion's compact module switcher; Cursor's persistent mark + workspace; Things 3's restraint in chrome.
 - **Anti-references**: VS Code's busy activity bar; Slack's tinted workspace identity (we keep the Mark monochrome); Discord's gradient hover stacks; any pattern that treats chrome as a feature.
 
