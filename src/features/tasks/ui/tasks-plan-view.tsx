@@ -643,7 +643,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
         blockedNoteFor={blockedNoteFor}
         onMarkDone={api.markDone}
         onSkip={api.moveQueuedToEnd}
-        onAddTime={api.addTimeSpent}
+        onAddTime={(taskId, seconds) => void api.logTimeAdjustment(taskId, seconds)}
         onSetTime={api.setTimeSpent}
         tagsFor={(id) => api.tagsByTask.get(id) ?? []}
         subtasksFor={(id) => api.subtasksByParent.get(id) ?? []}
