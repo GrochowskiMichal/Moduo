@@ -34,8 +34,8 @@ Six axes, persisted via CSS variables on `:root`:
 6. **Body font size**: small / normal / large
 
 ### Color
-- **Default accent**: pink/magenta (matches the current pink disc in the user's first draft).
-- **Accent palette (8 colors, user picks one)**: pink (default), violet, blue, green, amber, red, teal, mono (near-white).
+- **Default accent**: pink/magenta (matches the current pink disc in the user's first draft). *(Superseded: the default accent is mono since 2026-07-27, and the pink came from a misread of the draft. See brand decision 40 in `.design/brand/DECISIONS.md`.)*
+- **Accent palette (8 colors, user picks one)**: pink, violet, blue, green, amber, red, teal, mono (near-white). *(Mono is the default since 2026-07-27; pink was the default here only because of the misread, brand decision 40.)*
 - All accents pre-tuned to harmonize with the dark surfaces.
 - **Distinct from accent**: a separate set of "label colors" for tags, statuses, calendar event categories (TBD during `/design-tokens` — not tied to user's accent selection).
 
