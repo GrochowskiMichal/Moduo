@@ -3,7 +3,7 @@
 Things that have bitten us, grouped by area. **Before working in an area, read its file.** Before debugging anything, skim the matching area. Add a new trap to the area file (the trap, why, what to do instead); if it bit twice, turn it into a hook, lint rule or test instead and say so in the entry.
 
 - **[Build, CI and desktop release pipeline](gotchas/build-ci.md)** (37) · read when touching `.github/`, `scripts/`, `package.json`, `rsbuild.config.ts` · sections: Repo / build
-- **[Git, branching and Claude Code](gotchas/workflow.md)** (11) · read when touching git, branches, skills, hooks · sections: Git / branching · Claude Code / skills
+- **[Git, branching and Claude Code](gotchas/workflow.md)** (10) · read when touching git, branches, skills, hooks · sections: Git / branching · Claude Code / skills
 - **[Supabase, migrations, Realtime, caching](gotchas/supabase.md)** (55) · read when touching `supabase/`, `src/lib/runtime*` · sections: Supabase / migrations · Supabase / Realtime (NO-6) · Prefs sync · Boot-time read caching (DF-12)
 - **[UI, routes, Storybook, drag and the dashboard grid](gotchas/ui.md)** (70) · read when touching `src/components/`, `src/routes/`, `.storybook/`, dashboard · sections: Routes / app chrome · Storybook / live-verify · Storybook / live-verify (cont.) · React effects · Drag-to-link (dnd-kit consumers) · Dashboard grid drag (DB-3, hand-rolled — NOT dnd-kit) · Dashboard persistence + pager (DB-4) · UI / design · Dashboard grid engine (DB-1)
 - **[Tauri desktop shell and desktop stores](gotchas/desktop.md)** (10) · read when touching `src-tauri/` · sections: Tauri / desktop shell · Desktop email store (IM-2a)
