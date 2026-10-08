@@ -21,8 +21,8 @@
 --     task), the assignee's access grant (share_task_assign), the assigned and
 --     unblocked notifications, comment notifications, and unassigning on
 --     member removal and account deletion (PRIV-2a, live since 2026-10-08).
---   * New: completing a task someone else created notifies its creator
---     (tasks.completed).
+--   * New: completing a one-off task someone else created notifies its
+--     creator (tasks.completed). Repeating tasks don't (Maciej, 2026-10-08).
 --
 -- Expand only: owner_id keeps its column, and the shim stays until TV-D7.
 -- The functions redefined below are production's bodies as of 2026-10-08,
@@ -465,8 +465,10 @@ BEGIN
   -- The task just became done, and the person who did it isn't its creator:
   -- tell the creator. Only on the transition, so re-saving a done task can't
   -- notify again; never when the creator is unknown or can no longer see the
-  -- task (the notification carries its title).
+  -- task (the notification carries its title). Not for a repeating task, so a
+  -- daily chore doesn't ping its creator every day (Maciej, 2026-10-08).
   IF OLD.status IS DISTINCT FROM 'done' AND NEW.status = 'done'
+     AND (NEW.recurrence IS NULL OR jsonb_typeof(NEW.recurrence) = 'null')
      AND NEW.owner_id IS NOT NULL AND NOT NEW.creator_unknown
      AND NEW.owner_id IS DISTINCT FROM v_actor
      AND public.can_access('task', NEW.id, 'view', NEW.owner_id) THEN

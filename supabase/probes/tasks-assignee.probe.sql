@@ -521,6 +521,14 @@ BEGIN
   -- Saving it as done again doesn't repeat it.
   PERFORM public.tasks_op_set_status(probe.id('W'), probe.id('T8 blocked'), 'done', NULL, NULL);
   ASSERT probe.activity('tasks.completed', 'T8 blocked') = 1, '5: a re-save notified again';
+  -- A repeating task: nobody (Maciej, 2026-10-08).
+  PERFORM probe.as_user('A');
+  PERFORM probe.new_task('T22 daily for Bea', 'B');
+  UPDATE public.tasks SET recurrence = '{"freq": "daily"}'::jsonb WHERE id = probe.id('T22 daily for Bea');
+  PERFORM probe.as_user('B');
+  PERFORM public.tasks_op_set_status(probe.id('W'), probe.id('T22 daily for Bea'), 'done', NULL, NULL);
+  ASSERT (probe.task('T22 daily for Bea')).status = 'done', '5: the repeating task wasn''t completed';
+  ASSERT probe.activity('tasks.completed', 'T22 daily for Bea') = 0, '5: a repeating task notified its creator';
   -- The creator completing their own task: nothing.
   PERFORM probe.as_user('A');
   PERFORM public.tasks_op_set_status(probe.id('W'), probe.id('T13 by X for A'), 'done', NULL, NULL);
@@ -533,7 +541,7 @@ BEGIN
   -- Archiving isn't completing.
   PERFORM public.tasks_op_set_status(probe.id('W'), probe.id('T18 for B'), 'archived', NULL, NULL);
   ASSERT probe.activity('tasks.completed', 'T18 for B') = 0, '5: archiving notified';
-  RAISE NOTICE 'PASS D1-5 completing a task someone else created tells the creator once';
+  RAISE NOTICE 'PASS D1-5 completing a one-off task someone else created tells the creator once; repeating tasks don''t';
 END;
 $$;
 

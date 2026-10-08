@@ -323,7 +323,7 @@ The cross-module visual foundation (state tokens, scrollbars, NavRow/MetaCount/F
   - They still write `owner_id` / `committed_for` / `commit_order` / `time_spent_seconds` and call `tasks_op_commit`/`uncommit`/`skip_today`.
   - Shims keep them working (writes land in the new model) until the cleanup block (TV-D7), which only runs after the adoption window.
 - **Two people edit the same task at once** — field-level writes mean one person's priority change never reverts the other's assignee change. Same-field conflicts resolve last-writer-wins.
-- **Assignee leaves the workspace** — the task shows "Former member" and stays assigned, so history is kept. Filter "Unassigned" doesn't include it; a quiet chip lets you reassign.
+- **Assignee leaves the workspace** — their tasks there become Unassigned (PRIV-2 AC9; Maciej kept it over "stays assigned as Former member", 2026-10-08, TV-D1). "Created by" still names them as a former member.
 - **Creator unknown** (tasks reassigned before this change — the old model overwrote the creator) — the metadata line omits "Created by". There is no guessing beyond the activity-log recovery done in the migration.
 - **Queue a task you can't see anymore** (sharing revoked) — it drops out of your queue silently. If it was your Now in a run, the run advances and says "That task is no longer shared with you".
 - **A task completed by someone else while it's your Now** — the run advances, with a quiet line "Mike completed *X*".

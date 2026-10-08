@@ -18,6 +18,7 @@
 ## Notifications (D1-4, D1-5, D1-6)
 - [ ] **Do:** assign a task to your teammate. → **Expect:** their bell shows "<you> assigned this to you" once; yours shows nothing. Assigning it to yourself or unassigning notifies nobody, but the task's activity says "took this" / "unassigned this". _(web)_
 - [ ] **Do:** teammate completes a task you created and assigned to them. → **Expect:** your bell shows "<teammate> completed this" once; Settings → Preferences → Notifications has a "Completed by someone else" switch that hides it. _(web)_
+- [ ] **Do:** teammate completes a *repeating* task you created. → **Expect:** no notification for you. _(web)_
 - [ ] **Do:** comment on a task you created that's assigned to your teammate. → **Expect:** your teammate is notified; when they reply, you are. _(web)_
 - [ ] **Do:** with "Show overdue tasks" on, schedule a task assigned to your teammate in the past. → **Expect:** it's in their overdue list, not yours; an unassigned overdue task you created is in yours. _(web)_
 
@@ -37,4 +38,4 @@
 - `moduo-mcp` must not be redeployed from this branch until PR #247 is merged into `maciej`: production runs #247's connector (v21), and this branch doesn't have it. Deploy from `maciej` once both are in.
 - An old desktop build can't assign a task back to the person who created it (it already shows them as the assignee). Use the web build or update the desktop build.
 - An old-model "Assign to → Me" pickup left no record, so such a task may say it was created by whoever picked it up.
-- PRIV-2 removes a departing member's assignments (AC9); tasks-v2 imagined them staying as "Former member". The live PRIV-2 rule is kept; the UI still labels a former member if one appears.
+- Removing a member unassigns their tasks there (PRIV-2 AC9, kept by Maciej on 2026-10-08); "Created by a former member" still shows.
