@@ -5,7 +5,7 @@
  *
  * POST { action: "start", origin }        → { url }
  * GET  ?code&state  (Zoom's redirect)     → 302 to <app>/calendar?connect=zoom&connect_code&connect_state
- * POST { action: "finish", code, state }  → { ok }, 403 { error } if this user didn't start it
+ * POST { action: "finish", code, state }  → { ok }; 403 wrong_account / bad_state (see oauth-connect.ts)
  * POST { action: "status" }               → { configured, connected }
  * POST { action: "disconnect" }           → { ok }
  *

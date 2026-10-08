@@ -9,7 +9,8 @@
  * GET  ?code&state  (Google's redirect)
  *   → 302 to <app>/calendar?connect=google&connect_code&connect_state
  * POST { action: "finish", code, state }  Authorization: Bearer <user jwt>
- *   → { ok } once the tokens are saved, 403 { error } if this user didn't start it
+ *   → { ok } once the tokens are saved; 403 wrong_account if this user didn't start it,
+ *     403 bad_state if the state is invalid or expired
  *
  * The callback saves nothing: only the signed-in app can finish, and only for
  * the user who started (see _shared/oauth-connect.ts). <app> is an
