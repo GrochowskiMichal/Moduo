@@ -9,7 +9,7 @@ import { afterEach, beforeAll, describe, expect, it, rs } from "@rstest/core";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 
-import { type DragActivatorRef, NestableTask, SortableTask, useTaskDndSensors } from "./task-dnd";
+import { type DragActivatorRef, DraggableTask, SortableTask, useTaskDndSensors } from "./task-dnd";
 
 beforeAll(() => {
   // jsdom has no layout; dnd-kit scrolls the lifted row into view.
@@ -56,7 +56,7 @@ const ENTER = { key: "Enter", code: "Enter" };
 
 describe.each([
   ["SortableTask (Queue)", "sortable"],
-  ["NestableTask (bucket list)", "nestable"],
+  ["DraggableTask (List)", "draggable"],
 ] as const)("%s", (_name, kind) => {
   function renderRow(opts: { withActivator: boolean }) {
     const onDragStart = rs.fn();
@@ -76,7 +76,7 @@ describe.each([
         {kind === "sortable" ? (
           <SortableTask id="a" from="queue" render={row} />
         ) : (
-          <NestableTask id="a" from="list" render={row} />
+          <DraggableTask id="a" from="list" render={row} />
         )}
       </Harness>,
     );
