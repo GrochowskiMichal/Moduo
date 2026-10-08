@@ -31,6 +31,10 @@
 - [ ] **Do:** Settings → Appearance: try Dense, Compact and Comfortable, each radius, a few shades and accents → **Expect:** rows keep their height, the columns stay aligned, avatars stay icon-sized, selection stays a tint _(both)_
 
 ## Edge cases
+- [ ] **Do:** with completed hidden, open a link to a completed task (the panel's copy-link, then paste it, or reload with `?id=`) → **Expect:** it lands on that task's row (dimmed, struck through) instead of jumping to another task; it stays listed after you move on, until you switch scope _(both)_
+- [ ] **Do:** open a link to a completed subtask whose parent is also completed → **Expect:** the parent row stays and expands, with the subtask selected _(both)_
+- [ ] **Do:** click "N completed · show", click through a few done rows, then "hide" → **Expect:** they all hide again (browsing doesn't pin them) _(both)_
+- [ ] **Do:** on the Board, drag a card into the Done column while its done cards are hidden, then show them → **Expect:** the card sits after the earlier done cards; nothing reorders unexpectedly in the List _(both)_
 - [ ] **Do:** complete a parent task whose subtasks are still open → **Expect:** the parent stays listed (dimmed) so its open subtasks stay reachable _(both)_
 - [ ] **Do:** as a view-only member, open a bucket → **Expect:** no queue toggles; queued/claimed marks still show; dates can't be edited _(both)_
 - [ ] **Do:** have a teammate complete a task you're looking at → **Expect:** it stays in place, struck through, until you change scope _(both, needs TV-D5 live updates)_
