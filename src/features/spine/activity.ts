@@ -23,6 +23,12 @@ export function spineActorName(entry: SpineActorFields, currentUserId: string | 
 }
 
 const str = (v: unknown): string | null => (typeof v === "string" && v ? v : null);
+const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
+/** Bytes as gigabytes for a sentence: one decimal under 10 GB, whole above. */
+const gigabytes = (bytes: number): string => {
+  const gb = bytes / 1073741824;
+  return gb < 10 ? (Math.round(gb * 10) / 10).toString() : Math.round(gb).toString();
+};
 
 /** Phrase a relation kind for an activity line ("works at", "a follow-up"…). */
 function kindPhrase(kind: string | null): string {
@@ -72,6 +78,17 @@ export function spineActivityLine(entry: {
     // TV-D1: a teammate finished a task you created.
     case "tasks.completed":
       return "completed this";
+    // ── Storage alerts (AT-1): the owner's pool passed 80% / 95%. The actor is
+    // whoever uploaded the file that crossed it.
+    case "attachments.storage_80":
+    case "attachments.storage_95": {
+      const level = num(p.level) ?? (entry.op.endsWith("95") ? 95 : 80);
+      const used = num(p.used_bytes);
+      const total = num(p.total_bytes);
+      const amounts =
+        used !== null && total ? ` (${gigabytes(used)} of ${gigabytes(total)} GB)` : "";
+      return `filled storage past ${level}%${amounts}`;
+    }
     case "tasks.unblocked": {
       const blocker = str(p.blocker_title);
       return blocker ? `finished “${blocker}”, unblocking this` : "unblocked this";

@@ -44,7 +44,8 @@ export type NotificationType =
   | "completed"
   | "dueFollowUp"
   | "unblocked"
-  | "overdueTasks";
+  | "overdueTasks"
+  | "storage";
 export type NotificationPrefs = Record<NotificationType, boolean>;
 
 const NOTIFICATION_TYPES: ReadonlyArray<NotificationType> = [
@@ -54,6 +55,7 @@ const NOTIFICATION_TYPES: ReadonlyArray<NotificationType> = [
   "dueFollowUp",
   "unblocked",
   "overdueTasks",
+  "storage",
 ];
 
 export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
@@ -64,6 +66,8 @@ export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
   unblocked: true,
   // Opt-in: overdue work otherwise lives in Tasks/Home, not the bell (AC9).
   overdueTasks: false,
+  // Only a workspace owner ever gets these (AT-1: the pool passed 80% / 95%).
+  storage: true,
 };
 
 /** module_activity `op` → the quiet-set toggle that governs it. An op absent from
@@ -79,6 +83,8 @@ const OP_TO_NOTIFICATION_TYPE: Record<string, NotificationType> = {
   "email.snooze_due": "dueFollowUp",
   "email.follow_up_due": "dueFollowUp",
   "tasks.unblocked": "unblocked",
+  "attachments.storage_80": "storage",
+  "attachments.storage_95": "storage",
 };
 
 export function notificationTypeForOp(op: string): NotificationType | null {
@@ -133,6 +139,7 @@ const notificationPrefsSchema = z
     dueFollowUp: z.boolean().catch(true),
     unblocked: z.boolean().catch(true),
     overdueTasks: z.boolean().catch(false),
+    storage: z.boolean().catch(true),
   })
   .catch({ ...DEFAULT_NOTIFICATION_PREFS });
 const preferencesSchema = z.object({

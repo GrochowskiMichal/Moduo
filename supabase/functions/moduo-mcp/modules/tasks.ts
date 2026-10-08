@@ -14,6 +14,7 @@
  * ctx.key.workspaceId.
  */
 
+import { ATTACHMENTS_BUCKET, ATTACHMENT_LINK_TTL_SECONDS } from "../../_shared/contracts/attachments.ts";
 import { TASK_STATUSES, isTaskStatus } from "../../_shared/contracts/vocabularies.ts";
 import { assigneeCandidates, resolveAssigneeArg } from "../../_shared/task-people.ts";
 import {
@@ -395,6 +396,48 @@ export const tasksConnectorModule: ConnectorModule = {
             .filter((t) => t.parent_id === taskId)
             .map((t) => ({ id: t.id, title: t.title, status: t.status })),
           activity,
+        };
+      },
+    },
+    {
+      name: "tasks_attachments_list",
+      description:
+        "A task's files (AT-1): name, type, size, when added, and a download link that works for 5 minutes. Links are made for the key's creator; ask again for fresh ones.",
+      access: "view",
+      inputSchema: taskIdSchema,
+      handler: async (args, ctx) => {
+        const taskId = str(args, "task_id");
+        await fetchTask(ctx, taskId);
+        const files = await rows(
+          ctx.db.from("attachments")
+            .select("id, file_name, mime, size_bytes, width, height, created_at, object_path")
+            .eq("workspace_id", ctx.key.workspaceId).eq("entity_type", "task")
+            .eq("entity_id", taskId).eq("status", "ready").is("deleted_at", null)
+            .order("created_at", { ascending: true }),
+        );
+        const urls = new Map<string, string>();
+        if (files.length) {
+          const { data, error } = await ctx.db.storage
+            .from(ATTACHMENTS_BUCKET)
+            .createSignedUrls(files.map((f) => f.object_path as string), ATTACHMENT_LINK_TTL_SECONDS.mcp);
+          if (error) throw new Error(error.message);
+          for (const link of data ?? []) {
+            if (link.path && link.signedUrl) urls.set(link.path, link.signedUrl);
+          }
+        }
+        return {
+          task_id: taskId,
+          link_lifetime_seconds: ATTACHMENT_LINK_TTL_SECONDS.mcp,
+          attachments: files.map((f) => ({
+            id: f.id,
+            name: f.file_name,
+            mime: f.mime,
+            size_bytes: Number(f.size_bytes),
+            width: f.width ?? null,
+            height: f.height ?? null,
+            added_at: f.created_at,
+            url: urls.get(f.object_path) ?? null,
+          })),
         };
       },
     },

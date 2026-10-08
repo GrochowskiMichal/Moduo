@@ -294,6 +294,23 @@ export const habitRowSchema = z.object({
   updated_at: z.string().optional(),
 });
 
+/** public.attachments (AT-1). size_bytes is a bigint: PostgREST sends it as a
+ *  JSON number while it fits, a string past 2^53. */
+export const attachmentRowSchema = z.object({
+  id,
+  entity_type: z.string(),
+  entity_id: z.string(),
+  uploader_id: z.string().nullable().optional(),
+  file_name: z.string(),
+  mime: z.string(),
+  size_bytes: z.union([z.number(), z.string()]),
+  width: z.number().nullable().optional(),
+  height: z.number().nullable().optional(),
+  status: z.unknown(),
+  deleted_at: z.string().nullable().optional(),
+  created_at: z.string(),
+});
+
 export const contactChannelSchema = z.object({
   label: z.unknown().optional(),
   value: z.unknown().optional(),

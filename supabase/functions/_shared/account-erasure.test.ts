@@ -92,6 +92,12 @@ class FakeQuery implements DbFilter {
 
   private run(): DbResult {
     const op = this.mode === "delete" ? "delete" : "select";
+    if (this.db.missingTables.has(this.table)) {
+      return {
+        data: null,
+        error: { code: "PGRST205", message: `Could not find the table 'public.${this.table}'` },
+      };
+    }
     if (this.db.fail?.table === this.table && this.db.fail.op === op) {
       return { data: null, error: { message: `${op} ${this.table} failed` } };
     }
@@ -118,9 +124,14 @@ class FakeBucket implements StorageBucket {
   constructor(
     private readonly db: FakeDb,
     readonly files: Set<string>,
+    private readonly name = "",
   ) {}
 
   async list(prefix: string, options: { limit: number; offset: number }) {
+    // Like Storage when the bucket doesn't exist (yet).
+    if (this.db.missingBuckets.has(this.name)) {
+      return { data: null, error: { message: "Bucket not found" } };
+    }
     const children = new Map<string, StorageEntry>();
     for (const path of this.files) {
       if (!path.startsWith(`${prefix}/`)) continue;
@@ -169,10 +180,13 @@ class FakeDb implements ErasureDb {
     return this.tables[table] ?? [];
   }
 
+  missingBuckets = new Set<string>();
+  missingTables = new Set<string>();
+
   bucket(name: string): FakeBucket {
     let bucket = this.buckets.get(name);
     if (!bucket) {
-      bucket = new FakeBucket(this, new Set());
+      bucket = new FakeBucket(this, new Set(), name);
       this.buckets.set(name, bucket);
     }
     return bucket;
@@ -392,6 +406,19 @@ function world() {
   ]) {
     db.bucket("avatars").files.add(path);
   }
+  for (const path of [
+    "ws-solo/att-1/original.png",
+    "ws-solo/att-1/preview.webp",
+    "ws-trashed/att-2/original.pdf",
+    "ws-team/att-3/original.png",
+  ]) {
+    db.bucket("attachments").files.add(path);
+  }
+  db.tables.attachments = [
+    { id: "att-1", workspace_id: "ws-solo", object_path: "ws-solo/att-1/original.png", preview_path: "ws-solo/att-1/preview.webp" },
+    { id: "att-2", workspace_id: "ws-trashed", object_path: "ws-trashed/att-2/original.pdf", preview_path: null },
+    { id: "att-3", workspace_id: "ws-team", object_path: "ws-team/att-3/original.png", preview_path: null },
+  ];
 
   const stripe = new FakeStripe();
   stripe.addCustomer("cus_me", ME, [
@@ -464,6 +491,31 @@ describe("deleteAccount — erasing what the FK cascade can't reach", () => {
       `profiles/${OTHER}/avatar.jpg`,
       "workspaces/ws-team/logo.png",
     ]);
+  });
+
+  it("removes the attachments of every owned workspace, soft-deleted too, and keeps other people's", async () => {
+    const { db, deps } = world();
+
+    await deleteAccount(deps, me);
+
+    expect([...db.bucket("attachments").files]).toEqual(["ws-team/att-3/original.png"]);
+  });
+
+  it("treats a missing attachments table (before AT-1's migration) as nothing to remove", async () => {
+    const { db, deps } = world();
+    db.missingTables.add("attachments");
+
+    const result = await deleteAccount(deps, me);
+
+    expect(result.status).toBe("deleted");
+    expect(avatarFiles(db)).toEqual([`profiles/${OTHER}/avatar.jpg`, "workspaces/ws-team/logo.png"]);
+  });
+
+  it("still stops when the avatars bucket is missing", async () => {
+    const { db, deps } = world();
+    db.missingBuckets.add("avatars");
+
+    expect(await failedStep(deleteAccount(deps, me))).toBe("storage");
   });
 
   it("deletes the user's booking links with their bookings and busy windows, and their co-host seats", async () => {
