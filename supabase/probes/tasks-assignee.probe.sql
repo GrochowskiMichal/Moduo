@@ -537,6 +537,32 @@ BEGIN
 END;
 $$;
 
+-- 5d. A creator who can no longer see the task hears nothing about it: T9
+-- lives in Ada's private bucket; make its creator Bea (maintenance opt-out)
+-- with no grant, and let Xavier (its assignee) complete it.
+DO $$
+BEGIN
+  PERFORM probe.as_system();
+  PERFORM set_config('tasks.creator_write', '1', true);
+  UPDATE public.tasks SET owner_id = probe.id('B') WHERE id = probe.id('T9 private for B');
+  DELETE FROM public.resource_grants
+  WHERE resource_type = 'task' AND resource_id = probe.id('T9 private for B') AND subject_id = probe.id('B');
+  ASSERT NOT public.can_access('task', probe.id('T9 private for B'), 'view', probe.id('B')), '5d: setup — Bea can still see T9';
+  PERFORM probe.as_user('X');
+  PERFORM public.tasks_op_set_status(probe.id('W'), probe.id('T9 private for B'), 'done', NULL, NULL);
+  ASSERT probe.activity('tasks.completed', 'T9 private for B') = 0, '5d: a creator who can''t see the task was told';
+  PERFORM probe.as_user('A');
+  PERFORM public.comments_op_add(probe.id('W'), 'task', probe.id('T9 private for B'), 'Private', '{}');
+  ASSERT NOT probe.ids(probe.comment_notify('T9 private for B', 'Private')) @> ARRAY[probe.id('B')::text],
+    '5d: a creator who can''t see the task got a comment notification';
+  -- Put T9 back as it was for the later checks.
+  PERFORM probe.as_system();
+  PERFORM set_config('tasks.creator_write', '1', true);
+  UPDATE public.tasks SET owner_id = probe.id('A'), status = 'todo' WHERE id = probe.id('T9 private for B');
+  RAISE NOTICE 'PASS a creator who can no longer see a task gets no completed/comment notifications about it';
+END;
+$$;
+
 -- ── 6. Unblocked and comments go to the assignee, else the creator (D1-6) ────
 
 DO $$

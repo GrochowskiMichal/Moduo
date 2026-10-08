@@ -452,10 +452,12 @@ BEGIN
   -- ── completed-by-someone-else ────────────────────────────────────────────
   -- The task just became done, and the person who did it isn't its creator:
   -- tell the creator. Only on the transition, so re-saving a done task can't
-  -- notify again; never when the creator is unknown.
+  -- notify again; never when the creator is unknown or can no longer see the
+  -- task (the notification carries its title).
   IF OLD.status IS DISTINCT FROM 'done' AND NEW.status = 'done'
      AND NEW.owner_id IS NOT NULL AND NOT NEW.creator_unknown
-     AND NEW.owner_id IS DISTINCT FROM v_actor THEN
+     AND NEW.owner_id IS DISTINCT FROM v_actor
+     AND public.can_access('task', NEW.id, 'view', NEW.owner_id) THEN
     BEGIN
       PERFORM public.module_activity_log(
         NEW.workspace_id, 'tasks', 'task', NEW.id, 'tasks.completed',
@@ -479,7 +481,9 @@ BEGIN
       FOR v_blocked IN
         SELECT bt.id AS task_id,
                coalesce(bt.assignee_id,
-                        CASE WHEN bt.creator_unknown THEN NULL ELSE bt.owner_id END) AS target_id,
+                        CASE WHEN bt.creator_unknown
+                               OR NOT public.can_access('task', bt.id, 'view', bt.owner_id)
+                             THEN NULL ELSE bt.owner_id END) AS target_id,
                bt.title AS title
         FROM public.task_relations r
         JOIN public.tasks bt ON bt.id = r.blocked_task_id
@@ -567,8 +571,11 @@ BEGIN
   -- about a comment on something in their trash.
   IF p_entity_type = 'task' THEN
     -- A task comment reaches its assignee and its creator (TV-D1: owner_id is
-    -- the creator; left out when unknown), plus everyone who commented before.
-    SELECT t.assignee_id, CASE WHEN t.creator_unknown THEN NULL ELSE t.owner_id END
+    -- the creator; left out when unknown or when they can no longer see the
+    -- task), plus everyone who commented before.
+    SELECT t.assignee_id,
+           CASE WHEN t.creator_unknown OR NOT public.can_access('task', t.id, 'view', t.owner_id)
+                THEN NULL ELSE t.owner_id END
       INTO v_owner, v_creator FROM public.tasks t
       WHERE t.id = p_entity_id AND t.workspace_id = p_workspace_id AND t.deleted_at IS NULL;
   ELSIF p_entity_type = 'note' THEN
