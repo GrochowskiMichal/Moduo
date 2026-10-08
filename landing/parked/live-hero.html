@@ -29,7 +29,7 @@
     <meta property="og:image" content="https://www.moduo.app/assets/og.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="Fire ten apps. Keep the work. Moduo links email, tasks, notes, calendar and contacts in one workspace." />
+    <meta property="og:image:alt" content="Fire ten apps. Keep the work. Moduo links email, tasks, notes, calendar, contacts and chat in one workspace." />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:image" content="https://www.moduo.app/assets/og.png" />
     <link rel="canonical" href="https://www.moduo.app/" />
@@ -99,7 +99,6 @@
         --destructive: oklch(0.66 0.22 25);
         --warning: oklch(0.82 0.15 75);
         --info: oklch(0.7 0.14 230);
-        --ai: oklch(0.71 0.2 350);
 
         --font-ui: Geist, Inter, system-ui, -apple-system, sans-serif;
         --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -1214,7 +1213,7 @@
       /* ─── The app window ───────────────────────────────────────────────
          Measured from the app: 48px bars, 32px controls, 13px labels, 8px
          control radius, 16px panels. The page's tokens are the app's
-         dark · black · mono defaults, so colours carry straight over. */
+         dark · black · mono defaults, so colors carry straight over. */
       .app {
         position: absolute;
         inset: 0;
@@ -4321,7 +4320,7 @@
         font-size: clamp(1.125rem, 1.7vw, 1.375rem);
         text-wrap: balance;
       }
-      /* The grid centres items at their own width, which squeezed the form; give it the hero's width */
+      /* The grid centers items at their own width, which squeezed the form; give it the hero's width */
       .close .hero-cta {
         width: min(100%, 33rem);
       }
@@ -6930,7 +6929,7 @@
       }
 
       /* ─── v7 sections ───────────────────────────────────────────────────── */
-      /* Section heads are left-aligned and one colour everywhere but the close */
+      /* Section heads are left-aligned and one color everywhere but the close */
       .section-head .h-section {
         max-width: 22ch;
       }
@@ -7386,7 +7385,7 @@
       .yo-lead {
         color: var(--foreground);
       }
-      /* Inline-block keeps the pill on the sentence's baseline; the icon is centred on the
+      /* Inline-block keeps the pill on the sentence's baseline; the icon is centered on the
          text's optical middle (about a third of an em above the baseline) */
       .yo-pill {
         display: inline-block;
@@ -12059,7 +12058,7 @@
           });
         });
 
-        // One frame loop: edge geometry, labels, travelling pulses.
+        // One frame loop: edge geometry, labels, traveling pulses.
         var foundEl = $("rel-found");
         var found = 0;
         var inView = false;
@@ -14530,8 +14529,8 @@
           deck: { p: "anna", s: "Final deck notes", t: "9:12", at: [TODAY, 9.2], unread: true, n: 2, prev: "Here’s the draft for Friday. Shout if anything’s off.", snip: "Love it. Just swap the hero photo and we’re done.", body: ["Hi!", "Love it. Just swap the hero photo and we’re done. Can you send the revised deck by Friday?", "Thanks, Anna"], file: "Deck v3.pdf", task: "deck", links: [["task:deck", "Spawned from"], ["note:kickoff", "Mentions"], ["event:deck", "References"]] },
           logo: { p: "maya", s: "Logo files for print", t: "9:05", at: [TODAY, 9.08], unread: true, snip: "SVGs and PNGs are in the shared folder.", body: ["Morning!", "SVGs and PNGs are in the shared folder. Shout if the printer needs anything else.", "Maya"], task: "svg", links: [["task:svg", "Spawned from"], ["task:logo", "References"]] },
           phase3: { p: "tom", s: "Intro: the Phase 3 team", t: "Mon", at: [0, 16.5], snip: "Meet the crew for the shoot in November.", body: ["Hi both,", "Meet the crew for the shoot in November. I’ve copied Priya, who’ll take the photos.", "Tom"], links: [["note:phase3", "References"]] },
-          shoot: { p: "priya", s: "Photos from the shoot", t: "Sun", at: [-1, 21], snip: "Forty selects, uploaded tonight.", body: ["Hey,", "Forty selects, uploaded tonight. Let me know your favourites.", "Priya"], links: [] },
-          proof: { p: "print", s: "Your proofs are ready", t: "Mon", at: [0, 11], snip: "Come by any time before Friday to check the colours.", body: ["Hello,", "Your proofs are ready. Come by any time before Friday to check the colours.", "Print House"], links: [["task:proofs", "References"]] },
+          shoot: { p: "priya", s: "Photos from the shoot", t: "Sun", at: [-1, 21], snip: "Forty selects, uploaded tonight.", body: ["Hey,", "Forty selects, uploaded tonight. Let me know your favorites.", "Priya"], links: [] },
+          proof: { p: "print", s: "Your proofs are ready", t: "Mon", at: [0, 11], snip: "Come by any time before Friday to check the colors.", body: ["Hello,", "Your proofs are ready. Come by any time before Friday to check the colors.", "Print House"], links: [["task:proofs", "References"]] },
         };
         var TASKS = {
           deck: { t: "Send Anna the revised deck", due: 4, sched: [4, 10], tag: ["client", "var(--info)"], b: "Website redesign", pri: "High", desc: "From Anna’s email. Swap the hero photo first.", links: [["email:deck", "Spawned from"], ["note:kickoff", "Mentions"], ["event:deck", "References"], ["contact:anna", "References"]] },
@@ -15373,7 +15372,7 @@
             ay = ra.top - o.top;
             svg.setAttribute("viewBox", "0 0 " + o.width.toFixed(1) + " " + o.height.toFixed(1));
             // Each link gets its own shape: it leaves from its own spot on the card (fanned toward
-            // its target), lands off-centre, and bends asymmetrically. Seeded per pair, so it's stable.
+            // its target), lands off-center, and bends asymmetrically. Seeded per pair, so it's stable.
             var rels = REL[mod].slice().sort(function (m1, m2) {
               return byMod[m1].getBoundingClientRect().left - byMod[m2].getBoundingClientRect().left;
             });
