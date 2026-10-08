@@ -19,9 +19,9 @@
 --
 -- Comments also gain author_kind / author_label, like chat_messages: a key's
 -- comment belongs to its creator but reads as the app that wrote it
--- ("<key name> (app)" in the app), never as the person. Closed set ('user',
--- 'api_key') mirrored by CONTENT_AUTHOR_KINDS in
--- supabase/functions/_shared/contracts/vocabularies.ts.
+-- ("<key name> (app)" in the app), never as the person, and so it notifies the
+-- creator as well. Closed set ('user', 'api_key') mirrored by
+-- CONTENT_AUTHOR_KINDS in supabase/functions/_shared/contracts/vocabularies.ts.
 --
 -- Bodies are the newest definitions, which db:reconcile shows match prod
 -- (noted per function). Only the attribution expressions change, plus the
@@ -266,6 +266,8 @@ BEGIN
 
   -- notify_user_ids = (owner ∪ prior participants) − the actor. De-duped; TEXT
   -- ids to match the predicate's `@> jsonb_build_array(auth.uid()::text)`.
+  -- New here: a key's comment reads as the app, not as its creator, so it
+  -- notifies the creator like anyone else's comment would (Maciej, 2026-10-08).
   SELECT coalesce(jsonb_agg(DISTINCT s.uid::text), '[]'::jsonb) INTO v_notify
   FROM (
     SELECT c.created_by AS uid
@@ -278,7 +280,7 @@ BEGIN
     SELECT v_owner
     WHERE v_owner IS NOT NULL
   ) s
-  WHERE s.uid IS DISTINCT FROM public.perm_actor_id();
+  WHERE v_key IS NOT NULL OR s.uid IS DISTINCT FROM public.perm_actor_id();
 
   PERFORM public.module_activity_log(
     p_workspace_id, 'comments', p_entity_type, p_entity_id, 'comments.add',

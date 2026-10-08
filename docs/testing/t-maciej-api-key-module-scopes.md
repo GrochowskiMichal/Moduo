@@ -3,7 +3,7 @@
 > Generated 2026-10-08 · branch `t/maciej/api-key-module-scopes` · **Live-verified:** partial.
 > - **UI:** the real `ApiKeysSection` was driven in the browser pane through a temporary harness (in-memory runtime, removed before commit), as owner and as a member: new-key caps, editing someone else's key, the save payload, and the "Acts as" lines. The app only offers emailed-code sign-in, so the signed-in screen itself is your pass.
 > - **Server, before the migrations:** a keyed write round-trip on prod (rolled back, nothing kept) ran every connector write op under a real key context. It found six broken writes (see Migrations).
-> - **Server, the migrations:** `20261008120000` ran on a throwaway local Postgres with a stub schema (40 cases). All four ran on a local replica of prod's schema (the recipe is at the end). The replica reproduced prod's bugs before the migrations and passed 26 cases after, re-run after the review fixes (contact links start only at a contact or a company; a key with no creator can only be lowered; an import no longer takes a teammate's private company by name). Auto mode refused running migration DDL against prod, even rolled back.
+> - **Server, the migrations:** `20261008120000` ran on a throwaway local Postgres with a stub schema (40 cases). All four ran on a local replica of prod's schema (the recipe is at the end). The replica reproduced prod's bugs before the migrations and passed 28 cases after, re-run after the review fixes (contact links start only at a contact or a company; a key with no creator can only be lowered; an import no longer takes a teammate's private company by name; a key's comment notifies its creator). Auto mode refused running migration DDL against prod, even rolled back.
 > - **Connector:** 19 unit tests (`supabase/functions/moduo-mcp/key-scopes.test.ts`) run the real tool gating, reach checks and cross-module filters against an in-memory database. Each fix's test was checked to fail on the old code.
 > - **Not yet:** the connector redeploy and the prod apply (they wait for Maciej's go-ahead), then the same keyed round-trip on prod.
 >
@@ -44,6 +44,7 @@
 
 ## Comments written by an app
 - [ ] **Do:** After an agent comments on a note, open the note's comments panel. → **Expect:** "<key name> (app) · <time>", never "You". Your own comments still say "You". _(both)_
+- [ ] **Do:** Have an agent using your key comment on a task you own. → **Expect:** you get the usual comment notification, attributed to the key's name. Commenting yourself still doesn't notify you. _(both)_
 
 ## Edge cases
 - [ ] **Do:** Open a key made before this change (Tasks + Chat only). → **Expect:** summary "View: Tasks" (or "Edit: Tasks", plus Chat if set); Edit access shows the rest at None. _(both)_
