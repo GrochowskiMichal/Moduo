@@ -22,7 +22,7 @@ Local preview: `PORT=8765 bun scripts/preview-landing.ts`, then open http://127.
 - [ ] **Do:** open /manifesto, /privacy and /terms → **Expect:** the nav shows the lockup artwork (no typed "Moduo"), dark in light mode and white in dark mode; the "Light"/"Dark" toggle flips it. No reveal on these pages. _(web)_
 
 ## Share image
-- [ ] **Do:** open http://127.0.0.1:8765/assets/og.png → **Expect:** the same card as before, with the drawn lockup top left instead of the typed "moduo"; the headline, grid, frame and product picture are untouched. _(web)_
+- [ ] **Do:** open http://127.0.0.1:8765/assets/og.png → **Expect:** the same card as before, with the drawn lockup top left instead of the typed "moduo", and the subcopy now reads "Email, tasks, notes, calendar, contacts and chat / in one workspace, linked to each other." The headline, grid, frame and product picture are untouched. _(web)_
 - [ ] **Do:** after Mike merges, paste https://www.moduo.app into the LinkedIn Post Inspector or opengraph.xyz → **Expect:** the new card (social sites cache the old one; the inspector refreshes it). _(web)_
 
 ## Code-level checks (no visible change)
