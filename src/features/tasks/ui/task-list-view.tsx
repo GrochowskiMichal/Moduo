@@ -392,7 +392,14 @@ export function TaskListView({
       },
       onClearCommand: () => {
         setCommand(null);
-        containerRef.current?.focus();
+        // Back to the list, unless closing came from clicking into another field.
+        const active = document.activeElement;
+        const leftForElsewhere =
+          active instanceof HTMLElement &&
+          active !== document.body &&
+          !containerRef.current?.contains(active) &&
+          !active.closest('[data-slot="popover-content"]');
+        if (!leftForElsewhere) containerRef.current?.focus();
       },
       onRequestCommand: (kind: RowCommand) => setCommand({ taskId: t.id, kind }),
       onTagFilter,

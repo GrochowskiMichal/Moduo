@@ -3,8 +3,6 @@
 > Generated 2026-10-08 · branch `t/maciej/fix-row-menu-popovers` · **Live-verified:** yes, in Chromium on a temporary harness running the real Tasks list (real styles, fake data); not in the signed-in app.
 > Run top-to-bottom; check off as you go. Each item is a step → what you should see → where.
 
-Test in **Tasks → All** (or the Queue) so rows show their bucket pill.
-
 ## Row right-click menu
 - [ ] **Do:** right-click a task → **Set due date…** → **Expect:** the due-date popover opens on that row with the date field focused, and stays open. _(both)_
 - [ ] **Do:** right-click → **Schedule…** → **Expect:** the scheduled-time popover opens with its field focused and stays open. _(both)_
@@ -23,8 +21,9 @@ Test in **Tasks → All** (or the Queue) so rows show their bucket pill.
 - [ ] **Do:** open a chip popover by clicking the chip, close it by clicking the chip again → press Space → **Expect:** Space completes the selected row (focus is on the list, not the chip). _(both)_
 
 ## Edge cases
+- [ ] **Do:** in a single bucket (no pill shown), right-click → **Move to bucket…** → **Expect:** the bucket list opens. _(both)_
+- [ ] **Do:** open a chip popover, then click into the detail panel's title or another field → **Expect:** the popover closes and the cursor stays in the field you clicked. _(both)_
 - [ ] **Do:** right-click a row, press Esc without choosing → **Expect:** menu closes, nothing opens, j/k work. _(both)_
 
 ## Known gaps / not-yet-testable
 - Not verified in the signed-in app or the desktop shell (harness only); the code paths are the same.
-- In a single-bucket view there is no bucket pill, so **Move to bucket…** and `b` still open nothing there. TV-Q1 (Q1-3) adds that.

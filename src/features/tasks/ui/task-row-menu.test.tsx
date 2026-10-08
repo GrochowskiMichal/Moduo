@@ -74,7 +74,7 @@ const inbox: Bucket = {
 };
 
 /** The real list in "All", where every row shows its bucket pill. */
-function renderList() {
+function renderList({ canEdit = true }: { canEdit?: boolean } = {}) {
   const tasks = [task("a", "Alpha"), task("b", "Beta", { dueDate: "2026-10-20T00:00:00.000Z" })];
   const api = {
     tasks,
@@ -105,7 +105,7 @@ function renderList() {
           buckets={[]}
           inbox={inbox}
           bucketNameById={() => "Work"}
-          canEdit
+          canEdit={canEdit}
           onRequestCapture={() => {}}
           selectedTaskId={selected}
           onSelectTask={setSelected}
@@ -114,7 +114,12 @@ function renderList() {
       </TooltipProvider>
     );
   }
-  render(<Harness />);
+  render(
+    <>
+      <Harness />
+      <input aria-label="Elsewhere" />
+    </>,
+  );
   return { api, grid: screen.getByRole("grid") };
 }
 
@@ -274,5 +279,40 @@ describe("TaskRow popovers: the other ways in", () => {
 
     expect(popover()).toBeNull();
     expect(document.activeElement).toBe(grid);
+  });
+
+  it("clicking into another field closes the popover and leaves focus there", async () => {
+    renderList();
+    await settle();
+    const chip = rowOf("Beta").querySelector<HTMLElement>('[aria-label="Due date"]')!;
+    fireEvent.click(chip);
+    await settle();
+    const elsewhere = screen.getByRole("textbox", { name: "Elsewhere" });
+
+    fireEvent.pointerDown(elsewhere, { button: 0, pointerType: "mouse" });
+    fireEvent.mouseDown(elsewhere, { button: 0 });
+    elsewhere.focus();
+    fireEvent.pointerUp(elsewhere, { button: 0, pointerType: "mouse" });
+    fireEvent.mouseUp(elsewhere, { button: 0 });
+    fireEvent.click(elsewhere, { button: 0 });
+    await settle();
+
+    expect(popover()).toBeNull();
+    expect(document.activeElement).toBe(elsewhere);
+  });
+});
+
+describe("TaskRow read-only", () => {
+  it("a chip opens nothing and right-click opens no menu", async () => {
+    renderList({ canEdit: false });
+    await settle();
+    const chip = rowOf("Beta").querySelector<HTMLElement>('[aria-label="Due date"]')!;
+
+    fireEvent.click(chip);
+    fireEvent.contextMenu(rowOf("Beta"));
+    await settle();
+
+    expect(popover()).toBeNull();
+    expect(screen.queryByRole("menu")).toBeNull();
   });
 });
