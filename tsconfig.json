@@ -26,6 +26,8 @@
     "supabase/functions/_shared/account-erasure.test.ts",
     "supabase/functions/_shared/app-origin.ts",
     "supabase/functions/_shared/app-origin.test.ts",
+    "supabase/functions/_shared/client-ip.ts",
+    "supabase/functions/_shared/client-ip.test.ts",
     "supabase/functions/_shared/escape.ts",
     "supabase/functions/_shared/escape.test.ts",
     "supabase/functions/send-workspace-invite/email.ts",

@@ -17,12 +17,17 @@ export const issueFounderCouponBodySchema = z.object({
   sendEmail: z.boolean().optional(),
 });
 
-/** `website` is a honeypot (must stay empty); `elapsedMs` = time on page before submit. */
+/**
+ * `website` is a honeypot (must stay empty); `elapsedMs` = time on page before submit;
+ * `updates` = the optional build-updates opt-in offered after someone joins (a request,
+ * confirmed by email before anything is sent).
+ */
 export const waitlistJoinBodySchema = z.object({
   email: z.string().trim().toLowerCase().max(254).pipe(z.email()),
   source: waitlistSourceSchema,
   website: z.string().max(200).optional(),
   elapsedMs: z.number().int().nonnegative().optional(),
+  updates: z.boolean().optional(),
 });
 
 export const createPortalSessionBodySchema = z.object({
