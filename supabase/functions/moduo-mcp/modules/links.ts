@@ -16,9 +16,10 @@
  * user owns) — mirroring how the tasks connector omits `tasks.catch_up`.
  */
 
+import { keyCanSeeEntityType, keyVisibleEntityTypes } from "../../_shared/contracts/mcp-key-scopes.ts";
 import { RELATION_KINDS } from "../../_shared/contracts/vocabularies.ts";
 import type { ConnectorModule, ToolContext } from "../registry.ts";
-import { visibleIds } from "../share.ts";
+import { assertLiveLinkInScope, assertReach, linksInScope, visibleIds } from "../share.ts";
 
 type Row = Record<string, any>;
 
@@ -83,13 +84,17 @@ const entityRefProps = {
 } as const;
 
 /**
- * PERM-0: events and email threads are owner-only. The connector reads with
- * the service role (no RLS), so drop registry rows the key's creator doesn't own.
+ * What a key may see of the registry: only entity types whose module it holds
+ * at least View on (a Links key with Notes: None sees no note titles), and of
+ * those only what its creator can open. PERM-0: events and email threads are
+ * owner-only; the connector reads with the service role (no RLS), so drop
+ * registry rows the key's creator doesn't own.
  */
 const PRIVATE_TABLES: Record<string, string> = { event: "calendar_events", email_thread: "email_refs" };
 const SHARED_TYPES = ["note", "task", "bucket", "contact", "company"] as const;
 
-async function visibleToKey(ctx: ToolContext, data: Row[]): Promise<Row[]> {
+async function visibleToKey(ctx: ToolContext, rows_: Row[]): Promise<Row[]> {
+  const data = rows_.filter((e) => keyCanSeeEntityType(ctx.key.scopes, e.entity_type));
   const hidden = new Set<string>();
   for (const [type, table] of Object.entries(PRIVATE_TABLES)) {
     const ids = data.filter((e) => e.entity_type === type).map((e) => e.entity_id as string);
@@ -135,8 +140,13 @@ export const linksConnectorModule: ConnectorModule = {
           .is("deleted_at", null);
         const query = str(args, "query", false);
         if (query) q = q.ilike("label", `%${query}%`);
-        const types = Array.isArray(args.types) ? args.types.filter((t) => typeof t === "string") : [];
-        if (types.length) q = q.in("entity_type", types);
+        // Only types whose module the key can see, filtered in the query: the
+        // page would otherwise fill with rows visibleToKey then drops.
+        const allowed = keyVisibleEntityTypes(ctx.key.scopes);
+        const asked = Array.isArray(args.types) ? args.types.filter((t) => typeof t === "string") : [];
+        const types = asked.length ? allowed.filter((t) => asked.includes(t)) : allowed;
+        if (!types.length) return [];
+        q = q.in("entity_type", types);
         // Over-fetch so dropping a teammate's private rows doesn't starve the page.
         const limit = clampLimit(args, 20, 50);
         const fetched = await rows(q.order("label").limit(limit * 4));
@@ -159,6 +169,7 @@ export const linksConnectorModule: ConnectorModule = {
       handler: async (args, ctx) => {
         const type = safeToken(args, "entity_type");
         const id = safeToken(args, "entity_id");
+        await assertReach(ctx, type, id);
         const data = await rows(
           ctx.db
             .from("entity_links")
@@ -170,14 +181,16 @@ export const linksConnectorModule: ConnectorModule = {
             )
             .order("created_at", { ascending: false }),
         );
-        return data.map(shapeLink);
+        return linksInScope(ctx, data).map(shapeLink);
       },
     },
     {
       name: "links_suggest",
       description:
         "Deterministic auto-suggested links for an entity (shared tags / matching email domain / ±time-window co-activity). Never auto-applied — use links_create to accept.",
-      access: "view",
+      // Edit, not View: suggestions only exist to be accepted, and the RPC sits
+      // behind the Links Edit guard.
+      access: "edit",
       inputSchema: {
         type: "object",
         properties: {
@@ -188,14 +201,23 @@ export const linksConnectorModule: ConnectorModule = {
         required: ["entity_type", "entity_id"],
       },
       handler: async (args, ctx) => {
+        const type = str(args, "entity_type");
+        const id = str(args, "entity_id");
+        await assertReach(ctx, type, id);
         const { data, error } = await ctx.db.rpc("links_suggest", {
           p_workspace_id: ctx.key.workspaceId,
-          p_entity_type: str(args, "entity_type"),
-          p_entity_id: str(args, "entity_id"),
+          p_entity_type: type,
+          p_entity_id: id,
           p_limit: clampLimit(args, 25, 50),
         });
         if (error) throw new Error(error.message);
-        return Array.isArray(data) ? data : [];
+        // Suggestions carry titles: same visibility rule as search.
+        const suggested = (Array.isArray(data) ? data : []) as Row[];
+        const visible = await visibleToKey(
+          ctx,
+          suggested.map((r) => ({ ...r, entity_type: r.other_type, entity_id: r.other_id })),
+        );
+        return visible.map(({ entity_type: _type, entity_id: _id, ...r }) => r);
       },
     },
     // ── writes (edit scope) ──────────────────────────────────────────────────
@@ -213,6 +235,8 @@ export const linksConnectorModule: ConnectorModule = {
         required: ["source_type", "source_id", "target_type", "target_id"],
       },
       handler: async (args, ctx) => {
+        await assertReach(ctx, str(args, "source_type"), str(args, "source_id"));
+        await assertReach(ctx, str(args, "target_type"), str(args, "target_id"));
         const link = await callOp(ctx, "links_op_create", {
           p_source_type: str(args, "source_type"),
           p_source_id: str(args, "source_id"),
@@ -237,6 +261,7 @@ export const linksConnectorModule: ConnectorModule = {
         required: ["link_id", "relation_kind"],
       },
       handler: async (args, ctx) => {
+        await assertLiveLinkInScope(ctx, str(args, "link_id"));
         const link = await callOp(ctx, "links_op_set_kind", {
           p_link_id: str(args, "link_id"),
           p_relation_kind: str(args, "relation_kind"),
@@ -254,6 +279,7 @@ export const linksConnectorModule: ConnectorModule = {
         required: ["link_id"],
       },
       handler: async (args, ctx) => {
+        await assertLiveLinkInScope(ctx, str(args, "link_id"));
         const link = await callOp(ctx, "links_op_delete", { p_link_id: str(args, "link_id") });
         return link?.id ? shapeLink(link) : { ok: true };
       },
@@ -281,6 +307,7 @@ export const linksConnectorModule: ConnectorModule = {
         const mentioned = Array.isArray(args.mentioned_user_ids)
           ? args.mentioned_user_ids.filter((m) => typeof m === "string")
           : [];
+        await assertReach(ctx, str(args, "entity_type"), str(args, "entity_id"));
         const comment = await callOp(ctx, "comments_op_add", {
           p_entity_type: str(args, "entity_type"),
           p_entity_id: str(args, "entity_id"),

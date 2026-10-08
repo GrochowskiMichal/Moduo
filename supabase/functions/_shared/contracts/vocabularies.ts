@@ -267,11 +267,63 @@ export type ChatCapability = (typeof CHAT_CAPABILITIES)[number];
 export const MCP_KEY_SCOPES = ["none", "view", "edit"] as const;
 export type McpKeyScope = (typeof MCP_KEY_SCOPES)[number];
 export const mcpKeyScopeSchema = z.enum(MCP_KEY_SCOPES);
+export function isMcpKeyScope(value: unknown): value is McpKeyScope {
+  return typeof value === "string" && (MCP_KEY_SCOPES as readonly string[]).includes(value);
+}
 /** Key-scope normalization: case-insensitive view/edit; anything else → none. */
 export function normalizeMcpKeyScope(input: unknown): McpKeyScope {
   if (typeof input !== "string") return "none";
   const key = input.trim().toLowerCase();
   return key === "edit" || key === "view" ? key : "none";
+}
+/** Strict parse for write paths: exactly none / view / edit. */
+export function parseMcpKeyScope(input: unknown): SafeParseResult<McpKeyScope> {
+  return parseOrError(mcpKeyScopeSchema, input);
+}
+
+/**
+ * The modules an MCP key is scoped by: the keys of workspace_api_keys.scopes,
+ * in Settings → API keys order. Mirrors workspace_api_key_scopes_valid() (the
+ * table's CHECK) in 20261008120000_workspace_api_keys_set_scopes.sql and the
+ * modules the connector registers (supabase/functions/moduo-mcp/registry.ts).
+ * `links` is the spine: search, links and comments across the other modules.
+ */
+export const MCP_KEY_MODULES = [
+  "tasks",
+  "notes",
+  "calendar",
+  "email",
+  "contacts",
+  "chat",
+  "links",
+] as const;
+export type McpKeyModule = (typeof MCP_KEY_MODULES)[number];
+export const mcpKeyModuleSchema = z.enum(MCP_KEY_MODULES);
+export function isMcpKeyModule(value: unknown): value is McpKeyModule {
+  return typeof value === "string" && (MCP_KEY_MODULES as readonly string[]).includes(value);
+}
+
+/** A key's access with every module spelled out. */
+export type McpKeyScopes = Record<McpKeyModule, McpKeyScope>;
+/** Every module present, each exactly none / view / edit (Zod 4 enum-keyed records are exhaustive). */
+export const mcpKeyScopesSchema = z.record(mcpKeyModuleSchema, mcpKeyScopeSchema);
+/**
+ * Read a stored (or partial) scope map as a full one. Absent, unknown and
+ * `admin` levels read as none, which is what the connector grants them;
+ * modules outside MCP_KEY_MODULES are dropped.
+ */
+export function normalizeMcpKeyScopes(input: unknown): McpKeyScopes {
+  const raw =
+    input && typeof input === "object" && !Array.isArray(input)
+      ? (input as Record<string, unknown>)
+      : {};
+  return Object.fromEntries(
+    MCP_KEY_MODULES.map((module) => [module, normalizeMcpKeyScope(raw[module])]),
+  ) as McpKeyScopes;
+}
+/** Strict parse for the create / set-scopes payload: every module, nothing else. */
+export function parseMcpKeyScopes(input: unknown): SafeParseResult<McpKeyScopes> {
+  return parseOrError(mcpKeyScopesSchema, input) as SafeParseResult<McpKeyScopes>;
 }
 
 // ---------------------------------------------------------------------------
@@ -473,4 +525,23 @@ export function parseChatNotifyLevel(input: unknown): SafeParseResult<ChatNotify
 export const CHAT_PLAN_TIERS = ["duo", "team", "founder"] as const satisfies readonly PlanTier[];
 export function planHasChat(tier: unknown): boolean {
   return (CHAT_PLAN_TIERS as readonly string[]).includes(normalizePlanTier(tier));
+}
+
+// ---------------------------------------------------------------------------
+// Content authors — who wrote a chat message or a comment. Mirrors
+// chat_messages_author_kind_check (20261006160000_chat_agent_access) and
+// comments_author_kind_check (20261008123000_key_writes_act_as_creator).
+// `api_key` = an app over MCP, shown by the key's name and marked as an app
+// (an "App" badge in chat, "<key name> (app)" on a comment), never as a person.
+// ---------------------------------------------------------------------------
+
+export const CONTENT_AUTHOR_KINDS = ["user", "api_key"] as const;
+export type ContentAuthorKind = (typeof CONTENT_AUTHOR_KINDS)[number];
+export const contentAuthorKindSchema = z.enum(CONTENT_AUTHOR_KINDS);
+export function isContentAuthorKind(value: unknown): value is ContentAuthorKind {
+  return typeof value === "string" && (CONTENT_AUTHOR_KINDS as readonly string[]).includes(value);
+}
+/** Read-side normalization: rows written before the column existed are a person's. */
+export function normalizeContentAuthorKind(input: unknown): ContentAuthorKind {
+  return isContentAuthorKind(input) ? input : "user";
 }
