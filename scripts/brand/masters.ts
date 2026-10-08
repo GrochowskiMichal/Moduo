@@ -25,12 +25,15 @@ const FORBIDDEN: [RegExp, string][] = [
   [/<(linear|radial)Gradient\b/i, "a gradient"],
   [/<filter\b|\bfilter\s*=/i, "a filter"],
   [/<style\b|\bstyle\s*=/i, "inline CSS"],
-  [/\bstroke\s*=\s*"(?!none)/i, "a stroke (outline strokes first)"],
+  [/\bstroke\s*=\s*["'](?!none["'])/i, "a stroke (outline strokes first)"],
+  [/\bfill\s*=\s*["']none["']/i, "an unfilled path (delete invisible guides)"],
+  [/\b(?:fill-)?opacity\s*=\s*["'](?!1(?:\.0*)?["'])/i, "transparency (masters are solid)"],
   [/<(rect|circle|ellipse|polygon|polyline|line)\b/i, "a non-path shape (convert to outlines)"],
 ];
 
+/** An attribute's value, single- or double-quoted. */
 function attr(tag: string, name: string): string | undefined {
-  return tag.match(new RegExp(`\\s${name}\\s*=\\s*"([^"]*)"`, "i"))?.[1];
+  return tag.match(new RegExp(`\\s${name}\\s*=\\s*(["'])(.*?)\\1`, "is"))?.[2];
 }
 
 export function parseMaster(name: string, svg: string): Master {
@@ -59,7 +62,10 @@ export function parseMaster(name: string, svg: string): Master {
     if (!d) throw new Error(`brand/masters/${name}: a <path> has no d attribute.`);
     const rule = attr(tag, "fill-rule");
     // SVG's own default is nonzero; keep whatever the design tool wrote.
-    paths.push({ d: d.trim(), fillRule: rule === "evenodd" ? "evenodd" : "nonzero" });
+    // Collapse whitespace: some tools wrap long path data across lines, which
+    // would break the generated TS string literal.
+    const data = d.replace(/\s+/g, " ").trim();
+    paths.push({ d: data, fillRule: rule === "evenodd" ? "evenodd" : "nonzero" });
   }
   if (paths.length === 0) throw new Error(`brand/masters/${name}: no <path> found.`);
   return { name, viewBox: box as Master["viewBox"], paths };

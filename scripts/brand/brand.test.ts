@@ -35,14 +35,29 @@ describe("parseMaster", () => {
     ['<svg viewBox="0 0 1 1"><rect width="1" height="1"/></svg>', /non-path shape/],
     ['<svg><path d="M0 0Z"/></svg>', /viewBox/],
     ['<svg viewBox="0 0 1 1"></svg>', /no <path>/],
+    ["<svg viewBox='0 0 1 1'><path d='M0 0Z' stroke='#000'/></svg>", /stroke/],
+    ['<svg viewBox="0 0 1 1"><path d="M0 0Z" fill="none"/></svg>', /unfilled/],
+    ['<svg viewBox="0 0 1 1"><path d="M0 0Z" fill-opacity="0.5"/></svg>', /transparency/],
   ])("rejects a master that isn't flat paths (%#)", (svg, message) => {
     expect(() => parseMaster("bad.svg", svg)).toThrow(message);
   });
 
-  it("accepts all three provisional masters", () => {
-    expect(master("mark.svg").viewBox).toEqual([0, 0, 1000, 1000]);
-    expect(master("wordmark.svg").paths).toHaveLength(1);
-    expect(master("lockup.svg").paths).toHaveLength(2);
+  it("reads single-quoted attributes and collapses wrapped path data", () => {
+    const m = parseMaster(
+      "x.svg",
+      "<svg viewBox='0 0 4 4'><path fill-opacity='1' d='M0 0\n   H4\tV4Z'/></svg>",
+    );
+    expect(m.viewBox).toEqual([0, 0, 4, 4]);
+    expect(m.paths[0].d).toBe("M0 0 H4 V4Z");
+  });
+
+  // Structure only, never the drawing: Maciej's redraw (BRAND-0) must pass.
+  it("accepts every master in brand/masters", () => {
+    const mark = master("mark.svg");
+    expect(mark.viewBox[2]).toBe(mark.viewBox[3]);
+    for (const file of ["mark.svg", "wordmark.svg", "lockup.svg"]) {
+      expect(master(file).paths.length).toBeGreaterThan(0);
+    }
   });
 });
 
@@ -53,9 +68,14 @@ describe("compose", () => {
   });
 
   it("recolours every path and keeps the master's box", () => {
-    const svg = artworkSvg(master("lockup.svg"), "#123456");
-    expect(svg).toContain('viewBox="271.18 225.36 2445.96 549.48"');
+    const m = parseMaster(
+      "x.svg",
+      '<svg viewBox="10.5 20 300 80"><path d="M11 21H20Z" fill="#000"/><path d="M30 30H40Z"/></svg>',
+    );
+    const svg = artworkSvg(m, "#123456");
+    expect(svg).toContain('viewBox="10.5 20 300 80"');
     expect(svg.match(/fill="#123456"/g)).toHaveLength(2);
+    expect(placement(m, 0, 0, 600)).toBe("scale(2) translate(-10.5 -20)");
   });
 
   it("centres a scaled mark on its tile", () => {
@@ -110,6 +130,13 @@ describe("palette", () => {
 // from today's masters. If this fails, run `bun run brand:export` and commit.
 describe("exports match the masters", () => {
   const mark = master("mark.svg");
+
+  it("the SVG exports were made from today's masters", () => {
+    for (const file of ["mark.svg", "wordmark.svg", "lockup.svg"]) {
+      const exported = text(`brand/exports/svg/${file.replace(".svg", "")}-current.svg`);
+      expect(exported).toBe(artworkSvg(master(file), "currentColor"));
+    }
+  });
 
   it("ModuoMark renders the master's path", () => {
     expect(MODUO_MARK_VIEWBOX).toBe(mark.viewBox.join(" "));

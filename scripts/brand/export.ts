@@ -14,7 +14,7 @@
 
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join, relative } from "node:path";
+import { dirname, join } from "node:path";
 import { Resvg } from "@resvg/resvg-js";
 
 import { artworkSvg, glassLayerSvg, macosIconSvg, markModule, ogBaseSvg, tileSvg } from "./compose";
@@ -52,10 +52,10 @@ const markSmall = existsSync(join(root, "brand/masters/mark-small.svg"))
 const wordmark = readMaster("wordmark.svg");
 const lockup = readMaster("lockup.svg");
 
-if (mark.viewBox[2] !== mark.viewBox[3]) {
-  throw new Error(
-    "brand/masters/mark.svg: the mark's viewBox must be square (it is the icon box).",
-  );
+for (const m of [mark, markSmall]) {
+  if (m && m.viewBox[2] !== m.viewBox[3]) {
+    throw new Error(`brand/masters/${m.name}: the viewBox must be square (it is the icon box).`);
+  }
 }
 
 // How much of its own box the mark's artwork fills, measured from the
@@ -65,8 +65,8 @@ if (!markBox) throw new Error("brand/masters/mark.svg renders empty.");
 const markFill = markBox.width / mark.viewBox[2];
 
 /** The small master below 24 px of rendered mark (brief §3), when it exists. */
-function markAt(tilePx: number, scale = 1): Master {
-  return markSmall && tilePx * scale * markFill <= 24 ? markSmall : mark;
+function markAt(tilePx: number): Master {
+  return markSmall && tilePx * markFill <= 24 ? markSmall : mark;
 }
 
 // ── SVG + PNG artwork ────────────────────────────────────────────────────
@@ -98,12 +98,17 @@ const TILE_RADIUS = 220; // 22% of the box, the shipped favicon's corner
 function faviconSet(dir: string, background: string, fill: string): void {
   const tile = (px: number, radius = TILE_RADIUS) =>
     tileSvg({ mark: markAt(px), background, fill, radius });
+  const at32 = png(tile(32), 32);
   write(`${dir}/favicon.svg`, tile(32));
   write(
     `${dir}/favicon.ico`,
-    packIco([16, 32, 48].map((size) => ({ size, png: png(tile(size), size) }))),
+    packIco([
+      { size: 16, png: png(tile(16), 16) },
+      { size: 32, png: at32 },
+      { size: 48, png: png(tile(48), 48) },
+    ]),
   );
-  write(`${dir}/favicon-32x32.png`, png(tile(32), 32));
+  write(`${dir}/favicon-32x32.png`, at32);
   write(`${dir}/icon-192.png`, png(tile(192), 192));
   write(`${dir}/icon-512.png`, png(tile(512), 512));
   // iOS masks its own corners, so the touch icon is a full square.
@@ -155,8 +160,16 @@ for (const file of [
 }
 for (const [file, data] of emailLogos) write(`public/email/${file}`, data);
 
-write("scripts/icons/source/macos-icon-1024.svg", macosIcon);
-write("scripts/icons/source/Moduo.icon/Assets/moduo-mark.svg", glassLayerSvg(mark, ICON_WHITE));
+// The native icons (src-tauri/icons) are built from these sources by separate
+// tools (iconutil, actool), so say loudly when they need a rebuild.
+const iconSources: [string, string][] = [
+  ["scripts/icons/source/macos-icon-1024.svg", macosIcon],
+  ["scripts/icons/source/Moduo.icon/Assets/moduo-mark.svg", glassLayerSvg(mark, ICON_WHITE)],
+];
+const iconsChanged = iconSources.some(
+  ([rel, svg]) => !existsSync(join(root, rel)) || readFileSync(join(root, rel), "utf8") !== svg,
+);
+for (const [rel, svg] of iconSources) write(rel, svg);
 
 const markModulePath = "src/components/ui/moduo-mark-path.ts";
 write(markModulePath, markModule(mark));
@@ -173,5 +186,11 @@ const biome = spawnSync(
 if (biome.status !== 0) throw new Error(`biome format failed on ${markModulePath}`);
 
 console.log(`brand:export wrote ${written.length} files from brand/masters/`);
-for (const rel of written) console.log(`  ${relative(root, join(root, rel))}`);
+for (const rel of written) console.log(`  ${rel}`);
 if (!markSmall) console.log("  (no mark-small.svg yet: small sizes use the standard mark)");
+if (iconsChanged) {
+  console.log(
+    "\n⚠ The macOS icon sources changed. Rebuild the native icons and commit them:\n" +
+      "  bun scripts/icons/build-macos-icon.ts && bun run icon:liquid",
+  );
+}
