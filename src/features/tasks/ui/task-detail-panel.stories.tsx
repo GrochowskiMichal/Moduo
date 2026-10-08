@@ -42,9 +42,9 @@ function WithMembers({ children }: { children: ReactNode }) {
   );
 }
 
-// A fixed "now": the visual spec freezes the page clock at the same instant,
-// so the feed's clock times and dates read the same at every capture.
-const NOW = new Date("2026-10-09T15:00:00").getTime();
+// A fixed "now": the visual spec freezes the page clock at the same instant
+// (and zone), so the feed's clock times and dates read the same at every capture.
+const NOW = new Date("2026-10-09T13:00:00Z").getTime();
 const ago = (minutes: number) => new Date(NOW - minutes * 60_000).toISOString();
 
 function bucket(id: string, name: string, isSystem = false): Bucket {

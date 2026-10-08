@@ -20,7 +20,7 @@ import {
   User,
   Zap,
 } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { TagChip } from "../../../components/tag-chip";
@@ -535,35 +535,38 @@ function TimeEditor({
   api: TasksModuleApi;
   onDone: () => void;
 }) {
-  // What the fields opened with, fixed for the editor's life: Focus can save
-  // while it's open, and an untouched field must never write back the total
-  // it showed (that would take away the time saved meanwhile).
-  const [opened] = useState(() => ({
+  // What each field last showed as saved: the value it opened with, then the
+  // value it last wrote. Focus can save while the editor is open, and a field
+  // left as it was must never write back a total it showed earlier (that would
+  // take away the time saved meanwhile).
+  const baseline = useRef({
     estimate: task.durationMinutes != null ? formatMinutes(task.durationMinutes) : "",
     tracked: formatTracked(task.timeSpentSeconds),
-  }));
-  const initialEstimate = opened.estimate;
-  const initialTracked = opened.tracked;
-  const [estimate, setEstimate] = useState(initialEstimate);
-  const [tracked, setTracked] = useState(initialTracked);
+  });
+  const [estimate, setEstimate] = useState(baseline.current.estimate);
+  const [tracked, setTracked] = useState(baseline.current.tracked);
 
   const commitEstimate = () => {
-    if (estimate.trim() === initialEstimate) return;
-    const minutes = estimate.trim() === "" ? null : parseMinutes(estimate);
-    if (estimate.trim() !== "" && minutes === null) {
-      setEstimate(initialEstimate);
+    const typed = estimate.trim();
+    if (typed === baseline.current.estimate) return;
+    const minutes = typed === "" ? null : parseMinutes(typed);
+    if (typed !== "" && minutes === null) {
+      setEstimate(baseline.current.estimate);
       return;
     }
+    baseline.current.estimate = typed;
     const next = minutes && minutes > 0 ? minutes : null;
     if (next !== task.durationMinutes) api.patchTask(task.id, { durationMinutes: next });
   };
   const commitTracked = () => {
-    if (tracked.trim() === initialTracked) return;
-    const minutes = tracked.trim() === "" ? 0 : parseMinutes(tracked);
+    const typed = tracked.trim();
+    if (typed === baseline.current.tracked) return;
+    const minutes = typed === "" ? 0 : parseMinutes(typed);
     if (minutes === null) {
-      setTracked(initialTracked);
+      setTracked(baseline.current.tracked);
       return;
     }
+    baseline.current.tracked = typed;
     api.setTimeSpent(task.id, minutes * 60);
   };
 

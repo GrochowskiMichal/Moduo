@@ -403,6 +403,39 @@ describe("validator round", () => {
     expect(a.setTimeSpent).not.toHaveBeenCalled();
   });
 
+  it("after typing a total, a later commit doesn't send it again over newer time", async () => {
+    const before = task({ timeSpentSeconds: 4800, durationMinutes: 240 });
+    const a = api(before);
+    const view = renderPanel(before, a);
+    fireEvent.click(screen.getByRole("button", { name: /^Time: 1h 20m/ }));
+    const tracked = (await screen.findByLabelText("Tracked")) as HTMLInputElement;
+    fireEvent.change(tracked, { target: { value: "2h" } });
+    fireEvent.blur(tracked);
+    expect(a.setTimeSpent).toHaveBeenCalledWith("t1", 7200);
+    // Focus saves a minute after the typed total landed.
+    const after = { ...before, timeSpentSeconds: 7260 };
+    view.rerender(
+      <TooltipProvider>
+        <TaskDetailPanel
+          task={after}
+          buckets={[APP]}
+          inbox={INBOX}
+          canEdit
+          onRequestCapture={() => {}}
+          onSelectTask={() => {}}
+          api={{ ...a, tasks: [after] } as TasksModuleApi}
+          runtime={null}
+          workspaceId={null}
+        />
+      </TooltipProvider>,
+    );
+    const estimate = screen.getByLabelText("Estimate") as HTMLInputElement;
+    fireEvent.change(estimate, { target: { value: "5h" } });
+    fireEvent.keyDown(estimate, { key: "Enter" });
+    expect(a.setTimeSpent).toHaveBeenCalledTimes(1);
+    expect(a.patchTask).toHaveBeenCalledWith("t1", { durationMinutes: 300 });
+  });
+
   it("reads a task's comments once when it opens", async () => {
     const { runtime, spine } = fakeRuntime();
     renderPanel(task(), api(task(), { activityStamp: 3 }), runtime);

@@ -13,7 +13,10 @@ import { expect, test } from "@playwright/test";
  * feed's times and the metadata line read the same at every capture.
  */
 
-const NOW = new Date("2026-10-09T15:00:00");
+const NOW = new Date("2026-10-09T13:00:00Z");
+
+// One zone for every machine, so the feed's clock times match the baselines.
+test.use({ timezoneId: "Europe/Warsaw" });
 
 const STORIES = [
   { name: "tasks-detail-populated", id: "tasks-taskdetailpanel--populated" },
