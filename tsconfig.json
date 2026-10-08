@@ -21,6 +21,7 @@
     "src",
     "rsbuild.config.ts",
     "playwright.config.ts",
+    "scripts/brand",
     "rstest.config.ts",
     "supabase/functions/_shared/contracts",
     "supabase/functions/_shared/email",

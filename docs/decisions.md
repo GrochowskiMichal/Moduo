@@ -239,6 +239,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Brand: logo, colour, type, motion, voice → [decisions/brand.md](decisions/brand.md)
 
+- 2026-10-08 · BRAND-1: every brand file is generated from `brand/masters/` by `bun run brand:export`.
 - 2026-10-08 · Pink is not Moduo's accent and there is no "AI disc"; pink stays only as one ordinary accent/tag option.
 - 2026-10-08 · Brand system planned: the product is the brand; drawn wordmark; no brand hue; pink isn't a brand colour; the mark reveals itself out of nothing.
 

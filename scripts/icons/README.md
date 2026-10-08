@@ -5,8 +5,8 @@ Two macOS icon pipelines, both driven from vector sources in `source/`.
 ## macOS 26 Tahoe — Liquid Glass (primary)
 
 - **Source:** `source/Moduo.icon/` — an Icon Composer bundle (`icon.json` manifest
-  + `Assets/` SVG layers). Hand-authorable; no GUI required. Edit the layers or
-  the manifest's `fill` / `groups` to change the look.
+  + `Assets/` SVG layers). The mark layer is generated from the brand master
+  (see below); edit the manifest's `fill` / `groups` to change the glass look.
 - **Build:** `bun run icon:liquid` (→ `scripts/icons/build-liquid-icon.ts`) runs
   Apple's `actool` to compile it into `src-tauri/icons/Assets.car`.
 - **Wiring:** `bundle.resources` in `src-tauri/tauri.conf.json` ships `Assets.car`
@@ -26,8 +26,11 @@ Two macOS icon pipelines, both driven from vector sources in `source/`.
 - Tauri sets `CFBundleIconFile` to this automatically; macOS 26 prefers the
   `CFBundleIconName` glass icon when both are present.
 
-## Changing the logo scale
+## The mark in these sources is generated
 
-The mark sits at ~70% of canvas width, centred (matches the legacy icon). To
-resize, edit the `translate(...)` / `viewBox` in
-`source/Moduo.icon/Assets/moduo-mark.svg`, then re-run `bun run icon:liquid`.
+`source/macos-icon-1024.svg` and `source/Moduo.icon/Assets/moduo-mark.svg` are
+written by `bun run brand:export` from `brand/masters/mark.svg` (see
+`brand/README.md`); don't edit them by hand. The mark's 1000-unit box sits at
+`translate(12 12)` in the 1024 canvas, so it spans ~70% of the width, as in the
+shipped icon. Placement lives in `scripts/brand/compose.ts`. After a re-export,
+run `bun scripts/icons/build-macos-icon.ts` and `bun run icon:liquid`.
