@@ -1,0 +1,177 @@
+#!/usr/bin/env bun
+
+/**
+ * `bun run brand:export`: regenerate every brand file from brand/masters/.
+ *
+ * Writes brand/exports/ (the full set) and the consumers that ship it: the
+ * web favicons in public/, the email logos in public/email/, the ModuoMark
+ * path module, and the macOS icon sources. Deterministic: running it twice
+ * changes nothing. Rules: .design/brand/BRAND_BRIEF.md §14.
+ *
+ * After a mark change, also rebuild the native icons:
+ *   bun scripts/icons/build-macos-icon.ts && bun run icon:liquid
+ */
+
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join, relative } from "node:path";
+import { Resvg } from "@resvg/resvg-js";
+
+import { artworkSvg, glassLayerSvg, macosIconSvg, markModule, ogBaseSvg, tileSvg } from "./compose";
+import { packIco } from "./ico";
+import { type Master, parseMaster } from "./masters";
+import { CANVAS, ICON_BLACK, ICON_WHITE, INK, PAPER } from "./palette";
+
+const root = process.cwd();
+const written: string[] = [];
+
+function write(rel: string, data: string | Uint8Array): void {
+  const abs = join(root, rel);
+  mkdirSync(dirname(abs), { recursive: true });
+  writeFileSync(abs, data);
+  written.push(rel);
+}
+
+function readMaster(file: string): Master {
+  return parseMaster(file, readFileSync(join(root, "brand/masters", file), "utf8"));
+}
+
+/** Render an SVG to PNG at an exact pixel width (height follows the aspect). */
+function png(svg: string, width: number): Uint8Array {
+  const resvg = new Resvg(svg, {
+    fitTo: { mode: "width", value: width },
+    font: { loadSystemFonts: false },
+  });
+  return resvg.render().asPng();
+}
+
+const mark = readMaster("mark.svg");
+const markSmall = existsSync(join(root, "brand/masters/mark-small.svg"))
+  ? readMaster("mark-small.svg")
+  : null;
+const wordmark = readMaster("wordmark.svg");
+const lockup = readMaster("lockup.svg");
+
+if (mark.viewBox[2] !== mark.viewBox[3]) {
+  throw new Error(
+    "brand/masters/mark.svg: the mark's viewBox must be square (it is the icon box).",
+  );
+}
+
+// How much of its own box the mark's artwork fills, measured from the
+// rendered shape so a redrawn master needs no hand-entered numbers.
+const markBox = new Resvg(artworkSvg(mark, CANVAS)).getBBox();
+if (!markBox) throw new Error("brand/masters/mark.svg renders empty.");
+const markFill = markBox.width / mark.viewBox[2];
+
+/** The small master below 24 px of rendered mark (brief §3), when it exists. */
+function markAt(tilePx: number, scale = 1): Master {
+  return markSmall && tilePx * scale * markFill <= 24 ? markSmall : mark;
+}
+
+// ── SVG + PNG artwork ────────────────────────────────────────────────────
+const artwork: [Master, number][] = [
+  [mark, 128],
+  [lockup, 320],
+  [wordmark, 240],
+];
+const name = (m: Master) => m.name.replace(/\.svg$/, "");
+for (const [m, baseWidth] of artwork) {
+  write(`brand/exports/svg/${name(m)}-paper.svg`, artworkSvg(m, PAPER));
+  write(`brand/exports/svg/${name(m)}-ink.svg`, artworkSvg(m, INK));
+  write(`brand/exports/svg/${name(m)}-current.svg`, artworkSvg(m, "currentColor"));
+  for (const [variant, fill] of [
+    ["paper", PAPER],
+    ["ink", INK],
+  ] as const) {
+    for (const scale of [1, 2, 3]) {
+      write(
+        `brand/exports/png/${name(m)}-${variant}@${scale}x.png`,
+        png(artworkSvg(m, fill), baseWidth * scale),
+      );
+    }
+  }
+}
+
+// ── Favicons (prod: black tile; staging: inverted) ──────────────────────
+const TILE_RADIUS = 220; // 22% of the box, the shipped favicon's corner
+function faviconSet(dir: string, background: string, fill: string): void {
+  const tile = (px: number, radius = TILE_RADIUS) =>
+    tileSvg({ mark: markAt(px), background, fill, radius });
+  write(`${dir}/favicon.svg`, tile(32));
+  write(
+    `${dir}/favicon.ico`,
+    packIco([16, 32, 48].map((size) => ({ size, png: png(tile(size), size) }))),
+  );
+  write(`${dir}/favicon-32x32.png`, png(tile(32), 32));
+  write(`${dir}/icon-192.png`, png(tile(192), 192));
+  write(`${dir}/icon-512.png`, png(tile(512), 512));
+  // iOS masks its own corners, so the touch icon is a full square.
+  write(`${dir}/apple-touch-icon.png`, png(tile(180, 0), 180));
+}
+faviconSet("brand/exports/favicon/prod", CANVAS, PAPER);
+faviconSet("brand/exports/favicon/staging", PAPER, CANVAS);
+
+// ── Avatar: paper mark at ~55% of the width on Canvas black (brief §6) ──
+const avatarScale = 0.55 / markFill;
+const avatar = tileSvg({
+  mark,
+  background: CANVAS,
+  fill: PAPER,
+  radius: 0,
+  markScale: avatarScale,
+});
+write("brand/exports/avatar/avatar.svg", avatar);
+write("brand/exports/avatar/avatar-1024.png", png(avatar, 1024));
+
+// ── App icon ────────────────────────────────────────────────────────────
+const macosIcon = macosIconSvg(mark, ICON_BLACK, ICON_WHITE);
+write("brand/exports/png/app-icon-1024.png", png(macosIcon, 1024));
+
+// ── Share-image base ────────────────────────────────────────────────────
+const og = ogBaseSvg(lockup, CANVAS, PAPER);
+write("brand/exports/og/og-base.svg", og);
+write("brand/exports/og/og-base.png", png(og, 1200));
+
+// ── Email logos (names and size per specs/transactional-email.md T6) ────
+// "light" = for light emails (Ink artwork); "dark" = for dark mode (Paper).
+const emailLogos: [string, Uint8Array][] = [
+  ["lockup-light@2x.png", png(artworkSvg(lockup, INK), 192)],
+  ["lockup-dark@2x.png", png(artworkSvg(lockup, PAPER), 192)],
+  ["mark-light@2x.png", png(artworkSvg(mark, INK), 72)],
+  ["mark-dark@2x.png", png(artworkSvg(mark, PAPER), 72)],
+];
+for (const [file, data] of emailLogos) write(`brand/exports/email/${file}`, data);
+
+// ── Consumers ───────────────────────────────────────────────────────────
+for (const file of [
+  "favicon.svg",
+  "favicon.ico",
+  "favicon-32x32.png",
+  "icon-192.png",
+  "apple-touch-icon.png",
+]) {
+  write(`public/${file}`, readFileSync(join(root, "brand/exports/favicon/prod", file)));
+}
+for (const [file, data] of emailLogos) write(`public/email/${file}`, data);
+
+write("scripts/icons/source/macos-icon-1024.svg", macosIcon);
+write("scripts/icons/source/Moduo.icon/Assets/moduo-mark.svg", glassLayerSvg(mark, ICON_WHITE));
+
+const markModulePath = "src/components/ui/moduo-mark-path.ts";
+write(markModulePath, markModule(mark));
+// Long path strings: let Biome settle the generated file's formatting so
+// `bun run lint:js` stays clean without hand-matching its line rules.
+const biome = spawnSync(
+  join(root, "node_modules/.bin/biome"),
+  ["format", "--write", markModulePath],
+  {
+    cwd: root,
+    stdio: "ignore",
+  },
+);
+if (biome.status !== 0) throw new Error(`biome format failed on ${markModulePath}`);
+
+console.log(`brand:export wrote ${written.length} files from brand/masters/`);
+for (const rel of written) console.log(`  ${relative(root, join(root, rel))}`);
+if (!markSmall) console.log("  (no mark-small.svg yet: small sizes use the standard mark)");

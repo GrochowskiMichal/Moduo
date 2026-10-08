@@ -312,19 +312,24 @@ brand/
     avatar/             1024 square: paper mark at 55% on Canvas black
     favicon/            prod (black tile) + staging (inverted) sets
     og/                 OG template base
+    email/              email header logos (also copied to public/email/)
 ```
+
+Built in BRAND-1 (2026-10-08). The details live in [brand/README.md](../../brand/README.md).
 
 **Consumers** (the export script writes these, so nothing is hand-copied):
 
 | Destination | What |
 | --- | --- |
-| `src/components/ui/moduo-mark.tsx` | Inline mark path, regenerated from `mark.svg` (and `mark-small.svg` for ≤24px) |
-| `public/` | Web-app favicons, apple-touch, 192/512 icons |
+| `src/components/ui/moduo-mark-path.ts` | The path `ModuoMark` renders, generated from `mark.svg` |
+| `public/` | Favicons and touch icons for **both** the web app and the landing (the landing build copies the web build, so the landing needs no copies of its own) |
 | `public/email/` | Email lockup and mark PNGs, light and dark @2x (the location set by the email spec, T6) |
-| `landing/` root + `landing/assets/brand/` | Landing favicons, social avatars, press zip |
-| `scripts/icons/source/` | App-icon layer (`Moduo.icon/Assets/moduo-mark.svg`) and `macos-icon-1024.svg`; then `bun run icon:liquid` |
+| `landing/assets/brand/` | Press kit files (BRAND-5) |
+| `scripts/icons/source/` | App-icon layer (`Moduo.icon/Assets/moduo-mark.svg`) and `macos-icon-1024.svg`; then `bun scripts/icons/build-macos-icon.ts` + `bun run icon:liquid` |
 
-**Deleted** once replacements exist (76): `assets/moduo_logo_white.svg`, `moduo_sign_white.svg`, `logo_d-w.png`, `moduo_favicon.png`, and the Expo leftovers `icon.png`, `adaptive-icon.png`, `splash-icon.png`, `favicon.png`, plus `image.jpg` (§12). Git history keeps them.
+A test in `bun run verify` (`scripts/brand/brand.test.ts`) fails if these consumers drift from the masters. Favicons and touch icons switch to `mark-small.svg` automatically when the rendered mark is ≤ 24 px, once that master exists.
+
+**Deleted** (76). In BRAND-1: `assets/moduo_logo_white.svg`, `moduo_sign_white.svg`, `logo_d-w.png`, `moduo_favicon.png`, the Expo leftovers `adaptive-icon.png`, `splash-icon.png`, `favicon.png`, and `image.jpg` (§12). `assets/icon.png` goes in BRAND-2, together with the initials avatar that replaces its last use (the default profile picture). Git history keeps them.
 
 ---
 
