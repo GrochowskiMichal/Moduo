@@ -31,6 +31,7 @@ import { ShareMenu } from "../../sharing/share-menu";
 import { TIME_BLOCK_LABELS, TIME_BLOCK_SLOTS, type TimeBlockSlot } from "../default-view";
 import { bucketSections } from "../helpers";
 import type { Bucket } from "../model";
+import { DeleteBucketDialog } from "./delete-bucket-dialog";
 
 export type TasksMode = "plan" | "execute";
 
@@ -42,6 +43,8 @@ type Props = {
   buckets: Bucket[];
   inbox: Bucket | null;
   openCountByBucket: Map<string, number>;
+  /** Tasks each bucket's list shows (open + done) — quoted by the delete confirm. */
+  taskCountByBucket: Map<string, number>;
   driftCountByBucket: Map<string, number>;
   totalOpenCount: number;
   committedCount: number;
@@ -67,6 +70,7 @@ export function BucketRail({
   buckets,
   inbox,
   openCountByBucket,
+  taskCountByBucket,
   driftCountByBucket,
   totalOpenCount,
   committedCount,
@@ -81,6 +85,21 @@ export function BucketRail({
 }: Props) {
   const [adding, setAdding] = useState(false);
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
+  // Delete asks first (Q1-4). Bucket + counts are snapshotted on open: confirming
+  // empties the bucket at once, and the closing dialog must keep its copy.
+  const [deleting, setDeleting] = useState<{
+    bucket: Bucket;
+    taskCount: number;
+    openCount: number;
+    open: boolean;
+  } | null>(null);
+  const requestDelete = (bucket: Bucket) =>
+    setDeleting({
+      bucket,
+      taskCount: taskCountByBucket.get(bucket.id) ?? 0,
+      openCount: openCountByBucket.get(bucket.id) ?? 0,
+      open: true,
+    });
 
   const { ungrouped, sections } = bucketSections(buckets);
   const groupNames = sections.map((s) => s.name);
@@ -161,7 +180,7 @@ export function BucketRail({
               groupNames={groupNames}
               onClick={() => onSelect(bucket.id)}
               onRename={(name) => onRenameBucket(bucket.id, name)}
-              onDelete={() => onDeleteBucket(bucket.id)}
+              onDelete={() => requestDelete(bucket)}
               onTriage={() => onTriageBucket(bucket.id)}
               onSetTimeBlock={(slot) => onSetTimeBlock(bucket.id, slot)}
               onSetGroup={(group) => onSetBucketGroup(bucket.id, group)}
@@ -224,7 +243,7 @@ export function BucketRail({
                         groupNames={groupNames}
                         onClick={() => onSelect(bucket.id)}
                         onRename={(name) => onRenameBucket(bucket.id, name)}
-                        onDelete={() => onDeleteBucket(bucket.id)}
+                        onDelete={() => requestDelete(bucket)}
                         onTriage={() => onTriageBucket(bucket.id)}
                         onSetTimeBlock={(slot) => onSetTimeBlock(bucket.id, slot)}
                         onSetGroup={(group) => onSetBucketGroup(bucket.id, group)}
@@ -236,6 +255,15 @@ export function BucketRail({
           })}
         </nav>
       </div>
+
+      <DeleteBucketDialog
+        bucket={deleting?.bucket ?? null}
+        open={deleting?.open ?? false}
+        taskCount={deleting?.taskCount ?? 0}
+        openCount={deleting?.openCount ?? 0}
+        onConfirm={(bucket) => onDeleteBucket(bucket.id)}
+        onClose={() => setDeleting((prev) => (prev ? { ...prev, open: false } : prev))}
+      />
     </div>
   );
 }
@@ -522,7 +550,7 @@ function BucketRow({
             </DropdownMenuSub>
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onSelect={onDelete}>
-              Delete bucket
+              Delete bucket…
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

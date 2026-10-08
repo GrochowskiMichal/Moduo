@@ -37,6 +37,11 @@ function keyFor(id: ShortcutId): string {
   return entry ? formatShortcut(entry) : "";
 }
 
+// The ⌘1…⌘N module jumps collapse into one row. Both ends come from SHORTCUTS,
+// so the row can't fall behind the tabs again (it read ⌘1–⌘6 after Chat
+// became the 7th tab).
+const MODULE_SHORTCUTS = SHORTCUTS.filter((s) => s.id.startsWith("module-"));
+
 export function GlobalShortcutsDialog() {
   const [open, setOpen] = useState(false);
 
@@ -53,17 +58,20 @@ export function GlobalShortcutsDialog() {
     keys: <Kbd>{keyFor(id)}</Kbd>,
     desc,
   }));
-  // The ⌘1…⌘6 module jumps collapse into one row.
-  rows.push({
-    keys: (
-      <span className="flex items-center gap-1">
-        <Kbd>{keyFor("module-1")}</Kbd>
-        <span className="text-muted-foreground">–</span>
-        <Kbd>{keyFor("module-6")}</Kbd>
-      </span>
-    ),
-    desc: "Jump to a module",
-  });
+  const firstModule = MODULE_SHORTCUTS.at(0);
+  const lastModule = MODULE_SHORTCUTS.at(-1);
+  if (firstModule && lastModule) {
+    rows.push({
+      keys: (
+        <span className="flex items-center gap-1">
+          <Kbd>{formatShortcut(firstModule)}</Kbd>
+          <span className="text-muted-foreground">–</span>
+          <Kbd>{formatShortcut(lastModule)}</Kbd>
+        </span>
+      ),
+      desc: "Jump to a module",
+    });
+  }
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>

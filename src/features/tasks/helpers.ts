@@ -399,6 +399,18 @@ function groupLabel(by: GroupBy, key: string, ctx: GroupContext): string {
   return key;
 }
 
+/**
+ * Whether rows and cards show their bucket pill (tasks-v2 Q1-3). The pill only
+ * earns its place where the bucket isn't already implied: a single-bucket scope
+ * (a bucket, or Inbox) names it in the title, and bucket grouping names it in
+ * every group header. `scope` is the rail selection: "all" | "today" (the
+ * Queue) | "inbox" | a bucket id.
+ */
+export function showBucketPill(scope: string, groupBy: GroupBy): boolean {
+  const crossBucket = scope === "all" || scope === "today";
+  return crossBucket && groupBy !== "bucket";
+}
+
 // ── Organization: rail sections + tag filter (Session 4) ─────────────────────
 
 export type BucketSection = { name: string; buckets: Bucket[] };
