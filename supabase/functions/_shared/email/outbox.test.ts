@@ -118,6 +118,18 @@ describe("claim, send, retry", () => {
     expect(nextRetryAt(OUTBOX_MAX_ATTEMPTS, NOW)).toBeNull();
   });
 
+  it("fails the extra claim a lost 5th attempt gets, unless it goes through", async () => {
+    const lost = fakeQueue([row({ attempts: OUTBOX_MAX_ATTEMPTS + 1 })], [
+      { ok: false, retryable: true, status: 503, error: "resend_http_503" },
+    ]);
+    await runOutbox(lost.deps);
+    expect(lost.finished).toEqual([{ id: "row-1", outcome: "failed", error: "resend_http_503" }]);
+
+    const delivered = fakeQueue([row({ attempts: OUTBOX_MAX_ATTEMPTS + 1 })]);
+    await runOutbox(delivered.deps);
+    expect(delivered.finished).toEqual([{ id: "row-1", outcome: "sent", providerId: "re_1" }]);
+  });
+
   it("never retries a permanent refusal", async () => {
     const queue = fakeQueue([row()], [{ ok: false, retryable: false, status: 422, error: "Invalid `to` field" }]);
     await runOutbox(queue.deps);

@@ -372,10 +372,10 @@ SET search_path = ''
 AS $$
 #variable_conflict use_column
 BEGIN
-  -- A lost lease means the run died between sending and recording, so the
-  -- send may well have gone out. It gets one extra claim beyond the 5 attempts
-  -- (the same Idempotency-Key makes Resend answer with the first send); only a
-  -- row lost after that is given up on.
+  -- A lost lease means the run died mid-row, and the send may well have gone
+  -- out. It gets one extra claim beyond the 5 attempts, sent with the same
+  -- Idempotency-Key, so never a second copy; only a row lost after that is
+  -- given up on.
   UPDATE public.email_outbox o
      SET status = 'failed',
          locked_until = NULL,

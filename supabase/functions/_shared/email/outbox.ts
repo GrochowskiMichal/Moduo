@@ -14,9 +14,11 @@
  *   15, then 60 minutes; the 5th failed attempt, a permanent refusal, or a
  *   payload its template refuses is marked failed (the health job then alerts).
  *   A kind the deployed worker has no template for is retried the same way, so
- *   a feature whose migration ships before its worker deploy loses nothing.
- *   A run lost between sending and recording gets one extra, idempotent claim
- *   in SQL before it counts as failed.
+ *   a worker deploy up to ~80 minutes behind the migration that queues the kind
+ *   loses nothing (deploy the worker first; docs/email-runbook.md). A kind
+ *   missing from EMAIL_KINDS altogether fails at once.
+ *   A run lost between sending and recording gets one extra claim in SQL before
+ *   it counts as failed; it sends with the same key, so never a second copy.
  * - One run at a time (the database's run lease, `lock`), and its sends are
  *   paced, so a burst stays well inside Resend's per-team rate limit, which
  *   sign-in codes share. A kick that finds a run going exits; the running loop

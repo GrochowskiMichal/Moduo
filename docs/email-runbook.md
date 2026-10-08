@@ -123,7 +123,7 @@ Steps 1–3 are agent steps that need Maciej's OK in the session; step 4 is Maci
   select coalesce(last_attempt_at, created_at) as at, kind, attempts, last_error
   from public.email_outbox where status = 'failed' order by 1 desc limit 20;
   ```
-  `no_template:<kind>` means a feature queued a kind the deployed worker can't render: deploy the worker from the branch that added the template. `render_failed:…` is a payload the template refused.
+  `no_template:<kind>` means a feature queued a kind the deployed worker can't render: deploy the worker from the branch that added the template. Such rows retry for about 80 minutes before they fail, so **every TX block that adds a queued kind deploys `email-worker` before (or together with) the migration that starts queueing it**. `render_failed:…` is a payload the template refused.
 - **The worker's own log:** Edge Functions → email-worker → Logs: `run` (a summary per run that sent something, or `busy` when another run held the lease), `send_failed`, `unsendable`, `finish_failed`, `unauthorized`.
 - **Nothing goes out and no alert comes:** the alert travels through the same queue, so a worker that isn't deployed, or a kick it refuses, silences both. Check what pg_net got back for the latest kicks (`200`/`202` is fine; `401` means the Vault secret and the database disagree, `404` that `email-worker` isn't deployed):
   ```sql
