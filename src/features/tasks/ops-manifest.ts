@@ -8,15 +8,50 @@ import type { ModuleManifest } from "../../lib/module-manifest";
 
 export const tasksModuleManifest: ModuleManifest = {
   module: "tasks",
-  summary: "Buckets, tasks, today's commit queue, subtasks, dependencies, recurrence.",
+  summary: "Buckets, tasks, personal queues, subtasks, dependencies, recurrence.",
   permissionKey: "tasks",
   activityEntityTypes: ["task"],
   ops: [
     {
+      op: "tasks.queue_add",
+      rpc: "tasks_op_queue_add",
+      summary:
+        "Add a task to your own queue (TV-D2): at the end, or the top. Already queued: 'end' leaves it, 'top' moves it. Done/archived tasks can't be queued.",
+      args: {
+        p_workspace_id: "workspace uuid",
+        p_task_id: "task uuid",
+        p_at: "'end' (default) or 'top'",
+      },
+    },
+    {
+      op: "tasks.queue_remove",
+      rpc: "tasks_op_queue_remove",
+      summary: "Take a task out of your own queue. Idempotent.",
+      args: { p_workspace_id: "workspace uuid", p_task_id: "task uuid" },
+    },
+    {
+      op: "tasks.queue_reorder",
+      rpc: "tasks_op_queue_reorder",
+      summary:
+        "Move a task within your queue: right after another queued task, or to the top (null). Not logged.",
+      args: {
+        p_workspace_id: "workspace uuid",
+        p_task_id: "task uuid",
+        p_after_task_id: "queued task uuid to follow, or null for the top",
+      },
+    },
+    {
+      op: "tasks.queue_move_to_end",
+      rpc: "tasks_op_queue_move_to_end",
+      summary:
+        "Send a queued task to the end of your queue (Skip in a run). Not logged; never a reschedule.",
+      args: { p_workspace_id: "workspace uuid", p_task_id: "task uuid" },
+    },
+    {
       op: "tasks.commit",
       rpc: "tasks_op_commit",
       summary:
-        "Add a task to a day's commit queue ('doing this today'); recommitting moves it to the end of the queue.",
+        "Legacy (until TV-D7): commit a task for a day; since TV-D2 it also goes to the end of your queue, and recommitting moves it there.",
       args: {
         p_workspace_id: "workspace uuid",
         p_task_id: "task uuid",
@@ -26,14 +61,15 @@ export const tasksModuleManifest: ModuleManifest = {
     {
       op: "tasks.uncommit",
       rpc: "tasks_op_uncommit",
-      summary: "Remove a task from its commit queue. Idempotent, never intercepted.",
+      summary:
+        "Legacy (until TV-D7): clear the day's commit and take the task out of your queue. Idempotent.",
       args: { p_workspace_id: "workspace uuid", p_task_id: "task uuid" },
     },
     {
       op: "tasks.skip_today",
       rpc: "tasks_op_skip_today",
       summary:
-        "Skip a committed task out of the day's queue; atomically increments the ambient reschedule counter.",
+        "Legacy (until TV-D7): skip a task out of the day's commit and your queue. No longer counts as a reschedule (TV-D2).",
       args: { p_workspace_id: "workspace uuid", p_task_id: "task uuid" },
     },
     {
@@ -106,7 +142,8 @@ export const tasksModuleManifest: ModuleManifest = {
   resources: [
     { name: "buckets", summary: "The workspace's buckets (rail sections, Inbox)." },
     { name: "tasks", summary: "Tasks with computed drift/blocked state, subtasks, recurrence." },
-    { name: "today", summary: "The day's ordered commit queue." },
+    { name: "queue", summary: "Your own queue, in order (TV-D2)." },
+    { name: "today", summary: "Legacy alias of the queue (until TV-D7)." },
     { name: "drift", summary: "Open tasks whose scheduled time has passed (ambient, per bucket)." },
     { name: "tags", summary: "Workspace-level tags and their task links." },
     { name: "relations", summary: "Blocker → blocked dependency edges (DAG)." },

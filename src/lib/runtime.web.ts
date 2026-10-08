@@ -68,6 +68,7 @@ import {
   type Tag,
   type TagLink,
   type Task,
+  type TaskQueueEntry,
   type TaskRelation,
 } from "../features/tasks/model";
 import { toMemberPerm, toMemberRole } from "../features/workspaces/workspace-mappers";
@@ -99,10 +100,13 @@ import {
   editableTaskFields,
   isMissingColumnError,
   isMissingFunctionError,
+  isMissingTableError,
+  sortQueueEntries,
   type TaskFieldPatch,
   taskCreateRow,
   taskCreateRowLegacy,
   taskPatchToColumns,
+  taskQueueRowToModel,
   taskRowToModel,
 } from "./task-rows";
 
@@ -2389,6 +2393,55 @@ export const webRuntime: ModuoRuntime = {
       });
     },
 
+    // ── personal queues (TV-D2) ──────────────────────────────────────────
+    async listQueue(workspaceId) {
+      const res = await selectCapped<any>({
+        scope: "queued tasks",
+        cap: READ_CAPS.taskQueue,
+        build: (opts?: SelectOpts) =>
+          supabaseClient.from("task_queue").select("*", opts).eq("workspace_id", workspaceId),
+        order: (q) => q.order("user_id").order("position").order("id"),
+      });
+      // Until the migration reaches the database there are no queues: an
+      // empty list keeps every surface working (the old commit columns still
+      // drive the queue until TV-D4).
+      if (res.error) {
+        if (isMissingTableError(res.error, "task_queue")) return [];
+        throw new Error(res.error.message);
+      }
+      return sortQueueEntries(mapKnownRows(res.rows, taskQueueRowToModel));
+    },
+
+    async opQueueAdd({ workspaceId, taskId, at }) {
+      return queueOpRpc("tasks_op_queue_add", {
+        p_workspace_id: workspaceId,
+        p_task_id: taskId,
+        p_at: at ?? "end",
+      });
+    },
+
+    async opQueueRemove({ workspaceId, taskId }) {
+      return queueOpRpc("tasks_op_queue_remove", {
+        p_workspace_id: workspaceId,
+        p_task_id: taskId,
+      });
+    },
+
+    async opQueueReorder({ workspaceId, taskId, afterTaskId }) {
+      return queueOpRpc("tasks_op_queue_reorder", {
+        p_workspace_id: workspaceId,
+        p_task_id: taskId,
+        p_after_task_id: afterTaskId,
+      });
+    },
+
+    async opQueueMoveToEnd({ workspaceId, taskId }) {
+      return queueOpRpc("tasks_op_queue_move_to_end", {
+        p_workspace_id: workspaceId,
+        p_task_id: taskId,
+      });
+    },
+
     async opSetStatus({ workspaceId, taskId, status, recurrence, position }) {
       return taskOpRpc("tasks_op_set_status", {
         p_workspace_id: workspaceId,
@@ -3157,6 +3210,13 @@ async function taskOpRpc(fn: string, args: Record<string, unknown>): Promise<Tas
   const row = Array.isArray(data) ? data[0] : data;
   if (!row) throw new Error("The operation returned nothing.");
   return taskRowToModel(row);
+}
+
+/** Call a tasks_op_queue_* RPC: each returns the caller's queue, in order. */
+async function queueOpRpc(fn: string, args: Record<string, unknown>): Promise<TaskQueueEntry[]> {
+  const { data, error } = await supabaseClient.rpc(fn, args);
+  if (error) throw new Error(error.message);
+  return sortQueueEntries(mapKnownRows(Array.isArray(data) ? data : [], taskQueueRowToModel));
 }
 
 function activityRowToModel(raw: unknown): ActivityEntry {

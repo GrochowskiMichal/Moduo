@@ -139,7 +139,26 @@ export type ShapeData = {
   subtaskCounts: Map<string, number>;
   /** Member names by user id; anyone missing reads "Former member". */
   names: ReadonlyMap<string, string>;
+  /** Tasks in the key creator's own queue (TV-D2). */
+  queuedByMe?: ReadonlySet<string>;
 };
+
+/**
+ * The key creator's queue rows (TV-D2) → task ids in line-up order: by
+ * position compared bytewise (the column is COLLATE "C"), then by id, keeping
+ * only tasks the agent can see.
+ */
+export function queueTaskIds(
+  rows: ReadonlyArray<{ task_id: string; position: string; id?: string }>,
+  visible: ReadonlySet<string>,
+): string[] {
+  const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+  return rows
+    .filter((r) => visible.has(r.task_id))
+    .slice()
+    .sort((a, b) => cmp(a.position, b.position) || cmp(a.id ?? "", b.id ?? ""))
+    .map((r) => r.task_id);
+}
 
 export function isDrifted(t: Row, now: Date): boolean {
   if (t.status === "done" || t.status === "archived") return false;
@@ -170,10 +189,9 @@ export function shapeTask(t: Row, data: ShapeData, now: Date, full = false): Row
   if (t.duration_minutes != null) out.duration_minutes = t.duration_minutes;
   if (t.energy_level) out.energy_level = t.energy_level;
   if (t.priority) out.priority = t.priority;
-  if (t.committed_for) {
-    out.committed_for = t.committed_for;
-    out.commit_order = t.commit_order;
-  }
+  // TV-D2: queues are personal. The old committed_for/commit_order columns are
+  // the whole workspace's day list, kept only for app builds before TV-D4.
+  if (data.queuedByMe?.has(t.id)) out.queued_by_me = true;
   if (t.reschedule_count) out.reschedule_count = t.reschedule_count;
   if (t.recurrence) {
     out.recurrence = { rrule: t.recurrence.rrule, next_occurrence: t.recurrence.nextOccurrence ?? null };

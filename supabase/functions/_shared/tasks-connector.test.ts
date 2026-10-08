@@ -8,6 +8,7 @@ import {
   orderByBucket,
   pageOf,
   parseAssignee,
+  queueTaskIds,
   shapeTask,
   subtaskCounts,
   topLevelOnly,
@@ -175,6 +176,34 @@ describe("tasks connector helpers", () => {
     expect(pages.flat()).toEqual(all);
     expect(pageOf(all, -5, 3)).toEqual([0, 1, 2]);
     expect(pageOf(all, "x", 3)).toEqual([0, 1, 2]);
+  });
+
+  it("lines up the key creator's queue by position, bytewise, skipping tasks it can't see (TV-D2)", () => {
+    const rows = [
+      { id: "q3", task_id: "t3", position: "0000018y68" },
+      { id: "q1", task_id: "t1", position: "000000mh34" },
+      // A subdivided key sorts right after its prefix.
+      { id: "q2", task_id: "t2", position: "000000mh34i" },
+      { id: "q4", task_id: "hidden", position: "000000000a" },
+    ];
+    expect(queueTaskIds(rows, new Set(["t1", "t2", "t3"]))).toEqual(["t1", "t2", "t3"]);
+    expect(queueTaskIds([], new Set(["t1"]))).toEqual([]);
+  });
+
+  it("says queued_by_me only for the key creator's queue, and drops the shared day columns (TV-D2)", () => {
+    const tasks = [
+      task("queued", { committed_for: "2026-10-08", commit_order: 1 }),
+      task("not-queued", { committed_for: "2026-10-08", commit_order: 2 }),
+    ];
+    const data = { ...shapeData(tasks), queuedByMe: new Set(["queued"]) };
+    const now = new Date("2026-10-08T12:00:00Z");
+    const queued = shapeTask(tasks[0]!, data, now);
+    const other = shapeTask(tasks[1]!, data, now);
+    expect(queued.queued_by_me).toBe(true);
+    expect("queued_by_me" in other).toBe(false);
+    expect("committed_for" in queued || "commit_order" in queued).toBe(false);
+    // Without a queue at all (a caller that didn't load it), nothing is claimed.
+    expect("queued_by_me" in shapeTask(tasks[0]!, shapeData(tasks), now)).toBe(false);
   });
 
   it("fills Focus settings with the app's defaults", () => {
