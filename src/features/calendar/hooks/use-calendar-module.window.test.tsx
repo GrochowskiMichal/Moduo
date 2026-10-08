@@ -3,16 +3,22 @@
 // the first read after a workspace switch, a double fetch on mount, and an
 // `ensureAllTime` that silently does nothing (stranding the deep link that
 // waits on it). Everything else about the hook is covered by its page tests.
-// The busy overlay's lifecycle is pinned at the bottom.
+// The middle block pins what a workspace switch leaves behind, and the busy
+// overlay's lifecycle is pinned at the bottom.
 
 import { afterEach, beforeEach, describe, expect, it, rs } from "@rstest/core";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { useState } from "react";
 
+import type { Truncation } from "../../../lib/paged-select";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { supabaseClient } from "../../../lib/runtime.web";
+import type { CalendarAccountModel, CalendarEventModel, CalendarModuleBundle } from "../events";
 import { allTimeCalendarWindow, defaultCalendarWindow } from "../window";
 import { type CalendarModuleApi, useCalendarModule } from "./use-calendar-module";
+
+const h = rs.hoisted(() => ({ undoToast: rs.fn() }));
+rs.mock("../../../lib/undo-toast", () => ({ undoToast: h.undoToast }));
 
 type Call = { workspaceId: string; fromIso: string; toIso: string };
 
@@ -128,6 +134,253 @@ describe("useCalendarModule — fetch window", () => {
     await new Promise((r) => setTimeout(r, 0));
     expect(calls).toHaveLength(before);
   });
+});
+
+describe("useCalendarModule — workspace switch", () => {
+  type Held = {
+    args: { workspaceId: string };
+    resolve: (value: unknown) => void;
+    reject: (err: Error) => void;
+  };
+  type Writes = Record<"create" | "update" | "remove" | "restore", Held[]>;
+
+  const DRAFT = {
+    title: "Standup",
+    startsAt: "2026-10-08T09:00:00.000Z",
+    endsAt: "2026-10-08T09:30:00.000Z",
+  };
+  const CAP: Truncation = { scope: "events", shown: 2000, total: 2400 };
+
+  const event = (id: string, workspaceId: string): CalendarEventModel => ({
+    id,
+    workspaceId,
+    ownerId: "u1",
+    sourceAccountId: null,
+    externalEventId: null,
+    calendarId: "moduo",
+    title: id,
+    description: "",
+    startsAt: "2026-10-08T11:00:00.000Z",
+    endsAt: "2026-10-08T12:00:00.000Z",
+    allDay: false,
+    rrule: null,
+    status: "confirmed",
+    color: null,
+    createdAt: "2026-10-01T00:00:00.000Z",
+    updatedAt: "2026-10-01T00:00:00.000Z",
+    deletedAt: null,
+  });
+
+  const account = (id: string, workspaceId: string): CalendarAccountModel => ({
+    id,
+    workspaceId,
+    ownerId: "u1",
+    provider: "google",
+    externalId: `${id}@example.com`,
+    displayLabel: id,
+    isDefaultTarget: false,
+    color: null,
+    lastSyncAt: null,
+    status: "ok",
+    syncToken: null,
+    deletedAt: null,
+  });
+
+  /**
+   * Each workspace's read (a pending promise holds it open), and every write
+   * held open to settle by hand.
+   */
+  function switchRuntime(
+    reads: Record<string, Partial<CalendarModuleBundle> | Promise<Partial<CalendarModuleBundle>>>,
+  ) {
+    const writes: Writes = { create: [], update: [], remove: [], restore: [] };
+    const held = (list: Held[]) =>
+      rs.fn(
+        (args: Held["args"]) =>
+          new Promise((resolve, reject) => list.push({ args, resolve, reject })),
+      );
+    const runtime = {
+      calendar: {
+        listModule: rs.fn(async (workspaceId: string) => ({
+          events: [],
+          accounts: [],
+          degraded: false,
+          truncated: [],
+          ...(await reads[workspaceId]),
+        })),
+        createEvent: held(writes.create),
+        updateEvent: held(writes.update),
+        removeEvent: held(writes.remove),
+        restoreEvent: held(writes.restore),
+      },
+    } as unknown as ModuoRuntime;
+    return { runtime, writes };
+  }
+
+  /** Mounted on w1 with edit access, its first read settled; rerender to switch. */
+  async function mountOnW1(runtime: ModuoRuntime) {
+    const hook = renderHook(({ ws }) => useCalendarModule(runtime, params(ws)), {
+      initialProps: { ws: "w1" },
+    });
+    await settled(hook.result);
+    return hook;
+  }
+
+  /** The list's ids, with a still-saving create's random id shown as `tmp`. */
+  const rows = (result: { current: CalendarModuleApi }) =>
+    result.current.events.map((e) => (e.id.startsWith("tmp-") ? "tmp" : e.id));
+
+  const readsOf = (runtime: ModuoRuntime) =>
+    rs.mocked(runtime.calendar.listModule).mock.calls.map(([workspaceId]) => workspaceId);
+
+  it("shows none of the old workspace's rows while the new one is still loading", async () => {
+    let releaseW2 = () => {};
+    const w2Read = new Promise<Partial<CalendarModuleBundle>>((resolve) => {
+      releaseW2 = () => resolve({ events: [event("e2", "w2")] });
+    });
+    const { runtime } = switchRuntime({
+      w1: { events: [event("e1", "w1")], accounts: [account("a1", "w1")], truncated: [CAP] },
+      w2: w2Read,
+    });
+    const { result, rerender } = await mountOnW1(runtime);
+    expect(rows(result)).toEqual(["e1"]);
+
+    rerender({ ws: "w2" });
+    expect(rows(result)).toEqual([]);
+    expect(result.current.accounts).toEqual([]);
+    expect(result.current.truncated).toEqual([]);
+    expect(result.current.loading).toBe(true);
+
+    await act(async () => releaseW2());
+    await settled(result);
+    expect(rows(result)).toEqual(["e2"]);
+  });
+
+  it("leaves a create still saving in w1 behind, and it still saves to w1", async () => {
+    const { runtime, writes } = switchRuntime({ w2: { events: [event("e2", "w2")] } });
+    const { result, rerender } = await mountOnW1(runtime);
+    act(() => void result.current.createEvent(DRAFT));
+    expect(rows(result)).toEqual(["tmp"]);
+
+    rerender({ ws: "w2" });
+    await settled(result);
+    expect(rows(result)).toEqual(["e2"]); // the pending row didn't ride along
+
+    await act(async () => writes.create[0].resolve(event("saved", "w1")));
+    expect(rows(result)).toEqual(["e2"]); // ...and neither did the saved one
+    expect(writes.create[0].args.workspaceId).toBe("w1");
+  });
+
+  it("keeps a create still saving through a same-workspace reload", async () => {
+    const { runtime, writes } = switchRuntime({ w1: { events: [event("e1", "w1")] } });
+    const { result } = await mountOnW1(runtime);
+    act(() => void result.current.createEvent(DRAFT));
+
+    act(() => result.current.ensureAllTime()); // a wider window, same workspace → reload
+    await settled(result);
+    expect(readsOf(runtime)).toEqual(["w1", "w1"]);
+    expect(rows(result)).toEqual(["e1", "tmp"]);
+
+    await act(async () => writes.create[0].resolve(event("saved", "w1")));
+    expect(rows(result)).toEqual(["e1", "saved"]);
+  });
+
+  it("an update that settles after the switch leaves the new list alone", async () => {
+    const { runtime, writes } = switchRuntime({
+      w1: { events: [event("e1", "w1")] },
+      w2: { events: [event("e2", "w2")] },
+    });
+    const { result, rerender } = await mountOnW1(runtime);
+    act(() => void result.current.updateEvent("e1", { title: "Renamed" }));
+
+    rerender({ ws: "w2" });
+    await settled(result);
+    const before = result.current.events;
+    await act(async () => writes.update[0].resolve({ ...event("e1", "w1"), title: "Renamed" }));
+    expect(result.current.events).toBe(before); // not even re-rendered
+    expect(writes.update[0].args.workspaceId).toBe("w1");
+  });
+
+  it("a delete that fails after the switch doesn't put its row back into the new list", async () => {
+    const { runtime, writes } = switchRuntime({
+      w1: { events: [event("e1", "w1")] },
+      w2: { events: [event("e2", "w2")] },
+    });
+    const { result, rerender } = await mountOnW1(runtime);
+    act(() => void result.current.deleteEvent("e1"));
+    expect(rows(result)).toEqual([]);
+
+    rerender({ ws: "w2" });
+    await settled(result);
+    await act(async () => writes.remove[0].reject(new Error("offline")));
+    expect(rows(result)).toEqual(["e2"]);
+  });
+
+  it("Undo after the switch restores the event in w1, not into the new list", async () => {
+    h.undoToast.mockClear();
+    const { runtime, writes } = switchRuntime({
+      w1: { events: [event("e1", "w1")] },
+      w2: { events: [event("e2", "w2")] },
+    });
+    const { result, rerender } = await mountOnW1(runtime);
+    act(() => void result.current.deleteEvent("e1"));
+    await act(async () => writes.remove[0].resolve(undefined));
+    const { onUndo } = h.undoToast.mock.calls[0][1] as { onUndo: () => void };
+
+    rerender({ ws: "w2" });
+    await settled(result);
+    act(() => onUndo());
+    await act(async () => writes.restore[0].resolve(event("e1", "w1")));
+    expect(writes.restore[0].args.workspaceId).toBe("w1");
+    expect(rows(result)).toEqual(["e2"]);
+  });
+
+  it("a reload kept from before the switch reads the new workspace, never the old one", async () => {
+    const { runtime } = switchRuntime({
+      w1: { events: [event("e1", "w1")] },
+      w2: { events: [event("e2", "w2")] },
+    });
+    const { result, rerender } = await mountOnW1(runtime);
+    const { reload } = result.current; // e.g. a calendar sync that started on w1
+
+    rerender({ ws: "w2" });
+    await settled(result);
+    await act(async () => reload());
+    await settled(result);
+    expect(readsOf(runtime)).toEqual(["w1", "w2", "w2"]);
+    expect(rows(result)).toEqual(["e2"]);
+  });
+
+  it.each([
+    ["read access goes away", { permission: "none" }],
+    ["the user is signed out", { userId: null }],
+  ] as const)(
+    "clears the list and its notices when %s, and a create still saving stays out",
+    async (_when, change) => {
+      const { runtime, writes } = switchRuntime({
+        w1: { events: [event("e1", "w1")], degraded: true, truncated: [CAP] },
+      });
+      type Props = { permission: "edit" | "none"; userId: string | null };
+      const { result, rerender } = renderHook(
+        ({ permission, userId }: Props) =>
+          useCalendarModule(runtime, { userId, workspaceId: "w1", modulePermission: permission }),
+        { initialProps: { permission: "edit", userId: "u1" } as Props },
+      );
+      await settled(result);
+      expect(result.current.truncated).toEqual([CAP]);
+      expect(result.current.degraded).toBe(true);
+      act(() => void result.current.createEvent(DRAFT));
+
+      rerender({ permission: "edit", userId: "u1", ...change });
+      expect(rows(result)).toEqual([]);
+      expect(result.current.truncated).toEqual([]);
+      expect(result.current.degraded).toBe(false);
+      expect(result.current.loading).toBe(false);
+
+      await act(async () => writes.create[0].resolve(event("saved", "w1")));
+      expect(rows(result)).toEqual([]);
+    },
+  );
 });
 
 describe("useCalendarModule — busy overlay", () => {
