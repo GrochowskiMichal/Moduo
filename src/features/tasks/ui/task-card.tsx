@@ -1,6 +1,7 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { CalendarDays, Clock, CornerDownRight, Inbox, ListChecks, Repeat } from "lucide-react";
+import { useCallback } from "react";
 import { TagChipList } from "../../../components/tag-chip";
 import { Badge } from "../../../components/ui/badge";
 import { CompleteToggle } from "../../../components/ui/complete-toggle";
@@ -59,15 +60,32 @@ export function TaskCard({
   onTagFilter,
   api,
 }: Props) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
     id: task.id,
     data: taskDrag(task.id, "board"),
     disabled: !canEdit,
   });
+  // The card is the sortable node AND its only keyboard activator, so Space/
+  // Enter on the queue toggle or a chip inside it stay theirs (tasks-v2 Q1-2).
+  const setCardRef = useCallback(
+    (element: HTMLElement | null) => {
+      setNodeRef(element);
+      setActivatorNodeRef(element);
+    },
+    [setNodeRef, setActivatorNodeRef],
+  );
 
   const card = (
     <div
-      ref={setNodeRef}
+      ref={setCardRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       {...attributes}
       {...(canEdit ? listeners : {})}

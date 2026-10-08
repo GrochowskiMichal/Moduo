@@ -288,7 +288,7 @@ function DetailBody({
   return (
     <div className="flex h-full min-h-0 flex-col">
       {/* px/py inset so a focused field's ring isn't clipped by this scroll box */}
-      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-1 py-1">
+      <div className="pane-scroll min-h-0 flex-1 space-y-4 overflow-y-auto px-1 py-1">
         {/* title + complete */}
         <Input
           value={title}

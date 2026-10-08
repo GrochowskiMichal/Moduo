@@ -2,8 +2,9 @@
 // workspace's* summary (resolved from the refreshed list via the invite's
 // `workspace_id`), NOT `mapWorkspace(inviteRow)` — the invite shape would yield a
 // garbage id/name and select a non-existent workspace.
-import { act, renderHook, waitFor } from "@testing-library/react";
+
 import { beforeEach, describe, expect, it, rs } from "@rstest/core";
+import { act, renderHook, waitFor } from "@testing-library/react";
 
 const runtime = rs.hoisted(() => ({
   workspace: {

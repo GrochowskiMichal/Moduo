@@ -142,6 +142,8 @@ History moved out of [BUILD_ORDER.md](./BUILD_ORDER.md) so sessions don't re-rea
 
 ## Housekeeping & pre-alpha (between waves — designer-requested 2026-07-03)
 
+- [x] **LINT-1 — Biome back to green, then gated in CI** · deps: — · lane housekeeping · _done 2026-10-07 · `t/mike/lint-1`_ · The 57 errors were 41 in `landing/index.html` (Biome 2.5.15 now lints scripts and styles inside HTML) and 16 unsorted imports left by the vitest→rstest switch. Imports fixed with Biome's safe fix; linting switched off for `landing/**` (hand-written, separately deployed page); `bun run lint:js` added to `.github/workflows/checks.yml`. `bun run verify` green, 1582 tests.
+
 > Small, wave-independent blocks that keep the codebase honest on the way to the alpha. CLEAN-1 can run any time; MCP-1 is deliberately **pre-alpha** (the per-module manifests keep shipping with each wave's DoD at near-zero cost — the dedicated pass is the hardening round, not the build).
 
 - [x] **CLEAN-1 — Legacy dead-code sweep (calendar first)** · deps: — · _done 2026-07-03 · `t/maciej/clean-1-dead-code-sweep` (−1,533 lines; sweep extended to useSlotBookingsSync, expose-slot.ts, and the zero-consumer Google write commands; Rust OAuth engine kept; slot-booking ingestion now has no consumer — see decisions.md)_ · Remove the orphaned legacy calendar store end-to-end: [`use-calendar.ts`](../src/features/calendar/hooks/use-calendar.ts) (nothing imports it since CAL-6), the legacy shapes in `calendar/types.ts` (`CalendarViewMode`/`CalendarAccount`/`CalendarSource`/legacy `CalendarEvent`), the LEGACY `runtime.calendar` surface on web+tauri (`listEvents`/`upsertEvent`/`deleteEvent`/`upsertGoogleEvent`/`deleteGoogleEvent`/`syncGoogleEvents`/`startGoogleOAuth`/`startOutlookOAuth`/`startAppleOAuth` — the OAuth *engine commands in Rust stay*, only the dead JS bindings go), the redb calendar commands (`calendar_events_list/upsert/delete` + the `CALENDAR_EVENTS` redb table access), and the `moduo:calendar:*-v1` localStorage keys. Grep for consumers before each removal; extend the sweep to any other zero-consumer exports found along the way (knip-style pass). No behavior change; verify green is the gate.
@@ -176,6 +178,11 @@ History moved out of [BUILD_ORDER.md](./BUILD_ORDER.md) so sessions don't re-rea
 - [x] **PERM-6 — Contacts: private by default (incl. booking-created contacts) + contact groups + merge-on-share** · deps: PERM-2 · ✅ 2026-10-06 `t/mike/perm-sharing` (private-by-default live; the group + merge bar is hidden: groups have no list/share screen and merge doesn't move links yet)
 - [x] **PERM-7 — Chat capability grid + channel managers + announcement mode** · deps: PERM-2 · ✅ 2026-10-06 `t/mike/perm-sharing`
 - [x] **PERM-8 — Collective (Duo) booking links + Moduo Meet co-hosts** · deps: PERM-5 · ✅ 2026-10-06 `t/mike/perm-sharing` (database live; the co-host picker is HIDDEN behind `COLLECTIVE_LINKS_ENABLED` — the booking page doesn't combine each host's own calendars and co-hosts can't see the request yet; Moduo Meet not built)
+
+## Tasks v2 — dogfood rework · [`specs/tasks-v2.md`](./tasks-v2.md) + [`specs/design-state-layer.md`](./design-state-layer.md) + [`specs/attachments.md`](./attachments.md)
+
+- [x] **DS-1 — State tokens + global scrollbars + Storybook appearance** ✅ · design-state-layer block 1 · deps: — · lane design · _done 2026-10-08 · `t/maciej/ds-1-state-tokens` (PR #254)_
+- [x] **TV-Q1 — Quick fixes** ✅ · tasks-v2 block 1 · deps: — · lane tasks-ui · ⌘K/⌘⇧K no longer swallowed by the list, DnD activator fix, no bucket pill where implied, delete-bucket confirm + Undo, shortcut sheet ⌘1–7 · _done 2026-10-08 · `t/maciej/tv-q1-quick-fixes` (deferred-commit bucket delete; decision in [docs/decisions/tasks.md](../docs/decisions/tasks.md))_
 
 ## Wave D — Dogfood & alpha readiness · _added 2026-07-29 from the whole-project state audit_
 

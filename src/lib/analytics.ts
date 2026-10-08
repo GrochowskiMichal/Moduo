@@ -19,7 +19,10 @@
  * person. Signing out, switching to someone who hasn't opted in, or withdrawing consent
  * opts it out again and wipes its storage. New events stop at once; ones captured just
  * before can still go out with PostHog's current batch (or its retries of a failed
- * send, until the page reloads) — posthog-js has no way to drop those.
+ * send, until the page reloads) — posthog-js has no way to drop those. Switching off
+ * after a yes also has the server delete what PostHog holds for the person (PRIV-3,
+ * after the batch lands); deleting the account does the same in delete-account, and
+ * stopAnalyticsForDeletedAccount() stops this device before it signs out.
  *
  * Only the explicit `track()` calls below are captured, plus PostHog's `$identify` —
  * never autocapture, pageviews, session replay, heatmaps or surveys, whatever the
@@ -32,8 +35,8 @@
  *
  * The privacy policy (landing/privacy.html on prod-landing, §04 Analytics and §11
  * Cookies) describes all of this; change it in the same breath as anything here. Set
- * the key only once moduo.app/privacy shows "In the Moduo app". Deleting a person's
- * PostHog data isn't automatic yet (PRIV-3). See docs/decisions/permissions.md (2026-10-07).
+ * the key only once moduo.app/privacy shows "In the Moduo app", and only with the
+ * PostHog erasure secrets in place (PRIV-3). See docs/decisions/permissions.md.
  */
 
 import type { CaptureResult, PostHog, PostHogConfig } from "posthog-js";
@@ -104,6 +107,18 @@ export function getAnalyticsConsent(userId: string): AnalyticsConsent | null {
 /** Record this person's choice and apply it straight away. Settles once PostHog
  *  reflects it. */
 export function setAnalyticsConsent(userId: string, consent: AnalyticsConsent): Promise<void> {
+  const previous = getAnalyticsConsent(userId);
+  storeConsent(userId, consent);
+  notifyConsent();
+  if (userId === currentUserId) void enqueue(reconcile);
+  // Switching off after a yes also deletes what PostHog already has (PRIV-3). A first
+  // "no" has nothing to delete; a yes again drops a request the server hasn't confirmed.
+  if (PH_KEY && previous === "granted" && consent === "denied") scheduleForget(userId);
+  if (consent === "granted") cancelForget(userId);
+  return queue;
+}
+
+function storeConsent(userId: string, consent: AnalyticsConsent) {
   try {
     // Remove first: if the write then fails, the choice reads as "not granted".
     localStorage.removeItem(CONSENT_KEY_PREFIX + userId);
@@ -111,9 +126,6 @@ export function setAnalyticsConsent(userId: string, consent: AnalyticsConsent): 
   } catch {
     // Storage unavailable — nothing reads as granted, so analytics stays off.
   }
-  notifyConsent();
-  if (userId === currentUserId) void enqueue(reconcile);
-  return queue;
 }
 
 const consentListeners = new Set<() => void>();
@@ -293,8 +305,78 @@ export function setAnalyticsUser(userId: string | null): Promise<void> {
   if (userId !== currentUserId) {
     const atStartup = currentUserId === undefined;
     currentUserId = userId;
-    if (PH_KEY) void enqueue(atStartup && userId === null ? clearAbandonedPostHogState : reconcile);
+    if (PH_KEY) {
+      void enqueue(atStartup && userId === null ? clearAbandonedPostHogState : reconcile);
+      // A deletion asked for earlier that the server never confirmed (closed, offline).
+      if (userId !== null) void runPendingForget(userId);
+    }
   }
+  return queue;
+}
+
+// ── Deleting what was sent (PRIV-3) ───────────────────────────────────────────
+
+// When someone switches analytics off after a yes, the server deletes their PostHog person
+// and events (supabase/functions/analytics-forget). The request goes at once, while they're
+// still signed in, and the server waits a few seconds before deleting so the batch PostHog
+// was still sending lands and goes too. A marker keeps the request until the server
+// confirms it; each later session of that person sends it again (closed, offline, an error).
+const FORGET_KEY_PREFIX = "moduo:analytics-forget:";
+const pendingForgets = new Map<string, string>(); // this session's markers, storage or not
+
+function scheduleForget(userId: string) {
+  // One per switch-off, so an older request finishing can't clear a newer one.
+  const marker = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  pendingForgets.set(userId, marker);
+  try {
+    localStorage.setItem(FORGET_KEY_PREFIX + userId, marker);
+  } catch {
+    // Storage unavailable: only this session sends it.
+  }
+  void runPendingForget(userId);
+}
+
+function pendingForget(userId: string): string | null {
+  const inSession = pendingForgets.get(userId);
+  if (inSession !== undefined) return inSession;
+  try {
+    return localStorage.getItem(FORGET_KEY_PREFIX + userId);
+  } catch {
+    return null;
+  }
+}
+
+/** Drops the pending request; given a `marker`, only while it's still that one. */
+function cancelForget(userId: string, marker?: string) {
+  if (marker !== undefined && pendingForget(userId) !== marker) return;
+  pendingForgets.delete(userId);
+  try {
+    localStorage.removeItem(FORGET_KEY_PREFIX + userId);
+  } catch {
+    // Storage unavailable: nothing was stored.
+  }
+}
+
+async function runPendingForget(userId: string) {
+  const marker = pendingForget(userId);
+  if (marker === null) return;
+  try {
+    const { requestAnalyticsForget } = await import("./analytics-forget");
+    if (await requestAnalyticsForget(userId)) cancelForget(userId, marker);
+  } catch (err) {
+    console.warn("[analytics] couldn't ask to delete analytics; will retry", err);
+  }
+}
+
+/** The account was deleted (Settings → Account), which erased its PostHog data too. Stops
+ *  analytics on this device before signing out tracks `app_signed_out` under the erased id
+ *  and brings the person back: records a "no" (not a missing answer, which would bring the
+ *  question back until the sign-out lands) and drops any pending deletion request. */
+export function stopAnalyticsForDeletedAccount(userId: string): Promise<void> {
+  cancelForget(userId);
+  storeConsent(userId, "denied");
+  notifyConsent();
+  if (userId === currentUserId) void enqueue(reconcile);
   return queue;
 }
 

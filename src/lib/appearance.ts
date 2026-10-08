@@ -61,7 +61,10 @@ const DATA_ATTR_MAP: Record<keyof Appearance, string> = {
   tabs: "data-tabs",
 };
 
-const VALID_VALUES: Record<keyof Appearance, ReadonlyArray<string>> = {
+/** Every valid value per appearance key. The sanitizers below validate against
+ * it, and the Storybook appearance toolbar (.storybook/preview.tsx) builds its
+ * menus from it, so a new option shows up there without a second list. */
+export const APPEARANCE_OPTIONS: Record<keyof Appearance, ReadonlyArray<string>> = {
   theme: ["dark", "light"],
   shade: ["black", "warm", "cool", "slate", "plum", "forest"],
   accent: ["pink", "violet", "blue", "green", "amber", "red", "teal", "mono"],
@@ -89,14 +92,16 @@ const appearanceSchema = z.object({
   tabs: z.enum(["auto", "icons"]).catch(DEFAULT_APPEARANCE.tabs),
 });
 
-function sanitize(raw: unknown): Appearance {
+/** A full, valid Appearance from anything: unknown or invalid fields fall back to
+ * DEFAULT_APPEARANCE. Used for the localStorage mirror and Storybook's toolbar. */
+export function parseAppearance(raw: unknown): Appearance {
   const candidate = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
   const result = appearanceSchema.parse(candidate);
   const hasValidFont =
-    typeof candidate.font === "string" && VALID_VALUES.font.includes(candidate.font);
+    typeof candidate.font === "string" && APPEARANCE_OPTIONS.font.includes(candidate.font);
   if (!hasValidFont) {
     const legacy = candidate.fontBody ?? candidate.fontDisplay;
-    if (typeof legacy === "string" && VALID_VALUES.font.includes(legacy)) {
+    if (typeof legacy === "string" && APPEARANCE_OPTIONS.font.includes(legacy)) {
       result.font = legacy as Font;
     }
   }
@@ -115,7 +120,7 @@ function sanitizeSynced(raw: Record<string, unknown>): Partial<Appearance> {
   const out: Partial<Appearance> = {};
   for (const key of SYNCED_KEYS) {
     const value = raw[key];
-    if (typeof value === "string" && VALID_VALUES[key].includes(value)) {
+    if (typeof value === "string" && APPEARANCE_OPTIONS[key].includes(value)) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (out as any)[key] = value;
     }
@@ -123,7 +128,7 @@ function sanitizeSynced(raw: Record<string, unknown>): Partial<Appearance> {
   // Honour the retired two-font model if an older client synced it.
   if (out.font === undefined) {
     const legacy = raw.fontBody ?? raw.fontDisplay;
-    if (typeof legacy === "string" && VALID_VALUES.font.includes(legacy)) {
+    if (typeof legacy === "string" && APPEARANCE_OPTIONS.font.includes(legacy)) {
       out.font = legacy as Font;
     }
   }
@@ -135,7 +140,7 @@ export function readLocalAppearance(): Appearance {
   try {
     const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (!raw) return { ...DEFAULT_APPEARANCE };
-    return sanitize(JSON.parse(raw));
+    return parseAppearance(JSON.parse(raw));
   } catch {
     return { ...DEFAULT_APPEARANCE };
   }

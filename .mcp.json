@@ -4,17 +4,9 @@
       "type": "http",
       "url": "https://mcp.supabase.com/mcp?project_ref=wtoonrvuqumihpkbvwvs"
     },
-    "subframe": {
-      "type": "http",
-      "url": "https://mcp.subframe.com/mcp"
-    },
     "vercel": {
       "type": "http",
       "url": "https://mcp.vercel.com"
-    },
-    "github": {
-      "type": "http",
-      "url": "https://api.githubcopilot.com/mcp/"
     }
   }
 }

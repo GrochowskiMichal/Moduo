@@ -9,7 +9,7 @@
 - [ ] **Do:** look at the session-start preflight on `t/mike/*` and on `t/maciej/*` → **Expect:** it compares against `origin/mike` or `origin/maciej` respectively, and lists the short reading list _(Claude Code)_
 
 ## Plugins (first session after pulling)
-- [ ] **Do:** trust the project when asked, then run `/plugin` → **Expect:** these 7 are enabled: `mattpocock-skills`, `supabase`, `postgres-best-practices`, `claude-security`, `security-guidance`, `rust-analyzer-lsp`, `skill-creator` _(both machines)_
+- [ ] **Do:** trust the project when asked, then run `/plugin` → **Expect:** these 8 are enabled: `mattpocock-skills`, `supabase`, `postgres-best-practices`, `claude-security`, `security-guidance`, `rust-analyzer-lsp`, `skill-creator`, `ts7-lsp` (the last only once phase 2 is on `develop`) _(both machines)_
 - [ ] **Do:** type `/grilling` and `/claude-security` → **Expect:** both skills exist _(Claude Code)_
 - [ ] **Do:** have Claude introduce and then fix a type error in a `.rs` file → **Expect:** "Found N new diagnostic issues" after the edit _(Claude Code, needs rust-analyzer)_
 
@@ -31,7 +31,15 @@
 ## CI
 - [ ] **Do:** open the `checks` run on this PR → **Expect:** the new "Secret scan (gitleaks)" step passes _(GitHub)_
 
+## Phase 2 (2026-10-08): TypeScript LSP, ruleset, gardener
+- [ ] **Do:** after this is on `develop`, pull, open Claude Code, run `/plugin` → **Expect:** `ts7-lsp@moduo-local` is installed and enabled _(Claude Code)_
+- [ ] **Do:** ask Claude "use the LSP to find the definition of `openStripeUrl`" → **Expect:** it answers `src/features/billing/stripe-url.ts` line 14, via the LSP tool rather than grep _(Claude Code)_
+- [ ] **Do:** open a PR into `develop` and try to merge before checks finish → **Expect:** GitHub blocks the merge until `static-checks` passes _(GitHub)_
+- [ ] **Do:** install the Claude GitHub App (github.com/apps/claude) on GrochowskiMichal/Moduo, then press "Run now" on the gardener at claude.ai/code/routines → **Expect:** a `Knowledge gardening <date>` PR into `mike` with a Step outcomes section covering steps 1–8, or "Nothing to garden this week" _(claude.ai)_
+
 ## Known gaps / not-yet-testable
-- `bun run lint:js` (Biome) fails repo-wide with 57 errors that predate this branch, so `bun run verify` is red until block LINT-1. See `docs/gotchas/workflow.md`.
-- The TypeScript LSP plugin isn't enabled: `typescript-lsp` launches typescript-language-server, which needs the tsserver that TypeScript 7 no longer ships. Diagnostics for TS still come from `bun run typecheck` and the hooks.
+- `bun run lint:js` (Biome) failed repo-wide with 57 pre-existing errors when this was written; block LINT-1 fixed it and added Biome to CI.
+- The official `typescript-lsp` plugin can't start on TypeScript 7 (no tsserver). Phase 2 adds our own `ts7-lsp` plugin for navigation; it reports no type errors, so those still come from `bun run typecheck`.
+- The `moduo-local` marketplace is read from GitHub's default branch (`develop`), so `ts7-lsp` installs only after this lands there.
+- The gardener routine can't push until the Claude GitHub App is installed on the repo (its 2026-10-07 test run got a 403).
 - Revoke the old Modal key at Modal; it remains in git history.

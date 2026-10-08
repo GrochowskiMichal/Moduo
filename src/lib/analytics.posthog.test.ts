@@ -1,6 +1,9 @@
 import { gunzipSync } from "node:zlib";
 import { afterAll, beforeAll, describe, expect, it, rs } from "@rstest/core";
 
+// Not under test here (analytics.test.ts covers it): keeps the real runtime out.
+rs.mock("./analytics-forget", () => ({ requestAnalyticsForget: async () => true }));
+
 // The REAL posthog-js behind lib/analytics.ts, with every transport stubbed (fetch, XHR,
 // sendBeacon) — nothing leaves the test. It proves what the fake in analytics.test.ts
 // can't: no request at all before consent or after withdrawal, only event batches to the

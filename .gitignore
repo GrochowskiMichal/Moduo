@@ -50,6 +50,9 @@ src-tauri/*.sqlite3
 src-tauri/*.redb
 src-tauri/*.redb.lock
 
+# Supabase CLI per-machine state (update-check cache, `supabase link` output) — see docs/gotchas/supabase.md
+supabase/.temp/
+
 # Claude Code runtime files — ignore all, but version the shared workflow tooling
 .claude/*
 !.claude/skills/
@@ -84,3 +87,9 @@ main.mjs
 
 # backups of configs (they tend to hold secrets)
 *.backup
+
+# desktop keychain fallback files (local login sessions — never commit)
+src-tauri/.moduo_keychain_*
+
+# Cursor is not part of the harness (decisions/workflow.md, 2026-10-07)
+.cursor/
