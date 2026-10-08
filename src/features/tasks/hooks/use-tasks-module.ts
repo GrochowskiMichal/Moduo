@@ -558,6 +558,59 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     [bundle.tasks, patchTask],
   );
 
+  /**
+   * The Focus engine's flush sink (TV-F1): fold `seconds` of tracked work into
+   * the task's saved total and report what happened, so the engine keeps the
+   * seconds and retries ("not saved yet", F1-7) instead of losing them.
+   *  - `false` right away: not now (the bundle isn't loaded, or no edit access);
+   *  - `true` right away: nothing to save into (the task is gone);
+   *  - a promise: the write, `false` when it failed (the optimistic total is
+   *    put back).
+   * Two flushes can land before React re-renders, so the second one builds on
+   * the total the first wrote, not on the stale bundle (`focusTotals`).
+   */
+  const focusTotals = useRef(new Map<string, { basis: string; total: number }>());
+  const persistFocusTime = useCallback(
+    (id: string, seconds: number): boolean | Promise<boolean> => {
+      if (!Number.isFinite(seconds) || seconds < 1) return true;
+      if (loading) return false;
+      const task = bundle.tasks.find((t) => t.id === id);
+      if (!task) return true;
+      if (isTempId(id) || !runtime || !workspaceId || !canEdit) return false;
+      const pending = focusTotals.current.get(id);
+      const base =
+        pending && pending.basis === task.updatedAt ? pending.total : (task.timeSpentSeconds ?? 0);
+      const total = Math.max(0, base + Math.round(seconds));
+      const updatedAt = new Date().toISOString();
+      focusTotals.current.set(id, { basis: task.updatedAt, total });
+      patchTaskLocal(id, { timeSpentSeconds: total, updatedAt });
+      return runtime.tasks
+        .upsertTask({ ...task, timeSpentSeconds: total, updatedAt })
+        .then((saved) => {
+          setBundle((prev) => ({
+            ...prev,
+            tasks: prev.tasks.map((t) => (t.id === id ? saved : t)),
+          }));
+          return true;
+        })
+        .catch(() => {
+          // Put back exactly what this write added, unless something else has
+          // changed the total since.
+          setBundle((prev) => ({
+            ...prev,
+            tasks: prev.tasks.map((t) =>
+              t.id === id && t.timeSpentSeconds === total
+                ? { ...t, timeSpentSeconds: Math.max(0, base) }
+                : t,
+            ),
+          }));
+          focusTotals.current.delete(id);
+          return false;
+        });
+    },
+    [loading, bundle.tasks, runtime, workspaceId, canEdit, patchTaskLocal],
+  );
+
   /** Set the tracked total to an absolute value (manual "edit the value"). */
   const setTimeSpent = useCallback(
     (id: string, seconds: number) => {
@@ -1229,6 +1282,7 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     markDone,
     archiveTask,
     addTimeSpent,
+    persistFocusTime,
     setTimeSpent,
     rescheduleScheduledAt,
     unscheduleTask,
