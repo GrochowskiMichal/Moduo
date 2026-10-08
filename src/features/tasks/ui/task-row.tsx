@@ -44,7 +44,9 @@ import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import { type EnergyLevel, isDrifted, type PriorityLevel, type Task } from "../model";
 import { recurrenceLabel } from "../parse/recurrence";
 import { AssigneeAvatar } from "./assignee-avatar";
+import type { DragActivatorRef } from "./dnd/task-dnd";
 import { LevelDots } from "./level-icons";
+import { ROW_TITLE_ATTR } from "./list-keys";
 
 /** Which inline popover the keyboard asked to open on this row. */
 export type RowCommand = "bucket" | "schedule" | "due" | null;
@@ -86,6 +88,9 @@ type Props = {
    * dnd-kit listeners from the sortable/draggable wrapper, spread on the row
    * root. Absent → the row isn't draggable (looks/behaves as before). */
   dragListeners?: DraggableSyntheticListeners;
+  /** Goes with `dragListeners`: makes the row root the only keyboard drag
+   * activator, so Space/Enter on a button inside the row stay that button's. */
+  dragActivatorRef?: DragActivatorRef;
   /** Highlight as the live drop target during a drag-to-nest (quiet accent +
    * ring, mirrors the board column's drag-over treatment). */
   dropActive?: boolean;
@@ -116,6 +121,7 @@ export function TaskRow({
   nested = false,
   parentTitle = null,
   dragListeners,
+  dragActivatorRef,
   dropActive = false,
   api,
 }: Props) {
@@ -132,6 +138,7 @@ export function TaskRow({
 
   const row = (
     <div
+      ref={dragActivatorRef}
       role="row"
       aria-selected={selected}
       data-task-id={task.id}
@@ -208,6 +215,9 @@ export function TaskRow({
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <button
             type="button"
+            // Clicking the title selects the row, so its Space/Enter stay the
+            // List's (complete / edit), unlike the row's other buttons.
+            {...{ [ROW_TITLE_ATTR]: "" }}
             className={cn(
               // flex-1 so the title keeps priority; chips shrink/truncate first.
               // Body font (content, not chrome) at 15px — quiet, Linear/Todoist-ward.
@@ -296,12 +306,13 @@ export function TaskRow({
           api={api}
         />
 
-        {showBucket ? (
+        {showBucket || canEdit ? (
           <BucketPopover
             task={task}
             buckets={buckets}
             inboxId={inboxId}
             bucketName={bucketName}
+            showPill={showBucket}
             canEdit={canEdit}
             open={command === "bucket"}
             onOpenChange={(o) => !o && onClearCommand()}
@@ -665,6 +676,7 @@ function BucketPopover({
   buckets,
   inboxId,
   bucketName,
+  showPill,
   canEdit,
   open,
   onOpenChange,
@@ -674,6 +686,9 @@ function BucketPopover({
   buckets: Array<{ id: string; name: string; isSystem: boolean }>;
   inboxId: string | null;
   bucketName: string;
+  /** False where the bucket is implied (Q1-3). The popover stays mounted so the
+   * `b` key can still open it; the pill then shows as its anchor. */
+  showPill: boolean;
   canEdit: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -685,7 +700,12 @@ function BucketPopover({
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger asChild disabled={!canEdit}>
-        <button type="button" onClick={(e) => e.stopPropagation()} aria-label="Bucket">
+        <button
+          type="button"
+          onClick={(e) => e.stopPropagation()}
+          aria-label="Bucket"
+          className={showPill || open ? undefined : "hidden"}
+        >
           <Badge variant="secondary" className="gap-1 font-normal">
             {task.bucketId === inboxId ? <Inbox className="size-3" aria-hidden /> : null}
             {bucketName}

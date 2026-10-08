@@ -108,7 +108,7 @@ _Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
 > - **DoR status:** ✅ means ready now; the rest follow their dependencies. All designer calls are answered (2026-10-08).
 > - **Order:** top to bottom, every dep listed above its dependents. The lane table below shows what can run at once.
 
-- [~] **TV-Q1 — Quick fixes** ✅ · tasks-v2 block 1 · deps: — · lane tasks-ui · ⌘K/⌘⇧K no longer swallowed by the list, DnD activator fix, no bucket pill where implied, delete-bucket confirm + Undo, shortcut sheet ⌘1–7 · _in progress 2026-10-08 · `t/maciej/tv-q1-quick-fixes`_
+- [x] **TV-Q1 — Quick fixes** ✅ · tasks-v2 block 1 · deps: — · lane tasks-ui · ⌘K/⌘⇧K no longer swallowed by the list, DnD activator fix, no bucket pill where implied, delete-bucket confirm + Undo, shortcut sheet ⌘1–7 · _done 2026-10-08 · `t/maciej/tv-q1-quick-fixes` (deferred-commit bucket delete; decision in [docs/decisions/tasks.md](../docs/decisions/tasks.md))_
 - [ ] **TV-F1 — Focus engine (wall-clock, persisted, away, notifications)** ✅ · tasks-v2 block 2 · deps: — · lane focus
 - [ ] **DS-1 — State tokens + global scrollbars + Storybook appearance** ✅ · design-state-layer block 1 · deps: — · lane design
 - [ ] **TV-D1 — Safer saves + assignee data** ✅ · tasks-v2 block 3 · deps: — · lane data · migration (expand only; shims for old desktop builds) — round-trip, then apply to prod in-session
@@ -117,7 +117,7 @@ _Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
 - [ ] **TV-D2 — Personal queue (data)** · tasks-v2 block 4 · deps: TV-D1 · lane data · migration + legacy op shims + MCP queue tools
 - [ ] **TV-D3 — Time entries** · tasks-v2 block 5 · deps: TV-D1, TV-F1 · lane data · migration + legacy backfill/shim
 - [ ] **TV-T1 — Shared tag store** · tasks-v2 block 6 · deps: TV-D1 · lane data
-- [ ] **DS-3 — NavRow + MetaCount (+ Tasks rail)** · design-state-layer block 3 · deps: DS-2, TV-Q1 · lane design
+- [ ] **DS-3 — NavRow + MetaCount (+ Tasks rail)** · design-state-layer block 3 · deps: DS-2, TV-Q1 · lane design · also: return focus to the rail when a row menu's dialog closes (TV-Q1's delete-bucket confirm leaves it on the page body, like notes' Delete forever)
 - [ ] **DS-4 — FilterBar/Chip, DisplayMenu, drag visuals, view-prefs helper** · design-state-layer block 4 · deps: DS-2 · lane design
 - [ ] **TV-D4 — Queue & assignee in the UI (claims, My tasks)** · tasks-v2 block 7 · deps: TV-D2, DS-3 · lane tasks-ui
 - [ ] **TV-D5 — Live updates (Realtime)** · tasks-v2 block 8 · deps: TV-D2 · lane data · adds tables to the `supabase_realtime` publication
@@ -128,7 +128,7 @@ _Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
 - [ ] **TV-U2 — Toolbar, Filter, Display, search** · tasks-v2 block 13 · deps: DS-4, TV-U1, TV-D4 · lane tasks-ui
 - [ ] **TV-U4 — Drag and drop (reorder vs nest, sidebar drops, cross-group)** · tasks-v2 block 14 · deps: TV-U1, DS-4, TV-D4 · lane tasks-ui
 - [ ] **TV-U5 — Multi-select, bulk actions, keyboard, `?` sheet** · tasks-v2 block 15 · deps: TV-U4 · lane tasks-ui
-- [ ] **TV-U6 — Sidebar: bucket colours/reorder, archive, delete-with-tasks, Recently deleted** · tasks-v2 block 16 · deps: DS-3, TV-D4, AT-1 · lane tasks-ui · migration (`buckets.color/archived_at`, batch ids)
+- [ ] **TV-U6 — Sidebar: bucket colours/reorder, archive, delete-with-tasks, Recently deleted** · tasks-v2 block 16 · deps: DS-3, TV-D4, AT-1 · lane tasks-ui · migration (`buckets.color/archived_at`, batch ids) · note: TV-Q1 hides a deleted bucket for the whole session (`src/features/tasks/hidden-buckets.ts`), so a Restore must call `unhideBucket` or rework that store
 - [ ] **TV-U7 — Capture v2 (`#tag`, pills, queue switch, filter seed)** · tasks-v2 block 17 · deps: DS-2, TV-T1, TV-D2, TV-U2 · lane tasks-ui
 - [ ] **TV-F4 — In flight (hand-off, check-backs, linked waits)** · tasks-v2 block 18 · deps: TV-F3, TV-U3 · lane focus · migration (`focus_in_flight`)
 - [ ] **TV-F5 — Calendar & Home on one engine** · tasks-v2 block 19 · deps: TV-F2, TV-D3 · lane focus
