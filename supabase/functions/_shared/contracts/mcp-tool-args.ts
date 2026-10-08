@@ -20,8 +20,12 @@ export const TOOL_ARG_SCHEMAS: Record<string, z.ZodType<Record<string, unknown>>
   tasks_list: z.object({
     bucket_id: nonempty.optional(),
     status: listStatusSchema.optional(),
+    assignee: z.enum(["me", "anyone"]).optional(),
+    top_level: z.boolean().optional(),
     limit,
+    offset: z.coerce.number().int().min(0).optional(),
   }),
+  tasks_focus_settings: z.object({}),
   tasks_today: z.object({ date: ymd.optional() }),
   tasks_drift: z.object({}),
   tasks_list_tags: z.object({}),
