@@ -776,16 +776,18 @@ export function CalendarPageView({
       const task = api.tasks.find((t) => t.id === taskId);
       if (!task) return;
       const delta = tookLongerDeltaSeconds({ durationMinutes: task.durationMinutes });
-      api.addTimeSpent(taskId, delta);
+      // One adjustment (TV-D3); its Undo removes exactly that one, so time
+      // tracked on the task meanwhile stays.
+      const logged = api.logTimeAdjustment(taskId, delta);
       markWorked(taskId, true);
       toast(`+${Math.round(delta / 60)}m logged · kept open`, {
         duration: UNDO_TOAST_MS,
         action: {
-          // Subtract exactly what we added (reads the live total, floors at 0)
-          // so an interleaved focus flush on this task isn't clobbered.
           label: "Undo",
           onClick: () => {
-            api.addTimeSpent(taskId, -delta);
+            void logged.then((adjustment) => {
+              if (adjustment) api.undoTimeAdjustment(taskId, adjustment);
+            });
             markWorked(taskId, false);
           },
         },

@@ -49,7 +49,10 @@ import type {
   TaskStatus,
   TasksCatchUpItem,
   TasksModuleBundle,
+  TaskTimeResult,
+  TaskTimeTotals,
   TimeBlockMap,
+  TrackTimeInput,
 } from "../features/tasks/model";
 import type { EntityLink, EntityRecord, EntityRef, LinkOrigin, RelationKind } from "./entity-links";
 import type { Truncation } from "./paged-select";
@@ -905,6 +908,22 @@ export type ModuoRuntime = {
       afterTaskId: string | null;
     }): Promise<TaskQueueEntry[]>;
     opQueueMoveToEnd(input: { workspaceId: string; taskId: string }): Promise<TaskQueueEntry[]>;
+    /**
+     * Tracked time (TV-D3), through `tasks_op_track_time`: append a finished
+     * focus or waiting stretch, an adjustment, or the one that makes the total
+     * a typed value, or undo your own adjustment. It changes only the task's
+     * time total, never the rest of the row. A save resent with the same `key`
+     * counts once (`duplicate`); a task deleted for good or no longer shared
+     * answers `gone`. Until the migration reaches the database it writes the
+     * old total column instead.
+     */
+    trackTime(input: TrackTimeInput): Promise<TaskTimeResult>;
+    /**
+     * Each visible task's time in the workspace: the total, your share, your
+     * waiting time and, with `since`, your share since then. Empty until the
+     * migration reaches the database.
+     */
+    listTimeTotals(workspaceId: string, since?: string | null): Promise<TaskTimeTotals[]>;
     /**
      * Assign (or, with null, unassign) through `tasks_op_assign`: the person
      * has to be a member who can work on tasks. Assigning someone else

@@ -17,6 +17,9 @@ import {
   MEMBER_DB_ROLES,
   PLAN_TIERS,
   TASK_STATUSES,
+  TASK_TIME_ACTIONS,
+  TASK_TIME_ENTRY_KINDS,
+  TASK_TIME_STATUSES,
   WAITLIST_SOURCES,
   WAITLIST_STATUSES,
 } from "./vocabularies.ts";
@@ -67,6 +70,17 @@ describe("cross-runtime drift guards", () => {
     expect(read("20261008123000_key_writes_act_as_creator.sql")).toContain(
       `author_kind IN (${list(CONTENT_AUTHOR_KINDS, ",")})`,
     );
+  });
+
+  it("time entry kinds, actions and answers match the TV-D3 migration", () => {
+    const sql = readFileSync(
+      resolve(MIGRATIONS_DIR, "20261008223000_tasks_time_entries.sql"),
+      "utf8",
+    );
+    const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(",");
+    expect(sql).toContain(`kind IN (${inList(TASK_TIME_ENTRY_KINDS)})`);
+    expect(sql).toContain(`v_action NOT IN (${inList(TASK_TIME_ACTIONS)})`);
+    for (const status of TASK_TIME_STATUSES) expect(sql).toContain(`'${status}'`);
   });
 
   it("task statuses stay the closed set used by MCP parsers", () => {

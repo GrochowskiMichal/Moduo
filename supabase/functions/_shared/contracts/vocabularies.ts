@@ -76,6 +76,31 @@ export function isTaskStatus(value: unknown): value is TaskStatus {
   return typeof value === "string" && (TASK_STATUSES as readonly string[]).includes(value);
 }
 
+// ---------------------------------------------------------------------------
+// Task time entries (TV-D3) — mirrors task_time_entries' kind CHECK and
+// tasks_op_track_time's actions and answers in 20261008223000_tasks_time_entries.
+// ---------------------------------------------------------------------------
+
+/** focus/waiting: a tracked stretch; adjustment: a signed correction; legacy:
+ *  the total a task had before entries existed. */
+export const TASK_TIME_ENTRY_KINDS = ["focus", "waiting", "adjustment", "legacy"] as const;
+export type TaskTimeEntryKind = (typeof TASK_TIME_ENTRY_KINDS)[number];
+export const taskTimeEntryKindSchema = z.enum(TASK_TIME_ENTRY_KINDS);
+export function isTaskTimeEntryKind(value: unknown): value is TaskTimeEntryKind {
+  return typeof value === "string" && (TASK_TIME_ENTRY_KINDS as readonly string[]).includes(value);
+}
+
+/** What `tasks_op_track_time` can do. */
+export const TASK_TIME_ACTIONS = ["focus", "waiting", "adjust", "set_total", "undo"] as const;
+export type TaskTimeAction = (typeof TASK_TIME_ACTIONS)[number];
+export const taskTimeActionSchema = z.enum(TASK_TIME_ACTIONS);
+
+/** How `tasks_op_track_time` answered: recorded; a resend of a save it already
+ *  has; nothing to change; or no such task you can see. */
+export const TASK_TIME_STATUSES = ["saved", "duplicate", "noop", "gone"] as const;
+export type TaskTimeStatus = (typeof TASK_TIME_STATUSES)[number];
+export const taskTimeStatusSchema = z.enum(TASK_TIME_STATUSES);
+
 export const ENERGY_LEVELS = ["low", "medium", "high"] as const;
 export type EnergyLevel = (typeof ENERGY_LEVELS)[number];
 export const energyLevelSchema = z.enum(ENERGY_LEVELS);

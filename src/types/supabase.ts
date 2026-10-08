@@ -1753,6 +1753,84 @@ export type Database = {
           },
         ]
       }
+      task_time_entries: {
+        Row: {
+          client_key: string | null
+          created_at: string
+          ended_at: string | null
+          id: string
+          kind: string
+          run_id: string | null
+          seconds: number
+          started_at: string | null
+          task_id: string
+          user_id: string | null
+          workspace_id: string
+        }
+        Insert: {
+          client_key?: string | null
+          created_at?: string
+          ended_at?: string | null
+          id?: string
+          kind: string
+          run_id?: string | null
+          seconds: number
+          started_at?: string | null
+          task_id: string
+          user_id?: string | null
+          workspace_id: string
+        }
+        Update: {
+          client_key?: string | null
+          created_at?: string
+          ended_at?: string | null
+          id?: string
+          kind?: string
+          run_id?: string | null
+          seconds?: number
+          started_at?: string | null
+          task_id?: string
+          user_id?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_time_entries_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_time_entries_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks_with_drift"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_time_entries_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_time_entries_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_entitlements"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "task_time_entries_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tasks: {
         Row: {
           assignee_id: string | null
@@ -4718,6 +4796,18 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      tasks_op_track_time: {
+        Args: {
+          p_action: string
+          p_client_key?: string
+          p_ended_at?: string
+          p_entry_id?: string
+          p_seconds?: number
+          p_task_id: string
+          p_workspace_id: string
+        }
+        Returns: Json
+      }
       tasks_op_uncommit: {
         Args: { p_task_id: string; p_workspace_id: string }
         Returns: {
@@ -4783,6 +4873,16 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      tasks_time_totals: {
+        Args: { p_since?: string; p_workspace_id: string }
+        Returns: {
+          my_seconds: number
+          my_seconds_since: number
+          my_waiting_seconds: number
+          task_id: string
+          total_seconds: number
+        }[]
       }
       user_can_manage_workspace_members: {
         Args: { p_workspace_id: string }

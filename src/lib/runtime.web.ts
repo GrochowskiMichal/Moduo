@@ -70,6 +70,8 @@ import {
   type Task,
   type TaskQueueEntry,
   type TaskRelation,
+  type TaskTimeResult,
+  type TrackTimeInput,
 } from "../features/tasks/model";
 import { toMemberPerm, toMemberRole } from "../features/workspaces/workspace-mappers";
 import { clearIgnoredAuthLink, SUPABASE_AUTH_OPTIONS } from "./auth-url";
@@ -114,6 +116,8 @@ import {
   taskPatchToColumns,
   taskQueueRowToModel,
   taskRowToModel,
+  taskTimeAnswerToModel,
+  taskTimeTotalsRowToModel,
 } from "./task-rows";
 
 // ── Supabase client ────────────────────────────────────────────────────────────
@@ -2445,6 +2449,34 @@ export const webRuntime: ModuoRuntime = {
       });
     },
 
+    // ── tracked time (TV-D3) ─────────────────────────────────────────────
+    async trackTime(input) {
+      const { data, error } = await supabaseClient.rpc("tasks_op_track_time", {
+        p_workspace_id: input.workspaceId,
+        p_task_id: input.taskId,
+        p_action: input.action,
+        p_seconds: input.action === "undo" ? null : Math.round(input.seconds ?? 0),
+        p_ended_at: input.endedAt ?? null,
+        p_client_key: input.key ?? null,
+        p_entry_id: input.entryId ?? null,
+      });
+      // Until the migration reaches the database there are no entries: write
+      // the old total column, as builds before TV-D3 did. Remove in TV-D7.
+      if (isMissingFunctionError(error, "tasks_op_track_time")) return trackTimeLegacy(input);
+      if (error) throw new Error(error.message);
+      return taskTimeAnswerToModel(Array.isArray(data) ? data[0] : data);
+    },
+
+    async listTimeTotals(workspaceId, since) {
+      const { data, error } = await supabaseClient.rpc("tasks_time_totals", {
+        p_workspace_id: workspaceId,
+        p_since: since ?? null,
+      });
+      if (isMissingFunctionError(error, "tasks_time_totals")) return [];
+      if (error) throw new Error(error.message);
+      return mapKnownRows(Array.isArray(data) ? data : [], taskTimeTotalsRowToModel);
+    },
+
     async opSetStatus({ workspaceId, taskId, status, recurrence, position }) {
       return taskOpRpc("tasks_op_set_status", {
         p_workspace_id: workspaceId,
@@ -3213,6 +3245,49 @@ async function taskOpRpc(fn: string, args: Record<string, unknown>): Promise<Tas
   const row = Array.isArray(data) ? data[0] : data;
   if (!row) throw new Error("The operation returned nothing.");
   return taskRowToModel(row);
+}
+
+/**
+ * Tracked time on a database without TV-D3's entries: read the task's total and
+ * write the new one into the old column (only that column). Not safe against
+ * resends or a concurrent writer, like every build before TV-D3. Remove in TV-D7.
+ */
+async function trackTimeLegacy(input: TrackTimeInput): Promise<TaskTimeResult> {
+  const answer = (status: TaskTimeResult["status"], total: number | null): TaskTimeResult => ({
+    status,
+    taskId: input.taskId,
+    entryId: null,
+    totalSeconds: total,
+    mySeconds: null,
+    myWaitingSeconds: null,
+  });
+  const { data: row, error: readError } = await supabaseClient
+    .from("tasks")
+    .select("time_spent_seconds")
+    .eq("id", input.taskId)
+    .eq("workspace_id", input.workspaceId)
+    .maybeSingle();
+  if (readError) throw new Error(readError.message);
+  if (!row) return answer("gone", null);
+  const current = Number(row.time_spent_seconds ?? 0);
+  const seconds = Math.round(input.seconds ?? 0);
+  let total: number;
+  if (input.action === "waiting") return answer("noop", current);
+  if (input.action === "set_total") total = seconds;
+  else if (input.action === "undo") total = current - seconds;
+  else total = current + seconds;
+  total = Math.max(0, total);
+  if (total === current) return answer("noop", current);
+  const { data: saved, error } = await supabaseClient
+    .from("tasks")
+    .update({ time_spent_seconds: total })
+    .eq("id", input.taskId)
+    .eq("workspace_id", input.workspaceId)
+    .select("time_spent_seconds")
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!saved) return answer("gone", null);
+  return answer("saved", Number(saved.time_spent_seconds ?? total));
 }
 
 /** Call a tasks_op_queue_* RPC: each returns the caller's queue, in order. */

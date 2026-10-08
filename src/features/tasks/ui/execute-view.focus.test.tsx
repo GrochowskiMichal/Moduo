@@ -102,6 +102,7 @@ describe("Focus view — Done / Skip move the session", () => {
       alert: () => {},
       singleWindow: () => false,
       tabId: "other-tab",
+      newKey: () => crypto.randomUUID(),
     });
     otherTab.attach(USER);
     otherTab.bind({ id: "t1", title: "Task t1", bucketName: "Inbox", workspaceId: WS });
