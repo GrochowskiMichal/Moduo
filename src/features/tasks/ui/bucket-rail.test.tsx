@@ -58,12 +58,14 @@ function renderRail({
   drift = new Map<string, number>(),
   collapsed = new Set<string>(),
   myTasks = null,
+  queueRun = null,
 }: {
   canEdit?: boolean;
   selection?: string;
   drift?: Map<string, number>;
   collapsed?: Set<string>;
   myTasks?: number | null;
+  queueRun?: { done: number; total: number; running: boolean } | null;
 } = {}) {
   const onDeleteBucket = rs.fn();
   const onTriageBucket = rs.fn();
@@ -97,6 +99,7 @@ function renderRail({
           driftCountByBucket={drift}
           totalOpenCount={14}
           queueCount={2}
+          queueRun={queueRun}
           myTasksCount={myTasks}
           canEdit={canEdit}
           onCreateBucket={() => {}}
@@ -125,6 +128,27 @@ async function deleteFromMenu(name: string) {
   fireEvent.click(screen.getByRole("menuitem", { name: "Delete bucket…" }));
   await settle();
 }
+
+describe("the rail during a queue run (TV-F2, F2-1 / F2-3)", () => {
+  it("has no Plan/Focus switch", () => {
+    renderRail();
+    expect(screen.queryByRole("radiogroup", { name: "Tasks mode" })).toBeNull();
+    expect(screen.queryByText("Focus")).toBeNull();
+  });
+
+  it("shows the run's live “2/7” on the Queue row instead of the count", () => {
+    renderRail({ queueRun: { done: 2, total: 7, running: true } });
+    const queue = main(/^Queue/).closest('[data-slot="nav-row"]') as Element;
+    expect(queue.textContent).toContain("2/7");
+    expect(queue.textContent).toContain("run in progress, 2 of 7 done");
+  });
+
+  it("says paused when the run is paused", () => {
+    renderRail({ queueRun: { done: 0, total: 3, running: false } });
+    const queue = main(/^Queue/).closest('[data-slot="nav-row"]') as Element;
+    expect(queue.textContent).toContain("run paused, 0 of 3 done");
+  });
+});
 
 describe("BucketRail on NavRow", () => {
   it("marks the current bucket with aria-current and gives only bucket rows a ⋯", () => {

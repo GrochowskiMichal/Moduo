@@ -9,9 +9,9 @@
  * does nothing (gotchas §Supabase: a new RPC on a live path must not break it).
  */
 
+import { mapKnownRows } from "@contracts/rows";
 import type { FocusRun, FocusRunRuntime } from "../features/focus/run-model";
 import { focusRunRowToModel, runSnapshotToState } from "../features/focus/run-model";
-import { mapKnownRows } from "@contracts/rows";
 import { supabaseClient } from "./runtime.web";
 import {
   isMissingFunctionError,

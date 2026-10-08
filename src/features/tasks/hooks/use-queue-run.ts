@@ -39,9 +39,9 @@ type RunApi = Pick<
   | "currentUserId"
 >;
 
-/** Why a Now task left the run when nobody pressed anything here. */
+/** Why a Now task left the run when nobody pressed anything here: `live` is
+ *  what the task list holds for it now. */
 export function leftRunNotice(
-  task: Pick<Task, "id" | "title">,
   live: Pick<Task, "id" | "status"> | undefined,
 ): "gone" | "completed" | null {
   if (!live) return "gone";
@@ -88,9 +88,11 @@ export function useQueueRun({
     return (run.nowTaskId ? api.tasks.find((t) => t.id === run.nowTaskId) : undefined) ?? head;
   }, [runHere, run, inControl, head, api.tasks]);
   // The chip shows Now's title, also when another device runs the clock.
+  const nowId = nowTask?.id ?? null;
+  const nowTitle = nowTask ? nowTask.title || "Untitled" : null;
   useEffect(() => {
-    if (nowTask) noteQueueRunTitle(nowTask.id, nowTask.title || "Untitled");
-  }, [nowTask?.id, nowTask?.title]);
+    if (nowId && nowTitle) noteQueueRunTitle(nowId, nowTitle);
+  }, [nowId, nowTitle]);
   const upNext = useMemo(
     () => (nowTask ? openQueued(api.queuedTasks).filter((t) => t.id !== nowTask.id) : []),
     [api.queuedTasks, nowTask],
@@ -115,7 +117,9 @@ export function useQueueRun({
   });
 
   // Keep the run on the head of my queue (F2-2). Only the device in control
-  // moves it; an emptied queue ends the run.
+  // moves it; an emptied queue ends the run. Runs when the head's id, title or
+  // bucket changes, not on every new `head` object a reload makes.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: keyed on the head's fields, see above.
   useEffect(() => {
     if (!runHere || !inControl || api.loading || api.error) {
       prevHead.current = head;
@@ -128,13 +132,21 @@ export function useQueueRun({
     }
     if (previous?.id !== head?.id) expectedLeave.current = null;
     moveQueueRun(workspaceId, head ? taskRef(head) : null, { explicit: false });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runHere, inControl, api.loading, api.error, head?.id, head?.title, head?.bucketId, workspaceId]);
+  }, [
+    runHere,
+    inControl,
+    api.loading,
+    api.error,
+    head?.id,
+    head?.title,
+    head?.bucketId,
+    workspaceId,
+  ]);
 
   /** Now left the run without anyone pressing anything here: say why. */
   function explainLeave(task: Task): void {
     const live = apiRef.current.tasks.find((t) => t.id === task.id);
-    const why = leftRunNotice(task, live);
+    const why = leftRunNotice(live);
     const title = task.title || "Untitled";
     if (why === "gone") {
       setQueueRunNotice(`“${title}” was deleted or is no longer shared with you.`);
@@ -161,7 +173,8 @@ export function useQueueRun({
   }
 
   const next = useCallback(
-    (after: string) => openQueued(api.queuedTasks).find((t) => t.id !== after && !t.id.startsWith("tmp-")) ?? null,
+    (after: string) =>
+      openQueued(api.queuedTasks).find((t) => t.id !== after && !t.id.startsWith("tmp-")) ?? null,
     [api.queuedTasks],
   );
 

@@ -13,7 +13,6 @@ import type {
 } from "../features/calendar/events";
 import type { CalendarWindow } from "../features/calendar/window";
 import type { ChatRuntime } from "../features/chat/model";
-import type { FocusRunRuntime } from "../features/focus/run-model";
 import type { ContactImportResult, ContactImportRow } from "../features/contacts/import";
 import type {
   Company,
@@ -28,6 +27,7 @@ import type {
 import type { NeedsAttentionItem } from "../features/contacts/needs-attention";
 import type { ReconnectItem } from "../features/contacts/reconnect";
 import type { DashboardLayout } from "../features/dashboard/engine/types";
+import type { FocusRunRuntime } from "../features/focus/run-model";
 import type {
   NoteDocPull,
   NotesImportRow,

@@ -494,7 +494,12 @@ export interface FocusRunClock {
  * credits stay; an away block from before is dropped (that time was the other
  * device's).
  */
-export function adoptSession(r: FocusRecord, run: FocusRunClock, now: number, p: FocusRhythm): FocusRecord {
+export function adoptSession(
+  r: FocusRecord,
+  run: FocusRunClock,
+  now: number,
+  p: FocusRhythm,
+): FocusRecord {
   const phaseMs = run.pomodoro ? Math.max(MINUTE_MS, run.phaseMs) : workLength(p);
   return {
     ...r,
@@ -520,7 +525,12 @@ export function adoptSession(r: FocusRecord, run: FocusRunClock, now: number, p:
  * from what isn't saved yet (that time was counted on the other device), held
  * away time is dropped, and the session ends. Earlier time stays to be saved.
  */
-export function relinquishSession(r: FocusRecord, at: number, now: number, p: FocusRhythm): FocusRecord {
+export function relinquishSession(
+  r: FocusRecord,
+  at: number,
+  now: number,
+  p: FocusRhythm,
+): FocusRecord {
   const task = r.task;
   let credits = r.credits;
   const credit = task ? r.credits[task.id] : undefined;

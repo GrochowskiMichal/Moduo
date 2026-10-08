@@ -99,11 +99,7 @@ export function QueueToggle({
 
   if (!canEdit) {
     if (!queued && !claimed) return null;
-    const label = queued
-      ? claimed
-        ? `In your queue. ${alsoText}`
-        : "In your queue"
-      : claimText;
+    const label = queued ? (claimed ? `In your queue. ${alsoText}` : "In your queue") : claimText;
     return (
       <>
         {besideClaim}

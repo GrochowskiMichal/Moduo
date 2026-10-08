@@ -5,7 +5,7 @@
 // Skip (to the end), ⋯ Remove / Do later / Open; Up next reorders, and "Do
 // now" swaps a task in. The sidebar never changes.
 
-import { closestCenter, type DraggableSyntheticListeners, type DragEndEvent } from "@dnd-kit/core";
+import { closestCenter, type DragEndEvent, type DraggableSyntheticListeners } from "@dnd-kit/core";
 import { arrayMove, SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import {
   Calendar,
@@ -40,6 +40,7 @@ import { MetaCount, MetaCounts } from "../../../components/ui/meta-count";
 import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
 import { SegmentedControl } from "../../../components/ui/segmented-control";
 import { Toolbar } from "../../../components/ui/toolbar";
+import { ENTITY_OPEN_EVENT } from "../../../lib/entity-open";
 import { type FocusPrefs, useFocusPrefs } from "../../../lib/focus-prefs";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { cn } from "../../../lib/utils";
@@ -61,7 +62,6 @@ import { dispatchOpenSettings } from "../../settings/settings-events";
 import { useEntityHub } from "../../spine/hooks/use-entity-hub";
 import { resolveEntityIcon } from "../../spine/icon-map";
 import { EntityRichText } from "../../spine/ui/entity-rich-text";
-import { ENTITY_OPEN_EVENT } from "../../../lib/entity-open";
 import { useAssignees } from "../assignees";
 import { formatDue, formatScheduled, PRIORITY_LABELS } from "../helpers";
 import type { QueueRunApi } from "../hooks/use-queue-run";
@@ -80,6 +80,11 @@ import { ClaimAvatar, useQueueClaim } from "./queue-toggle";
 // "Keep all" holds for the rest of the session even before the next load
 // brings the touched rows (per workspace).
 const lineUpKeptAt = new Map<string, number>();
+
+/** Test seam: forget this session's "Keep all"s. */
+export function __resetLineUpKeptForTest(): void {
+  lineUpKeptAt.clear();
+}
 
 type Props = {
   api: TasksModuleApi;
@@ -129,12 +134,15 @@ export function QueueRunView({
       if (e.defaultPrevented || e.isComposing) return;
       const k = keysRef.current;
       const target = e.target instanceof Element ? e.target : null;
-      if (target?.closest('[role="dialog"], [role="menu"], [role="listbox"], [data-slot="popover-content"]')) {
+      if (
+        target?.closest(
+          '[role="dialog"], [role="menu"], [role="listbox"], [data-slot="popover-content"]',
+        )
+      ) {
         return;
       }
       const typing =
-        !!target &&
-        (target.closest("input, textarea, select, [contenteditable='true']") !== null);
+        !!target && target.closest("input, textarea, select, [contenteditable='true']") !== null;
       if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey) {
         if (k.running || !k.canEdit || !k.queueRun.head) return;
         e.preventDefault();
@@ -233,8 +241,12 @@ function LineUp({
   const capacity = lineUpCapacity(api.queuedTasks);
   const [reviewing, setReviewing] = useState(false);
   const [, setKept] = useState(0);
-  const touchedAt = Math.max(lineUpTouchedAt(api.myQueueEntries) ?? 0, lineUpKeptAt.get(workspaceId) ?? 0);
-  const staleDays = canEdit && capacity.count > 0 ? staleLineUpDays(touchedAt || null, Date.now()) : null;
+  const touchedAt = Math.max(
+    lineUpTouchedAt(api.myQueueEntries) ?? 0,
+    lineUpKeptAt.get(workspaceId) ?? 0,
+  );
+  const staleDays =
+    canEdit && capacity.count > 0 ? staleLineUpDays(touchedAt || null, Date.now()) : null;
 
   const keep = () => {
     lineUpKeptAt.set(workspaceId, Date.now());
@@ -243,7 +255,8 @@ function LineUp({
     api.keepLineUp();
   };
 
-  const ended = queueRun.ended && queueRun.ended.workspaceId === workspaceId ? queueRun.ended : null;
+  const ended =
+    queueRun.ended && queueRun.ended.workspaceId === workspaceId ? queueRun.ended : null;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -292,10 +305,12 @@ function LineUp({
         {ended ? <EndedRunLine run={ended} onDismiss={queueRun.dismissEnded} /> : null}
         {staleDays !== null && !reviewing ? (
           <div className="flex flex-wrap items-center gap-1.5 rounded-md bg-state-hover px-3 py-2 font-sans text-sm text-muted-foreground">
-            <span>
-              Lined up {staleDays} days ago — still want all of these?
-            </span>
-            <button type="button" className="font-medium text-foreground hover:underline" onClick={keep}>
+            <span>Lined up {staleDays} days ago — still want all of these?</span>
+            <button
+              type="button"
+              className="font-medium text-foreground hover:underline"
+              onClick={keep}
+            >
               Keep all
             </button>
             <span aria-hidden>·</span>
@@ -430,7 +445,11 @@ function RunBody({
         <Toolbar>
           <h1 className="truncate font-display text-lg text-foreground">Queue</h1>
           <span className="flex min-w-0 items-center gap-2 font-sans text-sm text-muted-foreground">
-            {reading.running ? <LiveDot /> : <Pause className="size-icon-xs shrink-0" aria-hidden />}
+            {reading.running ? (
+              <LiveDot />
+            ) : (
+              <Pause className="size-icon-xs shrink-0" aria-hidden />
+            )}
             <span className="truncate tabular-nums">
               {reading.running ? "Running" : "Paused"} · {queueRun.progress.done} of{" "}
               {queueRun.progress.total} done
@@ -545,8 +564,8 @@ function RunBody({
                   className="flex h-7 items-center gap-2 px-2 text-left font-sans text-xs text-muted-foreground hover:text-foreground"
                 >
                   <Check className="size-icon-xs" aria-hidden />
-                  {queueRun.doneTasks.length} done this run · {formatDuration(reading.focusedSeconds)} ·{" "}
-                  {showDone ? "hide" : "show"}
+                  {queueRun.doneTasks.length} done this run ·{" "}
+                  {formatDuration(reading.focusedSeconds)} · {showDone ? "hide" : "show"}
                 </button>
                 {showDone
                   ? queueRun.doneTasks.map((t) => (
@@ -616,7 +635,12 @@ function PhasePill({
                 <Eyebrow as="p">Add time</Eyebrow>
                 <div className="mt-1.5 flex gap-1.5">
                   {[5, 15, 30].map((m) => (
-                    <Button key={m} variant="secondary" size="sm" onClick={() => onAddTime(task.id, m * 60)}>
+                    <Button
+                      key={m}
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => onAddTime(task.id, m * 60)}
+                    >
                       +{m}m
                     </Button>
                   ))}
@@ -639,7 +663,8 @@ function PhasePill({
                     size="sm"
                     onClick={() => {
                       const n = Number(setMin);
-                      if (Number.isFinite(n) && setMin !== "") onSetTime(task.id, Math.max(0, n) * 60);
+                      if (Number.isFinite(n) && setMin !== "")
+                        onSetTime(task.id, Math.max(0, n) * 60);
                       setSetMin("");
                     }}
                   >
@@ -659,7 +684,9 @@ function PhasePill({
                 min={1}
                 max={180}
                 value={String(prefs.workMinutes)}
-                onChange={(e) => onPrefsChange({ workMinutes: Math.max(1, Number(e.target.value) || 1) })}
+                onChange={(e) =>
+                  onPrefsChange({ workMinutes: Math.max(1, Number(e.target.value) || 1) })
+                }
                 className="w-14"
               />
               <span>Break</span>
@@ -669,7 +696,9 @@ function PhasePill({
                 min={1}
                 max={180}
                 value={String(prefs.breakMinutes)}
-                onChange={(e) => onPrefsChange({ breakMinutes: Math.max(1, Number(e.target.value) || 1) })}
+                onChange={(e) =>
+                  onPrefsChange({ breakMinutes: Math.max(1, Number(e.target.value) || 1) })
+                }
                 className="w-14"
               />
             </div>
@@ -758,11 +787,18 @@ function NowCard({
           </span>
         ) : null}
         <MetaCounts>
-          <MetaCount icon={Hash} count={tags.length} label={(n) => (n === 1 ? "1 tag" : `${n} tags`)} />
+          <MetaCount
+            icon={Hash}
+            count={tags.length}
+            label={(n) => (n === 1 ? "1 tag" : `${n} tags`)}
+          />
         </MetaCounts>
         {claim.onThis.length > 0 || claim.names.length > 0 ? (
           <span className="ml-auto inline-flex items-center gap-1.5">
-            <ClaimAvatar assignee={claim.onThisFirst ?? claim.first} live={claim.onThis.length > 0} />
+            <ClaimAvatar
+              assignee={claim.onThisFirst ?? claim.first}
+              live={claim.onThis.length > 0}
+            />
           </span>
         ) : null}
       </div>
@@ -825,7 +861,12 @@ function NowCard({
         ) : null}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <IconButton icon={MoreHorizontal} label="More for this task" className="ml-auto" tooltip={null} />
+            <IconButton
+              icon={MoreHorizontal}
+              label="More for this task"
+              className="ml-auto"
+              tooltip={null}
+            />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem onSelect={onOpen}>Open task</DropdownMenuItem>
@@ -857,7 +898,10 @@ function LinkedChips({
 }) {
   const focus = useMemo(() => ({ type: "task" as const, id: taskId }), [taskId]);
   const hub = useEntityHub(runtime, workspaceId, focus);
-  const rows = hub.sections.flatMap((s) => s.rows).filter((r) => !r.tombstoned).slice(0, 6);
+  const rows = hub.sections
+    .flatMap((s) => s.rows)
+    .filter((r) => !r.tombstoned)
+    .slice(0, 6);
   if (rows.length === 0) return null;
   return (
     <div className="mt-4 flex flex-wrap gap-1.5">
@@ -869,7 +913,9 @@ function LinkedChips({
             type="button"
             onClick={() =>
               window.dispatchEvent(
-                new CustomEvent(ENTITY_OPEN_EVENT, { detail: { type: row.other.type, id: row.other.id } }),
+                new CustomEvent(ENTITY_OPEN_EVENT, {
+                  detail: { type: row.other.type, id: row.other.id },
+                }),
               )
             }
             className="inline-flex h-(--ctrl-h-sm) max-w-full items-center gap-1.5 rounded-md border border-border px-2 font-sans text-xs text-muted-foreground transition-colors hover:bg-state-hover hover:text-foreground"
@@ -933,7 +979,10 @@ function QueueList({
   const rows = tasks.map((task) => {
     const done = task.status === "done";
     const index = done ? null : n++;
-    const row = (drag?: { listeners: DraggableSyntheticListeners; activator: DragActivatorRef }) => (
+    const row = (drag?: {
+      listeners: DraggableSyntheticListeners;
+      activator: DragActivatorRef;
+    }) => (
       <QueueRow
         task={task}
         api={api}
@@ -964,7 +1013,12 @@ function QueueList({
 
   if (!canDrag) return <div role="list">{rows}</div>;
   return (
-    <DndBoundary dndMode={dndMode} sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+    <DndBoundary
+      dndMode={dndMode}
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragEnd={onDragEnd}
+    >
       <SortableContext items={ids} strategy={verticalListSortingStrategy}>
         <div role="list">{rows}</div>
       </SortableContext>
@@ -1023,7 +1077,9 @@ function QueueRow({
           <Check className="size-icon-xs" aria-hidden />
         ) : (
           <>
-            <span className={cn(canEdit && dragListeners && "group-hover:hidden")}>{index + 1}</span>
+            <span className={cn(canEdit && dragListeners && "group-hover:hidden")}>
+              {index + 1}
+            </span>
             {canEdit && dragListeners ? (
               <GripVertical className="hidden size-icon-xs group-hover:block" aria-hidden />
             ) : null}
@@ -1046,7 +1102,9 @@ function QueueRow({
       {face ? (
         <span
           className="flex shrink-0 items-center"
-          title={live ? `${claim.onThis.join(", ")} on this` : `In ${claim.names.join(", ")}'s queue`}
+          title={
+            live ? `${claim.onThis.join(", ")} on this` : `In ${claim.names.join(", ")}'s queue`
+          }
         >
           <ClaimAvatar assignee={face} live={live} />
         </span>

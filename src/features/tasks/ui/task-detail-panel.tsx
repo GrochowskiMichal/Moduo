@@ -66,6 +66,7 @@ import {
   toAssigneeValue,
 } from "../assignee-options";
 import { previewAssign, useAssignees } from "../assignees";
+import { onThisLabel } from "../claims";
 import { formatTimestamp, LEVEL_OPTIONS, STATUS_LABELS, wouldCreateCycle } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import {
@@ -83,7 +84,6 @@ import {
   recurrenceFromPreset,
   recurrenceLabel,
 } from "../parse/recurrence";
-import { onThisLabel } from "../claims";
 import { alsoInLabel, claimLabel } from "../queue";
 import { AssigneeAvatar } from "./assignee-avatar";
 import { ClaimAvatar, useQueueClaim } from "./queue-toggle";

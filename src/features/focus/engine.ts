@@ -41,8 +41,8 @@ import { useSyncExternalStore } from "react";
 import { type FocusPrefs, readLocalFocusPrefs } from "../../lib/focus-prefs";
 import { isTauriRuntime } from "../../lib/runtime";
 import {
-  adoptSession,
   type AwayChoice,
+  adoptSession,
   bindTask,
   blankRecord,
   type FlushItem,

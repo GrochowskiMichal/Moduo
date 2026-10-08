@@ -12,7 +12,10 @@ const CLAIMS_POLL_MS = 60_000;
 const EMPTY = new Map<string, string[]>();
 
 /** Claims → task id → the teammates on it (in the order the server gave). */
-export function runClaimsByTask(claims: FocusClaim[], selfId: string | null): Map<string, string[]> {
+export function runClaimsByTask(
+  claims: FocusClaim[],
+  selfId: string | null,
+): Map<string, string[]> {
   const map = new Map<string, string[]>();
   for (const c of claims) {
     if (c.userId === selfId) continue;

@@ -153,20 +153,23 @@ export function CaptureModal({
       toast.error("Couldn't load your buckets yet — try reloading Tasks.");
       return;
     }
-    onCreate({
-      bucketId,
-      title,
-      description: description.trim() || undefined,
-      dueDate: effDue,
-      // A recurring capture materializes its first occurrence as the scheduled
-      // time (spec §5d) — the occurrence IS scheduledAt in the single-row model.
-      scheduledAt: effScheduled ?? effRecurrence?.nextOccurrence ?? null,
-      recurrence: effRecurrence,
-      priority,
-      energyLevel: energy,
-      durationMinutes: duration,
-      assigneeId,
-    }, { queue: addToQueue });
+    onCreate(
+      {
+        bucketId,
+        title,
+        description: description.trim() || undefined,
+        dueDate: effDue,
+        // A recurring capture materializes its first occurrence as the scheduled
+        // time (spec §5d) — the occurrence IS scheduledAt in the single-row model.
+        scheduledAt: effScheduled ?? effRecurrence?.nextOccurrence ?? null,
+        recurrence: effRecurrence,
+        priority,
+        energyLevel: energy,
+        durationMinutes: duration,
+        assigneeId,
+      },
+      { queue: addToQueue },
+    );
     toast(title, {
       description: summarize(effScheduled, effDue, effRecurrence, bucketName(bucketId)),
     });

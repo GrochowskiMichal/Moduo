@@ -9,7 +9,10 @@ export function LiveDot({ className }: { className?: string }) {
   return (
     <span
       aria-hidden
-      className={cn("inline-block size-1.5 shrink-0 rounded-full bg-primary ring-2 ring-primary/25", className)}
+      className={cn(
+        "inline-block size-1.5 shrink-0 rounded-full bg-primary ring-2 ring-primary/25",
+        className,
+      )}
     />
   );
 }

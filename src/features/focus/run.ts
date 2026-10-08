@@ -72,7 +72,11 @@ const EMPTY: QueueRunState = { run: null, ended: null, notice: null };
 /** Resolves a task id to what the engine binds (title, bucket, workspace). */
 export type TaskRefResolver = (taskId: string) => FocusTaskRef | null;
 
-type Subscriber = (userId: string, onRow: (row: unknown) => void, onResync: () => void) => () => void;
+type Subscriber = (
+  userId: string,
+  onRow: (row: unknown) => void,
+  onResync: () => void,
+) => () => void;
 
 const defaultSubscribe: Subscriber = (userId, onRow, onResync) => {
   let stop: (() => void) | null = null;
@@ -165,7 +169,8 @@ function writeLocal(run: FocusRun | null): void {
   try {
     const store = storage();
     if (!run) store?.removeItem(runKey(user));
-    else store?.setItem(runKey(user), JSON.stringify({ run: toRow(run), local: run.local === true }));
+    else
+      store?.setItem(runKey(user), JSON.stringify({ run: toRow(run), local: run.local === true }));
   } catch {
     /* storage unavailable — the server still has it */
   }
@@ -225,7 +230,11 @@ function inControlOf(run: FocusRun | null): boolean {
 /** The run ended (here or elsewhere): stop this device's clock if it ran it. */
 function endedElsewhere(local: FocusRun, at: number, server?: FocusRun): void {
   if (inControlOf(local) && getFocusSession().tracking) relinquishFocus(at);
-  set({ run: null, ended: server ?? { ...local, status: "ended", endedAt: iso(at) }, notice: null });
+  set({
+    run: null,
+    ended: server ?? { ...local, status: "ended", endedAt: iso(at) },
+    notice: null,
+  });
 }
 
 /**
@@ -243,7 +252,11 @@ function receive(server: FocusRun | null, opts: { full?: boolean } = {}): void {
     // a newer run from elsewhere replaces it.
     if (Date.parse(server.startedAt) <= Date.parse(local.startedAt)) return;
   }
-  if (local && local.id !== server.id && Date.parse(server.startedAt) < Date.parse(local.startedAt)) {
+  if (
+    local &&
+    local.id !== server.id &&
+    Date.parse(server.startedAt) < Date.parse(local.startedAt)
+  ) {
     return; // an older run's answer
   }
   if (server.status === "ended") {
@@ -517,7 +530,11 @@ export function startQueueRun(input: {
     seenAt: iso(now),
   };
   const snap = runSnapshotFromSession(session, base, now);
-  const local: FocusRun = { ...base, phaseStartedAt: snap.phaseStartedAt, phaseSeconds: snap.phaseSeconds };
+  const local: FocusRun = {
+    ...base,
+    phaseStartedAt: snap.phaseStartedAt,
+    phaseSeconds: snap.phaseSeconds,
+  };
   lastSessionKey = "";
   set({ run: local, ended: null, notice: null });
   if (previous && !previous.local && previous.id !== local.id) {
@@ -538,7 +555,13 @@ export function startQueueRun(input: {
     if (current?.id === local.id) {
       set({
         ...state,
-        run: { ...current, id: saved.id, local: undefined, controlAt: saved.controlAt, seenAt: saved.seenAt },
+        run: {
+          ...current,
+          id: saved.id,
+          local: undefined,
+          controlAt: saved.controlAt,
+          seenAt: saved.seenAt,
+        },
       });
       // Anything that changed while the start was on its way.
       scheduleSave();
@@ -609,7 +632,12 @@ export function endQueueRun(): void {
     await runtime.endRun({
       runId: id,
       deviceId,
-      state: { focusedSeconds, blocksCompleted, doneTaskIds: run.doneTaskIds, nowTaskId: run.nowTaskId },
+      state: {
+        focusedSeconds,
+        blocksCompleted,
+        doneTaskIds: run.doneTaskIds,
+        nowTaskId: run.nowTaskId,
+      },
     });
   });
 }
@@ -718,7 +746,9 @@ export function useRunReading(run: FocusRun | null): FocusRunReading | null {
       running: session.running,
       pomodoro: session.pomodoro,
       phase: session.phase === "work" ? "work" : session.longBreak ? "long_break" : "break",
-      phaseElapsed: session.pomodoro ? Math.max(0, session.phaseSeconds - session.pomoLeft) : session.sitElapsed,
+      phaseElapsed: session.pomodoro
+        ? Math.max(0, session.phaseSeconds - session.pomoLeft)
+        : session.sitElapsed,
       phaseLeft: session.pomodoro ? session.pomoLeft : 0,
       bigClock: session.bigClock,
       focusedSeconds: session.sitElapsed,

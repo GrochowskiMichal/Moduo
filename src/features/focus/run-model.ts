@@ -185,7 +185,8 @@ export function runSnapshotFromSession(
   return {
     status: paused ? "paused" : "running",
     nowTaskId: run.nowTaskId,
-    phase: !pomodoro || session.phase === "work" ? "work" : session.longBreak ? "long_break" : "break",
+    phase:
+      !pomodoro || session.phase === "work" ? "work" : session.longBreak ? "long_break" : "break",
     phaseStartedAt: new Date(pausedAtMs - elapsed * 1000).toISOString(),
     phaseSeconds,
     pausedAt: paused ? new Date(pausedAtMs).toISOString() : null,
@@ -217,7 +218,9 @@ export function readRunClock(run: FocusRun, now: number): FocusRunReading {
   const phaseElapsed = Math.max(0, Math.floor((at - Date.parse(run.phaseStartedAt)) / 1000));
   const phaseLeft = pomodoro ? Math.max(0, (run.phaseSeconds ?? 0) - phaseElapsed) : 0;
   const sinceSeen =
-    running && run.phase === "work" ? Math.max(0, Math.floor((now - Date.parse(run.seenAt)) / 1000)) : 0;
+    running && run.phase === "work"
+      ? Math.max(0, Math.floor((now - Date.parse(run.seenAt)) / 1000))
+      : 0;
   const focusedSeconds = pomodoro ? run.focusedSeconds + sinceSeen : phaseElapsed;
   return {
     running,
@@ -231,7 +234,11 @@ export function readRunClock(run: FocusRun, now: number): FocusRunReading {
 }
 
 /** The run as the engine takes it over on this device (see adoptSession). */
-export function runClockForAdopt(run: FocusRun, task: FocusTaskRef | null, now: number): FocusRunClock {
+export function runClockForAdopt(
+  run: FocusRun,
+  task: FocusTaskRef | null,
+  now: number,
+): FocusRunClock {
   const reading = readRunClock(run, now);
   return {
     task,
@@ -257,7 +264,10 @@ export function runNowTask(queued: Task[]): Task | null {
 }
 
 /** "2 of 7 done": done this run, out of done + still lined up. */
-export function runProgress(run: Pick<FocusRun, "doneTaskIds">, queued: Task[]): {
+export function runProgress(
+  run: Pick<FocusRun, "doneTaskIds">,
+  queued: Task[],
+): {
   done: number;
   total: number;
 } {
