@@ -3,8 +3,8 @@
 // a spurious write (updatedAt bump / phantom activity row). Regression guard for
 // the senior-review finding.
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, rs } from "@rstest/core";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { EntityTextEditor } from "./entity-text-editor";
 
 afterEach(cleanup);

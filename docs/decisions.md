@@ -8,6 +8,8 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Agent workflow, branching, Entire, docs → [decisions/workflow.md](decisions/workflow.md)
 
+- 2026-10-08 · `main` and `develop` change only through a pull request whose `static-checks` job passed, and a weekly cloud routine gardens the knowledge files.
+- 2026-10-07 · The repo is public, so Entire checkpoints are local-only and never pushed.
 - 2026-10-07 · Claude Code is the only harness, on Anthropic models, and AGENTS.md is the single instruction file.
 - 2026-08-17 · Agents land bigger chunks on `develop` (standing), Entire default is `develop`, domain values go through `@contracts`.
 - 2026-08-14 · DOC-1 (doc reconcile) — the doc set now declares an explicit authority hierarchy, and stale *status* claims are neutralized by banner, not by rewriting history.
@@ -60,6 +62,9 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Toolchain and libraries → [decisions/toolchain.md](decisions/toolchain.md)
 
+- 2026-10-08 · Storybook is 10.6.1, with `@storybook/addon-mcp`.
+- 2026-10-08 · Claude Code gets TypeScript code intelligence from TypeScript 7's own language server, through a project plugin.
+- 2026-10-07 · Biome doesn't lint `landing/**`, and `bun run lint:js` gates CI.
 - 2026-10-07 · The rest of the JS libraries move to their newest stable release, with four majors left on the line already in use.
 - 2026-10-07 · Drag and drop stays on `@dnd-kit/core` 6.3.1, `@dnd-kit/sortable` 10.0.0, and `@dnd-kit/utilities` 3.2.2.
 - 2026-10-07 · The Lexical pack is 0.52.0, and Yjs is 13.6.33.
@@ -101,6 +106,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Calendar and booking links → [decisions/calendar.md](decisions/calendar.md)
 
+- 2026-10-07 · Emailed links use fixed, allow-listed origins, and public booking is rate-limited.
 - 2026-10-02 · A booked meeting is one event, and booking links can be deleted.
 - 2026-10-02 · A booking link's video is Google Meet, Zoom, or "Their choice".
 - 2026-10-01 · The public booking page is one sentence the guest finishes.
