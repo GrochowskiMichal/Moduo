@@ -238,7 +238,6 @@ Two blocks with no dependency between them still **merge-conflict if they edit t
 
 - [ ] **MCC-2 — Connector: reorder queue + log time** · deps: MCC-1 · migration: `tasks_op_reorder_queue`, `tasks_op_log_time`; manifest entries; `tasks_reorder_queue`, `tasks_log_time` tools; connector doc updated; Supabase-branch round-trip; migration then redeploy. Tier 2.
 - [ ] **MCC-3 — Connector: create task** · deps: MCC-2 · migration: `tasks_op_create` (Inbox default, commit option); `tasks_create` tool (due date as a local-midnight timestamp); connector doc's capture note updated; round-trip; redeploy. Tier 2.
-- [x] **MCC-4 — Mod: My tasks panel (read)** · deps: MCC-1 · `tools/claude-plugins/moduo-tasks`: key + endpoint settings, connector client + error mapping, `/mine` panel (filters, buckets, queue cards, done section, 60 s refresh), band line, reopen flag. · _done 2026-10-08 · `t/mike/mcc-4-mine-panel` (PR #289): 10 mod tests, validator clean after two rounds; live panel check is the designer's (needs the edit key)_
 - [ ] **MCC-5 — Mod: queue actions + work on this** · deps: MCC-2, MCC-4 · c / ⇧c / u / s / [ ] plus buttons; `⏎` fills the prompt, In progress on send.
 - [ ] **MCC-6 — Mod: Focus** · deps: MCC-5 · Focus panel, pomodoro/stopwatch from Moduo settings, band clock, toast + chime, time logging rules, done → next, Claude context.
 - [ ] **MCC-7 — Mod: quick capture** · deps: MCC-3, MCC-4 · `/task` parse (title, #bucket, today/tomorrow/weekday, !) + preview + create.
