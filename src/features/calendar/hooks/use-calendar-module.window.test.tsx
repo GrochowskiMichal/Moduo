@@ -2,13 +2,13 @@
 // are the ones the block's validator rounds actually broke — a stale window on
 // the first read after a workspace switch, a double fetch on mount, and an
 // `ensureAllTime` that silently does nothing (stranding the deep link that
-// waits on it). Everything else about the hook is covered by its page tests.
-// The middle block pins what a workspace switch leaves behind, and the busy
-// overlay's lifecycle is pinned at the bottom.
+// waits on it). The middle blocks pin that edits and deletes reach the
+// server and what a workspace switch leaves behind; the busy overlay's
+// lifecycle is pinned at the bottom. There are no page-level calendar tests.
 
 import { afterEach, beforeEach, describe, expect, it, rs } from "@rstest/core";
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import type { Truncation } from "../../../lib/paged-select";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
@@ -291,14 +291,43 @@ describe("useCalendarModule — workspace switch", () => {
       w1: { events: [event("e1", "w1")], accounts: [account("a1", "w1")], truncated: [CAP] },
       w2: w2Read,
     });
-    const { result, rerender } = await mountOnW1(runtime);
+    // What the page's effects see in each commit, the switch's own included:
+    // the `?event=` deep link and the Google linker act on that one.
+    const commits: {
+      ws: string;
+      loading: boolean;
+      rows: number;
+      accounts: number;
+      notices: number;
+    }[] = [];
+    const { result, rerender } = renderHook(
+      ({ ws }) => {
+        const api = useCalendarModule(runtime, params(ws));
+        useEffect(() => {
+          commits.push({
+            ws,
+            loading: api.loading,
+            rows: api.events.length,
+            accounts: api.accounts.length,
+            notices: api.truncated.length,
+          });
+        });
+        return api;
+      },
+      { initialProps: { ws: "w1" } },
+    );
+    await settled(result);
     expect(rows(result)).toEqual(["e1"]);
 
     rerender({ ws: "w2" });
+    expect(commits.find((c) => c.ws === "w2")).toEqual({
+      ws: "w2",
+      loading: true,
+      rows: 0,
+      accounts: 0,
+      notices: 0,
+    });
     expect(rows(result)).toEqual([]);
-    expect(result.current.accounts).toEqual([]);
-    expect(result.current.truncated).toEqual([]);
-    expect(result.current.loading).toBe(true);
 
     await act(async () => releaseW2());
     await settled(result);
