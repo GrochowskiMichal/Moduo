@@ -31,3 +31,19 @@ export const Outline: Story = {
     return <DateField value={value} onChange={setValue} variant="outline" />;
   },
 };
+
+/** As a detail-panel property value: icon slot, no box, muted placeholder. */
+export const Property: Story = {
+  render: () => {
+    const [value, setValue] = useState<Date | null>(null);
+    return (
+      <DateField
+        value={value}
+        onChange={setValue}
+        variant="property"
+        placeholder="Set date"
+        aria-label="Due"
+      />
+    );
+  },
+};

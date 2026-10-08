@@ -12,6 +12,9 @@ import { cn } from "@/lib/utils";
  *
  * - `rail` — the 320px right-hand inspector (task / event / thread reader).
  * - `page` — a centered `max-w-2xl` hub read as a record page (contact / company).
+ * - `lead` — a rail title that leads a redesigned inspector: 18px semibold,
+ *   wrapping (the Tasks detail panel, tasks-v2 comp §1). The other rails move
+ *   to it as their panels are redesigned.
  *
  * Body face, not display: R4 files an entity's own name under **content**
  * ("task/note titles"), the same bucket as its description. Chrome headings
@@ -26,6 +29,7 @@ const detailTitleVariants = cva("text-foreground font-sans", {
       // Medium weight, not size, is what holds the title above the 13–14px meta
       // lines packed around it in a 320px rail (2 of the 3 rails already had it).
       rail: "text-md font-medium",
+      lead: "text-lg font-semibold leading-snug tracking-tight",
       page: "text-2xl",
     },
   },
