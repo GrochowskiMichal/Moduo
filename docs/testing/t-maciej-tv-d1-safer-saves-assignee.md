@@ -32,7 +32,8 @@
 - [ ] **Do:** `tasks_list_assignees`, then `tasks_assign` with a teammate's id, `"me"`, and `null`. → **Expect:** the teammate is notified once (attributed to the key); "me" and null notify nobody; a view-only member is refused with "Viewers can't be assigned tasks." _(MCP)_
 
 ## Migrations / data
-- [ ] **Do:** after the production apply, open Tasks. → **Expect:** every task shows the same assignee as before; tasks that were reassigned before today don't show "Created by". _(web)_
+- [ ] **Do:** on a build with TV-D1 (applied to production 2026-10-08), open Tasks. → **Expect:** every task shows the same assignee as before; the 7 tasks whose creator couldn't be recovered don't show "Created by". _(web)_
+- [ ] **Do:** on a build from before TV-D1, open the 5 tasks someone made for a teammate. → **Expect (known, until it updates):** it shows the creator as the assignee. _(old web/desktop)_
 
 ## Known gaps / not-yet-testable
 - `moduo-mcp` must not be redeployed from this branch until PR #247 is merged into `maciej`: production runs #247's connector (v21), and this branch doesn't have it. Deploy from `maciej` once both are in.
