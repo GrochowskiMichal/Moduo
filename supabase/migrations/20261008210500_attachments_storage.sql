@@ -5,7 +5,7 @@
 --
 -- How an upload works (no Edge Function hands out URLs):
 --   1. attachments_op_begin checks edit access, the per-file limit and the pool
---      (used + pending + this file), creates a `pending` row and returns its
+--      (used + unfinished uploads + this file), creates a `pending` row and returns its
 --      object paths.
 --   2. The app uploads straight to Storage. The INSERT policy below only lets a
 --      file land on a path a pending row of the same uploader names.
@@ -140,19 +140,25 @@ AS $$
   SELECT CASE WHEN p_status = 'ready' AND p_deleted_at IS NULL THEN p_size + p_preview ELSE 0 END
 $$;
 
--- Bytes begun but not finalized in the owner's live workspaces (the last 24 h;
--- older pending rows are abandoned and swept).
-CREATE FUNCTION public.storage__pending_bytes(p_owner uuid)
+-- Bytes held by files that aren't ready yet: uploads in progress, abandoned
+-- and failed ones, until the purge removes them. Each counts the larger of what
+-- was declared and what is actually stored (original + preview), so bytes
+-- uploaded past a declared size, or left behind by a failed upload, still use
+-- the pool until they're gone.
+CREATE FUNCTION public.storage__unsettled_bytes(p_owner uuid)
 RETURNS bigint
 LANGUAGE sql STABLE SECURITY DEFINER
 SET search_path = public
 AS $$
-  SELECT coalesce(sum(a.size_bytes), 0)::bigint
+  SELECT coalesce(sum(greatest(
+           a.size_bytes,
+           coalesce((SELECT (o.metadata ->> 'size')::bigint FROM storage.objects o
+                     WHERE o.bucket_id = 'attachments' AND o.name = a.object_path), 0)
+         + coalesce((SELECT (o.metadata ->> 'size')::bigint FROM storage.objects o
+                     WHERE o.bucket_id = 'attachments' AND o.name = a.preview_path), 0))), 0)::bigint
   FROM public.attachments a
   JOIN public.workspaces w ON w.id = a.workspace_id
-  WHERE w.owner_id = p_owner AND w.deleted_at IS NULL
-    AND a.status = 'pending' AND a.deleted_at IS NULL
-    AND a.created_at > now() - interval '24 hours'
+  WHERE w.owner_id = p_owner AND a.status <> 'ready'
 $$;
 
 -- ── 5. The pool ledger ─────────────────────────────────────────────────────
@@ -398,10 +404,10 @@ BEGIN
   IF (p_width IS NOT NULL AND p_width <= 0) OR (p_height IS NOT NULL AND p_height <= 0) THEN
     RAISE EXCEPTION 'invalid_dimensions' USING ERRCODE = '22023';
   END IF;
-  -- One person can't park the owner's whole pool in abandoned uploads.
+  -- One person can't pile up unfinished uploads (pending or failed, until the
+  -- purge removes them).
   IF (SELECT count(*) FROM public.attachments a
-      WHERE a.uploader_id = v_uid AND a.status = 'pending'
-        AND a.created_at > now() - interval '24 hours') >= 50 THEN
+      WHERE a.uploader_id = v_uid AND a.status <> 'ready') >= 50 THEN
     RAISE EXCEPTION 'too_many_pending' USING ERRCODE = 'P0001';
   END IF;
 
@@ -420,7 +426,7 @@ BEGIN
   SELECT greatest(su.bytes_used, 0) INTO v_used
   FROM public.storage_usage su WHERE su.owner_id = v_owner;
   v_used := coalesce(v_used, 0);
-  v_pending := public.storage__pending_bytes(v_owner);
+  v_pending := public.storage__unsettled_bytes(v_owner);
   -- No lock: two uploads racing past the limit is a small allowed overage.
   IF v_used + v_pending + p_size_bytes > v_lim.total_bytes THEN
     RAISE EXCEPTION 'storage_full' USING ERRCODE = 'P0001',
@@ -637,7 +643,7 @@ BEGIN
   SELECT greatest(su.bytes_used, 0) INTO v_used
   FROM public.storage_usage su WHERE su.owner_id = v_owner;
   v_used := coalesce(v_used, 0);
-  v_pending := public.storage__pending_bytes(v_owner);
+  v_pending := public.storage__unsettled_bytes(v_owner);
   v_ratio := v_used::numeric / greatest(v_lim.total_bytes, 1);
   RETURN jsonb_build_object(
     'tier', v_lim.tier,
@@ -926,7 +932,7 @@ BEGIN
     'public.attachments__preview_cap()',
     'public.storage__limits_for_owner(uuid)',
     'public.attachments__bytes(text, timestamptz, bigint, bigint)',
-    'public.storage__pending_bytes(uuid)',
+    'public.storage__unsettled_bytes(uuid)',
     'public.storage_usage__add(uuid, bigint)',
     'public.attachments__ledger()',
     'public.attachments__owner_moved()',

@@ -584,3 +584,16 @@ export function isAttachmentPreviewMime(value: unknown): value is AttachmentPrev
     typeof value === "string" && (ATTACHMENT_PREVIEW_MIMES as readonly string[]).includes(value)
   );
 }
+
+/** The private Storage bucket that holds attachment bytes. */
+export const ATTACHMENTS_BUCKET = "attachments";
+
+/** How long a signed link to an attachment lives, in seconds (spec decision 11). */
+export const ATTACHMENT_LINK_TTL_SECONDS = {
+  /** Thumbnails in the panel and on tiles. */
+  preview: 3600,
+  /** The original, opened in the viewer or downloaded. */
+  original: 600,
+  /** Links handed to an agent over MCP. */
+  mcp: 300,
+} as const;

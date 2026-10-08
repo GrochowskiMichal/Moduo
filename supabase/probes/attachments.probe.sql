@@ -324,11 +324,47 @@ BEGIN
   PERFORM probe.ok((v_detail::jsonb ->> 'total_bytes')::bigint = 2 * gib
                AND (v_detail::jsonb ->> 'pending_bytes')::bigint = 2 * mib,
                    'begin: storage full carries used, pending and total in DETAIL');
-  -- An abandoned upload (over 24 h) no longer holds space.
+  -- An abandoned upload (over 24 h) holds its space until the purge removes it.
   UPDATE public.attachments SET created_at = now() - interval '25 hours';
   e := probe.try_as('A', format($q$SELECT public.attachments_op_begin(%L, 'task', %L, 'two.png', 'image/png', %s)$q$,
                                 probe.id('W'), probe.id('T1 shared'), 2 * mib));
-  PERFORM probe.ok(e = 'ok', 'begin: pending older than 24 h stops counting');
+  PERFORM probe.ok(e = 'storage_full', 'begin: an abandoned upload holds its space until purged (' || e || ')');
+  DELETE FROM public.attachments;
+  e := probe.try_as('A', format($q$SELECT public.attachments_op_begin(%L, 'task', %L, 'two.png', 'image/png', %s)$q$,
+                                probe.id('W'), probe.id('T1 shared'), 2 * mib));
+  PERFORM probe.ok(e = 'ok', 'begin: once purged the space is back');
+  DELETE FROM public.attachments;
+  UPDATE public.storage_usage SET bytes_used = 0 WHERE owner_id = probe.id('O');
+END;
+$$;
+
+-- Unfinished uploads count at what is really stored, not what was declared.
+DO $$
+DECLARE
+  v public.attachments;
+  w public.attachments;
+  e text;
+  gib constant bigint := 1073741824;
+  mib constant bigint := 1048576;
+BEGIN
+  UPDATE public.storage_usage SET bytes_used = 2 * gib - 30 * mib WHERE owner_id = probe.id('O');
+  -- Declared 1 byte, stored 20 MB, never finalized.
+  v := probe.begin('A', 'T1 shared', 'small.png', 1, 'image/png');
+  PERFORM probe.ok(probe.upload('A', v.object_path, 20 * mib) = 'ok', 'unsettled: an oversized upload lands');
+  PERFORM probe.ok(probe.upload('A', v.preview_path, 5 * mib) = 'ok', 'unsettled: and an oversized preview');
+  e := probe.try_as('A', format($q$SELECT public.attachments_op_begin(%L, 'task', %L, 'next.png', 'image/png', %s)$q$,
+                                probe.id('W'), probe.id('T1 shared'), 6 * mib));
+  PERFORM probe.ok(e = 'storage_full', 'unsettled: it counts at its stored 25 MB, not the declared byte (' || e || ')');
+  -- Finalize fails it; the failed file still counts until the purge removes it.
+  PERFORM probe.ok((probe.finalize('A', v.id)).status = 'failed', 'unsettled: finalize fails the tampered file');
+  e := probe.try_as('A', format($q$SELECT public.attachments_op_begin(%L, 'task', %L, 'next.png', 'image/png', %s)$q$,
+                                probe.id('W'), probe.id('T1 shared'), 6 * mib));
+  PERFORM probe.ok(e = 'storage_full', 'unsettled: a failed upload holds its bytes until purged (' || e || ')');
+  DELETE FROM storage.objects WHERE name IN (v.object_path, v.preview_path);
+  DELETE FROM public.attachments WHERE id = v.id;
+  e := probe.try_as('A', format($q$SELECT public.attachments_op_begin(%L, 'task', %L, 'next.png', 'image/png', %s)$q$,
+                                probe.id('W'), probe.id('T1 shared'), 6 * mib));
+  PERFORM probe.ok(e = 'ok', 'unsettled: purged, the space is back');
   DELETE FROM public.attachments;
   UPDATE public.storage_usage SET bytes_used = 0 WHERE owner_id = probe.id('O');
 END;
@@ -344,7 +380,11 @@ BEGIN
   END LOOP;
   e := probe.try_as('B', format($q$SELECT public.attachments_op_begin(%L, 'task', %L, 'p51.png', 'image/png', 10)$q$,
                                 probe.id('W'), probe.id('T1 shared')));
-  PERFORM probe.ok(e = 'too_many_pending', 'begin: 50 pending uploads per person at most (' || e || ')');
+  PERFORM probe.ok(e = 'too_many_pending', 'begin: 50 unfinished uploads per person at most (' || e || ')');
+  UPDATE public.attachments SET status = 'failed' WHERE uploader_id = probe.id('B');
+  e := probe.try_as('B', format($q$SELECT public.attachments_op_begin(%L, 'task', %L, 'p51.png', 'image/png', 10)$q$,
+                                probe.id('W'), probe.id('T1 shared')));
+  PERFORM probe.ok(e = 'too_many_pending', 'begin: failed uploads count until purged (' || e || ')');
   e := probe.try_as('A', format($q$SELECT public.attachments_op_begin(%L, 'task', %L, 'mine.png', 'image/png', 10)$q$,
                                 probe.id('W'), probe.id('T1 shared')));
   PERFORM probe.ok(e = 'ok', 'begin: another person isn''t held back by it');
