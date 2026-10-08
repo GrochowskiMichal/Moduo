@@ -136,109 +136,158 @@ describe("useCalendarModule — fetch window", () => {
   });
 });
 
-describe("useCalendarModule — workspace switch", () => {
-  type Held = {
-    args: { workspaceId: string };
-    resolve: (value: unknown) => void;
-    reject: (err: Error) => void;
-  };
-  type Writes = Record<"create" | "update" | "remove" | "restore", Held[]>;
+// Shared by the two blocks below: real event rows, and a runtime whose writes
+// stay open until a test settles them.
+type Held = {
+  args: { workspaceId: string };
+  resolve: (value: unknown) => void;
+  reject: (err: Error) => void;
+};
+type Writes = Record<"create" | "update" | "remove" | "restore", Held[]>;
 
-  const DRAFT = {
-    title: "Standup",
-    startsAt: "2026-10-08T09:00:00.000Z",
-    endsAt: "2026-10-08T09:30:00.000Z",
-  };
-  const CAP: Truncation = { scope: "events", shown: 2000, total: 2400 };
+const DRAFT = {
+  title: "Standup",
+  startsAt: "2026-10-08T09:00:00.000Z",
+  endsAt: "2026-10-08T09:30:00.000Z",
+};
+const CAP: Truncation = { scope: "events", shown: 2000, total: 2400 };
 
-  const event = (id: string, workspaceId: string): CalendarEventModel => ({
-    id,
-    workspaceId,
-    ownerId: "u1",
-    sourceAccountId: null,
-    externalEventId: null,
-    calendarId: "moduo",
-    title: id,
-    description: "",
-    startsAt: "2026-10-08T11:00:00.000Z",
-    endsAt: "2026-10-08T12:00:00.000Z",
-    allDay: false,
-    rrule: null,
-    status: "confirmed",
-    color: null,
-    createdAt: "2026-10-01T00:00:00.000Z",
-    updatedAt: "2026-10-01T00:00:00.000Z",
-    deletedAt: null,
+const event = (id: string, workspaceId: string): CalendarEventModel => ({
+  id,
+  workspaceId,
+  ownerId: "u1",
+  sourceAccountId: null,
+  externalEventId: null,
+  calendarId: "moduo",
+  title: id,
+  description: "",
+  startsAt: "2026-10-08T11:00:00.000Z",
+  endsAt: "2026-10-08T12:00:00.000Z",
+  allDay: false,
+  rrule: null,
+  status: "confirmed",
+  color: null,
+  createdAt: "2026-10-01T00:00:00.000Z",
+  updatedAt: "2026-10-01T00:00:00.000Z",
+  deletedAt: null,
+});
+
+const account = (id: string, workspaceId: string): CalendarAccountModel => ({
+  id,
+  workspaceId,
+  ownerId: "u1",
+  provider: "google",
+  externalId: `${id}@example.com`,
+  displayLabel: id,
+  isDefaultTarget: false,
+  color: null,
+  lastSyncAt: null,
+  status: "ok",
+  syncToken: null,
+  deletedAt: null,
+});
+
+/**
+ * Each workspace's read (a pending promise holds it open), and every write
+ * held open to settle by hand.
+ */
+function heldRuntime(
+  reads: Record<string, Partial<CalendarModuleBundle> | Promise<Partial<CalendarModuleBundle>>>,
+) {
+  const writes: Writes = { create: [], update: [], remove: [], restore: [] };
+  const held = (list: Held[]) =>
+    rs.fn(
+      (args: Held["args"]) =>
+        new Promise((resolve, reject) => list.push({ args, resolve, reject })),
+    );
+  const runtime = {
+    calendar: {
+      listModule: rs.fn(async (workspaceId: string) => ({
+        events: [],
+        accounts: [],
+        degraded: false,
+        truncated: [],
+        ...(await reads[workspaceId]),
+      })),
+      createEvent: held(writes.create),
+      updateEvent: held(writes.update),
+      removeEvent: held(writes.remove),
+      restoreEvent: held(writes.restore),
+    },
+  } as unknown as ModuoRuntime;
+  return { runtime, writes };
+}
+
+/** Mounted on w1 with edit access, its first read settled; rerender to switch. */
+async function mountOnW1(runtime: ModuoRuntime) {
+  const hook = renderHook(({ ws }) => useCalendarModule(runtime, params(ws)), {
+    initialProps: { ws: "w1" },
   });
+  await settled(hook.result);
+  return hook;
+}
 
-  const account = (id: string, workspaceId: string): CalendarAccountModel => ({
-    id,
-    workspaceId,
-    ownerId: "u1",
-    provider: "google",
-    externalId: `${id}@example.com`,
-    displayLabel: id,
-    isDefaultTarget: false,
-    color: null,
-    lastSyncAt: null,
-    status: "ok",
-    syncToken: null,
-    deletedAt: null,
-  });
+/** The list's ids, with a still-saving create's random id shown as `tmp`. */
+const rows = (result: { current: CalendarModuleApi }) =>
+  result.current.events.map((e) => (e.id.startsWith("tmp-") ? "tmp" : e.id));
 
-  /**
-   * Each workspace's read (a pending promise holds it open), and every write
-   * held open to settle by hand.
-   */
-  function switchRuntime(
-    reads: Record<string, Partial<CalendarModuleBundle> | Promise<Partial<CalendarModuleBundle>>>,
-  ) {
-    const writes: Writes = { create: [], update: [], remove: [], restore: [] };
-    const held = (list: Held[]) =>
-      rs.fn(
-        (args: Held["args"]) =>
-          new Promise((resolve, reject) => list.push({ args, resolve, reject })),
-      );
-    const runtime = {
-      calendar: {
-        listModule: rs.fn(async (workspaceId: string) => ({
-          events: [],
-          accounts: [],
-          degraded: false,
-          truncated: [],
-          ...(await reads[workspaceId]),
-        })),
-        createEvent: held(writes.create),
-        updateEvent: held(writes.update),
-        removeEvent: held(writes.remove),
-        restoreEvent: held(writes.restore),
-      },
-    } as unknown as ModuoRuntime;
-    return { runtime, writes };
-  }
+const readsOf = (runtime: ModuoRuntime) =>
+  rs.mocked(runtime.calendar.listModule).mock.calls.map(([workspaceId]) => workspaceId);
 
-  /** Mounted on w1 with edit access, its first read settled; rerender to switch. */
-  async function mountOnW1(runtime: ModuoRuntime) {
-    const hook = renderHook(({ ws }) => useCalendarModule(runtime, params(ws)), {
-      initialProps: { ws: "w1" },
+describe("useCalendarModule — edits and deletes", () => {
+  // The calendar page sets its own state in the same handler before it calls
+  // these (confirmDelete clears four pieces first). React then runs the hook's
+  // state updater later, at render, so a snapshot taken inside it was still
+  // empty when the hook decided whether to send the write, and it never did.
+  /** The hook plus another piece of state on the same component, like the page. */
+  function mountWithOtherState(runtime: ModuoRuntime) {
+    return renderHook(() => {
+      const [, bump] = useState(0);
+      return { ...useCalendarModule(runtime, params("w1")), bump };
     });
-    await settled(hook.result);
-    return hook;
   }
 
-  /** The list's ids, with a still-saving create's random id shown as `tmp`. */
-  const rows = (result: { current: CalendarModuleApi }) =>
-    result.current.events.map((e) => (e.id.startsWith("tmp-") ? "tmp" : e.id));
+  it("sends a delete even when the component has other state queued first", async () => {
+    const { runtime, writes } = heldRuntime({
+      w1: { events: [event("e1", "w1"), event("e2", "w1")] },
+    });
+    const { result } = mountWithOtherState(runtime);
+    await settled(result);
 
-  const readsOf = (runtime: ModuoRuntime) =>
-    rs.mocked(runtime.calendar.listModule).mock.calls.map(([workspaceId]) => workspaceId);
+    act(() => {
+      result.current.bump((n) => n + 1); // what confirmDelete does first
+      void result.current.deleteEvent("e1");
+    });
+    expect(writes.remove.map((w) => w.args)).toEqual([{ workspaceId: "w1", eventId: "e1" }]);
+    expect(rows(result)).toEqual(["e2"]);
+  });
 
+  it("sends an edit even when the component has other state queued first", async () => {
+    const { runtime, writes } = heldRuntime({ w1: { events: [event("e1", "w1")] } });
+    const { result } = mountWithOtherState(runtime);
+    await settled(result);
+
+    act(() => {
+      result.current.bump((n) => n + 1);
+      void result.current.updateEvent("e1", { title: "Renamed" });
+    });
+    expect(writes.update.map((w) => w.args)).toEqual([
+      { workspaceId: "w1", eventId: "e1", patch: { title: "Renamed" } },
+    ]);
+    expect(result.current.events.map((e) => e.title)).toEqual(["Renamed"]);
+
+    await act(async () => writes.update[0].reject(new Error("offline")));
+    expect(result.current.events.map((e) => e.title)).toEqual(["e1"]); // rolled back
+  });
+});
+
+describe("useCalendarModule — workspace switch", () => {
   it("shows none of the old workspace's rows while the new one is still loading", async () => {
     let releaseW2 = () => {};
     const w2Read = new Promise<Partial<CalendarModuleBundle>>((resolve) => {
       releaseW2 = () => resolve({ events: [event("e2", "w2")] });
     });
-    const { runtime } = switchRuntime({
+    const { runtime } = heldRuntime({
       w1: { events: [event("e1", "w1")], accounts: [account("a1", "w1")], truncated: [CAP] },
       w2: w2Read,
     });
@@ -257,7 +306,7 @@ describe("useCalendarModule — workspace switch", () => {
   });
 
   it("leaves a create still saving in w1 behind, and it still saves to w1", async () => {
-    const { runtime, writes } = switchRuntime({ w2: { events: [event("e2", "w2")] } });
+    const { runtime, writes } = heldRuntime({ w2: { events: [event("e2", "w2")] } });
     const { result, rerender } = await mountOnW1(runtime);
     act(() => void result.current.createEvent(DRAFT));
     expect(rows(result)).toEqual(["tmp"]);
@@ -272,7 +321,7 @@ describe("useCalendarModule — workspace switch", () => {
   });
 
   it("keeps a create still saving through a same-workspace reload", async () => {
-    const { runtime, writes } = switchRuntime({ w1: { events: [event("e1", "w1")] } });
+    const { runtime, writes } = heldRuntime({ w1: { events: [event("e1", "w1")] } });
     const { result } = await mountOnW1(runtime);
     act(() => void result.current.createEvent(DRAFT));
 
@@ -286,7 +335,7 @@ describe("useCalendarModule — workspace switch", () => {
   });
 
   it("an update that settles after the switch leaves the new list alone", async () => {
-    const { runtime, writes } = switchRuntime({
+    const { runtime, writes } = heldRuntime({
       w1: { events: [event("e1", "w1")] },
       w2: { events: [event("e2", "w2")] },
     });
@@ -302,7 +351,7 @@ describe("useCalendarModule — workspace switch", () => {
   });
 
   it("a delete that fails after the switch doesn't put its row back into the new list", async () => {
-    const { runtime, writes } = switchRuntime({
+    const { runtime, writes } = heldRuntime({
       w1: { events: [event("e1", "w1")] },
       w2: { events: [event("e2", "w2")] },
     });
@@ -318,7 +367,7 @@ describe("useCalendarModule — workspace switch", () => {
 
   it("Undo after the switch restores the event in w1, not into the new list", async () => {
     h.undoToast.mockClear();
-    const { runtime, writes } = switchRuntime({
+    const { runtime, writes } = heldRuntime({
       w1: { events: [event("e1", "w1")] },
       w2: { events: [event("e2", "w2")] },
     });
@@ -336,7 +385,7 @@ describe("useCalendarModule — workspace switch", () => {
   });
 
   it("a reload kept from before the switch reads the new workspace, never the old one", async () => {
-    const { runtime } = switchRuntime({
+    const { runtime } = heldRuntime({
       w1: { events: [event("e1", "w1")] },
       w2: { events: [event("e2", "w2")] },
     });
@@ -357,7 +406,7 @@ describe("useCalendarModule — workspace switch", () => {
   ] as const)(
     "clears the list and its notices when %s, and a create still saving stays out",
     async (_when, change) => {
-      const { runtime, writes } = switchRuntime({
+      const { runtime, writes } = heldRuntime({
         w1: { events: [event("e1", "w1")], degraded: true, truncated: [CAP] },
       });
       type Props = { permission: "edit" | "none"; userId: string | null };
