@@ -167,6 +167,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Data layer, Supabase, contracts → [decisions/data.md](decisions/data.md)
 
+- 2026-10-08 · Deployed Edge Functions must match `supabase/functions/`, checked by `bun run functions:reconcile`; the Stripe Sync Engine's three functions are the only allowed exceptions.
 - 2026-10-01 · Profile pictures and workspace marks live in the public `avatars` bucket.
 - 2026-08-30 · ZE-11 — hosted Edge Functions now run the Zod parsers.
 - 2026-08-17 · Zod boundary validation is `safeParse` at trust edges; closed values live in `@contracts`.
