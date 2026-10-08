@@ -3,6 +3,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { CalendarDays, Clock, CornerDownRight, Inbox, ListChecks, Repeat } from "lucide-react";
 import { useCallback } from "react";
 import { toast } from "sonner";
+import { SELECTED_OPTION } from "@/components/ui/selection";
 import { TagChipList } from "../../../components/tag-chip";
 import { Badge } from "../../../components/ui/badge";
 import { CompleteToggle } from "../../../components/ui/complete-toggle";
@@ -100,9 +101,9 @@ export function TaskCard({
         // column (the old bg-background was the inverted-elevation bug).
         "group flex items-start gap-2 rounded-md border px-2 py-1.5 text-sm transition-colors duration-(--motion-fade) ease-(--ease-out)",
         "select-none",
-        selected
-          ? "border-(--selected-border) bg-(--selected-bg)"
-          : "border-border bg-card hover:border-foreground/30",
+        // Selection = the accent tint + the 32% ring a card always carries
+        // (R5). The old bright accent border read as a white ring on mono.
+        selected ? SELECTED_OPTION : "border-border bg-card hover:border-foreground/30",
         // whole card is the drag handle (grip removed)
         canEdit && "cursor-grab active:cursor-grabbing",
         // hide the source while the DragOverlay clone follows the cursor; the
