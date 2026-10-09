@@ -586,9 +586,10 @@ export function TaskListView({
 
   const dragTask = dragId ? (taskById.get(dragId) ?? null) : null;
 
-  // What's under (x, y) in this list: a row, a group header, `undefined` for
-  // the list's own gaps (the preview, a "completed" line — the hover stays),
-  // or null outside it.
+  // What's under (x, y) in this list: a row, a group header, `undefined`
+  // inside a row's block but off its rows (the "Make subtask" preview, which
+  // takes no pointer events — the hover stays), or null anywhere else (empty
+  // space, outside the list): releasing there drops nothing.
   const targetAt = useCallback(
     (x: number, y: number): ListPointerTarget | null | undefined => {
       const container = containerRef.current;
@@ -608,8 +609,10 @@ export function TaskListView({
         if (groupEl && container.contains(groupEl)) {
           return { type: "group", groupKey: groupEl.dataset.listGroup ?? "" };
         }
+        const blockEl = el.closest("[data-list-block]");
+        if (blockEl && container.contains(blockEl)) return undefined;
       }
-      return undefined;
+      return null;
     },
     [rowIndex],
   );
@@ -783,7 +786,7 @@ export function TaskListView({
     const expanded = expandedParents.has(task.id);
     const nestHere = hover?.kind === "nest" && hover.targetId === task.id && dragTask;
     return (
-      <div key={task.id}>
+      <div key={task.id} data-list-block>
         {renderRow(task, 0, {
           expandSlot,
           expandable: children.length > 0,
