@@ -1,6 +1,6 @@
 # Manual test — Moduo landing v4/v5 rebuild (`t/mike/landing-v4`)
 
-Surface: **web**. Preview with `bun run preview:landing` → http://127.0.0.1:8765. After publishing: https://www.moduo.app.
+Surface: **web**. Preview with `bun run preview:landing` → http://127.0.0.1:8765. After publishing: https://moduo.app.
 
 ## Hero
 
@@ -61,7 +61,7 @@ Surface: **web**. Preview with `bun run preview:landing` → http://127.0.0.1:87
 
 - [ ] Nav: one "Join waitlist" button (no "Sign in") → opens a dialog with the mark, title, email field; focus lands in the field
 - [ ] Dialog closes with Esc, the × button and a click on the dimmed backdrop; clicking inside the card does not close it
-- [ ] Footer "Join the waitlist" link opens the same dialog; https://www.moduo.app/#waitlist opens it on load
+- [ ] Footer "Join the waitlist" link opens the same dialog; https://moduo.app/#waitlist opens it on load
 - [ ] Hero: email field + "Join the waitlist", note "One email when your invite is ready. No spam.", then "See how it connects ⌄"
 - [ ] Submit empty → red outline + "Enter your email to join."; type → error clears
 - [ ] Submit `anna@carter` → "That email doesn’t look right — check it and try again."

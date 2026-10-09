@@ -1,6 +1,6 @@
 /**
  * Local preview of the static landing, served the way Vercel ships it:
- *   /          → landing/index.html   (www.moduo.app, prod-landing)
+ *   /          → landing/index.html   (moduo.app, prod-landing)
  *   /staging   → landing/staging.html (staging.moduo.app, staging-landing)
  *   /manifesto → landing/manifesto.html
  *   /privacy   → landing/privacy.html
