@@ -43,7 +43,6 @@ const meta = {
     view: "list",
     onViewChange: () => {},
     groupBy: "none",
-    onGroupByChange: () => {},
     buckets: BUCKETS,
     inbox: INBOX,
     bucketNameById,
