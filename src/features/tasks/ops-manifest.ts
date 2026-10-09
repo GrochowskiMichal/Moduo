@@ -48,6 +48,39 @@ export const tasksModuleManifest: ModuleManifest = {
       args: { p_workspace_id: "workspace uuid", p_task_id: "task uuid" },
     },
     {
+      op: "tasks.bucket_delete",
+      rpc: "tasks_op_bucket_delete",
+      summary:
+        "Delete a bucket (TV-U6): its tasks move to your Inbox, or with p_with_tasks go to the trash with it in one batch (subtasks and files too). Needs Full access to the bucket. Not logged.",
+      args: {
+        p_workspace_id: "workspace uuid",
+        p_bucket_id: "bucket uuid",
+        p_with_tasks: "boolean (default false = move the tasks to Inbox)",
+      },
+    },
+    {
+      op: "tasks.trash_restore",
+      rpc: "tasks_op_trash_restore",
+      summary:
+        "Restore from Recently deleted (TV-U6), within 30 days: a bucket with its batch and the tasks its delete moved to Inbox, or one task (into your Inbox when its bucket is gone). Not logged.",
+      args: {
+        p_workspace_id: "workspace uuid",
+        p_entity_type: "'bucket' or 'task'",
+        p_entity_id: "uuid",
+      },
+    },
+    {
+      op: "tasks.trash_purge",
+      rpc: "tasks_op_trash_purge",
+      summary:
+        "Delete forever, from Recently deleted only (TV-U6): a bucket with its batch, or one task. Files go at the next daily purge. Not logged.",
+      args: {
+        p_workspace_id: "workspace uuid",
+        p_entity_type: "'bucket' or 'task'",
+        p_entity_id: "uuid",
+      },
+    },
+    {
       op: "tasks.commit",
       rpc: "tasks_op_commit",
       summary:

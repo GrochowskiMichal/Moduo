@@ -1,5 +1,9 @@
-import { Inbox, Layers, ListChecks, Plus, UserRound } from "lucide-react";
-import { type RefObject, useEffect, useRef, useState } from "react";
+import { useDndMonitor } from "@dnd-kit/core";
+import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { Inbox, Layers, ListChecks, Plus, Trash2, UserRound } from "lucide-react";
+import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
+import type { LabelColor } from "../../../components/tag-colors";
 import { Input } from "../../../components/ui/input";
 import {
   focusNavRow,
@@ -17,17 +21,39 @@ import { ShareMenu } from "../../sharing/share-menu";
 import { TIME_BLOCK_LABELS, TIME_BLOCK_SLOTS, type TimeBlockSlot } from "../default-view";
 import { bucketSections } from "../helpers";
 import type { Bucket } from "../model";
+import { BUCKET_COLOR_OPTIONS, bucketDotColor } from "../sidebar";
 import { DeleteBucketDialog } from "./delete-bucket-dialog";
 
 export type TasksMode = "plan" | "execute";
 
+/** The rail's selection for Recently deleted (TV-U6). */
+export const TRASH_SELECTION = "trash";
+
+// Bucket rows are sortable inside the page's one DndContext (DF-22). Their ids
+// carry the `rail:` prefix TV-U4's rail drop targets share, so the page's
+// collision keeps them apart from the center views' droppables.
+export const RAIL_BUCKET_PREFIX = "rail:bucket:";
+type RailBucketDrag = { type: "rail-bucket"; bucketId: string };
+const railBucketDrag = (bucketId: string): RailBucketDrag => ({ type: "rail-bucket", bucketId });
+
+/** The bucket a rail drag (or its drop target) is about, or null. */
+export function asRailBucket(data: unknown): string | null {
+  return data && typeof data === "object" && (data as { type?: unknown }).type === "rail-bucket"
+    ? (data as RailBucketDrag).bucketId
+    : null;
+}
+
 type Props = {
   mode: TasksMode;
   onModeChange: (mode: TasksMode) => void;
-  selection: string; // "all" | "today" | "mine" | "inbox" | bucketId
+  selection: string; // "all" | "today" | "mine" | "inbox" | "trash" | bucketId
   onSelect: (selection: string) => void;
   buckets: Bucket[];
   inbox: Bucket | null;
+  /** Archived buckets (TV-U6): a collapsed section at the bottom while there are any. */
+  archivedBuckets?: Bucket[];
+  /** Items in Recently deleted (TV-U6): its row shows while there are any. */
+  trashCount?: number;
   openCountByBucket: Map<string, number>;
   /** Tasks each bucket's list shows (open + done) — quoted by the delete confirm. */
   taskCountByBucket: Map<string, number>;
@@ -40,7 +66,15 @@ type Props = {
   canEdit: boolean;
   onCreateBucket: (name: string) => void;
   onRenameBucket: (id: string, name: string) => void;
-  onDeleteBucket: (id: string) => void;
+  /** Confirmed in the rail's dialog: move the tasks to Inbox, or delete them too. */
+  onDeleteBucket: (id: string, withTasks: boolean) => void;
+  onArchiveBucket?: (id: string) => void;
+  onUnarchiveBucket?: (id: string) => void;
+  onSetBucketColor?: (id: string, color: LabelColor) => void;
+  /** A bucket dragged onto another one (TV-U6); rows are sortable only with it. */
+  onMoveBucket?: (activeId: string, overId: string) => void;
+  /** A bucket's hover "+": capture a task straight into it. */
+  onCaptureInto?: (bucketId: string) => void;
   /** Open batch-triage for a bucket's drifted tasks. */
   onTriageBucket: (bucketId: string) => void;
   /** Which time-block slot (if any) each bucket is mapped to. */
@@ -52,6 +86,9 @@ type Props = {
   /** Collapsed section names (remembered per workspace by the page). */
   collapsedSections: ReadonlySet<string>;
   onToggleSection: (name: string) => void;
+  /** Whether Archived is expanded (collapsed by default; remembered by the page). */
+  archivedOpen?: boolean;
+  onToggleArchived?: () => void;
   /**
    * The rail's <nav>, for the page to hand focus back to it when a dialog the
    * rail opened (triage) closes; see `focusNavRow`.
@@ -78,6 +115,8 @@ export function BucketRail({
   onSelect,
   buckets,
   inbox,
+  archivedBuckets = [],
+  trashCount = 0,
   openCountByBucket,
   taskCountByBucket,
   driftCountByBucket,
@@ -88,12 +127,19 @@ export function BucketRail({
   onCreateBucket,
   onRenameBucket,
   onDeleteBucket,
+  onArchiveBucket,
+  onUnarchiveBucket,
+  onSetBucketColor,
+  onMoveBucket,
+  onCaptureInto,
   onTriageBucket,
   timeBlockByBucket,
   onSetTimeBlock,
   onSetBucketGroup,
   collapsedSections,
   onToggleSection,
+  archivedOpen = false,
+  onToggleArchived,
   navRef,
 }: Props) {
   const ownNavRef = useRef<HTMLElement | null>(null);
@@ -127,27 +173,54 @@ export function BucketRail({
   const { ungrouped, sections } = bucketSections(buckets);
   const groupNames = sections.map((s) => s.name);
   const inboxDrift = inbox ? (driftCountByBucket.get(inbox.id) ?? 0) : 0;
+  // Drag to reorder needs edit access; the rows stay plain otherwise.
+  const sortable = canEdit && !!onMoveBucket;
 
-  const bucketRow = (bucket: Bucket) => (
-    <BucketRow
-      key={bucket.id}
-      bucket={bucket}
-      count={openCountByBucket.get(bucket.id) ?? 0}
-      drift={driftCountByBucket.get(bucket.id) ?? 0}
-      current={selection === bucket.id}
-      canEdit={canEdit}
-      timeBlock={timeBlockByBucket.get(bucket.id) ?? null}
-      groupNames={groupNames}
-      onSelect={() => onSelect(bucket.id)}
-      onRename={(name) => onRenameBucket(bucket.id, name)}
-      onDelete={() => requestDelete(bucket)}
-      onTriage={() => onTriageBucket(bucket.id)}
-      onSetTimeBlock={(slot) => onSetTimeBlock(bucket.id, slot)}
-      onSetGroup={(group) => onSetBucketGroup(bucket.id, group)}
-      onShareCloseAutoFocus={returnFocus(bucket.id)}
-      onInputExit={() => focusRowSoon(bucket.id)}
-    />
-  );
+  const bucketRow = (bucket: Bucket) => {
+    const row = (drag?: DragSlot) => (
+      <BucketRow
+        bucket={bucket}
+        count={openCountByBucket.get(bucket.id) ?? 0}
+        drift={driftCountByBucket.get(bucket.id) ?? 0}
+        current={selection === bucket.id}
+        canEdit={canEdit}
+        timeBlock={timeBlockByBucket.get(bucket.id) ?? null}
+        groupNames={groupNames}
+        onSelect={() => onSelect(bucket.id)}
+        onRename={(name) => onRenameBucket(bucket.id, name)}
+        onDelete={() => requestDelete(bucket)}
+        onArchive={onArchiveBucket ? () => onArchiveBucket(bucket.id) : undefined}
+        onSetColor={onSetBucketColor ? (color) => onSetBucketColor(bucket.id, color) : undefined}
+        onCapture={canEdit && onCaptureInto ? () => onCaptureInto(bucket.id) : undefined}
+        onTriage={() => onTriageBucket(bucket.id)}
+        onSetTimeBlock={(slot) => onSetTimeBlock(bucket.id, slot)}
+        onSetGroup={(group) => onSetBucketGroup(bucket.id, group)}
+        onShareCloseAutoFocus={returnFocus(bucket.id)}
+        onInputExit={() => focusRowSoon(bucket.id)}
+        drag={drag}
+      />
+    );
+    return sortable ? (
+      <SortableBucket key={bucket.id} bucketId={bucket.id}>
+        {row}
+      </SortableBucket>
+    ) : (
+      <div key={bucket.id}>{row()}</div>
+    );
+  };
+  // One sortable list per section: a drop on another section's bucket moves
+  // the dragged one into that section (bucketDropPatch).
+  const sortableList = (list: Bucket[]) =>
+    sortable ? (
+      <SortableContext
+        items={list.map((b) => `${RAIL_BUCKET_PREFIX}${b.id}`)}
+        strategy={verticalListSortingStrategy}
+      >
+        {list.map(bucketRow)}
+      </SortableContext>
+    ) : (
+      list.map(bucketRow)
+    );
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
@@ -225,8 +298,10 @@ export function BucketRail({
             />
           ) : null}
 
+          {sortable && onMoveBucket ? <BucketDndMonitor onMove={onMoveBucket} /> : null}
+
           {/* Ungrouped buckets render flat, first. */}
-          {ungrouped.map(bucketRow)}
+          {sortableList(ungrouped)}
 
           {/* Collapsible sections (two levels max: section → bucket). */}
           {sections.map((section) => {
@@ -257,10 +332,50 @@ export function BucketRail({
                     ) : undefined
                   }
                 />
-                {!collapsed ? section.buckets.map(bucketRow) : null}
+                {!collapsed ? sortableList(section.buckets) : null}
               </div>
             );
           })}
+
+          {/* Archived (TV-U6): collapsed by default, only while there are any. */}
+          {archivedBuckets.length > 0 ? (
+            <div className="mt-3 flex flex-col gap-px">
+              <NavSectionHeader
+                label="Archived"
+                collapsed={!archivedOpen}
+                onToggle={onToggleArchived}
+              />
+              {archivedOpen
+                ? archivedBuckets.map((bucket) => (
+                    <ArchivedBucketRow
+                      key={bucket.id}
+                      bucket={bucket}
+                      current={selection === bucket.id}
+                      canEdit={canEdit}
+                      onSelect={() => onSelect(bucket.id)}
+                      onUnarchive={
+                        onUnarchiveBucket ? () => onUnarchiveBucket(bucket.id) : undefined
+                      }
+                      onDelete={() => requestDelete(bucket)}
+                    />
+                  ))
+                : null}
+            </div>
+          ) : null}
+
+          {/* Recently deleted (TV-U6): last and quiet, only while it holds anything. */}
+          {trashCount > 0 ? (
+            <NavRow
+              className="mt-3"
+              navId={TRASH_SELECTION}
+              label="Recently deleted"
+              icon={<Trash2 aria-hidden />}
+              count={trashCount}
+              countLabel={trashCount === 1 ? "1 item" : `${trashCount} items`}
+              current={selection === TRASH_SELECTION}
+              onSelect={() => onSelect(TRASH_SELECTION)}
+            />
+          ) : null}
         </nav>
       </div>
 
@@ -269,7 +384,7 @@ export function BucketRail({
         open={deleting?.open ?? false}
         taskCount={deleting?.taskCount ?? 0}
         openCount={deleting?.openCount ?? 0}
-        onConfirm={(bucket) => onDeleteBucket(bucket.id)}
+        onConfirm={(bucket, withTasks) => onDeleteBucket(bucket.id, withTasks)}
         onClose={() => setDeleting((prev) => (prev ? { ...prev, open: false } : prev))}
         onCloseAutoFocus={returnFocus(deleting?.bucket.id ?? null)}
       />
@@ -336,6 +451,51 @@ function DriftMark({ label, onTriage }: { label: string; onTriage?: () => void }
 
 // ── bucket row ────────────────────────────────────────────────────────────────
 
+/** What a sortable wrapper hands its row. */
+type DragSlot = { isDragging: boolean };
+
+/**
+ * A bucket row you can drag to reorder (TV-U6). The whole row is the
+ * activator (a 6 px pointer move starts the drag, so a click still selects it)
+ * and the only keyboard activator, so Space/Enter on its own buttons never
+ * lift it (the TV-Q1 rule): rows aren't focusable, so there is no keyboard lift.
+ */
+function SortableBucket({
+  bucketId,
+  children,
+}: {
+  bucketId: string;
+  children: (drag: DragSlot) => ReactNode;
+}) {
+  const { setNodeRef, setActivatorNodeRef, listeners, transform, transition, isDragging } =
+    useSortable({ id: `${RAIL_BUCKET_PREFIX}${bucketId}`, data: railBucketDrag(bucketId) });
+  return (
+    <div
+      ref={(el) => {
+        setNodeRef(el);
+        setActivatorNodeRef(el);
+      }}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={isDragging ? "relative z-10" : undefined}
+      {...listeners}
+    >
+      {children({ isDragging })}
+    </div>
+  );
+}
+
+/** Commits a bucket drop: inside the page's DndContext, it reacts only to rail buckets. */
+function BucketDndMonitor({ onMove }: { onMove: (activeId: string, overId: string) => void }) {
+  useDndMonitor({
+    onDragEnd: (event) => {
+      const active = asRailBucket(event.active.data.current);
+      const over = asRailBucket(event.over?.data.current);
+      if (active && over && active !== over) onMove(active, over);
+    },
+  });
+  return null;
+}
+
 function BucketRow({
   bucket,
   count,
@@ -347,11 +507,15 @@ function BucketRow({
   onSelect,
   onRename,
   onDelete,
+  onArchive,
+  onSetColor,
+  onCapture,
   onTriage,
   onSetTimeBlock,
   onSetGroup,
   onShareCloseAutoFocus,
   onInputExit,
+  drag,
 }: {
   bucket: Bucket;
   count: number;
@@ -363,12 +527,17 @@ function BucketRow({
   onSelect: () => void;
   onRename: (name: string) => void;
   onDelete: () => void;
+  onArchive?: () => void;
+  onSetColor?: (color: LabelColor) => void;
+  /** The hover "+": capture straight into this bucket. */
+  onCapture?: () => void;
   onTriage: () => void;
   onSetTimeBlock: (slot: TimeBlockSlot | null) => void;
   onSetGroup: (group: string | null) => void;
   onShareCloseAutoFocus: (event: Event) => void;
   /** The New section input closed by Enter/Esc: focus goes back to the row. */
   onInputExit: () => void;
+  drag?: DragSlot;
 }) {
   const [sharing, setSharing] = useState(false);
   const [addingSection, setAddingSection] = useState(false);
@@ -386,14 +555,25 @@ function BucketRow({
     );
   }
 
+  // tasks-v2 §11: Rename · Colour · Open at · Section · Share · Archive · Delete…
+  const dot = bucketDotColor(bucket);
   const menu = (m: MenuKit) => (
     <>
       <m.Item onSelect={m.rename}>Rename</m.Item>
-      {!bucket.isSystem ? (
-        <m.Item onSelect={m.afterClose(() => setSharing(true))}>Share</m.Item>
-      ) : null}
-      {drift > 0 ? (
-        <m.Item onSelect={m.afterClose(onTriage)}>Triage {drift} drifted…</m.Item>
+      {onSetColor ? (
+        <m.Sub>
+          <m.SubTrigger>Colour</m.SubTrigger>
+          <m.SubContent>
+            <m.RadioGroup value={dot} onValueChange={(v) => onSetColor(v as LabelColor)}>
+              {BUCKET_COLOR_OPTIONS.map((option) => (
+                <m.RadioItem key={option.value} value={option.value}>
+                  <NavRowDot color={option.value} />
+                  {option.label}
+                </m.RadioItem>
+              ))}
+            </m.RadioGroup>
+          </m.SubContent>
+        </m.Sub>
       ) : null}
       <m.Sub>
         <m.SubTrigger>Open at</m.SubTrigger>
@@ -433,8 +613,15 @@ function BucketRow({
         </m.SubContent>
       </m.Sub>
       {!bucket.isSystem ? (
+        <m.Item onSelect={m.afterClose(() => setSharing(true))}>Share</m.Item>
+      ) : null}
+      {drift > 0 ? (
+        <m.Item onSelect={m.afterClose(onTriage)}>Triage {drift} drifted…</m.Item>
+      ) : null}
+      {!bucket.isSystem ? (
         <>
           <m.Separator />
+          {onArchive ? <m.Item onSelect={onArchive}>Archive</m.Item> : null}
           <m.Item variant="destructive" onSelect={m.afterClose(onDelete)}>
             Delete bucket…
           </m.Item>
@@ -449,7 +636,7 @@ function BucketRow({
       <NavRow
         navId={bucket.id}
         label={bucket.name}
-        icon={<NavRowDot />}
+        icon={<NavRowDot color={dot} />}
         count={count}
         countLabel={`${count} open`}
         current={current}
@@ -461,6 +648,9 @@ function BucketRow({
         }
         onRename={canEdit ? onRename : undefined}
         menu={canEdit ? menu : undefined}
+        onAdd={onCapture}
+        addLabel={`New task in ${bucket.name}`}
+        dragging={drag?.isDragging}
       />
       {sharing && !bucket.isSystem ? (
         <BucketShare
@@ -470,6 +660,48 @@ function BucketRow({
         />
       ) : null}
     </div>
+  );
+}
+
+/**
+ * A bucket under Archived (TV-U6): opens its tasks read-only; ⋯ is Unarchive
+ * and Delete. No count: nothing in it is on anyone's list.
+ */
+function ArchivedBucketRow({
+  bucket,
+  current,
+  canEdit,
+  onSelect,
+  onUnarchive,
+  onDelete,
+}: {
+  bucket: Bucket;
+  current: boolean;
+  canEdit: boolean;
+  onSelect: () => void;
+  onUnarchive?: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <NavRow
+      navId={bucket.id}
+      label={bucket.name}
+      icon={<NavRowDot color={bucketDotColor(bucket)} />}
+      current={current}
+      onSelect={onSelect}
+      menu={
+        canEdit
+          ? (m) => (
+              <>
+                {onUnarchive ? <m.Item onSelect={onUnarchive}>Unarchive</m.Item> : null}
+                <m.Item variant="destructive" onSelect={m.afterClose(onDelete)}>
+                  Delete bucket…
+                </m.Item>
+              </>
+            )
+          : undefined
+      }
+    />
   );
 }
 

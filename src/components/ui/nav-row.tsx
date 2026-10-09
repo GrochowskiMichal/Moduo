@@ -146,11 +146,14 @@ const countClass = "font-sans text-xs tabular-nums text-muted-foreground";
 function TrailingSlot({
   count,
   swaps,
+  wide = false,
   children,
 }: {
   count: number | undefined;
   /** An action shares the slot, so the count fades out for it. */
   swaps: boolean;
+  /** Two actions share it (a row's + and ⋯): the slot reserves both. */
+  wide?: boolean;
   children?: React.ReactNode;
 }) {
   const showCount = typeof count === "number" && count > 0;
@@ -161,7 +164,7 @@ function TrailingSlot({
       className={cn(
         // Clicks fall through to the row's main button, except on the action.
         "pointer-events-none relative flex h-5 shrink-0 items-center justify-end",
-        swaps && "min-w-5",
+        swaps && (wide ? "min-w-10" : "min-w-5"),
       )}
     >
       {showCount ? (
@@ -199,6 +202,13 @@ type NavRowProps = Omit<React.ComponentProps<"div">, "children" | "onSelect"> & 
   menuLabel?: string;
   /** Enables inline rename: double-click, F2, or a `kit.rename` menu item. */
   onRename?: (name: string) => void;
+  /**
+   * A hover "+" just before ⋯ (a bucket's "capture into it"). It swaps with the
+   * count the same way, and the slot reserves room for both.
+   */
+  onAdd?: () => void;
+  /** Accessible name and tooltip of "+" (default "Add to <label>"). */
+  addLabel?: string;
   /** Indent for nested rows (the notes tree). */
   level?: 0 | 1 | 2;
   /** A drag is hovering this row and would drop here. */
@@ -222,6 +232,8 @@ function NavRow({
   menu,
   menuLabel,
   onRename,
+  onAdd,
+  addLabel,
   level = 0,
   dropTarget = false,
   dragging = false,
@@ -254,6 +266,7 @@ function NavRow({
 
   const showCount = typeof count === "number" && count > 0;
   const hasMenu = !!menu;
+  const addText = addLabel ?? `Add to ${label}`;
 
   const row = (
     <div
@@ -319,7 +332,23 @@ function NavRow({
           {indicator ? (
             <span className="relative flex shrink-0 items-center">{indicator}</span>
           ) : null}
-          <TrailingSlot count={count} swaps={hasMenu}>
+          <TrailingSlot count={count} swaps={hasMenu || !!onAdd} wide={hasMenu && !!onAdd}>
+            {onAdd ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    data-slot="nav-row-add"
+                    aria-label={addText}
+                    onClick={onAdd}
+                    className={cn(slotAction, hasMenu && "right-5")}
+                  >
+                    <Plus className="size-icon-sm" aria-hidden />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>{addText}</TooltipContent>
+              </Tooltip>
+            ) : null}
             {menu ? (
               <DropdownMenu>
                 <Tooltip>

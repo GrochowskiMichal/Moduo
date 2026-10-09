@@ -5,6 +5,8 @@
 
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import type { LabelColor } from "../../../components/tag-colors";
+import type { BucketFieldPatch } from "../../../lib/bucket-rows";
 import { TAG_LINKS_SCOPE } from "../../../lib/paged-select";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { editableTaskFields } from "../../../lib/task-rows";
@@ -34,7 +36,13 @@ import {
   subtaskProgress,
   wouldCreateCycle,
 } from "../helpers";
-import { hideBucket, unhideBucket, useHiddenBuckets } from "../hidden-buckets";
+import {
+  changesFor,
+  confirmBucket,
+  hideBucket,
+  unhideBucket,
+  useBucketChanges,
+} from "../hidden-buckets";
 import {
   type ActivityEntry,
   type Bucket,
@@ -49,6 +57,7 @@ import {
   type TaskStatus,
   type TasksCatchUpItem,
   type TasksModuleBundle,
+  type TasksTrash,
   type TaskTimeResult,
   type TimeBlockMap,
   type TimeBlockSlot,
@@ -72,6 +81,7 @@ import {
   recurrenceOnStatusChange,
   skipOccurrencePatch,
 } from "../recurrence-engine";
+import { bucketDropPatch, partitionBuckets, placeTasks, storedBucketColor } from "../sidebar";
 
 /** An adjustment `logTimeAdjustment` recorded, as its Undo needs it. */
 export type TimeAdjustment = {
@@ -84,7 +94,12 @@ type Params = {
   userId: string | null;
   workspaceId: string | null;
   modulePermission?: "none" | "view" | "edit" | "admin";
+  /** Also read Recently deleted (TV-U6): the Tasks page only. */
+  includeTrash?: boolean;
 };
+
+/** Which deleted item a Restore or Delete forever acts on (TV-U6). */
+export type TrashTarget = { kind: "bucket" | "task"; id: string };
 
 const EMPTY_BUNDLE: TasksModuleBundle = {
   buckets: [],
@@ -103,11 +118,16 @@ function byPosition<T extends { position: string }>(a: T, b: T): number {
 const isTempId = (id: string) => id.startsWith("tmp-");
 
 export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
-  const { userId, workspaceId, modulePermission = "none" } = params;
+  const { userId, workspaceId, modulePermission = "none", includeTrash = false } = params;
   const canRead = modulePermission !== "none";
   const canEdit = modulePermission === "edit" || modulePermission === "admin";
 
   const [bundle, setBundle] = useState<TasksModuleBundle>(EMPTY_BUNDLE);
+  /** When the read behind `bundle` started (`Date.now()`; 0 = none yet): which
+   *  pending bucket changes it already shows (hidden-buckets.ts). */
+  const [loadedAt, setLoadedAt] = useState(0);
+  /** Recently deleted (TV-U6), when `includeTrash`; null until read. */
+  const [trash, setTrash] = useState<TasksTrash | null>(null);
   /** Every queue row I can see here (TV-D2): my line-up and others' claims. */
   const [queueRows, setQueueRows] = useState<TaskQueueEntry[]>([]);
   /** My rows for tasks completed since the last load: the server has dropped
@@ -128,6 +148,8 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
   const load = useCallback(async () => {
     if (!runtime || !userId || !workspaceId || !canRead) {
       setBundle(EMPTY_BUNDLE);
+      setLoadedAt(0);
+      setTrash(null);
       setQueueRows([]);
       setKeptRows([]);
       setTimeBlocksState({});
@@ -141,13 +163,27 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
       // Time-blocks ride along with the bundle but never block it — a failed
       // read just means the default view skips the time-block step. The
       // queues are part of the list: a failed read fails the load.
-      const [next, queue, blocks] = await Promise.all([
+      // Recently deleted never blocks the list either: unread, the rail just
+      // leaves its row out.
+      const [next, queue, blocks, trashed] = await Promise.all([
         runtime.tasks.list(workspaceId),
         runtime.tasks.listQueue(workspaceId),
         runtime.tasks.getTimeBlocks(workspaceId).catch((): TimeBlockMap => ({})),
+        includeTrash
+          ? runtime.tasks.listTrash(workspaceId).catch((): TasksTrash | null => null)
+          : Promise.resolve(null),
       ]);
       if (reqRef.current === req) {
-        setBundle(next);
+        // Archived buckets and their tasks join the rest here; the derived
+        // lists below keep them apart (TV-U6).
+        const { archivedBuckets = [], archivedTasks = [], ...rest } = next;
+        setBundle({
+          ...rest,
+          buckets: [...next.buckets, ...archivedBuckets],
+          tasks: [...next.tasks, ...archivedTasks],
+        });
+        setLoadedAt(startedAt);
+        setTrash(trashed);
         setQueueRows(queue);
         setKeptRows([]);
         // Tags live in the workspace tag store, shared by every surface (TV-T1).
@@ -167,30 +203,56 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     } finally {
       if (reqRef.current === req) setLoading(false);
     }
-  }, [runtime, userId, workspaceId, canRead]);
+  }, [runtime, userId, workspaceId, canRead, includeTrash]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
+  /** Re-read Recently deleted alone (after a delete, Restore or Delete forever). */
+  const trashReq = useRef(0);
+  const reloadTrash = useCallback(async () => {
+    if (!includeTrash || !runtime || !workspaceId || !canRead) return;
+    const req = ++trashReq.current;
+    try {
+      const next = await runtime.tasks.listTrash(workspaceId);
+      if (trashReq.current === req) setTrash(next);
+    } catch {
+      // Keep what's on screen; the next load tries again.
+    }
+  }, [includeTrash, runtime, workspaceId, canRead]);
+
   // ── derived ────────────────────────────────────────────────────────────────
-  // Buckets deleted this session drop out here, and their tasks show in Inbox,
-  // before the server delete lands (see `deleteBucket` and hidden-buckets.ts).
-  const hiddenBuckets = useHiddenBuckets();
-  const liveBuckets = useMemo(
-    () => bundle.buckets.filter((b) => !b.deletedAt && !hiddenBuckets.has(b.id)),
-    [bundle.buckets, hiddenBuckets],
+  // Bucket changes this bundle doesn't show yet (a delete or archive made a
+  // moment ago, in this or another surface) apply on top of it, so every
+  // surface agrees at once (hidden-buckets.ts). Archived buckets and their
+  // tasks are kept apart: hidden from every list, count, search and queue,
+  // and shown only under Archived (TV-U6).
+  const bucketChanges = useBucketChanges();
+  const changes = useMemo(() => changesFor(bucketChanges, loadedAt), [bucketChanges, loadedAt]);
+  const partition = useMemo(
+    () => partitionBuckets(bundle.buckets, changes),
+    [bundle.buckets, changes],
   );
+  const liveBuckets = partition.live;
   const inbox = useMemo(() => liveBuckets.find((b) => b.isSystem) ?? null, [liveBuckets]);
-  const liveTasks = useMemo(() => {
-    const live = bundle.tasks
-      .filter((t) => !t.deletedAt)
-      .slice()
-      .sort(byPosition);
-    const inboxId = inbox?.id;
-    if (hiddenBuckets.size === 0 || !inboxId) return live;
-    return live.map((t) => (hiddenBuckets.has(t.bucketId) ? { ...t, bucketId: inboxId } : t));
-  }, [bundle.tasks, hiddenBuckets, inbox]);
+  /** Archived buckets, position-sorted (the rail's Archived section). */
+  const archivedBuckets = useMemo(
+    () => partition.archived.slice().sort(byPosition),
+    [partition.archived],
+  );
+  const placed = useMemo(
+    () =>
+      placeTasks(bundle.tasks.slice().sort(byPosition), {
+        archivedBucketIds: new Set(archivedBuckets.map((b) => b.id)),
+        changes,
+        inboxId: inbox?.id ?? null,
+      }),
+    [bundle.tasks, archivedBuckets, changes, inbox],
+  );
+  const liveTasks = placed.live;
+  /** Tasks of archived buckets: shown only when an archived bucket is opened. */
+  const archivedTasks = placed.archived;
   /** User buckets (Inbox excluded — the rail pins it), position-sorted. */
   const buckets = useMemo(
     () =>
@@ -201,25 +263,27 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     [liveBuckets],
   );
 
+  // Archived buckets count too: the delete confirm quotes them (the rail
+  // shows counts for live buckets only).
   const openTaskCountByBucket = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const t of liveTasks) {
+    for (const t of [...liveTasks, ...archivedTasks]) {
       if (t.status === "done" || t.status === "archived") continue;
       counts.set(t.bucketId, (counts.get(t.bucketId) ?? 0) + 1);
     }
     return counts;
-  }, [liveTasks]);
+  }, [liveTasks, archivedTasks]);
 
   /** Every task a bucket's own list shows (open + done, not archived) — the
    * count the delete-bucket confirm and its toast quote. */
   const taskCountByBucket = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const t of liveTasks) {
+    for (const t of [...liveTasks, ...archivedTasks]) {
       if (t.status === "archived") continue;
       counts.set(t.bucketId, (counts.get(t.bucketId) ?? 0) + 1);
     }
     return counts;
-  }, [liveTasks]);
+  }, [liveTasks, archivedTasks]);
 
   // ── subtasks (one level) ─────────────────────────────────────────────────────
   /** Live, non-archived children keyed by parent id (position order). Archived
@@ -1169,6 +1233,7 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
       if (canEdit) queueFollowStatus(id, "deleted");
       guard(async () => {
         await runtime!.tasks.deleteTask({ workspaceId: workspaceId!, taskId: id });
+        void reloadTrash();
         // Same guarantee as deleting the task from a note (DF-5): soft delete =
         // a stamp; Undo clears it and re-attaches the subtasks. Only those two
         // fields are written back, so edits made meanwhile survive (TV-D1).
@@ -1190,12 +1255,13 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
                 ),
               );
               await load();
+              await reloadTrash();
             })().catch(() => toast.error("Couldn't restore the task."));
           },
         });
       });
     },
-    [bundle.tasks, guard, runtime, workspaceId, load, canEdit, queueFollowStatus],
+    [bundle.tasks, guard, runtime, workspaceId, load, canEdit, queueFollowStatus, reloadTrash],
   );
 
   // ── subtask mutations (one level — spec §11) ─────────────────────────────────
@@ -1375,25 +1441,61 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     [runtime, workspaceId, canEdit, bundle.buckets, userId],
   );
 
+  /**
+   * Edit a bucket field by field (TV-U6): optimistic, then only the changed
+   * columns go to the server, so nothing a teammate changed meanwhile (or a
+   * delete) is put back. Writes to one bucket go out in order.
+   */
+  const bucketChains = useRef(new Map<string, Promise<unknown>>());
+  const chainBucketOp = useCallback(<T>(id: string, op: () => Promise<T>): Promise<T> => {
+    const prev = bucketChains.current.get(id) ?? Promise.resolve();
+    const next = prev.catch(() => undefined).then(op);
+    bucketChains.current.set(id, next);
+    return next;
+  }, []);
+
+  const editBucket = useCallback(
+    (id: string, patch: BucketFieldPatch) => {
+      if (!runtime || !workspaceId || !canEdit) {
+        toast.error("You don't have edit access to Tasks in this workspace.");
+        return;
+      }
+      if (isTempId(id)) {
+        toast.error("Still saving that bucket — try again in a moment.");
+        return;
+      }
+      if (!bundle.buckets.some((b) => b.id === id)) return;
+      setBundle((prev) => ({
+        ...prev,
+        buckets: prev.buckets.map((b) => (b.id === id ? { ...b, ...patch } : b)),
+      }));
+      const fields = Object.keys(patch) as Array<keyof BucketFieldPatch>;
+      void chainBucketOp(id, () => runtime.tasks.updateBucket({ workspaceId, bucketId: id, patch }))
+        .then((saved) => {
+          // Take back only what this edit wrote: a later edit may be in flight.
+          const confirmed: Partial<Bucket> = { updatedAt: saved.updatedAt };
+          for (const f of fields) (confirmed as Record<string, unknown>)[f] = saved[f];
+          setBundle((prev) => ({
+            ...prev,
+            buckets: prev.buckets.map((b) => (b.id === id ? { ...b, ...confirmed } : b)),
+          }));
+        })
+        .catch((e) => {
+          toast.error(e instanceof Error ? e.message : "Couldn't save the bucket.");
+          void load();
+        });
+    },
+    [runtime, workspaceId, canEdit, bundle.buckets, chainBucketOp, load],
+  );
+
   const renameBucket = useCallback(
     (id: string, name: string) => {
       const trimmed = name.trim();
       const existing = bundle.buckets.find((b) => b.id === id);
       if (!existing || !trimmed || trimmed === existing.name) return;
-      const updated = { ...existing, name: trimmed, updatedAt: new Date().toISOString() };
-      setBundle((prev) => ({
-        ...prev,
-        buckets: prev.buckets.map((b) => (b.id === id ? updated : b)),
-      }));
-      guard(async () => {
-        const saved = await runtime!.tasks.upsertBucket(updated);
-        setBundle((prev) => ({
-          ...prev,
-          buckets: prev.buckets.map((b) => (b.id === id ? saved : b)),
-        }));
-      });
+      editBucket(id, { name: trimmed });
     },
-    [bundle.buckets, guard, runtime],
+    [bundle.buckets, editBucket],
   );
 
   /**
@@ -1407,20 +1509,30 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
       if (!existing) return;
       const next = group?.trim() ? group.trim() : null;
       if (next === (existing.group ?? null)) return;
-      const updated = { ...existing, group: next, updatedAt: new Date().toISOString() };
-      setBundle((prev) => ({
-        ...prev,
-        buckets: prev.buckets.map((b) => (b.id === id ? updated : b)),
-      }));
-      guard(async () => {
-        const saved = await runtime!.tasks.upsertBucket(updated);
-        setBundle((prev) => ({
-          ...prev,
-          buckets: prev.buckets.map((b) => (b.id === id ? saved : b)),
-        }));
-      });
+      editBucket(id, { group: next });
     },
-    [bundle.buckets, guard, runtime],
+    [bundle.buckets, editBucket],
+  );
+
+  /** The rail dot's colour (TV-U6); neutral stores none. */
+  const setBucketColor = useCallback(
+    (id: string, color: LabelColor) => {
+      const existing = bundle.buckets.find((b) => b.id === id);
+      const next = storedBucketColor(color);
+      if (!existing || (existing.color ?? null) === next) return;
+      editBucket(id, { color: next });
+    },
+    [bundle.buckets, editBucket],
+  );
+
+  /** Drop a dragged bucket on another one (TV-U6): it takes that place, and
+   *  that bucket's section. */
+  const moveBucket = useCallback(
+    (activeId: string, overId: string) => {
+      const patch = bucketDropPatch(buckets, activeId, overId);
+      if (patch) editBucket(activeId, patch);
+    },
+    [buckets, editBucket],
   );
 
   /**
@@ -1438,15 +1550,34 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     [timeBlocks, guard, runtime, workspaceId],
   );
 
+  /** Bring an archived bucket back (TV-U6). Its tasks aren't re-queued. */
+  const unarchiveBucket = useCallback(
+    (id: string) => {
+      if (!runtime || !workspaceId || !canEdit) {
+        toast.error("You don't have edit access to Tasks in this workspace.");
+        return;
+      }
+      if (!bundle.buckets.some((b) => b.id === id)) return;
+      unhideBucket(id);
+      setBundle((prev) => ({
+        ...prev,
+        buckets: prev.buckets.map((b) => (b.id === id ? { ...b, archivedAt: null } : b)),
+      }));
+      void chainBucketOp(id, () =>
+        runtime.tasks.updateBucket({ workspaceId, bucketId: id, patch: { archivedAt: null } }),
+      ).catch((e) => {
+        toast.error(e instanceof Error ? e.message : "Couldn't unarchive the bucket.");
+        void load();
+      });
+    },
+    [runtime, workspaceId, canEdit, bundle.buckets, chainBucketOp, load],
+  );
   /**
-   * Delete a user bucket; its tasks move to Inbox. The rail confirms first
-   * (tasks-v2 Q1-4). Deferred commit, like `deleteTag`: the bucket is hidden at
-   * once (hidden-buckets.ts — every task surface agrees, and its tasks show in
-   * Inbox), the server delete waits until the Undo toast closes, and Undo
-   * un-hides it. The bundle itself is never touched, so saves made meanwhile
-   * still write the task's real bucket, and Undo has nothing to restore.
+   * Archive a bucket (TV-U6): it and its tasks leave every list, count, search
+   * and queue (the server takes them out of everyone's queue), and it shows
+   * under Archived. Undo unarchives; nothing goes back into a queue.
    */
-  const deleteBucket = useCallback(
+  const archiveBucket = useCallback(
     (id: string) => {
       if (!runtime || !workspaceId || !canEdit) {
         toast.error("You don't have edit access to Tasks in this workspace.");
@@ -1458,29 +1589,174 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
       }
       const existing = liveBuckets.find((b) => b.id === id);
       if (!existing || existing.isSystem) return;
+      const archivedAt = new Date().toISOString();
+      hideBucket(id, "archived");
+      setBundle((prev) => ({
+        ...prev,
+        buckets: prev.buckets.map((b) => (b.id === id ? { ...b, archivedAt } : b)),
+      }));
+      const taskIds = new Set(bundle.tasks.filter((t) => t.bucketId === id).map((t) => t.id));
+      setQueueRows((prev) => prev.filter((e) => !taskIds.has(e.taskId)));
+      setKeptRows((prev) => prev.filter((e) => !taskIds.has(e.taskId)));
+      void chainBucketOp(id, () =>
+        runtime.tasks.updateBucket({ workspaceId, bucketId: id, patch: { archivedAt } }),
+      )
+        .then(() => confirmBucket(id))
+        .catch((e) => {
+          unhideBucket(id);
+          toast.error(e instanceof Error ? e.message : "Couldn't archive the bucket.");
+          void load();
+        });
+      undoToast(`“${existing.name}” archived`, {
+        description: "It’s under Archived in the sidebar.",
+        onUndo: () => unarchiveBucket(id),
+      });
+    },
+    [
+      runtime,
+      workspaceId,
+      canEdit,
+      liveBuckets,
+      bundle.tasks,
+      chainBucketOp,
+      load,
+      unarchiveBucket,
+    ],
+  );
+
+  /**
+   * Bring something back from Recently deleted (TV-U6): a bucket with the
+   * tasks and files deleted with it (and the tasks its delete moved to Inbox),
+   * or one task (into Inbox when its bucket is gone). `quiet` for an Undo.
+   */
+  const restoreFromTrash = useCallback(
+    (target: TrashTarget, opts?: { quiet?: boolean; label?: string }) => {
+      if (!runtime || !workspaceId || !canEdit) {
+        toast.error("You don't have edit access to Tasks in this workspace.");
+        return Promise.resolve(false);
+      }
+      return chainBucketOp(target.id, () =>
+        runtime.tasks.restoreTrash({
+          workspaceId,
+          entityType: target.kind,
+          entityId: target.id,
+        }),
+      )
+        .then(() => {
+          if (target.kind === "bucket") unhideBucket(target.id);
+          void load();
+          if (!opts?.quiet) toast(opts?.label ? `“${opts.label}” restored` : "Restored");
+          return true;
+        })
+        .catch((e) => {
+          toast.error(e instanceof Error ? e.message : "Couldn't restore it.");
+          void reloadTrash();
+          return false;
+        });
+    },
+    [runtime, workspaceId, canEdit, chainBucketOp, load, reloadTrash],
+  );
+
+  /** Delete forever, from Recently deleted only (TV-U6). Files go at the next daily purge. */
+  const deleteForever = useCallback(
+    (target: TrashTarget) => {
+      if (!runtime || !workspaceId || !canEdit) {
+        toast.error("You don't have edit access to Tasks in this workspace.");
+        return;
+      }
+      setTrash((prev) =>
+        prev
+          ? target.kind === "bucket"
+            ? { ...prev, buckets: prev.buckets.filter((b) => b.bucket.id !== target.id) }
+            : { ...prev, tasks: prev.tasks.filter((t) => t.task.id !== target.id) }
+          : prev,
+      );
+      void chainBucketOp(target.id, () =>
+        runtime.tasks.purgeTrash({ workspaceId, entityType: target.kind, entityId: target.id }),
+      )
+        .then(() => reloadTrash())
+        .catch((e) => {
+          toast.error(e instanceof Error ? e.message : "Couldn't delete it forever.");
+          void reloadTrash();
+        });
+    },
+    [runtime, workspaceId, canEdit, chainBucketOp, reloadTrash],
+  );
+
+  /**
+   * Delete a user bucket (tasks-v2 §11, TV-U6). Its tasks move to Inbox, or
+   * with `withTasks` go to the trash with it in one batch (subtasks and files
+   * too). The rail confirms first. The server delete goes out at once; the
+   * bucket leaves every surface right away (hidden-buckets.ts), and the Undo
+   * toast restores the whole batch, as Recently deleted does for 30 days.
+   */
+  const deleteBucket = useCallback(
+    (id: string, opts?: { withTasks?: boolean }) => {
+      if (!runtime || !workspaceId || !canEdit) {
+        toast.error("You don't have edit access to Tasks in this workspace.");
+        return;
+      }
+      if (isTempId(id)) {
+        toast.error("Still saving that bucket — try again in a moment.");
+        return;
+      }
+      const existing =
+        liveBuckets.find((b) => b.id === id) ?? archivedBuckets.find((b) => b.id === id);
+      if (!existing || existing.isSystem) return;
+      const withTasks = !!opts?.withTasks;
       const count = taskCountByBucket.get(id) ?? 0;
-      hideBucket(id);
-      undoToast(`“${existing.name}” deleted`, {
-        description:
-          count === 0
-            ? undefined
+      hideBucket(id, withTasks ? "drop" : "move");
+      if (withTasks) {
+        // Deleted tasks leave every queue (the server does the same).
+        const taskIds = new Set(bundle.tasks.filter((t) => t.bucketId === id).map((t) => t.id));
+        setQueueRows((prev) => prev.filter((e) => !taskIds.has(e.taskId)));
+        setKeptRows((prev) => prev.filter((e) => !taskIds.has(e.taskId)));
+      }
+      const done = chainBucketOp(id, () =>
+        runtime.tasks.deleteBucket({ workspaceId, bucketId: id, withTasks }),
+      )
+        .then(() => {
+          confirmBucket(id);
+          void load();
+          return true;
+        })
+        .catch((e) => {
+          unhideBucket(id);
+          toast.error(e instanceof Error ? e.message : "Couldn't delete the bucket.");
+          void load();
+          return false;
+        });
+      const tasksLine =
+        count === 0
+          ? undefined
+          : withTasks
+            ? count === 1
+              ? "Its task was deleted too."
+              : `Its ${count} tasks were deleted too.`
             : count === 1
               ? "Its task moved to Inbox."
-              : `Its ${count} tasks moved to Inbox.`,
-        onUndo: () => unhideBucket(id),
-        onCommit: () => {
-          void runtime.tasks
-            .deleteBucket({ workspaceId, bucketId: id })
-            .then(() => load())
-            .catch((e) => {
-              unhideBucket(id);
-              toast.error(e instanceof Error ? e.message : "Couldn't delete the bucket.");
-              void load();
-            });
+              : `Its ${count} tasks moved to Inbox.`;
+      undoToast(`“${existing.name}” deleted`, {
+        description: tasksLine,
+        onUndo: () => {
+          void done.then((ok) => {
+            if (ok) void restoreFromTrash({ kind: "bucket", id }, { quiet: true });
+          });
         },
       });
     },
-    [runtime, workspaceId, canEdit, liveBuckets, taskCountByBucket, load],
+    [
+      runtime,
+      workspaceId,
+      canEdit,
+      liveBuckets,
+      archivedBuckets,
+      taskCountByBucket,
+      bundle.tasks,
+      chainBucketOp,
+      load,
+      restoreFromTrash,
+    ],
   );
 
   // ── tag mutations (through the shared workspace tag store, TV-T1) ────────────
@@ -1615,6 +1891,17 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     renameBucket,
     deleteBucket,
     setBucketGroup,
+    setBucketColor,
+    moveBucket,
+    /** Archived buckets (TV-U6), position-sorted, and their tasks. */
+    archivedBuckets,
+    archivedTasks,
+    archiveBucket,
+    unarchiveBucket,
+    /** Recently deleted (TV-U6), when read (`includeTrash`); null otherwise. */
+    trash,
+    restoreFromTrash,
+    deleteForever,
     toggleTaskTag,
     createTagForTask,
     setTagColor,

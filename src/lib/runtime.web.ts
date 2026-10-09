@@ -9,7 +9,6 @@
 import {
   activityRowSchema,
   attachmentRowSchema,
-  bucketRowSchema,
   calendarAccountRowSchema,
   calendarEventRowSchema,
   commentRowSchema,
@@ -72,10 +71,17 @@ import {
   type TaskQueueEntry,
   type TaskRelation,
   type TaskTimeResult,
+  TRASH_DAYS,
   type TrackTimeInput,
 } from "../features/tasks/model";
 import { toMemberPerm, toMemberRole } from "../features/workspaces/workspace-mappers";
 import { clearIgnoredAuthLink, SUPABASE_AUTH_OPTIONS } from "./auth-url";
+import {
+  bucketPatchToColumns,
+  bucketRowToModel,
+  splitArchived,
+  trashFromRows,
+} from "./bucket-rows";
 import type { EntityLink, EntityRecord } from "./entity-links";
 import {
   collectTruncations,
@@ -2095,8 +2101,11 @@ export const webRuntime: ModuoRuntime = {
         bucketsRes.error || tasksRes.error || tagsRes.error || linksRes.error || relationsRes.error;
       if (firstError) throw new Error(firstError.message);
       return {
-        buckets: mapKnownRows(bucketsRes.rows, bucketRowToModel),
-        tasks: mapKnownRows(tasksRes.rows, taskRowToModel),
+        // Archived buckets and their tasks ride apart (TV-U6).
+        ...splitArchived(
+          mapKnownRows(bucketsRes.rows, bucketRowToModel),
+          mapKnownRows(tasksRes.rows, taskRowToModel),
+        ),
         tags: mapKnownRows(tagsRes.rows, tagRowToModel),
         tagLinks: mapKnownRows(linksRes.rows, tagLinkRowToModel),
         taskRelations: mapKnownRows(relationsRes.rows, taskRelationRowToModel),
@@ -2145,26 +2154,77 @@ export const webRuntime: ModuoRuntime = {
       return bucketRowToModel(data);
     },
 
-    async deleteBucket({ workspaceId, bucketId }) {
-      const { data: bucket } = await supabaseClient
+    async updateBucket({ bucketId, patch }) {
+      const { data, error } = await supabaseClient
         .from("buckets")
-        .select("is_system")
+        .update(bucketPatchToColumns(patch, new Date().toISOString()))
         .eq("id", bucketId)
-        .maybeSingle();
-      if (!bucket) return;
-      if (bucket.is_system) throw new Error("The Inbox bucket cannot be deleted");
-      // Reassign live tasks to Inbox so none are orphaned, then soft-delete.
-      const inbox = await ensureWebInbox(workspaceId);
-      const now = new Date().toISOString();
-      await supabaseClient
-        .from("tasks")
-        .update({ bucket_id: inbox.id, updated_at: now })
-        .eq("bucket_id", bucketId)
-        .is("deleted_at", null);
-      const { error } = await supabaseClient
-        .from("buckets")
-        .update({ deleted_at: now, updated_at: now })
-        .eq("id", bucketId);
+        .select()
+        .single();
+      if (error) throw new Error(error.message);
+      return bucketRowToModel(data);
+    },
+
+    async deleteBucket({ workspaceId, bucketId, withTasks = false }) {
+      const { error } = await supabaseClient.rpc("tasks_op_bucket_delete", {
+        p_workspace_id: workspaceId,
+        p_bucket_id: bucketId,
+        p_with_tasks: withTasks,
+      });
+      if (!error) return;
+      // Until the TV-U6 migration reaches the database: the old move-to-Inbox
+      // delete, without a batch to restore.
+      if (!withTasks && isMissingFunctionError(error, "tasks_op_bucket_delete")) {
+        return legacyDeleteBucket(workspaceId, bucketId);
+      }
+      throw new Error(error.message);
+    },
+
+    async listTrash(workspaceId) {
+      const since = new Date(Date.now() - TRASH_DAYS * 86_400_000).toISOString();
+      const trashed = (table: string) => (opts?: SelectOpts) =>
+        supabaseClient
+          .from(table)
+          .select("*", opts)
+          .eq("workspace_id", workspaceId)
+          .not("deleted_at", "is", null)
+          .gte("deleted_at", since);
+      const [bucketsRes, tasksRes] = await Promise.all([
+        selectCapped<any>({
+          scope: "deleted buckets",
+          cap: READ_CAPS.buckets,
+          build: trashed("buckets"),
+          order: (q) => q.order("deleted_at", { ascending: false }).order("id"),
+        }),
+        selectCapped<any>({
+          scope: "deleted tasks",
+          cap: READ_CAPS.tasks,
+          build: trashed("tasks"),
+          order: (q) => q.order("deleted_at", { ascending: false }).order("id"),
+        }),
+      ]);
+      const firstError = bucketsRes.error || tasksRes.error;
+      if (firstError) throw new Error(firstError.message);
+      const trash = trashFromRows(bucketsRes.rows, tasksRes.rows);
+      // The Inbox is never deleted by hand; an old one left over isn't trash.
+      return { ...trash, buckets: trash.buckets.filter((b) => !b.bucket.isSystem) };
+    },
+
+    async restoreTrash({ workspaceId, entityType, entityId }) {
+      const { error } = await supabaseClient.rpc("tasks_op_trash_restore", {
+        p_workspace_id: workspaceId,
+        p_entity_type: entityType,
+        p_entity_id: entityId,
+      });
+      if (error) throw new Error(error.message);
+    },
+
+    async purgeTrash({ workspaceId, entityType, entityId }) {
+      const { error } = await supabaseClient.rpc("tasks_op_trash_purge", {
+        p_workspace_id: workspaceId,
+        p_entity_type: entityType,
+        p_entity_id: entityId,
+      });
       if (error) throw new Error(error.message);
     },
 
@@ -3419,22 +3479,6 @@ async function ensureWebInbox(workspaceId: string): Promise<Bucket> {
   return bucketRowToModel(data);
 }
 
-function bucketRowToModel(raw: unknown): Bucket {
-  const r = requireRow(bucketRowSchema, raw, "bucket");
-  return {
-    id: r.id,
-    workspaceId: r.workspace_id,
-    ownerId: r.owner_id ?? "",
-    name: r.name,
-    isSystem: !!r.is_system,
-    group: r.group_label ?? null,
-    position: r.position ?? "",
-    createdAt: r.created_at,
-    updatedAt: r.updated_at,
-    deletedAt: r.deleted_at ?? null,
-  };
-}
-
 /** A field-level task edit: only the changed columns go to the server (TV-D1). */
 async function updateTaskRow(taskId: string, patch: TaskFieldPatch): Promise<Task> {
   const { data, error } = await supabaseClient
@@ -3457,6 +3501,33 @@ async function updateTaskRowLegacyOwner(taskId: string, assigneeId: string | nul
     .single();
   if (error) throw new Error(error.message);
   return taskRowToModel(data);
+}
+
+/**
+ * The bucket delete from before TV-U6, for a database its migration hasn't
+ * reached: live tasks move to the Inbox, then the bucket is soft-deleted.
+ * Remove once the migration is everywhere.
+ */
+async function legacyDeleteBucket(workspaceId: string, bucketId: string): Promise<void> {
+  const { data: bucket } = await supabaseClient
+    .from("buckets")
+    .select("is_system")
+    .eq("id", bucketId)
+    .maybeSingle();
+  if (!bucket) return;
+  if (bucket.is_system) throw new Error("The Inbox bucket cannot be deleted");
+  const inbox = await ensureWebInbox(workspaceId);
+  const now = new Date().toISOString();
+  await supabaseClient
+    .from("tasks")
+    .update({ bucket_id: inbox.id, updated_at: now })
+    .eq("bucket_id", bucketId)
+    .is("deleted_at", null);
+  const { error } = await supabaseClient
+    .from("buckets")
+    .update({ deleted_at: now, updated_at: now })
+    .eq("id", bucketId);
+  if (error) throw new Error(error.message);
 }
 
 /**

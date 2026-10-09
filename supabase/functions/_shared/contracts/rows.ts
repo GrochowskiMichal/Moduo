@@ -63,6 +63,8 @@ export const taskRowSchema = z.object({
   created_at: z.string(),
   updated_at: z.string(),
   deleted_at: optStr,
+  /** Set while the task is in the trash as part of a batch (TV-U6). */
+  deleted_batch_id: optStr,
 });
 export type TaskRow = z.infer<typeof taskRowSchema>;
 
@@ -108,6 +110,12 @@ export const bucketRowSchema = z.object({
   created_at: z.string(),
   updated_at: z.string(),
   deleted_at: optStr,
+  /** TV-U6. Absent before its migration. A label hue name (an open string, like tags.color). */
+  color: optStr,
+  archived_at: optStr,
+  deleted_batch_id: optStr,
+  /** The tasks a "Move the tasks to Inbox" delete moved (Restore moves them back). */
+  trash_moved_task_ids: z.union([z.array(z.string()), z.null()]).optional(),
 });
 export type BucketRow = z.infer<typeof bucketRowSchema>;
 

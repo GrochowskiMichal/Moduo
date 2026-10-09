@@ -49,11 +49,13 @@ import type {
   TaskStatus,
   TasksCatchUpItem,
   TasksModuleBundle,
+  TasksTrash,
   TaskTimeResult,
   TaskTimeTotals,
   TimeBlockMap,
   TrackTimeInput,
 } from "../features/tasks/model";
+import type { BucketFieldPatch } from "./bucket-rows";
 import type { EntityLink, EntityRecord, EntityRef, LinkOrigin, RelationKind } from "./entity-links";
 import type { Truncation } from "./paged-select";
 import type { TaskFieldPatch } from "./task-rows";
@@ -844,8 +846,41 @@ export type ModuoRuntime = {
   tasks: {
     list(workspaceId: string): Promise<TasksModuleBundle>;
     seedInbox(workspaceId: string): Promise<Bucket>;
+    /** Create a bucket (whole row). Edits go through `updateBucket`. */
     upsertBucket(bucket: Bucket): Promise<Bucket>;
-    deleteBucket(input: { workspaceId: string; bucketId: string }): Promise<void>;
+    /**
+     * Edit a bucket: sends only the fields in `patch` (TV-U6) — name, section,
+     * position, colour, archived — so it never puts back a teammate's change.
+     */
+    updateBucket(input: {
+      workspaceId: string;
+      bucketId: string;
+      patch: BucketFieldPatch;
+    }): Promise<Bucket>;
+    /**
+     * Delete a bucket (`tasks_op_bucket_delete`, TV-U6): its tasks move to the
+     * caller's Inbox, or with `withTasks` go to the trash with it in one
+     * batch. Undo / Restore is `restoreTrash`.
+     */
+    deleteBucket(input: {
+      workspaceId: string;
+      bucketId: string;
+      withTasks?: boolean;
+    }): Promise<void>;
+    /** Recently deleted (TV-U6): the buckets and tasks deleted in the last 30 days. */
+    listTrash(workspaceId: string): Promise<TasksTrash>;
+    /** Bring a bucket (with its batch and moved tasks) or a task back (TV-U6). */
+    restoreTrash(input: {
+      workspaceId: string;
+      entityType: "bucket" | "task";
+      entityId: string;
+    }): Promise<void>;
+    /** Delete forever, from the trash only (TV-U6). Files go at the next daily purge. */
+    purgeTrash(input: {
+      workspaceId: string;
+      entityType: "bucket" | "task";
+      entityId: string;
+    }): Promise<void>;
     /**
      * Create a task. The server records the creator; an assignee of "" means
      * the creator. Re-saving a task that exists writes its editable fields only.

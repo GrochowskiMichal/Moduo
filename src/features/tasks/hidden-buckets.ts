@@ -1,35 +1,60 @@
-// Buckets the user deleted in this app session (tasks-v2 Q1-4).
+// Bucket changes made in this app session that a loaded bundle may not show
+// yet (tasks-v2 Q1-4, TV-U6).
 //
-// A bucket delete reaches the server only when its Undo toast closes (see
-// `deleteBucket` in use-tasks-module.ts), and every surface that loads tasks
-// runs its own `useTasksModule` (Tasks, Calendar, Notes, Email). So "this
-// bucket is gone" can't live in one hook's bundle: a reload before the server
-// delete, another pending delete committing, or a remount would bring it back.
-// It lives here instead, shared by every instance: hidden buckets drop out of
-// the bucket lists and their tasks show in Inbox until the server has moved
-// them there; Undo un-hides. A committed delete stays hidden for the session —
-// the server no longer has the bucket, so hiding it is then a no-op.
+// Every surface that loads tasks runs its own `useTasksModule` (Tasks,
+// Calendar, Notes, Email), each with a bundle loaded at its own time. A bucket
+// deleted or archived here has to leave all of them at once, and stay gone in
+// a bundle loaded before the server had the change. So the change lives here,
+// shared by every instance, and each one applies it on top of its bundle:
+//   - "move":     deleted, its tasks moved to Inbox (they show in Inbox);
+//   - "drop":     deleted with its tasks (the bucket and its tasks are gone);
+//   - "archived": archived (hidden with its tasks, listed under Archived).
+// While the server write is in flight an entry applies everywhere. Once the
+// server confirms it, an entry applies only to bundles loaded before the
+// confirmation: a bundle loaded later already says what the server says,
+// including a teammate's restore since. Undo, Restore and Unarchive clear the
+// entry (`unhideBucket`), so the bundles that still hold the bucket show it
+// again at once.
 
 import { useSyncExternalStore } from "react";
 
-let hidden: ReadonlySet<string> = new Set();
+export type BucketChange = "move" | "drop" | "archived";
+
+export type BucketChangeEntry = {
+  change: BucketChange;
+  /** When the server confirmed it (`Date.now()`), or null while in flight. */
+  confirmedAt: number | null;
+};
+
+let entries: ReadonlyMap<string, BucketChangeEntry> = new Map();
 const listeners = new Set<() => void>();
 
 function emit(): void {
   for (const listener of listeners) listener();
 }
 
-export function hideBucket(id: string): void {
-  if (hidden.has(id)) return;
-  hidden = new Set(hidden).add(id);
+/** Record a change the moment it's made (before the server has it). */
+export function hideBucket(id: string, change: BucketChange = "move"): void {
+  const prev = entries.get(id);
+  if (prev && prev.change === change && prev.confirmedAt === null) return;
+  entries = new Map(entries).set(id, { change, confirmedAt: null });
   emit();
 }
 
+/** The server has the change: bundles loaded from now on show it themselves. */
+export function confirmBucket(id: string, at: number = Date.now()): void {
+  const prev = entries.get(id);
+  if (!prev) return;
+  entries = new Map(entries).set(id, { ...prev, confirmedAt: at });
+  emit();
+}
+
+/** Undo, Restore, Unarchive, or a failed write: the bucket is back. */
 export function unhideBucket(id: string): void {
-  if (!hidden.has(id)) return;
-  const next = new Set(hidden);
+  if (!entries.has(id)) return;
+  const next = new Map(entries);
   next.delete(id);
-  hidden = next;
+  entries = next;
   emit();
 }
 
@@ -40,12 +65,28 @@ function subscribe(listener: () => void): () => void {
   };
 }
 
-// Same Set until it changes — a fresh one per read would loop useSyncExternalStore.
-function getSnapshot(): ReadonlySet<string> {
-  return hidden;
+// Same Map until it changes — a fresh one per read would loop useSyncExternalStore.
+function getSnapshot(): ReadonlyMap<string, BucketChangeEntry> {
+  return entries;
 }
 
-/** The ids of buckets deleted this session (still pending or committed). */
-export function useHiddenBuckets(): ReadonlySet<string> {
+/** Every bucket change made this session. */
+export function useBucketChanges(): ReadonlyMap<string, BucketChangeEntry> {
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+}
+
+/**
+ * The changes a bundle still needs: every one in flight, and every confirmed
+ * one the bundle's read started before (`loadedAt`, `Date.now()` at the start
+ * of the read; 0 = nothing loaded yet).
+ */
+export function changesFor(
+  all: ReadonlyMap<string, BucketChangeEntry>,
+  loadedAt: number,
+): Map<string, BucketChange> {
+  const out = new Map<string, BucketChange>();
+  for (const [id, entry] of all) {
+    if (entry.confirmedAt === null || loadedAt <= entry.confirmedAt) out.set(id, entry.change);
+  }
+  return out;
 }
