@@ -28,7 +28,7 @@
     "local:snapshot": "bash scripts/local/stack.sh snapshot",
     "local:status": "bash scripts/local/stack.sh status",
     "local:functions": "bash scripts/local/stack.sh functions",
-    "local:stripe": "docker run --rm -it -v \"$HOME/.config/stripe:/root/.config/stripe\" stripe/stripe-cli listen --forward-to http://host.docker.internal:54321/functions/v1/stripe-webhook",
+    "local:stripe": "docker run --rm -it -v \"$HOME/.config/stripe:/root/.config/stripe\" stripe/stripe-cli listen --print-json",
     "env:local": "bun scripts/local/env.ts local",
     "env:cloud": "bun scripts/local/env.ts cloud",
     "storybook": "storybook dev -p 6006",
