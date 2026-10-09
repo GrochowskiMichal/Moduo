@@ -559,6 +559,13 @@ export function ContactsPage() {
       } else {
         return;
       }
+      // The company goes first: the server refuses one you can't open, and then
+      // no works-at link is left behind.
+      await runtime!.contacts.updateContact({
+        workspaceId: ws,
+        contactId,
+        setCompany: { companyId: companyRef.id },
+      });
       await runtime!.contacts.link({
         workspaceId: ws,
         contact: { type: "contact", id: contactId },
@@ -567,11 +574,6 @@ export function ContactsPage() {
         origin: "manual",
         targetLabel: label,
         targetIcon: "building-2",
-      });
-      await runtime!.contacts.updateContact({
-        workspaceId: ws,
-        contactId,
-        setCompany: { companyId: companyRef.id },
       });
       reload();
       toast("Company set", { description: label });

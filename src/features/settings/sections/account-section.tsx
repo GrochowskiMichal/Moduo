@@ -6,14 +6,16 @@ import { Button } from "../../../components/ui/button";
 import { Eyebrow } from "../../../components/ui/eyebrow";
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
+import { stopAnalyticsForDeletedAccount } from "../../../lib/analytics";
 import { SUPABASE_URL, supabaseClient } from "../../../lib/runtime.web";
 import { useAuth } from "../../../providers/auth-provider";
 import { validateImageFile } from "../../branding/image-asset";
 import { ensureProfileAvatar } from "../../branding/profile-avatar";
 import { clearProfileAvatar, uploadProfileAvatar } from "../../branding/upload-image";
+import { forgetFocusUser } from "../../focus/engine";
 import { notifyProfileUpdated, writeStoredAvatar } from "../../profile/profile-storage";
 import { isPasswordProvider, providerLabel, validateNewPassword } from "../account";
-import { matchesDeleteConfirm } from "../delete-account";
+import { DANGER_ZONE_COPY, finishAccountDeletion, matchesDeleteConfirm } from "../delete-account";
 import { SettingsSectionShell } from "./section-shell";
 
 function maskedPhrase(phrase: string | null) {
@@ -96,9 +98,18 @@ export function AccountSection() {
       if (!res.ok || !payload?.ok) {
         throw new Error(payload?.error || "Couldn't delete your account. Try again.");
       }
-      // Deleted — the session is now invalid. Sign out locally and land on /auth.
-      await signOut();
-      await navigate({ to: "/auth" });
+      // Deleted — the session is now invalid. Land on /auth with the notice, then sign
+      // out locally (the order is explained in finishAccountDeletion). This device's
+      // focus session for the account (task titles, unsaved time) is erased too.
+      await finishAccountDeletion({
+        forgetOnDevice: () => {
+          if (!userId) return;
+          void stopAnalyticsForDeletedAccount(userId);
+          forgetFocusUser(userId);
+        },
+        goToSignInWithNotice: () => navigate({ to: "/auth", search: { deleted: 1 } }),
+        signOut,
+      });
     } catch (err) {
       setDeleteError(err instanceof Error ? err.message : "Couldn't delete your account.");
     } finally {
@@ -536,10 +547,7 @@ export function AccountSection() {
             <TriangleAlert className="size-4 text-destructive" aria-hidden />
             <h3 className="font-display text-lg text-foreground">Danger zone</h3>
           </div>
-          <p className="mt-1 max-w-prose text-sm text-muted-foreground">
-            Permanently delete your account and your personal data. This also cancels your Moduo
-            plan. This can&apos;t be undone.
-          </p>
+          <p className="mt-1 max-w-prose text-sm text-muted-foreground">{DANGER_ZONE_COPY}</p>
 
           {!deleteOpen ? (
             <Button

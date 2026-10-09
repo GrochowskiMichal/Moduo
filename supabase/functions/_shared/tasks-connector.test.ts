@@ -12,23 +12,81 @@ import {
   subtaskCounts,
   topLevelOnly,
 } from "./tasks-connector.ts";
+import { FORMER_MEMBER } from "./task-people.ts";
 
+// TV-D1: owner_id is the creator, assignee_id the assignee (null = Unassigned).
 const task = (id: string, extra: Record<string, unknown> = {}) => ({
   id,
   owner_id: "u1",
+  assignee_id: "u1",
+  creator_unknown: false,
   bucket_id: "b1",
   position: "",
   ...extra,
 });
 
+const names = new Map([
+  ["u1", "Ada"],
+  ["u2", "Bea"],
+]);
+
+const shapeData = (tasks: Record<string, any>[]) => ({
+  byId: new Map(tasks.map((t) => [t.id as string, t])),
+  blockedIds: new Set<string>(),
+  taskTags: new Map<string, string[]>(),
+  subtaskCounts: subtaskCounts(tasks),
+  names,
+});
+
 describe("tasks connector helpers", () => {
-  it("filters by assignee", () => {
-    const tasks = [task("a"), task("b", { owner_id: "u2" }), task("c", { owner_id: null })];
-    expect(filterByAssignee(tasks, "me", "u1").map((t) => t.id)).toEqual(["a"]);
-    expect(filterByAssignee(tasks, "anyone", "u1").map((t) => t.id)).toEqual(["a", "b", "c"]);
+  it("filters 'me' by the assignee, not the creator", () => {
+    const tasks = [
+      task("mine"),
+      task("made-for-bea", { assignee_id: "u2" }),
+      task("made-by-bea-for-me", { owner_id: "u2", assignee_id: "u1" }),
+      task("unassigned", { assignee_id: null }),
+    ];
+    expect(filterByAssignee(tasks, "me", "u1").map((t) => t.id)).toEqual(["mine", "made-by-bea-for-me"]);
+    expect(filterByAssignee(tasks, "me", "u2").map((t) => t.id)).toEqual(["made-for-bea"]);
+    expect(filterByAssignee(tasks, "anyone", "u1").map((t) => t.id)).toEqual([
+      "mine", "made-for-bea", "made-by-bea-for-me", "unassigned",
+    ]);
     expect(parseAssignee("me")).toBe("me");
     expect(parseAssignee("everyone")).toBe("anyone");
     expect(parseAssignee(undefined)).toBe("anyone");
+  });
+
+  it("a row from before the TV-D1 migration counts owner_id as the assignee", () => {
+    const legacy = [{ id: "old", owner_id: "u1" }, { id: "old-unowned", owner_id: null }];
+    expect(filterByAssignee(legacy, "me", "u1").map((t) => t.id)).toEqual(["old"]);
+  });
+
+  it("shapes the assignee and the creator by name", () => {
+    const now = new Date("2026-10-08T12:00:00Z");
+    const tasks = [
+      task("handed-over", { owner_id: "u1", assignee_id: "u2" }),
+      task("unassigned", { assignee_id: null }),
+      task("unknown-creator", { owner_id: "u2", assignee_id: "u2", creator_unknown: true }),
+      task("left", { owner_id: "gone", assignee_id: "gone" }),
+    ];
+    const data = shapeData(tasks);
+    const [handedOver, unassigned, unknownCreator, left] = tasks.map((t) => shapeTask(t, data, now));
+    expect(handedOver).toMatchObject({
+      assignee: { id: "u2", name: "Bea" },
+      creator: { id: "u1", name: "Ada" },
+    });
+    // The flat assignee_id is the real assignee, not the creator, and null when Unassigned.
+    expect(handedOver.assignee_id).toBe("u2");
+    expect(unassigned.assignee_id).toBeNull();
+    expect(unknownCreator.assignee_id).toBe("u2");
+    expect(unassigned.assignee).toBeNull();
+    expect(unassigned.creator).toEqual({ id: "u1", name: "Ada" });
+    expect(unknownCreator.assignee).toEqual({ id: "u2", name: "Bea" });
+    expect("creator" in unknownCreator).toBe(false);
+    expect(left).toMatchObject({
+      assignee: { id: "gone", name: FORMER_MEMBER },
+      creator: { id: "gone", name: FORMER_MEMBER },
+    });
   });
 
   it("shapes subtasks, drift, blocked, recurrence", () => {
@@ -44,12 +102,7 @@ describe("tasks connector helpers", () => {
     expect(subtaskCounts(tasks).get("orphan")).toBeUndefined();
 
     const now = new Date("2026-10-08T12:00:00Z");
-    const data = {
-      byId: new Map(tasks.map((t) => [t.id, t as Record<string, any>])),
-      blockedIds: new Set(["parent"]),
-      taskTags: new Map<string, string[]>(),
-      subtaskCounts: subtaskCounts(tasks),
-    };
+    const data = { ...shapeData(tasks), blockedIds: new Set(["parent"]) };
     const shaped = shapeTask(
       {
         ...tasks[0],
@@ -63,6 +116,8 @@ describe("tasks connector helpers", () => {
     expect(shaped).toMatchObject({
       id: "parent",
       assignee_id: "u1",
+      assignee: { id: "u1", name: "Ada" },
+      creator: { id: "u1", name: "Ada" },
       subtask_count: 2,
       drifted: true,
       blocked: true,

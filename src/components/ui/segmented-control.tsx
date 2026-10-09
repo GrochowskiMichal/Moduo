@@ -10,6 +10,8 @@ export type SegmentedItem = {
   icon?: React.ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
   /** Accessible label — required when the item is icon-only. */
   ariaLabel?: string;
+  /** Lock this one segment (e.g. a level you aren't allowed to choose). */
+  disabled?: boolean;
 };
 
 export type SegmentedControlProps = {
@@ -21,7 +23,11 @@ export type SegmentedControlProps = {
   iconOnly?: boolean;
   /** Stretch to fill the container with equal-width segments (rail toggles). */
   fullWidth?: boolean;
+  /** Lock every segment, e.g. while the chosen value is being saved. */
+  disabled?: boolean;
   "aria-label": string;
+  /** Id(s) of text that explains the choice, read out as each segment takes focus. */
+  "aria-describedby"?: string;
   className?: string;
 };
 
@@ -29,7 +35,7 @@ export type SegmentedControlProps = {
  * One segmented toggle for the whole app — replaces the hand-rolled View
  * switcher, the rail Plan/Queue toggle, and the Execute Pomodoro/Duration
  * toggle. Single-select, always one active. Active segment is a NEUTRAL raised
- * plate (bg-card) on a bg-muted track — no accent (accent budget is spent on
+ * plate (bg-control-raised) on a bg-muted track — no accent (accent budget is spent on
  * primary actions + selection, not chrome toggles). Height tracks the control
  * rung; font/icon match the Button on the same rung so they stack.
  */
@@ -40,6 +46,7 @@ function SegmentedControl({
   size = "default",
   iconOnly = false,
   fullWidth = false,
+  disabled = false,
   className,
   ...props
 }: SegmentedControlProps) {
@@ -47,6 +54,7 @@ function SegmentedControl({
   return (
     <ToggleGroupPrimitive.Root
       type="single"
+      disabled={disabled}
       value={value}
       onValueChange={(next) => {
         // Guard against deselect — a segmented control always keeps one active.
@@ -64,13 +72,19 @@ function SegmentedControl({
       )}
       style={{ height: heightVar }}
     >
-      {items.map(({ value: itemValue, label, icon: Icon, ariaLabel }) => {
+      {items.map(({ value: itemValue, label, icon: Icon, ariaLabel, disabled: itemDisabled }) => {
         const itemLabel = ariaLabel ?? label ?? itemValue;
         const item = (
           <ToggleGroupPrimitive.Item
             key={itemValue}
             value={itemValue}
+            disabled={itemDisabled}
             aria-label={itemLabel}
+            // Only when set: an explicit undefined would override the tooltip
+            // trigger's own aria-describedby on icon-only segments.
+            {...(props["aria-describedby"]
+              ? { "aria-describedby": props["aria-describedby"] }
+              : null)}
             className={cn(
               // Nested radius: outer is --radius-md, inset is 2px → inner is
               // calc(--radius-md − 2px) so the corners are concentric. (calc()
@@ -79,7 +93,14 @@ function SegmentedControl({
               "transition-[color,background-color,box-shadow] duration-(--motion-fade) ease-(--ease-out)",
               "hover:text-foreground",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-              "data-[state=on]:bg-card data-[state=on]:text-foreground data-[state=on]:shadow-sm",
+              "disabled:pointer-events-none disabled:opacity-50",
+              // Raised plate: lighter than the bg-muted track on dark, the
+              // white card + shadow on light (--control-raised, tokens.css §5b).
+              // Keyed on aria-checked, NOT data-state: an icon-only segment sits
+              // in a TooltipTrigger asChild, which overwrites the item's
+              // data-state with the tooltip's ("closed"), so a data-[state=on]
+              // style never showed on the icon-only view switcher.
+              "aria-checked:bg-control-raised aria-checked:text-foreground aria-checked:shadow-control-raised",
               fullWidth && "flex-1",
               iconOnly ? "aspect-square" : "px-2.5",
               "[&_svg]:size-icon-sm [&_svg]:shrink-0",

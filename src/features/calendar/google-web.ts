@@ -4,6 +4,7 @@
 
 import type { ModuoRuntime } from "../../lib/runtime.types";
 import { supabaseClient } from "../../lib/runtime.web";
+import { finishConnectReturn, rememberConnectStart } from "./connect-return";
 export type LinkedGoogleCalendar = {
   email: string;
   accountId: string;
@@ -71,6 +72,7 @@ export async function startWebGoogleConnect(): Promise<void> {
   // Coming back from Google should show every calendar again, including ones
   // the user had removed from this mailbox.
   sessionStorage.setItem("moduo:google-connect", "1");
+  rememberConnectStart(url);
   window.location.href = url;
 }
 
@@ -103,6 +105,8 @@ export async function ensureGoogleCalendarAccounts(opts: {
   workspaceId: string;
   accounts: { provider: string; externalId: string; deletedAt: string | null }[];
 }): Promise<boolean> {
+  // Back from Google: the new token is only saved once the connect finishes.
+  await finishConnectReturn();
   const linked = await loadLinkedGoogleCalendars();
   const live = opts.accounts.filter((account) => !account.deletedAt);
   const revive = sessionStorage.getItem("moduo:google-connect") === "1";

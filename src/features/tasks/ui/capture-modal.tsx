@@ -36,6 +36,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/
 import { Switch } from "../../../components/ui/switch";
 import { Textarea } from "../../../components/ui/textarea";
 import { cn } from "../../../lib/utils";
+import { assigneeOptions, fromAssigneeValue, toAssigneeValue } from "../assignee-options";
 import { useAssignees } from "../assignees";
 import { ENERGY_LABELS, type NewTaskFields, PRIORITY_LABELS } from "../helpers";
 import type { Bucket, EnergyLevel, PriorityLevel, RecurrenceRule } from "../model";
@@ -90,8 +91,12 @@ export function CaptureModal({
   );
   const [createMore, setCreateMore] = useState(false);
   const { assignees, currentUserId, byId } = useAssignees();
-  // Defaults to me (null only before the session resolves — the backend then assigns me).
-  const [assigneeId, setAssigneeId] = useState<string | null>(currentUserId);
+  // undefined = me (the default, which the backend fills in); null = Unassigned.
+  const [assigneeId, setAssigneeId] = useState<string | null | undefined>(undefined);
+  const shownAssigneeId = assigneeId === undefined ? currentUserId : assigneeId;
+  // The ticked option: me by default (nothing until the session resolves).
+  const pickedValue =
+    assigneeId === undefined ? (currentUserId ?? "") : toAssigneeValue(assigneeId);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const resetFields = (keepBucket: boolean) => {
@@ -106,7 +111,7 @@ export function CaptureModal({
     // Every fresh capture starts assigned to me; "Create more" keeps bucket + assignee.
     if (!keepBucket) {
       setBucketId(defaultBucketId);
-      setAssigneeId(currentUserId);
+      setAssigneeId(undefined);
     }
   };
 
@@ -152,7 +157,7 @@ export function CaptureModal({
       priority,
       energyLevel: energy,
       durationMinutes: duration,
-      ownerId: assigneeId ?? undefined,
+      assigneeId,
     });
     toast(title, {
       description: summarize(effScheduled, effDue, effRecurrence, bucketName(bucketId)),
@@ -238,21 +243,31 @@ export function CaptureModal({
 
             {/* Assignee */}
             <ListPill
-              active={!!assigneeId && assigneeId !== currentUserId}
+              active={shownAssigneeId !== currentUserId}
               icon={
-                assigneeId ? (
-                  <AssigneeAvatar assignee={byId(assigneeId)} className="size-4" />
+                shownAssigneeId ? (
+                  <AssigneeAvatar assignee={byId(shownAssigneeId)} className="size-4" />
                 ) : (
                   <User className="size-3.5" />
                 )
               }
-              label={byId(assigneeId)?.name ?? "Assignee"}
+              label={
+                assigneeId === null ? "Unassigned" : (byId(shownAssigneeId)?.name ?? "Assignee")
+              }
             >
-              {assignees.map((a) => (
-                <DropdownMenuItem key={a.userId} onSelect={() => setAssigneeId(a.userId)}>
-                  <AssigneeAvatar assignee={a} className="size-4" />
-                  <span className="truncate">{a.name}</span>
-                  {a.userId === assigneeId ? <Check className="ml-auto size-3.5" /> : null}
+              {assigneeOptions(assignees).map((o) => (
+                <DropdownMenuItem
+                  key={o.value}
+                  disabled={o.disabled}
+                  onSelect={() => setAssigneeId(fromAssigneeValue(o.value))}
+                >
+                  {o.assignee ? (
+                    <AssigneeAvatar assignee={o.assignee} className="size-4" />
+                  ) : (
+                    <User className="size-4 text-muted-foreground" aria-hidden />
+                  )}
+                  <span className="truncate">{o.label}</span>
+                  {o.value === pickedValue ? <Check className="ml-auto size-3.5" /> : null}
                 </DropdownMenuItem>
               ))}
             </ListPill>

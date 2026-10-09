@@ -3,6 +3,7 @@
  * Implementations live in runtime.tauri.ts (desktop) and runtime.web.ts (web).
  */
 
+import type { ContentAuthorKind } from "@contracts/vocabularies";
 import type {
   CalendarAccountModel,
   CalendarEventModel,
@@ -50,6 +51,7 @@ import type {
 } from "../features/tasks/model";
 import type { EntityLink, EntityRecord, EntityRef, LinkOrigin, RelationKind } from "./entity-links";
 import type { Truncation } from "./paged-select";
+import type { TaskFieldPatch } from "./task-rows";
 
 /** A comment on any registered entity (spine block CT-5). */
 export type SpineComment = {
@@ -58,7 +60,12 @@ export type SpineComment = {
   entityType: string;
   entityId: string;
   body: string;
+  /** Who it belongs to. For an app's comment, the person whose API key wrote it. */
   createdBy: string | null;
+  /** "api_key" = written by an app over MCP: show `authorLabel`, never the person. */
+  authorKind: ContentAuthorKind;
+  /** The key's name when the comment was written (api_key authors only). */
+  authorLabel: string | null;
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
@@ -112,8 +119,9 @@ export type IntegrationStatusItem = {
  * A workspace-scoped API key for the Moduo MCP connector
  * (docs/moduo-mcp-connector.md). The secret is returned exactly once from
  * `createApiKey` and never readable again — only the prefix is stored in
- * clear. `scopes` maps module → "none" | "view" | "edit" (view by default;
- * admin is never key-grantable).
+ * clear. `scopes` maps module → "none" | "view" | "edit" (admin is never
+ * key-grantable). The key acts as `createdBy` and never gets more than that
+ * person can do (PERM-0).
  */
 export type WorkspaceApiKey = {
   id: string;
@@ -121,6 +129,8 @@ export type WorkspaceApiKey = {
   name: string;
   keyPrefix: string;
   scopes: Record<string, string>;
+  /** The person the key acts as. Null for keys from before creators were recorded (they can't connect). */
+  createdBy: string | null;
   createdAt: string;
   lastUsedAt: string | null;
 };
@@ -297,7 +307,7 @@ export type ModuoRuntime = {
     listNotifications(): Promise<any[]>;
     markNotificationRead(notificationId: string): Promise<void>;
     markAllNotificationsRead(): Promise<void>;
-    /** Live (unrevoked) MCP connector keys. Owner/admin only (RLS-enforced). */
+    /** Live (unrevoked) MCP connector keys. Needs ws.api_keys (RLS-enforced). */
     listApiKeys(workspaceId: string): Promise<WorkspaceApiKey[]>;
     /** Create a key; the returned `secret` is shown once and never again. */
     createApiKey(input: {
@@ -305,6 +315,12 @@ export type ModuoRuntime = {
       name: string;
       scopes: Record<string, string>;
     }): Promise<WorkspaceApiKey & { secret: string }>;
+    /**
+     * Change a live key's per-module scopes without rotating its secret;
+     * resolves to the key's scopes after the change. Merges: modules missing
+     * from `scopes` keep their level. Only the key's creator can raise a level.
+     */
+    setApiKeyScopes(keyId: string, scopes: Record<string, string>): Promise<Record<string, string>>;
     revokeApiKey(keyId: string): Promise<void>;
     /** The Moduo MCP connector URL agents connect to (same on web + desktop). */
     getMcpEndpoint(): string;
@@ -786,7 +802,20 @@ export type ModuoRuntime = {
     seedInbox(workspaceId: string): Promise<Bucket>;
     upsertBucket(bucket: Bucket): Promise<Bucket>;
     deleteBucket(input: { workspaceId: string; bucketId: string }): Promise<void>;
+    /**
+     * Create a task. The server records the creator; an assignee of "" means
+     * the creator. Re-saving a task that exists writes its editable fields only.
+     */
     upsertTask(task: Task): Promise<Task>;
+    /**
+     * Edit a task: sends only the fields in `patch` (TV-D1), so a save can't put
+     * back what a teammate changed meanwhile in another field.
+     */
+    updateTask(input: {
+      workspaceId: string;
+      taskId: string;
+      patch: TaskFieldPatch;
+    }): Promise<Task>;
     deleteTask(input: { workspaceId: string; taskId: string }): Promise<Task>;
     upsertTag(tag: Tag): Promise<Tag>;
     deleteTag(input: { workspaceId: string; tagId: string }): Promise<void>;
@@ -841,6 +870,16 @@ export type ModuoRuntime = {
     opCommit(input: { workspaceId: string; taskId: string; forDate: string }): Promise<Task>;
     opUncommit(input: { workspaceId: string; taskId: string }): Promise<Task>;
     opSkipToday(input: { workspaceId: string; taskId: string }): Promise<Task>;
+    /**
+     * Assign (or, with null, unassign) through `tasks_op_assign`: the person
+     * has to be a member who can work on tasks. Assigning someone else
+     * notifies them once.
+     */
+    opAssign(input: {
+      workspaceId: string;
+      taskId: string;
+      assigneeId: string | null;
+    }): Promise<Task>;
     opSetStatus(input: {
       workspaceId: string;
       taskId: string;

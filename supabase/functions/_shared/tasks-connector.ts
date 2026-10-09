@@ -1,8 +1,10 @@
 /**
  * Pure list helpers for the Tasks connector (moduo-mcp/modules/tasks.ts).
  * No Deno or Supabase imports, so the app's test runner covers them
- * (specs/moduo-for-claude-code.md, MCC-1).
+ * (MCC-1; tool catalog in docs/moduo-mcp-connector.md).
  */
+
+import { assigneeIdOf, taskPeople } from "./task-people.ts";
 
 type Row = Record<string, any>;
 
@@ -13,9 +15,12 @@ export function parseAssignee(value: unknown): Assignee {
   return value === "me" ? "me" : "anyone";
 }
 
-/** "Mine" = `owner_id` is the key's creator (there is no assignee column yet). */
+/**
+ * "Mine" = assigned to the key's creator (`assignee_id`, TV-D1). `owner_id` is
+ * the creator, not the assignee, and Unassigned tasks are nobody's.
+ */
 export function filterByAssignee<T extends Row>(tasks: T[], assignee: Assignee, userId: string): T[] {
-  return assignee === "me" ? tasks.filter((t) => t.owner_id === userId) : tasks;
+  return assignee === "me" ? tasks.filter((t) => assigneeIdOf(t) === userId) : tasks;
 }
 
 /** A task is top-level when its parent is not in `inScope` (a subtask whose parent is filtered out stays visible, as in the app). */
@@ -132,6 +137,8 @@ export type ShapeData = {
   blockedIds: Set<string>;
   taskTags: Map<string, string[]>;
   subtaskCounts: Map<string, number>;
+  /** Member names by user id; anyone missing reads "Former member". */
+  names: ReadonlyMap<string, string>;
 };
 
 export function isDrifted(t: Row, now: Date): boolean {
@@ -148,8 +155,11 @@ export function shapeTask(t: Row, data: ShapeData, now: Date, full = false): Row
     status: t.status,
     drifted: isDrifted(t, now),
     blocked: data.blockedIds.has(t.id),
+    // MCC-1's flat field, now the real assignee (TV-D1): null = Unassigned, never the creator.
+    assignee_id: assigneeIdOf(t),
+    // TV-D1: who it's assigned to (null = Unassigned) and, when known, who made it.
+    ...taskPeople(t, data.names),
   };
-  if (t.owner_id) out.assignee_id = t.owner_id;
   const subtasks = data.subtaskCounts.get(t.id);
   if (subtasks) out.subtask_count = subtasks;
   const description = (t.description ?? "").trim();

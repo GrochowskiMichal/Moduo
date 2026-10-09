@@ -9,6 +9,7 @@ import { Constants } from "@/types/supabase";
 import { TOOL_ARG_SCHEMAS } from "./mcp-tool-args.ts";
 import {
   CALENDAR_ACCOUNT_STATUSES,
+  CONTENT_AUTHOR_KINDS,
   CALENDAR_PROVIDERS,
   EMAIL_ACCOUNT_STATUSES,
   EMAIL_PROVIDERS,
@@ -54,6 +55,18 @@ describe("cross-runtime drift guards", () => {
     expect(latest).toContain(`source IN (${inList(WAITLIST_SOURCES)})`);
     expect(latest).toContain(`p_source NOT IN (${inList(WAITLIST_SOURCES)})`);
     expect(base).toContain(`status IN (${inList(WAITLIST_STATUSES)})`);
+  });
+
+  it("content author kinds match the chat_messages and comments CHECKs", () => {
+    const read = (file: string) => readFileSync(resolve(MIGRATIONS_DIR, file), "utf8");
+    const list = (values: readonly string[], sep: string) =>
+      values.map((v) => `'${v}'`).join(sep);
+    expect(read("20261006160000_chat_agent_access.sql")).toContain(
+      `author_kind in (${list(CONTENT_AUTHOR_KINDS, ", ")})`,
+    );
+    expect(read("20261008123000_key_writes_act_as_creator.sql")).toContain(
+      `author_kind IN (${list(CONTENT_AUTHOR_KINDS, ",")})`,
+    );
   });
 
   it("task statuses stay the closed set used by MCP parsers", () => {

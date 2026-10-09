@@ -63,7 +63,21 @@ export type Bucket = {
 export type Task = {
   id: string;
   workspaceId: string;
-  ownerId: string;
+  /**
+   * Who created the task (`owner_id`). The server sets it on insert and it
+   * never changes. Empty on a task that isn't saved yet.
+   */
+  creatorId: string;
+  /**
+   * The creator was overwritten by a reassignment before TV-D1 and couldn't
+   * be recovered, so the app doesn't claim one ("Created by" stays hidden).
+   */
+  creatorUnknown: boolean;
+  /**
+   * Who the task is assigned to; null = Unassigned. On a task that isn't
+   * created yet, "" means "the creator" (the runtime fills it in).
+   */
+  assigneeId: string | null;
   /** Required: the bucket this task belongs to (Inbox as fallback). */
   bucketId: string;
   /**
@@ -232,4 +246,18 @@ export function isDrifted(
   if (task.status === "done" || task.status === "archived") return false;
   if (!task.scheduledAt) return false;
   return new Date(task.scheduledAt).getTime() < now.getTime();
+}
+
+/**
+ * Who a task's attention goes to: its assignee, else its creator when the
+ * creator is known. Mirrors the SQL that targets unblocked notifications
+ * (tasks_notify_spine); the bell's overdue list uses it. Comments notify the
+ * assignee and the creator both (comments_op_add).
+ */
+export function taskAttentionUserId(
+  task: Pick<Task, "assigneeId" | "creatorId" | "creatorUnknown">,
+): string | null {
+  if (task.assigneeId) return task.assigneeId;
+  if (task.creatorUnknown || !task.creatorId) return null;
+  return task.creatorId;
 }

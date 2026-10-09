@@ -32,6 +32,8 @@ type Props = {
   onArchive: (id: string) => void;
   /** Ignore = clear the past scheduled time; the task stays, the drift clears. */
   onIgnore: (id: string) => void;
+  /** Where focus goes on close: the dialog has no trigger to return to. */
+  onCloseAutoFocus?: (event: Event) => void;
 };
 
 /**
@@ -48,6 +50,7 @@ export function DriftTriageDialog({
   onReschedule,
   onArchive,
   onIgnore,
+  onCloseAutoFocus,
 }: Props) {
   const count = tasks.length;
   const applyAll = (fn: (id: string) => void) => {
@@ -56,7 +59,7 @@ export function DriftTriageDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md" onCloseAutoFocus={onCloseAutoFocus}>
         <DialogHeader>
           <DialogTitle>
             {bucketName} · {count} drifted

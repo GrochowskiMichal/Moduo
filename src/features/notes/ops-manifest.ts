@@ -88,6 +88,7 @@ export const notesModuleManifest: ModuleManifest = {
     {
       op: "notes.link",
       rpc: "links_op_create",
+      alsoNeeds: ["links"],
       summary:
         "Link a note to another entity with a typed relation (idempotent; rides the spine). Notes use `references` for a manual connection.",
       args: {

@@ -75,9 +75,30 @@ describe("MCP tool args", () => {
     expect(parseToolArgs("tasks_get", {}).success).toBe(false);
   });
 
+  it("lets contacts_link start only at a contact or a company", () => {
+    const link = { contact_id: "c1", target_type: "note", target_id: "n1" };
+    expect(parseToolArgs("contacts_link", { ...link, contact_type: "company" }).success).toBe(true);
+    expect(parseToolArgs("contacts_link", { ...link, contact_type: "task" }).success).toBe(false);
+    const listed = listingJsonSchema("contacts_link");
+    const type = (listed.properties as Record<string, { enum?: string[] }>).contact_type;
+    expect(type?.enum).toEqual(["contact", "company"]);
+  });
+
   it("rejects a non-canonical date on tasks_today", () => {
     const parsed = parseToolArgs("tasks_today", { date: "17/08/2026" });
     expect(parsed.success).toBe(false);
+  });
+
+  it("tasks_assign takes a member id, \"me\" or null (unassign), and needs it said (TV-D1)", () => {
+    expect(parseToolArgs("tasks_assign", { task_id: "t1", assignee_id: "u2" }).success).toBe(true);
+    expect(parseToolArgs("tasks_assign", { task_id: "t1", assignee_id: "me" }).success).toBe(true);
+    const unassign = parseToolArgs("tasks_assign", { task_id: "t1", assignee_id: null });
+    expect(unassign.success).toBe(true);
+    if (unassign.success) expect(unassign.data.assignee_id).toBeNull();
+    // Leaving it out must not read as "unassign".
+    expect(parseToolArgs("tasks_assign", { task_id: "t1" }).success).toBe(false);
+    expect(parseToolArgs("tasks_assign", { task_id: "t1", assignee_id: "" }).success).toBe(false);
+    expect(parseToolArgs("tasks_list_assignees", {}).success).toBe(true);
   });
 
   it("rejects an unknown tool instead of forwarding raw args", () => {

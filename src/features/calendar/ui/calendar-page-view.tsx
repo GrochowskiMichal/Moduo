@@ -43,6 +43,7 @@ import { CaptureModal } from "../../tasks/ui/capture-modal";
 import { TaskDetailPanel } from "../../tasks/ui/task-detail-panel";
 import { accountSourceLabel, resolveAccountHues, syncAgeLabel, visibleEvents } from "../accounts";
 import { cleanupCredentialsForRemoval } from "../caldav-connect";
+import { CONNECT_FINISHED_EVENT, connectDoneMessage, takeConnectNotice } from "../connect-return";
 import { isElapsedBlock } from "../elapsed";
 import type { CalendarAccountModel } from "../events";
 import { type EventChip, eventChipsInRange } from "../events";
@@ -180,6 +181,32 @@ export function CalendarPageView({
     onSynced: () => void calendar.reload(),
   });
 
+  // Back from connecting Google or Zoom: say when it didn't take, and ask first
+  // when this tab didn't start it (see connect-return.ts).
+  const [connectTick, setConnectTick] = useState(0);
+  useEffect(() => {
+    const onConnected = () => setConnectTick((tick) => tick + 1);
+    window.addEventListener(CONNECT_FINISHED_EVENT, onConnected);
+    void takeConnectNotice().then((outcome) => {
+      if (outcome?.status === "failed") toast.error(outcome.message);
+      if (outcome?.status !== "confirm") return;
+      toast(outcome.title, {
+        description: "Only if you started connecting it, here or in the Moduo app.",
+        duration: Number.POSITIVE_INFINITY,
+        action: {
+          label: "Connect",
+          onClick: () =>
+            void outcome.confirm().then((done) => {
+              if (done.status === "failed") toast.error(done.message);
+              else toast(connectDoneMessage(done.provider));
+            }),
+        },
+        cancel: { label: "Not now", onClick: () => {} },
+      });
+    });
+    return () => window.removeEventListener(CONNECT_FINISHED_EVENT, onConnected);
+  }, []);
+
   const accountKey = calendar.accounts
     .map((account) => `${account.externalId}:${account.deletedAt ?? ""}`)
     .join("|");
@@ -190,6 +217,7 @@ export function CalendarPageView({
   useEffect(() => {
     if (!runtime || !workspaceId || calendar.loading) return;
     void accountKey;
+    void connectTick;
     let cancelled = false;
     void (async () => {
       try {
@@ -206,7 +234,7 @@ export function CalendarPageView({
     return () => {
       cancelled = true;
     };
-  }, [runtime, workspaceId, calendar.loading, calendar.reload, accountKey]);
+  }, [runtime, workspaceId, calendar.loading, calendar.reload, accountKey, connectTick]);
 
   const setAccountColor = useCallback(
     (accountId: string, hue: string) => {
