@@ -7,6 +7,7 @@
 // collapses. Display → "Show on rows" turns a property column off (energy is
 // off by default; it always shows in the detail panel).
 
+import { dayOffset, formatShortDate, startOfDay } from "./day-buckets";
 import { formatTimestamp, isOpen } from "./helpers";
 import { isDrifted, type Task } from "./model";
 
@@ -81,37 +82,13 @@ export type RowDate = {
 };
 
 const TIME_FMT = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
-const WEEKDAY_FMT = new Intl.DateTimeFormat(undefined, { weekday: "short" });
-const DAY_FMT = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
 const DAY_YEAR_FMT = new Intl.DateTimeFormat(undefined, {
   month: "short",
   day: "numeric",
   year: "numeric",
 });
 
-function startOfDay(d: Date): number {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-}
-
-function dayOffset(d: Date, now: Date): number {
-  return Math.round((startOfDay(d) - startOfDay(now)) / 86_400_000);
-}
-
-/**
- * A date as short as the column allows: Today / Tomorrow / Yesterday, the
- * weekday for the rest of the coming week, else the month and day (with the
- * year when it isn't this year's).
- */
-export function formatShortDate(iso: string, now: Date = new Date()): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  const offset = dayOffset(d, now);
-  if (offset === 0) return "Today";
-  if (offset === 1) return "Tomorrow";
-  if (offset === -1) return "Yesterday";
-  if (offset > 1 && offset < 7) return WEEKDAY_FMT.format(d);
-  return d.getFullYear() === now.getFullYear() ? DAY_FMT.format(d) : DAY_YEAR_FMT.format(d);
-}
+export { formatShortDate };
 
 /**
  * The date a row's column shows: the scheduled time or the due date, whichever

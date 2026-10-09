@@ -104,7 +104,6 @@ function renderList({ canEdit = true }: { canEdit?: boolean } = {}) {
           view="list"
           onViewChange={() => {}}
           groupBy="none"
-          onGroupByChange={() => {}}
           buckets={[]}
           inbox={inbox}
           bucketNameById={() => "Work"}

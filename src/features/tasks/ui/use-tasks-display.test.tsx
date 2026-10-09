@@ -1,6 +1,7 @@
-// TV-U1 · U1-3 — the Tasks page's Display wiring: Completed is remembered per
-// workspace and scope, a task checked off in this scope stays (and is never
-// "hidden" for the selection backstop), and the Queue ignores Completed.
+// TV-U1 · U1-3, TV-U2 · U2-2/U2-3 — the Tasks page's Display wiring: Display
+// and filters are remembered per workspace and scope, a task checked off in
+// this scope stays (and is never "hidden" for the selection backstop), the
+// Queue ignores Completed, and a Status filter asking for Done shows them.
 
 import { afterEach, beforeEach, describe, expect, it } from "@rstest/core";
 import { act, cleanup, renderHook } from "@testing-library/react";
@@ -92,5 +93,55 @@ describe("useTasksDisplay", () => {
     const done = task("done", { status: "done" });
     const { result } = renderHook(() => useTasksDisplay("w1", "today", [done]));
     expect(result.current.isHidden(done)).toBe(false);
+  });
+
+  it("remembers filters per scope, and a Display edit keeps them", () => {
+    const { result, rerender } = renderHook(({ scope }) => useTasksDisplay("w1", scope, []), {
+      initialProps: { scope: "b1" },
+    });
+    const high = { dimension: "priority", operator: "is" as const, values: ["high"] };
+    act(() => result.current.setFilters([high]));
+    act(() => result.current.setDisplay({ ...result.current.display, group: "energy" }));
+    expect(result.current.filters).toEqual([high]);
+    expect(result.current.display.group).toBe("energy");
+    const stored = JSON.parse(window.localStorage.getItem("moduo:tasks:view:w1:b1") ?? "{}");
+    expect(stored.filters).toEqual([high]);
+
+    rerender({ scope: "b2" });
+    expect(result.current.filters).toEqual([]);
+    expect(result.current.display.group).toBe("none");
+    rerender({ scope: "b1" });
+    expect(result.current.filters).toEqual([high]);
+  });
+
+  it("a Status filter asking for Done shows done tasks whatever Completed says", () => {
+    const done = task("done", { status: "done" });
+    const { result } = renderHook(() => useTasksDisplay("w1", "b1", [done]));
+    expect(result.current.isHidden(done)).toBe(true);
+    act(() =>
+      result.current.setFilters([{ dimension: "status", operator: "is", values: ["done"] }]),
+    );
+    expect(result.current.viewProps.completed).toBe("all");
+    expect(result.current.isHidden(done)).toBe(false);
+    // Display itself still says Hidden, for when the filter goes.
+    expect(result.current.display.completed).toBe("hidden");
+  });
+
+  it("layout is per scope; a new scope starts with the old workspace-wide view", () => {
+    const { result, rerender } = renderHook(
+      ({ scope }) => useTasksDisplay("w1", scope, [], null, "board"),
+      { initialProps: { scope: "b1" } },
+    );
+    expect(result.current.display.layout).toBe("board");
+    act(() => result.current.setDisplay({ ...result.current.display, layout: "timeline" }));
+    rerender({ scope: "b2" });
+    expect(result.current.display.layout).toBe("board");
+    rerender({ scope: "b1" });
+    expect(result.current.display.layout).toBe("timeline");
+  });
+
+  it("All and My tasks group by bucket until told otherwise", () => {
+    const { result } = renderHook(() => useTasksDisplay("w1", "all", []));
+    expect(result.current.display.group).toBe("bucket");
   });
 });

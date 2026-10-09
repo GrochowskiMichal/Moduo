@@ -40,7 +40,6 @@ const meta = {
     view: "board",
     onViewChange: () => {},
     boardGroupBy: "status",
-    onBoardGroupByChange: () => {},
     buckets: BUCKETS,
     inbox: INBOX,
     bucketNameById,
