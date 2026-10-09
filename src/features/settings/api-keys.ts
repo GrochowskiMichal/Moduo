@@ -216,3 +216,80 @@ export function ceilingHint(input: {
     ? `You don't have access to ${label} yourself.`
     : `You can only view ${label} yourself.`;
 }
+
+// ── Expiry and staleness (API-KEY-EXP-1) ─────────────────────────────────────
+
+/** How long a new key lasts. 90 days is where the picker starts; the server takes 1–730. */
+export const KEY_EXPIRY_OPTIONS = [
+  { value: "never", label: "Never", days: null },
+  { value: "30", label: "30 days", days: 30 },
+  { value: "90", label: "90 days", days: 90 },
+  { value: "365", label: "1 year", days: 365 },
+] as const;
+
+export type KeyExpiryChoice = (typeof KEY_EXPIRY_OPTIONS)[number]["value"];
+
+export const DEFAULT_KEY_EXPIRY: KeyExpiryChoice = "90";
+
+/** The picker's choice as the number of days the server takes (null = never). */
+export function expiryDays(choice: string): number | null {
+  return KEY_EXPIRY_OPTIONS.find((option) => option.value === choice)?.days ?? null;
+}
+
+const DAY_MS = 86_400_000;
+/** A key unused this long (or never used this long after creation) is worth a look. */
+export const STALE_KEY_DAYS = 60;
+/** From here on, an expiring key says how long it has left. */
+const EXPIRING_SOON_DAYS = 7;
+
+export type KeyLifecycle = {
+  /** `expired` keys don't connect any more; they stay listed until revoked. */
+  status: "expired" | "expiring" | "active";
+  /** "Expired 3 Oct 2026", "Expires in 4 days", "Expires 12 Jan 2027"; null = never expires. */
+  expiryLine: string | null;
+  /** A nudge to revoke a key nobody uses; null when it's in use, expired, or new. */
+  staleNote: string | null;
+};
+
+function shortDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+export function keyLifecycle(
+  key: { createdAt: string; lastUsedAt: string | null; expiresAt: string | null },
+  now: number = Date.now(),
+): KeyLifecycle {
+  const expiresMs = key.expiresAt ? Date.parse(key.expiresAt) : null;
+  // An unreadable expiry is refused by the connector, so it reads as expired here too.
+  if (key.expiresAt && (expiresMs === null || Number.isNaN(expiresMs) || expiresMs <= now)) {
+    return {
+      status: "expired",
+      expiryLine: Number.isNaN(expiresMs ?? 0) ? "Expired" : `Expired ${shortDate(key.expiresAt)}`,
+      staleNote: null,
+    };
+  }
+  let status: KeyLifecycle["status"] = "active";
+  let expiryLine: string | null = null;
+  if (key.expiresAt && expiresMs !== null) {
+    const daysLeft = Math.ceil((expiresMs - now) / DAY_MS);
+    if (daysLeft <= EXPIRING_SOON_DAYS) {
+      status = "expiring";
+      expiryLine = daysLeft <= 1 ? "Expires tomorrow" : `Expires in ${daysLeft} days`;
+    } else {
+      expiryLine = `Expires ${shortDate(key.expiresAt)}`;
+    }
+  }
+  const since = key.lastUsedAt ?? key.createdAt;
+  const idleDays = Math.floor((now - Date.parse(since)) / DAY_MS);
+  const staleNote =
+    idleDays >= STALE_KEY_DAYS
+      ? key.lastUsedAt
+        ? `Unused for ${idleDays} days. Revoke it if you no longer need it.`
+        : `Never used in ${idleDays} days. Revoke it if you no longer need it.`
+      : null;
+  return { status, expiryLine, staleNote };
+}

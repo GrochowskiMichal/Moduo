@@ -67,6 +67,7 @@ function storedKey(
     createdBy: "u-me",
     createdAt: "2026-10-01T00:00:00Z",
     lastUsedAt: null,
+    expiresAt: null,
     ...overrides,
   };
 }
@@ -146,6 +147,7 @@ describe("creating a key", () => {
       workspaceId: "w1",
       name: "Claude",
       scopes: { ...NONE, notes: "edit", email: "view", chat: "view" },
+      expiresInDays: 90,
     });
     // Announced as ready (by an always-mounted region) — never the secret itself.
     await waitFor(() =>
@@ -174,6 +176,31 @@ describe("creating a key", () => {
       ...NONE,
       tasks: "view",
     });
+  });
+
+  it("lets the key last 30 days, a year, or never, and goes back to 90 days for the next key", async () => {
+    mocks.workspace.listApiKeys.mockResolvedValue([]);
+    mocks.workspace.createApiKey.mockResolvedValue({
+      ...storedKey({ tasks: "view" }),
+      secret: "s",
+    });
+    const { user } = renderSection();
+    await screen.findByText("No keys yet.");
+    const expiry = () => within(screen.getByRole("radiogroup", { name: "Expires after" }));
+    expect(isChecked(expiry().getByRole("radio", { name: "90 days" }))).toBe(true);
+
+    await user.click(expiry().getByRole("radio", { name: "Never" }));
+    await user.type(screen.getByLabelText("Name"), "Forever{Enter}");
+    await waitFor(() => expect(mocks.workspace.createApiKey).toHaveBeenCalledTimes(1));
+    expect(mocks.workspace.createApiKey.mock.calls[0][0].expiresInDays).toBeNull();
+    await waitFor(() =>
+      expect(isChecked(expiry().getByRole("radio", { name: "90 days" }))).toBe(true),
+    );
+
+    await user.click(expiry().getByRole("radio", { name: "1 year" }));
+    await user.type(screen.getByLabelText("Name"), "Yearly{Enter}");
+    await waitFor(() => expect(mocks.workspace.createApiKey).toHaveBeenCalledTimes(2));
+    expect(mocks.workspace.createApiKey.mock.calls[1][0].expiresInDays).toBe(365);
   });
 
   it("says when a grant lists tools that need another module, and stops once they won't", async () => {
@@ -502,5 +529,50 @@ describe("without the API keys permission", () => {
     expect(screen.getByText(/Your role doesn.t include API keys in this workspace/)).toBeTruthy();
     expect(screen.queryByLabelText("Name")).toBeNull();
     expect(mocks.workspace.listApiKeys).not.toHaveBeenCalled();
+  });
+});
+
+describe("key expiry and staleness on a row", () => {
+  const ago = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString();
+  const ahead = (days: number) => new Date(Date.now() + days * 86_400_000).toISOString();
+
+  it("shows an expired key as expired, takes its Edit access button away and still lets it be revoked", async () => {
+    mocks.workspace.listApiKeys.mockResolvedValue([
+      storedKey({ tasks: "view" }, { expiresAt: ago(2), lastUsedAt: ago(3) }),
+    ]);
+    renderSection();
+    const row = await waitFor(() => keyRow("Claude"));
+    expect(within(row).getByText(/^Expired \d/).textContent).toContain("It no longer connects");
+    expect(
+      (within(row).getByRole("button", { name: "Edit access for Claude" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(within(row).getByRole("button", { name: "Revoke Claude" })).toBeTruthy();
+  });
+
+  it("says how long a key has left in its last week, and nothing when it never expires", async () => {
+    mocks.workspace.listApiKeys.mockResolvedValue([
+      storedKey(
+        { tasks: "view" },
+        { id: "k1", name: "Soon", expiresAt: ahead(3), lastUsedAt: ago(1) },
+      ),
+      storedKey(
+        { tasks: "view" },
+        { id: "k2", name: "Forever", expiresAt: null, lastUsedAt: ago(1) },
+      ),
+    ]);
+    renderSection();
+    const soon = await waitFor(() => keyRow("Soon"));
+    expect(within(soon).getByText(/^Expires in \d days$/)).toBeTruthy();
+    expect(within(keyRow("Forever")).queryByText(/Expire/)).toBeNull();
+  });
+
+  it("nudges to revoke a key nobody has used for two months", async () => {
+    mocks.workspace.listApiKeys.mockResolvedValue([
+      storedKey({ tasks: "view" }, { createdAt: ago(120), lastUsedAt: ago(75) }),
+    ]);
+    renderSection();
+    const row = await waitFor(() => keyRow("Claude"));
+    expect(within(row).getByText(/^Unused for 75 days/)).toBeTruthy();
   });
 });

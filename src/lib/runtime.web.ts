@@ -806,7 +806,9 @@ export const webRuntime: ModuoRuntime = {
     async listApiKeys(workspaceId) {
       const { data, error } = await supabaseClient
         .from("workspace_api_keys")
-        .select("id, workspace_id, name, key_prefix, scopes, created_by, created_at, last_used_at")
+        .select(
+          "id, workspace_id, name, key_prefix, scopes, created_by, created_at, last_used_at, expires_at",
+        )
         .eq("workspace_id", workspaceId)
         .is("revoked_at", null)
         .order("created_at", { ascending: false });
@@ -820,13 +822,15 @@ export const webRuntime: ModuoRuntime = {
         createdBy: row.created_by ?? null,
         createdAt: row.created_at,
         lastUsedAt: row.last_used_at ?? null,
+        expiresAt: row.expires_at ?? null,
       }));
     },
-    async createApiKey({ workspaceId, name, scopes }) {
+    async createApiKey({ workspaceId, name, scopes, expiresInDays }) {
       const { data, error } = await supabaseClient.rpc("workspace_api_keys_create", {
         p_workspace_id: workspaceId,
         p_name: name,
         p_scopes: scopes,
+        ...(expiresInDays ? { p_expires_in_days: expiresInDays } : {}),
       });
       if (error) throw new Error(error.message);
       const row = Array.isArray(data) ? data[0] : data;
@@ -840,6 +844,7 @@ export const webRuntime: ModuoRuntime = {
         createdBy: (await getAuthedUser())?.id ?? null,
         createdAt: row.created_at,
         lastUsedAt: null,
+        expiresAt: row.expires_at ?? null,
         secret: row.secret,
       };
     },

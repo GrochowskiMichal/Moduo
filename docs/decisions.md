@@ -106,6 +106,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## MCP connector → [decisions/mcp.md](decisions/mcp.md)
 
+- 2026-10-09 · API keys can expire (optional, 90 days by default in the picker) and Settings flags expired and unused keys; no per-key rate limit.
 - 2026-10-08 · The "Moduo for Claude Code" mod was dropped; the connector improvements it came with stay.
 - 2026-10-08 · A key's tool list is honest per module: tools that also touch another module need it too, and None means none across modules.
 - 2026-07-04 · Notes NO-9 + NO-10 landed — publish-to-web + the DoD (MCP manifest/connector + Recent-notes widget); Wave 3 (Notes) COMPLETE.

@@ -133,6 +133,8 @@ export type WorkspaceApiKey = {
   createdBy: string | null;
   createdAt: string;
   lastUsedAt: string | null;
+  /** When the key stops working; null = never. An expired key stays listed until revoked. */
+  expiresAt: string | null;
 };
 
 /**
@@ -314,6 +316,8 @@ export type ModuoRuntime = {
       workspaceId: string;
       name: string;
       scopes: Record<string, string>;
+      /** Days until the key expires; omitted or null = never. */
+      expiresInDays?: number | null;
     }): Promise<WorkspaceApiKey & { secret: string }>;
     /**
      * Change a live key's per-module scopes without rotating its secret;
