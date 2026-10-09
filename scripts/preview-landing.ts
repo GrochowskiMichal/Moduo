@@ -5,6 +5,8 @@
  *   /manifesto → landing/manifesto.html
  *   /privacy   → landing/privacy.html
  *   /terms     → landing/terms.html
+ *   /dpa       → landing/dpa.html
+ *   /aup       → landing/aup.html
  *   /parked/x  → landing/parked/x.html (kept for later, never deployed)
  *
  * Usage: bun run preview:landing   (PORT=… to change the port)
@@ -20,6 +22,8 @@ const SUBPAGES: Record<string, string> = {
   "/manifesto": "manifesto.html",
   "/privacy": "privacy.html",
   "/terms": "terms.html",
+  "/dpa": "dpa.html",
+  "/aup": "aup.html",
 };
 
 const server = Bun.serve({
