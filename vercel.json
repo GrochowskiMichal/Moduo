@@ -74,6 +74,26 @@
       "destination": "/terms.html"
     },
     {
+      "source": "/dpa",
+      "has": [{ "type": "host", "value": "moduo.app" }],
+      "destination": "/dpa.html"
+    },
+    {
+      "source": "/dpa",
+      "has": [{ "type": "host", "value": "www.moduo.app" }],
+      "destination": "/dpa.html"
+    },
+    {
+      "source": "/aup",
+      "has": [{ "type": "host", "value": "moduo.app" }],
+      "destination": "/aup.html"
+    },
+    {
+      "source": "/aup",
+      "has": [{ "type": "host", "value": "www.moduo.app" }],
+      "destination": "/aup.html"
+    },
+    {
       "source": "/((?!assets|favicon|manifest|sw\\.|app\\.html|landing\\.html).*)",
       "destination": "/index.html"
     }
