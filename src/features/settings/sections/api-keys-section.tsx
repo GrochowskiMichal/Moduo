@@ -23,12 +23,16 @@ import { useWorkspace } from "../../../providers/workspace-provider";
 import {
   ceilingHint,
   clampScopes,
+  DEFAULT_KEY_EXPIRY,
   DEFAULT_KEY_SCOPES,
   effectiveScopes,
+  expiryDays,
   grantsAnyAccess,
+  KEY_EXPIRY_OPTIONS,
   KEY_SCOPE_LABELS,
   KEY_SCOPE_MODULES,
   type KeyActor,
+  keyLifecycle,
   keyScopeCap,
   MCP_KEY_MODULES,
   MCP_KEY_SCOPES,
@@ -40,6 +44,7 @@ import {
   scopeDependencyNotes,
   scopeSummary,
   scopesPayload,
+  shortDate,
   toKeyScopes,
 } from "../api-keys";
 import { SettingsSectionShell } from "./section-shell";
@@ -200,6 +205,8 @@ function ApiKeyRow({
   // its scopes while that access isn't known).
   const effective = owner.known ? effectiveScopes(scopes, owner.actor) : scopes;
   const limited = !sameScopes(effective, scopes);
+  const life = keyLifecycle(apiKey);
+  const expired = life.status === "expired";
   const draftGrantsAccess = grantsAnyAccess(draft);
   const editButtonRef = useRef<HTMLButtonElement>(null);
   const saveButtonRef = useRef<HTMLButtonElement>(null);
@@ -248,11 +255,24 @@ function ApiKeyRow({
           <p className="truncate font-mono text-xs text-muted-foreground">
             {apiKey.keyPrefix}…
             <span className="ml-2 font-sans">
-              {apiKey.lastUsedAt
-                ? `Last used ${new Date(apiKey.lastUsedAt).toLocaleDateString()}`
-                : "Never used"}
+              {apiKey.lastUsedAt ? `Last used ${shortDate(apiKey.lastUsedAt)}` : "Never used"}
             </span>
           </p>
+          {life.expiryLine ? (
+            <p
+              className={`text-xs ${
+                expired
+                  ? "text-destructive"
+                  : life.status === "expiring"
+                    ? "text-warning"
+                    : "text-muted-foreground"
+              }`}
+            >
+              {life.expiryLine}
+              {expired ? ". It no longer connects. Revoke it to clear it." : ""}
+            </p>
+          ) : null}
+          {life.staleNote ? <p className="text-xs text-warning">{life.staleNote}</p> : null}
         </div>
         <div className="flex shrink-0 items-center gap-1">
           <Button
@@ -263,7 +283,7 @@ function ApiKeyRow({
             aria-label={`Edit access for ${apiKey.name}`}
             aria-expanded={editing}
             onClick={editing ? closeFromHere : onToggleEdit}
-            disabled={saving}
+            disabled={saving || expired}
           >
             <SlidersHorizontal aria-hidden />
             Edit access
@@ -346,6 +366,7 @@ export function ApiKeysSection() {
   const [loadFailed, setLoadFailed] = useState(false);
   const [name, setName] = useState("");
   const [newScopes, setNewScopes] = useState<McpKeyScopes>(() => ({ ...DEFAULT_KEY_SCOPES }));
+  const [expiry, setExpiry] = useState<string>(DEFAULT_KEY_EXPIRY);
   const [creating, setCreating] = useState(false);
   const [revealed, setRevealed] = useState<{ name: string; secret: string } | null>(null);
   // What the status region reads out. Cleared first on every reveal, so a second
@@ -467,6 +488,7 @@ export function ApiKeysSection() {
     setRevokeTarget(null);
     setChatEnabled(null);
     setNewScopes({ ...DEFAULT_KEY_SCOPES });
+    setExpiry(DEFAULT_KEY_EXPIRY);
   }, [workspaceId]);
 
   useEffect(() => {
@@ -521,6 +543,7 @@ export function ApiKeysSection() {
         workspaceId,
         name: name.trim(),
         scopes: scopesPayload(shownNewScopes),
+        expiresInDays: expiryDays(expiry),
       });
       if (currentWorkspaceId.current !== startedIn) {
         // Switched workspace before the secret came back. The screen (and the
@@ -536,6 +559,7 @@ export function ApiKeysSection() {
       setRevealed({ name: created.name, secret: created.secret });
       setName("");
       setNewScopes({ ...DEFAULT_KEY_SCOPES });
+      setExpiry(DEFAULT_KEY_EXPIRY);
       await refresh();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Couldn't create the key.");
@@ -643,6 +667,22 @@ export function ApiKeysSection() {
                 onChange={setNewScopes}
                 ceilings={newKeyCeilings}
                 extraNotes={chatNotes}
+                disabled={creating}
+              />
+            </div>
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex min-w-0 flex-col gap-0.5">
+                <span className="text-sm font-medium text-foreground">Expires after</span>
+                <span id="api-key-expiry-hint" className="text-xs text-muted-foreground">
+                  A key that stops working on its own limits what a leak can do.
+                </span>
+              </div>
+              <SegmentedControl
+                aria-label="Expires after"
+                aria-describedby="api-key-expiry-hint"
+                items={KEY_EXPIRY_OPTIONS.map(({ value, label }) => ({ value, label }))}
+                value={expiry}
+                onValueChange={setExpiry}
                 disabled={creating}
               />
             </div>

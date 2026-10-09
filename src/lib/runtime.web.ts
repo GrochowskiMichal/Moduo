@@ -804,14 +804,21 @@ export const webRuntime: ModuoRuntime = {
     // MCP connector keys (docs/moduo-mcp-connector.md). Explicit column list —
     // key_hash is never client-readable (column-level grant excludes it).
     async listApiKeys(workspaceId) {
-      const { data, error } = await supabaseClient
-        .from("workspace_api_keys")
-        .select("id, workspace_id, name, key_prefix, scopes, created_by, created_at, last_used_at")
-        .eq("workspace_id", workspaceId)
-        .is("revoked_at", null)
-        .order("created_at", { ascending: false });
+      const columns =
+        "id, workspace_id, name, key_prefix, scopes, created_by, created_at, last_used_at";
+      const list = (select: string) =>
+        supabaseClient
+          .from("workspace_api_keys")
+          .select(select)
+          .eq("workspace_id", workspaceId)
+          .is("revoked_at", null)
+          .order("created_at", { ascending: false });
+      let { data, error } = await list(`${columns}, expires_at`);
+      // 42703 = expires_at isn't on this backend yet (migration 20261009210000
+      // not applied): list the keys without it rather than lose the whole list.
+      if (error?.code === "42703") ({ data, error } = await list(columns));
       if (error) throw new Error(error.message);
-      return (data ?? []).map((row) => ({
+      return ((data ?? []) as unknown as Array<Record<string, any>>).map((row) => ({
         id: row.id,
         workspaceId: row.workspace_id,
         name: row.name,
@@ -820,13 +827,15 @@ export const webRuntime: ModuoRuntime = {
         createdBy: row.created_by ?? null,
         createdAt: row.created_at,
         lastUsedAt: row.last_used_at ?? null,
+        expiresAt: row.expires_at ?? null,
       }));
     },
-    async createApiKey({ workspaceId, name, scopes }) {
+    async createApiKey({ workspaceId, name, scopes, expiresInDays }) {
       const { data, error } = await supabaseClient.rpc("workspace_api_keys_create", {
         p_workspace_id: workspaceId,
         p_name: name,
         p_scopes: scopes,
+        ...(expiresInDays != null ? { p_expires_in_days: expiresInDays } : {}),
       });
       if (error) throw new Error(error.message);
       const row = Array.isArray(data) ? data[0] : data;
@@ -840,6 +849,7 @@ export const webRuntime: ModuoRuntime = {
         createdBy: (await getAuthedUser())?.id ?? null,
         createdAt: row.created_at,
         lastUsedAt: null,
+        expiresAt: row.expires_at ?? null,
         secret: row.secret,
       };
     },

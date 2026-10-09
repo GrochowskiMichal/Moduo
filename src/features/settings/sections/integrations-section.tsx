@@ -23,6 +23,7 @@ import {
 import type { SavedAccount } from "../../email/model/email-types";
 import { EmailConnectDialog } from "../../email/ui/email-connect-dialog";
 import { EmailHistoryDepthSelect } from "../../email/ui/email-history-depth-select";
+import { keyLifecycle } from "../api-keys";
 import { MCP_KEYS_SECTION, mcpConnectorStatus } from "../integrations";
 import { dispatchOpenSettings } from "../settings-events";
 
@@ -111,7 +112,7 @@ export function IntegrationsSection() {
     if (!runtime || !workspaceId) return;
     try {
       const keys = await runtime.workspace.listApiKeys(workspaceId);
-      setMcpKeyCount(keys.length);
+      setMcpKeyCount(keys.filter((k) => keyLifecycle(k).status !== "expired").length);
     } catch {
       // Non-admins can't list keys (RLS) and reads can transiently fail — keep
       // the status neutral rather than falsely reporting "not connected".
