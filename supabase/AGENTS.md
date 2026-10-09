@@ -4,7 +4,7 @@ Read [docs/gotchas/supabase.md](../docs/gotchas/supabase.md) before changing any
 
 ## Migrations
 - Applied migrations are history. Never edit one; write a new migration. Every filename needs a unique timestamp prefix (a shared prefix leaves apply order undefined).
-- The repo cannot bootstrap a database (`supabase db reset` does not work). Verify SQL on a Supabase branch or on a throwaway local Postgres with a stub schema, never by assumption.
+- The repo cannot bootstrap a database from migrations (`supabase db reset` does not work). Verify SQL on the local stack instead: `bun run local:reset` loads a prod schema snapshot and applies every newer repo migration on top ([docs/local-dev.md](../docs/local-dev.md)). Never run `supabase db reset` or `config push`.
 - Repo docs are not evidence of what prod has. Probe the catalog (`pg_proc`, `pg_policies`, grants) before concluding anything is applied or missing.
 - `bun run verify` does not apply migrations. A new RPC wired into a live read path breaks that surface until the migration is deployed; ship the migration first or guard the call.
 - `DROP FUNCTION` + `CREATE`, or changing a function's return columns, resets its grants and re-opens `EXECUTE` to `PUBLIC`/`anon`. Re-state grants in the same migration. `REVOKE … FROM PUBLIC` does not revoke `anon`.
