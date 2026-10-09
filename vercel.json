@@ -3,6 +3,15 @@
   "installCommand": "bun install --frozen-lockfile",
   "buildCommand": "node scripts/vercel-build.mjs",
   "outputDirectory": "dist/web",
+  "git": {
+    "deploymentEnabled": {
+      "**": false,
+      "staging-landing": true,
+      "prod-landing": true,
+      "staging-app": true,
+      "prod-app": true
+    }
+  },
   "rewrites": [
     {
       "source": "/book",
