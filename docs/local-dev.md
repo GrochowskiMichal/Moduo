@@ -47,9 +47,13 @@ bun run local:down        # stop (data kept)
 
 ## Stripe
 
-`bun run local:stripe` prints a `whsec_…`; put it in `supabase/functions/.env` as `STRIPE_WEBHOOK_SECRET` and restart `local:functions`. Trigger events with `docker run --rm -it -v "$HOME/.config/stripe:/root/.config/stripe" stripe/stripe-cli trigger checkout.session.completed`.
+Billing runs on Supabase's **Stripe Sync Engine** ([decisions/billing.md](decisions/billing.md), 2026-10-06): an integration installed from the Supabase dashboard that owns the `stripe-webhook`, `stripe-setup` and `stripe-worker` functions and mirrors Stripe into the `stripe.*` schema. Its code is not ours and must never be committed or redeployed over. Locally the `stripe.*` tables exist but nothing fills them, so:
 
-**Gap:** `stripe-webhook`, `stripe-setup` and `stripe-worker` are deployed on prod but their source is not in this repo, so webhook handling can't run locally until someone commits that code (`supabase functions download stripe-webhook`). Checkout and portal session creation do run locally.
+- **Plan and limit behavior:** insert rows into `stripe.subscriptions` / `stripe.prices` in Studio (or SQL). `recompute_entitlement()` then sets the profile's plan exactly as on prod.
+- **Checkout, portal, trials** (`create-checkout-session`, `create-portal-session`, `start-trial`, `extend-trial`) run locally with test keys in `supabase/functions/.env`. They create real test-mode objects in Stripe, but the local DB only sees them after you mirror them by hand.
+- **A full webhook round trip** (Stripe → Sync Engine → trigger) is tested on cloud with test mode, at a release train.
+
+`bun run local:stripe` (Stripe CLI in Docker; log in once with `docker run --rm -it -v "$HOME/.config/stripe:/root/.config/stripe" stripe/stripe-cli login`) is there for watching and triggering test events.
 
 ## Not local (on purpose)
 
