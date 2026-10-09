@@ -33,7 +33,7 @@ if (target === "landing") {
   // Marketing subpages ride along on the public landing (staging keeps its portal at /).
   // Each one also needs a host rewrite in vercel.json (/manifesto → /manifesto.html, …).
   if (file === "index.html") {
-    for (const page of ["manifesto.html", "privacy.html", "terms.html"]) {
+    for (const page of ["manifesto.html", "privacy.html", "terms.html", "dpa.html", "aup.html"]) {
       fs.copyFileSync(path.join(root, "landing", page), path.join(outDir, page));
     }
   }
