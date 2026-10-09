@@ -25,7 +25,7 @@ import { EMAIL_FONT, EMAIL_MONO_FONT, paletteHex } from "./palette.ts";
 
 /** The legal line every email ends with (the registered company, not brand copy). */
 export const LEGAL_LINE = "Moduo · Ringdove sp. z o.o., Fatimska 41A/310, 31-831 Kraków, Poland";
-export const PRIVACY_URL = "https://www.moduo.app/privacy";
+export const PRIVACY_URL = "https://moduo.app/privacy";
 export const SCHEDULED_WITH = "Scheduled with Moduo";
 
 export type RenderOptions = {
