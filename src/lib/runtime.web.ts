@@ -835,7 +835,7 @@ export const webRuntime: ModuoRuntime = {
         p_workspace_id: workspaceId,
         p_name: name,
         p_scopes: scopes,
-        ...(expiresInDays ? { p_expires_in_days: expiresInDays } : {}),
+        ...(expiresInDays != null ? { p_expires_in_days: expiresInDays } : {}),
       });
       if (error) throw new Error(error.message);
       const row = Array.isArray(data) ? data[0] : data;
