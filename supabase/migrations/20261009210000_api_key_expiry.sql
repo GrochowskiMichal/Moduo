@@ -56,7 +56,8 @@ BEGIN
   -- A new key acts as the caller, who may give it up to their own access.
   PERFORM public.workspace_api_keys__check_scopes(p_workspace_id, auth.uid(), '{}'::jsonb, p_scopes, true);
   IF (SELECT count(*) FROM public.workspace_api_keys k
-      WHERE k.workspace_id = p_workspace_id AND k.revoked_at IS NULL) >= 20 THEN
+      WHERE k.workspace_id = p_workspace_id AND k.revoked_at IS NULL
+        AND (k.expires_at IS NULL OR k.expires_at > now())) >= 20 THEN
     RAISE EXCEPTION 'This workspace already has 20 active keys — revoke one first.';
   END IF;
 

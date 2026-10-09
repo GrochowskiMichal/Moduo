@@ -44,6 +44,7 @@ import {
   scopeDependencyNotes,
   scopeSummary,
   scopesPayload,
+  shortDate,
   toKeyScopes,
 } from "../api-keys";
 import { SettingsSectionShell } from "./section-shell";
@@ -254,9 +255,7 @@ function ApiKeyRow({
           <p className="truncate font-mono text-xs text-muted-foreground">
             {apiKey.keyPrefix}…
             <span className="ml-2 font-sans">
-              {apiKey.lastUsedAt
-                ? `Last used ${new Date(apiKey.lastUsedAt).toLocaleDateString()}`
-                : "Never used"}
+              {apiKey.lastUsedAt ? `Last used ${shortDate(apiKey.lastUsedAt)}` : "Never used"}
             </span>
           </p>
           {life.expiryLine ? (
@@ -674,12 +673,13 @@ export function ApiKeysSection() {
             <div className="flex items-center justify-between gap-4">
               <div className="flex min-w-0 flex-col gap-0.5">
                 <span className="text-sm font-medium text-foreground">Expires after</span>
-                <span className="text-xs text-muted-foreground">
+                <span id="api-key-expiry-hint" className="text-xs text-muted-foreground">
                   A key that stops working on its own limits what a leak can do.
                 </span>
               </div>
               <SegmentedControl
                 aria-label="Expires after"
+                aria-describedby="api-key-expiry-hint"
                 items={KEY_EXPIRY_OPTIONS.map(({ value, label }) => ({ value, label }))}
                 value={expiry}
                 onValueChange={setExpiry}

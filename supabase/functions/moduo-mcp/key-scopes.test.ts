@@ -6,6 +6,8 @@
  * docs/testing/t-maciej-api-key-module-scopes.md.
  */
 
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it, rs } from "@rstest/core";
 
 import { MCP_TOOL_NEEDS } from "../_shared/contracts/mcp-key-scopes.ts";
@@ -377,5 +379,12 @@ describe("calendar_day", () => {
     )) as Row;
     expect(none.blocks).toEqual([]);
     expect(none.strip).toEqual([]);
+  });
+});
+
+describe("connector wiring", () => {
+  it("refuses an expired key in authenticate()", () => {
+    const source = readFileSync(new URL("./index.ts", import.meta.url), "utf8");
+    expect(source).toContain("apiKeyExpired(data.expires_at)");
   });
 });

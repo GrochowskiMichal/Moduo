@@ -251,8 +251,8 @@ export type KeyLifecycle = {
   staleNote: string | null;
 };
 
-function shortDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-GB", {
+export function shortDate(iso: string): string {
+  return new Date(iso).toLocaleDateString(undefined, {
     day: "numeric",
     month: "short",
     year: "numeric",
@@ -275,10 +275,16 @@ export function keyLifecycle(
   let status: KeyLifecycle["status"] = "active";
   let expiryLine: string | null = null;
   if (key.expiresAt && expiresMs !== null) {
-    const daysLeft = Math.ceil((expiresMs - now) / DAY_MS);
+    const hoursLeft = (expiresMs - now) / 3_600_000;
+    const daysLeft = Math.ceil(hoursLeft / 24);
     if (daysLeft <= EXPIRING_SOON_DAYS) {
       status = "expiring";
-      expiryLine = daysLeft <= 1 ? "Expires tomorrow" : `Expires in ${daysLeft} days`;
+      expiryLine =
+        hoursLeft < 24
+          ? "Expires within a day"
+          : daysLeft <= 1
+            ? "Expires tomorrow"
+            : `Expires in ${daysLeft} days`;
     } else {
       expiryLine = `Expires ${shortDate(key.expiresAt)}`;
     }

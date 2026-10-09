@@ -542,7 +542,9 @@ describe("key expiry and staleness on a row", () => {
     ]);
     renderSection();
     const row = await waitFor(() => keyRow("Claude"));
-    expect(within(row).getByText(/^Expired \d/).textContent).toContain("It no longer connects");
+    expect(within(row).getByText(/^Expired .+\d{4}\./).textContent).toContain(
+      "It no longer connects",
+    );
     expect(
       (within(row).getByRole("button", { name: "Edit access for Claude" }) as HTMLButtonElement)
         .disabled,

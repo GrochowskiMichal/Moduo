@@ -519,14 +519,16 @@ describe("key expiry", () => {
   it("says when a key expires, and gets louder in the last week", () => {
     const far = keyLifecycle({ createdAt: day(-5), lastUsedAt: day(-1), expiresAt: day(60) }, NOW);
     expect(far.status).toBe("active");
-    expect(far.expiryLine).toMatch(/^Expires \d/);
+    expect(far.expiryLine).toMatch(/^Expires .+\d{4}$/);
     const soon = keyLifecycle({ createdAt: day(-5), lastUsedAt: day(-1), expiresAt: day(4) }, NOW);
     expect(soon).toMatchObject({ status: "expiring", expiryLine: "Expires in 4 days" });
     const tomorrow = keyLifecycle(
       { createdAt: day(-5), lastUsedAt: day(-1), expiresAt: day(0.5) },
       NOW,
     );
-    expect(tomorrow.expiryLine).toBe("Expires tomorrow");
+    expect(tomorrow.expiryLine).toBe("Expires within a day");
+    const tmrw = keyLifecycle({ createdAt: day(-5), lastUsedAt: day(-1), expiresAt: day(1) }, NOW);
+    expect(tmrw.expiryLine).toBe("Expires tomorrow");
   });
 
   it("marks a key expired once its time has passed, and an unreadable one too", () => {
@@ -535,7 +537,7 @@ describe("key expiry", () => {
       NOW,
     );
     expect(gone.status).toBe("expired");
-    expect(gone.expiryLine).toMatch(/^Expired \d/);
+    expect(gone.expiryLine).toMatch(/^Expired .+\d{4}$/);
     expect(gone.staleNote).toBeNull();
     const broken = keyLifecycle({ createdAt: day(-9), lastUsedAt: null, expiresAt: "soon" }, NOW);
     expect(broken).toMatchObject({ status: "expired", expiryLine: "Expired" });
