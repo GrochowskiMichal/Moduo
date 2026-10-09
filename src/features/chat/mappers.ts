@@ -2,7 +2,11 @@
 // dropped (returns null), closed fields normalize to their quiet default — the
 // same posture as @contracts' normalize* bridges. Never throws.
 
-import { isChatChannelKind, normalizeChatNotifyLevel } from "@contracts/vocabularies";
+import {
+  isChatChannelKind,
+  normalizeChatNotifyLevel,
+  normalizeContentAuthorKind,
+} from "@contracts/vocabularies";
 import type { ChatChannel, ChatMember, ChatMessage, ChatReactions, ChatUnread } from "./model";
 
 type Row = Record<string, unknown>;
@@ -75,7 +79,7 @@ export function mapMessage(raw: unknown): ChatMessage | null {
     channelId,
     parentId: str(r.parent_id),
     authorId: str(r.author_id),
-    authorKind: r.author_kind === "api_key" ? "api_key" : "user",
+    authorKind: normalizeContentAuthorKind(r.author_kind),
     authorLabel: str(r.author_label),
     body: str(r.body) ?? "",
     mentionedUserIds: strArr(r.mentioned_user_ids),

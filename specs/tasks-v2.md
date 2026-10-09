@@ -323,7 +323,7 @@ The cross-module visual foundation (state tokens, scrollbars, NavRow/MetaCount/F
   - They still write `owner_id` / `committed_for` / `commit_order` / `time_spent_seconds` and call `tasks_op_commit`/`uncommit`/`skip_today`.
   - Shims keep them working (writes land in the new model) until the cleanup block (TV-D7), which only runs after the adoption window.
 - **Two people edit the same task at once** — field-level writes mean one person's priority change never reverts the other's assignee change. Same-field conflicts resolve last-writer-wins.
-- **Assignee leaves the workspace** — the task shows "Former member" and stays assigned, so history is kept. Filter "Unassigned" doesn't include it; a quiet chip lets you reassign.
+- **Assignee leaves the workspace** — their tasks there become Unassigned (PRIV-2 AC9; Maciej kept it over "stays assigned as Former member", 2026-10-08, TV-D1). "Created by" still names them as a former member.
 - **Creator unknown** (tasks reassigned before this change — the old model overwrote the creator) — the metadata line omits "Created by". There is no guessing beyond the activity-log recovery done in the migration.
 - **Queue a task you can't see anymore** (sharing revoked) — it drops out of your queue silently. If it was your Now in a run, the run advances and says "That task is no longer shared with you".
 - **A task completed by someone else while it's your Now** — the run advances, with a quiet line "Mike completed *X*".
@@ -566,7 +566,7 @@ Layers per AGENTS.md:
    - makes `owner_id` immutable;
    - maps a legacy client's `owner_id` change into `assignee_id`.
 
-   Creator recovery for reassigned tasks uses the INSERT-branch actor of DF-9 `tasks.assigned` activity rows where present; otherwise the creator stays as-is. The UI hides "Created by" when it's flagged unknown. Assignment goes through **`tasks_op_assign`** (membership + `canTakeTasks` check, logs `tasks.assigned` with the notify target). The DF-9 trigger keeps only its INSERT branch, re-keyed to `assignee_id`. *Rejected: multi-assignee (decided 2026-10-07: single + queue claims covers the duo).*
+   Creator recovery for reassigned tasks uses the INSERT-branch actor of DF-9 `tasks.assigned` activity rows where present; otherwise the creator stays as-is. The UI hides "Created by" when it's flagged unknown (`tasks.creator_unknown`). Assignment goes through **`tasks_op_assign`** (membership + `canTakeTasks` check). *Amended in TV-D1 (2026-10-08):* `tasks.assigned` is logged by the DF-9 trigger for every way a task gets an assignee (INSERT and UPDATE branches, re-keyed to `assignee_id`), and the op doesn't log a second copy, so old builds' `owner_id` writes notify exactly once too. Old builds are recognised by the column default of `assignee_id` (a nil-uuid placeholder they leave in place). See `docs/decisions/tasks.md` 2026-10-08. *Rejected: multi-assignee (decided 2026-10-07: single + queue claims covers the duo).*
 4. **Queue** = new table `task_queue(id, workspace_id, user_id, task_id → tasks on delete cascade, position text, queued_at, updated_at)`, unique `(user_id, task_id)`.
    - Lexorank `position` reuses `betweenPositions`.
    - **RLS:** members who can view the task can read rows (claims); only the row's user writes (through ops).
@@ -591,6 +591,8 @@ Layers per AGENTS.md:
    - the 1 Hz tick only repaints;
    - recompute on `visibilitychange`/focus;
    - local persistence in `localStorage` under the `moduo:tasks:focus` key family. Settings → Advanced reset wipes `moduo.*` keys but not `moduo:tasks:*`, so a cache reset never kills a live run.
+
+   *As built in TV-F1 (2026-10-08):* `src/features/focus/engine.ts` (pure model in `engine-core.ts`), one record per person (`moduo:tasks:focus:<user id>`), one clock-owner tab per device. Saves go through a per-workspace flush sink (it writes only the task's time total) called with `{ ownedSince, earnedAt }` — `true` saved, `false` not now, `"gone"` the task can never take the time (dropped, the person is told), a promise = the write (a failure shows "not saved yet" and retries). Saving is at-least-once. **TV-D3 replaces the Tasks sink with `tasks_op_track_time` (give entries an idempotency key); the engine API stays.** Details: [docs/decisions/tasks.md](../docs/decisions/tasks.md) 2026-10-08.
 
    **Server persistence** = new table `focus_runs(id, workspace_id, user_id, status running|paused|ended, mode pomodoro|stopwatch, started_at, ended_at, now_task_id, phase work|break|long_break, phase_started_at, phase_seconds, blocks_completed, updated_at)`. One non-ended run per user. Members can read only `(user_id, now_task_id, status)` through a SECURITY DEFINER `focus_claims(workspace_id)` → "<name> is on this".
 

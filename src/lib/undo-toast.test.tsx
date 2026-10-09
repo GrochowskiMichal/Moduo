@@ -50,4 +50,46 @@ describe("undoToast", () => {
     expect(toastMock.dismiss).toHaveBeenCalledWith("toast-1");
     expect(onDanger).toHaveBeenCalledOnce();
   });
+
+  type CloseOpts = {
+    action: { onClick: () => void };
+    onAutoClose?: () => void;
+    onDismiss?: () => void;
+  };
+  const lastOpts = () => toastMock.mock.calls.at(-1)?.[1] as unknown as CloseOpts;
+
+  it("runs onCommit once when the toast closes without Undo", () => {
+    const onCommit = rs.fn();
+    undoToast("Bucket deleted", { onUndo: rs.fn(), onCommit });
+    const opts = lastOpts();
+    opts.onAutoClose?.();
+    opts.onDismiss?.(); // a late dismiss of the same toast doesn't commit twice
+    expect(onCommit).toHaveBeenCalledOnce();
+  });
+
+  it("commits when the toast is swiped or dismissed away", () => {
+    const onCommit = rs.fn();
+    undoToast("Bucket deleted", { onUndo: rs.fn(), onCommit });
+    lastOpts().onDismiss?.();
+    expect(onCommit).toHaveBeenCalledOnce();
+  });
+
+  it("never commits after Undo", () => {
+    const onUndo = rs.fn();
+    const onCommit = rs.fn();
+    undoToast("Bucket deleted", { onUndo, onCommit });
+    const opts = lastOpts();
+    opts.action.onClick();
+    opts.onDismiss?.();
+    opts.onAutoClose?.();
+    expect(onUndo).toHaveBeenCalledOnce();
+    expect(onCommit).not.toHaveBeenCalled();
+  });
+
+  it("adds no close callbacks without onCommit", () => {
+    undoToast("Task deleted", { onUndo: rs.fn() });
+    const opts = lastOpts();
+    expect(opts.onAutoClose).toBeUndefined();
+    expect(opts.onDismiss).toBeUndefined();
+  });
 });

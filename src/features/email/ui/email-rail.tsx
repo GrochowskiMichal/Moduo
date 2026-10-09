@@ -71,14 +71,16 @@ export function EmailRail({
   onReconnect,
 }: Props) {
   const rowBase =
-    "group flex w-full items-center gap-2 rounded-md px-2 text-left transition-colors";
-  const rowIdle = "hover:bg-accent";
-  const rowActive = "bg-accent";
+    "group flex w-full items-center gap-2 rounded-md px-2 text-left transition-colors duration-(--motion-fade) ease-(--ease-out)";
+  // Hover and the current scope sit on separate state-layer steps (they were
+  // one grey on dark, so a hovered row looked current).
+  const rowIdle = "hover:bg-state-hover";
+  const rowActive = "bg-state-active";
   // Inbox scope rows only read as "active" while the inbox itself is showing.
   const inboxView = activeView === "inbox";
 
   return (
-    <div className="scrollbar-thin flex h-full min-h-0 flex-col gap-3 overflow-y-auto">
+    <div className="pane-scroll scrollbar-thin flex h-full min-h-0 flex-col gap-3 overflow-y-auto">
       {/* Unified — the default scope. */}
       <div className="flex flex-col gap-0.5">
         <button

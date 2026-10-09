@@ -176,8 +176,8 @@ export type NewTaskFields = {
   position: string;
   /** Parent task id — makes the new task a subtask (one level, spec §11). */
   parentId?: string | null;
-  /** Assignee (the task's `ownerId`). Omit and the backend assigns the creator. */
-  ownerId?: string;
+  /** Who it's assigned to: a member's id, or null for Unassigned. Omit for the creator. */
+  assigneeId?: string | null;
   description?: string;
   dueDate?: string | null;
   scheduledAt?: string | null;
@@ -188,16 +188,19 @@ export type NewTaskFields = {
 };
 
 /**
- * Build a client-side Task. `id`/`ownerId` are left empty for the backend to
- * fill (both runtimes mint them on upsert), and timestamps are stamped now so
- * optimistic rendering has a stable value.
+ * Build a client-side Task. `id` and `creatorId` are left empty for the
+ * backend to fill (the runtime mints the id; the server records the creator),
+ * an omitted assignee is "" ("the creator", filled in on create), and
+ * timestamps are stamped now so optimistic rendering has a stable value.
  */
 export function makeTask(fields: NewTaskFields): Task {
   const now = new Date().toISOString();
   return {
     id: "",
     workspaceId: fields.workspaceId,
-    ownerId: fields.ownerId ?? "",
+    creatorId: "",
+    creatorUnknown: false,
+    assigneeId: fields.assigneeId === undefined ? "" : fields.assigneeId,
     bucketId: fields.bucketId,
     parentId: fields.parentId ?? null,
     title: fields.title,
@@ -397,6 +400,18 @@ function groupLabel(by: GroupBy, key: string, ctx: GroupContext): string {
   if (by === "priority")
     return key === "unset" ? UNSET_LABEL : PRIORITY_LABELS[key as PriorityLevel];
   return key;
+}
+
+/**
+ * Whether rows and cards show their bucket pill (tasks-v2 Q1-3). The pill only
+ * earns its place where the bucket isn't already implied: a single-bucket scope
+ * (a bucket, or Inbox) names it in the title, and bucket grouping names it in
+ * every group header. `scope` is the rail selection: "all" | "today" (the
+ * Queue) | "inbox" | a bucket id.
+ */
+export function showBucketPill(scope: string, groupBy: GroupBy): boolean {
+  const crossBucket = scope === "all" || scope === "today";
+  return crossBucket && groupBy !== "bucket";
 }
 
 // ── Organization: rail sections + tag filter (Session 4) ─────────────────────

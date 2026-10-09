@@ -30,7 +30,7 @@
  */
 
 import type { ConnectorModule, ToolContext } from "../registry.ts";
-import { visibleIds } from "../share.ts";
+import { assertReach, visibleIds } from "../share.ts";
 
 type Row = Record<string, any>;
 
@@ -233,10 +233,7 @@ export const notesConnectorModule: ConnectorModule = {
         // there's no FK on parent_id — so an unresolvable/foreign parent would
         // silently import the note as an orphan root. Guard it here so the agent
         // gets a clear error instead of a mis-parented note.
-        if (parentId) {
-          const parent = await getNote(ctx, parentId, "id");
-          if (!parent) throw new Error("Parent note not found in this workspace.");
-        }
+        if (parentId) await assertReach(ctx, "note", parentId);
         const id = crypto.randomUUID();
         const bodyMd = composeBody(title, body);
         const result = await callOp(ctx, "notes_op_import", {
@@ -271,6 +268,7 @@ export const notesConnectorModule: ConnectorModule = {
       handler: async (args, ctx) => {
         const noteId = str(args, "note_id");
         const addition = md(args, "markdown");
+        await assertReach(ctx, "note", noteId);
         const existing = await getNote(ctx, noteId, "id, body_md");
         if (!existing) throw new Error("Note not found in this workspace.");
         const combined = `${(existing.body_md ?? "").replace(/\s+$/g, "")}\n\n${addition}`.trim();
@@ -302,6 +300,7 @@ export const notesConnectorModule: ConnectorModule = {
         const noteId = str(args, "note_id");
         const body = md(args, "markdown");
         const title = str(args, "title", false);
+        await assertReach(ctx, "note", noteId);
         if (title) {
           await callOp(ctx, "notes_op_rename", { p_note_id: noteId, p_title: title });
         }
@@ -338,9 +337,12 @@ export const notesConnectorModule: ConnectorModule = {
         required: ["note_id"],
       },
       handler: async (args, ctx) => {
+        const parentId = str(args, "parent_id", false) || null;
+        // The op guards the module; the new parent must also be one you can open.
+        if (parentId) await assertReach(ctx, "note", parentId);
         const n = await callOp(ctx, "notes_op_move", {
           p_note_id: str(args, "note_id"),
-          p_parent_id: str(args, "parent_id", false) || null,
+          p_parent_id: parentId,
           p_position: "",
         });
         return n ? shapeNote(n) : null;
@@ -377,7 +379,7 @@ export const notesConnectorModule: ConnectorModule = {
     {
       name: "notes_link",
       description:
-        "Link a note to another entity with a typed relation (idempotent; rides the spine). Use `references` for a manual connection.",
+        "Link a note to another entity with a typed relation (idempotent; rides the spine, so the key also needs Links: Edit). Use `references` for a manual connection.",
       access: "edit",
       inputSchema: {
         type: "object",
@@ -390,6 +392,8 @@ export const notesConnectorModule: ConnectorModule = {
         required: ["note_id", "target_type", "target_id"],
       },
       handler: async (args, ctx) => {
+        await assertReach(ctx, "note", str(args, "note_id"));
+        await assertReach(ctx, str(args, "target_type"), str(args, "target_id"));
         const link = await callOp(ctx, "links_op_create", {
           p_source_type: "note",
           p_source_id: str(args, "note_id"),
