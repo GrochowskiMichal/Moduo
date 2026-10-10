@@ -151,9 +151,12 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
   const reqRef = useRef(0);
   /**
    * Bumped on every successful full load (open, reload, workspace switch),
-   * never on a quiet refetch: the recurrence catch-up trigger.
+   * and on a quiet refetch only when it's the first read of the workspace
+   * that worked: the recurrence catch-up trigger.
    */
   const [loadStamp, setLoadStamp] = useState(0);
+  /** The workspace the last stamped read was for. */
+  const stampedWs = useRef<string | null>(null);
 
   /**
    * Read the whole module. A quiet read (a refetch on focus or reconnect)
@@ -215,9 +218,13 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
           setTimeBlocksState(blocks);
           setError(null);
           // A full load triggers the recurrence catch-up pass; a quiet refetch
-          // never does (it would reopen a repeat checked off on Home the same
-          // day: Tasks v3 P0 #2).
-          if (!quiet) setLoadStamp((s) => s + 1);
+          // doesn't (it would reopen a repeat checked off on Home the same
+          // day: Tasks v3 P0 #2), unless it's the first read of this workspace
+          // that worked (the app opened offline and came back online).
+          if (!quiet || stampedWs.current !== workspaceId) {
+            stampedWs.current = workspaceId;
+            setLoadStamp((s) => s + 1);
+          }
           refresh.current.lastAt = Date.now(); // a full read counts for the refetch throttle
         }
       } catch (e) {

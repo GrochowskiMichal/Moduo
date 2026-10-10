@@ -333,4 +333,28 @@ describe("useTasksModule repeat catch-up and quiet refetches", () => {
     });
     await waitFor(() => expect(opCatchUp).toHaveBeenCalledTimes(1));
   }, 20_000);
+
+  it("opened offline: the first refetch that works catches up, once", async () => {
+    const { runtime, list, opCatchUp } = withCatchUp([doneElsewhere()]);
+    list.mockImplementationOnce(() => Promise.reject(new Error("offline")));
+    const { result } = mount(runtime);
+    await waitFor(() => expect(result.current.error).toBe("offline"));
+    expect(opCatchUp).not.toHaveBeenCalled();
+
+    act(() => {
+      h.listener?.({ type: "resync", reason: "reconnect" }); // back online
+    });
+    await waitFor(() => expect(opCatchUp).toHaveBeenCalledTimes(1));
+    expect(result.current.error).toBeNull();
+    expect(result.current.tasks[0]!.status).toBe("todo");
+
+    // Later quiet refetches don't run it again.
+    await sleep(5_100);
+    act(() => {
+      h.listener?.({ type: "resync", reason: "return" });
+    });
+    await waitFor(() => expect(list).toHaveBeenCalledTimes(3));
+    await sleep(ECHO_GRACE_MS + 50);
+    expect(opCatchUp).toHaveBeenCalledTimes(1);
+  }, 20_000);
 });
