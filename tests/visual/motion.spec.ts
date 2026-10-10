@@ -34,13 +34,20 @@ async function animationsOf(page: Page, testId: string) {
 const token = (page: Page, name: string) =>
   page.evaluate((n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim(), name);
 
+/** A duration token in ms, however the build wrote it ("100ms", ".1s", "0s"). */
+async function tokenMs(page: Page, name: string): Promise<number> {
+  const raw = await token(page, name);
+  const n = Number.parseFloat(raw);
+  return raw.endsWith("ms") ? n : Math.round(n * 1000);
+}
+
 test.describe("motion foundations", () => {
   test("the patterns run on the three durations", async ({ page }) => {
     await page.emulateMedia({ reducedMotion: "no-preference" });
     await openStory(page, "foundations-motion--default");
-    expect(await token(page, "--motion-fast")).toBe("100ms");
-    expect(await token(page, "--motion-base")).toBe("180ms");
-    expect(await token(page, "--motion-slow")).toBe("280ms");
+    expect(await tokenMs(page, "--motion-fast")).toBe(100);
+    expect(await tokenMs(page, "--motion-base")).toBe(180);
+    expect(await tokenMs(page, "--motion-slow")).toBe(280);
 
     expect(await animationsOf(page, "motion-panel")).toEqual({
       "motion-fade-in": "0.1s",
@@ -69,7 +76,7 @@ test.describe("motion foundations", () => {
   test("reduced motion leaves only opacity", async ({ page }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await openStory(page, "foundations-motion--default");
-    expect(await token(page, "--motion-slow")).toBe("0ms");
+    expect(await tokenMs(page, "--motion-slow")).toBe(0);
     expect(await token(page, "--motion-shift")).toBe("0");
     expect(await token(page, "--motion-grow")).toBe("1");
 

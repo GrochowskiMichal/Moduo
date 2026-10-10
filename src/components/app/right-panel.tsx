@@ -141,6 +141,23 @@ export function RightPanel({
     return () => root.removeEventListener("keydown", onKey);
   }, [hasActive]);
 
+  // Going back unmounts the back arrow that had focus, which would drop it on
+  // <body>. After the item on top changes, put focus on the title row, but only
+  // if it fell out or was already in the panel (never steal it from the page).
+  const itemKey = item?.key ?? null;
+  const prevItemKey = useRef(itemKey);
+  const titleRowRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const prev = prevItemKey.current;
+    prevItemKey.current = itemKey;
+    if (prev === null || prev === itemKey) return;
+    const focused = document.activeElement;
+    const root = rootRef.current;
+    if (focused && focused !== document.body && !root?.contains(focused)) return;
+    const row = titleRowRef.current;
+    row?.querySelector<HTMLElement>("button:not([disabled]), [tabindex]")?.focus();
+  }, [itemKey]);
+
   if (!active) return null;
 
   const pick = (id: string) => {
@@ -152,13 +169,20 @@ export function RightPanel({
 
   return (
     <div ref={rootRef} className="flex h-full min-h-0 flex-col gap-2" data-panel-module={module}>
-      <div className="flex min-h-(--ctrl-h) shrink-0 items-center gap-1">
+      <div ref={titleRowRef} className="flex min-h-(--ctrl-h) shrink-0 items-center gap-1">
         {item ? (
-          <ItemTitle item={item} backTo={active.label} onBack={onBack} />
+          <ItemTitle
+            item={item}
+            backTo={items.length > 1 ? items[items.length - 2].title : active.label}
+            onBack={onBack}
+          />
         ) : listed.length > 1 ? (
           <ViewMenu listed={listed} active={active} isMac={isMac} onPick={pick} />
         ) : (
-          <h2 className="min-w-0 flex-1 font-display text-base font-medium text-foreground">
+          <h2
+            tabIndex={-1}
+            className="min-w-0 flex-1 font-display text-base font-medium text-foreground outline-none"
+          >
             {active.label}
           </h2>
         )}

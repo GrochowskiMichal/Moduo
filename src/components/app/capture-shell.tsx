@@ -156,9 +156,7 @@ export function CaptureShell({ types = CAPTURE_TYPES }: Props) {
       >
         <DialogTitle className="sr-only">Capture</DialogTitle>
         <DialogDescription id="capture-shell-description" className="sr-only">
-          {`Capture a ${active.label.toLowerCase()}. ${
-            isMac ? "⌘" : "Ctrl "
-          }and a module's number switch what you capture.`}
+          {`Capture a ${active.label.toLowerCase()}. ${isMac ? "⌘" : "Ctrl"} plus a module's number switches what you capture.`}
         </DialogDescription>
         <div className="flex items-center gap-1 px-2 pt-2">
           <DropdownMenu>

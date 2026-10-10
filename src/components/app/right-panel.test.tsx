@@ -13,6 +13,7 @@ import {
   screen,
   within,
 } from "@testing-library/react";
+import { useState } from "react";
 
 import { TooltipProvider } from "../ui/tooltip";
 import { type PanelItem, RightPanel, usePanelStack } from "./right-panel";
@@ -203,5 +204,37 @@ describe("the ← item stack", () => {
     expect(result.current.stack.map((e) => e.key)).toEqual(["task:1"]);
     act(() => result.current.clear());
     expect(result.current.stack).toEqual([]);
+  });
+});
+
+describe("focus after going back", () => {
+  const top: PanelItem = { key: "email:7", title: "Re: Round 1", render: () => <p>Email body</p> };
+  const under: PanelItem = { key: "task:1", title: "Collect assets", render: () => <p>Task</p> };
+
+  function Stacked() {
+    const [items, setItems] = useState<PanelItem[]>([under, top]);
+    return (
+      <TooltipProvider>
+        <RightPanel
+          module="calendar"
+          views={CALENDAR_VIEWS}
+          activeId="tasks"
+          onChange={() => {}}
+          items={items}
+          onBack={() => setItems((all) => all.slice(0, -1))}
+        />
+      </TooltipProvider>
+    );
+  }
+
+  it("names the item underneath on the back arrow, and keeps focus on the title row", () => {
+    render(<Stacked />);
+    const back = screen.getByRole("button", { name: "Back to Collect assets" });
+    back.focus();
+    fireEvent.click(back);
+    const next = screen.getByRole("button", { name: "Back to Tasks" });
+    expect(document.activeElement).toBe(next);
+    fireEvent.click(next);
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Panel view: Tasks" }));
   });
 });
