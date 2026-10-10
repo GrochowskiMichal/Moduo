@@ -524,12 +524,14 @@ Deno.serve(async (req: Request) => {
         name: link?.name || "Meeting",
       });
     }
-    // Google created the event (its id is the meeting id), so Google tells the guests.
-    const googleInvites = row.meeting_id != null;
-    if (row.status !== "confirmed") return json({ ok: true, status: row.status, googleInvites });
+    // Google created the event (its id is the meeting id), so the guests hold
+    // Google's invite: only Google can take it back, and our calendar file can't.
+    const googleCreated = row.meeting_id != null;
+    if (row.status !== "confirmed") return json({ ok: true, status: row.status, googleInvites: googleCreated });
     const access = link ? await googleAccess(db, link.owner_user_id).catch(() => null) : null;
+    let googleDropped = false;
     if (access && row.meeting_id) {
-      await deleteGoogleEvent(access.accessToken, row.meeting_id).catch(() => {});
+      googleDropped = await deleteGoogleEvent(access.accessToken, row.meeting_id).catch(() => false);
     }
     const zoomId = zoomMeetingIdFromLink(row.meeting_link);
     if (link && zoomId) {
@@ -548,9 +550,11 @@ Deno.serve(async (req: Request) => {
       .from("slot_bookings")
       .update({ status: "cancelled", updated_at: cancelledAt.toISOString() })
       .eq("id", row.id);
-    // Whether the guest gets an email about it (not after the meeting started).
+    // Whether the guest gets our calendar update (not after the meeting started,
+    // and only for an event Google didn't create).
     let emailed = false;
     if (link) {
+      const inbox = await hostInbox(db, link);
       const facts: BookingFacts = {
         bookingId: row.id,
         link: { name: link.name || "Meeting", durationMinutes: link.duration_minutes, hostZone: link.host_timezone },
@@ -559,21 +563,22 @@ Deno.serve(async (req: Request) => {
         guestZone: row.timezone ?? "",
         video: zoomId ? VIDEO_LABEL.zoom : VIDEO_LABEL.google_meet,
         joinUrl: row.meeting_link ?? "",
-        host: { name: host.name, avatarUrl: host.avatarUrl, email: access?.email || link.owner_email || "" },
-        hostInbox: await hostInbox(db, link),
+        host: { name: host.name, avatarUrl: host.avatarUrl, email: access?.email || link.owner_email || inbox.email },
+        hostInbox: inbox,
         guest: { name: row.attendee_name, email: row.attendee_email },
         guests: Array.isArray(row.guest_emails) ? row.guest_emails : [],
-        googleInvites,
+        googleInvites: googleCreated,
         at: cancelledAt.toISOString(),
       };
       const planned = cancelEmails(facts, {
         rebookUrl: `${CANONICAL_BOOKING_ORIGIN}/book/${encodeURIComponent(link.slug)}`,
         nowMs: cancelledAt.getTime(),
       });
-      emailed = planned.enqueue.some((request) => request.kind === "booking_guest_cancelled");
+      emailed = !googleCreated && planned.enqueue.some((request) => request.kind === "booking_guest_cancelled");
       await queueEmails(db, planned.enqueue, planned.cancelPrefixes).catch(() => {});
     }
-    return json({ ok: true, status: "cancelled", googleInvites, emailed });
+    // The page says Google drops its invite only when Google confirmed the delete.
+    return json({ ok: true, status: "cancelled", googleInvites: googleCreated && googleDropped, emailed });
   }
 
   const slug = typeof body.slug === "string" ? body.slug.trim() : "";
@@ -636,7 +641,7 @@ Deno.serve(async (req: Request) => {
   // Strict, like the extra guests: this address is Resend's `to`.
   const email = typeof body.email === "string" ? body.email.trim() : "";
   if (!name || !isEmailAddress(email)) return json({ error: "bad_guest" }, 400);
-  const note = link.note_enabled && typeof body.note === "string" ? body.note.trim() : "";
+  const note = link.note_enabled && typeof body.note === "string" ? body.note.trim().slice(0, 2000) : "";
   const guests = link.guests_enabled
     ? parseGuestEmails(body.guests, email)
     : { ok: true as const, emails: [] as string[] };

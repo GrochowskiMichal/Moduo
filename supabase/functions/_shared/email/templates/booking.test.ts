@@ -108,6 +108,11 @@ describe("booking emails · guest", () => {
       payload({ ...BOOKING_ZOOM_FIXTURE, guestName: "Win big at casino.example" }),
     );
     expect(decode(queued.attachments?.[0]?.content ?? "")).not.toContain("casino");
+    // The booker's own calendar file (C1) follows the same rule.
+    const own = BOOKING_QUEUED.booking_guest_confirmed(
+      payload({ ...BOOKING_ZOOM_FIXTURE, guestName: "Win big at casino.example" }),
+    );
+    expect(decode(own.attachments?.[0]?.content ?? "")).not.toContain("casino");
   });
 
   it("C5 confirms the guest's cancel, cancels the calendar file on Zoom-only links, no badge", () => {

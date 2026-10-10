@@ -142,7 +142,11 @@ function calendarEvent(data: BookingEmailData, method: IcsEvent["method"]): IcsE
     description: data.joinUrl ? `${name(data.video)}: ${data.joinUrl}` : undefined,
     url: data.joinUrl || undefined,
     organizer: { name: name(data.hostName), email: data.hostEmail },
-    attendees: [{ name: name(data.guestName), email: data.guestEmail }, ...data.guests.map((email) => ({ email }))],
+    // Guests' calendars show this name, so it gets C2's plain-name rule in every file.
+    attendees: [
+      { name: plainBookerName(data.guestName), email: data.guestEmail },
+      ...data.guests.map((email) => ({ email })),
+    ],
     stamp: new Date(data.at),
   };
 }
@@ -367,8 +371,7 @@ export const BOOKING_QUEUED: Record<
     return {
       doc: bookingGuestAddedEmail(data),
       fromName: viaModuo(data.hostName),
-      // The booker's name reaches these people only in its plain form, in the file too.
-      attachments: calendarFile({ ...data, guestName: plainBookerName(data.guestName) }, "REQUEST"),
+      attachments: calendarFile(data, "REQUEST"),
     };
   },
   booking_host_new: (payload) => {
