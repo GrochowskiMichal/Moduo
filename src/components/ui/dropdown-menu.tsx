@@ -4,9 +4,9 @@ import type * as React from "react";
 
 import { cn } from "@/lib/utils";
 import { eyebrowVariants } from "./eyebrow";
-import { FLOATING_SURFACE } from "./surface";
+import { DROPDOWN_MENU_SCROLL, FLOATING_SURFACE } from "./surface";
 
-const contentBase = cn(FLOATING_SURFACE, "min-w-[8rem] overflow-hidden p-1");
+const contentBase = cn(FLOATING_SURFACE, DROPDOWN_MENU_SCROLL, "min-w-[8rem] p-1");
 
 const itemBase = cn(
   "relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-popover-foreground",

@@ -38,6 +38,19 @@ test.describe("avatars", () => {
     expect(teamShape.radius).toBeGreaterThan(0);
     expect(teamShape.radius).toBeLessThan(teamShape.half);
 
+    // Two letters fit inside the circle at every size (the icon rung's 9 px
+    // step must win over the fallback's own type step).
+    for (const box of await people.all()) {
+      const fit = await box.evaluate((el) => {
+        // The text node itself: the fallback span fills the circle by design.
+        const letters = el.querySelector("[data-slot=avatar-fallback]")?.firstChild;
+        const range = document.createRange();
+        if (letters) range.selectNodeContents(letters);
+        return { text: range.getBoundingClientRect().width, box: el.getBoundingClientRect().width };
+      });
+      expect(fit.text).toBeLessThanOrEqual(fit.box);
+    }
+
     // Initials sit on a coloured fill, not the old neutral muted disc.
     const fill = await people
       .first()

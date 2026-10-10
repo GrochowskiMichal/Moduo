@@ -10,3 +10,13 @@
 /** Popover, menu, select list and tooltip surface. */
 export const FLOATING_SURFACE =
   "motion-pop rounded-md border border-hairline bg-popover text-popover-foreground";
+
+/**
+ * A menu never runs past the window: it caps at the room Radix measures on its
+ * side and scrolls inside (DS-6; a long project picker was cut off at the
+ * window's edge). The select list does the same through its own viewport.
+ */
+export const DROPDOWN_MENU_SCROLL =
+  "max-h-(--radix-dropdown-menu-content-available-height) overflow-x-hidden overflow-y-auto";
+export const CONTEXT_MENU_SCROLL =
+  "max-h-(--radix-context-menu-content-available-height) overflow-x-hidden overflow-y-auto";

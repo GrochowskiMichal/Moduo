@@ -10,17 +10,26 @@ import type { Assignee } from "../assignees";
  */
 export function AssigneeAvatar({
   assignee,
+  assigneeId,
   size = "sm",
   className,
 }: {
   assignee: Assignee | null;
+  /** The task's assignee id: set but unknown (a former member) draws "?" on
+   *  gray, never the empty "unassigned" ring. */
+  assigneeId?: string | null;
   size?: "sm" | "icon";
   className?: string;
 }) {
+  const name = assignee
+    ? // Test fixtures and older callers may lack personName; never a pronoun in prod.
+      (assignee.personName ?? assignee.name)
+    : assigneeId
+      ? "?"
+      : null;
   return (
     <PersonAvatar
-      // Test fixtures and older callers may lack personName; never a pronoun in prod.
-      name={assignee ? (assignee.personName ?? assignee.name) : null}
+      name={name}
       id={assignee?.userId}
       src={assignee?.avatarUrl}
       size={size}

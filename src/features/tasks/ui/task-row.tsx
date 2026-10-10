@@ -1,5 +1,5 @@
 import type { DraggableSyntheticListeners } from "@dnd-kit/core";
-import { Check, ChevronDown, ChevronRight, CornerDownRight, Inbox } from "lucide-react";
+import { ChevronDown, ChevronRight, CornerDownRight, Inbox } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { DatePickerPanel } from "@/components/ui/date-field";
 import { SELECTED_ROW } from "@/components/ui/selection";
@@ -16,6 +16,13 @@ import {
   ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "../../../components/ui/context-menu";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "../../../components/ui/dropdown-menu";
 import { Input } from "../../../components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
@@ -314,7 +321,7 @@ export function TaskRow({
                     role="img"
                     aria-label={`Assignee: ${assigneeName}`}
                   >
-                    <AssigneeAvatar assignee={assignee} size="icon" />
+                    <AssigneeAvatar assignee={assignee} assigneeId={task.assigneeId} size="icon" />
                   </span>
                 </TooltipTrigger>
                 <TooltipContent>{assigneeName}</TooltipContent>
@@ -678,49 +685,49 @@ function BucketPopover({
   const options = inboxId
     ? [{ id: inboxId, name: "Inbox", isSystem: true }, ...buckets.filter((b) => b.id !== inboxId)]
     : buckets;
+  // A menu, not a hand-rolled list (DS-6, visual audit B11): arrow keys and
+  // typeahead come with it. Where the bucket is implied the trigger stays in
+  // the row but takes no width and can't be seen or tabbed to, so opening the
+  // menu with `b` anchors it without moving the row (R6: never `hidden → flex`).
   return (
-    <Popover open={open} onOpenChange={onOpenChange}>
-      <PopoverTrigger asChild disabled={!canEdit}>
+    // Not modal, like the row's date popovers: a trapped focus scope would pull
+    // focus back from the list when Esc hands it there.
+    <DropdownMenu open={open} onOpenChange={onOpenChange} modal={false}>
+      <DropdownMenuTrigger asChild disabled={!canEdit}>
         <button
           type="button"
           onClick={(e) => e.stopPropagation()}
           aria-label={`Bucket: ${bucketName}`}
+          tabIndex={showLabel ? undefined : -1}
           className={cn(
-            "min-w-0 shrink-3 rounded-sm px-1 transition-colors duration-(--motion-fade) ease-(--ease-out)",
+            "flex min-w-0 shrink-3 rounded-sm px-1 transition-colors duration-(--motion-fade) ease-(--ease-out)",
             canEdit && "hover:bg-state-hover",
-            showLabel || open ? "flex" : "hidden",
+            !showLabel && "pointer-events-none w-0 overflow-hidden px-0 opacity-0",
           )}
         >
           <BucketLabel name={bucketName} isInbox={task.bucketId === inboxId} />
         </button>
-      </PopoverTrigger>
-      <PopoverContent
-        className="w-48 p-1"
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        className="max-h-64 w-48 overflow-auto"
         onClick={(e) => e.stopPropagation()}
         onCloseAutoFocus={keepListFocus}
         align="end"
       >
-        <div className="max-h-64 overflow-auto">
+        <DropdownMenuRadioGroup
+          value={task.bucketId ?? ""}
+          onValueChange={(id) => {
+            if (id !== task.bucketId) api.patchTask(task.id, { bucketId: id });
+          }}
+        >
           {options.map((b) => (
-            <button
-              key={b.id}
-              type="button"
-              className={cn(
-                "flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-state-hover",
-                b.id === task.bucketId && "text-foreground",
-              )}
-              onClick={() => {
-                if (b.id !== task.bucketId) api.patchTask(task.id, { bucketId: b.id });
-                onOpenChange(false);
-              }}
-            >
-              {b.isSystem ? <Inbox className="size-3.5 text-muted-foreground" aria-hidden /> : null}
+            <DropdownMenuRadioItem key={b.id} value={b.id}>
+              {b.isSystem ? <Inbox aria-hidden /> : null}
               <span className="truncate">{b.name}</span>
-              {b.id === task.bucketId ? <Check className="ml-auto size-3.5" aria-hidden /> : null}
-            </button>
+            </DropdownMenuRadioItem>
           ))}
-        </div>
-      </PopoverContent>
-    </Popover>
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

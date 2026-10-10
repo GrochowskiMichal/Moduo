@@ -496,7 +496,8 @@ export function TaskListView({
           active instanceof HTMLElement &&
           active !== document.body &&
           !containerRef.current?.contains(active) &&
-          !active.closest('[data-slot="popover-content"]');
+          // The row's own editors: the date popovers and the bucket menu.
+          !active.closest('[data-slot="popover-content"], [data-slot="dropdown-menu-content"]');
         if (!leftForElsewhere) containerRef.current?.focus();
       },
       onRequestCommand: (kind: RowCommand) => setCommand({ taskId: t.id, kind }),

@@ -227,16 +227,18 @@ function PersonAvatar({
       />
     );
   }
+  const initials = initialsOf(name);
   return (
     <Avatar
       size={size}
-      data-label={avatarHue(id || name)}
+      // Someone the app can't name (a former member) is "?" on gray.
+      data-label={initials === "?" ? "gray" : avatarHue(id || name)}
       aria-hidden={ariaHidden}
       className={className}
       {...props}
     >
       {src ? <AvatarImage src={src} alt="" /> : null}
-      <AvatarFallback className={personFill({ size })}>{initialsOf(name)}</AvatarFallback>
+      <AvatarFallback className={personFill({ size })}>{initials}</AvatarFallback>
     </Avatar>
   );
 }

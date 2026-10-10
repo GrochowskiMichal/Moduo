@@ -92,7 +92,14 @@ function useDraftField<T>({
     else set(next);
   };
 
-  return { draft, setDraft, commit, set, revert: () => setDraft(shown) };
+  /** Throw the draft away (Esc). Also cleared from the unmount commit at once,
+   *  so an Esc that closes the field's popover in the same tick saves nothing. */
+  const revert = () => {
+    latest.current.draft = shown;
+    setDraft(shown);
+  };
+
+  return { draft, setDraft, commit, set, revert };
 }
 
 type NumberInputProps = Omit<InputProps, "value" | "defaultValue" | "onChange" | "type"> & {

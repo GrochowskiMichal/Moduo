@@ -53,6 +53,17 @@ describe("text is never rotated (call 46a)", () => {
     // Not a quarter turn: not this rule's business.
     expect(hits(`<span className="rotate-45">x</span>`)).toEqual([]);
   });
+
+  it("an icon's exemption is its own tag only, and inline `rotate:` counts", () => {
+    // A class held in a const after an icon is not on the icon.
+    const after = `import { Check } from "lucide-react";
+      <Check className="size-icon" />
+      const label = cn("text-xs", folded && "rotate-90");`;
+    expect(hits(after)).toEqual(["rotated-text:rotate-90"]);
+    expect(hits(`<span style={{ rotate: "90deg" }}>Lane</span>`)).toEqual([
+      'rotated-text:rotate: "90deg',
+    ]);
+  });
 });
 
 describe("small caps never carry people's words (call 40)", () => {
@@ -105,14 +116,39 @@ describe("small caps never carry people's words (call 40)", () => {
     for (const file of Object.keys(SMALL_CAPS_DEBT)) {
       expect(file.startsWith("src/features/tasks/"), file).toBe(false);
     }
-    // Every allowlisted value still exists where it is listed; a stale entry
-    // would quietly excuse the next name written there.
-    for (const list of [SMALL_CAPS_CHROME, SMALL_CAPS_DEBT]) {
-      for (const [file, exprs] of Object.entries(list)) {
-        const source = (await fs.readFile(path.join(ROOT, file), "utf8")).replace(/\s+/g, " ");
-        for (const expr of exprs) expect(source, `${file}: ${expr}`).toContain(expr);
-      }
+    // Each file has exactly as many sites as its entries: a stale entry would
+    // quietly excuse the next name written there.
+    const files = new Set([...Object.keys(SMALL_CAPS_CHROME), ...Object.keys(SMALL_CAPS_DEBT)]);
+    for (const file of files) {
+      const source = await fs.readFile(path.join(ROOT, file), "utf8");
+      const sites = scanTextRules(source, file, { useAllowlist: false })
+        .filter((h) => h.expr)
+        .map((h) => h.expr as string)
+        .sort();
+      const listed = [...(SMALL_CAPS_CHROME[file] ?? []), ...(SMALL_CAPS_DEBT[file] ?? [])].sort();
+      expect(sites, file).toEqual(listed);
     }
+  });
+
+  it("checks the wrappers that set small caps: their children or their label prop", () => {
+    expect(hits(`<WidgetSectionLabel count={3}>{project.name}</WidgetSectionLabel>`)).toEqual([
+      "small-caps-user-words:<WidgetSectionLabel>{project.name}",
+    ]);
+    expect(hits(`<Field label={team.name}><Input /></Field>`)).toEqual([
+      "small-caps-user-words:<Field label={team.name}>",
+    ]);
+    expect(hits(`<CommandGroup heading={project.name}>{rows}</CommandGroup>`)).toEqual([
+      "small-caps-user-words:<CommandGroup heading={project.name}>",
+    ]);
+    expect(hits(`<Field label="Name"><Input /></Field>`)).toEqual([]);
+  });
+
+  it("an allowlist entry excuses one site, not every site with that name", () => {
+    // settings-modal lists `group.label` once: a second site in that file fails.
+    const twice = "<Eyebrow>{group.label}</Eyebrow>\n<Eyebrow>{group.label}</Eyebrow>";
+    expect(
+      scanTextRules(twice, "src/features/settings/settings-modal.tsx").map((h) => h.match),
+    ).toEqual(["<Eyebrow>{group.label}"]);
   });
 
   it("lint:tw reports the text rules through scanFile", () => {

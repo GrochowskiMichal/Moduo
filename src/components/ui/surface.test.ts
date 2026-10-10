@@ -5,7 +5,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "@rstest/core";
 
-import { FLOATING_SURFACE } from "./surface";
+import { CONTEXT_MENU_SCROLL, DROPDOWN_MENU_SCROLL, FLOATING_SURFACE } from "./surface";
 
 const ROOT = process.cwd();
 
@@ -87,6 +87,23 @@ describe("one floating-surface recipe (DS-6)", () => {
       // tw-animate entrances are the second motion recipe (the old tooltip).
       expect(source, name).not.toMatch(/\b(?:animate-in|zoom-in-95|slide-in-from-)/);
     }
+  });
+
+  it("menus cap at the room on their side and scroll inside", async () => {
+    const pairs: Array<[string, string]> = [
+      ["dropdown-menu", "DROPDOWN_MENU_SCROLL"],
+      ["context-menu", "CONTEXT_MENU_SCROLL"],
+    ];
+    for (const [file, token] of pairs) {
+      const source = await fs.readFile(path.join(ROOT, `src/components/ui/${file}.tsx`), "utf8");
+      const base = /const contentBase = cn\(([^)]*)\)/.exec(source)?.[1] ?? "";
+      expect(base, file).toContain(token);
+    }
+    expect(DROPDOWN_MENU_SCROLL).toContain(
+      "max-h-(--radix-dropdown-menu-content-available-height)",
+    );
+    expect(DROPDOWN_MENU_SCROLL).toContain("overflow-y-auto");
+    expect(CONTEXT_MENU_SCROLL).toContain("max-h-(--radix-context-menu-content-available-height)");
   });
 
   it("no caller re-skins a floating surface", async () => {

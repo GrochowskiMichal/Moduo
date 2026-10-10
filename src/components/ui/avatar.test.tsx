@@ -70,6 +70,14 @@ describe("PersonAvatar and TeamMark", () => {
     expect(fallback.className).not.toContain("group-data-[size=icon]/avatar:text-2xs");
   });
 
+  it("someone the app can't name is a gray ?, not the unassigned ring", () => {
+    const { container } = render(<PersonAvatar name="?" />);
+    const root = container.querySelector("[data-slot=avatar]") as HTMLElement;
+    expect(root.getAttribute("data-label")).toBe("gray");
+    expect(root.hasAttribute("data-unassigned")).toBe(false);
+    expect(container.textContent).toBe("?");
+  });
+
   it("no one is the dashed ring, with no letters", () => {
     const { container } = render(<PersonAvatar name={null} />);
     const root = container.querySelector("[data-slot=avatar]") as HTMLElement;

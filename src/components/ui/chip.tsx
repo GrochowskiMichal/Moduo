@@ -13,8 +13,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "./popover";
  * - At rest: a hairline ring, no fill. Set / active: the neutral active fill
  *   (`state-active`), never a stronger border (one set/unset rule: fill).
  * - Density-bound height: `sm` sits on the small control rung (`--ctrl-h-sm`,
- *   14 px); `xs` is the inline rung (`--ctrl-h-xs`, 13 px) for chips inside a
- *   line of text or a row.
+ *   26 / 24 / 22 px) with 14 px text; `xs` is the inline rung (`--ctrl-h-xs`,
+ *   24 / 22 / 20 px) with 13 px text, for chips inside a line of text or a row.
  * - `shape="full"` for a pill, `md` (default) for a chip.
  * - Optional leading icon on the icon rung; optional trailing × (`onRemove`)
  *   with its own label and a 24 px hit area.

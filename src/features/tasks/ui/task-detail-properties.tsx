@@ -149,7 +149,8 @@ export function TaskDetailProperties({ task, api, canEdit, mySeconds }: Props) {
             icon={<Clock />}
             value={task.scheduledAt ? new Date(task.scheduledAt) : null}
             onChange={(d) => api.patchTask(task.id, { scheduledAt: d ? d.toISOString() : null })}
-            formatValue={(d) => format(d, "EEE, MMM d · HH:mm")}
+            // One time grammar with its TimeInput: "3:00 PM" (call 41).
+            formatValue={(d) => format(d, "EEE, MMM d · h:mm a")}
             placeholder="Set time"
             aria-label="Scheduled"
             disabled={!canEdit}

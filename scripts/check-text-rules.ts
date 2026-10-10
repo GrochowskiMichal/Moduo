@@ -17,12 +17,19 @@
  *    same rule. `capitalize` and `font-variant` small caps fail anywhere.
  */
 
-type TextHit = { line: number; column: number; pattern: string; match: string };
+type TextHit = {
+  line: number;
+  column: number;
+  pattern: string;
+  match: string;
+  /** The allowlist key a small-caps hit is filed under. */
+  expr?: string;
+};
 
 // ── shapes ───────────────────────────────────────────────────────────────────
 
 const ROTATION =
-  /(?<![\w-])-?rotate-(?:90|270|\[-?(?:90|270)deg\])(?![\w-])|rotate\(\s*-?(?:90|270)deg\s*\)/g;
+  /(?<![\w-])-?rotate-(?:90|270|\[-?(?:90|270)deg\])(?![\w-])|rotate\(\s*-?(?:90|270)deg\s*\)|\brotate\s*:\s*["'`]-?(?:90|270)deg/g;
 
 const VERTICAL_TEXT =
   /\[(?:writing-mode|text-orientation):[^\]]*\]|\bwritingMode\s*:|\btextOrientation\s*:|\b(?:vertical|sideways)-(?:rl|lr)\b/g;
@@ -30,17 +37,29 @@ const VERTICAL_TEXT =
 const SMALL_CAPS_SHAPES =
   /\[font-variant(?:-caps)?:[^\]]*\]|\bfontVariant(?:Caps)?\s*:|(?<=["'`\s])capitalize(?=["'`\s])/g;
 
-/** Labels that wear the eyebrow recipe (small caps). */
-const SMALL_CAPS_TAGS = ["Eyebrow", "DropdownMenuLabel", "ContextMenuLabel", "SelectLabel"];
+/** Labels that wear the eyebrow recipe (small caps) on their children. */
+const SMALL_CAPS_TAGS = [
+  "Eyebrow",
+  "DropdownMenuLabel",
+  "ContextMenuLabel",
+  "SelectLabel",
+  "WidgetSectionLabel",
+];
+
+/** Wrappers that put one prop into small caps: checked at every call site. */
+const SMALL_CAPS_PROPS: Record<string, string> = { Field: "label", CommandGroup: "heading" };
 
 // ── the reviewed allowlist ───────────────────────────────────────────────────
 //
 // `file → expressions` whose small caps were checked and hold fixed chrome
 // (a section name the app chose, a weekday, a kind of thing), never a name a
-// person typed. Add an entry only after checking where the value comes from;
-// a user word moves to `GroupHeader` instead. Paths outside Tasks also sit
-// here because DS-5's sweep of the other modules was retired (tasks-v3,
-// 2026-10-10): each one is read again when its module is rebuilt.
+// person typed. Each entry excuses ONE site: list an expression twice for two
+// sites, so a generic name (`label`) can't excuse the next site in the same
+// file, and a test fails when a file has fewer sites than its entries. Add an
+// entry only after checking where the value comes from; a user word moves to
+// `GroupHeader` instead. Paths outside Tasks also sit here because DS-5's
+// sweep of the other modules was retired (tasks-v3, 2026-10-10): each one is
+// read again when its module is rebuilt.
 const SMALL_CAPS_CHROME: Record<string, string[]> = {
   // Settings: section and nav-group names the app defines; platform names;
   // the "This device" tag.
@@ -55,11 +74,10 @@ const SMALL_CAPS_CHROME: Record<string, string[]> = {
   // TV-F7) shows its phase word ("Focus", "Break") and a subtask number.
   "src/features/tasks/ui/task-timeline-view.tsx": ["m.label"],
   "src/features/tasks/ui/execute-view.tsx": ["session.phaseLabel", "done"],
-  // Calendar: its Tasks groups ("Queue", "Due soon", "Backlog"), the rail's
-  // fixed group headers, a weekday on the booking page; colour names
-  // ("blue" → "Blue") in the account colour menu.
+  // Calendar: its Tasks groups ("Queue", "Due soon", "Backlog"), a weekday on
+  // the booking page; colour names ("blue" → "Blue") in the account colour menu.
   "src/features/calendar/ui/calendar-tasks-panel.tsx": ["title"],
-  "src/features/calendar/ui/calendar-rail.tsx": ["group.header", "capitalize"],
+  "src/features/calendar/ui/calendar-rail.tsx": ["capitalize"],
   "src/features/calendar/booking/sentence-ui.tsx": ["parts.weekday"],
   // Chat: rail sections ("Starred", "Channels", "Direct messages"); the kind
   // of thing in a reference result ("project", "task").
@@ -92,7 +110,11 @@ const SMALL_CAPS_CHROME: Record<string, string[]> = {
   // Shared: a form field's label; the command palette's kind of result; the
   // paywall's plan names and its section eyebrow.
   "src/components/ui/field.tsx": ["label"],
-  "src/components/app/global-command-palette.tsx": ["TYPE_LABEL[record.type] ?? record.type"],
+  "src/components/app/global-command-palette.tsx": [
+    "TYPE_LABEL[record.type] ?? record.type",
+    // Result groups from palette-search's fixed GROUP_DEFS ("Tasks", "Notes").
+    "group.heading",
+  ],
   "src/routes/pages/paywall-page.tsx": ["heading.eyebrow", "name"],
   // Stories demonstrate the recipe with sample text.
   "src/components/ui/drag-visuals.stories.tsx": ["children"],
@@ -105,8 +127,10 @@ const SMALL_CAPS_CHROME: Record<string, string[]> = {
  * here: a test fails on either.
  */
 const SMALL_CAPS_DEBT: Record<string, string[]> = {
-  // A CalDAV / ICS account's own name heads its group.
+  // A CalDAV / ICS account's own name heads its group (Settings and the
+  // calendar rail: the username or server, accounts.ts).
   "src/features/settings/sections/integrations-section.tsx": ["header"],
+  "src/features/calendar/ui/calendar-rail.tsx": ["group.header"],
   // The sender's address heads the row menu.
   "src/features/email/ui/email-thread-list.tsx": ["thread.fromEmail || senderText(thread)"],
   // "<Host> also asks": the host's name on the public booking page.
@@ -200,15 +224,21 @@ function lucideNames(content: string): Set<string> {
   return names;
 }
 
-/** The nearest JSX opening tag before `index` (the element a class is on). */
+/**
+ * The JSX element whose opening tag holds `index` (a class on that element),
+ * or null when `index` sits anywhere else (a `const` of classes, a child).
+ */
 function owningTag(content: string, index: number): string | null {
-  const before = content.slice(Math.max(0, index - 3000), index);
+  const from = Math.max(0, index - 3000);
   const re = /<([A-Za-z][\w.]*)\b/g;
-  let last: string | null = null;
+  let last: { tag: string; at: number } | null = null;
   let m: RegExpExecArray | null;
+  const before = content.slice(from, index);
   // biome-ignore lint/suspicious/noAssignInExpressions: regex-drain idiom
-  while ((m = re.exec(before))) last = m[1];
-  return last;
+  while ((m = re.exec(before))) last = { tag: m[1], at: from + m.index };
+  if (!last) return null;
+  const open = openingTag(content, last.at);
+  return last.at + open.length > index ? last.tag : null;
 }
 
 function isIconTag(tag: string | null, icons: Set<string>): boolean {
@@ -241,17 +271,38 @@ function isNotWords(expr: string): boolean {
 
 const normalise = (expr: string) => expr.replace(/\s+/g, " ").trim();
 
-function allowlisted(file: string, expr: string): boolean {
+/** How many sites of `expr` the allowlists excuse in `file`. */
+function allowance(file: string, expr: string): number {
   const key = normalise(expr);
-  return !!(SMALL_CAPS_CHROME[file]?.includes(key) || SMALL_CAPS_DEBT[file]?.includes(key));
+  const count = (list: Record<string, string[]>) =>
+    (list[file] ?? []).filter((e) => e === key).length;
+  return count(SMALL_CAPS_CHROME) + count(SMALL_CAPS_DEBT);
 }
 
 // ── the scan ─────────────────────────────────────────────────────────────────
 
-function scanTextRules(content: string, file: string): TextHit[] {
+/**
+ * Every rotated-text and small-caps hit in one file. `useAllowlist: false`
+ * reports the allowlisted sites too (the "allowlists stay honest" test).
+ */
+function scanTextRules(
+  content: string,
+  file: string,
+  { useAllowlist = true }: { useAllowlist?: boolean } = {},
+): TextHit[] {
   const hits: TextHit[] = [];
-  const push = (index: number, pattern: string, match: string) =>
-    hits.push({ ...lineCol(content, index), pattern, match });
+  const push = (index: number, pattern: string, match: string, expr?: string) =>
+    hits.push({ ...lineCol(content, index), pattern, match, ...(expr ? { expr } : {}) });
+  // Each allowlist entry excuses one site, in file order.
+  const used = new Map<string, number>();
+  const allowlisted = (_file: string, expr: string) => {
+    if (!useAllowlist) return false;
+    const key = normalise(expr);
+    const n = used.get(key) ?? 0;
+    if (n >= allowance(file, key)) return false;
+    used.set(key, n + 1);
+    return true;
+  };
 
   const icons = lucideNames(content);
   for (const m of content.matchAll(ROTATION)) {
@@ -265,7 +316,7 @@ function scanTextRules(content: string, file: string): TextHit[] {
   }
   for (const m of content.matchAll(SMALL_CAPS_SHAPES)) {
     if (inComment(content, m.index ?? 0) || allowlisted(file, m[0])) continue;
-    push(m.index ?? 0, "small-caps", m[0]);
+    push(m.index ?? 0, "small-caps", m[0], m[0]);
   }
 
   const tagRe = new RegExp(`<(${SMALL_CAPS_TAGS.join("|")})\\b`, "g");
@@ -277,7 +328,24 @@ function scanTextRules(content: string, file: string): TextHit[] {
     if (close < 0) continue;
     for (const expr of childExpressions(content.slice(start + open.length, close))) {
       if (isNotWords(expr) || allowlisted(file, expr)) continue;
-      push(start, "small-caps-user-words", `<${m[1]}>{${normalise(expr)}}`);
+      push(start, "small-caps-user-words", `<${m[1]}>{${normalise(expr)}}`, normalise(expr));
+    }
+  }
+
+  for (const [tag, prop] of Object.entries(SMALL_CAPS_PROPS)) {
+    for (const m of content.matchAll(new RegExp(`<${tag}\\b`, "g"))) {
+      const start = m.index ?? 0;
+      const open = openingTag(content, start);
+      const attr = new RegExp(`\\b${prop}=\\{`).exec(open);
+      if (!attr) continue;
+      const expr = childExpressions(open.slice(attr.index + prop.length + 1))[0] ?? "";
+      if (isNotWords(expr) || allowlisted(file, expr)) continue;
+      push(
+        start,
+        "small-caps-user-words",
+        `<${tag} ${prop}={${normalise(expr)}}>`,
+        normalise(expr),
+      );
     }
   }
 
@@ -287,7 +355,7 @@ function scanTextRules(content: string, file: string): TextHit[] {
       const lineStart = content.lastIndexOf("\n", index) + 1;
       if (/^\s*(?:import|\/\/|\*|\/\*)/.test(content.slice(lineStart, index))) continue;
       if (allowlisted(file, "eyebrowVariants()")) continue;
-      push(index, "small-caps-user-words", "eyebrowVariants()");
+      push(index, "small-caps-user-words", "eyebrowVariants()", "eyebrowVariants()");
     }
   }
   return hits;

@@ -19,3 +19,26 @@
 - [ ] **Do:** progress → Densities → **Expect:** grey bars, never the accent colour; the thin one sits beside "1h 20m of ~4h". _(Storybook)_
 - [ ] **Do:** toolbar → Default → **Expect:** "Website relaunch 76" · Search · Filter · Display as plain (ghost) buttons · the list/board/timeline icons · one filled "New" button. _(Storybook)_
 - [ ] **Do:** Components/app → app-chrome → Default → **Expect:** the app's top bar renders (it used to show "Something went wrong"). _(Storybook)_
+
+## Tasks: the fix list (Storybook → Tasks, or the app on the local stack)
+- [ ] **Do:** Tasks → TaskListView → All by bucket → **Expect:** group headers read "Moduo App 9", "Landing 1" as typed (no capitals), with a chevron that collapses them; assignees are two letters on a colour (MA, MI), never one letter. _(both)_
+- [ ] **Do:** select a row and press `s`, then `d` (or click a row's date) → **Expect:** a small "Scheduled" / "Due date" picker: Today · Tomorrow · Next week, the month with its arrows on the title row, and for Scheduled a time field reading like "9:00 AM". Type "3pm" and click outside → the time is kept. No browser date or time control appears anywhere. _(both)_
+- [ ] **Do:** in "All", select a row and press `b` (or click a row's project name) → **Expect:** a menu of projects with a check on the current one; ↑ / ↓ and typing a name's first letters move through it; Enter moves the task. Where the project is implied (inside one project), pressing `b` opens the menu without the row shifting. _(both)_
+- [ ] **Do:** open any long menu (a project picker with many projects) in a short window → **Expect:** it stops at the window's edge and scrolls inside instead of being cut off. _(both)_
+- [ ] **Do:** double-click a row title to rename it → **Expect:** the text stays the same size and face while you type (it used to shrink into a smaller heading font). _(both)_
+- [ ] **Do:** point just outside a row's round check, the queue icon, the expand arrow and the rail's drift dot → **Expect:** each still reacts (a 24 px target) while the glyphs look the same size as before. _(both)_
+- [ ] **Do:** TaskBoardView → By bucket → **Expect:** column headers "Inbox 0", "Moduo App 9" as typed; the empty Inbox column shows "Drop tasks here" in the quiet empty style. _(both)_
+- [ ] **Do:** TaskTimelineView → Populated → **Expect:** lane headers "Deep work 6", "Admin 1" and the "Unscheduled 2" tray header as typed, collapsible; only the month band ("OCTOBER 2026") stays in small caps (fixed chrome). _(both)_
+- [ ] **Do:** TaskDetailPanel → Populated → **Expect:** Subtasks / Blocked by / Linked headers with their counts and a "+"; the feed shows two-letter avatars (your own initials, not "M" for "Me") and comment cards with the time in a quieter grey. _(both)_
+- [ ] **Do:** in the app, ⌘N in Tasks (the capture modal) → **Expect:** the pills (Bucket, Assignee, Priority, …) are one chip style: a faint ring when empty, a soft fill when set; Schedule's time is a text field ("3:00 PM"); Duration is a number field plus chips (15m · 30m · …); the close × is a normal icon button; the shortcut hint uses the app's key caps. _(app)_
+- [ ] **Do:** Focus (the execute view) → the timer settings → **Expect:** the minute fields are plain number fields without spinner arrows; ↑ / ↓ step them; Skip and Done are on the same small button size. _(app)_
+- [ ] **Do:** Calendar → the right panel → Notes, and Contacts → a contact → Notes → **Expect:** no second "Notes" heading under the panel's own title; just the list and "New linked note". _(app)_
+
+## The guards
+- [ ] **Do:** in any `src/features/**.tsx`, add `<Eyebrow>{task.title}</Eyebrow>` and run `bun run lint:tw` → **Expect:** it fails with "small-caps-user-words" and tells you to use GroupHeader. Revert. _(terminal)_
+- [ ] **Do:** add `className="-rotate-90"` to a `<span>` with text and run `bun run lint:tw` → **Expect:** "rotated-text". The same class on a lucide icon passes. Revert. _(terminal)_
+- [ ] **Do:** add `.x { writing-mode: vertical-rl; }` to `src/global.css` and run `bun run lint:css` → **Expect:** an error naming DS-6. Revert. _(terminal)_
+
+## Known and left on purpose
+- 14 hand-rolled controls stay in Tasks because no primitive fits without changing behaviour: the row, subtask and related-task title targets; the date and bucket cell triggers; the expand chevron; the queue toggle, the subtask queue toggle and the drift dot; the timeline tray chip (a drag source); a capture pill's ×; three mid-sentence text links. TV-U10 / U11 / U13 / U14 rebuild those surfaces on the kit.
+- Other modules keep their native inputs, one-letter avatars (Chat, the dashboard's chat widget, the account menu) and three small-caps names (a CalDAV account, an email sender in a row menu, the booking host): DS-5's sweep is retired, each module adopts the kit when it is rebuilt.
