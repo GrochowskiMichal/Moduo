@@ -4,6 +4,8 @@
 >
 > **Supersedes** [`specs/tasks-v2.md`](./tasks-v2.md) as the plan of record. tasks-v2 blocks 1–10 landed and stay; blocks 11–21 are re-scoped here (§Execution blocks, "Carried from v2"). Decision entries with the one-line *why* and the rejected alternative live in [`docs/decisions/tasks.md`](../docs/decisions/tasks.md); this spec says only *what* to build.
 >
+> **Build mode:** local only until Maciej says "release" — see the 🟠 LOCAL BUILD MODE box at the top of the Tasks v3 section in [`specs/BUILD_ORDER.md`](./BUILD_ORDER.md) (integration branch `t/maciej/tasks-v3-build`, local Supabase as prod, no pushes or PRs).
+>
 > **Reading rule for builders:** a call number in parentheses — (53a), (82b), (default m) — points at REPLAN §8. Open it only when you need the reasoning. Numbers are stable and never reused.
 
 ## Scope
