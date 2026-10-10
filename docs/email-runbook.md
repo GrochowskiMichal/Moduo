@@ -166,7 +166,7 @@ select vault.create_secret(replace(gen_random_uuid()::text || gen_random_uuid():
 
 Steps 1–2 are agent steps that need Maciej's OK in the session; steps 4–7 are Maciej's, in the Supabase dashboard (project `wtoonrvuqumihpkbvwvs`). Nothing here touches the TX-2 steps above, but step 6 waits for them: once sign-ups are on, a new person's first code is a `signup` email, which only `auth-email-hook` renders as A1.
 
-1. **Worker first** (agent, with OK). The B1 template (`waitlist_invite`) has to be in the deployed worker before anything can queue it:
+1. **Worker first** (agent, with OK). The B1 template (`waitlist_invite`) has to be in the deployed worker before anything can queue it. A deploy replaces the whole worker, so deploy from a branch whose `OUTBOX_TEMPLATES` (`_shared/email/outbox.ts`) holds every kind the live worker already sends: since TX-5 (PR #349) that means merging TX-5 in first, or deploying from `maciej` once both PRs are in; otherwise the booking emails drop out and their queued rows fail after about 80 minutes.
    ```bash
    supabase functions deploy email-worker --project-ref wtoonrvuqumihpkbvwvs --no-verify-jwt --import-map supabase/functions/deno.json --use-api
    ```
