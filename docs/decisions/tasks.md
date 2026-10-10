@@ -2,6 +2,81 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index.
 
+## 2026-10-10 · TV-D9 statuses, completion, dates — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 9 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §Assumptions #3, #4, #24, #26–#28; migrations `20261010170000_project_statuses`, `20261010171000_tasks_completion_due_on`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **D9-1 · Every project gets its own copy of the default statuses when it's made** → TV-D9 (`project_statuses__seed`, AFTER INSERT on `buckets`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: a new project copies the workspace default set at once, and existing projects were backfilled the same way; the Inbox (a system project) has no rows and uses the default set itself; changing the default never touches existing projects.
+  - Why: a task's status always points into its own project's set, so moves, renames and deletes stay local and need no copy-on-first-edit remapping.
+  - Rejected: projects inheriting the default until first edited (every read would have to fall back, and the first edit would have to remap every task).
+- **D9-2 · "The first status of a category" is the first visible one** → TV-D9 (`tasks__first_status`, `firstStatusOf`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: visible statuses first, then by position; a hidden one is used only when the whole category is hidden.
+  - Why: a creator's pipeline hides To do and Won't do; a repeat coming back or a deleted status's tasks shouldn't land in a hidden column when a visible one exists.
+  - Rejected: position alone (tasks would vanish into hidden statuses).
+- **D9-3 · Hidden is not empty: a category keeps at least one live status, hidden or not** → TV-D9 (`project_statuses_op_delete`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: deleting a category's last status is refused ("Rename or hide this one instead"); hiding every status of a category is allowed.
+  - Why: the five categories carry the app's behaviour and must always resolve; a pipeline without a To do column is still a pipeline.
+  - Rejected: refusing to hide the last visible status (the creator example needs it).
+- **D9-4 · A status keeps its category; a category's word names only a status of that category** → TV-D9 (`project_statuses_op_update`, `project_statuses__check_name`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: statuses rename, hide and reorder inside their category but never move to another; a name like "Done" or "To do" is refused for a status of another category.
+  - Why: moving a status across categories would silently complete or reopen its tasks; a word that reads as a category could never be reached by name.
+  - Rejected: free category changes with a bulk remap.
+- **D9-5 · Status by id, then a category word, then the project's name; anything else is refused with the list** → TV-D9 (`tasks__resolve_status`), TV-D16 (MCP)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: the ops read a status id from the project's set, a category word in any spelling (backlog, To do, in_progress, Won't do, the old archived), or one of the project's names in any case; a category word keeps a status already in that category ("in_progress" on a task In review stays In review); an unknown word is refused with "This project's statuses: …".
+  - Why: old clients and agents send category words and must keep working whatever a project names its statuses; the project's own vocabulary is what its people type.
+  - Rejected: names before category words (a project naming something "done" could hijack the app's checkbox).
+- **D9-6 · The category is stored on the task too** → TV-D9 (`tasks.status_category`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: a trigger keeps `status_category` beside `status_id` and the legacy `status`; the client and MCP read the category from the row.
+  - Why: a Realtime payload, a delta sync and an assignee who can't see the project's statuses all need the category without a join.
+  - Rejected: deriving it client-side from the statuses list (hidden projects would lose it).
+- **D9-7 · Backlog is neither open nor closed** → TV-D9 (`isOpenTask`, `isClosedTask`, `isBacklogTask` in `@contracts/vocabularies`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: the one "is open" rule is To do and In progress, so every count, My tasks, the Calendar's Due soon and strip, drift, late and Focus suggestions leave Backlog out by default; "closed" is Done and Won't do; a backlog task still blocks, can still be queued (it then moves to To do) and shows unfinished in the contact hub.
+  - Why: the spec's list of where Backlog sits out is nearly every place that asked "is it open"; one rule beats a second exclusion at each site.
+  - Rejected: treating Backlog as open and adding "and not backlog" everywhere.
+- **D9-8 · Lists, boards and Filter → Status group by a status key: the legacy value, with Backlog as its own** → TV-D9 (`StatusKey`, `statusKeyOf`), TV-U10/TV-U11 (per-project columns)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: keys are todo · in_progress · done · archived · backlog; the List puts Backlog last, the Board first (shown only when it has tasks); drops write the key's category and their Undo puts the exact status back by id.
+  - Why: saved filters and drop code keep their values; Backlog stops reading as To do.
+  - Rejected: switching every key to the five categories now (saved filters would break; TV-U11 replaces the board columns anyway).
+- **D9-9 · Status writes go out as words every database takes** → TV-D9 (`taskStatusWord`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: a category is sent as its legacy word (Won't do as "archived"), Backlog as "backlog"; a named status goes by id; the date goes as `due_on`, falling back to the old instant when the op doesn't know the field.
+  - Why: the app can be deployed before the migration (the merge-before-apply window) and Won't do must keep working there.
+  - Rejected: sending the new category tokens (refused by a database before TV-D9).
+- **D9-10 · Queuing or scheduling a backlog task moves it to To do on the server; assigning or dating it only offers** → TV-D9 (`tasks__status_sync`, `tasks_queue__backlog_to_todo`, the hook's "Move to To do" toast)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: a schedule (any write path) and a queue row (the op, the legacy commit mirror) move a backlog task to the first To do, with a trail line; queuing needs edit on the task; the roll-over leaves backlog repeats alone; moving a queued task to Backlog takes it out of every queue.
+  - Why: REPLAN 53 says so, and doing it in the database covers the app, MCP and old builds alike.
+  - Rejected: client-only moves (agents and old builds would leave scheduled tasks in Backlog).
+- **D9-11 · The due date is a date; due_date mirrors it as noon UTC; a due time is the assignee's clock** → TV-D9 (`tasks__due_sync`, `tasks__due_on_of`, `tasks__due_at`), TV-D12 (reminders), TV-U13 (the picker)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: a new write sets `due_on` (and `due_date` = noon UTC of it); an old build's write of `due_date` sets `due_on` from the writer's zone (a local midnight there), else noon UTC as its own date, else the nearest UTC day; the backfill read every stored due date the same way with the task person's zone and rewrote `due_date` to noon UTC; a due time is the clock time in the task's zone (assignee, else creator, else UTC).
+  - Why: the same calendar date for everyone (AC12.5); noon UTC reads as that date for old builds from UTC-11 to UTC+11; reminders fire relative to the assignee's zone.
+  - Rejected: changing `due_date`'s type in place (breaks old builds) and a writer-zone due time (no zone is stored with it). Known limit: old builds at UTC+12 to +14 read the noon mirror as the next day until TV-D7.
+- **D9-12 · Completion is stamped by the trigger on every path; history rows by the ops, plus old builds' direct writes** → TV-D9 (`tasks.completed_at/completed_by`, `tasks__completion_record`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: entering Done stamps when and who (the API key's person for an agent), leaving clears both, clients can't write them; an old build's raw status write to done also records a completion row (a raw insert done doesn't; the create op does); backfill: the latest completion, else the trail's last "→ done", else the last edit, with the backfills' triggers off so `updated_at` isn't re-stamped.
+  - Why: "Done this month" and "Completed" need the real time; the row answers "when", the history answers "which cycles".
+  - Rejected: stamping only in `tasks__apply_status` (old builds' completions would be missing).
+- **D9-13 · The late flag is computed, never stored** → TV-D9 (`tasks__late`, `tasks_late`), TV-U10/TV-D12
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: late = To do or In progress with a due time passed, or a due date before today in the task's zone; `tasks_late(t)` is a PostgREST computed field (`select=*,late:tasks_late`) that reads the stored row and answers only for a task the caller can see.
+  - Why: a stored flag would need a job to flip it at every midnight and would wake Realtime for every late task.
+  - Rejected: a `late` column kept by the roll-over.
+- **D9-14 · The workspace default statuses open from the Inbox's ⋯ until a Settings → Tasks section exists** → TV-D9 ("Default statuses…"), the Settings rebuild
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: owners and admins get "Default statuses…" in the Inbox row's menu (the Inbox uses that set); projects get "Statuses…" in their ⋯ and "+ Add status" at the end of their board grouped by status, which opens the editor with an In progress field ready.
+  - Why: Settings has no Tasks section yet, and adding one is an IA change outside this block; the Inbox is where that set is used.
+  - Rejected: a row in Settings → Workspace (another wiring, outside the module).
+
 ## 2026-10-10 · TV-D8 server ops, registry, handles, recurrence, tolerance — the agent's choices (deferred to by Maciej)
 
 Built in tasks-v3 block 5 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §Assumptions #1, #2, #5, #6, #9; migrations `20261010160000_tasks_ops_registry_handles`, `20261010161000_tasks_recurrence_server`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.

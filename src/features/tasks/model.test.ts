@@ -193,6 +193,11 @@ describe("backlog is out of counts and views (AC4.2, AC11.6)", () => {
       current: after,
     });
     expect(write).toEqual({ taskId: "r", status: "in_progress", statusId: "s-review" });
+    // A teammate moved it to another Done status since: Undo keeps theirs.
+    const shipped = { ...after, statusId: "s-shipped" };
+    expect(
+      undoWrite({ write: { taskId: "r", status: "done" }, before, after, current: shipped }),
+    ).toEqual({ write: null, kept: ["status"] });
   });
 });
 

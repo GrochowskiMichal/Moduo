@@ -205,4 +205,26 @@ describe("the tasks export carries every new tasks table (TV-D8, §Assumptions #
     );
     expect(data.truncated).toEqual([tasksCut, completionsCut]);
   });
+
+  it("carries the statuses and each task's status, completion and due date (TV-D9)", async () => {
+    const status = { id: "s1", projectId: "p1", category: "in_progress", name: "In review" };
+    const task = {
+      id: "t1",
+      statusId: "s1",
+      statusCategory: "in_progress",
+      completedAt: null,
+      completedBy: null,
+      dueOn: "2026-11-08",
+      dueTime: "15:00:00",
+    };
+    const data = await readTasksExport(
+      {
+        list: async () => ({ tasks: [task], buckets: [], statuses: [status], truncated: [] }),
+        listCompletions: async () => ({ completions: [], truncated: [] }),
+      },
+      "ws-1",
+    );
+    expect(data.statuses).toEqual([status]);
+    expect(data.tasks).toEqual([task]);
+  });
 });

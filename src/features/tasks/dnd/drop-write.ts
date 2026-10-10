@@ -77,11 +77,15 @@ export function undoWrite(input: {
   // Backlog, not To do (TV-D9).
   const value = (task: Pick<Task, DropField | "statusCategory">, field: DropField) =>
     field === "status" ? statusKeyOf(task) : task[field];
+  // "Changed since" compares the exact status too: a teammate's move to
+  // another status of the same category is a newer change Undo keeps.
+  const exact = (task: Pick<Task, DropField | "statusCategory" | "statusId">, field: DropField) =>
+    field === "status" ? `${statusKeyOf(task)}|${task.statusId ?? ""}` : task[field];
   const revert: Record<string, unknown> = {};
   const kept: DropField[] = [];
   for (const field of DROP_FIELDS) {
     if (write[field] === undefined) continue;
-    if (!same(value(current, field), value(after, field))) {
+    if (!same(exact(current, field), exact(after, field))) {
       kept.push(field);
       continue;
     }

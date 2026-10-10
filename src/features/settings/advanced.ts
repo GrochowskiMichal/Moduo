@@ -28,7 +28,9 @@ export type ModuleReadResult =
 
 /**
  * The tasks part of an export: the module bundle (tasks carry their handle
- * numbers) plus every completion (TV-D8, specs/tasks-v3.md §Assumptions #26).
+ * numbers and, since TV-D9, their status, completion and due date; the
+ * bundle's `statuses` are every project's and the workspace default set)
+ * plus every completion (TV-D8, specs/tasks-v3.md §Assumptions #26).
  * Every new tasks table joins here in the block that creates it. A cut read
  * of either joins the bundle's `truncated` list, never silently.
  */
