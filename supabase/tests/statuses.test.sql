@@ -87,6 +87,9 @@ BEGIN
   r := test.try('E', format($q$SELECT * FROM public.project_statuses_op_update(%L, %L, '{"after": %s}'::jsonb)$q$,
     test.id('W'), test.status('SB', 'In review'), to_json(test.status('SB', 'Done')::text)));
   PERFORM test.ok(r LIKE '%moves only among its category%', 'a status never moves into another category', r);
+  r := test.try('E', format($q$SELECT * FROM public.project_statuses_op_update(%L, %L, '{"after": %s}'::jsonb)$q$,
+    test.id('W'), test.status('SB', 'In review'), to_json(test.status('SB', 'In review')::text)));
+  PERFORM test.ok(r LIKE '%moves only among its category%', 'a status can''t move after itself', r);
   PERFORM test.as_user('E', format($q$SELECT * FROM public.project_statuses_op_update(%L, %L, '{"after": %s}'::jsonb)$q$,
     test.id('W'), test.status('SB', 'In review'), to_json(test.status('SB', 'In progress')::text)));
 

@@ -919,7 +919,7 @@ BEGIN
       SELECT * INTO v_after FROM public.project_statuses x
       WHERE x.id = public.tasks__try_uuid(p_patch ->> 'after');
       IF NOT public.tasks__status_in_set(v_after, p_workspace_id, s.project_id)
-         OR v_after.category <> s.category THEN
+         OR v_after.category <> s.category OR v_after.id = s.id THEN
         RAISE EXCEPTION 'A status moves only among its category''s statuses.' USING ERRCODE = '22023';
       END IF;
     END IF;
