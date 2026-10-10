@@ -393,6 +393,7 @@ Round 3 reconciles in-flight work that touches Calendar: these blocks, collectiv
   - their sessions count as Busy (Tasks default d); titles show only where they've shared a calendar as Can view.
 - *Recommend: yes.* Rejected: a team availability grid (large-team tooling; five people fit on one week); showing every teammate's Busy by default (today's behaviour: anonymous and crowded).
 - *Outside the target roles?* Yes: any two people meeting need it.
+- (c) re-decides how the October permissions work (PERM-5) draws teammates' Busy: today every shared calendar shows at once; this makes it opt-in per person.
 - Prototype frame 7.
 
 ❓ OK?
@@ -450,7 +451,8 @@ Round 3 reconciles in-flight work that touches Calendar: these blocks, collectiv
 
   | Event | Who hears | Where | When | Turned off by |
   | --- | --- | --- | --- | --- |
-  | An event is about to start | You | Desktop / browser | 10 min before by default, for events with other people; none by default for events with just you; a provider's own alert time is respected | Per event, and a default per calendar |
+  | An event is about to start | You | Desktop / browser | Each calendar has a default alert that new events take (10 min before timed events; none for all-day ones), changeable per event. Events from Google, Microsoft or iCloud keep the alert set there. Solo events alert too: a lecture or a dentist matters as much as a meeting | Per event, and the calendar's default |
+  | A session is about to start | Nobody | — | — | Sessions never alert; a task's own reminder (Tasks 24) does that job |
   | You're invited | You | Bell | Grouped by the hour | Settings → Notifications → Invitations |
   | An event you're in changes or is cancelled | You | Bell | At once, quietly | Same |
   | A guest replies | The organiser | Bell | Grouped | Same |
@@ -489,6 +491,7 @@ Round 3 reconciles in-flight work that touches Calendar: these blocks, collectiv
   - **"Show my sessions on Work (Google) as Busy"**, a per-person switch, off by default: each session becomes a private "Busy" event on that calendar, kept in step (moved, removed) by Moduo. Colleagues see you as busy, your phone shows your plan, and outside booking tools respect it;
   - **the same switch for another calendar's events:** "Show Personal (iCloud) on Work (Google) as Busy", so your dentist appointment stops colleagues booking over it without merging accounts (Notion Calendar does this, [competitors](./research/structure-competitors.md));
   - Moduo's own calendars stay inside Moduo.
+  - **Depends on C6:** both switches write to a connected calendar, so they come after write-back.
 - *Recommend: yes.* Rejected: bringing the calendar feed back (Google refreshes feeds every 12–24 hours and drops their alerts, Tasks round 2c); session titles on your work calendar by default (they'd be visible to your whole company); Reclaim/Motion's "free until the deadline is at risk, then busy" (it moves your availability by itself).
 - *Outside the target roles?* Yes: anyone who defends focus time in a company calendar.
 

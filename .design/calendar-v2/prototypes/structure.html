@@ -183,7 +183,8 @@ html[data-frame="9"] .rpanel { width: 300px; }
 .toolbar h3 { font-size: 18px; font-weight: 600; letter-spacing: -.01em; white-space: nowrap; }
 .toolbar .rng { font-size: 13px; color: var(--text-2); white-space: nowrap; }
 .toolbar .sep { width: 1px; height: 16px; background: var(--hairline); margin: 0 4px; }
-html[data-frame="9"] .toolbar .dlab { display: none; }
+html[data-frame="9"] .toolbar .dlab, html[data-frame="9"] .toolbar .rng { display: none; }
+.toolbar .title { overflow: hidden; }
 .missline { flex-shrink: 0; display: flex; align-items: center; gap: 8px; height: 28px; margin: 0 12px 6px 16px; padding: 0 4px 0 10px; border-radius: var(--radius-md); font-size: 13px; color: var(--text-2); background: var(--state-hover); }
 .missline .ic { color: var(--text-3); }
 .missline .btn { margin-left: auto; height: 22px; font-size: 12.5px; }
@@ -726,7 +727,7 @@ html[data-frame="9"] .toolbar .dlab { display: none; }
     return '<div class="toolbar"><div class="title"><h3>' + (o.title || 'October 2026') + '</h3><span class="rng num">' + (o.rng !== undefined ? o.rng : 'Oct 12 – 18') + '</span></div>' +
       '<button type="button" class="btn icon" title="Search  /">' + ic('i-search') + '</button>' +
       '<button type="button" class="btn">' + ic('i-sliders') + '<span class="dlab">Display</span></button><span class="sep"></span>' +
-      '<span class="seg">' + ['Day', 'Week', 'Month'].map(function (v) { return '<button type="button" class="' + (v === view ? 'on' : '') + '" title="' + v[0] + '">' + v + '</button>'; }).join('') + '</span><span class="sep"></span>' +
+      '<span class="seg">' + ['Day', 'Week', 'Month', 'List'].map(function (v) { return '<button type="button" class="' + (v === view ? 'on' : '') + '" title="' + v[0] + '">' + v + '</button>'; }).join('') + '</span><span class="sep"></span>' +
       '<button type="button" class="btn icon" title="Previous  ←">' + ic('i-chev-l') + '</button><button type="button" class="btn sm secondary" title="T">Today</button><button type="button" class="btn icon" title="Next  →">' + ic('i-chev-r') + '</button>' +
       '<span class="sep"></span><button type="button" class="btn primary" title="⌘N">' + ic('i-plus') + 'New</button></div>';
   }
