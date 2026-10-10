@@ -300,3 +300,76 @@ BEGIN
     'no time block keeps a project that went with the person');
 END;
 $$;
+
+-- ── Privacy: nothing about a project you can't see comes through ───────────
+-- PB is O's private project. M is a member, V a viewer of shared projects.
+SELECT test.person(n) FROM unnest(ARRAY['M', 'N']) AS n;
+INSERT INTO public.workspace_members (workspace_id, user_id, role) VALUES
+  (test.id('W'), test.id('M'), 'member'),
+  (test.id('W'), test.id('N'), 'member');
+INSERT INTO public.contacts (id, workspace_id, owner_id, name) VALUES
+  (test.id('C2'), test.id('W'), test.id('M'), 'Private client');
+DELETE FROM public.resource_grants WHERE resource_type = 'contact' AND resource_id = test.id('C2');
+
+DO $$
+DECLARE
+  r text;
+  v_secret uuid;
+BEGIN
+  -- An old build's label typed only on a private project.
+  r := test.as_user('O', format($q$UPDATE public.buckets SET group_label = 'Job hunt' WHERE id = %L$q$, test.id('PB')));
+  PERFORM test.ok(r = 'ok 1' AND (test.bucket('PB')).area_id = test.area('Job hunt'), 'the label made its area', r);
+  PERFORM test.ok(test.value_as('O', format($q$SELECT count(*)::text FROM public.areas WHERE id = %L$q$, test.area('Job hunt'))) = '1'
+              AND test.value_as('M', format($q$SELECT count(*)::text FROM public.areas WHERE id = %L$q$, test.area('Job hunt'))) = '0'
+              AND test.value_as('V', format($q$SELECT count(*)::text FROM public.areas WHERE id = %L$q$, test.area('Job hunt'))) = '0',
+    'an area that holds only projects you can''t see is hidden from you (its name was never yours to read)');
+  r := test.value_as('M', format($q$SELECT string_agg(name, ',' ORDER BY name) FROM public.areas_op_create(%L, 'Ops')$q$, test.id('W')));
+  PERFORM test.ok(r LIKE '%Ops%' AND r NOT LIKE '%Job hunt%', 'the ops answer only with areas you can see', r);
+  PERFORM test.ok(test.value_as('M', format($q$SELECT string_agg(name, ',' ORDER BY name) FROM public.areas_op_move(%L, %L, NULL)$q$,
+                    test.id('W'), test.area('Ops'))) NOT LIKE '%Job hunt%',
+    'a move answers without the hidden area too');
+  r := test.try('M', format($q$SELECT * FROM public.areas_op_update(%L, %L, '{"name": "Mine"}'::jsonb)$q$, test.id('W'), test.area('Job hunt')));
+  PERFORM test.ok(r LIKE '%Area not found%', 'a hidden area can''t be renamed by someone who can''t see it', r);
+  r := test.try('M', format($q$SELECT * FROM public.areas_op_move(%L, %L, %L)$q$, test.id('W'), test.area('Ops'), test.area('Job hunt')));
+  PERFORM test.ok(r LIKE '%moves only among%', 'nor used as a place to move to', r);
+  PERFORM test.as_user('O', format($q$SELECT public.projects_op_move(%L, %L, %L)$q$, test.id('W'), test.id('P4'), test.area('Job hunt')));
+  PERFORM test.ok(test.value_as('M', format($q$SELECT count(*)::text FROM public.areas WHERE id = %L$q$, test.area('Job hunt'))) = '1',
+    'once it holds a project you can see, the area shows');
+
+  -- A private project's fields and sections.
+  PERFORM test.as_user('O', format($q$SELECT public.projects_op_update(%L, %L, %L::jsonb)$q$, test.id('W'), test.id('PB'),
+    jsonb_build_object('status', 'on_hold', 'target_on', '2027-01-01', 'lead_id', test.id('O'))));
+  PERFORM test.ok(test.value_as('M', format($q$SELECT count(*)::text FROM public.buckets WHERE id = %L$q$, test.id('PB'))) = '0'
+              AND test.value_as('M', format($q$SELECT count(*)::text FROM public.buckets WHERE lead_id = %L AND status = 'on_hold'$q$, test.id('O'))) = '0',
+    'a member reads none of a private project''s fields, not even by filtering on them');
+  PERFORM test.ok(test.value_as('M', format($q$SELECT count(*)::text FROM public.sections WHERE project_id = %L$q$, test.id('PB'))) = '0'
+              AND test.value_as('M', format($q$SELECT count(*)::text FROM public.sections WHERE workspace_id = %L AND name = 'Secret'$q$, test.id('W'))) = '0',
+    'nor its sections, nor a count of them');
+  SELECT s.id INTO v_secret FROM public.sections s WHERE s.project_id = test.id('PB') AND s.name = 'Secret';
+  r := test.try('M', format($q$SELECT * FROM public.sections_op_update(%L, %L, '{"name": "x"}'::jsonb)$q$, test.id('W'), v_secret));
+  PERFORM test.ok(r LIKE '%Section not found%', 'a private project''s section reads as missing to the ops', r);
+  r := test.try('M', format($q$SELECT * FROM public.sections_op_move(%L, %L, NULL)$q$, test.id('W'), v_secret));
+  PERFORM test.ok(r LIKE '%Section not found%', 'to every op', r);
+  r := test.try('M', format($q$SELECT public.projects_op_update(%L, %L, '{"name": "x"}'::jsonb)$q$, test.id('W'), test.id('PB')));
+  PERFORM test.ok(r LIKE '%isn''t in this workspace%', 'and so does the project', r);
+
+  -- A client the reader can't see stays unseen through the project.
+  r := test.as_user('M', format($q$SELECT public.projects_op_create(%L, %L::jsonb)$q$, test.id('W'),
+    jsonb_build_object('id', test.id('CL'), 'name', 'Client work', 'client_contact_id', test.id('C2'))));
+  PERFORM test.ok(r = 'ok 1'
+      AND test.value_as('V', format($q$SELECT count(*)::text FROM public.buckets WHERE id = %L$q$, test.id('CL'))) = '1'
+      AND test.value_as('V', format($q$SELECT count(*)::text FROM public.contacts WHERE id = %L$q$, test.id('C2'))) = '0'
+      AND test.value_as('V', format($q$SELECT count(*)::text FROM public.contacts c JOIN public.buckets b ON b.client_contact_id = c.id WHERE b.id = %L$q$, test.id('CL'))) = '0',
+    'a viewer who sees the project can''t read its private client contact', r);
+  r := test.try('N', format($q$SELECT public.projects_op_update(%L, %L, %L::jsonb)$q$, test.id('W'), test.id('P2'),
+    jsonb_build_object('client_contact_id', test.id('C2'))));
+  PERFORM test.ok(r LIKE '%contact isn''t in this workspace%', 'nobody can name a contact they can''t see as a client', r);
+
+  -- Time blocks keep only projects you can see.
+  r := test.as_user('M', format($q$SELECT public.tasks_op_set_time_blocks(%L, %L::jsonb)$q$, test.id('W'),
+    jsonb_build_object('morning', test.id('PB'), 'evening', test.id('CL'))));
+  PERFORM test.ok((SELECT task_time_blocks -> test.id('W')::text FROM public.user_preferences WHERE user_id = test.id('M'))
+                  = jsonb_build_object('evening', test.id('CL')),
+    'a time block can''t name a project you can''t see', r);
+END;
+$$;

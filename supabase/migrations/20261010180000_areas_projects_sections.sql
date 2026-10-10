@@ -9,7 +9,10 @@
 --     group_label stays a mirror of the area's name both ways: a build from
 --     before this migration writes group_label and lands in (or makes) the area
 --     of that name; renaming an area relabels its projects; deleting one makes
---     its projects area-less.
+--     its projects area-less. An area is read by whoever can see one of its
+--     projects (by every Tasks reader while it's empty), so a label typed only
+--     on private projects stays as private as they are; sections and project
+--     fields follow the project's own access.
 --   * Project fields on buckets (projects keep the table name until TV-D7):
 --     status Active · On hold · Done (@contracts PROJECT_STATES), starts_on,
 --     target_on, lead_id (a member), client_contact_id (a contact the setter
@@ -63,13 +66,9 @@ CREATE INDEX IF NOT EXISTS areas_workspace_position
 CREATE INDEX IF NOT EXISTS areas_workspace_updated
   ON public.areas (workspace_id, updated_at);
 
--- Readable by whoever can read Tasks in the workspace (areas carry no
--- permissions); every write goes through the ops below.
+-- Read access is set after the project columns (section 2b); every write goes
+-- through the ops below.
 ALTER TABLE public.areas ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS areas_read ON public.areas;
-CREATE POLICY areas_read ON public.areas
-  FOR SELECT TO authenticated
-  USING (public.perm_can_view(workspace_id, 'tasks'));
 REVOKE ALL ON public.areas FROM PUBLIC, anon, authenticated;
 GRANT SELECT ON public.areas TO authenticated;
 GRANT ALL ON public.areas TO service_role;
@@ -100,6 +99,33 @@ CREATE INDEX IF NOT EXISTS buckets_area_id_idx ON public.buckets (area_id) WHERE
 CREATE INDEX IF NOT EXISTS buckets_lead_id_idx ON public.buckets (lead_id) WHERE lead_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS buckets_client_contact_id_idx
   ON public.buckets (client_contact_id) WHERE client_contact_id IS NOT NULL;
+
+-- ── 2b. Who sees an area ────────────────────────────────────────────────────
+
+-- Areas carry no permissions of their own, but a name can say something: a
+-- rail section label lived only on the projects it was typed on, so one used
+-- only on private projects was never seen by anyone else. An area is visible
+-- to whoever can read Tasks in the workspace when it holds no live project,
+-- or when they can see at least one of its projects. Never the projects
+-- themselves: a project stays as private as its own sharing says.
+CREATE OR REPLACE FUNCTION public.areas__visible(p_area_id uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT NOT EXISTS (SELECT 1 FROM public.buckets b
+                     WHERE b.area_id = p_area_id AND b.deleted_at IS NULL)
+      OR EXISTS (SELECT 1 FROM public.buckets b
+                 WHERE b.area_id = p_area_id AND b.deleted_at IS NULL
+                   AND public.can_access('bucket', b.id, 'view', public.perm_actor_id()))
+$$;
+
+DROP POLICY IF EXISTS areas_read ON public.areas;
+CREATE POLICY areas_read ON public.areas
+  FOR SELECT TO authenticated
+  USING (public.perm_can_view(workspace_id, 'tasks') AND public.areas__visible(id));
 
 -- ── 3. Sections ─────────────────────────────────────────────────────────────
 
@@ -550,8 +576,11 @@ CREATE TRIGGER tasks_estimate_sync
 
 -- ── 12. Time blocks: per person ─────────────────────────────────────────────
 
--- The slots of a time-block map that name a live project of the workspace.
-CREATE OR REPLACE FUNCTION public.tasks__clean_time_blocks(p_workspace_id uuid, p_blocks jsonb)
+DROP FUNCTION IF EXISTS public.tasks__clean_time_blocks(uuid, jsonb);
+
+-- The slots of a time-block map that name a live project of the workspace
+-- that this person can see.
+CREATE OR REPLACE FUNCTION public.tasks__clean_time_blocks(p_workspace_id uuid, p_blocks jsonb, p_user uuid)
 RETURNS jsonb
 LANGUAGE sql
 STABLE
@@ -564,7 +593,8 @@ AS $$
     AND jsonb_typeof(j.value) = 'string'
     AND EXISTS (SELECT 1 FROM public.buckets b
                 WHERE b.id = public.tasks__try_uuid(j.value #>> '{}')
-                  AND b.workspace_id = p_workspace_id AND b.deleted_at IS NULL)
+                  AND b.workspace_id = p_workspace_id AND b.deleted_at IS NULL
+                  AND public.can_access('bucket', b.id, 'view', p_user))
 $$;
 
 -- Put one person's map for one workspace into their preferences.
@@ -597,7 +627,7 @@ BEGIN
   IF p_blocks IS NULL OR jsonb_typeof(p_blocks) <> 'object' THEN
     RAISE EXCEPTION 'Expected an object of time blocks.' USING ERRCODE = '22023';
   END IF;
-  v_clean := public.tasks__clean_time_blocks(p_workspace_id, p_blocks);
+  v_clean := public.tasks__clean_time_blocks(p_workspace_id, p_blocks, v_actor);
   PERFORM public.tasks__put_time_blocks(v_actor, p_workspace_id, v_clean);
   RETURN v_clean;
 END;
@@ -616,7 +646,7 @@ DECLARE
 BEGIN
   IF v_actor IS NOT NULL THEN
     PERFORM public.tasks__put_time_blocks(v_actor, NEW.workspace_id,
-      public.tasks__clean_time_blocks(NEW.workspace_id, NEW.blocks));
+      public.tasks__clean_time_blocks(NEW.workspace_id, NEW.blocks, v_actor));
   END IF;
   RETURN NULL;
 END;
@@ -629,7 +659,7 @@ CREATE TRIGGER task_time_blocks_legacy
 
 -- ── 13. Area ops ────────────────────────────────────────────────────────────
 
--- The workspace's live areas, in sidebar order.
+-- The workspace's live areas the caller can see, in sidebar order.
 CREATE OR REPLACE FUNCTION public.areas__list(p_workspace_id uuid)
 RETURNS SETOF public.areas
 LANGUAGE sql
@@ -639,7 +669,21 @@ SET search_path = public
 AS $$
   SELECT * FROM public.areas a
   WHERE a.workspace_id = p_workspace_id AND a.deleted_at IS NULL
+    AND (public.perm_actor_id() IS NULL OR public.areas__visible(a.id))
   ORDER BY a.position, a.created_at, a.id
+$$;
+
+-- Every live area in sidebar order, hidden ones included (for renumbering).
+CREATE OR REPLACE FUNCTION public.areas__order(p_workspace_id uuid)
+RETURNS uuid[]
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT coalesce(array_agg(a.id ORDER BY a.position, a.created_at, a.id), '{}')
+  FROM public.areas a
+  WHERE a.workspace_id = p_workspace_id AND a.deleted_at IS NULL
 $$;
 
 CREATE OR REPLACE FUNCTION public.areas__check_name(p_workspace_id uuid, p_name text, p_except uuid)
@@ -725,8 +769,9 @@ BEGIN
   SELECT * INTO a FROM public.areas x
   WHERE x.id = p_area_id AND x.workspace_id = p_workspace_id
   FOR UPDATE;
-  IF NOT FOUND OR (a.deleted_at IS NOT NULL
-                   AND NOT (p_patch ? 'deleted_at' AND jsonb_typeof(p_patch -> 'deleted_at') = 'null')) THEN
+  IF NOT FOUND OR NOT public.areas__visible(a.id)
+     OR (a.deleted_at IS NOT NULL
+         AND NOT (p_patch ? 'deleted_at' AND jsonb_typeof(p_patch -> 'deleted_at') = 'null')) THEN
     RAISE EXCEPTION 'Area not found.' USING ERRCODE = '22023';
   END IF;
 
@@ -775,12 +820,13 @@ DECLARE
 BEGIN
   PERFORM public.tasks__guard_structure(p_workspace_id);
   PERFORM pg_advisory_xact_lock(hashtextextended('areas:' || p_workspace_id::text, 0));
-  SELECT coalesce(array_agg(a.id ORDER BY a.position, a.created_at, a.id), '{}') INTO v_order
-  FROM public.areas__list(p_workspace_id) a;
-  IF NOT (p_area_id = ANY (v_order)) THEN
+  -- Renumber every area (hidden ones keep their order among the rest).
+  v_order := public.areas__order(p_workspace_id);
+  IF NOT (p_area_id = ANY (v_order)) OR NOT public.areas__visible(p_area_id) THEN
     RAISE EXCEPTION 'Area not found.' USING ERRCODE = '22023';
   END IF;
-  IF p_after IS NOT NULL AND (p_after = p_area_id OR NOT (p_after = ANY (v_order))) THEN
+  IF p_after IS NOT NULL AND (p_after = p_area_id OR NOT (p_after = ANY (v_order))
+                              OR NOT public.areas__visible(p_after)) THEN
     RAISE EXCEPTION 'An area moves only among this workspace''s areas.' USING ERRCODE = '22023';
   END IF;
   v_order := public.tasks__reorder(v_order, p_area_id, p_after);
@@ -1088,7 +1134,9 @@ BEGIN
   SELECT * INTO s FROM public.sections x
   WHERE x.id = p_section_id AND x.workspace_id = p_workspace_id
   FOR UPDATE;
-  IF NOT FOUND OR (s.deleted_at IS NOT NULL AND NOT v_restore) THEN
+  -- A section of a project the caller can't see reads as missing.
+  IF NOT FOUND OR (s.deleted_at IS NOT NULL AND NOT v_restore)
+     OR NOT public.can_access('bucket', s.project_id, 'view', public.perm_actor_id()) THEN
     RAISE EXCEPTION 'Section not found.' USING ERRCODE = '22023';
   END IF;
   PERFORM public.projects__guard(p_workspace_id, s.project_id);
@@ -1142,7 +1190,7 @@ DECLARE
 BEGIN
   SELECT * INTO s FROM public.sections x
   WHERE x.id = p_section_id AND x.workspace_id = p_workspace_id AND x.deleted_at IS NULL;
-  IF NOT FOUND THEN
+  IF NOT FOUND OR NOT public.can_access('bucket', s.project_id, 'view', public.perm_actor_id()) THEN
     RAISE EXCEPTION 'Section not found.' USING ERRCODE = '22023';
   END IF;
   PERFORM public.projects__guard(p_workspace_id, s.project_id);
@@ -1230,7 +1278,7 @@ DECLARE
   r record;
 BEGIN
   FOR r IN
-    SELECT tb.workspace_id, u.user_id, public.tasks__clean_time_blocks(tb.workspace_id, tb.blocks) AS blocks
+    SELECT tb.workspace_id, u.user_id, public.tasks__clean_time_blocks(tb.workspace_id, tb.blocks, u.user_id) AS blocks
     FROM public.task_time_blocks tb
     JOIN LATERAL (
       SELECT w.owner_id AS user_id FROM public.workspaces w WHERE w.id = tb.workspace_id
@@ -1258,7 +1306,8 @@ BEGIN
     'tasks__is_member(uuid, uuid)', 'tasks__guard_structure(uuid)', 'projects__guard(uuid, uuid)',
     'areas__find_or_create(uuid, text)', 'buckets__area_sync()', 'areas__mirror_labels()',
     'buckets__project_check()', 'tasks__section_check()',
-    'tasks__clean_time_blocks(uuid, jsonb)', 'tasks__put_time_blocks(uuid, uuid, jsonb)',
+    'tasks__clean_time_blocks(uuid, jsonb, uuid)', 'tasks__put_time_blocks(uuid, uuid, jsonb)',
+    'areas__order(uuid)',
     'task_time_blocks__legacy()', 'areas__list(uuid)', 'areas__check_name(uuid, text, uuid)',
     'projects__end_position(uuid)', 'projects__apply_fields(public.buckets, jsonb)',
     'sections__list(uuid)', 'tasks__backfill_areas(uuid)'] LOOP
@@ -1269,6 +1318,10 @@ BEGIN
   END LOOP;
   -- Pure helpers: they read only their arguments (tasks__estimate_sync is a
   -- trigger every writer of tasks fires).
+  -- The areas policy calls this, so every reader needs it. It answers only
+  -- for the caller (perm_actor_id), and says nothing but visible or not.
+  REVOKE ALL ON FUNCTION public.areas__visible(uuid) FROM PUBLIC, anon;
+  GRANT EXECUTE ON FUNCTION public.areas__visible(uuid) TO authenticated, service_role;
   FOREACH fn IN ARRAY ARRAY[
     'tasks__reorder(uuid[], uuid, uuid)', 'tasks__clean_name(text, text, integer)',
     'tasks__patch_date(jsonb, text)', 'areas__check_color(jsonb)',
