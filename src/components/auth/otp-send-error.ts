@@ -10,8 +10,9 @@ import type { OtpSendError } from "@/lib/runtime";
 /** The ratified "couldn't send" line (specs/transactional-email.md, flow 1). */
 export const OTP_SEND_FAILED_MESSAGE = "We couldn't send your code. Try again in a minute.";
 export const OTP_TOO_MANY_MESSAGE = "Too many code requests right now. Try again in a few minutes.";
+/** The ratified invite-only line (specs/transactional-email.md, flow 1; TX-4). */
 export const OTP_INVITE_ONLY_MESSAGE =
-  "Moduo is invite-only right now. If you were invited, click the link in your invite email first, then ask for a code here. If that link has expired, ask for a new invite.";
+  "Moduo is invite-only right now. Join the waitlist at moduo.app, or ask the person who invited you to use this address.";
 
 /**
  * How long a code works (Auth's OTP expiry, 600 s since TX-2). Matches the email's
@@ -34,9 +35,15 @@ export function describeOtpSendError(error: OtpSendError): OtpSendFailure {
   const message = error.message ?? "";
   const code = error.code ?? "";
 
-  // Sign-ups are closed, so only confirmed people get a code. A dashboard invitee
-  // is confirmed by clicking their invite link once (docs/decisions/data.md).
-  if (code === "signup_disabled" || /signups? not allowed/i.test(message)) {
+  // An address nobody invited. The before-user-created hook refuses it with the
+  // message `invite_only` (TX-4, 20261010150000); while sign-ups are still off on
+  // the project, Auth refuses it as `signup_disabled` instead. Checked before the
+  // hook-failure branch below, so a refusal never reads as "couldn't send".
+  if (
+    /\binvite_only\b/.test(message) ||
+    code === "signup_disabled" ||
+    /signups? not allowed/i.test(message)
+  ) {
     return { kind: "message", message: OTP_INVITE_ONLY_MESSAGE };
   }
 

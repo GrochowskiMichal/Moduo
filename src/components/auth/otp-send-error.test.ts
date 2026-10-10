@@ -59,7 +59,13 @@ describe("describeOtpSendError", () => {
     }
   });
 
-  it("keeps the invite-only guidance for an unconfirmed address", () => {
+  it("shows the invite-only line for an address nobody invited", () => {
+    // The before-user-created hook's refusal (TX-4).
+    expect(describeOtpSendError({ message: "invite_only", status: 403 })).toEqual({
+      kind: "message",
+      message: OTP_INVITE_ONLY_MESSAGE,
+    });
+    // Sign-ups still off on the project.
     expect(
       describeOtpSendError({
         message: "Signups not allowed for this instance",
@@ -67,6 +73,9 @@ describe("describeOtpSendError", () => {
         status: 422,
       }),
     ).toEqual({ kind: "message", message: OTP_INVITE_ONLY_MESSAGE });
+    expect(OTP_INVITE_ONLY_MESSAGE).toBe(
+      "Moduo is invite-only right now. Join the waitlist at moduo.app, or ask the person who invited you to use this address.",
+    );
   });
 
   it("passes anything else through", () => {
