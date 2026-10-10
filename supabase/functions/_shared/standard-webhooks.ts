@@ -1,7 +1,10 @@
 /**
  * Standard Webhooks signature check (https://www.standardwebhooks.com), which
- * Supabase Auth's HTTP hooks use. Web Crypto only, so it runs in Deno and in
- * the unit tests without the esm.sh library.
+ * Supabase Auth's HTTP hooks use (auth-email-hook) and Resend's webhooks use
+ * under Svix's names (resend-webhook: `svix-id`, `svix-timestamp`,
+ * `svix-signature`, secret `whsec_<base64>`; same signed content and HMAC).
+ * Web Crypto only, so it runs in Deno and in the unit tests without the esm.sh
+ * library.
  *
  * Supabase signs `${webhook-id}.${webhook-timestamp}.${body}` with HMAC-SHA256.
  * The secret is `v1,whsec_<base64>`; several can be configured, separated by

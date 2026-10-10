@@ -16,7 +16,7 @@ import {
 import { EMAIL_PALETTE } from "./palette.ts";
 import { LEGAL_LINE, PRIVACY_URL, renderEmail, SCHEDULED_WITH, safeHref } from "./render.ts";
 import { EMAIL_FIXTURES } from "./templates/fixtures.ts";
-import { BUILT_EMAIL_KINDS, EMAIL_TEMPLATES, renderTemplate } from "./templates/index.ts";
+import { BUILT_EMAIL_KINDS, renderTemplate, templateDoc } from "./templates/index.ts";
 
 const HOSTILE = '<script>alert(1)</script> "quoted" & <b>bold</b>';
 
@@ -33,7 +33,7 @@ function doc(overrides: Partial<EmailDoc> = {}): EmailDoc {
 describe("every built email renders the shared shell", () => {
   for (const kind of BUILT_EMAIL_KINDS) {
     it(`${kind}: header, footer and at most one button`, () => {
-      const emailDoc = EMAIL_TEMPLATES[kind](EMAIL_FIXTURES[kind]);
+      const emailDoc = templateDoc(kind, EMAIL_FIXTURES[kind]);
       const { html } = renderTemplate(kind, EMAIL_FIXTURES[kind]);
 
       expect(emailDoc.blocks.filter((block) => block.type === "button").length).toBeLessThanOrEqual(1);
