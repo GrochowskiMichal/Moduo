@@ -2,6 +2,81 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index.
 
+## 2026-10-11 · TV-D10 areas, projects, sections, sessions, reminders, waiting, teams — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 10 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §Assumptions #4, #12, #20, #24, #26, #27; REPLAN 13–20a, 24, 25, 54, 94, 95, default d; migrations `20261010180000_areas_projects_sections`, `20261010181000_task_sessions_reminders_waiting`, `20261010182000_teams`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **D10-1 · The estimate gets its own column, `tasks.estimate_minutes`** → TV-D10, TV-U13 (the picker), TV-D7 (drops `duration_minutes`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: the spec makes `duration_minutes` the mirror of the next work session, and D7 drops it, so the estimate moves to `estimate_minutes` (backfilled from `duration_minutes`). A write of `duration_minutes` that isn't the mirror (builds before TV-D10, a calendar resize) is the estimate too; a write of the estimate reaches `duration_minutes` while nothing is scheduled. The app reads `estimateOf(task)` and the panel writes `estimateMinutes`.
+  - Why: without it the mirror would overwrite every estimate the day a task has two sessions of different lengths ("the estimate no longer doubles as block length", REPLAN 25).
+  - Rejected: keeping the estimate in `duration_minutes` and not mirroring the length (a ratified line of the spec), or leaving the split to a UI block (the UI lanes don't add migrations).
+- **D10-2 · The "next" session is the earliest that hasn't ended, else the latest; the mirror moves on writes and every 15 minutes** → TV-D10 (`tasks__next_session`, `tasks-session-mirror` cron), TV-F6/Calendar (read sessions directly)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: `scheduled_at` / `duration_minutes` show that session (a 30-minute session on a task with no duration leaves `duration_minutes` empty, the app's default block); with none left `scheduled_at` clears and `duration_minutes` stays as the estimate. A job moves the mirror on when a session ends with a later one waiting.
+  - Why: an old build's drift and its calendar block should follow the work still ahead; all past means the task drifted.
+  - Rejected: the earliest session (it would sit in the past forever) and a mirror that refreshes only on writes (Monday's session would read as drifted on Tuesday with Wednesday's ahead).
+- **D10-3 · A write of `scheduled_at` edits the session it showed; clearing it removes that session only through an op** → TV-D10 (`tasks__session_legacy`, the `tasks.session_op` flag in `tasks_op_update` / `tasks_op_unschedule`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: an old build's move, the app's schedule picker, the repeat engine and Reschedule all move the shown session (keeping its length unless `duration_minutes` changed too), or make the first one. A raw `scheduled_at = NULL` never deletes a session; the mirror puts the time back. The current app's picker keeps writing `scheduled_at` (single-session semantics) until a sessions UI exists.
+  - Why: a whole-row save from a build before TV-D1 can carry a stale null, the same trap as TV-D2's queue mirror (gotchas/spine.md); builds since TV-D8 clear through the ops.
+  - Rejected: mirroring removals from raw writes (a stale save would delete planned calendar blocks) and moving the earliest session on an old build's write (the move would land on a past session and look reverted).
+- **D10-4 · An area is read by whoever can see one of its projects, or by every Tasks reader while it's empty** → TV-D10 (`areas__visible`, the areas policy, `areas__list`), TV-U6
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: areas still carry no permissions of their own, but one whose projects are all private to someone else is hidden from them; ops answer only with visible areas and read a hidden one as missing; the backfill and the legacy label path make areas the same way.
+  - Why: a rail label lived only on the projects it was typed on, so a label used only on private projects was never seen by teammates; turning it into a workspace-wide name would have published it.
+  - Rejected: workspace-wide areas (the leak) and areas with their own sharing (REPLAN 15: no permissions). Known limit: creating an area whose name a hidden area already has says the name is taken.
+- **D10-5 · Areas and sections: deleting one clears the link; restoring brings back the container, not the members** → TV-D10 (`areas_op_update`, `sections_op_update`), TV-U6 (Undo)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: deleting an area makes its projects area-less (system work, so a project the deleter can't edit follows too); deleting a section moves its tasks, deleted ones included, to "No section" in the same project. A restore brings back the area or section empty; an Undo moves the members back from what the app held.
+  - Why: the spec's edge cases say exactly that, and keeping dangling links would make every reader filter deleted containers.
+  - Rejected: keeping `area_id` / `section_id` on the members and hiding deleted containers at read time.
+- **D10-6 · `group_label` follows the area both ways, removals included** → TV-D10 (`buckets__area_sync`, `areas__mirror_labels`), TV-D7 (drops `group_label`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: whichever of `area_id` and `group_label` a write changes leads; an old build's label write lands in (or makes) the area of that name, and clearing it leaves the area; renaming an area relabels its projects.
+  - Why: an old build's "No section" must keep working; a stale whole-row save can move a project between areas, but that's a sidebar grouping, cheap to fix, unlike a lost work session (D10-3).
+  - Rejected: ignoring label removals (the old build's explicit choice would bounce back).
+- **D10-7 · Projects: fields checked on every write path; the Inbox has none** → TV-D10 (`buckets__project_check`, `projects_op_*`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: a lead is anyone in the workspace (any role; a viewer can lead); a client is a live contact of the workspace the setter can see; a target can't precede the start; status is Active · On hold · Done (`PROJECT_STATES`, lax on read). The "bucket" calls stay as aliases (`upsertBucket` is the old raw save and the fallback); the app's create, rename and rail "Section" menu go through the project ops. No project activity yet (TV-U16's overview owns it).
+  - Why: a raw write from an old build or a client mustn't set what the op would refuse.
+  - Rejected: checks in the ops only.
+- **D10-8 · Sections: a range or an end date, ordered by `after`, no unique names** → TV-D10 (`sections_op_*`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: a section has an end date, or a start and an end; positions are integers renumbered by the ops (like statuses); two sections may share a name ("Week 1" in two courses' copies); a task moved to another project (an old build, a parent carrying its subtasks) lands in "No section" there.
+  - Why: imports bring duplicate list names; a start without an end has nothing to draw on the Timeline.
+  - Rejected: fractional keys computed by the client (sections are few and the ops serialize them).
+- **D10-9 · Work sessions are busy for booking links through the busy list, on for every link** → TV-D10 (`exposed_slot_links.busy_calendar_ids` gets `"tasks"`, `_shared/booking-sessions.ts`, the link editor's "Work sessions from Tasks")
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11 (default d).
+  - Decision: the switch is a pseudo-calendar id in the existing busy list, added to every existing link and to the default; the booking function reads the host's live sessions on open tasks (Done and Won't do don't block) and returns only the times.
+  - Why: the busy list is the link's existing per-link picker, and an old app or function ignores the id (no deploy order to manage).
+  - Rejected: a new boolean column (a client fallback and a deploy order for one switch).
+- **D10-10 · Reminders are each person's own, set by anyone who can see the task; relative ones remind at 09:00 for a date-only due** → TV-D10 (`task_reminders`, `tasks__reminder_at`, the sender stub), TV-D12 (delivery, Backlog cancels)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: kinds `at` (any number, at most 10 per task and person), `day_before`, `hour_before` (one each); a relative reminder fires at the due time the day before / an hour before in the task's zone, or 09:00 / 08:00 for a date-only due, follows due changes and fires again when moved into the future; the stub (every 5 minutes) only stamps `fired_at` on To do / In progress tasks.
+  - Why: "Remind me" is personal, so a viewer may set one; a date-only due has no time to count back from.
+  - Rejected: one reminder per task (Todoist allows several) and delivering anything before TV-D12.
+- **D10-11 · Waiting on… entries name items by id; only a typed note stores words** → TV-D10 (`task_waiting`), TV-U13 (the list renders through references)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: kinds person (a workspace member), email (a thread the adder can open), agent (an API key of the workspace) and text (≤ 200 characters); the same person, email or agent twice is one entry; `since` defaults to now; the trail says "is waiting on someone / an email / an agent / “note”".
+  - Why: an email's subject must never reach a teammate who can't open it; the panel resolves names through references ("Private item").
+  - Rejected: a free label on every entry.
+- **D10-12 · Teams: members who can work on tasks; any editor makes one; a team task never sits in an Inbox** → TV-D10 (`teams`, `team_members`, `tasks__team_check`, `teams__route_project`), TV-D13 (claims, settings, marks UI)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11 (defaults s–t, REPLAN 94–95).
+  - Decision: Tasks at Edit makes and edits teams and their members; members must be able to work on tasks; only the creator, the owner or an admin deletes (and restores) one, which takes it off its tasks; names are unique per workspace in any case; the mark is the initials of the first two words, else the first letter and the next consonant (Design DS, Development DV), editable to one or two letters; colour optional (TV-D13 picks the stable default). Routing a task in an Inbox (or with no project) files it into the team's default project, else it's refused; system hand-overs into an Inbox drop the team. Removing a member changes no task.
+  - Why: routing hides nothing, so the bar to make a team is low, and a viewer can't take a routed task.
+  - Rejected: auto-adding the creator as a member and allowing team tasks in an Inbox (the team couldn't see them).
+- **D10-13 · Time blocks move to each person's preferences, in their own column** → TV-D10 (`user_preferences.task_time_blocks`, `tasks_op_set_time_blocks`), TV-D7 (drops `task_time_blocks`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: `{workspace id: {slot: project}}`, written only by the op (like TV-D8's `time_zone`), keeping only projects the person can see; every member got the workspace's map; an old build's write to the table lands in the writer's own map.
+  - Why: a synced prefs domain is pushed whole from localStorage and would overwrite a server write (gotchas/supabase.md §Prefs sync).
+  - Rejected: a key inside `user_preferences.preferences`.
+- **D10-14 · `imported_from` is `{source, key}`, unique among live tasks of a workspace** → TV-D10, TV-D16
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: an open source name (≤ 40) and key (≤ 200); a second live task with the same key is refused; a deleted task frees its key; settable on create only.
+  - Why: a re-run finds what it made; deleting an imported task and re-importing should bring it back as new.
+  - Rejected: a closed source vocabulary now (TV-D16 decides the importers) and uniqueness over deleted tasks.
+
 ## 2026-10-10 · TV-D9 statuses, completion, dates — the agent's choices (deferred to by Maciej)
 
 Built in tasks-v3 block 9 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §Assumptions #3, #4, #24, #26–#28; migrations `20261010170000_project_statuses`, `20261010171000_tasks_completion_due_on`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
