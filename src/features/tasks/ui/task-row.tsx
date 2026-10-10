@@ -15,13 +15,14 @@ import {
   ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "../../../components/ui/context-menu";
+import { DatePickerPanel, useDateDraft } from "../../../components/ui/date-field";
 import { Input } from "../../../components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import { cn } from "../../../lib/utils";
 import { assigneeLabel } from "../assignee-options";
 import { useAssignees } from "../assignees";
-import { LEVEL_OPTIONS, toDateInputValue, toLocalInputValue } from "../helpers";
+import { LEVEL_OPTIONS } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { EnergyLevel, PriorityLevel, Task } from "../model";
 import { ALL_ROW_COLUMNS, type RowColumns, type RowDate, rowDate } from "../row-layout";
@@ -507,8 +508,24 @@ function DateCell({
 }) {
   const date = rowDate(task);
   const cell = "flex w-19 shrink-0 items-center justify-end";
-  if (!date && !command) return <span data-col="date" className={cell} aria-hidden />;
   const kind = command ?? (date?.kind === "due" ? "due" : "schedule");
+  // One save when the popover closes (TV-P0): a scheduled time goes through
+  // the reschedule op, so it lands in the task's trail.
+  const current = kind === "schedule" ? task.scheduledAt : task.dueDate;
+  const draft = useDateDraft({
+    value: current ? new Date(current) : null,
+    onChange: (d) =>
+      api.patchTask(
+        task.id,
+        kind === "schedule"
+          ? { scheduledAt: d ? d.toISOString() : null }
+          : { dueDate: d ? d.toISOString() : null },
+      ),
+    withTime: kind === "schedule",
+    open: command !== null,
+    done: onClearCommand,
+  });
+  if (!date && !command) return <span data-col="date" className={cell} aria-hidden />;
   // With a date, its description names it ("Scheduled …", "Due …").
   const label = date ? date.description : kind === "due" ? "Due date" : "Scheduled time";
 
@@ -547,20 +564,19 @@ function DateCell({
   return (
     <Popover
       open={command !== null}
-      onOpenChange={(o) => (o ? onRequestCommand(kind) : onClearCommand())}
+      onOpenChange={(o) => (o ? onRequestCommand(kind) : draft.close())}
     >
       {date ? <DateTip date={date}>{trigger}</DateTip> : trigger}
       <PopoverContent
-        className="w-auto p-3"
+        className="w-auto p-0"
         onClick={(e) => e.stopPropagation()}
         onCloseAutoFocus={keepListFocus}
         align="end"
       >
-        {kind === "schedule" ? (
-          <ScheduleEditor task={task} api={api} onDone={onClearCommand} />
-        ) : (
-          <DueEditor task={task} api={api} onDone={onClearCommand} />
-        )}
+        <p className="px-3 pt-2.5 font-sans text-xs font-medium text-muted-foreground">
+          {kind === "schedule" ? "Scheduled time" : "Due date"}
+        </p>
+        <DatePickerPanel draft={draft} />
       </PopoverContent>
     </Popover>
   );
@@ -573,74 +589,6 @@ function DateTip({ date, children }: { date: RowDate; children: React.ReactNode 
       <TooltipTrigger asChild>{children}</TooltipTrigger>
       <TooltipContent>{date.description}</TooltipContent>
     </Tooltip>
-  );
-}
-
-function ScheduleEditor({
-  task,
-  api,
-  onDone,
-}: {
-  task: Task;
-  api: TasksModuleApi;
-  onDone: () => void;
-}) {
-  return (
-    <>
-      <label className="mb-1 block text-xs font-medium text-muted-foreground">Scheduled time</label>
-      <Input
-        type="datetime-local"
-        autoFocus
-        defaultValue={toLocalInputValue(task.scheduledAt)}
-        className="h-8"
-        onChange={(e) => {
-          const v = e.target.value;
-          api.patchTask(task.id, { scheduledAt: v ? new Date(v).toISOString() : null });
-        }}
-      />
-      {task.scheduledAt ? (
-        <button
-          type="button"
-          className="mt-2 text-xs text-muted-foreground hover:text-foreground"
-          onClick={() => {
-            api.patchTask(task.id, { scheduledAt: null });
-            onDone();
-          }}
-        >
-          Clear
-        </button>
-      ) : null}
-    </>
-  );
-}
-
-function DueEditor({ task, api, onDone }: { task: Task; api: TasksModuleApi; onDone: () => void }) {
-  return (
-    <>
-      <label className="mb-1 block text-xs font-medium text-muted-foreground">Due date</label>
-      <Input
-        type="date"
-        autoFocus
-        defaultValue={toDateInputValue(task.dueDate)}
-        className="h-8"
-        onChange={(e) => {
-          const v = e.target.value;
-          api.patchTask(task.id, { dueDate: v ? new Date(`${v}T00:00:00`).toISOString() : null });
-        }}
-      />
-      {task.dueDate ? (
-        <button
-          type="button"
-          className="mt-2 text-xs text-muted-foreground hover:text-foreground"
-          onClick={() => {
-            api.patchTask(task.id, { dueDate: null });
-            onDone();
-          }}
-        >
-          Clear
-        </button>
-      ) : null}
-    </>
   );
 }
 

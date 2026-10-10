@@ -60,6 +60,7 @@ function task(id: string, over: Partial<Task> = {}): Task {
 
 function viewApi(tasks: Task[], extra: Record<string, unknown> = {}) {
   return {
+    loaded: true,
     tasks,
     queuedTaskIds: new Set<string>(),
     queueClaims: new Map<string, string[]>(),
@@ -212,7 +213,8 @@ describe("Row anatomy (U1-1, U1-2)", () => {
   it("the date cell is named by its dates", () => {
     renderList([task("a", { dueDate: "2026-10-20T00:00:00.000Z" })]);
     const cell = rowOf("Task a").querySelector('[data-col="date"]') as HTMLElement;
-    expect(cell.getAttribute("aria-label")).toMatch(/^Due \S+ \d+, 2026$/);
+    // The one grammar (decision 41): the year shows only when it isn't this one.
+    expect(cell.getAttribute("aria-label")).toMatch(/^Due (\S+ \d+|\d+ \S+)(,? \d{4})?$/);
   });
 });
 

@@ -2,6 +2,7 @@
 // position generation (Lexorank-lite), label maps, datetime formatting, and the
 // grouping logic for the List view. No React, no IO — easy to unit-test.
 
+import { formatDay, formatStamp, formatWhen } from "../../lib/time-format";
 import type { Bucket, EnergyLevel, PriorityLevel, Task, TaskRelation, TaskStatus } from "./model";
 
 // ── Position (fractional indexing) ───────────────────────────────────────────
@@ -225,11 +226,13 @@ export function makeTask(fields: NewTaskFields): Task {
 
 // ── Labels ───────────────────────────────────────────────────────────────────
 
+/** What each status is called (tasks-v3 calls 21, 23): "archived" reads "Won't do"
+ *  everywhere; the stored value changes at the contract step (TV-D7). */
 export const STATUS_LABELS: Record<TaskStatus, string> = {
-  todo: "Todo",
+  todo: "To do",
   in_progress: "In progress",
   done: "Done",
-  archived: "Archived",
+  archived: "Won’t do",
 };
 
 /** Status order for grouping (open work first, terminal states last). */
@@ -258,55 +261,22 @@ export const LEVEL_OPTIONS: Array<{ value: EnergyLevel | PriorityLevel; label: s
 
 // ── Datetime formatting ──────────────────────────────────────────────────────
 
-function sameDay(a: Date, b: Date): boolean {
-  return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
-  );
-}
-
-const TIME_FMT = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
-const DATE_FMT = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
-const DATE_TIME_FMT = new Intl.DateTimeFormat(undefined, {
-  month: "short",
-  day: "numeric",
-  hour: "numeric",
-  minute: "2-digit",
-});
-const TIMESTAMP_FMT = new Intl.DateTimeFormat(undefined, {
-  month: "short",
-  day: "numeric",
-  year: "numeric",
-  hour: "numeric",
-  minute: "2-digit",
-});
-
-/** Absolute timestamp with year — created/updated metadata, activity trails. */
+/** Absolute timestamp — created/updated metadata, activity trails ("Oct 6, 12:07 PM"). */
 export function formatTimestamp(iso: string | null): string {
   if (!iso) return "—";
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? "—" : TIMESTAMP_FMT.format(d);
+  return formatStamp(iso) || "—";
 }
 
-/** Scheduled clock time — just the time if today, else short date + time. */
+/** Scheduled clock time — just the time if today, else the day and time (one grammar). */
 export function formatScheduled(iso: string | null, now: Date = new Date()): string | null {
   if (!iso) return null;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
-  return sameDay(d, now) ? TIME_FMT.format(d) : DATE_TIME_FMT.format(d);
+  return formatWhen(iso, now) || null;
 }
 
-/** Due marker — relative ("Today"/"Tomorrow") near now, else a short date. */
+/** Due marker — "Today", "Tomorrow", "Mon", "Oct 16" (one grammar). */
 export function formatDue(iso: string | null, now: Date = new Date()): string | null {
   if (!iso) return null;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
-  const tomorrow = new Date(now);
-  tomorrow.setDate(now.getDate() + 1);
-  if (sameDay(d, now)) return "Today";
-  if (sameDay(d, tomorrow)) return "Tomorrow";
-  return DATE_FMT.format(d);
+  return formatDay(iso, now) || null;
 }
 
 /** For datetime-local inputs (YYYY-MM-DDTHH:mm in local time). */

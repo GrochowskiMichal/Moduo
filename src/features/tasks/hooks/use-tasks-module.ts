@@ -120,6 +120,9 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
   const queueChain = useRef<Promise<unknown>>(Promise.resolve());
   const [timeBlocks, setTimeBlocksState] = useState<TimeBlockMap>({});
   const [loading, setLoading] = useState(true);
+  /** The first load has answered (data or an error): before it, views show a
+   *  skeleton, never "empty" (TV-P0). Later reloads keep the rows on screen. */
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const reqRef = useRef(0);
   /** Bumped on every successful load — the recurrence catch-up trigger. */
@@ -132,6 +135,7 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
       setKeptRows([]);
       setTimeBlocksState({});
       setLoading(false);
+      setLoaded(true);
       return;
     }
     const req = ++reqRef.current;
@@ -165,7 +169,10 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     } catch (e) {
       if (reqRef.current === req) setError(e instanceof Error ? e.message : String(e));
     } finally {
-      if (reqRef.current === req) setLoading(false);
+      if (reqRef.current === req) {
+        setLoading(false);
+        setLoaded(true);
+      }
     }
   }, [runtime, userId, workspaceId, canRead]);
 
@@ -794,6 +801,19 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
         );
         return;
       }
+      // A scheduled time on its own is an intent op (tasks.reschedule /
+      // tasks.unschedule), so setting it from a row, the panel or a menu lands
+      // in the task's trail (TV-P0). The server op checks access and logs.
+      if (Object.keys(patch).length === 1 && "scheduledAt" in patch) {
+        const scheduledAt = patch.scheduledAt ?? null;
+        if ((existing.scheduledAt ?? null) === scheduledAt) return;
+        applyOp(id, { scheduledAt }, () =>
+          scheduledAt
+            ? runtime!.tasks.opReschedule({ workspaceId: workspaceId!, taskId: id, scheduledAt })
+            : runtime!.tasks.opUnschedule({ workspaceId: workspaceId!, taskId: id }),
+        );
+        return;
+      }
       // Field-level save (TV-D1): only the changed columns go to the server,
       // so this edit can't put back a field a teammate changed meanwhile.
       const fields = editableTaskFields(patch);
@@ -802,14 +822,42 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
         toast.error("Still saving that task — try again in a moment.");
         return;
       }
-      patchTaskLocal(id, { ...fields, updatedAt: new Date().toISOString() });
+      // Moving a parent takes its subtasks along (TV-P0): a subtask never
+      // stays behind in the old project. `bundle.tasks` has the real buckets.
+      const movedChildren =
+        fields.bucketId !== undefined && fields.bucketId !== existing.bucketId
+          ? bundle.tasks.filter(
+              (t) =>
+                t.parentId === id &&
+                !t.deletedAt &&
+                !isTempId(t.id) &&
+                t.bucketId !== fields.bucketId,
+            )
+          : [];
+      const stamp = new Date().toISOString();
+      patchTaskLocal(id, { ...fields, updatedAt: stamp });
+      for (const child of movedChildren) {
+        patchTaskLocal(child.id, { bucketId: fields.bucketId, updatedAt: stamp });
+      }
       guard(async () => {
         const saved = await runtime!.tasks.updateTask({
           workspaceId: workspaceId!,
           taskId: id,
           patch: fields,
         });
-        setBundle((prev) => ({ ...prev, tasks: prev.tasks.map((t) => (t.id === id ? saved : t)) }));
+        // Subtasks follow the project the parent really landed in (an unknown
+        // one falls back to Inbox on the server).
+        const savedChildren = await Promise.all(
+          movedChildren.map((child) =>
+            runtime!.tasks.updateTask({
+              workspaceId: workspaceId!,
+              taskId: child.id,
+              patch: { bucketId: saved.bucketId },
+            }),
+          ),
+        );
+        const byId = new Map([saved, ...savedChildren].map((t) => [t.id, t]));
+        setBundle((prev) => ({ ...prev, tasks: prev.tasks.map((t) => byId.get(t.id) ?? t) }));
       });
     },
     [
@@ -1551,6 +1599,7 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
 
   return {
     loading,
+    loaded,
     error,
     canRead,
     canEdit,

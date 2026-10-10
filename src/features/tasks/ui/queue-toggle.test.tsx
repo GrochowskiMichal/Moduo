@@ -50,6 +50,7 @@ function task(id: string, over: Partial<Task> = {}): Task {
 
 function api(queued: string[], claims: Record<string, string[]>) {
   return {
+    loaded: true,
     queuedTaskIds: new Set(queued),
     queueClaims: new Map(Object.entries(claims)),
     toggleQueue: rs.fn(),

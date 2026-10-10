@@ -7,6 +7,7 @@
 // collapses. Display → "Show on rows" turns a property column off (energy is
 // off by default; it always shows in the detail panel).
 
+import { dayOffset, formatDate, formatDay, formatTime } from "../../lib/time-format";
 import { formatTimestamp, isOpen } from "./helpers";
 import { isDrifted, type Task } from "./model";
 
@@ -80,37 +81,13 @@ export type RowDate = {
   description: string;
 };
 
-const TIME_FMT = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
-const WEEKDAY_FMT = new Intl.DateTimeFormat(undefined, { weekday: "short" });
-const DAY_FMT = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
-const DAY_YEAR_FMT = new Intl.DateTimeFormat(undefined, {
-  month: "short",
-  day: "numeric",
-  year: "numeric",
-});
-
-function startOfDay(d: Date): number {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-}
-
-function dayOffset(d: Date, now: Date): number {
-  return Math.round((startOfDay(d) - startOfDay(now)) / 86_400_000);
-}
-
 /**
  * A date as short as the column allows: Today / Tomorrow / Yesterday, the
  * weekday for the rest of the coming week, else the month and day (with the
- * year when it isn't this year's).
+ * year when it isn't this year's) — the one grammar, src/lib/time-format.ts.
  */
 export function formatShortDate(iso: string, now: Date = new Date()): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  const offset = dayOffset(d, now);
-  if (offset === 0) return "Today";
-  if (offset === 1) return "Tomorrow";
-  if (offset === -1) return "Yesterday";
-  if (offset > 1 && offset < 7) return WEEKDAY_FMT.format(d);
-  return d.getFullYear() === now.getFullYear() ? DAY_FMT.format(d) : DAY_YEAR_FMT.format(d);
+  return formatDay(iso, now);
 }
 
 /**
@@ -126,11 +103,11 @@ export function rowDate(
   const scheduled = validDate(task.scheduledAt);
   const due = validDate(task.dueDate);
   if (!scheduled && !due) return null;
-  const useDue = due && (!scheduled || startOfDay(due) < startOfDay(scheduled));
+  const useDue = due && (!scheduled || dayOffset(due, scheduled) < 0);
   // The date shown comes first, so the cell's name matches the editor it opens.
   const parts: string[] = [];
   if (scheduled) parts.push(`Scheduled ${formatTimestamp(task.scheduledAt)}`);
-  if (due) parts[useDue ? "unshift" : "push"](`Due ${DAY_YEAR_FMT.format(due)}`);
+  if (due) parts[useDue ? "unshift" : "push"](`Due ${formatDate(due, now)}`);
   const description = parts.join(" · ");
   if (useDue && task.dueDate) {
     return { kind: "due", label: formatShortDate(task.dueDate, now), drifted: false, description };
@@ -138,7 +115,7 @@ export function rowDate(
   const at = scheduled as Date;
   return {
     kind: "scheduled",
-    label: dayOffset(at, now) === 0 ? TIME_FMT.format(at) : formatShortDate(at.toISOString(), now),
+    label: dayOffset(at, now) === 0 ? formatTime(at) : formatDay(at, now),
     drifted: isDrifted(task, now),
     description,
   };

@@ -86,6 +86,7 @@ function stubApi(tasks: Task[], relations: TaskRelation[]): TasksModuleApi {
   }
   return {
     loading: false,
+    loaded: true,
     taskRelations: relations,
     blockedTaskIds: blockedIds,
     blockersByTask,

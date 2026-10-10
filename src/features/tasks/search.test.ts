@@ -59,6 +59,18 @@ describe("resolveTasksDeepLink", () => {
     expect(resolveTasksDeepLink("nope", ctx)).toEqual({ kind: "none" });
   });
 
+  it("a task in a project you can't see opens in All, never Inbox (TV-P0, AC1.10)", () => {
+    const withPrivate = {
+      ...ctx,
+      tasks: [...ctx.tasks, { id: "assigned-to-me", bucketId: "b-someone-elses" }],
+    };
+    expect(resolveTasksDeepLink("assigned-to-me", withPrivate)).toEqual({
+      kind: "task",
+      taskId: "assigned-to-me",
+      scope: "all",
+    });
+  });
+
   it("handles a missing inbox (no crash on a fresh workspace)", () => {
     expect(
       resolveTasksDeepLink("t1", { tasks: ctx.tasks, buckets: ctx.buckets, inboxId: null }),

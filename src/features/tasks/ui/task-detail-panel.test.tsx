@@ -213,7 +213,7 @@ describe("the comp layout and property rule C (U3-1)", () => {
     // Checkbox beside a wrapping title, no chevrons on the values.
     expect(screen.getByRole("button", { name: "Mark as done" })).toBeTruthy();
     expect(screen.getByRole("textbox", { name: "Task title" }).tagName).toBe("TEXTAREA");
-    expect(screen.getByRole("button", { name: "Status: Todo" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Status: To do" })).toBeTruthy();
     // Values are PropertyValues even under a Radix trigger, and none has a chevron.
     expect(document.querySelectorAll("[data-slot=property-value]").length).toBeGreaterThanOrEqual(
       5,
@@ -259,7 +259,7 @@ describe("the comp layout and property rule C (U3-1)", () => {
     expect(screen.queryByRole("button", { name: "Add energy" })).toBeNull();
     expect(screen.queryByRole("button", { name: "More actions" })).toBeNull();
     expect(
-      (screen.getByRole("button", { name: "Status: Todo" }) as HTMLButtonElement).disabled,
+      (screen.getByRole("button", { name: "Status: To do" }) as HTMLButtonElement).disabled,
     ).toBe(true);
   });
 });

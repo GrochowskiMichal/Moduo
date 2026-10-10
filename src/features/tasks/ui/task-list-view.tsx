@@ -6,14 +6,11 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { arrayMove, SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { ChevronDown, ChevronRight, Plus } from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
-import { Button } from "../../../components/ui/button";
-import { EmptyState as EmptyStateBase } from "../../../components/ui/empty-state";
 import { eyebrowVariants } from "../../../components/ui/eyebrow";
-import { Kbd } from "../../../components/ui/kbd";
 import {
   Select,
   SelectContent,
@@ -49,6 +46,7 @@ import { listKeyActionFor } from "./list-keys";
 import { type PlanView, PlanViewHeader } from "./plan-view-header";
 import { CompletedLine } from "./task-meta";
 import { type RowCommand, TaskRow } from "./task-row";
+import { TaskListSkeleton, TasksEmptyScope, TasksNoMatch } from "./task-view-states";
 
 type Props = {
   tasks: Task[];
@@ -66,6 +64,9 @@ type Props = {
   /** Lifted task selection — drives the keyboard cursor and the detail rail. */
   selectedTaskId: string | null;
   onSelectTask: (id: string | null) => void;
+  /** A filter is narrowing the scope: an empty result reads "No tasks match". */
+  filterActive?: boolean;
+  onClearFilters?: () => void;
   /** Tag-filter header control + active-chip row (built by the parent). */
   tagFilterControl?: ReactNode;
   activeTagFilters?: ReactNode;
@@ -124,6 +125,8 @@ export function TaskListView({
   onRequestCapture,
   selectedTaskId,
   onSelectTask,
+  filterActive = false,
+  onClearFilters,
   tagFilterControl,
   activeTagFilters,
   displayControl,
@@ -677,8 +680,18 @@ export function TaskListView({
         aria-label={`${scopeTitle} tasks`}
         className="pane-scroll min-h-0 flex-1 overflow-auto rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
-        {tasks.length === 0 ? (
-          <EmptyState canEdit={canEdit} onRequestCapture={onRequestCapture} />
+        {!api.loaded ? (
+          <TaskListSkeleton />
+        ) : tasks.length === 0 ? (
+          filterActive ? (
+            <TasksNoMatch onClearFilters={onClearFilters} />
+          ) : (
+            <TasksEmptyScope
+              scopeTitle={scopeTitle}
+              canEdit={canEdit}
+              onRequestCapture={onRequestCapture}
+            />
+          )
         ) : canReorder ? (
           // Queue reorder. In external mode (DF-22) the tasks page owns the one
           // DndContext (so a row can be dropped on the hub); we bind our reorder
@@ -796,34 +809,5 @@ export function TaskListView({
         )}
       </div>
     </div>
-  );
-}
-
-function EmptyState({
-  canEdit,
-  onRequestCapture,
-}: {
-  canEdit: boolean;
-  onRequestCapture: () => void;
-}) {
-  return (
-    <EmptyStateBase
-      title="Nothing here yet."
-      action={
-        canEdit ? (
-          <Button variant="secondary" size="sm" onClick={onRequestCapture}>
-            <Plus aria-hidden />
-            Add a task
-          </Button>
-        ) : undefined
-      }
-      hint={
-        canEdit ? (
-          <>
-            or press <Kbd>c</Kbd> to capture
-          </>
-        ) : undefined
-      }
-    />
   );
 }

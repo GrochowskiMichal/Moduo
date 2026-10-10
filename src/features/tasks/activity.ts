@@ -2,6 +2,7 @@
 // per intent op (docs/moduo-module-contract.md, Pillar 3). Mirrors, never
 // walls — no alarm, no judgment, newest first in the detail panel.
 
+import { formatDate } from "../../lib/time-format";
 import { formatScheduled, STATUS_LABELS } from "./helpers";
 import type { ActivityEntry, TaskStatus } from "./model";
 
@@ -19,13 +20,13 @@ export function activityActorName(
 
 const str = (v: unknown): string | null => (typeof v === "string" && v ? v : null);
 
-/** "Jun 12" from a queue date (YYYY-MM-DD). */
+/** "Jun 12" from a queue date (YYYY-MM-DD), in the one grammar. */
 function formatQueueDate(v: unknown): string | null {
   const s = str(v);
   if (!s) return null;
   const d = new Date(`${s}T00:00:00`);
   if (Number.isNaN(d.getTime())) return null;
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return formatDate(d);
 }
 
 /**

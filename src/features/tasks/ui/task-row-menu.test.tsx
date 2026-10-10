@@ -79,6 +79,7 @@ const inbox: Bucket = {
 function renderList({ canEdit = true }: { canEdit?: boolean } = {}) {
   const tasks = [task("a", "Alpha"), task("b", "Beta", { dueDate: "2026-10-20T00:00:00.000Z" })];
   const api = {
+    loaded: true,
     tasks,
     queuedTaskIds: new Set(),
     queueClaims: new Map(),

@@ -77,6 +77,7 @@ const inbox: Bucket = {
 function renderList({ queue = false }: { queue?: boolean } = {}) {
   const tasks = [task("a", "Alpha"), task("b", "Beta"), task("c", "Gamma")];
   const api = {
+    loaded: true,
     tasks,
     queuedTaskIds: new Set(queue ? ["a", "b", "c"] : []),
     queueClaims: new Map(),
@@ -216,11 +217,13 @@ describe("TaskListView keys (tasks-v2 Q1-1, Q1-2)", () => {
     grid.focus();
     fireEvent.keyDown(grid, { key: "d", code: "KeyD" });
     await wait();
-    const input = document.querySelector<HTMLInputElement>('[data-slot="popover-content"] input')!;
+    // The picker (TV-P0) focuses its first control; keys there stay the picker's.
+    const inside = document.activeElement as HTMLElement;
+    expect(inside.closest('[data-slot="popover-content"]')).not.toBeNull();
 
-    fireEvent.keyDown(input, SPACE);
-    fireEvent.keyDown(input, { key: "ArrowDown", code: "ArrowDown" });
-    fireEvent.keyDown(input, { key: "Backspace", code: "Backspace", metaKey: true });
+    fireEvent.keyDown(inside, SPACE);
+    fireEvent.keyDown(inside, { key: "ArrowDown", code: "ArrowDown" });
+    fireEvent.keyDown(inside, { key: "Backspace", code: "Backspace", metaKey: true });
 
     expect(api.toggleDone).not.toHaveBeenCalled();
     expect(api.deleteTask).not.toHaveBeenCalled();

@@ -299,6 +299,9 @@ export function sanitizeTimeBlocks(raw: unknown): TimeBlockMap {
 /** Name of the reserved system Inbox bucket. */
 export const INBOX_BUCKET_NAME = "Inbox";
 
+/** What a task's project reads when you can't see that project (TV-P0, AC1.10). */
+export const PRIVATE_PROJECT_LABEL = "Private project";
+
 /**
  * Computed `drifted` flag — mirrors `Task::is_drifted` in the Rust backend and
  * the spec: a scheduled task whose time has passed without completion.

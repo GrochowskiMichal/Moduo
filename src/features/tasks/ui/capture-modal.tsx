@@ -35,6 +35,7 @@ import { Input } from "../../../components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
 import { Switch } from "../../../components/ui/switch";
 import { Textarea } from "../../../components/ui/textarea";
+import { formatDay, formatDayTime } from "../../../lib/time-format";
 import { cn } from "../../../lib/utils";
 import { assigneeOptions, fromAssigneeValue, toAssigneeValue } from "../assignee-options";
 import { useAssignees } from "../assignees";
@@ -524,34 +525,11 @@ function InputPill({
 
 // ── labels ────────────────────────────────────────────────────────────────────
 
-const TIME_FMT = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
-const DATE_FMT = new Intl.DateTimeFormat(undefined, {
-  weekday: "short",
-  month: "short",
-  day: "numeric",
-});
-const DATETIME_FMT = new Intl.DateTimeFormat(undefined, {
-  weekday: "short",
-  month: "short",
-  day: "numeric",
-  hour: "numeric",
-  minute: "2-digit",
-});
-
-function isToday(d: Date): boolean {
-  const n = new Date();
-  return (
-    d.getFullYear() === n.getFullYear() &&
-    d.getMonth() === n.getMonth() &&
-    d.getDate() === n.getDate()
-  );
-}
 function scheduledLabel(iso: string): string {
-  const d = new Date(iso);
-  return isToday(d) ? `Today ${TIME_FMT.format(d)}` : DATETIME_FMT.format(d);
+  return formatDayTime(iso);
 }
 function dateLabel(iso: string): string {
-  return DATE_FMT.format(new Date(iso));
+  return formatDay(iso);
 }
 function summarize(
   scheduledAt: string | null,

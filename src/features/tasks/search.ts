@@ -15,7 +15,8 @@ export function validateTasksSearch(search: Record<string, unknown>): TasksSearc
 }
 
 // ── inbound-target resolution ────────────────────────────────────────────────
-// Pure: an inbound `?id=` is a task id (select it, scoped to its bucket), a
+// Pure: an inbound `?id=` is a task id (select it, scoped to its bucket — or
+// All when that bucket isn't one you can see), a
 // bucket id (a `project` deep link — scope to it), or unknown/stale (degrade
 // to the default selection, never crash). The scope value is the plan view's
 // bucket-scope selection ("inbox" is the alias the rail uses for the system
@@ -34,7 +35,15 @@ export function resolveTasksDeepLink(
     inboxId: string | null;
   },
 ): TasksDeepLinkTarget {
-  const scopeFor = (bucketId: string) => (bucketId === ctx.inboxId ? "inbox" : bucketId);
+  // A task in a project you can't see (it was assigned to you there) opens in
+  // All, which lists it; scoping to that project would bounce to Inbox and
+  // select another task (TV-P0, AC1.10).
+  const scopeFor = (bucketId: string) =>
+    bucketId === ctx.inboxId
+      ? "inbox"
+      : ctx.buckets.some((b) => b.id === bucketId)
+        ? bucketId
+        : "all";
   const task = ctx.tasks.find((t) => t.id === id);
   if (task) return { kind: "task", taskId: task.id, scope: scopeFor(task.bucketId) };
   if (id === ctx.inboxId || ctx.buckets.some((b) => b.id === id)) {

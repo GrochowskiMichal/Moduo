@@ -34,6 +34,7 @@ import type { PlanView } from "./plan-view-header";
 import { PlanViewHeader } from "./plan-view-header";
 import { CardBody, TaskCard } from "./task-card";
 import { CompletedLine } from "./task-meta";
+import { TaskBoardSkeleton, TasksNoMatch } from "./task-view-states";
 
 export type BoardGroupBy = "status" | "bucket";
 
@@ -54,6 +55,9 @@ type Props = {
   onSelectTask: (id: string | null) => void;
   tagFilterControl?: ReactNode;
   activeTagFilters?: ReactNode;
+  /** A filter is narrowing the scope: an empty result reads "No tasks match". */
+  filterActive?: boolean;
+  onClearFilters?: () => void;
   /** The Display menu (built by the parent). */
   displayControl?: ReactNode;
   /** Display → Completed (tasks-v2 §6). Default: hidden. */
@@ -109,6 +113,8 @@ export function TaskBoardView({
   onSelectTask,
   tagFilterControl,
   activeTagFilters,
+  filterActive = false,
+  onClearFilters,
   displayControl,
   completed = "hidden",
   properties = DEFAULT_ROW_PROPERTIES,
@@ -296,24 +302,30 @@ export function TaskBoardView({
         onDragCancel={() => setActiveId(null)}
       >
         <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto pb-1">
-          {columns.map((col) => (
-            <BoardColumn
-              key={col.id}
-              column={col}
-              canEdit={canEdit}
-              showBucketTag={showBucketTag}
-              showAssignee={showAssignee}
-              properties={properties}
-              buckets={buckets}
-              inbox={inbox}
-              bucketNameById={bucketNameById}
-              selectedTaskId={selectedTaskId}
-              onSelectTask={onSelectTask}
-              revealed={revealed.has(col.id)}
-              onToggleReveal={() => toggleReveal(col.id)}
-              api={api}
-            />
-          ))}
+          {!api.loaded ? <TaskBoardSkeleton /> : null}
+          {api.loaded && filterActive && tasks.length === 0 ? (
+            <TasksNoMatch onClearFilters={onClearFilters} />
+          ) : null}
+          {!api.loaded || (filterActive && tasks.length === 0)
+            ? null
+            : columns.map((col) => (
+                <BoardColumn
+                  key={col.id}
+                  column={col}
+                  canEdit={canEdit}
+                  showBucketTag={showBucketTag}
+                  showAssignee={showAssignee}
+                  properties={properties}
+                  buckets={buckets}
+                  inbox={inbox}
+                  bucketNameById={bucketNameById}
+                  selectedTaskId={selectedTaskId}
+                  onSelectTask={onSelectTask}
+                  revealed={revealed.has(col.id)}
+                  onToggleReveal={() => toggleReveal(col.id)}
+                  api={api}
+                />
+              ))}
         </div>
 
         {typeof document !== "undefined"
