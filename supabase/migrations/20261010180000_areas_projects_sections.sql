@@ -23,9 +23,10 @@
 --     section does the same for its tasks.
 --   * tasks.estimate_minutes: the estimate gets its own column, because
 --     duration_minutes becomes the mirror of the next work session's length in
---     part 2. A write of duration_minutes that isn't the mirror (builds from
---     before TV-D10, which read it as the estimate) is the estimate too; a write
---     of the estimate reaches duration_minutes while nothing is scheduled.
+--     part 2. While a task is unscheduled the two are one value both ways
+--     (builds from before TV-D10 read duration_minutes as the estimate); once it
+--     is scheduled, duration_minutes is the block's length and never touches
+--     the estimate (a calendar drop or resize leaves it alone).
 --   * user_preferences.task_time_blocks: the time-of-day slots (morning,
 --     afternoon, evening → a project), now per person and keyed by workspace.
 --     The workspace table task_time_blocks stays until TV-D7; a write to it (a
@@ -539,8 +540,9 @@ CREATE TRIGGER tasks_section_check
 -- session (that write sets tasks.session_mirror and is skipped here).
 --   * the estimate leads: it reaches duration_minutes while nothing is
 --     scheduled (the block's length stays the session's);
---   * duration_minutes leads (an old build, a calendar resize): it is the
---     estimate too, as it always was.
+--   * duration_minutes leads on an unscheduled task (an old build's estimate):
+--     it is the estimate too. On a scheduled task it is the block's length (a
+--     calendar drop or resize, an old build's block), and the estimate stays.
 CREATE OR REPLACE FUNCTION public.tasks__estimate_sync()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -551,9 +553,11 @@ BEGIN
     RETURN NEW;
   END IF;
   IF TG_OP = 'INSERT' THEN
-    IF NEW.estimate_minutes IS NULL THEN
+    IF NEW.scheduled_at IS NOT NULL THEN
+      RETURN NEW;
+    ELSIF NEW.estimate_minutes IS NULL THEN
       NEW.estimate_minutes := NEW.duration_minutes;
-    ELSIF NEW.duration_minutes IS NULL AND NEW.scheduled_at IS NULL THEN
+    ELSIF NEW.duration_minutes IS NULL THEN
       NEW.duration_minutes := NEW.estimate_minutes;
     END IF;
     RETURN NEW;
@@ -562,7 +566,7 @@ BEGIN
     IF NEW.duration_minutes IS NOT DISTINCT FROM OLD.duration_minutes AND NEW.scheduled_at IS NULL THEN
       NEW.duration_minutes := NEW.estimate_minutes;
     END IF;
-  ELSIF NEW.duration_minutes IS DISTINCT FROM OLD.duration_minutes THEN
+  ELSIF NEW.duration_minutes IS DISTINCT FROM OLD.duration_minutes AND NEW.scheduled_at IS NULL THEN
     NEW.estimate_minutes := NEW.duration_minutes;
   END IF;
   RETURN NEW;
@@ -804,6 +808,28 @@ BEGIN
     PERFORM set_config('share.bypass', coalesce(v_bypass, ''), true);
   END IF;
   RETURN QUERY SELECT * FROM public.areas__list(p_workspace_id);
+END;
+$$;
+
+-- The area of this name (made at the end of the sidebar when there's none),
+-- for filing a project under a name (the rail's "Section" menu). Looked up on
+-- the server, so a stale list in the app never makes a second one. Answers
+-- with that area.
+CREATE OR REPLACE FUNCTION public.areas_op_ensure(p_workspace_id uuid, p_name text)
+RETURNS public.areas
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  a public.areas;
+  v_id uuid;
+BEGIN
+  PERFORM public.tasks__guard_structure(p_workspace_id);
+  PERFORM pg_advisory_xact_lock(hashtextextended('areas:' || p_workspace_id::text, 0));
+  v_id := public.areas__find_or_create(p_workspace_id, public.tasks__clean_name(p_name, 'An area', 80));
+  SELECT * INTO a FROM public.areas WHERE id = v_id;
+  RETURN a;
 END;
 $$;
 
@@ -1333,7 +1359,7 @@ BEGIN
   -- The ops.
   FOREACH fn IN ARRAY ARRAY[
     'areas_op_create(uuid, text, text)', 'areas_op_update(uuid, uuid, jsonb)',
-    'areas_op_move(uuid, uuid, uuid)',
+    'areas_op_move(uuid, uuid, uuid)', 'areas_op_ensure(uuid, text)',
     'projects_op_create(uuid, jsonb)', 'projects_op_update(uuid, uuid, jsonb)',
     'projects_op_move(uuid, uuid, uuid, text)',
     'sections_op_create(uuid, uuid, jsonb)', 'sections_op_update(uuid, uuid, jsonb)',

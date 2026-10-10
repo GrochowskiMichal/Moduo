@@ -199,9 +199,10 @@ AS $$
 $$;
 
 -- Write the mirror: scheduled_at = the shown session's start, duration_minutes
--- = its length (left as it is with no session, where it's only the estimate;
--- and left null for the app's default 30-minute block). No write when nothing
--- changes. tasks.session_mirror tells the other triggers this isn't an edit.
+-- = its length (left null for the app's default 30-minute block). With no
+-- session left, duration_minutes goes back to the estimate (what builds before
+-- TV-D10 and the Calendar's drop read it as). No write when nothing changes.
+-- tasks.session_mirror tells the other triggers this isn't an edit.
 CREATE OR REPLACE FUNCTION public.tasks__session_mirror(p_task_id uuid)
 RETURNS void
 LANGUAGE plpgsql
@@ -222,7 +223,7 @@ BEGIN
   s := public.tasks__next_session(p_task_id, now());
   IF s.id IS NULL THEN
     v_at := NULL;
-    v_minutes := t.duration_minutes;
+    v_minutes := coalesce(t.estimate_minutes, t.duration_minutes);
   ELSE
     v_at := s.starts_at;
     v_minutes := round(extract(epoch FROM s.ends_at - s.starts_at) / 60)::integer;
@@ -264,8 +265,9 @@ CREATE TRIGGER task_sessions_mirror
 
 -- AFTER a write of scheduled_at / duration_minutes that isn't the mirror: the
 -- write edits the session the mirror showed (matched by its start, else the
--- task's next one), or makes the first. The session belongs to whoever
--- scheduled it (else the assignee, else the creator).
+-- task's next one), or makes the first. A new session is the assignee's (who
+-- does the work, so whose booking links it blocks), else the scheduler's,
+-- else the creator's.
 CREATE OR REPLACE FUNCTION public.tasks__session_legacy()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -280,7 +282,7 @@ BEGIN
   IF coalesce(current_setting('tasks.session_mirror', true), '') = '1' THEN
     RETURN NULL;
   END IF;
-  v_user := coalesce(public.perm_actor_id(), NEW.assignee_id, NEW.owner_id);
+  v_user := coalesce(NEW.assignee_id, public.perm_actor_id(), NEW.owner_id);
   v_len := make_interval(mins => coalesce(nullif(NEW.duration_minutes, 0), 30));
 
   IF TG_OP = 'INSERT' THEN
@@ -452,6 +454,9 @@ BEGIN
   v_times := public.tasks__session_times(p_session, NULL, NULL);
   v_user := CASE WHEN p_session ? 'user_id' THEN public.tasks__try_uuid(p_session ->> 'user_id')
                  ELSE public.perm_actor_id() END;
+  IF v_user IS NULL THEN
+    RAISE EXCEPTION 'A session is someone''s: pick who does the work.' USING ERRCODE = '22023';
+  END IF;
   IF v_user IS DISTINCT FROM public.perm_actor_id() THEN
     PERFORM public.tasks__check_assignee(p_workspace_id, v_user);
   END IF;
@@ -487,6 +492,9 @@ BEGIN
   SELECT * INTO s FROM public.task_sessions WHERE id = s.id FOR UPDATE;
   v_times := public.tasks__session_times(p_patch, s.starts_at, s.ends_at);
   v_user := CASE WHEN p_patch ? 'user_id' THEN public.tasks__try_uuid(p_patch ->> 'user_id') ELSE s.user_id END;
+  IF p_patch ? 'user_id' AND v_user IS NULL THEN
+    RAISE EXCEPTION 'A session is someone''s: pick who does the work.' USING ERRCODE = '22023';
+  END IF;
   IF v_user IS DISTINCT FROM s.user_id AND v_user IS DISTINCT FROM public.perm_actor_id() THEN
     PERFORM public.tasks__check_assignee(p_workspace_id, v_user);
   END IF;

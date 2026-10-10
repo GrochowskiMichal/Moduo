@@ -127,6 +127,67 @@ function deletedAtOf(deleted: boolean | undefined): Row {
   return deleted === undefined ? {} : { deleted_at: deleted ? new Date().toISOString() : null };
 }
 
+/** One table's list read: what it's called, its cap and its order. */
+type LiveRead<T> = {
+  table: string;
+  scope: string;
+  cap: number;
+  order: string;
+  map: (row: unknown) => T;
+};
+
+const READS = {
+  areas: {
+    table: "areas",
+    scope: "areas",
+    cap: READ_CAPS.areas,
+    order: "position",
+    map: areaRowToModel,
+  },
+  sections: {
+    table: "sections",
+    scope: "sections",
+    cap: READ_CAPS.sections,
+    order: "position",
+    map: sectionRowToModel,
+  },
+  teams: {
+    table: "teams",
+    scope: "teams",
+    cap: READ_CAPS.teams,
+    order: "name",
+    map: teamRowToModel,
+  },
+  teamMembers: {
+    table: "team_members",
+    scope: "team members",
+    cap: READ_CAPS.teamMembers,
+    order: "created_at",
+    map: teamMemberRowToModel,
+  },
+  sessions: {
+    table: "task_sessions",
+    scope: "work sessions",
+    cap: READ_CAPS.taskSessions,
+    order: "starts_at",
+    map: taskSessionRowToModel,
+  },
+  reminders: {
+    table: "task_reminders",
+    scope: "reminders",
+    cap: READ_CAPS.taskReminders,
+    order: "created_at",
+    map: taskReminderRowToModel,
+  },
+  waiting: {
+    table: "task_waiting",
+    scope: "waiting entries",
+    cap: READ_CAPS.taskWaiting,
+    order: "since",
+    map: taskWaitingRowToModel,
+  },
+} satisfies Record<string, LiveRead<unknown>>;
+
 export function createTasksStructure(
   client: SupabaseClient,
   deps: {
@@ -140,29 +201,22 @@ export function createTasksStructure(
   },
 ) {
   /** Every live row of a workspace table, up to its cap, in a stable order. */
-  async function listLive<T>(args: {
-    table: string;
-    scope: string;
-    cap: number;
-    workspaceId: string;
-    order: string;
-    map: (row: unknown) => T;
-    extra?: (q: any) => any;
-  }): Promise<{ rows: T[]; truncation: Truncation | null }> {
-    const build = (opts?: { count: "exact"; head: true }) => {
-      const q = client
-        .from(args.table)
+  async function listLive<T>(
+    read: LiveRead<T>,
+    workspaceId: string,
+  ): Promise<{ rows: T[]; truncation: Truncation | null }> {
+    const build = (opts?: { count: "exact"; head: true }) =>
+      client
+        .from(read.table)
         .select("*", opts)
-        .eq("workspace_id", args.workspaceId)
+        .eq("workspace_id", workspaceId)
         .is("deleted_at", null);
-      return args.extra ? args.extra(q) : q;
-    };
     const res = await readPaged<Row, Answer["error"]>({
-      scope: args.scope,
-      cap: args.cap,
+      scope: read.scope,
+      cap: read.cap,
       page: async (offset, limit) => {
         const { data, error } = await build()
-          .order(args.order)
+          .order(read.order)
           .order("id")
           .range(offset, offset + limit - 1);
         return { data: (data ?? null) as Row[] | null, error };
@@ -175,10 +229,10 @@ export function createTasksStructure(
     });
     if (res.error) {
       // A database before TV-D10 has no such table: nothing to show.
-      if (isMissingTableError(res.error, args.table)) return { rows: [], truncation: null };
+      if (isMissingTableError(res.error, read.table)) return { rows: [], truncation: null };
       fail(res.error);
     }
-    return { rows: mapRows(res.rows, args.map), truncation: res.truncation };
+    return { rows: mapRows(res.rows, read.map), truncation: res.truncation };
   }
 
   async function rpc(fn: string, args: Row): Promise<Answer> {
@@ -202,48 +256,18 @@ export function createTasksStructure(
     // ── Reads ────────────────────────────────────────────────────────────────
 
     async listAreas(workspaceId: string): Promise<Area[]> {
-      const res = await listLive({
-        table: "areas",
-        scope: "areas",
-        cap: READ_CAPS.areas,
-        workspaceId,
-        order: "position",
-        map: areaRowToModel,
-      });
-      return res.rows;
+      return (await listLive(READS.areas, workspaceId)).rows;
     },
 
     /** Every live section of every project the reader can see. */
     async listSections(workspaceId: string): Promise<Section[]> {
-      const res = await listLive({
-        table: "sections",
-        scope: "sections",
-        cap: READ_CAPS.sections,
-        workspaceId,
-        order: "position",
-        map: sectionRowToModel,
-      });
-      return res.rows;
+      return (await listLive(READS.sections, workspaceId)).rows;
     },
 
     async listTeams(workspaceId: string): Promise<{ teams: Team[]; members: TeamMember[] }> {
       const [teams, members] = await Promise.all([
-        listLive({
-          table: "teams",
-          scope: "teams",
-          cap: READ_CAPS.teams,
-          workspaceId,
-          order: "name",
-          map: teamRowToModel,
-        }),
-        listLive({
-          table: "team_members",
-          scope: "team members",
-          cap: READ_CAPS.teamMembers,
-          workspaceId,
-          order: "created_at",
-          map: teamMemberRowToModel,
-        }),
+        listLive(READS.teams, workspaceId),
+        listLive(READS.teamMembers, workspaceId),
       ]);
       return { teams: teams.rows, members: members.rows };
     },
@@ -251,38 +275,10 @@ export function createTasksStructure(
     /** Areas, sections, teams and members in one go (the Tasks bundle). */
     async listStructure(workspaceId: string): Promise<TasksStructure> {
       const [areas, sections, teams, members] = await Promise.all([
-        listLive({
-          table: "areas",
-          scope: "areas",
-          cap: READ_CAPS.areas,
-          workspaceId,
-          order: "position",
-          map: areaRowToModel,
-        }),
-        listLive({
-          table: "sections",
-          scope: "sections",
-          cap: READ_CAPS.sections,
-          workspaceId,
-          order: "position",
-          map: sectionRowToModel,
-        }),
-        listLive({
-          table: "teams",
-          scope: "teams",
-          cap: READ_CAPS.teams,
-          workspaceId,
-          order: "name",
-          map: teamRowToModel,
-        }),
-        listLive({
-          table: "team_members",
-          scope: "team members",
-          cap: READ_CAPS.teamMembers,
-          workspaceId,
-          order: "created_at",
-          map: teamMemberRowToModel,
-        }),
+        listLive(READS.areas, workspaceId),
+        listLive(READS.sections, workspaceId),
+        listLive(READS.teams, workspaceId),
+        listLive(READS.teamMembers, workspaceId),
       ]);
       return {
         areas: areas.rows,
@@ -302,14 +298,7 @@ export function createTasksStructure(
     async listSessions(
       workspaceId: string,
     ): Promise<{ sessions: TaskSession[]; truncated: Truncation[] }> {
-      const res = await listLive({
-        table: "task_sessions",
-        scope: "work sessions",
-        cap: READ_CAPS.taskSessions,
-        workspaceId,
-        order: "starts_at",
-        map: taskSessionRowToModel,
-      });
+      const res = await listLive(READS.sessions, workspaceId);
       return { sessions: res.rows, truncated: collectTruncations(res.truncation) };
     },
 
@@ -317,14 +306,7 @@ export function createTasksStructure(
     async listReminders(
       workspaceId: string,
     ): Promise<{ reminders: TaskReminder[]; truncated: Truncation[] }> {
-      const res = await listLive({
-        table: "task_reminders",
-        scope: "reminders",
-        cap: READ_CAPS.taskReminders,
-        workspaceId,
-        order: "created_at",
-        map: taskReminderRowToModel,
-      });
+      const res = await listLive(READS.reminders, workspaceId);
       return { reminders: res.rows, truncated: collectTruncations(res.truncation) };
     },
 
@@ -332,14 +314,7 @@ export function createTasksStructure(
     async listWaiting(
       workspaceId: string,
     ): Promise<{ waiting: TaskWaitingEntry[]; truncated: Truncation[] }> {
-      const res = await listLive({
-        table: "task_waiting",
-        scope: "waiting entries",
-        cap: READ_CAPS.taskWaiting,
-        workspaceId,
-        order: "since",
-        map: taskWaitingRowToModel,
-      });
+      const res = await listLive(READS.waiting, workspaceId);
       return { waiting: res.rows, truncated: collectTruncations(res.truncation) };
     },
 
@@ -462,8 +437,10 @@ export function createTasksStructure(
 
     /**
      * File a project under an area by name (the rail's "Section" menu): the
-     * area of that name you can see, made at the end when there's none; null
-     * takes it out. Before TV-D10's migration it writes the old label.
+     * server finds the area of that name or makes it (`areas_op_ensure`, so a
+     * stale list here never makes a second one); null takes it out. Answers
+     * with the project and `areas` with that area in it. Before TV-D10's
+     * migration it writes the old label.
      */
     async setProjectArea(input: {
       workspaceId: string;
@@ -472,41 +449,41 @@ export function createTasksStructure(
       areas: Area[];
     }): Promise<{ project: Bucket; areas: Area[] | null }> {
       const name = input.areaName?.trim() || null;
-      let areas: Area[] | null = null;
-      let areaId: string | null = null;
+      let area: Area | null = null;
       if (name) {
-        areaId = input.areas.find((a) => a.name === name)?.id ?? null;
-        if (!areaId) {
-          const created = await rpc("areas_op_create", {
-            p_workspace_id: input.workspaceId,
-            p_name: name,
-            p_color: null,
-          });
-          if (created.error) {
-            if (isMissingFunctionError(created.error, "areas_op_create")) {
-              return {
-                project: await deps.upsertBucketLegacy({ ...input.project, group: name }),
-                areas: null,
-              };
-            }
-            fail(created.error);
+        const ensured = await rpc("areas_op_ensure", {
+          p_workspace_id: input.workspaceId,
+          p_name: name,
+        });
+        if (ensured.error) {
+          if (isMissingFunctionError(ensured.error, "areas_op_ensure")) {
+            return {
+              project: await deps.upsertBucketLegacy({ ...input.project, group: name }),
+              areas: null,
+            };
           }
-          areas = mapRows(created.data, areaRowToModel);
-          areaId = areas.find((a) => a.name === name)?.id ?? null;
+          fail(ensured.error);
         }
+        area = one(ensured.data, areaRowToModel);
       }
       const moved = await rpc("projects_op_move", {
         p_workspace_id: input.workspaceId,
         p_project_id: input.project.id,
-        p_area_id: areaId,
+        p_area_id: area?.id ?? null,
         p_position: null,
       });
-      if (!moved.error) return { project: one(moved.data, bucketRowToModel), areas };
-      if (!isMissingFunctionError(moved.error, "projects_op_move")) fail(moved.error);
-      return {
-        project: await deps.upsertBucketLegacy({ ...input.project, group: name }),
-        areas: null,
-      };
+      if (moved.error) {
+        if (!isMissingFunctionError(moved.error, "projects_op_move")) fail(moved.error);
+        return {
+          project: await deps.upsertBucketLegacy({ ...input.project, group: name }),
+          areas: null,
+        };
+      }
+      const areas =
+        area && !input.areas.some((a) => a.id === area.id)
+          ? [...input.areas, area].sort((a, b) => a.position - b.position)
+          : null;
+      return { project: one(moved.data, bucketRowToModel), areas };
     },
 
     // ── Sections ─────────────────────────────────────────────────────────────

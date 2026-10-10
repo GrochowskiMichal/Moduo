@@ -151,9 +151,10 @@ describe("the rail's Section menu files a project into an area", () => {
     },
   ];
 
-  it("moves it into the area of that name", async () => {
+  it("asks the server for the area of that name, then moves it in", async () => {
     const { api, rpcCalls } = fakeClient({
       rpc: {
+        areas_op_ensure: { data: areaRow("a1", "Clients", 1), error: null },
         projects_op_move: {
           data: bucketRow({ area_id: "a1", group_label: "Clients" }),
           error: null,
@@ -167,21 +168,20 @@ describe("the rail's Section menu files a project into an area", () => {
       areas,
     });
     expect(rpcCalls).toEqual([
+      ["areas_op_ensure", { p_workspace_id: "ws", p_name: "Clients" }],
       [
         "projects_op_move",
         { p_workspace_id: "ws", p_project_id: "p1", p_area_id: "a1", p_position: null },
       ],
     ]);
+    // The area was already in the app's list: nothing to add.
     expect([moved.areaId, moved.group, made]).toEqual(["a1", "Clients", null]);
   });
 
-  it("makes the area first when it's new, and answers with the areas", async () => {
+  it("adds a new area to the app's list (the server made it, whatever the list said)", async () => {
     const { api, rpcCalls } = fakeClient({
       rpc: {
-        areas_op_create: {
-          data: [areaRow("a1", "Clients", 1), areaRow("a2", "School", 2)],
-          error: null,
-        },
+        areas_op_ensure: { data: areaRow("a2", "School", 2), error: null },
         projects_op_move: {
           data: bucketRow({ area_id: "a2", group_label: "School" }),
           error: null,
@@ -194,7 +194,6 @@ describe("the rail's Section menu files a project into an area", () => {
       areaName: "School",
       areas,
     });
-    expect(rpcCalls.map(([fn]) => fn)).toEqual(["areas_op_create", "projects_op_move"]);
     expect(rpcCalls[1]?.[1].p_area_id).toBe("a2");
     expect(made?.map((a) => a.name)).toEqual(["Clients", "School"]);
   });
@@ -204,11 +203,12 @@ describe("the rail's Section menu files a project into an area", () => {
       rpc: { projects_op_move: { data: bucketRow(), error: null } },
     });
     await api.setProjectArea({ workspaceId: "ws", project, areaName: null, areas });
+    expect(rpcCalls.map(([fn]) => fn)).toEqual(["projects_op_move"]);
     expect(rpcCalls[0]?.[1].p_area_id).toBeNull();
   });
 
   it("before the migration, writes the old label", async () => {
-    const { api, legacy } = fakeClient({ rpc: { areas_op_create: missingFn("areas_op_create") } });
+    const { api, legacy } = fakeClient({ rpc: { areas_op_ensure: missingFn("areas_op_ensure") } });
     await api.setProjectArea({ workspaceId: "ws", project, areaName: "School", areas });
     expect(legacy.upserts.map((b) => b.group)).toEqual(["School"]);
   });

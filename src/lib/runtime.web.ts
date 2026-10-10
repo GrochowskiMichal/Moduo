@@ -120,6 +120,7 @@ import {
   isMissingFunctionError,
   isMissingTableError,
   isMissingTvD9FieldError,
+  isMissingTvD10FieldError,
   projectStatusRowToModel,
   sortQueueEntries,
   type TaskFieldPatch,
@@ -136,6 +137,7 @@ import {
   taskTimeAnswerToModel,
   taskTimeTotalsRowToModel,
   withoutTvD9Fields,
+  withoutTvD10Fields,
 } from "./task-rows";
 
 // ── Supabase client ────────────────────────────────────────────────────────────
@@ -2284,17 +2286,14 @@ export const webRuntime: ModuoRuntime = {
       // Every create is the server op (TV-D8): it numbers the task, registers
       // it for search and logs it. The client's id makes a resend idempotent.
       const input = taskCreateOpInput(created);
-      let op = await supabaseClient.rpc("tasks_op_create", {
-        p_workspace_id: task.workspaceId,
-        p_task: input,
-      });
-      // A database before TV-D9 (the merge-before-apply window). Remove in TV-D7.
-      if (isMissingTvD9FieldError(op.error)) {
-        op = await supabaseClient.rpc("tasks_op_create", {
+      // A database before TV-D10 / TV-D9 (the merge-before-apply window)
+      // refuses the newer fields: retry without them. Remove in TV-D7.
+      const op = await withFieldFallback(input, (fields) =>
+        supabaseClient.rpc("tasks_op_create", {
           p_workspace_id: task.workspaceId,
-          p_task: withoutTvD9Fields(input),
-        });
-      }
+          p_task: fields,
+        }),
+      );
       if (!op.error) return taskRowToModel(Array.isArray(op.data) ? op.data[0] : op.data);
       if (!isMissingFunctionError(op.error, "tasks_op_create")) throw new Error(op.error.message);
       // Before TV-D8's migration: the direct insert. Remove in TV-D7.
@@ -3693,6 +3692,25 @@ async function listWorkspaceStatuses(
 }
 
 /**
+ * Send a task op, and when the database is older than the fields sent (the
+ * op answers 'Tasks have no field "…"'), send it again without TV-D10's
+ * fields, then without TV-D9's too. Remove in TV-D7.
+ */
+async function withFieldFallback<T extends { error: { message?: string } | null }>(
+  fields: Record<string, unknown>,
+  send: (fields: Record<string, unknown>) => PromiseLike<T>,
+): Promise<T> {
+  let res = await send(fields);
+  if (isMissingTvD10FieldError(res.error)) {
+    res = await send(withoutTvD10Fields(fields));
+  }
+  if (isMissingTvD9FieldError(res.error)) {
+    res = await send(withoutTvD9Fields(withoutTvD10Fields(fields)));
+  }
+  return res;
+}
+
+/**
  * A field-level task edit through `tasks_op_update` (TV-D8): only the changed
  * fields go, the server checks, writes, registers a rename and logs it, and
  * answers with the task, then any subtasks it carried along. Before the
@@ -3703,20 +3721,15 @@ async function opUpdateTaskRows(
   taskId: string,
   patch: TaskFieldPatch,
 ): Promise<Task[]> {
-  const fields = taskPatchToOpFields(patch);
-  let { data, error } = await supabaseClient.rpc("tasks_op_update", {
-    p_workspace_id: workspaceId,
-    p_task_id: taskId,
-    p_patch: fields,
-  });
-  // A database before TV-D9 (the merge-before-apply window). Remove in TV-D7.
-  if (isMissingTvD9FieldError(error)) {
-    ({ data, error } = await supabaseClient.rpc("tasks_op_update", {
+  // A database before TV-D10 / TV-D9 (the merge-before-apply window) refuses
+  // the newer fields: retry without them. Remove in TV-D7.
+  const { data, error } = await withFieldFallback(taskPatchToOpFields(patch), (fields) =>
+    supabaseClient.rpc("tasks_op_update", {
       p_workspace_id: workspaceId,
       p_task_id: taskId,
-      p_patch: withoutTvD9Fields(fields),
-    }));
-  }
+      p_patch: fields,
+    }),
+  );
   if (!error) {
     const rows = mapKnownRows(data, taskRowToModel);
     if (!rows.length) throw new Error("The task edit returned nothing.");

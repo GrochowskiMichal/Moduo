@@ -267,10 +267,19 @@ BEGIN
   PERFORM test.ok((test.task('ES')).estimate_minutes = 45, 'an old build''s duration_minutes write is the estimate too');
   PERFORM test.as_user('E', format($q$SELECT * FROM public.tasks_op_update(%L, %L, '{"scheduled_at": "2030-01-07T09:00:00Z", "duration_minutes": 60}'::jsonb)$q$,
     test.id('W'), test.id('ES')));
+  PERFORM test.ok(((test.task('ES')).estimate_minutes, (test.task('ES')).duration_minutes) = (45, 60),
+    'scheduling a block (a calendar drop or resize) leaves the estimate alone');
+  PERFORM test.as_user('E', format($q$UPDATE public.tasks SET duration_minutes = 120 WHERE id = %L$q$, test.id('ES')));
+  PERFORM test.ok(((test.task('ES')).estimate_minutes, (test.task('ES')).duration_minutes) = (45, 120),
+    'so does resizing it');
   PERFORM test.as_user('E', format($q$SELECT * FROM public.tasks_op_update(%L, %L, '{"estimate_minutes": 300}'::jsonb)$q$,
     test.id('W'), test.id('ES')));
-  PERFORM test.ok(((test.task('ES')).estimate_minutes, (test.task('ES')).duration_minutes) = (300, 60),
+  PERFORM test.ok(((test.task('ES')).estimate_minutes, (test.task('ES')).duration_minutes) = (300, 120),
     'on a scheduled task the estimate no longer doubles as the block''s length (REPLAN 25)');
+  PERFORM test.as_user('E', format($q$SELECT public.tasks_op_unschedule(%L, %L)$q$, test.id('W'), test.id('ES')));
+  PERFORM test.ok(((test.task('ES')).estimate_minutes, (test.task('ES')).duration_minutes) = (300, 300)
+                  AND (test.task('ES')).scheduled_at IS NULL,
+    'unscheduled again, duration_minutes is the estimate (what old builds and a calendar drop read)');
 
   -- ── Time blocks are each person's own ────────────────────────────────────
   r := test.as_user('E', format($q$SELECT public.tasks_op_set_time_blocks(%L, %L::jsonb)$q$, test.id('W'),

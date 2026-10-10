@@ -96,11 +96,21 @@ BEGIN
               AND EXISTS (SELECT 1 FROM public.module_activity a WHERE a.entity_id = test.id('T3') AND a.op = 'tasks.update'
                             AND a.payload -> 'fields' @> '["bucket_id", "team_id"]'::jsonb),
     'routing an Inbox task to the team files it into the default project, in the trail', r);
-  r := test.try('E', format($q$SELECT * FROM public.tasks_op_update(%L, %L, %L::jsonb)$q$, test.id('W'), test.id('T3'),
+  -- A team task moved into an Inbox leaves its team (an Inbox is private), so
+  -- a move or a project's delete never fails over it.
+  PERFORM test.as_user('E', format($q$SELECT public.tasks_op_create(%L, %L::jsonb)$q$, test.id('W'),
+    jsonb_build_object('id', test.id('T5'), 'title', 'Moodboard', 'team_id', test.id('DS'))));
+  r := test.as_user('E', format($q$SELECT * FROM public.tasks_op_update(%L, %L, %L::jsonb)$q$, test.id('W'), test.id('T5'),
     jsonb_build_object('bucket_id', v_inbox)));
-  PERFORM test.ok(r LIKE '%needs a project%', 'a team task can''t go back into an Inbox', r);
-  r := test.try('E', format($q$UPDATE public.tasks SET bucket_id = %L WHERE id = %L$q$, v_inbox, test.id('T1')));
-  PERFORM test.ok(r LIKE '%needs a project%', 'not by a raw write either', r);
+  PERFORM test.ok(r = 'ok 1' AND (test.task('T5')).bucket_id = v_inbox AND (test.task('T5')).team_id IS NULL,
+    'a team task moved into an Inbox leaves its team', r);
+  PERFORM test.as_user('E', format($q$SELECT public.tasks_op_create(%L, %L::jsonb)$q$, test.id('W'),
+    jsonb_build_object('id', test.id('T6'), 'title', 'Palette', 'team_id', test.id('DS'))));
+  r := test.as_user('E', format($q$UPDATE public.tasks SET bucket_id = %L WHERE id = %L$q$, v_inbox, test.id('T6')));
+  PERFORM test.ok(r = 'ok 1' AND (test.task('T6')).bucket_id = v_inbox AND (test.task('T6')).team_id IS NULL,
+    'so does one an old build (or today''s project delete) moves there raw', r);
+  r := test.try('E', format($q$UPDATE public.tasks SET team_id = %L WHERE id = %L$q$, test.id('DS'), test.id('T6')));
+  PERFORM test.ok(r LIKE '%needs a project%', 'routing a task that sits in an Inbox, raw, is refused', r);
   r := test.as_user('E', format($q$SELECT * FROM public.tasks_op_update(%L, %L, '{"team_id": null}'::jsonb)$q$, test.id('W'), test.id('T3')));
   PERFORM test.ok((test.task('T3')).team_id IS NULL AND (test.task('T3')).bucket_id = test.id('DR'),
     'taking the team off leaves the task where it is', r);

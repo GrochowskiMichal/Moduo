@@ -8,7 +8,7 @@
  * nothing, like the calendar events read beside it.
  */
 
-/** The busy list's id for work sessions (src/features/calendar/booking/model.ts). */
+/** The busy list's id for work sessions (the app's TASKS_BUSY_ID, src/features/calendar/booking/model.ts; the test checks they match). */
 export const TASKS_BUSY_ID = "tasks";
 
 export type BusyInterval = { start: Date; end: Date };
@@ -19,10 +19,23 @@ export type SessionsDb = { from(table: string): any };
 type SessionRow = {
   starts_at?: unknown;
   ends_at?: unknown;
-  tasks?: { status_category?: unknown; deleted_at?: unknown } | null;
+  tasks?: { status?: unknown; status_category?: unknown; deleted_at?: unknown } | null;
 };
 
-const CLOSED = new Set(["done", "wont_do"]);
+/**
+ * Finished tasks block nothing: @contracts TASK_CLOSED_CATEGORIES (kept here
+ * so the function doesn't load zod; booking-sessions.test.ts checks they
+ * match), plus the legacy status words for a row without a category.
+ */
+export const CLOSED_TASK_CATEGORIES: readonly string[] = ["done", "wont_do"];
+const CLOSED_LEGACY = new Set(["done", "archived"]);
+
+function isClosed(task: NonNullable<SessionRow["tasks"]>): boolean {
+  if (typeof task.status_category === "string") {
+    return CLOSED_TASK_CATEGORIES.includes(task.status_category);
+  }
+  return typeof task.status === "string" && CLOSED_LEGACY.has(task.status);
+}
 
 export async function sessionBusyIntervals(
   db: SessionsDb,
@@ -30,7 +43,7 @@ export async function sessionBusyIntervals(
 ): Promise<BusyInterval[]> {
   const { data, error } = await db
     .from("task_sessions")
-    .select("starts_at, ends_at, tasks!inner(status_category, deleted_at)")
+    .select("starts_at, ends_at, tasks!inner(status, status_category, deleted_at)")
     .eq("workspace_id", args.workspaceId)
     .eq("user_id", args.userId)
     .is("deleted_at", null)
@@ -43,8 +56,7 @@ export async function sessionBusyIntervals(
   const out: BusyInterval[] = [];
   for (const row of data as SessionRow[]) {
     const task = row.tasks;
-    if (!task || task.deleted_at != null) continue;
-    if (typeof task.status_category === "string" && CLOSED.has(task.status_category)) continue;
+    if (!task || task.deleted_at != null || isClosed(task)) continue;
     const start = new Date(String(row.starts_at));
     const end = new Date(String(row.ends_at));
     if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) continue;

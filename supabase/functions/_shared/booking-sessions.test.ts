@@ -1,6 +1,12 @@
 import { describe, expect, it, rs } from "@rstest/core";
 
-import { sessionBusyIntervals } from "./booking-sessions.ts";
+import { TASKS_BUSY_ID as APP_TASKS_BUSY_ID } from "../../../src/features/calendar/booking/model.ts";
+import {
+  CLOSED_TASK_CATEGORIES,
+  sessionBusyIntervals,
+  TASKS_BUSY_ID,
+} from "./booking-sessions.ts";
+import { TASK_CLOSED_CATEGORIES } from "./contracts/vocabularies.ts";
 
 /** A Supabase query stand-in: records the calls, answers with `answer`. */
 function fakeDb(answer: { data: unknown; error: unknown }) {
@@ -37,7 +43,7 @@ describe("sessionBusyIntervals (TV-D10, default d)", () => {
     await sessionBusyIntervals(db, range);
     expect(calls).toEqual([
       ["from", ["task_sessions"]],
-      ["select", ["starts_at, ends_at, tasks!inner(status_category, deleted_at)"]],
+      ["select", ["starts_at, ends_at, tasks!inner(status, status_category, deleted_at)"]],
       ["eq", ["workspace_id", "ws-1"]],
       ["eq", ["user_id", "host-1"]],
       ["is", ["deleted_at", null]],
@@ -78,6 +84,31 @@ describe("sessionBusyIntervals (TV-D10, default d)", () => {
     ]);
     // Nothing but the times leaves the function.
     expect(Object.keys(busy[0]!).sort()).toEqual(["end", "start"]);
+  });
+
+  it("reads a row without a category by its legacy status", async () => {
+    const { db } = fakeDb({
+      error: null,
+      data: [
+        {
+          starts_at: "2030-03-05T09:00:00Z",
+          ends_at: "2030-03-05T10:00:00Z",
+          tasks: { status: "archived", status_category: null, deleted_at: null },
+        },
+        {
+          starts_at: "2030-03-06T09:00:00Z",
+          ends_at: "2030-03-06T10:00:00Z",
+          tasks: { status: "todo", status_category: null, deleted_at: null },
+        },
+      ],
+    });
+    const busy = await sessionBusyIntervals(db, range);
+    expect(busy.map((b) => b.start.toISOString())).toEqual(["2030-03-06T09:00:00.000Z"]);
+  });
+
+  it("keeps its copies in step with the contracts and the app", () => {
+    expect([...CLOSED_TASK_CATEGORIES]).toEqual([...TASK_CLOSED_CATEGORIES]);
+    expect(TASKS_BUSY_ID).toBe(APP_TASKS_BUSY_ID);
   });
 
   it("blocks nothing when the read fails (a database before TV-D10)", async () => {

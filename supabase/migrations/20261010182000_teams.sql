@@ -12,9 +12,9 @@
 --   * tasks.team_id: a task's optional team, next to its one assignee. A task
 --     for a team needs a project, since an Inbox is private: routing a task
 --     that sits in an Inbox (or names no project) files it into the team's
---     default project, else it's refused (94). System hand-overs that move a
---     team task into an Inbox (account erasure, a project's delete) drop the
---     team instead. A member leaving a team changes no task.
+--     default project, else it's refused (94). A team task moved into an Inbox
+--     (by hand, a project's delete, an old build, account erasure) leaves its
+--     team. A member leaving a team changes no task.
 --   * tasks.imported_from {source, key}: unique per workspace among live
 --     tasks, so an import run twice finds what it made (TV-D16 uses it).
 --   * tasks_op_create / tasks_op_update (bodies from the catalog after TV-D9's
@@ -169,8 +169,10 @@ END;
 $$;
 
 -- BEFORE INSERT/UPDATE OF team_id, bucket_id on tasks: a team of this
--- workspace, and never in an Inbox (the ops file it into the team's default
--- project first). System hand-overs into an Inbox drop the team.
+-- workspace, and never in an Inbox. Routing a task in an Inbox to a team is
+-- refused (the ops file it into the team's default project first); a team
+-- task moved into an Inbox leaves its team (an Inbox is private), so a move
+-- or a project's delete never fails over it.
 CREATE OR REPLACE FUNCTION public.tasks__team_check()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -191,12 +193,13 @@ BEGIN
     RAISE EXCEPTION 'That team isn''t in this workspace.' USING ERRCODE = '22023';
   END IF;
   IF EXISTS (SELECT 1 FROM public.buckets b WHERE b.id = NEW.bucket_id AND b.is_system) THEN
-    IF coalesce(current_setting('share.bypass', true), '') = '1' OR public.perm_actor_id() IS NULL THEN
-      NEW.team_id := NULL;
-    ELSE
+    IF (TG_OP = 'INSERT' OR NEW.team_id IS DISTINCT FROM OLD.team_id)
+       AND coalesce(current_setting('share.bypass', true), '') <> '1'
+       AND public.perm_actor_id() IS NOT NULL THEN
       RAISE EXCEPTION 'A task for a team needs a project. Pick one, or give the team a default project.'
         USING ERRCODE = '22023';
     END IF;
+    NEW.team_id := NULL;
   END IF;
   RETURN NEW;
 END;
