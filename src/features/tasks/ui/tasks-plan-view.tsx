@@ -308,14 +308,19 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
 
   // Won't do (archived) tasks leave every scope, except the one you're looking
   // at: it stays listed, and in the panel with Reopen, until you change scope
-  // (TV-P0, AC1.4 — the TV-U1 rule for a task you check off). The scope it was
-  // selected in is noted at render so the backstops below see it at once.
+  // (TV-P0, AC1.4 — the TV-U1 rule for a task you check off). While the
+  // selected task is open the pin follows the scope; once it's Won't do the
+  // pin freezes there. Read at render so the backstops below see it at once.
   const selectedTaskForScope = selectedTaskId
     ? (tasks.find((t) => t.id === selectedTaskId) ?? null)
     : null;
   const archivedPinRef = useRef<{ id: string; scope: string } | null>(null);
-  if (selectedTaskId && archivedPinRef.current?.id !== selectedTaskId) {
-    archivedPinRef.current = { id: selectedTaskId, scope: selection };
+  if (
+    selectedTaskForScope &&
+    (archivedPinRef.current?.id !== selectedTaskForScope.id ||
+      selectedTaskForScope.status !== "archived")
+  ) {
+    archivedPinRef.current = { id: selectedTaskForScope.id, scope: selection };
   }
   const keptArchivedId =
     selectedTaskForScope?.status === "archived" &&
@@ -329,9 +334,9 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     const live = (t: Task) => t.status !== "archived" || t.id === keptArchivedId;
     if (selection === "all") return tasks.filter(live);
     if (selection === "mine") {
-      const kept = tasks.find((t) => t.id === keptArchivedId && t.assigneeId === currentUserId);
-      const mine = myTasksScope(tasks, currentUserId);
-      return kept ? tasks.filter((t) => t === kept || mine.includes(t)) : mine;
+      if (!keptArchivedId || !currentUserId) return myTasksScope(tasks, currentUserId);
+      // My tasks' rule (assigned to me, not Won't do), plus the kept one.
+      return tasks.filter((t) => t.assigneeId === currentUserId && live(t));
     }
     const bucketId = selection === "inbox" ? inboxId : selection;
     if (!bucketId) return [];

@@ -104,9 +104,13 @@ const panel = (page: Page) => page.locator("aside, [data-panel]").last();
 test("AC1.4 — a Won't do task stays reachable and reopens", async ({ page }) => {
   const t = await createTask(dev, { title: `Won't do me ${tag}`, bucketId: ws.inboxId });
   await openTasks(page, t.id);
+  // Chosen in Inbox, marked Won't do in All: it stays in view with Reopen.
+  await page.getByRole("button", { name: /^All ,/ }).click();
+  await expect(page.getByRole("textbox", { name: "Task title" })).toHaveValue(t.title);
   await page.getByRole("button", { name: "More actions" }).click();
   await page.getByRole("menuitem", { name: "Won’t do" }).click();
   await expect(page.getByRole("button", { name: "Status: Won’t do" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Reopen" })).toBeVisible();
   await expect.poll(async () => (await taskById(t.id)).status).toBe("archived");
 
   // A deep link straight to the Won't do task opens it, with Reopen.

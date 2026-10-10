@@ -232,13 +232,15 @@ export function TaskListView({
   const groupSignature = `${selection}:${groupBy}:${groups.map((g) => g.key).join(",")}`;
   const initRef = useRef("");
   const selectedForInitRef = useRef(selectedId);
-  selectedForInitRef.current = selectedId;
+  useEffect(() => {
+    selectedForInitRef.current = selectedId;
+  });
   useEffect(() => {
     if (initRef.current === groupSignature) return;
     initRef.current = groupSignature;
     if (groupBy === "bucket" && groups.length > 1) {
       const selected = selectedForInitRef.current;
-      const parentId = selected ? api.tasks.find((t) => t.id === selected)?.parentId : null;
+      const parentId = selected ? taskById.get(selected)?.parentId : null;
       const holding = groups.find((g) =>
         g.tasks.some((t) => t.id === selected || (parentId && t.id === parentId)),
       )?.key;
@@ -255,7 +257,7 @@ export function TaskListView({
     }
     setExpandedParents(new Set());
     setRevealedGroups(NO_IDS);
-  }, [groupSignature, groupBy, groups, api.tasks]);
+  }, [groupSignature, groupBy, groups, taskById]);
 
   const toggleRevealGroup = useCallback((key: string) => {
     setRevealedGroups((prev) => {

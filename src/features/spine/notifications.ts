@@ -203,12 +203,23 @@ export function notificationSubject(
   return label || null;
 }
 
-/** Name the item in a verb line: "assigned this to you" → "assigned “Brief” to you". */
+/**
+ * Name the item in a verb line: "assigned this to you" → "assigned “Brief” to
+ * you". Only the vocabulary's own "this" is replaced, never one inside quoted
+ * user text (a comment excerpt, a blocker's title).
+ */
 function nameTheItem(verb: string, subject: string): string {
   const named = `“${subject}”`;
-  if (/\bthis\b/.test(verb)) return verb.replace(/\bthis\b/, named);
   if (verb.startsWith("commented: ")) return verb.replace("commented: ", `commented on ${named}: `);
   if (verb === "left a comment") return `left a comment on ${named}`;
+  // Split into vocabulary and quoted runs; quoted runs (odd indexes) stay as typed.
+  const runs = verb.split(/(“[^”]*”)/);
+  for (let i = 0; i < runs.length; i += 2) {
+    if (/\bthis\b/.test(runs[i])) {
+      runs[i] = runs[i].replace(/\bthis\b/, named);
+      return runs.join("");
+    }
+  }
   return `${verb} · ${named}`;
 }
 

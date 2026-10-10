@@ -59,6 +59,13 @@ describe("parseCapture — a bare hour is daytime", () => {
     expect(local(parseCapture("train at 05:30", FRIDAY_10AM).scheduledAt)?.getHours()).toBe(5);
   });
 
+  it("a zero-padded day doesn't make the time 24-hour", () => {
+    const at = local(parseCapture("Dentist Oct 15 at 3", FRIDAY_10AM).scheduledAt);
+    expect(at?.getHours()).toBe(15);
+    const padded = local(parseCapture("Dentist 2026-10-15 at 3", FRIDAY_10AM).scheduledAt);
+    expect(padded?.getHours()).toBe(15);
+  });
+
   it("a named day keeps its day with the daytime hour", () => {
     const at = local(parseCapture("Dentist Monday at 3", FRIDAY_10AM).scheduledAt);
     expect(at?.getDay()).toBe(1);
@@ -84,6 +91,12 @@ describe("parseCapture — a date and a repeat both stick", () => {
     const next = local(p.scheduledAt);
     expect(next?.getDate()).toBe(1);
     expect(next?.getMonth()).toBe(10); // 1 November: October's 1st has passed
+    expect(RRule.fromString(p.recurrence?.rrule ?? "").options.bymonthday).toEqual([1]);
+  });
+
+  it("words between the repeat and its day stay in the title", () => {
+    const p = parseCapture("Pay rent every month for the flat on the 1st", FRIDAY_10AM);
+    expect(p.title).toBe("Pay rent for the flat");
     expect(RRule.fromString(p.recurrence?.rrule ?? "").options.bymonthday).toEqual([1]);
   });
 

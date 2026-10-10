@@ -58,6 +58,8 @@ const WEEKDAYS: Record<string, Weekday> = {
 
 type RecurrenceMatch = {
   span: [number, number];
+  /** A second phrase that belongs to the repeat ("on the 1st"), stripped on its own. */
+  extraSpan?: [number, number];
   options: Partial<{
     freq: number;
     interval: number;
@@ -137,8 +139,10 @@ function withMonthDay(text: string, match: RecurrenceMatch | null): RecurrenceMa
   if (!m) return match;
   const day = Number.parseInt(m[1], 10);
   if (day < 1 || day > 31) return match;
+  // Its own span: the words between "every month" and "on the 1st" stay.
   return {
-    span: [Math.min(match.span[0], m.index), Math.max(match.span[1], m.index + m[0].length)],
+    ...match,
+    extraSpan: [m.index, m.index + m[0].length],
     options: { ...match.options, bymonthday: [day] },
   };
 }
@@ -161,8 +165,9 @@ function daytimeClock(result: chrono.ParsedResult): { hour: number; minute: numb
   if (!s.isCertain("hour")) return null;
   let hour = s.get("hour") ?? 0;
   const minute = s.get("minute") ?? 0;
-  // "05:30" is a 24-hour time someone meant; "5" or "5:30" is ambiguous.
-  const zeroPadded = /\b0\d/.test(result.text);
+  // "05:30" is a 24-hour time someone meant; "5" or "5:30" is ambiguous. Only
+  // a zero-padded clock counts ("Oct 05 at 3" is still 3 PM).
+  const zeroPadded = /(?:^|[^\d])0\d:\d{2}/.test(result.text);
   if (!s.isCertain("meridiem") && !zeroPadded && hour >= 1 && hour <= DAYTIME_PM_UNTIL) {
     hour += 12;
   }
@@ -276,6 +281,7 @@ export function parseCapture(input: string, refDate: Date = new Date()): ParsedC
   let unparsedRecurrence = false;
   if (recur) {
     spans.push(recur.span);
+    if (recur.extraSpan) spans.push(recur.extraSpan);
     // DTSTART: the date typed with the repeat ("tomorrow 3pm every week"), or
     // today; at the parsed time of day, or a 9am default.
     const dtstart = dateResult && !insideRepeat ? resolveDate(dateResult) : new Date(refDate);

@@ -462,6 +462,20 @@ describe("notifications name the task", () => {
     );
   });
 
+  it("never rewrites a “this” inside the user's own words", () => {
+    const comment = one({ op: "comments.add", payload: { excerpt: "is this done?" } });
+    expect(notificationSummary(comment, "me", "Q4 plan")).toBe(
+      "Mike commented on “Q4 plan”: “is this done?”",
+    );
+    const unblocked = one({
+      op: "tasks.unblocked",
+      payload: { title: "Launch", blocker_title: "Fix this bug" },
+    });
+    expect(notificationSummary(unblocked, "me", notificationSubject(unblocked))).toBe(
+      "Mike finished “Fix this bug”, unblocking “Launch”",
+    );
+  });
+
   it("names only tasks, and says “this” when the name isn't known", () => {
     const note = one({ op: "comments.add", targetType: "note", payload: { title: "Hidden" } });
     expect(notificationSubject(note, new Map([["t1", "x"]]))).toBeNull();

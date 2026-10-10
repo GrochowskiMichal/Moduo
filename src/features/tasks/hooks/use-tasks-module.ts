@@ -136,7 +136,9 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
       setKeptRows([]);
       setTimeBlocksState({});
       setLoading(false);
-      setLoaded(true);
+      // Nothing to read yet (no workspace, person or access): not a first
+      // load, so the views keep their skeleton until a real answer.
+      setLoaded(false);
       return;
     }
     const req = ++reqRef.current;
@@ -747,10 +749,14 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
   const captureToQueue = useCallback(
     (title: string) => {
       const trimmed = title.trim();
-      if (!trimmed || !inbox) return;
+      if (!trimmed) return;
+      if (!inbox) {
+        if (!canEdit) toast.error("You don't have edit access to Tasks in this workspace.");
+        return;
+      }
       createQueuedTask({ bucketId: inbox.id, title: trimmed, assigneeId: userId });
     },
-    [inbox, userId, createQueuedTask],
+    [inbox, userId, canEdit, createQueuedTask],
   );
 
   const patchTask = useCallback(
@@ -766,7 +772,8 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
           patch = { ...patch, recurrence: advanced };
           if (patch.status === "done" && advanced.nextOccurrence) {
             // Quiet, factual mirror — when this comes back (never a wall).
-            toast(`Done — next ${formatScheduled(advanced.nextOccurrence)}`);
+            // "Done — next: Tomorrow, 9:00 AM" (the one grammar reads "Tomorrow").
+            toast(`Done — next: ${formatScheduled(advanced.nextOccurrence)}`);
           }
         }
       }
@@ -1216,7 +1223,7 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
           releaseCommit: "committedFor" in patch,
         }),
       );
-      toast(`Skipped — next ${formatScheduled(scheduledAt)}`);
+      toast(`Skipped — next: ${formatScheduled(scheduledAt)}`);
     },
     [bundle.tasks, applyOp, runtime, workspaceId],
   );

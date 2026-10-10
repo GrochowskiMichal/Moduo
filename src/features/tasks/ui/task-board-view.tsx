@@ -302,30 +302,30 @@ export function TaskBoardView({
         onDragCancel={() => setActiveId(null)}
       >
         <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto pb-1">
-          {!api.loaded ? <TaskBoardSkeleton /> : null}
-          {api.loaded && filterActive && tasks.length === 0 ? (
+          {!api.loaded ? (
+            <TaskBoardSkeleton />
+          ) : filterActive && tasks.length === 0 ? (
             <TasksNoMatch onClearFilters={onClearFilters} />
-          ) : null}
-          {!api.loaded || (filterActive && tasks.length === 0)
-            ? null
-            : columns.map((col) => (
-                <BoardColumn
-                  key={col.id}
-                  column={col}
-                  canEdit={canEdit}
-                  showBucketTag={showBucketTag}
-                  showAssignee={showAssignee}
-                  properties={properties}
-                  buckets={buckets}
-                  inbox={inbox}
-                  bucketNameById={bucketNameById}
-                  selectedTaskId={selectedTaskId}
-                  onSelectTask={onSelectTask}
-                  revealed={revealed.has(col.id)}
-                  onToggleReveal={() => toggleReveal(col.id)}
-                  api={api}
-                />
-              ))}
+          ) : (
+            columns.map((col) => (
+              <BoardColumn
+                key={col.id}
+                column={col}
+                canEdit={canEdit}
+                showBucketTag={showBucketTag}
+                showAssignee={showAssignee}
+                properties={properties}
+                buckets={buckets}
+                inbox={inbox}
+                bucketNameById={bucketNameById}
+                selectedTaskId={selectedTaskId}
+                onSelectTask={onSelectTask}
+                revealed={revealed.has(col.id)}
+                onToggleReveal={() => toggleReveal(col.id)}
+                api={api}
+              />
+            ))
+          )}
         </div>
 
         {typeof document !== "undefined"
