@@ -83,6 +83,27 @@ export function TaskFeed({ task, api, runtime, workspaceId }: Props) {
   const { lead, hidden, rest } = foldFeed(feed, expanded);
   const selfName = currentUserId ? people.nameOf(currentUserId) : null;
   const canComment = !!runtime && !!workspaceId && !task.id.startsWith("tmp-");
+  // `@` in a comment names things too (RF-1): the registry, under its RLS,
+  // never this task itself. Stored as references, never titles.
+  const taskId = task.id;
+  const referenceSearch = useMemo(
+    () =>
+      runtime && workspaceId
+        ? {
+            search: async (query: string) => {
+              const records = await runtime.spine.searchEntities({
+                workspaceId,
+                query,
+                limit: 7,
+              });
+              return records
+                .filter((r) => !(r.type === "task" && r.id === taskId))
+                .map((r) => ({ ref: { type: r.type, id: r.id }, label: r.label, icon: r.icon }));
+            },
+          }
+        : undefined,
+    [runtime, workspaceId, taskId],
+  );
 
   const render = (item: FeedItem) => {
     switch (item.kind) {
@@ -175,6 +196,8 @@ export function TaskFeed({ task, api, runtime, workspaceId }: Props) {
         <CommentComposer
           people={people.mentionable}
           aria-label="Comment on this task"
+          placeholder="Leave a comment…  @ to mention · / for dates"
+          references={referenceSearch}
           onSubmit={(body, mentionedUserIds) => thread.post({ body, mentionedUserIds })}
         />
       ) : null}

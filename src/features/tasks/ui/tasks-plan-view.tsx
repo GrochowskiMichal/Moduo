@@ -7,11 +7,20 @@ import {
   type DragEndEvent,
   pointerWithin,
 } from "@dnd-kit/core";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { CircleCheck } from "lucide-react";
+import {
+  useCallback,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { toast } from "sonner";
 import { onCreateNew } from "../../../components/app/create-events";
 import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell";
-import { RightPanel } from "../../../components/app/right-panel";
+import { type PanelItem, RightPanel, usePanelStack } from "../../../components/app/right-panel";
 import { truncationNotice } from "../../../components/app/truncation-notice";
 import { Button } from "../../../components/ui/button";
 import { restoreNavFocus } from "../../../components/ui/nav-row";
@@ -22,12 +31,31 @@ import {
   targetAccepts,
 } from "../../../lib/drag-payload";
 import type { EntityRef } from "../../../lib/entity-links";
-import { ENTITY_OPEN_EVENT, takeEntityOpenIntent } from "../../../lib/entity-open";
+import {
+  ENTITY_OPEN_EVENT,
+  markEntityOpenIntent,
+  takeEntityOpenIntent,
+} from "../../../lib/entity-open";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { undoToast } from "../../../lib/undo-toast";
 import { HubDropZone } from "../../contacts/ui/hub-drop-zone";
 import { consumeFocusViewRequest, FOCUS_VIEW_REQUEST_EVENT } from "../../focus/view-request";
+import { looksLikeHandle } from "../../spine/grammar";
+import {
+  type ReferenceHost,
+  ReferenceHostProvider,
+  useReferenceStore,
+  useReferences,
+} from "../../spine/references/context";
+import { referenceKey, referenceKind } from "../../spine/references/kinds";
+import type { ReferenceRef } from "../../spine/references/types";
+import {
+  ReferencePanelBody,
+  referencePanelOpen,
+  referencePanelTitle,
+} from "../../spine/references/ui/reference-panel";
 import { createLinkWithToast } from "../../spine/ui/drop-link-toast";
+import { WorkspaceContext } from "../../workspaces/workspace-context";
 import { useAssignees } from "../assignees";
 import {
   timeBlockByBucket as invertTimeBlocks,
@@ -51,7 +79,7 @@ import { groupsByBucket, STATUS_LABELS } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import { isDrifted, PRIVATE_PROJECT_LABEL, type Task, type TaskStatus } from "../model";
 import { showsSortedNote, sortedByLabel } from "../order";
-import { resolveTasksDeepLink } from "../search";
+import { resolveTasksDeepLink, taskIdForHandle } from "../search";
 import { sanitizeTimelineZoom, type TimelineZoom } from "../timeline-geometry";
 import { BucketRail, parseCollapsedSections, type TasksMode } from "./bucket-rail";
 import { CaptureModal } from "./capture-modal";
@@ -166,6 +194,15 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   const processedUrlIdRef = useRef<string | null>(null);
   const selfWroteUrlIdRef = useRef<string | null>(null);
   const scrollTargetRef = useRef<string | null>(null);
+  // A handle deep link (`?id=MOD-142`, RF-1) being looked up, and the URL's
+  // latest id (the lookup is dropped if the URL moved on meanwhile).
+  const handlePendingRef = useRef<string | null>(null);
+  const latestUrlIdRef = useRef(urlTaskId);
+  useLayoutEffect(() => {
+    latestUrlIdRef.current = urlTaskId;
+  });
+  const taskKey = useContext(WorkspaceContext)?.selectedWorkspace?.taskKey ?? null;
+  const referenceStore = useReferenceStore();
   const inboundPending =
     urlTaskId !== null &&
     processedUrlIdRef.current !== urlTaskId &&
@@ -628,6 +665,30 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     }
     processedUrlIdRef.current = urlTaskId;
     const external = takeEntityOpenIntent(urlTaskId);
+    // A handle (`?id=MOD-142`, RF-1): find its task (here, else on the server,
+    // which knows the old keys too), then follow the task's own id, keeping a
+    // "take me there" mark. A handle you can't open is a "Private item".
+    if (looksLikeHandle(urlTaskId)) {
+      const handle = urlTaskId;
+      handlePendingRef.current = handle;
+      const follow = (id: string | null) => {
+        if (handlePendingRef.current !== handle) return;
+        handlePendingRef.current = null;
+        if (latestUrlIdRef.current !== handle) return;
+        if (!id) {
+          if (external) setPrivateLinkId(handle);
+          onUrlTaskIdChange(null);
+          return;
+        }
+        if (external) markEntityOpenIntent(id);
+        onUrlTaskIdChange(id);
+      };
+      const local = taskIdForHandle(handle, tasks, taskKey);
+      if (local) follow(local);
+      else if (referenceStore) void referenceStore.resolveHandle(handle).then(follow);
+      else follow(null);
+      return;
+    }
     // Won't do tasks open too: the selected one stays in scope with Reopen
     // (see `keptArchivedId`). A task in a project you can't see opens in All.
     const target = resolveTasksDeepLink(urlTaskId, { tasks, buckets, inboxId });
@@ -661,17 +722,21 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     inboxId,
     scopeTasksAll,
     onUrlTaskIdChange,
+    taskKey,
+    referenceStore,
   ]);
 
   // Mirror selection → URL (replace) so refresh keeps it. Trailing-debounced:
   // the URL only needs to be right at rest, and WebKit throttles
   // history.replaceState (~100 calls/30s) — an undebounced j/k key-repeat
   // cursor would trip a SecurityError in the desktop webview. Suspended while
-  // an inbound id awaits apply — never overwrite a target before honoring it.
+  // an inbound id awaits apply — never overwrite a target before honoring it
+  // (a handle being looked up included).
   useEffect(() => {
-    if (api.loading || inboundPending) return;
+    if (api.loading || inboundPending || handlePendingRef.current) return;
     if ((selectedTaskId ?? null) === (urlTaskId ?? null)) return;
     const handle = window.setTimeout(() => {
+      if (handlePendingRef.current) return;
       selfWroteUrlIdRef.current = selectedTaskId;
       onUrlTaskIdChange(selectedTaskId);
     }, URL_MIRROR_DEBOUNCE_MS);
@@ -947,6 +1012,48 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     [runtime, workspaceId, canEdit],
   );
 
+  // The "← item" stack (SH-1) for references opened from the panel (RF-1). A
+  // new selection is a new context, so the stack starts over.
+  const panelStack = usePanelStack<{ key: string; type: string; id: string }>();
+  const { push: pushPanel, clear: clearPanel } = panelStack;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new selection is the cue
+  useEffect(() => {
+    clearPanel();
+  }, [selectedTaskId, clearPanel]);
+  const latestForHost = useRef({ taskById, selectedTask, inbox, api });
+  useLayoutEffect(() => {
+    latestForHost.current = { taskById, selectedTask, inbox, api };
+  });
+  // What references on this page can do: open in the panel, complete a task
+  // through the module (so the live gate and Undo see it), and create a task
+  // for `/` in a description ("New task “…”", filed with the open task).
+  const referenceHost = useMemo<ReferenceHost>(
+    () => ({
+      openInPanel: (ref: ReferenceRef) =>
+        pushPanel({ key: referenceKey(ref), type: ref.type, id: ref.id }),
+      setTaskDone: (taskId: string, done: boolean) => {
+        const { taskById: byId, api: moduleApi } = latestForHost.current;
+        if (byId.has(taskId)) {
+          moduleApi.patchTask(taskId, { status: done ? "done" : "todo" });
+          return;
+        }
+        referenceStore?.completeTask(taskId, done).catch((error: unknown) => {
+          toast.error(error instanceof Error ? error.message : "Couldn’t change the task.");
+        });
+      },
+      createEntity: async (type: string, title: string) => {
+        if (type !== "task") return null;
+        const { selectedTask: open, inbox: myInbox, api: moduleApi } = latestForHost.current;
+        const bucketId = open?.bucketId ?? myInbox?.id;
+        if (!bucketId) return null;
+        const saved = await moduleApi.createTask({ bucketId, title });
+        return saved ? { type: "task", id: saved.id } : null;
+      },
+      canEditTasks: canEdit,
+    }),
+    [pushPanel, referenceStore, canEdit],
+  );
+
   const detailPanel = (
     <TaskDetailPanel
       task={selectedTask}
@@ -972,6 +1079,48 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   ) : (
     detailPanel
   );
+  // References opened from the panel stack on top of Details as "← item"
+  // (RF-1, SH-1's stack): a task shows its own detail, anything else its card
+  // with "Open in …"; the title is what this reader may see ("Private item").
+  const stackRefs = useMemo(
+    () => panelStack.stack.map((entry) => ({ type: entry.type, id: entry.id })),
+    [panelStack.stack],
+  );
+  const stackState = useReferences(stackRefs);
+  const panelItems: PanelItem[] = panelStack.stack.map((entry) => {
+    const ref: ReferenceRef = { type: entry.type, id: entry.id };
+    const state = stackState(ref);
+    const task = referenceKind(entry.type) === "task" ? taskById.get(entry.id) : undefined;
+    if (task) {
+      return {
+        key: entry.key,
+        title: task.title || "Untitled task",
+        icon: CircleCheck,
+        render: () => (
+          <TaskDetailPanel
+            task={task}
+            buckets={buckets}
+            inbox={inbox}
+            canEdit={canEdit}
+            onRequestCapture={openCapture}
+            onSelectTask={(id) => pushPanel({ key: `task:${id}`, type: "task", id })}
+            api={viewApi}
+            runtime={runtime}
+            workspaceId={workspaceId}
+            onOpenEntity={handleOpenEntity}
+          />
+        ),
+        open: { label: "Open in Tasks", onOpen: () => onUrlTaskIdChange(task.id) },
+      };
+    }
+    return {
+      key: entry.key,
+      title: referencePanelTitle(ref, state),
+      render: () => <ReferencePanelBody reference={ref} />,
+      open: referencePanelOpen(ref, state),
+    };
+  });
+
   // The right panel's title row names and switches its views (SH-1): Details
   // today; Project, In flight and No date register in panel-views.ts later.
   const right = (
@@ -980,11 +1129,14 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       views={{ details: () => details }}
       activeId={panelView}
       onChange={setPanelView}
+      items={panelItems}
+      onBack={panelStack.back}
+      onClearItems={panelStack.clear}
     />
   );
 
   return (
-    <>
+    <ReferenceHostProvider host={referenceHost}>
       <DndContext
         sensors={pageSensors}
         collisionDetection={appCollision}
@@ -1045,6 +1197,6 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
           if (frontierOfferTaskId) api.addToQueue(frontierOfferTaskId);
         }}
       />
-    </>
+    </ReferenceHostProvider>
   );
 }

@@ -3,6 +3,7 @@
 // links (dashboard widget rows, contact-hub rollups, note /task chips) land on
 // the right task instead of whatever the page last showed.
 
+import { findSigilWords } from "../spine/grammar";
 import type { Bucket, Task } from "./model";
 
 export type TasksSearch = {
@@ -26,6 +27,22 @@ export type TasksDeepLinkTarget =
   | { kind: "task"; taskId: string; scope: string }
   | { kind: "bucket"; scope: string }
   | { kind: "none" };
+
+/**
+ * A handle deep link (`?id=MOD-142`, RF-1) resolved against the loaded tasks:
+ * the task whose number it names under the workspace's current key, or null
+ * (not loaded, an old key, someone else's: the server answers those).
+ */
+export function taskIdForHandle(
+  handle: string,
+  tasks: ReadonlyArray<Pick<Task, "id" | "number">>,
+  taskKey: string | null,
+): string | null {
+  const m = /^([A-Za-z]{2,5})-(\d{1,9})$/.exec(handle.trim());
+  if (!m || !taskKey || m[1].toUpperCase() !== taskKey.toUpperCase()) return null;
+  const number = Number(m[2]);
+  return tasks.find((t) => t.number === number)?.id ?? null;
+}
 
 export function resolveTasksDeepLink(
   id: string,
@@ -80,6 +97,9 @@ export function descriptionText(description: string | null | undefined): string 
   const text = (
     /^\s*</.test(description)
       ? description
+          // A reference's stored text is never searchable: an older chip kept
+          // a title the reader may not be allowed to see (RF-1).
+          .replace(/<span\b[^>]*\bdata-lexical-entity-ref\b[^>]*>[^<]*<\/span>/g, " ")
           .replace(/<[^>]*>/g, " ")
           .replace(/&[a-z#0-9]+;/gi, (m) => ENTITIES[m.toLowerCase()] ?? m)
       : description
@@ -127,8 +147,6 @@ function resolveName<T>(
   return prefixed.length === 1 ? (prefixed[0] ?? null) : null;
 }
 
-const TOKEN = /(^|\s)([#@])([^\s#@]+)(?=\s)/g;
-
 /**
  * Turns finished `#tag` and `@name` words in the search box into filter
  * values (U2-4). A word is finished once a space follows it, or on Enter
@@ -143,21 +161,29 @@ export function takeSearchTokens(
   final = false,
 ): { query: string; tokens: SearchToken[] } {
   const tokens: SearchToken[] = [];
-  const source = final ? `${query} ` : query;
-  const rest = source.replace(TOKEN, (match, lead: string, sigil: string, word: string) => {
-    if (sigil === "#") {
-      const tag = resolveName(word, ctx.tags, (t) => [t.name]);
-      if (!tag) return match;
-      tokens.push({ dimension: "tag", value: tag.id });
-      return lead;
+  // The app's one tokenizer (spine/grammar.ts, RF-1): the same `#` and `@`
+  // words capture and prose read.
+  const words = findSigilWords(query, { sigils: ["#", "@"], final });
+  let rest = "";
+  let last = 0;
+  for (const w of words) {
+    let value: SearchToken | null = null;
+    if (w.sigil === "#") {
+      const tag = resolveName(w.word, ctx.tags, (t) => [t.name]);
+      if (tag) value = { dimension: "tag", value: tag.id };
+    } else {
+      const person = resolveName(w.word, ctx.people, (p) =>
+        p.isMe ? ["me"] : [p.name, p.name.split(/\s+/)[0] ?? p.name],
+      );
+      if (person) value = { dimension: "assignee", value: person.userId };
     }
-    const person = resolveName(word, ctx.people, (p) =>
-      p.isMe ? ["me"] : [p.name, p.name.split(/\s+/)[0] ?? p.name],
-    );
-    if (!person) return match;
-    tokens.push({ dimension: "assignee", value: person.userId });
-    return lead;
-  });
+    if (!value) continue;
+    tokens.push(value);
+    rest += query.slice(last, w.start);
+    last = w.end;
+  }
+  rest += query.slice(last);
+  if (final) rest += " ";
   if (tokens.length === 0) return { query, tokens };
   const cleaned = rest.replace(/\s{2,}/g, " ").replace(/^\s+/, "");
   return { query: final ? cleaned.trimEnd() : cleaned, tokens };

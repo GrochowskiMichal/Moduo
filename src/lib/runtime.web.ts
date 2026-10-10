@@ -107,6 +107,7 @@ import type {
   SpineComment,
   UserPreferences,
 } from "./runtime.types";
+import { createReferencePreviews } from "./runtime.web.previews";
 import { handleSearchPattern, handleWithCurrentKey } from "./task-handle";
 import {
   bucketRowToModel,
@@ -3000,6 +3001,9 @@ export const webRuntime: ModuoRuntime = {
       const byKey = new Map(records.map((r) => [`${r.type}:${r.id}`, r]));
       return shapeRecentLinks(links, byKey);
     },
+
+    // References (RF-1): every read under the module table's RLS (can_access).
+    previews: createReferencePreviews(supabaseClient),
   },
 
   // ── Contacts module (specs/contacts.md block CO-1) ──────────────────────────

@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { useNotificationLabels } from "../features/spine/hooks/use-notification-labels";
+import {
+  useNotificationLabels,
+  useNotificationReferenceNames,
+} from "../features/spine/hooks/use-notification-labels";
 import {
   groupNotifications,
   type NotificationGroup,
@@ -114,6 +117,8 @@ export function NotificationCenter() {
   // Every task card names its task (TV-P0): comment notices carry no title.
   const allGroups = useMemo(() => [...groups, ...historyGroups], [groups, historyGroups]);
   const labels = useNotificationLabels(allGroups);
+  // A comment's excerpt names its references per reader (RF-1: "Private item").
+  const referenceName = useNotificationReferenceNames(allGroups);
   const badge = Math.min(unreadCountWorkspace, BADGE_CAP);
 
   const handleOpenChange = useCallback(
@@ -241,7 +246,12 @@ export function NotificationCenter() {
             <p
               className={`flex-1 text-sm ${unread ? "font-medium text-foreground" : "text-foreground"}`}
             >
-              {notificationSummary(group, userId, notificationSubject(group, labels))}
+              {notificationSummary(
+                group,
+                userId,
+                notificationSubject(group, labels),
+                referenceName,
+              )}
               {group.count > 1 ? (
                 <span className="ml-1 text-xs text-muted-foreground">×{group.count}</span>
               ) : null}

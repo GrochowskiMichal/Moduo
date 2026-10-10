@@ -15,6 +15,7 @@ import * as chrono from "chrono-node";
 import { RRule, type Weekday } from "rrule";
 
 import { formatDay, formatDayTime } from "../../../lib/time-format";
+import { takeSlashDates } from "../../spine/grammar";
 import type { RecurrenceRule } from "../model";
 
 export type ParsedCapture = {
@@ -247,6 +248,21 @@ export function parseCapture(input: string, refDate: Date = new Date()): ParsedC
     unparsedRecurrence: false,
   };
   if (!raw) return empty;
+
+  // `/today`, `/tomorrow`, `/next week` (the grammar's date commands, 33a):
+  // an explicit command sets the due date and leaves the title; it wins over
+  // date words, which then stay the person's words.
+  const slash = takeSlashDates(raw, refDate);
+  if (slash.day) {
+    const due = new Date(`${slash.day}T00:00:00`);
+    return {
+      ...empty,
+      title: slash.text || raw,
+      dueDate: due.toISOString(),
+      summary: `due ${chronoLabel(due, false)}`,
+      matched: true,
+    };
+  }
 
   const spans: Array<[number, number]> = [];
   let scheduledAt: string | null = null;

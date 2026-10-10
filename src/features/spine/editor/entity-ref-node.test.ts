@@ -98,3 +98,39 @@ describe("EntityRefNode HTML round-trip", () => {
     expect(chips).toHaveLength(0);
   });
 });
+
+describe("the Reference node (RF-1)", () => {
+  it("a reference stored without a label writes no title, only the type's word", () => {
+    const html = exportHtml(() => {
+      const p = $createParagraphNode();
+      p.append($createEntityRefNode({ entityType: "task", entityId: "t-1", display: "card" }));
+      $getRoot().append(p);
+    });
+    expect(html).toContain('data-display="card"');
+    expect(html).toContain('data-ref-v="2"');
+    expect(html).toContain(">task<");
+    const [chip] = importChips(html);
+    // The type's word is never read back as a title.
+    expect(chip?.exportJSON()).toMatchObject({ entityId: "t-1", label: "", display: "card" });
+    expect(chip?.getTextContent()).toBe("");
+  });
+
+  it("an older (version 1) node reads as a chip and keeps its address", () => {
+    let json: unknown = null;
+    makeEditor().update(
+      () => {
+        const node = EntityRefNode.importJSON({
+          type: "entity-ref",
+          version: 1,
+          entityType: "note",
+          entityId: "n-1",
+          label: "Brand voice",
+          icon: null,
+        });
+        json = node.exportJSON();
+      },
+      { discrete: true },
+    );
+    expect(json).toMatchObject({ version: 2, display: "chip", entityId: "n-1" });
+  });
+});

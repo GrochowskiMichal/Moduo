@@ -35,6 +35,7 @@ import type {
 } from "../features/notes/model";
 import type { NotificationItem } from "../features/spine/notifications";
 import type { RecentLinkItem } from "../features/spine/recent";
+import type { ReferencePreviewApi } from "../features/spine/references/rows";
 import type { RawLinkSuggestion } from "../features/spine/suggest";
 import type {
   ActivityEntry,
@@ -1194,6 +1195,14 @@ export type ModuoRuntime = {
      * `entity_links` read + one batched registry lookup, shaped newest-first.
      */
     recentLinks(input: { workspaceId: string; limit?: number }): Promise<RecentLinkItem[]>;
+
+    // ── References (RF-1, tasks-v3 §11) ──────────────────────────────────────
+    /**
+     * The reads behind a reference's chip, card and hover preview: one batched
+     * select per kind under the module table's row-level security (`can_access`),
+     * so an item the reader can't open never comes back ("Private item").
+     */
+    previews: ReferencePreviewApi;
   };
 
   /**

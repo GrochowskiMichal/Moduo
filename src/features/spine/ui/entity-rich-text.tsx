@@ -1,9 +1,11 @@
 // Connective-tissue spine — DF-23 read-only renderer for entity-rich text.
 //
 // Renders a stored `description` (task / calendar event) that MAY carry inline
-// EntityRefNode chips, as read-only React: plain text stays plain (verbatim,
-// `whitespace-pre-wrap`, matching the old <Textarea>-mirror), our HTML walks to
-// text + clickable `EntityRefChip`s that deep-link via `moduo:entity:open`.
+// references and date chips, as read-only React: plain text stays plain
+// (verbatim, `whitespace-pre-wrap`, matching the old <Textarea>-mirror), our
+// HTML walks to text + References (RF-1: live, per reader, "Private item" when
+// the reader can't open it) + date chips. A stored chip's old label is never
+// shown inside the app shell: the reference resolves what the reader may see.
 //
 // XSS posture: this NEVER uses `dangerouslySetInnerHTML`. It DOMParses into an
 // inert document (no script execution) and emits ONLY text, `<br>`, list/para
@@ -13,10 +15,11 @@
 // Relative imports only (no `@/` value imports — this file is test-reachable).
 
 import { type ReactNode, useMemo } from "react";
-import { ENTITY_OPEN_EVENT } from "../../../lib/entity-open";
 import { cn } from "../../../lib/utils";
 import { looksLikeRichHtml } from "../editor/entity-rich-html";
-import { EntityRefChip } from "./entity-ref-chip";
+import { isReferenceDisplay } from "../references/types";
+import { DateChip } from "../references/ui/date-chip";
+import { Reference } from "../references/ui/reference";
 
 // Elements dropped whole (content and all) — never rendered, never flattened.
 const DROP = new Set([
@@ -34,11 +37,6 @@ const DROP = new Set([
 // Block wrappers we preserve structurally; everything else inline is flattened.
 const BLOCK = new Set(["P", "DIV", "BLOCKQUOTE", "H1", "H2", "H3", "H4", "H5", "H6"]);
 
-function openEntity(type: string, id: string): void {
-  if (typeof window === "undefined") return;
-  window.dispatchEvent(new CustomEvent(ENTITY_OPEN_EVENT, { detail: { type, id } }));
-}
-
 function walk(parent: Node, keyPrefix: string): ReactNode[] {
   const out: ReactNode[] = [];
   parent.childNodes.forEach((child, i) => {
@@ -55,26 +53,33 @@ function walk(parent: Node, keyPrefix: string): ReactNode[] {
     const tag = el.tagName.toUpperCase();
     if (DROP.has(tag)) return;
 
-    // A chip → clickable, deep-linking EntityRefChip (drop malformed markers to
-    // their label text).
+    // A reference → the live Reference. A malformed marker renders nothing: its
+    // text may be a stored title the reader can't be shown.
     if (el.hasAttribute("data-lexical-entity-ref")) {
       const type = el.getAttribute("data-entity-type") ?? "";
       const id = el.getAttribute("data-entity-id") ?? "";
-      const label = el.textContent ?? type;
-      const icon = el.getAttribute("data-entity-icon");
+      const display = el.getAttribute("data-display");
+      // A label-less reference (data-ref-v) holds only the type's word.
+      const label = el.hasAttribute("data-ref-v") ? null : el.textContent;
       if (type && id) {
         out.push(
-          <EntityRefChip
+          <Reference
             key={key}
             type={type}
-            label={label}
-            icon={icon}
-            onClick={() => openEntity(type, id)}
+            id={id}
+            display={isReferenceDisplay(display) ? display : "chip"}
+            fallbackLabel={label}
           />,
         );
-      } else if (label) {
-        out.push(label);
       }
+      return;
+    }
+
+    // A date chip.
+    if (tag === "TIME" && el.hasAttribute("data-moduo-date")) {
+      const day = el.getAttribute("data-moduo-date") ?? "";
+      if (/^\d{4}-\d{2}-\d{2}$/.test(day)) out.push(<DateChip key={key} day={day} />);
+      else out.push(el.textContent ?? "");
       return;
     }
 

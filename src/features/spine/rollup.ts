@@ -7,6 +7,7 @@
 // file is unit-tested in rollup.test.ts (AC6).
 
 import type { EntityLink, EntityRecord, EntityRef, RelationKind } from "@/lib/entity-links";
+import { deletedLabel, referenceKind } from "./references/kinds";
 import { type HubSnippetMeta, projectSnippet } from "./snippet-projectors";
 
 /** The entity whose hub is being rendered. */
@@ -152,7 +153,7 @@ export function rollupSections(
     // registry record never arrives — say so instead of "Untitled event".
     const hidden = record === null && OWNER_ONLY_TYPES.has(other.type);
     const title = tombstoned
-      ? `Deleted ${other.type}`
+      ? deletedLabel(referenceKind(other.type))
       : hidden
         ? PRIVATE_ITEM_TITLE
         : projected.title;

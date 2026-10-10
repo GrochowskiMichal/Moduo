@@ -7,9 +7,31 @@ import { useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "../../../providers/auth-provider";
 import { useWorkspace } from "../../../providers/workspace-provider";
-import { type NotificationGroup, unnamedTaskTargets } from "../notifications";
+import {
+  type NotificationGroup,
+  notificationReferences,
+  unnamedTaskTargets,
+} from "../notifications";
+import { useReferences } from "../references/context";
+import { plainReferenceName } from "../references/text";
+import type { ReferenceRef } from "../references/types";
 
 const NO_LABELS: ReadonlyMap<string, string> = new Map();
+
+/**
+ * Names for the references a card's comment excerpt carries (RF-1): the title
+ * when this reader can open the item, "Private item" when they can't, "Deleted
+ * task" when it's gone. Read through the reference store, which asks the
+ * server per reader (row-level security = can_access): a title the reader may
+ * not see never reaches the bell's text.
+ */
+export function useNotificationReferenceNames(
+  groups: NotificationGroup[],
+): (ref: ReferenceRef) => string {
+  const refs = useMemo(() => notificationReferences(groups), [groups]);
+  const stateOf = useReferences(refs);
+  return useMemo(() => (ref: ReferenceRef) => plainReferenceName(ref, stateOf(ref)), [stateOf]);
+}
 
 export function useNotificationLabels(groups: NotificationGroup[]): ReadonlyMap<string, string> {
   const { runtime } = useAuth();

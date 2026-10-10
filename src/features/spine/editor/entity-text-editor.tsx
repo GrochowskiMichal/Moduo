@@ -1,17 +1,22 @@
-// Connective-tissue spine — DF-23 shared entity-rich text editor.
+// Connective-tissue spine — the shared entity-rich text editor (DF-23; the
+// References host since RF-1).
 //
-// A minimal standalone (non-collab) Lexical editor that brings the Notes
-// `@mention` + `/ref` gestures to short prose fields — the task description and
-// calendar event notes. It is deliberately NOT a block editor (no headings /
-// tables / lists slash-menu): the point is entity LINKING in prose, not
-// document authoring. It seeds from the stored string (our HTML → parsed;
-// foreign/legacy plain text → verbatim, never parsed as markup) and commits
-// `{ html, text }` on blur — html to persist (chips ride along via
-// `EntityRefNode.exportDOM`), text as the plain-text projection.
+// A minimal standalone (non-collab) Lexical editor for short prose fields —
+// the task description and calendar event notes. It is deliberately NOT a
+// block editor (no headings / tables / lists slash-menu): the point is linking
+// in prose, with the app's grammar (spine/grammar.ts):
+// - `@` mentions things (projects first) and inserts a Reference;
+// - `#` links a tag (never changes the item's tags);
+// - `/` runs the date commands (`/today` … `/date` → a date chip), inserts
+//   things, and creates ("New task “…”") where the page can;
+// - a typed handle (`MOD-142`) links itself.
+// A reference alone on its line is a card, in running text a chip; "Show as"
+// follows the insert. References are stored as `{type, id, display}` only,
+// never a title (RF-1 privacy), and render per reader.
 //
-// Both `@` and `/` mount the SAME generalized `MentionMenuPlugin` (a `null`
-// source makes it insert-only; here we always pass a real source, so each pick
-// also writes an `entity_link`). Tokens-only theme (Tailwind utilities).
+// It seeds from the stored string (our HTML → parsed; foreign/legacy plain
+// text → verbatim, never parsed as markup) and commits `{ html, text }` on
+// blur. Tokens-only theme (Tailwind utilities).
 
 import { $generateHtmlFromNodes, $generateNodesFromDOM } from "@lexical/html";
 import { LexicalComposer } from "@lexical/react/LexicalComposer";
@@ -30,11 +35,16 @@ import {
   COMMAND_PRIORITY_LOW,
   type LexicalNode,
 } from "lexical";
-import { useEffect, useMemo, useRef } from "react";
+import { useContext, useEffect, useMemo, useRef } from "react";
 
 import type { EntityRef } from "@/lib/entity-links";
 import type { ModuoRuntime } from "@/lib/runtime.types";
 import { cn } from "@/lib/utils";
+import { WorkspaceContext } from "../../workspaces/workspace-context";
+import type { MentionInsert } from "../mention-actions";
+import { useReferenceHost } from "../references/context";
+import { DateNode } from "../references/date-node";
+import { HandleAutolinkPlugin, SEED_TAG } from "../references/handle-autolink-plugin";
 import { EntityRefNode } from "./entity-ref-node";
 import { looksLikeRichHtml } from "./entity-rich-html";
 import { MentionMenuPlugin } from "./mention-menu-plugin";
@@ -51,8 +61,8 @@ const THEME = {
 };
 
 /** Empty content persists as "" (not "<p><br></p>") so `looksLikeRichHtml`
- * reads it as plain — a chip-only body is NOT empty (chips carry no text but
- * leave the marker in the html). */
+ * reads it as plain — a body of only references or date chips is NOT empty
+ * (they carry no text but leave their markers in the html). */
 function serialize(editor: Parameters<typeof $generateHtmlFromNodes>[0]): {
   html: string;
   text: string;
@@ -60,57 +70,64 @@ function serialize(editor: Parameters<typeof $generateHtmlFromNodes>[0]): {
   return editor.read(() => {
     const text = $getRoot().getTextContent();
     const html = $generateHtmlFromNodes(editor, null);
-    const isEmpty = text.trim() === "" && !html.includes("data-lexical-entity-ref");
+    const isEmpty =
+      text.trim() === "" &&
+      !html.includes("data-lexical-entity-ref") &&
+      !html.includes("data-moduo-date");
     return { html: isEmpty ? "" : html, text };
   });
 }
 
 /** Seed the editor once from the stored value. Our HTML is parsed; foreign /
  * legacy plain text is inserted verbatim (line breaks preserved) so a literal
- * "<x>" is never swallowed as an element. */
+ * "<x>" is never swallowed as an element. Tagged so nothing that reacts to
+ * typing (handle auto-links) treats stored text as typed. */
 function SeedPlugin({ value }: { value: string }) {
   const [editor] = useLexicalComposerContext();
   const seeded = useRef(false);
   useEffect(() => {
     if (seeded.current) return;
     seeded.current = true;
-    editor.update(() => {
-      const root = $getRoot();
-      root.clear();
-      if (looksLikeRichHtml(value)) {
-        const dom = new DOMParser().parseFromString(value, "text/html");
-        const nodes = $generateNodesFromDOM(editor, dom);
-        // Root children must be blocks: append block elements directly, gather
-        // stray inline / text / decorator nodes into a paragraph.
-        let inline: LexicalNode[] = [];
-        const flush = () => {
-          if (inline.length === 0) return;
-          const p = $createParagraphNode();
-          p.append(...inline);
-          root.append(p);
-          inline = [];
-        };
-        for (const node of nodes) {
-          // A block element opens a new root child; inline elements, decorator
-          // chips, and bare text nodes gather into a wrapping paragraph.
-          if ($isElementNode(node) && !node.isInline()) {
-            flush();
-            root.append(node);
-          } else {
-            inline.push(node);
+    editor.update(
+      () => {
+        const root = $getRoot();
+        root.clear();
+        if (looksLikeRichHtml(value)) {
+          const dom = new DOMParser().parseFromString(value, "text/html");
+          const nodes = $generateNodesFromDOM(editor, dom);
+          // Root children must be blocks: append block elements directly, gather
+          // stray inline / text / decorator nodes into a paragraph.
+          let inline: LexicalNode[] = [];
+          const flush = () => {
+            if (inline.length === 0) return;
+            const p = $createParagraphNode();
+            p.append(...inline);
+            root.append(p);
+            inline = [];
+          };
+          for (const node of nodes) {
+            // A block element opens a new root child; inline elements, decorator
+            // chips, and bare text nodes gather into a wrapping paragraph.
+            if ($isElementNode(node) && !node.isInline()) {
+              flush();
+              root.append(node);
+            } else {
+              inline.push(node);
+            }
           }
+          flush();
+        } else if (value) {
+          const p = $createParagraphNode();
+          value.split("\n").forEach((line, i) => {
+            if (i > 0) p.append($createLineBreakNode());
+            if (line) p.append($createTextNode(line));
+          });
+          root.append(p);
         }
-        flush();
-      } else if (value) {
-        const p = $createParagraphNode();
-        value.split("\n").forEach((line, i) => {
-          if (i > 0) p.append($createLineBreakNode());
-          if (line) p.append($createTextNode(line));
-        });
-        root.append(p);
-      }
-      if (root.getChildrenSize() === 0) root.append($createParagraphNode());
-    });
+        if (root.getChildrenSize() === 0) root.append($createParagraphNode());
+      },
+      { tag: SEED_TAG },
+    );
   }, [editor, value]);
   return null;
 }
@@ -190,11 +207,59 @@ export function EntityTextEditor({
       onError: (error: Error) => {
         console.error("EntityTextEditor error:", error);
       },
-      nodes: [EntityRefNode],
+      nodes: [EntityRefNode, DateNode],
       theme: THEME,
     }),
     [editable],
   );
+  const taskKey = useContext(WorkspaceContext)?.selectedWorkspace?.taskKey ?? null;
+  const taskKeys = useMemo(() => (taskKey ? [taskKey] : []), [taskKey]);
+  // `/` creates where the page can ("New task “…”" in Tasks).
+  const host = useReferenceHost();
+  const createEntity = host?.createEntity;
+  const onCreateEntity = useMemo(
+    () =>
+      createEntity
+        ? async (type: string, label: string): Promise<MentionInsert | null> => {
+            const ref = await createEntity(type, label);
+            return ref ? { ref, label, icon: type } : null;
+          }
+        : undefined,
+    [createEntity],
+  );
+
+  // A typed handle that linked itself is a mention like `@` (it shows in Linked).
+  const linkTypedHandle = (taskId: string) => {
+    if (!runtime || !workspaceId || !source) return;
+    if (source.type === "task" && source.id === taskId) return;
+    void runtime.spine
+      .createLink({
+        workspaceId,
+        source,
+        target: { type: "task", id: taskId },
+        relationKind: "mentions",
+        origin: "mention",
+        sourceLabel,
+        sourceIcon: sourceIcon ?? null,
+      })
+      .catch(() => {
+        // Quiet: the reference is in the text either way; Linked catches up on the next link.
+      });
+  };
+
+  const shared = {
+    runtime,
+    workspaceId,
+    source,
+    sourceLabel,
+    sourceIcon,
+    currentUserId,
+    // Privacy first: a description stores `{type, id, display}`, never a title.
+    storeLabel: false,
+    cards: true,
+    showAs: true,
+    includeProjects: true,
+  } as const;
 
   return (
     <LexicalComposer initialConfig={initialConfig}>
@@ -230,26 +295,16 @@ export function EntityTextEditor({
       {editable ? <CommitOnBlurPlugin onCommit={onCommit} /> : null}
       {editable ? (
         <>
+          <MentionMenuPlugin {...shared} triggerChar="@" trigger="mention" />
           <MentionMenuPlugin
-            triggerChar="@"
-            trigger="mention"
-            runtime={runtime}
-            workspaceId={workspaceId}
-            source={source}
-            sourceLabel={sourceLabel}
-            sourceIcon={sourceIcon}
-            currentUserId={currentUserId}
-          />
-          <MentionMenuPlugin
+            {...shared}
             triggerChar="/"
             trigger="ref"
-            runtime={runtime}
-            workspaceId={workspaceId}
-            source={source}
-            sourceLabel={sourceLabel}
-            sourceIcon={sourceIcon}
-            currentUserId={currentUserId}
+            dateCommands
+            onCreateEntity={onCreateEntity}
           />
+          <MentionMenuPlugin {...shared} triggerChar="#" trigger="tag" />
+          <HandleAutolinkPlugin taskKeys={taskKeys} onLinked={linkTypedHandle} />
         </>
       ) : null}
     </LexicalComposer>

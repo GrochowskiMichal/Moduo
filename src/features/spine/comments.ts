@@ -5,6 +5,9 @@
 // DOM or a runtime.
 
 import type { SpineComment } from "@/lib/runtime.types";
+import { replaceSlashDates } from "./grammar";
+import { dateUri, referenceUri } from "./references/text";
+import type { ReferenceRef } from "./references/types";
 
 /** A person who can be @mentioned in a comment, or who wrote one. */
 export type CommentPerson = {
@@ -35,6 +38,50 @@ export function keptMentionIds(text: string, mentions: PickedMention[]): string[
   const ids = new Set<string>();
   for (const m of mentions) if (mentionStillPresent(text, m.label)) ids.add(m.id);
   return [...ids];
+}
+
+/** A thing picked after `@` in the composer (RF-1): written `@Title` while typing. */
+export type PickedThing = { ref: ReferenceRef; label: string };
+
+/**
+ * The body a comment stores (RF-1, research §8): every picked thing still
+ * written `@Title` becomes its reference (`moduo://task/<id>`) and every
+ * `/today` · `/tomorrow` · `/next week` a date chip (`moduo://date/…`), so
+ * the stored text carries no title for anyone to read, notifications
+ * included. A person mention keeps its `@Name` (people win a name clash).
+ */
+export function commentBodyWithReferences(
+  text: string,
+  things: PickedThing[],
+  people: PickedMention[],
+  now: Date = new Date(),
+): string {
+  const personLabels = new Set(people.map((p) => p.label));
+  // Longest first, so "@Brand guidelines PDF" wins over "@Brand".
+  const picked = [...things]
+    .filter((t) => !personLabels.has(t.label))
+    .sort((a, b) => b.label.length - a.label.length);
+  let out = text;
+  for (const thing of picked) {
+    const needle = `@${thing.label}`;
+    let from = 0;
+    for (;;) {
+      const i = out.indexOf(needle, from);
+      if (i < 0) break;
+      const before = out[i - 1];
+      const after = out[i + needle.length];
+      const atStart = i === 0 || /\s/.test(before ?? "");
+      const atEnd = after === undefined || !/\w/.test(after);
+      if (atStart && atEnd) {
+        const uri = referenceUri(thing.ref);
+        out = `${out.slice(0, i)}${uri}${out.slice(i + needle.length)}`;
+        from = i + uri.length;
+      } else {
+        from = i + 1;
+      }
+    }
+  }
+  return replaceSlashDates(out, dateUri, now);
 }
 
 /**

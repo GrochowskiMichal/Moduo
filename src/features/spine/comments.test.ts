@@ -2,6 +2,7 @@ import { describe, expect, it } from "@rstest/core";
 
 import {
   commentAuthorName,
+  commentBodyWithReferences,
   filterPeople,
   insertMention,
   keptMentionIds,
@@ -10,6 +11,45 @@ import {
   relativeTime,
   splitMentions,
 } from "./comments";
+
+describe("what a comment stores (RF-1)", () => {
+  const TASK = { type: "task", id: "11111111-1111-4111-8111-111111111111" };
+  const NOTE = { type: "note", id: "22222222-2222-4222-8222-222222222222" };
+  const WED = new Date(2026, 9, 14, 10);
+
+  it("a picked thing still written @Title becomes its reference, never its title", () => {
+    const body = commentBodyWithReferences(
+      "Chase @Collect assets and @Brand voice, @Mike",
+      [
+        { ref: TASK, label: "Collect assets" },
+        { ref: NOTE, label: "Brand voice" },
+      ],
+      [{ id: "u2", label: "Mike" }],
+      WED,
+    );
+    expect(body).toBe(`Chase moduo://task/${TASK.id} and moduo://note/${NOTE.id}, @Mike`);
+    expect(body).not.toContain("Collect assets");
+  });
+
+  it("leaves a thing that was edited away, and a person who shares its name", () => {
+    expect(
+      commentBodyWithReferences(
+        "Ask @Mike",
+        [{ ref: TASK, label: "Mike" }],
+        [{ id: "u2", label: "Mike" }],
+      ),
+    ).toBe("Ask @Mike");
+    expect(
+      commentBodyWithReferences("Ask @Collectors", [{ ref: TASK, label: "Collect" }], []),
+    ).toBe("Ask @Collectors");
+  });
+
+  it("turns /today, /tomorrow and /next week into date chips", () => {
+    expect(commentBodyWithReferences("Ship /tomorrow", [], [], WED)).toBe(
+      "Ship moduo://date/2026-10-15",
+    );
+  });
+});
 
 describe("mentions that still notify", () => {
   it("needs the label at a word boundary", () => {

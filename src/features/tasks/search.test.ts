@@ -6,6 +6,7 @@ import { describe, expect, it } from "@rstest/core";
 import {
   resolveTasksDeepLink,
   takeSearchTokens,
+  taskIdForHandle,
   taskMatchesQuery,
   validateTasksSearch,
 } from "./search";
@@ -117,6 +118,32 @@ describe("taskMatchesQuery", () => {
     }
     // Plain text is read as it is, angle brackets included.
     expect(taskMatchesQuery({ title: "x", description: "a <b> c" }, "<b>")).toBe(true);
+  });
+
+  it("never matches the title an older reference chip stored (RF-1)", () => {
+    const withChip = {
+      title: "Weekly sync",
+      description:
+        '<p>See <span data-lexical-entity-ref="true" data-entity-type="task" data-entity-id="t1">Acquire Northwind</span> first</p>',
+    };
+    expect(taskMatchesQuery(withChip, "northwind")).toBe(false);
+    expect(taskMatchesQuery(withChip, "first")).toBe(true);
+  });
+});
+
+describe("taskIdForHandle — `?id=MOD-142` (RF-1)", () => {
+  const tasks = [
+    { id: "a", number: 142 },
+    { id: "b", number: 7 },
+  ];
+  it("finds the loaded task by its number under the current key, any case", () => {
+    expect(taskIdForHandle("MOD-142", tasks, "MOD")).toBe("a");
+    expect(taskIdForHandle("mod-7", tasks, "MOD")).toBe("b");
+  });
+  it("leaves another key, an unknown number or no key to the server", () => {
+    expect(taskIdForHandle("ML-142", tasks, "MOD")).toBeNull();
+    expect(taskIdForHandle("MOD-9", tasks, "MOD")).toBeNull();
+    expect(taskIdForHandle("MOD-142", tasks, null)).toBeNull();
   });
 });
 

@@ -32,10 +32,18 @@ export function mentionCandidateKey(candidate: MentionCandidate): string {
       return `person:${candidate.memberId}`;
     case "create":
       return `create:${candidate.entityType}`;
+    case "command":
+      return `command:${candidate.command}`;
+    case "tag":
+      return `tag:${candidate.tagId}`;
   }
 }
 
 function CandidateRow({ candidate }: { candidate: MentionCandidate }) {
+  if (candidate.kind === "command" || candidate.kind === "tag") {
+    // The picker lists things; commands and tags belong to the inline menu.
+    return <span className="min-w-0 flex-1 truncate">{candidate.label}</span>;
+  }
   if (candidate.kind === "create") {
     return (
       <>

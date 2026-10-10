@@ -81,5 +81,9 @@ export async function executeMention(
       await ctx.onMentionPerson?.(resolution.memberId, resolution.label);
       return null;
     }
+    // A date chip and a `#tag` link are text: nothing to write.
+    case "insert-date":
+    case "insert-tag":
+      return null;
   }
 }
