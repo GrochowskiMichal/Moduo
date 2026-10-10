@@ -3,7 +3,7 @@
 > **Status (2026-10-10): round 1 sent. Waiting on Maciej's answers to C1–C20.**
 >
 > - **Open calls:** C1–C20, all ❓. Load-bearing: ★ C1 (the ceiling), ★ C2 (the shape), ★ C3 (missed sessions), ★ C6 (connected calendars).
-> - **Research lanes:** six, in [`research/`](./research/). Landed and folded in: current state (with a live look at the running app), early-decisions audit, role journeys, connectivity, competitor structure. Still running: visual audit (§5 and the 1024×700 verdict in C2 wait on it).
+> - **Research lanes:** all six landed and folded in ([`research/`](./research/)): current state (with a live look at the running app), visual audit, early-decisions audit, role journeys, connectivity, competitor structure.
 > - **Research data in the shared local database:** the current-state lane seeded a workspace for its live look; [research/current-state.md](./research/current-state.md) §8 lists every row to remove.
 > - **Prototype:** [`prototypes/structure.html`](./prototypes/structure.html), keys 1–9 switch frames, V cycles variants.
 > - **Waiting on Maciej, outside the calls:** (1) may one line be added to TV-D10's row on the integration branch (§6 #4, one reminders table for tasks and events); (2) is Google's OAuth consent screen still in "Testing" (§6 #14: if so, every Google connection drops after 7 days).
@@ -81,7 +81,7 @@ Tasks' root cause was "a solo-planner assumption stored as a column". Calendar's
 
 ### 1.3 What's broken, in five kinds
 
-*From the current-state lane (code + a live look with a second member), the decisions audit, role journeys and connectivity. The visual lane adds kind D.*
+*From the current-state lane (code + a live look with a second member), the visual audit, the decisions audit, role journeys and connectivity.*
 
 **A · Structure: a calendar without people.**
 - An event has no guests, no invitations and no replies; mirrored meetings arrive without their attendees. So nothing links a meeting with Anna to Anna, and the References event card promises "people" it can't fill.
@@ -112,7 +112,7 @@ Tasks' root cause was "a solo-planner assumption stored as a column". Calendar's
 - No "find a time"; teammates' Busy blocks don't say whose.
 - No way to set a place on a Moduo event.
 
-**D · Visual seams.** Durations read "240m", panel titles truncate (Tasks research); the rest comes from the visual audit ([research/visual-audit.md](./research/visual-audit.md)).
+**D · Visual seams** ([visual audit](./research/visual-audit.md), §5 below): the shared hover, selection and drop recipes are unused; about nine date formats; every chip truncates its time; faded text below 4.5:1; every Moduo event in the accent colour; red in twelve places.
 
 **E · No way in.**
 - On the web only Google connects; Outlook, iCloud and ICS say "Connect from the desktop app".
@@ -220,7 +220,26 @@ From [research/role-journeys.md](./research/role-journeys.md) (a normal week per
 
 ## 5. The visual north star, applied
 
-*Filled from [research/visual-audit.md](./research/visual-audit.md) when it lands: what would spread if copied, the fix list, and the 1024×700 verdict.*
+From [research/visual-audit.md](./research/visual-audit.md): the live app measured at 1440×900 and 1024×700, dark mode, three densities, plus accent and light-mode spot checks.
+
+**Keep:** the grid's hour height follows density and draws DST days right; account colours go through the tag hue tokens; the toolbar sits on one control rung; core text is readable (12 px titles at 15–19:1); quiet states (dashed elapsed, struck done, nothing red on the grid); the 48b layout already holds; booking is the one surface on the shared recipes.
+
+**What would spread if copied** (the audit's §1 has all 16 with measurements):
+
+| # | Issue | Measurement | Rule |
+| --- | --- | --- | --- |
+| 1 | None of the shared interaction layer is used; hover comes in 8 styles; the drop target is invisible | Drop column vs its neighbour 1.01:1 | 39 |
+| 2 | Selection looks like keyboard focus, and no timed event can take focus | 0 of 13 chips focusable | 39 |
+| 3 | Two date formatters, about nine formats for one moment ("60m", "10/11/2026, 3:00:00 PM", a native "15:00" next to "3:00 PM") | — | 41 |
+| 4 | Every chip truncates its time, and titles in overlaps get one letter | Week column 106 px at 1440, 51 px at 1024 | 41, 42 |
+| 5 | Overlaps cap at three columns at any width; "+N" can't be clicked | A 740 px Day column still hides the fourth | 42 |
+| 6 | Faded steps below readable contrast | Past-event time 3.2:1, done title 3.46:1, day number 4.37:1, other-month day 2.73:1 | 38 |
+| 7 | Every Moduo event is accent-tinted | 15–17 accent marks on one week | 46 |
+| 8 | Density only changes the hour height; in Dense a 15- and a 30-minute event look identical | 22 px both | 44 |
+| 9 | About nine chip languages, two property-panel languages (uppercase field labels vs PropertyRow), caps on group headers | — | 40, 45, kit |
+| 10 | Red in 12 places, four ways to delete; "Remove account" runs at once with no confirm and no Undo | — | no red; Undo |
+
+**What the rebuild does about it** (C2's layout, plus the kit): a chip that survives narrow columns (title first, the time drops whole when it doesn't fit, two lines when tall enough, overlaps that widen with the column and a "+N" that opens a list); one date grammar from `lib/time-format.ts`; one selection and focus recipe, every chip reachable by keyboard; Moduo's own calendars in a calendar colour, not the accent; three readable text levels for past and done states; density applied to chips, popovers and the mini-month; the kit's PropertyRow, Chip, EmptyState, DateField; no red, and Undo instead of confirms where Tasks does. The quick wins in the audit's §4 fold into the first UI block.
 
 ---
 
@@ -313,10 +332,15 @@ Round 3 reconciles in-flight work that touches Calendar: these blocks, collectiv
   - *alongside:* **Tasks**: your work to schedule, grouped Up next (your Focus line-up) · Due this week · No date, with search; rows drag onto the grid. **Day**: the picked day as a list, the default beside Month.
   - Today's "Notes" view goes: linked notes appear in Details' Linked section (References).
 - **Bottom bar:** the left toggle · Search · Capture · New · the right toggle; a multi-select swaps the centre for its action row (Tasks 82b).
-- **At the minimum window (1024×700):** both side panels leave about 60 px per day (prototype frame 9). *Recommend:* the left panel folds first (the mini-month and calendars are glanceable; the Tasks list is the planning tool); the bottom-bar toggle brings it back. To be checked against the visual audit's measurements.
+- **At the minimum window (1024×700)** *(recommendation changed after the visual audit)*: with both panels open the centre gets 440 px, 51 px per day, and only 7.3 hours fit ([visual audit](./research/visual-audit.md) §3). *Recommend:*
+  1. **the right panel starts folded below about 1200 px wide**: it's context, not the surface (Tasks 48b); clicking an event still opens its popover, and the bottom-bar toggle (or opening Details) brings the panel back;
+  2. **Week shows weekdays only at that size** unless your weekend has something on it;
+  3. **the left panel keeps only the mini-month and the calendar list**; creating a calendar or a set moves into the Calendars ⋯ menu;
+  4. in the toolbar, "synced 3m ago" moves into the refresh button's tooltip before the range label shortens.
+  - My first draft folded the left panel first, to keep the Tasks list beside the week for planning. The audit's measurements and 48b win: planning a week is a bigger-window job, and the Tasks list is one toggle away.
 - *Recommend: yes, this shape.* Rejected: booking links in Settings (they're everyday objects for sales and freelancers, and their bookings live on the grid); People as a panel view (overlaying someone's time is about the grid, so it sits with the calendars).
 - *Outside the target roles?* Yes.
-- Prototype frames 1, 2, 3, 4 and 9.
+- Prototype frames 1, 2, 3, 4 and 9 (variants: right folds · left folds · both open).
 
 ❓ OK?
 
@@ -577,7 +601,7 @@ Checked every call against the others, against Tasks v3, and against the decisio
 | File | What it holds | Status |
 | --- | --- | --- |
 | [research/current-state.md](./research/current-state.md) | Calendar today in code and in the running app (seeded workspace, a second member): capability matrix, 15 trust bugs, what Tasks v3 already changed, the research data to remove | landed, folded into §1.3, C2, C6, C10 |
-| [research/visual-audit.md](./research/visual-audit.md) | Measurements against the north-star rules; the 1024×700 verdict | running |
+| [research/visual-audit.md](./research/visual-audit.md) | The live app measured against the north-star rules; 16 spreading issues; the 1024×700 verdict; the fix list | landed, folded into §1.3, §5 and C2 |
 | [research/early-decisions-audit.md](./research/early-decisions-audit.md) | Every early Calendar decision: keep / adjust / reverse; 19 contradictions; 15 designer questions | landed, folded into §1, C1–C20 and the consistency pass |
 | [research/structure-competitors.md](./research/structure-competitors.md) | Views, calendars, people, tasks, booking, write-back and complaints across 20 tools | landed, folded into C5, C16, C19 |
 | [research/role-journeys.md](./research/role-journeys.md) | A normal week per role, 23 gaps, who would switch | landed, folded into §3 and C13–C20 |

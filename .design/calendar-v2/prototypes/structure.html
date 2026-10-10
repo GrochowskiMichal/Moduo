@@ -586,7 +586,7 @@ html[data-frame="9"] .toolbar .dlab, html[data-frame="9"] .toolbar .rng { displa
     2: { lab: 'Selected', opts: [['invite', 'Invitation'], ['session', 'Session']] },
     4: { lab: 'Panel', opts: [['menu', 'Menu open'], ['ref', 'Guest opened']] },
     5: { lab: 'Missed', opts: [['grid', 'On the grid'], ['review', 'Review'], ['after', 'After Fit']] },
-    9: { lab: 'Gives way', opts: [['left', 'Left folds'], ['right', 'Right folds'], ['both', 'Both open']] }
+    9: { lab: 'Gives way', opts: [['right', 'Right folds'], ['left', 'Left folds'], ['both', 'Both open']] }
   };
   var S = { frame: Math.min(FRAMES, Math.max(1, parseInt(q.get('frame'), 10) || 1)), v: {} };
   Object.keys(VARS).forEach(function (f) { S.v[f] = VARS[f].opts[0][0]; });
@@ -940,9 +940,9 @@ html[data-frame="9"] .toolbar .dlab, html[data-frame="9"] .toolbar .rng { displa
     if (f === 6) return '6 · Booking link selected (C9): its open times wash the grid; Details shows bookings, hours, busy calendars and the sessions switch.';
     if (f === 7) return '7 · Teammates (C8): Mike ticked in People shows his Busy; drawing an event with guests offers “Find a time”, plain arithmetic.';
     if (f === 8) return '8 · ⌘⇧K, then ⌘4: capture as Event. Destination row = which calendar; date words and a contact become When and a guest (C10).';
-    if (v === 'right') return '9 · 1024×700 with the right panel folded: the week reads well; the Tasks list (the drag source) is one click away.';
-    if (v === 'both') return '9 · 1024×700 with both panels open: ~60 px per day. Titles go to one word; too tight to plan in.';
-    return '9 · 1024×700 with the left panel folded (recommended): the Tasks list stays beside the week; the mini-month is one click away.';
+    if (v === 'left') return '9 · 1024×700 with the left panel folded instead (my first draft): the Tasks list stays beside the week, but the panel is context, not the surface (48b).';
+    if (v === 'both') return '9 · 1024×700 with both panels open: ~51 px per day (measured). Titles go to one letter; too tight to read.';
+    return '9 · 1024×700, recommended: the right panel starts folded below ~1200 px (popovers still work), and Week shows weekdays only. The visual audit’s verdict.';
   }
 
   function render() {
@@ -986,7 +986,7 @@ html[data-frame="9"] .toolbar .dlab, html[data-frame="9"] .toolbar .rng { displa
     } else if (f === 9) {
       showRail = v === 'right' || v === 'both';
       showRp = v === 'left' || v === 'both';
-      c = toolbar({}) + missline(2) + renderWeek({});
+      c = toolbar({}) + missline(2) + renderWeek(v === 'right' ? { days: [0, 1, 2, 3, 4] } : {});
       r = tasksView();
     }
     html.dataset.frame = f;
