@@ -1,7 +1,6 @@
-// DF-20 — capture routing + write path. Proves the prefix parser routes to the
-// right module (default Task, `/note` `/event` `/contact`, `/task` alias, unknown
-// slash stays a Task) and that createCapturedEntity calls each module's own
-// create op with a date-stripped title / correct event times.
+// DF-20 — the capture write paths: createCapturedEntity calls each module's own
+// create op with a date-stripped title / correct event times. (The "/note"
+// prefix parser is gone: the capture shell picks the type, tasks-v3 call 90b.)
 
 import { describe, expect, it, rs } from "@rstest/core";
 
@@ -11,63 +10,9 @@ import {
   canWriteRoute,
   createCapturedEntity,
   isPermissionError,
-  parseCaptureCommand,
 } from "./capture-command";
 
 const routeFor = (target: string) => CAPTURE_ROUTES.find((r) => r.target === target)!;
-
-describe("parseCaptureCommand", () => {
-  it("defaults a plain line to the Task route with the whole line as body", () => {
-    const { route, body } = parseCaptureCommand("buy milk");
-    expect(route.target).toBe("task");
-    expect(body).toBe("buy milk");
-  });
-
-  it.each([
-    ["/note", "note"],
-    ["/event", "event"],
-    ["/contact", "contact"],
-    ["/task", "task"],
-  ] as const)("routes %s to the %s module and strips the prefix", (prefix, target) => {
-    const { route, body } = parseCaptureCommand(`${prefix} Design review`);
-    expect(route.target).toBe(target);
-    expect(body).toBe("Design review");
-  });
-
-  it("is case-insensitive on the prefix", () => {
-    expect(parseCaptureCommand("/NOTE hello").route.target).toBe("note");
-    expect(parseCaptureCommand("/Event standup").route.target).toBe("event");
-  });
-
-  it("accepts a bare prefix with no body", () => {
-    const { route, body } = parseCaptureCommand("/note");
-    expect(route.target).toBe("note");
-    expect(body).toBe("");
-  });
-
-  it("treats an unknown slash word as a Task carrying the literal text", () => {
-    const { route, body } = parseCaptureCommand("/groceries eggs");
-    expect(route.target).toBe("task");
-    expect(body).toBe("/groceries eggs");
-  });
-
-  it("only honors the prefix at the very start (mid-line slash is literal)", () => {
-    const { route, body } = parseCaptureCommand("call Sam /note later");
-    expect(route.target).toBe("task");
-    expect(body).toBe("call Sam /note later");
-  });
-
-  it("ignores leading whitespace before the prefix", () => {
-    expect(parseCaptureCommand("   /contact Ada").route.target).toBe("contact");
-  });
-
-  it("does not treat a longer word starting with a prefix as that prefix", () => {
-    // "/notebook" is not "/note" — no whitespace terminator, so it stays a Task.
-    const { route, body } = parseCaptureCommand("/notebook shopping");
-    expect(route.target).toBe("task");
-    expect(body).toBe("/notebook shopping");
-  });
-});
 
 // ── createCapturedEntity ──────────────────────────────────────────────────────
 

@@ -56,26 +56,19 @@ export function CaptureShell({ types = CAPTURE_TYPES }: Props) {
   const returnFocusRef = useRef<HTMLElement | null>(null);
 
   const visibleModules = useMemo(
-    () =>
-      visibleModuleNavItems({
-        notes: modulePermissions.notes,
-        tasks: modulePermissions.tasks,
-        calendar: modulePermissions.calendar,
-        contacts: modulePermissions.contacts,
-        chat: modulePermissions.chat,
-      }),
-    [
-      modulePermissions.notes,
-      modulePermissions.tasks,
-      modulePermissions.calendar,
-      modulePermissions.contacts,
-      modulePermissions.chat,
-    ],
+    () => visibleModuleNavItems(modulePermissions),
+    [modulePermissions],
   );
+  // The type's body; a pick from the chip menu hands focus back to its line.
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const openRef = useRef(false);
+  openRef.current = open;
 
   const active = types.find((t) => t.type === typeId) ?? types[0];
 
   const show = useCallback(() => {
+    // Already open: keep the type and what's typed.
+    if (openRef.current) return;
     const focused = document.activeElement;
     returnFocusRef.current = focused instanceof HTMLElement ? focused : null;
     // Always opens as the first type, Task (90b), with a fresh line.
@@ -172,7 +165,17 @@ export function CaptureShell({ types = CAPTURE_TYPES }: Props) {
                 <ChevronDown className="text-muted-foreground" aria-hidden />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="min-w-44">
+            <DropdownMenuContent
+              align="start"
+              className="min-w-44"
+              // Back to the title line, not the chip, so typing just goes on.
+              onCloseAutoFocus={(event) => {
+                const field = bodyRef.current?.querySelector<HTMLElement>("input, textarea");
+                if (!field) return;
+                event.preventDefault();
+                field.focus();
+              }}
+            >
               <DropdownMenuRadioGroup
                 value={active.type}
                 onValueChange={(value) => pick(types.find((t) => t.type === value))}
@@ -205,7 +208,7 @@ export function CaptureShell({ types = CAPTURE_TYPES }: Props) {
             {active.destination}
           </span>
         </div>
-        <div key={active.type} className="motion-view">
+        <div key={active.type} ref={bodyRef} className="motion-view">
           <Body
             draft={draft}
             onDraftChange={setDraft}

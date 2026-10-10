@@ -253,21 +253,8 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   }, [navigate]);
 
   const modulesNavItems = useMemo(
-    () =>
-      visibleModuleNavItems({
-        notes: modulePermissions.notes,
-        tasks: modulePermissions.tasks,
-        calendar: modulePermissions.calendar,
-        contacts: modulePermissions.contacts,
-        chat: modulePermissions.chat,
-      }),
-    [
-      modulePermissions.notes,
-      modulePermissions.tasks,
-      modulePermissions.calendar,
-      modulePermissions.contacts,
-      modulePermissions.chat,
-    ],
+    () => visibleModuleNavItems(modulePermissions),
+    [modulePermissions],
   );
 
   const navHrefs = useMemo(() => modulesNavItems.map((tab) => tab.href), [modulesNavItems]);

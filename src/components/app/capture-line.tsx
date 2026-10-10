@@ -10,11 +10,13 @@ import { toast } from "sonner";
 
 import { requestDashboardDataRefresh } from "../../features/dashboard/context/dashboard-data-context";
 import {
+  CAPTURE_ROUTES,
   type CaptureTarget,
+  canWriteRoute,
   createCapturedEntity,
   isPermissionError,
 } from "../../features/spine/capture-command";
-import type { CaptureBodyProps } from "../../lib/capture-registry";
+import type { CaptureBodyProps, CaptureTypeDef } from "../../lib/capture-registry";
 import { isMacPlatform } from "../../lib/shortcuts";
 import { useAuth } from "../../providers/auth-provider";
 import { useWorkspace } from "../../providers/workspace-provider";
@@ -34,6 +36,24 @@ export function lineCaptureBody(options: LineOptions): ComponentType<CaptureBody
   }
   LineBody.displayName = `CaptureLine(${options.target})`;
   return LineBody;
+}
+
+/**
+ * A registry entry for a one-line capture type: its route's permission lane
+ * gates it (capture-command.ts) and its body is the line above.
+ */
+export function lineCaptureType(
+  def: Omit<CaptureTypeDef, "canWrite" | "Body" | "type"> & LineOptions,
+): CaptureTypeDef {
+  const route = CAPTURE_ROUTES.find((r) => r.target === def.target);
+  if (!route) throw new Error(`No capture route for "${def.target}"`);
+  const { target, plural, placeholder, ...type } = def;
+  return {
+    ...type,
+    type: target,
+    canWrite: (perms) => canWriteRoute(route, perms),
+    Body: lineCaptureBody({ target, plural, placeholder }),
+  };
 }
 
 function CaptureLine({

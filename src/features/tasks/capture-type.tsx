@@ -4,18 +4,14 @@
 
 import { CheckSquare } from "lucide-react";
 
-import { lineCaptureBody } from "../../components/app/capture-line";
-import type { CaptureTypeDef } from "../../lib/capture-registry";
-import { CAPTURE_ROUTES, canWriteRoute } from "../spine/capture-command";
+import { lineCaptureType } from "../../components/app/capture-line";
 
-const route = CAPTURE_ROUTES.find((r) => r.target === "task") ?? CAPTURE_ROUTES[0];
-
-export const taskCaptureType: CaptureTypeDef = {
-  type: "task",
+export const taskCaptureType = lineCaptureType({
+  target: "task",
   module: "tasks",
   label: "Task",
   icon: CheckSquare,
   destination: "Inbox",
-  canWrite: (perms) => canWriteRoute(route, perms),
-  Body: lineCaptureBody({ target: "task", plural: "tasks", placeholder: "Capture a task…" }),
-};
+  plural: "tasks",
+  placeholder: "Capture a task…",
+});

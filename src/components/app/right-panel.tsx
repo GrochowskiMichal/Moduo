@@ -86,6 +86,14 @@ function isEditable(target: EventTarget | null): boolean {
   return tag === "input" || tag === "textarea" || tag === "select";
 }
 
+/** An open dialog (capture, Settings, palette…) that doesn't contain `root`. */
+function overlayOver(root: HTMLElement): boolean {
+  const open = document.querySelectorAll<HTMLElement>(
+    '[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]',
+  );
+  return Array.from(open).some((dialog) => !dialog.contains(root));
+}
+
 export function RightPanel({
   module,
   views,
@@ -100,20 +108,30 @@ export function RightPanel({
   const item = items.length > 0 ? items[items.length - 1] : null;
   const isMac = isMacPlatform();
 
-  // ⌥1–9 pick a view while the panel is on screen. The latest props live in a
-  // ref so the listener is bound once per mount.
+  // ⌥1–9 pick a view while the panel is on screen; Esc steps back one item from
+  // anywhere inside the panel but a field. One bubble listener on window, so
+  // it runs after React's own handlers: a child (or a Radix menu, which
+  // handles Esc on its document listener) that claims the key first wins. Both
+  // stay out of the way while a dialog that doesn't hold the panel is open.
+  // The latest props live in a ref so the listener is bound once per mount.
   const latest = useRef({ listed, active, item, onChange, onBack, onClearItems });
   latest.current = { listed, active, item, onChange, onBack, onClearItems };
   const rootRef = useRef<HTMLDivElement>(null);
-  const hasActive = Boolean(active);
   useEffect(() => {
     if (typeof window === "undefined") return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.defaultPrevented) return;
-      const n = panelShortcutNumber(event);
-      if (n === null || isEditable(event.target)) return;
+      if (event.defaultPrevented || isEditable(event.target)) return;
+      const root = rootRef.current;
+      if (!root || overlayOver(root)) return;
       const { listed, active, item, onChange, onBack, onClearItems } = latest.current;
-      const view = listed[n - 1];
+      if (event.key === "Escape") {
+        if (!item || !onBack || !root.contains(event.target as Node)) return;
+        event.preventDefault();
+        onBack();
+        return;
+      }
+      const n = panelShortcutNumber(event);
+      const view = n === null ? undefined : listed[n - 1];
       if (!view) return;
       event.preventDefault();
       if (item) (onClearItems ?? onBack)?.();
@@ -122,24 +140,6 @@ export function RightPanel({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
-
-  // Esc steps back one item, from anywhere inside the panel but a field. A
-  // menu or popover opened from the panel is portaled, so its Esc never
-  // bubbles here; Radix closes it on its own document listener first.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: rebinds once the root exists (no views → no root)
-  useEffect(() => {
-    const root = rootRef.current;
-    if (!root) return;
-    const onKey = (event: KeyboardEvent) => {
-      const { item, onBack } = latest.current;
-      if (event.key !== "Escape" || !item || !onBack) return;
-      if (event.defaultPrevented || isEditable(event.target)) return;
-      event.preventDefault();
-      onBack();
-    };
-    root.addEventListener("keydown", onKey);
-    return () => root.removeEventListener("keydown", onKey);
-  }, [hasActive]);
 
   // Going back unmounts the back arrow that had focus, which would drop it on
   // <body>. After the item on top changes, put focus on the title row, but only

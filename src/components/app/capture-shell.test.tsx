@@ -225,3 +225,36 @@ describe("the type chip", () => {
     unlisten();
   });
 });
+
+describe("focus and re-opening", () => {
+  it("picking a type from the chip hands focus to its line", async () => {
+    const { unlisten } = renderShell([TASK, NOTE]);
+    await openWithShortcut();
+    fireEvent.pointerDown(chip(), { button: 0, ctrlKey: false, pointerType: "mouse" });
+    const menu = screen.getByRole("menu");
+    await act(async () => {
+      fireEvent.click(within(menu).getByRole("menuitemradio", { name: /Note/ }));
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(document.activeElement).toBe(screen.getByRole("textbox", { name: "Note title" }));
+    unlisten();
+  });
+
+  it("opening it again while open keeps the type and what was typed", async () => {
+    const { unlisten } = renderShell([TASK, NOTE]);
+    await openWithShortcut();
+    press({ metaKey: true, key: "2" });
+    fireEvent.change(screen.getByRole("textbox", { name: "Note title" }), {
+      target: { value: "Pick up keys" },
+    });
+    await act(async () => {
+      dispatchOpenCapture();
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(chip().getAttribute("aria-label")).toBe("Capture type: Note");
+    expect((screen.getByRole("textbox", { name: "Note title" }) as HTMLInputElement).value).toBe(
+      "Pick up keys",
+    );
+    unlisten();
+  });
+});

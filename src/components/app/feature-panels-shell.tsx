@@ -319,9 +319,10 @@ export function FeaturePanelsShell({
       {showRightFull ? (
         <ResizablePanel
           id={`${feature}-right`}
-          defaultSize="20%"
+          // A fixed (not resizable) right panel sits exactly at the floor: a
+          // share of the window could fall under 280 px on a small one.
+          defaultSize={resizable ? "20%" : RIGHT_MIN}
           minSize={RIGHT_MIN}
-          // Fixed (not resizable) panels hold exactly the floor.
           maxSize={resizable ? "40%" : RIGHT_MIN}
         >
           <aside

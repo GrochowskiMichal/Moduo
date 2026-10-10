@@ -238,3 +238,36 @@ describe("focus after going back", () => {
     expect(document.activeElement).toBe(screen.getByRole("button", { name: "Panel view: Tasks" }));
   });
 });
+
+describe("while a dialog is open over the panel", () => {
+  it("⌥n and Esc leave the panel alone", () => {
+    const onBack = rs.fn();
+    const item: PanelItem = { key: "task:1", title: "Collect assets", render: () => <p>Body</p> };
+    const { onChange } = renderPanel({ items: [item], onBack });
+    const dialog = document.createElement("div");
+    dialog.setAttribute("role", "dialog");
+    dialog.setAttribute("data-state", "open");
+    document.body.appendChild(dialog);
+    altDigit(1);
+    fireEvent.keyDown(screen.getByText("Body"), { key: "Escape" });
+    dialog.remove();
+    expect(onChange).not.toHaveBeenCalled();
+    expect(onBack).not.toHaveBeenCalled();
+  });
+
+  it("a child that claims Esc in its own handler keeps the item open", () => {
+    const onBack = rs.fn();
+    const item: PanelItem = {
+      key: "task:1",
+      title: "Collect assets",
+      render: () => (
+        <button type="button" onKeyDown={(e) => e.key === "Escape" && e.preventDefault()}>
+          Cancel delete
+        </button>
+      ),
+    };
+    renderPanel({ items: [item], onBack });
+    fireEvent.keyDown(screen.getByRole("button", { name: "Cancel delete" }), { key: "Escape" });
+    expect(onBack).not.toHaveBeenCalled();
+  });
+});

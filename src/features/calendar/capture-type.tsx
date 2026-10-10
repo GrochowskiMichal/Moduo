@@ -5,18 +5,14 @@
 
 import { Calendar } from "lucide-react";
 
-import { lineCaptureBody } from "../../components/app/capture-line";
-import type { CaptureTypeDef } from "../../lib/capture-registry";
-import { CAPTURE_ROUTES, canWriteRoute } from "../spine/capture-command";
+import { lineCaptureType } from "../../components/app/capture-line";
 
-const route = CAPTURE_ROUTES.find((r) => r.target === "event") ?? CAPTURE_ROUTES[0];
-
-export const calendarCaptureType: CaptureTypeDef = {
-  type: "event",
+export const calendarCaptureType = lineCaptureType({
+  target: "event",
   module: "calendar",
   label: "Event",
   icon: Calendar,
   destination: "Calendar",
-  canWrite: (perms) => canWriteRoute(route, perms),
-  Body: lineCaptureBody({ target: "event", plural: "events", placeholder: "Capture an event…" }),
-};
+  plural: "events",
+  placeholder: "Capture an event…",
+});

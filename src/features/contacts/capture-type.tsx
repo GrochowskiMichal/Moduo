@@ -4,22 +4,14 @@
 
 import { Contact } from "lucide-react";
 
-import { lineCaptureBody } from "../../components/app/capture-line";
-import type { CaptureTypeDef } from "../../lib/capture-registry";
-import { CAPTURE_ROUTES, canWriteRoute } from "../spine/capture-command";
+import { lineCaptureType } from "../../components/app/capture-line";
 
-const route = CAPTURE_ROUTES.find((r) => r.target === "contact") ?? CAPTURE_ROUTES[0];
-
-export const contactsCaptureType: CaptureTypeDef = {
-  type: "contact",
+export const contactsCaptureType = lineCaptureType({
+  target: "contact",
   module: "contacts",
   label: "Contact",
   icon: Contact,
   destination: "Contacts",
-  canWrite: (perms) => canWriteRoute(route, perms),
-  Body: lineCaptureBody({
-    target: "contact",
-    plural: "contacts",
-    placeholder: "Capture a contact…",
-  }),
-};
+  plural: "contacts",
+  placeholder: "Capture a contact…",
+});
