@@ -29,7 +29,8 @@ export function HelpMenu() {
   const { runtime } = useAuth();
   const [bugReportOpen, setBugReportOpen] = useState(false);
   // An item that opens a dialog waits for the menu to close, or the closing
-  // menu takes focus back and the dialog closes at once (gotchas/ui.md).
+  // menu takes focus back and the dialog closes at once (gotchas/ui.md). It
+  // runs as focus returns to Help, so the dialog hands focus back there too.
   const afterClose = useRef<(() => void) | null>(null);
 
   const openDocs = () => {
@@ -72,12 +73,10 @@ export function HelpMenu() {
         <DropdownMenuContent
           align="end"
           className="min-w-52"
-          onCloseAutoFocus={(event) => {
+          onCloseAutoFocus={() => {
             const run = afterClose.current;
-            if (!run) return;
             afterClose.current = null;
-            event.preventDefault();
-            run();
+            run?.();
           }}
         >
           <DropdownMenuItem onSelect={openDocs}>

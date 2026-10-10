@@ -9,7 +9,9 @@ import {
   registerFocusFlushSink,
   startFocus,
   stopFocus,
+  useFocusSession,
 } from "../../features/focus/engine";
+import { FocusAwayPrompt } from "../../features/focus/ui/away-prompt";
 import { TooltipProvider } from "../ui/tooltip";
 import { FocusSessionChip, formatClock } from "./focus-session-chip";
 
@@ -80,7 +82,48 @@ describe("FocusSessionChip (the top-bar Focus timer)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Resume Focus" }));
     expect(getFocusSession().running).toBe(true);
   });
+
+  it("asks 'while you were away' from a popover, with a way into Focus (TV-F1)", () => {
+    renderTimer();
+    startOn("Write spec");
+    act(() => {
+      rs.setSystemTime(Date.now() + 10 * 60_000); // the laptop slept for 10 minutes
+      rs.advanceTimersByTime(1000);
+    });
+
+    const trigger = screen.getByRole("button", { name: /^You were away 10m/ });
+    expect(trigger.textContent?.replace(/\s/g, " ")).toBe("Away 10m");
+    fireEvent.click(trigger);
+    expect(screen.queryByText("You were away 10m.")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Open Focus" })).not.toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Count as break" }));
+    expect(getFocusSession().away).toBeNull();
+    expect(screen.queryByRole("button", { name: /^You were away/ })).toBeNull();
+  });
+
+  it("leaves the away question to the Focus view while it's asking (asked once)", () => {
+    render(
+      <TooltipProvider>
+        <FocusSessionChip />
+        <AwayOnFocusView />
+      </TooltipProvider>,
+    );
+    startOn("Write spec");
+    act(() => {
+      rs.setSystemTime(Date.now() + 10 * 60_000);
+      rs.advanceTimersByTime(1000);
+    });
+    expect(screen.queryByRole("button", { name: /^You were away/ })).toBeNull();
+    expect(screen.getByRole("button", { name: /^Focus — Write spec/ })).not.toBeNull();
+  });
 });
+
+/** Stands in for the Focus view's Now card, which shows the full prompt. */
+function AwayOnFocusView() {
+  const session = useFocusSession();
+  return session.away ? <FocusAwayPrompt away={session.away} /> : null;
+}
 
 describe("formatClock", () => {
   it("drops the leading zero under an hour and adds hours from an hour on", () => {

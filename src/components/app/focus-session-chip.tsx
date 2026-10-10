@@ -3,8 +3,9 @@ import { CloudOff, Coffee, Pause, Play } from "lucide-react";
 
 import { formatAwaySpan } from "../../features/focus/away-copy";
 import { toggleFocusRunning, useFocusSession } from "../../features/focus/engine";
-import { FocusAwayPrompt } from "../../features/focus/ui/away-prompt";
+import { FocusAwayPrompt, useFullAwayPromptShown } from "../../features/focus/ui/away-prompt";
 import { requestFocusView } from "../../features/focus/view-request";
+import { Button } from "../ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 
@@ -23,17 +24,20 @@ const buttonFocus =
  * the controls Focus-only (call 96).
  *
  * "While you were away" (TV-F1) still waits for an answer from any screen: the
- * timer reads "Away 42m" and a click asks the question in a popover. Stopped
+ * timer reads "Away 42m" and a click asks the question in a popover (not on the
+ * Focus view, whose Now card asks it already). Stopped
  * with tracked time still unsaved, it says so until the retry lands (F1-7).
  * Renders nothing otherwise.
  *
  * At the 1024px minimum window the right of the top bar has room for about
- * "1:04:12", so the wordy states are shortened below `xl`: a cup for "Break",
- * "Away" without its length, and an icon for "not saved yet". Their tooltips
- * and labels always say it in full.
+ * "1:04:12", so the wordy states shorten until that group (an `@container` in
+ * app-chrome) is at least `@2xs` wide: a cup for "Break", "Away" without its
+ * length, and an icon for "not saved yet". Tooltips and labels say them in full.
  */
 export function FocusSessionChip() {
   const session = useFocusSession();
+  // On the Focus view the Now card already asks "while you were away".
+  const awayAskedThere = useFullAwayPromptShown();
   const navigate = useNavigate();
   const openFocus = () => {
     requestFocusView();
@@ -49,10 +53,10 @@ export function FocusSessionChip() {
           data-slot="focus-timer"
           onClick={openFocus}
           aria-label="Focus time not saved yet · retrying, nothing is lost · click to open"
-          className={`flex h-8 min-w-8 shrink-0 items-center justify-center rounded-md font-sans text-xs text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground xl:px-2 ${buttonFocus}`}
+          className={`flex h-8 min-w-8 shrink-0 items-center justify-center rounded-md font-sans text-xs text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground @2xs:px-2 ${buttonFocus}`}
         >
-          <CloudOff className="size-4 xl:hidden" aria-hidden />
-          <span className="hidden xl:inline">Focus time not saved yet</span>
+          <CloudOff className="size-4 @2xs:hidden" aria-hidden />
+          <span className="hidden @2xs:inline">Focus time not saved yet</span>
         </TooltipTrigger>
         <TooltipContent>Retrying — nothing is lost · click to open Focus</TooltipContent>
       </Tooltip>
@@ -66,7 +70,8 @@ export function FocusSessionChip() {
   const state = session.running ? "" : " (paused)";
   const unsaved = session.unsaved ? " · time not saved yet" : "";
   const tip = `Focus — ${label}${phaseTip}${state}${unsaved} · click to open`;
-  const awaySpan = session.away ? formatAwaySpan(session.away.awaySeconds) : "";
+  const away = awayAskedThere ? null : session.away;
+  const awaySpan = away ? formatAwaySpan(away.awaySeconds) : "";
   const toggleLabel = session.running ? "Pause Focus" : "Resume Focus";
   const ToggleIcon = session.running ? Pause : Play;
 
@@ -89,8 +94,8 @@ export function FocusSessionChip() {
               <Pause className="size-3" />
             ) : onBreak ? (
               <>
-                <Coffee className="size-3 xl:hidden" />
-                <span className="hidden size-1.5 rounded-full bg-muted-foreground xl:block" />
+                <Coffee className="size-3 @2xs:hidden" />
+                <span className="hidden size-1.5 rounded-full bg-muted-foreground @2xs:block" />
               </>
             ) : (
               <span className="size-1.5 rounded-full bg-muted-foreground" />
@@ -103,7 +108,7 @@ export function FocusSessionChip() {
         </TooltipTrigger>
         <TooltipContent>{toggleLabel}</TooltipContent>
       </Tooltip>
-      {session.away ? (
+      {away ? (
         <Popover>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -111,20 +116,23 @@ export function FocusSessionChip() {
                 aria-label={`You were away ${awaySpan} · ${tip}`}
                 className={`${clockClass} text-foreground`}
               >
-                Away<span className="hidden xl:inline">&nbsp;{awaySpan}</span>
+                Away<span className="hidden @2xs:inline">&nbsp;{awaySpan}</span>
               </PopoverTrigger>
             </TooltipTrigger>
             <TooltipContent>{tip}</TooltipContent>
           </Tooltip>
-          <PopoverContent align="end" className="w-80 p-3">
-            <FocusAwayPrompt away={session.away} />
+          <PopoverContent align="end" className="w-80 space-y-1 p-3">
+            <FocusAwayPrompt away={away} compact />
+            <Button variant="ghost" size="sm" onClick={openFocus}>
+              Open Focus
+            </Button>
           </PopoverContent>
         </Popover>
       ) : (
         <Tooltip>
           <TooltipTrigger onClick={openFocus} aria-label={tip} className={clockClass}>
             {onBreak ? (
-              <span className="hidden xl:inline">{capitalize(session.phaseLabel)}&nbsp;</span>
+              <span className="hidden @2xs:inline">{capitalize(session.phaseLabel)}&nbsp;</span>
             ) : null}
             {formatClock(session.bigClock)}
           </TooltipTrigger>

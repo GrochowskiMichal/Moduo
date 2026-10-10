@@ -9,6 +9,7 @@ import { useId, useState } from "react";
 import { toast } from "sonner";
 
 import { IS_DESKTOP } from "../../features/settings/about";
+import { useReturnFocus } from "../../hooks/use-return-focus";
 import { Button } from "../ui/button";
 import {
   Dialog,
@@ -29,8 +30,12 @@ import {
   mailtoUrl,
 } from "./help-links";
 
-/** Keeps the mailto link under the length mail apps reliably accept. */
-const MAX_DESCRIPTION = 1500;
+/**
+ * A short form. Some mail apps cut a mailto link at about 2,000 characters, and
+ * encoding can triple non-ASCII text, so a long report may arrive cut; the
+ * toast's "Copy report" always carries all of it.
+ */
+const MAX_DESCRIPTION = 1000;
 
 /** Copy text to the clipboard; false when the browser refuses. */
 export async function copyText(text: string): Promise<boolean> {
@@ -61,6 +66,7 @@ export function BugReportDialog({
 }) {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const fieldId = useId();
+  const returnFocus = useReturnFocus(open);
   // The draft survives Cancel, so closing by accident loses nothing.
   const [description, setDescription] = useState("");
   const context = bugReportContext(pathname);
@@ -91,7 +97,7 @@ export function BugReportDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md" onCloseAutoFocus={returnFocus}>
         <DialogHeader>
           <DialogTitle>Report a bug</DialogTitle>
           <DialogDescription>

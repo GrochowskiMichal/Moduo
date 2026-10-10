@@ -9,6 +9,7 @@
 // sheet stays closed on that route. Mirrors the tasks/email Kbd + dialog pattern.
 
 import { Fragment, type ReactNode, useEffect, useState } from "react";
+import { useReturnFocus } from "../../hooks/use-return-focus";
 import { formatShortcut, onShortcut, SHORTCUTS, type ShortcutId } from "../../lib/shortcuts";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../ui/dialog";
 import { Kbd } from "../ui/kbd";
@@ -44,6 +45,7 @@ const MODULE_SHORTCUTS = SHORTCUTS.filter((s) => s.id.startsWith("module-"));
 
 export function GlobalShortcutsDialog() {
   const [open, setOpen] = useState(false);
+  const returnFocus = useReturnFocus(open);
 
   useEffect(() => onShortcut("help", () => setOpen(true)), []);
 
@@ -75,7 +77,7 @@ export function GlobalShortcutsDialog() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="max-w-sm" onCloseAutoFocus={returnFocus}>
         <DialogHeader>
           <DialogTitle>Keyboard shortcuts</DialogTitle>
           <DialogDescription>Move around Moduo without the mouse.</DialogDescription>

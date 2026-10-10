@@ -92,7 +92,12 @@ describe("HelpMenu", () => {
     renderMenu();
     await choose("Keyboard shortcuts");
     expect(screen.queryByRole("menu")).toBeNull();
-    expect(screen.getByRole("dialog", { name: "Keyboard shortcuts" })).not.toBeNull();
+    const dialog = screen.getByRole("dialog", { name: "Keyboard shortcuts" });
+
+    fireEvent.keyDown(dialog, { key: "Escape", code: "Escape" });
+    await settle();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Help" }));
   });
 
   it("writes to support@ from Contact support", async () => {

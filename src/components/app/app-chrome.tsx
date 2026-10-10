@@ -521,7 +521,8 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
           })}
         </div>
 
-        <div className="flex flex-row items-center justify-end gap-1">
+        {/* A container, so the Focus timer can shorten itself when this side is narrow. */}
+        <div className="@container flex flex-row items-center justify-end gap-1">
           {/* DF-21f — web-only email follow-up-due sweep (renders nothing). */}
           <EmailDueWebSweep />
           <UpdateOnLaunch />

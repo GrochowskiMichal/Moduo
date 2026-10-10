@@ -49,8 +49,8 @@ function FocusFixture({
       clearStoredSession();
     };
   }, [setup]);
-  // Sits where the top bar puts it: right-aligned, left of Help.
-  return ready ? <div className="flex justify-end p-4">{children}</div> : null;
+  // Sits where the top bar puts it: right-aligned in a container, left of Help.
+  return ready ? <div className="@container flex justify-end p-4">{children}</div> : null;
 }
 
 const meta: Meta<typeof FocusSessionChip> = {
