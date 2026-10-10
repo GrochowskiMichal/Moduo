@@ -3,7 +3,6 @@ import { defineConfig, devices } from "@playwright/test";
 const STORYBOOK_URL = process.env.STORYBOOK_URL ?? "http://127.0.0.1:6006";
 
 export default defineConfig({
-  testDir: "./tests",
   timeout: 30_000,
   expect: {
     toHaveScreenshot: {
@@ -16,7 +15,7 @@ export default defineConfig({
   projects: [
     {
       name: "e2e",
-      testIgnore: ["**/visual/**"],
+      testDir: "./e2e",
       use: {
         ...devices["Desktop Chrome"],
         baseURL: "http://127.0.0.1:8081",
@@ -24,7 +23,7 @@ export default defineConfig({
     },
     {
       name: "visual",
-      testMatch: ["**/visual/**/*.spec.ts"],
+      testDir: "./tests/visual",
       use: {
         ...devices["Desktop Chrome"],
         baseURL: STORYBOOK_URL,
@@ -40,11 +39,16 @@ export default defineConfig({
       reuseExistingServer: true,
       timeout: 120_000,
     },
-    {
-      command: "bun run storybook -- --no-open --ci",
-      url: STORYBOOK_URL,
-      reuseExistingServer: true,
-      timeout: 180_000,
-    },
+    // The smoke run (`bun run e2e:smoke`, CI) never opens Storybook, so it skips the slow start.
+    ...(process.env.E2E_NO_STORYBOOK
+      ? []
+      : [
+          {
+            command: "bun run storybook -- --no-open --ci",
+            url: STORYBOOK_URL,
+            reuseExistingServer: true,
+            timeout: 180_000,
+          },
+        ]),
   ],
 });

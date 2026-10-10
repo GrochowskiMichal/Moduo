@@ -18,8 +18,8 @@ test.describe("Invite paywall", () => {
   test("paywall page renders the Team plan invite features", async ({ page }) => {
     await page.goto(`${BASE_URL}/paywall`);
 
-    // The Team plan features list should mention collaboration / sharing.
-    const teamSection = page.locator("text=Real-time collaboration").first();
+    // The Team plan features list should mention roles / guests.
+    const teamSection = page.getByText("Roles, permissions and guests");
     await expect(teamSection).toBeVisible();
   });
 

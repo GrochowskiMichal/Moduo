@@ -63,3 +63,35 @@ jobs:
 
       - name: Unit tests
         run: bun run test
+
+  # Unauthenticated smoke of the web app (paywall, auth, redirect). The authed suites need a
+  # seeded test Supabase project and stay manual: `bun run e2e` (see docs/gotchas/build-ci.md).
+  e2e-smoke:
+    if: github.event_name == 'pull_request' && github.base_ref == 'develop'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install frontend deps
+        run: bun install --frozen-lockfile
+
+      - name: Install Chromium
+        run: bunx playwright install --with-deps chromium
+
+      - name: E2E smoke
+        run: bun run e2e:smoke
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-smoke-results
+          path: test-results/
+          retention-days: 7
