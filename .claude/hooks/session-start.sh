@@ -47,7 +47,17 @@ else
   echo "  off mike or maciej, not main/develop."
 fi
 echo
-echo "Before building, read: docs/decisions.md · docs/gotchas.md · specs/BUILD_ORDER.md"
-echo "(all short indexes). Open docs/gotchas/<area>.md for the area you will touch."
-echo "Build → /s2 (claims the next ready block) · plan → /s1 · finish → /s3."
+# Operator mode (AGENTS.md §Working posture): docs/local/OPERATOR holds `designer`
+# (default) or `engineer`; MODUO_OPERATOR overrides it for one shell.
+mode="${MODUO_OPERATOR:-}"
+if [ -z "$mode" ] && [ -f docs/local/OPERATOR ]; then
+  mode=$(head -1 docs/local/OPERATOR | tr -d '[:space:]')
+fi
+case "$mode" in engineer|designer) ;; *) mode="designer" ;; esac
+echo "Operator mode: $mode (docs/local/OPERATOR; see AGENTS.md §Working posture)."
+echo
+echo "Before building, read docs/gotchas.md (index) and docs/gotchas/<area>.md for the area"
+echo "you will touch, plus the last five entries of docs/decisions/<area>.md. What is ready"
+echo "to build: bun run next (block state comes from PRs, not from checkboxes)."
+echo "Build → /s2 <ID> (claims it with a draft PR, lands it) · plan → /s1 · wrap → /s3."
 exit 0

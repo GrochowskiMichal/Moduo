@@ -19,17 +19,17 @@ Marked rules are enforced in code; the rest you hold yourself.
 ## Session start
 
 1. **Base check.** The SessionStart hook prints whether you are behind the personal branch; reconcile before editing. Note whether `origin/develop` moved.
-2. **Read three short files:** [docs/decisions.md](./docs/decisions.md) (one-line index of every decision), [docs/gotchas.md](./docs/gotchas.md) (areas of traps) and [specs/BUILD_ORDER.md](./specs/BUILD_ORDER.md) (open blocks and lanes only). **Before working in an area, open its `docs/gotchas/<area>.md`** and any `docs/decisions/<area>.md` you need. Finished history is in [specs/BUILD_LOG.md](./specs/BUILD_LOG.md); for why code exists, `entire search` / `entire why` are faster.
+2. **Read little, read the right thing:** [docs/gotchas.md](./docs/gotchas.md) (index of trap areas), then **`docs/gotchas/<area>.md` and the last five entries of `docs/decisions/<area>.md` for the area you touch**. What is ready to build is a query, `bun run next`, not a file. [docs/decisions.md](./docs/decisions.md) is a generated index for people; [specs/BUILD_LOG.md](./specs/BUILD_LOG.md) is finished history. For why code exists, `entire search` / `entire why` are faster.
 3. **Read `docs/local/` if it exists** (the gitignored personal layer); never require it.
 4. **Title the session** the moment its purpose is clear: write one line to `.claude/SESSION_TITLE` (gitignored; a SessionStart hook applies it). Planning: `[<Module>] <short title>`. Building: `[<Module> <BLOCK-ID>] <block name>`.
 
 ## Working posture
 
-The user is a **product designer, not an engineer**: authoritative on product, UX, edge cases, scope and priorities; not on infrastructure, data models or testing.
+Two operators, one switch. `docs/local/OPERATOR` (gitignored; the preflight prints it) holds **`designer`** (the default: Maciej, authoritative on product, UX, edge cases, scope and priorities, not on infrastructure, data models or testing) or **`engineer`** (Mike: wants the agent to push through and raise product-code tradeoffs against working code). The machine gates are identical in both modes; only how much the agent asks, and when, changes.
 
-- **Plan (`/s1`, read-only):** grill exhaustively on product behavior (50–100 questions up front, each with a recommended answer). **Never ask implementation, infra, data-model or library questions**: research and decide them, and record decision + assumption in the spec. Surface a technical choice only when the user would feel it, in product terms, with a recommendation. End at the Definition-of-Ready gate in [specs/_template.md](./specs/_template.md).
-- **Execute (`/s2`, autonomous):** stay silent between tool calls; report once, opening with a **Status** line, then **Changed · Test this · To finish this block** (+ **❓ Needs you / ⚠ Broke / 🔎 Found, not needed for this block** when they apply) and a **Session** line saying whether it's safe to archive. One block per session; never leave unlanded work only in the worktree. A block is done when `bun run verify` passes **and** the `validator` subagent reports no BLOCKER/MAJOR. The only acceptable mid-run interruption is a hard blocker research can't resolve.
-- **Wrap (`/s3`):** manual test checklist in `docs/testing/<branch-or-sprint>.md` ([template](./docs/testing/TEMPLATE.md)), live-verified first; decisions + gotchas appended; commit, PR, merge; review gates by risk.
+- **Plan (`/s1`, read-only):** designer mode grills exhaustively on product behavior (50–100 questions up front, each with a recommended answer); engineer mode asks 10–20 product-code questions and records the rest as assumptions. **Never ask the designer implementation, infra, data-model or library questions**: research and decide them, and record decision + assumption in the spec. Surface a technical choice only when the user would feel it, in product terms, with a recommendation. Take the **first two blocks** to Definition-of-Ready ([specs/_template.md](./specs/_template.md)); later blocks may carry low-confidence assumptions with a named verification step.
+- **Execute (`/s2`, autonomous):** stay silent between tool calls; build the block's oracle (one test per acceptance criterion) first; pass `bun run verify` and the `validator` (no BLOCKER/MAJOR); then **land it on the personal branch yourself** (Tier 0/1 diffs; Tier 2 stops for the deep review). Report once, as the PR body: a **Status** line, then **Changed · Test this · To finish this block** (+ **❓ Needs you / ⚠ Broke / 🔎 Found, not needed for this block** when they apply) and a **Session** line. Every low-confidence assumption you built on goes under ❓ Needs you with what you did and what a different answer changes. One block per session; never leave unlanded work only in the worktree. The only mid-run interruption is a hard blocker research can't resolve.
+- **Wrap (`/s3`):** what `/s2` couldn't land (Tier 2 gates, the `develop` sync, work done outside `/s2`); the **sitting checklist** for user-visible changes in `docs/testing/<ISO-week>.md` ([template](./docs/testing/TEMPLATE.md): questions with an expected observation, live-verified first); decisions + gotchas; then `bun run next` for what's ready. It edits the PR body instead of writing a second report.
 
 ## Models (Anthropic only, Claude Max plan, October 2026)
 
@@ -50,7 +50,7 @@ On Max, Fable counts against at most half the weekly limit. On Pro it bills usag
 
 Pick the tier by what the diff touches; details and commands are in the `/s3` skill.
 
-- **Tier 0, every block:** `bun run verify` + hooks + Rust LSP diagnostics, then the `validator` subagent and `/code-review high`.
+- **Tier 0, every block:** the block's oracle (its tests) + `bun run verify` + hooks + Rust LSP diagnostics, then the `validator` subagent and `/code-review high`. CI adds what a human used to check: the guard hooks' own tests (`bun run test:hooks`), the decisions-index check and `cargo check` when `src-tauri/` changed.
 - **Tier 1, every PR into `develop`:** `/code-review high <PR>` on the PR plus the review checklist in [REVIEW.md](./REVIEW.md).
 - **Tier 2, risky paths** (migrations, RLS/policies, contracts, `delete-account`, billing functions, `moduo-mcp`, `meet-*`, `src/lib/runtime*`, updater/signing, `.github/workflows`): add `/code-review ultra <PR>` and a `/claude-security` diff scan before merging.
 - **Tier 3, promotion to `prod-app`:** the designer's manual checklist pass.
@@ -62,9 +62,9 @@ Pick the tier by what the diff touches; details and commands are in the `/s3` sk
 ## Knowledge map
 
 - **Architecture:** [docs/architecture.md](./docs/architecture.md) (code layout) · [docs/data-layers.md](./docs/data-layers.md) · [docs/moduo-module-contract.md](./docs/moduo-module-contract.md) · vocabulary: [docs/moduo-architecture-vocabulary.md](./docs/moduo-architecture-vocabulary.md).
-- **Decisions:** index [docs/decisions.md](./docs/decisions.md), full entries in `docs/decisions/<area>.md`. Add a decision as a full entry at the top of its area file **plus** one line in the index.
+- **Decisions:** full entries in `docs/decisions/<area>.md`; the index [docs/decisions.md](./docs/decisions.md) is generated. Add a decision as a full entry at the top of its area file, then `bun run gen:decisions-index` (CI fails on a stale index).
 - **Gotchas:** index [docs/gotchas.md](./docs/gotchas.md), entries in `docs/gotchas/<area>.md`. Append when something costs you more than a few minutes; a trap that bites twice becomes a hook, lint rule or test (with the fix in its error message).
-- **Execution ledger:** [specs/BUILD_ORDER.md](./specs/BUILD_ORDER.md) (open blocks; claim a block before building it) · [specs/BUILD_LOG.md](./specs/BUILD_LOG.md) (finished).
+- **Execution ledger:** [specs/BUILD_ORDER.md](./specs/BUILD_ORDER.md) is the dependency graph (IDs, deps, lanes, focus); block **state** comes from PRs: a draft PR titled `[<ID>] …` claims a block, its merge finishes it, `bun run next` reads both. Nothing to tick. [specs/BUILD_LOG.md](./specs/BUILD_LOG.md) is finished history, regenerated by the gardener.
 - **Agent setup:** [docs/agent-setup.md](./docs/agent-setup.md) · **Entire:** [docs/entire.md](./docs/entire.md).
 
 ## Stack
@@ -75,6 +75,7 @@ Tauri 2 + React 19 + Rsbuild + TanStack Router + Tailwind CSS v4, TypeScript 7, 
 
 - `bun run dev:web` (http://127.0.0.1:8081) · `bun run dev:desktop` · `bun run build:web` / `build:desktop` · `bun run storybook` (port 6006)
 - `bun run verify` = typecheck + Biome + lint:tw + lint:css + tests: **the block-done gate**. It covers no Rust: see `src-tauri/AGENTS.md`.
+- `bun run next` (ready blocks, from the ledger graph + PR state) · `bun run test:hooks` (the guard hooks against fixtures) · `bun run gen:decisions-index`
 - `bun test` / `bun run e2e`
 
 ## Repo layout (short)
@@ -98,7 +99,7 @@ Closed vocabularies (plan tier, task status, roles, link origins, …) live in `
 
 ## Agent tooling (Claude Code)
 
-- **Skills** (`.claude/skills/`): `/s1` plan · `/s2` build one block (inside `/goal`) · `/s3` wrap and land · `moduo-design-quality` (design audit/polish/build). Plugins add the grilling, TDD and debugging skills `/s1`–`/s3` call, language servers (Rust diagnostics, TypeScript navigation), security scanning and Supabase rules; they are enabled for the project in `.claude/settings.json`.
+- **Skills** (`.claude/skills/`): `/s1` plan · `/s2` build and land one block (inside `/goal`) · `/s3` wrap what didn't land · `moduo-design-quality` (design audit/polish/build). Plugins add the grilling, TDD and debugging skills `/s1`–`/s3` call, language servers (Rust diagnostics, TypeScript navigation), security scanning and Supabase rules; they are enabled for the project in `.claude/settings.json`.
 - **Subagents** (`.claude/agents/`): `validator`, the skeptical staff review that gates every block.
 - **Hooks** (`.claude/hooks/`): session preflight + title, notifications, Entire capture, and the three guards above.
 - **MCP:** `supabase`, `vercel` in `.mcp.json` (`claude mcp login <name>` once per machine). GitHub work goes through the `gh` CLI.
@@ -106,7 +107,7 @@ Closed vocabularies (plan tier, task status, roles, link origins, …) live in `
 
 ## Personal layer
 
-`docs/local/` (gitignored) holds personal, project-specific notes. Read it if present, never fail if absent, never commit it. Machine-global personal rules go in `~/.claude/CLAUDE.md`.
+`docs/local/` (gitignored) holds personal, project-specific notes and the `OPERATOR` switch (`designer` | `engineer`). Read it if present, never fail if absent, never commit it. Machine-global personal rules go in `~/.claude/CLAUDE.md`.
 
 ## Out of scope right now
 

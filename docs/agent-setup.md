@@ -4,7 +4,8 @@ How to run the agent workflow ([AGENTS.md](../AGENTS.md)) unsupervised. Moduo is
 
 ## What the repo provides (committed)
 
-- **Skills** (`.claude/skills/`): `/s1` plan, `/s2` build one block, `/s3` wrap and land, `moduo-design-quality`.
+- **Skills** (`.claude/skills/`): `/s1` plan, `/s2` build and land one block, `/s3` wrap what didn't land, `moduo-design-quality`.
+- **Scripts the workflow runs:** `bun run next` (what is ready to build: the dependency graph in `specs/BUILD_ORDER.md` plus PR state, so a block is claimed by its draft PR and done by its merge), `bun run test:hooks` (the guard hooks against fixtures; CI runs it), `bun run gen:decisions-index` (regenerates `docs/decisions.md`; CI fails when it is stale).
 - **Subagent** (`.claude/agents/validator.md`): the skeptical staff review `/s2` runs before a block counts as done.
 - **Plugins** (enabled in `.claude/settings.json`, installed for you on first trust):
   - `mattpocock-skills`: grilling, prototype, to-tickets, tdd, diagnosing-bugs, handoff, retro, improve-codebase-architecture. Configured through [docs/agents/](./agents/).
@@ -15,7 +16,7 @@ How to run the agent workflow ([AGENTS.md](../AGENTS.md)) unsupervised. Moduo is
   - `ts7-lsp` (ours, from `tools/claude-plugins/`, marketplace `moduo-local`): TypeScript 7's own language server (`tsc --lsp`) for go-to-definition, references, hover and symbols. It reports no type errors after edits; `bun run typecheck` does.
   - `skill-creator`: evals for our own skills.
 - **Hooks** (`.claude/hooks/`, wired in `.claude/settings.json`):
-  - `session-start.sh`: stale-base preflight and the reading list. `session-title.sh` applies `.claude/SESSION_TITLE`.
+  - `session-start.sh`: stale-base preflight, the operator mode and the reading list. `session-title.sh` applies `.claude/SESSION_TITLE`.
   - `guard-git.sh`: blocks direct pushes to `main`/`develop`/`prod-app`/`staging-app` and bare force-pushes.
   - `guard-secrets.sh`: gitleaks scan of staged changes on every commit.
   - `guard-design-tokens.sh`: re-runs `lint:tw` + `lint:css` after UI edits, and wakes Claude only on a violation.
@@ -27,8 +28,8 @@ How to run the agent workflow ([AGENTS.md](../AGENTS.md)) unsupervised. Moduo is
 
 ## What GitHub and the cloud provide
 
-- **Branch ruleset** "Protect main and develop": both change only through a pull request whose `static-checks` job (`checks.yml`: verify, Biome, gitleaks) passed. Force-pushes and deletion are blocked, and nobody bypasses it. `/s3` waits for the check before merging into `develop`. Personal and task branches are unprotected.
-- **Weekly knowledge gardener**, a Claude Code routine (Mondays 07:07 Warsaw, Sonnet 5.5, Anthropic cloud). It re-syncs the decisions and gotchas indexes, moves finished blocks to `BUILD_LOG.md`, lists possibly superseded decisions, duplicate gotchas and hook candidates, and opens one PR into `mike` for review. It never merges. Manage it at [claude.ai/code/routines](https://claude.ai/code/routines). It needs the [Claude GitHub App](https://github.com/apps/claude) installed on the repo to push.
+- **Branch ruleset** "Protect main and develop": both change only through a pull request whose `static-checks` job (`checks.yml`: verify, Biome, gitleaks, hook tests, decisions-index check) passed. A second job, `rust-check`, runs `cargo check`, `cargo check --features lite` and `cargo test --lib` whenever `src-tauri/` changes. Force-pushes and deletion are blocked, and nobody bypasses it. `/s3` waits for the check before merging into `develop`. Personal and task branches are unprotected.
+- **Weekly knowledge gardener**, a Claude Code routine (Mondays 07:07 Warsaw, Sonnet 5.5, Anthropic cloud). Its steps, since 2026-10-10: (1) `bun run gen:decisions-index` and re-sync the gotchas index counts; (2) move every block whose `[<ID>]` PR merged (`bun run next --all --json` lists what is still open) from `specs/BUILD_ORDER.md` to the same section of `specs/BUILD_LOG.md`, collapsing sections with nothing left; (3) archive `docs/testing/*.md` files untouched for two weeks into `docs/testing/archive/`; (4) list possibly superseded decisions, duplicate gotchas and hook candidates; (5) tally PR `outcome:*` labels for the week. It opens one PR into `mike` for review and never merges. Manage it at [claude.ai/code/routines](https://claude.ai/code/routines); **its prompt there still has to be updated to these steps.** It needs the [Claude GitHub App](https://github.com/apps/claude) installed on the repo to push.
 
 ## One-time setup per machine
 
@@ -41,13 +42,17 @@ How to run the agent workflow ([AGENTS.md](../AGENTS.md)) unsupervised. Moduo is
 5. **Trust the project** when Claude Code asks; that installs the project plugins and the Supabase skills marketplace.
 6. **Max plan only:** `/advisor fable`, which lets Fable 5.1 advise Opus 5.5 at decision points (saved in your user settings). On Pro, skip it: Fable bills usage credits there.
 7. **Auto mode** for `/s2` runs (the default for new sessions on Pro and Max). Phone pushes need `agentPushNotifEnabled` / `inputNeededNotifEnabled` plus Remote Control.
-8. **Personal notes** (optional): `docs/local/` (gitignored), or machine-wide rules in `~/.claude/CLAUDE.md`.
+8. **Operator mode:** write `designer` or `engineer` to `docs/local/OPERATOR` (gitignored; the default is `designer`). It changes how much the agent asks and when, never the gates: see AGENTS.md §Working posture. `MODUO_OPERATOR=engineer` overrides it for one shell.
+9. **Personal notes** (optional): elsewhere in `docs/local/` (gitignored), or machine-wide rules in `~/.claude/CLAUDE.md`.
+10. **Verify the harness itself** on a new machine: `bun run test:hooks` (needs gitleaks), then the short human list in [docs/testing/harness-v2.md](./testing/harness-v2.md).
+
+Once-only chores still open from the 2026-10-07 harness move: revoke the old Modal key at Modal (it remains in git history); install the Claude GitHub App so the gardener can push.
 
 ## The unsupervised flow
 
 1. **Day:** `/s1 <topic>`, the grilling, spec, blocks and Definition-of-Ready gate (read-only; plan mode works).
-2. **Night shift:** one session per block, each in its own worktree (dispatch from `claude agents` or the desktop app). Start each with the `/goal` template from the `/s2` skill, so the session keeps working until the block's definition of done holds. `/s2` claims its block with a draft PR, so parallel sessions never take the same one.
-3. **Morning:** read each report's **Status** line first (Built, not landed · Blocked · Not started), then its **To finish this block** and **❓ Needs you** lists, and run the manual checklist. Then `/s3` runs the review gate the diff's risk calls for, merges into the personal branch, and syncs bigger chunks to `develop`.
+2. **Night shift:** one session per block, each in its own worktree (dispatch from `claude agents` or the desktop app). `bun run next` says what is ready. Start each with the `/goal` template from the `/s2` skill, so the session keeps working until the block is done **and landed** on the personal branch. `/s2` claims its block with a draft PR, so parallel sessions never take the same one, and merges it itself unless the diff is Tier 2.
+3. **Morning, one sitting:** read each PR body's **Status** line first (Landed · Built, not landed · Blocked), then **❓ Needs you** (the product-code decisions the agent built on an assumption) and **To finish this block**. Run the week's sitting checklist (`docs/testing/<ISO-week>.md`) at the surfaces. `/s3` only for what didn't land: Tier 2 reviews, the `develop` sync, and the checklist/memory for work done outside `/s2`.
 4. **Large audits and migrations** across many files run as dynamic workflows (put `ultracode` in the prompt). Watch long CI or release runs with `/loop`.
 
 The only two things you manage: **the work plan** and **your plan limits**.

@@ -1,14 +1,15 @@
 # Build order — the execution ledger
 
-> **Status of record for "what's next."** One flat, dependency-respecting sequence of every execution block across all ready specs, with a checkbox each. This is the single entry point a fresh session reads to know what to build next — the per-block detail lives in each spec's *Execution blocks* table.
+> **The dependency graph of every execution block.** One flat, dependency-respecting sequence of blocks across all ready specs: `**<ID> — <name>** · deps: <IDs or —> · lane <name> · notes`. The per-block detail lives in each spec's *Execution blocks* table.
 >
-> **How `/s2` uses this:** if you name a block, it builds that one. If you don't (e.g. `/s2 next`), it takes the **first unchecked block below whose dependencies are all ticked**, states which it picked and why, then builds it. On success it ticks the box here.
-> **How `/s3` uses this:** at session end it reconciles this file (ticks any block completed that session) and syncs each spec's `Status:` line.
+> **Block state is not kept here.** It is derived from pull requests: a **draft PR titled `[<ID>] …`** claims a block, its **merge** finishes it. `bun run next` reads this graph plus the PR list and prints what is `ready`, `claimed` or `waiting`; `bun run next <ID>` answers for one block. Nobody flips `[~]` or ticks `[x]` any more; the leading `[ ]` on each line is just the bullet, and a legacy `[x]` still counts as done.
+> **How `/s2` uses this:** if you name a block, it builds that one. If you don't (`/s2 next`), it takes the first `ready` block in its lane, states which it picked and why, claims it with the draft PR and lands it.
+> **How the gardener uses this:** weekly it moves blocks whose PR merged into [BUILD_LOG.md](./BUILD_LOG.md) and collapses finished sections.
 > **Invariant:** every block's dependencies appear **above** it, so strict top-to-bottom is always a valid order. Items at the same depth with disjoint deps may be built in parallel/any order.
 
 **Focus:** Tasks (TV-*, AT-*, and the DS-* blocks they need) · the website (moduo.app, PRs into `prod-landing`: BRAND-4, PRIV-2d) · transactional email templates (TX-*, plus BRAND-1's email logos), **not** the email module · set by Maciej 2026-10-08 — the designer's current focus area, edited by Mike or Maciej. `/s2` and `/s3` turn a 🔎 Found item into a chip or next-session suggestion only when it falls inside this; while it's unset, none do.
 
-Legend: `[ ]` not started · `[~]` in progress · `[x]` done (date + branch in the trailing note).
+Legend: `[ ]` a block (state from `bun run next`) · `[x]` legacy tick from before 2026-10-10, still counts as done.
 
 > **⚠ Reading the trailing notes: "migration deploy-ready but unapplied" is HISTORY, not current state.**
 > Many `[x]` notes below say a block's migration was "deploy-ready but unapplied", "deploy-gated", or "manual-test post-deploy". Those describe the world **on the day that block shipped** — sessions routinely could not reach prod. **As of 2026-07-29 (OPS-1 + OPS-2) every migration file in this repo is applied to prod**: every object those files *declare* (195 of them — tables, columns, functions, triggers, policies, one view) exists in prod, and no function body drifts semantically. See [`docs/reviews/ops-2-schema-reconciliation.md`](../docs/reviews/ops-2-schema-reconciliation.md), re-runnable via `bun run db:reconcile`. **Mind its limits (§1.1):** it is a name-existence + function-body check — **indexes, grants, function signatures, base-table columns and policy bodies are NOT compared**, which is exactly the class OPS-2's anon-EXECUTE hole fell into. "Applied" ≠ "audited".

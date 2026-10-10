@@ -63,3 +63,82 @@ jobs:
 
       - name: Unit tests
         run: bun run test
+
+      # The harness's own rules, proven by fixtures instead of a human checklist (AGENTS.md §Review gates).
+      - name: Guard hook tests
+        run: PATH="$PWD:$PATH" bun run test:hooks
+
+      - name: Decisions index is generated, not hand-edited
+        run: bun run gen:decisions-index --check
+
+  # `bun run verify` covers no Rust (src-tauri/AGENTS.md). This job runs the three Rust
+  # gates whenever src-tauri/ (or this workflow) changed; otherwise it exits early.
+  rust-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Did src-tauri change?
+        id: changed
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          BEFORE: ${{ github.event.before }}
+          SHA: ${{ github.sha }}
+        run: |
+          if [ "$EVENT" = "pull_request" ]; then from="$PR_BASE"; else from="$BEFORE"; fi
+          if [ -z "$from" ] || ! git cat-file -e "$from^{commit}" 2>/dev/null; then from="$SHA~1"; fi
+          if git diff --name-only "$from" "$SHA" -- src-tauri .github/workflows/checks.yml | grep -q .; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"; echo "No Rust change; skipping."
+          fi
+
+      - name: Linux build deps for Tauri 2
+        if: steps.changed.outputs.changed == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev patchelf
+
+      - name: Read Rust toolchain
+        if: steps.changed.outputs.changed == 'true'
+        id: toolchain
+        run: echo "channel=$(sed -n 's/^channel *= *"\(.*\)"/\1/p' src-tauri/rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Rust
+        if: steps.changed.outputs.changed == 'true'
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.toolchain.outputs.channel }}
+          components: rustfmt, clippy
+
+      - name: Cache Rust dependencies
+        if: steps.changed.outputs.changed == 'true'
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          shared-key: rust-check-linux
+          cache-on-failure: true
+
+      # tauri-build refuses to compile when frontendDist does not exist; an empty stub is enough for check/test.
+      - name: Stub the frontend dist
+        if: steps.changed.outputs.changed == 'true'
+        run: mkdir -p dist && [ -f dist/index.html ] || echo '<!doctype html>' > dist/index.html
+
+      - name: cargo check
+        if: steps.changed.outputs.changed == 'true'
+        working-directory: src-tauri
+        run: cargo check --locked
+
+      - name: cargo check --features lite
+        if: steps.changed.outputs.changed == 'true'
+        working-directory: src-tauri
+        run: cargo check --locked --features lite
+
+      - name: cargo test --lib
+        if: steps.changed.outputs.changed == 'true'
+        working-directory: src-tauri
+        run: cargo test --locked --lib

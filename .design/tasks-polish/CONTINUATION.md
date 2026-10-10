@@ -8,7 +8,7 @@
   `maciej`** so the user can test on `dev:desktop`. Don't push `main`/`develop`; force-push only this
   task branch with `--force-with-lease`.
 - Full record: [.design/tasks-polish/](.) — **DECISIONS.md** (read this first), BRIEF.md, TASKS.md,
-  and the two raw audits. Session breadcrumb: [docs/build-log.md](../../docs/build-log.md) (newest first).
+  and the two raw audits. Session breadcrumb: [docs/archive/build-log-tasks.md](../../docs/archive/build-log-tasks.md) (newest first).
 - Improvement plan: [docs/improvement-plan.md](../../docs/improvement-plan.md) — Session 11 is ☑;
   **Notes canary is the next planned session**.
 
