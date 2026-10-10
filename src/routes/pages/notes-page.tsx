@@ -15,15 +15,12 @@ import {
   useSensors,
 } from "@dnd-kit/core";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { CloudOff, PanelRight } from "lucide-react";
+import { CheckSquare, CloudOff, PanelRight } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { onCreateNew } from "../../components/app/create-events";
 import { FeaturePanelsShell } from "../../components/app/feature-panels-shell";
-import {
-  RightPanelSwitcher,
-  type RightPanelVariant,
-} from "../../components/app/right-panel-switcher";
+import { type PanelItem, RightPanel } from "../../components/app/right-panel";
 import { truncationNotice } from "../../components/app/truncation-notice";
 import { IconButton } from "../../components/ui/icon-button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../components/ui/tooltip";
@@ -192,7 +189,8 @@ export function NotesPage() {
     modulePermission: modulePermissions.tasks,
   });
 
-  // Task-detail rail variant — meta click opens it; note switch closes it.
+  // A task opened from the note shows in the right panel as an item ("← title")
+  // on top of the current view — meta click opens it; note switch closes it.
   const [taskDetailId, setTaskDetailId] = useState<string | null>(null);
   useEffect(() => {
     setTaskDetailId(null);
@@ -737,60 +735,51 @@ export function NotesPage() {
   const noteForPanel = selectedNote && !selectedNote.deletedAt ? selectedNote : null;
   const panelSession = noteForPanel && engine ? engine.getOrCreateSession(noteForPanel.id) : null;
 
-  const noteVariants: RightPanelVariant[] =
+  // The registered views (features/notes/panel-views.ts), unchanged from the
+  // old tabs until the module is rebuilt.
+  const noteViews =
     noteForPanel && selectedWorkspaceId
-      ? [
-          {
-            id: "detail",
-            label: "Detail",
-            render: () => (
-              // The hub is a drop target (NO-7b): dropping a note here links it
-              // to the open note (drag-onto-hub = link only).
-              <HubDropZone
-                target={{ type: "note", id: noteForPanel.id }}
-                disabled={!canEdit || degraded}
-              >
-                <NoteDetailPanel
-                  runtime={runtime}
-                  workspaceId={selectedWorkspaceId}
-                  noteId={noteForPanel.id}
-                  canEdit={canEdit && !degraded}
-                  currentUserId={userId}
-                  onOpenEntity={handleOpenEntity}
-                />
-              </HubDropZone>
-            ),
-          },
-          {
-            id: "comments",
-            label: "Comments",
-            render: () => (
-              <NoteCommentsPanel
+      ? {
+          detail: () => (
+            // The hub is a drop target (NO-7b): dropping a note here links it
+            // to the open note (drag-onto-hub = link only).
+            <HubDropZone
+              target={{ type: "note", id: noteForPanel.id }}
+              disabled={!canEdit || degraded}
+            >
+              <NoteDetailPanel
                 runtime={runtime}
                 workspaceId={selectedWorkspaceId}
                 noteId={noteForPanel.id}
-                noteLabel={displayTitle(noteForPanel.title)}
-                canComment={modulePermissions.notes !== "none"}
+                canEdit={canEdit && !degraded}
                 currentUserId={userId}
-                getSelectionQuote={getSelectionQuote}
-                onScrollToQuote={scrollToQuote}
+                onOpenEntity={handleOpenEntity}
               />
-            ),
-          },
-          {
-            id: "outline",
-            label: "Outline",
-            render: () => (
-              <NoteOutlinePanel doc={panelSession?.doc ?? null} onNavigate={outlineNavigate} />
-            ),
-          },
-        ]
-      : [];
+            </HubDropZone>
+          ),
+          comments: () => (
+            <NoteCommentsPanel
+              runtime={runtime}
+              workspaceId={selectedWorkspaceId}
+              noteId={noteForPanel.id}
+              noteLabel={displayTitle(noteForPanel.title)}
+              canComment={modulePermissions.notes !== "none"}
+              currentUserId={userId}
+              getSelectionQuote={getSelectionQuote}
+              onScrollToQuote={scrollToQuote}
+            />
+          ),
+          outline: () => (
+            <NoteOutlinePanel doc={panelSession?.doc ?? null} onNavigate={outlineNavigate} />
+          ),
+        }
+      : null;
 
-  const taskVariant: RightPanelVariant | null = detailTask
+  const taskItem: PanelItem | null = detailTask
     ? {
-        id: "task",
-        label: "Task",
+        key: `task:${detailTask.id}`,
+        title: detailTask.title,
+        icon: CheckSquare,
         render: () => (
           // The embedded task hub is a drop target too (DF-8): dragging a note
           // onto it links the note to the task, using the page's DndContext.
@@ -814,28 +803,22 @@ export function NotesPage() {
       }
     : null;
 
-  const panelVariants = taskVariant ? [taskVariant, ...noteVariants] : noteVariants;
-  const activePanel = taskVariant ? "task" : panelVariant;
-  const onPanelChange = (id: string) => {
-    if (id === "task") return;
-    setTaskDetailId(null); // leaving the Task tab closes the focused task
-    changePanelVariant(id as NotesPanelVariantId);
-  };
-
   // Always give the shell a right slot (DF-13): with no note open the panel
   // shows a quiet empty state instead of vanishing — the surface stays real.
-  const right =
-    noteForPanel && panelVariants.length > 0 ? (
-      <RightPanelSwitcher
-        variants={panelVariants}
-        activeId={activePanel}
-        onChange={onPanelChange}
-      />
-    ) : (
-      <div className="grid h-full place-content-center px-4 text-center text-sm text-muted-foreground">
-        Select a note to see its links, comments, and outline.
-      </div>
-    );
+  const right = noteViews ? (
+    <RightPanel
+      module="notes"
+      views={noteViews}
+      activeId={panelVariant}
+      onChange={(id) => changePanelVariant(id as NotesPanelVariantId)}
+      items={taskItem ? [taskItem] : []}
+      onBack={() => setTaskDetailId(null)}
+    />
+  ) : (
+    <div className="grid h-full place-content-center px-4 text-center text-sm text-muted-foreground">
+      Select a note to see its links, comments, and outline.
+    </div>
+  );
 
   const editorNoteId = noteForPanel?.id ?? null;
 

@@ -310,13 +310,16 @@ Established during the Tasks rebuild; **reusable across modules** (Notes adopts 
   `CompleteToggle`, `EmptyState`. `TagChip` v2 = colored `#` + neutral name (no
   dot/pill); active filter chip = full-hue.
 
-### Motion (Session 11)
-Restrained + a **fade/micro-blur** signature. Tokens are load-bearing — no raw
+### Motion (Session 11; foundations re-set by SH-1, 2026-10-10)
+Quiet and quick, **no blur** (tasks-v3 call 81). Tokens are load-bearing — no raw
 ms/cubic. `--motion-fade` for opacity/color (survives reduced-motion at ~80ms);
-`--motion-*`/`--ease-*` for movement (zeroed under reduced-motion). `--blur-veil`
-for overlay/popover/mode-shift fade+blur-in (→0 reduced). One sanctioned delight:
-the check-off `.check-pop`. Reveal-on-hover **reserves space + fades opacity**
-(never `hidden`→`flex`, which reflows). No spring-heavy / sparkle / glow motion.
+`--motion-fast/base/slow` (100/180/280 ms) + `--ease-out`/`--ease-in` for
+movement (zeroed under reduced-motion). Four shared patterns in `global.css`:
+`.motion-panel`, `.motion-pop` (in the floating primitives), `.motion-row`,
+`.motion-view`; reduced motion leaves only opacity. No `backdrop-filter`. One
+sanctioned delight: the check-off `.check-pop`. Reveal-on-hover **reserves
+space + fades opacity** (never `hidden`→`flex`, which reflows). No spring-heavy /
+sparkle / glow motion. Full rule: DESIGN_RULES.md R6.
 
 ### Accent-usage policy (Session 11)
 Accent (`--primary`/`--ring`) appears ONLY on: (1) one primary action per surface

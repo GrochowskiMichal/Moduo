@@ -406,7 +406,7 @@ export function Composer({
         <div
           role="listbox"
           aria-label="Suggestions"
-          className="fx-overlay absolute right-0 bottom-full left-0 mb-1 flex max-h-72 flex-col gap-0.5 overflow-y-auto rounded-lg border border-border bg-popover p-1 text-popover-foreground"
+          className="absolute right-0 bottom-full left-0 mb-1 flex max-h-72 flex-col gap-0.5 overflow-y-auto rounded-lg border border-border bg-popover p-1 text-popover-foreground"
           style={{ zIndex: "var(--z-popover)", boxShadow: "var(--shadow-md)" }}
         >
           <span className="px-2 pt-1 pb-0.5 text-2xs text-muted-foreground">

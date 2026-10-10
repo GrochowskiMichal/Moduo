@@ -707,15 +707,18 @@
   --motion-instant: 0ms;
   --motion-fast:    100ms;
   --motion-base:    180ms;
-  --motion-slow:    320ms;
+  --motion-slow:    280ms;
   --motion-slower:  500ms;
 
-  /* Fade duration — used for opacity & color (and the blur-in motif). Kept
-     non-zero under reduced-motion so state changes still register softly. */
+  /* Fade duration — used for opacity & color. Kept non-zero under
+     reduced-motion so state changes still register softly. */
   --motion-fade:    100ms;
-  /* Blur amount for the overlay/popover/mode-shift fade+blur-in motif.
-     Animate from blur(var(--blur-veil)) → blur(0) alongside the opacity fade. */
-  --blur-veil:      0.25rem; /* 4px */
+
+  /* How far the four motion patterns travel (global.css, "Motion patterns";
+     tasks-v3 call 81). Neutral under reduced-motion, so every pattern falls
+     back to opacity alone. No blur anywhere (81: left out for performance). */
+  --motion-shift:   0.5rem; /* a panel slides in from this far */
+  --motion-grow:    0.96;   /* a popover grows from this scale at its origin */
 
   --ease-out:     cubic-bezier(0.16, 1, 0.3, 1);    /* drift-in */
   --ease-in-out:  cubic-bezier(0.65, 0, 0.35, 1);
@@ -724,8 +727,8 @@
 }
 
 /* Reduced motion = kill movement, keep tiny fades. Transforms/springs collapse
-   to 0ms (no travel); opacity/color fades stay ~80ms so feedback still reads;
-   the blur-in motif is disabled (veil → 0). The `data-motion` app override
+   to 0ms (no travel) and the pattern amounts go neutral; opacity/color fades
+   stay ~80ms so feedback still reads. The `data-motion` app override
    (Settings → Preferences, DF-19f) layers on top of the OS setting:
      • data-motion="reduced" forces reduced regardless of the OS.
      • data-motion="full" opts out of the OS reduce (the media query below
@@ -738,7 +741,8 @@
   --motion-slow:    0ms;
   --motion-slower:  0ms;
   --motion-fade:    80ms;
-  --blur-veil:      0;
+  --motion-shift:   0;
+  --motion-grow:    1;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -749,7 +753,8 @@
     --motion-slow:    0ms;
     --motion-slower:  0ms;
     --motion-fade:    80ms;
-    --blur-veil:      0;
+    --motion-shift:   0;
+    --motion-grow:    1;
   }
 }
 

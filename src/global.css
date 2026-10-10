@@ -290,38 +290,132 @@ body,
   }
 }
 
-/* ═══ Fade + micro-blur motif for floating surfaces (popovers, dialogs, menus,
-   selects). Enter/exit fade with a small blur-in. Uses --motion-fade so a soft
-   fade survives reduced-motion; --blur-veil is 0 under reduced-motion (no blur),
-   so the effect degrades to a plain fade. ═══ */
-@keyframes fx-overlay-in {
+/* ═══ Motion patterns (tasks-v3 call 81, SH-1) ═══
+   Four shared recipes; components use these classes, never their own keyframes.
+   The rule they share: opacity runs on --motion-fade (kept ~80ms under reduced
+   motion) and movement runs on --motion-fast/base/slow (zeroed under reduced
+   motion), travelling --motion-shift / --motion-grow (neutral under reduced
+   motion). So with reduced motion each pattern is a plain fade, from either
+   the OS setting or Settings → Preferences (data-motion). Arrivals ease out;
+   exits take a quicker ease-in. No blur (81).
+     1 · .motion-panel  a panel slides and fades in       (slow)
+     2 · .motion-pop    a popover grows from its origin   (base in, fade out)
+     3 · .motion-row    a row's height and opacity open   (base in, fast out)
+     4 · .motion-view   views crossfade                   (slow)
+   An exit that removes the element after it ends should wait for the
+   `motion-fade-out` animationend: the movement half can end first. ═══ */
+@keyframes motion-fade-in {
   from {
     opacity: 0;
-    filter: blur(var(--blur-veil));
-  }
-  to {
-    opacity: 1;
-    filter: blur(0);
   }
 }
 
-@keyframes fx-overlay-out {
-  from {
-    opacity: 1;
-    filter: blur(0);
-  }
+@keyframes motion-fade-out {
   to {
     opacity: 0;
-    filter: blur(var(--blur-veil));
   }
 }
 
-.fx-overlay[data-state="open"] {
-  animation: fx-overlay-in var(--motion-fade) var(--ease-out);
+@keyframes motion-slide-in {
+  from {
+    transform: translateX(calc(var(--motion-shift) * var(--motion-from, 1)));
+  }
 }
 
-.fx-overlay[data-state="closed"] {
-  animation: fx-overlay-out var(--motion-fade) var(--ease-out);
+@keyframes motion-grow-in {
+  from {
+    transform: scale(var(--motion-grow));
+  }
+}
+
+@keyframes motion-grow-out {
+  to {
+    transform: scale(var(--motion-grow));
+  }
+}
+
+@keyframes motion-row-open {
+  from {
+    grid-template-rows: 0fr;
+  }
+}
+
+@keyframes motion-row-close {
+  to {
+    grid-template-rows: 0fr;
+  }
+}
+
+/* 1 · Panels. Slides in from the right by default; `data-side="left"` comes
+   from the left. Applied by the panel shell when a panel opens. */
+.motion-panel {
+  animation:
+    motion-fade-in var(--motion-fade) var(--ease-out),
+    motion-slide-in var(--motion-slow) var(--ease-out);
+}
+
+.motion-panel[data-side="left"] {
+  --motion-from: -1;
+}
+
+/* 2 · Popovers, menus, selects and dialogs grow from where they were opened.
+   Radix sets --radix-popper-transform-origin on every popper's wrapper; a
+   dialog has none and grows from its centre. The exit's movement half runs on
+   --motion-fade too, so Radix (which unmounts on the first animationend) never
+   cuts the fade short under reduced motion, when --motion-grow is 1. */
+.motion-pop {
+  transform-origin: var(--radix-popper-transform-origin, center);
+}
+
+.motion-pop[data-state="open"] {
+  animation:
+    motion-fade-in var(--motion-fade) var(--ease-out),
+    motion-grow-in var(--motion-base) var(--ease-out);
+}
+
+.motion-pop[data-state="closed"] {
+  animation:
+    motion-fade-out var(--motion-fade) var(--ease-in) forwards,
+    motion-grow-out var(--motion-fade) var(--ease-in) forwards;
+}
+
+/* 3 · A row opening on add: the row is a one-row grid whose only child clips
+   its content while the track grows. Add `data-leaving` to play the exit, then
+   remove the row on the `motion-fade-out` animationend. */
+.motion-row {
+  display: grid;
+  grid-template-rows: 1fr;
+  animation:
+    motion-row-open var(--motion-base) var(--ease-out),
+    motion-fade-in var(--motion-fade) var(--ease-out);
+}
+
+.motion-row > * {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.motion-row[data-leaving] {
+  animation:
+    motion-row-close var(--motion-fast) var(--ease-in) forwards,
+    motion-fade-out var(--motion-fade) var(--ease-in) forwards;
+}
+
+/* 4 · A view switch: key the incoming view so it remounts, and it fades in.
+   It is all opacity, so under reduced motion it keeps a short fade instead of
+   the zeroed --motion-slow (both reduce paths, per gotchas/ui.md). */
+.motion-view {
+  animation: motion-fade-in var(--motion-slow) var(--ease-out);
+}
+
+:root[data-motion="reduced"] .motion-view {
+  animation-duration: var(--motion-fade);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion="full"]) .motion-view {
+    animation-duration: var(--motion-fade);
+  }
 }
 
 /* ═══ Notes: Lexical theme — token-driven ═══ */
