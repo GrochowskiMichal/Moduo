@@ -1,11 +1,12 @@
-// DF-20 — Global capture command bar routing.
+// DF-20 — capture write paths, used by the capture shell's one-line types
+// (components/app/capture-line.tsx, SH-1) and Chat's "make a task" action.
 //
-// The pure + runtime halves of capture-anywhere (critique CC-11): parse one line
-// into a target module + body, then write it through that module's create op. A
-// plain line is a Task in the Inbox — reusing the quick-capture write path
-// (`seedInbox` + `upsertTask`, same as the Home quick-capture widget) — while the
-// `/note` `/event` `/contact` prefixes route to the sibling modules. Kept out of
-// the UI so both halves are unit-testable with a mock runtime.
+// Writes one captured line through its module's create op. A Task lands in
+// the Inbox, reusing the quick-capture write path (`seedInbox` + `upsertTask`,
+// same as the Home quick-capture widget); notes, events and contacts go through
+// their own ops. The type is picked by the capture shell (⌘ + a module's
+// number, tasks-v3 call 90b), never by a "/note" prefix any more. Kept out of
+// the UI so it stays unit-testable with a mock runtime.
 
 import type { ModuoRuntime } from "../../lib/runtime.types";
 import { endPosition, makeTask } from "../tasks/helpers";
@@ -15,8 +16,6 @@ export type CaptureTarget = "task" | "note" | "event" | "contact";
 
 export type CaptureRoute = {
   target: CaptureTarget;
-  /** The slash prefix that selects this route ("" for the default Task). */
-  prefix: string;
   label: string;
   /** Module page the created entity lives on (the toast's "Open" jump). */
   openTo: string;
@@ -29,27 +28,15 @@ export type CaptureRoute = {
   lane: "tasks" | "notes" | null;
 };
 
-/**
- * Ordered routes. Task is the default (no prefix); the three sibling prefixes
- * route elsewhere. Order drives the hint legend + chip row in the capture bar.
- */
+/** One route per capture target, Task first. */
 export const CAPTURE_ROUTES: readonly CaptureRoute[] = [
-  { target: "task", prefix: "", label: "Task", openTo: "/tasks", lane: "tasks" },
-  { target: "note", prefix: "/note", label: "Note", openTo: "/notes", lane: "notes" },
-  { target: "event", prefix: "/event", label: "Event", openTo: "/calendar", lane: "tasks" },
-  { target: "contact", prefix: "/contact", label: "Contact", openTo: "/contacts", lane: null },
+  { target: "task", label: "Task", openTo: "/tasks", lane: "tasks" },
+  { target: "note", label: "Note", openTo: "/notes", lane: "notes" },
+  { target: "event", label: "Event", openTo: "/calendar", lane: "tasks" },
+  { target: "contact", label: "Contact", openTo: "/contacts", lane: null },
 ];
 
-const TASK_ROUTE = CAPTURE_ROUTES[0];
-
-/** Prefix → route, incl. an explicit `/task` alias for the default. Longest
- *  prefixes first so a future `/note…` can't be shadowed by a shorter match. */
-const PREFIX_ALIASES: ReadonlyArray<{ prefix: string; route: CaptureRoute }> = [
-  ...CAPTURE_ROUTES.filter((r) => r.prefix).map((route) => ({ prefix: route.prefix, route })),
-  { prefix: "/task", route: TASK_ROUTE },
-].sort((a, b) => b.prefix.length - a.prefix.length);
-
-/** The two lane permissions the capture bar can read from the workspace
+/** The two lane permissions the capture shell reads from the workspace
  *  (Contacts + Calendar have no client lane at alpha — see CaptureRoute.lane). */
 export type CaptureModulePermissions = { notes: string; tasks: string };
 
@@ -80,26 +67,6 @@ export function isPermissionError(message: string | null | undefined): boolean {
   return (
     m.includes("edit access") || m.includes("row-level security") || m.includes("permission denied")
   );
-}
-
-export type ParsedCaptureCommand = { route: CaptureRoute; body: string };
-
-/**
- * Split a capture line into its target route + body. A leading `/note`
- * `/event` `/contact` `/task` prefix (case-insensitive, terminated by
- * whitespace or end-of-input) selects that route; anything else — including a
- * `/` that isn't a known prefix ("/groceries") — is a Task carrying the whole
- * line. Never throws; an empty input is an empty-body Task.
- */
-export function parseCaptureCommand(input: string): ParsedCaptureCommand {
-  const text = input.replace(/^\s+/, "");
-  const lower = text.toLowerCase();
-  for (const { prefix, route } of PREFIX_ALIASES) {
-    if (lower === prefix || lower.startsWith(`${prefix} `) || lower.startsWith(`${prefix}\t`)) {
-      return { route, body: text.slice(prefix.length).trimStart() };
-    }
-  }
-  return { route: TASK_ROUTE, body: text };
 }
 
 export type CaptureCreated = {

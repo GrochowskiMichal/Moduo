@@ -51,10 +51,7 @@ import { undoToast } from "../../lib/undo-toast";
 import { useAuth } from "../../providers/auth-provider";
 import { useWorkspace } from "../../providers/workspace-provider";
 import "../../features/contacts/projectors";
-import {
-  RightPanelSwitcher,
-  type RightPanelVariant,
-} from "../../components/app/right-panel-switcher";
+import { RightPanel } from "../../components/app/right-panel";
 import { buildFollowupTask, followupLinkArgs } from "../../features/contacts/followup";
 import { useCompanyHub } from "../../features/contacts/hooks/use-company-hub";
 import { useContactHub } from "../../features/contacts/hooks/use-contact-hub";
@@ -821,37 +818,32 @@ export function ContactsPage() {
   }
 
   // The "Notes" right-panel rail (NO-7b, AC8): linked notes + New-linked-note for
-  // the selected contact/company. Contacts had no right panel before this — the
-  // switcher is single-variant today, extension-ready per the IA principle.
+  // the selected contact/company, Contacts' one registered panel view
+  // (features/contacts/panel-views.ts) until the module is rebuilt.
   const railFocus = contactFocus ?? companyFocus;
   const railLabel = selectedContact?.name ?? selectedCompany?.name ?? undefined;
   const railIcon = selectedContact ? "contact" : selectedCompany ? "building-2" : null;
-  const notesRailVariants: RightPanelVariant[] = railFocus
-    ? [
-        {
-          id: "notes",
-          label: "Notes",
-          render: () => (
-            <LinkedNotesPanel
-              runtime={runtime}
-              workspaceId={ws}
-              focus={railFocus}
-              focusLabel={railLabel}
-              focusIcon={railIcon}
-              canEdit={canEdit}
-              onOpenNote={(id) => openEntity({ type: "note", id })}
-              onLinked={() => {
-                if (railFocus) reloadFocus(railFocus);
-              }}
-            />
-          ),
-        },
-      ]
-    : [];
-  const right =
-    railFocus && notesRailVariants.length > 0 ? (
-      <RightPanelSwitcher variants={notesRailVariants} activeId="notes" onChange={() => {}} />
-    ) : undefined;
+  const right = railFocus ? (
+    <RightPanel
+      module="contacts"
+      views={{
+        notes: () => (
+          <LinkedNotesPanel
+            runtime={runtime}
+            workspaceId={ws}
+            focus={railFocus}
+            focusLabel={railLabel}
+            focusIcon={railIcon}
+            canEdit={canEdit}
+            onOpenNote={(id) => openEntity({ type: "note", id })}
+            onLinked={() => reloadFocus(railFocus)}
+          />
+        ),
+      }}
+      activeId="notes"
+      onChange={() => {}}
+    />
+  ) : undefined;
 
   return (
     <>

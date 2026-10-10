@@ -10,10 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { onCreateNew } from "../../../components/app/create-events";
 import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell";
-import {
-  RightPanelSwitcher,
-  type RightPanelVariant,
-} from "../../../components/app/right-panel-switcher";
+import { RightPanel } from "../../../components/app/right-panel";
 import { truncationNotice } from "../../../components/app/truncation-notice";
 import { Button } from "../../../components/ui/button";
 import { restoreNavFocus } from "../../../components/ui/nav-row";
@@ -115,7 +112,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   const [timelineZoom, setTimelineZoom] = useState<TimelineZoom>(() =>
     sanitizeTimelineZoom(readLS(workspaceId, "timelineZoom")),
   );
-  // Which right-panel view is showing (see `panelVariants`).
+  // Which right-panel view is showing (views: features/tasks/panel-views.ts).
   const [panelView, setPanelView] = useState("details");
   // Rail sections the user collapsed stay collapsed (tasks-v2 §11).
   const [collapsedSections, setCollapsedSections] = useState<ReadonlySet<string>>(() =>
@@ -883,17 +880,14 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   ) : (
     detailPanel
   );
-  // The right panel is a switchable surface of hand-picked views (never one
-  // purpose): Details today; TV-F4 adds In flight beside it.
-  const panelVariants: RightPanelVariant[] = [
-    { id: "details", label: "Details", render: () => details },
-  ];
+  // The right panel's title row names and switches its views (SH-1): Details
+  // today; Project, In flight and No date register in panel-views.ts later.
   const right = (
-    <RightPanelSwitcher
-      variants={panelVariants}
+    <RightPanel
+      module="tasks"
+      views={{ details: () => details }}
       activeId={panelView}
       onChange={setPanelView}
-      hideWhenSingle
     />
   );
 

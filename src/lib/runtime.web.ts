@@ -9,7 +9,6 @@
 import {
   activityRowSchema,
   attachmentRowSchema,
-  bucketRowSchema,
   calendarAccountRowSchema,
   calendarEventRowSchema,
   commentRowSchema,
@@ -31,8 +30,6 @@ import {
   parsedRelationKind,
   prefsRowSchema,
   requireRow,
-  tagLinkRowSchema,
-  tagRowSchema,
   taskRelationRowSchema,
 } from "@contracts/rows";
 import { normalizeAttachmentStatus, normalizeContentAuthorKind } from "@contracts/vocabularies";
@@ -66,8 +63,6 @@ import {
   type ActivityEntry,
   type Bucket,
   sanitizeTimeBlocks,
-  type Tag,
-  type TagLink,
   type Task,
   type TaskQueueEntry,
   type TaskRelation,
@@ -108,12 +103,15 @@ import type {
   UserPreferences,
 } from "./runtime.types";
 import {
+  bucketRowToModel,
   editableTaskFields,
   isMissingColumnError,
   isMissingFunctionError,
   isMissingTableError,
   sortQueueEntries,
   type TaskFieldPatch,
+  tagLinkRowToModel,
+  tagRowToModel,
   taskCreateRow,
   taskCreateRowLegacy,
   taskPatchToColumns,
@@ -3436,22 +3434,6 @@ async function ensureWebInbox(workspaceId: string): Promise<Bucket> {
   return bucketRowToModel(data);
 }
 
-function bucketRowToModel(raw: unknown): Bucket {
-  const r = requireRow(bucketRowSchema, raw, "bucket");
-  return {
-    id: r.id,
-    workspaceId: r.workspace_id,
-    ownerId: r.owner_id ?? "",
-    name: r.name,
-    isSystem: !!r.is_system,
-    group: r.group_label ?? null,
-    position: r.position ?? "",
-    createdAt: r.created_at,
-    updatedAt: r.updated_at,
-    deletedAt: r.deleted_at ?? null,
-  };
-}
-
 /** A field-level task edit: only the changed columns go to the server (TV-D1). */
 async function updateTaskRow(taskId: string, patch: TaskFieldPatch): Promise<Task> {
   const { data, error } = await supabaseClient
@@ -3493,32 +3475,6 @@ async function liveBucketOrInbox(
     if (b && b.workspace_id === workspaceId && !b.deleted_at) return bucketId;
   }
   return (await ensureWebInbox(workspaceId)).id;
-}
-
-function tagRowToModel(raw: unknown): Tag {
-  const r = requireRow(tagRowSchema, raw, "tag");
-  return {
-    id: r.id,
-    workspaceId: r.workspace_id,
-    ownerId: r.owner_id ?? "",
-    name: r.name,
-    color: r.color ?? null,
-    createdAt: r.created_at,
-    updatedAt: r.updated_at,
-    deletedAt: r.deleted_at ?? null,
-  };
-}
-
-function tagLinkRowToModel(raw: unknown): TagLink {
-  const r = requireRow(tagLinkRowSchema, raw, "tag link");
-  return {
-    id: r.id,
-    workspaceId: r.workspace_id,
-    tagId: r.tag_id,
-    entityType: r.entity_type,
-    entityId: r.entity_id,
-    createdAt: r.created_at,
-  };
 }
 
 function taskRelationRowToModel(raw: unknown): TaskRelation {

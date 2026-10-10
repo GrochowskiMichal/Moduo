@@ -32,7 +32,7 @@ export function MindmapToolbar() {
   return (
     <>
       <nav
-        className="absolute bottom-4 left-1/2 z-20 -translate-x-1/2 rounded-2xl bg-[#111111]/90 p-2 shadow-[0_16px_36px_rgba(0,0,0,0.62),0_6px_14px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-xl"
+        className="absolute bottom-4 left-1/2 z-20 -translate-x-1/2 rounded-2xl bg-[#111111]/90 p-2 shadow-[0_16px_36px_rgba(0,0,0,0.62),0_6px_14px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.05)]"
         role="toolbar"
         aria-label="Mindmap toolbar"
       >
@@ -49,7 +49,7 @@ export function MindmapToolbar() {
 
       {isOpen ? (
         <div className="absolute inset-0 z-[120] flex items-center justify-center bg-black/45 p-4">
-          <div className="w-full max-w-[520px] rounded-2xl border border-[#2a2a2a] bg-[#141414]/95 p-4 shadow-2xl backdrop-blur-xl">
+          <div className="w-full max-w-[520px] rounded-2xl border border-[#2a2a2a] bg-[#141414]/95 p-4 shadow-2xl">
             <div className="mb-3 flex items-center">
               <h2 className="text-[14px] font-semibold text-[#f1f1f1]">Keyboard shortcuts</h2>
               <button

@@ -32,6 +32,7 @@ import { toast } from "sonner";
 import { pickTagColor } from "../../components/tag-colors";
 import type { ModuoRuntime } from "../../lib/runtime.types";
 import { undoToast } from "../../lib/undo-toast";
+import { isNewer, type LiveChange } from "../tasks/live";
 import type { Tag, TagLink } from "../tasks/model";
 import { findTagByName } from "./selectors";
 
@@ -106,6 +107,13 @@ type WorkspaceTags = {
   seeds: Map<string, { scope: LinkScope; at: number }>;
   /** When the read behind `tags` started. */
   tagsAt: number;
+  /** When a live change (TV-D5) last touched each link (by `linkKey`) and
+   *  tag: a read that started before it can't put back what it changed. */
+  liveLinks: Map<string, number>;
+  liveTags: Map<string, number>;
+  /** Link ids a live change deleted (a delete carries only the id, and the
+   *  link may not have been loaded yet), with when. */
+  liveDeletedLinks: Map<string, number>;
   ops: Op[];
   view: TagView | null;
 };
@@ -158,6 +166,9 @@ function workspace(workspaceId: string): WorkspaceTags {
       links: new Map(),
       seeds: new Map(),
       tagsAt: Number.NEGATIVE_INFINITY,
+      liveLinks: new Map(),
+      liveTags: new Map(),
+      liveDeletedLinks: new Map(),
       ops: [],
       view: null,
     };
@@ -260,13 +271,16 @@ export function seedTags(workspaceId: string, seed: TagSeed): void {
     (fullyRead !== null &&
       (fullyRead.types.has(link.entityType) ||
         fullyRead.entities.has(entityKey(link.entityType, link.entityId))));
-  // A link written since this read started is the write's to say.
+  // A link written since this read started is the write's to say, and so is
+  // one a live change touched since then.
   const changedSince = new Set<string>();
   for (const op of ws.ops) {
     if (op.kind === "link" && (op.settledAt === null || op.settledAt > seed.at)) {
       changedSince.add(linkKey(op.tagId, op.entityType, op.entityId));
     }
   }
+  forgetOldLive(ws);
+  for (const [key, at] of ws.liveLinks) if (at > seed.at) changedSince.add(key);
   if (complete) {
     // This read now stands for its scope; older reads it covers are forgotten.
     for (const [key, old] of ws.seeds) {
@@ -277,7 +291,15 @@ export function seedTags(workspaceId: string, seed: TagSeed): void {
   // Every read loads the workspace's live tags (a capped list is the same first rows each time).
   if (seed.at >= ws.tagsAt) {
     ws.tagsAt = seed.at;
-    ws.tags = new Map(seed.tags.map((t) => [t.id, t]));
+    const tags = new Map(seed.tags.map((t) => [t.id, t]));
+    // A tag a live change touched after this read started keeps that state.
+    for (const [id, at] of ws.liveTags) {
+      if (at <= seed.at) continue;
+      const live = ws.tags.get(id);
+      if (live) tags.set(id, live);
+      else tags.delete(id);
+    }
+    ws.tags = tags;
   }
   const links = new Map<string, TagLink>();
   for (const [k, link] of ws.links) {
@@ -285,8 +307,10 @@ export function seedTags(workspaceId: string, seed: TagSeed): void {
       links.set(k, link);
     }
   }
+  const deletedSince = (link: TagLink) => (ws.liveDeletedLinks.get(link.id) ?? 0) > seed.at;
   for (const link of seed.links) {
     const k = linkKey(link.tagId, link.entityType, link.entityId);
+    if (deletedSince(link)) continue;
     if (
       inScope(seed.scope, link.entityType, link.entityId) &&
       !loadedSince(link) &&
@@ -311,6 +335,81 @@ export function seedTags(workspaceId: string, seed: TagSeed): void {
     return !seen.has(linkKey(op.tagId, op.entityType, op.entityId));
   });
   changed(ws);
+}
+
+// ── live changes (TV-D5) ──────────────────────────────────────────────────────
+
+/**
+ * Fold teammates' changes from Realtime into what's loaded. An op still
+ * saving stays on top (it is the newer word). A saved op on the same tag or
+ * link gives way, since changes arrive in commit order: this one came after
+ * it. A tag version only replaces a newer one it beats on `updated_at`
+ * (server-stamped). Nothing loaded for the workspace yet: the first read
+ * brings it all.
+ */
+export function applyLiveTags(workspaceId: string, changes: readonly LiveChange[]): void {
+  const ws = workspaces.get(workspaceId);
+  if (!ws) return;
+  // Deletes reach us from every workspace (they carry only an id), so keep
+  // the marks bounded here too, not only when a read lands.
+  forgetOldLive(ws);
+  const now = Date.now();
+  let touched = false;
+  const giveWay = (gone: (op: Op) => boolean) => {
+    const before = ws.ops.length;
+    ws.ops = ws.ops.filter((op) => op.settledAt === null || !gone(op));
+    if (ws.ops.length !== before) touched = true;
+  };
+  for (const change of changes) {
+    if (change.table === "tags") {
+      if (change.kind === "delete") {
+        if (ws.tags.delete(change.id)) touched = true;
+        ws.liveTags.set(change.id, now);
+        giveWay((op) => op.kind === "tag" && op.tag.id === change.id);
+        continue;
+      }
+      const row = change.row as Tag;
+      const local = ws.tags.get(row.id);
+      if (local && !isNewer(row.updatedAt, local.updatedAt)) continue;
+      ws.tags.set(row.id, row);
+      ws.liveTags.set(row.id, now);
+      touched = true;
+      giveWay(
+        (op) =>
+          op.kind === "tag" && op.tag.id === row.id && !isNewer(op.tag.updatedAt, row.updatedAt),
+      );
+    } else if (change.table === "tag_links") {
+      if (change.kind === "delete") {
+        ws.liveDeletedLinks.set(change.id, now);
+        for (const [key, link] of ws.links) {
+          if (link.id === change.id) {
+            ws.links.delete(key);
+            ws.liveLinks.set(key, now);
+            touched = true;
+          }
+        }
+        giveWay((op) => op.kind === "link" && op.link.id === change.id);
+        continue;
+      }
+      const link = change.row as TagLink;
+      const key = linkKey(link.tagId, link.entityType, link.entityId);
+      ws.liveLinks.set(key, now);
+      if (ws.links.get(key)?.id !== link.id) {
+        ws.links.set(key, link);
+        touched = true;
+      }
+      giveWay((op) => op.kind === "link" && linkKey(op.tagId, op.entityType, op.entityId) === key);
+    }
+  }
+  if (touched) changed(ws);
+}
+
+/** Live-change marks only matter to reads still in flight: drop old ones. */
+function forgetOldLive(ws: WorkspaceTags): void {
+  const cutoff = Date.now() - SETTLED_OP_TTL_MS;
+  for (const [key, at] of ws.liveLinks) if (at < cutoff) ws.liveLinks.delete(key);
+  for (const [id, at] of ws.liveTags) if (at < cutoff) ws.liveTags.delete(id);
+  for (const [id, at] of ws.liveDeletedLinks) if (at < cutoff) ws.liveDeletedLinks.delete(id);
 }
 
 /** The entity types and single entities that full reads (not "everything") loaded. */

@@ -8,6 +8,10 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { makeTask } from "../helpers";
 import type { Bucket, Task, TasksModuleBundle } from "../model";
+
+// Live updates (TV-D5) need a socket; these tests drive the hook without one.
+rs.mock("../realtime", () => ({ listenTasksLive: () => () => {} }));
+
 import { useTasksModule } from "./use-tasks-module";
 
 const bucket = (id: string, over: Partial<Bucket> = {}): Bucket => ({

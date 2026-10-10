@@ -71,6 +71,46 @@ Built in tasks-v3 block 3 ([specs/tasks-v3.md](../../specs/tasks-v3.md) AC1.3–
   - Decision: the engine's save sink is registered once in the app chrome and writes straight through `tasks_op_track_time` (the server keeps the total and answers "gone"); a mounted Tasks page shows each saved total. The module's old sink stays, unregistered, with its tests, for TV-F6.
   - Why: AC1.6; time tracked on Notes waited until Tasks was opened again.
   - Rejected: keeping the Tasks module mounted in the background (loads every task on every page).
+## 2026-10-10 · SH-1 (tasks-v3 block 4): the shell's panel dropdown, capture registry and motion
+
+- **⌘⇧K keeps capturing notes, events and contacts: provisional types until each module is rebuilt** → SH-1 (`src/lib/capture-registry.ts`, `features/{notes,calendar,contacts}/capture-type.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10 (confirmed for building; may be reconsidered).
+  - Decision: Task is the type the capture opens as; Notes, Calendar and Contacts register the one-line captures ⌘⇧K already made with "/note", "/event", "/contact", now picked with ⌘2 / ⌘4 / ⌘6 or the type chip; "/note" in a title is just text (90b). With only Task registered, ⌘2–7 do nothing (proven by a test registry).
+  - Why: the spec's "Task registered" read literally would have removed three captures that work today (DF-20), and 90a's point was that capture shouldn't lock the workflow into tasks.
+  - Rejected: Task only until each rebuild (a visible regression); keeping the "/note" prefix (90b: one way per job).
+- **A task opened from a note is an item, not a tab** → SH-1 (`src/routes/pages/notes-page.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: Notes' old transient "Task" tab shows as "← task title" over the view (back arrow, Esc, or picking a view closes it); Email's permanent Task tab stays a registered view; every other tab registers unchanged (ids, labels, saved choice).
+  - Why: 72a — references open as items, so the menu only lists hand-picked views; it was already an opened reference in all but name.
+  - Rejected: registering "Task" as a Notes view that appears and disappears (the menu would change shape).
+- **One registered view = a plain title** → SH-1 (`src/components/app/right-panel.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: Tasks (Details) and Contacts (Notes) show the view's name with no chevron; the menu appears once a second view registers. Calendar lists Detail · Notes, a hairline, then Tasks (alongside); Email and Notes are all *about this*.
+  - Why: a one-entry menu is a dead click; the title row still names the panel (72a).
+  - Rejected: a menu with one checked entry.
+- **⌥1–9 pick the view at that menu position; Esc steps back one item** → SH-1 (`src/lib/panel-registry.ts`, `right-panel.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10 (keymap rules 4 and 8).
+  - Decision: matched on `event.code` (macOS types ¡ ™ £ for ⌥1–3); never from a field, never while a dialog that doesn't hold the panel is open; after "back", focus lands on the title row.
+  - Why: the same keys work in every module because positions come from the registry; a modal or a typing field must never move the panel behind it.
+  - Rejected: Ctrl+digit (Ctrl is ⌘ on Windows); per-module hard-coded keys.
+- **Motion: opacity on the fade token, movement on fast/base/slow, no blur anywhere** → SH-1 (`tokens.css` §12, `global.css` "Motion patterns", DESIGN_RULES R6)
+  - Who: agent's choice within Maciej's call 81 (2026-10-10).
+  - Decision: `--motion-slow` 280 ms; two new tokens, `--motion-shift` (panel travel) and `--motion-grow` (popover start scale), go neutral under reduced motion so each pattern becomes a plain fade; `.motion-pop` replaces the blur motif in popover, menu, select and dialog and grows from Radix's origin; a side panel slides in only when toggled, not when a page mounts; every `backdrop-blur` is gone.
+  - Why: one rule makes "reduced motion = opacity only" hold for both the OS setting and Settings → Motion without per-pattern exceptions; blur was left out for performance (81).
+  - Rejected: per-pattern reduced-motion overrides (they drift); animating panels on every module switch (noise).
+- **The spec's e2e capture test becomes component tests** → SH-1 (`src/components/app/capture-shell.test.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: `tests/capture.spec.ts`'s ⌘⇧K / ⌘1–7 cases run as component tests in `bun run verify` (with the app's real global key handler); the e2e file waits for an e2e harness on the local stack (TV-U14 owns ⌘N → here).
+  - Why: `tests/` has no e2e login on the local stack yet, and an e2e file that always skips proves nothing.
+  - Rejected: an `E2E_APP_URL`-gated spec like `e2e/tasks/timeline.spec.ts` (never runs unattended).
+
+## 2026-10-10 · TV-D5 finished (tasks-v3 block 1): a quiet refetch never runs the repeat catch-up
+
+- **The client repeat catch-up runs after a full load only** → TV-D5 (`src/features/tasks/hooks/use-tasks-module.ts`, the `loadStamp` bump in `loadImpl`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10 (confirmed for building; may be reconsidered).
+  - Decision: opening Tasks, a reload or a workspace switch reopens due repeats as before; coming back to the window or reconnecting refetches without it, unless that refetch is the first read of the workspace that worked (the app opened offline).
+  - Why: #315 refetches on every return, and the pass would reopen a repeat checked off on Home or by MCP the same day (P0 #2); TV-D8's server roll-over replaces the client pass.
+  - Rejected: landing TV-D8's server fix first (it depends on this block); keeping the pass on reconnect (a reconnect hits the same bug).
 
 ## 2026-10-10 · Tasks v3 re-plan (calls 13–98, defaults a–u, §6)
 
@@ -896,6 +936,15 @@ Format (Maciej, 2026-10-10): who · decision · why · rejected, four lines at m
   - **Linked +** links a note, contact, company or event (`EntityLinkPicker`, origin `manual`), with the "Already linked" guard the hub drop uses.
 
   → [specs/tasks-v2.md](../../specs/tasks-v2.md) §9 · [src/features/tasks/ui/task-detail-panel.tsx](../../src/features/tasks/ui/task-detail-panel.tsx) · [src/features/spine/ui/comments-panel.tsx](../../src/features/spine/ui/comments-panel.tsx)
+- **2026-10-08 · TV-D5: Tasks is live over Supabase Realtime; your own edits hold teammates' changes back until they settle, and coming back to the app refetches** (`specs/tasks-v2.md` block 8, decision 10; migrations `20261008223000_tasks_realtime_publication.sql`, applied to production 2026-10-08, and `20261008224500_tasks_server_updated_at.sql`).
+  - **Published:** `tasks`, `buckets`, `task_queue`, `tags`, `tag_links`, `comments` join `supabase_realtime`. Inserts and updates reach only subscribers whose RLS lets them read the row; a delete reaches every subscriber of the table but carries only its uuid. `comments` is published for TV-U3 (no Tasks listener yet; TV-U3 landed without one, so TV-D11a owns it); `attachments` doesn't exist yet, so a data-lane block adds it (TV-D11a in the v3 build).
+  - **One channel per workspace and person** (`tasks-db:<ws>:<me>`, `src/features/tasks/realtime.ts`), shared by every surface running `useTasksModule` and filtered by `workspace_id`. Like chat and notes it sits outside the runtime seam (NO-6).
+  - **Merge rules** (`src/features/tasks/live.ts`): a change for a row we have lands only if its `updated_at` is newer (to the microsecond; Realtime and PostgREST format timestamps differently), and soft-deleted rows leave. While any of the module's own `runtime.tasks` calls is in flight, plus 1 s after (the echo usually trails the response), changes wait in a buffer and then land in order. So an echo never reverts an optimistic edit, and a row you just removed isn't put back by its insert's late echo. A stalled call can hold changes for 10 s at most. *Rejected: per-entity pending sets wired into every mutation (~20 call sites) — the runtime wrapper covers them all, including future ones.*
+  - **One clock for `updated_at`** (`20261008224500_tasks_server_updated_at.sql`): a `BEFORE INSERT OR UPDATE` trigger stamps `tasks`, `buckets` and `tags` with `clock_timestamp()`. Client-direct writes used to send the device's clock while ops used the server's, so a device running ahead made its rows look newer than later changes and open apps dropped them (validator, round 1). Old builds' stamps are quietly replaced. *Rejected: comparing by Realtime's commit timestamp — reads carry no such column to compare against.*
+  - **Refetch** on reconnect (socket rejoin, `online`), with one trailing read if inside the 5 s throttle, and on coming back to the window (focus or visibility, leading-only, so one return reads once). It's quiet: no loading flag, no error banner, and the result is discarded and retried if one of our saves started while it was out.
+  - **Where changes land:** tasks and buckets in the hook's bundle; queue rows in TV-D4's `queueRows` (claims and my line-up update live; a quiet refetch keeps the done tasks shown in place in my Queue); tags and links in TV-T1's workspace tag store (`applyLiveTags`), where a pending op stays on top and a saved one gives way to a later change on the same tag or link; the store remembers when a live change touched each tag and link, so a read that started before it (a hub's single-item read, another surface's load) can't put the older state back. A done task kept in place in my Queue leaves it if a teammate reopens it. Not caught live: a row that stops being visible to you (unshared, moved to a bucket you can't see) sends you nothing, so it stays until the next refetch.
+
+  → [specs/tasks-v2.md](../../specs/tasks-v2.md) §12, decision 10 · probe: `supabase/probes/tasks-realtime.{stub,probe}.sql`
 
 - **2026-10-08 · TV-D3: tracked time is a log of entries; a save resent after a reload counts once, and saving time never puts back anyone's edit** (`specs/tasks-v2.md` block 5; migration `20261008225500_tasks_time_entries.sql`, applied to production 2026-10-09 as version `20261008221907`, after AT-1 and TV-D5's stamp, with Maciej's OK; then a rolled-back probe there as a workspace owner passed: a focus save, its resend answered `duplicate`, an adjustment and its Undo, a typed total, an unknown task `gone`, own rows only through RLS, the totals read, an old build's write as an adjustment, nothing else on the row changed, no activity rows; round-trip `supabase/probes/tasks-time.{stub,seed,probe}.sql` on the TV-D2 stub chain plus AT-1's migration, in both orders).
   - **`task_time_entries`**: one row per focus or waiting stretch (who, when it ended, how long), per adjustment (signed), and one `legacy` row per task holding the total it had before (no person, no date). Written only by `tasks_op_track_time` and the old-build shim; each person reads only their own rows. Time ops write no `module_activity` rows (spec decision 5).

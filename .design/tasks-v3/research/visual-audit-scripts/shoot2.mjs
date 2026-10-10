@@ -1,43 +1,248 @@
+import fs from "node:fs";
+import path from "node:path";
 import { chromium } from "/Users/maciej/Documents/Coding/moduohyb/.claude/worktrees/tasks-module-research-ba3dc1/node_modules/playwright/index.mjs";
-import fs from "node:fs"; import path from "node:path";
-const SB="http://localhost:6107"; const OUT=path.resolve("shots");
-const url=(id,g="theme:dark")=>`${SB}/iframe.html?id=${id}&viewMode=story&globals=${g}`;
-const browser=await chromium.launch({executablePath:"/Users/maciej/Library/Caches/ms-playwright/chromium_headless_shell-1228/chrome-headless-shell-mac-arm64/chrome-headless-shell"});
-const ctx=await browser.newContext({viewport:{width:1440,height:900},deviceScaleFactor:2,colorScheme:"dark"});
-const page=await ctx.newPage();
-async function open(id,g){await page.goto(url(id,g),{waitUntil:"load"});await page.locator("#storybook-root").first().waitFor({state:"visible",timeout:20000});await page.waitForTimeout(400);}
-async function shot(n,o={}){await page.screenshot({path:path.join(OUT,`${n}.png`),fullPage:false,...o});console.log("shot",n);}
-const MEASURE=fs.readFileSync("measure.js","utf8");
-async function dump(n){const d=await page.evaluate(MEASURE);fs.writeFileSync(path.join(OUT,`${n}.measure.json`),JSON.stringify(d,null,1));}
-const opens=[["components-ui-display-menu--default","#storybook-root button"],["components-ui-filter-bar--default","#storybook-root button"],["components-ui-filter-bar--operators","#storybook-root button"],["components-ui-date-field--with-time","#storybook-root button"],["components-ui-date-field--property","#storybook-root button"],["components-ui-dropdown-menu--default","#storybook-root button"],["components-ui-dropdown-menu--checkbox-and-radio","#storybook-root button"],["components-ui-popover--default","#storybook-root button"],["components-ui-dialog--default","#storybook-root button"],["components-ui-dialog--destructive","#storybook-root button"],["components-ui-sheet--right-side","#storybook-root button"],["components-ui-command--palette-dialog","#storybook-root button"],["components-ui-tag-picker--default","#storybook-root button"]];
-for(const [id,sel] of opens){try{await open(id);const b=page.locator(sel).first();await b.click({timeout:5000});await page.waitForTimeout(500);await shot(`${id}__open`);await dump(`${id}__open`);}catch(e){console.log("FAIL open",id,e.message.split("\n")[0]);}}
+
+const SB = "http://localhost:6107";
+const OUT = path.resolve("shots");
+const url = (id, g = "theme:dark") => `${SB}/iframe.html?id=${id}&viewMode=story&globals=${g}`;
+const browser = await chromium.launch({
+  executablePath:
+    "/Users/maciej/Library/Caches/ms-playwright/chromium_headless_shell-1228/chrome-headless-shell-mac-arm64/chrome-headless-shell",
+});
+const ctx = await browser.newContext({
+  viewport: { width: 1440, height: 900 },
+  deviceScaleFactor: 2,
+  colorScheme: "dark",
+});
+const page = await ctx.newPage();
+async function open(id, g) {
+  await page.goto(url(id, g), { waitUntil: "load" });
+  await page.locator("#storybook-root").first().waitFor({ state: "visible", timeout: 20000 });
+  await page.waitForTimeout(400);
+}
+async function shot(n, o = {}) {
+  await page.screenshot({ path: path.join(OUT, `${n}.png`), fullPage: false, ...o });
+  console.log("shot", n);
+}
+const MEASURE = fs.readFileSync("measure.js", "utf8");
+async function dump(n) {
+  const d = await page.evaluate(MEASURE);
+  fs.writeFileSync(path.join(OUT, `${n}.measure.json`), JSON.stringify(d, null, 1));
+}
+const opens = [
+  ["components-ui-display-menu--default", "#storybook-root button"],
+  ["components-ui-filter-bar--default", "#storybook-root button"],
+  ["components-ui-filter-bar--operators", "#storybook-root button"],
+  ["components-ui-date-field--with-time", "#storybook-root button"],
+  ["components-ui-date-field--property", "#storybook-root button"],
+  ["components-ui-dropdown-menu--default", "#storybook-root button"],
+  ["components-ui-dropdown-menu--checkbox-and-radio", "#storybook-root button"],
+  ["components-ui-popover--default", "#storybook-root button"],
+  ["components-ui-dialog--default", "#storybook-root button"],
+  ["components-ui-dialog--destructive", "#storybook-root button"],
+  ["components-ui-sheet--right-side", "#storybook-root button"],
+  ["components-ui-command--palette-dialog", "#storybook-root button"],
+  ["components-ui-tag-picker--default", "#storybook-root button"],
+];
+for (const [id, sel] of opens) {
+  try {
+    await open(id);
+    const b = page.locator(sel).first();
+    await b.click({ timeout: 5000 });
+    await page.waitForTimeout(500);
+    await shot(`${id}__open`);
+    await dump(`${id}__open`);
+  } catch (e) {
+    console.log("FAIL open", id, e.message.split("\n")[0]);
+  }
+}
 // tooltip hover
-for(const id of ["components-ui-tooltip--icon-button","components-ui-icon-button--default","components-ui-segmented-control--icon-only"]){try{await open(id);const b=page.locator("#storybook-root button").first();await b.hover();await page.waitForTimeout(900);await shot(`${id}__hover-tooltip`);}catch(e){console.log("FAIL tip",id,e.message.split("\n")[0]);}}
+for (const id of [
+  "components-ui-tooltip--icon-button",
+  "components-ui-icon-button--default",
+  "components-ui-segmented-control--icon-only",
+]) {
+  try {
+    await open(id);
+    const b = page.locator("#storybook-root button").first();
+    await b.hover();
+    await page.waitForTimeout(900);
+    await shot(`${id}__hover-tooltip`);
+  } catch (e) {
+    console.log("FAIL tip", id, e.message.split("\n")[0]);
+  }
+}
 // context menu story
-try{await open("components-ui-context-menu--default");const t=page.locator("#storybook-root > *").first();const box=await t.boundingBox();await page.mouse.click(box.x+box.width/2,box.y+box.height/2,{button:"right"});await page.waitForTimeout(500);await shot("components-ui-context-menu--default__open");await dump("components-ui-context-menu--default__open");}catch(e){console.log("FAIL ctx",e.message.split("\n")[0]);}
+try {
+  await open("components-ui-context-menu--default");
+  const t = page.locator("#storybook-root > *").first();
+  const box = await t.boundingBox();
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2, { button: "right" });
+  await page.waitForTimeout(500);
+  await shot("components-ui-context-menu--default__open");
+  await dump("components-ui-context-menu--default__open");
+} catch (e) {
+  console.log("FAIL ctx", e.message.split("\n")[0]);
+}
 // sonner
-try{await open("components-ui-sonner--variants");const btns=page.locator("#storybook-root button");const n=await btns.count();for(let i=0;i<Math.min(n,5);i++){await btns.nth(i).click();await page.waitForTimeout(120);}await page.waitForTimeout(600);await shot("components-ui-sonner--variants__toasts");}catch(e){console.log("FAIL sonner",e.message.split("\n")[0]);}
+try {
+  await open("components-ui-sonner--variants");
+  const btns = page.locator("#storybook-root button");
+  const n = await btns.count();
+  for (let i = 0; i < Math.min(n, 5); i++) {
+    await btns.nth(i).click();
+    await page.waitForTimeout(120);
+  }
+  await page.waitForTimeout(600);
+  await shot("components-ui-sonner--variants__toasts");
+} catch (e) {
+  console.log("FAIL sonner", e.message.split("\n")[0]);
+}
 // detail panel: open status dropdown, due date field, tag picker, more menu
-try{await open("tasks-taskdetailpanel--populated");await page.getByRole("button",{name:/^Status:/}).click();await page.waitForTimeout(400);await shot("tasks-taskdetailpanel--populated__status-open");await page.keyboard.press("Escape");await page.getByRole("button",{name:/^Due/}).first().click();await page.waitForTimeout(400);await shot("tasks-taskdetailpanel--populated__due-open");await page.keyboard.press("Escape");await page.getByRole("button",{name:"Add tag"}).click();await page.waitForTimeout(400);await shot("tasks-taskdetailpanel--populated__tagpicker-open");await page.keyboard.press("Escape");await page.getByRole("button",{name:"More actions"}).click();await page.waitForTimeout(400);await shot("tasks-taskdetailpanel--populated__more-open");await page.keyboard.press("Escape");await page.getByRole("button",{name:/^Time:/}).click();await page.waitForTimeout(400);await shot("tasks-taskdetailpanel--populated__time-open");await page.keyboard.press("Escape");const pv=page.getByRole("button",{name:/^Priority:/});await pv.hover();await page.waitForTimeout(300);await shot("tasks-taskdetailpanel--populated__priority-hover");}catch(e){console.log("FAIL detail opens",e.message.split("\n")[0]);}
+try {
+  await open("tasks-taskdetailpanel--populated");
+  await page.getByRole("button", { name: /^Status:/ }).click();
+  await page.waitForTimeout(400);
+  await shot("tasks-taskdetailpanel--populated__status-open");
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: /^Due/ }).first().click();
+  await page.waitForTimeout(400);
+  await shot("tasks-taskdetailpanel--populated__due-open");
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Add tag" }).click();
+  await page.waitForTimeout(400);
+  await shot("tasks-taskdetailpanel--populated__tagpicker-open");
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "More actions" }).click();
+  await page.waitForTimeout(400);
+  await shot("tasks-taskdetailpanel--populated__more-open");
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: /^Time:/ }).click();
+  await page.waitForTimeout(400);
+  await shot("tasks-taskdetailpanel--populated__time-open");
+  await page.keyboard.press("Escape");
+  const pv = page.getByRole("button", { name: /^Priority:/ });
+  await pv.hover();
+  await page.waitForTimeout(300);
+  await shot("tasks-taskdetailpanel--populated__priority-hover");
+} catch (e) {
+  console.log("FAIL detail opens", e.message.split("\n")[0]);
+}
 // list: date popover + bucket popover via keyboard, context menu
-try{await open("tasks-tasklistview--all-by-bucket");const row=page.locator('[role="row"]').nth(1);await row.click({position:{x:300,y:10}});await page.keyboard.press("s");await page.waitForTimeout(500);await shot("tasks-tasklistview--all-by-bucket__schedule-popover");await page.keyboard.press("Escape");await page.waitForTimeout(200);await page.keyboard.press("b");await page.waitForTimeout(500);await shot("tasks-tasklistview--all-by-bucket__bucket-popover");await page.keyboard.press("Escape");await page.waitForTimeout(200);await page.keyboard.press("e");await page.waitForTimeout(400);await shot("tasks-tasklistview--all-by-bucket__inline-edit");await page.keyboard.press("Escape");}catch(e){console.log("FAIL list popovers",e.message.split("\n")[0]);}
+try {
+  await open("tasks-tasklistview--all-by-bucket");
+  const row = page.locator('[role="row"]').nth(1);
+  await row.click({ position: { x: 300, y: 10 } });
+  await page.keyboard.press("s");
+  await page.waitForTimeout(500);
+  await shot("tasks-tasklistview--all-by-bucket__schedule-popover");
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(200);
+  await page.keyboard.press("b");
+  await page.waitForTimeout(500);
+  await shot("tasks-tasklistview--all-by-bucket__bucket-popover");
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(200);
+  await page.keyboard.press("e");
+  await page.waitForTimeout(400);
+  await shot("tasks-tasklistview--all-by-bucket__inline-edit");
+  await page.keyboard.press("Escape");
+} catch (e) {
+  console.log("FAIL list popovers", e.message.split("\n")[0]);
+}
 // list: expand subtasks row
-try{await open("tasks-tasklistview--all-by-bucket");const exp=page.getByRole("button",{name:"Expand subtasks"}).first();await exp.click();await page.waitForTimeout(400);await page.mouse.move(5,5);await shot("tasks-tasklistview--all-by-bucket__subtasks-expanded");await dump("tasks-tasklistview--all-by-bucket__subtasks-expanded");const cl=page.getByRole("button",{name:/completed, show/}).first();await cl.click();await page.waitForTimeout(400);await page.mouse.move(5,5);await shot("tasks-tasklistview--all-by-bucket__completed-shown");}catch(e){console.log("FAIL expand",e.message.split("\n")[0]);}
+try {
+  await open("tasks-tasklistview--all-by-bucket");
+  const exp = page.getByRole("button", { name: "Expand subtasks" }).first();
+  await exp.click();
+  await page.waitForTimeout(400);
+  await page.mouse.move(5, 5);
+  await shot("tasks-tasklistview--all-by-bucket__subtasks-expanded");
+  await dump("tasks-tasklistview--all-by-bucket__subtasks-expanded");
+  const cl = page.getByRole("button", { name: /completed, show/ }).first();
+  await cl.click();
+  await page.waitForTimeout(400);
+  await page.mouse.move(5, 5);
+  await shot("tasks-tasklistview--all-by-bucket__completed-shown");
+} catch (e) {
+  console.log("FAIL expand", e.message.split("\n")[0]);
+}
 // board card hover + context menu
-try{await open("tasks-taskboardview--by-status");const card=page.locator('[role="button"][data-task-id]').nth(1);await card.hover();await page.waitForTimeout(300);await shot("tasks-taskboardview--by-status__card-hover");await card.click({button:"right"});await page.waitForTimeout(500);await shot("tasks-taskboardview--by-status__contextmenu");}catch(e){console.log("FAIL board",e.message.split("\n")[0]);}
+try {
+  await open("tasks-taskboardview--by-status");
+  const card = page.locator('[role="button"][data-task-id]').nth(1);
+  await card.hover();
+  await page.waitForTimeout(300);
+  await shot("tasks-taskboardview--by-status__card-hover");
+  await card.click({ button: "right" });
+  await page.waitForTimeout(500);
+  await shot("tasks-taskboardview--by-status__contextmenu");
+} catch (e) {
+  console.log("FAIL board", e.message.split("\n")[0]);
+}
 // timeline hover bar
-try{await open("tasks-tasktimelineview--populated");const bar=page.locator('#storybook-root [data-task-id], #storybook-root [role="button"]').nth(2);await bar.hover();await page.waitForTimeout(600);await shot("tasks-tasktimelineview--populated__bar-hover");}catch(e){console.log("FAIL timeline",e.message.split("\n")[0]);}
+try {
+  await open("tasks-tasktimelineview--populated");
+  const bar = page
+    .locator('#storybook-root [data-task-id], #storybook-root [role="button"]')
+    .nth(2);
+  await bar.hover();
+  await page.waitForTimeout(600);
+  await shot("tasks-tasktimelineview--populated__bar-hover");
+} catch (e) {
+  console.log("FAIL timeline", e.message.split("\n")[0]);
+}
 // nav-row states hover + focus
-try{await open("components-ui-nav-row--states");await page.keyboard.press("Tab");await page.waitForTimeout(300);await shot("components-ui-nav-row--states__focus");}catch(e){console.log("FAIL navrow focus",e.message.split("\n")[0]);}
+try {
+  await open("components-ui-nav-row--states");
+  await page.keyboard.press("Tab");
+  await page.waitForTimeout(300);
+  await shot("components-ui-nav-row--states__focus");
+} catch (e) {
+  console.log("FAIL navrow focus", e.message.split("\n")[0]);
+}
 // comp
-const comp="file:///Users/maciej/Documents/Coding/moduohyb/.claude/worktrees/tasks-module-research-ba3dc1/.design/tasks-dogfood/ui-proposal.html";
-await page.goto(comp);await page.waitForTimeout(1200);
-await page.screenshot({path:path.join(OUT,"comp__full.png"),fullPage:true});console.log("shot comp__full");
-const secs=page.locator("h2.sec");const sn=await secs.count();console.log("comp h2.sec",sn);
+const comp =
+  "file:///Users/maciej/Documents/Coding/moduohyb/.claude/worktrees/tasks-module-research-ba3dc1/.design/tasks-dogfood/ui-proposal.html";
+await page.goto(comp);
+await page.waitForTimeout(1200);
+await page.screenshot({ path: path.join(OUT, "comp__full.png"), fullPage: true });
+console.log("shot comp__full");
+const secs = page.locator("h2.sec");
+const sn = await secs.count();
+console.log("comp h2.sec", sn);
 // screenshot from each h2.sec to the next
-const tops=[];for(let i=0;i<sn;i++){const b=await secs.nth(i).boundingBox();tops.push(b.y+(await page.evaluate(()=>window.scrollY)));}
-const total=await page.evaluate(()=>document.documentElement.scrollHeight);
-for(let i=0;i<sn;i++){const y0=Math.max(0,tops[i]-8);const y1=(i+1<sn?tops[i+1]:total)-8;const h=Math.min(y1-y0,8000);const w=await page.evaluate(()=>document.documentElement.scrollWidth);await page.screenshot({path:path.join(OUT,`comp__sec${i+1}.png`),fullPage:true,clip:{x:0,y:y0,width:Math.min(w,1440),height:h}});console.log("shot comp sec",i+1,y0,h);}
+const tops = [];
+for (let i = 0; i < sn; i++) {
+  const b = await secs.nth(i).boundingBox();
+  tops.push(b.y + (await page.evaluate(() => window.scrollY)));
+}
+const total = await page.evaluate(() => document.documentElement.scrollHeight);
+for (let i = 0; i < sn; i++) {
+  const y0 = Math.max(0, tops[i] - 8);
+  const y1 = (i + 1 < sn ? tops[i + 1] : total) - 8;
+  const h = Math.min(y1 - y0, 8000);
+  const w = await page.evaluate(() => document.documentElement.scrollWidth);
+  await page.screenshot({
+    path: path.join(OUT, `comp__sec${i + 1}.png`),
+    fullPage: true,
+    clip: { x: 0, y: y0, width: Math.min(w, 1440), height: h },
+  });
+  console.log("shot comp sec", i + 1, y0, h);
+}
 // comp: hover a row + click Display + Filter
-try{const row=page.locator(".row").nth(1);await row.hover();await page.waitForTimeout(300);const b=await row.boundingBox();await page.screenshot({path:path.join(OUT,"comp__row-hover.png"),clip:{x:0,y:Math.max(0,b.y-200),width:1440,height:520}});console.log("shot comp row hover");}catch(e){console.log("FAIL comp hover",e.message.split("\n")[0]);}
-await browser.close();console.log("DONE");
+try {
+  const row = page.locator(".row").nth(1);
+  await row.hover();
+  await page.waitForTimeout(300);
+  const b = await row.boundingBox();
+  await page.screenshot({
+    path: path.join(OUT, "comp__row-hover.png"),
+    clip: { x: 0, y: Math.max(0, b.y - 200), width: 1440, height: 520 },
+  });
+  console.log("shot comp row hover");
+} catch (e) {
+  console.log("FAIL comp hover", e.message.split("\n")[0]);
+}
+await browser.close();
+console.log("DONE");

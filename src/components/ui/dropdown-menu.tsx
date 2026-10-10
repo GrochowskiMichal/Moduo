@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { eyebrowVariants } from "./eyebrow";
 
 const contentBase = cn(
-  "fx-overlay min-w-[8rem] overflow-hidden rounded-md border border-border bg-popover p-1 text-popover-foreground",
+  "motion-pop min-w-[8rem] overflow-hidden rounded-md border border-border bg-popover p-1 text-popover-foreground",
 );
 
 const itemBase = cn(

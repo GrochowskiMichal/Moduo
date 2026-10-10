@@ -25,7 +25,7 @@ function PopoverContent({
         align={align}
         sideOffset={sideOffset}
         className={cn(
-          "fx-overlay w-72 rounded-md border border-border bg-popover p-4 text-popover-foreground outline-none",
+          "motion-pop w-72 rounded-md border border-border bg-popover p-4 text-popover-foreground outline-none",
           className,
         )}
         style={{

@@ -2,8 +2,8 @@ import { Plus, Search, SquarePen } from "lucide-react";
 
 import { formatShortcut, SHORTCUTS } from "../../lib/shortcuts";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
+import { dispatchOpenCapture } from "./capture-shell";
 import { dispatchCreateNew } from "./create-events";
-import { dispatchOpenCapture } from "./global-capture-bar";
 import { dispatchOpenPalette } from "./global-command-palette";
 
 function BarButton({

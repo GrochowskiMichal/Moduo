@@ -18,6 +18,9 @@ import { makeTask } from "../helpers";
 import type { Task, TasksModuleBundle, TaskTimeResult, TrackTimeInput } from "../model";
 import { useTasksModule } from "./use-tasks-module";
 
+// Live updates (TV-D5) need a socket; these tests drive the hook without one.
+rs.mock("../realtime", () => ({ listenTasksLive: () => () => {} }));
+
 // Tracked time goes through tasks_op_track_time (TV-D3): the Focus engine's
 // sink records stretches under the save's key, and every answer it gives
 // decides whether tracked seconds are kept, retried or saved — never lost,

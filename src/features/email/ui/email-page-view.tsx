@@ -10,10 +10,7 @@ import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } fro
 import { toast } from "sonner";
 import { onCreateNew } from "../../../components/app/create-events";
 import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell";
-import {
-  RightPanelSwitcher,
-  type RightPanelVariant,
-} from "../../../components/app/right-panel-switcher";
+import { RightPanel } from "../../../components/app/right-panel";
 import { truncationNotice } from "../../../components/app/truncation-notice";
 import { Button } from "../../../components/ui/button";
 import { EmptyState } from "../../../components/ui/empty-state";
@@ -1033,80 +1030,66 @@ export function EmailPageView({
     void email.reload();
   }, [email]);
 
-  const panelVariants = useMemo<RightPanelVariant[]>(
-    () => [
-      {
-        id: "reader",
-        label: "Reader",
-        render: () => (
-          <EmailReader
-            thread={selectedThread}
-            getThread={email.getThread}
-            getBody={email.getBody}
-            onReply={startReply}
-            onConvert={selectedThread ? () => void runConvert(selectedThread) : undefined}
-            listAttachments={listAttachments}
-            saveAttachment={saveAttachment}
-            getInlineImages={getInlineImages}
-            imageAllowedSenders={imageAllowedSenders}
-            onAllowSenderImages={allowSenderImages}
-          />
-        ),
-      },
-      {
-        id: "contact",
-        label: "Contact",
-        render: () => (
-          <EmailContactPanel
+  // The registered views (features/email/panel-views.ts), unchanged from the
+  // old tabs until the module is rebuilt.
+  const panelViews = useMemo(
+    () => ({
+      reader: () => (
+        <EmailReader
+          thread={selectedThread}
+          getThread={email.getThread}
+          getBody={email.getBody}
+          onReply={startReply}
+          onConvert={selectedThread ? () => void runConvert(selectedThread) : undefined}
+          listAttachments={listAttachments}
+          saveAttachment={saveAttachment}
+          getInlineImages={getInlineImages}
+          imageAllowedSenders={imageAllowedSenders}
+          onAllowSenderImages={allowSenderImages}
+        />
+      ),
+      contact: () => (
+        <EmailContactPanel
+          runtime={runtime}
+          workspaceId={workspaceId}
+          fromName={selectedThread?.fromName ?? ""}
+          fromAddr={selectedThread?.fromEmail ?? ""}
+          contact={resolvedContact}
+          canEdit={tasksApi.canEdit}
+          onAddContact={addAsContact}
+          onOpenEntity={openEntity}
+        />
+      ),
+      detail: () => (
+        <EmailDetailPanel
+          runtime={runtime}
+          workspaceId={workspaceId}
+          refId={selectedRefId}
+          canEdit={tasksApi.canEdit}
+          onOpenEntity={openEntity}
+        />
+      ),
+      task: () =>
+        detailTaskId ? (
+          <TaskDetailPanel
+            task={tasksApi.tasks.find((t) => t.id === detailTaskId) ?? null}
+            buckets={tasksApi.buckets}
+            inbox={tasksApi.inbox}
+            canEdit={tasksApi.canEdit}
+            onRequestCapture={() => {}}
+            onSelectTask={setDetailTaskId}
+            api={tasksApi}
             runtime={runtime}
             workspaceId={workspaceId}
-            fromName={selectedThread?.fromName ?? ""}
-            fromAddr={selectedThread?.fromEmail ?? ""}
-            contact={resolvedContact}
-            canEdit={tasksApi.canEdit}
-            onAddContact={addAsContact}
             onOpenEntity={openEntity}
           />
-        ),
-      },
-      {
-        id: "detail",
-        label: "Detail",
-        render: () => (
-          <EmailDetailPanel
-            runtime={runtime}
-            workspaceId={workspaceId}
-            refId={selectedRefId}
-            canEdit={tasksApi.canEdit}
-            onOpenEntity={openEntity}
+        ) : (
+          <EmptyState
+            title="No task selected"
+            description="Convert an email to a task to work on it here."
           />
         ),
-      },
-      {
-        id: "task",
-        label: "Task",
-        render: () =>
-          detailTaskId ? (
-            <TaskDetailPanel
-              task={tasksApi.tasks.find((t) => t.id === detailTaskId) ?? null}
-              buckets={tasksApi.buckets}
-              inbox={tasksApi.inbox}
-              canEdit={tasksApi.canEdit}
-              onRequestCapture={() => {}}
-              onSelectTask={setDetailTaskId}
-              api={tasksApi}
-              runtime={runtime}
-              workspaceId={workspaceId}
-              onOpenEntity={openEntity}
-            />
-          ) : (
-            <EmptyState
-              title="No task selected"
-              description="Convert an email to a task to work on it here."
-            />
-          ),
-      },
-    ],
+    }),
     [
       selectedThread,
       email.getThread,
@@ -1227,8 +1210,9 @@ export function EmailPageView({
           />
         }
         right={
-          <RightPanelSwitcher
-            variants={panelVariants}
+          <RightPanel
+            module="email"
+            views={panelViews}
             activeId={panelVariant}
             onChange={(id) => setPanelVariant(id as PanelVariantId)}
           />
