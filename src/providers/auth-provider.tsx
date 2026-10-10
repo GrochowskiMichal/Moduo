@@ -9,6 +9,7 @@ import {
 } from "react";
 import { attachFocusUser } from "../features/focus/engine";
 import { attachTagUser } from "../features/tags/store";
+import { attachSyncUser } from "../lib/sync/store";
 import { Analytics, setAnalyticsUser } from "../lib/analytics";
 import { sendDeviceTimeZone } from "../lib/device-time-zone";
 import {
@@ -191,12 +192,16 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   // The focus session is persisted per person: resume it on sign-in, hand it
   // back on sign-out (TV-F1). The workspace tag store starts over for another
-  // person (TV-T1). Skipped while the cached session is still loading.
+  // person (TV-T1). The shared Tasks store and its device copy are one
+  // person's: signed out (account deletion included) every copy is wiped, and
+  // another person signing in wipes every copy but theirs (TV-D11a). Skipped
+  // while the cached session is still loading.
   const sessionUserId = session?.user?.id ?? null;
   useEffect(() => {
     if (loading) return;
     attachFocusUser(sessionUserId);
     attachTagUser(sessionUserId);
+    void attachSyncUser(sessionUserId);
   }, [loading, sessionUserId]);
 
   const signOut = async () => {

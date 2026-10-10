@@ -171,8 +171,21 @@ export const SYNC_TABLES: readonly { name: SyncTableName; delta: boolean; phase:
   { name: "comments", delta: true, phase: 2 },
 ];
 
-/** Tables whose live ids are checked once a session (access taken away). */
-const ACCESS_CHECKED: readonly SyncTableName[] = ["tasks", "buckets", "statuses"];
+/**
+ * Tables whose live ids are checked against the server now and then: a row
+ * you lost access to (a project made private, you left it) is hidden by RLS
+ * and never shows up in a delta, so this is how it leaves the device copy.
+ * The whole-read tables (queue, tag links, relations) drop such rows on every
+ * read already.
+ */
+const ACCESS_CHECKED: readonly SyncTableName[] = [
+  "tasks",
+  "buckets",
+  "statuses",
+  "completions",
+  "comments",
+  "tags",
+];
 
 type TableState = {
   rows: Map<string, AnyRow>;
@@ -214,6 +227,8 @@ export type StoreTiming = {
   retryMs: number;
   /** A live delete keeps a row out of older reads this long. */
   goneTtlMs: number;
+  /** The access check (rows you can no longer see) runs at most this often. */
+  accessCheckMs: number;
 };
 
 export const DEFAULT_TIMING: StoreTiming = {
@@ -222,6 +237,7 @@ export const DEFAULT_TIMING: StoreTiming = {
   persistMs: 800,
   retryMs: 20_000,
   goneTtlMs: 60_000,
+  accessCheckMs: 10 * 60_000,
 };
 
 /** A server stamp moved back by `ms`, keeping its microseconds. */
@@ -272,7 +288,9 @@ export class WorkspaceStore {
   private offline = browserOffline();
   private loadStamp = 0;
   private reachedServer = false;
-  private accessChecked = false;
+  /** When rows you can no longer see were last dropped (0: not this session). */
+  private accessCheckedAt = 0;
+  private accessChecking = false;
   private hydrated: Promise<void> | null = null;
 
   private refs = 0;
@@ -360,7 +378,7 @@ export class WorkspaceStore {
     void this.hydrated.then(() => this.sync("open"));
   }
 
-  private stop(): void {
+  private stop(opts: { persist?: boolean } = {}): void {
     this.stopLive?.();
     this.stopLive = null;
     if (typeof window !== "undefined") {
@@ -371,16 +389,23 @@ export class WorkspaceStore {
     if (this.retryTimer) clearTimeout(this.retryTimer);
     this.syncTimer = null;
     this.retryTimer = null;
-    this.persistNow();
+    if (opts.persist !== false) this.persistNow();
   }
 
-  /** Stop for good (sign-out, another person): nothing is written after this. */
-  dispose(): void {
-    this.stop();
-    this.disposed = true;
+  /**
+   * Stop for good (sign-out, another person): nothing is written after this.
+   * `persist: false` drops what wasn't written yet (the copy is being wiped).
+   */
+  dispose(opts: { persist?: boolean } = {}): void {
     if (this.persistTimer) clearTimeout(this.persistTimer);
     this.persistTimer = null;
+    this.stop(opts);
+    this.disposed = true;
     this.listeners.clear();
+    this.tables.clear();
+    this.overlays = [];
+    this.outbox = [];
+    this.renderedCache.clear();
   }
 
   private onBrowserOffline = () => this.setOffline(true);
@@ -516,8 +541,12 @@ export class WorkspaceStore {
     this.changed();
     this.schedulePersist();
     void this.flush();
-    // A first load read everything; after a delta, check once what's still yours.
-    if (delta && !this.accessChecked) void this.checkAccess();
+    // A first load (or a whole read) checked everything; after deltas, check
+    // now and then what's still yours.
+    if (!delta) this.accessCheckedAt = startedAt;
+    else if (Date.now() - this.accessCheckedAt >= this.timing.accessCheckMs) {
+      void this.checkAccess();
+    }
   }
 
   private onReadFailed(e: unknown): void {
@@ -671,29 +700,54 @@ export class WorkspaceStore {
     this.seedTagStore(started);
   }
 
-  /** Once a session: drop rows whose access was taken away (a delta never reports them). */
-  private async checkAccess(): Promise<void> {
+  /**
+   * Drop rows whose access was taken away: RLS hides them, so a delta never
+   * reports them. Each checked table's live ids are compared with the copy;
+   * what the server no longer returns leaves the device (and with a task, its
+   * comment marks and completions). Runs after the first delta of a session
+   * and then at most every `accessCheckMs`.
+   */
+  checkAccess = async (): Promise<void> => {
     const ids = this.runtime.tasks.syncIds;
-    if (!ids || this.accessChecked) return;
-    this.accessChecked = true;
+    if (!ids || this.accessChecking || this.disposed) return;
+    this.accessChecking = true;
     const started = Date.now();
     try {
+      let dropped = false;
       for (const table of ACCESS_CHECKED) {
         const res = await ids({ workspaceId: this.workspaceId, table });
-        if (!res.complete) continue;
+        if (!res.complete || this.disposed) continue;
         const keep = new Set(res.ids);
         const state = this.table(table);
         const gone = [...state.rows.keys()].filter(
           (id) => !keep.has(id) && (state.seenAt.get(id) ?? 0) < started,
         );
-        if (gone.length > 0) this.forgetRows(table, gone);
+        if (gone.length === 0) continue;
+        dropped = true;
+        this.forgetRows(table, gone);
+        if (table === "tasks") {
+          const goneTasks = new Set(gone);
+          for (const dependent of ["comments", "completions"] as const) {
+            const rows = this.table(dependent).rows;
+            const ofGone = [...rows.values()]
+              .filter((r) => goneTasks.has((r as { taskId?: string }).taskId ?? ""))
+              .map((r) => r.id);
+            this.forgetRows(dependent, ofGone);
+          }
+        }
       }
-      this.changed();
-      this.schedulePersist();
+      this.accessCheckedAt = started;
+      if (dropped) {
+        this.changed();
+        // Leave no private row on the device a moment longer than needed.
+        this.persistNow();
+      }
     } catch {
-      this.accessChecked = false;
+      // Tried again after the next delta.
+    } finally {
+      this.accessChecking = false;
     }
-  }
+  };
 
   /** Tags live in the workspace tag store (TV-T1): hand it every tag and link. */
   private seedTagStore(at: number): void {
@@ -1237,7 +1291,7 @@ export function workspaceStore(
   }
   let store = byWorkspace.get(workspaceId);
   if (store && store.userId !== userId) {
-    store.dispose();
+    store.dispose({ persist: false });
     everyStore.delete(store);
     store = undefined;
   }
@@ -1258,14 +1312,20 @@ export function findWorkspaceStore(
 }
 
 /**
- * The person changed (sign-in as someone else, sign-out): every store goes,
- * and on sign-out every device copy is wiped too.
+ * Who is signed in now (the auth shell calls this on every change). Signed
+ * out (null; account deletion signs out too): every store and every device
+ * copy goes. Someone signed in: stores and device copies of anyone else go, so
+ * a second account on this device never reads the first one's rows.
  */
-export function resetWorkspaceStores(opts: { wipeDeviceCopies: boolean }): void {
-  for (const store of everyStore) {
-    store.dispose();
-    registries.get(store.runtime.tasks)?.delete(store.workspaceId);
+export function attachSyncUser(userId: string | null): Promise<void> {
+  for (const store of [...everyStore]) {
+    if (userId !== null && store.userId === userId) continue;
+    store.dispose({ persist: false });
+    if (registries.get(store.runtime.tasks)?.get(store.workspaceId) === store) {
+      registries.get(store.runtime.tasks)?.delete(store.workspaceId);
+    }
+    everyStore.delete(store);
   }
-  everyStore.clear();
-  if (opts.wipeDeviceCopies) void (storeOptions.cache ?? deviceCache()).clear();
+  const cache = storeOptions.cache ?? deviceCache();
+  return userId === null ? cache.clear() : cache.keepOnly(userId);
 }

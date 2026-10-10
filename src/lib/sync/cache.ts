@@ -7,9 +7,12 @@
 // richer store goes.
 //
 // Records are keyed `<person>:<workspace>`, so one browser never shows a
-// person another's copy, and every copy is wiped on sign-out. Where
-// IndexedDB is missing (tests, a locked-down browser) the copy lives in
-// memory only: the store still works, it just opens from the server.
+// person another's copy; every copy is wiped on sign-out (account deletion
+// signs out too), and when someone else signs in on the device every copy but
+// theirs goes. A copy holds only the rows the views read: never a token, key
+// or session, comments without their text, no time entries or agent sessions.
+// Where IndexedDB is missing (tests, a locked-down browser) there is no copy:
+// the store still works, it just opens from the server.
 
 import type { SyncTableName } from "./types";
 
@@ -35,10 +38,17 @@ export interface SyncCache {
   write(key: string, value: CachedWorkspace): Promise<void>;
   /** Wipe every copy (sign-out). */
   clear(): Promise<void>;
+  /** Wipe every copy that isn't this person's (another account signed in on this device). */
+  keepOnly(userId: string): Promise<void>;
 }
 
 export function cacheKey(userId: string, workspaceId: string): string {
   return `${userId}:${workspaceId}`;
+}
+
+/** Whether a record key belongs to this person. */
+export function isKeyOf(key: string, userId: string): boolean {
+  return key.startsWith(`${userId}:`);
 }
 
 /** A copy that lives as long as the page (tests; no IndexedDB). */
@@ -55,6 +65,9 @@ export function memoryCache(): SyncCache & { records: Map<string, CachedWorkspac
     },
     async clear() {
       records.clear();
+    },
+    async keepOnly(userId) {
+      for (const key of [...records.keys()]) if (!isKeyOf(key, userId)) records.delete(key);
     },
   };
 }
@@ -122,6 +135,19 @@ export function idbCache(factory: IDBFactory): SyncCache {
         // Nothing to wipe.
       }
     },
+    async keepOnly(userId) {
+      try {
+        const store = await tx("readwrite");
+        const keys = (await requestToPromise(store.getAllKeys())) as IDBValidKey[];
+        await Promise.all(
+          keys
+            .filter((key) => typeof key !== "string" || !isKeyOf(key, userId))
+            .map((key) => requestToPromise(store.delete(key))),
+        );
+      } catch {
+        // Nothing to wipe.
+      }
+    },
   };
 }
 
@@ -130,6 +156,7 @@ export const noCache: SyncCache = {
   read: async () => null,
   write: async () => {},
   clear: async () => {},
+  keepOnly: async () => {},
 };
 
 let shared: SyncCache | null = null;
