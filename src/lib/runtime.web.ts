@@ -2120,27 +2120,33 @@ export const webRuntime: ModuoRuntime = {
       const now = new Date().toISOString();
       const { data: prev } = await supabaseClient
         .from("buckets")
-        .select("is_system, created_at")
+        .select("id")
         .eq("id", id)
         .maybeSingle();
-      // is_system is owned by the seeding path only — never settable via upsert.
-      const row = {
-        id,
-        workspace_id: bucket.workspaceId,
-        owner_id: bucket.ownerId || user?.id || null,
+      // A saved project's owner, workspace and Inbox flag never change (the
+      // server refuses it), so a re-save writes its editable fields only.
+      const editable = {
         name: bucket.name,
-        is_system: prev ? prev.is_system : false,
         group_label: bucket.group ?? null,
         position: bucket.position ?? "",
-        created_at: prev ? prev.created_at : bucket.createdAt || now,
         updated_at: now,
         deleted_at: bucket.deletedAt ?? null,
       };
-      const { data, error } = await supabaseClient
-        .from("buckets")
-        .upsert(row, { onConflict: "id" })
-        .select()
-        .single();
+      const { data, error } = prev
+        ? await supabaseClient.from("buckets").update(editable).eq("id", id).select().single()
+        : await supabaseClient
+            .from("buckets")
+            .insert({
+              ...editable,
+              id,
+              workspace_id: bucket.workspaceId,
+              owner_id: bucket.ownerId || user?.id || null,
+              // is_system is owned by the seeding path (ensureWebInbox) only.
+              is_system: false,
+              created_at: bucket.createdAt || now,
+            })
+            .select()
+            .single();
       if (error) throw new Error(error.message);
       return bucketRowToModel(data);
     },
@@ -2240,37 +2246,48 @@ export const webRuntime: ModuoRuntime = {
       const now = new Date().toISOString();
       const { data: prev } = await supabaseClient
         .from("tags")
-        .select("created_at")
+        .select("id")
         .eq("id", id)
         .maybeSingle();
-      const row = {
-        id,
-        workspace_id: tag.workspaceId,
-        owner_id: tag.ownerId || user?.id || null,
+      // A saved tag's owner and workspace never change (the server refuses
+      // it), so a re-save writes its editable fields only.
+      const editable = {
         name: tag.name,
         color: tag.color ?? null,
-        created_at: prev ? prev.created_at : tag.createdAt || now,
         updated_at: now,
         deleted_at: tag.deletedAt ?? null,
       };
-      const { data, error } = await supabaseClient
-        .from("tags")
-        .upsert(row, { onConflict: "id" })
-        .select()
-        .single();
+      const { data, error } = prev
+        ? await supabaseClient.from("tags").update(editable).eq("id", id).select().single()
+        : await supabaseClient
+            .from("tags")
+            .insert({
+              ...editable,
+              id,
+              workspace_id: tag.workspaceId,
+              owner_id: tag.ownerId || user?.id || null,
+              created_at: tag.createdAt || now,
+            })
+            .select()
+            .single();
       if (error) throw new Error(error.message);
       return tagRowToModel(data);
     },
 
     async deleteTag({ tagId }) {
       const now = new Date().toISOString();
-      // tag_links cascade on tag delete in the schema, but soft-delete the tag.
-      await supabaseClient.from("tag_links").delete().eq("tag_id", tagId);
-      const { error } = await supabaseClient
+      // Tags are deleted softly, and the server takes a deleted tag off
+      // everything it was on, items this person can't edit included.
+      const { data, error } = await supabaseClient
         .from("tags")
         .update({ deleted_at: now, updated_at: now })
-        .eq("id", tagId);
+        .eq("id", tagId)
+        .select("id");
       if (error) throw new Error(error.message);
+      // An update the server's rules filter out matches no row and no error.
+      if (!data?.length) throw new Error("You can't delete this tag.");
+      // Already gone on a server with that rule; kept for one without it.
+      await supabaseClient.from("tag_links").delete().eq("tag_id", tagId);
     },
 
     async attachTag({ workspaceId, tagId, entityType, entityId }) {
