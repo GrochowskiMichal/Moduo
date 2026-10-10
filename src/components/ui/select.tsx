@@ -5,6 +5,7 @@ import type * as React from "react";
 import { cn } from "@/lib/utils";
 import { eyebrowVariants } from "./eyebrow";
 import { type FieldShellVariant, fieldShellVariants } from "./field-shell";
+import { FLOATING_SURFACE } from "./surface";
 
 function Select({ ...props }: React.ComponentProps<typeof SelectPrimitive.Root>) {
   return <SelectPrimitive.Root data-slot="select" {...props} />;
@@ -66,7 +67,8 @@ function SelectContent({
       <SelectPrimitive.Content
         data-slot="select-content"
         className={cn(
-          "motion-pop relative min-w-[8rem] overflow-x-hidden overflow-y-auto rounded-md border border-border bg-popover text-popover-foreground",
+          FLOATING_SURFACE,
+          "relative min-w-[8rem] overflow-x-hidden overflow-y-auto",
           position === "popper" &&
             "data-[side=bottom]:translate-y-1 data-[side=left]:-translate-x-1 data-[side=right]:translate-x-1 data-[side=top]:-translate-y-1",
           className,

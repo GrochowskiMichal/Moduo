@@ -8,7 +8,7 @@ import {
   useDroppable,
 } from "@dnd-kit/core";
 import { differenceInCalendarDays, startOfDay } from "date-fns";
-import { ChevronDown, ChevronRight, GripVertical } from "lucide-react";
+import { GripVertical } from "lucide-react";
 import {
   type ReactNode,
   type PointerEvent as ReactPointerEvent,
@@ -23,7 +23,9 @@ import { createPortal } from "react-dom";
 
 import { Button } from "../../../components/ui/button";
 import { CompleteToggle } from "../../../components/ui/complete-toggle";
-import { Eyebrow, eyebrowVariants } from "../../../components/ui/eyebrow";
+import { EmptyState } from "../../../components/ui/empty-state";
+import { Eyebrow } from "../../../components/ui/eyebrow";
+import { GroupHeader } from "../../../components/ui/group-header";
 import { SegmentedControl } from "../../../components/ui/segmented-control";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import { cn } from "../../../lib/utils";
@@ -650,11 +652,16 @@ export function TaskTimelineView({
           {/* Empty axis — quiet hint, the tray below stays prominent (AC10). */}
           {datedCount === 0 && !api.loading ? (
             <div className="pointer-events-none absolute inset-x-0 top-16 z-10 flex justify-center">
-              <span className="rounded-md bg-background/90 px-3 py-1.5 font-sans text-sm text-muted-foreground">
-                {rollup.tray.length > 0
-                  ? "Nothing on the timeline yet — drag a task up from the tray to schedule it."
-                  : "No tasks in this scope yet."}
-              </span>
+              {/* A plate behind the words so the day grid doesn't run through them. */}
+              <EmptyState
+                size="inline"
+                title={
+                  rollup.tray.length > 0
+                    ? "Nothing on the timeline yet — drag a task up from the tray to schedule it."
+                    : "No tasks in this scope yet."
+                }
+                className="rounded-md bg-background/90 py-1.5"
+              />
             </div>
           ) : null}
         </div>
@@ -662,23 +669,12 @@ export function TaskTimelineView({
         {/* Unscheduled tray — collapsible bottom strip; chips drag onto a day. */}
         {rollup.tray.length > 0 ? (
           <div className="mt-2 shrink-0 rounded-md border border-border bg-card">
-            <button
-              type="button"
-              aria-expanded={trayOpen}
-              onClick={() => setTrayOpen((v) => !v)}
-              className={cn(
-                eyebrowVariants(),
-                "flex h-8 w-full items-center gap-1.5 rounded-md px-2 transition-colors duration-(--motion-fade) ease-(--ease-out) hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-              )}
-            >
-              {trayOpen ? (
-                <ChevronDown className="size-3.5" aria-hidden />
-              ) : (
-                <ChevronRight className="size-3.5" aria-hidden />
-              )}
-              Unscheduled
-              <span className="tabular-nums text-muted-foreground/70">{rollup.tray.length}</span>
-            </button>
+            <GroupHeader
+              label="Unscheduled"
+              count={rollup.tray.length}
+              onToggle={() => setTrayOpen((v) => !v)}
+              collapsed={!trayOpen}
+            />
             {trayOpen ? (
               <div className="scrollbar-thin flex max-h-28 flex-wrap gap-1.5 overflow-y-auto px-2 pb-2">
                 {rollup.tray.map((task) => (
@@ -845,24 +841,16 @@ function TimelineLaneBlock({
   return (
     <div>
       <div className="flex items-center" style={{ height: LANE_HEADER_H }}>
-        {/* Sticky so the lane label stays readable while scrolling the axis. */}
-        <button
-          type="button"
-          aria-expanded={!collapsed}
-          onClick={onToggle}
-          className={cn(
-            eyebrowVariants(),
-            "sticky left-0 z-10 flex h-full items-center gap-1 bg-background pl-1 pr-3 transition-colors duration-(--motion-fade) ease-(--ease-out) hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-          )}
-        >
-          {collapsed ? (
-            <ChevronRight className="size-3.5" aria-hidden />
-          ) : (
-            <ChevronDown className="size-3.5" aria-hidden />
-          )}
-          <span className="max-w-48 truncate">{name}</span>
-          <span className="tabular-nums text-muted-foreground/70">{count}</span>
-        </button>
+        {/* Sticky so the lane label stays readable while scrolling the axis;
+            content-wide (w-fit) so it can stick. The lane's name as typed
+            (a bucket, a person): sentence case, never small caps (call 40). */}
+        <GroupHeader
+          label={name}
+          count={count}
+          onToggle={onToggle}
+          collapsed={collapsed}
+          className="sticky left-0 z-10 h-full w-fit max-w-60 bg-background"
+        />
       </div>
       {!collapsed ? (
         <div className="relative" style={{ height: bodyHeight }}>

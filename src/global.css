@@ -379,6 +379,15 @@ body,
     motion-grow-out var(--motion-fade) var(--ease-in) forwards;
 }
 
+/* A tooltip opens as "delayed-open" or "instant-open" (Radix), never "open".
+   Same arrival as every other floating surface (DS-6: one recipe). */
+.motion-pop[data-state="delayed-open"],
+.motion-pop[data-state="instant-open"] {
+  animation:
+    motion-fade-in var(--motion-fade) var(--ease-out),
+    motion-grow-in var(--motion-base) var(--ease-out);
+}
+
 /* 3 · A row opening on add: the row is a one-row grid whose only child clips
    its content while the track grows. Add `data-leaving` to play the exit, then
    remove the row on the `motion-fade-out` animationend. */
@@ -821,6 +830,26 @@ body,
    does the scrolling, or the pane shows a dead strip beside the real bar. */
 .pane-scroll {
   scrollbar-gutter: stable;
+}
+
+/* ═══ Hit target (DS-6, visual audit B14) ═══
+   A small control (a 16 px checkbox, a queue toggle, an expand chevron) keeps
+   its glyph and gets a pointer target of at least --hit-min (24 px) from an
+   invisible ::before centred on it. The inset is negative only when the control
+   is smaller than the target, so a big control is untouched. The host becomes
+   `position: relative` in the components layer, so an explicit `absolute` /
+   `fixed` utility still wins. An `overflow-hidden` ancestor smaller than the
+   target clips the pad: give such a control room, or skip the class. */
+@layer components {
+  .hit-min {
+    position: relative;
+  }
+}
+
+.hit-min::before {
+  content: "";
+  position: absolute;
+  inset: min(0%, calc((100% - var(--hit-min)) / 2));
 }
 
 /* React Flow overrides for the dark mindmap theme */

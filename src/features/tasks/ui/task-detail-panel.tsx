@@ -15,6 +15,7 @@ import { EntityHub } from "@/features/spine/ui/entity-hub";
 import type { EntityLink, EntityRef, RelationKind } from "@/lib/entity-links";
 import { ENTITY_OPEN_EVENT } from "@/lib/entity-open";
 import type { ModuoRuntime } from "@/lib/runtime.types";
+import { CollectionHeader } from "../../../components/ui/collection-header";
 import {
   Command,
   CommandEmpty,
@@ -25,6 +26,7 @@ import {
 } from "../../../components/ui/command";
 import { CompleteToggle } from "../../../components/ui/complete-toggle";
 import { detailTitleVariants } from "../../../components/ui/detail-title";
+import { EmptyState } from "../../../components/ui/empty-state";
 import { IconButton } from "../../../components/ui/icon-button";
 import { Input } from "../../../components/ui/input";
 import { Kbd } from "../../../components/ui/kbd";
@@ -366,25 +368,7 @@ function TitleField({ task, canEdit, api }: { task: Task; canEdit: boolean; api:
 }
 
 // ── collections ───────────────────────────────────────────────────────────────
-
-/** Every collection's header: label · count · + (comp §1). */
-function CollectionHeader({
-  label,
-  count,
-  action,
-}: {
-  label: string;
-  count: React.ReactNode;
-  action?: React.ReactNode;
-}) {
-  return (
-    <div className="flex h-(--ctrl-h-sm) items-center gap-1.5 font-display text-sm font-medium text-foreground">
-      <span>{label}</span>
-      <span className="font-sans font-normal text-muted-foreground tabular-nums">{count}</span>
-      {action ? <span className="ml-auto flex items-center">{action}</span> : null}
-    </div>
-  );
-}
+// Every collection's header is the kit's CollectionHeader: label · count · + (comp §1).
 
 function SubtasksSection({
   task,
@@ -499,7 +483,8 @@ function SubtaskRow({
               aria-pressed={queued}
               onClick={() => api.toggleQueue(subtask.id)}
               className={cn(
-                "flex size-5 shrink-0 items-center justify-center rounded transition-opacity duration-(--motion-fade) ease-(--ease-out)",
+                // hit-min pads the pointer target to 24 px; the glyph stays put.
+                "hit-min flex size-5 shrink-0 items-center justify-center rounded transition-opacity duration-(--motion-fade) ease-(--ease-out)",
                 "focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
                 queued
                   ? "text-primary"
@@ -596,19 +581,15 @@ function RelatedTaskRow({
         {task.title || "Untitled"}
       </button>
       {onRemove ? (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              aria-label="Remove dependency"
-              onClick={onRemove}
-              className="flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground opacity-0 transition-opacity duration-(--motion-fade) ease-(--ease-out) hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 group-hover:opacity-100"
-            >
-              <X className="size-icon-sm" aria-hidden />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent>Remove dependency (keeps the task)</TooltipContent>
-        </Tooltip>
+        // Revealed on row hover or focus: it keeps its space and fades (R6).
+        // hit-min keeps a 24 px target on the dense rung.
+        <IconButton
+          icon={X}
+          label="Remove dependency"
+          tooltip="Remove dependency (keeps the task)"
+          onClick={onRemove}
+          className="hit-min text-muted-foreground opacity-0 transition-[color,background-color,opacity] hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+        />
       ) : null}
     </div>
   );
@@ -668,22 +649,24 @@ function DetailEmptyState({
   onRequestCapture: () => void;
 }) {
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-2 px-2 text-center">
-      <p className="font-display text-sm text-foreground">No task selected</p>
-      <p className="text-xs text-muted-foreground">Pick a task to see and edit its details here.</p>
-      {canEdit ? (
-        <p className="mt-1 text-xs text-muted-foreground">
-          Press <Kbd>c</Kbd> to{" "}
-          <button
-            type="button"
-            onClick={onRequestCapture}
-            className="underline-offset-2 hover:text-foreground hover:underline"
-          >
-            capture
-          </button>{" "}
-          a new one.
-        </p>
-      ) : null}
-    </div>
+    <EmptyState
+      title="No task selected"
+      description="Pick a task to see and edit its details here."
+      hint={
+        canEdit ? (
+          <>
+            Press <Kbd>c</Kbd> to {/* A link inside the sentence: a Button would break the line. */}
+            <button
+              type="button"
+              onClick={onRequestCapture}
+              className="rounded-sm underline-offset-2 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+            >
+              capture
+            </button>{" "}
+            a new one.
+          </>
+        ) : undefined
+      }
+    />
   );
 }

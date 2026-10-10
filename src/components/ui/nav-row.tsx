@@ -31,7 +31,6 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "./dropdown-menu";
-import { eyebrowVariants } from "./eyebrow";
 import { Input } from "./input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./tooltip";
 
@@ -458,7 +457,7 @@ type NavSectionHeaderProps = Omit<React.ComponentProps<"div">, "children"> & {
   indicator?: React.ReactNode;
 };
 
-/** A rail section's eyebrow header: optional collapse and a hover "+" that swaps with the count. */
+/** A rail section's header (the GroupHeader type, sentence case): optional collapse and a hover "+" that swaps with the count. */
 function NavSectionHeader({
   label,
   count,
@@ -475,7 +474,8 @@ function NavSectionHeader({
   const Chevron = collapsed ? ChevronRight : ChevronDown;
   const text = (
     <>
-      <span className={cn(eyebrowVariants({ tone: "inherit" }), "min-w-0 truncate")}>{label}</span>
+      {/* Sentence case as typed: a section is usually named by a person (call 40). */}
+      <span className="min-w-0 truncate font-display text-sm font-medium">{label}</span>
       {onToggle ? <Chevron className="size-icon-xs shrink-0" aria-hidden /> : null}
       {showCount ? <span className="sr-only">, {countLabel ?? String(count)}</span> : null}
     </>

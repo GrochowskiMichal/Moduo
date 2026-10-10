@@ -1,0 +1,21 @@
+# Manual test checklist — DS-6 (Tasks v3 block 8: the north-star kit, the fix list, the lint guards)
+
+> Generated 2026-10-10 · branch `t/maciej/ds-6-kit` (landed locally on `t/maciej/tasks-v3-build`) · **Live-verified:** in Storybook (`bun run storybook`, this worktree on port 6118) with the kit stories, the Tasks stories and the app-chrome story; `tests/visual/kit.spec.ts` and `tests/visual/avatars.spec.ts` passed there on system Chrome. Not tried: the desktop app, light mode (out of scope), and the Tasks views against the local stack (the fix list changes their pieces, not their data).
+> Run top-to-bottom; check off as you go. Each item is a step → what you should see → where.
+
+## The kit in Storybook
+- [ ] **Do:** open Storybook → Components/ui → **row** → Densities → **Expect:** three copies, Comfortable · Compact · Dense; the rows get shorter (36 / 32 / 28 px) while the text stays the same size; the long title is cut off before the date or the avatar ever is. _(Storybook)_
+- [ ] **Do:** row → Default, point at a row, then Tab into the list → **Expect:** hover is a soft fill; the selected row has the accent tint and hovering it gets a little stronger; the focused row shows the one soft focus ring; the done row is faded and struck through but its check stays bright. _(Storybook)_
+- [ ] **Do:** item-card → Default and Densities → **Expect:** cards have a faint hairline edge (no hard border); hover fills them like rows; the selected one is tinted with a ring; cards get tighter at Compact and Dense. _(Storybook)_
+- [ ] **Do:** group-header → Default → **Expect:** "iOS app", "Today · Mon, Oct 12", "Discovery 3/3", a team square "DS For Design", "design system": names exactly as typed, never in capitals; counts in a quieter grey; the chevron turns, the text never does. Point at "iOS app" → a "+" and "⋯" fade in on the right without anything moving. _(Storybook)_
+- [ ] **Do:** group-header → Sticky, scroll the box → **Expect:** each header stays pinned at the top while its rows pass under it. _(Storybook)_
+- [ ] **Do:** chip → Default and Picker pills → **Expect:** one chip look everywhere: a hairline ring at rest, a soft fill when set ("Anna" with its ×, "In progress" toggles on click); "Due · Oct 16" is filled, "Assignee" is muted on the ring; Priority opens a menu and shows the pick. The inline chips sit in the sentence at text height. _(Storybook)_
+- [ ] **Do:** avatar → Identity → **Expect:** Maciej "MA" and Mike "MI" in different colours; "Alex Rivera" AR; the email shows "AK"; Unassigned is a dashed empty ring; teams are rounded squares: Design DS, Development DV, Customer success CS, Ops OP. _(Storybook)_
+- [ ] **Do:** date-field → Time; type "3pm", Enter; then "1530", Tab; then "banana", Tab; then press ↑ twice → **Expect:** "3:00 PM", then "3:30 PM", then it goes back to "3:30 PM", then "4:00 PM". No browser clock control appears. _(Storybook)_
+- [ ] **Do:** date-field → With time, pick a day → **Expect:** the month's arrows sit on the caption row inside the popover (not floating at its edges); the time field shows "9:00 AM"; the trigger reads like "Oct 16, 9:00 AM". _(Storybook)_
+- [ ] **Do:** input → Number field; type "abc" then Tab; press ↑ → **Expect:** "abc" is rejected (the old number comes back); ↑ adds 5; no spinner arrows. _(Storybook)_
+- [ ] **Do:** display-menu → Densities → **Expect:** three open Display panels, the rows getting tighter from Comfortable to Dense. _(Storybook)_
+- [ ] **Do:** open any menu, select, popover and hover a tooltip (e.g. dropdown-menu, select, tooltip, filter-bar → Menu open) → **Expect:** one look for all of them: the same faint hairline edge and the same corner radius, and each grows quickly from where it was opened (the tooltip too). _(Storybook)_
+- [ ] **Do:** progress → Densities → **Expect:** grey bars, never the accent colour; the thin one sits beside "1h 20m of ~4h". _(Storybook)_
+- [ ] **Do:** toolbar → Default → **Expect:** "Website relaunch 76" · Search · Filter · Display as plain (ghost) buttons · the list/board/timeline icons · one filled "New" button. _(Storybook)_
+- [ ] **Do:** Components/app → app-chrome → Default → **Expect:** the app's top bar renders (it used to show "Something went wrong"). _(Storybook)_

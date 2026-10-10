@@ -431,6 +431,9 @@
   --state-active:        color-mix(in oklab, var(--foreground) 9%, transparent);
   --state-active-hover:  color-mix(in oklab, var(--foreground) 14%, transparent);
   --state-selected:      color-mix(in oklab, var(--primary) 13%, transparent);
+  /* Hovering a selected item steps one up (DS-6, the kit Row and Card), so a
+     selected row still answers the pointer. */
+  --state-selected-hover: color-mix(in oklab, var(--primary) 18%, transparent);
   --state-selected-ring: color-mix(in oklab, var(--primary) 32%, transparent);
   /* The 1px inset hairline a selected LIST ROW draws with its tint. The
      designer's switch between the two selection looks: keep it for
@@ -438,6 +441,14 @@
      accent the tint alone sits close to --state-active, so it ships on. */
   --state-selected-edge: var(--state-selected-ring);
   --hairline:            color-mix(in oklab, var(--foreground) 10%, transparent);
+  /* The third readable text level (tasks-v3 call 38, DS-6): timestamps, hints,
+     counts. Three readable levels for every module — foreground (primary),
+     --muted-foreground (secondary, ~8.5:1) and this one (tertiary, ~6:1, never
+     under 4.5:1) — plus one decorative level below it that carries no
+     information (ghost priority bars, placeholders, disabled). Translucent, so
+     it reads the same on card, background and popover. Utility:
+     text-subtle-foreground. New one-off fades (/40 /50 /60) are not levels. */
+  --subtle-foreground:   color-mix(in oklab, var(--muted-foreground) 86%, transparent);
   /* The current segment of a segmented control / tab list sits on a --muted
      track and must read LIGHTER than it on dark (the old bg-card plate
      rendered darker, so an icon-only switcher lost its current view). */
@@ -469,6 +480,14 @@
  *    in @theme). Re-add a scale here only if a density-driven spacing axis ships.
  * ==========================================================================*/
 
+/* The smallest pointer target (WCAG 2.2 AA "Target size", 24 x 24 CSS px;
+   DS-6, visual audit B14). Not density-scaled: a dense row keeps a 24 px hit
+   area. `.hit-min` (global.css) pads a small control's hit area out to this
+   size with an invisible ::before, so its glyph never grows. */
+:root {
+  --hit-min: 1.5rem; /* 24 */
+}
+
 /* ============================================================================
  * 7. Density variants — drive row heights, control heights, paddings.
  *    Three steps, an even 4px row ladder (36 / 32 / 28). The dense end
@@ -482,6 +501,7 @@
   --row-h-sm: 1.75rem; /* 28 — nested rows                    */
   --ctrl-h:  2rem;     /* 32 — buttons, inputs                */
   --ctrl-h-sm: 1.625rem; /* 26 — small buttons                */
+  --ctrl-h-xs: 1.5rem;   /* 24 — chips and pills inline with text (DS-6) */
   --ctrl-h-lg: 2.5rem;   /* 40 — large buttons                */
   --pad-x:   1rem;     /* 16 — primary horizontal padding     */
   --pad-y:   0.625rem; /* 10 — primary vertical padding       */
@@ -503,6 +523,7 @@
   --row-h-sm: 1.625rem; /* 26 */
   --ctrl-h:  1.875rem;  /* 30 */
   --ctrl-h-sm: 1.5rem;  /* 24 */
+  --ctrl-h-xs: 1.375rem;/* 22 */
   --ctrl-h-lg: 2.25rem; /* 36 */
   --pad-x:   0.875rem;  /* 14 */
   --pad-y:   0.5rem;    /* 8  */
@@ -520,6 +541,7 @@
   --row-h-sm: 1.5rem;   /* 24 */
   --ctrl-h:  1.625rem;  /* 26 */
   --ctrl-h-sm: 1.375rem;/* 22 */
+  --ctrl-h-xs: 1.25rem; /* 20 */
   --ctrl-h-lg: 2rem;    /* 32 */
   --pad-x:   0.75rem;   /* 12 */
   --pad-y:   0.375rem;  /* 6  */
@@ -601,6 +623,7 @@
      Sizes use rem so the user's OS text-size pref still applies.
      The body-tier ladder across text-size settings is 13 / 14 / 16 base —
      small ≈ Linear UI text, normal ≈ Notion chrome, large stays generous. */
+  --text-3xs:  0.5625rem; /* 9 — two-letter initials on an icon-rung avatar only */
   --text-2xs:  0.6875rem; /* 11 — eyebrow / section labels */
   --text-xs:   0.75rem;   /* 12 — labels, captions   */
   --text-sm:   0.8125rem; /* 13 — secondary UI       */
@@ -805,6 +828,17 @@
 [data-label="teal"]   { --label: var(--teal-base);    --label-surface: oklch(0.72 0.13 200 / 0.18); }
 [data-label="pink"]   { --label: var(--pink-base);    --label-surface: oklch(0.71 0.20 350 / 0.18); }
 
+/* The avatar strength of a hue (DS-6, calls 43 + 95): a person's two initials
+   and a team's two letters sit on the hue mixed about half into the card, with
+   --foreground text on top. --label-surface (18 % alpha) is too faint to tell
+   two people apart at 16 px. Re-declared on every [data-label] element so it
+   resolves against that element's own --label and --card. Utility:
+   bg-label-fill. */
+:root,
+[data-label] {
+  --label-fill: color-mix(in oklab, var(--label) 48%, var(--card));
+}
+
 /* ============================================================================
  * 14. Tailwind v4 @theme mapping
  *     Exposes our semantic tokens as Tailwind utilities:
@@ -849,10 +883,15 @@
   --color-state-active:         var(--state-active);
   --color-state-active-hover:   var(--state-active-hover);
   --color-state-selected:       var(--state-selected);
+  --color-state-selected-hover: var(--state-selected-hover);
   --ring-color-state-selected:  var(--state-selected-ring);
   --ring-color-state-selected-edge: var(--state-selected-edge);
   --color-hairline:             var(--hairline);
   --color-control-raised:       var(--control-raised);
+  /* Text levels (call 38): text-foreground · text-muted-foreground ·
+     text-subtle-foreground. Avatar / team-mark hue fill: bg-label-fill. */
+  --color-subtle-foreground:    var(--subtle-foreground);
+  --color-label-fill:           var(--label-fill);
 
   --radius-sm: var(--radius-sm);
   --radius:    var(--radius);
@@ -873,6 +912,7 @@
   --spacing-icon:    var(--icon);
   --spacing-icon-lg: var(--icon-lg);
 
+  --text-3xs:  var(--text-3xs);
   --text-2xs:  var(--text-2xs);
   --text-xs:   var(--text-xs);
   --text-sm:   var(--text-sm);

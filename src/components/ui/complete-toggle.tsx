@@ -35,7 +35,8 @@ function CompleteToggle({
         onToggle();
       }}
       className={cn(
-        "flex size-4 shrink-0 items-center justify-center rounded-full border",
+        // hit-min pads the pointer target to 24 px; the 16 px circle stays (DS-6).
+        "hit-min flex size-4 shrink-0 items-center justify-center rounded-full border",
         "transition-[color,background-color,border-color] duration-(--motion-fade) ease-(--ease-out)",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
         done

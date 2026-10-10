@@ -4,6 +4,7 @@
 
 import { useMemo } from "react";
 
+import { initialsOf as kitInitialsOf } from "../../components/ui/avatar";
 import { supabaseClient } from "../../lib/runtime.web";
 import { useAuth } from "../../providers/auth-provider";
 import { useWorkspace } from "../workspaces/workspace-context";
@@ -11,12 +12,9 @@ import { type Assignee, toAssignees } from "./assignee-options";
 
 export type { Assignee } from "./assignee-options";
 
+/** A person's initials: the kit's one rule (`initialsOf` in ui/avatar, call 43). */
 export function initialsOf(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "?";
-  const first = parts[0][0] ?? "";
-  const last = parts.length > 1 ? (parts[parts.length - 1][0] ?? "") : "";
-  return (first + last).toUpperCase();
+  return kitInitialsOf(name);
 }
 
 /** Null when they can already see the bucket. Otherwise the picker warning. */

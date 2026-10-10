@@ -122,13 +122,14 @@ export function ActiveTagFilters({
       <span className="font-sans text-xs tabular-nums text-muted-foreground/70">
         {matchCount} of {scopeCount}
       </span>
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        size="sm"
         onClick={onClear}
-        className="rounded text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="px-1.5 font-sans text-xs font-normal text-muted-foreground hover:text-foreground"
       >
         Clear
-      </button>
+      </Button>
     </>
   );
 }

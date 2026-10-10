@@ -1,6 +1,10 @@
 import type { DraggableSyntheticListeners } from "@dnd-kit/core";
-import { Check, ChevronDown, ChevronRight, CornerDownRight, Inbox } from "lucide-react";
+import { addDays, format, startOfWeek } from "date-fns";
+import { Check, ChevronDown, ChevronRight, Clock, CornerDownRight, Inbox, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
+import { TimeInput } from "@/components/ui/date-field";
 import { SELECTED_ROW } from "@/components/ui/selection";
 import { CompleteToggle } from "../../../components/ui/complete-toggle";
 import {
@@ -21,7 +25,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/
 import { cn } from "../../../lib/utils";
 import { assigneeLabel } from "../assignee-options";
 import { useAssignees } from "../assignees";
-import { LEVEL_OPTIONS, toDateInputValue, toLocalInputValue } from "../helpers";
+import { LEVEL_OPTIONS } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { EnergyLevel, PriorityLevel, Task } from "../model";
 import { ALL_ROW_COLUMNS, type RowColumns, type RowDate, rowDate } from "../row-layout";
@@ -184,7 +188,8 @@ export function TaskRow({
                 aria-expanded={expanded}
                 aria-label={expanded ? "Collapse subtasks" : "Expand subtasks"}
                 className={cn(
-                  "flex size-4 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  // hit-min pads the pointer target to 24 px; the glyph stays put.
+                  "hit-min flex size-4 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   done && "opacity-40",
                 )}
                 onClick={(e) => {
@@ -469,7 +474,11 @@ function TitleEditor({
         else if (e.key === "Escape") end(false);
       }}
       onBlur={() => end(true)}
-      className="h-7 px-1.5 py-0 font-display text-sm"
+      // Bare and in the row title's own face and size, so the text doesn't
+      // change when editing starts (content, not chrome: R4).
+      variant="bare"
+      size="sm"
+      className="font-sans text-md"
     />
   );
 }
@@ -551,7 +560,7 @@ function DateCell({
     >
       {date ? <DateTip date={date}>{trigger}</DateTip> : trigger}
       <PopoverContent
-        className="w-auto p-3"
+        className="w-auto p-0"
         onClick={(e) => e.stopPropagation()}
         onCloseAutoFocus={keepListFocus}
         align="end"
@@ -586,59 +595,120 @@ function ScheduleEditor({
   onDone: () => void;
 }) {
   return (
-    <>
-      <label className="mb-1 block text-xs font-medium text-muted-foreground">Scheduled time</label>
-      <Input
-        type="datetime-local"
-        autoFocus
-        defaultValue={toLocalInputValue(task.scheduledAt)}
-        className="h-8"
-        onChange={(e) => {
-          const v = e.target.value;
-          api.patchTask(task.id, { scheduledAt: v ? new Date(v).toISOString() : null });
-        }}
-      />
-      {task.scheduledAt ? (
-        <button
-          type="button"
-          className="mt-2 text-xs text-muted-foreground hover:text-foreground"
-          onClick={() => {
-            api.patchTask(task.id, { scheduledAt: null });
-            onDone();
-          }}
-        >
-          Clear
-        </button>
-      ) : null}
-    </>
+    <DateEditor
+      label="Scheduled time"
+      value={validDate(task.scheduledAt)}
+      withTime
+      onChange={(next) => api.patchTask(task.id, { scheduledAt: next ? next.toISOString() : null })}
+      onDone={onDone}
+    />
   );
 }
 
 function DueEditor({ task, api, onDone }: { task: Task; api: TasksModuleApi; onDone: () => void }) {
   return (
+    <DateEditor
+      label="Due date"
+      value={validDate(task.dueDate)}
+      withTime={false}
+      onChange={(next) => api.patchTask(task.id, { dueDate: next ? next.toISOString() : null })}
+      onDone={onDone}
+    />
+  );
+}
+
+function validDate(iso: string | null): Date | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/**
+ * The row's date editor: the kit DateField's picker (presets · Calendar ·
+ * TimeInput · Clear), composed inside the row's own popover. DateField owns its
+ * open state and its trigger, and this popover must open from `s` / `d` and the
+ * menu and hand focus back to the list on close, so the row keeps its popover
+ * and uses DateField's parts. Each pick saves once: a due date closes the
+ * editor; a scheduled day stays open so its time can be set.
+ */
+function DateEditor({
+  label,
+  value,
+  withTime,
+  onChange,
+  onDone,
+}: {
+  label: string;
+  value: Date | null;
+  withTime: boolean;
+  onChange: (next: Date | null) => void;
+  onDone: () => void;
+}) {
+  const pick = (day: Date | undefined) => {
+    // A click on the chosen day again keeps it; Clear is the way to remove it.
+    if (!day) return;
+    const next = new Date(day);
+    if (withTime) {
+      next.setHours(value ? value.getHours() : 9, value ? value.getMinutes() : 0, 0, 0);
+      onChange(next);
+    } else {
+      next.setHours(0, 0, 0, 0);
+      onChange(next);
+      onDone();
+    }
+  };
+  const today = new Date();
+  const presets = [
+    { label: "Today", date: today },
+    { label: "Tomorrow", date: addDays(today, 1) },
+    { label: "Next week", date: addDays(startOfWeek(today, { weekStartsOn: 1 }), 7) },
+  ];
+  return (
     <>
-      <label className="mb-1 block text-xs font-medium text-muted-foreground">Due date</label>
-      <Input
-        type="date"
-        autoFocus
-        defaultValue={toDateInputValue(task.dueDate)}
-        className="h-8"
-        onChange={(e) => {
-          const v = e.target.value;
-          api.patchTask(task.id, { dueDate: v ? new Date(`${v}T00:00:00`).toISOString() : null });
-        }}
+      <p className="px-3 pt-2.5 text-xs font-medium text-muted-foreground">{label}</p>
+      <div className="flex flex-wrap gap-1 border-b border-hairline p-2">
+        {presets.map((p) => (
+          <Button key={p.label} variant="ghost" size="sm" onClick={() => pick(p.date)}>
+            {p.label}
+          </Button>
+        ))}
+      </div>
+      <Calendar
+        mode="single"
+        selected={value ?? undefined}
+        defaultMonth={value ?? undefined}
+        onSelect={pick}
       />
-      {task.dueDate ? (
-        <button
-          type="button"
-          className="mt-2 text-xs text-muted-foreground hover:text-foreground"
-          onClick={() => {
-            api.patchTask(task.id, { dueDate: null });
-            onDone();
-          }}
-        >
-          Clear
-        </button>
+      {withTime ? (
+        <div className="flex items-center gap-2 border-t border-hairline p-2">
+          <Clock className="size-icon-sm text-muted-foreground" aria-hidden />
+          <TimeInput
+            aria-label="Time"
+            value={value ? format(value, "HH:mm") : ""}
+            onValueChange={(hhmm) => {
+              const [h, m] = hhmm.split(":").map(Number);
+              const next = value ? new Date(value) : new Date();
+              next.setHours(h, m, 0, 0);
+              onChange(next);
+            }}
+          />
+        </div>
+      ) : null}
+      {value ? (
+        <div className="border-t border-hairline p-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start gap-1.5 text-muted-foreground"
+            onClick={() => {
+              onChange(null);
+              onDone();
+            }}
+          >
+            <X aria-hidden />
+            Clear
+          </Button>
+        </div>
       ) : null}
     </>
   );

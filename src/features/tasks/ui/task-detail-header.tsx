@@ -86,10 +86,13 @@ export function TaskDetailHeader({
       <nav aria-label="Location" className="flex min-w-0 flex-1 items-center gap-0.5">
         <DropdownMenu>
           <DropdownMenuTrigger asChild disabled={!canEdit}>
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="sm"
               aria-label={`Bucket: ${bucket?.name ?? "Inbox"}. Move to another bucket`}
-              className="-ml-1.5 flex h-(--ctrl-h-sm) min-w-0 shrink items-center gap-1.5 rounded-md px-1.5 font-sans text-xs text-muted-foreground outline-none transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 aria-expanded:bg-state-active aria-expanded:text-foreground disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
+              // Content, not chrome: the body face at the meta size. A
+              // view-only member sees it at full strength, just not clickable.
+              className="-ml-1.5 min-w-0 shrink px-1.5 font-sans text-xs font-normal text-muted-foreground hover:text-foreground aria-expanded:bg-state-active aria-expanded:text-foreground disabled:opacity-100"
             >
               {bucket?.isSystem ? (
                 <Inbox className="size-icon-xs shrink-0" aria-hidden />
@@ -97,7 +100,7 @@ export function TaskDetailHeader({
                 <span aria-hidden className="size-2 shrink-0 rounded-full bg-muted-foreground/60" />
               )}
               <span className="truncate">{bucket?.name ?? "Inbox"}</span>
-            </button>
+            </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-56">
             <DropdownMenuRadioGroup
@@ -118,14 +121,15 @@ export function TaskDetailHeader({
         {parent ? (
           <>
             <ChevronRight className="size-icon-xs shrink-0 text-muted-foreground/60" aria-hidden />
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={() => onSelectTask(parent.id)}
               aria-label={`Parent task: ${parent.title || "Untitled"}`}
-              className="flex h-(--ctrl-h-sm) min-w-0 shrink items-center rounded-md px-1.5 font-sans text-xs text-muted-foreground outline-none transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
+              className="min-w-0 shrink px-1.5 font-sans text-xs font-normal text-muted-foreground hover:text-foreground"
             >
               <span className="truncate">{parent.title || "Untitled"}</span>
-            </button>
+            </Button>
           </>
         ) : null}
       </nav>
@@ -197,7 +201,7 @@ function QueueButton({
           aria-label={note ?? undefined}
           className="flex shrink-0 items-center px-0.5"
         >
-          <ClaimAvatar assignee={claim.first} />
+          <ClaimAvatar assignee={claim.first} size="icon" />
         </span>
       </TooltipTrigger>
       <TooltipContent>{note}</TooltipContent>

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button } from "./button";
 import { FilterBar, FilterButton, FilterMenu } from "./filter-bar";
 import { type FilterCondition, type FilterDimension, matchesFilters } from "./filter-model";
+import { AtThreeDensities } from "./kit-densities";
 import { Toolbar } from "./toolbar";
 
 const meta: Meta<typeof FilterBar> = {
@@ -162,6 +163,27 @@ export const MenuOpen: Story = {
           </Button>
         </FilterMenu>
       </div>
+    );
+  },
+};
+
+/** The chip row at the three density steps: chips sit on the small control rung. */
+export const Densities: Story = {
+  render: () => {
+    const [value, setValue] = useState<FilterCondition[]>([
+      { dimension: "assignee", operator: "is", values: ["me"] },
+      { dimension: "tag", operator: "any_of", values: ["ui", "fix"] },
+    ]);
+    return (
+      <AtThreeDensities direction="column">
+        <FilterBar
+          dimensions={DIMENSIONS}
+          value={value}
+          onValueChange={setValue}
+          matchCount={3}
+          totalCount={9}
+        />
+      </AtThreeDensities>
     );
   },
 };

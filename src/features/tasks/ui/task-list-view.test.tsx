@@ -216,7 +216,11 @@ describe("TaskListView keys (tasks-v2 Q1-1, Q1-2)", () => {
     grid.focus();
     fireEvent.keyDown(grid, { key: "d", code: "KeyD" });
     await wait();
-    const input = document.querySelector<HTMLInputElement>('[data-slot="popover-content"] input')!;
+    // The due editor is the kit's date picker now (DS-6), not a native date
+    // input: aim the keys at whatever it focused on open.
+    const popover = document.querySelector<HTMLElement>('[data-slot="popover-content"]')!;
+    const input = document.activeElement as HTMLElement;
+    expect(popover.contains(input)).toBe(true);
 
     fireEvent.keyDown(input, SPACE);
     fireEvent.keyDown(input, { key: "ArrowDown", code: "ArrowDown" });

@@ -1,3 +1,4 @@
+import { cva } from "class-variance-authority";
 import { Avatar as AvatarPrimitive } from "radix-ui";
 import type * as React from "react";
 
@@ -94,4 +95,186 @@ function AvatarGroupCount({ className, ...props }: React.ComponentProps<"div">) 
   );
 }
 
-export { Avatar, AvatarBadge, AvatarFallback, AvatarGroup, AvatarGroupCount, AvatarImage };
+// ── Identity: people round, teams square (tasks-v3 calls 43 + 95, DS-6) ────────
+
+/** The label hues an avatar or team mark may take (tokens.css §13b). Gray is
+ *  kept for "no one", red for errors; the rest are spread by a hash. */
+const AVATAR_HUES = ["blue", "green", "amber", "violet", "teal", "pink"] as const;
+type AvatarHue = (typeof AVATAR_HUES)[number];
+
+/** A stable hue for a person or a team. Key it on the id (a rename keeps the
+ *  colour); fall back to the name. FNV-1a, so it is the same on every device. */
+function avatarHue(key: string): AvatarHue {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < key.length; i++) {
+    hash ^= key.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return AVATAR_HUES[(hash >>> 0) % AVATAR_HUES.length];
+}
+
+const firstLetter = (word: string) => [...word][0] ?? "";
+
+/** Words of a name; an email's local part is split on `.`, `_` and `-` too. */
+function nameWords(name: string): string[] {
+  const trimmed = name.trim();
+  const base = /^\S+@\S+$/.test(trimmed) ? trimmed.slice(0, trimmed.indexOf("@")) : trimmed;
+  return base
+    .split(/[\s._-]+/)
+    .map((w) => w.replace(/^[^\p{L}\p{N}]+/u, ""))
+    .filter(Boolean);
+}
+
+/**
+ * A person's two initials (call 43): first and last word ("Maciej Grzywacz" →
+ * "MG"), or the first two letters of a single word ("Maciej" → "MA", "Mike" →
+ * "MI"), so two people who share a first letter still differ. Never one letter
+ * and never "Me": pass the person's own name, not a pronoun.
+ */
+function initialsOf(name: string | null | undefined): string {
+  const words = nameWords(name ?? "");
+  if (words.length === 0) return "?";
+  if (words.length === 1) return [...words[0]].slice(0, 2).join("").toUpperCase();
+  return (firstLetter(words[0]) + firstLetter(words[words.length - 1])).toUpperCase();
+}
+
+/**
+ * A team's two automatic letters (call 95): the first letters of the first two
+ * words ("Customer success" → "CS"), or a single word's first letter plus its
+ * next consonant ("Design" → "DS", "Development" → "DV"). A team can edit its
+ * letters (TV-D10 stores them); pass them as `letters` when set.
+ */
+function teamLettersOf(name: string | null | undefined): string {
+  const words = nameWords(name ?? "");
+  if (words.length === 0) return "?";
+  if (words.length > 1) return (firstLetter(words[0]) + firstLetter(words[1])).toUpperCase();
+  const letters = [...words[0]];
+  const consonant = letters.slice(1).find((ch) => /\p{L}/u.test(ch) && !/[aeiouy]/i.test(ch));
+  return (letters[0] + (consonant ?? letters[1] ?? "")).toUpperCase();
+}
+
+// Initials sit on the label hue mixed into the card (bg-label-fill), in the
+// foreground colour, one type step per rung: two letters must fit 16 px.
+const identityFill = cva(
+  "bg-label-fill font-sans font-semibold leading-none tracking-normal text-foreground",
+  {
+    variants: {
+      size: {
+        icon: "text-3xs",
+        sm: "text-2xs",
+        default: "text-xs",
+        lg: "text-sm",
+      },
+    },
+    defaultVariants: { size: "default" },
+  },
+);
+
+type IdentitySize = "icon" | "sm" | "default" | "lg";
+
+type PersonAvatarProps = Omit<React.ComponentProps<typeof AvatarPrimitive.Root>, "children"> & {
+  /** The person's name; `null` draws the empty "unassigned" ring. */
+  name: string | null;
+  /** Their id: keys the colour, so a rename keeps it. Defaults to the name. */
+  id?: string | null;
+  /** A photo, when they have one. The initials show until it loads. */
+  src?: string | null;
+  size?: IdentitySize;
+};
+
+/**
+ * A person: two initials on a stable colour, round (call 43). Decorative by
+ * default (`aria-hidden`), since a name almost always sits beside it and the
+ * initials would otherwise join that row's accessible name (gotchas §UI). Pass
+ * `aria-hidden={false}` with an `aria-label` when it stands alone.
+ */
+function PersonAvatar({
+  name,
+  id,
+  src,
+  size = "icon",
+  className,
+  "aria-hidden": ariaHidden = true,
+  ...props
+}: PersonAvatarProps) {
+  if (name === null) {
+    return (
+      <Avatar
+        size={size}
+        data-unassigned=""
+        aria-hidden={ariaHidden}
+        className={cn("border border-dashed border-subtle-foreground", className)}
+        {...props}
+      />
+    );
+  }
+  return (
+    <Avatar
+      size={size}
+      data-label={avatarHue(id || name)}
+      aria-hidden={ariaHidden}
+      className={className}
+      {...props}
+    >
+      {src ? <AvatarImage src={src} alt="" /> : null}
+      <AvatarFallback className={identityFill({ size })}>{initialsOf(name)}</AvatarFallback>
+    </Avatar>
+  );
+}
+
+type TeamMarkProps = Omit<React.ComponentProps<"span">, "children"> & {
+  /** The team's name. */
+  name: string;
+  id?: string | null;
+  /** The team's own letters, when someone edited them. */
+  letters?: string | null;
+  size?: IdentitySize;
+};
+
+/**
+ * A team: two letters on a stable colour in a rounded square (call 95). People
+ * are round and teams are square, so the two never read alike in one row.
+ */
+function TeamMark({
+  name,
+  id,
+  letters,
+  size = "icon",
+  className,
+  "aria-hidden": ariaHidden = true,
+  ...props
+}: TeamMarkProps) {
+  return (
+    <span
+      data-slot="team-mark"
+      data-size={size}
+      data-label={avatarHue(id || name)}
+      aria-hidden={ariaHidden}
+      className={cn(
+        "inline-flex size-8 shrink-0 select-none items-center justify-center rounded-sm",
+        "data-[size=icon]:size-icon data-[size=sm]:size-6 data-[size=lg]:size-10",
+        identityFill({ size }),
+        className,
+      )}
+      {...props}
+    >
+      {(letters?.trim() || teamLettersOf(name)).slice(0, 2).toUpperCase()}
+    </span>
+  );
+}
+
+export type { AvatarHue, PersonAvatarProps, TeamMarkProps };
+export {
+  AVATAR_HUES,
+  Avatar,
+  AvatarBadge,
+  AvatarFallback,
+  AvatarGroup,
+  AvatarGroupCount,
+  AvatarImage,
+  avatarHue,
+  initialsOf,
+  PersonAvatar,
+  TeamMark,
+  teamLettersOf,
+};

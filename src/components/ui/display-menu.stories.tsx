@@ -1,20 +1,22 @@
 import type { Meta, StoryObj } from "@storybook/react";
 import { Columns3, GanttChart, List } from "lucide-react";
+import type * as React from "react";
 import { useState } from "react";
 import { Button } from "./button";
 import { type DisplayControl, DisplayMenu } from "./display-menu";
+import { AtThreeDensities } from "./kit-densities";
 
 const meta: Meta<typeof DisplayMenu> = {
   title: "Components/ui/display-menu",
   component: DisplayMenu,
-  decorators: [
-    (Story) => (
-      <div className="flex h-[480px] w-[560px] justify-end rounded-lg bg-card p-4">
-        <Story />
-      </div>
-    ),
-  ],
 };
+
+/** The toolbar-corner frame the menu opens from. */
+function Frame({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex h-[480px] w-[560px] justify-end rounded-lg bg-card p-4">{children}</div>
+  );
+}
 
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -118,13 +120,15 @@ export const Default: Story = {
   render: () => {
     const [value, setValue] = useState(DEFAULTS);
     return (
-      <DisplayMenu
-        controls={CONTROLS}
-        value={value}
-        onValueChange={setValue}
-        defaultValue={DEFAULTS}
-        defaultOpen
-      />
+      <Frame>
+        <DisplayMenu
+          controls={CONTROLS}
+          value={value}
+          onValueChange={setValue}
+          defaultValue={DEFAULTS}
+          defaultOpen
+        />
+      </Frame>
     );
   },
 };
@@ -134,18 +138,49 @@ export const WithFooter: Story = {
   render: () => {
     const [value, setValue] = useState({ ...DEFAULTS, completed: "all" });
     return (
-      <DisplayMenu
-        controls={CONTROLS}
-        value={value}
-        onValueChange={setValue}
-        defaultValue={DEFAULTS}
-        defaultOpen
-        footer={
-          <Button variant="ghost" size="sm" className="me-auto px-2">
-            Save as view…
-          </Button>
-        }
-      />
+      <Frame>
+        <DisplayMenu
+          controls={CONTROLS}
+          value={value}
+          onValueChange={setValue}
+          defaultValue={DEFAULTS}
+          defaultOpen
+          footer={
+            <Button variant="ghost" size="sm" className="me-auto px-2">
+              Save as view…
+            </Button>
+          }
+        />
+      </Frame>
     );
   },
+};
+
+function OpenAtDensity() {
+  const [value, setValue] = useState(DEFAULTS);
+  const [container, setContainer] = useState<HTMLElement | null>(null);
+  return (
+    <div ref={setContainer} className="h-[540px] w-[340px]">
+      {container ? (
+        <DisplayMenu
+          controls={CONTROLS}
+          value={value}
+          onValueChange={setValue}
+          defaultValue={DEFAULTS}
+          align="start"
+          open
+          onOpenChange={() => {}}
+          portalContainer={container}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * The open panel at the three density steps (call 44: menus follow density).
+ * Each panel mounts inside its density wrapper, so it takes that step.
+ */
+export const Densities: Story = {
+  render: () => <AtThreeDensities>{() => <OpenAtDensity />}</AtThreeDensities>,
 };

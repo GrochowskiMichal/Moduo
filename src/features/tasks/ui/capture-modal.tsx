@@ -16,6 +16,8 @@ import { toast } from "sonner";
 
 import { Button } from "../../../components/ui/button";
 import { Calendar } from "../../../components/ui/calendar";
+import { ChipButton, type ChipButtonProps } from "../../../components/ui/chip";
+import { TimeInput } from "../../../components/ui/date-field";
 import {
   Dialog,
   DialogClose,
@@ -31,7 +33,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "../../../components/ui/dropdown-menu";
-import { Input } from "../../../components/ui/input";
+import { IconButton } from "../../../components/ui/icon-button";
+import { Input, NumberInput } from "../../../components/ui/input";
+import { Kbd } from "../../../components/ui/kbd";
 import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
 import { Switch } from "../../../components/ui/switch";
 import { Textarea } from "../../../components/ui/textarea";
@@ -195,9 +199,14 @@ export function CaptureModal({
             Type a task. Dates and recurrence parse automatically; set any property below.
           </DialogDescription>
         </DialogHeader>
-        <DialogClose className="absolute top-3 right-3 z-10 flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-          <X className="size-4" aria-hidden />
-          <span className="sr-only">Close</span>
+        {/* No tooltip: the dialog focuses this first, for a tick, on open. */}
+        <DialogClose asChild>
+          <IconButton
+            icon={X}
+            label="Close"
+            tooltip={null}
+            className="absolute top-3 right-3 z-10 text-muted-foreground"
+          />
         </DialogClose>
 
         <div className="flex flex-col gap-2 px-4 pt-5 pb-1">
@@ -229,7 +238,7 @@ export function CaptureModal({
             {/* Bucket */}
             <ListPill
               active
-              icon={bucketId === inbox?.id ? <Inbox className="size-3.5" /> : null}
+              icon={bucketId === inbox?.id ? Inbox : undefined}
               label={bucketName(bucketId)}
             >
               {bucketOptions.map((b) => (
@@ -246,9 +255,9 @@ export function CaptureModal({
               active={shownAssigneeId !== currentUserId}
               icon={
                 shownAssigneeId ? (
-                  <AssigneeAvatar assignee={byId(shownAssigneeId)} className="size-4" />
+                  <AssigneeAvatar assignee={byId(shownAssigneeId)} size="icon" />
                 ) : (
-                  <User className="size-3.5" />
+                  User
                 )
               }
               label={
@@ -262,7 +271,7 @@ export function CaptureModal({
                   onSelect={() => setAssigneeId(fromAssigneeValue(o.value))}
                 >
                   {o.assignee ? (
-                    <AssigneeAvatar assignee={o.assignee} className="size-4" />
+                    <AssigneeAvatar assignee={o.assignee} size="icon" />
                   ) : (
                     <User className="size-4 text-muted-foreground" aria-hidden />
                   )}
@@ -275,7 +284,7 @@ export function CaptureModal({
             {/* Priority */}
             <ListPill
               active={!!priority}
-              icon={<Flag className="size-3.5" />}
+              icon={Flag}
               label={priority ? PRIORITY_LABELS[priority] : "Priority"}
             >
               <DropdownMenuItem onSelect={() => setPriority(null)}>None</DropdownMenuItem>
@@ -291,7 +300,7 @@ export function CaptureModal({
             {/* Energy */}
             <ListPill
               active={!!energy}
-              icon={<Zap className="size-3.5" />}
+              icon={Zap}
               label={energy ? ENERGY_LABELS[energy] : "Energy"}
             >
               <DropdownMenuItem onSelect={() => setEnergy(null)}>None</DropdownMenuItem>
@@ -307,7 +316,7 @@ export function CaptureModal({
             {/* Scheduled — same pill as the others; token Calendar + time inside */}
             <InputPill
               active={!!effScheduled}
-              icon={<Clock className="size-3.5" />}
+              icon={Clock}
               label={effScheduled ? scheduledLabel(effScheduled) : "Schedule"}
               onClear={effScheduled ? () => setScheduled({ manual: true, value: null }) : undefined}
             >
@@ -324,13 +333,10 @@ export function CaptureModal({
               />
               <div className="mt-2 flex items-center gap-2 border-t border-border pt-2">
                 <Clock className="size-icon-sm text-muted-foreground" aria-hidden />
-                <Input
-                  type="time"
-                  size="sm"
-                  className="w-auto"
-                  value={effScheduled ? new Date(effScheduled).toTimeString().slice(0, 5) : "09:00"}
-                  onChange={(e) => {
-                    const [h, m] = e.target.value.split(":").map(Number);
+                <TimeInput
+                  value={effScheduled ? new Date(effScheduled).toTimeString().slice(0, 5) : ""}
+                  onValueChange={(hhmm) => {
+                    const [h, m] = hhmm.split(":").map(Number);
                     const base = effScheduled ? new Date(effScheduled) : new Date();
                     base.setHours(h || 0, m || 0, 0, 0);
                     setScheduled({ manual: true, value: base.toISOString() });
@@ -343,7 +349,7 @@ export function CaptureModal({
             {/* Due */}
             <InputPill
               active={!!effDue}
-              icon={<CalendarDays className="size-3.5" />}
+              icon={CalendarDays}
               label={effDue ? `Due ${dateLabel(effDue)}` : "Due"}
               onClear={effDue ? () => setDue({ manual: true, value: null }) : undefined}
             >
@@ -364,7 +370,7 @@ export function CaptureModal({
             {/* Recurrence */}
             <ListPill
               active={!!effRecurrence}
-              icon={<Repeat className="size-3.5" />}
+              icon={Repeat}
               label={effRecurrence ? recurrenceLabel(effRecurrence) : "Repeat"}
             >
               <DropdownMenuItem onSelect={() => setRecurrence({ manual: true, value: null })}>
@@ -389,34 +395,31 @@ export function CaptureModal({
             {/* Duration */}
             <InputPill
               active={!!duration}
-              icon={<Timer className="size-3.5" />}
+              icon={Timer}
               label={duration ? `${duration} min` : "Duration"}
               onClear={duration ? () => setDuration(null) : undefined}
             >
               <label className="mb-1 block text-xs font-medium text-muted-foreground">
                 Duration (minutes)
               </label>
-              <Input
-                type="number"
+              <NumberInput
                 min={0}
                 step={5}
                 autoFocus
-                value={duration ?? ""}
-                className="h-8"
-                onChange={(e) =>
-                  setDuration(e.target.value ? Math.max(0, parseInt(e.target.value, 10)) : null)
-                }
+                aria-label="Duration (minutes)"
+                value={duration}
+                onValueChange={setDuration}
               />
               <div className="mt-2 flex flex-wrap gap-1">
                 {DURATION_PRESETS.map((m) => (
-                  <button
+                  <ChipButton
                     key={m}
-                    type="button"
+                    size="xs"
+                    active={duration === m}
                     onClick={() => setDuration(m)}
-                    className="rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
                   >
                     {m}m
-                  </button>
+                  </ChipButton>
                 ))}
               </div>
             </InputPill>
@@ -431,9 +434,10 @@ export function CaptureModal({
           </label>
           <Button size="sm" onClick={submit} disabled={!raw.trim()}>
             Create
-            <kbd className="flex items-center opacity-80">
-              <CornerDownLeft className="size-3" aria-hidden />
-            </kbd>
+            {/* The kit key badge, tuned to sit on the primary fill. */}
+            <Kbd className="flex items-center border-primary-foreground/25 bg-transparent py-0 text-primary-foreground/80">
+              <CornerDownLeft className="size-icon-xs" aria-hidden />
+            </Kbd>
           </Button>
         </div>
       </DialogContent>
@@ -443,15 +447,8 @@ export function CaptureModal({
 
 // ── pills ─────────────────────────────────────────────────────────────────────
 
-function pillCls(active: boolean): string {
-  return cn(
-    "flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition-colors",
-    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-    active
-      ? "border-border bg-muted text-foreground"
-      : "border-border text-muted-foreground hover:bg-accent hover:text-foreground",
-  );
-}
+// Every pill is the kit's ChipButton (DS-6): the hairline at rest, the neutral
+// active fill once its field is set, the field's name muted while unset.
 
 /** Pill backed by a dropdown list of choices (auto-closes on select). */
 function ListPill({
@@ -461,15 +458,20 @@ function ListPill({
   children,
 }: {
   active: boolean;
-  icon: React.ReactNode;
+  icon: ChipButtonProps["icon"];
   label: string;
   children: React.ReactNode;
 }) {
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger className={pillCls(active)}>
-        {icon}
-        <span className="max-w-40 truncate">{label}</span>
+      <DropdownMenuTrigger asChild>
+        <ChipButton
+          active={active}
+          icon={icon}
+          className={cn("max-w-48", !active && "text-muted-foreground")}
+        >
+          {label}
+        </ChipButton>
       </DropdownMenuTrigger>
       {/* lift above the dialog (z-dialog 60); default dropdown z is below it */}
       <DropdownMenuContent
@@ -483,7 +485,11 @@ function ListPill({
   );
 }
 
-/** Pill backed by a popover with an input (stays open while editing). */
+/**
+ * Pill backed by a popover with an input (stays open while editing). A set
+ * pill carries a × inside its edge: a sibling control laid over the chip's
+ * end padding, never a button inside the trigger button.
+ */
 function InputPill({
   active,
   icon,
@@ -492,17 +498,22 @@ function InputPill({
   children,
 }: {
   active: boolean;
-  icon: React.ReactNode;
+  icon: ChipButtonProps["icon"];
   label: string;
   onClear?: () => void;
   children: React.ReactNode;
 }) {
   return (
-    <div className={pillCls(active)}>
+    <span className="relative inline-flex max-w-48">
       <Popover>
-        <PopoverTrigger className="flex items-center gap-1.5 focus-visible:outline-none">
-          {icon}
-          <span className="max-w-40 truncate">{label}</span>
+        <PopoverTrigger asChild>
+          <ChipButton
+            active={active}
+            icon={icon}
+            className={cn(!active && "text-muted-foreground", onClear && "pe-6")}
+          >
+            {label}
+          </ChipButton>
         </PopoverTrigger>
         <PopoverContent align="start" className="w-auto p-3">
           {children}
@@ -513,12 +524,16 @@ function InputPill({
           type="button"
           aria-label="Clear"
           onClick={onClear}
-          className="-mr-0.5 ml-0.5 rounded text-muted-foreground hover:text-foreground"
+          className={cn(
+            "hit-min absolute end-1.5 top-1/2 flex -translate-y-1/2 items-center rounded-sm text-muted-foreground outline-none",
+            "transition-colors duration-(--motion-fade) ease-(--ease-out)",
+            "hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50",
+          )}
         >
-          <X className="size-3" />
+          <X aria-hidden className="size-icon-sm" />
         </button>
       ) : null}
-    </div>
+    </span>
   );
 }
 

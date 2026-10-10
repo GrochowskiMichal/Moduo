@@ -8,7 +8,13 @@ import type { Task } from "./model";
 
 export type Assignee = {
   userId: string;
+  /** How the person reads in pickers and labels: "Me" for the current user. */
   name: string;
+  /**
+   * The person's own name, also for the current user (whose `name` is "Me"):
+   * avatars draw their initials from it, never from a pronoun (call 43).
+   */
+  personName: string;
   avatarUrl: string | null;
   isMe: boolean;
   /** Viewers can't complete tasks, so they can't be assigned. */
@@ -25,6 +31,7 @@ export function toAssignees(members: WorkspaceMember[], userId: string | null): 
     .map((m) => ({
       userId: m.userId,
       name: m.userId === userId ? "Me" : (m.displayName?.trim() ?? "Member"),
+      personName: m.displayName?.trim() || "Member",
       avatarUrl: m.avatarUrl,
       isMe: m.userId === userId,
       canTakeTasks: canBeAssignee(m.perms),

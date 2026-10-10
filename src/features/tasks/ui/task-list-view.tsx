@@ -6,13 +6,13 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { arrayMove, SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { ChevronDown, ChevronRight, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { Button } from "../../../components/ui/button";
 import { EmptyState as EmptyStateBase } from "../../../components/ui/empty-state";
-import { eyebrowVariants } from "../../../components/ui/eyebrow";
+import { GroupHeader } from "../../../components/ui/group-header";
 import { Kbd } from "../../../components/ui/kbd";
 import {
   Select,
@@ -21,7 +21,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../../../components/ui/select";
-import { cn } from "../../../lib/utils";
 import { useAssignees } from "../assignees";
 import { type CompletedMode, partitionCompleted } from "../completed";
 import {
@@ -756,26 +755,18 @@ export function TaskListView({
             return (
               <div key={group.key} className="mb-1">
                 {groupBy !== "none" ? (
-                  <button
-                    type="button"
-                    onClick={() => toggleGroup(group.key)}
-                    className={cn(
-                      eyebrowVariants(),
-                      "flex w-full items-center gap-1.5 rounded px-1 py-1 text-left hover:text-foreground",
-                    )}
-                  >
-                    {isCollapsed ? (
-                      <ChevronRight className="size-3.5" aria-hidden />
-                    ) : (
-                      <ChevronDown className="size-3.5" aria-hidden />
-                    )}
-                    {group.label}
-                    <span className="font-sans text-muted-foreground/70 tabular-nums">
-                      {revealedGroups.has(group.key)
+                  // The group's name as typed (a bucket, a status): sentence
+                  // case, never small caps (call 40).
+                  <GroupHeader
+                    label={group.label}
+                    count={
+                      revealedGroups.has(group.key)
                         ? group.tasks.length
-                        : group.tasks.length + group.hidden.length}
-                    </span>
-                  </button>
+                        : group.tasks.length + group.hidden.length
+                    }
+                    onToggle={() => toggleGroup(group.key)}
+                    collapsed={isCollapsed}
+                  />
                 ) : null}
 
                 {!isCollapsed ? (

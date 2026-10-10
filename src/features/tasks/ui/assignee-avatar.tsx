@@ -1,11 +1,12 @@
-import { Avatar, AvatarFallback, AvatarImage } from "../../../components/ui/avatar";
-import { cn } from "../../../lib/utils";
-import { type Assignee, initialsOf } from "../assignees";
+import { PersonAvatar } from "../../../components/ui/avatar";
+import type { Assignee } from "../assignees";
 
 /**
- * Small round avatar for a task's assignee; empty slot when unassigned.
- * `size="icon"` sits on the icon rung (rows, cards, the queue mark) and shows
- * one initial, which is all that fits.
+ * A task's assignee as the kit's `PersonAvatar` (DS-6, call 43): two initials
+ * on a stable colour keyed on their id, or the dashed "unassigned" ring when
+ * there is nobody. `size="icon"` sits on the icon rung (rows, cards, pickers,
+ * the queue mark). Initials come from the person's own name, never "Me".
+ * Decorative: the name always sits beside it or in its wrapper's label.
  */
 export function AssigneeAvatar({
   assignee,
@@ -16,13 +17,14 @@ export function AssigneeAvatar({
   size?: "sm" | "icon";
   className?: string;
 }) {
-  const initials = assignee ? initialsOf(assignee.name) : "?";
   return (
-    <Avatar size={size} className={cn(size === "sm" && "size-5", className)}>
-      {assignee?.avatarUrl ? <AvatarImage src={assignee.avatarUrl} alt="" /> : null}
-      <AvatarFallback className={size === "sm" ? "text-2xs" : undefined}>
-        {size === "icon" ? initials.slice(0, 1) : initials}
-      </AvatarFallback>
-    </Avatar>
+    <PersonAvatar
+      // Test fixtures and older callers may lack personName; never a pronoun in prod.
+      name={assignee ? (assignee.personName ?? assignee.name) : null}
+      id={assignee?.userId}
+      src={assignee?.avatarUrl}
+      size={size}
+      className={className}
+    />
   );
 }

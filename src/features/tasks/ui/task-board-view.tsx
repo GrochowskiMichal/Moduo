@@ -8,7 +8,8 @@ import {
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { type ReactNode, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { Eyebrow } from "../../../components/ui/eyebrow";
+import { EmptyState } from "../../../components/ui/empty-state";
+import { GroupHeader } from "../../../components/ui/group-header";
 import {
   Select,
   SelectContent,
@@ -379,9 +380,9 @@ function BoardColumn({
   return (
     // Columns flex between 280 and 400 px (tasks-v2 §6).
     <section className="flex h-full min-w-70 max-w-100 flex-1 flex-col">
-      <header className="mb-2 flex items-center gap-1.5 px-1">
-        <Eyebrow>{column.label}</Eyebrow>
-        <span className="font-sans text-xs tabular-nums text-muted-foreground/70">{total}</span>
+      {/* The column's name as typed (a bucket, a status): sentence case (call 40). */}
+      <header className="mb-2">
+        <GroupHeader label={column.label} count={total} />
       </header>
       <div
         ref={setNodeRef}
@@ -397,9 +398,7 @@ function BoardColumn({
           strategy={verticalListSortingStrategy}
         >
           {column.tasks.length === 0 && column.hidden.length === 0 ? (
-            <p className="px-2 py-6 text-center text-xs text-muted-foreground/50">
-              {canEdit ? "Drop tasks here" : "Empty"}
-            </p>
+            <EmptyState size="inline" title={canEdit ? "Drop tasks here" : "Empty"} />
           ) : (
             column.tasks.map((task) => (
               <TaskCard

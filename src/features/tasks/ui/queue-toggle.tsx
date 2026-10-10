@@ -30,7 +30,7 @@ export function ClaimAvatar({
   className,
 }: {
   assignee: Assignee | null;
-  /** `icon` on rows and cards, where it shares a column with icons. */
+  /** `icon` on rows, cards and the panel header, where it sits with icons. */
   size?: "sm" | "icon";
   className?: string;
 }) {
@@ -38,7 +38,7 @@ export function ClaimAvatar({
     <AssigneeAvatar
       assignee={assignee}
       size={size}
-      className={cn(size === "sm" && "size-4", "ring-1 ring-foreground/35", className)}
+      className={cn("ring-1 ring-foreground/35", className)}
     />
   );
 }
@@ -128,7 +128,8 @@ export function QueueToggle({
               api.toggleQueue(task.id);
             }}
             className={cn(
-              "flex size-icon items-center justify-center rounded transition-[color,opacity] duration-(--motion-fade) ease-(--ease-out)",
+              // hit-min pads the pointer target to 24 px; the glyph stays put.
+              "hit-min flex size-icon items-center justify-center rounded transition-[color,opacity] duration-(--motion-fade) ease-(--ease-out)",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
               queued
                 ? "text-primary"

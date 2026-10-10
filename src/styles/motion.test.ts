@@ -141,10 +141,25 @@ describe("the four motion patterns (global.css)", () => {
     expect(exit.every((a) => a.duration === "var(--motion-fade)")).toBe(true);
   });
 
+  it("a tooltip's delayed-open and instant-open arrive like any popover (DS-6)", async () => {
+    const blocks = cssBlocks(await read("src/global.css"));
+    const open = declarations(only(blocks, '.motion-pop[data-state="open"]')).get("animation");
+    const tooltip = blocks.find(
+      (b) =>
+        selectors(b).includes('.motion-pop[data-state="delayed-open"]') &&
+        selectors(b).includes('.motion-pop[data-state="instant-open"]'),
+    );
+    expect(tooltip && declarations(tooltip).get("animation")).toBe(open);
+  });
+
   it("the floating primitives grow from their origin", async () => {
-    for (const file of ["popover", "dropdown-menu", "select", "dialog"]) {
-      expect(await read(`src/components/ui/${file}.tsx`), file).toMatch(/\bmotion-pop\b/);
+    // DS-6: the menus, popover, select and tooltip take motion-pop through the
+    // one floating-surface recipe (surface.ts); the dialog spells it itself.
+    expect(await read("src/components/ui/surface.ts")).toMatch(/\bmotion-pop\b/);
+    for (const file of ["popover", "dropdown-menu", "context-menu", "select", "tooltip"]) {
+      expect(await read(`src/components/ui/${file}.tsx`), file).toMatch(/\bFLOATING_SURFACE\b/);
     }
+    expect(await read("src/components/ui/dialog.tsx")).toMatch(/\bmotion-pop\b/);
     const blocks = cssBlocks(await read("src/global.css"));
     const pop = blocks.find((b) => selectors(b).includes(".motion-pop"));
     expect(pop && declarations(pop).get("transform-origin")).toBe(

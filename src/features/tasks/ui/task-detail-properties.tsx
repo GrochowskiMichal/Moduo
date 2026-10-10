@@ -269,7 +269,7 @@ function AssigneeValue({
       <DropdownMenuTrigger asChild disabled={!canEdit}>
         <PropertyValue
           empty={unassigned}
-          icon={known ? <AssigneeAvatar assignee={known} className="size-icon-sm" /> : <User />}
+          icon={known ? <AssigneeAvatar assignee={known} size="icon" /> : <User />}
           aria-label={`Assignee: ${label}`}
         >
           {label}
@@ -292,7 +292,7 @@ function AssigneeValue({
           {assigneeOptions(assignees).map((o) => (
             <DropdownMenuRadioItem key={o.value} value={o.value} disabled={o.disabled}>
               {o.assignee ? (
-                <AssigneeAvatar assignee={o.assignee} className="size-4" />
+                <AssigneeAvatar assignee={o.assignee} size="icon" />
               ) : (
                 <User className="size-4 text-muted-foreground" aria-hidden />
               )}
