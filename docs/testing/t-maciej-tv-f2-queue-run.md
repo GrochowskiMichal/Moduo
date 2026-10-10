@@ -1,6 +1,6 @@
 # Manual test checklist — TV-F2 Queue run
 
-> Generated 2026-10-09 · branch `t/maciej/tv-f2-queue-run` · **Live-verified:** partial. In a temporary harness (the real Tasks page and run chip over an in-memory runtime with two members and a run server that follows the ops' control rules; deleted before landing): the line-up (numbers, capacity, Pomodoro/Stopwatch, "Add to queue…"), ⌘↵ Start run, the run view (Now, Up next with the 3rd dimmed, rail "0/4" with a live dot, chip with phase, clock and task, right panel on Now), ⏎ = Done with the pomodoro kept (24:54 after the switch), "Mike completed …" when Now left by his hand, read-through when another device took over (engine stopped here, chip "on your other device", clock carried on), Skip taking control back, "Mike is on this" with a live dot in a bucket list, the chip returning to the Queue, Pause and End run reaching the server, and the 4-day stale line. The migration round-trips on a local Postgres replica (`supabase/probes/focus-runs.probe.sql`, 9 checks). **Not driven:** two real devices, a signed-in hosted session, desktop.
+> Generated 2026-10-09 · branch `t/maciej/tv-f2-queue-run` · **Live-verified:** partial. In a temporary harness (the real Tasks page and run chip over an in-memory runtime with two members and a run server that follows the ops' control rules; deleted before landing): the line-up (numbers, capacity, Pomodoro/Stopwatch, "Add to queue…"), ⌘↵ Start run, the run view (Now, Up next with the 3rd dimmed, rail "0/4" with a live dot, chip with phase, clock and task, right panel on Now), ⏎ = Done with the pomodoro kept (24:54 after the switch), "Mike completed …" when Now left by his hand, read-through when another device took over (engine stopped here, chip "on your other device", clock carried on), Skip taking control back, "Mike is on this" with a live dot in a bucket list, the chip returning to the Queue, Pause and End run reaching the server, and the 4-day stale line. The migration round-trips on a local Postgres replica (`supabase/probes/focus-runs.probe.sql`, 9 checks) and is on production (2026-10-09, version `20261008235243`; a rolled-back probe there passed). **Not driven:** two real devices, a signed-in hosted session, desktop.
 > Run top-to-bottom; check off as you go. Each item is a step → what you should see → where.
 
 ## The line-up (no run)
@@ -41,7 +41,7 @@
 - [ ] **Do:** start a run in workspace A, switch to B, open the Queue → **Expect:** "Your run is on in A. Starting one here ends it."; the chip still shows A's run. _(both)_
 
 ## Migrations / data
-- [ ] **Do:** after the apply, in the SQL editor: `select count(*) from focus_runs;` and `select has_function_privilege('anon','public.focus_claims(uuid)','EXECUTE');` → **Expect:** a number; `false`. _(prod)_
+- [x] **Do:** after the apply, in the SQL editor: `select count(*) from focus_runs;` and `select has_function_privilege('anon','public.focus_claims(uuid)','EXECUTE');` → **Expect:** a number; `false`. _(prod)_
 - [ ] **Do:** start and end one run → **Expect:** one row, `status = 'ended'`, `done_task_ids` and `focused_seconds` filled. _(prod)_
 
 ## Known gaps / not-yet-testable
