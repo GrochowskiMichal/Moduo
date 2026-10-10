@@ -64,6 +64,43 @@ describe("activityLine", () => {
     );
   });
 
+  it("names the project's own status, by its category (TV-D9)", () => {
+    const line = (payload: Record<string, unknown>) =>
+      activityLine(entry("tasks.set_status", payload));
+    // A backlog task stores "todo" in the legacy column: the name tells.
+    expect(
+      line({
+        from: "todo",
+        to: "todo",
+        from_category: "todo",
+        to_category: "backlog",
+        to_name: "Backlog",
+      }),
+    ).toBe("set this to Backlog");
+    expect(
+      line({ from: "todo", to: "in_progress", to_category: "in_progress", to_name: "In review" }),
+    ).toBe("set this to In review");
+    expect(
+      line({ from: "todo", to: "in_progress", to_category: "in_progress", to_name: "In progress" }),
+    ).toBe("started this");
+    expect(line({ to: "done", to_category: "done", to_name: "Published" })).toBe("completed this");
+    expect(line({ to: "archived", to_category: "wont_do", to_name: "Canceled" })).toBe(
+      "marked this Won’t do",
+    );
+    expect(
+      line({
+        from: "done",
+        to: "todo",
+        from_category: "done",
+        to_category: "todo",
+        to_name: "Todo",
+      }),
+    ).toBe("reopened this");
+    expect(
+      line({ from: "todo", to: "todo", to_category: "todo", to_name: "Todo", reason: "scheduled" }),
+    ).toBe("scheduled this, so it moved to Todo");
+  });
+
   it("describes personal-queue adds and removals in the actor's voice (TV-D2)", () => {
     expect(activityLine(entry("tasks.queue_add", { at: "end" }))).toBe("queued this");
     expect(activityLine(entry("tasks.queue_add", { at: "top" }))).toBe("queued this first");

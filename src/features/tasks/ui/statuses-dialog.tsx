@@ -47,7 +47,16 @@ export function StatusesDialog(props: StatusesDialogProps) {
   const { open, projectName, onClose } = props;
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent className="max-w-md">
+      <DialogContent
+        className="max-w-md"
+        // Focus the dialog, not the first name field (a stray key would rename
+        // a status); the add field from "+ Add status" focuses itself.
+        onOpenAutoFocus={(e) => {
+          if (props.addingTo) return;
+          e.preventDefault();
+          (e.currentTarget as HTMLElement | null)?.focus?.();
+        }}
+      >
         <DialogHeader>
           <DialogTitle>
             {projectName ? `Statuses · ${projectName}` : "Default statuses"}
@@ -97,7 +106,7 @@ function StatusesEditor({
           aria-label={CATEGORY_LABELS[category]}
           className="flex flex-col gap-1"
         >
-          <div className="flex items-baseline gap-2">
+          <div className="flex flex-col">
             <span className="text-sm font-medium text-foreground">{CATEGORY_LABELS[category]}</span>
             <span className="text-xs text-muted-foreground">{CATEGORY_HINTS[category]}</span>
           </div>

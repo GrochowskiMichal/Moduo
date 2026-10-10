@@ -143,11 +143,20 @@ export function activityLine(entry: Pick<ActivityEntry, "op" | "payload">): stri
     case "tasks.set_status": {
       const from = str(p.from) as TaskStatus | null;
       const to = str(p.to) as TaskStatus | null;
-      if (to === "done") return "completed this";
+      // TV-D9: lines name the project's own status and carry its category;
+      // older lines have only the legacy values.
+      const toCategory = str(p.to_category) ?? (to === "archived" ? "wont_do" : to);
+      const fromCategory = str(p.from_category) ?? (from === "archived" ? "wont_do" : from);
+      const toName = str(p.to_name);
+      if (toCategory === "done") return "completed this";
       // "archived" reads "Won't do" everywhere (calls 21, 23).
-      if (to === "archived") return "marked this Won’t do";
-      if (to === "in_progress") return "started this";
-      if ((from === "done" || from === "archived") && to === "todo") return "reopened this";
+      if (toCategory === "wont_do") return "marked this Won’t do";
+      if (p.reason === "scheduled") return `scheduled this, so it moved to ${toName ?? "To do"}`;
+      if ((fromCategory === "done" || fromCategory === "wont_do") && toCategory === "todo")
+        return "reopened this";
+      if (toCategory === "in_progress" && (!toName || toName === "In progress"))
+        return "started this";
+      if (toName) return `set this to ${toName}`;
       return to ? `set this to ${STATUS_LABELS[to] ?? to}` : "changed the status";
     }
     case "tasks.reschedule": {
