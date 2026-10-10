@@ -88,7 +88,7 @@ Each row is **Works** / **Missing** / **Wrong**. Evidence follows each row.
 |---|---|---|---|
 | Mini-month | Navigates. Shows dots for days with any task or event (`CPV:311-323`). | — | Dots include teammates' tasks. |
 | "Calendars" (accounts) | "Moduo" (always on, no eye: `RAIL:208`) plus one row per connected account: colour, show/hide, remove. CalDAV rows group under their server; feeds under "Feeds". "Connect calendar…" opens Settings (`RAIL`). | A way to hide your own Moduo events or a teammate's busy time. Reconnect for Google, Outlook or ICS (CalDAV only, desktop only: `RAIL:94-95`). | — |
-| "Calendars" (sharing) | A second block with the same heading: your calendar, each teammate's ("Tess Mate's calendar"), integration calendars. Share (busy only, can view, can edit), "New calendar", "Save this set" (`CALS:156-237`). | — | The checkboxes look like visibility toggles but mean "include in a set". Screen readers hear "Include Moduo in a set" twice for two different people (live). Custom calendars can never receive an event: no op takes a calendar (lane S; `QC:225` offers Moduo and Google only). A saved set only toggles *accounts*, so a set of people's calendars does nothing useful (`CPV:1016-1022`). Failed saves are silent (`CALS:120`, `CALS:133`). It reads the database directly, outside the runtime (`CALS:5`, `CALS:66-98`). |
+| "Calendars" (sharing) | A second block with the same heading: your calendar, each teammate's ("Tess Mate's calendar"), integration calendars. Share (busy only, can view, can edit), "New calendar", "Save this set" (`CALS:156-237`). | — | The checkboxes look like visibility toggles but mean "include in a set". Screen readers hear "Include Moduo in a set" twice for two different people (live). Custom calendars can never receive an event: no op takes a calendar, and a trigger files every new event into its owner's Moduo or integration calendar (`20261006240000_perm_sharing_followups.sql:86-103`; `QC:225` offers Moduo and Google only). A saved set only toggles *accounts*, so a set of people's calendars does nothing useful (`CPV:1016-1022`). Failed saves are silent (`CALS:120`, `CALS:133`). It reads the database directly, outside the runtime (`CALS:5`, `CALS:66-98`). |
 | Booking links | The list sits at the bottom of the rail (`CPV:1025-1030`). | — | See §1e. |
 | Colours | Account colours, synced per user (`CPV:236-241`). | — | — |
 
@@ -96,24 +96,24 @@ Each row is **Works** / **Missing** / **Wrong**. Evidence follows each row.
 
 | Provider | Web | Desktop |
 |---|---|---|
-| Google | Connect through the web sign-in. One rail row per Google calendar, read-only holiday and birthday calendars included (`google-web.ts:116-133`). Syncs in the browser. | Keychain sign-in. One row per Google *login* (`google:{email}`). Different row shape from web (lane B §6). Tokens are never refreshed, so it likely stops after ~1 h (lane S §3). |
+| Google | Connect through the web sign-in. One rail row per Google calendar, read-only holiday and birthday calendars included (`google-web.ts:116-133`). Syncs in the browser. | Keychain sign-in. One row per Google *login* (`google:{email}`). Different row shape from web (`google-web.ts:116-121`, `BP:311-333`). Tokens are never refreshed, so it likely stops after ~1 h (`calendar.rs:342-356`; `oauth_flow.rs:5-6` says calendar never refreshed). |
 | Outlook | "Desktop only", disabled (`INT`). Rows seeded from desktop show as connected. The web skips them silently (`RTW:2035-2039`). | Keychain sign-in, read-only (`calendar.rs:251`). |
 | CalDAV / iCloud / ICS | "Desktop only", disabled. | Connect dialog with iCloud, Fastmail and Nextcloud presets. Read-only. Credentials live in the keychain of the machine that connected, so only that machine syncs (`docs/gotchas/calendar.md`). |
-| Zoom | Not in Settings at all. Only inside the booking-link dialog (lane B §6). | Same. |
+| Zoom | Not in Settings at all. Only inside the booking-link dialog (`BLD:105-129`). | Same. |
 
 - **Sync cadence:** on page open, on tab wake, every 15 min, and on manual refresh. Only while `/calendar` is mounted. No server sync (`SYNC:16`, `SYNC:158-172`).
 - **"synced X ago"** shows the *freshest* account, so a stale one hides behind a fresh one (`accounts.ts:221-240`).
 - The mirror op stamps `status='ok'` and `last_sync_at=now()` on every call, even when every row was skipped (`FIX:224-226`).
 
-### 1e. Booking links (detail in lane B's notes; summary)
+### 1e. Booking links
 
 | Area | Works | Missing | Wrong |
 |---|---|---|---|
 | Create/edit dialog | Name, length (15–60 or 5–240), description, video (Meet, Zoom, guest's choice; "Moduo video · Later" shown greyed), short note, add guests (≤10), custom questions, weekly hours (one window per day), how far ahead (7–90 d), minimum notice, buffers, busy calendars, pause, delete (`BLD`). Live: matches. | Several windows per day, date overrides, start-time spacing, daily cap, reschedule, reminders, in-person or phone, round-robin. The host time zone can't be changed (`BLD:495`). | Saves a Meet link when Google isn't connected (only Zoom is checked, `BL:313`). Live: saved fine; the guest will see "paused". The default busy calendar is **Moduo only** (`BL:90`). Name looks pre-filled ("Intro call") but is a placeholder. Live: "Give the link a name." |
-| Busy time | Moduo events plus checked accounts' mirrored events plus active bookings on *this* link. Live Google free/busy for the primary calendar (`BP:244-307`). | Task blocks never count. Other links' bookings don't count (`BP:280`). | **Recurring Moduo events block only their first occurrence** (`BP:252-273` reads raw rows). Google free/busy ignores which calendars are ticked and treats a failed check as free (lane B §4). Cancelled and "free" events count as busy. |
+| Busy time | Moduo events plus checked accounts' mirrored events plus active bookings on *this* link. Live Google free/busy for the primary calendar (`BP:244-307`). | Task blocks never count. Other links' bookings don't count (`BP:280`). | **Recurring Moduo events block only their first occurrence** (`BP:252-273` reads raw rows). Google free/busy runs if any Google account is ticked, checks only the primary calendar, and treats a failed check as free (`BP:296-303`, `supabase/functions/_shared/google-calendar.ts:87`, `:90`). Cancelled and "free" events count as busy. |
 | List | Name, "· paused", Copy (`BL:465-506`). | Bookings list, stats, preview, duplicate. Nothing in `src/` reads `slot_bookings`. The host can't see or cancel a booking except as a calendar event, and a Google-backed one is read-only. | Copy greys out with no reason when video isn't connected (`BL:67-72`). |
 | Public /book page | One sentence the guest completes. 17 time zones plus the detected one. Open times come from the server. Confirmation with Join. Cancel page by token (`BOOK`, `book-cancel-page.tsx`). | Reschedule. Time-zone search. | Branch wording promises "a calendar invite" even for Zoom-only hosts (`BOOK:316`). A server error says "Check your connection" (live). A failed cancel is silent (branch). |
-| Collective links | Database and server intersect hosts' free times (`BP:338-371`). | UI off: `COLLECTIVE_LINKS_ENABLED = false` (`BLD:61`). PERM-8b open. | The co-host "Accept / Decline" rows render anyway (`BL:430-464`). Co-hosts' own calendars mostly don't count. Cancelling leaves co-hosts' copies behind (lane S §7). |
+| Collective links | Database and server intersect hosts' free times (`BP:338-371`). | UI off: `COLLECTIVE_LINKS_ENABLED = false` (`BLD:61`). PERM-8b open. | The co-host "Accept / Decline" rows render anyway (`BL:430-464`). Co-hosts' own calendars mostly don't count. Each co-host gets their own copy of the event, and cancelling releases only the host's (`PERM:1646-1663`, `BP:527-533`). |
 | Emails | Branch: Google sends invites (`sendUpdates=all`); Moduo sends one plain guest email via Resend. TX-5 (prod): outbox emails to guest, host and extra guests, plus a host bell. | Reminders (TX-6). | Branch: extra guests on Zoom-only bookings get nothing (`BP:607`, `BP:717-720`). |
 
 ### 1f. Home Today widget (`TODAY`, `today.ts`)
@@ -134,7 +134,7 @@ Each row is **Works** / **Missing** / **Wrong**. Evidence follows each row.
 
 - **App** (`ops-manifest.ts:16-117`) declares 6 ops plus 2 resources, as metadata only.
 - **Connector** (`MCP`) serves 8 tools with the same names: `calendar_list_events`, `calendar_day`, `create/update/delete_event`, `schedule_task`, `move_block`, `complete_block`, `roll_forward`.
-- Gaps (lane S §8):
+- Gaps (`MCP:103-213`, `MCP:354-415`):
   - Recurring events appear only if their *first* occurrence is in range.
   - Days are computed in UTC (`MCP:91-96`).
   - `list_events` applies its row limit before the visibility filter, so results can come back short.
@@ -149,14 +149,14 @@ Each row is **Works** / **Missing** / **Wrong**. Evidence follows each row.
   - A time gives a 1-hour event, a date an all-day event, nothing gives the next full hour (`capture-command.ts:83-107`).
   - A typed repeat is parsed and then **dropped**.
   - It always lands on Moduo.
-  - It's gated on the **Tasks** permission (`capture-command.ts:35`), while the server checks Calendar's own permission (lane S).
+  - It's gated on the **Tasks** permission (`capture-command.ts:35`), while the server checks Calendar's own permission (`calendar_module_permission`, newest in `20261006200000_perm1_roles_overrides.sql`).
 - **"Capture" in the empty Tasks panel:** opens the old Tasks `CaptureModal` (`CPV:1171-1178`), not the new capture shell.
 
 ---
 
 ## 2. The data model as it is today
 
-**Tables** (lane S §1; columns abridged):
+**Tables** (columns abridged; `src/types/supabase.ts:123-147` for events):
 - **`calendar_events`**: an old table extended in place (`20260702130000_calendar_module.sql:85-106`).
   - title, description, location, start_time/end_time (instants only), all_day, recurrence_rule (RRULE text), attendees/reminders/tags (jsonb, unused by sync), color, status.
   - `calendar_id` (text: `moduo` or `google:{email}:{calId}`) **and** `calendar_ref` (uuid → `calendars`; `PERM:338`). Two ways to say which calendar.
@@ -166,7 +166,7 @@ Each row is **Works** / **Missing** / **Wrong**. Evidence follows each row.
 - **Booking:** `exposed_slot_links`, `slot_bookings`, `booking_link_hosts`, `booking_attempts`. Tokens live in `user_integrations`.
 - **Task blocks are not a table.** A block is the task row (`scheduled_at` + `duration_minutes`). Tracked time is `task_time_entries` since TV-D3.
 
-**Ops** (newest definitions per lane S):
+**Ops** (newest definitions; event ops in `PERM0`, mirror in `FIX`, sharing ops in `PERM`):
 - `calendar_op_event_create/_update/_delete/_restore`: Calendar edit, and **owner only**. External events refused (`PERM0:414-446`, `PERM0:436-439`).
 - `calendar_op_account_upsert/_remove`: owner only.
 - `calendar_op_mirror_events`: batched, isolates per-event errors (`FIX:139-230`).
@@ -189,7 +189,7 @@ Each row is **Works** / **Missing** / **Wrong**. Evidence follows each row.
 
 - The 2026-10-01 decision ("created in Google, then mirrored back") is **true for create only**.
 - If Google accepts but the mirror save fails, the toast says "Couldn't save the event on Google." while the event exists in Google (`CPV:506-508`).
-- The OAuth scopes would allow edits (lane S §2).
+- The OAuth scopes would allow edits (`booking-google-connect/index.ts:46-52` asks for `calendar.events`; desktop `calendar.rs:148-149`).
 
 **Sync:**
 - Runs in the browser or desktop app, only while the Calendar page is open (`SYNC`).
@@ -244,10 +244,15 @@ Each row is **Works** / **Missing** / **Wrong**. Evidence follows each row.
 12. **Booking links double-book by default.** Busy = Moduo only (`BL:90`). Other links' bookings, task blocks and secondary Google calendars don't count unless mirrored and ticked. Recurring Moduo events count once.
 13. **Success shown when it isn't:**
     - "Couldn't save on Google" after Google saved it (`CPV:506-508`).
-    - Booking cancel reports `{ok}` even when steps failed (lane S §7).
+    - Booking cancel reports `{ok}` even when the Google, Zoom or Moduo steps failed (`BP:517-538`).
     - The guest page blames "your connection" for a server error (live).
     - The Calendar Tasks panel shows "Nothing to schedule" while loading (live).
-14. **Native events don't update live.** Tasks blocks do since TV-D5, because Calendar mounts `useTasksModule` with its Realtime listener (`use-tasks-module.ts:278-290`). Events have no Realtime and no refetch on focus. They reload only on the 15-minute external sync, which never fires when there are no accounts (`UCM`, `SYNC`).
+14. **Native events don't update live.** Tasks blocks do since TV-D5, because Calendar mounts `useTasksModule` with its Realtime listener (`use-tasks-module.ts:278-290`). Events have no Realtime and no refetch on focus. They reload only after an external sync actually changed rows (`SYNC:149`). With no syncable account the sync returns early (`SYNC:61`); on web an Outlook/CalDAV/ICS account is skipped (`SYNC:30`). So a teammate's new event appears only when you leave and come back.
+
+15. **Duplicates.**
+    - A booking saved before the host had a matching Google account row is stored as a native event; the next sync mirrors the same Google event again (`BP:311-333` returns null).
+    - A desktop row `google:{email}` and web rows `google:{email}:{calId}` can exist side by side, and the web only skips one direction (`google-web.ts:116-121`), so the same Google events may be mirrored twice. Not verified live.
+    - Each co-host gets a copy of a booked event that a guest's cancel never removes (`PERM:1646-1663`, `BP:527-533`).
 
 Checked and **not** a bug: deleting a native event asks first. View-only members can't draw (`GRID:426`, `GRID:549`).
 
@@ -356,8 +361,8 @@ Every one of these is unmet today; §3 has the evidence.
 1. **Two calendar models.** `calendar_accounts` (rail) and `calendars` + `calendar_ref` (sharing), plus `calendar_id` text. Three ways to say "which calendar" (`PERM:318-339`, `CALS`, `RAIL`).
 2. **`calendar-page-view.tsx` is 1,217 lines** and owns sync, connect returns, deep links, the drag contract, keyboard, the loop, focus, three panel views and five dialogs (`CPV`).
 3. **Permission lanes disagree.** Event capture and the grid's edit rights follow **Tasks** (`capture-command.ts:35`, `CPV:148`, `CPV:1076`); the server checks **Calendar** (`calendar_module_permission`). The page gate checks Calendar (`calendar-page.tsx:43-50`).
-4. **Bypasses the runtime layer.** `CALS` and `UCM:164` call `supabaseClient` directly; `BL` writes `exposed_slot_links` straight from the component (lane B).
-5. **Errors swallowed and success claimed:** `CALS:120`, `CALS:133`, `CPV:506-508`, booking cancel and confirm (lane S §7), the mirror op's `ok` stamp (`FIX:224-226`), the dropped `skipped` count (`RTW:2026-2029`).
+4. **Bypasses the runtime layer.** `CALS` and `UCM:164` call `supabaseClient` directly; `BL` writes `exposed_slot_links` straight from the component (`BL:306-417`).
+5. **Errors swallowed and success claimed:** `CALS:120`, `CALS:133`, `CPV:506-508`, booking cancel (`BP:517-538`) and confirm (`BP:770-784`), the mirror op's `ok` stamp (`FIX:224-226`), the dropped `skipped` count (`RTW:2026-2029`).
 6. **Deletion diff against the loaded list**, not the sync window (`SYNC:100-106`).
 7. **Its own time formatting** (`ui/time-format.ts`) beside `src/lib/time-format.ts`; durations as raw "60m" (`task-popover.tsx:81`).
 8. **Edge function imports app code** (`BP:41-53`). Works on deploy, but the local stack can't boot it.
@@ -373,7 +378,7 @@ Every one of these is unmet today; §3 has the evidence.
 
 ## 7. Could not verify
 
-- The public `/book` page, live: `booking-public` doesn't boot on the local stack (§5). Lane notes cover it from code.
+- The public `/book` page, live: `booking-public` doesn't boot on the local stack (§5). §1e covers it from code (`BOOK`, `BP`).
 - Desktop: the OAuth round-trips, the 1-hour token expiry, CalDAV, the Rust sync. Code only.
 - Whether "Move to today" shows its "No room left today." toast (none was visible to the page reader).
 - Whether the keyboard check-off bug in the Tasks panel (`TPNL:249-256`) fires in a real browser. Code unchanged since PRIOR.

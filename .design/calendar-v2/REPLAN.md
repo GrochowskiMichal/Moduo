@@ -3,7 +3,8 @@
 > **Status (2026-10-10): round 1 sent. Waiting on Maciej's answers to C1–C20.**
 >
 > - **Open calls:** C1–C20, all ❓. Load-bearing: ★ C1 (the ceiling), ★ C2 (the shape), ★ C3 (missed sessions), ★ C6 (connected calendars).
-> - **Research lanes:** six, in [`research/`](./research/). Landed and folded in: early-decisions audit, role journeys, connectivity, competitor structure. Still running: current state, visual audit (§5 and the 1024×700 verdict in C2 wait on it).
+> - **Research lanes:** six, in [`research/`](./research/). Landed and folded in: current state (with a live look at the running app), early-decisions audit, role journeys, connectivity, competitor structure. Still running: visual audit (§5 and the 1024×700 verdict in C2 wait on it).
+> - **Research data in the shared local database:** the current-state lane seeded a workspace for its live look; [research/current-state.md](./research/current-state.md) §8 lists every row to remove.
 > - **Prototype:** [`prototypes/structure.html`](./prototypes/structure.html), keys 1–9 switch frames, V cycles variants.
 > - **Waiting on Maciej, outside the calls:** (1) may one line be added to TV-D10's row on the integration branch (§6 #4, one reminders table for tasks and events); (2) is Google's OAuth consent screen still in "Testing" (§6 #14: if so, every Google connection drops after 7 days).
 > - **Uncommitted:** nothing.
@@ -80,7 +81,7 @@ Tasks' root cause was "a solo-planner assumption stored as a column". Calendar's
 
 ### 1.3 What's broken, in five kinds
 
-*From the decisions audit, role journeys and connectivity lanes; the current-state and visual lanes confirm or correct each line.*
+*From the current-state lane (code + a live look with a second member), the decisions audit, role journeys and connectivity. The visual lane adds kind D.*
 
 **A · Structure: a calendar without people.**
 - An event has no guests, no invitations and no replies; mirrored meetings arrive without their attendees. So nothing links a meeting with Anna to Anna, and the References event card promises "people" it can't fill.
@@ -88,14 +89,21 @@ Tasks' root cause was "a solo-planner assumption stored as a column". Calendar's
 - No Month view; due-only tasks never appear.
 - Teammates' work appears on your grid and your free-time finder treats it as yours.
 - Repeating Moduo events can't end on a date and can't change one occurrence.
+- **Two "Calendars" lists sit one above the other** and don't talk: connected accounts (show/hide) and the sharing calendars from the permissions work, whose checkboxes look like show/hide but mean "include in a set". Calendars you create can never hold an event. Teammates' Busy can't be hidden.
 
-**B · Trust: things that make people stop believing it.**
-- "Took longer" logs planned time as worked time.
-- Two clocks: block focus and Focus can run on two tasks at once; leaving the Calendar page ends block focus silently.
-- "Move to today" can move a teammate's task.
-- **Connected calendars go stale:** nothing syncs unless a Calendar page is open somewhere; Outlook and iCloud only from the Mac that connected them. A booking guest can pick a slot that was taken this morning.
-- A Google event made in Moduo turns read-only once saved.
-- Booking links see only the primary calendar of whichever Google login was saved last, and a repeating Moduo event blocks only its first date.
+**B · Trust: things that make people stop believing it** (ranked; [current state](./research/current-state.md) §3):
+1. **Teammates' tasks are treated as yours.** Live: "6 unfinished from earlier" included two of Tess's tasks, ticked by default in Review; "Move to today" would have moved them. The MCP roll-forward does the same across the whole workspace.
+2. **Past meetings disappear.** Every sync deletes mirrored events older than 30 days (or more than 120 ahead), with their links to contacts and notes.
+3. **Clicking inside the new-event popover throws the draft away** (live, twice).
+4. **"Synced just now" can be untrue:** it shows the freshest account; the web silently skips Outlook and iCloud; desktop Google and Outlook connections stop about an hour after connecting.
+5. **Teammates see your repeating meetings as free** after the first one; booking links make the same mistake.
+6. **"Took longer" logs planned time as worked time.**
+7. **Two clocks:** block focus ends silently when you leave the page and never shows in the top bar.
+8. **Dragging one occurrence moves the whole series, without asking.**
+9. **Overlapping events can be unreachable:** "+3" can't be clicked.
+10. **"Couldn't save on Google" after Google saved it;** a booking cancel reports success when a step failed.
+11. **A teammate's new event appears only when you leave and come back** (no live updates for events).
+12. **The same Google event can be mirrored twice.**
 
 **C · Capability gaps for a daily driver** (the [gap map](./research/role-journeys.md) §8 has all 23):
 - Can't edit or delete anything from Google, Outlook or iCloud; can't invite anyone; can't answer an invitation.
@@ -295,7 +303,7 @@ Round 3 reconciles in-flight work that touches Calendar: these blocks, collectiv
 **★ C2 · The shape: what each panel holds**
 - **Left · overview:**
   - the mini-month;
-  - **Calendars**, grouped by where they come from (Moduo first, then each connected account), each with its colour and show/hide on hover; teammates' calendars shared with you sit under **Shared with you**; saved sets live in the group's ⋯ menu ("Show set: Work week");
+  - **Calendars**, one list (today there are two, and their checkboxes mean different things), grouped by where they come from (Moduo first, then each connected account), each with its colour and show/hide on hover; every calendar you own can hold events (today a calendar you create can't); teammates' calendars shared with you sit under **Shared with you**; saved sets live in the group's ⋯ menu ("Show set: Work week");
   - **People**: your workspace's members; tick one to see their busy time on your grid, with their avatar (C8);
   - **Booking links**: one row each, with "2" bookings this week; selecting one shows its open times on the grid (C9).
   - Same rules as the Tasks sidebar: no glyphs, sentence-case headers, groups collapse, headers only when a group has something.
@@ -363,10 +371,12 @@ Round 3 reconciles in-flight work that touches Calendar: these blocks, collectiv
   - **Moduo keeps them current on its servers**, so the web, teammates' Busy, booking links, alerts and Focus's meeting divider are right even with every laptop closed; changes show within about five minutes;
   - **connect any of them from the web**; the desktop opens the same sign-in;
   - **you pick a default calendar** for new events, shown on every create (the "wrong calendar" guard);
-  - **while a change is saving** it shows a faint mark; if Google refuses: "Couldn't save to Google · Retry · Keep in Moduo only"; if someone changed it meanwhile: "Changed in Google since you opened it".
+  - **while a change is saving** it shows a faint mark; if Google refuses: "Couldn't save to Google · Retry · Keep in Moduo only"; if someone changed it meanwhile: "Changed in Google since you opened it";
+  - **past meetings stay**, with their links (today anything older than 30 days is deleted on every sync);
+  - **each calendar says honestly when it last updated**, and a broken connection shows Reconnect wherever it appears.
 - **Order:** Google first (nearly there), then iCloud and other CalDAV, then Microsoft. Microsoft is last only because it needs an app registration with publisher verification, which needs a registered company.
-- **The one choice you'd see (iCloud and other CalDAV):** at connect, "Keep this calendar up to date when my Mac is off — your app-specific password is stored encrypted on Moduo's servers" (on by default) or "Keep my password on this Mac only — updates only while Moduo runs here". Google and Microsoft use sign-in, so no password is stored.
-- *Recommend: yes, all of the above.* Rejected: Google-only write-back (Outlook users keep Outlook open; that's most PMs); keeping desktop-only sync (stale for everyone but you); keychain-only for iCloud with no choice (students on the web and anyone's second device never see their Apple calendar).
+- **The one choice you'd see (iCloud and other CalDAV):** at connect, two options side by side, neither pre-picked: "Keep it up to date when my Mac is off — your app-specific password is stored encrypted on Moduo's servers" or "Keep my password on this Mac only — updates only while Moduo runs here". Neither is the default because an iCloud app-specific password also opens that person's iCloud mail and contacts, so storing it is a real step up in what Moduo holds ([connectivity](./research/connectivity.md) Q1). ICS feeds (just a link) default to the server. Google and Microsoft use sign-in, so no password is stored.
+- *Recommend: yes, all of the above.* Rejected: Google-only write-back (Outlook users keep Outlook open; that's most PMs); keeping desktop-only sync (stale for everyone but you); keychain-only for iCloud with no choice (students on the web and anyone's second device never see their Apple calendar); storing iCloud passwords on the server by default (too much to hold without asking).
 - *Outside the target roles?* Yes.
 - Evidence: [connectivity](./research/connectivity.md) §0–§4.
 
@@ -417,6 +427,7 @@ Round 3 reconciles in-flight work that touches Calendar: these blocks, collectiv
   - **⌘N in Calendar** → a new event at the selected time, or the next half hour.
   - **⌘⇧K then ⌘4** → capture as Event: a destination row "Event · Work (Google) ▾", the title with live date words and people ("Lunch with Anna Thu 1pm" → When and a guest), and the pills When · Guests · Repeat · ⋯ More (place or video, notes, alert, time zone).
   - **Dragging a task** from the panel onto the grid makes a session; onto the all-day row sets its due date (Tasks contract).
+- Today, clicking any control inside the new-event popover throws the draft away; the rebuild's popover keeps the draft until Esc or an empty click-away.
 - *Recommend: yes.* Rejected: a separate "New session" button (one more choice; the toggle and the drag cover it).
 - *Outside the target roles?* Yes.
 - Prototype frames 7 (the popover) and 8 (capture).
@@ -565,7 +576,7 @@ Checked every call against the others, against Tasks v3, and against the decisio
 
 | File | What it holds | Status |
 | --- | --- | --- |
-| [research/current-state.md](./research/current-state.md) | Calendar today in code and in the running app: capability matrix, trust bugs, what Tasks v3 already changed | running |
+| [research/current-state.md](./research/current-state.md) | Calendar today in code and in the running app (seeded workspace, a second member): capability matrix, 15 trust bugs, what Tasks v3 already changed, the research data to remove | landed, folded into §1.3, C2, C6, C10 |
 | [research/visual-audit.md](./research/visual-audit.md) | Measurements against the north-star rules; the 1024×700 verdict | running |
 | [research/early-decisions-audit.md](./research/early-decisions-audit.md) | Every early Calendar decision: keep / adjust / reverse; 19 contradictions; 15 designer questions | landed, folded into §1, C1–C20 and the consistency pass |
 | [research/structure-competitors.md](./research/structure-competitors.md) | Views, calendars, people, tasks, booking, write-back and complaints across 20 tools | landed, folded into C5, C16, C19 |
