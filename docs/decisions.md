@@ -184,6 +184,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Data layer, Supabase, contracts → [decisions/data.md](decisions/data.md)
 
+- 2026-10-10 · AT-2: one upload queue takes a file from prepare to finalize, survives restarts and words each refusal as a fact with one action; the task panel shows the strip under the description and takes paste or drop anywhere; desktop drops are plain HTML5 drops.
 - 2026-10-08 · AT-1: attachment bytes go straight to a private bucket under a pending row and are locked once finalized; one ledger per workspace owner counts them (held under the hosted 50 MB upload cap; Maciej: keep 50 MB for now); the trash clock is the server's; a daily `purge-deleted` function empties the trash after 30 days.
 - 2026-10-08 · The app never takes a Supabase session from the URL (`detectSessionInUrl: false`); sign-in is the typed 6-digit code only; the dashboard invite link still confirms the address but no longer signs anyone in.
 - 2026-10-07 · Attachments are attachments-only, private, and pooled per workspace owner; HEIC converts only where the app can read it.

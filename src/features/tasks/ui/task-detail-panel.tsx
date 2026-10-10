@@ -308,7 +308,7 @@ function DetailBody({
                   ariaLabel="Description"
                   placeholder={canEdit ? "Add a description…  @ or / to link" : undefined}
                   className="min-h-6 text-base text-foreground/85"
-                  placeholderClassName="text-base"
+                  placeholderClassName="right-0 truncate text-base"
                   onCommit={(html) => {
                     if (html !== task.description) api.patchTask(task.id, { description: html });
                   }}
