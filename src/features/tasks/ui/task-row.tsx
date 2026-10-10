@@ -1,10 +1,7 @@
 import type { DraggableSyntheticListeners } from "@dnd-kit/core";
-import { addDays, format, startOfWeek } from "date-fns";
-import { Check, ChevronDown, ChevronRight, Clock, CornerDownRight, Inbox, X } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, CornerDownRight, Inbox } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
-import { TimeInput } from "@/components/ui/date-field";
+import { DatePickerPanel } from "@/components/ui/date-field";
 import { SELECTED_ROW } from "@/components/ui/selection";
 import { CompleteToggle } from "../../../components/ui/complete-toggle";
 import {
@@ -624,12 +621,12 @@ function validDate(iso: string | null): Date | null {
 }
 
 /**
- * The row's date editor: the kit DateField's picker (presets · Calendar ·
- * TimeInput · Clear), composed inside the row's own popover. DateField owns its
- * open state and its trigger, and this popover must open from `s` / `d` and the
- * menu and hand focus back to the list on close, so the row keeps its popover
- * and uses DateField's parts. Each pick saves once: a due date closes the
- * editor; a scheduled day stays open so its time can be set.
+ * The row's date editor: the kit's `DatePickerPanel` (presets · Calendar ·
+ * TimeInput · Clear, the body DateField renders too) inside the row's own
+ * popover. DateField owns its open state and trigger, and this popover opens
+ * from `s` / `d` and the menu and hands focus back to the list on close, so the
+ * row keeps its popover. Each pick saves once: a due date closes the editor; a
+ * scheduled day stays open so its time can be set.
  */
 function DateEditor({
   label,
@@ -644,73 +641,14 @@ function DateEditor({
   onChange: (next: Date | null) => void;
   onDone: () => void;
 }) {
-  const pick = (day: Date | undefined) => {
-    // A click on the chosen day again keeps it; Clear is the way to remove it.
-    if (!day) return;
-    const next = new Date(day);
-    if (withTime) {
-      next.setHours(value ? value.getHours() : 9, value ? value.getMinutes() : 0, 0, 0);
-      onChange(next);
-    } else {
-      next.setHours(0, 0, 0, 0);
-      onChange(next);
-      onDone();
-    }
-  };
-  const today = new Date();
-  const presets = [
-    { label: "Today", date: today },
-    { label: "Tomorrow", date: addDays(today, 1) },
-    { label: "Next week", date: addDays(startOfWeek(today, { weekStartsOn: 1 }), 7) },
-  ];
   return (
-    <>
-      <p className="px-3 pt-2.5 text-xs font-medium text-muted-foreground">{label}</p>
-      <div className="flex flex-wrap gap-1 border-b border-hairline p-2">
-        {presets.map((p) => (
-          <Button key={p.label} variant="ghost" size="sm" onClick={() => pick(p.date)}>
-            {p.label}
-          </Button>
-        ))}
-      </div>
-      <Calendar
-        mode="single"
-        selected={value ?? undefined}
-        defaultMonth={value ?? undefined}
-        onSelect={pick}
-      />
-      {withTime ? (
-        <div className="flex items-center gap-2 border-t border-hairline p-2">
-          <Clock className="size-icon-sm text-muted-foreground" aria-hidden />
-          <TimeInput
-            aria-label="Time"
-            value={value ? format(value, "HH:mm") : ""}
-            onValueChange={(hhmm) => {
-              const [h, m] = hhmm.split(":").map(Number);
-              const next = value ? new Date(value) : new Date();
-              next.setHours(h, m, 0, 0);
-              onChange(next);
-            }}
-          />
-        </div>
-      ) : null}
-      {value ? (
-        <div className="border-t border-hairline p-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full justify-start gap-1.5 text-muted-foreground"
-            onClick={() => {
-              onChange(null);
-              onDone();
-            }}
-          >
-            <X aria-hidden />
-            Clear
-          </Button>
-        </div>
-      ) : null}
-    </>
+    <DatePickerPanel
+      heading={label}
+      value={value}
+      withTime={withTime}
+      onChange={onChange}
+      onDone={onDone}
+    />
   );
 }
 

@@ -4,18 +4,12 @@
 
 import { useMemo } from "react";
 
-import { initialsOf as kitInitialsOf } from "../../components/ui/avatar";
 import { supabaseClient } from "../../lib/runtime.web";
 import { useAuth } from "../../providers/auth-provider";
 import { useWorkspace } from "../workspaces/workspace-context";
 import { type Assignee, toAssignees } from "./assignee-options";
 
 export type { Assignee } from "./assignee-options";
-
-/** A person's initials: the kit's one rule (`initialsOf` in ui/avatar, call 43). */
-export function initialsOf(name: string): string {
-  return kitInitialsOf(name);
-}
 
 /** Null when they can already see the bucket. Otherwise the picker warning. */
 export async function previewAssign(bucketId: string, userId: string): Promise<string | null> {

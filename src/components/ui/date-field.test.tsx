@@ -2,6 +2,7 @@
 // native `<input type="time">` / `type="number"`.
 import { describe, expect, it, rs } from "@rstest/core";
 import { fireEvent, render, screen } from "@testing-library/react";
+import { useState } from "react";
 
 import { formatTimeText, parseTimeText, TimeInput } from "./date-field";
 import { NumberInput } from "./input";
@@ -30,10 +31,25 @@ describe("parseTimeText / formatTimeText", () => {
   });
 });
 
+/** A controlled owner, as every real caller is. */
+function OwnedTime({ initial, onSave }: { initial: string; onSave: (v: string) => void }) {
+  const [value, setValue] = useState(initial);
+  return (
+    <TimeInput
+      value={value}
+      onValueChange={(v) => {
+        onSave(v);
+        setValue(v);
+      }}
+      aria-label="Time"
+    />
+  );
+}
+
 describe("TimeInput", () => {
   it("is a text field, commits a typed time on Enter and reverts junk on blur", () => {
     const onValueChange = rs.fn();
-    render(<TimeInput value="09:00" onValueChange={onValueChange} aria-label="Time" />);
+    render(<OwnedTime initial="09:00" onSave={onValueChange} />);
     const field = screen.getByRole("textbox", { name: "Time" }) as HTMLInputElement;
     expect(field.type).toBe("text");
     expect(field.value).toBe("9:00 AM");
@@ -75,6 +91,25 @@ describe("a typed value survives a popover closing (no blur on unmount)", () => 
 });
 
 describe("NumberInput", () => {
+  it("never sits blank over a value its owner kept (cleared → mapped back)", () => {
+    function Owner() {
+      const [n, setN] = useState<number | null>(1);
+      return <NumberInput value={n} onValueChange={(v) => setN(v ?? 1)} aria-label="Minutes" />;
+    }
+    render(<Owner />);
+    const field = screen.getByRole("textbox", { name: "Minutes" }) as HTMLInputElement;
+    fireEvent.change(field, { target: { value: "" } });
+    fireEvent.blur(field);
+    expect(field.value).toBe("1");
+  });
+
+  it("an empty time field steps from 9:00 AM, never NaN", () => {
+    const onValueChange = rs.fn();
+    render(<TimeInput value="" onValueChange={onValueChange} aria-label="Time" />);
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "Time" }), { key: "ArrowUp" });
+    expect(onValueChange).toHaveBeenLastCalledWith("09:15");
+  });
+
   it("takes digits only, clamps on Enter and steps on the arrows", () => {
     const onValueChange = rs.fn();
     render(

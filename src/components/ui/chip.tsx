@@ -179,7 +179,7 @@ type PickerPillProps = Omit<ChipButtonProps, "children" | "active" | "content" |
  * Picker pill — a ChipButton that opens a picker (DS-6, visual audit §C). The
  * one set/unset rule: unset shows the field's name, muted, on the hairline;
  * set shows the value on the active fill. The accessible name always carries
- * both ("Due: Oct 16").
+ * both ("Due: Oct 16"), whether the value is text or a node.
  */
 function PickerPill({
   label,
@@ -195,15 +195,23 @@ function PickerPill({
   ...props
 }: PickerPillProps) {
   const set = value !== null && value !== undefined && value !== "";
-  const name = ariaLabel ?? (set && typeof value === "string" ? `${label}: ${value}` : label);
+  // The name is the content: "Due: Oct 16" (the field name hidden but read),
+  // so a value given as a node (an avatar and a name) is still announced.
   const trigger = (
     <ChipButton
       active={set}
-      aria-label={name}
+      aria-label={ariaLabel}
       className={cn(!set && "text-muted-foreground", className)}
       {...props}
     >
-      {set ? value : label}
+      {set ? (
+        <>
+          <span className="sr-only">{label}: </span>
+          {value}
+        </>
+      ) : (
+        label
+      )}
     </ChipButton>
   );
   if (kind === "popover") {

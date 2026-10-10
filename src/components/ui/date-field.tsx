@@ -5,7 +5,7 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "./button";
 import { Calendar } from "./calendar";
-import { Input } from "./input";
+import { Input, useDraftField } from "./input";
 import { Popover, PopoverContent, PopoverTrigger } from "./popover";
 import { PropertyValue } from "./property-row";
 
@@ -101,44 +101,19 @@ function TimeInput({
   placeholder = "3:00 PM",
   ...props
 }: TimeInputProps) {
-  const shown = value ? formatTimeText(value) : "";
-  const [draft, setDraft] = React.useState(shown);
-  React.useEffect(() => setDraft(shown), [shown]);
-
-  // A popover that closes on an outside click unmounts the field without a
-  // blur, so a typed time would be lost (the native field saved per keystroke).
-  // Commit a pending, readable draft on the way out.
-  const pending = React.useRef({ draft, value, onValueChange });
-  pending.current = { draft, value, onValueChange };
-  React.useEffect(
-    () => () => {
-      const { draft: last, value: current, onValueChange: save } = pending.current;
-      const parsed = last.trim() ? parseTimeText(last) : null;
-      if (parsed && parsed !== current) save(parsed);
-    },
-    [],
-  );
-
-  const commit = () => {
-    if (draft.trim() === "") {
-      setDraft(shown);
-      return;
-    }
-    const parsed = parseTimeText(draft);
-    if (parsed) {
-      setDraft(formatTimeText(parsed));
-      if (parsed !== value) onValueChange(parsed);
-    } else {
-      setDraft(shown);
-    }
-  };
+  // "" is "no time": an empty field stays empty, and clearing never saves.
+  const field = useDraftField<string>({
+    value,
+    format: (hhmm) => (hhmm ? formatTimeText(hhmm) : ""),
+    parse: (text) => (text.trim() === "" ? value : (parseTimeText(text) ?? undefined)),
+    onValueChange,
+  });
 
   const nudge = (direction: 1 | -1) => {
-    const [h, m] = (parseTimeText(draft) ?? value ?? "09:00").split(":").map(Number);
+    const from = parseTimeText(field.draft) ?? (value || "09:00");
+    const [h, m] = from.split(":").map(Number);
     const total = (((h * 60 + m + direction * step) % 1440) + 1440) % 1440;
-    const next = `${pad2(Math.floor(total / 60))}:${pad2(total % 60)}`;
-    setDraft(formatTimeText(next));
-    onValueChange(next);
+    field.set(`${pad2(Math.floor(total / 60))}:${pad2(total % 60)}`);
   };
 
   return (
@@ -148,28 +123,127 @@ function TimeInput({
       autoComplete="off"
       spellCheck={false}
       size={size}
-      value={draft}
+      value={field.draft}
       placeholder={placeholder}
-      onChange={(e) => setDraft(e.target.value)}
+      onChange={(e) => field.setDraft(e.target.value)}
       onBlur={(e) => {
-        commit();
+        field.commit();
         onBlur?.(e);
       }}
       onKeyDown={(e) => {
         if (e.key === "Enter") {
           e.preventDefault();
-          commit();
+          field.commit();
         } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
           e.preventDefault();
           nudge(e.key === "ArrowUp" ? 1 : -1);
         } else if (e.key === "Escape") {
-          setDraft(shown);
+          field.revert();
         }
         onKeyDown?.(e);
       }}
       className={cn("w-24 tabular-nums", className)}
       {...props}
     />
+  );
+}
+
+type DatePickerPanelProps = {
+  value: Date | null;
+  onChange: (value: Date | null) => void;
+  /** Pair the calendar with a time field. */
+  withTime?: boolean;
+  /** A pick that ends the edit: a date-only day, a preset, or Clear. */
+  onDone?: () => void;
+  /** A small heading over the presets ("Due date"). */
+  heading?: string;
+};
+
+/**
+ * The date picker's body — presets (Today / Tomorrow / Next week, the phrases
+ * the capture parser understands), the Calendar, an optional TimeInput and
+ * Clear — for a surface that owns its own popover (a task row's date cell,
+ * opened from `s` / `d`). DateField renders the same panel.
+ *
+ * Each pick saves once. A date-only pick ends the edit; with a time the panel
+ * stays open so the time can be set, keeping the existing time (or 9:00 AM).
+ * Clicking the chosen day again keeps it: Clear is the way to remove a date.
+ */
+function DatePickerPanel({
+  value,
+  onChange,
+  withTime = false,
+  onDone,
+  heading,
+}: DatePickerPanelProps) {
+  const pick = (day: Date | undefined) => {
+    if (!day) return;
+    if (withTime) {
+      onChange(applyTime(day, value ? value.getHours() : 9, value ? value.getMinutes() : 0));
+    } else {
+      onChange(applyTime(day, 0, 0));
+      onDone?.();
+    }
+  };
+
+  const commitTime = (hhmm: string) => {
+    const [h, m] = hhmm.split(":").map(Number);
+    if (Number.isNaN(h) || Number.isNaN(m)) return;
+    onChange(applyTime(value ?? new Date(), h, m));
+  };
+
+  const today = new Date();
+  const presets = [
+    { label: "Today", date: today },
+    { label: "Tomorrow", date: addDays(today, 1) },
+    { label: "Next week", date: addDays(startOfWeek(today, { weekStartsOn: 1 }), 7) },
+  ];
+
+  return (
+    <>
+      {heading ? (
+        <p className="px-3 pt-2.5 font-sans text-xs font-medium text-muted-foreground">{heading}</p>
+      ) : null}
+      <div className="flex flex-wrap gap-1 border-b border-hairline p-2">
+        {presets.map((p) => (
+          <Button key={p.label} variant="ghost" size="sm" onClick={() => pick(p.date)}>
+            {p.label}
+          </Button>
+        ))}
+      </div>
+      <Calendar
+        mode="single"
+        selected={value ?? undefined}
+        onSelect={pick}
+        defaultMonth={value ?? undefined}
+      />
+      {withTime ? (
+        <div className="flex items-center gap-2 border-t border-hairline p-2">
+          <Clock className="size-icon-sm text-muted-foreground" aria-hidden />
+          <TimeInput
+            value={value ? format(value, "HH:mm") : ""}
+            onValueChange={commitTime}
+            aria-label="Time"
+          />
+        </div>
+      ) : null}
+      {value ? (
+        <div className="border-t border-hairline p-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start gap-1.5 text-muted-foreground"
+            onClick={() => {
+              onChange(null);
+              onDone?.();
+            }}
+          >
+            <X aria-hidden />
+            Clear
+          </Button>
+        </div>
+      ) : null}
+    </>
   );
 }
 
@@ -193,37 +267,6 @@ function DateField({
   ...props
 }: DateFieldProps) {
   const [open, setOpen] = React.useState(defaultOpen);
-  const timeStr = value ? format(value, "HH:mm") : "09:00";
-  const timeValue = value ? timeStr : "";
-
-  const commitDate = (day: Date | undefined) => {
-    if (!day) {
-      onChange(null);
-      return;
-    }
-    if (withTime) {
-      const [h, m] = timeStr.split(":").map(Number);
-      onChange(applyTime(day, value ? value.getHours() : h, value ? value.getMinutes() : m));
-    } else {
-      onChange(applyTime(day, 0, 0));
-      setOpen(false);
-    }
-  };
-
-  const commitTime = (next: string) => {
-    const [h, m] = next.split(":").map(Number);
-    if (Number.isNaN(h) || Number.isNaN(m)) return;
-    onChange(applyTime(value ?? new Date(), h, m));
-  };
-
-  const presets: Array<{ label: string; date: Date }> = (() => {
-    const today = new Date();
-    return [
-      { label: "Today", date: today },
-      { label: "Tomorrow", date: addDays(today, 1) },
-      { label: "Next week", date: addDays(startOfWeek(today, { weekStartsOn: 1 }), 7) },
-    ];
-  })();
 
   const label = value
     ? (formatValue?.(value) ?? format(value, withTime ? "MMM d, h:mm a" : "MMM d"))
@@ -261,45 +304,16 @@ function DateField({
         )}
       </PopoverTrigger>
       <PopoverContent className="w-auto p-0" align="start">
-        <div className="flex flex-wrap gap-1 border-b border-hairline p-2">
-          {presets.map((p) => (
-            <Button key={p.label} variant="ghost" size="sm" onClick={() => commitDate(p.date)}>
-              {p.label}
-            </Button>
-          ))}
-        </div>
-        <Calendar
-          mode="single"
-          selected={value ?? undefined}
-          onSelect={commitDate}
-          defaultMonth={value ?? undefined}
+        <DatePickerPanel
+          value={value}
+          onChange={onChange}
+          withTime={withTime}
+          onDone={() => setOpen(false)}
         />
-        {withTime ? (
-          <div className="flex items-center gap-2 border-t border-hairline p-2">
-            <Clock className="size-icon-sm text-muted-foreground" aria-hidden />
-            <TimeInput value={timeValue} onValueChange={commitTime} aria-label="Time" />
-          </div>
-        ) : null}
-        {value ? (
-          <div className="border-t border-hairline p-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="w-full justify-start gap-1.5 text-muted-foreground"
-              onClick={() => {
-                onChange(null);
-                setOpen(false);
-              }}
-            >
-              <X aria-hidden />
-              Clear
-            </Button>
-          </div>
-        ) : null}
       </PopoverContent>
     </Popover>
   );
 }
 
-export type { DateFieldProps, TimeInputProps };
-export { DateField, formatTimeText, parseTimeText, TimeInput };
+export type { DateFieldProps, DatePickerPanelProps, TimeInputProps };
+export { DateField, DatePickerPanel, formatTimeText, parseTimeText, TimeInput };

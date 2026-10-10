@@ -155,6 +155,25 @@ function teamLettersOf(name: string | null | undefined): string {
 
 // Initials sit on the label hue mixed into the card (bg-label-fill), in the
 // foreground colour, one type step per rung: two letters must fit 16 px.
+// `identityFill` is for a bare element (the team mark). Inside an Avatar the
+// fallback already carries `group-data-[size=…]/avatar:` type steps, which are
+// more specific than a plain `text-3xs` and survive tailwind-merge (a different
+// variant), so `personFill` sets each rung through the same variants.
+const personFill = cva(
+  "bg-label-fill font-sans font-semibold leading-none tracking-normal text-foreground",
+  {
+    variants: {
+      size: {
+        icon: "group-data-[size=icon]/avatar:font-semibold group-data-[size=icon]/avatar:text-3xs",
+        sm: "group-data-[size=sm]/avatar:text-2xs",
+        default: "text-xs",
+        lg: "text-sm",
+      },
+    },
+    defaultVariants: { size: "default" },
+  },
+);
+
 const identityFill = cva(
   "bg-label-fill font-sans font-semibold leading-none tracking-normal text-foreground",
   {
@@ -217,7 +236,7 @@ function PersonAvatar({
       {...props}
     >
       {src ? <AvatarImage src={src} alt="" /> : null}
-      <AvatarFallback className={identityFill({ size })}>{initialsOf(name)}</AvatarFallback>
+      <AvatarFallback className={personFill({ size })}>{initialsOf(name)}</AvatarFallback>
     </Avatar>
   );
 }

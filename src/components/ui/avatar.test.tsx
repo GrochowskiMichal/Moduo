@@ -64,6 +64,10 @@ describe("PersonAvatar and TeamMark", () => {
     expect(root.getAttribute("aria-hidden")).toBe("true");
     expect(root.className).toContain("rounded-avatar");
     expect(container.textContent).toBe("MI");
+    // The icon rung's 9 px step must beat the fallback's own 11 px variant.
+    const fallback = container.querySelector("[data-slot=avatar-fallback]") as HTMLElement;
+    expect(fallback.className).toContain("group-data-[size=icon]/avatar:text-3xs");
+    expect(fallback.className).not.toContain("group-data-[size=icon]/avatar:text-2xs");
   });
 
   it("no one is the dashed ring, with no letters", () => {

@@ -15,7 +15,8 @@ import { SELECTED_OPTION } from "./selection";
  * - Padding is the density's small pad, so cards scale with density like rows
  *   do (call 44); before DS-6 a board card was 65 px at every density.
  * - Hover is a fill (the same language as a Row); selected is SELECTED_OPTION
- *   and hovering it steps one up; done fades to half (a state, call 38); a
+ *   and hovering it steps one up; done fades the title and meta to half but
+ *   never the lead control, so it can be reopened (a state, call 38); a
  *   drop target and the drag source take the shared drag visuals. What follows
  *   the pointer while dragging is `DragOverlaySurface`, never this.
  * - Title 14 px body, wraps; one meta line under it, 12 px, indented past the
@@ -52,7 +53,6 @@ function ItemCard({
         "transition-colors duration-(--motion-fade) ease-(--ease-out)",
         "hover:bg-state-hover focus-visible:ring-2 focus-visible:ring-ring/50",
         selected && cn(SELECTED_OPTION, "hover:bg-state-selected-hover"),
-        done && "opacity-50",
         dropTarget && DROP_TARGET,
         dragging && DRAG_SOURCE,
         className,
@@ -76,7 +76,7 @@ function ItemCardTitle({
       {...props}
     >
       {lead ? <span className="flex h-lh shrink-0 items-center">{lead}</span> : null}
-      <span className="min-w-0 break-words">{children}</span>
+      <span className="min-w-0 break-words group-data-[done]/card:opacity-50">{children}</span>
     </div>
   );
 }
@@ -92,6 +92,7 @@ function ItemCardMeta({
       data-slot="item-card-meta"
       className={cn(
         "flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-muted-foreground tabular-nums",
+        "group-data-[done]/card:opacity-50",
         indent && "ps-6",
         className,
       )}
