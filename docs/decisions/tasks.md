@@ -13,9 +13,9 @@ Built in tasks-v3 block 11 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §Assum
   - Rejected: Dexie (unused query layer, ~40 KB); localStorage (5 MB cap, synchronous).
 - **D11a-2 · The device copy is one person's, holds no secrets, and goes on sign-out** → TV-D11a (`attachSyncUser`, auth-provider, account deletion)
   - Who: agent's choice, deferred to by Maciej, 2026-10-11 (hardened at the orchestrator's request the same day).
-  - Decision: keyed by person and workspace; signing out (account deletion signs out too, and also wipes it explicitly) wipes every copy; another person signing in wipes every copy but theirs; rows only (no token, key or session), comments as id + task + stamps (no text), no time entries or agent sessions; rows you lost access to leave the copy at the access check (D11a-6).
-  - Why: a shared or handed-on laptop must never show one account's private projects to the next; the copy is a convenience, the server keeps the truth.
-  - Rejected: keeping copies across sign-out for a faster next sign-in.
+  - Decision: keyed by person and workspace; a real sign-out (the `SIGNED_OUT` event) and account deletion wipe every copy and the remembered workspace list; another person signing in wipes every copy but theirs; a session that is merely missing (an expired token that couldn't refresh offline) stops the stores but keeps the copy and its waiting captures; a workspace no longer on your list (left, removed, deleted) loses its copy when the list comes back; rows only (no token, key or session), comments as id + task + stamps (no text), no time entries or agent sessions; rows you lost access to leave the copy at the access check (D11a-6).
+  - Why: a shared or handed-on laptop must never show one account's private projects to the next; but a capture made on a plane must survive a token that expired before Wi-Fi came back. The copy is a convenience, the server keeps the truth.
+  - Rejected: keeping copies across sign-out for a faster next sign-in; wiping whenever the session reads null (it lost offline captures, found by the validator).
 - **D11a-3 · Open tasks first, the rest straight after, not on demand** → TV-D11a (`readFirst`, `restLoaded`, `whenRest`)
   - Who: agent's choice, deferred to by Maciej, 2026-10-11.
   - Decision: a first load reads To do and In progress (and the small tables), shows them, then reads Done, Won't do and Backlog, completions and comment counts; from then on the copy has everything and later reads are deltas. A link to a closed task, and a hub's linked Done task, wait for the rest.
@@ -28,7 +28,7 @@ Built in tasks-v3 block 11 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §Assum
   - Rejected: `updated_at > cursor` with offset paging; a server `sync_since` RPC (needs a migration: noted for TV-D11b).
 - **D11a-5 · Writes are ops laid over the copy; a refusal takes back only its own fields** → TV-D11a (`begin` / `settle` / `fail`, the hook)
   - Who: agent's choice, deferred to by Maciej, 2026-10-11.
-  - Decision: every edit shows at once as an op (op id) on top of the rows the server sent; its answer becomes the row unless the copy already holds a strictly newer one; a Realtime row lands only if strictly newer (an equal stamp is our echo); a refusal drops the op (toast, no reload); a teammate's newer write wins once our op settles. TV-D5's hold-while-saving gate and the refetch-discard are no longer used by the hook.
+  - Decision: every edit shows at once as an op (op id) on top of the rows the server sent; its answer becomes the row unless the copy already holds a strictly newer one; a Realtime row lands only if strictly newer (an equal stamp is our echo); a refusal drops the op (toast, no reload); a lost connection drops it too and says "Offline"; a teammate's newer write wins once our op settles; a delete leaves a mark (the deleted row's stamp, and when) so no older version and no read already on its way brings the row back, while a restore (newer) does. TV-D5's hold-while-saving gate and the refetch-discard are no longer used by the hook.
   - Why: AC12.8 (one field rolls back, nothing reloads) and "your own pending write is skipped on echo" fall out of one rule set.
   - Rejected: reloading after any error (the old hook), a server op-id column for echo matching (a migration).
 - **D11a-6 · Rows you can no longer see are dropped by comparing ids** → TV-D11a (`checkAccess`, `syncIds`)
@@ -56,6 +56,11 @@ Built in tasks-v3 block 11 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §Assum
   - Decision: store reads fail at once on a lost connection; the store says "Offline" and tries again after 3 s, doubling to 20 s, and at once on the browser's `online` event or a Realtime rejoin.
   - Why: postgrest-js retries a failed GET three times (1 + 2 + 4 s), so "Offline" would show 7 s late and the first offline open would wait that long.
   - Rejected: keeping the client's retries (a long silent wait), a fixed 20 s retry (a short blip would read as offline for 20 s).
+- **D11a-12 · Everything is read whole again once a day** → TV-D11a (`fullReadMs`, `fullReadAt` in the copy)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: a session whose copy was last read whole more than 24 h ago reads everything again (open tasks first, the rest after, the copy shown meanwhile) instead of a delta; a new field a later build reads also needs `CACHE_VERSION` bumped, which drops every copy.
+  - Why: a delta never re-reads a row the server changed without a new stamp (TV-D9's backfills ran with the stamp trigger off) or fills a field a newer build reads.
+  - Rejected: a server "sync epoch" (a migration); never (the copy could drift for good).
 - **D11a-11 · Smaller calls** → TV-D11a
   - Who: agent's choice, deferred to by Maciej, 2026-10-11.
   - Decision: Home's quick capture keeps its plain behaviour (no date parsing) through the store; the full data export (Settings → Advanced) keeps its own complete read (an action, not a screen); the repeat roll-over is asked after the first read of a session that reaches the server and on Retry, once per load across all surfaces (`claimCatchUp`); comment counts come from comment ids per task (`commentCounts` on the hook) for TV-U10/U13 to show.

@@ -28,6 +28,8 @@
 - [ ] **Do:** sign in as person A, open Tasks; sign out; sign in as person B on the same browser → **Expect:** B never sees A's tasks, not even for a moment. _(web)_
 - [ ] **Do:** as the owner, make a project private (remove its workspace grant) while a teammate has Tasks open; the teammate comes back to the window after 10 minutes, or reloads → **Expect:** that project's tasks leave the teammate's list and their device copy. _(web)_
 - [ ] **Do:** Settings → Account → delete a throwaway account → **Expect:** its device copy is gone (IndexedDB `moduo-sync` empty). _(web)_
+- [ ] **Do:** offline, capture a task; leave the app closed for more than an hour (the session token expires); reopen it before the network is back, then connect → **Expect:** the capture is still "waiting to sync" and is sent once; nothing was wiped. _(desktop)_
+- [ ] **Do:** leave a workspace (or have its owner remove you), then open the app → **Expect:** IndexedDB `moduo-sync` has no record for that workspace any more. _(web)_
 
 ## Drops and Undo (TV-U4's gap)
 - [ ] **Do:** with three tasks in your Queue, drag the middle one to the Board's Done column, then Undo → **Expect:** it's back in the Queue in the middle, open. _(both)_
