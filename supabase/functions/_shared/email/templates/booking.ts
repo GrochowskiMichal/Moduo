@@ -80,6 +80,21 @@ const CALENDAR_FILE = "invite.ics";
 
 const name = (value: string) => singleLine(value, TEXT_LIMITS.name);
 
+/** Looks like a link, a domain or an address: www., ://, @, or a dot before letters ("x.com", "bit.ly"). */
+const LINKISH = /:\/\/|www\.|@|\.[\p{L}]{2,}/iu;
+
+/**
+ * The booker's name as C2 shows it to someone who never asked to hear from
+ * Moduo. The booking page is public, so this is anyone's free text, mailed
+ * from our address to up to ten addresses they typed. A name that carries a
+ * link or a domain (the shape spam needs) becomes "Someone".
+ */
+export function plainBookerName(value: string): string {
+  const flat = name(value);
+  if (!flat || LINKISH.test(flat) || Array.from(flat).length > 50) return "Someone";
+  return flat;
+}
+
 function firstName(value: string): string {
   const full = name(value);
   return full.split(/\s+/)[0] || full;
@@ -162,7 +177,8 @@ export function bookingGuestConfirmedEmail(data: BookingEmailData): EmailDoc {
 export function bookingGuestAddedEmail(data: BookingEmailData): EmailDoc {
   const w = when(data);
   const host = name(data.hostName);
-  const booker = name(data.guestName);
+  const booker = plainBookerName(data.guestName);
+  const bookerFirst = booker === "Someone" ? "the person who booked" : firstName(booker);
   const details = detailsLine(data, w);
   const blocks: Block[] = [
     { type: "host", name: host, avatarUrl: data.hostAvatarUrl ?? null },
@@ -171,13 +187,13 @@ export function bookingGuestAddedEmail(data: BookingEmailData): EmailDoc {
   ];
   if (!data.googleInvites) blocks.push(attachmentNote());
   if (data.joinUrl) blocks.push(button(`Join ${name(data.video)}`, data.joinUrl));
-  blocks.push(muted(`Can't make it? Let ${firstName(data.guestName)} know.`));
+  blocks.push(muted(`Can't make it? Let ${bookerFirst} know.`));
   return {
     subject: `${booker} added you: ${host}, ${w.short} at ${w.time}`,
     preheader: details,
     blocks,
     footer: {
-      reason: `You got this email because ${booker} added this address when booking time with ${host}.`,
+      reason: `You got this email because ${booker === "Someone" ? "someone" : booker} added this address when booking time with ${host}.`,
       scheduledWith: true,
     },
   };
@@ -345,7 +361,8 @@ export const BOOKING_QUEUED: Record<
     return {
       doc: bookingGuestAddedEmail(data),
       fromName: viaModuo(data.hostName),
-      attachments: calendarFile(data, "REQUEST"),
+      // The booker's name reaches these people only in its plain form, in the file too.
+      attachments: calendarFile({ ...data, guestName: plainBookerName(data.guestName) }, "REQUEST"),
     };
   },
   booking_host_new: (payload) => {

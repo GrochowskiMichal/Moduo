@@ -159,3 +159,29 @@ delete from vault.secrets where name = 'email_worker_secret';
 select vault.create_secret(replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', ''), 'email_worker_secret');
 ```
 
+
+## TX-5 · Booking emails: going live
+
+All agent steps, each needing Maciej's OK in the session, in this order. The worker goes first: `booking-public` starts queueing the five booking kinds the moment it's deployed, and a worker without their templates only retries them (for up to ~80 minutes).
+
+1. **Worker** (agent, with OK), from the branch that has the booking templates:
+   ```bash
+   supabase functions deploy email-worker --project-ref wtoonrvuqumihpkbvwvs --no-verify-jwt --import-map supabase/functions/deno.json --use-api
+   ```
+2. **Migration** `20261010160000_tx5_booking_bell.sql` (agent, with OK): the host's bell. Check:
+   ```sql
+   select position('notify_user_ids' in prosrc) > 0 from pg_proc where proname in ('booking_op_commit', 'booking_op_release');
+   ```
+   Expect two `true` rows. Until it's applied, bookings still work; the host just gets no bell line.
+3. **Booking function** (agent, with OK):
+   ```bash
+   supabase functions deploy booking-public --project-ref wtoonrvuqumihpkbvwvs --no-verify-jwt --import-map supabase/functions/deno.json --use-api
+   ```
+   then `bun run functions:reconcile`. From here on `booking-public` sends nothing itself (the old `sendGuestEmail` and its `RESEND_FROM` are gone).
+4. **Booking page copy** ships with the app (develop → staging-app → prod-app). Until then the confirmation keeps saying a calendar invite is coming on Zoom-only links.
+5. **Live check:** book a slot on a Google-connected link and on a Zoom-only link (docs/testing/ checklist for TX-5), cancel each, and read the rows:
+   ```sql
+   select kind, status, attempts, last_error, dedupe_key from public.email_outbox
+   where kind like 'booking_%' order by created_at desc limit 20;
+   ```
+

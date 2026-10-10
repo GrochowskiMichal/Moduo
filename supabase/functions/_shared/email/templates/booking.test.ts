@@ -5,8 +5,10 @@ import {
   BOOKING_QUEUED,
   BOOKING_SETTINGS_URL,
   bookingGuestConfirmedEmail,
+  bookingGuestAddedEmail,
   bookingHostNewEmail,
   parseBookingPayload,
+  plainBookerName,
 } from "./booking.ts";
 import { BOOKING_FIXTURE, BOOKING_ZOOM_FIXTURE } from "./fixtures.ts";
 
@@ -76,6 +78,25 @@ describe("booking emails · guest", () => {
     expect(text).not.toContain("cancel?token");
     expect(queued.attachments?.[0]?.contentType).toContain("method=REQUEST");
     expect(BOOKING_QUEUED.booking_guest_added(payload(BOOKING_FIXTURE)).attachments).toBeUndefined();
+  });
+
+  it("C2 never mails a booker's name that carries a link or a domain", () => {
+    for (const spam of ["Cheap pills at pills.example", "visit www.x.co", "http://x", "tom@spam.test", "x".repeat(60)]) {
+      expect(plainBookerName(spam)).toBe("Someone");
+    }
+    expect(plainBookerName("Tom Becker")).toBe("Tom Becker");
+    expect(plainBookerName("Zoë O'Neill-Łukasz")).toBe("Zoë O'Neill-Łukasz");
+    expect(plainBookerName("Dr. Tom Becker")).toBe("Dr. Tom Becker");
+    const { subject, text } = renderEmail(
+      bookingGuestAddedEmail({ ...BOOKING_ZOOM_FIXTURE, guestName: "Win big at casino.example" }),
+    );
+    expect(subject).toBe("Someone added you: Anna Carter, Fri 16 Oct at 14:00");
+    expect(text).not.toContain("casino");
+    expect(text).toContain("Let the person who booked know.");
+    const queued = BOOKING_QUEUED.booking_guest_added(
+      payload({ ...BOOKING_ZOOM_FIXTURE, guestName: "Win big at casino.example" }),
+    );
+    expect(decode(queued.attachments?.[0]?.content ?? "")).not.toContain("casino");
   });
 
   it("C5 confirms the guest's cancel, cancels the calendar file on Zoom-only links, no badge", () => {
