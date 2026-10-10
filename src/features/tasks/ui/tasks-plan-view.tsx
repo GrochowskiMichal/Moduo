@@ -1,4 +1,9 @@
-import { isBacklogTask, isClosedTask, isOpenTask } from "@contracts/vocabularies";
+import {
+  isBacklogTask,
+  isClosedTask,
+  isOpenTask,
+  type TaskStatusCategory,
+} from "@contracts/vocabularies";
 import {
   type CollisionDetection,
   closestCenter,
@@ -7,7 +12,7 @@ import {
   type DragEndEvent,
   pointerWithin,
 } from "@dnd-kit/core";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { onCreateNew } from "../../../components/app/create-events";
 import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell";
@@ -28,6 +33,7 @@ import { undoToast } from "../../../lib/undo-toast";
 import { HubDropZone } from "../../contacts/ui/hub-drop-zone";
 import { consumeFocusViewRequest, FOCUS_VIEW_REQUEST_EVENT } from "../../focus/view-request";
 import { createLinkWithToast } from "../../spine/ui/drop-link-toast";
+import { WorkspaceContext } from "../../workspaces/workspace-context";
 import { useAssignees } from "../assignees";
 import {
   timeBlockByBucket as invertTimeBlocks,
@@ -61,6 +67,7 @@ import { DriftTriageDialog } from "./drift-triage-dialog";
 import { ExecuteView } from "./execute-view";
 import { FrontierOfferDialog } from "./frontier-offer-dialog";
 import { type PlanHeaderControls, type PlanView, SortedOrderLine } from "./plan-view-header";
+import { StatusesDialog } from "./statuses-dialog";
 import { TaskBoardView } from "./task-board-view";
 import { PrivateItemPanel, TASK_DETAIL_REFRESH_EVENT, TaskDetailPanel } from "./task-detail-panel";
 import { TaskListView } from "./task-list-view";
@@ -140,6 +147,12 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   }, []);
   const [captureOpen, setCaptureOpen] = useState(false);
   const [triageBucketId, setTriageBucketId] = useState<string | null>(null);
+  // Statuses (TV-D9): a project's (its ⋯, or "+ Add status" on its board), or
+  // the workspace default set (the Inbox's ⋯). Null = closed.
+  const [statusesEditor, setStatusesEditor] = useState<{
+    projectId: string | null;
+    addingTo?: TaskStatusCategory | null;
+  } | null>(null);
   // Triage opens from a rail row and has no trigger to hand focus back to.
   const railNavRef = useRef<HTMLElement | null>(null);
   const triageFromRef = useRef<string | null>(null);
@@ -256,6 +269,9 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   // "My tasks" is only in the rail of workspaces with two or more members
   // (tasks-v2 §1): with fewer, every task is yours, so All says the same.
   const { assignees, currentUserId } = useAssignees();
+  // Owners and admins edit the workspace's default statuses (TV-D9). Read
+  // without useWorkspace so the page renders where no provider is mounted.
+  const canManageWorkspace = useContext(WorkspaceContext)?.canManageWorkspace ?? false;
   const showMyTasks = showsMyTasks(assignees.length);
 
   // Keep selection valid; "inbox" resolves against the seeded Inbox bucket.
@@ -583,6 +599,10 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
         triageFromRef.current = id;
         setTriageBucketId(id);
       }}
+      onEditStatuses={canEdit ? (id) => setStatusesEditor({ projectId: id }) : undefined}
+      onEditDefaultStatuses={
+        canEdit && canManageWorkspace ? () => setStatusesEditor({ projectId: null }) : undefined
+      }
       timeBlockByBucket={timeBlocksByBucket}
       onSetTimeBlock={api.setTimeBlock}
       onSetBucketGroup={api.setBucketGroup}
@@ -787,6 +807,13 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
         boardGroupBy={tasksDisplay.display.boardGroup}
         statusFilter={statusFilter}
         onManualOrder={backToManualOrder}
+        onAddStatus={
+          // One project's board only (REPLAN 53a): never All, My tasks, the
+          // Queue or the Inbox (which uses the workspace default set).
+          canEdit && buckets.some((b) => b.id === selection)
+            ? () => setStatusesEditor({ projectId: selection, addingTo: "in_progress" })
+            : undefined
+        }
       />
     ) : view === "timeline" ? (
       <TaskTimelineView {...sharedViewProps} zoom={timelineZoom} onZoomChange={setTimelineZoom} />
@@ -1034,6 +1061,19 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
             if (tag) api.createTagForTask(tag.name, created);
           }
         }}
+      />
+      <StatusesDialog
+        open={statusesEditor !== null}
+        projectName={statusesEditor?.projectId ? bucketNameById(statusesEditor.projectId) : null}
+        statuses={api.statuses.filter((s) => s.projectId === (statusesEditor?.projectId ?? null))}
+        canEdit={canEdit}
+        addingTo={statusesEditor?.addingTo ?? null}
+        onCreate={(category, name) =>
+          api.createStatus(statusesEditor?.projectId ?? null, category, name)
+        }
+        onUpdate={api.updateStatus}
+        onDelete={api.deleteStatus}
+        onClose={() => setStatusesEditor(null)}
       />
       <DriftTriageDialog
         open={triageBucketId !== null}

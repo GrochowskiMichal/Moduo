@@ -46,6 +46,11 @@ type Props = {
   onDeleteBucket: (id: string) => void;
   /** Open batch-triage for a bucket's drifted tasks. */
   onTriageBucket: (bucketId: string) => void;
+  /** A project's ⋯ → Statuses… (TV-D9). Absent: no such item. */
+  onEditStatuses?: (bucketId: string) => void;
+  /** The Inbox's ⋯ → Default statuses… (owners and admins; the Inbox uses
+   *  the workspace default set). Absent: no such item. */
+  onEditDefaultStatuses?: () => void;
   /** Which time-block slot (if any) each bucket is mapped to. */
   timeBlockByBucket: Map<string, TimeBlockSlot>;
   /** Assign a bucket to a slot, or clear it (slot = null). */
@@ -110,6 +115,8 @@ export function BucketRail({
   onRenameBucket,
   onDeleteBucket,
   onTriageBucket,
+  onEditStatuses,
+  onEditDefaultStatuses,
   timeBlockByBucket,
   onSetTimeBlock,
   onSetBucketGroup,
@@ -164,6 +171,7 @@ export function BucketRail({
       onRename={(name) => onRenameBucket(bucket.id, name)}
       onDelete={() => requestDelete(bucket)}
       onTriage={() => onTriageBucket(bucket.id)}
+      onEditStatuses={onEditStatuses ? () => onEditStatuses(bucket.id) : undefined}
       onSetTimeBlock={(slot) => onSetTimeBlock(bucket.id, slot)}
       onSetGroup={(group) => onSetBucketGroup(bucket.id, group)}
       onShareCloseAutoFocus={returnFocus(bucket.id)}
@@ -231,11 +239,20 @@ export function BucketRail({
                 ) : undefined
               }
               menu={
-                canEdit && inboxDrift > 0
+                (canEdit && inboxDrift > 0) || onEditDefaultStatuses
                   ? (m) => (
-                      <m.Item onSelect={m.afterClose(() => onTriageBucket(inbox.id))}>
-                        Triage {inboxDrift} drifted…
-                      </m.Item>
+                      <>
+                        {canEdit && inboxDrift > 0 ? (
+                          <m.Item onSelect={m.afterClose(() => onTriageBucket(inbox.id))}>
+                            Triage {inboxDrift} drifted…
+                          </m.Item>
+                        ) : null}
+                        {onEditDefaultStatuses ? (
+                          <m.Item onSelect={m.afterClose(onEditDefaultStatuses)}>
+                            Default statuses…
+                          </m.Item>
+                        ) : null}
+                      </>
                     )
                   : undefined
               }
@@ -381,6 +398,7 @@ function BucketRow({
   onRename,
   onDelete,
   onTriage,
+  onEditStatuses,
   onSetTimeBlock,
   onSetGroup,
   onShareCloseAutoFocus,
@@ -398,6 +416,7 @@ function BucketRow({
   onRename: (name: string) => void;
   onDelete: () => void;
   onTriage: () => void;
+  onEditStatuses?: () => void;
   onSetTimeBlock: (slot: TimeBlockSlot | null) => void;
   onSetGroup: (group: string | null) => void;
   onShareCloseAutoFocus: (event: Event) => void;
@@ -426,6 +445,9 @@ function BucketRow({
       <m.Item onSelect={m.rename}>Rename</m.Item>
       {!bucket.isSystem ? (
         <m.Item onSelect={m.afterClose(() => setSharing(true))}>Share</m.Item>
+      ) : null}
+      {!bucket.isSystem && onEditStatuses ? (
+        <m.Item onSelect={m.afterClose(onEditStatuses)}>Statuses…</m.Item>
       ) : null}
       {drift > 0 ? (
         <m.Item onSelect={m.afterClose(onTriage)}>Triage {drift} drifted…</m.Item>
