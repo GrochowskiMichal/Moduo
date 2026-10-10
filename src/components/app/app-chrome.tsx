@@ -55,6 +55,7 @@ import { GlobalBottomBar } from "./global-bottom-bar";
 import { GlobalCaptureBar } from "./global-capture-bar";
 import { GlobalCommandPalette } from "./global-command-palette";
 import { GlobalShortcutsDialog } from "./global-shortcuts-dialog";
+import { HelpMenu } from "./help-menu";
 import { useUnknownRouteRedirect } from "./use-unknown-route-redirect";
 
 type ModuleTabProps = {
@@ -520,10 +521,14 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
           })}
         </div>
 
-        <div className="flex flex-row items-center justify-end gap-2">
+        {/* A container, so the Focus timer can shorten itself when this side is narrow. */}
+        <div className="@container flex flex-row items-center justify-end gap-1">
           {/* DF-21f — web-only email follow-up-due sweep (renders nothing). */}
           <EmailDueWebSweep />
           <UpdateOnLaunch />
+          {/* Global, so top bar (call 96): the running Focus timer, then Help. */}
+          <FocusSessionChip />
+          <HelpMenu />
           <NotificationCenter />
           <UserMenu
             avatarDataUrl={avatarDataUrl}
@@ -542,8 +547,6 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
         style={{ height: "var(--bar-h)" }}
       >
         <div className="flex flex-1 flex-row items-center justify-start gap-2">
-          {/* Ambient running-Focus indicator (DF-11) — renders nothing when idle. */}
-          <FocusSessionChip />
           {isHomeRoute ? (
             // Home has no left panel — this slot holds the dashboard page dots.
             <PageDots
