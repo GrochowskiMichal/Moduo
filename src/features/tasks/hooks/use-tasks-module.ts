@@ -430,21 +430,27 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
   }, [runtime, workspaceId, canEdit, store]);
 
   /**
-   * A write that didn't go through: its fields are back to the server's, and
-   * it says why. A lost connection (the browser may not know yet) is
-   * "Offline", and the store holds further edits until it's back.
+   * Say why a write didn't go through. A lost connection (the browser may not
+   * know yet) is "Offline", and the store holds further edits until it's back.
    */
+  const storeRef = useRef(store);
+  storeRef.current = store;
+  const failed = useCallback((e: unknown, fallback: string) => {
+    if (isNetworkError(e)) {
+      storeRef.current?.wentOffline();
+      sayOffline();
+      return;
+    }
+    toast.error(e instanceof Error ? e.message : fallback);
+  }, []);
+
+  /** A write that didn't go through: its fields are back to the server's, and it says why. */
   const refused = useCallback(
     (write: PendingWrite, e: unknown, fallback = "Something went wrong.") => {
       write.fail();
-      if (isNetworkError(e)) {
-        store?.wentOffline();
-        sayOffline();
-        return;
-      }
-      toast.error(e instanceof Error ? e.message : fallback);
+      failed(e, fallback);
     },
-    [store],
+    [failed],
   );
 
   /** A backlog task's move to To do (queuing or scheduling it, REPLAN 53), for
@@ -571,12 +577,12 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       return store.sendCreate(optimistic, opts).then(
         (result) => result.saved,
         (e) => {
-          toast.error(e instanceof Error ? e.message : "Couldn't create task.");
+          failed(e, "Couldn't create task.");
           return null;
         },
       );
     },
-    [store],
+    [store, failed],
   );
 
   /**
@@ -618,10 +624,10 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         .catch((e) => {
           // Only the shown line-up goes; the copy holds the server's.
           store.lineupFailed(seq);
-          toast.error(e instanceof Error ? e.message : "Couldn't update your queue.");
+          failed(e, "Couldn't update your queue.");
         });
     },
-    [store],
+    [store, failed],
   );
 
   /**
@@ -1141,11 +1147,11 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         store.forget("statuses", gone);
         return true;
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Something went wrong.");
+        failed(e, "Something went wrong.");
         return false;
       }
     },
-    [editBlocked, store],
+    [editBlocked, store, failed],
   );
 
   const createStatus = useCallback(
@@ -1188,11 +1194,11 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         );
         return true;
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Something went wrong.");
+        failed(e, "Something went wrong.");
         return false;
       }
     },
-    [editBlocked, runtime, workspaceId, store],
+    [editBlocked, runtime, workspaceId, store, failed],
   );
 
   // ── recurrence roll-over (TV-D8) ─────────────────────────────────────────────
@@ -1327,10 +1333,10 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         seconds > 0
           ? { workspaceId, taskId: id, action: "focus", seconds }
           : { workspaceId, taskId: id, action: "adjust", seconds },
-      ).catch((e) => toast.error(e instanceof Error ? e.message : "Couldn't save the time."));
+      ).catch((e) => failed(e, "Couldn't save the time."));
       return true;
     },
-    [timeWriteBlocked, workspaceId, writeTime],
+    [timeWriteBlocked, workspaceId, writeTime, failed],
   );
 
   /**
@@ -1350,12 +1356,12 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       return writeTime(id, seconds, { workspaceId, taskId: id, action: "adjust", seconds }).then(
         (result) => (result.status === "saved" ? { entryId: result.entryId, seconds } : null),
         (e) => {
-          toast.error(e instanceof Error ? e.message : "Couldn't save the time.");
+          failed(e, "Couldn't save the time.");
           return null;
         },
       );
     },
-    [timeWriteBlocked, workspaceId, writeTime],
+    [timeWriteBlocked, workspaceId, writeTime, failed],
   );
 
   /** Undo an adjustment `logTimeAdjustment` made: removes exactly that one. */
@@ -1368,9 +1374,9 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         action: "undo",
         entryId: adjustment.entryId,
         seconds: adjustment.seconds,
-      }).catch((e) => toast.error(e instanceof Error ? e.message : "Couldn't undo that."));
+      }).catch((e) => failed(e, "Couldn't undo that."));
     },
-    [timeWriteBlocked, workspaceId, writeTime],
+    [timeWriteBlocked, workspaceId, writeTime, failed],
   );
 
   /**
@@ -1437,9 +1443,9 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         taskId: id,
         action: "set_total",
         seconds: total,
-      }).catch((e) => toast.error(e instanceof Error ? e.message : "Couldn't save the time."));
+      }).catch((e) => failed(e, "Couldn't save the time."));
     },
-    [timeWriteBlocked, workspaceId, writeTime],
+    [timeWriteBlocked, workspaceId, writeTime, failed],
   );
 
   /**
@@ -2015,10 +2021,10 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       setTimeBlocksState(next);
       void runtime!.tasks.setTimeBlocks({ workspaceId: workspaceId!, blocks: next }).catch((e) => {
         setTimeBlocksState((now) => (now === next ? before : now));
-        toast.error(e instanceof Error ? e.message : "Something went wrong.");
+        failed(e, "Something went wrong.");
       });
     },
-    [timeBlocks, editBlocked, runtime, workspaceId],
+    [timeBlocks, editBlocked, runtime, workspaceId, failed],
   );
 
   /**
@@ -2055,12 +2061,12 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
             .then(() => store?.syncNow())
             .catch((e) => {
               unhideBucket(id);
-              toast.error(e instanceof Error ? e.message : "Couldn't delete the bucket.");
+              failed(e, "Couldn't delete the bucket.");
             });
         },
       });
     },
-    [editBlocked, runtime, workspaceId, liveBuckets, taskCountByBucket, store],
+    [editBlocked, runtime, workspaceId, liveBuckets, taskCountByBucket, store, failed],
   );
 
   // ── tag mutations (through the shared workspace tag store, TV-T1) ────────────
