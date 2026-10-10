@@ -36,7 +36,7 @@ expect "allows develop after && (not this push)" 0 $H/guard-git.sh "$(bashcall '
 
 echo "## guard-secrets.sh"
 if command -v gitleaks >/dev/null 2>&1; then
-  tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
+  tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT INT TERM
   git -C "$tmp" init -q && git -C "$tmp" config user.email t@t && git -C "$tmp" config user.name t
   # Built at runtime so no secret-shaped literal sits in this file.
   key="sk_live_$(openssl rand -hex 16)"
@@ -59,8 +59,11 @@ if [ "${HOOK_TESTS_FAST:-}" = "1" ]; then
   skp "design gate on a raw hex class (HOOK_TESTS_FAST=1)"
 else
   probe="src/__hook_probe__.tsx"
+  trap 'rm -f "$probe"; rm -rf "${tmp:-}" "${ltmp:-}"' EXIT INT TERM
   printf 'export const Probe = () => <div className="bg-[#ff0000]" />;\n' > "$probe"
-  printf '{"tool_input":{"file_path":"%s/%s"}}' "$PWD" "$probe" | bash $H/guard-design-tokens.sh >/dev/null 2>&1; got=$?
+  # A private TMPDIR so another session's design-gate lock can't make the hook exit 0 early.
+  ltmp=$(mktemp -d)
+  printf '{"tool_input":{"file_path":"%s/%s"}}' "$PWD" "$probe" | TMPDIR="$ltmp" bash $H/guard-design-tokens.sh >/dev/null 2>&1; got=$?
   rm -f "$probe"
   [ "$got" = 2 ] && ok "wakes Claude on a raw hex class" || bad "wakes Claude on a raw hex class" "exit $got"
 fi

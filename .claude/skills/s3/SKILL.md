@@ -6,7 +6,7 @@ effort: medium
 
 # /s3 — wrap: land it, remember it, say what's next
 
-Close out a session so nothing is lost. `/s2` now runs steps 3–6 itself for a Tier 0/1 block, so on a normal block `/s3` is short: the Tier 2 gate if one was deferred, the sitting checklist, memory, the `develop` sync and the next-blocks query. For work done outside `/s2` (a chat session, a fix on the fly), run every step. **Never make the operator retype the steps.**
+Close out a session so nothing is lost. `/s2` now runs steps 1–6 itself for a Tier 0/1 block (including the block's sitting checklist), so on a normal block `/s3` is short: the Tier 2 gate if one was deferred, memory, **the `develop` sync (owned here, once per batch, never by `/s2`)** and the next-blocks query. For work done outside `/s2` (a chat session, a fix on the fly), run every step. **Never make the operator retype the steps.**
 
 ## Rules that always hold
 - **Never push or merge to `main`.** Never push directly to `develop`; it changes only through PRs. The `guard-git.sh` hook blocks direct pushes.
@@ -17,7 +17,7 @@ Close out a session so nothing is lost. `/s2` now runs steps 3–6 itself for a 
 - Force-push only your own task branch, only with `--force-with-lease`.
 
 ## Steps
-1. **Sitting checklist (user-visible changes only).** If the session changed something a person can see or do in the app, append a section to this week's `docs/testing/<ISO-week>.md` (e.g. `2026-W41.md`; create it from `docs/testing/TEMPLATE.md`), titled `## [<ID>] <name> · PR #n`. Items are **questions with an expected observation and a blank for what was seen**, not assertions to tick (the template shows the form). **Live-verify first** where you can observe the change, and list what you couldn't under "Not verified by the agent". Backend, tooling and docs changes that the tests prove need no checklist entry.
+1. **Sitting checklist (user-visible changes only, when `/s2` didn't write it).** If the session changed something a person can see or do in the app, write `docs/testing/<ISO-week>/<ID-or-kebab>.md` (e.g. `docs/testing/2026-W41/TV-U5.md`, from `docs/testing/TEMPLATE.md`; one file per PR, so parallel lanes never edit the same file; the week folder is what the operator runs in one sitting). Items are **questions with an expected observation and a blank for what was seen**, not assertions to tick. **Live-verify first** where you can observe the change, and list what you couldn't under "Not verified by the agent". Backend, tooling and docs changes that the tests prove need no checklist.
 2. **Institutional memory.**
    - Add decisions as full entries at the top of `docs/decisions/<area>.md`, then `bun run gen:decisions-index` (CI fails on a stale index). Add traps to `docs/gotchas/<area>.md`.
    - Update the spec's `Status:` line if scope changed. Block state needs no edit: `bun run next` derives it from the PRs.

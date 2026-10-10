@@ -94,7 +94,7 @@
 - [ ] For a **module feature**: spine wiring is enumerated (links / attach / drag / @mention / notifications / activity / tags), MCP tools are listed, and the dashboard widget is defined — per `docs/moduo-module-contract.md`.
 - [ ] **Execution blocks** are decomposed, sequenced, and each is context-sized and self-contained.
 - [ ] **Design constraints acknowledged**: tokens-only (no hardcoded visual values), shadcn-wrapped primitives, and the relevant `docs/DESIGN_RULES.md` rules for any UI.
-- [ ] **Sitting-checklist questions identified** for any user-visible change (`docs/testing/<ISO-week>.md`: "what happens when … ?" with the expected observation).
+- [ ] **Sitting-checklist questions identified** for any user-visible change (`docs/testing/<ISO-week>/<ID>.md`: "what happens when … ?" with the expected observation).
 
 When all boxes are checked for the first two blocks, state: **"Ready to execute: <ID>, <ID>."**
 

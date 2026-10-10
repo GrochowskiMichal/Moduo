@@ -11,7 +11,7 @@ How skills such as `tdd`, `diagnosing-bugs`, `grill-with-docs`, `domain-modeling
 ## When a term or decision gets resolved
 
 - A new or sharpened term goes into the glossary doc, in its existing format. Don't create a separate `CONTEXT.md` glossary.
-- A new decision goes at the top of `docs/decisions/<area>.md` as a full entry (bold one-sentence title, the why, a pointer to the authoritative doc), plus its title as one line in [docs/decisions.md](../decisions.md). Don't create `docs/adr/` files.
+- A new decision goes at the top of `docs/decisions/<area>.md` as a full entry (bold one-sentence title, the why, a pointer to the authoritative doc), then run `bun run gen:decisions-index` ([docs/decisions.md](../decisions.md) is generated; never edit it by hand). Don't create `docs/adr/` files.
 
 ## Flag conflicts
 

@@ -49,9 +49,15 @@ fi
 echo
 # Operator mode (AGENTS.md §Working posture): docs/local/OPERATOR holds `designer`
 # (default) or `engineer`; MODUO_OPERATOR overrides it for one shell.
+# Worktrees don't carry gitignored files, so fall back to the main checkout's copy.
 mode="${MODUO_OPERATOR:-}"
-if [ -z "$mode" ] && [ -f docs/local/OPERATOR ]; then
-  mode=$(head -1 docs/local/OPERATOR | tr -d '[:space:]')
+opfile="docs/local/OPERATOR"
+if [ ! -f "$opfile" ]; then
+  common=$(git rev-parse --git-common-dir 2>/dev/null)
+  [ -n "$common" ] && [ -f "$common/../docs/local/OPERATOR" ] && opfile="$common/../docs/local/OPERATOR"
+fi
+if [ -z "$mode" ] && [ -f "$opfile" ]; then
+  mode=$(head -1 "$opfile" | tr -d '[:space:]')
 fi
 case "$mode" in engineer|designer) ;; *) mode="designer" ;; esac
 echo "Operator mode: $mode (docs/local/OPERATOR; see AGENTS.md §Working posture)."

@@ -1,8 +1,6 @@
-# Sitting checklist — <ISO week, e.g. 2026-W41>
+# Sitting checklist — [<ID>] <block name> · PR #<n> · <date> · _(web / desktop / both)_
 
-> One file per week; `/s3` (or `/s2`'s report) appends a section per landed PR. You run it in **one sitting** at the surfaces, not per block. Items are **questions**, each with the observation the agent expects and a blank for what you actually saw: write the observation even when it matches, because a checklist that only gets ticks confirms instead of discovers. Anything surprising goes to the PR as a comment or becomes a block.
-
-## [<ID>] <block name> · PR #<n> · <date> · _(web / desktop / both)_
+> Path: `docs/testing/<ISO-week>/<ID>.md` (e.g. `docs/testing/2026-W41/TV-U5.md`): one file per landed PR, so parallel lanes never edit the same file, and the week folder is what you run in **one sitting** at the surfaces. `/s2` writes it before landing a user-visible change. Items are **questions**, each with the observation the agent expects and a blank for what you actually saw: write the observation even when it matches, because a checklist that only gets ticks confirms instead of discovers. Anything surprising goes to the PR as a comment or becomes a block.
 
 **Agent verified live:** <yes / partial / no, and what>
 
@@ -12,9 +10,5 @@
 
 **Not verified by the agent:** <what, and why>
 
-## [<ID>] <next block> · PR #<n> · <date>
-
-…
-
 ---
-*Convention: AGENTS.md → "Working posture" (Wrap). Older per-branch checklists live beside this file; the gardener archives any file untouched for two weeks.*
+*Convention: AGENTS.md → "Working posture". Older per-branch checklists live beside the week folders; the gardener archives anything untouched for two weeks.*

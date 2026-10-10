@@ -33,7 +33,7 @@ The session preflight prints the **operator mode** (`docs/local/OPERATOR`, defau
 - For a UI feature, **reference** the `.design/<module>` briefs and the module contract; don't restate them.
 
 ## 4. Decompose into execution blocks
-- Use the `to-tickets` skill to cut tracer-bullet blocks with explicit blocking edges; it writes them where [docs/agents/issue-tracker.md](../../../docs/agents/issue-tracker.md) says (the spec's *Execution blocks* table + `specs/BUILD_ORDER.md`, which is the dependency graph: `**<ID> — <name>** · deps: <IDs or —> · lane <name>`; block state is derived from PRs by `bun run next`, so no checkboxes to maintain).
+- Use the `to-tickets` skill to cut tracer-bullet blocks with explicit blocking edges; it writes them where [docs/agents/issue-tracker.md](../../../docs/agents/issue-tracker.md) says (the spec's *Execution blocks* table + `specs/BUILD_ORDER.md`, which is the dependency graph; each line exactly `- [ ] **<ID> — <name>** · deps: <IDs, or —> · lane <name>`, because `bun run next` parses that form and derives the block's state from PRs; the `[ ]` is never ticked by hand).
 - Block-sizing is **your** responsibility: size each block to complete within one execution's context budget, vertical-slice where possible, sequence with dependencies, each self-contained (its behavior + acceptance criteria + tests). A fresh session must be able to read the spec + the area's decisions and resume.
 
 ## 5. Definition-of-Ready gate, per block pair
