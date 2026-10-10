@@ -150,7 +150,7 @@ function CaptureLine({
         aria-label={placeholder}
         // Not disabled while busy: `busyRef` blocks a double submit, and
         // disabling would drop focus on the error path, which stays open.
-        className="h-11 w-full bg-transparent px-4 font-sans text-base text-foreground outline-none placeholder:text-muted-foreground"
+        className="h-(--ctrl-h-lg) w-full bg-transparent px-4 font-sans text-base text-foreground outline-none placeholder:text-muted-foreground"
       />
       <div className="flex items-center gap-3 border-t border-border px-4 py-2 font-sans text-xs text-muted-foreground">
         {writable ? (

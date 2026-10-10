@@ -204,7 +204,7 @@ export function CaptureShell({ types = CAPTURE_TYPES }: Props) {
           <span className="text-muted-foreground" aria-hidden>
             ·
           </span>
-          <span className="px-1 font-display text-sm text-muted-foreground">
+          <span className="px-1 font-display text-base text-muted-foreground">
             {active.destination}
           </span>
         </div>
