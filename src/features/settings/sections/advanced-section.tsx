@@ -104,7 +104,7 @@ async function gatherExport(
 }
 
 export function AdvancedSection() {
-  const { runtime } = useAuth();
+  const { runtime, userId } = useAuth();
   const { selectedWorkspace } = useWorkspace();
   const workspaceId = selectedWorkspace?.id ?? null;
   const platform: "web" | "desktop" = isDesktop() ? "desktop" : "web";
@@ -192,7 +192,7 @@ export function AdvancedSection() {
     if (checking) return;
     setChecking(true);
     try {
-      const [n, u] = await Promise.all([countPendingOutbox(), countPendingUploads()]);
+      const [n, u] = await Promise.all([countPendingOutbox(), countPendingUploads(userId ?? null)]);
       setPendingNotes(n);
       setPendingUploads(u);
       setDiagPending(n);
@@ -200,19 +200,19 @@ export function AdvancedSection() {
     } finally {
       setChecking(false);
     }
-  }, [checking]);
+  }, [checking, userId]);
 
   const recheckPending = useCallback(async () => {
     setChecking(true);
     try {
-      const [n, u] = await Promise.all([countPendingOutbox(), countPendingUploads()]);
+      const [n, u] = await Promise.all([countPendingOutbox(), countPendingUploads(userId ?? null)]);
       setPendingNotes(n);
       setPendingUploads(u);
       setDiagPending(n);
     } finally {
       setChecking(false);
     }
-  }, []);
+  }, [userId]);
 
   const performReset = useCallback(async () => {
     if (resetting) return;

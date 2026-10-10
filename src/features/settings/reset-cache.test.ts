@@ -52,13 +52,13 @@ describe("isModuoIdbName — notes IndexedDB scope (AC11)", () => {
 describe("resetBlockedMessage — pending uploads block the reset too (AT2-6)", () => {
   it("counts files still uploading", () => {
     expect(resetBlockedMessage({ pendingNotes: 0, pendingUploads: 2, online: true })).toBe(
-      "2 files haven't finished uploading. Resetting now would lose them. Wait for them to finish (notes sync in Notes; files upload on their task), then re-check.",
+      "2 files haven't finished uploading. Resetting now would lose them. Wait for them to finish (notes sync in Notes; files upload on their task), then re-check. A file that can't upload can be retried or dismissed on its task.",
     );
   });
 
   it("names notes and files together, offline", () => {
     expect(resetBlockedMessage({ pendingNotes: 1, pendingUploads: 1, online: false })).toBe(
-      "1 note change hasn't synced to the cloud yet, and 1 file hasn't finished uploading. Resetting now would lose them. Reconnect to the internet so they can finish, then re-check.",
+      "1 note change hasn't synced to the cloud yet, and 1 file hasn't finished uploading. Resetting now would lose them. Reconnect to the internet so they can finish, then re-check. A file that can't upload can be retried or dismissed on its task.",
     );
   });
 });

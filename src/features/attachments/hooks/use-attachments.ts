@@ -9,7 +9,7 @@ import type { AttachmentRecord, ModuoRuntime, StorageStatus } from "@/lib/runtim
 import { undoToast } from "@/lib/undo-toast";
 import { getUploadQueue } from "@/lib/uploads";
 import { targetKey, type UploadTarget, type UploadView } from "@/lib/uploads/queue";
-import { signPaths } from "../signed-urls";
+import { clearSignedUrlCache, signPaths } from "../signed-urls";
 
 /** Start the queue for the signed-in person and wake it when the network or
  *  the window comes back. Mounted once, in the signed-in app shell. */
@@ -18,6 +18,12 @@ export function useUploadQueueBoot(
   runtime: Pick<ModuoRuntime, "attachments"> | null,
 ): void {
   const api = runtime?.attachments ?? null;
+  // Links and pool facts belong to whoever was signed in: drop them on a switch.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runs on every account switch
+  useEffect(() => {
+    clearSignedUrlCache();
+    statusCache.clear();
+  }, [userId]);
   useEffect(() => {
     const queue = getUploadQueue();
     if (!userId) {
@@ -97,9 +103,14 @@ export function useEntityAttachments({
     [workspaceId, entity.type, entity.id],
   );
   const key = target ? targetKey(target) : null;
+  // Only this person's uploads: on a shared device another account's pending
+  // files stay theirs (Retry wouldn't run them, Dismiss would delete them).
   const uploads = useMemo(
-    () => (key ? snap.items.filter((i) => targetKey(i.target) === key) : []),
-    [snap.items, key],
+    () =>
+      key && userId
+        ? snap.items.filter((i) => i.userId === userId && targetKey(i.target) === key)
+        : [],
+    [snap.items, key, userId],
   );
   const almostFull = key ? (snap.almostFull[key] ?? null) : null;
 
@@ -154,12 +165,17 @@ export function useEntityAttachments({
     () =>
       queue.onUploaded((rec, t) => {
         if (targetKey(t) !== key) return;
+        if (!rec) {
+          // Finished in another window: read the list again.
+          void reload();
+          return;
+        }
         setRecords((prev) =>
           prev.some((r) => r.id === rec.id) ? prev : [...prev, rec].sort(byCreated),
         );
         void signPreviews([rec]);
       }),
-    [queue, key, signPreviews],
+    [queue, key, signPreviews, reload],
   );
 
   useEffect(() => {

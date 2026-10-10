@@ -88,7 +88,8 @@ export type UploadStore = {
   /** One item as stored now: null when it's gone (finished or dismissed,
    *  maybe in another tab), undefined when the store can't be read. */
   get(id: string): Promise<UploadItem | null | undefined>;
-  put(item: UploadItem): Promise<void>;
+  /** True once the item is durably stored. */
+  put(item: UploadItem): Promise<boolean>;
   remove(id: string): Promise<void>;
 };
 
@@ -107,6 +108,7 @@ export function memoryUploadStore(initial: UploadItem[] = []): UploadStore & {
     },
     async put(item) {
       items.set(item.id, { ...item });
+      return true;
     },
     async remove(id) {
       items.delete(id);
@@ -187,14 +189,18 @@ export class UploadQueue {
   private running = new Map<string, AbortController>();
   private almostFull: Record<string, { usedBytes: number; totalBytes: number }> = {};
   private listeners = new Set<() => void>();
-  private uploadedListeners = new Set<(rec: AttachmentRecord, target: UploadTarget) => void>();
+  private uploadedListeners = new Set<
+    (rec: AttachmentRecord | null, target: UploadTarget) => void
+  >();
   private snapshot: UploadSnapshot = { items: [], almostFull: {} };
   private userId: string | null = null;
   private api: AttachmentsApi | null = null;
   private loaded: Promise<void> | null = null;
   private timer: unknown = null;
   private persistAsked = false;
-  private progressTimer: ReturnType<typeof setTimeout> | null = null;
+  private progressTimer: unknown = null;
+  /** Items known to be in the store: only those can be "gone" from it. */
+  private persisted = new Set<string>();
   private readonly now: () => number;
   private readonly random: () => number;
   private readonly setTimer: (fn: () => void, ms: number) => unknown;
@@ -224,8 +230,9 @@ export class UploadQueue {
 
   getSnapshot = (): UploadSnapshot => this.snapshot;
 
-  /** Fires once per file that reached `ready`. */
-  onUploaded(fn: (rec: AttachmentRecord, target: UploadTarget) => void): () => void {
+  /** Fires once per file that reached `ready` here, or with null when another
+   *  tab finished one for that target (re-read the list). */
+  onUploaded(fn: (rec: AttachmentRecord | null, target: UploadTarget) => void): () => void {
     this.uploadedListeners.add(fn);
     return () => this.uploadedListeners.delete(fn);
   }
@@ -233,7 +240,7 @@ export class UploadQueue {
   /** Coalesce progress repaints: a big upload reports hundreds of times. */
   private emitProgress() {
     if (this.progressTimer != null) return;
-    this.progressTimer = setTimeout(() => {
+    this.progressTimer = this.setTimer(() => {
       this.progressTimer = null;
       this.emit();
     }, PROGRESS_EMIT_MS);
@@ -261,6 +268,7 @@ export class UploadQueue {
       .all()
       .then((rows) => {
         for (const row of rows) {
+          this.persisted.add(row.id);
           if (this.items.has(row.id)) continue;
           // Whatever was mid-flight when the app closed goes back in line.
           this.items.set(row.id, {
@@ -302,11 +310,13 @@ export class UploadQueue {
     this.pump();
   }
 
-  /** Files still to upload on this device (the reset-cache guard). */
-  countPending(): number {
-    let n = 0;
-    for (const item of this.items.values()) if (item.state !== "rejected") n += 1;
-    return n;
+  /** One person's files still to upload on this device (the reset-cache guard). */
+  pendingIds(userId: string): string[] {
+    const ids: string[] = [];
+    for (const item of this.items.values()) {
+      if (item.userId === userId && item.state !== "rejected") ids.push(item.id);
+    }
+    return ids;
   }
 
   // ── adding ──────────────────────────────────────────────────────────────────
@@ -435,6 +445,7 @@ export class UploadQueue {
     this.running.delete(id);
     this.items.delete(id);
     this.progress.delete(id);
+    this.persisted.delete(id);
     void this.deps.store.remove(id).catch(() => {});
     this.emit();
   }
@@ -449,7 +460,8 @@ export class UploadQueue {
   /** Persist an item still in the queue (a dismissed one must not come back). */
   private async save(item: UploadItem) {
     if (this.items.get(item.id) !== item) return;
-    await this.deps.store.put(item).catch(() => {});
+    const ok = await this.deps.store.put(item).catch(() => false);
+    if (ok) this.persisted.add(item.id);
   }
 
   private reject(item: UploadItem, problem: UploadProblem) {
@@ -458,6 +470,7 @@ export class UploadQueue {
     // Nothing to retry: let the bytes go.
     item.original = new Blob([]);
     this.items.set(item.id, item);
+    this.persisted.delete(item.id);
     void this.deps.store.remove(item.id).catch(() => {});
   }
 
@@ -522,6 +535,7 @@ export class UploadQueue {
     if (!claimed && this.items.get(item.id) === item) {
       // Another tab is uploading this file; look again later.
       item.state = "waiting";
+      item.problem = { kind: "elsewhere" };
       item.nextRetryAt = this.now() + CLAIMED_ELSEWHERE_MS;
     }
     this.pump();
@@ -532,11 +546,16 @@ export class UploadQueue {
       // Another tab may have finished or moved this file on: work from the
       // stored copy, and drop it here when it's gone.
       const stored = await this.deps.store.get(item.id);
-      if (stored === null) {
+      // "Gone" only means something for a file that was stored: a write that
+      // failed (quota, an unstorable Blob) must not make the file vanish.
+      if (stored === null && this.persisted.has(item.id)) {
+        this.persisted.delete(item.id);
         if (this.items.get(item.id) === item) {
           this.items.delete(item.id);
           this.progress.delete(item.id);
         }
+        // Finished in another tab: views of this target re-read the server.
+        for (const fn of this.uploadedListeners) fn(null, item.target);
         return;
       }
       if (stored) {
@@ -610,6 +629,7 @@ export class UploadQueue {
       // Attached, even if dismissed while finalizing: say so truthfully.
       this.items.delete(item.id);
       this.progress.delete(item.id);
+      this.persisted.delete(item.id);
       await this.deps.store.remove(item.id).catch(() => {});
       for (const fn of this.uploadedListeners) fn(rec, item.target);
       // The 95% caption: uploaders see it under the strip, no popup.

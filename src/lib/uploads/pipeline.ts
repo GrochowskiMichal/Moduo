@@ -85,6 +85,8 @@ function extOf(name: string): string {
  *  arrive with an empty `type`). */
 export function effectiveMime(type: string, name: string): string {
   const t = type.trim().toLowerCase();
+  // Non-standard JPEG labels some apps and old browsers still send.
+  if (t === "image/jpg" || t === "image/pjpeg") return "image/jpeg";
   if (t) return t;
   return EXT_MIME[extOf(name)] ?? "application/octet-stream";
 }

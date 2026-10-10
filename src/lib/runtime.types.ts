@@ -207,7 +207,7 @@ export type AttachmentRecord = {
   /** Storage paths in the `attachments` bucket (signed links only). */
   objectPath: string | null;
   previewPath: string | null;
-  previewMime: string | null;
+  previewMime: AttachmentPreviewMime | null;
 };
 
 /** The owner's storage pool as `storage_status` reports it (AT-1). */

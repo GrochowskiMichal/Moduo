@@ -84,6 +84,8 @@ describe("pure rules", () => {
     expect(effectiveMime("", "IMG_0001.HEIC")).toBe("image/heic");
     expect(effectiveMime("", "notes.unknown")).toBe("application/octet-stream");
     expect(effectiveMime("Image/PNG", "x")).toBe("image/png");
+    expect(effectiveMime("image/jpg", "a.jpg")).toBe("image/jpeg");
+    expect(effectiveMime("image/pjpeg", "a.jpg")).toBe("image/jpeg");
     expect(isHeic("image/heif", "a")).toBe(true);
     expect(isHeic("", "photo.heic")).toBe(true);
     expect(isImageCandidate("image/svg+xml", "logo.svg")).toBe(false);

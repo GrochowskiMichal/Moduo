@@ -5,6 +5,7 @@ import {
   Outlet,
   redirect,
 } from "@tanstack/react-router";
+import { useFileDropGuard } from "../../features/attachments/hooks/use-file-drop-guard";
 import { validateCalendarSearch } from "../../features/calendar/search";
 import { validateChatSearch } from "../../features/chat/search";
 import { validateContactsSearch } from "../../features/contacts/search";
@@ -29,6 +30,8 @@ import { SettingsPage } from "../../routes/pages/settings-page";
 import { TasksPage } from "../../routes/pages/tasks-page";
 
 function RootLayout() {
+  // Every screen, signed in or not: a stray file drop never navigates the window.
+  useFileDropGuard();
   return (
     <AuthProvider>
       <Outlet />

@@ -124,7 +124,9 @@ function setup(
     requestPersist: () => persisted.push("asked"),
   });
   const uploaded: AttachmentRecord[] = [];
-  queue.onUploaded((rec) => uploaded.push(rec));
+  queue.onUploaded((rec) => {
+    if (rec) uploaded.push(rec);
+  });
   return {
     queue,
     api,
@@ -185,7 +187,7 @@ describe("UploadQueue", () => {
     });
     // Nothing kept on disk for a file that can never go.
     expect(t.store.items.size).toBe(0);
-    expect(t.queue.countPending()).toBe(0);
+    expect(t.queue.pendingIds("u1").length).toBe(0);
   });
 
   it("keeps a file that doesn't fit the pool waiting as 'storage full'", async () => {
@@ -197,7 +199,7 @@ describe("UploadQueue", () => {
     expect(item.state).toBe("waiting");
     expect(item.problem?.kind).toBe("storage_full");
     expect(t.api.calls).toEqual([]);
-    expect(t.queue.countPending()).toBe(1);
+    expect(t.queue.pendingIds("u1").length).toBe(1);
   });
 
   it("waits offline and goes when the network comes back", async () => {
@@ -269,7 +271,7 @@ describe("UploadQueue", () => {
     };
     const store = memoryUploadStore([stored]);
     const t = setup({ store });
-    expect(t.queue.countPending()).toBe(0);
+    expect(t.queue.pendingIds("u1").length).toBe(0);
     await t.queue.start("u1");
     await settle();
     expect(t.api.calls.map((c) => c.step)).toEqual(["upload", "finalize"]);
@@ -284,7 +286,7 @@ describe("UploadQueue", () => {
     await t.queue.add([png()], TARGET, "u1", status());
     await settle();
     expect(t.api.calls).toEqual([]);
-    expect(t.queue.countPending()).toBe(1);
+    expect(t.queue.pendingIds("u1").length).toBe(1);
   });
 
   it("drops a refused file (no edit access) and shows why, without retrying", async () => {
@@ -468,6 +470,29 @@ describe("UploadQueue", () => {
       problem: { kind: "server_too_large", sizeBytes: 3 },
     });
     expect(t.store.items.size).toBe(0);
+  });
+
+  it("still uploads a file the store couldn't write (quota), instead of losing it", async () => {
+    const store = memoryUploadStore();
+    store.put = async () => false; // every write fails
+    const t = setup({ store });
+    await t.queue.start("u1");
+    await t.queue.add([png()], TARGET, "u1", status());
+    await settle();
+    expect(t.api.calls.map((c) => c.step)).toEqual(["begin", "upload", "upload", "finalize"]);
+    expect(t.uploaded).toHaveLength(1);
+  });
+
+  it("counts only this person's waiting files for the reset guard", async () => {
+    const t = setup({ online: () => false });
+    await t.queue.start("u1");
+    await t.queue.add([png("a.png"), png("b.png")], TARGET, "u1", status());
+    await t.queue.add([png("c.png")], TARGET, "u2", status());
+    await t.queue.add([png("big.mov", 60 * MB)], TARGET, "u1", status());
+    await settle();
+    // The too-big one never uploads, so it doesn't block a reset.
+    expect(t.queue.pendingIds("u1")).toHaveLength(2);
+    expect(t.queue.pendingIds("u2")).toHaveLength(1);
   });
 
   it("backs off exponentially with jitter, capped at five minutes", () => {

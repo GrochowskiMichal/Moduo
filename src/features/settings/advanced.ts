@@ -202,9 +202,11 @@ export function resetBlockedMessage(input: {
   }
   const total = pendingNotes + pendingUploads;
   const lead = `${parts.join(", and ")}. Resetting now would lose ${total === 1 ? "it" : "them"}.`;
+  const files =
+    pendingUploads > 0 ? " A file that can't upload can be retried or dismissed on its task." : "";
   return online
-    ? `${lead} Wait for them to finish (notes sync in Notes; files upload on their task), then re-check.`
-    : `${lead} Reconnect to the internet so they can finish, then re-check.`;
+    ? `${lead} Wait for them to finish (notes sync in Notes; files upload on their task), then re-check.${files}`
+    : `${lead} Reconnect to the internet so they can finish, then re-check.${files}`;
 }
 
 // ── Diagnostics ──────────────────────────────────────────────────────────────

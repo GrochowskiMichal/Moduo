@@ -36,7 +36,11 @@ import {
   tagRowSchema,
   taskRelationRowSchema,
 } from "@contracts/rows";
-import { normalizeAttachmentStatus, normalizeContentAuthorKind } from "@contracts/vocabularies";
+import {
+  isAttachmentPreviewMime,
+  normalizeAttachmentStatus,
+  normalizeContentAuthorKind,
+} from "@contracts/vocabularies";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import * as Y from "yjs";
 import type { CalendarAccountModel, CalendarEventModel } from "../features/calendar/events";
@@ -336,7 +340,7 @@ function mapAttachmentRow(raw: unknown): AttachmentRecord {
     createdAt: r.created_at,
     objectPath: r.object_path ?? null,
     previewPath: r.preview_path ?? null,
-    previewMime: r.preview_mime ?? null,
+    previewMime: isAttachmentPreviewMime(r.preview_mime) ? r.preview_mime : null,
   };
 }
 

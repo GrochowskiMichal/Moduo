@@ -26,6 +26,16 @@ const fakeQueue = {
   },
 };
 
+const undo = { label: "", onUndo: null as null | (() => void) };
+rs.mock("@/lib/undo-toast", () => ({
+  UNDO_TOAST_MS: 8000,
+  undoToast: (label: string, opts: { onUndo: () => void }) => {
+    undo.label = label;
+    undo.onUndo = opts.onUndo;
+    return 1;
+  },
+}));
+
 rs.mock("@/lib/uploads", () => ({
   getUploadQueue: () => fakeQueue,
   countPendingUploads: async () => 0,
@@ -300,7 +310,15 @@ describe("TaskDetailPanel — attachments (AT-2)", () => {
       fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
     });
     await waitFor(() => expect(attachments.remove).toHaveBeenCalledWith("ccc"));
-    expect(screen.queryByRole("button", { name: "Open ccc.png" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Open ccc.png", hidden: true })).toBeNull();
+    // Undo puts it back.
+    expect(undo.label).toBe("File deleted");
+    await act(async () => {
+      undo.onUndo?.();
+    });
+    expect(attachments.restore).toHaveBeenCalledWith("ccc");
+    // (the viewer is still open, so the panel behind it is aria-hidden)
+    await screen.findByRole("button", { name: "Open ccc.png", hidden: true });
   });
 
   it("shows an upload's progress in place, and a problem as a caption with its action", async () => {

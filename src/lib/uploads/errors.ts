@@ -54,6 +54,8 @@ export type UploadProblem =
   | { kind: "server_too_large"; sizeBytes: number }
   /** Too many unfinished uploads for this person; waits a little. */
   | { kind: "busy" }
+  /** Another window of the app is uploading this file right now. */
+  | { kind: "elsewhere" }
   /** Anything else the server refused. */
   | { kind: "failed" };
 
@@ -123,7 +125,8 @@ export function problemRetriesItself(problem: UploadProblem): boolean {
     problem.kind === "offline" ||
     problem.kind === "interrupted" ||
     problem.kind === "storage_full" ||
-    problem.kind === "busy"
+    problem.kind === "busy" ||
+    problem.kind === "elsewhere"
   );
 }
 
@@ -206,6 +209,8 @@ export function describeProblem(
       return { text: "Upload interrupted — trying again", actions: ["retry", "dismiss"] };
     case "busy":
       return { text: "Waiting for your other uploads to finish", actions: ["dismiss"] };
+    case "elsewhere":
+      return { text: "Uploading in another Moduo window", actions: [] };
     case "mismatch":
       return {
         text: "Not attached — the upload didn't arrive whole",

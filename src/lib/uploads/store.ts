@@ -44,6 +44,29 @@ function req<T>(r: IDBRequest<T>): Promise<T> {
   });
 }
 
+/** A write counts once its transaction commits, not when its request succeeds
+ *  (a quota error can still abort the transaction after that). */
+function committed(tx: IDBTransaction): Promise<boolean> {
+  return new Promise((resolve) => {
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = () => resolve(false);
+    tx.onabort = () => resolve(false);
+  });
+}
+
+async function writeTx(fn: (s: IDBObjectStore) => void): Promise<boolean> {
+  const db = await openDb();
+  if (!db) return false;
+  try {
+    const tx = db.transaction(STORE, "readwrite");
+    const done = committed(tx);
+    fn(tx.objectStore(STORE));
+    return await done;
+  } catch {
+    return false;
+  }
+}
+
 async function withStore<T>(
   mode: IDBTransactionMode,
   fn: (s: IDBObjectStore) => Promise<T>,
@@ -59,7 +82,8 @@ async function withStore<T>(
 }
 
 export function idbUploadStore(): UploadStore {
-  // Holds the session's items when IndexedDB is unavailable.
+  // Holds the session's items when IndexedDB is unavailable or a write failed,
+  // so `get` never answers "gone" for a file that simply wasn't stored.
   const memory = new Map<string, UploadItem>();
   return {
     async all() {
@@ -68,8 +92,10 @@ export function idbUploadStore(): UploadStore {
       return withStore("readonly", (s) => req(s.getAll() as IDBRequest<UploadItem[]>), []);
     },
     async get(id) {
+      const kept = memory.get(id);
+      if (kept) return kept;
       const db = await openDb();
-      if (!db) return memory.get(id) ?? null;
+      if (!db) return null;
       return withStore<UploadItem | null | undefined>(
         "readonly",
         (s) => req(s.get(id) as IDBRequest<UploadItem | undefined>).then((v) => v ?? null),
@@ -77,23 +103,18 @@ export function idbUploadStore(): UploadStore {
       );
     },
     async put(item) {
-      const db = await openDb();
-      if (!db) {
-        memory.set(item.id, item);
-        return;
-      }
-      await withStore("readwrite", (s) => req(s.put(item)).then(() => undefined), undefined);
+      const ok = await writeTx((s) => s.put(item));
+      // Not stored (no IndexedDB, quota, an unstorable Blob): keep it for this
+      // session at least. It won't survive a restart, and `put` says so.
+      if (ok) memory.delete(item.id);
+      else memory.set(item.id, item);
+      return ok;
     },
     async remove(id) {
       memory.delete(id);
-      await withStore("readwrite", (s) => req(s.delete(id)).then(() => undefined), undefined);
+      await writeTx((s) => s.delete(id));
     },
   };
-}
-
-/** Files waiting to upload on this device, every account (the reset guard). */
-export async function countStoredUploads(): Promise<number> {
-  return withStore("readonly", (s) => req(s.count()), 0);
 }
 
 /** Close the handle so the reset flow's deleteDatabase isn't blocked. */

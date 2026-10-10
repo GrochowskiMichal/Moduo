@@ -14,6 +14,7 @@
 - [ ] **Do:** drag a file from Finder onto a task's panel → **Expect:** it attaches (the panel highlights while you hover). _(desktop)_
 - [ ] **Do:** Notes → Import, and Contacts → Import: drop a file on each drop zone → **Expect:** both accept the drop (they were dead on desktop before). _(desktop)_
 - [ ] **Do:** drop a file on the sidebar or an empty area → **Expect:** nothing happens; the window doesn't navigate to the file. _(desktop + web)_
+- [ ] **Do:** signed out, drop a file on the sign-in screen → **Expect:** nothing happens; the app stays on the sign-in screen. _(desktop)_
 
 ## The strip and the viewer
 - [ ] **Do:** look at a task with files → **Expect:** thumbnails 64×44 and file tiles with name + size, then "+", right under the description. _(both)_

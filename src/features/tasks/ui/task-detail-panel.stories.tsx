@@ -227,7 +227,7 @@ function stubAttachments(withFiles: boolean) {
       fileName: string;
       mime: string;
       sizeBytes: number;
-      previewMime: string | null;
+      previewMime: AttachmentRecord["previewMime"];
       width: number | null;
       height: number | null;
     }) => {

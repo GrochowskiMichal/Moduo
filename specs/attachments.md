@@ -125,7 +125,7 @@ The storage layer is polymorphic (`entity_type`), so Notes, comments and Chat ca
 - **AT2-1** — Paste/drop into the detail panel or description, or "+", uploads with visible progress. Big files resume after interruptions.
 - **AT2-2** — The panel shows the strip under the description and the viewer (←/→, Download, Copy, Delete).
 - **AT2-3** — Images get previews. Originals stay pixel-exact except: >4096 px is scaled; photo EXIF/GPS is stripped with orientation applied; HEIC becomes JPEG where the browser can decode it (desktop + Safari); elsewhere the original is kept with a file tile.
-- **AT2-4** — Every error state shows its message and action (too big · almost full · full · failed · offline).
+- **AT2-4** — Every error state shows its message and action (too big · almost full · full · failed · offline). *(Full's "Free up space" arrives with Settings → Storage in AT-3; until then full shows Upgrade for the owner and retries by itself.)*
 - **AT2-5** — Files dragged from Finder reach the app on desktop (`dragDropEnabled: false`). The Notes/Contacts import drop zones work on desktop again.
 - **AT2-6** — Pending uploads survive restarts and retry by themselves. "Reset local cache" counts them.
 
@@ -209,7 +209,7 @@ The storage layer is polymorphic (`entity_type`), so Notes, comments and Chat ca
 | --- | --- | --- | --- | --- |
 | 1 | **AT-1** Storage, limits, trash *(start now)* | bucket + policies, `attachments` + ops (begin/finalize/delete/restore), ledger + limits + status RPC, alerts, trash triggers, `purge-deleted` function (+ pending sweep), erasure/workspace-delete hooks, MCP list tool, export manifest; hosted upload-limit check | AT1-1–8 | — |
 | 2 | **AT-2** Upload pipeline + panel | `src/lib/uploads` (pipeline, TUS, queue, errors), `dragDropEnabled:false`, Lexical paste/drop handler, panel strip + viewer + tile states | AT2-1–6 | AT-1, TV-U3 |
-| 3 | **AT-3** Everywhere + Storage settings | row/card drop targets, capture paste chip, 📎 mark on every surface, Settings → Storage | AT3-1–4 | AT-2, TV-U1, TV-U7 |
+| 3 | **AT-3** Everywhere + Storage settings | row/card drop targets, capture paste chip, 📎 mark on every surface, Settings → Storage; wires the strip's "Free up space" (storage-full line, `onFreeUpSpace`) to Settings → Storage; `attachments` joins the Realtime publication for live 📎 counts | AT3-1–4 | AT-2, TV-U1, TV-U7 |
 
 ## Out of scope
 
