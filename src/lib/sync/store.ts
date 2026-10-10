@@ -301,7 +301,9 @@ export class WorkspaceStore {
   private refs = 0;
   private stopLive: (() => void) | null = null;
   private syncing: Promise<void> | null = null;
-  private syncAgain = false;
+  /** A read that follows the running one (see `sync`). */
+  private again: Promise<void> | null = null;
+  private againReload = false;
   private lastSyncAt = 0;
   private syncTimer: ReturnType<typeof setTimeout> | null = null;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -517,21 +519,29 @@ export class WorkspaceStore {
   /** Read what changed now, quietly (after an op whose answer isn't the row it moved). */
   syncNow = (): Promise<void> => this.sync("quiet");
 
+  /**
+   * One read at a time. A read asked for while one runs follows it, once (a
+   * Retry among them makes the follow-up a reload), and resolves after it:
+   * the running read may have started before what the caller wants to see.
+   */
   private sync(kind: "open" | "quiet" | "reload"): Promise<void> {
     if (this.disposed) return Promise.resolve();
     if (this.syncing) {
-      this.syncAgain = true;
-      return this.syncing;
+      if (kind === "reload") this.againReload = true;
+      this.again ??= this.syncing.then(() => {
+        const next = this.againReload ? "reload" : "quiet";
+        this.again = null;
+        this.againReload = false;
+        if (this.disposed || (this.refs <= 0 && next !== "reload")) return;
+        return this.sync(next);
+      });
+      return this.again;
     }
     const run = (async () => {
       try {
         await this.syncOnce(kind);
       } finally {
         this.syncing = null;
-        if (this.syncAgain && !this.disposed && this.refs > 0) {
-          this.syncAgain = false;
-          void this.sync("quiet");
-        }
       }
     })();
     this.syncing = run;
