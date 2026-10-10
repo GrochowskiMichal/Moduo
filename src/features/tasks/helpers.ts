@@ -188,6 +188,8 @@ export type NewTaskFields = {
   energyLevel?: EnergyLevel | null;
   priority?: PriorityLevel | null;
   durationMinutes?: number | null;
+  /** The estimate (TV-D10); omitted, the server takes it from durationMinutes. */
+  estimateMinutes?: number | null;
 };
 
 /**
@@ -211,6 +213,7 @@ export function makeTask(fields: NewTaskFields): Task {
     dueDate: fields.dueDate ?? null,
     scheduledAt: fields.scheduledAt ?? null,
     durationMinutes: fields.durationMinutes ?? null,
+    ...(fields.estimateMinutes !== undefined ? { estimateMinutes: fields.estimateMinutes } : {}),
     timeSpentSeconds: 0,
     recurrence: fields.recurrence ?? null,
     energyLevel: fields.energyLevel ?? null,

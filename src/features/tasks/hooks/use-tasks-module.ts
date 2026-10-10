@@ -2008,8 +2008,9 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       };
       const tempId = optimistic.id;
       setBundle((prev) => ({ ...prev, buckets: [...prev.buckets, optimistic] }));
+      // TV-D10: through the project op (the old save on a database before it).
       void runtime.tasks
-        .upsertBucket({ ...optimistic, id: "" })
+        .createProject({ workspaceId, fields: { name: trimmed, position } })
         .then((saved) => {
           setBundle((prev) => ({
             ...prev,
@@ -2035,7 +2036,14 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         buckets: prev.buckets.map((b) => (b.id === id ? updated : b)),
       }));
       guard(async () => {
-        const saved = await runtime!.tasks.upsertBucket(updated);
+        // Only the name goes (TV-D10), so a rename can't put back a teammate's
+        // newer area or place.
+        const saved = await runtime!.tasks.updateProject({
+          workspaceId: existing.workspaceId,
+          projectId: id,
+          patch: { name: trimmed },
+          fallback: updated,
+        });
         setBundle((prev) => ({
           ...prev,
           buckets: prev.buckets.map((b) => (b.id === id ? saved : b)),
@@ -2062,14 +2070,23 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         buckets: prev.buckets.map((b) => (b.id === id ? updated : b)),
       }));
       guard(async () => {
-        const saved = await runtime!.tasks.upsertBucket(updated);
+        // TV-D10: the rail's sections are areas. The area of that name is
+        // found or made, and the project moves into it (the old label write on
+        // a database before it).
+        const { project, areas } = await runtime!.tasks.setProjectArea({
+          workspaceId: existing.workspaceId,
+          project: updated,
+          areaName: next,
+          areas: bundle.areas ?? [],
+        });
         setBundle((prev) => ({
           ...prev,
-          buckets: prev.buckets.map((b) => (b.id === id ? saved : b)),
+          ...(areas ? { areas } : {}),
+          buckets: prev.buckets.map((b) => (b.id === id ? project : b)),
         }));
       });
     },
-    [bundle.buckets, guard, runtime],
+    [bundle.buckets, bundle.areas, guard, runtime],
   );
 
   /**

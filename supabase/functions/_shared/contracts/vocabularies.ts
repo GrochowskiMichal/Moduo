@@ -220,6 +220,52 @@ export const TASK_TIME_STATUSES = ["saved", "duplicate", "noop", "gone"] as cons
 export type TaskTimeStatus = (typeof TASK_TIME_STATUSES)[number];
 export const taskTimeStatusSchema = z.enum(TASK_TIME_STATUSES);
 
+// ---------------------------------------------------------------------------
+// Tasks v3 structure (TV-D10) — mirrors buckets.status in
+// 20261010180000_areas_projects_sections, and task_reminders.kind and
+// task_waiting.kind in 20261010181000_task_sessions_reminders_waiting.
+// ---------------------------------------------------------------------------
+
+/** A project's state (REPLAN 16): Active · On hold · Done. Only the overview,
+ *  a dimmed sidebar row and MCP read it; it never hides tasks. (Not the
+ *  per-project task statuses, which live in `project_statuses`.) */
+export const PROJECT_STATES = ["active", "on_hold", "done"] as const;
+export type ProjectState = (typeof PROJECT_STATES)[number];
+export const projectStateSchema = z.enum(PROJECT_STATES);
+export function isProjectState(value: unknown): value is ProjectState {
+  return typeof value === "string" && (PROJECT_STATES as readonly string[]).includes(value);
+}
+export function parseProjectState(input: unknown): SafeParseResult<ProjectState> {
+  return parseOrError(projectStateSchema, input);
+}
+/** Lax read: unknown reads as Active, so a project never disappears. */
+export function normalizeProjectState(input: unknown): ProjectState {
+  return isProjectState(input) ? input : "active";
+}
+
+/** When a reminder fires (REPLAN 24): at a time, or a day / an hour before due. */
+export const TASK_REMINDER_KINDS = ["at", "day_before", "hour_before"] as const;
+export type TaskReminderKind = (typeof TASK_REMINDER_KINDS)[number];
+export const taskReminderKindSchema = z.enum(TASK_REMINDER_KINDS);
+export function isTaskReminderKind(value: unknown): value is TaskReminderKind {
+  return typeof value === "string" && (TASK_REMINDER_KINDS as readonly string[]).includes(value);
+}
+export function parseTaskReminderKind(input: unknown): SafeParseResult<TaskReminderKind> {
+  return parseOrError(taskReminderKindSchema, input);
+}
+
+/** What a Waiting on… entry waits on (default q): a person, an email thread,
+ *  an agent (an API key) or free text. */
+export const TASK_WAITING_KINDS = ["person", "email", "agent", "text"] as const;
+export type TaskWaitingKind = (typeof TASK_WAITING_KINDS)[number];
+export const taskWaitingKindSchema = z.enum(TASK_WAITING_KINDS);
+export function isTaskWaitingKind(value: unknown): value is TaskWaitingKind {
+  return typeof value === "string" && (TASK_WAITING_KINDS as readonly string[]).includes(value);
+}
+export function parseTaskWaitingKind(input: unknown): SafeParseResult<TaskWaitingKind> {
+  return parseOrError(taskWaitingKindSchema, input);
+}
+
 export const ENERGY_LEVELS = ["low", "medium", "high"] as const;
 export type EnergyLevel = (typeof ENERGY_LEVELS)[number];
 export const energyLevelSchema = z.enum(ENERGY_LEVELS);

@@ -26,11 +26,14 @@ import {
   MEMBER_DB_PERMISSIONS,
   MEMBER_DB_ROLES,
   PLAN_TIERS,
+  PROJECT_STATES,
+  TASK_REMINDER_KINDS,
   TASK_STATUS_CATEGORIES,
   TASK_STATUSES,
   TASK_TIME_ACTIONS,
   TASK_TIME_ENTRY_KINDS,
   TASK_TIME_STATUSES,
+  TASK_WAITING_KINDS,
   WAITLIST_SOURCES,
   WAITLIST_STATUSES,
 } from "./vocabularies.ts";
@@ -144,6 +147,20 @@ describe("cross-runtime drift guards", () => {
     expect(sql).toContain(`CHECK (status_category IN (${inList(TASK_STATUS_CATEGORIES)}))`);
     // The server's word reader and legacy mirror know every category.
     for (const c of TASK_STATUS_CATEGORIES) expect(sql).toContain(`THEN '${c}'`);
+  });
+
+  it("project states, reminder kinds and waiting kinds match the TV-D10 CHECKs and ops", () => {
+    const read = (file: string) => readFileSync(resolve(MIGRATIONS_DIR, file), "utf8");
+    const structure = read("20261010180000_areas_projects_sections.sql");
+    const sessions = read("20261010181000_task_sessions_reminders_waiting.sql");
+    const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(",");
+    const opList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(", ");
+    expect(structure).toContain(`CHECK (status IN (${inList(PROJECT_STATES)}))`);
+    expect(structure).toContain(`NOT IN (${opList(PROJECT_STATES)})`);
+    expect(sessions).toContain(`CHECK (kind IN (${inList(TASK_REMINDER_KINDS)}))`);
+    expect(sessions).toContain(`p_kind NOT IN (${opList(TASK_REMINDER_KINDS)})`);
+    expect(sessions).toContain(`CHECK (kind IN (${inList(TASK_WAITING_KINDS)}))`);
+    expect(sessions).toContain(`v_kind NOT IN (${opList(TASK_WAITING_KINDS)})`);
   });
 
   it("every MCP module tool name has a TOOL_ARG_SCHEMAS parser and vice versa", () => {

@@ -6,34 +6,51 @@
 // one person's edit could put back a field a teammate had just changed.
 
 import {
+  areaRowSchema,
   bucketRowSchema,
   projectStatusRowSchema,
   requireRow,
+  sectionRowSchema,
   tagLinkRowSchema,
   tagRowSchema,
   taskCompletionRowSchema,
   taskQueueRowSchema,
+  taskReminderRowSchema,
   taskRowSchema,
+  taskSessionRowSchema,
   taskTimeAnswerSchema,
   taskTimeTotalsRowSchema,
+  taskWaitingRowSchema,
+  teamMemberRowSchema,
+  teamRowSchema,
 } from "@contracts/rows";
 import {
+  isTaskReminderKind,
+  isTaskWaitingKind,
   legacyTaskStatus,
+  normalizeProjectState,
   normalizeTaskStatus,
   normalizeTaskStatusCategory,
   type TaskStatusCategory,
   taskStatusWord,
 } from "@contracts/vocabularies";
 import type {
+  Area,
   Bucket,
   ProjectStatus,
+  Section,
   Tag,
   TagLink,
   Task,
   TaskCompletion,
   TaskQueueEntry,
+  TaskReminder,
+  TaskSession,
   TaskTimeResult,
   TaskTimeTotals,
+  TaskWaitingEntry,
+  Team,
+  TeamMember,
 } from "../features/tasks/model";
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
@@ -85,6 +102,9 @@ export type TaskFieldPatch = Partial<
     | "rescheduleCount"
     | "position"
     | "deletedAt"
+    | "sectionId"
+    | "teamId"
+    | "estimateMinutes"
   >
 >;
 
@@ -112,7 +132,13 @@ const PATCH_COLUMNS = {
   rescheduleCount: "reschedule_count",
   position: "position",
   deletedAt: "deleted_at",
+  sectionId: "section_id",
+  teamId: "team_id",
+  estimateMinutes: "estimate_minutes",
 } as const satisfies Record<keyof Required<TaskFieldPatch>, string>;
+
+/** The fields only a database since TV-D10 has. */
+const TV_D10_FIELDS = new Set<keyof TaskFieldPatch>(["sectionId", "teamId", "estimateMinutes"]);
 
 const PATCH_FIELDS = Object.keys(PATCH_COLUMNS) as Array<keyof TaskFieldPatch>;
 
@@ -138,6 +164,13 @@ export function taskPatchToColumns(
   for (const field of PATCH_FIELDS) {
     const value = patch[field];
     if (value === undefined || field === "statusId" || field === "dueTime") continue;
+    if (TV_D10_FIELDS.has(field)) {
+      // The estimate was duration_minutes then; sections and teams didn't exist.
+      if (field === "estimateMinutes" && patch.durationMinutes === undefined) {
+        row.duration_minutes = value;
+      }
+      continue;
+    }
     if (field === "statusCategory") {
       row.status = legacyTaskStatus(normalizeTaskStatusCategory(value));
       continue;
@@ -206,7 +239,37 @@ export function taskCreateOpInput(task: Task): Record<string, unknown> {
   if (task.statusId) input.status_id = task.statusId;
   if (task.dueTime) input.due_time = task.dueTime;
   if (task.assigneeId !== "") input.assignee_id = task.assigneeId;
+  // TV-D10: only when set, so a create needs no fallback on an older database.
+  if (task.sectionId) input.section_id = task.sectionId;
+  if (task.teamId) input.team_id = task.teamId;
+  if (task.estimateMinutes != null) input.estimate_minutes = task.estimateMinutes;
+  if (task.importedFrom) input.imported_from = task.importedFrom;
   return input;
+}
+
+/**
+ * A create or edit for a database before TV-D10: its ops refuse
+ * `section_id`, `team_id`, `estimate_minutes` and `imported_from`. The
+ * estimate goes back to duration_minutes (which held it); the rest is
+ * dropped, as that database has nowhere to keep it. Remove in TV-D7.
+ */
+export function withoutTvD10Fields(fields: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...fields };
+  if ("estimate_minutes" in out && !("duration_minutes" in out)) {
+    out.duration_minutes = out.estimate_minutes;
+  }
+  delete out.estimate_minutes;
+  delete out.section_id;
+  delete out.team_id;
+  delete out.imported_from;
+  return out;
+}
+
+/** The op's answer when it doesn't know a TV-D10 field (a database before it). */
+export function isMissingTvD10FieldError(error: { message?: string } | null | undefined): boolean {
+  return /no field "(section_id|team_id|estimate_minutes|imported_from)"/.test(
+    error?.message ?? "",
+  );
 }
 
 /**
@@ -385,6 +448,12 @@ export function taskRowToModel(raw: unknown): Task {
     dueTime: r.due_time ?? null,
     scheduledAt: r.scheduled_at ?? null,
     durationMinutes: r.duration_minutes ?? null,
+    // TV-D10: left out (undefined) on a row from before it, so readers fall
+    // back to duration_minutes for the estimate.
+    ...(r.estimate_minutes !== undefined ? { estimateMinutes: r.estimate_minutes ?? null } : {}),
+    ...(r.section_id !== undefined ? { sectionId: r.section_id ?? null } : {}),
+    ...(r.team_id !== undefined ? { teamId: r.team_id ?? null } : {}),
+    ...(r.imported_from !== undefined ? { importedFrom: importedFromOf(r.imported_from) } : {}),
     timeSpentSeconds: r.time_spent_seconds ?? 0,
     recurrence: (r.recurrence as Task["recurrence"]) ?? null,
     energyLevel: r.energy_level ?? null,
@@ -450,9 +519,127 @@ export function bucketRowToModel(raw: unknown): Bucket {
     isSystem: !!r.is_system,
     group: r.group_label ?? null,
     position: r.position ?? "",
+    // TV-D10's project fields, only when the row has them.
+    ...(r.status !== undefined
+      ? {
+          status: normalizeProjectState(r.status),
+          startsOn: r.starts_on ?? null,
+          targetOn: r.target_on ?? null,
+          leadId: r.lead_id ?? null,
+          clientContactId: r.client_contact_id ?? null,
+          areaId: r.area_id ?? null,
+        }
+      : {}),
     createdAt: r.created_at,
     updatedAt: r.updated_at,
     deletedAt: r.deleted_at ?? null,
+  };
+}
+
+/** `tasks.imported_from` ({source, key}) when it has that shape. */
+function importedFromOf(raw: unknown): Task["importedFrom"] {
+  if (!raw || typeof raw !== "object") return null;
+  const { source, key } = raw as Record<string, unknown>;
+  return typeof source === "string" && typeof key === "string" ? { source, key } : null;
+}
+
+// ── TV-D10 rows ─────────────────────────────────────────────────────────────
+
+export function areaRowToModel(raw: unknown): Area {
+  const r = requireRow(areaRowSchema, raw, "area");
+  return {
+    id: r.id,
+    workspaceId: r.workspace_id,
+    name: r.name,
+    color: r.color ?? null,
+    position: r.position ?? 1,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  };
+}
+
+export function sectionRowToModel(raw: unknown): Section {
+  const r = requireRow(sectionRowSchema, raw, "section");
+  return {
+    id: r.id,
+    workspaceId: r.workspace_id,
+    projectId: r.project_id,
+    name: r.name,
+    position: r.position ?? 1,
+    startsOn: r.starts_on ?? null,
+    endsOn: r.ends_on ?? null,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  };
+}
+
+export function teamRowToModel(raw: unknown): Team {
+  const r = requireRow(teamRowSchema, raw, "team");
+  return {
+    id: r.id,
+    workspaceId: r.workspace_id,
+    name: r.name,
+    mark: r.mark,
+    color: r.color ?? null,
+    defaultProjectId: r.default_project_id ?? null,
+    createdBy: r.created_by ?? null,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  };
+}
+
+export function teamMemberRowToModel(raw: unknown): TeamMember {
+  const r = requireRow(teamMemberRowSchema, raw, "team member");
+  return {
+    id: r.id,
+    workspaceId: r.workspace_id,
+    teamId: r.team_id,
+    userId: r.user_id,
+    createdAt: r.created_at,
+  };
+}
+
+export function taskSessionRowToModel(raw: unknown): TaskSession {
+  const r = requireRow(taskSessionRowSchema, raw, "work session");
+  return {
+    id: r.id,
+    workspaceId: r.workspace_id,
+    taskId: r.task_id,
+    userId: r.user_id ?? null,
+    startsAt: r.starts_at,
+    endsAt: r.ends_at,
+    updatedAt: r.updated_at,
+  };
+}
+
+/** A reminder of a kind this build doesn't know reads as one at its time. */
+export function taskReminderRowToModel(raw: unknown): TaskReminder {
+  const r = requireRow(taskReminderRowSchema, raw, "reminder");
+  return {
+    id: r.id,
+    workspaceId: r.workspace_id,
+    taskId: r.task_id,
+    userId: r.user_id,
+    kind: isTaskReminderKind(r.kind) ? r.kind : "at",
+    at: r.at ?? null,
+    firedAt: r.fired_at ?? null,
+    updatedAt: r.updated_at,
+  };
+}
+
+/** An entry of a kind this build doesn't know reads as free text. */
+export function taskWaitingRowToModel(raw: unknown): TaskWaitingEntry {
+  const r = requireRow(taskWaitingRowSchema, raw, "waiting entry");
+  return {
+    id: r.id,
+    workspaceId: r.workspace_id,
+    taskId: r.task_id,
+    kind: isTaskWaitingKind(r.kind) ? r.kind : "text",
+    ref: r.ref ?? null,
+    label: r.label ?? null,
+    since: r.since,
+    createdBy: r.created_by ?? null,
+    updatedAt: r.updated_at,
   };
 }
 

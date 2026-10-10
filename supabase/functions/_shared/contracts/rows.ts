@@ -68,6 +68,13 @@ export const taskRowSchema = z.object({
   completed_by: optStr,
   due_on: optStr,
   due_time: optStr,
+  /** TV-D10: the section, the team, the estimate (duration_minutes mirrors
+   *  the next work session from then on) and where it was imported from.
+   *  All absent on a database before that migration. */
+  section_id: optStr,
+  team_id: optStr,
+  estimate_minutes: optNum,
+  imported_from: z.unknown().optional(),
   committed_for: optStr,
   commit_order: optNum,
   reschedule_count: optNum,
@@ -106,6 +113,110 @@ export const projectStatusRowSchema = z.object({
   deleted_at: optStr,
 });
 export type ProjectStatusRow = z.infer<typeof projectStatusRowSchema>;
+
+// ── TV-D10: areas, sections, teams, sessions, reminders, Waiting on… ───────
+// Kinds and states are lax on read (open strings), like status_category: a
+// value this build doesn't know never drops the row.
+
+/** An areas row: an optional group of projects in the sidebar. */
+export const areaRowSchema = z.object({
+  id,
+  workspace_id: id,
+  name: z.string(),
+  color: optStr,
+  position: optNum,
+  created_at: z.string(),
+  updated_at: z.string(),
+  deleted_at: optStr,
+});
+export type AreaRow = z.infer<typeof areaRowSchema>;
+
+/** A sections row: an ordered part of a project, with a range or an end date. */
+export const sectionRowSchema = z.object({
+  id,
+  workspace_id: id,
+  project_id: id,
+  name: z.string(),
+  position: optNum,
+  starts_on: optStr,
+  ends_on: optStr,
+  created_at: z.string(),
+  updated_at: z.string(),
+  deleted_at: optStr,
+});
+export type SectionRow = z.infer<typeof sectionRowSchema>;
+
+/** A teams row: a named group that tasks are routed to. */
+export const teamRowSchema = z.object({
+  id,
+  workspace_id: id,
+  name: z.string(),
+  mark: z.string(),
+  color: optStr,
+  default_project_id: optStr,
+  created_by: optStr,
+  created_at: z.string(),
+  updated_at: z.string(),
+  deleted_at: optStr,
+});
+export type TeamRow = z.infer<typeof teamRowSchema>;
+
+/** A team_members row. */
+export const teamMemberRowSchema = z.object({
+  id,
+  workspace_id: id,
+  team_id: id,
+  user_id: id,
+  created_at: z.string(),
+  updated_at: z.string(),
+  deleted_at: optStr,
+});
+export type TeamMemberRow = z.infer<typeof teamMemberRowSchema>;
+
+/** A task_sessions row: one scheduled block of work on a task. */
+export const taskSessionRowSchema = z.object({
+  id,
+  workspace_id: id,
+  task_id: id,
+  user_id: optStr,
+  starts_at: z.string(),
+  ends_at: z.string(),
+  created_at: z.string(),
+  updated_at: z.string(),
+  deleted_at: optStr,
+});
+export type TaskSessionRow = z.infer<typeof taskSessionRowSchema>;
+
+/** A task_reminders row: one of the reader's own reminders. */
+export const taskReminderRowSchema = z.object({
+  id,
+  workspace_id: id,
+  task_id: id,
+  user_id: id,
+  kind: z.string(),
+  at: optStr,
+  fired_at: optStr,
+  created_at: z.string(),
+  updated_at: z.string(),
+  deleted_at: optStr,
+});
+export type TaskReminderRow = z.infer<typeof taskReminderRowSchema>;
+
+/** A task_waiting row: one Waiting on… entry. */
+export const taskWaitingRowSchema = z.object({
+  id,
+  workspace_id: id,
+  task_id: id,
+  kind: z.string(),
+  ref: optStr,
+  label: optStr,
+  since: z.string(),
+  created_by: optStr,
+  created_at: z.string(),
+  updated_at: z.string(),
+  deleted_at: optStr,
+});
+export type TaskWaitingRow = z.infer<typeof taskWaitingRowSchema>;
 
 /** Notes meta row — v2 columns optional so pre-migration (legacy) reads still parse. */
 export const noteRowSchema = z.object({
@@ -146,6 +257,14 @@ export const bucketRowSchema = z.object({
   is_system: z.boolean().optional(),
   group_label: optStr,
   position: z.string().optional(),
+  /** TV-D10: the project's fields (status lax on read). Absent on a database
+   *  before that migration. */
+  status: z.string().optional(),
+  starts_on: optStr,
+  target_on: optStr,
+  lead_id: optStr,
+  client_contact_id: optStr,
+  area_id: optStr,
   created_at: z.string(),
   updated_at: z.string(),
   deleted_at: optStr,

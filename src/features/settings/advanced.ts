@@ -29,10 +29,13 @@ export type ModuleReadResult =
 /**
  * The tasks part of an export: the module bundle (tasks carry their handle
  * numbers and, since TV-D9, their status, completion and due date; the
- * bundle's `statuses` are every project's and the workspace default set)
- * plus every completion (TV-D8, specs/tasks-v3.md §Assumptions #26).
- * Every new tasks table joins here in the block that creates it. A cut read
- * of either joins the bundle's `truncated` list, never silently.
+ * bundle's `statuses` are every project's and the workspace default set;
+ * since TV-D10 projects carry their fields, and the bundle has `areas`,
+ * `sections`, `teams` and `teamMembers`) plus every completion (TV-D8),
+ * work session, your own reminders and every Waiting on… entry (TV-D10),
+ * specs/tasks-v3.md §Assumptions #26. Every new tasks table joins here in
+ * the block that creates it. A cut read joins the bundle's `truncated` list,
+ * never silently.
  */
 export async function readTasksExport(
   tasks: {
@@ -40,18 +43,39 @@ export async function readTasksExport(
     listCompletions(
       workspaceId: string,
     ): Promise<{ completions: unknown[]; truncated: readonly unknown[] }>;
+    listSessions(
+      workspaceId: string,
+    ): Promise<{ sessions: unknown[]; truncated: readonly unknown[] }>;
+    listReminders(
+      workspaceId: string,
+    ): Promise<{ reminders: unknown[]; truncated: readonly unknown[] }>;
+    listWaiting(
+      workspaceId: string,
+    ): Promise<{ waiting: unknown[]; truncated: readonly unknown[] }>;
   },
   workspaceId: string,
 ): Promise<Record<string, unknown>> {
-  const [bundle, read] = await Promise.all([
+  const [bundle, read, sessions, reminders, waiting] = await Promise.all([
     tasks.list(workspaceId),
     tasks.listCompletions(workspaceId),
+    tasks.listSessions(workspaceId),
+    tasks.listReminders(workspaceId),
+    tasks.listWaiting(workspaceId),
   ]);
   const cut = (bundle as { truncated?: unknown }).truncated;
   return {
     ...bundle,
     completions: read.completions,
-    truncated: [...(Array.isArray(cut) ? cut : []), ...read.truncated],
+    sessions: sessions.sessions,
+    reminders: reminders.reminders,
+    waiting: waiting.waiting,
+    truncated: [
+      ...(Array.isArray(cut) ? cut : []),
+      ...read.truncated,
+      ...sessions.truncated,
+      ...reminders.truncated,
+      ...waiting.truncated,
+    ],
   };
 }
 

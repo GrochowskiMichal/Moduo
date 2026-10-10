@@ -26,6 +26,7 @@ import {
   refreshGoogleAccess,
 } from "../_shared/google-calendar.ts";
 import { bookingCancelUrl, bookingOrigin } from "../_shared/app-origin.ts";
+import { sessionBusyIntervals, TASKS_BUSY_ID } from "../_shared/booking-sessions.ts";
 import { clientIp } from "../_shared/client-ip.ts";
 import { escapeHtml, singleLine } from "../_shared/escape.ts";
 import { getDefaultSecretKey } from "../_shared/secret-keys.ts";
@@ -164,7 +165,7 @@ function validTimeZone(value: unknown): string | null {
 }
 
 function busyIds(raw: unknown): string[] {
-  if (!Array.isArray(raw)) return ["moduo"];
+  if (!Array.isArray(raw)) return ["moduo", TASKS_BUSY_ID];
   return raw.filter((id): id is string => typeof id === "string" && id.length > 0);
 }
 
@@ -272,6 +273,19 @@ async function busyIntervals(
       start: new Date(String(row.start_time)),
       end: new Date(String(row.end_time)),
     });
+  }
+
+  // TV-D10 (default d): the host's work sessions from Tasks, when the link's
+  // busy list has them. Times only; a guest never learns what the work is.
+  if (ids.has(TASKS_BUSY_ID) && link.workspace_id) {
+    intervals.push(
+      ...(await sessionBusyIntervals(db, {
+        workspaceId: link.workspace_id,
+        userId: link.owner_user_id,
+        from,
+        to,
+      })),
+    );
   }
 
   const bookings = await db

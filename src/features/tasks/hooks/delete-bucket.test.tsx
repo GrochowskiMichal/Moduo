@@ -252,8 +252,23 @@ describe("deleteBucket (tasks-v2 Q1-4)", () => {
 
   it("a bucket created while another's delete is pending sorts after it", async () => {
     const { ids, runtime } = makeServer("i-");
-    const upsertBucket = rs.fn(async (b: Bucket) => ({ ...b, id: "i-new" }));
-    const { result } = await mount({ tasks: { ...runtime.tasks, upsertBucket } });
+    // TV-D10: a new project goes through the project op.
+    const createProject = rs.fn(
+      async (input: { workspaceId: string; fields: { name: string; position?: string } }) =>
+        ({
+          id: "i-new",
+          workspaceId: input.workspaceId,
+          ownerId: "",
+          name: input.fields.name,
+          isSystem: false,
+          group: null,
+          position: input.fields.position ?? "",
+          createdAt: "",
+          updatedAt: "",
+          deletedAt: null,
+        }) satisfies Bucket,
+    );
+    const { result } = await mount({ tasks: { ...runtime.tasks, createProject } });
     act(() => result.current.deleteBucket(ids.y)); // Y is the last bucket
     const [, opts] = lastToast();
 

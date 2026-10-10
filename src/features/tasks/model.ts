@@ -11,10 +11,13 @@ import type {
   ActivityActorType,
   EnergyLevel,
   PriorityLevel,
+  ProjectState,
+  TaskReminderKind,
   TaskStatus,
   TaskStatusCategory,
   TaskTimeAction,
   TaskTimeStatus,
+  TaskWaitingKind,
 } from "@contracts/vocabularies";
 import { isOpenTask } from "@contracts/vocabularies";
 import type { Truncation } from "../../lib/paged-select";
@@ -23,10 +26,13 @@ export type {
   ActivityActorType,
   EnergyLevel,
   PriorityLevel,
+  ProjectState,
+  TaskReminderKind,
   TaskStatus,
   TaskStatusCategory,
   TaskTimeAction,
   TaskTimeStatus,
+  TaskWaitingKind,
 } from "@contracts/vocabularies";
 
 /**
@@ -44,6 +50,116 @@ export type ProjectStatus = {
   position: number;
   hidden: boolean;
   createdAt: string;
+  updatedAt: string;
+};
+
+// ── TV-D10: the structure around tasks ────────────────────────────────────
+
+/**
+ * An area (`public.areas`): an optional group of projects in the sidebar —
+ * name, colour, order; no permissions, no page, no tasks of its own. Today's
+ * rail sections became areas (a project's `group` mirrors its area's name).
+ */
+export type Area = {
+  id: string;
+  workspaceId: string;
+  name: string;
+  color: string | null;
+  position: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/**
+ * A section (`public.sections`): an ordered part of one project (a phase, a
+ * week, a sprint), with a date range or an end date only.
+ */
+export type Section = {
+  id: string;
+  workspaceId: string;
+  projectId: string;
+  name: string;
+  position: number;
+  /** YYYY-MM-DD; set only together with an end. */
+  startsOn: string | null;
+  /** YYYY-MM-DD. */
+  endsOn: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/**
+ * A team (`public.teams`): a named group that work is routed to (routing
+ * only: a team hides nothing). People are round; a team's mark is a rounded
+ * square with two letters.
+ */
+export type Team = {
+  id: string;
+  workspaceId: string;
+  name: string;
+  /** One or two letters. */
+  mark: string;
+  color: string | null;
+  /** Where a task for this team goes when it names no project. */
+  defaultProjectId: string | null;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** One person in a team (`public.team_members`). */
+export type TeamMember = {
+  id: string;
+  workspaceId: string;
+  teamId: string;
+  userId: string;
+  createdAt: string;
+};
+
+/**
+ * One scheduled block of work on a task (`public.task_sessions`); a task can
+ * have several. Until TV-D7 the task's `scheduledAt` / `durationMinutes`
+ * mirror its next session (the earliest that hasn't ended, else the latest).
+ */
+export type TaskSession = {
+  id: string;
+  workspaceId: string;
+  taskId: string;
+  /** Whose calendar holds it. */
+  userId: string | null;
+  startsAt: string;
+  endsAt: string;
+  updatedAt: string;
+};
+
+/** One of your own reminders on a task (`public.task_reminders`). */
+export type TaskReminder = {
+  id: string;
+  workspaceId: string;
+  taskId: string;
+  userId: string;
+  kind: TaskReminderKind;
+  /** When it fires; null for a relative one while the task has no due date. */
+  at: string | null;
+  /** When the sender picked it up (TV-D12 delivers it). */
+  firedAt: string | null;
+  updatedAt: string;
+};
+
+/**
+ * One Waiting on… entry (`public.task_waiting`): a person, an email thread,
+ * an agent (an API key) or free text, with when the wait began. `ref` names
+ * the item for the first three; `label` is the text for the last.
+ */
+export type TaskWaitingEntry = {
+  id: string;
+  workspaceId: string;
+  taskId: string;
+  kind: TaskWaitingKind;
+  ref: string | null;
+  label: string | null;
+  since: string;
+  createdBy: string | null;
   updatedAt: string;
 };
 
@@ -81,6 +197,17 @@ export type Bucket = {
   group: string | null;
   /** Lexorank-style ordering string. */
   position: string;
+  /**
+   * TV-D10 project fields (absent on a row read before that migration): the
+   * project's state, its start and target dates (YYYY-MM-DD), an optional lead
+   * (a member), a client (a contact) and its area.
+   */
+  status?: ProjectState;
+  startsOn?: string | null;
+  targetOn?: string | null;
+  leadId?: string | null;
+  clientContactId?: string | null;
+  areaId?: string | null;
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
@@ -138,8 +265,21 @@ export type Task = {
   dueTime?: string | null;
   /** When the task is planned to a clock time. Works with Calendar hidden. */
   scheduledAt: string | null;
-  /** Estimated/blocked duration in minutes (default-on-drop, resizable). */
+  /**
+   * The scheduled block's length in minutes (default-on-drop, resizable). It
+   * was the estimate too until TV-D10; since then it mirrors the next work
+   * session, and the estimate is {@link Task.estimateMinutes}. Read the
+   * estimate with `estimateOf`.
+   */
   durationMinutes: number | null;
+  /** The estimate in minutes (TV-D10). Absent on a row read before it. */
+  estimateMinutes?: number | null;
+  /** The task's section in its project (TV-D10); null = No section. */
+  sectionId?: string | null;
+  /** The team it's routed to (TV-D10), next to its one assignee. */
+  teamId?: string | null;
+  /** Where it was imported from (TV-D10; TV-D16 writes it). */
+  importedFrom?: { source: string; key: string } | null;
   /** Accumulated tracked work time in seconds (lightweight time-tracking). */
   timeSpentSeconds: number;
   recurrence: RecurrenceRule | null;
@@ -342,6 +482,14 @@ export type TasksModuleBundle = {
    */
   statuses?: ProjectStatus[];
   /**
+   * TV-D10: the workspace's areas, every visible project's sections, the
+   * teams and their members. Absent from a database before TV-D10.
+   */
+  areas?: Area[];
+  sections?: Section[];
+  teams?: Team[];
+  teamMembers?: TeamMember[];
+  /**
    * Collections the read had to cut at their ceiling (SCALE-1). Empty = you
    * are holding everything. Non-empty MUST be shown — a silent cut is the bug
    * this field exists to kill.
@@ -376,6 +524,16 @@ export const INBOX_BUCKET_NAME = "Inbox";
 
 /** What a task's project reads when you can't see that project (TV-P0, AC1.10). */
 export const PRIVATE_PROJECT_LABEL = "Private project";
+
+/**
+ * A task's estimate in minutes: its own column since TV-D10, else (a row read
+ * from a database before it) `durationMinutes`, which held the estimate then.
+ */
+export function estimateOf(
+  task: Pick<Task, "durationMinutes"> & { estimateMinutes?: number | null },
+): number | null {
+  return task.estimateMinutes !== undefined ? task.estimateMinutes : task.durationMinutes;
+}
 
 /**
  * Computed `drifted` flag — mirrors `Task::is_drifted` in the Rust backend and

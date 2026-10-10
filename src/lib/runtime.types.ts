@@ -60,7 +60,16 @@ import type {
 } from "../features/tasks/model";
 import type { EntityLink, EntityRecord, EntityRef, LinkOrigin, RelationKind } from "./entity-links";
 import type { Truncation } from "./paged-select";
+import type { TasksStructureApi } from "./runtime.web.structure";
 import type { TaskFieldPatch } from "./task-rows";
+
+/**
+ * TV-D10's structure around tasks (runtime.web.structure.ts): areas, project
+ * fields ("bucket" calls stay as aliases), sections, teams, work sessions,
+ * your reminders, Waiting on…; each write is an op. Time blocks keep their
+ * own signatures above.
+ */
+export type TasksStructureRuntime = Omit<TasksStructureApi, "getTimeBlocks" | "setTimeBlocks">;
 
 /** A comment on any registered entity (spine block CT-5). */
 export type SpineComment = {
@@ -972,7 +981,7 @@ export type ModuoRuntime = {
       blockedTaskId: string;
     }): Promise<TaskRelation>;
     deleteTaskRelation(input: { workspaceId: string; relationId: string }): Promise<void>;
-    /** Workspace-scoped time-of-day slot → bucket map (one row per workspace). */
+    /** Your time-of-day slot → project map in a workspace (yours alone since TV-D10). */
     getTimeBlocks(workspaceId: string): Promise<TimeBlockMap>;
     setTimeBlocks(input: { workspaceId: string; blocks: TimeBlockMap }): Promise<TimeBlockMap>;
 
@@ -1087,7 +1096,7 @@ export type ModuoRuntime = {
        * under module='contacts', not 'tasks'. */
       module?: string;
     }): Promise<ActivityEntry[]>;
-  };
+  } & TasksStructureRuntime;
 
   /**
    * Connective-tissue spine — the link substrate (specs/connective-tissue.md
