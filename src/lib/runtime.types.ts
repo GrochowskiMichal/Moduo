@@ -879,7 +879,9 @@ export type ModuoRuntime = {
      * row saved during the read is never skipped. Optional: a runtime without
      * it (test doubles) is read whole through `list` + `listQueue`.
      */
-    syncRead?<T extends SyncTableName>(input: SyncReadInput<T>): Promise<SyncReadResult<SyncRows[T]>>;
+    syncRead?<T extends SyncTableName>(
+      input: SyncReadInput<T>,
+    ): Promise<SyncReadResult<SyncRows[T]>>;
     /** Every live id of a table you can see (tasks, buckets, statuses): what
      *  the store keeps after access was taken away. */
     syncIds?(input: { workspaceId: string; table: SyncTableName }): Promise<SyncIdsResult>;

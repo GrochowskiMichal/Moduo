@@ -64,6 +64,7 @@ import { decodeBase64ToUint8, encodeUint8ToBase64 } from "../features/notes/util
 import type { NotificationItem } from "../features/spine/notifications";
 import { type RecentLinkItem, shapeRecentLinks } from "../features/spine/recent";
 import type { RawLinkSuggestion } from "../features/spine/suggest";
+import { timestampMicros } from "../features/tasks/live";
 import {
   type ActivityEntry,
   type Bucket,
@@ -75,7 +76,6 @@ import {
   type TaskTimeResult,
   type TrackTimeInput,
 } from "../features/tasks/model";
-import { timestampMicros } from "../features/tasks/live";
 import { toMemberPerm, toMemberRole } from "../features/workspaces/workspace-mappers";
 import { clearIgnoredAuthLink, SUPABASE_AUTH_OPTIONS } from "./auth-url";
 import type { EntityLink, EntityRecord } from "./entity-links";
@@ -3841,7 +3841,9 @@ async function syncReadTable(input: SyncReadInput): Promise<SyncReadResult<unkno
           : source.cap,
       scope: source.scope,
       build: () => {
-        const q = input.since ? base().gte("updated_at", input.since) : base().is("deleted_at", null);
+        const q = input.since
+          ? base().gte("updated_at", input.since)
+          : base().is("deleted_at", null);
         return partFilter(q, byCategory);
       },
     });

@@ -9,7 +9,7 @@ import {
 } from "react";
 import { attachFocusUser } from "../features/focus/engine";
 import { attachTagUser } from "../features/tags/store";
-import { attachSyncUser } from "../lib/sync/store";
+import { forgetRememberedWorkspaces } from "../features/workspaces/remembered-workspaces";
 import { Analytics, setAnalyticsUser } from "../lib/analytics";
 import { sendDeviceTimeZone } from "../lib/device-time-zone";
 import {
@@ -18,6 +18,7 @@ import {
   type RuntimeSession,
   runtimeConfigError,
 } from "../lib/runtime";
+import { attachSyncUser } from "../lib/sync/store";
 
 export type { PlanTier } from "@contracts/vocabularies";
 
@@ -202,6 +203,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
     attachFocusUser(sessionUserId);
     attachTagUser(sessionUserId);
     void attachSyncUser(sessionUserId);
+    // The workspace list kept for opening offline is one person's too.
+    if (!sessionUserId) forgetRememberedWorkspaces();
   }, [loading, sessionUserId]);
 
   const signOut = async () => {

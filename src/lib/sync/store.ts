@@ -33,7 +33,7 @@
 // resend never makes a second task. Other edits say "Offline" (the hook).
 
 import { toast } from "sonner";
-
+import { applyLiveTags, seedTags } from "../../features/tags/store";
 import { isNewer, type LiveChange, timestampMicros } from "../../features/tasks/live";
 import type {
   RecurrenceRule,
@@ -43,11 +43,16 @@ import type {
   TasksModuleBundle,
 } from "../../features/tasks/model";
 import { listenTasksLive, type TasksLiveEvent } from "../../features/tasks/realtime";
-import { applyLiveTags, seedTags } from "../../features/tags/store";
 import { TAG_LINKS_SCOPE, type Truncation } from "../paged-select";
 import type { ModuoRuntime } from "../runtime.types";
 import { sortQueueEntries } from "../task-rows";
-import { type CachedWorkspace, CACHE_VERSION, cacheKey, deviceCache, type SyncCache } from "./cache";
+import {
+  CACHE_VERSION,
+  type CachedWorkspace,
+  cacheKey,
+  deviceCache,
+  type SyncCache,
+} from "./cache";
 import { browserOffline, isNetworkError } from "./network";
 import type { SyncReadResult, SyncRows, SyncTableName } from "./types";
 
@@ -338,6 +343,26 @@ export class WorkspaceStore {
   whenLoaded(): Promise<void> {
     if (this.loaded || this.error) return Promise.resolve();
     return new Promise((resolve) => this.loadWaiters.push(resolve));
+  }
+
+  /**
+   * Resolves once Done, Won't do and Backlog tasks are in too (they load after
+   * the open ones), or when there's nothing more to wait for (offline, an
+   * error), or after `timeoutMs`.
+   */
+  whenRest(timeoutMs = 5_000): Promise<void> {
+    if (this.restLoaded || this.offline || this.error || this.disposed) return Promise.resolve();
+    return new Promise((resolve) => {
+      const timer = setTimeout(done, timeoutMs);
+      const stop = this.subscribe(() => {
+        if (this.restLoaded || this.offline || this.error) done();
+      });
+      function done() {
+        clearTimeout(timer);
+        stop();
+        resolve();
+      }
+    });
   }
 
   /** Whether a capture is waiting in the outbox under this task id. */
@@ -1046,6 +1071,49 @@ export class WorkspaceStore {
     this.setOffline(true);
   }
 
+  /**
+   * Create a task: shown at once (under its id, which may be a `tmp-` id the
+   * views treat as "still saving"), sent under its own uuid so a resend is the
+   * same task. Offline, or when the connection goes on the way, it waits in
+   * the outbox instead (`queued`). A refusal throws (nothing stays shown).
+   * `queue`: also line it up at the end of my queue once it exists (only the
+   * outbox does it; online, the caller sends the queue op).
+   */
+  async sendCreate(
+    task: Task,
+    opts: { queue?: boolean } = {},
+  ): Promise<{ saved: Task | null; queued: boolean }> {
+    const tasks = this.runtime.tasks;
+    const clientId = task.id.replace(/^tmp-/, "") || crypto.randomUUID();
+    const queueIt = () => {
+      this.enqueue({
+        kind: "create",
+        id: crypto.randomUUID(),
+        task: { ...task, id: clientId },
+        queue: opts.queue,
+      });
+      return { saved: null, queued: true };
+    };
+    if (this.offline) return queueIt();
+    const write = this.begin([{ table: "tasks", insert: task as AnyRow }]);
+    try {
+      // A runtime with `createTask` creates under the client's id (idempotent);
+      // the older path lets the server pick it.
+      const saved = tasks.createTask
+        ? await tasks.createTask({ ...task, id: clientId })
+        : await tasks.upsertTask({ ...task, id: "" });
+      write.settle({ tasks: [saved] });
+      return { saved, queued: false };
+    } catch (e) {
+      write.fail();
+      if (tasks.createTask && isNetworkError(e)) {
+        this.wentOffline();
+        return queueIt();
+      }
+      throw e;
+    }
+  }
+
   private showOutboxEntry(entry: OutboxEntry): void {
     const write = this.begin(
       entry.kind === "create"
@@ -1207,7 +1275,9 @@ export class WorkspaceStore {
         };
     const comments = this.rendered("comments");
     const commentCounts =
-      prev && prev.commentsSource === comments ? prev.snapshot.commentCounts : countComments(comments);
+      prev && prev.commentsSource === comments
+        ? prev.snapshot.commentCounts
+        : countComments(comments);
     const queue = this.queueRows();
     const snapshot: StoreSnapshot = {
       workspaceId: this.workspaceId,

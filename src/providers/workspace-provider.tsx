@@ -1,6 +1,10 @@
 import { type PropsWithChildren, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { deriveNotificationFeeds, type NotificationItem } from "../features/spine/notifications";
 import type { Overrides, WorkspaceRoleDef } from "../features/workspaces/access";
+import {
+  rememberedWorkspaces,
+  rememberWorkspaces,
+} from "../features/workspaces/remembered-workspaces";
 import type {
   PermissionKey,
   WorkspaceInvite,
@@ -28,6 +32,7 @@ import {
   readLocalPreferences,
   usePreferencesValue,
 } from "../lib/preferences";
+import { isNetworkError } from "../lib/sync/network";
 import { useAuth } from "./auth-provider";
 
 /** Map a legacy workspace notification into the source-agnostic feed item. */
@@ -162,10 +167,20 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
       return [];
     }
 
-    const rows = await runtime.workspace.list();
-    const next = rows
-      .map((row) => mapWorkspace(row, userId))
-      .filter((workspace) => !workspace.isDeleted);
+    let next: WorkspaceSummary[];
+    try {
+      const rows = await runtime.workspace.list();
+      next = rows
+        .map((row) => mapWorkspace(row, userId))
+        .filter((workspace) => !workspace.isDeleted);
+      rememberWorkspaces(userId, next);
+    } catch (e) {
+      // Offline at launch (TV-D11a): open the workspaces this person had, as
+      // this device remembers them, so the Tasks device copy can show.
+      const remembered = isNetworkError(e) ? rememberedWorkspaces(userId) : null;
+      if (!remembered) throw e;
+      next = remembered;
+    }
     setWorkspaces(next);
 
     const currentSelected = selectedWorkspaceIdRef.current;

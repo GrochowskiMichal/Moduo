@@ -186,9 +186,6 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     await store?.reload();
   }, [store]);
 
-  /** A quiet read once things settle (after an op whose answer isn't the task). */
-  const requestRefresh = useCallback(() => store?.requestSync("reconnect"), [store]);
-
   // ── derived ────────────────────────────────────────────────────────────────
   // Buckets deleted this session drop out here, and their tasks show in Inbox,
   // before the server delete lands (see `deleteBucket` and hidden-buckets.ts).
@@ -433,10 +430,13 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
   }, [runtime, workspaceId, canEdit, store]);
 
   /** A write the server refused: its fields are back to the server's, and it says why. */
-  const refused = useCallback((write: PendingWrite, e: unknown, fallback = "Something went wrong.") => {
-    write.fail();
-    toast.error(e instanceof Error ? e.message : fallback);
-  }, []);
+  const refused = useCallback(
+    (write: PendingWrite, e: unknown, fallback = "Something went wrong.") => {
+      write.fail();
+      toast.error(e instanceof Error ? e.message : fallback);
+    },
+    [],
+  );
 
   /** A backlog task's move to To do (queuing or scheduling it, REPLAN 53), for
    *  showing it before the server's own move comes back. Null otherwise. */
@@ -558,44 +558,16 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
    */
   const sendNewTask = useCallback(
     (optimistic: Task, opts: { queue?: boolean } = {}): Promise<Task | null> => {
-      if (!runtime || !store) return Promise.resolve(null);
-      const rt = runtime;
-      const clientId = optimistic.id.replace(/^tmp-/, "");
-      const queued = () =>
-        store.enqueue({
-          kind: "create",
-          id: crypto.randomUUID(),
-          task: { ...optimistic, id: clientId },
-          queue: opts.queue,
-        });
-      if (store.isOffline()) {
-        queued();
-        return Promise.resolve(null);
-      }
-      const write = store.begin([{ table: "tasks", insert: optimistic }]);
-      // A runtime with `createTask` creates under the client's id (idempotent);
-      // the older path lets the server pick it.
-      const send = rt.tasks.createTask
-        ? rt.tasks.createTask({ ...optimistic, id: clientId })
-        : rt.tasks.upsertTask({ ...optimistic, id: "" });
-      return send.then(
-        (saved) => {
-          write.settle({ tasks: [saved] });
-          return saved;
-        },
+      if (!store) return Promise.resolve(null);
+      return store.sendCreate(optimistic, opts).then(
+        (result) => result.saved,
         (e) => {
-          write.fail();
-          if (rt.tasks.createTask && isNetworkError(e)) {
-            store.wentOffline();
-            queued();
-            return null;
-          }
           toast.error(e instanceof Error ? e.message : "Couldn't create task.");
           return null;
         },
       );
     },
-    [runtime, store],
+    [store],
   );
 
   /**
@@ -1778,15 +1750,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         return null;
       }
     },
-    [
-      editBlocked,
-      runtime,
-      workspaceId,
-      store,
-      queueFollowStatus,
-      statusesForBucket,
-      refused,
-    ],
+    [editBlocked, runtime, workspaceId, store, queueFollowStatus, statusesForBucket, refused],
   );
 
   /**
@@ -2038,12 +2002,10 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       const before = timeBlocks;
       const next = setBucketTimeBlock(timeBlocks, bucketId, slot);
       setTimeBlocksState(next);
-      void runtime!.tasks
-        .setTimeBlocks({ workspaceId: workspaceId!, blocks: next })
-        .catch((e) => {
-          setTimeBlocksState((now) => (now === next ? before : now));
-          toast.error(e instanceof Error ? e.message : "Something went wrong.");
-        });
+      void runtime!.tasks.setTimeBlocks({ workspaceId: workspaceId!, blocks: next }).catch((e) => {
+        setTimeBlocksState((now) => (now === next ? before : now));
+        toast.error(e instanceof Error ? e.message : "Something went wrong.");
+      });
     },
     [timeBlocks, editBlocked, runtime, workspaceId],
   );

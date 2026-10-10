@@ -36,8 +36,7 @@ import type { SyncReadInput, SyncReadResult, SyncTableName } from "./types";
 const WS = "ws-1";
 const ME = "u-me";
 
-const at = (minute: number) =>
-  `2026-10-11T10:${String(minute).padStart(2, "0")}:00.000000+00:00`;
+const at = (minute: number) => `2026-10-11T10:${String(minute).padStart(2, "0")}:00.000000+00:00`;
 
 function task(id: string, over: Partial<Task> = {}): Task {
   return {
@@ -206,7 +205,12 @@ describe("delta sync (AC12.2)", () => {
     await settled(store);
     const taskReads = server.reads.filter((r) => r.table === "tasks");
     expect(taskReads.map((r) => r.part)).toEqual(["open", "rest"]);
-    expect(store.getSnapshot().bundle.tasks.map((t) => t.id).sort()).toEqual(["done", "open"]);
+    expect(
+      store
+        .getSnapshot()
+        .bundle.tasks.map((t) => t.id)
+        .sort(),
+    ).toEqual(["done", "open"]);
     expect(store.getSnapshot().restLoaded).toBe(true);
   });
 
@@ -335,7 +339,9 @@ describe("one-field rollback (AC12.8)", () => {
     const shown = store.getSnapshot().bundle.tasks.find((t) => t.id === "a");
     expect(shown?.title).toBe("Before");
     expect(shown?.priority).toBe("high");
-    priority.settle({ tasks: [task("a", { title: "Before", priority: "high", updatedAt: at(6) })] });
+    priority.settle({
+      tasks: [task("a", { title: "Before", priority: "high", updatedAt: at(6) })],
+    });
     await tick();
     expect(server.syncRead.mock.calls.length).toBe(readsBefore);
   });
@@ -514,7 +520,7 @@ describe("the device copy is one person's", () => {
 
     expect(store.getSnapshot().bundle.tasks.map((t) => t.id)).toEqual(["mine"]);
     const copy = cache.records.get(cacheKey(ME, WS));
-    const cachedIds = (copy?.tables.tasks?.rows as Task[]).map((t) => t.id);
+    const cachedIds = ((copy?.tables.tasks?.rows ?? []) as Task[]).map((t) => t.id);
     expect(cachedIds).toEqual(["mine"]);
     release();
   });

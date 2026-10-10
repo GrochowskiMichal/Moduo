@@ -60,6 +60,7 @@ import { GlobalCommandPalette } from "./global-command-palette";
 import { GlobalShortcutsDialog } from "./global-shortcuts-dialog";
 import { HelpMenu } from "./help-menu";
 import { MinBuildBanner } from "./min-build-banner";
+import { TasksSyncStatus } from "./sync-status";
 import { useUnknownRouteRedirect } from "./use-unknown-route-redirect";
 
 type ModuleTabProps = {
@@ -531,6 +532,9 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
             {/* DF-21f — web-only email follow-up-due sweep (renders nothing). */}
             <EmailDueWebSweep />
             <UpdateOnLaunch />
+            {/* The shared Tasks store for this workspace, held all session, and its
+                quiet sync state: Offline / "2 waiting to sync" (TV-D11a). */}
+            <TasksSyncStatus />
             {/* Global, so top bar (call 96): the running Focus timer, then Help. */}
             <FocusSessionChip />
             <HelpMenu />

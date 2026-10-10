@@ -485,7 +485,12 @@ export function tagLinkRowToModel(raw: unknown): TagLink {
 
 /** A comment row → what the shared store's comment counts need (TV-D11a). */
 export function commentMarkRowToModel(raw: unknown): CommentMark {
-  const r = raw as { id?: unknown; entity_id?: unknown; updated_at?: unknown; deleted_at?: unknown };
+  const r = raw as {
+    id?: unknown;
+    entity_id?: unknown;
+    updated_at?: unknown;
+    deleted_at?: unknown;
+  };
   if (typeof r?.id !== "string" || typeof r.entity_id !== "string") {
     throw new Error("Malformed comment payload");
   }
