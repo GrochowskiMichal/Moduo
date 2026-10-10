@@ -892,8 +892,13 @@ export type ModuoRuntime = {
     }): Promise<Task[]>;
     /** Soft-deletes through the edit op; its live subtasks move to the top level. */
     deleteTask(input: { workspaceId: string; taskId: string }): Promise<Task>;
-    /** Every completion in the workspace you can see (TV-D8), for the export. */
-    listCompletions(workspaceId: string): Promise<TaskCompletion[]>;
+    /**
+     * Every completion in the workspace you can see (TV-D8), for the export;
+     * `truncated` says when the read hit its cap.
+     */
+    listCompletions(
+      workspaceId: string,
+    ): Promise<{ completions: TaskCompletion[]; truncated: Truncation[] }>;
     upsertTag(tag: Tag): Promise<Tag>;
     deleteTag(input: { workspaceId: string; tagId: string }): Promise<void>;
     attachTag(input: {

@@ -320,3 +320,71 @@ BEGIN
     'account erasure deletes their completions and no one else''s', r);
 END;
 $$;
+
+-- ── More of rrule.js's reading (values from rrule.js 2.8), incl. counted rules ──
+-- The engine scans calendar days, so a counted rule is exact however sparse:
+-- a 2,000-case random sweep against rrule.js matched (TV-D8 review).
+DO $$
+BEGIN
+  PERFORM test.ok(public.tasks__rrule_next('{"rrule":"FREQ=DAILY;BYDAY=MO;COUNT=1000","dtstart":"2020-01-06T09:00:00.000Z"}'::jsonb, '2026-10-10T00:00:00.000Z', NULL) IS NOT DISTINCT FROM '2026-10-12T09:00:00.000Z'::timestamptz,
+    'after: a counted rule over more than a thousand days', coalesce(public.tasks__rrule_next('{"rrule":"FREQ=DAILY;BYDAY=MO;COUNT=1000","dtstart":"2020-01-06T09:00:00.000Z"}'::jsonb, '2026-10-10T00:00:00.000Z', NULL)::text, '∅'));
+  PERFORM test.ok(public.tasks__rrule_prev('{"rrule":"FREQ=DAILY;BYDAY=MO;COUNT=1000","dtstart":"2020-01-06T09:00:00.000Z"}'::jsonb, '2026-10-10T00:00:00.000Z', NULL) IS NOT DISTINCT FROM '2026-10-05T09:00:00.000Z'::timestamptz,
+    'before: a counted rule over more than a thousand days', coalesce(public.tasks__rrule_prev('{"rrule":"FREQ=DAILY;BYDAY=MO;COUNT=1000","dtstart":"2020-01-06T09:00:00.000Z"}'::jsonb, '2026-10-10T00:00:00.000Z', NULL)::text, '∅'));
+  PERFORM test.ok(public.tasks__rrule_next('{"rrule":"FREQ=WEEKLY;BYMONTHDAY=29","dtstart":"2001-09-21T05:00:00.000Z"}'::jsonb, '2026-12-06T23:15:00.000Z', NULL) IS NOT DISTINCT FROM '2026-12-29T05:00:00.000Z'::timestamptz,
+    'after: weekly on a day of the month', coalesce(public.tasks__rrule_next('{"rrule":"FREQ=WEEKLY;BYMONTHDAY=29","dtstart":"2001-09-21T05:00:00.000Z"}'::jsonb, '2026-12-06T23:15:00.000Z', NULL)::text, '∅'));
+  PERFORM test.ok(public.tasks__rrule_prev('{"rrule":"FREQ=WEEKLY;BYMONTHDAY=29","dtstart":"2001-09-21T05:00:00.000Z"}'::jsonb, '2026-12-06T23:15:00.000Z', NULL) IS NOT DISTINCT FROM '2026-11-29T05:00:00.000Z'::timestamptz,
+    'before: weekly on a day of the month', coalesce(public.tasks__rrule_prev('{"rrule":"FREQ=WEEKLY;BYMONTHDAY=29","dtstart":"2001-09-21T05:00:00.000Z"}'::jsonb, '2026-12-06T23:15:00.000Z', NULL)::text, '∅'));
+  PERFORM test.ok(public.tasks__rrule_next('{"rrule":"FREQ=YEARLY;INTERVAL=7;BYDAY=SU,-2SU;BYMONTH=6,12","dtstart":"2019-09-15T06:30:00.000Z"}'::jsonb, '2027-01-22T00:15:00.000Z', NULL) IS NOT DISTINCT FROM '2033-06-19T06:30:00.000Z'::timestamptz,
+    'after: plain and ordinal weekdays must both match', coalesce(public.tasks__rrule_next('{"rrule":"FREQ=YEARLY;INTERVAL=7;BYDAY=SU,-2SU;BYMONTH=6,12","dtstart":"2019-09-15T06:30:00.000Z"}'::jsonb, '2027-01-22T00:15:00.000Z', NULL)::text, '∅'));
+  PERFORM test.ok(public.tasks__rrule_prev('{"rrule":"FREQ=YEARLY;INTERVAL=7;BYDAY=SU,-2SU;BYMONTH=6,12","dtstart":"2019-09-15T06:30:00.000Z"}'::jsonb, '2027-01-22T00:15:00.000Z', NULL) IS NOT DISTINCT FROM '2026-12-20T06:30:00.000Z'::timestamptz,
+    'before: plain and ordinal weekdays must both match', coalesce(public.tasks__rrule_prev('{"rrule":"FREQ=YEARLY;INTERVAL=7;BYDAY=SU,-2SU;BYMONTH=6,12","dtstart":"2019-09-15T06:30:00.000Z"}'::jsonb, '2027-01-22T00:15:00.000Z', NULL)::text, '∅'));
+  PERFORM test.ok(public.tasks__rrule_next('{"rrule":"FREQ=YEARLY;BYMONTHDAY=15","dtstart":"2026-01-03T08:00:00.000Z"}'::jsonb, '2026-10-10T00:00:00.000Z', NULL) IS NOT DISTINCT FROM '2026-10-15T08:00:00.000Z'::timestamptz,
+    'after: yearly on a day of the month, every month', coalesce(public.tasks__rrule_next('{"rrule":"FREQ=YEARLY;BYMONTHDAY=15","dtstart":"2026-01-03T08:00:00.000Z"}'::jsonb, '2026-10-10T00:00:00.000Z', NULL)::text, '∅'));
+  PERFORM test.ok(public.tasks__rrule_prev('{"rrule":"FREQ=YEARLY;BYMONTHDAY=15","dtstart":"2026-01-03T08:00:00.000Z"}'::jsonb, '2026-10-10T00:00:00.000Z', NULL) IS NOT DISTINCT FROM '2026-09-15T08:00:00.000Z'::timestamptz,
+    'before: yearly on a day of the month, every month', coalesce(public.tasks__rrule_prev('{"rrule":"FREQ=YEARLY;BYMONTHDAY=15","dtstart":"2026-01-03T08:00:00.000Z"}'::jsonb, '2026-10-10T00:00:00.000Z', NULL)::text, '∅'));
+  PERFORM test.ok(public.tasks__rrule_next('{"rrule":"FREQ=MONTHLY;COUNT=40;BYMONTHDAY=31","dtstart":"2019-01-31T10:00:00.000Z"}'::jsonb, '2026-10-10T00:00:00.000Z', NULL) IS NOT DISTINCT FROM NULL,
+    'after: a counted rule that skips short months, ended', coalesce(public.tasks__rrule_next('{"rrule":"FREQ=MONTHLY;COUNT=40;BYMONTHDAY=31","dtstart":"2019-01-31T10:00:00.000Z"}'::jsonb, '2026-10-10T00:00:00.000Z', NULL)::text, '∅'));
+  PERFORM test.ok(public.tasks__rrule_prev('{"rrule":"FREQ=MONTHLY;COUNT=40;BYMONTHDAY=31","dtstart":"2019-01-31T10:00:00.000Z"}'::jsonb, '2026-10-10T00:00:00.000Z', NULL) IS NOT DISTINCT FROM '2024-08-31T10:00:00.000Z'::timestamptz,
+    'before: a counted rule that skips short months, ended', coalesce(public.tasks__rrule_prev('{"rrule":"FREQ=MONTHLY;COUNT=40;BYMONTHDAY=31","dtstart":"2019-01-31T10:00:00.000Z"}'::jsonb, '2026-10-10T00:00:00.000Z', NULL)::text, '∅'));
+END;
+$$;
+
+-- ── The roll-over's candidates shrink by themselves ────────────────────────
+DO $$
+DECLARE
+  r text;
+  v_ctid tid;
+BEGIN
+  -- A completed repeat whose rule ended, from before pointers were kept.
+  INSERT INTO public.tasks (id, workspace_id, bucket_id, title, status, recurrence)
+  VALUES (test.id('XEND'), test.id('W'), test.id('SB'), 'Ended', 'done',
+          '{"rrule": "FREQ=DAILY;UNTIL=20200101T000000Z", "dtstart": "2019-12-25T06:00:00.000Z"}');
+  PERFORM count(*) FROM public.tasks__roll_over(test.id('W'), now());
+  PERFORM test.ok((test.task('XEND')).status = 'done'
+              AND jsonb_typeof((test.task('XEND')).recurrence -> 'nextOccurrence') = 'null',
+    'an ended repeat is worked out once and marked as having no next occurrence');
+  SELECT ctid INTO v_ctid FROM public.tasks WHERE id = test.id('XEND');
+  PERFORM count(*) FROM public.tasks__roll_over(test.id('W'), now());
+  PERFORM test.ok((SELECT ctid FROM public.tasks WHERE id = test.id('XEND')) = v_ctid,
+    'and after that the roll-over leaves it alone');
+
+  -- A completed repeat on a rule only the app reads comes back at its stored
+  -- pointer (the app's old catch-up did this).
+  INSERT INTO public.tasks (id, workspace_id, bucket_id, title, status, recurrence)
+  VALUES (test.id('XHR'), test.id('W'), test.id('SB'), 'Hourly', 'done',
+          jsonb_build_object('rrule', 'FREQ=HOURLY;INTERVAL=4', 'dtstart', public.tasks__iso(now() - interval '10 days'),
+                             'nextOccurrence', public.tasks__iso(date_trunc('hour', now()) - interval '2 days')));
+  INSERT INTO public.task_completions (workspace_id, task_id, user_id, completed_at, cycle_key)
+  VALUES (test.id('W'), test.id('XHR'), test.id('O'), now() - interval '3 days', 'h');
+  PERFORM count(*) FROM public.tasks__roll_over(test.id('W'), now());
+  PERFORM test.ok((test.task('XHR')).status = 'todo'
+              AND (test.task('XHR')).scheduled_at = date_trunc('hour', now()) - interval '2 days',
+    'a repeat only the app can read comes back at the pointer the app stored',
+    (test.task('XHR')).status || ' ' || coalesce((test.task('XHR')).scheduled_at::text, '∅'));
+  -- Open, it isn't a candidate: the server can't move it.
+  SELECT ctid INTO v_ctid FROM public.tasks WHERE id = test.id('XHR');
+  PERFORM count(*) FROM public.tasks__roll_over(test.id('W'), now() + interval '3 days');
+  PERFORM test.ok((SELECT ctid FROM public.tasks WHERE id = test.id('XHR')) = v_ctid,
+    'an open repeat the server can''t read is left to the app');
+END;
+$$;

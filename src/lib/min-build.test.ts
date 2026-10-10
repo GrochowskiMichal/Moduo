@@ -1,3 +1,5 @@
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { mapKnownRows } from "@contracts/rows";
 import { describe, expect, it } from "@rstest/core";
 
@@ -8,6 +10,7 @@ import {
   isWriteRequest,
   parseVersion,
   READ_ONLY_MESSAGE,
+  READ_RPCS,
   readOnlyFetch,
 } from "./min-build";
 import { taskRowToModel } from "./task-rows";
@@ -59,7 +62,8 @@ describe("which requests are writes", () => {
     expect(isWriteRequest("POST", `${BASE}/auth/v1/token?grant_type=refresh_token`)).toBe(false);
     expect(isWriteRequest("POST", `${BASE}/functions/v1/moduo-mcp`)).toBe(false);
     expect(isWriteRequest("POST", `${BASE}/rest/v1/rpc/tasks_time_totals`)).toBe(false);
-    expect(isWriteRequest("POST", `${BASE}/rest/v1/rpc/share_visible_ids`)).toBe(false);
+    expect(isWriteRequest("POST", `${BASE}/rest/v1/rpc/share_op_state`)).toBe(false);
+    expect(isWriteRequest("POST", `${BASE}/rest/v1/rpc/notifications_list`)).toBe(false);
     expect(isWriteRequest("POST", `${BASE}/storage/v1/object/sign/attachments/a.png`)).toBe(false);
   });
 
@@ -71,6 +75,68 @@ describe("which requests are writes", () => {
     expect(isWriteRequest("POST", `${BASE}/rest/v1/rpc/links_op_create`)).toBe(true);
     expect(isWriteRequest("POST", `${BASE}/rest/v1/rpc/workspace_api_keys_create`)).toBe(true);
     expect(isWriteRequest("POST", `${BASE}/storage/v1/object/attachments/w/a.png`)).toBe(true);
+  });
+
+  it("an RPC is a write unless it's listed as a read, whatever its name", () => {
+    for (const fn of ["contact_merge", "calendar_set_save", "booking_hosts_set", "anything_new"]) {
+      expect(isWriteRequest("POST", `${BASE}/rest/v1/rpc/${fn}`)).toBe(true);
+    }
+  });
+});
+
+// Every RPC the app calls by name, read from the source.
+function clientRpcNames(): Set<string> {
+  const names = new Set<string>();
+  const walk = (dir: string) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const path = join(dir, entry.name);
+      if (entry.isDirectory()) walk(path);
+      else if (/\.tsx?$/.test(entry.name) && !/\.(test|stories)\.tsx?$/.test(entry.name)) {
+        for (const m of readFileSync(path, "utf8").matchAll(/\.rpc\(\s*["'`]([a-z0-9_]+)["'`]/g)) {
+          names.add(m[1]!);
+        }
+      }
+    }
+  };
+  walk(join(process.cwd(), "src"));
+  return names;
+}
+
+// Client RPCs that write although their name has no `_op_` in it. Intent ops
+// (`*_op_*`) write by the module contract; anything else must be sorted here
+// or into READ_RPCS, so a new read isn't silently blocked in a read-only build.
+const NAMED_WRITE_RPCS = new Set([
+  "booking_host_respond",
+  "booking_hosts_set",
+  "calendar_set_save",
+  "chat_caps_set",
+  "contact_group_add",
+  "contact_group_create",
+  "contact_merge",
+  "share_defaults_set",
+  "workspace_api_keys_create",
+  "workspace_api_keys_revoke",
+  "workspace_api_keys_set_scopes",
+]);
+
+describe("every RPC the app calls is sorted into read or write", () => {
+  const names = clientRpcNames();
+
+  it("finds the app's RPCs", () => {
+    expect(names.size).toBeGreaterThan(50);
+  });
+
+  it("each one is a listed read, an intent op or a listed write", () => {
+    const unsorted = [...names].filter(
+      (n) => !READ_RPCS.has(n) && !n.includes("_op_") && !NAMED_WRITE_RPCS.has(n),
+    );
+    // A new RPC: add it to READ_RPCS (src/lib/min-build.ts) if it only reads,
+    // else to NAMED_WRITE_RPCS here.
+    expect(unsorted).toEqual([]);
+  });
+
+  it("the read list names only RPCs the app calls", () => {
+    expect([...READ_RPCS].filter((n) => !names.has(n))).toEqual([]);
   });
 });
 

@@ -2,6 +2,86 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index.
 
+## 2026-10-10 · TV-D8 server ops, registry, handles, recurrence, tolerance — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 5 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §Assumptions #1, #2, #5, #6, #9; migrations `20261010160000_tasks_ops_registry_handles`, `20261010161000_tasks_recurrence_server`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **D8-1 · The registry follows every task through a trigger, not only the ops** → TV-D8 (`tasks__registry_sync`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: register on create, re-label on rename, tombstone on delete and revive on restore, on every write path (the ops and old builds' raw writes until TV-D7); `entities.handle` carries `KEY-number` so search finds handles.
+  - Why: old builds keep writing raw until TV-D7, and a rename from them must still reach search (AC1.1); one place instead of every op.
+  - Rejected: registering only inside `tasks_op_create`/`_update` (old builds' tasks would stay unfindable until D7).
+- **D8-2 · The task key can be changed again; every old key stays an alias** → TV-D8 (`workspace_op_set_task_key`, Settings → Workspace → Task key)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10 (the spec says the owner "edits it once"; read as "a rare edit", not "only one").
+  - Decision: the owner changes it any time; numbers never change; a handle typed with an old key still finds its task (search maps it to the current key).
+  - Why: a typo on a one-shot edit would be permanent, and the research call already keeps old keys as aliases (Plane's bug).
+  - Rejected: a lock after the first edit.
+- **D8-3 · Numbers come from a trigger and a guarded counter on the workspace** → TV-D8 (`tasks__number_assign`, `workspaces.task_number_last`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: a genuine insert takes the next number whatever the writer sent; an upsert of an existing row keeps its number (old builds save whole rows); only `tasks__next_number` moves the counter, which never goes below the highest number in use.
+  - Why: numbers are never reused and old builds' saves must not burn them.
+  - Rejected: a per-workspace sequence object (one object per workspace) and `max(number)+1` (reuses numbers after a purge).
+- **D8-4 · A done repeat comes back at its assignee's midnight, never on the day it was done** → TV-D8 (`tasks__pointer_on_complete`, `tasks__roll_over`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: completing skips any occurrence still on today's date (the assignee's zone, else the creator's, else UTC); the roll-over reopens it at local midnight of the next occurrence's day, at that occurrence; an open repeat that missed a whole day moves to today's occurrence ("missed occurrences don't exist").
+  - Why: AC1.2, and a repeat is a day's worth of work: checking off yesterday's at 8 AM counts for today.
+  - Rejected: reopening at the occurrence's instant (the old client rule that reopened tasks the same day).
+- **D8-5 · The server reads rules the way rrule.js does (UTC from DTSTART)** → TV-D8 (engine), TV-D12 (DST-aware parity)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: occurrences are computed in UTC wall-clock from DTSTART, exactly like the app's preview, filtering calendar days the way rrule.js does (WEEKLY honours BYMONTHDAY; in MONTHLY/YEARLY plain and ordinal weekdays must both match); a rule outside the subset keeps the app's pointer, and a completed one comes back at that pointer.
+  - Why: the "Done — next: …" preview and the server must agree today; parity is tested case by case against rrule.js, and a 2,300-rule random sweep (counted, UNTIL, ordinals, month days) matched exactly.
+  - Rejected: evaluating in the assignee's zone now (preview and server would disagree across DST until TV-D12 changes both).
+- **D8-6 · Repeat rules are bounded on write and in the engine** → TV-D8 (`tasks__recurrence_problem`, CHECK `tasks_recurrence_bounded`, the engine's day scan and 20-year horizon, the roll-over's batch and time budget)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: INTERVAL and COUNT 1–1000, UNTIL and DTSTART between 1900 and 2200, a rule ≤ 500 characters, refused by the ops and a CHECK; the engine scans calendar days in one set-based query (a counted rule from its start, anything else from the day asked about), never past 20 years ahead, and stops at the first day it needs, so a call costs a few milliseconds and under 30 ms at worst; the 15-minute job handles at most 2,000 tasks in 60 seconds, and a completed repeat whose rule has ended is marked (`nextOccurrence: null`) and stops being a candidate.
+  - Why: a stored rule must never make a status change or the shared job slow, and a counted rule must stay exact however sparse (a step cap made long counted rules read as ended).
+  - Rejected: unbounded RFC rules (no one writes INTERVAL=5000 on purpose) and a period walk with a step cap (bounded, but wrong for sparse counted rules).
+- **D8-7 · The roll-over writes its trail line as "Moduo"** → TV-D8
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: `tasks.catch_up` rows with actor_type `agent`, no actor id, label "Moduo" ("Moduo reopened this for … (recurrence)").
+  - Why: nobody did it; the old client pass put it on whoever opened the app.
+  - Rejected: no trail line (a repeat coming back would be silent) and a new actor type (CHECK change for one label).
+- **D8-8 · The old catch-up op answers old builds with the server's rows** → TV-D8 (`tasks_op_catch_up`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: it ignores the client's items, runs the workspace's roll-over as system work, and returns what changed plus the tasks named, as the server has them, filtered to what the caller can see; new builds call it with `[]` after a full load (only when the workspace has repeats).
+  - Why: old builds keep calling it on load; this puts their optimistic reopen back instead of storing it.
+  - Rejected: making it a no-op (old builds would show a wrong reopen until the next refetch).
+- **D8-9 · A "blocks" link between two tasks is a dependency, with a dependency's rules** → TV-D8 (`entity_links__blocks_to_relations`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: making one needs edit on the waiting task and view on the other (a member with Links but without Tasks edit is refused); a loop is refused; changing the kind or deleting the link ends the dependency; existing links were turned into dependencies unless that made a loop.
+  - Why: AC1.14, one store (REPLAN §6.5).
+  - Rejected: a "blocks" link that only some members can make blocking.
+- **D8-10 · Old builds: the minimum version is the app version, enforced in the Supabase client's fetch** → TV-D8 (`src/lib/min-build.ts`, `MinBuildBanner`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: `app_settings.min_build` is compared with the version Settings → About shows (semver); below it every table write, RPC and upload is refused with one message and a strip says "Update Moduo" (desktop: Check for updates; web: Reload); sign-in, reads, the RPCs listed as reads (`READ_RPCS`, sorted by what the database marks them) and Edge Functions pass; a test fails when the app calls an RPC nobody has sorted; it starts at "0.0.0".
+  - Why: one place catches every write path; nothing to remember per feature.
+  - Rejected: a header the database checks (builds before D8 never send it).
+- **D8-11 · Unknown statuses show as their nearest one** → TV-D8 (`normalizeTaskStatus`, `isOpenTaskStatus`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: `backlog` reads as To do, `wont_do` as Won't do, anything else unknown as To do; one "is open" rule in `@contracts/vocabularies` used across the app and MCP.
+  - Why: a row is never dropped (REPLAN §6.3), and an unknown state should stay in view.
+  - Rejected: hiding unknown rows (the old behaviour) and treating them as done.
+- **D8-12 · The trail leads with the server's create line; description typing is one line per stretch** → TV-D8 (`feed.ts`, `tasks_op_update`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: when a `tasks.create` row exists it replaces the synthetic "created this" (so an agent's create names its key); repeated description saves by the same person within 10 minutes, with nothing else in between, log once.
+  - Why: every edit is logged now; the trail must stay a quiet mirror (Pillar 3).
+  - Rejected: logging every save (description autosave would flood the trail).
+- **D8-13 · MCP gets `tasks_create` and `tasks_update` now; the full surface stays TV-D16's** → TV-D8, TV-D16
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: minimal create/update tools on the ops (fields, project, parent, assignee on create); status and assignee keep their own tools; handles lead every task in results.
+  - Why: AC12.1 says agents create and edit through the ops; D16 adds status-by-name, teams, sessions, imports and handle arguments.
+  - Rejected: waiting for D16 (agents would keep no way to capture).
+- **D8-14 · A task you can't see reads as missing in every op answer; a delete promotes subtasks as the server's own work** → TV-D8 (`tasks_op_update`, `tasks_op_set_status`, `tasks__check_parent`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: the edit and status ops answer "Task not found" for a task the caller can't see, even when nothing would change; a parent must be a task the caller can see (same words when it's missing); deleting a parent promotes all its live subtasks, including ones the deleter can't edit, and answers only with those they can see.
+  - Why: an op answers with full rows, so it must never answer with one the caller couldn't read; a subtask outliving its parent is the server's consequence of the delete, not a separate edit.
+  - Rejected: refusing the delete when a subtask isn't editable (a private step would block deleting your own task).
+- **D8-15 · Completion history follows what was actually done** → TV-D8 (`task_completions`, `tasks__record_completion`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: a task created done (an import) records a completion; done → To do or In progress, and done → Won't do, take back the latest completion (it didn't stand); one completion per cycle.
+  - Why: the history answers "when was this really done", which a Won't do contradicts.
+  - Rejected: keeping a completion after Won't do (two answers for one cycle).
+
 ## 2026-10-10 · TV-P0 trust pass — the agent's choices (deferred to by Maciej)
 
 Built in tasks-v3 block 3 ([specs/tasks-v3.md](../../specs/tasks-v3.md) AC1.3–1.12, 1.15–1.16) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.

@@ -66,14 +66,15 @@ rebuilt. The long-term direction is ops for
 everything (Session 9 agents get *only* ops); new invariant-bearing features
 must not add raw write paths.
 
-**Engine math stays client-side (for now).** rrule evaluation can't live in
-plpgsql. Where an op's inputs require occurrence math (recurrence pointer
-targets), the *caller* computes the datetimes (the tested pure engine,
-`recurrence-engine.ts`) and the op enforces the **structural** invariants it
-can: forward-only moves, recurring-task-only, commit release, counter
-increments, atomicity, attribution. Session 9's connector runs the same engine
-server-side (edge function) before calling the same ops — clients of the ops,
-never of the tables.
+**Engine math runs on the server (Tasks, since TV-D8).** Tasks' recurrence
+pointer is computed in Postgres (a plpgsql engine for the RRULE subset the app
+writes, read the way rrule.js reads it, bounded by rule limits and a 20-year
+horizon) inside `tasks_op_set_status` and the 15-minute roll-over, for every
+caller. The app's `recurrence-engine.ts` previews only; a caller's pointer is
+used only for a rule outside the server's subset. Skip-occurrence still takes
+the caller's datetimes with the op enforcing forward-only moves (until
+TV-D12). Other modules: where an op needs math the database can't do, the
+caller computes it and the op enforces the structural invariants.
 
 ---
 
@@ -129,8 +130,11 @@ module_activity (
 - **Rendering rule:** the trail is an ambient mirror — quiet, factual,
   muted-foreground, newest-first, in the entity's detail surface. Never a
   wall, never red, no "X changed this!!" notification spam (principles 1, 4, 5).
-- Entity creation needs no activity row — `created_at` + `owner_id` on the
-  entity already say it; detail surfaces anchor it from the row itself.
+- Entity creation needs no activity row where a module doesn't log one —
+  `created_at` + `owner_id` on the entity already say it; detail surfaces
+  anchor it from the row itself. Tasks logs `tasks.create` since TV-D8 (so an
+  agent's create names its key), and its feed leads with that row when it
+  exists.
 
 ---
 
@@ -190,16 +194,20 @@ static, typed manifest — onboarding module N+1 is additive:
 | `tasks.commit` | `tasks_op_commit(ws, task, for_date)` | not archived; order = queue max + 1 (race-safe); recommitting an already-committed task moves it to the end (= "Do last") |
 | `tasks.uncommit` | `tasks_op_uncommit(ws, task)` | idempotent; never intercepted (spec §5c) |
 | `tasks.skip_today` | `tasks_op_skip_today(ws, task)` | only if committed; clears commit **and** increments `reschedule_count` atomically (the ambient mirror counter never races) |
-| `tasks.set_status` | `tasks_op_set_status(ws, task, status, recurrence?, position?)` | recurrence pointer ride-along only on recurring tasks (advance-on-done, spec §5d); optional board position |
+| `tasks.set_status` | `tasks_op_set_status(ws, task, status, recurrence?, position?)` | the server moves the recurrence pointer (never to an occurrence on the day it was done) and records the completion (`task_completions`); the caller's pointer only for a rule outside the server's subset; optional board position |
 | `tasks.reschedule` | `tasks_op_reschedule(ws, task, scheduled_at, days?)` | task must be scheduled (drift-triage Reschedule); never touches `reschedule_count` (that counts *skips out of today*, not triage) |
 | `tasks.unschedule` | `tasks_op_unschedule(ws, task)` | idempotent; clears the stale time, keeps the task (drift-triage Ignore) |
 | `tasks.skip_occurrence` | `tasks_op_skip_occurrence(ws, task, scheduled_at, recurrence, release_commit)` | open recurring tasks only; forward-only (`scheduled_at` strictly increases); never touches `reschedule_count` (spec §5d) |
-| `tasks.catch_up` | `tasks_op_catch_up(ws, items)` | batched engine pass (one RPC per reload, not N); recurring, live, non-archived tasks only; per-task activity rows (`payload.kind`: reopen / collapse / adopt) |
+| `tasks.catch_up` | `tasks_op_catch_up(ws, items)` | since TV-D8: runs the server's roll-over for the workspace now (system work, bounded batch), ignores the client's items, answers with what changed plus the named tasks the caller can see; activity rows by "Moduo" (`payload.kind`: reopen / collapse / adopt) |
+| `tasks.create` | `tasks_op_create(ws, task)` | TV-D8: numbers the task (`MOD-142`), registers it for search, logs it; default project = the creator's Inbox, default assignee = the creator; idempotent on a resent id; repeat rules bounded |
+| `tasks.update` | `tasks_op_update(ws, task, patch)` | TV-D8: only the fields given; a move carries the live subtasks, a delete promotes them, null `deleted_at` restores; status and assignee through their own ops' rules; one trail row naming the fields (description edits coalesce) |
 
-Not ops (v1): capture/`createTask` (creation is self-evident from the row),
-plain field edits via `upsertTask` (no invariants), tag/relation edges (already
-idempotent, single-row, RLS-covered — they become ops when agents get write
-scopes). Subtask one-level and dependency-cycle rules stay DB triggers — they
+Not ops (v1, superseded for creates and field edits by TV-D8):
+capture/`createTask` and plain field edits now go through `tasks_op_create` /
+`tasks_op_update`; old builds' raw writes still work until TV-D7 revokes them
+(triggers number and register them). Tag/relation edges stay direct writes
+(idempotent, single-row, RLS-covered); a "blocks" spine link is a relation
+since TV-D8. Subtask one-level and dependency-cycle rules stay DB triggers — they
 are *corruption guards* on the raw write path, which intent ops sit above.
 
 Trail rendering: `src/features/tasks/activity.ts` (op → quiet sentence) +

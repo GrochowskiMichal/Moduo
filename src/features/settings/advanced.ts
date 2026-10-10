@@ -29,20 +29,28 @@ export type ModuleReadResult =
 /**
  * The tasks part of an export: the module bundle (tasks carry their handle
  * numbers) plus every completion (TV-D8, specs/tasks-v3.md §Assumptions #26).
- * Every new tasks table joins here in the block that creates it.
+ * Every new tasks table joins here in the block that creates it. A cut read
+ * of either joins the bundle's `truncated` list, never silently.
  */
 export async function readTasksExport(
   tasks: {
     list(workspaceId: string): Promise<object>;
-    listCompletions(workspaceId: string): Promise<unknown[]>;
+    listCompletions(
+      workspaceId: string,
+    ): Promise<{ completions: unknown[]; truncated: readonly unknown[] }>;
   },
   workspaceId: string,
 ): Promise<Record<string, unknown>> {
-  const [bundle, completions] = await Promise.all([
+  const [bundle, read] = await Promise.all([
     tasks.list(workspaceId),
     tasks.listCompletions(workspaceId),
   ]);
-  return { ...bundle, completions };
+  const cut = (bundle as { truncated?: unknown }).truncated;
+  return {
+    ...bundle,
+    completions: read.completions,
+    truncated: [...(Array.isArray(cut) ? cut : []), ...read.truncated],
+  };
 }
 
 /** One attachment as the export lists it (AT-1, AT1-8). */

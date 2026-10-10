@@ -495,6 +495,42 @@ END;
 $$;
 REVOKE ALL ON FUNCTION public.tasks__check_bucket(uuid, uuid) FROM PUBLIC, anon, authenticated;
 
+-- A parent must be a live task here that the caller can see. One message for
+-- missing and hidden alike, so it can't be used to test whether a task exists.
+CREATE OR REPLACE FUNCTION public.tasks__check_parent(p_workspace_id uuid, p_parent_id uuid)
+RETURNS void
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF p_parent_id IS NULL THEN
+    RETURN;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.tasks x
+                 WHERE x.id = p_parent_id AND x.workspace_id = p_workspace_id AND x.deleted_at IS NULL)
+     OR NOT public.can_access('task', p_parent_id, 'view', public.perm_actor_id()) THEN
+    RAISE EXCEPTION 'That parent task isn''t in this workspace.' USING ERRCODE = '22023';
+  END IF;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.tasks__check_parent(uuid, uuid) FROM PUBLIC, anon, authenticated;
+
+-- What a create does when the task is born done (an import of finished work):
+-- nothing here; the second TV-D8 migration records the completion.
+CREATE OR REPLACE FUNCTION public.tasks__created_done(t public.tasks)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  RETURN;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.tasks__created_done(public.tasks) FROM PUBLIC, anon, authenticated;
+
 -- Refuses a field an op doesn't take (a typo shouldn't be dropped silently).
 CREATE OR REPLACE FUNCTION public.tasks__check_keys(p_fields jsonb, p_allowed text[])
 RETURNS void
@@ -675,6 +711,7 @@ BEGIN
   IF v_assignee IS DISTINCT FROM v_actor THEN
     PERFORM public.tasks__check_assignee(p_workspace_id, v_assignee);
   END IF;
+  PERFORM public.tasks__check_parent(p_workspace_id, nullif(p_task ->> 'parent_id', '')::uuid);
 
   -- perm_enforce_write checks the creator's role and the project; the number,
   -- creator, registry entry and any assignment notice come from the triggers.
@@ -697,6 +734,9 @@ BEGIN
   PERFORM public.module_activity_log(
     p_workspace_id, 'tasks', 'task', t.id, 'tasks.create',
     jsonb_build_object('title', t.title, 'number', t.number, 'bucket_id', t.bucket_id));
+  IF t.status = 'done' THEN
+    PERFORM public.tasks__created_done(t);
+  END IF;
   RETURN t;
 END;
 $$;
@@ -730,6 +770,7 @@ DECLARE
   -- Who the trail row names: the person, or the API key.
   v_actor uuid := coalesce(public.module_api_key_id(), public.perm_actor_id());
   v_field text;
+  v_bypass text;
 BEGIN
   IF public.tasks_module_permission(p_workspace_id) NOT IN ('edit', 'admin') THEN
     RAISE EXCEPTION 'You don''t have edit access to Tasks in this workspace.';
@@ -744,7 +785,10 @@ BEGIN
   FOR UPDATE;
   v_restore := p_patch ? 'deleted_at' AND jsonb_typeof(p_patch -> 'deleted_at') = 'null';
   v_delete := p_patch ? 'deleted_at' AND jsonb_typeof(p_patch -> 'deleted_at') <> 'null';
-  IF NOT FOUND OR (t.deleted_at IS NOT NULL AND NOT v_restore) THEN
+  -- A task the caller can't see reads as missing (never answered with, even
+  -- for a patch that changes nothing); writes are checked again row by row.
+  IF NOT FOUND OR (t.deleted_at IS NOT NULL AND NOT v_restore)
+     OR NOT public.can_access('task', t.id, 'view', public.perm_actor_id()) THEN
     RAISE EXCEPTION 'Task not found in this workspace.';
   END IF;
 
@@ -768,11 +812,8 @@ BEGIN
   IF p_patch ? 'bucket_id' THEN
     PERFORM public.tasks__check_bucket(p_workspace_id, nullif(p_patch ->> 'bucket_id', '')::uuid);
   END IF;
-  IF p_patch ? 'parent_id' AND nullif(p_patch ->> 'parent_id', '') IS NOT NULL
-     AND NOT EXISTS (SELECT 1 FROM public.tasks x
-                     WHERE x.id = (p_patch ->> 'parent_id')::uuid
-                       AND x.workspace_id = p_workspace_id AND x.deleted_at IS NULL) THEN
-    RAISE EXCEPTION 'That parent task isn''t in this workspace.' USING ERRCODE = '22023';
+  IF p_patch ? 'parent_id' THEN
+    PERFORM public.tasks__check_parent(p_workspace_id, nullif(p_patch ->> 'parent_id', '')::uuid);
   END IF;
 
   t0 := t;
@@ -868,6 +909,11 @@ BEGIN
     UPDATE public.tasks SET deleted_at = now(), updated_at = now()
     WHERE id = t.id RETURNING * INTO t;
     -- Its subtasks stay, at the top level (work is never lost with a parent).
+    -- That's the server's own consequence of the delete, so it runs as
+    -- system work: a subtask the caller can't edit doesn't refuse the delete,
+    -- and the answer names only the subtasks the caller can see.
+    v_bypass := current_setting('share.bypass', true);
+    PERFORM set_config('share.bypass', '1', true);
     FOR c IN
       SELECT * FROM public.tasks x
       WHERE x.parent_id = t.id AND x.deleted_at IS NULL
@@ -876,8 +922,11 @@ BEGIN
     LOOP
       UPDATE public.tasks SET parent_id = NULL, updated_at = now()
       WHERE id = c.id RETURNING * INTO c;
-      v_carried := v_carried || c;
+      IF public.can_access('task', c.id, 'view', public.perm_actor_id()) THEN
+        v_carried := v_carried || c;
+      END IF;
     END LOOP;
+    PERFORM set_config('share.bypass', coalesce(v_bypass, ''), true);
     PERFORM public.module_activity_log(p_workspace_id, 'tasks', 'task', t.id, 'tasks.delete', '{}'::jsonb);
   END IF;
 
@@ -941,6 +990,11 @@ DECLARE
   t public.tasks;
 BEGIN
   t := public.tasks_op__guard(p_workspace_id, p_task_id);
+  -- The guard checks the workspace role only: a task the caller can't see
+  -- reads as missing, even when nothing would change.
+  IF NOT public.can_access('task', t.id, 'view', public.perm_actor_id()) THEN
+    RAISE EXCEPTION 'Task not found in this workspace.';
+  END IF;
   RETURN public.tasks__apply_status(t, p_status, p_recurrence, p_position);
 END;
 $$;

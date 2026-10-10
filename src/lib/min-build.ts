@@ -77,13 +77,35 @@ export function useMinBuild(): MinBuildState {
 
 // ── Which requests are writes ──────────────────────────────────────────────────
 
-/** RPCs that write: every intent op (`*_op_*`) and the API-key admin calls. */
-const WRITE_RPC = /(?:^|_)op(?:_|$)|^workspace_api_keys_(?:create|revoke|set_scopes)$/;
+/**
+ * The RPCs that only read. Every other RPC counts as a write: a name can't say
+ * which is which (`share_op_state` reads, `contact_merge` writes), so a new
+ * RPC is held back in a read-only build until it's listed here. The list is
+ * the client's read RPCs as the database marks them (STABLE, or volatile
+ * without a write); `min-build.test.ts` fails when the client calls an RPC
+ * this file hasn't classified.
+ */
+export const READ_RPCS: ReadonlySet<string> = new Set([
+  "booking_google_connected",
+  "calendar_busy_blocks",
+  "chat_caps_get",
+  "chat_unread_counts",
+  "chat_workspace_enabled",
+  "contact_merge_candidates",
+  "links_suggest",
+  "notes_list_unmaterialized",
+  "notifications_list",
+  "share_assign_preview",
+  "share_can",
+  "share_defaults_get",
+  "share_op_state",
+  "tasks_time_totals",
+]);
 
 /**
  * Does this request change data? Reads, sign-in (`/auth/v1`), Edge Functions
- * and Realtime always pass; a table write, a write RPC and a Storage upload or
- * delete don't.
+ * and Realtime always pass; a table write, any RPC not in `READ_RPCS` and a
+ * Storage upload or delete don't.
  */
 export function isWriteRequest(method: string | undefined, url: string): boolean {
   const verb = (method ?? "GET").toUpperCase();
@@ -96,7 +118,7 @@ export function isWriteRequest(method: string | undefined, url: string): boolean
   }
   if (path.includes("/auth/v1/") || path.includes("/functions/v1/")) return false;
   const rpc = /\/rest\/v1\/rpc\/([^/?]+)/.exec(path);
-  if (rpc) return WRITE_RPC.test(decodeURIComponent(rpc[1]!));
+  if (rpc) return !READ_RPCS.has(decodeURIComponent(rpc[1]!));
   if (path.includes("/rest/v1/")) return true;
   if (path.includes("/storage/v1/object/")) {
     // Signed download links and listings are reads, even though they POST.

@@ -180,12 +180,29 @@ describe("the tasks export carries every new tasks table (TV-D8, §Assumptions #
   it("adds the completions to the tasks bundle", async () => {
     const data = await readTasksExport(
       {
-        list: async () => ({ tasks: [{ id: "t1", number: 7 }], buckets: [] }),
-        listCompletions: async () => [{ id: "c1", taskId: "t1", cycleKey: "once" }],
+        list: async () => ({ tasks: [{ id: "t1", number: 7 }], buckets: [], truncated: [] }),
+        listCompletions: async () => ({
+          completions: [{ id: "c1", taskId: "t1", cycleKey: "once" }],
+          truncated: [],
+        }),
       },
       "ws-1",
     );
     expect(data.tasks).toEqual([{ id: "t1", number: 7 }]);
     expect(data.completions).toEqual([{ id: "c1", taskId: "t1", cycleKey: "once" }]);
+    expect(data.truncated).toEqual([]);
+  });
+
+  it("says when the completions were cut, next to the tasks' own cuts", async () => {
+    const tasksCut = { scope: "tasks", shown: 10000, total: 10400 };
+    const completionsCut = { scope: "completions", shown: 20000, total: 25000 };
+    const data = await readTasksExport(
+      {
+        list: async () => ({ tasks: [], buckets: [], truncated: [tasksCut] }),
+        listCompletions: async () => ({ completions: [], truncated: [completionsCut] }),
+      },
+      "ws-1",
+    );
+    expect(data.truncated).toEqual([tasksCut, completionsCut]);
   });
 });

@@ -227,7 +227,7 @@ BEGIN
     'and there is still one link (the two mirrors don''t ping-pong)');
   r := test.try('E', format($q$SELECT public.links_op_create(%L, 'task', %L, 'task', %L, 'blocks')$q$,
     test.id('W'), test.id('BB'), test.id('BA')));
-  PERFORM test.ok(r LIKE '%cycle%' OR r LIKE '%already%' OR r = 'ok 1' AND NOT EXISTS (
+  PERFORM test.ok((r LIKE '%cycle%' OR r LIKE '%already%' OR r = 'ok 1') AND NOT EXISTS (
       SELECT 1 FROM public.task_relations WHERE blocker_task_id = test.id('BB') AND blocked_task_id = test.id('BA')),
     'a loop is never stored', r);
   r := test.as_key('K', format($q$SELECT public.links_op_set_kind(%L, (SELECT id FROM public.entity_links
@@ -268,5 +268,41 @@ BEGIN
     test.id('W'), test.id('BA'), test.id('TP')));
   PERFORM test.ok(r NOT LIKE 'ok%' AND NOT EXISTS (SELECT 1 FROM public.task_relations WHERE blocked_task_id = test.id('TP')),
     'a "blocks" link needs edit on the task that waits', r);
+
+  -- ── A task you can't see is never answered with ───────────────────────────
+  -- TP is in O's private project: whatever E sends, it reads as missing.
+  r := test.try('E', format($q$SELECT title FROM public.tasks_op_update(%L, %L, '{}'::jsonb)$q$, test.id('W'), test.id('TP')));
+  PERFORM test.ok(r LIKE '%Task not found%', 'an empty patch to a hidden task reads as missing', r);
+  r := test.try('E', format($q$SELECT title FROM public.tasks_op_update(%L, %L, '{"deleted_at": null}'::jsonb)$q$, test.id('W'), test.id('TP')));
+  PERFORM test.ok(r LIKE '%Task not found%', 'a "restore" of a live hidden task reads as missing', r);
+  r := test.try('E', format($q$SELECT title FROM public.tasks_op_update(%L, %L, '{"status": "todo"}'::jsonb)$q$, test.id('W'), test.id('TP')));
+  PERFORM test.ok(r LIKE '%Task not found%', 'a status it already has reads as missing', r);
+  r := test.try('E', format($q$SELECT (public.tasks_op_set_status(%L, %L, 'todo')).title$q$, test.id('W'), test.id('TP')));
+  PERFORM test.ok(r LIKE '%Task not found%', 'set_status to the status it has reads as missing', r);
+  -- …and can't be a parent (which would also tell whether it exists).
+  r := test.try('E', format($q$SELECT public.tasks_op_create(%L, '{"title": "Sneaky", "bucket_id": %s, "parent_id": %s}'::jsonb)$q$,
+    test.id('W'), to_json(test.id('SB')::text), to_json(test.id('TP')::text)));
+  PERFORM test.ok(r LIKE '22023%parent task%', 'a create under a hidden parent is refused', r);
+  r := test.try('E', format($q$SELECT * FROM public.tasks_op_update(%L, %L, '{"parent_id": %s}'::jsonb)$q$,
+    test.id('W'), test.id('T9'), to_json(test.id('TP')::text)));
+  PERFORM test.ok(r LIKE '22023%parent task%' AND (SELECT parent_id FROM public.tasks WHERE id = test.id('T9')) IS NULL,
+    'moving a task under a hidden parent is refused, with the same words as a missing one', r);
+
+  -- Deleting a parent promotes even a subtask the deleter can't edit (the
+  -- server's own consequence), and doesn't answer with it.
+  PERFORM test.as_user('E', format($q$SELECT public.tasks_op_create(%L, '{"id": %s, "title": "Parent", "bucket_id": %s}'::jsonb)$q$,
+    test.id('W'), to_json(test.id('PA')::text), to_json(test.id('SB')::text)));
+  PERFORM test.as_op('O', format($q$INSERT INTO public.tasks (id, workspace_id, bucket_id, parent_id, title) VALUES (%L, %L, %L, %L, 'O''s private step')$q$,
+    test.id('PS'), test.id('W'), test.id('PB'), test.id('PA')));
+  r := test.as_user('E', format($q$SELECT * FROM public.tasks_op_update(%L, %L, '{"deleted_at": "now"}'::jsonb)$q$,
+    test.id('W'), test.id('PA')));
+  PERFORM test.ok(r = 'ok 1' AND (SELECT parent_id IS NULL AND deleted_at IS NULL FROM public.tasks WHERE id = test.id('PS')),
+    'a delete promotes a subtask the deleter can''t edit, and answers without it', r);
+
+  -- A task created done (an import) has its completion.
+  PERFORM test.as_user('E', format($q$SELECT public.tasks_op_create(%L, '{"id": %s, "title": "Done already", "bucket_id": %s, "status": "done"}'::jsonb)$q$,
+    test.id('W'), to_json(test.id('TD')::text), to_json(test.id('SB')::text)));
+  PERFORM test.ok((SELECT count(*) FROM public.task_completions WHERE task_id = test.id('TD') AND user_id = test.id('E')) = 1,
+    'a task created done records its completion');
 END;
 $$;

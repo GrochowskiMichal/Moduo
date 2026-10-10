@@ -2296,10 +2296,14 @@ export const webRuntime: ModuoRuntime = {
         order: (q) => q.order("completed_at").order("id"),
       });
       if (res.error) {
-        if (isMissingTableError(res.error, "task_completions")) return [];
+        if (isMissingTableError(res.error, "task_completions"))
+          return { completions: [], truncated: [] };
         throw new Error(res.error.message);
       }
-      return mapKnownRows(res.rows, taskCompletionRowToModel);
+      return {
+        completions: mapKnownRows(res.rows, taskCompletionRowToModel),
+        truncated: collectTruncations(res.truncation),
+      };
     },
 
     async deleteTask({ workspaceId, taskId }) {
