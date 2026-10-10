@@ -10,27 +10,26 @@
 import { expect, test } from "@playwright/test";
 import { BASE_URL } from "./helpers";
 
-test.describe("Web paywall (SubscriptionGate)", () => {
+// @smoke: unauthenticated, read-only specs that `bun run e2e:smoke` runs in CI.
+test.describe("Web paywall (SubscriptionGate)", { tag: "@smoke" }, () => {
   test("/ redirects unauthenticated user away from dashboard", async ({ page }) => {
-    const response = await page.goto(BASE_URL, { waitUntil: "networkidle" });
-    // A redirect occurred, meaning the raw "/" was not returned.
-    const finalUrl = page.url();
-    expect(finalUrl).not.toBe(`${BASE_URL}/`);
+    await page.goto(BASE_URL);
+    await expect(page).toHaveURL(/\/(auth|paywall)/, { timeout: 8_000 });
   });
 
   test("/paywall is publicly accessible without auth", async ({ page }) => {
     const response = await page.goto(`${BASE_URL}/paywall`);
     expect(response?.status()).toBeLessThan(400);
-    await expect(page.getByText("Pro")).toBeVisible({ timeout: 8_000 });
+    await expect(page.getByRole("heading", { name: "Pro", exact: true })).toBeVisible({
+      timeout: 8_000,
+    });
   });
 
   test("/auth is reachable for unauthenticated users", async ({ page }) => {
     const response = await page.goto(`${BASE_URL}/auth`);
     expect(response?.status()).toBeLessThan(400);
     // Email input should appear on the auth page.
-    await expect(page.getByRole("textbox", { name: /email/i }).first()).toBeVisible({
-      timeout: 8_000,
-    });
+    await expect(page.getByPlaceholder("you@example.com")).toBeVisible({ timeout: 8_000 });
   });
 
   test("/paywall contains pricing information", async ({ page }) => {
