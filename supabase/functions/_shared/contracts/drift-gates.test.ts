@@ -17,6 +17,7 @@ import {
   EMAIL_KINDS,
   EMAIL_OUTBOX_STATUSES,
   EMAIL_STREAMS,
+  EMAIL_SUPPRESSION_REASONS,
   CALENDAR_PROVIDERS,
   EMAIL_ACCOUNT_STATUSES,
   EMAIL_PROVIDERS,
@@ -73,6 +74,12 @@ describe("cross-runtime drift guards", () => {
     expect(sql).toContain(`kind IN (${inList(EMAIL_KINDS)})`);
     expect(sql).toContain(`stream IN (${inList(EMAIL_STREAMS)})`);
     expect(sql).toContain(`status IN (${inList(EMAIL_OUTBOX_STATUSES)})`);
+  });
+
+  it("email_suppressions CHECK lists the canonical suppression reasons", () => {
+    const sql = readFileSync(resolve(MIGRATIONS_DIR, "20261008233000_email_outbox_worker.sql"), "utf8");
+    const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(",");
+    expect(sql).toContain(`reason IN (${inList(EMAIL_SUPPRESSION_REASONS)})`);
   });
 
   it("content author kinds match the chat_messages and comments CHECKs", () => {

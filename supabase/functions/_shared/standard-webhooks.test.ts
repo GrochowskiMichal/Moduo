@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@rstest/core";
 
-import { parseHookSecrets, signWebhook, verifyWebhook } from "./webhook.ts";
+import { parseHookSecrets, signWebhook, verifyWebhook } from "./standard-webhooks.ts";
 
 const KEY_B64 = btoa("a-thirty-two-byte-test-secret!!!");
 const SECRET = `v1,whsec_${KEY_B64}`;
