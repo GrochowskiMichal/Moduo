@@ -17,6 +17,9 @@ import {
   EMAIL_KINDS,
   EMAIL_OUTBOX_STATUSES,
   EMAIL_STREAMS,
+  EMAIL_SUBSCRIPTION_SOURCES,
+  EMAIL_SUBSCRIPTION_STATUSES,
+  EMAIL_SUBSCRIPTION_TOPICS,
   EMAIL_SUPPRESSION_REASONS,
   CALENDAR_PROVIDERS,
   EMAIL_ACCOUNT_STATUSES,
@@ -30,6 +33,7 @@ import {
   TASK_TIME_ACTIONS,
   TASK_TIME_ENTRY_KINDS,
   TASK_TIME_STATUSES,
+  WAITLIST_ROW_SOURCES,
   WAITLIST_SOURCES,
   WAITLIST_STATUSES,
 } from "./vocabularies.ts";
@@ -62,12 +66,21 @@ describe("cross-runtime drift guards", () => {
 
   it("waitlist migration CHECKs + join function list the canonical IN-lists", () => {
     const read = (file: string) => readFileSync(resolve(MIGRATIONS_DIR, file), "utf8");
-    const base = read("20261001160000_waitlist_secure_join.sql");
-    const latest = read("20261001170000_waitlist_footer_source.sql");
+    const join = read("20261001170000_waitlist_footer_source.sql");
+    const gate = read("20261010150000_tx4_invite_only_gate.sql");
     const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(",");
-    expect(latest).toContain(`source IN (${inList(WAITLIST_SOURCES)})`);
-    expect(latest).toContain(`p_source NOT IN (${inList(WAITLIST_SOURCES)})`);
-    expect(base).toContain(`status IN (${inList(WAITLIST_STATUSES)})`);
+    // The landing joins with a CTA source only; the row CHECK also allows `manual`.
+    expect(join).toContain(`p_source NOT IN (${inList(WAITLIST_SOURCES)})`);
+    expect(gate).toContain(`source IN (${inList(WAITLIST_ROW_SOURCES)})`);
+    expect(gate).toContain(`status IN (${inList(WAITLIST_STATUSES)})`);
+  });
+
+  it("email_subscriptions CHECKs list the canonical subscription vocabularies (TX-4)", () => {
+    const sql = readFileSync(resolve(MIGRATIONS_DIR, "20261010150000_tx4_invite_only_gate.sql"), "utf8");
+    const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(",");
+    expect(sql).toContain(`topic IN (${inList(EMAIL_SUBSCRIPTION_TOPICS)})`);
+    expect(sql).toContain(`status IN (${inList(EMAIL_SUBSCRIPTION_STATUSES)})`);
+    expect(sql).toContain(`source IN (${inList(EMAIL_SUBSCRIPTION_SOURCES)})`);
   });
 
   it("email_outbox CHECKs list the canonical email vocabularies", () => {

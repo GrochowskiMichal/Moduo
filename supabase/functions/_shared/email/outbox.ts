@@ -43,6 +43,7 @@ import {
 } from "./send.ts";
 import { BOOKING_QUEUED } from "./templates/booking.ts";
 import { opsAlertEmail, parseOpsAlertPayload } from "./templates/ops-alert.ts";
+import { parseWaitlistInvitePayload, waitlistInviteEmail } from "./templates/waitlist-invite.ts";
 
 export const OUTBOX_MAX_ATTEMPTS = 5;
 /** Wait before attempt n+1, after attempt n failed (n = 1…4). */
@@ -92,6 +93,7 @@ export type QueuedTemplate = (payload: Record<string, unknown>) => QueuedEmail;
  * five seconds and only logs it).
  */
 export const OUTBOX_TEMPLATES: Partial<Record<EmailKind, QueuedTemplate>> = {
+  waitlist_invite: (payload) => ({ doc: waitlistInviteEmail(parseWaitlistInvitePayload(payload)) }),
   ops_alert: (payload) => ({ doc: opsAlertEmail(parseOpsAlertPayload(payload)) }),
   ...BOOKING_QUEUED,
 };
