@@ -23,8 +23,6 @@
       "!scripts/icons/source",
       "!brand/masters",
       "!brand/exports",
-      "!.design/tasks-v3/prototypes",
-      "!.design/tasks-v3/research/visual-audit-scripts",
       "!**/*.png",
       "!**/*.ico"
     ]

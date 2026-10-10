@@ -2,6 +2,39 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index.
 
+## 2026-10-10 · SH-1 (tasks-v3 block 4): the shell's panel dropdown, capture registry and motion
+
+- **⌘⇧K keeps capturing notes, events and contacts: provisional types until each module is rebuilt** → SH-1 (`src/lib/capture-registry.ts`, `features/{notes,calendar,contacts}/capture-type.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10 (confirmed for building; may be reconsidered).
+  - Decision: Task is the type the capture opens as; Notes, Calendar and Contacts register the one-line captures ⌘⇧K already made with "/note", "/event", "/contact", now picked with ⌘2 / ⌘4 / ⌘6 or the type chip; "/note" in a title is just text (90b). With only Task registered, ⌘2–7 do nothing (proven by a test registry).
+  - Why: the spec's "Task registered" read literally would have removed three captures that work today (DF-20), and 90a's point was that capture shouldn't lock the workflow into tasks.
+  - Rejected: Task only until each rebuild (a visible regression); keeping the "/note" prefix (90b: one way per job).
+- **A task opened from a note is an item, not a tab** → SH-1 (`src/routes/pages/notes-page.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: Notes' old transient "Task" tab shows as "← task title" over the view (back arrow, Esc, or picking a view closes it); Email's permanent Task tab stays a registered view; every other tab registers unchanged (ids, labels, saved choice).
+  - Why: 72a — references open as items, so the menu only lists hand-picked views; it was already an opened reference in all but name.
+  - Rejected: registering "Task" as a Notes view that appears and disappears (the menu would change shape).
+- **One registered view = a plain title** → SH-1 (`src/components/app/right-panel.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: Tasks (Details) and Contacts (Notes) show the view's name with no chevron; the menu appears once a second view registers. Calendar lists Detail · Notes, a hairline, then Tasks (alongside); Email and Notes are all *about this*.
+  - Why: a one-entry menu is a dead click; the title row still names the panel (72a).
+  - Rejected: a menu with one checked entry.
+- **⌥1–9 pick the view at that menu position; Esc steps back one item** → SH-1 (`src/lib/panel-registry.ts`, `right-panel.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10 (keymap rules 4 and 8).
+  - Decision: matched on `event.code` (macOS types ¡ ™ £ for ⌥1–3); never from a field, never while a dialog that doesn't hold the panel is open; after "back", focus lands on the title row.
+  - Why: the same keys work in every module because positions come from the registry; a modal or a typing field must never move the panel behind it.
+  - Rejected: Ctrl+digit (Ctrl is ⌘ on Windows); per-module hard-coded keys.
+- **Motion: opacity on the fade token, movement on fast/base/slow, no blur anywhere** → SH-1 (`tokens.css` §12, `global.css` "Motion patterns", DESIGN_RULES R6)
+  - Who: agent's choice within Maciej's call 81 (2026-10-10).
+  - Decision: `--motion-slow` 280 ms; two new tokens, `--motion-shift` (panel travel) and `--motion-grow` (popover start scale), go neutral under reduced motion so each pattern becomes a plain fade; `.motion-pop` replaces the blur motif in popover, menu, select and dialog and grows from Radix's origin; a side panel slides in only when toggled, not when a page mounts; every `backdrop-blur` is gone.
+  - Why: one rule makes "reduced motion = opacity only" hold for both the OS setting and Settings → Motion without per-pattern exceptions; blur was left out for performance (81).
+  - Rejected: per-pattern reduced-motion overrides (they drift); animating panels on every module switch (noise).
+- **The spec's e2e capture test becomes component tests** → SH-1 (`src/components/app/capture-shell.test.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: `tests/capture.spec.ts`'s ⌘⇧K / ⌘1–7 cases run as component tests in `bun run verify` (with the app's real global key handler); the e2e file waits for an e2e harness on the local stack (TV-U14 owns ⌘N → here).
+  - Why: `tests/` has no e2e login on the local stack yet, and an e2e file that always skips proves nothing.
+  - Rejected: an `E2E_APP_URL`-gated spec like `e2e/tasks/timeline.spec.ts` (never runs unattended).
+
 ## 2026-10-10 · TV-D5 finished (tasks-v3 block 1): a quiet refetch never runs the repeat catch-up
 
 - **The client repeat catch-up runs after a full load only** → TV-D5 (`src/features/tasks/hooks/use-tasks-module.ts`, the `loadStamp` bump in `loadImpl`)

@@ -220,6 +220,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Tasks and Timeline → [decisions/tasks.md](decisions/tasks.md)
 
+- 2026-10-10 · SH-1 (v3 block 4): ⌘⇧K keeps note/event/contact captures as provisional types, a task opened from a note is a "← item", one view = a plain title, ⌥1–9 + Esc in the panel, motion = opacity on the fade token and no blur → decisions/tasks.md
 - 2026-10-10 · TV-D5 finished (v3 block 1): a quiet refetch (focus, reconnect) never runs the client repeat catch-up; a full load, or the first read that works, still does → decisions/tasks.md
 - 2026-10-10 · Tasks v3 re-plan — structure: Project/Areas/Sections, personal Inbox with the hairline, handing an unfiled task asks for a project, one-level subtasks that finish with their parent (REPLAN 13–20a, 28, 87) → decisions/tasks.md
 - 2026-10-10 · Tasks v3 re-plan — statuses, dates, repeats: per-project statuses in five fixed categories with Backlog, Won't do, a quiet late state, reminders, sessions, recurrence a–i, the completion record, contradicting dates shown not prevented (21–27, 53–53b, 68b, 77) → decisions/tasks.md
