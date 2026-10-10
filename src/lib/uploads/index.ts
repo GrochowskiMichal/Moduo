@@ -36,4 +36,14 @@ export async function countPendingUploads(userId: string | null): Promise<number
   return ids.size;
 }
 
+/**
+ * Does another account on this device still have files waiting? Then "Reset
+ * local cache" keeps the uploads store: it only ever holds files that haven't
+ * reached the server, and they aren't this person's to discard.
+ */
+export async function otherAccountsHaveUploads(userId: string | null): Promise<boolean> {
+  const items = await idbUploadStore().all();
+  return items.some((item) => item.userId !== userId && item.state !== "rejected");
+}
+
 export { closeUploadsDb, UPLOADS_DB_NAME } from "./store";

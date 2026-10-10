@@ -210,7 +210,7 @@ export function describeProblem(
     case "busy":
       return { text: "Waiting for your other uploads to finish", actions: ["dismiss"] };
     case "elsewhere":
-      return { text: "Uploading in another Moduo window", actions: [] };
+      return { text: "Uploading in another Moduo window", actions: ["dismiss"] };
     case "mismatch":
       return {
         text: "Not attached — the upload didn't arrive whole",

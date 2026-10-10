@@ -2,7 +2,12 @@ import { strToU8 } from "fflate";
 import { AlertTriangle, Check, Copy, Download, Loader2, RotateCcw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { closeUploadsDb, countPendingUploads, UPLOADS_DB_NAME } from "@/lib/uploads";
+import {
+  closeUploadsDb,
+  countPendingUploads,
+  otherAccountsHaveUploads,
+  UPLOADS_DB_NAME,
+} from "@/lib/uploads";
 import { Button } from "../../../components/ui/button";
 import {
   Dialog,
@@ -218,6 +223,9 @@ export function AdvancedSection() {
     if (resetting) return;
     setResetting(true);
     try {
+      // Another account's files waiting to upload aren't this person's to lose.
+      // Asked before the handles close (the read reopens the store).
+      const keepUploads = await otherAccountsHaveUploads(userId ?? null);
       // Clear only Moduo's own on-device caches — the auth session and other
       // apps' keys are left intact; cloud data re-syncs on the reload below.
       for (const key of moduoCacheKeysToClear(Object.keys(localStorage))) {
@@ -232,6 +240,7 @@ export function AdvancedSection() {
       const list = (await indexedDB.databases?.()) ?? [];
       const names = new Set<string>(["moduo-notes-v2", UPLOADS_DB_NAME]);
       for (const db of list) if (isModuoIdbName(db.name)) names.add(db.name as string);
+      if (keepUploads) names.delete(UPLOADS_DB_NAME);
       await Promise.all(
         [...names].map(
           (name) =>
@@ -246,7 +255,7 @@ export function AdvancedSection() {
       setResetting(false);
       toast.error(err instanceof Error ? err.message : "Couldn't reset the local cache.");
     }
-  }, [resetting]);
+  }, [resetting, userId]);
 
   const copyDebug = useCallback(async () => {
     await navigator.clipboard.writeText(formatDebugInfo(diagnostics)).catch(() => {});
