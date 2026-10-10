@@ -1,8 +1,9 @@
 // Screenshot + measurement harness for the Tasks visual audit.
 // Usage: node shoot.mjs [group]   (group: tasks | prims | comp | all)
-import { chromium } from "/Users/maciej/Documents/Coding/moduohyb/.claude/worktrees/tasks-module-research-ba3dc1/node_modules/playwright/index.mjs";
+
 import fs from "node:fs";
 import path from "node:path";
+import { chromium } from "/Users/maciej/Documents/Coding/moduohyb/.claude/worktrees/tasks-module-research-ba3dc1/node_modules/playwright/index.mjs";
 
 const SB = "http://localhost:6107";
 const OUT = path.resolve(
@@ -198,7 +199,10 @@ async function shot(page, name, opts = {}) {
   console.log("shot", name);
 }
 
-const browser = await chromium.launch({ executablePath: "/Users/maciej/Library/Caches/ms-playwright/chromium_headless_shell-1228/chrome-headless-shell-mac-arm64/chrome-headless-shell" });
+const browser = await chromium.launch({
+  executablePath:
+    "/Users/maciej/Library/Caches/ms-playwright/chromium_headless_shell-1228/chrome-headless-shell-mac-arm64/chrome-headless-shell",
+});
 const ctx = await browser.newContext({
   viewport: { width: 1440, height: 900 },
   deviceScaleFactor: 2,
@@ -207,13 +211,24 @@ const ctx = await browser.newContext({
 const page = await ctx.newPage();
 page.on("pageerror", (e) => console.log("PAGEERROR", e.message));
 
-const ids = group === "tasks" ? TASKS : group === "prims" ? PRIMS : group === "comp" ? [] : [...TASKS, ...PRIMS];
+const ids =
+  group === "tasks"
+    ? TASKS
+    : group === "prims"
+      ? PRIMS
+      : group === "comp"
+        ? []
+        : [...TASKS, ...PRIMS];
 
 for (const id of ids) {
   try {
     await openStory(page, id);
     await shot(page, id);
-    if (/^tasks-|nav-row|filter-bar|display-menu|property-row|segmented|toolbar|button--|meta-count|complete-toggle|stateladder|app-chrome|entityhub|taskblockchip/.test(id)) {
+    if (
+      /^tasks-|nav-row|filter-bar|display-menu|property-row|segmented|toolbar|button--|meta-count|complete-toggle|stateladder|app-chrome|entityhub|taskblockchip/.test(
+        id,
+      )
+    ) {
       await dump(page, id);
     }
   } catch (e) {
@@ -255,8 +270,16 @@ async function states(id, rowSelector, label) {
 }
 
 if (group === "tasks" || group === "all") {
-  await states("tasks-tasklistview--all-by-bucket", '[role="row"], [data-task-row], li[data-id], [data-testid*="row"], div[role="option"], button[aria-label*="task" i]', "list");
-  await states("tasks-taskboardview--by-status", '[role="article"], [data-task-card], [data-card], div[draggable="true"], [role="button"]', "board");
+  await states(
+    "tasks-tasklistview--all-by-bucket",
+    '[role="row"], [data-task-row], li[data-id], [data-testid*="row"], div[role="option"], button[aria-label*="task" i]',
+    "list",
+  );
+  await states(
+    "tasks-taskboardview--by-status",
+    '[role="article"], [data-task-card], [data-card], div[draggable="true"], [role="button"]',
+    "board",
+  );
   // right-click context menu on a list row
   try {
     await openStory(page, "tasks-tasklistview--all-by-bucket");
@@ -264,15 +287,23 @@ if (group === "tasks" || group === "all") {
     await anyRow.click({ button: "right", position: { x: 200, y: 10 } });
     await page.waitForTimeout(400);
     await shot(page, "tasks-tasklistview--all-by-bucket__contextmenu");
-  } catch (e) { console.log("FAIL ctx", e.message); }
+  } catch (e) {
+    console.log("FAIL ctx", e.message);
+  }
   // density variants on list + board + detail
   for (const d of ["compact", "dense"]) {
-    for (const id of ["tasks-tasklistview--all-by-bucket", "tasks-taskboardview--by-status", "tasks-taskdetailpanel--populated"]) {
+    for (const id of [
+      "tasks-tasklistview--all-by-bucket",
+      "tasks-taskboardview--by-status",
+      "tasks-taskdetailpanel--populated",
+    ]) {
       try {
         await openStory(page, id, `theme:dark;density:${d}`);
         await shot(page, `${id}__density-${d}`);
         await dump(page, `${id}__density-${d}`);
-      } catch (e) { console.log("FAIL density", id, d, e.message); }
+      } catch (e) {
+        console.log("FAIL density", id, d, e.message);
+      }
     }
   }
   // accent + shade spot checks
@@ -281,15 +312,24 @@ if (group === "tasks" || group === "all") {
       try {
         await openStory(page, id, `theme:dark;${g}`);
         await shot(page, `${id}__${g.replace(":", "-")}`);
-      } catch (e) { console.log("FAIL global", id, g, e.message); }
+      } catch (e) {
+        console.log("FAIL global", id, g, e.message);
+      }
     }
   }
   // light theme spot checks
-  for (const id of ["tasks-tasklistview--all-by-bucket", "tasks-taskboardview--by-status", "tasks-taskdetailpanel--populated", "foundations-stateladder--default"]) {
+  for (const id of [
+    "tasks-tasklistview--all-by-bucket",
+    "tasks-taskboardview--by-status",
+    "tasks-taskdetailpanel--populated",
+    "foundations-stateladder--default",
+  ]) {
     try {
       await openStory(page, id, "theme:light");
       await shot(page, `${id}__light`);
-    } catch (e) { console.log("FAIL light", id, e.message); }
+    } catch (e) {
+      console.log("FAIL light", id, e.message);
+    }
   }
   // Hover states on NavRow story + board card + detail panel property rows
   try {
@@ -300,7 +340,9 @@ if (group === "tasks" || group === "all") {
     await page.waitForTimeout(300);
     await shot(page, "components-ui-nav-row--rail__hover");
     await dump(page, "components-ui-nav-row--rail__hover");
-  } catch (e) { console.log("FAIL navrow hover", e.message); }
+  } catch (e) {
+    console.log("FAIL navrow hover", e.message);
+  }
   try {
     await openStory(page, "tasks-taskdetailpanel--populated");
     await page.keyboard.press("Tab");
@@ -308,7 +350,9 @@ if (group === "tasks" || group === "all") {
     await page.keyboard.press("Tab");
     await page.waitForTimeout(250);
     await shot(page, "tasks-taskdetailpanel--populated__focus-tab3");
-  } catch (e) { console.log("FAIL detail focus", e.message); }
+  } catch (e) {
+    console.log("FAIL detail focus", e.message);
+  }
   // open the filter + display menus in their stories
   for (const [id, trig] of [
     ["components-ui-display-menu--default", "button"],
@@ -324,11 +368,17 @@ if (group === "tasks" || group === "all") {
     try {
       await openStory(page, id);
       const b = page.locator(trig).first();
-      if (id.includes("tooltip")) { await b.hover(); } else { await b.click(); }
+      if (id.includes("tooltip")) {
+        await b.hover();
+      } else {
+        await b.click();
+      }
       await page.waitForTimeout(500);
       await shot(page, `${id}__open`, { fullPage: false });
       await dump(page, `${id}__open`);
-    } catch (e) { console.log("FAIL open", id, e.message); }
+    } catch (e) {
+      console.log("FAIL open", id, e.message);
+    }
   }
   // context menu story
   try {
@@ -337,27 +387,39 @@ if (group === "tasks" || group === "all") {
     await target.click({ button: "right" });
     await page.waitForTimeout(400);
     await shot(page, "components-ui-context-menu--default__open", { fullPage: false });
-  } catch (e) { console.log("FAIL ctxmenu", e.message); }
+  } catch (e) {
+    console.log("FAIL ctxmenu", e.message);
+  }
   // sonner: click the buttons to spawn toasts
   try {
     await openStory(page, "components-ui-sonner--variants");
     const btns = page.locator("#storybook-root button");
     const n = await btns.count();
-    for (let i = 0; i < Math.min(n, 4); i++) { await btns.nth(i).click(); await page.waitForTimeout(150); }
+    for (let i = 0; i < Math.min(n, 4); i++) {
+      await btns.nth(i).click();
+      await page.waitForTimeout(150);
+    }
     await page.waitForTimeout(500);
     await shot(page, "components-ui-sonner--variants__toasts", { fullPage: false });
-  } catch (e) { console.log("FAIL sonner", e.message); }
+  } catch (e) {
+    console.log("FAIL sonner", e.message);
+  }
 }
 
 if (group === "comp" || group === "all") {
-  const comp = "file:///Users/maciej/Documents/Coding/moduohyb/.claude/worktrees/tasks-module-research-ba3dc1/.design/tasks-dogfood/ui-proposal.html";
+  const comp =
+    "file:///Users/maciej/Documents/Coding/moduohyb/.claude/worktrees/tasks-module-research-ba3dc1/.design/tasks-dogfood/ui-proposal.html";
   await page.goto(comp);
   await page.waitForTimeout(800);
   await shot(page, "comp__full");
   const sections = page.locator("section, [id]");
   const n = await sections.count();
   console.log("comp sections", n);
-  const ids2 = await page.evaluate(() => Array.from(document.querySelectorAll("section[id], h2[id], [id]")).map((e) => e.id).filter(Boolean));
+  const ids2 = await page.evaluate(() =>
+    Array.from(document.querySelectorAll("section[id], h2[id], [id]"))
+      .map((e) => e.id)
+      .filter(Boolean),
+  );
   console.log("comp ids", ids2.join(","));
   const secs = page.locator("section");
   const sn = await secs.count();
@@ -368,7 +430,9 @@ if (group === "comp" || group === "all") {
       const id = (await s.getAttribute("id")) || `s${i}`;
       await s.screenshot({ path: path.join(OUT, `comp__section-${i}-${id}.png`) });
       console.log("comp section", i, id);
-    } catch (e) { console.log("FAIL comp sec", i, e.message); }
+    } catch (e) {
+      console.log("FAIL comp sec", i, e.message);
+    }
   }
 }
 

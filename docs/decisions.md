@@ -220,6 +220,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Tasks and Timeline → [decisions/tasks.md](decisions/tasks.md)
 
+- 2026-10-10 · TV-D5 finished (v3 block 1): a quiet refetch (focus, reconnect) never runs the client repeat catch-up; a full load, or the first read that works, still does → decisions/tasks.md
 - 2026-10-10 · Tasks v3 re-plan — structure: Project/Areas/Sections, personal Inbox with the hairline, handing an unfiled task asks for a project, one-level subtasks that finish with their parent (REPLAN 13–20a, 28, 87) → decisions/tasks.md
 - 2026-10-10 · Tasks v3 re-plan — statuses, dates, repeats: per-project statuses in five fixed categories with Backlog, Won't do, a quiet late state, reminders, sessions, recurrence a–i, the completion record, contradicting dates shown not prevented (21–27, 53–53b, 68b, 77) → decisions/tasks.md
 - 2026-10-10 · Tasks v3 re-plan — navigation and views: the rail order, Customize sidebar, Pin, no view glyphs, views in one place, collapsible groups, the multi-select action row, day grouping, My tasks by status, lanes, boards open by status, six reactions, no permanent Archived/Recently deleted rows (29–30, 32, 82b–86, 88, 98) → decisions/tasks.md
@@ -236,6 +237,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 - 2026-10-10 · Tasks v3 re-plan — carried from the research round: complete but calm, row presets, handles, Waiting on as a field, agents as delegates, agent task writes, the client loop, the client link parked, team load widget (RESEARCH 1–8, 11, 12) → decisions/tasks.md
 - 2026-10-09 · TV-U1: task rows get fixed right-hand columns (priority · date · assignee · queue, empty ones collapse) and quiet counts (`# N` tags); completed tasks hide behind "N completed · show" (Display → Hidden · 7 days · All, per scope); a checked-off task stays until the scope changes; board columns flex 280–400 px with one meta line per card.
 - 2026-10-09 · TV-U3: the task detail panel follows the comp (rule C properties, the Time row with "you 50m", the queue toggle in the header, ⋯ with Duplicate), and comments & activity live in it on shared spine comment pieces that Notes uses too.
+- 2026-10-08 · TV-D5: Tasks is live over Realtime (6 tables published); own in-flight edits hold echoes back, newest server-stamped `updated_at` wins, quiet refetch on reconnect/return (5 s throttle).
 - 2026-10-08 · TV-D3: tracked time is a log of entries (`task_time_entries`, `tasks_op_track_time`, `tasks_time_totals`); a save resent after a reload counts once, saving time never puts back anyone's edit, and old builds' writes become adjustments.
 - 2026-10-08 · TV-D4: the app reads and writes my personal queue (toggles, `q`, rail, Focus, Home widget, Calendar panel); claims show who else has a task queued; "My tasks" rail row with two or more members.
 - 2026-10-08 · TV-T1 landed: one workspace tag store feeds every surface, and a tag can be created by name and attached before its task exists.
