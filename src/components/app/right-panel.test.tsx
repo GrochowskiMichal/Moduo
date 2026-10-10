@@ -271,3 +271,32 @@ describe("while a dialog is open over the panel", () => {
     expect(onBack).not.toHaveBeenCalled();
   });
 });
+
+describe("the body's crossfade", () => {
+  it("doesn't fade on mount, only after the view changes", () => {
+    const { rerender } = render(
+      <RightPanel module="calendar" views={CALENDAR_VIEWS} activeId="tasks" onChange={() => {}} />,
+    );
+    const bodyOf = (text: string) => screen.getByText(text).parentElement as HTMLElement;
+    expect(bodyOf("Tasks body").className).not.toMatch(/motion-view/);
+    rerender(
+      <RightPanel module="calendar" views={CALENDAR_VIEWS} activeId="notes" onChange={() => {}} />,
+    );
+    expect(bodyOf("Notes body").className).toMatch(/motion-view/);
+  });
+});
+
+describe("switching views over a deep stack", () => {
+  it("without onClearItems, pops every item through onBack", () => {
+    const onBack = rs.fn();
+    const items: PanelItem[] = [1, 2, 3].map((n) => ({
+      key: `task:${n}`,
+      title: `Task ${n}`,
+      render: () => <p>Task {n}</p>,
+    }));
+    const { onChange } = renderPanel({ items, onBack });
+    altDigit(1);
+    expect(onBack).toHaveBeenCalledTimes(3);
+    expect(onChange).toHaveBeenCalledWith("detail");
+  });
+});

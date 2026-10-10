@@ -22,7 +22,7 @@
 - [ ] **Do:** with a long task title, narrow the panel → **Expect:** the title wraps to a second line instead of being cut off. _(both)_
 
 ## Panel width and motion
-- [ ] **Do:** drag the right panel's edge as far left as it goes → **Expect:** it stops at 280 px; it never got narrower than that, even with an old saved layout. _(both)_
+- [ ] **Do:** drag the right panel's left edge to the right, as far as it goes → **Expect:** it stops at 280 px; it never got narrower than that, even with an old saved layout. _(both)_
 - [ ] **Do:** hide the right panel from the bottom bar, then show it → **Expect:** it slides in a little from the right while fading in; the left panel doesn't move. Switching modules doesn't animate the panels. _(both)_
 - [ ] **Do:** open any menu or popover (a panel's "▾", a date picker) → **Expect:** it grows quickly from the corner it was opened from; no blur anywhere, also not behind dialogs or the Settings window. _(both)_
 - [ ] **Do:** Settings → Preferences → Motion → Reduced, then repeat the three steps above → **Expect:** nothing slides or grows, things only fade in quickly. Set it back to System. _(both)_

@@ -9,7 +9,15 @@
 // goes back one item (keymap.md, rules 4 and 8).
 
 import { ArrowLeft, ChevronDown, ExternalLink, type LucideIcon } from "lucide-react";
-import { Fragment, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import {
+  Fragment,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 
 import {
   type PanelModule,
@@ -54,7 +62,7 @@ type Props = {
   items?: readonly PanelItem[];
   /** Pops the top item (the back arrow, Esc). */
   onBack?: () => void;
-  /** Drops every item; called before switching views with an item open. Defaults to `onBack`. */
+  /** Drops every item before a view switch. Without it, `onBack` runs once per item. */
   onClearItems?: () => void;
 };
 
@@ -86,6 +94,16 @@ function isEditable(target: EventTarget | null): boolean {
   return tag === "input" || tag === "textarea" || tag === "select";
 }
 
+/** Drops every item: the page's `onClearItems`, or one `onBack` per item. */
+function clearItems(
+  items: readonly PanelItem[],
+  onBack: (() => void) | undefined,
+  onClearItems: (() => void) | undefined,
+) {
+  if (onClearItems) onClearItems();
+  else for (let i = 0; i < items.length; i++) onBack?.();
+}
+
 /** An open dialog (capture, Settings, palette…) that doesn't contain `root`. */
 function overlayOver(root: HTMLElement): boolean {
   const open = document.querySelectorAll<HTMLElement>(
@@ -114,8 +132,10 @@ export function RightPanel({
   // handles Esc on its document listener) that claims the key first wins. Both
   // stay out of the way while a dialog that doesn't hold the panel is open.
   // The latest props live in a ref so the listener is bound once per mount.
-  const latest = useRef({ listed, active, item, onChange, onBack, onClearItems });
-  latest.current = { listed, active, item, onChange, onBack, onClearItems };
+  const latest = useRef({ listed, active, items, onChange, onBack, onClearItems });
+  useLayoutEffect(() => {
+    latest.current = { listed, active, items, onChange, onBack, onClearItems };
+  });
   const rootRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -123,7 +143,8 @@ export function RightPanel({
       if (event.defaultPrevented || isEditable(event.target)) return;
       const root = rootRef.current;
       if (!root || overlayOver(root)) return;
-      const { listed, active, item, onChange, onBack, onClearItems } = latest.current;
+      const { listed, active, items, onChange, onBack, onClearItems } = latest.current;
+      const item = items.length > 0 ? items[items.length - 1] : null;
       if (event.key === "Escape") {
         if (!item || !onBack || !root.contains(event.target as Node)) return;
         event.preventDefault();
@@ -134,12 +155,23 @@ export function RightPanel({
       const view = n === null ? undefined : listed[n - 1];
       if (!view) return;
       event.preventDefault();
-      if (item) (onClearItems ?? onBack)?.();
+      if (item) clearItems(items, onBack, onClearItems);
       if (view.id !== active?.id) onChange(view.id);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+
+  // The body crossfades when the view or item changes, never when the panel
+  // mounts (a page load, or the shell remounting it when the other side panel
+  // toggles). React's "adjust state while rendering" pattern, not an effect.
+  const bodyKey = item ? `item:${item.key}` : `view:${active?.id ?? ""}`;
+  const [shownKey, setShownKey] = useState(bodyKey);
+  const [crossfade, setCrossfade] = useState(false);
+  if (shownKey !== bodyKey) {
+    setShownKey(bodyKey);
+    setCrossfade(true);
+  }
 
   // Going back unmounts the back arrow that had focus, which would drop it on
   // <body>. After the item on top changes, put focus on the title row, but only
@@ -161,7 +193,7 @@ export function RightPanel({
   if (!active) return null;
 
   const pick = (id: string) => {
-    if (item) (onClearItems ?? onBack)?.();
+    if (item) clearItems(items, onBack, onClearItems);
     if (id !== active.id) onChange(id);
   };
 
@@ -187,10 +219,7 @@ export function RightPanel({
           </h2>
         )}
       </div>
-      <div
-        key={item ? `item:${item.key}` : `view:${active.id}`}
-        className="motion-view min-h-0 flex-1"
-      >
+      <div key={bodyKey} className={cn("min-h-0 flex-1", crossfade && "motion-view")}>
         {body}
       </div>
     </div>
