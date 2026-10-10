@@ -202,6 +202,7 @@ History moved out of [BUILD_ORDER.md](./BUILD_ORDER.md) so sessions don't re-rea
 ## Transactional email — every email Moduo sends · [`specs/transactional-email.md`](./transactional-email.md)
 
 - [x] **TX-1 — Email kit (shared templates, palette, plain text, .ics, Storybook gallery, logo image names, `EMAIL_KINDS`)** · deps: — · _2026-10-08 · `t/maciej/tx-1-email-kit`_ (logo PNGs come from BRAND-1's `public/email/` exports under the size contract in `_shared/email/assets.ts`)
+- [x] **TX-3 — Outbox worker + deliverability (enqueue/cancel, pg_cron + pg_net, retries, suppression webhook, purge, ops alert)** · deps: TX-2 · _2026-10-09 · `t/maciej/tx-3-outbox-worker` (PR #321)_ (live on prod 2026-10-09: `email-worker` v1 + `resend-webhook` v1, migration `20261008233000`, outbox test delivered to hello@; still Maciej's: the Resend dashboard webhook + `RESEND_WEBHOOK_SECRET`, runbook §TX-3 step 4, after a privacy-policy line for the do-not-email list)
 
 ## Wave D — Dogfood & alpha readiness · _added 2026-07-29 from the whole-project state audit_
 
