@@ -74,6 +74,11 @@ const NOTIFICATION_ROWS: ReadonlyArray<{
     title: "Storage almost full",
     description: "When files take your workspaces past 80% and 95% of your storage. Owners only.",
   },
+  {
+    type: "bookings",
+    title: "Bookings",
+    description: "When someone books or cancels on your links.",
+  },
 ];
 
 /** Day-to-day behaviour: per-type notification mutes, what opens on launch,

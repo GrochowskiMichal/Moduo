@@ -17,62 +17,7 @@ import { SELECTED_OPTION } from "@/components/ui/selection";
 import { Button } from "../../../components/ui/button";
 import { Eyebrow } from "../../../components/ui/eyebrow";
 import { cn } from "../../../lib/utils";
-
-// ---- formatting (guest's locale) ----
-
-function keyDate(key: string): Date {
-  const [y, m, d] = key.split("-").map(Number);
-  return new Date(Date.UTC(y, m - 1, d, 12));
-}
-
-export function dayLong(key: string): string {
-  return new Intl.DateTimeFormat(undefined, {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-    timeZone: "UTC",
-  }).format(keyDate(key));
-}
-
-export function dayShort(key: string): string {
-  return new Intl.DateTimeFormat(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    timeZone: "UTC",
-  }).format(keyDate(key));
-}
-
-export function dayParts(key: string): { weekday: string; day: string; month: string } {
-  const at = keyDate(key);
-  const part = (options: Intl.DateTimeFormatOptions) =>
-    new Intl.DateTimeFormat(undefined, { ...options, timeZone: "UTC" }).format(at);
-  return {
-    weekday: part({ weekday: "short" }),
-    day: part({ day: "numeric" }),
-    month: part({ month: "short" }),
-  };
-}
-
-export function timeLabel(slot: string, timeZone: string): string {
-  return new Intl.DateTimeFormat(undefined, {
-    timeZone,
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(slot));
-}
-
-export function clockIn(timeZone: string): string {
-  try {
-    return new Intl.DateTimeFormat(undefined, {
-      timeZone,
-      hour: "numeric",
-      minute: "2-digit",
-    }).format(new Date());
-  } catch {
-    return "";
-  }
-}
+import { dayLongOfKey, dayPartsOfKey } from "./sentence";
 
 // ---- blanks ----
 
@@ -277,14 +222,14 @@ export function DayStrip({ days, selected, onPick }: DayStripProps) {
         className="no-scrollbar -my-1 flex min-w-0 flex-1 snap-x gap-2 overflow-x-auto scroll-smooth py-1"
       >
         {days.map((day) => {
-          const parts = dayParts(day.key);
+          const parts = dayPartsOfKey(day.key);
           const on = day.key === selected;
           return (
             <button
               key={day.key}
               type="button"
               aria-pressed={on}
-              aria-label={`${dayLong(day.key)}, ${day.count} open ${day.count === 1 ? "time" : "times"}`}
+              aria-label={`${dayLongOfKey(day.key)}, ${day.count} open ${day.count === 1 ? "time" : "times"}`}
               onClick={() => onPick(day.key)}
               className={cn(
                 "flex w-16 shrink-0 snap-start flex-col items-center gap-0.5 rounded-lg border py-2.5",

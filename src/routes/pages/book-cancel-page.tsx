@@ -7,6 +7,7 @@ import { useSearch } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Button } from "../../components/ui/button";
 import { bookingRequest } from "../../features/calendar/booking/public-client";
+import { dayLong, time24 } from "../../features/calendar/booking/sentence";
 
 type Preview = {
   status: string;
@@ -15,11 +16,23 @@ type Preview = {
   name: string;
 };
 
+/** "Friday 16 October at 14:00", in this device's zone (the booking page's format). */
+function startLabel(iso: string): string {
+  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  const at = new Date(iso);
+  try {
+    return `${dayLong(at, zone)} at ${time24(at, zone)}`;
+  } catch {
+    return `${dayLong(at, "UTC")} at ${time24(at, "UTC")} UTC`;
+  }
+}
+
 export function BookCancelPage() {
   const { token } = useSearch({ from: "/book/cancel" });
   const [preview, setPreview] = useState<Preview | null>(null);
   const [missing, setMissing] = useState(false);
-  const [done, setDone] = useState(false);
+  /** Set once cancelled: whether Google sends the cancellation (else our email's calendar file does). */
+  const [done, setDone] = useState<{ googleInvites: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -44,7 +57,7 @@ export function BookCancelPage() {
     setBusy(true);
     const res = await bookingRequest({ action: "cancel", token });
     setBusy(false);
-    if (res.ok) setDone(true);
+    if (res.ok) setDone({ googleInvites: res.json.googleInvites !== false });
   };
 
   return (
@@ -62,7 +75,9 @@ export function BookCancelPage() {
           <>
             <h1 className="font-display text-3xl text-foreground">Booking cancelled</h1>
             <p className="font-sans text-base text-muted-foreground">
-              The time is free again. Google will drop the calendar invite.
+              {done.googleInvites
+                ? "The time is free again. Google will drop the calendar invite."
+                : "The time is free again. An email with a calendar update that removes it is on its way."}
             </p>
           </>
         ) : null}
@@ -74,10 +89,7 @@ export function BookCancelPage() {
                 {preview.name} with {preview.hostName}
               </p>
               <p className="font-sans text-base text-muted-foreground tabular-nums">
-                {new Intl.DateTimeFormat(undefined, {
-                  dateStyle: "full",
-                  timeStyle: "short",
-                }).format(new Date(preview.start))}
+                {startLabel(preview.start)}
               </p>
             </div>
             {preview.status === "cancelled" ? (

@@ -10,6 +10,10 @@
  * only a hint for which of our own hosts the guest email's cancel link uses;
  * an unknown value gets moduo.app (see _shared/app-origin.ts).
  *
+ * Emails (TX-5): `book` and `cancel` queue the booking emails through
+ * `email_enqueue`; `email-worker` renders and sends them. Which ones, and
+ * with what, is decided in `emails.ts` (pure, unit-tested).
+ *
  * A link's video_provider is google_meet, zoom, or guest_choice. The guest only
  * ever sees platforms the host has connected (Google refresh token / Zoom login).
  * POST { action: "cancel-preview", token }
@@ -25,7 +29,12 @@ import {
   googleUserEmail,
   refreshGoogleAccess,
 } from "../_shared/google-calendar.ts";
-import { bookingCancelUrl, bookingOrigin } from "../_shared/app-origin.ts";
+import {
+  appOrigin,
+  bookingCancelUrl,
+  bookingOrigin,
+  CANONICAL_BOOKING_ORIGIN,
+} from "../_shared/app-origin.ts";
 import { clientIp } from "../_shared/client-ip.ts";
 import { escapeHtml, singleLine } from "../_shared/escape.ts";
 import { getDefaultSecretKey } from "../_shared/secret-keys.ts";
@@ -38,6 +47,7 @@ import {
   zoomMeetingIdFromLink,
 } from "../_shared/zoom.ts";
 import { decryptToken, encryptToken } from "../_shared/token-cipher.ts";
+import { type BookingFacts, bookEmails, cancelEmails, type EnqueueRequest, guestTimeZone } from "./emails.ts";
 import { isEmailAddress, parseGuestEmails } from "../../../src/features/calendar/booking/guests.ts";
 import {
   computeOpenSlots,
@@ -65,8 +75,7 @@ const GOOGLE_CLIENTS = [
     secret: Deno.env.get("GOOGLE_CALENDAR_WEB_CLIENT_SECRET") ?? "",
   },
 ].filter((client) => client.id.length > 0 && client.secret.length > 0);
-const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
-const RESEND_FROM = Deno.env.get("RESEND_FROM") ?? "Moduo <noreply@moduo.app>";
+const APP_ORIGIN = appOrigin(Deno.env.get("APP_URL"));
 
 const CORS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -151,16 +160,6 @@ async function bookingGate(
   }
   console.error("[booking-public] rate check failed:", error.code, error.message);
   return error.code === "PGRST202" ? "ok" : "error";
-}
-
-function validTimeZone(value: unknown): string | null {
-  if (typeof value !== "string" || !value) return null;
-  try {
-    new Intl.DateTimeFormat("en-US", { timeZone: value });
-    return value;
-  } catch {
-    return null;
-  }
 }
 
 function busyIds(raw: unknown): string[] {
@@ -435,34 +434,39 @@ function publicLink(
   };
 }
 
-async function sendGuestEmail(input: {
-  to: string;
-  hostName: string;
-  when: string;
-  meetLink: string;
-  platform: string;
-  cancelUrl: string;
-}): Promise<void> {
-  if (!RESEND_API_KEY) return;
-  const hostName = singleLine(input.hostName) || "Moduo";
-  await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${RESEND_API_KEY}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      from: RESEND_FROM,
-      to: input.to,
-      subject: `Booked with ${hostName}`,
-      text: [
-        `You're booked with ${hostName}.`,
-        input.when,
-        `${input.platform}: ${input.meetLink}`,
-        `Cancel: ${input.cancelUrl}`,
-      ].join("\n"),
-    }),
-  });
+/** The host's own inbox (their Moduo account), for the host emails. */
+async function hostInbox(db: SupabaseClient, link: LinkRow): Promise<{ email: string; userId: string | null }> {
+  const fallback = (link.owner_email ?? "").trim();
+  if (!link.owner_user_id) return { email: fallback, userId: null };
+  const user = await db.auth.admin.getUserById(link.owner_user_id).catch(() => null);
+  const email = user?.data?.user?.email?.trim() || fallback;
+  return { email, userId: link.owner_user_id };
+}
+
+/**
+ * Queues the booking's emails. Never throws: the booking (or the cancel) has
+ * already happened, so a queue failure is logged, not shown to the guest.
+ */
+async function queueEmails(
+  db: SupabaseClient,
+  enqueue: EnqueueRequest[],
+  cancelPrefixes: string[] = [],
+): Promise<void> {
+  for (const prefix of cancelPrefixes) {
+    const { error } = await db.rpc("email_cancel", { p_dedupe_key_prefix: prefix });
+    if (error) console.error("[booking-public] email_cancel failed:", error.code, error.message);
+  }
+  for (const request of enqueue) {
+    const { error } = await db.rpc("email_enqueue", {
+      p_kind: request.kind,
+      p_to_email: request.to,
+      p_to_user_id: request.toUserId,
+      p_payload: request.payload,
+      p_dedupe_key: request.dedupeKey,
+      p_send_after: null,
+    });
+    if (error) console.error("[booking-public] email_enqueue failed:", request.kind, error.code, error.message);
+  }
 }
 
 Deno.serve(async (req: Request) => {
@@ -497,6 +501,9 @@ Deno.serve(async (req: Request) => {
       meeting_link: string | null;
       calendar_event_id: string | null;
       attendee_name: string;
+      attendee_email: string;
+      guest_emails: string[] | null;
+      timezone: string | null;
     };
     const linkRes = await db
       .from("exposed_slot_links")
@@ -514,7 +521,9 @@ Deno.serve(async (req: Request) => {
         name: link?.name || "Meeting",
       });
     }
-    if (row.status !== "confirmed") return json({ ok: true, status: row.status });
+    // Google created the event (its id is the meeting id), so Google tells the guests.
+    const googleInvites = row.meeting_id != null;
+    if (row.status !== "confirmed") return json({ ok: true, status: row.status, googleInvites });
     const access = link ? await googleAccess(db, link.owner_user_id).catch(() => null) : null;
     if (access && row.meeting_id) {
       await deleteGoogleEvent(access.accessToken, row.meeting_id).catch(() => {});
@@ -531,11 +540,34 @@ Deno.serve(async (req: Request) => {
         p_event_id: row.calendar_event_id,
       });
     }
+    const cancelledAt = new Date();
     await db
       .from("slot_bookings")
-      .update({ status: "cancelled", updated_at: new Date().toISOString() })
+      .update({ status: "cancelled", updated_at: cancelledAt.toISOString() })
       .eq("id", row.id);
-    return json({ ok: true, status: "cancelled" });
+    if (link) {
+      const facts: BookingFacts = {
+        bookingId: row.id,
+        link: { name: link.name || "Meeting", durationMinutes: link.duration_minutes, hostZone: link.host_timezone },
+        start: row.start_at,
+        end: row.end_at,
+        guestZone: guestTimeZone(row.timezone, link.host_timezone),
+        video: zoomId ? VIDEO_LABEL.zoom : VIDEO_LABEL.google_meet,
+        joinUrl: row.meeting_link ?? "",
+        host: { name: host.name, avatarUrl: host.avatarUrl, email: access?.email || link.owner_email || "" },
+        hostInbox: await hostInbox(db, link),
+        guest: { name: row.attendee_name, email: row.attendee_email },
+        guests: Array.isArray(row.guest_emails) ? row.guest_emails : [],
+        googleInvites,
+        at: cancelledAt.toISOString(),
+      };
+      const planned = cancelEmails(facts, {
+        rebookUrl: `${CANONICAL_BOOKING_ORIGIN}/book/${encodeURIComponent(link.slug)}`,
+        nowMs: cancelledAt.getTime(),
+      });
+      await queueEmails(db, planned.enqueue, planned.cancelPrefixes).catch(() => {});
+    }
+    return json({ ok: true, status: "cancelled", googleInvites });
   }
 
   const slug = typeof body.slug === "string" ? body.slug.trim() : "";
@@ -621,8 +653,9 @@ Deno.serve(async (req: Request) => {
     if (id && value) answers.push({ id, label, value });
   }
 
-  // An unknown zone would make Intl throw after the booking is committed.
-  const guestZone = validTimeZone(body.timeZone) ?? "UTC";
+  // An unusable zone falls back to the host's (AC30): Intl would otherwise
+  // throw after the booking is committed, and the guest's email names the zone used.
+  const guestZone = guestTimeZone(body.timeZone, link.host_timezone);
   const hostEmail = access?.email || link.owner_email || "";
   if (!hostEmail) return json({ error: "host_unavailable" }, 409);
 
@@ -784,19 +817,32 @@ Deno.serve(async (req: Request) => {
 
   // Never from the request: body.origin only picks one of our own hosts.
   const cancelUrl = bookingCancelUrl(bookingOrigin(body.origin), cancelToken);
-  const when = new Intl.DateTimeFormat("en-US", {
-    dateStyle: "full",
-    timeStyle: "short",
-    timeZone: guestZone,
-  }).format(start);
-  await sendGuestEmail({
-    to: email,
-    hostName: host.name,
-    when,
-    meetLink: meet.meetLink,
-    platform: VIDEO_LABEL[platform],
-    cancelUrl,
-  }).catch(() => {});
+  // Google created the event with sendUpdates=all, so it invites everyone itself.
+  const googleInvites = meet.eventId != null;
+  const facts: BookingFacts = {
+    bookingId,
+    link: { name: link.name || "Meeting", durationMinutes: link.duration_minutes, hostZone: link.host_timezone },
+    start: start.toISOString(),
+    end: end.toISOString(),
+    guestZone,
+    video: VIDEO_LABEL[platform],
+    joinUrl: meet.meetLink,
+    host: { name: host.name, avatarUrl: host.avatarUrl, email: hostEmail },
+    hostInbox: await hostInbox(db, link),
+    guest: { name, email },
+    guests: invitedEmails,
+    googleInvites,
+    at: new Date().toISOString(),
+  };
+  await queueEmails(
+    db,
+    bookEmails(facts, {
+      cancelUrl,
+      openUrl: ids.event_id ? `${APP_ORIGIN}/calendar?event=${encodeURIComponent(ids.event_id)}` : null,
+      note: note || null,
+      answers: answers.map(({ label, value }) => ({ label, value })),
+    }),
+  ).catch(() => {});
 
   return json({
     ok: true,
@@ -805,6 +851,7 @@ Deno.serve(async (req: Request) => {
     meetLink: meet.meetLink,
     video: platform,
     guests: invitedEmails,
+    googleInvites,
     cancelToken,
   });
 });

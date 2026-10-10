@@ -4,6 +4,7 @@
 
 import { describe, expect, it } from "@rstest/core";
 
+import { dayShort, time24 } from "../calendar/booking/sentence";
 import { spineActivityLine, spineActorName } from "./activity";
 
 function entry(op: string, payload: Record<string, unknown> = {}) {
@@ -105,5 +106,41 @@ describe("storage alerts (AT-1)", () => {
 
   it("still reads without the numbers", () => {
     expect(spineActivityLine(entry("attachments.storage_95"))).toBe("filled storage past 95%");
+  });
+});
+
+describe("bookings in the host's bell (TX-5)", () => {
+  const START = "2026-10-16T12:00:00Z";
+  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  const day = dayShort(new Date(START), zone);
+  const time = time24(new Date(START), zone);
+  const booked = {
+    op: "calendar.booking_create",
+    actorType: "user" as const,
+    actorId: "host",
+    actorLabel: "Anna Carter",
+    payload: {
+      title: "Intro call",
+      guest: "tom@becker.studio",
+      guest_name: "Tom Becker",
+      start: START,
+    },
+  };
+
+  it("names the guest, not the host recorded as the actor", () => {
+    expect(spineActorName(booked, "host")).toBe("Tom Becker");
+    expect(spineActorName({ ...booked, payload: { guest: "tom@becker.studio" } }, "host")).toBe(
+      "tom@becker.studio",
+    );
+    // An older row with no guest falls back to the usual actor.
+    expect(spineActorName({ ...booked, payload: {} }, "host")).toBe("You");
+  });
+
+  it("reads like the ratified line", () => {
+    expect(spineActivityLine(booked)).toBe(`booked Intro call · ${day}, ${time}`);
+    expect(spineActivityLine({ ...booked, op: "calendar.booking_cancel" })).toBe(
+      `canceled Intro call · ${day}`,
+    );
+    expect(spineActivityLine(entry("calendar.booking_cancel"))).toBe("canceled a meeting");
   });
 });

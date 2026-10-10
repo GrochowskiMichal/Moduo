@@ -35,6 +35,7 @@ describe("DEFAULT_PREFERENCES", () => {
         unblocked: true,
         overdueTasks: false,
         storage: true,
+        bookings: true,
       },
       confirmBeforeQuit: false,
     });
@@ -73,6 +74,7 @@ describe("sanitizePreferences", () => {
         unblocked: true,
         overdueTasks: false,
         storage: true,
+        bookings: true,
       },
       confirmBeforeQuit: true,
     });
@@ -107,6 +109,7 @@ describe("sanitizePreferences", () => {
       unblocked: false,
       overdueTasks: false,
       storage: true,
+      bookings: true,
     });
   });
 
@@ -127,6 +130,8 @@ describe("notificationTypeForOp", () => {
     expect(notificationTypeForOp("tasks.unblocked")).toBe("unblocked");
     expect(notificationTypeForOp("attachments.storage_80")).toBe("storage");
     expect(notificationTypeForOp("attachments.storage_95")).toBe("storage");
+    expect(notificationTypeForOp("calendar.booking_create")).toBe("bookings");
+    expect(notificationTypeForOp("calendar.booking_cancel")).toBe("bookings");
   });
 
   it("returns null for ops outside the quiet set (legacy / future)", () => {
@@ -146,9 +151,11 @@ describe("isNotificationEnabled", () => {
       unblocked: false,
       overdueTasks: false,
       storage: false,
+      bookings: false,
     };
     expect(isNotificationEnabled("comments.add", prefs)).toBe(true);
     expect(isNotificationEnabled("attachments.storage_95", prefs)).toBe(false);
+    expect(isNotificationEnabled("calendar.booking_create", prefs)).toBe(false);
     expect(isNotificationEnabled("tasks.assigned", prefs)).toBe(false);
     expect(isNotificationEnabled("tasks.completed", prefs)).toBe(false);
     expect(isNotificationEnabled("email.follow_up_due", prefs)).toBe(true);
@@ -164,6 +171,7 @@ describe("isNotificationEnabled", () => {
       unblocked: false,
       overdueTasks: false,
       storage: false,
+      bookings: false,
     };
     expect(isNotificationEnabled("workspace.invite_accepted", allOff)).toBe(true);
     expect(isNotificationEnabled("note_shared", allOff)).toBe(true);
