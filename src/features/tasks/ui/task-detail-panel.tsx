@@ -32,6 +32,7 @@ import {
 } from "../../../components/ui/command";
 import { CompleteToggle } from "../../../components/ui/complete-toggle";
 import { detailTitleVariants } from "../../../components/ui/detail-title";
+import { DROP_TARGET } from "../../../components/ui/drag-visuals";
 import { IconButton } from "../../../components/ui/icon-button";
 import { Input } from "../../../components/ui/input";
 import { Kbd } from "../../../components/ui/kbd";
@@ -231,7 +232,8 @@ function DetailBody({
     // A drop or paste anywhere on the task attaches the files. The description
     // editor hands its own to `onFiles` (Lexical owns those events), so they're
     // skipped here.
-    <div
+    <section
+      aria-label="Task details"
       className="flex h-full min-h-0 flex-col"
       onDragEnter={(e) => {
         if (!acceptsFiles || !dragHasFiles(e.dataTransfer)) return;
@@ -278,7 +280,7 @@ function DetailBody({
         data-drop-active={dropActive || undefined}
         className={cn(
           "pane-scroll min-h-0 flex-1 overflow-y-auto rounded-lg px-1 pt-2.5 pb-4 transition-[background-color,box-shadow] duration-(--motion-fade) ease-(--ease-out)",
-          dropActive && "bg-primary/5 ring-2 ring-primary/40 ring-inset",
+          dropActive && DROP_TARGET,
         )}
       >
         <div className="flex flex-col gap-5">
@@ -397,7 +399,7 @@ function DetailBody({
         canEdit={acceptsFiles}
         onDelete={attachments.remove}
       />
-    </div>
+    </section>
   );
 }
 
