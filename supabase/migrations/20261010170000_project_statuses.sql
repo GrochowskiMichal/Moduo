@@ -352,7 +352,11 @@ $$;
 CREATE INDEX IF NOT EXISTS tasks_status_id_idx ON public.tasks (status_id);
 
 -- Backfill before the trigger exists: every task takes the first status of
--- its legacy value's category in its project (or the workspace default).
+-- its legacy value's category in its project (or the workspace default). The
+-- triggers stay off: it isn't an edit, and it mustn't re-stamp updated_at
+-- (the completion backfill in 20261010171000 falls back to it) or wake the
+-- notification triggers (TV-D8's pattern).
+ALTER TABLE public.tasks DISABLE TRIGGER USER;
 UPDATE public.tasks t
 SET (status_id, status_category) = (
   SELECT s.id, s.category FROM public.project_statuses s
@@ -364,6 +368,7 @@ SET (status_id, status_category) = (
   ORDER BY s.hidden, s.position, s.created_at, s.id
   LIMIT 1)
 WHERE t.status_id IS NULL;
+ALTER TABLE public.tasks ENABLE TRIGGER USER;
 
 ALTER TABLE public.tasks ALTER COLUMN status_id SET NOT NULL;
 ALTER TABLE public.tasks ALTER COLUMN status_category SET NOT NULL;
@@ -820,7 +825,7 @@ AS $$
 $$;
 
 CREATE OR REPLACE FUNCTION public.project_statuses__check_name(
-  p_workspace_id uuid, p_project_id uuid, p_name text, p_except uuid)
+  p_workspace_id uuid, p_project_id uuid, p_name text, p_except uuid, p_category text)
 RETURNS text
 LANGUAGE plpgsql
 STABLE
@@ -829,9 +834,16 @@ SET search_path = public
 AS $$
 DECLARE
   v text := btrim(coalesce(p_name, ''));
+  v_word text := public.tasks__status_category_of(btrim(coalesce(p_name, '')));
 BEGIN
   IF v = '' THEN
     RAISE EXCEPTION 'A status needs a name.' USING ERRCODE = '22023';
+  END IF;
+  -- A category's own word ("Done", "To do") names only a status of that
+  -- category: a word always reads as its category first.
+  IF v_word IS NOT NULL AND v_word IS DISTINCT FROM p_category THEN
+    RAISE EXCEPTION '"%" is the name of a category. Pick another name for this status.', v
+      USING ERRCODE = '22023';
   END IF;
   IF char_length(v) > 60 THEN
     RAISE EXCEPTION 'A status name is at most 60 characters.' USING ERRCODE = '22023';
@@ -861,7 +873,7 @@ BEGIN
     RAISE EXCEPTION 'A status belongs to Backlog, To do, In progress, Done or Won''t do.' USING ERRCODE = '22023';
   END IF;
   PERFORM public.project_statuses__seed(p_workspace_id, p_project_id);
-  v_name := public.project_statuses__check_name(p_workspace_id, p_project_id, p_name, NULL);
+  v_name := public.project_statuses__check_name(p_workspace_id, p_project_id, p_name, NULL, v_cat);
   INSERT INTO public.project_statuses (workspace_id, project_id, category, name, position)
   SELECT p_workspace_id, p_project_id, v_cat, v_name, coalesce(max(x.position), 0) + 1
   FROM public.project_statuses__set_rows(p_workspace_id, p_project_id) x
@@ -904,7 +916,7 @@ BEGIN
   PERFORM public.project_statuses__guard(p_workspace_id, s.project_id);
 
   IF p_patch ? 'name' THEN
-    v_name := public.project_statuses__check_name(p_workspace_id, s.project_id, p_patch ->> 'name', s.id);
+    v_name := public.project_statuses__check_name(p_workspace_id, s.project_id, p_patch ->> 'name', s.id, s.category);
     UPDATE public.project_statuses SET name = v_name WHERE id = s.id AND name IS DISTINCT FROM v_name;
   END IF;
   IF p_patch ? 'hidden' THEN
@@ -1006,7 +1018,7 @@ BEGIN
     'tasks__first_status(uuid, uuid, text)', 'tasks__resolve_status(uuid, uuid, text, uuid)',
     'tasks__status_sync()', 'tasks_queue__backlog_to_todo()',
     'project_statuses__guard(uuid, uuid)', 'project_statuses__set_rows(uuid, uuid)',
-    'project_statuses__check_name(uuid, uuid, text, uuid)',
+    'project_statuses__check_name(uuid, uuid, text, uuid, text)',
     'tasks__apply_status(public.tasks, text, jsonb, text)', 'tasks_queue_leave()',
     'tasks__roll_over(uuid, timestamptz, integer, interval)'] LOOP
     EXECUTE format('REVOKE ALL ON FUNCTION public.%s FROM PUBLIC', fn);

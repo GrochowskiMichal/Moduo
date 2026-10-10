@@ -26,6 +26,9 @@ export type TaskDropWrite = {
   /** A status key: the legacy value, or "backlog" (TV-D9). Saved as its
    *  category, so Backlog stays Backlog through a drop and its Undo. */
   status?: StatusKey;
+  /** Undo only: the exact status to put back (its project's own name, say
+   *  In review), with `status` as its key. */
+  statusId?: string;
   assigneeId?: string | null;
 };
 
@@ -63,11 +66,11 @@ const same = (a: unknown, b: unknown) => (a ?? null) === (b ?? null);
  */
 export function undoWrite(input: {
   write: TaskDropWrite;
-  before: Pick<Task, DropField | "statusCategory">;
+  before: Pick<Task, DropField | "statusCategory" | "statusId">;
   /** The row as the drop saved it. */
-  after: Pick<Task, DropField | "statusCategory">;
+  after: Pick<Task, DropField | "statusCategory" | "statusId">;
   /** The row now. */
-  current: Pick<Task, DropField | "statusCategory">;
+  current: Pick<Task, DropField | "statusCategory" | "statusId">;
 }): { write: TaskDropWrite | null; kept: DropField[] } {
   const { write, before, after, current } = input;
   // A status reads as its key, so a backlog task (stored "todo") goes back to
@@ -84,6 +87,8 @@ export function undoWrite(input: {
     }
     if (same(value(before, field), value(current, field))) continue;
     revert[field] = value(before, field) ?? null;
+    // The status goes back by id, so its project's own name comes back too.
+    if (field === "status" && before.statusId) revert.statusId = before.statusId;
   }
   if (Object.keys(revert).length === 0) return { write: null, kept };
   return { write: { taskId: write.taskId, ...revert } as TaskDropWrite, kept };

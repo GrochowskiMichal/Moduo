@@ -21,6 +21,8 @@ import {
   legacyTaskStatus,
   normalizeTaskStatus,
   normalizeTaskStatusCategory,
+  type TaskStatusCategory,
+  taskStatusWord,
 } from "@contracts/vocabularies";
 import type {
   Bucket,
@@ -165,7 +167,8 @@ export function taskPatchToOpFields(patch: TaskFieldPatch): Record<string, unkno
     }
     if (field === "statusCategory") {
       // The id wins when both are given (the server reads status_id first).
-      if (patch.statusId == null) fields.status = value;
+      // The legacy word, so a database before TV-D9 takes it too.
+      if (patch.statusId == null) fields.status = taskStatusWord(value as TaskStatusCategory);
       continue;
     }
     if (field === "status" && (patch.statusId != null || patch.statusCategory != null)) continue;
@@ -197,7 +200,7 @@ export function taskCreateOpInput(task: Task): Record<string, unknown> {
     priority: task.priority ?? null,
     // A project status by id, else its category (Backlog included), else the
     // legacy value.
-    status: task.statusCategory ?? task.status,
+    status: task.statusCategory ? taskStatusWord(task.statusCategory) : task.status,
     position: task.position ?? "",
   };
   if (task.statusId) input.status_id = task.statusId;

@@ -10,6 +10,7 @@ import {
   normalizeTaskStatusCategory,
   type TaskStatusCategory,
   taskCategoryOf,
+  taskStatusWord,
 } from "@contracts/vocabularies";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -779,7 +780,15 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
           return [...rest, optimisticEntry(id, position)];
         },
         (rt, ws) => rt.tasks.opQueueAdd({ workspaceId: ws, taskId: id, at }),
-        onSaved,
+        // The queue op answers with the queue, not the task: a quiet read then
+        // settles the task's status (the server moves it only when you can
+        // edit the task, which this list can't tell).
+        toTodo
+          ? () => {
+              onSaved?.();
+              requestRefresh();
+            }
+          : onSaved,
       );
       const others = queueClaims.get(id) ?? [];
       if (started && others.length > 0) toast(alsoInLabel(others.map(memberName)));
@@ -794,6 +803,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       canEdit,
       backlogToTodo,
       patchTaskLocal,
+      requestRefresh,
     ],
   );
 
@@ -1037,7 +1047,9 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       ) {
         // By id when the change names a project status, else by category word
         // (the server keeps a status already in that category).
-        const status = explicitStatusId ?? patch.statusCategory ?? patch.status;
+        const status =
+          explicitStatusId ??
+          (patch.statusCategory ? taskStatusWord(patch.statusCategory) : patch.status);
         const recurrence = patch.recurrence;
         const position = patch.position;
         applyOp(id, patch, () =>
@@ -1763,7 +1775,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         ...(category !== undefined
           ? optimisticStatus(
               existing,
-              { category },
+              write.statusId ? { statusId: write.statusId } : { category },
               statusesForBucket(write.bucketId ?? existing.bucketId),
             )
           : {}),
@@ -1799,7 +1811,8 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
             await rt.tasks.opSetStatus({
               workspaceId: ws,
               taskId,
-              status: category,
+              // By id when Undo puts a named status back, else the word.
+              status: write.statusId ?? taskStatusWord(category),
               recurrence,
               position: write.position,
             }),

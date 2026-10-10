@@ -153,6 +153,15 @@ export function legacyTaskStatus(category: TaskStatusCategory): TaskStatus {
   return category;
 }
 
+/**
+ * The word a status op is sent for a category: the legacy value (every
+ * database reads "archived" as Won't do, so a write works before TV-D9's
+ * migration too), and "backlog", which only TV-D9 knows.
+ */
+export function taskStatusWord(category: TaskStatusCategory): string {
+  return category === "backlog" ? "backlog" : legacyTaskStatus(category);
+}
+
 /** Categories still to be worked on: the one "is open" rule. Backlog is
  *  parked, so it sits out of counts, My tasks, Upcoming, Focus, drift and late. */
 export const TASK_OPEN_CATEGORIES = ["todo", "in_progress"] as const satisfies readonly TaskStatusCategory[];

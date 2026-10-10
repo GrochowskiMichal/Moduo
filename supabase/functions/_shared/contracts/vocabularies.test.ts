@@ -500,6 +500,17 @@ describe("task status categories (TV-D9, REPLAN 53/53a)", () => {
     ]);
   });
 
+  it("status words: the legacy value, Backlog as itself", async () => {
+    const v = await import("./vocabularies.ts");
+    expect(v.TASK_STATUS_CATEGORIES.map(v.taskStatusWord)).toEqual([
+      "backlog",
+      "todo",
+      "in_progress",
+      "done",
+      "archived",
+    ]);
+  });
+
   it("one open rule: Backlog is neither open nor closed", async () => {
     const v = await import("./vocabularies.ts");
     const backlog = { status: "todo", statusCategory: "backlog" as const };

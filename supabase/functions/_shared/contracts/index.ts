@@ -161,6 +161,7 @@ export {
   parseTaskStatusCategory,
   normalizeTaskStatusCategory,
   legacyTaskStatus,
+  taskStatusWord,
   taskCategoryOf,
   isOpenTask,
   isClosedTask,

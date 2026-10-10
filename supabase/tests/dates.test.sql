@@ -63,6 +63,13 @@ BEGIN
   r := test.as_user('N', format($q$UPDATE public.tasks SET due_date = '2026-11-13T05:00:00Z' WHERE id = %L$q$, test.id('D1')));
   PERFORM test.ok(r = 'ok 1' AND (test.task('D1')).due_on = '2026-11-13',
     'and west of UTC (New York''s Nov 13)', r);
+  -- At UTC+12 a local midnight is noon UTC: the writer's zone reads first.
+  PERFORM test.as_user('N', $q$SELECT public.user_op_set_time_zone('Pacific/Auckland')$q$);
+  r := test.as_user('N', format($q$UPDATE public.tasks SET due_date = '2026-07-08T12:00:00Z' WHERE id = %L$q$, test.id('D1')));
+  PERFORM test.ok(r = 'ok 1' AND (test.task('D1')).due_on = '2026-07-09',
+    'an old build in Auckland writing its local midnight of Jul 9 sets Jul 9', r);
+  DELETE FROM public.user_preferences WHERE user_id = test.id('N');
+  r := test.as_user('N', format($q$UPDATE public.tasks SET due_date = '2026-11-13T05:00:00Z' WHERE id = %L$q$, test.id('D1')));
   -- An old build saving the row it read changes nothing.
   r := test.as_user('A', format($q$UPDATE public.tasks SET due_date = %L, title = 'Renamed' WHERE id = %L$q$,
     (test.task('D1')).due_date, test.id('D1')));

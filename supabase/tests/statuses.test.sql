@@ -75,6 +75,10 @@ BEGIN
   r := test.try('E', format($q$SELECT * FROM public.project_statuses_op_update(%L, %L, '{"name": "in review"}'::jsonb)$q$,
     test.id('W'), test.status('SB', 'Todo')));
   PERFORM test.ok(r LIKE '%already a status called%', 'two statuses in a project can''t share a name', r);
+  r := test.try('E', format($q$SELECT * FROM public.project_statuses_op_create(%L, %L, 'in_progress', 'Done')$q$,
+    test.id('W'), test.id('SB')));
+  PERFORM test.ok(r LIKE '%is the name of a category%',
+    'a category''s word names only a status of that category (it would read as the category)', r);
   r := test.try('E', format($q$SELECT * FROM public.project_statuses_op_create(%L, %L, 'blocked', 'Blocked')$q$,
     test.id('W'), test.id('SB')));
   PERFORM test.ok(r LIKE '%belongs to Backlog, To do, In progress, Done or Won''t do%', 'a status needs one of the five categories', r);

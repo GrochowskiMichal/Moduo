@@ -52,9 +52,10 @@ AS $$
 $$;
 
 -- The calendar date a stored due instant stands for:
---   1. noon UTC is this migration's own mirror: its UTC date;
---   2. a local midnight in the zone we know (the writer's, or the task's
---      person's): that date (how the app has always written due dates);
+--   1. a local midnight in the zone we know (the writer's, or the task's
+--      person's): that date (how the app has always written due dates; at
+--      UTC+12 that is noon UTC, so it reads first);
+--   2. noon UTC is this migration's own mirror: its UTC date;
 --   3. anything else, or no zone: the nearest UTC day (a local midnight
 --      anywhere from UTC-11 to UTC+12 lands on its own date, and so does the
 --      UTC midnight an agent's "2026-11-08" became).
@@ -66,9 +67,9 @@ SET search_path = ''
 AS $$
   SELECT CASE
     WHEN p_at IS NULL THEN NULL
-    WHEN (p_at AT TIME ZONE 'UTC')::time = time '12:00' THEN (p_at AT TIME ZONE 'UTC')::date
     WHEN p_zone IS NOT NULL AND (p_at AT TIME ZONE p_zone)::time = time '00:00'
       THEN (p_at AT TIME ZONE p_zone)::date
+    WHEN (p_at AT TIME ZONE 'UTC')::time = time '12:00' THEN (p_at AT TIME ZONE 'UTC')::date
     ELSE ((p_at + interval '12 hours') AT TIME ZONE 'UTC')::date
   END
 $$;
@@ -84,6 +85,11 @@ AS $$
 $$;
 
 -- ── 3. Backfill (before the triggers below exist) ───────────────────────────
+
+-- The triggers stay off for both backfills: they aren't edits, so they
+-- mustn't re-stamp updated_at (the fallback completion time below) or wake
+-- the notification triggers (TV-D8's pattern).
+ALTER TABLE public.tasks DISABLE TRIGGER USER;
 
 -- Done tasks: their latest completion, else the trail's last "→ done", else
 -- the last edit. Who: the completion's person, else the trail's.
@@ -117,6 +123,8 @@ FROM (SELECT x.id, public.tasks__due_on_of(x.due_date,
       WHERE x.due_date IS NOT NULL AND x.due_on IS NULL) d
 WHERE t.id = d.id;
 
+ALTER TABLE public.tasks ENABLE TRIGGER USER;
+
 -- ── 4. Completion, kept by the status trigger ───────────────────────────────
 
 -- 20261010170000's body, plus completion: entering a Done status stamps when
@@ -135,7 +143,12 @@ DECLARE
   s public.project_statuses;
   v_old public.project_statuses;
   v_cat text;
-  v_system boolean := public.perm_actor_id() IS NULL OR coalesce(current_setting('share.bypass', true), '') = '1';
+  -- Moduo's own work may set the completion fields: no actor, share.bypass,
+  -- or a write made by another trigger (a foreign key's SET NULL when an
+  -- account goes, while someone is signed in).
+  v_system boolean := public.perm_actor_id() IS NULL
+    OR coalesce(current_setting('share.bypass', true), '') = '1'
+    OR pg_trigger_depth() > 1;
 BEGIN
   IF NEW.status_id IS NOT NULL
      AND (TG_OP = 'INSERT' OR NEW.status_id IS DISTINCT FROM OLD.status_id) THEN

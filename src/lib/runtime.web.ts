@@ -3621,12 +3621,6 @@ async function ensureWebInbox(workspaceId: string): Promise<Bucket> {
 }
 
 /**
- * A field-level task edit through `tasks_op_update` (TV-D8): only the changed
- * fields go, the server checks, writes, registers a rename and logs it, and
- * answers with the task, then any subtasks it carried along. Before the
- * migration it falls back to the direct update (remove in TV-D7).
- */
-/**
  * Every status the reader can see in a workspace (TV-D9): the default set and
  * each visible project's. Empty on a database before TV-D9.
  */
@@ -3652,6 +3646,12 @@ async function listWorkspaceStatuses(
   return { statuses: mapKnownRows(res.rows, projectStatusRowToModel), truncation: res.truncation };
 }
 
+/**
+ * A field-level task edit through `tasks_op_update` (TV-D8): only the changed
+ * fields go, the server checks, writes, registers a rename and logs it, and
+ * answers with the task, then any subtasks it carried along. Before the
+ * migration it falls back to the direct update (remove in TV-D7).
+ */
 async function opUpdateTaskRows(
   workspaceId: string,
   taskId: string,

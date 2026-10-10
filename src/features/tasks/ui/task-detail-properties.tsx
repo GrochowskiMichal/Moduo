@@ -234,12 +234,16 @@ function StatusValue({
                   ))}
                 </div>
               ))
-            : TASK_STATUS_CATEGORIES.map((c) => (
-                <DropdownMenuRadioItem key={c} value={c}>
-                  <StatusIcon category={c} className="text-muted-foreground" />
-                  {CATEGORY_LABELS[c]}
-                </DropdownMenuRadioItem>
-              ))}
+            : // No statuses read (a project you can't see, or a database before
+              // TV-D9, which has no Backlog): the categories every one takes.
+              TASK_STATUS_CATEGORIES.filter((c) => c !== "backlog" || api.statuses.length > 0).map(
+                (c) => (
+                  <DropdownMenuRadioItem key={c} value={c}>
+                    <StatusIcon category={c} className="text-muted-foreground" />
+                    {CATEGORY_LABELS[c]}
+                  </DropdownMenuRadioItem>
+                ),
+              )}
         </DropdownMenuRadioGroup>
       </DropdownMenuContent>
     </DropdownMenu>

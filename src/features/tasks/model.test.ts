@@ -173,6 +173,27 @@ describe("backlog is out of counts and views (AC4.2, AC11.6)", () => {
     expect(write).toEqual({ taskId: parked.id, status: "backlog" });
     expect(STATUS_KEY_LABELS[statusKeyOf(before)]).toBe("Backlog");
   });
+
+  it("an Undo puts a named status back by id (In review, not the category's first)", () => {
+    const before = task("r", {
+      status: "in_progress",
+      statusCategory: "in_progress",
+      statusId: "s-review",
+    });
+    const after = {
+      ...before,
+      status: "done" as const,
+      statusCategory: "done" as const,
+      statusId: "s-done",
+    };
+    const { write } = undoWrite({
+      write: { taskId: "r", status: "done" },
+      before,
+      after,
+      current: after,
+    });
+    expect(write).toEqual({ taskId: "r", status: "in_progress", statusId: "s-review" });
+  });
 });
 
 describe("statuses on the client (mirrors of the server's rules)", () => {
@@ -265,6 +286,11 @@ describe("rows: statuses, completion and the due date (TV-D9)", () => {
     expect(taskPatchToOpFields({ dueDate: null })).toEqual({ due_on: null });
     expect(taskPatchToOpFields({ status: "todo", statusCategory: "backlog" })).toEqual({
       status: "backlog",
+    });
+    // Every other category goes as the legacy word, which a database before
+    // TV-D9 takes too.
+    expect(taskPatchToOpFields({ status: "archived", statusCategory: "wont_do" })).toEqual({
+      status: "archived",
     });
     expect(
       taskPatchToOpFields({ status: "in_progress", statusCategory: "in_progress", statusId: "s2" }),
