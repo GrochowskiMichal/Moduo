@@ -82,7 +82,7 @@ const taskById = async (id: string) =>
   (await rest<TaskRow[]>("service", `tasks?id=eq.${id}&select=id,title,status,bucket_id`))[0];
 
 async function openTasks(page: Page, taskId?: string) {
-  await signInPage(page, dev);
+  await signInPage(page, dev, ws.id);
   await page.goto(taskId ? `/tasks?id=${taskId}` : "/tasks");
   await expect(page.getByRole("navigation", { name: "Location" })).toBeVisible({ timeout: 20_000 });
 }
@@ -160,7 +160,7 @@ test("AC1.4 — Won't do tasks are listed by Filter → Status (TV-U2)", async (
 });
 
 test("AC1.5 — a skeleton while loading, never “Nothing here yet”", async ({ page }) => {
-  await signInPage(page, dev);
+  await signInPage(page, dev, ws.id);
   // Hold the task list back so the first paint is the loading state.
   await page.route("**/rest/v1/tasks?*", async (route) => {
     await new Promise((r) => setTimeout(r, 1500));

@@ -156,12 +156,16 @@ export function resolveListHover(input: {
   if (target.id === active.id) return null;
 
   // Right of the indent on a top-level row → nest, when the one-level rule
-  // and the parent's project allow it.
+  // and the parent's project allow it; otherwise it reads as a reorder (a
+  // parent dragged by its middle must still reorder).
   const inNestZone = pointer.x >= over.rect.left + NEST_INDENT_PX;
-  if (over.depth === 0 && inNestZone) {
-    return canNestUnder(active, target, hasChildren) && input.canNestInto(target)
-      ? { kind: "nest", targetId: target.id }
-      : null;
+  if (
+    over.depth === 0 &&
+    inNestZone &&
+    canNestUnder(active, target, hasChildren) &&
+    input.canNestInto(target)
+  ) {
+    return { kind: "nest", targetId: target.id };
   }
 
   const lower = pointer.y >= over.rect.top + over.rect.height / 2;

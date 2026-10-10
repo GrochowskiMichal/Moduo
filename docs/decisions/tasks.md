@@ -2,6 +2,46 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index.
 
+## 2026-10-10 · TV-U4 (tasks-v3 block 7): drag and drop — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 7 (#329 re-scoped; [specs/tasks-v3.md](../../specs/tasks-v3.md) AC11.4, AC13.3, default m, calls a, 20, 39, k) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **U4-1 · Manual order lives in a project or the Inbox only; All, My tasks and the Queue's board never write a position** → TV-U4 (`src/features/tasks/order.ts`), TV-U10, TV-U11
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: a drag or ⌥⇧↑/↓ reorders only in a project's or the Inbox's view under Order by: Manual. Sorted, the view shows "Sorted by due date · Back to manual order" under the toolbar, the drag shows the note where the line would be, and the drop writes nothing and asks with a toast ("Sorted by due date" · Back to manual order). Across projects (All, My tasks, the Queue's Board) a drag only changes the field of the group it lands in (status, priority, assignee, project), keeping the task's place; a slot in its own group is no drop, with no note. This includes All grouped by project, where research §3 had "drag inside each project group".
+  - Why: default m and AC11.4 say cross-project views never write positions; one rule for every cross-project view is easier to learn than "All by project only". TV-U10 can add the in-group reorder for All by project if the List rebuild wants it.
+  - Rejected: #329's reorder in every list; reorder inside All's project groups.
+- **U4-2 · A move into another project that wasn't placed goes to that project's end** → TV-U4 (`dropTask`, `bucketEndPosition`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: a sidebar project row, a Board project column or a List project group (across projects) moves the task to the end of the project's manual order, its subtasks following (Won't do and done ones too). The view itself never chose that place, so U4-1 holds. A subtask moved to another project on its own comes out of its parent (a subtask lives in its parent's project); nesting under a task in another project moves the child there.
+  - Why: keeping the old key would land the task somewhere random in the new project's order; Todoist and Asana file a moved task at the end.
+  - Rejected: keeping the old position; asking where.
+- **U4-3 · A project task is never dropped into the Inbox** → TV-U4 (`railDropAction`, `canMoveInto`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: the Inbox sidebar row stays a droppable that never accepts (so a release over it lands nowhere instead of on the Board's nearest column); the Inbox group in All grouped by project and the Inbox column of the Board take no task from a project either. Inbox → project, and the Inbox's own order, still drag.
+  - Why: the edge case "a shared task never turns private by a drop" (REPLAN 20).
+  - Rejected: Inbox row only (the group and column would leak the same way).
+- **U4-4 · Undo on every drop, never over a newer change** → TV-U4 (`useTasksModule.dropTask`, `drop-write.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: every drop and move key saves through one `dropTask`: its writes go one after another (field write, then the status op, then the assign op), and only once all landed does the toast say what happened ("Moved to Website", "Moved to In progress", "Assigned to you", "Moved under “Plan launch”", "Moved up") with the 8 s Undo. A failed drop says why and offers no Undo. Undo puts back each field the drop changed unless it changed since, and then says "Undo kept a newer change to “…”". The rail's Queue drop has Undo too (out of the queue); Queue reorders by drag or ⌥⇧↑/↓ undo to the previous line-up. A drop into Done that moved a task out of a queue doesn't requeue it on Undo (the server's rule since TV-D2).
+  - Why: call a; #329's "Moved to X" showed even when the move failed, and its parent + status went as two writes at once.
+  - Rejected: Undo by reload; an Undo that overwrites whatever is there.
+- **U4-5 · The drop targets: Won't do yes, a day no, a former member no** → TV-U4 (`groupAccepts`), TV-U15, TV-D7
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: a drop into the Won't do group (List) or column (Board) marks it Won't do, with Undo (TV-U2 left that to this block); a Date group takes no cross-group drop (Upcoming's drag-to-reschedule is TV-U15's); an assignee group of someone who can't take tasks takes none. Done drops still finish only the task: 87's "finish its open subtasks too" goes with the status op rework (TV-D7/TV-D9).
+  - Why: each is either a write the drop can make cleanly today or another block's.
+  - Rejected: refusing Won't do drops; guessing a date field from a Date group.
+- **U4-6 · The keys: `>` `<`, ⌥⇧↑/↓; the Board's keys wait** → TV-U4 (`list-keys.ts`), TV-U10, TV-U11
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: `>` makes the selected task a subtask of the row above (one level; across projects it moves there), `<` brings a subtask out to the top level right after its parent (where the order is manual), ⌥⇧↑/↓ move it one place among its siblings (manual order only; the Queue moves in its line-up); every one has Undo. ⌥⇧←/→ (across columns) and Group by Assignee/Priority on the Board come with the Board rebuild (TV-U11), which brings the Board's keyboard cursor.
+  - Why: default k and the keymap's move keys; the Board has no keyboard cursor yet to hang them on.
+  - Rejected: ⌘] / ⌘[ (Back and Forward), ⌘↑/↓.
+- **U4-7 · The drag preview sits beside the pointer in the List** → TV-U4 (`overlayBesideCursor`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: the List's drag preview is a 256 px title chip just below-right of the pointer, so it never covers the row it points at (the line, the nest tint, the sorted note); the Board's card and the Queue's row keep their place under the grab (their collisions measure the dragged box). Screen readers hear titles and row or column names, never ids.
+  - Why: call 39's one drag preview has to leave the drop target visible.
+  - Rejected: #329's full-width preview at the grab offset.
+
 ## 2026-10-10 · TV-U2 (tasks-v3 block 6): toolbar, Filter, Display, search — the agent's choices (deferred to by Maciej)
 
 Built in tasks-v3 block 6 (#330 re-scoped; [specs/tasks-v3.md](../../specs/tasks-v3.md) AC11.2–11.3, AC1.4, AC13.3) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.

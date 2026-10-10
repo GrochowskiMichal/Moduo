@@ -132,5 +132,35 @@ describe("manual order inside one project", () => {
       expect(plan).toEqual({ taskId: "a", fields: { status: "done" } });
       expect(plan?.position).toBeUndefined();
     }
+    // Grouped by project: a drop into another project's group moves it there
+    // with no place from the view (the move files it at that project's end).
+    const projectHover = resolveListHover({
+      active: a,
+      activeNested: false,
+      activeGroupKey: "p1",
+      hasChildren: () => false,
+      pointer: { x: 0, y: 204 },
+      over: {
+        type: "row",
+        task: b,
+        depth: 0,
+        groupKey: "p2",
+        rect: { left: 0, top: 200, height: 32 },
+        lastChildId: null,
+      },
+      order: dragOrderFor("all", "manual"),
+      accepts: () => true,
+      canNestInto: () => true,
+    });
+    expect(
+      planListDrop({
+        hover: projectHover!,
+        active: a,
+        activeGroupKey: "p1",
+        groupBy: "bucket",
+        allByPosition: all,
+        groupTasks: () => [b, c],
+      }),
+    ).toEqual({ taskId: "a", bucketId: "p2" });
   });
 });

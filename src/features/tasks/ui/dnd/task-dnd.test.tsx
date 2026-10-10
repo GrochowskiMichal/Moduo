@@ -9,7 +9,13 @@ import { afterEach, beforeAll, describe, expect, it, rs } from "@rstest/core";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 
-import { type DragActivatorRef, DraggableTask, SortableTask, useTaskDndSensors } from "./task-dnd";
+import {
+  type DragActivatorRef,
+  DraggableTask,
+  SortableTask,
+  taskDragAnnouncements,
+  useTaskDndSensors,
+} from "./task-dnd";
 
 beforeAll(() => {
   // jsdom has no layout; dnd-kit scrolls the lifted row into view.
@@ -104,5 +110,29 @@ describe.each([
     button.focus();
     expect(fireEvent.keyDown(button, SPACE)).toBe(false);
     await waitFor(() => expect(onDragStart).toHaveBeenCalledOnce());
+  });
+});
+
+describe("taskDragAnnouncements (TV-U4: screen readers hear names, never ids)", () => {
+  const words = taskDragAnnouncements({
+    taskName: (id) => (id === "t1" ? "“Write the brief”" : "the task"),
+    targetName: (id) => (id === "rail:queue" ? "the Queue" : null),
+  });
+  const active = { id: "t1" } as never;
+
+  it("names the task and where it's going", () => {
+    expect(words.onDragStart({ active })).toBe("Picked up “Write the brief”.");
+    expect(words.onDragOver({ active, over: { id: "rail:queue" } as never })).toBe(
+      "“Write the brief” is over the Queue.",
+    );
+    expect(words.onDragEnd({ active, over: { id: "rail:queue" } as never })).toBe(
+      "Dropped “Write the brief” on the Queue.",
+    );
+    expect(words.onDragCancel({ active, over: null })).toBe("Stopped moving “Write the brief”.");
+  });
+
+  it("says nothing over a spot without a name, and never an id", () => {
+    expect(words.onDragOver({ active, over: { id: "3f2c-uuid" } as never })).toBeUndefined();
+    expect(words.onDragEnd({ active, over: null })).toBe("Dropped “Write the brief”.");
   });
 });

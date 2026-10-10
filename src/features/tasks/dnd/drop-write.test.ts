@@ -94,6 +94,10 @@ describe("dropLabel — the Undo toast's words", () => {
     expect(dropLabel({ taskId: "t", priority: "high" }, names)).toBe("Set to High priority");
     expect(dropLabel({ taskId: "t", priority: null }, names)).toBe("Priority cleared");
     expect(dropLabel({ taskId: "t", parentId: "p" }, names)).toBe("Moved under “Plan launch”");
+    // Under a parent in another project: the parent says where.
+    expect(dropLabel({ taskId: "t", parentId: "p", bucketId: "b2" }, names)).toBe(
+      "Moved under “Plan launch”",
+    );
     expect(dropLabel({ taskId: "t", parentId: null }, names, { parentId: "p" })).toBe(
       "Moved out of “Plan launch”",
     );

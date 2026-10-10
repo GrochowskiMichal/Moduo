@@ -24,6 +24,7 @@ import {
   type DraggableSyntheticListeners,
   type DragStartEvent,
   KeyboardSensor,
+  type Modifier,
   PointerSensor,
   type SensorDescriptor,
   type SensorOptions,
@@ -34,7 +35,7 @@ import {
   useSensors,
 } from "@dnd-kit/core";
 import { sortableKeyboardCoordinates, useSortable } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
+import { CSS, getEventCoordinates } from "@dnd-kit/utilities";
 import type { CSSProperties, ReactNode } from "react";
 
 import { DRAG_SOURCE } from "../../../../components/ui/drag-visuals";
@@ -112,6 +113,28 @@ export function taskDragAnnouncements(names: {
     onDragCancel: ({ active }) => `Stopped moving ${names.taskName(String(active.id))}.`,
   };
 }
+
+// ── the drag preview's place ─────────────────────────────────────────────────
+
+/**
+ * A DragOverlay modifier for the List: the preview sits just below-right of
+ * the pointer instead of over the row it was grabbed from, so it never hides
+ * the row under the pointer and its insertion line, nest tint or sorted note.
+ * Visual only there: the List resolves its drop from the raw pointer, and the
+ * rail and hub from the pointer too. Never on a surface whose collision
+ * measures the dragged rect (the Queue's `closestCenter`, the Board's
+ * `closestCorners`): moving the overlay would move their drops.
+ */
+export const overlayBesideCursor: Modifier = ({ transform, activatorEvent, draggingNodeRect }) => {
+  if (!activatorEvent || !draggingNodeRect) return transform;
+  const at = getEventCoordinates(activatorEvent);
+  if (!at) return transform;
+  return {
+    ...transform,
+    x: transform.x + at.x - draggingNodeRect.left + 12,
+    y: transform.y + at.y - draggingNodeRect.top + 8,
+  };
+};
 
 // ── sensors ──────────────────────────────────────────────────────────────────
 

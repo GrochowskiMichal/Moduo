@@ -58,6 +58,7 @@ import {
   DndBoundary,
   type DragActivatorRef,
   DraggableTask,
+  overlayBesideCursor,
   SortableTask,
   taskDragAnnouncements,
   useTaskDndSensors,
@@ -825,7 +826,7 @@ export function TaskListView({
       if (!dragTask) return null;
       const over = targetAt(x, y);
       if (over === undefined) return previous;
-      return resolveListHover({
+      const next = resolveListHover({
         active: dragTask,
         activeNested: rowIndex.get(dragTask.id)?.depth === 1,
         activeGroupKey: groupKeyFor(dragTask, groupBy, nowOn(today)),
@@ -836,6 +837,10 @@ export function TaskListView({
         accepts: (key) => groupAccepts(groupBy, key, dragTask, { inboxId, assignableIds }),
         canNestInto: (parent) => canMoveInto(parent.bucketId, dragTask, inboxId),
       });
+      // A drop "into the group" is drawn on the group's header; an ungrouped
+      // list has none, so it would happen unseen (a subtask quietly coming out
+      // of its parent in a sorted list): no drop. `<` still un-nests.
+      return groupBy === "none" && next?.kind === "group" ? null : next;
     },
     [dragTask, targetAt, rowIndex, groupBy, today, hasChildren, dragOrder, inboxId, assignableIds],
   );
@@ -966,7 +971,16 @@ export function TaskListView({
           <InsertionLine edge={line.edge} indent={hover.depth * NEST_INDENT_PX} />
         ) : null}
         {line && hover?.kind === "sorted" && order !== "manual" ? (
-          <SortedNote edge={line.edge}>{sortedByLabel(order)}</SortedNote>
+          // Above the list's very first row the scroll box would clip it.
+          <SortedNote
+            edge={
+              line.edge === "top" && groupBy === "none" && task.id === visibleTasks[0]?.id
+                ? "bottom"
+                : line.edge
+            }
+          >
+            {sortedByLabel(order)}
+          </SortedNote>
         ) : null}
       </div>
     );
@@ -1040,9 +1054,12 @@ export function TaskListView({
   const dragOverlay =
     typeof document !== "undefined"
       ? createPortal(
-          <DragOverlay>
+          // A List drag's preview sits beside the pointer, never over the row
+          // it points at; the Queue's stays where it was grabbed (its
+          // closestCenter measures the dragged rect).
+          <DragOverlay modifiers={dragTask ? [overlayBesideCursor] : undefined}>
             {overlayTask ? (
-              <DragOverlaySurface>
+              <DragOverlaySurface className={dragTask ? "w-64" : undefined}>
                 <span className="min-w-0 flex-1 truncate">{overlayTask.title || "Untitled"}</span>
               </DragOverlaySurface>
             ) : null}

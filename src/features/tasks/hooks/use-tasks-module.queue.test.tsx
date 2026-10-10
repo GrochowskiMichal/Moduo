@@ -88,7 +88,21 @@ function fakeRuntime(tasks: Task[], queue: TaskQueueEntry[]) {
       rows = rows.filter((r) => !(r.userId === ME && r.taskId === taskId));
       return mine();
     }),
-    opQueueReorder: rs.fn(async () => mine()),
+    // Puts the task right after `afterTaskId` (or first) in my line-up.
+    opQueueReorder: rs.fn(
+      async ({ taskId, afterTaskId }: { taskId: string; afterTaskId: string | null }) => {
+        const order = mine()
+          .map((r) => r.taskId)
+          .filter((id) => id !== taskId);
+        order.splice(afterTaskId ? order.indexOf(afterTaskId) + 1 : 0, 0, taskId);
+        rows = rows.map((r) =>
+          r.userId === ME && r.workspaceId === "w1"
+            ? { ...r, position: `p${String(order.indexOf(r.taskId)).padStart(9, "0")}` }
+            : r,
+        );
+        return mine();
+      },
+    ),
     opQueueMoveToEnd: rs.fn(async () => mine()),
     opSetStatus: rs.fn(async ({ taskId, status }: { taskId: string; status: Task["status"] }) => {
       if (status === "done" || status === "archived")
@@ -230,6 +244,44 @@ describe("useTasksModule: my queue (TV-D4)", () => {
         afterTaskId: null,
       }),
     );
+  });
+
+  it("a drop's Undo, run seconds later, puts the line-up back (TV-U4)", async () => {
+    const { api, hook } = await mount(
+      [task("a"), task("b"), task("c")],
+      [row(ME, "a", "000000mh34"), row(ME, "b", "00000168g8"), row(ME, "c", "000001ilsc")],
+    );
+    // The Undo holds the reorder from the drop's render, as a toast does.
+    const reorderAtDrop = hook.result.current.reorderQueue;
+    let saved = false;
+    act(() =>
+      reorderAtDrop(["c", "a", "b"], () => {
+        saved = true;
+      }),
+    );
+    await waitFor(() => expect(saved).toBe(true));
+    act(() => reorderAtDrop(["a", "b", "c"]));
+    await waitFor(() => expect(api.opQueueReorder).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(hook.result.current.queuedTasks.map((t) => t.id)).toEqual(["a", "b", "c"]),
+    );
+  });
+
+  it("the sidebar Queue drop's Undo takes the task out again (TV-U4)", async () => {
+    const { api, hook } = await mount([task("a")], []);
+    const { addToQueue, removeFromQueue } = hook.result.current;
+    let saved = false;
+    act(() =>
+      addToQueue("a", "end", () => {
+        saved = true;
+      }),
+    );
+    await waitFor(() => expect(saved).toBe(true));
+    act(() => removeFromQueue("a"));
+    await waitFor(() =>
+      expect(api.opQueueRemove).toHaveBeenCalledWith({ workspaceId: "w1", taskId: "a" }),
+    );
+    await waitFor(() => expect(hook.result.current.queuedTasks).toEqual([]));
   });
 
   it("Skip in Focus moves the task to the end of my queue", async () => {

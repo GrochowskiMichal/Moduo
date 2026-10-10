@@ -89,7 +89,7 @@ async function createProject(name: string): Promise<{ id: string }> {
 }
 
 async function openTasks(page: Page, taskId: string) {
-  await signInPage(page, dev);
+  await signInPage(page, dev, ws.id);
   await page.goto(`/tasks?id=${taskId}`);
   await expect(page.getByRole("navigation", { name: "Location" })).toBeVisible({ timeout: 20_000 });
 }

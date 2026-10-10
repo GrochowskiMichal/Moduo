@@ -98,16 +98,18 @@ describe("resolveListHover — reorder vs nest (manual order)", () => {
     expect(hover(A, shifted, { x: 300 + NEST_INDENT_PX, y: UPPER })?.kind).toBe("nest");
   });
 
-  it("right of the indent is no drop where the one-level rule forbids nesting", () => {
-    // c has subtasks, so it can't become one
-    expect(hover(C, rowOver(A), { x: RIGHT, y: UPPER })).toBeNull();
+  it("falls back to reorder where the one-level rule forbids nesting", () => {
+    // c has subtasks, so it can't become one: dragged by its middle, it reorders
+    expect(hover(C, rowOver(A), { x: RIGHT, y: UPPER })?.kind).toBe("reorder");
     // a subtask listed top level (its parent is elsewhere) can't take children
     const orphan = task("o", "0000000050", { parentId: "elsewhere" });
-    expect(hover(A, rowOver(orphan), { x: RIGHT, y: UPPER })).toBeNull();
+    expect(hover(A, rowOver(orphan), { x: RIGHT, y: UPPER })?.kind).toBe("reorder");
   });
 
-  it("right of the indent is no drop where the parent's project won't take it", () => {
-    expect(hover(A, rowOver(B), { x: RIGHT, y: UPPER }, { canNestInto: () => false })).toBeNull();
+  it("falls back to reorder where the parent's project won't take it", () => {
+    expect(hover(A, rowOver(B), { x: RIGHT, y: UPPER }, { canNestInto: () => false })?.kind).toBe(
+      "reorder",
+    );
   });
 
   it("a row over itself, or nothing under the pointer, is no drop", () => {

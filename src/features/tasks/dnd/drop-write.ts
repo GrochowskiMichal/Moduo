@@ -99,6 +99,8 @@ export function dropLabel(
   names: DropNames,
   before?: Pick<Task, "parentId">,
 ): string {
+  // Under a parent says where, its project included (a subtask lives there).
+  if (write.parentId) return `Moved under “${names.taskTitle(write.parentId)}”`;
   if (write.bucketId !== undefined) return `Moved to ${names.bucketName(write.bucketId)}`;
   if (write.status !== undefined) return `Moved to ${STATUS_LABELS[write.status]}`;
   if (write.assigneeId !== undefined) {
@@ -107,7 +109,6 @@ export function dropLabel(
   if (write.priority !== undefined) {
     return write.priority ? `Set to ${PRIORITY_LABELS[write.priority]}` : "Priority cleared";
   }
-  if (write.parentId) return `Moved under “${names.taskTitle(write.parentId)}”`;
   if (write.parentId === null && before?.parentId) {
     return `Moved out of “${names.taskTitle(before.parentId)}”`;
   }

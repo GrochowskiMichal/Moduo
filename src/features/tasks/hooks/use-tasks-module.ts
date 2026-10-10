@@ -469,6 +469,10 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     () => new Set(myQueueEntries.map((e) => e.taskId)),
     [myQueueEntries],
   );
+  /** My line-up as it is now, for a queue op called later than its render
+   *  (a drop's Undo runs seconds after the drop's closure was made). */
+  const myQueueRef = useRef(myQueueEntries);
+  myQueueRef.current = myQueueEntries;
   /** Who else has each task queued (user ids, earliest first). */
   const queueClaims = useMemo(() => claimsByTask(liveQueueRows, userId), [liveQueueRows, userId]);
   /** My queue's tasks in order, with the ones I just completed still in place. */
@@ -737,7 +741,8 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
 
   const removeFromQueue = useCallback(
     (id: string) => {
-      if (!queuedTaskIds.has(id)) return;
+      // The line-up as it is now: a drop's Undo calls this long after its render.
+      if (!myQueueRef.current.some((e) => e.taskId === id)) return;
       if (isTempId(id)) {
         toast.error("Still saving that task — try again in a moment.");
         return;
@@ -747,7 +752,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         (rt, ws) => rt.tasks.opQueueRemove({ workspaceId: ws, taskId: id }),
       );
     },
-    [queuedTaskIds, runQueueOp],
+    [runQueueOp],
   );
 
   /** In or out of my queue: the row/card toggle, `q`, the menus, the panel. */
@@ -787,8 +792,9 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
   const reorderQueue = useCallback(
     (orderedIds: string[], onSaved?: () => void) => {
       if (!canEdit) return;
+      // The line-up as it is now: a drop's Undo calls this long after its render.
       const move = queueMove(
-        myQueueEntries.map((e) => e.taskId),
+        myQueueRef.current.map((e) => e.taskId),
         orderedIds,
       );
       if (!move) return;
@@ -812,7 +818,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         onSaved,
       );
     },
-    [canEdit, myQueueEntries, runQueueOp],
+    [canEdit, runQueueOp],
   );
 
   /**
@@ -1639,8 +1645,17 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
             keptNote();
             return;
           }
+          // A status going back takes its repeat rule back too: the one before
+          // the drop, unless the rule was edited since (then it stays as is).
+          const ruleUntouched =
+            JSON.stringify(current.recurrence) === JSON.stringify(after.recurrence);
           void saveTaskWrite(undo.write, {
-            recurrence: undo.write.status !== undefined ? before.recurrence : undefined,
+            recurrence:
+              undo.write.status === undefined
+                ? undefined
+                : ruleUntouched
+                  ? before.recurrence
+                  : current.recurrence,
           }).then((saved) => {
             if (saved) keptNote();
           });

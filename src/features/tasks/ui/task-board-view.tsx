@@ -5,7 +5,11 @@ import {
   type DragStartEvent,
   useDroppable,
 } from "@dnd-kit/core";
-import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import {
+  SortableContext,
+  type SortingStrategy,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
 import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
@@ -14,8 +18,7 @@ import { Eyebrow } from "../../../components/ui/eyebrow";
 import { cn } from "../../../lib/utils";
 import { type CompletedMode, partitionCompleted } from "../completed";
 import { type BoardGroupBy, orderTasks, type SubtaskMode, type TaskOrder } from "../display";
-import { canMoveInto } from "../dnd/drop-mode";
-import { projectMoveWrite } from "../dnd/rail-drop";
+import { boardColumnAccepts, planBoardDrop } from "../dnd/board-drop";
 import {
   groupsByBucket,
   isOpen,
@@ -26,7 +29,6 @@ import {
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { Bucket, Task, TaskStatus } from "../model";
 import { BACK_TO_MANUAL_ORDER, dragOrderFor, sortedByLabel } from "../order";
-import { boardDropPosition } from "../reorder";
 import { DEFAULT_ROW_PROPERTIES } from "../row-layout";
 import { DndBoundary, taskDragAnnouncements, useTaskDndSensors } from "./dnd/task-dnd";
 import type { PlanHeaderControls, PlanView } from "./plan-view-header";
@@ -104,6 +106,11 @@ type Column = {
 };
 
 const NO_IDS: ReadonlySet<string> = new Set();
+
+/** Cards stay put while dragging where the board has no manual order (sorted,
+ *  or across projects): parting them would promise a reorder the drop won't
+ *  make. */
+const NO_SHIFT: SortingStrategy = () => null;
 
 export function TaskBoardView({
   tasks,
@@ -281,45 +288,20 @@ export function TaskBoardView({
     if (!task || !sourceCol || !destCol) return;
 
     // Positions are worked out among EVERY task in the column, hidden
-    // completed ones included (TV-U1, boardDropPosition) — and only where the
-    // board is one project's manual order (order.ts, default m).
-    const position =
-      dragOrder === "manual"
-        ? boardDropPosition({
-            activeId,
-            overId: overIsColumn ? null : overId,
-            source: sourceCol.all,
-            dest: destCol.all,
-          })
-        : null;
-    if (sourceCol.id === destCol.id) {
-      // A sorted project board asks to switch back first; a board across
-      // projects (All, My tasks, the Queue) has no manual order to change.
-      if (dragOrder === "sorted") askManualOrder();
-      if (dragOrder !== "manual" || position === null) return;
-      void api.dropTask({ taskId: activeId, position }, "Moved");
-      return;
-    }
-    // Across columns the column's field changes; the place only where the
-    // order is manual (else it keeps its place in the order).
-    const placed = position === null ? {} : { position };
-    if (destCol.dim === "status") {
-      const status = destCol.value as TaskStatus;
-      void api.dropTask(
-        { taskId: activeId, status, ...placed },
-        `Moved to ${STATUS_LABELS[status]}`,
-      );
-      return;
-    }
-    // Another project's column moves it there, its subtasks following; never
-    // into the Inbox from a project (a shared task never turns private by a
-    // drop). Unplaced, it goes to the project's end.
-    if (!canMoveInto(destCol.value, task, inbox?.id ?? null)) return;
-    const parent = task.parentId ? (api.tasks.find((t) => t.id === task.parentId) ?? null) : null;
-    void api.dropTask(
-      { ...projectMoveWrite(task, destCol.value, parent), ...placed },
-      `Moved to ${bucketNameById(destCol.value)}`,
-    );
+    // completed ones included (TV-U1), and only where the board is one
+    // project's manual order (board-drop.ts, default m).
+    const decision = planBoardDrop({
+      task,
+      parent: task.parentId ? (api.tasks.find((t) => t.id === task.parentId) ?? null) : null,
+      source: sourceCol,
+      dest: destCol,
+      overId: overIsColumn ? null : overId,
+      order: dragOrder,
+      inboxId: inbox?.id ?? null,
+      bucketName: bucketNameById,
+    });
+    if (decision.kind === "ask-manual") askManualOrder();
+    else if (decision.kind === "write") void api.dropTask(decision.write, decision.label);
   };
 
   const activeTask = activeId ? (tasks.find((t) => t.id === activeId) ?? null) : null;
@@ -370,6 +352,8 @@ export function TaskBoardView({
                 onSelectTask={onSelectTask}
                 revealed={revealed.has(col.id)}
                 onToggleReveal={() => toggleReveal(col.id)}
+                activeTask={activeTask}
+                reorderable={dragOrder === "manual"}
                 api={api}
               />
             ))
@@ -416,6 +400,8 @@ function BoardColumn({
   onSelectTask,
   revealed,
   onToggleReveal,
+  activeTask,
+  reorderable,
   api,
 }: {
   column: Column;
@@ -430,9 +416,17 @@ function BoardColumn({
   onSelectTask: (id: string | null) => void;
   revealed: boolean;
   onToggleReveal: () => void;
+  /** The card being dragged, if any. */
+  activeTask: Task | null;
+  /** The board is one project's manual order: cards part to make room. */
+  reorderable: boolean;
   api: TasksModuleApi;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: column.id, disabled: !canEdit });
+  // Only a column that would take the card lights up (never the Inbox for a
+  // project's task).
+  const accepting =
+    isOver && (!activeTask || boardColumnAccepts(column, activeTask, inbox?.id ?? null));
   // While revealed, the column lists its completed cards too; the count in
   // the header is always every task in the column.
   const total = revealed ? column.tasks.length : column.tasks.length + column.hidden.length;
@@ -450,12 +444,12 @@ function BoardColumn({
           // Linear-quiet: columns are transparent on the canvas; cards carry the
           // elevation (bg-card + hairline). Only a drag-over state lights up.
           "flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto rounded-md p-1 transition-colors duration-(--motion-fade) ease-(--ease-out)",
-          isOver ? DROP_TARGET : "bg-transparent",
+          accepting ? DROP_TARGET : "bg-transparent",
         )}
       >
         <SortableContext
           items={column.tasks.map((t) => t.id)}
-          strategy={verticalListSortingStrategy}
+          strategy={reorderable ? verticalListSortingStrategy : NO_SHIFT}
         >
           {column.tasks.length === 0 && column.hidden.length === 0 ? (
             <p className="px-2 py-6 text-center text-xs text-muted-foreground/50">
