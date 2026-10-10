@@ -62,7 +62,8 @@ type Props = {
   items?: readonly PanelItem[];
   /** Pops the top item (the back arrow, Esc). */
   onBack?: () => void;
-  /** Drops every item before a view switch. Without it, `onBack` runs once per item. */
+  /** Drops every item before a view switch. Without it, `onBack` runs once per item, so its
+   *  state update must be functional (pop from the latest stack). */
   onClearItems?: () => void;
 };
 

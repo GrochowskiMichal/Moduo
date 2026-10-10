@@ -2,6 +2,8 @@
 // 280 px, in every module, resizable or fixed. jsdom can't lay the panels out,
 // so this pins the constraint where FeaturePanelsShell declares it; the live
 // clamp (a saved 168 px layout opens at 280) is in docs/testing/t-maciej-sh-1-shell.md.
+// It reads the source text on purpose: if a rename or reformat breaks it,
+// re-point the match, don't drop the floor.
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "@rstest/core";
