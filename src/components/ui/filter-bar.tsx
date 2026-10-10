@@ -99,7 +99,7 @@ function ValueItems({ dimension, selected, onToggle }: ValueListProps) {
   );
 }
 
-const POPOVER_CLASS = "w-64 rounded-lg border-hairline p-0";
+const POPOVER_CLASS = "w-64 p-0";
 
 /** Scores an item by its keywords (labels and the option's own keywords)
  *  only. cmdk's default also scores the item's `value`, which here is an

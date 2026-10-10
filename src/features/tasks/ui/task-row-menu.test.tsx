@@ -130,7 +130,12 @@ function renderList({ canEdit = true }: { canEdit?: boolean } = {}) {
 const settle = () => act(() => new Promise((resolve) => setTimeout(resolve, 50)));
 const rowOf = (title: string) =>
   screen.getByRole("button", { name: title }).closest('[role="row"]') as HTMLElement;
-const popover = () => document.querySelector<HTMLElement>('[data-slot="popover-content"]');
+// The date editors are popovers; the bucket picker is a radio menu (DS-6).
+const popover = () =>
+  document.querySelector<HTMLElement>(
+    '[data-slot="popover-content"], [data-slot="dropdown-menu-content"]',
+  );
+const rowMenu = () => document.querySelector('[data-slot="context-menu-content"]');
 const pressEscape = () =>
   fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape", code: "Escape" });
 
@@ -156,7 +161,7 @@ describe("TaskRow context menu", () => {
 
       await chooseFromRowMenu("Alpha", item);
 
-      expect(screen.queryByRole("menu")).toBeNull();
+      expect(rowMenu()).toBeNull();
       expect(popover()?.textContent).toContain(text);
       expect(popover()?.contains(document.activeElement)).toBe(true);
     });
@@ -221,6 +226,22 @@ describe("TaskRow context menu", () => {
     await chooseFromRowMenu("Beta", "Mark done");
 
     expect(api.toggleDone).toHaveBeenCalledWith(expect.objectContaining({ id: "b" }));
+    expect(popover()).toBeNull();
+    expect(document.activeElement).toBe(grid);
+  });
+});
+
+describe("TaskRow bucket menu (DS-6: a radio menu, not a hand-rolled list)", () => {
+  it("picking a project from the menu moves the task once and hands focus back", async () => {
+    const { api, grid } = renderList();
+    await settle();
+    grid.focus();
+    fireEvent.keyDown(grid, { key: "b", code: "KeyB" });
+    await settle();
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Inbox" }));
+    await settle();
+    expect(api.patchTask).toHaveBeenCalledTimes(1);
+    expect(api.patchTask).toHaveBeenCalledWith("a", { bucketId: "inbox" });
     expect(popover()).toBeNull();
     expect(document.activeElement).toBe(grid);
   });

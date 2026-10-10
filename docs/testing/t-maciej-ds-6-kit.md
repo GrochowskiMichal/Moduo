@@ -1,0 +1,44 @@
+# Manual test checklist — DS-6 (Tasks v3 block 8: the north-star kit, the fix list, the lint guards)
+
+> Generated 2026-10-10 · branch `t/maciej/ds-6-kit` (landed locally on `t/maciej/tasks-v3-build`) · **Live-verified:** in Storybook (`bun run storybook`, this worktree on port 6118) with the kit stories, the Tasks stories and the app-chrome story; `tests/visual/kit.spec.ts` and `tests/visual/avatars.spec.ts` passed there on system Chrome. Not tried: the desktop app, light mode (out of scope), and the Tasks views against the local stack (the fix list changes their pieces, not their data).
+> Run top-to-bottom; check off as you go. Each item is a step → what you should see → where.
+
+## The kit in Storybook
+- [ ] **Do:** open Storybook → Components/ui → **row** → Densities → **Expect:** three copies, Comfortable · Compact · Dense; the rows get shorter (36 / 32 / 28 px) while the text stays the same size; the long title is cut off before the date or the avatar ever is. _(Storybook)_
+- [ ] **Do:** row → Default, point at a row, then Tab into the list → **Expect:** hover is a soft fill; the selected row has the accent tint and hovering it gets a little stronger; the focused row shows the one soft focus ring; the done row is faded and struck through but its check stays bright. _(Storybook)_
+- [ ] **Do:** item-card → Default and Densities → **Expect:** cards have a faint hairline edge (no hard border); hover fills them like rows; the selected one is tinted with a ring; cards get tighter at Compact and Dense. _(Storybook)_
+- [ ] **Do:** group-header → Default → **Expect:** "iOS app", "Today · Mon, Oct 12", "Discovery 3/3", a team square "DS For Design", "design system": names exactly as typed, never in capitals; counts in a quieter grey; the chevron turns, the text never does. Point at "iOS app" → a "+" and "⋯" fade in on the right without anything moving. _(Storybook)_
+- [ ] **Do:** group-header → Sticky, scroll the box → **Expect:** each header stays pinned at the top while its rows pass under it. _(Storybook)_
+- [ ] **Do:** chip → Default and Picker pills → **Expect:** one chip look everywhere: a hairline ring at rest, a soft fill when set ("Anna" with its ×, "In progress" toggles on click); "Due · Oct 16" is filled, "Assignee" is muted on the ring; Priority opens a menu and shows the pick. The inline chips sit in the sentence at text height. _(Storybook)_
+- [ ] **Do:** avatar → Identity → **Expect:** Maciej "MA" and Mike "MI" in different colours; "Alex Rivera" AR; the email shows "AK"; Unassigned is a dashed empty ring; teams are rounded squares: Design DS, Development DV, Customer success CS, Ops OP. _(Storybook)_
+- [ ] **Do:** date-field → Time; type "3pm", Enter; then "1530", Tab; then "banana", Tab; then press ↑ twice → **Expect:** "3:00 PM", then "3:30 PM", then it goes back to "3:30 PM", then "4:00 PM". No browser clock control appears. _(Storybook)_
+- [ ] **Do:** date-field → With time: open it, pick Tomorrow, type "4pm" in Time, then click outside → **Expect:** the month's arrows sit on the caption row inside the popover (not floating at its edges); nothing is saved while the picker is open; after the click the trigger reads "Tomorrow, 4:00 PM" (one save, TV-P0's rule). Open it again, type "9am", press Esc → nothing changes. _(Storybook)_
+- [ ] **Do:** input → Number field; type "abc" then Tab; press ↑ → **Expect:** "abc" is rejected (the old number comes back); ↑ adds 5; no spinner arrows. _(Storybook)_
+- [ ] **Do:** display-menu → Densities → **Expect:** three open Display panels, the rows getting tighter from Comfortable to Dense. _(Storybook)_
+- [ ] **Do:** open any menu, select, popover and hover a tooltip (e.g. dropdown-menu, select, tooltip, filter-bar → Menu open) → **Expect:** one look for all of them: the same faint hairline edge and the same corner radius, and each grows quickly from where it was opened (the tooltip too). _(Storybook)_
+- [ ] **Do:** progress → Densities → **Expect:** grey bars, never the accent colour; the thin one sits beside "1h 20m of ~4h". _(Storybook)_
+- [ ] **Do:** toolbar → Default → **Expect:** "Website relaunch 76" · Search · Filter · Display as plain (ghost) buttons · the list/board/timeline icons · one filled "New" button. _(Storybook)_
+- [ ] **Do:** Components/app → app-chrome → Default → **Expect:** the app's top bar renders (it used to show "Something went wrong"). _(Storybook)_
+
+## Tasks: the fix list (Storybook → Tasks, or the app on the local stack)
+- [ ] **Do:** Tasks → TaskListView → All by bucket → **Expect:** group headers read "Moduo App 9", "Landing 1" as typed (no capitals), with a chevron that collapses them; assignees are two letters on a colour (MA, MI), never one letter. _(both)_
+- [ ] **Do:** select a row and press `s`, then `d` (or click a row's date) → **Expect:** a small "Scheduled" / "Due date" picker: Today · Tomorrow · Next week, the month with its arrows on the title row, and for Scheduled a time field reading like "9:00 AM". Type "3pm" and click outside → the time is kept. No browser date or time control appears anywhere. _(both)_
+- [ ] **Do:** in "All", select a row and press `b` (or click a row's project name) → **Expect:** a menu of projects with a check on the current one; ↑ / ↓ and typing a name's first letters move through it; Enter moves the task. Where the project is implied (inside one project), pressing `b` opens the menu without the row shifting. _(both)_
+- [ ] **Do:** open any long menu (a project picker with many projects) in a short window → **Expect:** it stops at the window's edge and scrolls inside instead of being cut off. _(both)_
+- [ ] **Do:** double-click a row title to rename it → **Expect:** the text stays the same size and face while you type (it used to shrink into a smaller heading font). _(both)_
+- [ ] **Do:** point just outside a row's round check, the queue icon, the expand arrow and the rail's drift dot → **Expect:** each still reacts (a 24 px target) while the glyphs look the same size as before. _(both)_
+- [ ] **Do:** TaskBoardView → By bucket → **Expect:** column headers "Inbox 0", "Moduo App 9" as typed; the empty Inbox column shows "Drop tasks here" in the quiet empty style. _(both)_
+- [ ] **Do:** TaskTimelineView → Populated → **Expect:** lane headers "Deep work 6", "Admin 1" and the "Unscheduled 2" tray header as typed, collapsible; only the month band ("OCTOBER 2026") stays in small caps (fixed chrome). _(both)_
+- [ ] **Do:** TaskDetailPanel → Populated → **Expect:** Subtasks / Blocked by / Linked headers with their counts and a "+"; the feed shows two-letter avatars (your own initials, not "M" for "Me") and comment cards with the time in a quieter grey. _(both)_
+- [ ] **Do:** in the app, ⌘N in Tasks (the capture modal) → **Expect:** the pills (Bucket, Assignee, Priority, …) are one chip style: a faint ring when empty, a soft fill when set; Schedule's time is a text field ("3:00 PM"); Duration is a number field plus chips (15m · 30m · …); the close × is a normal icon button; the shortcut hint uses the app's key caps. _(app)_
+- [ ] **Do:** Focus (the execute view) → the timer settings → **Expect:** the minute fields are plain number fields without spinner arrows; ↑ / ↓ step them; Skip and Done are on the same small button size. _(app)_
+- [ ] **Do:** Calendar → the right panel → Notes, and Contacts → a contact → Notes → **Expect:** no second "Notes" heading under the panel's own title; just the list and "New linked note". _(app)_
+
+## The guards
+- [ ] **Do:** in any `src/features/**.tsx`, add `<Eyebrow>{task.title}</Eyebrow>` and run `bun run lint:tw` → **Expect:** it fails with "small-caps-user-words" and tells you to use GroupHeader. Revert. _(terminal)_
+- [ ] **Do:** add `className="-rotate-90"` to a `<span>` with text and run `bun run lint:tw` → **Expect:** "rotated-text". The same class on a lucide icon passes. Revert. _(terminal)_
+- [ ] **Do:** add `.x { writing-mode: vertical-rl; }` to `src/global.css` and run `bun run lint:css` → **Expect:** an error naming DS-6. Revert. _(terminal)_
+
+## Known and left on purpose
+- 16 hand-rolled controls stay in Tasks because no primitive fits without changing behaviour: the row, subtask and related-task title targets; the date and bucket cell triggers; the detail panel's two breadcrumbs (they wrap a long name, TV-P0; a Button is one fixed-height line); the expand chevron; the queue toggle, the subtask queue toggle and the drift dot; the timeline tray chip (a drag source); a capture pill's ×; three mid-sentence text links. TV-U10 / U11 / U13 / U14 rebuild those surfaces on the kit.
+- Other modules keep their native inputs, one-letter avatars (Chat, the dashboard's chat widget, the account menu) and three small-caps names (a CalDAV account, an email sender in a row menu, the booking host): DS-5's sweep is retired, each module adopts the kit when it is rebuilt.

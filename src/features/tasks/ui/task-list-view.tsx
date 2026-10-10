@@ -8,7 +8,6 @@ import {
   pointerWithin,
 } from "@dnd-kit/core";
 import { arrayMove, SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { ChevronDown, ChevronRight } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
@@ -20,7 +19,7 @@ import {
   NestPreview,
   SortedNote,
 } from "../../../components/ui/drag-visuals";
-import { eyebrowVariants } from "../../../components/ui/eyebrow";
+import { GroupHeader } from "../../../components/ui/group-header";
 import { undoToast } from "../../../lib/undo-toast";
 import { cn } from "../../../lib/utils";
 import { useAssignees } from "../assignees";
@@ -722,7 +721,8 @@ export function TaskListView({
           active instanceof HTMLElement &&
           active !== document.body &&
           !containerRef.current?.contains(active) &&
-          !active.closest('[data-slot="popover-content"]');
+          // The row's own editors: the date popovers and the bucket menu.
+          !active.closest('[data-slot="popover-content"], [data-slot="dropdown-menu-content"]');
         if (!leftForElsewhere) containerRef.current?.focus();
       },
       onRequestCommand: (kind: RowCommand) => setCommand({ taskId: t.id, kind }),
@@ -1164,28 +1164,22 @@ export function TaskListView({
               return (
                 <div key={group.key} className="mb-1">
                   {groupBy !== "none" ? (
-                    <button
-                      type="button"
+                    // The group's name as typed (a bucket, a status): sentence
+                    // case, never small caps (call 40). It's also the group's
+                    // drop target (TV-U4): it lights up when a drop would
+                    // land in the group.
+                    <GroupHeader
                       data-list-group={group.key}
-                      onClick={() => toggleGroup(group.key)}
-                      className={cn(
-                        eyebrowVariants(),
-                        "flex w-full items-center gap-1.5 rounded px-1 py-1 text-left hover:text-foreground",
-                        groupTarget && DROP_TARGET,
-                      )}
-                    >
-                      {isCollapsed ? (
-                        <ChevronRight className="size-3.5" aria-hidden />
-                      ) : (
-                        <ChevronDown className="size-3.5" aria-hidden />
-                      )}
-                      {group.label}
-                      <span className="font-sans text-muted-foreground/70 tabular-nums">
-                        {revealedGroups.has(group.key)
+                      className={cn(groupTarget && DROP_TARGET)}
+                      label={group.label}
+                      count={
+                        revealedGroups.has(group.key)
                           ? group.tasks.length
-                          : group.tasks.length + group.hidden.length}
-                      </span>
-                    </button>
+                          : group.tasks.length + group.hidden.length
+                      }
+                      onToggle={() => toggleGroup(group.key)}
+                      collapsed={isCollapsed}
+                    />
                   ) : null}
 
                   {!isCollapsed ? (

@@ -42,6 +42,39 @@ Built in tasks-v3 block 7 (#329 re-scoped; [specs/tasks-v3.md](../../specs/tasks
   - Why: call 39's one drag preview has to leave the drop target visible.
   - Rejected: #329's full-width preview at the grab offset.
 
+## 2026-10-10 · DS-6 (tasks-v3 block 8): the north-star kit, the fix list and the lint guards
+
+- **Group headers are sentence case as typed, never small caps** → DS-6 (`src/components/ui/group-header.tsx`, `NavSectionHeader`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10 (follows call 40 and both prototypes' `.ghead`).
+  - Decision: `GroupHeader` (list groups, board columns, timeline lanes, Upcoming's days) and the rail's `NavSectionHeader` show the name as typed at 13 px medium with the count in the tertiary level; `Eyebrow` small caps stay for fixed chrome only.
+  - Why: a group is usually named by a person (a project, a status, a team), and call 40 says people's words are never capitalised; the visual audit's "eyebrow + plain count" contract predates that call.
+  - Rejected: building GroupHeader on `eyebrowVariants` as the audit's §C wrote it.
+- **Three readable text levels: the tertiary one is `--subtle-foreground`** → DS-6 (`tokens.css` §5b, DESIGN_RULES R11)
+  - Who: agent's choice within call 38, deferred to by Maciej, 2026-10-10.
+  - Decision: `color-mix(in oklab, var(--muted-foreground) 86%, transparent)`, about 6:1 on dark, the prototypes' `--text-3`; translucent, so it reads the same on card, background and popover. The kit uses it for counts, timestamps and hints; existing `/70`-style fades elsewhere are left for each module's rebuild.
+  - Why: call 38 left the exact step to round 2; 86% keeps a visible step below secondary (8.5:1) while staying well above 4.5:1.
+  - Rejected: `/75` of muted (≈ 5:1, too close to the line on light); a sweep of every fade now (DS-5's sweep is retired).
+- **Avatars: two initials on a hue keyed by id; teams first letter + next consonant** → DS-6 (`src/components/ui/avatar.tsx`)
+  - Who: agent's choice within calls 43 and 95, deferred to by Maciej, 2026-10-10.
+  - Decision: people take first + last word ("Maciej Grzywacz" → MG) or a single word's first two letters ("Maciej" → MA, "Mike" → MI); teams take two words' initials or a single word's first letter and next consonant (Design → DS, Development → DV), editable later (`letters`, TV-D10); the hue is an FNV hash of the id (name as fallback) over six label hues (gray means no one, red reads as an error); initials sit on the hue mixed 48% into the card (`--label-fill`) in the foreground colour; the icon rung uses a new 9 px step (`--text-3xs`).
+  - Why: call 95's own examples (DS, DV) need the consonant rule for teams; a person's single name must still tell Maciej from Mike; keying on the id keeps a colour through a rename.
+  - Rejected: one letter on a hue (the audit's fallback: Maciej and Mike can still collide); the 18% `--label-surface` tint (too faint at 16 px).
+- **One floating surface: hairline edge, control radius, `motion-pop`** → DS-6 (`src/components/ui/surface.ts`, `global.css`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10 (the prototypes' `.menu`).
+  - Decision: popover, dropdown and context menus, select lists and tooltips share `FLOATING_SURFACE` (`rounded-md border-hairline bg-popover` + `motion-pop`); FilterBar and DisplayMenu lose their `rounded-lg` override; the tooltip leaves tw-animate for `motion-pop`, which now also answers Radix's `delayed-open` / `instant-open`; dropdown and context menus cap at the height Radix measures on their side and scroll inside. Inline cards (a comment, the composer) keep `rounded-lg`: they are cards, not floating.
+  - Why: AC14.3's "two floating-surface recipes"; the prototypes draw menus at the control radius with a hairline.
+  - Rejected: `rounded-lg` for every floating surface (rounder than any prototype menu).
+- **The guards live in `lint:tw` and `lint:css`; small caps fail closed** → DS-6 (`scripts/check-text-rules.ts`, `.stylelintrc.json`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: rotated text (any `writing-mode`, a 90° / 270° turn anywhere but on an icon's own tag, inline `rotate:` included) and small caps on people's words (an `Eyebrow`, menu label or `WidgetSectionLabel` with an expression child, a `Field label` / `CommandGroup heading` expression, `eyebrowVariants()` outside the primitives, `capitalize`, `font-variant` small caps) fail `lint:tw` unless the site is on the reviewed allowlist, where each entry excuses exactly one site; the CSS forms fail `lint:css`. Known people's words in other modules (a CalDAV account name in Settings and the calendar rail, an email sender in a row menu, the booking host's name) are listed as debt for their rebuilds; a test keeps Tasks out of that list and checks each file has exactly as many sites as entries.
+  - Why: the spec's `lint:controls` never landed on this line (the control-sizing branch is not an ancestor), and a third linter would duplicate `lint:tw`'s walk; a fail-closed allowlist is the only static check that can't miss a new name.
+  - Rejected: a denylist of "user-looking" property names (misses the next one); fixing the three other-module sites now (DS-5's sweep is retired).
+- **Native date, time and number inputs give way to `DateField`, `TimeInput` and `NumberInput`** → DS-6 (`date-field.tsx`, `input.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: `TimeInput` is a token text field that shows "3:00 PM", takes "15:00", "3pm" or "1530", commits on Enter or blur and steps 15 minutes on ↑ / ↓; `NumberInput` takes digits only, clamps and steps; DateField's trigger reads "Oct 16, 3:00 PM" (call 41). Tasks adopts them now; Calendar, Email, Contacts, Settings and the dashboard keep their native inputs until each is rebuilt. Inside a date picker (TV-P0's save-once draft) the time field is "live": a time that looks finished ("3pm", "15:30", "1530") goes into the draft as you type, so a click outside that closes the picker before any blur keeps it, and clearing the field puts back the time from before you typed (an empty field never saves a stray digit).
+  - Why: the fix list's "native inputs"; a native time field draws browser chrome inside token UI and ignores the 12-hour grammar.
+  - Rejected: keeping `<Input type="time">` inside DateField (still the browser's own control).
+
 ## 2026-10-10 · TV-U2 (tasks-v3 block 6): toolbar, Filter, Display, search — the agent's choices (deferred to by Maciej)
 
 Built in tasks-v3 block 6 (#330 re-scoped; [specs/tasks-v3.md](../../specs/tasks-v3.md) AC11.2–11.3, AC1.4, AC13.3) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.

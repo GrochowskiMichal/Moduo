@@ -108,8 +108,9 @@ async function setGroupBy(page: Page, label: string): Promise<string[]> {
 /** The List's group headers, in order, without their counts. */
 async function groupHeaders(page: Page): Promise<string[]> {
   const grid = page.getByRole("grid");
-  const texts = await grid.locator(":scope > div > button").allTextContents();
-  return texts.map((t) => t.replace(/\d+$/, "").trim());
+  // DS-6's GroupHeader: the label sits in its own slot, apart from the count.
+  const texts = await grid.locator('[data-slot="group-header-label"]').allTextContents();
+  return texts.map((t) => t.trim());
 }
 
 test("AC11.3 — one Date grouping: Earlier · Today · Tomorrow · five day names · Later · No date", async ({

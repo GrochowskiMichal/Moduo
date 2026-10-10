@@ -19,6 +19,7 @@
   },
   "include": [
     "src",
+    ".storybook/preview.tsx",
     "rsbuild.config.ts",
     "playwright.config.ts",
     "scripts/brand",

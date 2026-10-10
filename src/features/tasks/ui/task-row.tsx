@@ -1,5 +1,5 @@
 import type { DraggableSyntheticListeners } from "@dnd-kit/core";
-import { Check, ChevronDown, ChevronRight, CornerDownRight, Inbox } from "lucide-react";
+import { ChevronDown, ChevronRight, CornerDownRight, Inbox } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { SELECTED_ROW } from "@/components/ui/selection";
 import { CompleteToggle } from "../../../components/ui/complete-toggle";
@@ -17,6 +17,13 @@ import {
 } from "../../../components/ui/context-menu";
 import { DatePickerPanel, useDateDraft } from "../../../components/ui/date-field";
 import { DROP_TARGET } from "../../../components/ui/drag-visuals";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "../../../components/ui/dropdown-menu";
 import { Input } from "../../../components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
@@ -189,7 +196,8 @@ export function TaskRow({
                 aria-expanded={expanded}
                 aria-label={expanded ? "Collapse subtasks" : "Expand subtasks"}
                 className={cn(
-                  "flex size-4 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  // hit-min pads the pointer target to 24 px; the glyph stays put.
+                  "hit-min flex size-4 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   done && "opacity-40",
                 )}
                 onClick={(e) => {
@@ -332,7 +340,7 @@ export function TaskRow({
           >
             {task.assigneeId ? (
               <>
-                <AssigneeAvatar assignee={assignee} size="icon" />
+                <AssigneeAvatar assignee={assignee} assigneeId={task.assigneeId} size="icon" />
                 {assignee ? firstName(assignee.name) : assigneeName}
               </>
             ) : null}
@@ -347,7 +355,7 @@ export function TaskRow({
                     role="img"
                     aria-label={`Assignee: ${assigneeName}`}
                   >
-                    <AssigneeAvatar assignee={assignee} size="icon" />
+                    <AssigneeAvatar assignee={assignee} assigneeId={task.assigneeId} size="icon" />
                   </span>
                 </TooltipTrigger>
                 <TooltipContent>{assigneeName}</TooltipContent>
@@ -504,7 +512,11 @@ function TitleEditor({
         else if (e.key === "Escape") end(false);
       }}
       onBlur={() => end(true)}
-      className="h-7 px-1.5 py-0 font-display text-sm"
+      // Bare and in the row title's own face and size, so the text doesn't
+      // change when editing starts (content, not chrome: R4).
+      variant="bare"
+      size="sm"
+      className="font-sans text-md"
     />
   );
 }
@@ -610,10 +622,10 @@ function DateCell({
         onEscapeKeyDown={draft.cancel}
         align="end"
       >
-        <p className="px-3 pt-2.5 font-sans text-xs font-medium text-muted-foreground">
-          {kind === "schedule" ? "Scheduled time" : "Due date"}
-        </p>
-        <DatePickerPanel draft={draft} />
+        <DatePickerPanel
+          draft={draft}
+          heading={kind === "schedule" ? "Scheduled time" : "Due date"}
+        />
       </PopoverContent>
     </Popover>
   );
@@ -655,50 +667,53 @@ function BucketPopover({
   const options = inboxId
     ? [{ id: inboxId, name: "Inbox", isSystem: true }, ...buckets.filter((b) => b.id !== inboxId)]
     : buckets;
+  // A menu, not a hand-rolled list (DS-6, visual audit B11): arrow keys and
+  // typeahead come with it. Where the bucket is implied the trigger stays in
+  // the row but takes no width and can't be seen or tabbed to, so opening the
+  // menu with `b` anchors it without moving the row (R6: never `hidden → flex`).
   return (
-    <Popover open={open} onOpenChange={onOpenChange}>
-      <PopoverTrigger asChild disabled={!canEdit}>
+    // Not modal, like the row's date popovers: a trapped focus scope would pull
+    // focus back from the list when Esc hands it there.
+    <DropdownMenu open={open} onOpenChange={onOpenChange} modal={false}>
+      <DropdownMenuTrigger asChild disabled={!canEdit}>
         <button
           type="button"
           onClick={(e) => e.stopPropagation()}
           aria-label={`Bucket: ${bucketName}`}
+          tabIndex={showLabel ? undefined : -1}
+          aria-hidden={showLabel ? undefined : true}
+          data-implied={showLabel ? undefined : ""}
           className={cn(
-            "min-w-0 shrink-3 rounded-sm px-1 transition-colors duration-(--motion-fade) ease-(--ease-out)",
+            "flex min-w-0 shrink-3 rounded-sm px-1 transition-colors duration-(--motion-fade) ease-(--ease-out)",
             canEdit && "hover:bg-state-hover",
-            showLabel || open ? "flex" : "hidden",
+            // Takes no width and gives back the row's gap, so nothing shifts.
+            !showLabel && "pointer-events-none -ms-2.5 w-0 overflow-hidden px-0 opacity-0",
           )}
         >
           <BucketLabel name={bucketName} isInbox={task.bucketId === inboxId} />
         </button>
-      </PopoverTrigger>
-      <PopoverContent
-        className="w-48 p-1"
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        className="w-48"
         onClick={(e) => e.stopPropagation()}
         onCloseAutoFocus={keepListFocus}
         align="end"
       >
-        <div className="max-h-64 overflow-auto">
+        <DropdownMenuRadioGroup
+          value={task.bucketId ?? ""}
+          onValueChange={(id) => {
+            if (id !== task.bucketId) api.patchTask(task.id, { bucketId: id });
+          }}
+        >
           {options.map((b) => (
-            <button
-              key={b.id}
-              type="button"
-              className={cn(
-                "flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-state-hover",
-                b.id === task.bucketId && "text-foreground",
-              )}
-              onClick={() => {
-                if (b.id !== task.bucketId) api.patchTask(task.id, { bucketId: b.id });
-                onOpenChange(false);
-              }}
-            >
-              {b.isSystem ? <Inbox className="size-3.5 text-muted-foreground" aria-hidden /> : null}
+            <DropdownMenuRadioItem key={b.id} value={b.id}>
+              {b.isSystem ? <Inbox aria-hidden /> : null}
               <span className="truncate">{b.name}</span>
-              {b.id === task.bucketId ? <Check className="ml-auto size-3.5" aria-hidden /> : null}
-            </button>
+            </DropdownMenuRadioItem>
           ))}
-        </div>
-      </PopoverContent>
-    </Popover>
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 

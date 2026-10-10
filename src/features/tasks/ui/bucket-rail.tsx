@@ -351,7 +351,8 @@ function DriftMark({ label, onTriage }: { label: string; onTriage?: () => void }
             type="button"
             aria-label={label}
             onClick={onTriage}
-            className="flex size-4 items-center justify-center rounded-sm outline-none hover:bg-state-active focus-visible:ring-2 focus-visible:ring-ring/50"
+            // hit-min pads the pointer target to 24 px; the dot stays put.
+            className="hit-min flex size-4 items-center justify-center rounded-sm outline-none hover:bg-state-active focus-visible:ring-2 focus-visible:ring-ring/50"
           >
             {dot}
           </button>

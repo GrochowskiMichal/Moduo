@@ -235,8 +235,10 @@ describe("Display → Rows: Standard · Detailed", () => {
 
   // The project's control is in every editable row; inside the project it
   // stays out of sight in Standard (implied by the scope).
+  // Where the project is implied the trigger stays, taking no width (DS-6).
+  // (It is aria-hidden then, so look it up by its label, not its role.)
   const projectShown = (row: HTMLElement) =>
-    !within(row).getByRole("button", { name: "Bucket: Work" }).classList.contains("hidden");
+    !row.querySelector('[aria-label="Bucket: Work"]')?.hasAttribute("data-implied");
 
   it("Standard keeps TV-U1's columns", () => {
     renderList(rows);
@@ -442,8 +444,11 @@ describe("Board (U1-4)", () => {
     expect(card("Task d")).toBeTruthy();
   });
 
+  // The column's name in its kit GroupHeader (DS-6), without the count.
   const headers = () =>
-    [...document.querySelectorAll("section > header")].map((h) => h.firstChild?.textContent);
+    [...document.querySelectorAll("section > header")].map(
+      (h) => h.querySelector('[data-slot="group-header-label"]')?.textContent,
+    );
 
   it("Filter → Status shows only the groups it lets through: Won't do on its own", () => {
     renderBoard([task("w", { status: "archived" })], {

@@ -2,6 +2,7 @@ import { Popover as PopoverPrimitive } from "radix-ui";
 import type * as React from "react";
 
 import { cn } from "@/lib/utils";
+import { FLOATING_SURFACE } from "./surface";
 
 function Popover({ ...props }: React.ComponentProps<typeof PopoverPrimitive.Root>) {
   return <PopoverPrimitive.Root data-slot="popover" {...props} />;
@@ -16,18 +17,20 @@ function PopoverContent({
   align = "center",
   sideOffset = 4,
   style,
+  container,
   ...props
-}: React.ComponentProps<typeof PopoverPrimitive.Content>) {
+}: React.ComponentProps<typeof PopoverPrimitive.Content> & {
+  /** Where the surface mounts (default: the body). A surface takes the density
+   *  of the element it mounts in, so a story can show it at each step. */
+  container?: HTMLElement | null;
+}) {
   return (
-    <PopoverPrimitive.Portal>
+    <PopoverPrimitive.Portal container={container ?? undefined}>
       <PopoverPrimitive.Content
         data-slot="popover-content"
         align={align}
         sideOffset={sideOffset}
-        className={cn(
-          "motion-pop w-72 rounded-md border border-border bg-popover p-4 text-popover-foreground outline-none",
-          className,
-        )}
+        className={cn(FLOATING_SURFACE, "w-72 p-4 outline-none", className)}
         style={{
           zIndex: "var(--z-popover)",
           boxShadow: "var(--shadow-md)",

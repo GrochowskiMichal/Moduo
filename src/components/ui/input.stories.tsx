@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react";
+import { useState } from "react";
 
-import { Input } from "./input";
+import { Input, NumberInput } from "./input";
 import { Label } from "./label";
 
 const meta: Meta<typeof Input> = {
@@ -66,4 +67,29 @@ export const Sizes: Story = {
       <Input size="sm" placeholder="sm — --ctrl-h-sm" />
     </div>
   ),
+};
+
+/**
+ * The token number field that replaced the native `<input type="number">`:
+ * no spinner chrome, digits only, ↑ / ↓ step, clamped on Enter or blur.
+ */
+export const NumberField: Story = {
+  render: () => {
+    const [minutes, setMinutes] = useState<number | null>(25);
+    return (
+      <div className="flex items-center gap-2">
+        <NumberInput
+          value={minutes}
+          onValueChange={setMinutes}
+          min={1}
+          max={480}
+          step={5}
+          size="sm"
+          className="w-20"
+          aria-label="Minutes"
+        />
+        <span className="font-sans text-xs text-muted-foreground">min</span>
+      </div>
+    );
+  },
 };

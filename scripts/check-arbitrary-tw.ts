@@ -9,10 +9,15 @@
  * escape hatch, and one-off *geometry* (top-/left-/h-/w-/translate-/inset-[…])
  * which is never a design-system property. Paths in IGNORED_PATHS are skipped
  * (the RN shim + the curated legacy backlog). Exits non-zero on hits.
+ *
+ * Also runs the text rules (scripts/check-text-rules.ts, DS-6): text is never
+ * rotated (call 46a), and small caps never carry people's words (call 40).
  */
 
 import { promises as fs } from "node:fs";
 import path from "node:path";
+
+import { scanTextRules } from "./check-text-rules";
 
 type Pattern = { name: string; regex: RegExp };
 
@@ -96,6 +101,7 @@ const PATTERNS: Pattern[] = [
 const IGNORED_PATHS: string[] = [
   // This gate's own test fixtures — the probe strings ARE violations by design.
   "src/components/design-lint.test.ts",
+  "src/components/text-rules.test.ts",
 
   // React Native compatibility shim — intentionally untouched per AGENTS.md.
   "src/tw",
@@ -202,6 +208,7 @@ function scanFile(content: string, file: string): Hit[] {
       }
     }
   }
+  for (const hit of scanTextRules(content, file)) hits.push({ file, ...hit });
   return hits;
 }
 
@@ -242,6 +249,16 @@ async function main() {
     }
   }
   console.error(`\nlint:tw — design-system properties must use semantic tokens (see AGENTS.md).`);
+  if (allHits.some((h) => h.pattern.startsWith("rotated-text"))) {
+    console.error(
+      "lint:tw — rotated-text: text is never turned sideways (tasks-v3 call 46a). Lay the label out horizontally; a 90° turn is allowed only on an icon (<svg>, a lucide icon, …Icon / Chevron… / Arrow…).",
+    );
+  }
+  if (allHits.some((h) => h.pattern.startsWith("small-caps"))) {
+    console.error(
+      "lint:tw — small-caps: people's words are never capitalised (call 40). A group named by a person uses <GroupHeader> (sentence case); <Eyebrow> is for fixed chrome. If the value is fixed chrome, add it to SMALL_CAPS_CHROME in scripts/check-text-rules.ts with where it comes from.",
+    );
+  }
   process.exit(1);
 }
 
