@@ -531,9 +531,11 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   // (a failed fetch leaves an empty bundle with api.error set; resolving
   // against that would wrongly strip a valid id — hold until Retry succeeds).
   // A fresh external open (marked by the app-chrome listener) gets the full
-  // "take me there" treatment: plan mode + filters and search cleared if they
-  // hide the target. A mirrored id arriving back on refresh/back-forward restores the
-  // selection quietly and keeps the user's mode/filter. Scope snaps to the
+  // "take me there" treatment: plan mode. Filters and search are never
+  // cleared (they're saved per scope): the target stays listed past them
+  // while it's selected (`keepTaskId`, TV-U2). A mirrored id arriving back on
+  // refresh/back-forward restores the selection quietly and keeps the user's
+  // mode. Scope snaps to the
   // task's bucket unless the current scope already shows it. A bucket id (a
   // `project` link) scopes the rail; a stale or archived id clears quietly and
   // the backstop above picks the default (AC: no crash).
