@@ -4,7 +4,7 @@
  * (MCC-1; tool catalog in docs/moduo-mcp-connector.md).
  */
 
-import { isOpenTaskStatus } from "./contracts/vocabularies.ts";
+import { isOpenTask, normalizeTaskStatusCategory } from "./contracts/vocabularies.ts";
 import { assigneeIdOf, taskPeople } from "./task-people.ts";
 
 type Row = Record<string, any>;
@@ -185,8 +185,17 @@ export async function readAllPages<T>(
   return out;
 }
 
+/** A row's state through the one open rule (TV-D9): its category, else its
+ *  legacy status (a row from before TV-D9). */
+export function rowTaskState(t: Row): { status: unknown; statusCategory: ReturnType<typeof normalizeTaskStatusCategory> | null } {
+  return {
+    status: t.status,
+    statusCategory: t.status_category ? normalizeTaskStatusCategory(t.status_category) : null,
+  };
+}
+
 export function isDrifted(t: Row, now: Date): boolean {
-  if (!isOpenTaskStatus(t.status)) return false;
+  if (!isOpenTask(rowTaskState(t))) return false;
   return !!t.scheduled_at && new Date(t.scheduled_at).getTime() < now.getTime();
 }
 
@@ -211,6 +220,12 @@ export function shapeTask(t: Row, data: ShapeData, now: Date, full = false): Row
   const description = (t.description ?? "").trim();
   if (description) out.description = full ? description : description.slice(0, 280);
   if (t.parent_id && data.byId.has(t.parent_id)) out.parent_id = t.parent_id;
+  // TV-D9: the status's category (backlog · todo · in_progress · done ·
+  // wont_do) and the due date as a date, the same for everyone (due_date is
+  // its noon-UTC mirror until TV-D7), plus an optional due time.
+  if (t.status_category) out.status_category = t.status_category;
+  if (t.due_on) out.due_on = t.due_on;
+  if (t.due_time) out.due_time = t.due_time;
   if (t.due_date) out.due_date = t.due_date;
   if (t.scheduled_at) out.scheduled_at = t.scheduled_at;
   if (t.duration_minutes != null) out.duration_minutes = t.duration_minutes;

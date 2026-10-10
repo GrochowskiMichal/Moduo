@@ -129,6 +129,10 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
   const canEdit = modulePermission === "edit" || modulePermission === "admin";
 
   const [bundle, setBundle] = useState<TasksModuleBundle>(EMPTY_BUNDLE);
+  // ── drops (TV-U4) ───────────────────────────────────────────────────────────
+  /** The rows as they are now, for a save or an Undo that runs later. */
+  const tasksRef = useRef(bundle.tasks);
+  tasksRef.current = bundle.tasks;
   /** Every queue row I can see here (TV-D2): my line-up and others' claims. */
   const [queueRows, setQueueRows] = useState<TaskQueueEntry[]>([]);
   /** My rows for tasks completed since the last load: the server has dropped
@@ -589,7 +593,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         toast.error("Still saving that task — try again in a moment.");
         return;
       }
-      const current = bundle.tasks.find((t) => t.id === id);
+      const current = tasksRef.current.find((t) => t.id === id);
       const toTodo =
         current && optimistic.scheduledAt && optimistic.statusCategory === undefined
           ? backlogToTodo(current)
@@ -608,7 +612,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
           void load();
         });
     },
-    [runtime, workspaceId, canEdit, patchTaskLocal, load, bundle.tasks, backlogToTodo],
+    [runtime, workspaceId, canEdit, patchTaskLocal, load, backlogToTodo],
   );
 
   /** Fetch a task's quiet activity trail (newest first). */
@@ -1697,11 +1701,6 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     },
     [liveTasks, subtasksByParent, patchTask],
   );
-
-  // ── drops (TV-U4) ───────────────────────────────────────────────────────────
-  /** The rows as they are now, for a save or an Undo that runs later. */
-  const tasksRef = useRef(bundle.tasks);
-  tasksRef.current = bundle.tasks;
 
   /**
    * Save one task's drop writes (`TaskDropWrite`): shown at once, then sent

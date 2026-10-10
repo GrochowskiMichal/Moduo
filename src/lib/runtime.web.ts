@@ -33,9 +33,10 @@ import {
   taskRelationRowSchema,
 } from "@contracts/rows";
 import {
-  isOpenTaskStatus,
+  isOpenTask,
   normalizeAttachmentStatus,
   normalizeContentAuthorKind,
+  normalizeTaskStatusCategory,
 } from "@contracts/vocabularies";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import * as Y from "yjs";
@@ -3406,22 +3407,34 @@ async function loadOverdueFollowups(workspaceId: string): Promise<OverdueFollowu
   const taskIds = [...taskToContact.keys()];
   if (taskIds.length === 0) return [];
 
+  // Whole rows (a handful): the date and category columns exist only from
+  // TV-D9 on, and naming one a database doesn't have fails the read.
   const { data: tasks, error: tErr } = await supabaseClient
     .from("tasks")
-    .select("id, due_date, status")
+    .select("*")
     .eq("workspace_id", workspaceId)
     .in("id", taskIds)
     .is("deleted_at", null);
   if (tErr) throw new Error(tErr.message);
 
-  // tasks.due_date is a timestamptz (stored from local midnight → UTC), so
-  // normalize it back to a local calendar date before comparing / surfacing —
-  // a raw lexical compare against "today" is off by a day for users east of UTC.
+  // The due date is a date since TV-D9 (due_on, the same for everyone). A row
+  // from before it has only the timestamptz (stored from local midnight →
+  // UTC), normalized back to a local calendar date before comparing. Backlog
+  // is never late (REPLAN 53), so only open tasks count.
   const today = localToday();
   const overdue: OverdueFollowup[] = [];
   for (const t of tasks ?? []) {
-    if (!t.due_date || !isOpenTaskStatus(t.status)) continue;
-    const dueLocal = localDateOf(new Date(t.due_date));
+    const open = isOpenTask({
+      status: t.status,
+      statusCategory: t.status_category ? normalizeTaskStatusCategory(t.status_category) : null,
+    });
+    const dueLocal =
+      typeof t.due_on === "string"
+        ? t.due_on
+        : t.due_date
+          ? localDateOf(new Date(t.due_date))
+          : null;
+    if (!dueLocal || !open) continue;
     if (dueLocal < today) {
       const contactId = taskToContact.get(t.id);
       if (contactId) overdue.push({ contactId, dueDate: dueLocal });

@@ -18,6 +18,7 @@ const DAY_MS = 86_400_000;
 
 /** Sentence-case labels for the fixed task lifecycle statuses. */
 const TASK_STATUS_LABEL: Record<string, string> = {
+  backlog: "Backlog",
   todo: "To do",
   in_progress: "In progress",
   done: "Done",

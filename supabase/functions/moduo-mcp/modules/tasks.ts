@@ -19,7 +19,8 @@ import {
   ENERGY_LEVELS,
   PRIORITY_LEVELS,
   TASK_STATUSES,
-  isOpenTaskStatus,
+  isClosedTask,
+  isOpenTask,
   isTaskStatus,
 } from "../../_shared/contracts/vocabularies.ts";
 import { assigneeCandidates, resolveAssigneeArg } from "../../_shared/task-people.ts";
@@ -29,6 +30,7 @@ import {
   focusSettingsFrom,
   isDrifted,
   orderByBucket,
+  rowTaskState,
   pageOf,
   parseAssignee,
   readAllPages,
@@ -109,7 +111,8 @@ async function loadWorkspace(ctx: ToolContext) {
   const byId = new Map(tasks.map((t) => [t.id, t]));
   const open = (id: string) => {
     const t = byId.get(id);
-    return !!t && isOpenTaskStatus(t.status);
+    // A backlog blocker still blocks (TV-D9): only finished ones don't.
+    return !!t && !isClosedTask(rowTaskState(t));
   };
   const blockedIds = new Set(
     relations.filter((r) => open(r.blocker_task_id) && byId.has(r.blocked_task_id))
@@ -152,6 +155,11 @@ function taskFieldsFromArgs(args: Row): Row {
   if (typeof args.description === "string") fields.description = args.description;
   for (const name of ["due_date", "scheduled_at"]) {
     if (!(name in args)) continue;
+    // TV-D9: a due date given as a date alone is that date for everyone.
+    if (name === "due_date" && typeof args[name] === "string" && /^\d{4}-\d{2}-\d{2}$/.test(args[name] as string)) {
+      fields.due_on = args[name];
+      continue;
+    }
     fields[name] = args[name] === null ? null : isoOrThrow(str(args, name), name);
   }
   if ("duration_minutes" in args) fields.duration_minutes = args.duration_minutes ?? null;
@@ -296,7 +304,8 @@ export const tasksConnectorModule: ConnectorModule = {
         const bucketId = str(args, "bucket_id", false);
         let list = filterByAssignee(data.tasks, parseAssignee(args.assignee), ctx.key.createdBy);
         if (bucketId) list = list.filter((t) => t.bucket_id === bucketId);
-        if (status === "open") list = list.filter((t) => isOpenTaskStatus(t.status));
+        // Open = To do or In progress (TV-D9's one rule: Backlog is parked).
+        if (status === "open") list = list.filter((t) => isOpenTask(rowTaskState(t)));
         else if (isTaskStatus(status)) list = list.filter((t) => t.status === status);
         if (args.top_level === true) list = topLevelOnly(list, new Set(list.map((t) => t.id)));
         const buckets = await rows(
