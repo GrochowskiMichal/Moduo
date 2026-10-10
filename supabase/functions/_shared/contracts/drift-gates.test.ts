@@ -26,6 +26,7 @@ import {
   MEMBER_DB_PERMISSIONS,
   MEMBER_DB_ROLES,
   PLAN_TIERS,
+  TASK_STATUS_CATEGORIES,
   TASK_STATUSES,
   TASK_TIME_ACTIONS,
   TASK_TIME_ENTRY_KINDS,
@@ -134,6 +135,15 @@ describe("cross-runtime drift guards", () => {
 
   it("task statuses stay the closed set used by MCP parsers", () => {
     expect(TASK_STATUSES).toEqual(["todo", "in_progress", "done", "archived"]);
+  });
+
+  it("task status categories match the project_statuses and tasks CHECKs (TV-D9)", () => {
+    const sql = readFileSync(resolve(MIGRATIONS_DIR, "20261010170000_project_statuses.sql"), "utf8");
+    const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(",");
+    expect(sql).toContain(`CHECK (category IN (${inList(TASK_STATUS_CATEGORIES)}))`);
+    expect(sql).toContain(`CHECK (status_category IN (${inList(TASK_STATUS_CATEGORIES)}))`);
+    // The server's word reader and legacy mirror know every category.
+    for (const c of TASK_STATUS_CATEGORIES) expect(sql).toContain(`THEN '${c}'`);
   });
 
   it("every MCP module tool name has a TOOL_ARG_SCHEMAS parser and vice versa", () => {

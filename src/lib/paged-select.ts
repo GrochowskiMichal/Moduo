@@ -36,6 +36,7 @@ export const READ_CAPS = {
   tagLinks: 10000,
   taskRelations: 10000,
   taskCompletions: 20000,
+  projectStatuses: 10000,
   taskQueue: 5000,
   notes: 5000,
   contacts: 10000,

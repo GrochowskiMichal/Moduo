@@ -59,6 +59,15 @@ export const taskRowSchema = z.object({
   status: z.string().optional(),
   /** The handle number (TV-D8); absent on a database before that migration. */
   number: optNum,
+  /** TV-D9: the project status, its category (lax, like status), when and by
+   *  whom it was finished, and the due date as a date plus an optional time.
+   *  All absent on a database before that migration. */
+  status_id: optStr,
+  status_category: z.string().nullable().optional(),
+  completed_at: optStr,
+  completed_by: optStr,
+  due_on: optStr,
+  due_time: optStr,
   committed_for: optStr,
   commit_order: optNum,
   reschedule_count: optNum,
@@ -81,6 +90,22 @@ export const taskCompletionRowSchema = z.object({
   deleted_at: optStr,
 });
 export type TaskCompletionRow = z.infer<typeof taskCompletionRowSchema>;
+
+/** A project_statuses row (TV-D9): one status of a project, or of the
+ *  workspace default set (project_id null). The category is lax on read. */
+export const projectStatusRowSchema = z.object({
+  id,
+  workspace_id: id,
+  project_id: optStr,
+  category: z.string(),
+  name: z.string(),
+  position: optNum,
+  hidden: z.boolean().optional(),
+  created_at: z.string(),
+  updated_at: z.string(),
+  deleted_at: optStr,
+});
+export type ProjectStatusRow = z.infer<typeof projectStatusRowSchema>;
 
 /** Notes meta row — v2 columns optional so pre-migration (legacy) reads still parse. */
 export const noteRowSchema = z.object({

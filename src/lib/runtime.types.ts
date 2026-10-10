@@ -40,6 +40,7 @@ import type {
   ActivityEntry,
   Bucket,
   QueuePlacement,
+  ProjectStatus,
   RecurrenceRule,
   Tag,
   TagLink,
@@ -48,6 +49,7 @@ import type {
   TaskQueueEntry,
   TaskRelation,
   TaskStatus,
+  TaskStatusCategory,
   TasksCatchUpItem,
   TasksModuleBundle,
   TaskTimeResult,
@@ -899,6 +901,36 @@ export type ModuoRuntime = {
     listCompletions(
       workspaceId: string,
     ): Promise<{ completions: TaskCompletion[]; truncated: Truncation[] }>;
+    /**
+     * Statuses (TV-D9): every status the reader can see (the workspace default
+     * set and each visible project's). Empty before the migration.
+     */
+    listStatuses(workspaceId: string): Promise<ProjectStatus[]>;
+    /**
+     * Status ops (`project_statuses_op_*`): add a status at the end of its
+     * category in a project (null = the workspace default set); rename, hide
+     * or show, and reorder inside the category (`after`: the status to follow,
+     * null for first). Each answers with the whole set, in order.
+     */
+    createStatus(input: {
+      workspaceId: string;
+      projectId: string | null;
+      category: TaskStatusCategory;
+      name: string;
+    }): Promise<ProjectStatus[]>;
+    updateStatus(input: {
+      workspaceId: string;
+      statusId: string;
+      patch: { name?: string; hidden?: boolean; after?: string | null };
+    }): Promise<ProjectStatus[]>;
+    /**
+     * Delete a status: its tasks move to the first other status of its
+     * category (`movedToName`); the last status of a category can't go.
+     */
+    deleteStatus(input: {
+      workspaceId: string;
+      statusId: string;
+    }): Promise<{ moved: number; movedTo: string | null; movedToName: string | null }>;
     upsertTag(tag: Tag): Promise<Tag>;
     deleteTag(input: { workspaceId: string; tagId: string }): Promise<void>;
     attachTag(input: {
@@ -1014,7 +1046,12 @@ export type ModuoRuntime = {
     opSetStatus(input: {
       workspaceId: string;
       taskId: string;
-      status: TaskStatus;
+      /**
+       * A legacy status, a category word (`backlog`, `wont_do`, …), one of the
+       * project's status ids or one of its status names (TV-D9). The server
+       * keeps a status already in a category it's given.
+       */
+      status: TaskStatus | TaskStatusCategory | (string & {});
       recurrence?: RecurrenceRule | null;
       position?: string;
     }): Promise<Task>;

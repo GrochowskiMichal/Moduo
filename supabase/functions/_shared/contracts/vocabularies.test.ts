@@ -333,7 +333,7 @@ describe("normalizeTaskStatus / isOpenTaskStatus (TV-D8: old builds tolerate new
     expect(normalizeTaskStatus(42)).toBe("todo");
   });
 
-  it("has one open rule", () => {
+  it("has one open rule for the legacy values", () => {
     expect([...TASK_OPEN_STATUSES]).toEqual(["todo", "in_progress"]);
     expect(isOpenTaskStatus("todo")).toBe(true);
     expect(isOpenTaskStatus("in_progress")).toBe(true);
@@ -457,5 +457,60 @@ describe("content author kinds (chat messages and comments)", () => {
     expect(v.normalizeContentAuthorKind(undefined)).toBe("user");
     expect(v.normalizeContentAuthorKind("bot")).toBe("user");
     expect(v.isContentAuthorKind("bot")).toBe(false);
+  });
+});
+
+describe("task status categories (TV-D9, REPLAN 53/53a)", () => {
+  it("are the five fixed categories, in order", async () => {
+    const v = await import("./vocabularies.ts");
+    expect([...v.TASK_STATUS_CATEGORIES]).toEqual([
+      "backlog",
+      "todo",
+      "in_progress",
+      "done",
+      "wont_do",
+    ]);
+    expect(v.isTaskStatusCategory("backlog")).toBe(true);
+    expect(v.isTaskStatusCategory("archived")).toBe(false);
+  });
+
+  it("parse is strict, normalize reads legacy values and people's words", async () => {
+    const v = await import("./vocabularies.ts");
+    expect(v.parseTaskStatusCategory("wont_do").success).toBe(true);
+    expect(v.parseTaskStatusCategory("archived").success).toBe(false);
+    expect(v.parseTaskStatusCategory("To do").success).toBe(false);
+    expect(v.normalizeTaskStatusCategory("archived")).toBe("wont_do");
+    expect(v.normalizeTaskStatusCategory("Won't do")).toBe("wont_do");
+    expect(v.normalizeTaskStatusCategory("To do")).toBe("todo");
+    expect(v.normalizeTaskStatusCategory("In progress")).toBe("in_progress");
+    expect(v.normalizeTaskStatusCategory("Backlog")).toBe("backlog");
+    expect(v.normalizeTaskStatusCategory("in_review")).toBe("in_progress");
+    expect(v.normalizeTaskStatusCategory("shipped")).toBe("todo");
+    expect(v.normalizeTaskStatusCategory(null)).toBe("todo");
+  });
+
+  it("mirror the legacy column like the server does", async () => {
+    const v = await import("./vocabularies.ts");
+    expect(v.TASK_STATUS_CATEGORIES.map(v.legacyTaskStatus)).toEqual([
+      "todo",
+      "todo",
+      "in_progress",
+      "done",
+      "archived",
+    ]);
+  });
+
+  it("one open rule: Backlog is neither open nor closed", async () => {
+    const v = await import("./vocabularies.ts");
+    const backlog = { status: "todo", statusCategory: "backlog" as const };
+    expect(v.isOpenTask(backlog)).toBe(false);
+    expect(v.isClosedTask(backlog)).toBe(false);
+    expect(v.isBacklogTask(backlog)).toBe(true);
+    expect(v.isOpenTask({ status: "in_progress" })).toBe(true);
+    expect(v.isClosedTask({ status: "archived" })).toBe(true);
+    expect(v.isClosedTask({ status: "todo", statusCategory: "wont_do" as const })).toBe(true);
+    // A row from before TV-D9 has no category: its legacy status decides.
+    expect(v.taskCategoryOf({ status: "archived" })).toBe("wont_do");
+    expect(v.taskCategoryOf({ status: "todo", statusCategory: null })).toBe("todo");
   });
 });

@@ -66,6 +66,7 @@ import type { RawLinkSuggestion } from "../features/spine/suggest";
 import {
   type ActivityEntry,
   type Bucket,
+  type ProjectStatus,
   sanitizeTimeBlocks,
   type Task,
   type TaskQueueEntry,
@@ -114,6 +115,8 @@ import {
   isMissingColumnError,
   isMissingFunctionError,
   isMissingTableError,
+  isMissingTvD9FieldError,
+  projectStatusRowToModel,
   sortQueueEntries,
   type TaskFieldPatch,
   tagLinkRowToModel,
@@ -128,6 +131,7 @@ import {
   taskRowToModel,
   taskTimeAnswerToModel,
   taskTimeTotalsRowToModel,
+  withoutTvD9Fields,
 } from "./task-rows";
 
 // ── Supabase client ────────────────────────────────────────────────────────────
@@ -2096,7 +2100,7 @@ export const webRuntime: ModuoRuntime = {
           .is("deleted_at", null);
       const all = (table: string) => (opts?: SelectOpts) =>
         supabaseClient.from(table).select("*", opts).eq("workspace_id", workspaceId);
-      const [bucketsRes, tasksRes, tagsRes, linksRes, relationsRes] = await Promise.all([
+      const [bucketsRes, tasksRes, tagsRes, linksRes, relationsRes, statusesRes] = await Promise.all([
         selectCapped<any>({
           scope: "buckets",
           cap: READ_CAPS.buckets,
@@ -2127,6 +2131,7 @@ export const webRuntime: ModuoRuntime = {
           build: all("task_relations"),
           order: (q) => q.order("id"),
         }),
+        listWorkspaceStatuses(workspaceId),
       ]);
       const firstError =
         bucketsRes.error || tasksRes.error || tagsRes.error || linksRes.error || relationsRes.error;
@@ -2137,13 +2142,55 @@ export const webRuntime: ModuoRuntime = {
         tags: mapKnownRows(tagsRes.rows, tagRowToModel),
         tagLinks: mapKnownRows(linksRes.rows, tagLinkRowToModel),
         taskRelations: mapKnownRows(relationsRes.rows, taskRelationRowToModel),
+        statuses: statusesRes.statuses,
         truncated: collectTruncations(
           bucketsRes.truncation,
           tasksRes.truncation,
           tagsRes.truncation,
           linksRes.truncation,
           relationsRes.truncation,
+          statusesRes.truncation,
         ),
+      };
+    },
+
+    async listStatuses(workspaceId) {
+      const res = await listWorkspaceStatuses(workspaceId);
+      return res.statuses;
+    },
+
+    async createStatus({ workspaceId, projectId, category, name }) {
+      const { data, error } = await supabaseClient.rpc("project_statuses_op_create", {
+        p_workspace_id: workspaceId,
+        p_project_id: projectId,
+        p_category: category,
+        p_name: name,
+      });
+      if (error) throw new Error(error.message);
+      return mapKnownRows(data, projectStatusRowToModel);
+    },
+
+    async updateStatus({ workspaceId, statusId, patch }) {
+      const { data, error } = await supabaseClient.rpc("project_statuses_op_update", {
+        p_workspace_id: workspaceId,
+        p_status_id: statusId,
+        p_patch: patch,
+      });
+      if (error) throw new Error(error.message);
+      return mapKnownRows(data, projectStatusRowToModel);
+    },
+
+    async deleteStatus({ workspaceId, statusId }) {
+      const { data, error } = await supabaseClient.rpc("project_statuses_op_delete", {
+        p_workspace_id: workspaceId,
+        p_status_id: statusId,
+      });
+      if (error) throw new Error(error.message);
+      const answer = (data ?? {}) as { moved?: unknown; moved_to?: unknown; moved_to_name?: unknown };
+      return {
+        moved: typeof answer.moved === "number" ? answer.moved : 0,
+        movedTo: typeof answer.moved_to === "string" ? answer.moved_to : null,
+        movedToName: typeof answer.moved_to_name === "string" ? answer.moved_to_name : null,
       };
     },
 
@@ -2239,10 +2286,18 @@ export const webRuntime: ModuoRuntime = {
       };
       // Every create is the server op (TV-D8): it numbers the task, registers
       // it for search and logs it. The client's id makes a resend idempotent.
-      const op = await supabaseClient.rpc("tasks_op_create", {
+      const input = taskCreateOpInput(created);
+      let op = await supabaseClient.rpc("tasks_op_create", {
         p_workspace_id: task.workspaceId,
-        p_task: taskCreateOpInput(created),
+        p_task: input,
       });
+      // A database before TV-D9 (the merge-before-apply window). Remove in TV-D7.
+      if (isMissingTvD9FieldError(op.error)) {
+        op = await supabaseClient.rpc("tasks_op_create", {
+          p_workspace_id: task.workspaceId,
+          p_task: withoutTvD9Fields(input),
+        });
+      }
       if (!op.error) return taskRowToModel(Array.isArray(op.data) ? op.data[0] : op.data);
       if (!isMissingFunctionError(op.error, "tasks_op_create")) throw new Error(op.error.message);
       // Before TV-D8's migration: the direct insert. Remove in TV-D7.
@@ -3553,16 +3608,50 @@ async function ensureWebInbox(workspaceId: string): Promise<Bucket> {
  * answers with the task, then any subtasks it carried along. Before the
  * migration it falls back to the direct update (remove in TV-D7).
  */
+/**
+ * Every status the reader can see in a workspace (TV-D9): the default set and
+ * each visible project's. Empty on a database before TV-D9.
+ */
+async function listWorkspaceStatuses(
+  workspaceId: string,
+): Promise<{ statuses: ProjectStatus[]; truncation: Truncation | null }> {
+  const res = await selectCapped<any>({
+    scope: "statuses",
+    cap: READ_CAPS.projectStatuses,
+    build: (opts?: SelectOpts) =>
+      supabaseClient
+        .from("project_statuses")
+        .select("*", opts)
+        .eq("workspace_id", workspaceId)
+        .is("deleted_at", null),
+    order: (q) => q.order("position").order("id"),
+  });
+  if (res.error) {
+    if (isMissingTableError(res.error, "project_statuses")) return { statuses: [], truncation: null };
+    throw new Error(res.error.message);
+  }
+  return { statuses: mapKnownRows(res.rows, projectStatusRowToModel), truncation: res.truncation };
+}
+
 async function opUpdateTaskRows(
   workspaceId: string,
   taskId: string,
   patch: TaskFieldPatch,
 ): Promise<Task[]> {
-  const { data, error } = await supabaseClient.rpc("tasks_op_update", {
+  const fields = taskPatchToOpFields(patch);
+  let { data, error } = await supabaseClient.rpc("tasks_op_update", {
     p_workspace_id: workspaceId,
     p_task_id: taskId,
-    p_patch: taskPatchToOpFields(patch),
+    p_patch: fields,
   });
+  // A database before TV-D9 (the merge-before-apply window). Remove in TV-D7.
+  if (isMissingTvD9FieldError(error)) {
+    ({ data, error } = await supabaseClient.rpc("tasks_op_update", {
+      p_workspace_id: workspaceId,
+      p_task_id: taskId,
+      p_patch: withoutTvD9Fields(fields),
+    }));
+  }
   if (!error) {
     const rows = mapKnownRows(data, taskRowToModel);
     if (!rows.length) throw new Error("The task edit returned nothing.");

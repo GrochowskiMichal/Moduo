@@ -3,7 +3,14 @@
 // snappy, keyboard-driven editing; on error they reload from the source of truth
 // and surface a toast. Drift is computed client-side via isDrifted().
 
-import { isOpenTaskStatus } from "@contracts/vocabularies";
+import {
+  isBacklogTask,
+  isOpenTask,
+  legacyTaskStatus,
+  normalizeTaskStatusCategory,
+  type TaskStatusCategory,
+  taskCategoryOf,
+} from "@contracts/vocabularies";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { TAG_LINKS_SCOPE } from "../../../lib/paged-select";
@@ -46,6 +53,7 @@ import {
   type Bucket,
   INBOX_BUCKET_NAME,
   isDrifted,
+  type ProjectStatus,
   type QueuePlacement,
   type RecurrenceRule,
   type Tag,
@@ -72,6 +80,13 @@ import {
   withoutTask,
 } from "../queue";
 import { listenTasksLive } from "../realtime";
+import {
+  CATEGORY_LABELS,
+  optimisticStatus,
+  replaceStatusSet,
+  type StatusTarget,
+  statusSetFor,
+} from "../statuses";
 import { recurrenceOnStatusChange, skipOccurrencePatch } from "../recurrence-engine";
 
 /** An adjustment `logTimeAdjustment` recorded, as its Undo needs it. */
@@ -93,6 +108,7 @@ const EMPTY_BUNDLE: TasksModuleBundle = {
   tags: [],
   tagLinks: [],
   taskRelations: [],
+  statuses: [],
   truncated: [],
 };
 
@@ -328,10 +344,27 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     [liveBuckets],
   );
 
+  // ── statuses (TV-D9) ─────────────────────────────────────────────────────────
+  /** Every status this reader can see: the workspace default set and each
+   *  visible project's (REPLAN 53a). */
+  const statuses = useMemo(() => bundle.statuses ?? [], [bundle.statuses]);
+  const statusById = useMemo(() => new Map(statuses.map((s) => [s.id, s])), [statuses]);
+  const bucketById = useMemo(
+    () => new Map(bundle.buckets.map((b) => [b.id, b])),
+    [bundle.buckets],
+  );
+  /** The statuses a project's tasks use (the Inbox: the workspace default). */
+  const statusesForBucket = useCallback(
+    (bucketId: string): ProjectStatus[] => statusSetFor(statuses, bucketById.get(bucketId)),
+    [statuses, bucketById],
+  );
+
+  /** Open (To do / In progress) tasks per project: the sidebar counts. Backlog
+   *  sits out (TV-D9). */
   const openTaskCountByBucket = useMemo(() => {
     const counts = new Map<string, number>();
     for (const t of liveTasks) {
-      if (!isOpenTaskStatus(t.status)) continue;
+      if (!isOpenTask(t)) continue;
       counts.set(t.bucketId, (counts.get(t.bucketId) ?? 0) + 1);
     }
     return counts;
@@ -435,7 +468,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
 
   /** Open-task count per tag — drives the filter menu (counts, hides empties). */
   const openTaskCountByTag = useMemo(() => {
-    const openIds = new Set(liveTasks.filter((t) => isOpenTaskStatus(t.status)).map((t) => t.id));
+    const openIds = new Set(liveTasks.filter((t) => isOpenTask(t)).map((t) => t.id));
     const counts = new Map<string, number>();
     for (const link of tagView.links) {
       if (link.entityType !== "task" || !openIds.has(link.entityId)) continue;
@@ -492,8 +525,9 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
   /** Mirror the server: done, archived or deleted leaves every queue. A done
    *  task of mine stays on show (kept) until the next load; reopening drops it. */
   const queueFollowStatus = useCallback(
-    (taskId: string, status: TaskStatus | "deleted") => {
-      if (isOpenTaskStatus(status)) {
+    (taskId: string, status: TaskStatus | TaskStatusCategory | "deleted") => {
+      // Backlog leaves every queue too (TV-D9); To do / In progress stay.
+      if (status === "todo" || status === "in_progress") {
         setKeptRows((prev) => prev.filter((e) => e.taskId !== taskId));
         return;
       }
@@ -528,6 +562,16 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     }));
   }, []);
 
+  /** A backlog task's move to To do (queuing or scheduling it, REPLAN 53), for
+   *  showing it before the server's own move comes back. Null otherwise. */
+  const backlogToTodo = useCallback(
+    (task: Task): Partial<Task> | null =>
+      isBacklogTask(task)
+        ? optimisticStatus(task, { category: "todo" }, statusesForBucket(task.bucketId))
+        : null,
+    [statusesForBucket],
+  );
+
   // ── intent ops (docs/moduo-module-contract.md) ──────────────────────────────
   /** Bumped after every successful op — the detail panel's trail refetch cue. */
   const [activityStamp, setActivityStamp] = useState(0);
@@ -547,7 +591,12 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         toast.error("Still saving that task — try again in a moment.");
         return;
       }
-      patchTaskLocal(id, { ...optimistic, updatedAt: new Date().toISOString() });
+      const current = bundle.tasks.find((t) => t.id === id);
+      const toTodo =
+        current && optimistic.scheduledAt && optimistic.statusCategory === undefined
+          ? backlogToTodo(current)
+          : null;
+      patchTaskLocal(id, { ...optimistic, ...toTodo, updatedAt: new Date().toISOString() });
       void op()
         .then((saved) => {
           setBundle((prev) => ({
@@ -561,7 +610,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
           void load();
         });
     },
-    [runtime, workspaceId, canEdit, patchTaskLocal, load],
+    [runtime, workspaceId, canEdit, patchTaskLocal, load, bundle.tasks, backlogToTodo],
   );
 
   /** Fetch a task's quiet activity trail (newest first). */
@@ -716,6 +765,10 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         return;
       }
       if (queuedTaskIds.has(id) && at === "end") return;
+      // Queuing a backlog task moves it to To do (the server does it in the
+      // same transaction); show it at once.
+      const toTodo = canEdit ? backlogToTodo(task) : null;
+      if (toTodo) patchTaskLocal(id, toTodo);
       const started = runQueueOp(
         (mine) => {
           const rest = mine.filter((e) => e.taskId !== id);
@@ -729,7 +782,17 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       const others = queueClaims.get(id) ?? [];
       if (started && others.length > 0) toast(alsoInLabel(others.map(memberName)));
     },
-    [liveTasks, queuedTaskIds, runQueueOp, optimisticEntry, queueClaims, memberName],
+    [
+      liveTasks,
+      queuedTaskIds,
+      runQueueOp,
+      optimisticEntry,
+      queueClaims,
+      memberName,
+      canEdit,
+      backlogToTodo,
+      patchTaskLocal,
+    ],
   );
 
   const removeFromQueue = useCallback(
@@ -890,10 +953,40 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     [inbox, userId, canEdit, createQueuedTask],
   );
 
+  /** "Still in Backlog · Move to To do": the offer after assigning a backlog
+   *  task or giving it a due date. */
+  const offerMoveToTodoRef = useRef<(task: Task) => void>(() => {});
+  const offerMoveToTodo = useCallback((task: Task) => offerMoveToTodoRef.current(task), []);
+
   const patchTask = useCallback(
     (id: string, patch: Partial<Task>) => {
       const existing = bundle.tasks.find((t) => t.id === id);
       if (!existing) return;
+      // A status by category (or a legacy value: the checkbox, Won't do)
+      // shows the project's status for it at once (TV-D9); the server is told
+      // the category, and picks the same one (or keeps one already in it).
+      const explicitStatusId = patch.statusId;
+      if ((patch.status || patch.statusCategory) && explicitStatusId === undefined) {
+        patch = {
+          ...patch,
+          ...optimisticStatus(
+            existing,
+            { category: patch.statusCategory ?? normalizeTaskStatusCategory(patch.status) },
+            statusesForBucket(existing.bucketId),
+          ),
+        };
+      }
+      // Assigning a backlog task or giving it a due date offers to plan it
+      // (REPLAN 53): it stays in Backlog unless you say so.
+      if (
+        canEdit &&
+        isBacklogTask(existing) &&
+        patch.statusCategory === undefined &&
+        ((patch.assigneeId != null && patch.assigneeId !== existing.assigneeId) ||
+          (patch.dueDate != null && patch.dueDate !== existing.dueDate))
+      ) {
+        offerMoveToTodo(existing);
+      }
       // Advance-on-done (spec §5d): a status change on a recurring task keeps
       // the stored nextOccurrence pointer fresh — unless the caller already
       // patched the rule itself (catch-up / skip pass it explicitly).
@@ -910,7 +1003,8 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       }
       // Done or archived leaves every queue on the server (TV-D2); follow it
       // here so the rail count and claims agree right away.
-      if (patch.status && canEdit && !isTempId(id)) queueFollowStatus(id, patch.status);
+      if (patch.status && canEdit && !isTempId(id))
+        queueFollowStatus(id, patch.statusCategory ?? patch.status);
       // Assignment is an intent op (tasks.assign): the RPC checks the person can
       // take tasks, and the server notifies them. The rest of the patch, if
       // any, saves as usual below.
@@ -930,9 +1024,18 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       // that way — plain field edits below are field-level writes (contract §1).
       if (
         patch.status &&
-        Object.keys(patch).every((k) => k === "status" || k === "recurrence" || k === "position")
+        Object.keys(patch).every(
+          (k) =>
+            k === "status" ||
+            k === "statusId" ||
+            k === "statusCategory" ||
+            k === "recurrence" ||
+            k === "position",
+        )
       ) {
-        const status = patch.status;
+        // By id when the change names a project status, else by category word
+        // (the server keeps a status already in that category).
+        const status = explicitStatusId ?? patch.statusCategory ?? patch.status;
         const recurrence = patch.recurrence;
         const position = patch.position;
         applyOp(id, patch, () =>
@@ -961,7 +1064,11 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       }
       // Field-level save (TV-D1): only the changed columns go to the server,
       // so this edit can't put back a field a teammate changed meanwhile.
-      const fields = editableTaskFields(patch);
+      // A status shown by category goes to the server as the category (the
+      // id picked here is only what shows meanwhile).
+      const fields = editableTaskFields(
+        explicitStatusId === undefined ? { ...patch, statusId: undefined } : patch,
+      );
       if (Object.keys(fields).length === 0) return;
       if (isTempId(id)) {
         toast.error("Still saving that task — try again in a moment.");
@@ -1034,7 +1141,115 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       applyOp,
       canEdit,
       queueFollowStatus,
+      statusesForBucket,
+      offerMoveToTodo,
     ],
+  );
+
+  /**
+   * Set a task's status (TV-D9): one of its project's statuses by id, or a
+   * category (the project's first status of it, unless the task is already in
+   * that category). The repeat pointer and the queue follow as for any status
+   * change.
+   */
+  const setTaskStatus = useCallback(
+    (id: string, target: StatusTarget) => {
+      const existing = bundle.tasks.find((t) => t.id === id);
+      if (!existing) return;
+      if ("statusId" in target) {
+        const s = statusesForBucket(existing.bucketId).find((x) => x.id === target.statusId);
+        if (!s || s.id === existing.statusId) return;
+        patchTask(id, {
+          statusId: s.id,
+          statusCategory: s.category,
+          status: legacyTaskStatus(s.category),
+        });
+        return;
+      }
+      if (taskCategoryOf(existing) === target.category) return;
+      patchTask(id, { statusCategory: target.category, status: legacyTaskStatus(target.category) });
+    },
+    [bundle.tasks, statusesForBucket, patchTask],
+  );
+
+  offerMoveToTodoRef.current = (task: Task) => {
+    const title = task.title.trim() || "This task";
+    toast(`${title} is still in Backlog`, {
+      description: "Backlog tasks stay out of My tasks, Upcoming and Focus.",
+      action: { label: "Move to To do", onClick: () => setTaskStatus(task.id, { category: "todo" }) },
+    });
+  };
+
+  // ── editing statuses (TV-D9) ─────────────────────────────────────────────────
+  /** Run a status op and take the set it answers (project, or the default when
+   *  `projectId` is null). Errors show and nothing changes. */
+  const runStatusOp = useCallback(
+    async (projectId: string | null, op: () => Promise<ProjectStatus[]>): Promise<boolean> => {
+      if (!runtime || !workspaceId || !canEdit) {
+        toast.error("You don't have edit access to Tasks in this workspace.");
+        return false;
+      }
+      try {
+        const set = await op();
+        setBundle((prev) => ({
+          ...prev,
+          statuses: replaceStatusSet(prev.statuses ?? [], projectId, set),
+        }));
+        return true;
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Something went wrong.");
+        return false;
+      }
+    },
+    [runtime, workspaceId, canEdit],
+  );
+
+  const createStatus = useCallback(
+    (projectId: string | null, category: TaskStatusCategory, name: string) =>
+      runStatusOp(projectId, () =>
+        runtime!.tasks.createStatus({ workspaceId: workspaceId!, projectId, category, name }),
+      ),
+    [runStatusOp, runtime, workspaceId],
+  );
+
+  const updateStatus = useCallback(
+    (status: ProjectStatus, patch: { name?: string; hidden?: boolean; after?: string | null }) =>
+      runStatusOp(status.projectId, () =>
+        runtime!.tasks.updateStatus({ workspaceId: workspaceId!, statusId: status.id, patch }),
+      ),
+    [runStatusOp, runtime, workspaceId],
+  );
+
+  /** Delete a status: its tasks move to the first other status of its
+   *  category, and a toast says how many. */
+  const deleteStatus = useCallback(
+    async (status: ProjectStatus): Promise<boolean> => {
+      if (!runtime || !workspaceId || !canEdit) {
+        toast.error("You don't have edit access to Tasks in this workspace.");
+        return false;
+      }
+      try {
+        const answer = await runtime.tasks.deleteStatus({ workspaceId, statusId: status.id });
+        setBundle((prev) => ({
+          ...prev,
+          statuses: (prev.statuses ?? []).filter((s) => s.id !== status.id),
+          tasks: answer.movedTo
+            ? prev.tasks.map((t) => (t.statusId === status.id ? { ...t, statusId: answer.movedTo } : t))
+            : prev.tasks,
+        }));
+        const to = answer.movedToName ?? CATEGORY_LABELS[status.category];
+        toast(
+          answer.moved > 0
+            ? `Deleted “${status.name}” · ${answer.moved === 1 ? "1 task" : `${answer.moved} tasks`} moved to ${to}`
+            : `Deleted “${status.name}”`,
+        );
+        return true;
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Something went wrong.");
+        return false;
+      }
+    },
+    [runtime, workspaceId, canEdit],
   );
 
   // ── recurrence roll-over (TV-D8) ─────────────────────────────────────────────
@@ -1986,6 +2201,14 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     /** My open queued tasks — the rail's Queue count. */
     queueCount,
     reload: load,
+    /** Every status this reader can see (TV-D9). */
+    statuses,
+    statusById,
+    statusesForBucket,
+    setTaskStatus,
+    createStatus,
+    updateStatus,
+    deleteStatus,
     createTask,
     createQueuedTask,
     captureToQueue,

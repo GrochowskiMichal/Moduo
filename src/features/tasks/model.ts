@@ -12,10 +12,11 @@ import type {
   EnergyLevel,
   PriorityLevel,
   TaskStatus,
+  TaskStatusCategory,
   TaskTimeAction,
   TaskTimeStatus,
 } from "@contracts/vocabularies";
-import { isOpenTaskStatus } from "@contracts/vocabularies";
+import { isOpenTask } from "@contracts/vocabularies";
 import type { Truncation } from "../../lib/paged-select";
 
 export type {
@@ -23,9 +24,28 @@ export type {
   EnergyLevel,
   PriorityLevel,
   TaskStatus,
+  TaskStatusCategory,
   TaskTimeAction,
   TaskTimeStatus,
 } from "@contracts/vocabularies";
+
+/**
+ * One status of a project (TV-D9, `public.project_statuses`): a name the
+ * project chose inside one of the five fixed categories, which carry the
+ * app's behaviour. `projectId` null = the workspace default set (new projects
+ * copy it; the Inbox uses it as it is). Order: by category, then `position`.
+ */
+export type ProjectStatus = {
+  id: string;
+  workspaceId: string;
+  projectId: string | null;
+  category: TaskStatusCategory;
+  name: string;
+  position: number;
+  hidden: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
 
 /** Recurrence definition (rrule.js-compatible). Produced by the capture parser. */
 export type RecurrenceRule = {
@@ -105,8 +125,17 @@ export type Task = {
   parentId: string | null;
   title: string;
   description: string;
-  /** When the task is due. */
+  /**
+   * When the task is due, as the local midnight of its due date (an ISO
+   * instant, as every date reader in the app expects). Since TV-D9 the date
+   * itself is {@link Task.dueOn}, the same for everyone; this is derived from
+   * it on read and written back as a date.
+   */
   dueDate: string | null;
+  /** The due date, YYYY-MM-DD (TV-D9). Absent on a row read before TV-D9. */
+  dueOn?: string | null;
+  /** An optional due time, HH:MM[:SS], the clock time in the assignee's zone (TV-D9). */
+  dueTime?: string | null;
   /** When the task is planned to a clock time. Works with Calendar hidden. */
   scheduledAt: string | null;
   /** Estimated/blocked duration in minutes (default-on-drop, resizable). */
@@ -118,7 +147,20 @@ export type Task = {
   energyLevel: EnergyLevel | null;
   /** How important the task is to get done. Optional, ambient. */
   priority: PriorityLevel | null;
+  /**
+   * The legacy status (what builds before TV-D9 read): the category with
+   * Backlog as "todo" and Won't do as "archived". Read the task's state
+   * through `taskCategoryOf` / `isOpenTask` / `isClosedTask`, never this alone.
+   */
   status: TaskStatus;
+  /** The task's status in its project (TV-D9, a {@link ProjectStatus} id). */
+  statusId?: string | null;
+  /** Its category, as the server keeps it (TV-D9). Absent before TV-D9:
+   *  `taskCategoryOf` then reads `status`. */
+  statusCategory?: TaskStatusCategory | null;
+  /** When it was last finished, and by whom (TV-D9; null unless Done). */
+  completedAt?: string | null;
+  completedBy?: string | null;
   /** Today's-commit-queue membership: the date (YYYY-MM-DD) committed for. */
   committedFor: string | null;
   /** Ordering within the commit queue. */
@@ -295,6 +337,11 @@ export type TasksModuleBundle = {
   tagLinks: TagLink[];
   taskRelations: TaskRelation[];
   /**
+   * Every status the reader can see (TV-D9): the workspace default set and
+   * each visible project's. Absent from a database before TV-D9.
+   */
+  statuses?: ProjectStatus[];
+  /**
    * Collections the read had to cut at their ceiling (SCALE-1). Empty = you
    * are holding everything. Non-empty MUST be shown — a silent cut is the bug
    * this field exists to kill.
@@ -334,15 +381,16 @@ export const PRIVATE_PROJECT_LABEL = "Private project";
  * Computed `drifted` flag — mirrors `Task::is_drifted` in the Rust backend and
  * the spec: a scheduled task whose time has passed without completion.
  *
- *   drifted = scheduledAt < now AND status NOT IN (done, archived)
+ *   drifted = scheduledAt < now AND the task is open (To do / In progress)
  *
- * Ambient signal only — never render as red / "overdue" (design principles 4 & 5).
+ * Backlog never drifts (TV-D9). Ambient signal only — never render as red /
+ * "overdue" (design principles 4 & 5).
  */
 export function isDrifted(
-  task: Pick<Task, "scheduledAt" | "status">,
+  task: Pick<Task, "scheduledAt" | "status" | "statusCategory">,
   now: Date = new Date(),
 ): boolean {
-  if (!isOpenTaskStatus(task.status)) return false;
+  if (!isOpenTask(task)) return false;
   if (!task.scheduledAt) return false;
   return new Date(task.scheduledAt).getTime() < now.getTime();
 }

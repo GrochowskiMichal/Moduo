@@ -96,9 +96,94 @@ export function normalizeTaskStatus(input: unknown): TaskStatus {
 /** Statuses that still need doing (the one "is open" rule; MCP and the app share it). */
 export const TASK_OPEN_STATUSES = ["todo", "in_progress"] as const satisfies readonly TaskStatus[];
 
-/** Is this status still open? Unknown values read through {@link normalizeTaskStatus}. */
+/**
+ * Is this legacy status value still open? Unknown values read through
+ * {@link normalizeTaskStatus}. A task's own openness reads its category:
+ * use {@link isOpenTask} (a backlog task stores "todo" here).
+ */
 export function isOpenTaskStatus(status: unknown): boolean {
   return (TASK_OPEN_STATUSES as readonly string[]).includes(normalizeTaskStatus(status));
+}
+
+// ---------------------------------------------------------------------------
+// Task status categories (TV-D9, REPLAN 53/53a) — mirrors the CHECKs on
+// project_statuses.category and tasks.status_category in
+// 20261010170000_project_statuses. Each project names its own statuses inside
+// these five; the app's behaviour hangs on the category. Replaces
+// TASK_STATUSES at TV-D7 (archived → wont_do, plus backlog).
+// ---------------------------------------------------------------------------
+
+export const TASK_STATUS_CATEGORIES = ["backlog", "todo", "in_progress", "done", "wont_do"] as const;
+export type TaskStatusCategory = (typeof TASK_STATUS_CATEGORIES)[number];
+export const taskStatusCategorySchema = z.enum(TASK_STATUS_CATEGORIES);
+
+export function isTaskStatusCategory(value: unknown): value is TaskStatusCategory {
+  return (
+    typeof value === "string" && (TASK_STATUS_CATEGORIES as readonly string[]).includes(value)
+  );
+}
+
+/** Strict parse for write paths: only the five stored tokens. */
+export function parseTaskStatusCategory(input: unknown): SafeParseResult<TaskStatusCategory> {
+  return parseOrError(taskStatusCategorySchema, input);
+}
+
+/**
+ * Lax read: the five tokens, the legacy column's values (archived → Won't do)
+ * and the words people write ("To do", "Won't do"). Unknown reads as To do,
+ * so a row is never dropped (REPLAN §6.3). Same reading as the server's
+ * `tasks__status_category_of`.
+ */
+export function normalizeTaskStatusCategory(input: unknown): TaskStatusCategory {
+  if (isTaskStatusCategory(input)) return input;
+  const v = typeof input === "string" ? input.trim().toLowerCase().replace(/[\s'’_-]+/g, "") : "";
+  if (v === "backlog") return "backlog";
+  if (v === "inprogress") return "in_progress";
+  if (v === "done") return "done";
+  if (v === "wontdo" || v === "archived") return "wont_do";
+  // Everything else as the legacy reading does (started → In progress, …).
+  const legacy = normalizeTaskStatus(input);
+  return legacy === "archived" ? "wont_do" : legacy;
+}
+
+/** The legacy column's value for a category (what builds before TV-D9 read). */
+export function legacyTaskStatus(category: TaskStatusCategory): TaskStatus {
+  if (category === "backlog") return "todo";
+  if (category === "wont_do") return "archived";
+  return category;
+}
+
+/** Categories still to be worked on: the one "is open" rule. Backlog is
+ *  parked, so it sits out of counts, My tasks, Upcoming, Focus, drift and late. */
+export const TASK_OPEN_CATEGORIES = ["todo", "in_progress"] as const satisfies readonly TaskStatusCategory[];
+/** Categories that are finished, one way or the other. */
+export const TASK_CLOSED_CATEGORIES = ["done", "wont_do"] as const satisfies readonly TaskStatusCategory[];
+
+/** A task's category: the stored one, else read from its legacy status (a row
+ *  from before TV-D9). */
+export function taskCategoryOf(task: {
+  status: unknown;
+  statusCategory?: TaskStatusCategory | null;
+}): TaskStatusCategory {
+  return task.statusCategory ?? normalizeTaskStatusCategory(task.status);
+}
+
+/** Is this task open (To do or In progress)? Backlog is not. */
+export function isOpenTask(task: { status: unknown; statusCategory?: TaskStatusCategory | null }) {
+  return (TASK_OPEN_CATEGORIES as readonly string[]).includes(taskCategoryOf(task));
+}
+
+/** Is this task finished (Done or Won't do)? Backlog is not. */
+export function isClosedTask(task: { status: unknown; statusCategory?: TaskStatusCategory | null }) {
+  return (TASK_CLOSED_CATEGORIES as readonly string[]).includes(taskCategoryOf(task));
+}
+
+/** Is this task parked in Backlog? */
+export function isBacklogTask(task: {
+  status: unknown;
+  statusCategory?: TaskStatusCategory | null;
+}) {
+  return taskCategoryOf(task) === "backlog";
 }
 
 // ---------------------------------------------------------------------------
