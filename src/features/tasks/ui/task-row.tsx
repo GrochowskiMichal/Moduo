@@ -16,6 +16,7 @@ import {
   ContextMenuTrigger,
 } from "../../../components/ui/context-menu";
 import { DatePickerPanel, useDateDraft } from "../../../components/ui/date-field";
+import { DROP_TARGET } from "../../../components/ui/drag-visuals";
 import { Input } from "../../../components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
@@ -81,9 +82,9 @@ type Props = {
   /** Goes with `dragListeners`: makes the row root the only keyboard drag
    * activator, so Space/Enter on a button inside the row stay that button's. */
   dragActivatorRef?: DragActivatorRef;
-  /** Highlight as the live drop target during a drag-to-nest (quiet accent +
-   * ring, mirrors the board column's drag-over treatment). */
-  dropActive?: boolean;
+  /** A drag hovers this row and would make the dragged task its subtask
+   * (DS-4's DROP_TARGET, the one drop look). */
+  dropTarget?: boolean;
   /** False in My tasks, where every row is mine (D4-4). */
   showAssignee?: boolean;
   api: TasksModuleApi;
@@ -120,7 +121,7 @@ export function TaskRow({
   parentTitle = null,
   dragListeners,
   dragActivatorRef,
-  dropActive = false,
+  dropTarget = false,
   showAssignee = true,
   api,
 }: Props) {
@@ -162,16 +163,15 @@ export function TaskRow({
         // Whole-row drag (queue reorder / drag-to-nest): a grab cursor signals
         // it; a 6px activation distance keeps plain clicks selecting the row.
         dragListeners ? "cursor-grab active:cursor-grabbing" : "cursor-default",
-        // Drop-target highlight wins over selection/hover while a nest drag is
-        // live (mirrors the board column's drag-over treatment — ring + accent).
-        dropActive
-          ? "bg-accent/50 ring-1 ring-inset ring-ring/50"
-          : selected
-            ? // Tint-only selection (R5): the accent tint + the row hairline
-              // switch (--state-selected-edge). No bar.
-              SELECTED_ROW
-            : "hover:bg-state-hover",
+        selected
+          ? // Tint-only selection (R5): the accent tint + the row hairline
+            // switch (--state-selected-edge). No bar.
+            SELECTED_ROW
+          : "hover:bg-state-hover",
         nested && "ml-10",
+        // The nest target wins over selection/hover while a drag is live;
+        // after the row's own classes so its hover: copy replaces theirs.
+        dropTarget && DROP_TARGET,
       )}
       // height rides the density setting; py is only a multiline guard
       style={{ minHeight: "var(--row-h)" }}

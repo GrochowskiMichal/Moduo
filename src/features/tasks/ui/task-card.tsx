@@ -16,6 +16,7 @@ import {
   ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "../../../components/ui/context-menu";
+import { DRAG_SOURCE } from "../../../components/ui/drag-visuals";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import { cn } from "../../../lib/utils";
 import { assigneeLabel } from "../assignee-options";
@@ -112,9 +113,9 @@ export function TaskCard({
         selected ? SELECTED_OPTION : "border-border bg-card hover:border-foreground/30",
         // whole card is the drag handle (grip removed)
         canEdit && "cursor-grab active:cursor-grabbing",
-        // hide the source while the DragOverlay clone follows the cursor; the
-        // empty slot stays so neighbours animate apart (insertion indicator).
-        isDragging && "opacity-0",
+        // The source stays in its slot, dimmed (DS-4's DRAG_SOURCE), while the
+        // overlay follows the cursor and its neighbours animate apart.
+        isDragging && DRAG_SOURCE,
       )}
     >
       <CardBody

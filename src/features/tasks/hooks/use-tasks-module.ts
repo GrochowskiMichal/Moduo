@@ -24,6 +24,7 @@ import {
 } from "../../tags/store";
 import { WorkspaceContext } from "../../workspaces/workspace-context";
 import { setBucketTimeBlock } from "../default-view";
+import { bucketMovePatches } from "../dnd/rail-drop";
 import {
   betweenPositions,
   blockedTaskIds as computeBlockedTaskIds,
@@ -1463,6 +1464,35 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     [liveTasks, subtasksByParent, patchTask],
   );
 
+  /**
+   * Move a task to another bucket by drag (tasks-v2 §8): its subtasks follow
+   * it, and it goes to the end of that bucket's manual order unless the drop
+   * placed it (`position`). `parentId` rides along when the drop also
+   * changed it.
+   */
+  const moveTaskToBucket = useCallback(
+    (id: string, bucketId: string, opts: { position?: string; parentId?: string | null } = {}) => {
+      const task = liveTasks.find((t) => t.id === id);
+      if (!task) return;
+      const patches = bucketMovePatches({
+        task,
+        subtasks: subtasksByParent.get(id) ?? [],
+        bucketId,
+        allByPosition: liveTasks,
+        position: opts.position,
+      });
+      for (const { id: taskId, patch } of patches) {
+        patchTask(
+          taskId,
+          taskId === id && opts.parentId !== undefined
+            ? { ...patch, parentId: opts.parentId }
+            : patch,
+        );
+      }
+    },
+    [liveTasks, subtasksByParent, patchTask],
+  );
+
   // ── blocked-by mutations (edges, not statuses — spec §5c) ────────────────────
 
   /** Add a blocker → task edge. Cycle-checked here; the DB trigger backstops. */
@@ -1810,6 +1840,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     subtaskProgressByTask,
     addSubtask,
     setTaskParent,
+    moveTaskToBucket,
     blockedTaskIds: blockedIds,
     taskRelations: bundle.taskRelations,
     /** SCALE-1: collections the read had to cut — the page must show these. */

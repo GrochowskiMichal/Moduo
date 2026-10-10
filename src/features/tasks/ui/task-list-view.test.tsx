@@ -112,7 +112,6 @@ function renderList({ queue = false }: { queue?: boolean } = {}) {
           onSelectTask={setSelected}
           reorderable={queue}
           onReorder={() => {}}
-          nestable={!queue}
           api={api as never}
         />
       </TooltipProvider>
