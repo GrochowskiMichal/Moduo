@@ -82,7 +82,7 @@ const taskById = async (id: string) =>
   (await rest<TaskRow[]>("service", `tasks?id=eq.${id}&select=id,title,status,bucket_id`))[0];
 
 async function openTasks(page: Page, taskId?: string) {
-  await signInPage(page, dev);
+  await signInPage(page, dev, ws.id);
   await page.goto(taskId ? `/tasks?id=${taskId}` : "/tasks");
   await expect(page.getByRole("navigation", { name: "Location" })).toBeVisible({ timeout: 20_000 });
 }
@@ -123,8 +123,44 @@ test("AC1.4 — a Won't do task stays reachable and reopens", async ({ page }) =
   await expect.poll(async () => (await taskById(t.id)).status).toBe("todo");
 });
 
+test("AC1.4 — Won't do tasks are listed by Filter → Status (TV-U2)", async ({ page }) => {
+  const project = await createProject(dev, `Filter me ${tag}`);
+  const open = await createTask(dev, { title: `Still open ${tag}`, bucketId: project.id });
+  const gone = await createTask(dev, {
+    title: `Not doing ${tag}`,
+    bucketId: project.id,
+    status: "archived",
+  });
+  await openTasks(page, open.id);
+  await expect(page.getByRole("button", { name: open.title })).toBeVisible();
+  await expect(page.getByRole("button", { name: gone.title })).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Filter", exact: true }).click();
+  await page.getByRole("option", { name: "Status" }).click();
+  await page.getByRole("option", { name: /Won’t do/ }).click();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("group", { name: "Status is Won’t do" })).toBeVisible();
+  await expect(page.getByRole("button", { name: open.title })).toHaveCount(0);
+
+  // Listed once, it opens with TV-P0's Reopen.
+  await page.getByRole("button", { name: gone.title }).click();
+  await expect(page.getByRole("button", { name: "Status: Won’t do" })).toBeVisible();
+  await page.getByRole("button", { name: "Reopen" }).click();
+  await expect.poll(async () => (await taskById(gone.id)).status).toBe("todo");
+  // Leave the shared dev workspace as it was.
+  const at = new Date().toISOString();
+  await rest("service", `tasks?bucket_id=eq.${project.id}`, {
+    method: "PATCH",
+    body: { deleted_at: at },
+  });
+  await rest("service", `buckets?id=eq.${project.id}`, {
+    method: "PATCH",
+    body: { deleted_at: at },
+  });
+});
+
 test("AC1.5 — a skeleton while loading, never “Nothing here yet”", async ({ page }) => {
-  await signInPage(page, dev);
+  await signInPage(page, dev, ws.id);
   // Hold the task list back so the first paint is the loading state.
   await page.route("**/rest/v1/tasks?*", async (route) => {
     await new Promise((r) => setTimeout(r, 1500));
@@ -180,7 +216,13 @@ test("AC1.8 — moving a parent moves its subtasks", async ({ page }) => {
   });
   await openTasks(page, parent.id);
   await page.getByRole("button", { name: /^Bucket: .*Move to another bucket$/ }).click();
-  await page.getByRole("menuitemradio", { name: `Move here ${tag}` }).click();
+  // Pick by typing: the dev workspace's project list outgrows the window,
+  // and the menu doesn't scroll (a primitive gap, noted for DS-6).
+  const item = page.getByRole("menuitemradio", { name: `Move here ${tag}` });
+  await expect(item).toHaveCount(1);
+  await page.keyboard.type(`Move here ${tag}`);
+  await expect(item).toBeFocused();
+  await page.keyboard.press("Enter");
   await expect.poll(async () => (await taskById(a.id)).bucket_id).toBe(project.id);
   await expect.poll(async () => (await taskById(b.id)).bucket_id).toBe(project.id);
   expect((await taskById(parent.id)).bucket_id).toBe(project.id);

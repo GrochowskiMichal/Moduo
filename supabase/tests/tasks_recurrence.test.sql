@@ -404,6 +404,20 @@ BEGIN
   PERFORM test.ok((test.task('XNV')).scheduled_at > now() - interval '2 days',
     'after an edit to the rule it rolls over again', (test.task('XNV')).scheduled_at::text);
 
+  -- An open repeat on its last occurrence (the rule has ended) is marked too.
+  INSERT INTO public.tasks (id, workspace_id, bucket_id, title, scheduled_at, recurrence)
+  VALUES (test.id('XFIN'), test.id('W'), test.id('SB'), 'Finished', date_trunc('day', now()) - interval '8 days' + interval '6 hours',
+          jsonb_build_object('rrule', 'FREQ=DAILY;COUNT=3',
+                             'dtstart', public.tasks__iso(date_trunc('day', now()) - interval '10 days' + interval '6 hours')));
+  PERFORM count(*) FROM public.tasks__roll_over(test.id('W'), now());
+  PERFORM test.ok((test.task('XFIN')).recurrence ? 'endedRule'
+              AND (test.task('XFIN')).scheduled_at = date_trunc('day', now()) - interval '8 days' + interval '6 hours',
+    'an open repeat on its last occurrence stays put and is marked', (test.task('XFIN')).recurrence::text);
+  SELECT ctid INTO v_ctid FROM public.tasks WHERE id = test.id('XFIN');
+  PERFORM count(*) FROM public.tasks__roll_over(test.id('W'), now());
+  PERFORM test.ok((SELECT ctid FROM public.tasks WHERE id = test.id('XFIN')) = v_ctid,
+    'and the next run leaves it alone');
+
   -- A rule stored before the bounds, outside them, is never a candidate.
   ALTER TABLE public.tasks DROP CONSTRAINT tasks_recurrence_bounded;
   INSERT INTO public.tasks (id, workspace_id, bucket_id, title, status, recurrence)

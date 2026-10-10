@@ -10,10 +10,10 @@ import { ArrowUp, AtSign } from "lucide-react";
 import { type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { PersonAvatar as KitPersonAvatar } from "@/components/ui/avatar";
+import { FeedCard, FeedComposer, FeedComposerInput } from "@/components/ui/feed";
 import { IconButton } from "@/components/ui/icon-button";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
-import { initialsOf } from "@/lib/initials";
 import { cn } from "@/lib/utils";
 import {
   type CommentPerson,
@@ -25,21 +25,28 @@ import {
   splitMentions,
 } from "../comments";
 
-/** A comment author's (or a mentioned person's) small round avatar. */
+/**
+ * A comment author's (or a mentioned person's) small avatar: the kit's two
+ * initials on a stable colour (DS-6, call 43), keyed on the person's id when
+ * known so it matches every other surface. Decorative: a name always sits
+ * beside it. Someone the app can't resolve (an API key, a former member) is a
+ * gray "?", like an unknown assignee; never the empty "unassigned" ring.
+ */
 export function PersonAvatar({
   person,
   className,
 }: {
-  person: Pick<CommentPerson, "name" | "avatarUrl"> | null;
+  person: (Pick<CommentPerson, "name" | "avatarUrl"> & { id?: string }) | null;
   className?: string;
 }) {
   return (
-    // Decorative: a name always sits beside it.
-    // Two initials, on the icon rung's type so they fit (call 43).
-    <Avatar size="icon" aria-hidden className={cn("size-4", className)}>
-      {person?.avatarUrl ? <AvatarImage src={person.avatarUrl} alt="" /> : null}
-      <AvatarFallback>{person ? initialsOf(person.name) : null}</AvatarFallback>
-    </Avatar>
+    <KitPersonAvatar
+      name={person?.name || "?"}
+      id={person?.id}
+      src={person?.avatarUrl}
+      size="icon"
+      className={className}
+    />
   );
 }
 
@@ -93,7 +100,7 @@ export function CommentCard({
   timeTitle,
   children,
 }: {
-  author: Pick<CommentPerson, "name" | "avatarUrl"> | null;
+  author: (Pick<CommentPerson, "name" | "avatarUrl"> & { id?: string }) | null;
   authorName: string;
   time: string;
   /** The full date, as a tooltip on the relative time. */
@@ -101,17 +108,14 @@ export function CommentCard({
   children: ReactNode;
 }) {
   return (
-    <article className="rounded-lg border border-hairline px-3 py-2.5">
-      <header className="mb-1 flex min-w-0 items-center gap-2 font-sans text-xs text-muted-foreground">
-        <PersonAvatar person={author} />
-        <span className="min-w-0 break-words font-medium text-foreground">{authorName}</span>
-        <span aria-hidden>·</span>
-        <time className="shrink-0 tabular-nums" title={timeTitle}>
-          {time}
-        </time>
-      </header>
+    <FeedCard
+      avatar={<PersonAvatar person={author} />}
+      author={authorName}
+      time={time}
+      timeTitle={timeTitle}
+    >
       {children}
-    </article>
+    </FeedCard>
   );
 }
 
@@ -241,79 +245,72 @@ export function CommentComposer({
   return (
     <Popover open={listOpen}>
       <PopoverAnchor asChild>
-        <div
+        <FeedComposer
           ref={boxRef}
-          className={cn(
-            "rounded-lg border border-hairline bg-transparent transition-[border-color] duration-(--motion-fade) ease-(--ease-out)",
-            "focus-within:border-border",
-            className,
-          )}
+          className={className}
+          leading={leading}
+          actions={
+            <>
+              {tools}
+              <IconButton
+                icon={AtSign}
+                label="Mention someone"
+                disabled={disabled}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={startMention}
+              />
+              <IconButton
+                icon={ArrowUp}
+                label="Comment"
+                tooltip={
+                  <span>
+                    Comment <span className="text-muted-foreground">⌘↵</span>
+                  </span>
+                }
+                disabled={!canPost}
+                onClick={() => void post()}
+              />
+            </>
+          }
         >
-          {leading ? <div className="px-3 pt-2">{leading}</div> : null}
-          <div className="flex items-end gap-1 py-1 pr-1 pl-3">
-            <textarea
-              ref={areaRef}
-              value={text}
-              rows={1}
-              disabled={disabled}
-              placeholder={placeholder}
-              aria-label={props["aria-label"] ?? "Comment"}
-              aria-autocomplete="list"
-              aria-controls={listOpen ? listId : undefined}
-              aria-activedescendant={listOpen ? `${listId}-${activeIndex}` : undefined}
-              onChange={(e) => update(e.target.value, e.target.selectionStart)}
-              onSelect={(e) => setCaret(e.currentTarget.selectionStart)}
-              onKeyDown={(e) => {
-                if (listOpen) {
-                  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-                    e.preventDefault();
-                    const step = e.key === "ArrowDown" ? 1 : -1;
-                    setActive((activeIndex + step + matches.length) % matches.length);
-                    return;
-                  }
-                  if ((e.key === "Enter" && !e.metaKey && !e.ctrlKey) || e.key === "Tab") {
-                    e.preventDefault();
-                    pick(matches[activeIndex]);
-                    return;
-                  }
-                  if (e.key === "Escape") {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setDismissedAt(at?.start ?? null);
-                    return;
-                  }
-                }
-                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+          <FeedComposerInput
+            ref={areaRef}
+            value={text}
+            disabled={disabled}
+            placeholder={placeholder}
+            aria-label={props["aria-label"] ?? "Comment"}
+            aria-autocomplete="list"
+            aria-controls={listOpen ? listId : undefined}
+            aria-activedescendant={listOpen ? `${listId}-${activeIndex}` : undefined}
+            onChange={(e) => update(e.target.value, e.target.selectionStart)}
+            onSelect={(e) => setCaret(e.currentTarget.selectionStart)}
+            onKeyDown={(e) => {
+              if (listOpen) {
+                if (e.key === "ArrowDown" || e.key === "ArrowUp") {
                   e.preventDefault();
-                  void post();
+                  const step = e.key === "ArrowDown" ? 1 : -1;
+                  setActive((activeIndex + step + matches.length) % matches.length);
+                  return;
                 }
-              }}
-              className={cn(
-                "max-h-60 min-h-6 flex-1 resize-none self-center bg-transparent py-0.5 font-sans text-sm leading-relaxed text-foreground outline-none",
-                "placeholder:text-muted-foreground disabled:cursor-not-allowed",
-              )}
-            />
-            {tools}
-            <IconButton
-              icon={AtSign}
-              label="Mention someone"
-              disabled={disabled}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={startMention}
-            />
-            <IconButton
-              icon={ArrowUp}
-              label="Comment"
-              tooltip={
-                <span>
-                  Comment <span className="text-muted-foreground">⌘↵</span>
-                </span>
+                if ((e.key === "Enter" && !e.metaKey && !e.ctrlKey) || e.key === "Tab") {
+                  e.preventDefault();
+                  pick(matches[activeIndex]);
+                  return;
+                }
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setDismissedAt(at?.start ?? null);
+                  return;
+                }
               }
-              disabled={!canPost}
-              onClick={() => void post()}
-            />
-          </div>
-        </div>
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault();
+                void post();
+              }
+            }}
+          />
+        </FeedComposer>
       </PopoverAnchor>
       <PopoverContent
         align="start"

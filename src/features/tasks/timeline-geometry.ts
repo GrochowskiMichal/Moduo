@@ -212,6 +212,8 @@ export type TimelineBar = {
   /** Open task whose known end (or lone start) is past — the ambient dot. */
   pastEnd: boolean;
   done: boolean;
+  /** Done or Won't do: drawn closed, never a blocker (TV-U2). */
+  closed: boolean;
 };
 
 /**
@@ -263,6 +265,7 @@ export function barForTask(
     solidRight: !!due,
     pastEnd: open && dayIndex(window, knownEnd) < dayIndex(window, startOfDay(now)),
     done: task.status === "done",
+    closed: !open,
   };
 }
 

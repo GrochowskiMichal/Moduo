@@ -1,6 +1,6 @@
 import { isOpenTaskStatus } from "@contracts/vocabularies";
 import type { DraggableSyntheticListeners } from "@dnd-kit/core";
-import { Check, ChevronDown, ChevronRight, CornerDownRight, Inbox } from "lucide-react";
+import { ChevronDown, ChevronRight, CornerDownRight, Inbox } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { SELECTED_ROW } from "@/components/ui/selection";
 import { CompleteToggle } from "../../../components/ui/complete-toggle";
@@ -17,16 +17,24 @@ import {
   ContextMenuTrigger,
 } from "../../../components/ui/context-menu";
 import { DatePickerPanel, useDateDraft } from "../../../components/ui/date-field";
+import { DROP_TARGET } from "../../../components/ui/drag-visuals";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "../../../components/ui/dropdown-menu";
 import { Input } from "../../../components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import { cn } from "../../../lib/utils";
 import { assigneeLabel } from "../assignee-options";
 import { useAssignees } from "../assignees";
-import { LEVEL_OPTIONS } from "../helpers";
+import { LEVEL_OPTIONS, STATUS_LABELS } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { EnergyLevel, PriorityLevel, Task } from "../model";
-import { ALL_ROW_COLUMNS, type RowColumns, type RowDate, rowDate } from "../row-layout";
+import { ALL_ROW_COLUMNS, type RowColumns, type RowDate, rowDate, rowTime } from "../row-layout";
 import { AssignContextMenu } from "./assign-context-menu";
 import { AssigneeAvatar } from "./assignee-avatar";
 import type { DragActivatorRef } from "./dnd/task-dnd";
@@ -82,9 +90,9 @@ type Props = {
   /** Goes with `dragListeners`: makes the row root the only keyboard drag
    * activator, so Space/Enter on a button inside the row stay that button's. */
   dragActivatorRef?: DragActivatorRef;
-  /** Highlight as the live drop target during a drag-to-nest (quiet accent +
-   * ring, mirrors the board column's drag-over treatment). */
-  dropActive?: boolean;
+  /** A drag hovers this row and would make the dragged task its subtask
+   * (DS-4's DROP_TARGET, the one drop look). */
+  dropTarget?: boolean;
   /** False in My tasks, where every row is mine (D4-4). */
   showAssignee?: boolean;
   api: TasksModuleApi;
@@ -93,8 +101,9 @@ type Props = {
 /**
  * One task in the List (tasks-v2 §6): checkbox · title · quiet counts, then
  * fixed right-hand columns (priority · [energy] · date · assignee · queue) so
- * the meta lines up down the list. A done row dims as a whole except its
- * checkbox; selection is the tint (DS-2), never a bar.
+ * the meta lines up down the list. Display → Rows: Detailed adds the status
+ * name, the time and the assignee's name (TV-U2). A done row dims as a whole
+ * except its checkbox; selection is the tint (DS-2), never a bar.
  */
 export function TaskRow({
   task,
@@ -120,7 +129,7 @@ export function TaskRow({
   parentTitle = null,
   dragListeners,
   dragActivatorRef,
-  dropActive = false,
+  dropTarget = false,
   showAssignee = true,
   api,
 }: Props) {
@@ -143,6 +152,7 @@ export function TaskRow({
   const assigneeName = assigneeLabel(task.assigneeId, byId);
   // Solo workspaces have nobody to tell apart — the avatar only appears with teammates.
   const withAssignee = columns.assignee && showAssignee && assignees.length > 1;
+  const time = columns.time ? rowTime(task) : null;
   const dateCommand = command === "schedule" || command === "due";
 
   const row = (
@@ -161,16 +171,15 @@ export function TaskRow({
         // Whole-row drag (queue reorder / drag-to-nest): a grab cursor signals
         // it; a 6px activation distance keeps plain clicks selecting the row.
         dragListeners ? "cursor-grab active:cursor-grabbing" : "cursor-default",
-        // Drop-target highlight wins over selection/hover while a nest drag is
-        // live (mirrors the board column's drag-over treatment — ring + accent).
-        dropActive
-          ? "bg-accent/50 ring-1 ring-inset ring-ring/50"
-          : selected
-            ? // Tint-only selection (R5): the accent tint + the row hairline
-              // switch (--state-selected-edge). No bar.
-              SELECTED_ROW
-            : "hover:bg-state-hover",
+        selected
+          ? // Tint-only selection (R5): the accent tint + the row hairline
+            // switch (--state-selected-edge). No bar.
+            SELECTED_ROW
+          : "hover:bg-state-hover",
         nested && "ml-10",
+        // The nest target wins over selection/hover while a drag is live;
+        // after the row's own classes so its hover: copy replaces theirs.
+        dropTarget && DROP_TARGET,
       )}
       // height rides the density setting; py is only a multiline guard
       style={{ minHeight: "var(--row-h)" }}
@@ -188,7 +197,8 @@ export function TaskRow({
                 aria-expanded={expanded}
                 aria-label={expanded ? "Collapse subtasks" : "Expand subtasks"}
                 className={cn(
-                  "flex size-4 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  // hit-min pads the pointer target to 24 px; the glyph stays put.
+                  "hit-min flex size-4 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   done && "opacity-40",
                 )}
                 onClick={(e) => {
@@ -286,6 +296,16 @@ export function TaskRow({
         data-slot="row-columns"
         className={cn("flex shrink-0 items-center gap-3", closed && "opacity-40")}
       >
+        {/* Detailed's cells hold their width (min-w, so a longer value widens
+            the cell rather than truncate, call 41). */}
+        {columns.status ? (
+          <span
+            data-col="status"
+            className="min-w-24 shrink-0 whitespace-nowrap font-sans text-xs text-muted-foreground"
+          >
+            {STATUS_LABELS[task.status]}
+          </span>
+        ) : null}
         {columns.priority ? (
           <span data-col="priority" className="flex w-icon-sm shrink-0 items-center justify-center">
             <PriorityMark level={task.priority} />
@@ -306,7 +326,27 @@ export function TaskRow({
             api={api}
           />
         ) : null}
-        {withAssignee ? (
+        {columns.time ? (
+          <span
+            data-col="time"
+            className="min-w-22 shrink-0 whitespace-nowrap text-right font-sans text-xs tabular-nums text-muted-foreground"
+          >
+            {time}
+          </span>
+        ) : null}
+        {withAssignee && columns.assigneeName ? (
+          <span
+            data-col="assignee"
+            className="flex min-w-24 shrink-0 items-center gap-1.5 whitespace-nowrap font-sans text-xs text-muted-foreground"
+          >
+            {task.assigneeId ? (
+              <>
+                <AssigneeAvatar assignee={assignee} assigneeId={task.assigneeId} size="icon" />
+                {assignee ? firstName(assignee.name) : assigneeName}
+              </>
+            ) : null}
+          </span>
+        ) : withAssignee ? (
           <span data-col="assignee" className="flex w-icon shrink-0 items-center justify-center">
             {task.assigneeId ? (
               <Tooltip>
@@ -316,7 +356,7 @@ export function TaskRow({
                     role="img"
                     aria-label={`Assignee: ${assigneeName}`}
                   >
-                    <AssigneeAvatar assignee={assignee} size="icon" />
+                    <AssigneeAvatar assignee={assignee} assigneeId={task.assigneeId} size="icon" />
                   </span>
                 </TooltipTrigger>
                 <TooltipContent>{assigneeName}</TooltipContent>
@@ -473,7 +513,11 @@ function TitleEditor({
         else if (e.key === "Escape") end(false);
       }}
       onBlur={() => end(true)}
-      className="h-7 px-1.5 py-0 font-display text-sm"
+      // Bare and in the row title's own face and size, so the text doesn't
+      // change when editing starts (content, not chrome: R4).
+      variant="bare"
+      size="sm"
+      className="font-sans text-md"
     />
   );
 }
@@ -579,10 +623,10 @@ function DateCell({
         onEscapeKeyDown={draft.cancel}
         align="end"
       >
-        <p className="px-3 pt-2.5 font-sans text-xs font-medium text-muted-foreground">
-          {kind === "schedule" ? "Scheduled time" : "Due date"}
-        </p>
-        <DatePickerPanel draft={draft} />
+        <DatePickerPanel
+          draft={draft}
+          heading={kind === "schedule" ? "Scheduled time" : "Due date"}
+        />
       </PopoverContent>
     </Popover>
   );
@@ -624,49 +668,57 @@ function BucketPopover({
   const options = inboxId
     ? [{ id: inboxId, name: "Inbox", isSystem: true }, ...buckets.filter((b) => b.id !== inboxId)]
     : buckets;
+  // A menu, not a hand-rolled list (DS-6, visual audit B11): arrow keys and
+  // typeahead come with it. Where the bucket is implied the trigger stays in
+  // the row but takes no width and can't be seen or tabbed to, so opening the
+  // menu with `b` anchors it without moving the row (R6: never `hidden → flex`).
   return (
-    <Popover open={open} onOpenChange={onOpenChange}>
-      <PopoverTrigger asChild disabled={!canEdit}>
+    // Not modal, like the row's date popovers: a trapped focus scope would pull
+    // focus back from the list when Esc hands it there.
+    <DropdownMenu open={open} onOpenChange={onOpenChange} modal={false}>
+      <DropdownMenuTrigger asChild disabled={!canEdit}>
         <button
           type="button"
           onClick={(e) => e.stopPropagation()}
           aria-label={`Bucket: ${bucketName}`}
+          tabIndex={showLabel ? undefined : -1}
+          aria-hidden={showLabel ? undefined : true}
+          data-implied={showLabel ? undefined : ""}
           className={cn(
-            "min-w-0 shrink-3 rounded-sm px-1 transition-colors duration-(--motion-fade) ease-(--ease-out)",
+            "flex min-w-0 shrink-3 rounded-sm px-1 transition-colors duration-(--motion-fade) ease-(--ease-out)",
             canEdit && "hover:bg-state-hover",
-            showLabel || open ? "flex" : "hidden",
+            // Takes no width and gives back the row's gap, so nothing shifts.
+            !showLabel && "pointer-events-none -ms-2.5 w-0 overflow-hidden px-0 opacity-0",
           )}
         >
           <BucketLabel name={bucketName} isInbox={task.bucketId === inboxId} />
         </button>
-      </PopoverTrigger>
-      <PopoverContent
-        className="w-48 p-1"
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        className="w-48"
         onClick={(e) => e.stopPropagation()}
         onCloseAutoFocus={keepListFocus}
         align="end"
       >
-        <div className="max-h-64 overflow-auto">
+        <DropdownMenuRadioGroup
+          value={task.bucketId ?? ""}
+          onValueChange={(id) => {
+            if (id !== task.bucketId) api.patchTask(task.id, { bucketId: id });
+          }}
+        >
           {options.map((b) => (
-            <button
-              key={b.id}
-              type="button"
-              className={cn(
-                "flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-state-hover",
-                b.id === task.bucketId && "text-foreground",
-              )}
-              onClick={() => {
-                if (b.id !== task.bucketId) api.patchTask(task.id, { bucketId: b.id });
-                onOpenChange(false);
-              }}
-            >
-              {b.isSystem ? <Inbox className="size-3.5 text-muted-foreground" aria-hidden /> : null}
+            <DropdownMenuRadioItem key={b.id} value={b.id}>
+              {b.isSystem ? <Inbox aria-hidden /> : null}
               <span className="truncate">{b.name}</span>
-              {b.id === task.bucketId ? <Check className="ml-auto size-3.5" aria-hidden /> : null}
-            </button>
+            </DropdownMenuRadioItem>
           ))}
-        </div>
-      </PopoverContent>
-    </Popover>
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
+}
+
+/** Detailed's assignee cell: the first name ("Mike" of "Mike Grochowski"; "Me" stays). */
+function firstName(name: string): string {
+  return name.trim().split(/\s+/)[0] ?? name;
 }

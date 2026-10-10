@@ -51,3 +51,114 @@ export function resolveTasksDeepLink(
   }
   return { kind: "none" };
 }
+
+// ── Live search (`/`, tasks-v2 §7, U2-4) ────────────────────────────────────
+
+const ENTITIES: Record<string, string> = {
+  "&amp;": "&",
+  "&lt;": "<",
+  "&gt;": ">",
+  "&quot;": '"',
+  "&#39;": "'",
+  "&nbsp;": " ",
+};
+
+/** A description's text, lower-cased, cached by its source (they're long and
+ *  searched on every keystroke). */
+const textCache = new Map<string, string>();
+
+/**
+ * The words a description shows: the editor stores HTML (`<p dir="ltr"><span
+ * style="white-space: pre-wrap;">…`), so its tags and attributes are dropped
+ * and entities decoded; otherwise "pre" or "span" would match every task with
+ * a description (TV-U2 review). Plain text is read as it is.
+ */
+export function descriptionText(description: string | null | undefined): string {
+  if (!description) return "";
+  const cached = textCache.get(description);
+  if (cached !== undefined) return cached;
+  const text = (
+    /^\s*</.test(description)
+      ? description
+          .replace(/<[^>]*>/g, " ")
+          .replace(/&[a-z#0-9]+;/gi, (m) => ENTITIES[m.toLowerCase()] ?? m)
+      : description
+  ).toLowerCase();
+  if (textCache.size > 2000) textCache.clear();
+  textCache.set(description, text);
+  return text;
+}
+
+/**
+ * Whether a task matches the search box: every word of the query appears in
+ * its title or the text of its description, ignoring case. An empty query
+ * matches everything.
+ */
+export function taskMatchesQuery(
+  task: Pick<Task, "title" | "description">,
+  query: string,
+): boolean {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return true;
+  const haystack = `${task.title.toLowerCase()}\n${descriptionText(task.description)}`;
+  return words.every((word) => haystack.includes(word));
+}
+
+/** What a `#tag` or `@name` in the search box became. */
+export type SearchToken = { dimension: "tag" | "assignee"; value: string };
+
+export type SearchTokenContext = {
+  tags: ReadonlyArray<{ id: string; name: string }>;
+  /** Members in picker order; the current user is named "Me" there. */
+  people: ReadonlyArray<{ userId: string; name: string; isMe?: boolean }>;
+};
+
+/** One name, by exact match (ignoring case) or else a single prefix match. */
+function resolveName<T>(
+  word: string,
+  items: readonly T[],
+  namesOf: (item: T) => string[],
+): T | null {
+  const w = word.toLowerCase();
+  const exact = items.filter((item) => namesOf(item).some((n) => n.toLowerCase() === w));
+  if (exact.length === 1) return exact[0] ?? null;
+  if (exact.length > 1) return null;
+  const prefixed = items.filter((item) => namesOf(item).some((n) => n.toLowerCase().startsWith(w)));
+  return prefixed.length === 1 ? (prefixed[0] ?? null) : null;
+}
+
+const TOKEN = /(^|\s)([#@])([^\s#@]+)(?=\s)/g;
+
+/**
+ * Turns finished `#tag` and `@name` words in the search box into filter
+ * values (U2-4). A word is finished once a space follows it, or on Enter
+ * (`final`), so `#des` doesn't jump to a filter while you're still typing
+ * `#design`. `@me` is you; a person matches by their whole name or first
+ * name. A word that matches nothing, or more than one tag or person, stays
+ * in the query as text (`#123` and `C#` stay text unless a tag has that name).
+ */
+export function takeSearchTokens(
+  query: string,
+  ctx: SearchTokenContext,
+  final = false,
+): { query: string; tokens: SearchToken[] } {
+  const tokens: SearchToken[] = [];
+  const source = final ? `${query} ` : query;
+  const rest = source.replace(TOKEN, (match, lead: string, sigil: string, word: string) => {
+    if (sigil === "#") {
+      const tag = resolveName(word, ctx.tags, (t) => [t.name]);
+      if (!tag) return match;
+      tokens.push({ dimension: "tag", value: tag.id });
+      return lead;
+    }
+    const person = resolveName(word, ctx.people, (p) =>
+      p.isMe ? ["me"] : [p.name, p.name.split(/\s+/)[0] ?? p.name],
+    );
+    if (!person) return match;
+    tokens.push({ dimension: "assignee", value: person.userId });
+    return lead;
+  });
+  if (tokens.length === 0) return { query, tokens };
+  const cleaned = rest.replace(/\s{2,}/g, " ").replace(/^\s+/, "");
+  return { query: final ? cleaned.trimEnd() : cleaned, tokens };
+}

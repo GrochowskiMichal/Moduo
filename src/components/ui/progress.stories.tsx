@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react";
-
+import { AtThreeDensities } from "./kit-densities";
 import { Progress } from "./progress";
 
 const meta: Meta<typeof Progress> = {
@@ -50,5 +50,21 @@ export const EdgeCases: Story = {
         <p className="text-xs text-muted-foreground">value &lt; 0 — clamped to empty</p>
       </div>
     </div>
+  ),
+};
+
+/** Both sizes at the three density steps; the fill is neutral, never the accent. */
+export const Densities: Story = {
+  render: () => (
+    <AtThreeDensities>
+      <div className="w-60 space-y-3">
+        <Progress value={142} max={350} label="142 of 350 pages imported" />
+        <div className="flex items-center gap-2 font-sans text-xs text-muted-foreground tabular-nums">
+          <span className="text-foreground">1h 20m</span>
+          <span>of ~4h</span>
+          <Progress value={80} max={240} size="sm" label="1h 20m of about 4h" className="w-8" />
+        </div>
+      </div>
+    </AtThreeDensities>
   ),
 };

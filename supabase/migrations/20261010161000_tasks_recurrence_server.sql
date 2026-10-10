@@ -744,8 +744,9 @@ REVOKE ALL ON FUNCTION public.tasks__rule_signature(jsonb) FROM PUBLIC, anon, au
 -- its pointer is due (a pointer of null means the rule has ended, and one the
 -- server works out for an old row is stored, ended or not), and an open one
 -- only when the server reads its rule and it still has an occurrence within
--- 20 years either side (one that has none is marked with `endedRule`, the
--- rule it was worked out for, so an edited rule is a candidate again). A rule
+-- 20 years either side, or one still to come after a rule's last (one that
+-- hasn't is marked with `endedRule`, the rule it was worked out for, so an
+-- edited rule is a candidate again). A rule
 -- stored before the bounds existed and outside them is never one. A
 -- completed repeat on a rule only the app reads comes back at its stored
 -- pointer, as the app's catch-up did.
@@ -874,8 +875,19 @@ BEGIN
           CONTINUE WHEN v_cur IS NULL;
           v_kind := 'adopt';
         ELSE
-          CONTINUE WHEN v_cur IS NULL OR v_cur <= t.scheduled_at
-                     OR public.tasks__local_date(t.scheduled_at, v_zone) >= public.tasks__local_date(v_cur, v_zone);
+          IF v_cur IS NULL OR v_cur <= t.scheduled_at
+             OR public.tasks__local_date(t.scheduled_at, v_zone) >= public.tasks__local_date(v_cur, v_zone) THEN
+            -- Nothing to move. A rule that ends (COUNT or UNTIL) with nothing
+            -- after this occurrence never will have: mark it like one that
+            -- never happens. Endless rules skip the extra look.
+            IF (t.recurrence ->> 'rrule') ~* '(^|;)\s*(COUNT|UNTIL)\s*='
+               AND public.tasks__rrule_next(t.recurrence, t.scheduled_at, t.created_at) IS NULL THEN
+              UPDATE public.tasks
+                SET recurrence = t.recurrence || jsonb_build_object('endedRule', public.tasks__rule_signature(t.recurrence))
+                WHERE id = t.id;
+            END IF;
+            CONTINUE;
+          END IF;
           v_kind := 'collapse';
         END IF;
         v_next := public.tasks__rrule_next(t.recurrence, v_cur, t.created_at);

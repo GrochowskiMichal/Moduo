@@ -7,7 +7,10 @@ import {
   AvatarGroup,
   AvatarGroupCount,
   AvatarImage,
+  PersonAvatar,
+  TeamMark,
 } from "./avatar";
+import { AtThreeDensities } from "./kit-densities";
 
 const meta: Meta<typeof Avatar> = {
   title: "Components/ui/avatar",
@@ -83,5 +86,77 @@ export const Group: Story = {
       </Avatar>
       <AvatarGroupCount>+3</AvatarGroupCount>
     </AvatarGroup>
+  ),
+};
+
+const PEOPLE = [
+  { id: "u-maciej", name: "Maciej" },
+  { id: "u-mike", name: "Mike" },
+  { id: "u-alex", name: "Alex Rivera" },
+  { id: "u-sam", name: "Sam Okafor" },
+  { id: "u-mia", name: "Mia Chen" },
+  { id: "u-anna", name: "anna.kowalska@example.com" },
+];
+
+const TEAMS = [
+  { id: "t-design", name: "Design" },
+  { id: "t-dev", name: "Development" },
+  { id: "t-cs", name: "Customer success" },
+  { id: "t-ops", name: "Ops", letters: "OP" },
+];
+
+/**
+ * People are round, teams are square (calls 43 + 95). Two initials on a
+ * stable colour keyed on the id, so Maciej (MA) and Mike (MI) never read alike
+ * and a rename keeps the colour. No one assigned is the dashed ring.
+ */
+export const Identity: Story = {
+  render: () => (
+    <div className="flex flex-col gap-4 font-sans text-sm text-foreground">
+      <div className="flex flex-wrap items-center gap-4">
+        {PEOPLE.map((p) => (
+          <span key={p.id} className="flex items-center gap-1.5">
+            <PersonAvatar name={p.name} id={p.id} />
+            {p.name}
+          </span>
+        ))}
+        <span className="flex items-center gap-1.5 text-muted-foreground">
+          <PersonAvatar name={null} />
+          Unassigned
+        </span>
+      </div>
+      <div className="flex flex-wrap items-center gap-4">
+        {TEAMS.map((t) => (
+          <span key={t.id} className="flex items-center gap-1.5">
+            <TeamMark name={t.name} id={t.id} letters={t.letters} />
+            {t.name}
+          </span>
+        ))}
+      </div>
+      <div className="flex items-end gap-3">
+        {(["icon", "sm", "default", "lg"] as const).map((size) => (
+          <PersonAvatar key={size} name="Maciej Grzywacz" id="u-maciej" size={size} />
+        ))}
+        {(["icon", "sm", "default", "lg"] as const).map((size) => (
+          <TeamMark key={size} name="Design" id="t-design" size={size} />
+        ))}
+      </div>
+    </div>
+  ),
+};
+
+/** The icon rung scales with density: 16 / 15 / 14 px, two letters still fit. */
+export const Densities: Story = {
+  render: () => (
+    <AtThreeDensities>
+      <div className="flex items-center gap-2">
+        <PersonAvatar name="Maciej" id="u-maciej" />
+        <PersonAvatar name="Mike" id="u-mike" />
+        <PersonAvatar name={null} />
+        <TeamMark name="Design" id="t-design" />
+        <TeamMark name="Development" id="t-dev" />
+        <PersonAvatar name="Maciej" id="u-maciej" size="sm" />
+      </div>
+    </AtThreeDensities>
   ),
 };

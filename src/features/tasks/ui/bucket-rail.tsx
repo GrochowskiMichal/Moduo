@@ -6,6 +6,7 @@ import {
   type MenuKit,
   NavRow,
   NavRowDot,
+  type NavRowProps,
   NavSectionHeader,
   restoreNavFocus,
 } from "../../../components/ui/nav-row";
@@ -15,9 +16,11 @@ import { useAuth } from "../../../providers/auth-provider";
 import { useWorkspace } from "../../../providers/workspace-provider";
 import { ShareMenu } from "../../sharing/share-menu";
 import { TIME_BLOCK_LABELS, TIME_BLOCK_SLOTS, type TimeBlockSlot } from "../default-view";
+import type { RailDropTarget } from "../dnd/rail-drop";
 import { bucketSections } from "../helpers";
 import type { Bucket } from "../model";
 import { DeleteBucketDialog } from "./delete-bucket-dialog";
+import { type RailDropAccepts, RailDropRow } from "./dnd/rail-drop-row";
 
 export type TasksMode = "plan" | "execute";
 
@@ -57,7 +60,25 @@ type Props = {
    * rail opened (triage) closes; see `focusNavRow`.
    */
   navRef?: RefObject<HTMLElement | null>;
+  /**
+   * Makes Queue, My tasks, Inbox and the buckets task drop targets (TV-U4),
+   * tinting while a drop would change something. Only under the page's
+   * DndContext; absent = plain rows (stories, tests).
+   */
+  dropAccepts?: RailDropAccepts;
 };
+
+/** A rail row: a drop target when the rail takes drops, else a plain NavRow. */
+function RailRow({
+  drop,
+  ...props
+}: NavRowProps & { drop?: { target: RailDropTarget; accepts?: RailDropAccepts } }) {
+  return drop?.accepts ? (
+    <RailDropRow target={drop.target} accepts={drop.accepts} {...props} />
+  ) : (
+    <NavRow {...props} />
+  );
+}
 
 /** Collapsed section names from storage; anything unreadable is "none collapsed". */
 export function parseCollapsedSections(raw: string | null): Set<string> {
@@ -95,6 +116,7 @@ export function BucketRail({
   collapsedSections,
   onToggleSection,
   navRef,
+  dropAccepts,
 }: Props) {
   const ownNavRef = useRef<HTMLElement | null>(null);
   const nav = navRef ?? ownNavRef;
@@ -146,6 +168,7 @@ export function BucketRail({
       onSetGroup={(group) => onSetBucketGroup(bucket.id, group)}
       onShareCloseAutoFocus={returnFocus(bucket.id)}
       onInputExit={() => focusRowSoon(bucket.id)}
+      dropAccepts={dropAccepts}
     />
   );
 
@@ -163,7 +186,8 @@ export function BucketRail({
             current={selection === "all"}
             onSelect={() => onSelect("all")}
           />
-          <NavRow
+          <RailRow
+            drop={{ target: { type: "rail", target: "queue" }, accepts: dropAccepts }}
             label="Queue"
             icon={<ListChecks aria-hidden />}
             count={queueCount}
@@ -172,7 +196,8 @@ export function BucketRail({
             onSelect={() => onSelect("today")}
           />
           {myTasksCount !== null ? (
-            <NavRow
+            <RailRow
+              drop={{ target: { type: "rail", target: "mine" }, accepts: dropAccepts }}
               label="My tasks"
               icon={<UserRound aria-hidden />}
               count={myTasksCount}
@@ -182,7 +207,14 @@ export function BucketRail({
             />
           ) : null}
           {inbox ? (
-            <NavRow
+            // A droppable that never accepts (railDropAction): a task dropped
+            // here does nothing — a shared task never turns private by a drop
+            // — and the drop doesn't fall through to the Board's nearest column.
+            <RailRow
+              drop={{
+                target: { type: "rail", target: "bucket", bucketId: inbox.id },
+                accepts: dropAccepts,
+              }}
               navId={inbox.id}
               label="Inbox"
               icon={<Inbox aria-hidden />}
@@ -319,7 +351,8 @@ function DriftMark({ label, onTriage }: { label: string; onTriage?: () => void }
             type="button"
             aria-label={label}
             onClick={onTriage}
-            className="flex size-4 items-center justify-center rounded-sm outline-none hover:bg-state-active focus-visible:ring-2 focus-visible:ring-ring/50"
+            // hit-min pads the pointer target to 24 px; the dot stays put.
+            className="hit-min flex size-4 items-center justify-center rounded-sm outline-none hover:bg-state-active focus-visible:ring-2 focus-visible:ring-ring/50"
           >
             {dot}
           </button>
@@ -352,6 +385,7 @@ function BucketRow({
   onSetGroup,
   onShareCloseAutoFocus,
   onInputExit,
+  dropAccepts,
 }: {
   bucket: Bucket;
   count: number;
@@ -369,6 +403,7 @@ function BucketRow({
   onShareCloseAutoFocus: (event: Event) => void;
   /** The New section input closed by Enter/Esc: focus goes back to the row. */
   onInputExit: () => void;
+  dropAccepts?: RailDropAccepts;
 }) {
   const [sharing, setSharing] = useState(false);
   const [addingSection, setAddingSection] = useState(false);
@@ -446,7 +481,11 @@ function BucketRow({
   return (
     // Positioned so the Share popover can anchor to the row.
     <div className="relative">
-      <NavRow
+      <RailRow
+        drop={{
+          target: { type: "rail", target: "bucket", bucketId: bucket.id },
+          accepts: dropAccepts,
+        }}
         navId={bucket.id}
         label={bucket.name}
         icon={<NavRowDot />}

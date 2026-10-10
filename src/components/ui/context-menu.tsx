@@ -4,11 +4,10 @@ import type * as React from "react";
 
 import { cn } from "@/lib/utils";
 import { eyebrowVariants } from "./eyebrow";
+import { CONTEXT_MENU_SCROLL, FLOATING_SURFACE } from "./surface";
 
-// motion-pop: grows from where it was opened, on the motion tokens (global.css).
-const contentBase = cn(
-  "motion-pop min-w-[8rem] overflow-hidden rounded-md border border-border bg-popover p-1 text-popover-foreground",
-);
+// The one floating surface (surface.ts): grows from where it was opened.
+const contentBase = cn(FLOATING_SURFACE, CONTEXT_MENU_SCROLL, "min-w-[8rem] p-1");
 
 const itemBase = cn(
   "relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-popover-foreground",

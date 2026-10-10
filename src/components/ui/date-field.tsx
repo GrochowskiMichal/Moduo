@@ -6,7 +6,7 @@ import { formatDay, formatDayTime } from "@/lib/time-format";
 import { cn } from "@/lib/utils";
 import { Button } from "./button";
 import { Calendar } from "./calendar";
-import { Input } from "./input";
+import { Input, useDraftField } from "./input";
 import { Popover, PopoverContent, PopoverTrigger } from "./popover";
 import { PropertyValue } from "./property-row";
 
@@ -37,6 +37,150 @@ function applyTime(date: Date, hours: number, minutes: number): Date {
   const next = new Date(date);
   next.setHours(hours, minutes, 0, 0);
   return next;
+}
+
+const pad2 = (n: number) => String(n).padStart(2, "0");
+
+/**
+ * Reads a typed time: "15:00", "1500", "3pm", "3:30 PM", "9", "noon",
+ * "midnight". Returns "HH:mm" (24 h), or null when it isn't a time.
+ */
+function parseTimeText(input: string): string | null {
+  const text = input.trim().toLowerCase().replace(/\./g, "");
+  if (text === "noon") return "12:00";
+  if (text === "midnight") return "00:00";
+  const match = /^(\d{1,2})(?::?(\d{2}))?\s*(a|am|p|pm)?$/.exec(text);
+  if (!match) return null;
+  let hours = Number(match[1]);
+  const minutes = match[2] ? Number(match[2]) : 0;
+  const meridiem = match[3];
+  if (minutes > 59) return null;
+  if (meridiem) {
+    if (hours < 1 || hours > 12) return null;
+    if (meridiem.startsWith("p") && hours < 12) hours += 12;
+    if (meridiem.startsWith("a") && hours === 12) hours = 0;
+  } else if (hours > 23) {
+    return null;
+  }
+  return `${pad2(hours)}:${pad2(minutes)}`;
+}
+
+/** A typed time that reads as finished: a meridiem, `:mm`, three or four digits, a word. */
+function looksFinished(text: string): boolean {
+  const t = text.trim().toLowerCase().replace(/\./g, "");
+  return (
+    /[ap]m?$/.test(t) || /:\d{2}$/.test(t) || /^\d{3,4}$/.test(t) || /^(noon|midnight)$/.test(t)
+  );
+}
+
+/** "15:00" → "3:00 PM": the one time grammar (tasks-v3 call 41). */
+function formatTimeText(hhmm: string): string {
+  const [h, m] = hhmm.split(":").map(Number);
+  if (Number.isNaN(h) || Number.isNaN(m)) return hhmm;
+  const suffix = h < 12 ? "AM" : "PM";
+  const hour = h % 12 === 0 ? 12 : h % 12;
+  return `${hour}:${pad2(m)} ${suffix}`;
+}
+
+type TimeInputProps = Omit<
+  React.ComponentProps<typeof Input>,
+  "value" | "defaultValue" | "onChange" | "type"
+> & {
+  /** "HH:mm", 24 h, or "" for no time. */
+  value: string;
+  /** Called with "HH:mm" once the typed text reads as a time. */
+  onValueChange: (hhmm: string) => void;
+  /** Minutes ↑ / ↓ move the time by (default 15). */
+  step?: number;
+  /**
+   * Also report every keystroke that reads as a time, not only on Enter or
+   * blur: for an owner that holds a draft until its picker closes (DateField
+   * saves once), since a click outside closes the picker before any blur.
+   */
+  live?: boolean;
+};
+
+/**
+ * TimeInput — the token time field that replaces the native
+ * `<input type="time">` (DS-6, the §5.1 fix list): an `Input` that shows
+ * "3:00 PM", takes "15:00", "3pm" or "1530", commits on Enter or blur, reverts
+ * text that isn't a time, and moves by `step` minutes on ↑ / ↓. While you type
+ * the text stays as typed; it reads back as "3:00 PM" once committed.
+ */
+function TimeInput({
+  value,
+  onValueChange,
+  step = 15,
+  live = false,
+  size = "sm",
+  className,
+  onBlur,
+  onKeyDown,
+  placeholder = "3:00 PM",
+  ...props
+}: TimeInputProps) {
+  // "" is "no time": an empty field stays empty, and clearing never saves.
+  const field = useDraftField<string>({
+    value,
+    format: (hhmm) => (hhmm ? formatTimeText(hhmm) : ""),
+    parse: (text) => (text.trim() === "" ? value : (parseTimeText(text) ?? undefined)),
+    onValueChange,
+  });
+
+  // The time the field showed when typing began, for a cleared field.
+  const typedFrom = React.useRef(value);
+
+  const nudge = (direction: 1 | -1) => {
+    const from = parseTimeText(field.draft) ?? (value || "09:00");
+    const [h, m] = from.split(":").map(Number);
+    const total = (((h * 60 + m + direction * step) % 1440) + 1440) % 1440;
+    field.set(`${pad2(Math.floor(total / 60))}:${pad2(total % 60)}`);
+  };
+
+  return (
+    <Input
+      type="text"
+      inputMode="text"
+      autoComplete="off"
+      spellCheck={false}
+      size={size}
+      value={field.draft}
+      placeholder={placeholder}
+      onChange={(e) => {
+        const text = e.target.value;
+        if (!field.isTyping()) typedFrom.current = value;
+        field.type(text);
+        if (!live) return;
+        // Clearing the field puts back the time from before typing (an empty
+        // field never saves the last digit typed); otherwise only a time that
+        // looks finished goes into the draft ("3pm", "15:30", "1530", not "3").
+        if (text.trim() === "") {
+          if (typedFrom.current && typedFrom.current !== value) onValueChange(typedFrom.current);
+          return;
+        }
+        const parsed = looksFinished(text) ? parseTimeText(text) : null;
+        if (parsed && parsed !== value) onValueChange(parsed);
+      }}
+      onBlur={(e) => {
+        field.commit();
+        onBlur?.(e);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          field.commit();
+        } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+          e.preventDefault();
+          nudge(e.key === "ArrowUp" ? 1 : -1);
+        } else if (e.key === "Escape") {
+          field.revert();
+        }
+        onKeyDown?.(e);
+      }}
+      className={cn("w-24 tabular-nums", className)}
+      {...props}
+    />
+  );
 }
 
 const sameMoment = (a: Date | null, b: Date | null) =>
@@ -110,6 +254,7 @@ function useDateDraft({
   };
 
   const setTime = (next: string) => {
+    if (!open) return;
     const match = /^(\d{1,2}):(\d{2})$/.exec(next);
     if (!match) return; // a half-typed or cleared field moves nothing
     const h = Number(match[1]);
@@ -136,7 +281,7 @@ type DateDraft = ReturnType<typeof useDateDraft>;
  * capture parser understands), the Calendar, an optional time field and Clear —
  * for any popover that edits a date through {@link useDateDraft}.
  */
-function DatePickerPanel({ draft }: { draft: DateDraft }) {
+function DatePickerPanel({ draft, heading }: { draft: DateDraft; heading?: string }) {
   const presets: Array<{ label: string; date: Date }> = (() => {
     const today = new Date();
     return [
@@ -147,7 +292,10 @@ function DatePickerPanel({ draft }: { draft: DateDraft }) {
   })();
   return (
     <>
-      <div className="flex flex-wrap gap-1 border-b border-border p-2">
+      {heading ? (
+        <p className="px-3 pt-2.5 font-sans text-xs font-medium text-muted-foreground">{heading}</p>
+      ) : null}
+      <div className="flex flex-wrap gap-1 border-b border-hairline p-2">
         {presets.map((p) => (
           <Button key={p.label} variant="ghost" size="sm" onClick={() => draft.pickDay(p.date)}>
             {p.label}
@@ -161,26 +309,23 @@ function DatePickerPanel({ draft }: { draft: DateDraft }) {
         defaultMonth={draft.shown ?? undefined}
       />
       {draft.withTime ? (
-        <div className="flex items-center gap-2 border-t border-border p-2">
+        <div className="flex items-center gap-2 border-t border-hairline p-2">
           <Clock className="size-icon-sm text-muted-foreground" aria-hidden />
-          <Input
-            type="time"
-            size="sm"
-            value={draft.timeStr}
-            onChange={(e) => draft.setTime(e.target.value)}
+          {/* The token time field (DS-6), live into the draft: Enter commits
+              the typed time, then saves and closes (TV-P0: saves once). */}
+          <TimeInput
+            live
+            value={draft.shown ? draft.timeStr : ""}
+            onValueChange={draft.setTime}
             onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                draft.close();
-              }
+              if (e.key === "Enter") draft.close();
             }}
-            className="w-auto"
             aria-label="Time"
           />
         </div>
       ) : null}
       {draft.shown ? (
-        <div className="border-t border-border p-1">
+        <div className="border-t border-hairline p-1">
           <Button
             variant="ghost"
             size="sm"
@@ -259,5 +404,5 @@ function DateField({
   );
 }
 
-export type { DateDraft, DateFieldProps };
-export { DateField, DatePickerPanel, useDateDraft };
+export type { DateDraft, DateFieldProps, TimeInputProps };
+export { DateField, DatePickerPanel, formatTimeText, parseTimeText, TimeInput, useDateDraft };

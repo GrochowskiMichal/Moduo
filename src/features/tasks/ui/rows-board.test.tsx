@@ -92,7 +92,6 @@ function renderList(tasks: Task[], extra: ListExtra = {}, apiExtra: Record<strin
         view="list"
         onViewChange={() => {}}
         groupBy="none"
-        onGroupByChange={() => {}}
         buckets={[]}
         inbox={null}
         bucketNameById={() => "Work"}
@@ -218,6 +217,60 @@ describe("Row anatomy (U1-1, U1-2)", () => {
   });
 });
 
+// TV-U2 · Display → Rows (tasks-v3 §4, AC11.2): Standard is TV-U1's row;
+// Detailed adds the status name, the time and the assignee's name, and names
+// the project on every row. The rest of Detailed is TV-U10's.
+describe("Display → Rows: Standard · Detailed", () => {
+  const rows = [
+    task("a", {
+      status: "in_progress",
+      assigneeId: "u2",
+      durationMinutes: 240,
+      timeSpentSeconds: 4800,
+      dueDate: "2026-10-20T00:00:00.000Z",
+    }),
+    task("b", { durationMinutes: 45 }),
+    task("c", { status: "archived" }),
+  ];
+
+  // The project's control is in every editable row; inside the project it
+  // stays out of sight in Standard (implied by the scope).
+  // Where the project is implied the trigger stays, taking no width (DS-6).
+  // (It is aria-hidden then, so look it up by its label, not its role.)
+  const projectShown = (row: HTMLElement) =>
+    !row.querySelector('[aria-label="Bucket: Work"]')?.hasAttribute("data-implied");
+
+  it("Standard keeps TV-U1's columns", () => {
+    renderList(rows);
+    expect(cols(rowOf("Task a"))).toEqual(["date", "assignee", "queue"]);
+    expect(projectShown(rowOf("Task a"))).toBe(false);
+  });
+
+  it("Detailed adds the status name, the time and the assignee's name, and the project", () => {
+    renderList(rows, { rows: "detailed" });
+    const a = rowOf("Task a");
+    expect(cols(a)).toEqual(["status", "date", "time", "assignee", "queue"]);
+    const cell = (row: HTMLElement, col: string) =>
+      row.querySelector<HTMLElement>(`[data-col="${col}"]`)?.textContent;
+    expect(cell(a, "status")).toBe("In progress");
+    expect(cell(a, "time")).toBe("1h 20m / ~4h");
+    expect(cell(a, "assignee")).toContain("Mike");
+    expect(cell(rowOf("Task b"), "time")).toBe("~45m");
+    expect(cell(rowOf("Task c"), "status")).toBe("Won’t do");
+    // The project shows even inside the project.
+    expect(projectShown(a)).toBe(true);
+  });
+
+  it("nothing in Detailed's cells truncates: they widen instead", () => {
+    renderList(rows, { rows: "detailed" });
+    for (const col of ["status", "time", "assignee"]) {
+      const el = rowOf("Task a").querySelector<HTMLElement>(`[data-col="${col}"]`);
+      expect(el?.className).toContain("whitespace-nowrap");
+      expect(el?.className).not.toContain("truncate");
+    }
+  });
+});
+
 describe("Done and completed (U1-3)", () => {
   const tasks = () => [
     task("open"),
@@ -338,7 +391,6 @@ describe("Board (U1-4)", () => {
           view="board"
           onViewChange={() => {}}
           boardGroupBy="status"
-          onBoardGroupByChange={() => {}}
           buckets={[]}
           inbox={null}
           bucketNameById={() => "Work"}
@@ -392,8 +444,143 @@ describe("Board (U1-4)", () => {
     expect(card("Task d")).toBeTruthy();
   });
 
+  // The column's name in its kit GroupHeader (DS-6), without the count.
+  const headers = () =>
+    [...document.querySelectorAll("section > header")].map(
+      (h) => h.querySelector('[data-slot="group-header-label"]')?.textContent,
+    );
+
+  it("Filter → Status shows only the groups it lets through: Won't do on its own", () => {
+    renderBoard([task("w", { status: "archived" })], {
+      statusFilter: new Set(["archived"]),
+      selectedTaskId: "w",
+    });
+    expect(headers()).toEqual(["Won’t do"]);
+    expect(card("Task w")).toBeTruthy();
+    cleanup();
+    renderBoard([task("a")], { statusFilter: new Set(["todo", "in_progress"]) });
+    expect(headers()).toEqual(["To do", "In progress"]);
+    cleanup();
+    renderBoard([task("a")]);
+    expect(headers()).toEqual(["To do", "In progress", "Done"]);
+  });
+
+  it("a Won't do card kept in view (TV-P0) brings its group with it", () => {
+    renderBoard([task("a"), task("w", { status: "archived" })], { selectedTaskId: "w" });
+    expect(headers()).toEqual(["To do", "In progress", "Done", "Won’t do"]);
+  });
+
   it("a card with nothing to show has no empty meta line", () => {
     renderBoard([task("d", { status: "done" })], { completed: "all", canEdit: false });
     expect(card("Task d").querySelector(".whitespace-nowrap")).toBeNull();
+  });
+});
+
+// TV-U2 · U2-1/U2-3 — Display drives the List and the Board: group, order and
+// subtasks; the toolbar carries the page's search, Filter, Display and count.
+describe("Display on the List and Board (U2-1, U2-3)", () => {
+  it("the toolbar shows the title, its count and the page's controls; Group isn't in it", () => {
+    renderList([task("a")], {
+      header: {
+        count: 7,
+        search: <button type="button">Search</button>,
+        filter: <button type="button">Filter</button>,
+        display: <button type="button">Display</button>,
+      },
+    });
+    const toolbar = screen.getByRole("toolbar");
+    expect(within(toolbar).getByRole("heading", { name: "Work" })).toBeTruthy();
+    expect(within(toolbar).getByText("7")).toBeTruthy();
+    for (const name of ["Search", "Filter", "Display", "New"]) {
+      expect(within(toolbar).getByRole("button", { name })).toBeTruthy();
+    }
+    expect(within(toolbar).queryByText("Group")).toBeNull();
+    expect(within(toolbar).queryByRole("combobox")).toBeNull();
+  });
+
+  it("orders rows inside each group", () => {
+    renderList(
+      [
+        task("a", { priority: "low" }),
+        task("b", { priority: "high", status: "in_progress" }),
+        task("c", { priority: "high" }),
+        task("d", { priority: "medium" }),
+      ],
+      { groupBy: "status", order: "priority" },
+    );
+    expect(screen.getByRole("button", { name: /^In progress/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^To do/ })).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: /^Task / }).map((b) => b.textContent)).toEqual([
+      "Task b",
+      "Task c",
+      "Task d",
+      "Task a",
+    ]);
+  });
+
+  it("each task is listed once, whatever the grouping (no Tag grouping)", () => {
+    const tasks = [
+      task("a", { dueDate: new Date().toISOString(), priority: "high" }),
+      task("b", { assigneeId: null }),
+    ];
+    for (const groupBy of ["status", "priority", "assignee", "date"] as const) {
+      renderList(tasks, { groupBy });
+      expect(screen.getAllByRole("button", { name: "Task a" })).toHaveLength(1);
+      cleanup();
+    }
+  });
+
+  it("Subtasks · Flat lists a subtask as its own row", () => {
+    const parent = task("p");
+    const child = task("c", { parentId: "p" });
+    const apiExtra = { subtasksByParent: new Map([["p", [child]]]) };
+    renderList([parent, child], { subtasks: "nested" }, apiExtra);
+    expect(screen.queryByRole("button", { name: "Task c" })).toBeNull();
+    cleanup();
+    renderList([parent, child], { subtasks: "flat" }, apiExtra);
+    expect(screen.getByRole("button", { name: "Task c" })).toBeTruthy();
+  });
+
+  it("the Queue keeps its line-up whatever Order says", () => {
+    renderList([task("a", { priority: "low" }), task("b", { priority: "high" })], {
+      selection: "today",
+      order: "priority",
+    });
+    expect(screen.getAllByRole("button", { name: /^Task / }).map((b) => b.textContent)).toEqual([
+      "Task a",
+      "Task b",
+    ]);
+  });
+
+  it("the Board orders cards inside each column, and flattens subtasks on Flat", () => {
+    const parent = task("p", { dueDate: "2026-10-20T00:00:00.000Z" });
+    const child = task("c", { parentId: "p", dueDate: "2026-10-10T00:00:00.000Z" });
+    const api = viewApi([parent, child], { subtasksByParent: new Map([["p", [child]]]) });
+    render(
+      <TooltipProvider>
+        <TaskBoardView
+          tasks={[parent, child]}
+          scopeTitle="Work"
+          selection="b1"
+          view="board"
+          onViewChange={() => {}}
+          boardGroupBy="status"
+          buckets={[]}
+          inbox={null}
+          bucketNameById={() => "Work"}
+          canEdit
+          onRequestCapture={() => {}}
+          selectedTaskId={null}
+          onSelectTask={() => {}}
+          order="due"
+          subtasks="flat"
+          api={api as never}
+        />
+      </TooltipProvider>,
+    );
+    const cards = [...document.querySelectorAll<HTMLElement>("[data-task-id]")].map(
+      (el) => el.dataset.taskId,
+    );
+    expect(cards).toEqual(["c", "p"]);
   });
 });

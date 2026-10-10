@@ -1,41 +1,44 @@
 // Reusable drag-and-drop layer for the Tasks module.
 //
 // One typed vocabulary so every surface (queue reorder, board reorder/move,
-// drag-onto-task → subtask, and future drop targets like a calendar slot or a
-// cross-surface task sidebar) speaks the same language instead of re-deriving
-// sensors, payloads, and the drag handle per view:
+// the List's reorder-or-nest, the rail's drop targets, and future ones like a
+// calendar slot) speaks the same language instead of re-deriving sensors,
+// payloads, and the drag handle per view:
 //   • `taskDrag` / `asTaskDrag` — the payload every draggable task carries.
 //   • `TaskDropTarget` — a discriminated union of where a task can land; new
 //     surfaces add a variant + a branch in their drop handler, nothing else.
 //   • `useTaskDndSensors` — shared pointer + keyboard sensors (a11y reorder).
-//   • `SortableTask` / `NestableTask` — wrappers that hand the row its drag
+//   • `SortableTask` / `DraggableTask` — wrappers that hand the row its drag
 //     listeners + activator ref so the whole row is the activator (no grip).
+//   • DS-4's drag visuals (`DRAG_SOURCE`, `DROP_TARGET`, `InsertionLine`,
+//     `NestPreview`, `DragOverlaySurface`) are the one look (tasks-v2 U4-5).
 //
 // dnd-kit does the geometry; this module is the shared contract on top of it.
 
 import {
+  type Announcements,
   type CollisionDetection,
-  closestCenter,
   DndContext,
   type DragCancelEvent,
   type DragEndEvent,
   type DraggableSyntheticListeners,
   type DragStartEvent,
   KeyboardSensor,
+  type Modifier,
   PointerSensor,
-  pointerWithin,
   type SensorDescriptor,
   type SensorOptions,
+  type UniqueIdentifier,
   useDndMonitor,
   useDraggable,
-  useDroppable,
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
 import { sortableKeyboardCoordinates, useSortable } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-import { type CSSProperties, type ReactNode, useCallback } from "react";
+import { CSS, getEventCoordinates } from "@dnd-kit/utilities";
+import type { CSSProperties, ReactNode } from "react";
 
+import { DRAG_SOURCE } from "../../../../components/ui/drag-visuals";
 import { cn } from "../../../../lib/utils";
 
 // ── drag payload ─────────────────────────────────────────────────────────────
@@ -65,11 +68,10 @@ export function asTaskDrag(data: unknown): TaskDragData | null {
  * sortable directly — these variants are the *non-sortable* targets a surface
  * sets on `useDroppable({ data })`. Adding a surface (e.g. a calendar slot) is a
  * new variant here + one branch in that surface's `onDragEnd`; existing call
- * sites stay untouched.
+ * sites stay untouched. The List has no droppables: it resolves reorder-or-nest
+ * from the raw pointer (`dnd/drop-mode.ts`); the rail's are `dnd/rail-drop.ts`.
  */
 export type TaskDropTarget =
-  // Drop onto another task → make the dragged task its subtask (one level).
-  | { type: "onto-task"; taskId: string }
   // Board column → move (and re-rank to the column end on a bare column drop).
   | { type: "column"; dim: "status" | "bucket"; value: string }
   // The Timeline's lanes region — ONE droppable for the whole axis; the drop
@@ -80,10 +82,59 @@ export type TaskDropTarget =
 
 export function asTaskDropTarget(data: unknown): TaskDropTarget | null {
   const t = (data as { type?: unknown } | null)?.type;
-  return t === "onto-task" || t === "column" || t === "timeline-axis"
-    ? (data as TaskDropTarget)
-    : null;
+  return t === "column" || t === "timeline-axis" ? (data as TaskDropTarget) : null;
 }
+
+// ── screen-reader announcements ──────────────────────────────────────────────
+
+/**
+ * What a screen reader hears during a task drag, in words: dnd-kit's own
+ * announcements read the raw ids ("Picked up draggable item 3f2c…").
+ * `taskName` names a task ("“Write the brief”"); `targetName` a droppable id
+ * (a sidebar row, a Board column, a card, the hub), or null for none.
+ */
+export function taskDragAnnouncements(names: {
+  taskName: (id: string) => string;
+  targetName: (id: string) => string | null;
+}): Announcements {
+  const target = (over: { id: UniqueIdentifier } | null) =>
+    over ? names.targetName(String(over.id)) : null;
+  return {
+    onDragStart: ({ active }) => `Picked up ${names.taskName(String(active.id))}.`,
+    onDragOver: ({ active, over }) => {
+      const where = target(over);
+      return where ? `${names.taskName(String(active.id))} is over ${where}.` : undefined;
+    },
+    onDragEnd: ({ active, over }) => {
+      const where = target(over);
+      const what = names.taskName(String(active.id));
+      return where ? `Dropped ${what} on ${where}.` : `Dropped ${what}.`;
+    },
+    onDragCancel: ({ active }) => `Stopped moving ${names.taskName(String(active.id))}.`,
+  };
+}
+
+// ── the drag preview's place ─────────────────────────────────────────────────
+
+/**
+ * A DragOverlay modifier for the List: the preview sits just below-right of
+ * the pointer instead of over the row it was grabbed from, so it never hides
+ * the row under the pointer and its insertion line, nest tint or sorted note.
+ * Visual only there: the List resolves its drop from the raw pointer, and the
+ * rail and hub from the pointer too. Never on a surface whose collision
+ * measures the dragged rect (the Queue's `closestCenter`, the Board's
+ * `closestCorners`): moving the overlay would move their drops.
+ */
+export const overlayBesideCursor: Modifier = ({ transform, activatorEvent, draggingNodeRect }) => {
+  if (!activatorEvent || !draggingNodeRect) return transform;
+  const at = getEventCoordinates(activatorEvent);
+  if (!at) return transform;
+  return {
+    ...transform,
+    x: transform.x + at.x - draggingNodeRect.left + 12,
+    y: transform.y + at.y - draggingNodeRect.top + 8,
+  };
+};
 
 // ── sensors ──────────────────────────────────────────────────────────────────
 
@@ -115,29 +166,6 @@ export function useTaskDndSensors(opts?: { sortable?: boolean; keyboard?: boolea
     ),
   );
 }
-
-// ── collision detection ──────────────────────────────────────────────────────
-
-/**
- * Pointer-first collision strategy for drag-*onto*-target surfaces (nesting),
- * where a droppable's rect can be taller than its own row: an expanded parent's
- * `onto-task` node encloses its visible children (see {@link NestableTask}), so
- * its geometric centre sits down among them. Plain `closestCenter` then
- * mis-resolves a hover over a lower child to the *next sibling* (whose centre is
- * nearer the pointer), nesting under the wrong parent. `pointerWithin` asks the
- * precise question instead — which droppable actually contains the pointer — and
- * only falls back to `closestCenter` when there is no pointer (keyboard dragging)
- * or it sits outside every droppable. This is the dnd-kit-recommended combo for
- * high-precision drop-onto-target semantics.
- *
- * Reorder surfaces (Queue/board) stay on plain `closestCenter`: their droppables
- * are one row tall, so centre distance is the right proxy and the sortable
- * keyboard path expects it.
- */
-export const pointerFirstCollision: CollisionDetection = (args) => {
-  const pointerHits = pointerWithin(args);
-  return pointerHits.length > 0 ? pointerHits : closestCenter(args);
-};
 
 // ── external-context monitor (DF-22) ─────────────────────────────────────────
 
@@ -183,6 +211,7 @@ export function DndBoundary({
   onDragStart,
   onDragEnd,
   onDragCancel,
+  announcements,
   children,
 }: {
   dndMode: "internal" | "external";
@@ -191,6 +220,9 @@ export function DndBoundary({
   onDragStart?: (event: DragStartEvent) => void;
   onDragEnd?: (event: DragEndEvent) => void;
   onDragCancel?: (event: DragCancelEvent) => void;
+  /** Internal mode's screen-reader words (`taskDragAnnouncements`); external
+   *  mode hears the page context's. */
+  announcements?: Announcements;
   children: ReactNode;
 }) {
   if (dndMode === "external") {
@@ -212,6 +244,7 @@ export function DndBoundary({
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
       onDragCancel={onDragCancel}
+      accessibility={announcements ? { announcements } : undefined}
     >
       {children}
     </DndContext>
@@ -242,9 +275,8 @@ type SortableTaskRender = (slot: {
 /**
  * Wraps a sortable task row/card: owns the sortable node ref + transform and
  * hands the drag listeners + activator ref back for the child to put on the
- * whole row. The dragged item lifts (raised z + reduced opacity) while its
- * neighbours animate apart — the insertion affordance comes free from the
- * sortable strategy.
+ * whole row. The source stays in its slot dimmed (DRAG_SOURCE) while the
+ * overlay follows the pointer and its neighbours animate apart.
  */
 export function SortableTask({
   id,
@@ -275,80 +307,51 @@ export function SortableTask({
     <div
       ref={setNodeRef}
       style={style}
-      className={cn(isDragging && "relative z-10 opacity-60", className)}
+      className={cn(isDragging && ["relative z-10", DRAG_SOURCE], className)}
     >
       {render({ dragListeners: listeners, dragActivatorRef: setActivatorNodeRef, isDragging })}
     </div>
   );
 }
 
-// ── nestable wrapper (drag-onto-task → subtask) ──────────────────────────────
+// ── draggable wrapper (the List: reorder or nest) ────────────────────────────
 
-type NestableTaskRender = (slot: {
-  /** dnd-kit listeners — spread on the row root so the WHOLE childless row is
-   * the drag activator. Undefined when this row can't be dragged (has children). */
+type DraggableTaskRender = (slot: {
+  /** dnd-kit listeners — spread on the row root so the WHOLE row is the drag
+   * activator. */
   dragListeners: DraggableSyntheticListeners;
   /** Set on the same element as `dragListeners` — see {@link DragActivatorRef}. */
   dragActivatorRef: DragActivatorRef;
-  /** A valid drop is currently hovering this row → caller paints the target. */
-  isOver: boolean;
   isDragging: boolean;
 }) => ReactNode;
 
 /**
- * Wraps a row that can be dragged *onto another row* to nest it (set parent),
- * and/or receive such a drop. Unlike {@link SortableTask} there is no
- * reordering: the row is a plain draggable plus an `onto-task` droppable on the
- * same node. The two capabilities are gated independently —
- *   • `canDrag` — only a childless task may become a subtask (one level), so the
- *     handle (and lift) appear only when true;
- *   • `canDrop` — only a valid parent target for the in-flight drag; the caller
- *     recomputes this per render against the active task and toggles it, so
- *     invalid rows never register as `over`.
+ * Wraps a List row as a plain drag source. There's no droppable: where it
+ * lands (before/after a row, nested under one, into a group) is resolved from
+ * the raw pointer against the rows' boxes (`dnd/drop-mode.ts`), and the rail
+ * and the hub are their own droppables. The source stays put, dimmed.
  */
-export function NestableTask({
+export function DraggableTask({
   id,
   from,
-  canDrag = true,
-  canDrop = true,
+  disabled,
   className,
   render,
 }: {
   id: string;
   from: TaskDragSource;
-  canDrag?: boolean;
-  canDrop?: boolean;
+  disabled?: boolean;
   className?: string;
-  render: NestableTaskRender;
+  render: DraggableTaskRender;
 }) {
-  const {
-    setNodeRef: setDragRef,
-    setActivatorNodeRef,
-    listeners,
-    isDragging,
-  } = useDraggable({ id, data: taskDrag(id, from), disabled: !canDrag });
-  const { setNodeRef: setDropRef, isOver } = useDroppable({
-    id: `onto:${id}`,
-    data: { type: "onto-task", taskId: id } satisfies TaskDropTarget,
-    disabled: !canDrop,
+  const { setNodeRef, setActivatorNodeRef, listeners, isDragging } = useDraggable({
+    id,
+    data: taskDrag(id, from),
+    disabled,
   });
-  // Same DOM node is both the drag source and the drop target.
-  const setNodeRef = useCallback(
-    (node: HTMLElement | null) => {
-      setDragRef(node);
-      setDropRef(node);
-    },
-    [setDragRef, setDropRef],
-  );
-
   return (
-    <div ref={setNodeRef} className={cn(isDragging && "opacity-50", className)}>
-      {render({
-        dragListeners: listeners,
-        dragActivatorRef: setActivatorNodeRef,
-        isOver,
-        isDragging,
-      })}
+    <div ref={setNodeRef} className={cn(isDragging && DRAG_SOURCE, className)}>
+      {render({ dragListeners: listeners, dragActivatorRef: setActivatorNodeRef, isDragging })}
     </div>
   );
 }

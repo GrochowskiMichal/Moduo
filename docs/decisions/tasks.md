@@ -33,7 +33,7 @@ Built in tasks-v3 block 5 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §Assump
   - Rejected: evaluating in the assignee's zone now (preview and server would disagree across DST until TV-D12 changes both).
 - **D8-6 · Repeat rules are bounded on write and in the engine** → TV-D8 (`tasks__recurrence_problem`, CHECK `tasks_recurrence_bounded`, the engine's day scan and 20-year horizon, the roll-over's batch and time budget)
   - Who: agent's choice, deferred to by Maciej, 2026-10-10.
-  - Decision: INTERVAL and COUNT 1–1000, UNTIL and DTSTART between 1900 and 2200, a rule ≤ 500 characters, refused by the ops and a CHECK; the engine scans calendar days in one set-based query (a counted rule from its start, anything else from the day asked about), never past 20 years ahead, and stops at the first day it needs, so a call costs a few milliseconds and under 30 ms at worst; the 15-minute job handles at most 2,000 tasks in 60 seconds; a completed repeat whose rule has ended is marked (`nextOccurrence: null`), an open one with no occurrence within 20 years either side is marked for that rule (`endedRule`), and a rule stored before the bounds and outside them is never a candidate, so the job's candidates shrink.
+  - Decision: INTERVAL and COUNT 1–1000, UNTIL and DTSTART between 1900 and 2200, a rule ≤ 500 characters, refused by the ops and a CHECK; the engine scans calendar days in one set-based query (a counted rule from its start, anything else from the day asked about), never past 20 years ahead, and stops at the first day it needs, so a call costs a few milliseconds and under 30 ms at worst; the 15-minute job handles at most 2,000 tasks in 60 seconds; a completed repeat whose rule has ended is marked (`nextOccurrence: null`), an open one with no occurrence within 20 years either side, or sitting on the last occurrence of a rule that has ended, is marked for that rule (`endedRule`), and a rule stored before the bounds and outside them is never a candidate, so the job's candidates shrink.
   - Why: a stored rule must never make a status change or the shared job slow, and a counted rule must stay exact however sparse (a step cap made long counted rules read as ended).
   - Rejected: unbounded RFC rules (no one writes INTERVAL=5000 on purpose) and a period walk with a step cap (bounded, but wrong for sparse counted rules).
 - **D8-7 · The roll-over writes its trail line as "Moduo"** → TV-D8
@@ -81,6 +81,118 @@ Built in tasks-v3 block 5 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §Assump
   - Decision: a task created done (an import) records a completion; done → To do or In progress, and done → Won't do, take back the latest completion (it didn't stand); one completion per cycle.
   - Why: the history answers "when was this really done", which a Won't do contradicts.
   - Rejected: keeping a completion after Won't do (two answers for one cycle).
+## 2026-10-10 · TV-U4 (tasks-v3 block 7): drag and drop — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 7 (#329 re-scoped; [specs/tasks-v3.md](../../specs/tasks-v3.md) AC11.4, AC13.3, default m, calls a, 20, 39, k) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **U4-1 · Manual order lives in a project or the Inbox only; All, My tasks and the Queue's board never write a position** → TV-U4 (`src/features/tasks/order.ts`), TV-U10, TV-U11
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: a drag or ⌥⇧↑/↓ reorders only in a project's or the Inbox's view under Order by: Manual. Sorted, the view shows "Sorted by due date · Back to manual order" under the toolbar, the drag shows the note where the line would be, and the drop writes nothing and asks with a toast ("Sorted by due date" · Back to manual order). Across projects (All, My tasks, the Queue's Board) a drag only changes the field of the group it lands in (status, priority, assignee, project), keeping the task's place; a slot in its own group is no drop, with no note. This includes All grouped by project, where research §3 had "drag inside each project group".
+  - Why: default m and AC11.4 say cross-project views never write positions; one rule for every cross-project view is easier to learn than "All by project only". TV-U10 can add the in-group reorder for All by project if the List rebuild wants it.
+  - Rejected: #329's reorder in every list; reorder inside All's project groups.
+- **U4-2 · A move into another project that wasn't placed goes to that project's end** → TV-U4 (`dropTask`, `bucketEndPosition`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: a sidebar project row, a Board project column or a List project group (across projects) moves the task to the end of the project's manual order, its subtasks following (Won't do and done ones too). The view itself never chose that place, so U4-1 holds. A subtask moved to another project on its own comes out of its parent (a subtask lives in its parent's project); nesting under a task in another project moves the child there.
+  - Why: keeping the old key would land the task somewhere random in the new project's order; Todoist and Asana file a moved task at the end.
+  - Rejected: keeping the old position; asking where.
+- **U4-3 · A project task is never dropped into the Inbox** → TV-U4 (`railDropAction`, `canMoveInto`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: the Inbox sidebar row stays a droppable that never accepts (so a release over it lands nowhere instead of on the Board's nearest column); the Inbox group in All grouped by project and the Inbox column of the Board take no task from a project either. Inbox → project, and the Inbox's own order, still drag.
+  - Why: the edge case "a shared task never turns private by a drop" (REPLAN 20).
+  - Rejected: Inbox row only (the group and column would leak the same way).
+- **U4-4 · Undo on every drop, never over a newer change** → TV-U4 (`useTasksModule.dropTask`, `drop-write.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: every drop and move key saves through one `dropTask`: its writes go one after another (field write, then the status op, then the assign op), and only once all landed does the toast say what happened ("Moved to Website", "Moved to In progress", "Assigned to you", "Moved under “Plan launch”", "Moved up") with the 8 s Undo. A failed drop says why and offers no Undo. Undo puts back each field the drop changed unless it changed since, and then says "Undo kept a newer change to “…”". The rail's Queue drop has Undo too (out of the queue); Queue reorders by drag or ⌥⇧↑/↓ undo to the previous line-up. A drop into Done that moved a task out of a queue doesn't requeue it on Undo (the server's rule since TV-D2).
+  - Why: call a; #329's "Moved to X" showed even when the move failed, and its parent + status went as two writes at once.
+  - Rejected: Undo by reload; an Undo that overwrites whatever is there.
+- **U4-5 · The drop targets: Won't do yes, a day no, a former member no** → TV-U4 (`groupAccepts`), TV-U15, TV-D7
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: a drop into the Won't do group (List) or column (Board) marks it Won't do, with Undo (TV-U2 left that to this block); a Date group takes no cross-group drop (Upcoming's drag-to-reschedule is TV-U15's); an assignee group of someone who can't take tasks takes none. Done drops still finish only the task: 87's "finish its open subtasks too" goes with the status op rework (TV-D7/TV-D9).
+  - Why: each is either a write the drop can make cleanly today or another block's.
+  - Rejected: refusing Won't do drops; guessing a date field from a Date group.
+- **U4-6 · The keys: `>` `<`, ⌥⇧↑/↓; the Board's keys wait** → TV-U4 (`list-keys.ts`), TV-U10, TV-U11
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: `>` makes the selected task a subtask of the row above (one level; across projects it moves there), `<` brings a subtask out to the top level right after its parent (where the order is manual), ⌥⇧↑/↓ move it one place among its siblings (manual order only; the Queue moves in its line-up); every one has Undo. ⌥⇧←/→ (across columns) and Group by Assignee/Priority on the Board come with the Board rebuild (TV-U11), which brings the Board's keyboard cursor.
+  - Why: default k and the keymap's move keys; the Board has no keyboard cursor yet to hang them on.
+  - Rejected: ⌘] / ⌘[ (Back and Forward), ⌘↑/↓.
+- **U4-7 · The drag preview sits beside the pointer in the List** → TV-U4 (`overlayBesideCursor`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: the List's drag preview is a 256 px title chip just below-right of the pointer, so it never covers the row it points at (the line, the nest tint, the sorted note); the Board's card and the Queue's row keep their place under the grab (their collisions measure the dragged box). Screen readers hear titles and row or column names, never ids.
+  - Why: call 39's one drag preview has to leave the drop target visible.
+  - Rejected: #329's full-width preview at the grab offset.
+
+## 2026-10-10 · DS-6 (tasks-v3 block 8): the north-star kit, the fix list and the lint guards
+
+- **Group headers are sentence case as typed, never small caps** → DS-6 (`src/components/ui/group-header.tsx`, `NavSectionHeader`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10 (follows call 40 and both prototypes' `.ghead`).
+  - Decision: `GroupHeader` (list groups, board columns, timeline lanes, Upcoming's days) and the rail's `NavSectionHeader` show the name as typed at 13 px medium with the count in the tertiary level; `Eyebrow` small caps stay for fixed chrome only.
+  - Why: a group is usually named by a person (a project, a status, a team), and call 40 says people's words are never capitalised; the visual audit's "eyebrow + plain count" contract predates that call.
+  - Rejected: building GroupHeader on `eyebrowVariants` as the audit's §C wrote it.
+- **Three readable text levels: the tertiary one is `--subtle-foreground`** → DS-6 (`tokens.css` §5b, DESIGN_RULES R11)
+  - Who: agent's choice within call 38, deferred to by Maciej, 2026-10-10.
+  - Decision: `color-mix(in oklab, var(--muted-foreground) 86%, transparent)`, about 6:1 on dark, the prototypes' `--text-3`; translucent, so it reads the same on card, background and popover. The kit uses it for counts, timestamps and hints; existing `/70`-style fades elsewhere are left for each module's rebuild.
+  - Why: call 38 left the exact step to round 2; 86% keeps a visible step below secondary (8.5:1) while staying well above 4.5:1.
+  - Rejected: `/75` of muted (≈ 5:1, too close to the line on light); a sweep of every fade now (DS-5's sweep is retired).
+- **Avatars: two initials on a hue keyed by id; teams first letter + next consonant** → DS-6 (`src/components/ui/avatar.tsx`)
+  - Who: agent's choice within calls 43 and 95, deferred to by Maciej, 2026-10-10.
+  - Decision: people take first + last word ("Maciej Grzywacz" → MG) or a single word's first two letters ("Maciej" → MA, "Mike" → MI); teams take two words' initials or a single word's first letter and next consonant (Design → DS, Development → DV), editable later (`letters`, TV-D10); the hue is an FNV hash of the id (name as fallback) over six label hues (gray means no one, red reads as an error); initials sit on the hue mixed 48% into the card (`--label-fill`) in the foreground colour; the icon rung uses a new 9 px step (`--text-3xs`).
+  - Why: call 95's own examples (DS, DV) need the consonant rule for teams; a person's single name must still tell Maciej from Mike; keying on the id keeps a colour through a rename.
+  - Rejected: one letter on a hue (the audit's fallback: Maciej and Mike can still collide); the 18% `--label-surface` tint (too faint at 16 px).
+- **One floating surface: hairline edge, control radius, `motion-pop`** → DS-6 (`src/components/ui/surface.ts`, `global.css`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10 (the prototypes' `.menu`).
+  - Decision: popover, dropdown and context menus, select lists and tooltips share `FLOATING_SURFACE` (`rounded-md border-hairline bg-popover` + `motion-pop`); FilterBar and DisplayMenu lose their `rounded-lg` override; the tooltip leaves tw-animate for `motion-pop`, which now also answers Radix's `delayed-open` / `instant-open`; dropdown and context menus cap at the height Radix measures on their side and scroll inside. Inline cards (a comment, the composer) keep `rounded-lg`: they are cards, not floating.
+  - Why: AC14.3's "two floating-surface recipes"; the prototypes draw menus at the control radius with a hairline.
+  - Rejected: `rounded-lg` for every floating surface (rounder than any prototype menu).
+- **The guards live in `lint:tw` and `lint:css`; small caps fail closed** → DS-6 (`scripts/check-text-rules.ts`, `.stylelintrc.json`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: rotated text (any `writing-mode`, a 90° / 270° turn anywhere but on an icon's own tag, inline `rotate:` included) and small caps on people's words (an `Eyebrow`, menu label or `WidgetSectionLabel` with an expression child, a `Field label` / `CommandGroup heading` expression, `eyebrowVariants()` outside the primitives, `capitalize`, `font-variant` small caps) fail `lint:tw` unless the site is on the reviewed allowlist, where each entry excuses exactly one site; the CSS forms fail `lint:css`. Known people's words in other modules (a CalDAV account name in Settings and the calendar rail, an email sender in a row menu, the booking host's name) are listed as debt for their rebuilds; a test keeps Tasks out of that list and checks each file has exactly as many sites as entries.
+  - Why: the spec's `lint:controls` never landed on this line (the control-sizing branch is not an ancestor), and a third linter would duplicate `lint:tw`'s walk; a fail-closed allowlist is the only static check that can't miss a new name.
+  - Rejected: a denylist of "user-looking" property names (misses the next one); fixing the three other-module sites now (DS-5's sweep is retired).
+- **Native date, time and number inputs give way to `DateField`, `TimeInput` and `NumberInput`** → DS-6 (`date-field.tsx`, `input.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: `TimeInput` is a token text field that shows "3:00 PM", takes "15:00", "3pm" or "1530", commits on Enter or blur and steps 15 minutes on ↑ / ↓; `NumberInput` takes digits only, clamps and steps; DateField's trigger reads "Oct 16, 3:00 PM" (call 41). Tasks adopts them now; Calendar, Email, Contacts, Settings and the dashboard keep their native inputs until each is rebuilt. Inside a date picker (TV-P0's save-once draft) the time field is "live": a time that looks finished ("3pm", "15:30", "1530") goes into the draft as you type, so a click outside that closes the picker before any blur keeps it, and clearing the field puts back the time from before you typed (an empty field never saves a stray digit).
+  - Why: the fix list's "native inputs"; a native time field draws browser chrome inside token UI and ignores the 12-hour grammar.
+  - Rejected: keeping `<Input type="time">` inside DateField (still the browser's own control).
+
+## 2026-10-10 · TV-U2 (tasks-v3 block 6): toolbar, Filter, Display, search — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 6 (#330 re-scoped; [specs/tasks-v3.md](../../specs/tasks-v3.md) AC11.2–11.3, AC1.4, AC13.3) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **U2-1 · Group by is Status · Priority · Assignee · Date · Project · None until sections and teams exist** → TV-U2 (`helpers.ts` `GROUP_BYS`, `display.ts`), TV-D10/TV-U10 (Section, Team)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: default l's order with the two missing dimensions left out until TV-D10 creates their data; "None" stays, listed last; Project only across projects; the stored key stays `bucket` until TV-D7. Defaults: All by project, My tasks by status (84), a project, the Inbox and the Queue ungrouped (a project's default becomes Section once it has sections).
+  - Why: a Section or Team choice today would put every task in one "No section" group; None is how a flat project list is asked for.
+  - Rejected: listing Section and Team now; dropping None.
+- **U2-2 · The Date grouping is rolling, and its five days are named in full** → TV-U2 (`dateGroupOf`, `dateGroupLabel`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: Earlier · Today · Tomorrow · the next five days ("Saturday" … "Wednesday") · Later · No date, from the row's date (next session or due, whichever is first by day); "This week" stays only in Filter → Due date / Scheduled.
+  - Why: call 83; rolling days never depend on where the week starts, so Time & region (TV-D14) changes nothing here; a header reads as a word, not a column value.
+  - Rejected: "Sat"-style headers; week-based groups.
+- **U2-3 · Rows: Detailed shows what today's row can carry; the rest waits for the kit Row** → TV-U2 (`row-layout.ts`, `task-row.tsx`), TV-U10, TV-U11
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: Display → Rows: Standard · Detailed, remembered per view (scope), Standard by default. Detailed adds the status name, "1h 20m / ~4h", the assignee's first name and the project on every row; handle, Project › Section, Due and Next session as two columns, waiting, updated and sortable headers come with TV-U10 on DS-6's Row. The Board has no Rows control until TV-U11's cards. The preset is stored per scope only: RESEARCH 2's user-level default (with per-view overrides) and "developers start on Detailed" arrive with onboarding's role question (TV-U17), which will set that default.
+  - Why: a preset that changes nothing would be a lie, and building the full Detailed anatomy on the row that TV-U10 replaces would build it twice.
+  - Rejected: Rows as a placebo control; the full anatomy now.
+- **U2-4 · A Status filter decides the Board's status groups** → TV-U2 (`statusesLetThrough`, `task-board-view.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: "Status is Won't do" shows one Won't do group; "is not Done" shows To do and In progress; without a Status filter the Board shows To do · In progress · Done, plus Won't do only while a kept Won't do card (TV-P0) is on it. Won't do cards fade and strike through like their rows.
+  - Why: AC1.4 — with three fixed columns the Won't do cards sat off-screen to the right of three empty ones.
+  - Rejected: always three columns; a Won't do column on every board.
+- **U2-5 · A link lands on its task past saved filters, and never clears them** → TV-U2 (`useTasksFilters` `keepTaskId`, `tasks-plan-view.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: a deep-linked task (and the selected task just marked Won't do) stays listed, with its parent, past the filters and search it arrived under, while it's selected; changing either lets them decide again. DF-1's "clear the filters that hide the target" is gone. New pre-fills from the filters on screen only (never in Focus) and never names someone who can't take the task.
+  - Why: filters are saved per scope now (#330), so clearing them on a link erased a saved setup, and only the scope you were leaving; the target's own scope could still hide it and the link landed on another task (the validator's MAJOR). Keeping it is how Display already treats a linked completed task (TV-U1).
+  - Rejected: clearing the target scope's saved filters; clearing them in memory only.
+- **U2-6 · "Yesterday" stays in the one grammar; #330's second date formatter is gone** → TV-U2 (`day-buckets.ts` is Filter-only now), DS-6/TV-D14 (owners of 41)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: the verdict's "drop Yesterday" was about #330's duplicate formatter, which is deleted; `src/lib/time-format.ts` keeps "Yesterday" as TV-P0 built and tested it.
+  - Why: one grammar, changed in one place by the blocks that own it.
+  - Rejected: changing the shared grammar from a toolbar block.
+- **U2-7 · Left for later blocks** → TV-U4, TV-U10, DS-6
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: the Board's drag-while-sorted toast keeps #330's words until TV-U4 builds default m ("Sorted by due · Back to manual order" with its action), and a drop on the Won't do group has no Undo until TV-U4's "Undo on every drop"; the checkbox on a listed Won't do task still marks it Done (research §1: clicking a Won't do glyph reopens it, TV-U10's status glyph); a task just checked off under a filter that excludes it leaves at once, and a linked task kept past the filters leaves once you move off it, while Display's opened-here keep lasts until the scope changes (TV-U10's "stays listed" should make the two one rule); the DisplayMenu/FilterBar primitive stories still show v2's words (Bucket, Time, Archived), and the DropdownMenu primitive doesn't scroll, so a long project picker is cut off at the window's edge (DS-6).
+  - Why: each is those blocks' own work, and DS-6 is rebuilding the primitives in parallel.
+  - Rejected: half of m's copy without its button.
 
 ## 2026-10-10 · TV-P0 trust pass — the agent's choices (deferred to by Maciej)
 

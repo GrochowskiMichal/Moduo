@@ -106,7 +106,9 @@ export function TaskDetailHeader({
 
   return (
     <div className="flex min-h-(--ctrl-h) shrink-0 items-center gap-1">
-      {/* Names wrap, never truncate (TV-P0, AC1.16). */}
+      {/* Names wrap, never truncate (TV-P0, AC1.16). The breadcrumbs stay their
+          own buttons on the state layer: a Button is one fixed-height line
+          (DS-6 kept them for that reason). */}
       <nav aria-label="Location" className="flex min-w-0 flex-1 flex-wrap items-center gap-0.5">
         <DropdownMenu>
           <DropdownMenuTrigger asChild disabled={!canEdit}>
@@ -241,7 +243,7 @@ function QueueButton({
           aria-label={note ?? undefined}
           className="flex shrink-0 items-center px-0.5"
         >
-          <ClaimAvatar assignee={claim.first} />
+          <ClaimAvatar assignee={claim.first} size="icon" />
         </span>
       </TooltipTrigger>
       <TooltipContent>{note}</TooltipContent>

@@ -7,6 +7,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { Button } from "@/components/ui/button";
+import { FeedItem as FeedLine } from "@/components/ui/feed";
 import type { ModuoRuntime } from "@/lib/runtime.types";
 import { commentAuthorName } from "../../spine/comments";
 import { useCommentPeople } from "../../spine/hooks/use-comment-people";
@@ -146,25 +148,27 @@ export function TaskFeed({ task, api, runtime, workspaceId }: Props) {
     <section aria-label="Comments and activity" className="flex flex-col gap-2.5">
       {lead.map(render)}
       {hidden > 0 ? (
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={() => setExpanded(true)}
-          className="self-start rounded-sm font-sans text-xs text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+          className="-ms-2 self-start font-sans text-xs font-normal text-muted-foreground"
         >
           Show {hidden} earlier
-        </button>
+        </Button>
       ) : null}
       {rest.map(render)}
       {thread.failed ? (
         <p className="font-sans text-xs text-muted-foreground">
           Comments didn’t load.{" "}
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={thread.reload}
-            className="underline-offset-2 hover:text-foreground hover:underline"
+            className="-my-1 px-1.5 font-sans text-xs font-normal text-muted-foreground"
           >
             Retry
-          </button>
+          </Button>
         </p>
       ) : null}
       {canComment ? (
@@ -179,28 +183,22 @@ export function TaskFeed({ task, api, runtime, workspaceId }: Props) {
   );
 }
 
-/** One quiet trail line: avatar, "**Name** did this", when. */
+/** One quiet trail line: avatar, "**Name** did this", when (the kit's FeedItem). */
 function FeedEvent({
   person,
   time,
   title,
   children,
 }: {
-  person: { name: string; avatarUrl: string | null } | null;
+  person: { id?: string; name: string; avatarUrl: string | null } | null;
   time: string;
   title: string;
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex min-w-0 items-start gap-2 font-sans text-xs text-muted-foreground">
-      <PersonAvatar person={person} className="mt-px" />
-      <p className="min-w-0 leading-relaxed">
-        {children}{" "}
-        <time className="whitespace-nowrap tabular-nums" title={title}>
-          · {time}
-        </time>
-      </p>
-    </div>
+    <FeedLine avatar={<PersonAvatar person={person} />} time={time} timeTitle={title}>
+      {children}
+    </FeedLine>
   );
 }
 
