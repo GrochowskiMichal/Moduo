@@ -949,8 +949,9 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         toast.error("Still saving that task — try again in a moment.");
         return;
       }
-      // Moving a parent takes its subtasks along (TV-P0): a subtask never
-      // stays behind in the old project. `bundle.tasks` has the real buckets.
+      // Moving a parent takes its subtasks along (TV-P0): shown at once for
+      // every subtask, then settled by the server, which carries the ones you
+      // can edit (TV-D8). `bundle.tasks` has the real buckets.
       const movedChildren =
         fields.bucketId !== undefined && fields.bucketId !== existing.bucketId
           ? bundle.tasks.filter(
@@ -986,7 +987,22 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
               }),
             ];
         const byId = new Map(saved.map((t) => [t.id, t]));
-        setBundle((prev) => ({ ...prev, tasks: prev.tasks.map((t) => byId.get(t.id) ?? t) }));
+        // A subtask the server didn't carry (one you can't edit stays in its
+        // project) goes back to where it was.
+        const leftBehind = new Map(
+          movedChildren.filter((c) => !byId.has(c.id)).map((c) => [c.id, c.bucketId]),
+        );
+        setBundle((prev) => ({
+          ...prev,
+          tasks: prev.tasks.map((t) => {
+            const server = byId.get(t.id);
+            if (server) return server;
+            const was = leftBehind.get(t.id);
+            return was !== undefined && t.bucketId === fields.bucketId
+              ? { ...t, bucketId: was }
+              : t;
+          }),
+        }));
         // Every edit is in the trail now (TV-D8): refresh it.
         setActivityStamp((stamp) => stamp + 1);
       });

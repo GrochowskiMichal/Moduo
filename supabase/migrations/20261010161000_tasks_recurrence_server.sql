@@ -720,6 +720,18 @@ REVOKE ALL ON FUNCTION public.tasks__apply_status(public.tasks, text, jsonb, tex
 
 -- ── 6. The roll-over ────────────────────────────────────────────────────────
 
+-- What a rule is, for a mark that must not outlive an edit: the rule and its
+-- start.
+CREATE OR REPLACE FUNCTION public.tasks__rule_signature(p_rec jsonb)
+RETURNS text
+LANGUAGE sql
+IMMUTABLE
+SET search_path = ''
+AS $$
+  SELECT coalesce(p_rec ->> 'rrule', '') || '|' || coalesce(p_rec ->> 'dtstart', '')
+$$;
+REVOKE ALL ON FUNCTION public.tasks__rule_signature(jsonb) FROM PUBLIC, anon, authenticated;
+
 -- Brings completed repeats back at their assignee's midnight on the day of
 -- the next occurrence (never on the day they were done), and moves an open
 -- repeat that missed a whole day to today's occurrence (or gives one with no
@@ -731,8 +743,12 @@ REVOKE ALL ON FUNCTION public.tasks__apply_status(public.tasks, text, jsonb, tex
 -- The candidates shrink by themselves: a completed repeat is one only while
 -- its pointer is due (a pointer of null means the rule has ended, and one the
 -- server works out for an old row is stored, ended or not), and an open one
--- only when the server reads its rule. A completed repeat on a rule only the
--- app reads comes back at its stored pointer, as the app's catch-up did.
+-- only when the server reads its rule and it still has an occurrence within
+-- 20 years either side (one that has none is marked with `endedRule`, the
+-- rule it was worked out for, so an edited rule is a candidate again). A rule
+-- stored before the bounds existed and outside them is never one. A
+-- completed repeat on a rule only the app reads comes back at its stored
+-- pointer, as the app's catch-up did.
 DROP FUNCTION IF EXISTS public.tasks__roll_over(uuid, timestamptz);
 CREATE OR REPLACE FUNCTION public.tasks__roll_over(
   p_workspace_id uuid DEFAULT NULL,
@@ -765,6 +781,7 @@ BEGIN
     WHERE (p_workspace_id IS NULL OR x.workspace_id = p_workspace_id)
       AND x.deleted_at IS NULL
       AND jsonb_typeof(x.recurrence) = 'object'
+      AND public.tasks__recurrence_problem(x.recurrence) IS NULL
       AND ((x.status = 'done'
             AND jsonb_typeof(x.recurrence -> 'nextOccurrence') IS DISTINCT FROM 'null'
             AND coalesce(public.tasks__try_ts(x.recurrence ->> 'nextOccurrence'), '-infinity'::timestamptz)
@@ -772,6 +789,7 @@ BEGIN
            OR (x.status IN ('todo', 'in_progress')
                AND coalesce(x.recurrence ->> 'mode', '') <> 'after_completion'
                AND (x.scheduled_at IS NULL OR x.scheduled_at < p_now)
+               AND x.recurrence ->> 'endedRule' IS DISTINCT FROM public.tasks__rule_signature(x.recurrence)
                AND public.tasks__rrule_parse(x.recurrence ->> 'rrule') IS NOT NULL))
     -- Coming-back repeats first (they're due at a moment), then the rest.
     ORDER BY (x.status <> 'done'), random()
@@ -843,6 +861,14 @@ BEGIN
         v_changed := true;
       ELSE
         v_cur := public.tasks__rrule_prev(t.recurrence, v_end, t.created_at);
+        IF v_cur IS NULL AND public.tasks__rrule_next(t.recurrence, p_now, t.created_at) IS NULL THEN
+          -- Nothing within 20 years either side: mark it for this rule, so
+          -- it isn't worked out again until the rule changes.
+          UPDATE public.tasks
+            SET recurrence = t.recurrence || jsonb_build_object('endedRule', public.tasks__rule_signature(t.recurrence))
+            WHERE id = t.id;
+          CONTINUE;
+        END IF;
         IF t.scheduled_at IS NULL THEN
           v_cur := coalesce(v_cur, public.tasks__rrule_next(t.recurrence, p_now, t.created_at));
           CONTINUE WHEN v_cur IS NULL;

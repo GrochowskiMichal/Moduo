@@ -386,5 +386,34 @@ BEGIN
   PERFORM count(*) FROM public.tasks__roll_over(test.id('W'), now() + interval '3 days');
   PERFORM test.ok((SELECT ctid FROM public.tasks WHERE id = test.id('XHR')) = v_ctid,
     'an open repeat the server can''t read is left to the app');
+
+  -- An open repeat whose rule never happens is worked out once, then left
+  -- alone until its rule changes.
+  INSERT INTO public.tasks (id, workspace_id, bucket_id, title, scheduled_at, recurrence)
+  VALUES (test.id('XNV'), test.id('W'), test.id('SB'), 'Never', now() - interval '2 days',
+          '{"rrule": "FREQ=YEARLY;BYMONTH=2;BYMONTHDAY=30", "dtstart": "2020-01-01T06:00:00.000Z"}');
+  PERFORM count(*) FROM public.tasks__roll_over(test.id('W'), now());
+  PERFORM test.ok((test.task('XNV')).recurrence ->> 'endedRule' = 'FREQ=YEARLY;BYMONTH=2;BYMONTHDAY=30|2020-01-01T06:00:00.000Z',
+    'a rule with no occurrence near now is marked for that rule', (test.task('XNV')).recurrence::text);
+  SELECT ctid INTO v_ctid FROM public.tasks WHERE id = test.id('XNV');
+  PERFORM count(*) FROM public.tasks__roll_over(test.id('W'), now());
+  PERFORM test.ok((SELECT ctid FROM public.tasks WHERE id = test.id('XNV')) = v_ctid,
+    'and the next run leaves it alone');
+  UPDATE public.tasks SET recurrence = recurrence || '{"rrule": "FREQ=DAILY"}' WHERE id = test.id('XNV');
+  PERFORM count(*) FROM public.tasks__roll_over(test.id('W'), now());
+  PERFORM test.ok((test.task('XNV')).scheduled_at > now() - interval '2 days',
+    'after an edit to the rule it rolls over again', (test.task('XNV')).scheduled_at::text);
+
+  -- A rule stored before the bounds, outside them, is never a candidate.
+  ALTER TABLE public.tasks DROP CONSTRAINT tasks_recurrence_bounded;
+  INSERT INTO public.tasks (id, workspace_id, bucket_id, title, status, recurrence)
+  VALUES (test.id('XOB'), test.id('W'), test.id('SB'), 'Out of bounds', 'done',
+          '{"rrule": "FREQ=DAILY;INTERVAL=5000", "dtstart": "2020-01-01T06:00:00.000Z"}');
+  ALTER TABLE public.tasks ADD CONSTRAINT tasks_recurrence_bounded
+    CHECK (public.tasks__recurrence_problem(recurrence) IS NULL) NOT VALID;
+  SELECT ctid INTO v_ctid FROM public.tasks WHERE id = test.id('XOB');
+  PERFORM count(*) FROM public.tasks__roll_over(test.id('W'), now());
+  PERFORM test.ok((SELECT ctid FROM public.tasks WHERE id = test.id('XOB')) = v_ctid,
+    'an old out-of-bounds rule is left alone by the roll-over');
 END;
 $$;

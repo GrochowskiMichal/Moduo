@@ -56,11 +56,16 @@ function fakeRuntime(tasks: Task[]) {
       ...byId(taskId),
       ...patch,
     })),
-    // The server's edit op (TV-D8): a move carries the live subtasks along.
+    // The server's edit op (TV-D8): a move carries the live subtasks the
+    // mover can edit along (here, any not named "locked…").
     opUpdateTask: rs.fn(async ({ taskId, patch }: { taskId: string; patch: Partial<Task> }) => {
       const moved = patch.bucketId
         ? tasks.filter(
-            (t) => t.parentId === taskId && !t.deletedAt && t.bucketId !== patch.bucketId,
+            (t) =>
+              t.parentId === taskId &&
+              !t.deletedAt &&
+              t.bucketId !== patch.bucketId &&
+              !t.id.startsWith("locked"),
           )
         : [];
       return [
@@ -138,6 +143,20 @@ describe("moving a parent moves its subtasks (AC1.8)", () => {
     await waitFor(() => expect(api.opUpdateTask).toHaveBeenCalledTimes(1));
     expect(api.opUpdateTask.mock.calls[0][0].taskId).toBe("parent");
     expect(api.updateTask).not.toHaveBeenCalled();
+  });
+
+  it("a subtask the server leaves behind (not yours to edit) goes back to its project", async () => {
+    const { api, hook } = await mount([
+      task("parent", { bucketId: "p1" }),
+      task("child", { bucketId: "p1", parentId: "parent" }),
+      task("locked-child", { bucketId: "p1", parentId: "parent" }),
+    ]);
+    act(() => hook.result.current.patchTask("parent", { bucketId: "p2" }));
+    expect(bucketOf(hook, "locked-child")).toBe("p2");
+    await waitFor(() => expect(api.opUpdateTask).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(bucketOf(hook, "locked-child")).toBe("p1"));
+    expect(bucketOf(hook, "child")).toBe("p2");
+    expect(bucketOf(hook, "parent")).toBe("p2");
   });
 
   it("editing anything else touches only the task", async () => {

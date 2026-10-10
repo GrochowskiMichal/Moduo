@@ -1,7 +1,7 @@
 # Manual test checklist — TV-D8 server ops, registry, handles, recurrence, tolerance
 
 > Generated 2026-10-10 · branch `t/maciej/tv-d8-server-ops` → `t/maciej/tasks-v3-build` (local build mode) · **Live-verified:** yes, on the local stack (web, `dev:web` on :8093, signed in as `dev@moduo.local`): time zone saved at sign-in, create through the op (number, registry, trail), ⌘K by handle and by an old-key handle, rename re-registers, Settings → Workspace → Task key (invalid key refused, MW → MOD with the alias kept and every handle refreshed), the handle in the panel header, completing a repeat (server pointer = the app's preview, one completion row), the "Update Moduo" banner with a refused save. Not verified: copying the handle (the preview pane refuses clipboard writes: "Couldn't copy MW-2." — same as Copy link there).
-> Migrations: `20261010160000_tasks_ops_registry_handles.sql`, `20261010161000_tasks_recurrence_server.sql` (local only). SQL tests: `bun run db:test` (179 checks in `supabase/tests/`). The server's repeat engine was also swept against rrule.js on 2,300 random rules (no difference).
+> Migrations: `20261010160000_tasks_ops_registry_handles.sql`, `20261010161000_tasks_recurrence_server.sql` (local only). SQL tests: `bun run db:test` (187 checks in `supabase/tests/`). The server's repeat engine was also swept against rrule.js on 2,300 random rules (no difference).
 
 ## Handles and the registry
 - [ ] **Do:** open any task → **Expect:** its handle (e.g. `MOD-142`) at the end of the header breadcrumb ("Inbox › MOD-142"); hover says "Copy MOD-142" _(both)_
@@ -43,6 +43,7 @@
 - [ ] **Do:** save a repeat rule with `INTERVAL=0`, `COUNT=5000` or `UNTIL=99991231` (MCP `tasks_update`/raw write) → **Expect:** refused: "That repeat can't be saved: …" _(both)_
 - [ ] **Do:** export the workspace (Settings → Advanced) → **Expect:** `tasks.json` has every task's `number` and a `completions` list; past 20,000 completions its `truncated` list says so _(both)_
 - [ ] **Do:** as a member, delete your task that has a subtask in the owner's private project → **Expect:** the delete goes through; the subtask stays, at the top level, for the owner _(both)_
+- [ ] **Do:** as a member, move that kind of task (one with your own subtask and one in the owner's private project) to another project → **Expect:** the move goes through with your subtask; the owner's stays in their private project _(both)_
 - [ ] **Do:** through MCP, `tasks_update` a task you can't see, or set a parent you can't see → **Expect:** "Task not found in this workspace." / "That parent task isn't in this workspace." _(MCP)_
 
 ## Migrations / data

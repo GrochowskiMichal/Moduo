@@ -563,6 +563,7 @@ RETURNS text
 LANGUAGE plpgsql
 IMMUTABLE
 SET search_path = ''
+SET TimeZone = 'UTC' -- an offset-less start reads as UTC, whatever the session says
 AS $$
 DECLARE
   v_rule text;
@@ -841,11 +842,15 @@ BEGIN
     WHERE id = t.id
     RETURNING * INTO t;
 
-    -- Moving a task takes its subtasks along, in this transaction.
+    -- Moving a task takes its subtasks along, in this transaction: the ones
+    -- the mover can edit. Anyone else's (say, a step in a private project)
+    -- stays where it is, so the move never fails or hints at a task the mover
+    -- can't see.
     IF t.bucket_id IS DISTINCT FROM t0.bucket_id THEN
       FOR c IN
         SELECT * FROM public.tasks x
         WHERE x.parent_id = t.id AND x.deleted_at IS NULL AND x.bucket_id IS DISTINCT FROM t.bucket_id
+          AND public.can_access('task', x.id, 'edit', public.perm_actor_id())
         ORDER BY x.id
         FOR UPDATE
       LOOP
@@ -1002,10 +1007,10 @@ $$;
 REVOKE ALL ON FUNCTION public.tasks_op_update(uuid, uuid, jsonb) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.tasks_op_update(uuid, uuid, jsonb) TO authenticated, service_role;
 
--- The ops that can answer without writing (nothing to undo) answer only about
--- a task the caller can see: production's bodies (read from the catalog,
--- 2026-10-10) with the same check as tasks_op_set_status after the guard.
--- Same signatures, so the grants stand.
+-- The other ops on one task answer only about a task the caller can see
+-- (never with its row, its state or a different refusal): production's bodies
+-- (read from the catalog, 2026-10-10) with the same check as
+-- tasks_op_set_status after the guard. Same signatures, so the grants stand.
 CREATE OR REPLACE FUNCTION public.tasks_op_uncommit(p_workspace_id uuid, p_task_id uuid)
 RETURNS public.tasks
 LANGUAGE plpgsql
@@ -1080,6 +1085,128 @@ BEGIN
   PERFORM public.module_activity_log(
     p_workspace_id, 'tasks', 'task', t.id, 'tasks.skip_today',
     jsonb_build_object('reschedule_count', t.reschedule_count)
+  );
+  RETURN t;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.tasks_op_commit(p_workspace_id uuid, p_task_id uuid, p_for date)
+RETURNS public.tasks
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  t public.tasks;
+  v_order integer;
+  v_reordered boolean;
+BEGIN
+  t := public.tasks_op__guard(p_workspace_id, p_task_id);
+  IF NOT public.can_access('task', t.id, 'view', public.perm_actor_id()) THEN
+    RAISE EXCEPTION 'Task not found in this workspace.';
+  END IF;
+  IF p_for IS NULL THEN
+    RAISE EXCEPTION 'Commit needs a date.';
+  END IF;
+  IF t.status = 'archived' THEN
+    RAISE EXCEPTION 'Archived tasks can''t be committed.';
+  END IF;
+  -- TV-D2: committing puts the task at the end of the caller's queue
+  -- (recommitting moves it there, as it moved to the end of the day's queue).
+  -- Done tasks keep the old answer (the column write below) but no queue row.
+  IF public.perm_actor_id() IS NOT NULL AND t.status <> 'done' THEN
+    PERFORM public.tasks_queue__guard(p_workspace_id, t.id);
+    PERFORM public.tasks_queue__place(p_workspace_id, public.perm_actor_id(), t.id, 'end');
+  END IF;
+  v_reordered := t.committed_for = p_for;
+  SELECT coalesce(max(commit_order), 0) + 1 INTO v_order
+    FROM public.tasks
+    WHERE workspace_id = p_workspace_id AND committed_for = p_for
+      AND deleted_at IS NULL AND id <> t.id;
+  PERFORM set_config('tasks.queue_legacy', 'op', true);
+  UPDATE public.tasks
+    SET committed_for = p_for, commit_order = v_order, updated_at = now()
+    WHERE id = t.id
+    RETURNING * INTO t;
+  PERFORM set_config('tasks.queue_legacy', '', true);
+  PERFORM public.module_activity_log(
+    p_workspace_id, 'tasks', 'task', t.id, 'tasks.commit',
+    jsonb_build_object('for', p_for, 'order', v_order, 'reordered', coalesce(v_reordered, false))
+  );
+  RETURN t;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.tasks_op_reschedule(p_workspace_id uuid, p_task_id uuid, p_scheduled_at timestamptz, p_days integer DEFAULT NULL::integer)
+RETURNS public.tasks
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  t public.tasks;
+  v_from timestamptz;
+BEGIN
+  t := public.tasks_op__guard(p_workspace_id, p_task_id);
+  IF NOT public.can_access('task', t.id, 'view', public.perm_actor_id()) THEN
+    RAISE EXCEPTION 'Task not found in this workspace.';
+  END IF;
+  IF p_scheduled_at IS NULL THEN
+    RAISE EXCEPTION 'Reschedule needs a new time.';
+  END IF;
+  v_from := t.scheduled_at;
+  UPDATE public.tasks
+    SET scheduled_at = p_scheduled_at, updated_at = now()
+    WHERE id = t.id
+    RETURNING * INTO t;
+  PERFORM public.module_activity_log(
+    p_workspace_id, 'tasks', 'task', t.id, 'tasks.reschedule',
+    jsonb_build_object('from', v_from, 'to', p_scheduled_at, 'days', p_days)
+  );
+  RETURN t;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.tasks_op_skip_occurrence(p_workspace_id uuid, p_task_id uuid, p_scheduled_at timestamptz, p_recurrence jsonb, p_release_commit boolean DEFAULT false)
+RETURNS public.tasks
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  t public.tasks;
+  v_from timestamptz;
+BEGIN
+  t := public.tasks_op__guard(p_workspace_id, p_task_id);
+  IF NOT public.can_access('task', t.id, 'view', public.perm_actor_id()) THEN
+    RAISE EXCEPTION 'Task not found in this workspace.';
+  END IF;
+  IF t.recurrence IS NULL THEN
+    RAISE EXCEPTION 'Only recurring tasks have occurrences to skip.';
+  END IF;
+  IF t.status NOT IN ('todo', 'in_progress') THEN
+    RAISE EXCEPTION 'Only open tasks can skip an occurrence.';
+  END IF;
+  IF p_scheduled_at IS NULL OR p_recurrence IS NULL THEN
+    RAISE EXCEPTION 'Skip needs the next occurrence.';
+  END IF;
+  IF t.scheduled_at IS NOT NULL AND p_scheduled_at <= t.scheduled_at THEN
+    RAISE EXCEPTION 'Skip can only move an occurrence forward.';
+  END IF;
+  v_from := t.scheduled_at;
+  UPDATE public.tasks
+    SET scheduled_at = p_scheduled_at,
+        recurrence = p_recurrence,
+        committed_for = CASE WHEN p_release_commit THEN NULL ELSE committed_for END,
+        commit_order = CASE WHEN p_release_commit THEN NULL ELSE commit_order END,
+        updated_at = now()
+    WHERE id = t.id
+    RETURNING * INTO t;
+  PERFORM public.module_activity_log(
+    p_workspace_id, 'tasks', 'task', t.id, 'tasks.skip_occurrence',
+    jsonb_build_object('from', v_from, 'to', p_scheduled_at,
+                       'next_occurrence', p_recurrence ->> 'nextOccurrence',
+                       'released_commit', coalesce(p_release_commit, false))
   );
   RETURN t;
 END;

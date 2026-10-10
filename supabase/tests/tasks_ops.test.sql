@@ -285,6 +285,14 @@ BEGIN
   PERFORM test.ok(r LIKE '%Task not found%', 'skip-today on a hidden task reads as missing', r);
   r := test.try('E', format($q$SELECT (public.tasks_op_unschedule(%L, %L)).title$q$, test.id('W'), test.id('TP')));
   PERFORM test.ok(r LIKE '%Task not found%', 'unscheduling a hidden unscheduled task reads as missing', r);
+  UPDATE public.tasks SET status = 'archived' WHERE id = test.id('TP');
+  r := test.try('E', format($q$SELECT (public.tasks_op_commit(%L, %L, current_date)).title$q$, test.id('W'), test.id('TP')));
+  PERFORM test.ok(r LIKE '%Task not found%', 'committing a hidden archived task reads as missing, not as archived', r);
+  r := test.try('E', format($q$SELECT (public.tasks_op_skip_occurrence(%L, %L, now() + interval '1 day', '{}'::jsonb)).title$q$, test.id('W'), test.id('TP')));
+  PERFORM test.ok(r LIKE '%Task not found%', 'skipping an occurrence of a hidden task reads as missing', r);
+  r := test.try('E', format($q$SELECT (public.tasks_op_reschedule(%L, %L, now())).title$q$, test.id('W'), test.id('TP')));
+  PERFORM test.ok(r LIKE '%Task not found%', 'rescheduling a hidden task reads as missing', r);
+  UPDATE public.tasks SET status = 'todo' WHERE id = test.id('TP');
   -- …and can't be a parent (which would also tell whether it exists).
   r := test.try('E', format($q$SELECT public.tasks_op_create(%L, '{"title": "Sneaky", "bucket_id": %s, "parent_id": %s}'::jsonb)$q$,
     test.id('W'), to_json(test.id('SB')::text), to_json(test.id('TP')::text)));
@@ -304,6 +312,21 @@ BEGIN
     test.id('W'), test.id('PA')));
   PERFORM test.ok(r = 'ok 1' AND (SELECT parent_id IS NULL AND deleted_at IS NULL FROM public.tasks WHERE id = test.id('PS')),
     'a delete promotes a subtask the deleter can''t edit, and answers without it', r);
+
+  -- Moving a parent carries the subtasks the mover can edit and leaves anyone
+  -- else's where it is: no refusal, nothing said about it.
+  PERFORM test.as_user('E', format($q$SELECT public.tasks_op_create(%L, '{"id": %s, "title": "Mover", "bucket_id": %s}'::jsonb)$q$,
+    test.id('W'), to_json(test.id('MV')::text), to_json(test.id('SB')::text)));
+  PERFORM test.as_user('E', format($q$SELECT public.tasks_op_create(%L, '{"id": %s, "title": "My step", "bucket_id": %s, "parent_id": %s}'::jsonb)$q$,
+    test.id('W'), to_json(test.id('MS')::text), to_json(test.id('SB')::text), to_json(test.id('MV')::text)));
+  PERFORM test.as_op('O', format($q$INSERT INTO public.tasks (id, workspace_id, bucket_id, parent_id, title) VALUES (%L, %L, %L, %L, 'O''s hidden step')$q$,
+    test.id('MH'), test.id('W'), test.id('PB'), test.id('MV')));
+  r := test.as_user('E', format($q$SELECT * FROM public.tasks_op_update(%L, %L, '{"bucket_id": %s}'::jsonb)$q$,
+    test.id('W'), test.id('MV'), to_json(test.id('SB2')::text)));
+  PERFORM test.ok(r = 'ok 2'
+              AND (SELECT bucket_id FROM public.tasks WHERE id = test.id('MS')) = test.id('SB2')
+              AND (SELECT bucket_id FROM public.tasks WHERE id = test.id('MH')) = test.id('PB'),
+    'a move carries your subtasks and leaves a hidden one in its project', r);
 
   -- A task created done (an import) has its completion.
   PERFORM test.as_user('E', format($q$SELECT public.tasks_op_create(%L, '{"id": %s, "title": "Done already", "bucket_id": %s, "status": "done"}'::jsonb)$q$,
