@@ -106,4 +106,11 @@ describe("booking-public · cancel enqueue", () => {
     const { enqueue } = cancelEmails(FACTS, { rebookUrl: "https://moduo.app/book/anna", nowMs: BEFORE });
     expect(enqueue.some((r) => r.payload.recipient === "added")).toBe(false);
   });
+
+  it("doesn't tell the host it left Google when Google's delete failed", () => {
+    const { enqueue } = cancelEmails(FACTS, { rebookUrl: "x", nowMs: BEFORE, googleDropped: false });
+    expect(enqueue.find((r) => r.kind === "booking_host_guest_cancelled")?.payload.googleInvites).toBe(false);
+    const ok = cancelEmails(FACTS, { rebookUrl: "x", nowMs: BEFORE, googleDropped: true });
+    expect(ok.enqueue.find((r) => r.kind === "booking_host_guest_cancelled")?.payload.googleInvites).toBe(true);
+  });
 });

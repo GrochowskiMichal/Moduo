@@ -573,6 +573,7 @@ Deno.serve(async (req: Request) => {
       const planned = cancelEmails(facts, {
         rebookUrl: `${CANONICAL_BOOKING_ORIGIN}/book/${encodeURIComponent(link.slug)}`,
         nowMs: cancelledAt.getTime(),
+        googleDropped,
       });
       emailed = !googleCreated && planned.enqueue.some((request) => request.kind === "booking_guest_cancelled");
       await queueEmails(db, planned.enqueue, planned.cancelPrefixes).catch(() => {});
@@ -641,7 +642,8 @@ Deno.serve(async (req: Request) => {
   // Strict, like the extra guests: this address is Resend's `to`.
   const email = typeof body.email === "string" ? body.email.trim() : "";
   if (!name || !isEmailAddress(email)) return json({ error: "bad_guest" }, 400);
-  const note = link.note_enabled && typeof body.note === "string" ? body.note.trim().slice(0, 2000) : "";
+  const note = link.note_enabled && typeof body.note === "string" ? Array.from(body.note.trim()).slice(0, 2000).join("") : "";
+  // (Cut by characters, not UTF-16 units: half an emoji is invalid JSON to PostgREST.)
   const guests = link.guests_enabled
     ? parseGuestEmails(body.guests, email)
     : { ok: true as const, emails: [] as string[] };

@@ -856,6 +856,7 @@ export function BookPage() {
             <Textarea
               id="book-note"
               rows={3}
+              maxLength={2000}
               value={note}
               onChange={(event) => setNote(event.target.value)}
             />

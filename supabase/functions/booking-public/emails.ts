@@ -143,7 +143,12 @@ export function bookEmails(
 
 export function cancelEmails(
   facts: BookingFacts,
-  extra: { rebookUrl: string; nowMs: number },
+  extra: {
+    rebookUrl: string;
+    nowMs: number;
+    /** Google confirmed it deleted its event; the host's email says "calendars" only then. */
+    googleDropped?: boolean;
+  },
 ): { enqueue: EnqueueRequest[]; cancelPrefixes: string[] } {
   const cancelPrefixes = [`C7:${facts.bookingId}`];
   // The meeting already started: the booking is released, but nobody is emailed.
@@ -156,7 +161,7 @@ export function cancelEmails(
       kind: "booking_host_guest_cancelled",
       to: facts.hostInbox.email,
       toUserId: facts.hostInbox.userId,
-      payload: base(facts, hostZone),
+      payload: { ...base(facts, hostZone), googleInvites: facts.googleInvites && extra.googleDropped !== false },
       dedupeKey: `C4:${facts.bookingId}`,
     });
   }
