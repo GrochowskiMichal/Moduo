@@ -44,6 +44,7 @@ import type {
   Tag,
   TagLink,
   Task,
+  TaskCompletion,
   TaskQueueEntry,
   TaskRelation,
   TaskStatus,
@@ -271,6 +272,14 @@ export type ModuoRuntime = {
       workspaceId: string,
       branding: { icon: string | null; logoUrl: string | null },
     ): Promise<any>;
+    /**
+     * Owner-only (TV-D8): change the workspace's task key (2–5 letters, A–Z),
+     * the prefix of every handle (`MOD-142`). The old key stays an alias.
+     */
+    setTaskKey(
+      workspaceId: string,
+      key: string,
+    ): Promise<{ taskKey: string; taskKeyAliases: string[] }>;
     leave(workspaceId: string): Promise<void>;
     softDelete(workspaceId: string): Promise<void>;
     issueInvite(
@@ -517,6 +526,17 @@ export type ModuoRuntime = {
   preferences: {
     get(): Promise<UserPreferences | null>;
     set(patch: Partial<UserPreferences>): Promise<UserPreferences | null>;
+    /**
+     * Save the device's time zone for the signed-in person (TV-D8): repeats
+     * come back at their midnight. Sent at every sign-in; an unknown zone is
+     * refused by the server.
+     */
+    setTimeZone(timeZone: string): Promise<void>;
+    /**
+     * The oldest app version that may still save (`app_settings.min_build`,
+     * TV-D8), or null when it can't be read (the app then runs as normal).
+     */
+    getMinBuild(): Promise<string | null>;
   };
 
   /**
@@ -860,7 +880,20 @@ export type ModuoRuntime = {
       taskId: string;
       patch: TaskFieldPatch;
     }): Promise<Task>;
+    /**
+     * The edit op itself (TV-D8, `tasks_op_update`): the task first, then any
+     * subtasks the change carried along (a move takes them, a delete promotes
+     * them). `updateTask` is this, first row only.
+     */
+    opUpdateTask(input: {
+      workspaceId: string;
+      taskId: string;
+      patch: TaskFieldPatch;
+    }): Promise<Task[]>;
+    /** Soft-deletes through the edit op; its live subtasks move to the top level. */
     deleteTask(input: { workspaceId: string; taskId: string }): Promise<Task>;
+    /** Every completion in the workspace you can see (TV-D8), for the export. */
+    listCompletions(workspaceId: string): Promise<TaskCompletion[]>;
     upsertTag(tag: Tag): Promise<Tag>;
     deleteTag(input: { workspaceId: string; tagId: string }): Promise<void>;
     attachTag(input: {
@@ -994,6 +1027,11 @@ export type ModuoRuntime = {
       recurrence: RecurrenceRule;
       releaseCommit: boolean;
     }): Promise<Task>;
+    /**
+     * Ask the server to roll this workspace's repeats over now (TV-D8): it
+     * answers with what changed, plus the tasks named in `items`, as it has
+     * them. Builds since TV-D8 send no items; the server's engine decides.
+     */
     opCatchUp(input: { workspaceId: string; items: TasksCatchUpItem[] }): Promise<Task[]>;
     /** Read the entity's quiet activity trail (newest first). */
     listActivity(input: {

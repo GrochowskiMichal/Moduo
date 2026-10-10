@@ -17,6 +17,7 @@
 // here — mode / selection / grouping — is a per-device view preference and
 // stays in localStorage.
 
+import { isOpenTaskStatus } from "@contracts/vocabularies";
 import { type Task, TIME_BLOCK_SLOTS, type TimeBlockMap, type TimeBlockSlot } from "./model";
 
 export { TIME_BLOCK_SLOTS, type TimeBlockMap, type TimeBlockSlot };
@@ -122,5 +123,5 @@ export function myTasksScope(tasks: Task[], userId: string | null): Task[] {
 
 /** Open (not done, not archived) tasks in a list: a rail row's count. */
 export function openCount(tasks: Task[]): number {
-  return tasks.filter((t) => t.status !== "done" && t.status !== "archived").length;
+  return tasks.filter((t) => isOpenTaskStatus(t.status)).length;
 }

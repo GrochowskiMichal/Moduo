@@ -1,11 +1,9 @@
-// Activity-trail rendering (activity.ts) + the catch-up op item shaping
-// (recurrence-engine catchUpItem) — the pure halves of Session 8's intent ops.
+// Activity-trail rendering (activity.ts): one quiet sentence per intent op.
 
 import { describe, expect, it } from "@rstest/core";
 
 import { activityActorName, activityLine, isTrailEntry } from "./activity";
 import type { ActivityEntry, RecurrenceRule, Task } from "./model";
-import { catchUpItem } from "./recurrence-engine";
 
 function entry(
   op: string,
@@ -85,6 +83,49 @@ describe("activityLine", () => {
     expect(activityLine(entry("tasks.unschedule"))).toBe("cleared the scheduled time");
   });
 
+  it("describes creates and field edits (TV-D8: every create and edit is an op)", () => {
+    expect(activityLine(entry("tasks.create", { title: "Logo", number: 3 }))).toBe("created this");
+    expect(activityLine(entry("tasks.delete"))).toBe("deleted this");
+    expect(activityLine(entry("tasks.restore"))).toBe("restored this");
+    expect(
+      activityLine(
+        entry("tasks.update", { fields: ["title"], title: { from: "Logo", to: "Logo v2" } }),
+      ),
+    ).toBe("renamed this to “Logo v2”");
+    expect(activityLine(entry("tasks.update", { fields: ["description"] }))).toBe(
+      "edited the description",
+    );
+    expect(
+      activityLine(
+        entry("tasks.update", { fields: ["due_date"], due_date: { from: null, to: null } }),
+      ),
+    ).toBe("cleared the due date");
+    expect(
+      activityLine(
+        entry("tasks.update", {
+          fields: ["due_date"],
+          due_date: { from: null, to: "2099-03-04T00:00:00Z" },
+        }),
+      ),
+    ).toMatch(/^set the due date to Mar \d/);
+    expect(
+      activityLine(
+        entry("tasks.update", {
+          fields: ["bucket_id"],
+          bucket_id: { from: "b1", to: "b2" },
+          subtasks_moved: 2,
+        }),
+      ),
+    ).toBe("moved this and its 2 subtasks to another project");
+    expect(
+      activityLine(entry("tasks.update", { fields: ["priority"], priority: { to: "high" } })),
+    ).toBe("set high priority");
+    expect(activityLine(entry("tasks.update", { fields: ["title", "due_date", "priority"] }))).toBe(
+      "changed the title, the due date and the priority",
+    );
+    expect(activityLine(entry("tasks.update", {}))).toBe("edited this");
+  });
+
   it("renders DF-9 spine notifications in the trail with a neutral, third-person voice", () => {
     // The trail is read by anyone, so it must NOT use the notification card's "…to you".
     expect(activityLine(entry("tasks.assigned"))).toBe("assigned this");
@@ -111,52 +152,5 @@ describe("activityLine", () => {
 
   it("never lies by omission — unknown ops fall back to the op name", () => {
     expect(activityLine(entry("tasks.future_op"))).toBe("tasks.future_op");
-  });
-});
-
-describe("catchUpItem", () => {
-  const rec: RecurrenceRule = {
-    rrule: "FREQ=DAILY",
-    dtstart: null,
-    nextOccurrence: "2026-06-13T07:00:00Z",
-  };
-
-  it("shapes a reopen (status present ⇒ commit cleared)", () => {
-    const task = { id: "t1", scheduledAt: "2026-06-10T07:00:00Z" } as Pick<
-      Task,
-      "id" | "scheduledAt"
-    >;
-    const item = catchUpItem(task, {
-      status: "todo",
-      scheduledAt: "2026-06-12T07:00:00Z",
-      recurrence: rec,
-      committedFor: null,
-      commitOrder: null,
-    });
-    expect(item).toEqual({
-      taskId: "t1",
-      kind: "reopen",
-      status: "todo",
-      scheduledAt: "2026-06-12T07:00:00Z",
-      recurrence: rec,
-      clearCommit: true,
-    });
-  });
-
-  it("shapes a collapse (open task moved forward, commit untouched)", () => {
-    const task = { id: "t2", scheduledAt: "2026-06-10T07:00:00Z" } as Pick<
-      Task,
-      "id" | "scheduledAt"
-    >;
-    const item = catchUpItem(task, { scheduledAt: "2026-06-12T07:00:00Z", recurrence: rec });
-    expect(item.kind).toBe("collapse");
-    expect(item.status).toBeUndefined();
-    expect(item.clearCommit).toBeUndefined();
-  });
-
-  it("shapes an adopt (no scheduled time yet)", () => {
-    const task = { id: "t3", scheduledAt: null } as Pick<Task, "id" | "scheduledAt">;
-    const item = catchUpItem(task, { scheduledAt: "2026-06-12T07:00:00Z", recurrence: rec });
-    expect(item.kind).toBe("adopt");
   });
 });

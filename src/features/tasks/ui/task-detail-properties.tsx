@@ -5,6 +5,7 @@
 // once set, and until then sit in one quiet line that names them. Picking a name
 // there shows its row, empty, with its editor open.
 
+import { isOpenTaskStatus } from "@contracts/vocabularies";
 import {
   Archive,
   CircleCheck,
@@ -397,8 +398,7 @@ function RepeatValue({
     );
   };
   const label = task.recurrence ? recurrenceLabel(task.recurrence) : "Doesn’t repeat";
-  const canSkip =
-    canEdit && !!task.recurrence && task.status !== "done" && task.status !== "archived";
+  const canSkip = canEdit && !!task.recurrence && isOpenTaskStatus(task.status);
   return (
     <DropdownMenu defaultOpen={defaultOpen && canEdit}>
       <DropdownMenuTrigger asChild disabled={!canEdit}>

@@ -90,6 +90,8 @@ export type WorkspaceContextValue = {
   createWorkspace: (name?: string) => Promise<string | null>;
   renameWorkspace: (workspaceId: string, name: string) => Promise<void>;
   updateWorkspaceBranding: (workspaceId: string, branding: WorkspaceBranding) => Promise<void>;
+  /** Owner-only (TV-D8): the prefix of task handles. The old key stays an alias. */
+  setTaskKey: (workspaceId: string, key: string) => Promise<void>;
   leaveWorkspace: (workspaceId: string) => Promise<void>;
   softDeleteWorkspace: (workspaceId: string) => Promise<void>;
   sendInvite: (args: SendWorkspaceInviteArgs) => Promise<WorkspaceInvite | null>;

@@ -58,6 +58,7 @@ function fakeDb(tables: Record<string, Row[]>, rpcs: Record<string, (args: Row) 
     const filters: Filter[] = [];
     let orderBy: string | null = null;
     let max = Number.POSITIVE_INFINITY;
+    let skip = 0;
     const add = (op: Filter["op"]) => (column: string, value: unknown) => {
       filters.push({ op, column, value });
       return query;
@@ -78,12 +79,19 @@ function fakeDb(tables: Record<string, Row[]>, rpcs: Record<string, (args: Row) 
         max = n;
         return query;
       },
+      range: (from: number, to: number) => {
+        skip = from;
+        max = to - from + 1;
+        return query;
+      },
+      maybeSingle: () =>
+        query.then((r: { data: Row[]; error: null }) => ({ data: r.data[0] ?? null, error: r.error })),
       then<T>(resolve: (result: { data: Row[]; error: null }) => T) {
         queries.push({ table, filters });
         let data = (tables[table] ?? []).filter((row) => filters.every((f) => matches(row, f)));
         const by = orderBy;
         if (by) data = [...data].sort((a, b) => String(a[by]).localeCompare(String(b[by])));
-        return Promise.resolve({ data: data.slice(0, max), error: null }).then(resolve);
+        return Promise.resolve({ data: data.slice(skip, skip + max), error: null }).then(resolve);
       },
     };
     return query;

@@ -76,6 +76,31 @@ export function isTaskStatus(value: unknown): value is TaskStatus {
   return typeof value === "string" && (TASK_STATUSES as readonly string[]).includes(value);
 }
 
+/**
+ * Lax read of a task's status (TV-D8, REPLAN §6.3): a value this build doesn't
+ * know still shows, as its category, and the row is never dropped. Tasks v3
+ * stores five categories (TV-D9): "backlog" reads as To do here and
+ * "wont_do" as Won't do (`archived` until TV-D7); anything else unknown
+ * reads as To do, so it stays in view.
+ */
+export function normalizeTaskStatus(input: unknown): TaskStatus {
+  if (isTaskStatus(input)) return input;
+  const v = typeof input === "string" ? input.trim().toLowerCase().replace(/[\s'’-]+/g, "_") : "";
+  if (isTaskStatus(v)) return v;
+  if (v === "wont_do" || v === "won_t_do" || v === "cancelled" || v === "canceled") return "archived";
+  if (v === "completed" || v === "complete" || v === "closed") return "done";
+  if (v === "started" || v === "in_review") return "in_progress";
+  return "todo";
+}
+
+/** Statuses that still need doing (the one "is open" rule; MCP and the app share it). */
+export const TASK_OPEN_STATUSES = ["todo", "in_progress"] as const satisfies readonly TaskStatus[];
+
+/** Is this status still open? Unknown values read through {@link normalizeTaskStatus}. */
+export function isOpenTaskStatus(status: unknown): boolean {
+  return (TASK_OPEN_STATUSES as readonly string[]).includes(normalizeTaskStatus(status));
+}
+
 // ---------------------------------------------------------------------------
 // Task time entries (TV-D3) — mirrors task_time_entries' kind CHECK and
 // tasks_op_track_time's actions and answers in 20261008225500_tasks_time_entries.

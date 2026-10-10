@@ -58,6 +58,7 @@ import { GlobalBottomBar } from "./global-bottom-bar";
 import { GlobalCommandPalette } from "./global-command-palette";
 import { GlobalShortcutsDialog } from "./global-shortcuts-dialog";
 import { HelpMenu } from "./help-menu";
+import { MinBuildBanner } from "./min-build-banner";
 import { useUnknownRouteRedirect } from "./use-unknown-route-redirect";
 
 type ModuleTabProps = {
@@ -482,6 +483,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   return (
     <div className="flex h-screen min-h-screen flex-col overflow-hidden bg-background">
       <TrialBanner />
+      <MinBuildBanner />
       <nav
         aria-label="Workspace navigation"
         className="relative grid w-full items-center bg-background px-5"

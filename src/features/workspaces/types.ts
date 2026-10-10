@@ -28,6 +28,11 @@ export type WorkspaceSummary = {
   icon: string | null;
   /** Public URL of the uploaded logo. Takes the place of `icon`. */
   logoUrl: string | null;
+  /**
+   * The prefix of every task handle, `MOD` in `MOD-142` (TV-D8): 2–5 letters,
+   * from the workspace name; the owner can change it. Null before TV-D8.
+   */
+  taskKey: string | null;
   role: WorkspaceRole;
   permissions: ModulePermissions;
   /** Effective permission keys (PERM-1). Owners hold every key. */

@@ -5,6 +5,7 @@
 // key in the app). A task leaves every queue when it's done, archived or
 // deleted; restoring it never puts it back.
 
+import { isOpenTaskStatus } from "@contracts/vocabularies";
 import { betweenPositions } from "./helpers";
 import type { Task, TaskQueueEntry } from "./model";
 
@@ -65,7 +66,7 @@ export function queueTasks(mine: TaskQueueEntry[], kept: TaskQueueEntry[], tasks
 
 /** My open queued tasks: the Queue row's count. */
 export function openQueueCount(queued: Task[]): number {
-  return queued.filter((t) => t.status !== "done" && t.status !== "archived").length;
+  return queued.filter((t) => isOpenTaskStatus(t.status)).length;
 }
 
 /**
@@ -179,7 +180,7 @@ export function queueOrOpen(
   const open = tasks.filter(
     (t) =>
       !t.deletedAt &&
-      (t.status === "todo" || t.status === "in_progress") &&
+      isOpenTaskStatus(t.status) &&
       (bucketIds.length === 0 || bucketIds.includes(t.bucketId)),
   );
   const byId = new Map(open.map((t) => [t.id, t]));

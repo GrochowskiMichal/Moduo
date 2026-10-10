@@ -10,6 +10,7 @@ import {
 import { attachFocusUser } from "../features/focus/engine";
 import { attachTagUser } from "../features/tags/store";
 import { Analytics, setAnalyticsUser } from "../lib/analytics";
+import { sendDeviceTimeZone } from "../lib/device-time-zone";
 import {
   initRuntime,
   type ModuoRuntime,
@@ -156,6 +157,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
       // Refresh plan tier on sign-in events, and start analytics once the account is confirmed.
       if ((event === "SIGNED_IN" || event === "INITIAL_SESSION") && uid) {
+        // Repeats come back at their assignee's midnight (TV-D8).
+        sendDeviceTimeZone(rt, uid);
         rt.workspace
           .getProfile(uid)
           .then((result) => {

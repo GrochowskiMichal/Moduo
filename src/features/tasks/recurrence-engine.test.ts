@@ -3,7 +3,6 @@ import { describe, expect, it } from "@rstest/core";
 import { makeTask, todayStr } from "./helpers";
 import type { RecurrenceRule, Task, TaskStatus } from "./model";
 import {
-  catchUpPatch,
   currentOccurrence,
   occurrenceAfter,
   recurrenceOnStatusChange,
@@ -82,109 +81,23 @@ describe("recurrenceOnStatusChange (advance-on-done)", () => {
     expect(recurrenceOnStatusChange(t, "done", NOW)).toBeNull();
   });
 
+  it("a repeat done today never comes back today (the server's rule, TV-D8)", () => {
+    // Daily at 21:00 local; yesterday's was missed; done at 10:00 today: the
+    // next one isn't tonight's but tomorrow's. Local times, so any zone holds.
+    const at = (d: number, h: number) => new Date(2026, 5, d, h, 0, 0, 0);
+    const t = task({
+      recurrence: daily({ dtstart: at(10, 21).toISOString() }),
+      scheduledAt: at(11, 21).toISOString(),
+    });
+    const rec = recurrenceOnStatusChange(t, "done", at(12, 10));
+    expect(rec?.nextOccurrence).toBe(at(13, 21).toISOString());
+    expect(todayStr(at(12, 10))).toBe("2026-06-12");
+  });
+
   it("an exhausted rule advances to a null pointer (task stays done)", () => {
     const rec = daily({ rrule: "FREQ=DAILY;COUNT=2" }); // June 10 + 11 only
     const t = task({ recurrence: rec, scheduledAt: "2026-06-11T08:00:00.000Z" });
     expect(recurrenceOnStatusChange(t, "done", NOW)?.nextOccurrence).toBeNull();
-  });
-});
-
-describe("catchUpPatch", () => {
-  it("reopens a done task whose pointer has arrived, at the latest occurrence", () => {
-    // Completed June 10; pointer June 11 08:00; opened June 12 10:00 — the
-    // missed June 11 occurrence doesn't exist; it reopens at June 12 08:00.
-    const t = task({
-      status: "done",
-      recurrence: daily({ nextOccurrence: "2026-06-11T08:00:00.000Z" }),
-      scheduledAt: "2026-06-10T08:00:00.000Z",
-      committedFor: "2026-06-10",
-      commitOrder: 3,
-    });
-    const patch = catchUpPatch(t, NOW);
-    expect(patch).toMatchObject({
-      status: "todo",
-      scheduledAt: "2026-06-12T08:00:00.000Z",
-      committedFor: null,
-      commitOrder: null,
-    });
-    expect(patch?.recurrence?.nextOccurrence).toBe("2026-06-13T08:00:00.000Z");
-  });
-
-  it("leaves a done task alone while its pointer is still in the future", () => {
-    const t = task({
-      status: "done",
-      recurrence: daily({ nextOccurrence: "2026-06-13T08:00:00.000Z" }),
-      scheduledAt: "2026-06-12T08:00:00.000Z",
-    });
-    expect(catchUpPatch(t, NOW)).toBeNull();
-  });
-
-  it("falls back to updatedAt for pre-engine done rows without a pointer", () => {
-    const t = task({
-      status: "done",
-      recurrence: daily(),
-      scheduledAt: "2026-06-10T08:00:00.000Z",
-      updatedAt: "2026-06-10T09:00:00.000Z",
-    });
-    const patch = catchUpPatch(t, NOW);
-    expect(patch?.status).toBe("todo");
-    expect(patch?.scheduledAt).toBe("2026-06-12T08:00:00.000Z");
-  });
-
-  it("a done task with an exhausted rule stays done forever", () => {
-    const t = task({
-      status: "done",
-      recurrence: daily({ rrule: "FREQ=DAILY;COUNT=2", nextOccurrence: null }),
-      scheduledAt: "2026-06-11T08:00:00.000Z",
-      updatedAt: "2026-06-11T09:00:00.000Z",
-    });
-    expect(catchUpPatch(t, NOW)).toBeNull();
-  });
-
-  it("collapses an open task that missed full occurrences — one drift, no pile", () => {
-    const t = task({ recurrence: daily(), scheduledAt: "2026-06-08T08:00:00.000Z" });
-    const patch = catchUpPatch(t, NOW);
-    expect(patch?.scheduledAt).toBe("2026-06-12T08:00:00.000Z");
-    expect(patch?.recurrence?.nextOccurrence).toBe("2026-06-13T08:00:00.000Z");
-    expect(patch?.status).toBeUndefined(); // stays open — no status write
-  });
-
-  it("does NOT catch up drift within the current occurrence", () => {
-    const t = task({ recurrence: daily(), scheduledAt: "2026-06-12T08:00:00.000Z" });
-    expect(catchUpPatch(t, NOW)).toBeNull(); // 2h drifted — still actionable today
-  });
-
-  it("respects a scheduledAt deliberately pushed past the current occurrence", () => {
-    const t = task({ recurrence: daily(), scheduledAt: "2026-06-14T08:00:00.000Z" });
-    expect(catchUpPatch(t, NOW)).toBeNull();
-  });
-
-  it("adopts the live occurrence for a recurring task with no scheduledAt", () => {
-    const t = task({ recurrence: daily(), scheduledAt: null });
-    expect(catchUpPatch(t, NOW)?.scheduledAt).toBe("2026-06-12T08:00:00.000Z");
-  });
-
-  it("adopts the first future occurrence when none has passed yet", () => {
-    const future = daily({ dtstart: "2026-06-14T08:00:00.000Z" });
-    const t = task({ recurrence: future, scheduledAt: null });
-    expect(catchUpPatch(t, NOW)?.scheduledAt).toBe("2026-06-14T08:00:00.000Z");
-  });
-
-  it("skips non-recurring, archived, and deleted tasks", () => {
-    expect(catchUpPatch(task(), NOW)).toBeNull();
-    expect(catchUpPatch(task({ recurrence: daily(), status: "archived" }), NOW)).toBeNull();
-    expect(
-      catchUpPatch(
-        task({ recurrence: daily(), scheduledAt: null, deletedAt: NOW.toISOString() }),
-        NOW,
-      ),
-    ).toBeNull();
-  });
-
-  it("is idempotent: applying the patch yields no further patch", () => {
-    const t = task({ recurrence: daily(), scheduledAt: "2026-06-08T08:00:00.000Z" });
-    const patch = catchUpPatch(t, NOW)!;
-    expect(catchUpPatch({ ...t, ...patch }, NOW)).toBeNull();
   });
 });
 

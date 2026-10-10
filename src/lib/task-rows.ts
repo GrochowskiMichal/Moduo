@@ -10,16 +10,19 @@ import {
   requireRow,
   tagLinkRowSchema,
   tagRowSchema,
+  taskCompletionRowSchema,
   taskQueueRowSchema,
   taskRowSchema,
   taskTimeAnswerSchema,
   taskTimeTotalsRowSchema,
 } from "@contracts/rows";
+import { normalizeTaskStatus } from "@contracts/vocabularies";
 import type {
   Bucket,
   Tag,
   TagLink,
   Task,
+  TaskCompletion,
   TaskQueueEntry,
   TaskTimeResult,
   TaskTimeTotals,
@@ -97,6 +100,48 @@ export function taskPatchToColumns(
   }
   row.updated_at = updatedAt;
   return row;
+}
+
+/**
+ * The fields `tasks_op_update` takes for an edit (TV-D8): the changed columns
+ * only. No `updated_at` (the server stamps it); a `deletedAt` deletes, null
+ * restores.
+ */
+export function taskPatchToOpFields(patch: TaskFieldPatch): Record<string, unknown> {
+  const fields: Record<string, unknown> = {};
+  for (const field of PATCH_FIELDS) {
+    const value = patch[field];
+    if (value === undefined) continue;
+    fields[PATCH_COLUMNS[field]] = field === "description" ? (value ?? "") : value;
+  }
+  return fields;
+}
+
+/**
+ * What `tasks_op_create` takes for a new task (TV-D8). The id is the client's,
+ * so a resent create answers with the task it made instead of making two. An
+ * assignee of "" (not chosen) is left out: the server makes it the creator;
+ * null is Unassigned. An empty position puts it at the end of its project. The
+ * server sets the number, the creator, the timestamps and the time total.
+ */
+export function taskCreateOpInput(task: Task): Record<string, unknown> {
+  const input: Record<string, unknown> = {
+    id: task.id,
+    title: task.title,
+    description: task.description ?? "",
+    bucket_id: task.bucketId,
+    parent_id: task.parentId ?? null,
+    due_date: task.dueDate ?? null,
+    scheduled_at: task.scheduledAt ?? null,
+    duration_minutes: task.durationMinutes ?? null,
+    recurrence: task.recurrence ?? null,
+    energy_level: task.energyLevel ?? null,
+    priority: task.priority ?? null,
+    status: task.status,
+    position: task.position ?? "",
+  };
+  if (task.assigneeId !== "") input.assignee_id = task.assigneeId;
+  return input;
 }
 
 /**
@@ -235,6 +280,7 @@ export function taskRowToModel(raw: unknown): Task {
   return {
     id: r.id,
     workspaceId: r.workspace_id,
+    number: r.number ?? null,
     creatorId: r.owner_id ?? "",
     creatorUnknown: migrated ? (r.creator_unknown ?? false) : true,
     assigneeId: migrated ? (r.assignee_id ?? null) : (r.owner_id ?? null),
@@ -249,12 +295,28 @@ export function taskRowToModel(raw: unknown): Task {
     recurrence: (r.recurrence as Task["recurrence"]) ?? null,
     energyLevel: r.energy_level ?? null,
     priority: r.priority ?? null,
-    status: r.status ?? "todo",
+    // A status this build doesn't know shows as its nearest one (TV-D8).
+    status: normalizeTaskStatus(r.status),
     committedFor: r.committed_for ?? null,
     commitOrder: r.commit_order ?? null,
     rescheduleCount: r.reschedule_count ?? 0,
     position: r.position ?? "",
     createdAt: r.created_at,
+    updatedAt: r.updated_at,
+    deletedAt: r.deleted_at ?? null,
+  };
+}
+
+/** A task_completions row (TV-D8) → the model. */
+export function taskCompletionRowToModel(raw: unknown): TaskCompletion {
+  const r = requireRow(taskCompletionRowSchema, raw, "task completion");
+  return {
+    id: r.id,
+    workspaceId: r.workspace_id,
+    taskId: r.task_id,
+    userId: r.user_id ?? null,
+    completedAt: r.completed_at,
+    cycleKey: r.cycle_key,
     updatedAt: r.updated_at,
     deletedAt: r.deleted_at ?? null,
   };

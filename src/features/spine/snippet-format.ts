@@ -6,6 +6,7 @@
 // `new Date()` — `now` is injected) so snippet-format.test.ts can pin every
 // relative phrase. snippet-projectors.builtin.ts wires these to the registry.
 
+import { isOpenTaskStatus } from "@contracts/vocabularies";
 import type {
   EmailSnippetMeta,
   EventSnippetMeta,
@@ -90,7 +91,7 @@ function clockLabel(d: Date): string {
  */
 export function formatTaskSnippet(meta: TaskSnippetMeta, now: Date): string | null {
   const statusLabel = TASK_STATUS_LABEL[meta.status] ?? null;
-  const finished = meta.status === "done" || meta.status === "archived";
+  const finished = !isOpenTaskStatus(meta.status);
   const parts: string[] = [];
   if (statusLabel) parts.push(statusLabel);
   if (!finished && meta.dueDate) {

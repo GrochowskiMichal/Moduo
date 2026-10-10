@@ -36,6 +36,9 @@ import {
   isPlanTier,
   isRelationKind,
   isTaskStatus,
+  isOpenTaskStatus,
+  normalizeTaskStatus,
+  TASK_OPEN_STATUSES,
   isWaitlistSource,
   isWorkspaceRole,
   normalizeCalendarProvider,
@@ -307,6 +310,38 @@ describe("type guards narrow without casts", () => {
     expect(isTaskStatus("doing")).toBe(false);
     expect(isRelationKind("works-at")).toBe(true);
     expect(isRelationKind("knows")).toBe(false);
+  });
+});
+
+describe("normalizeTaskStatus / isOpenTaskStatus (TV-D8: old builds tolerate new values)", () => {
+  it("keeps the known values", () => {
+    for (const s of TASK_STATUSES) expect(normalizeTaskStatus(s)).toBe(s);
+  });
+
+  it("reads the Tasks v3 categories as their nearest known status, never dropping the row", () => {
+    expect(normalizeTaskStatus("backlog")).toBe("todo");
+    expect(normalizeTaskStatus("wont_do")).toBe("archived");
+    expect(normalizeTaskStatus("Won't do")).toBe("archived");
+    expect(normalizeTaskStatus("completed")).toBe("done");
+    expect(normalizeTaskStatus("in_review")).toBe("in_progress");
+  });
+
+  it("reads anything else as To do, so it stays in view", () => {
+    expect(normalizeTaskStatus("shipped")).toBe("todo");
+    expect(normalizeTaskStatus("")).toBe("todo");
+    expect(normalizeTaskStatus(null)).toBe("todo");
+    expect(normalizeTaskStatus(42)).toBe("todo");
+  });
+
+  it("has one open rule", () => {
+    expect([...TASK_OPEN_STATUSES]).toEqual(["todo", "in_progress"]);
+    expect(isOpenTaskStatus("todo")).toBe(true);
+    expect(isOpenTaskStatus("in_progress")).toBe(true);
+    expect(isOpenTaskStatus("done")).toBe(false);
+    expect(isOpenTaskStatus("archived")).toBe(false);
+    expect(isOpenTaskStatus("backlog")).toBe(true);
+    expect(isOpenTaskStatus("wont_do")).toBe(false);
+    expect(isOpenTaskStatus("something new")).toBe(true);
   });
 });
 

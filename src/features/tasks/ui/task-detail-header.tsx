@@ -16,6 +16,7 @@ import {
   Trash2,
   Unlink,
 } from "lucide-react";
+import { useContext } from "react";
 import { toast } from "sonner";
 
 import { Button } from "../../../components/ui/button";
@@ -31,8 +32,11 @@ import {
 import { IconButton } from "../../../components/ui/icon-button";
 import { Kbd } from "../../../components/ui/kbd";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
+import { taskHandle } from "../../../lib/task-handle";
 import { taskUrl } from "../../../lib/web-origin";
+import { WorkspaceContext } from "../../workspaces/workspace-context";
 import { duplicateFields } from "../duplicate";
+import { isOpen } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import { type Bucket, PRIVATE_PROJECT_LABEL, type Task } from "../model";
 import { alsoInLabel, claimLabel } from "../queue";
@@ -61,7 +65,23 @@ export function TaskDetailHeader({
   const bucket = bucketOptions.find((b) => b.id === task.bucketId) ?? null;
   // A project you can't see is never shown as Inbox (TV-P0, AC1.10).
   const bucketLabel = bucket?.name ?? PRIVATE_PROJECT_LABEL;
-  const open = task.status !== "done" && task.status !== "archived";
+  const open = isOpen(task);
+  // The handle, MOD-142 (TV-D8). Read without requiring the provider, so the
+  // panel renders in isolation (stories, tests) without one.
+  const taskKey = useContext(WorkspaceContext)?.selectedWorkspace?.taskKey ?? null;
+  const handle = taskHandle(taskKey, task.number);
+
+  const copyHandle = () => {
+    if (!handle) return;
+    if (!navigator.clipboard) {
+      toast(`Couldn't copy ${handle}.`);
+      return;
+    }
+    void navigator.clipboard
+      .writeText(handle)
+      .then(() => toast(`Copied ${handle}`))
+      .catch(() => toast(`Couldn't copy ${handle}.`));
+  };
 
   const copyLink = () => {
     if (!navigator.clipboard) {
@@ -137,6 +157,21 @@ export function TaskDetailHeader({
       </nav>
 
       {open ? <QueueButton task={task} api={api} canEdit={canEdit} /> : null}
+      {handle ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={copyHandle}
+              aria-label={`Copy ${handle}`}
+              className="flex min-h-(--ctrl-h-sm) shrink-0 items-center rounded-md px-1.5 py-0.5 font-sans text-xs tabular-nums text-muted-foreground outline-none transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
+            >
+              {handle}
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>Copy {handle}</TooltipContent>
+        </Tooltip>
+      ) : null}
       <IconButton icon={Link2} label="Copy link" onClick={copyLink} />
       {canEdit ? (
         <DropdownMenu>

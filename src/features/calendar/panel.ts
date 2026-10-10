@@ -4,6 +4,7 @@
 // show their time and sort to the BOTTOM of their group rather than vanishing
 // (visibility beats purity — the row is how you find what's already placed).
 
+import { isOpenTaskStatus } from "@contracts/vocabularies";
 import type { Task } from "../tasks/model";
 import { addDays, localDayKey } from "./lens";
 
@@ -19,7 +20,7 @@ export type PanelGroups = {
 export const BACKLOG_CAP = 50;
 
 function isOpen(t: Task): boolean {
-  return (t.status === "todo" || t.status === "in_progress") && !t.deletedAt;
+  return isOpenTaskStatus(t.status) && !t.deletedAt;
 }
 
 /** Local calendar-day key of a stored timestamptz (the CO-5 gotcha). */

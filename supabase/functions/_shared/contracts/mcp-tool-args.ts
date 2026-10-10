@@ -6,7 +6,12 @@
 import { z } from "zod";
 
 import { parseOrStructured } from "./errors.ts";
-import { relationKindSchema, taskStatusSchema } from "./vocabularies.ts";
+import {
+  energyLevelSchema,
+  priorityLevelSchema,
+  relationKindSchema,
+  taskStatusSchema,
+} from "./vocabularies.ts";
 
 const nonempty = z.string().trim().min(1);
 const ymd = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "must be YYYY-MM-DD");
@@ -56,6 +61,31 @@ export const TOOL_ARG_SCHEMAS: Record<string, z.ZodType<Record<string, unknown>>
   // TV-D1: who can be assigned, and assigning (null unassigns; "me" = the key's creator).
   tasks_list_assignees: z.object({}),
   tasks_assign: z.object({ task_id: nonempty, assignee_id: z.union([nonempty, z.null()]) }),
+  // TV-D8: creates and edits through tasks_op_create / tasks_op_update.
+  tasks_create: z.object({
+    title: nonempty,
+    bucket_id: nonempty.optional(),
+    parent_id: nonempty.optional(),
+    description: z.string().optional(),
+    due_date: z.union([iso, z.null()]).optional(),
+    scheduled_at: z.union([iso, z.null()]).optional(),
+    duration_minutes: z.union([z.coerce.number().int().min(0).max(100000), z.null()]).optional(),
+    priority: z.union([priorityLevelSchema, z.null()]).optional(),
+    energy_level: z.union([energyLevelSchema, z.null()]).optional(),
+    assignee_id: z.union([nonempty, z.null()]).optional(),
+  }),
+  tasks_update: z.object({
+    task_id: nonempty,
+    title: nonempty.optional(),
+    bucket_id: nonempty.optional(),
+    parent_id: z.union([nonempty, z.null()]).optional(),
+    description: z.string().optional(),
+    due_date: z.union([iso, z.null()]).optional(),
+    scheduled_at: z.union([iso, z.null()]).optional(),
+    duration_minutes: z.union([z.coerce.number().int().min(0).max(100000), z.null()]).optional(),
+    priority: z.union([priorityLevelSchema, z.null()]).optional(),
+    energy_level: z.union([energyLevelSchema, z.null()]).optional(),
+  }),
 
   calendar_list_events: z.object({ from: iso, to: iso, limit: wideLimit }),
   calendar_day: z.object({ date: ymd.optional() }),

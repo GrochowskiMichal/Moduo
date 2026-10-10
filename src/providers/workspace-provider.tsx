@@ -291,6 +291,15 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
     [refreshWorkspaces, runtime],
   );
 
+  const setTaskKey = useCallback(
+    async (workspaceId: string, key: string) => {
+      if (!runtime) return;
+      await runtime.workspace.setTaskKey(workspaceId, key);
+      await refreshWorkspaces();
+    },
+    [refreshWorkspaces, runtime],
+  );
+
   const leaveWorkspace = useCallback(
     async (workspaceId: string) => {
       if (!runtime) return;
@@ -611,6 +620,7 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
       createWorkspace,
       renameWorkspace,
       updateWorkspaceBranding,
+      setTaskKey,
       leaveWorkspace,
       softDeleteWorkspace,
       sendInvite,
@@ -652,6 +662,7 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
       refreshWorkspaces,
       renameWorkspace,
       updateWorkspaceBranding,
+      setTaskKey,
       revokeInvite,
       selectedWorkspace,
       selectedWorkspaceId,

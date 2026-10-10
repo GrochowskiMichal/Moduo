@@ -2,7 +2,8 @@
 // reference implementation of the per-module AI-readiness contract. Consumed
 // by the module registry (src/lib/module-registry.ts) and, from Session 9 on,
 // by the Moduo MCP connector. Keep in sync with the tasks_op_* RPCs
-// (supabase/migrations/20260612150000_module_activity_intent_ops.sql).
+// (supabase/migrations/20260612150000_module_activity_intent_ops.sql; every
+// create and field edit since TV-D8: 20261010160000_tasks_ops_registry_handles.sql).
 
 import type { ModuleManifest } from "../../lib/module-manifest";
 
@@ -12,6 +13,29 @@ export const tasksModuleManifest: ModuleManifest = {
   permissionKey: "tasks",
   activityEntityTypes: ["task"],
   ops: [
+    {
+      op: "tasks.create",
+      rpc: "tasks_op_create",
+      summary:
+        "Create a task (TV-D8): numbers it (its handle, MOD-142), registers it for search and @, logs it. Default project: the creator's Inbox; default assignee: the creator. A resend with the same id answers with the task it made.",
+      args: {
+        p_workspace_id: "workspace uuid",
+        p_task:
+          "{id?, title, description?, bucket_id?, parent_id?, due_date?, scheduled_at?, duration_minutes?, recurrence?, energy_level?, priority?, status?, position?, assignee_id?}",
+      },
+    },
+    {
+      op: "tasks.update",
+      rpc: "tasks_op_update",
+      summary:
+        "Edit a task's fields (TV-D8): only those given change; a rename re-registers it; moving it moves its subtasks; deleted_at deletes (subtasks go top-level), null restores; status and assignee go through their own ops' rules. Answers with the task, then any subtasks it carried.",
+      args: {
+        p_workspace_id: "workspace uuid",
+        p_task_id: "task uuid",
+        p_patch:
+          "{title?, description?, bucket_id?, parent_id?, due_date?, scheduled_at?, duration_minutes?, recurrence?, energy_level?, priority?, position?, status?, assignee_id?, deleted_at?}",
+      },
+    },
     {
       op: "tasks.queue_add",
       rpc: "tasks_op_queue_add",
@@ -87,12 +111,13 @@ export const tasksModuleManifest: ModuleManifest = {
       op: "tasks.set_status",
       rpc: "tasks_op_set_status",
       summary:
-        "Change a task's status (todo / in_progress / done / archived), with the recurrence pointer ride-along on recurring tasks.",
+        "Change a task's status (todo / in_progress / done / archived). On a repeat the server moves the pointer (never to an occurrence on the day it was done) and records the completion (TV-D8).",
       args: {
         p_workspace_id: "workspace uuid",
         p_task_id: "task uuid",
         p_status: "new status",
-        p_recurrence: "advanced recurrence rule (recurring tasks only; optional)",
+        p_recurrence:
+          "the client's pointer; used only for a rule the server's engine can't read (optional)",
         p_position: "board position (optional)",
       },
     },
@@ -131,11 +156,10 @@ export const tasksModuleManifest: ModuleManifest = {
       op: "tasks.catch_up",
       rpc: "tasks_op_catch_up",
       summary:
-        "Batched recurrence catch-up on app open: reopen arrived done tasks, collapse missed occurrences forward.",
+        "Roll the workspace's repeats over now (TV-D8; the server also does it every 15 minutes): repeats come back at their assignee's midnight. Answers with what changed plus the tasks named in p_items (old builds' engine results, otherwise ignored).",
       args: {
         p_workspace_id: "workspace uuid",
-        p_items:
-          "engine results: [{task_id, kind, status?, scheduled_at?, recurrence, clear_commit}]",
+        p_items: "[] (builds before TV-D8 send their engine's results; the server ignores them)",
       },
     },
   ],

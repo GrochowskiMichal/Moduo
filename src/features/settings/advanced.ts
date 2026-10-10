@@ -26,6 +26,25 @@ export type ModuleReadResult =
   | { module: ExportModuleKey; ok: true; data: unknown }
   | { module: ExportModuleKey; ok: false; error: string };
 
+/**
+ * The tasks part of an export: the module bundle (tasks carry their handle
+ * numbers) plus every completion (TV-D8, specs/tasks-v3.md §Assumptions #26).
+ * Every new tasks table joins here in the block that creates it.
+ */
+export async function readTasksExport(
+  tasks: {
+    list(workspaceId: string): Promise<object>;
+    listCompletions(workspaceId: string): Promise<unknown[]>;
+  },
+  workspaceId: string,
+): Promise<Record<string, unknown>> {
+  const [bundle, completions] = await Promise.all([
+    tasks.list(workspaceId),
+    tasks.listCompletions(workspaceId),
+  ]);
+  return { ...bundle, completions };
+}
+
 /** One attachment as the export lists it (AT-1, AT1-8). */
 export type AttachmentManifestInput = {
   id: string;

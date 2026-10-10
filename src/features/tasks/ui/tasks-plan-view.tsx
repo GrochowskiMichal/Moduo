@@ -1,3 +1,4 @@
+import { isOpenTaskStatus } from "@contracts/vocabularies";
 import {
   type CollisionDetection,
   closestCenter,
@@ -375,7 +376,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   const createCaptured = captureQueues ? api.createQueuedTask : api.createTask;
 
   const totalOpenCount = useMemo(
-    () => tasks.filter((t) => t.status !== "done" && t.status !== "archived").length,
+    () => tasks.filter((t) => isOpenTaskStatus(t.status)).length,
     [tasks],
   );
   const myOpenCount = useMemo(
@@ -441,8 +442,8 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   const blockedNoteFor = useCallback(
     (task: Task) => {
       if (!api.blockedTaskIds.has(task.id)) return null;
-      const open = (api.blockersByTask.get(task.id) ?? []).filter(
-        (b) => b.status !== "done" && b.status !== "archived",
+      const open = (api.blockersByTask.get(task.id) ?? []).filter((b) =>
+        isOpenTaskStatus(b.status),
       );
       if (open.length === 0) return null;
       return open.length === 1

@@ -26,7 +26,6 @@ import {
   normalizeRelationKind,
   priorityLevelSchema,
   relationKindSchema,
-  taskStatusSchema,
   taskTimeStatusSchema,
 } from "./vocabularies.ts";
 
@@ -55,7 +54,11 @@ export const taskRowSchema = z.object({
   recurrence: z.unknown().optional(),
   energy_level: z.union([energyLevelSchema, z.null()]).optional(),
   priority: z.union([priorityLevelSchema, z.null()]).optional(),
-  status: taskStatusSchema.optional(),
+  /** Lax (TV-D8): a status this build doesn't know is read through
+   *  normalizeTaskStatus, so the row still shows instead of being dropped. */
+  status: z.string().optional(),
+  /** The handle number (TV-D8); absent on a database before that migration. */
+  number: optNum,
   committed_for: optStr,
   commit_order: optNum,
   reschedule_count: optNum,
@@ -65,6 +68,19 @@ export const taskRowSchema = z.object({
   deleted_at: optStr,
 });
 export type TaskRow = z.infer<typeof taskRowSchema>;
+
+/** A task_completions row (TV-D8). */
+export const taskCompletionRowSchema = z.object({
+  id,
+  workspace_id: id,
+  task_id: id,
+  user_id: optStr,
+  completed_at: z.string(),
+  cycle_key: z.string(),
+  updated_at: z.string(),
+  deleted_at: optStr,
+});
+export type TaskCompletionRow = z.infer<typeof taskCompletionRowSchema>;
 
 /** Notes meta row — v2 columns optional so pre-migration (legacy) reads still parse. */
 export const noteRowSchema = z.object({

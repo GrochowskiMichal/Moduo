@@ -29,8 +29,18 @@ function fakeDb(
   const rpcCalls: Array<{ fn: string; args: Row }> = [];
   function from(table: string) {
     const filters: Array<[string, unknown]> = [];
+    let window: [number, number] | null = null;
     const query = {
       select: () => query,
+      range: (from: number, to: number) => {
+        window = [from, to];
+        return query;
+      },
+      maybeSingle: () =>
+        query.then((r: { data: Row[] | null; error: { code?: string; message: string } | null }) => ({
+          data: r.data?.[0] ?? null,
+          error: r.error,
+        })),
       eq: (column: string, value: unknown) => {
         filters.push([column, value]);
         return query;
@@ -53,9 +63,10 @@ function fakeDb(
             },
           }).then(resolve);
         }
-        const data = (tables[table] ?? []).filter((row) =>
+        const all = (tables[table] ?? []).filter((row) =>
           filters.every(([c, v]) => (row[c] ?? null) === v),
         );
+        const data = window ? all.slice(window[0], window[1] + 1) : all;
         return Promise.resolve({ data, error: null }).then(resolve);
       },
     };

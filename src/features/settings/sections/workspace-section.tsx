@@ -24,6 +24,7 @@ import { WorkspaceMark, WorkspaceMarkPicker } from "../../workspaces/ui/workspac
 
 import { dispatchOpenSettings } from "../settings-events";
 import { SettingsSectionShell } from "./section-shell";
+import { TaskKeyField } from "./task-key-field";
 
 /** A labelled cluster (eyebrow above a card), mirroring the other settings sections. */
 function WsGroup({ label, children }: { label: string; children: ReactNode }) {
@@ -48,6 +49,7 @@ export function WorkspaceSection() {
     leaveWorkspace,
     renameWorkspace,
     updateWorkspaceBranding,
+    setTaskKey,
     softDeleteWorkspace,
     createWorkspace,
     selectWorkspace,
@@ -295,6 +297,15 @@ export function WorkspaceSection() {
                 Add workspace
               </Button>
             </div>
+          </WsGroup>
+
+          {/* Task handles, MOD-142 (TV-D8). */}
+          <WsGroup label="Tasks">
+            <TaskKeyField
+              taskKey={selectedWorkspace.taskKey}
+              canEdit={isOwner}
+              onSave={(key) => setTaskKey(selectedWorkspace.id, key)}
+            />
           </WsGroup>
 
           {/* People, roles and invites moved to Members and access (PERM-2). */}

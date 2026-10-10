@@ -15,6 +15,7 @@ import type {
   TaskTimeAction,
   TaskTimeStatus,
 } from "@contracts/vocabularies";
+import { isOpenTaskStatus } from "@contracts/vocabularies";
 import type { Truncation } from "../../lib/paged-select";
 
 export type {
@@ -32,8 +33,13 @@ export type RecurrenceRule = {
   rrule: string;
   /** Optional anchor datetime (DTSTART), ISO 8601. */
   dtstart: string | null;
-  /** Precomputed next occurrence datetime, ISO 8601. */
+  /** Precomputed next occurrence datetime, ISO 8601. The server moves it (TV-D8). */
   nextOccurrence: string | null;
+  /**
+   * "after_completion": the next one counts from the day it was done (the
+   * server reads it; the picker comes with TV-D12/TV-U13). Absent: by the rule.
+   */
+  mode?: "after_completion";
 };
 
 /**
@@ -67,6 +73,12 @@ export type Bucket = {
 export type Task = {
   id: string;
   workspaceId: string;
+  /**
+   * The task's permanent number in its workspace (TV-D8): with the workspace's
+   * task key it is the handle, `MOD-142`. Set by the server; absent on a task
+   * that isn't saved yet (or read from a database before TV-D8).
+   */
+  number?: number | null;
   /**
    * Who created the task (`owner_id`). The server sets it on insert and it
    * never changes. Empty on a task that isn't saved yet.
@@ -210,6 +222,22 @@ export type TagLink = {
 };
 
 /**
+ * One completion of a task (TV-D8, `public.task_completions`): who, when, and
+ * which cycle it closed (the occurrence for a repeat, "once" otherwise).
+ * Written by the server's status op; reopening by hand takes it back.
+ */
+export type TaskCompletion = {
+  id: string;
+  workspaceId: string;
+  taskId: string;
+  userId: string | null;
+  completedAt: string;
+  cycleKey: string;
+  updatedAt: string;
+  deletedAt: string | null;
+};
+
+/**
  * A directed dependency edge: `blockerTaskId` blocks `blockedTaskId` (spec §5c).
  * *Blocked* is computed at read time from these edges — see `blockedTaskIds`
  * in helpers — never stored on the task. The edge graph is a DAG (cycles are
@@ -314,7 +342,7 @@ export function isDrifted(
   task: Pick<Task, "scheduledAt" | "status">,
   now: Date = new Date(),
 ): boolean {
-  if (task.status === "done" || task.status === "archived") return false;
+  if (!isOpenTaskStatus(task.status)) return false;
   if (!task.scheduledAt) return false;
   return new Date(task.scheduledAt).getTime() < now.getTime();
 }

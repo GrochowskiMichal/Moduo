@@ -261,12 +261,12 @@ describe("useTasksModule live updates", () => {
   }, 20_000);
 });
 
-// The repeat catch-up (reopen a done repeating task whose next occurrence has
-// arrived) runs after a full load only. A quiet refetch on coming back to the
-// window must not re-run it: a repeat checked off on Home or through MCP can
-// carry a pointer that's already due, and the catch-up would reopen it the
-// same day (Tasks v3 P0 #2; the server-side fix is TV-D8).
-describe("useTasksModule repeat catch-up and quiet refetches", () => {
+// Repeats roll over on the server (TV-D8): the client sends nothing of its own
+// and never reopens a task itself. After a full load it asks the server to
+// roll the workspace over now (items: []) and applies the server's answer. A
+// quiet refetch on coming back to the window doesn't ask again. A repeat
+// checked off on Home or through MCP stays done (Tasks v3 P0 #2).
+describe("useTasksModule repeat roll-over and quiet refetches", () => {
   const DAY = 24 * 60 * 60 * 1000;
   const rule = {
     rrule: "FREQ=DAILY;INTERVAL=1",
@@ -274,7 +274,7 @@ describe("useTasksModule repeat catch-up and quiet refetches", () => {
     nextOccurrence: null,
   };
   const today = () => currentOccurrence(rule, new Date())!.toISOString();
-  /** Checked off elsewhere without moving the pointer past today. */
+  /** Checked off elsewhere without moving the pointer past today (an old build's save). */
   const doneElsewhere = () =>
     task({
       status: "done",
@@ -285,26 +285,40 @@ describe("useTasksModule repeat catch-up and quiet refetches", () => {
 
   function withCatchUp(rows: Task[]) {
     const fake = fakeRuntime(rows);
-    const opCatchUp = rs.fn(() => Promise.resolve([] as Task[]));
+    const opCatchUp = rs.fn((_input: { workspaceId: string; items: unknown[] }) =>
+      Promise.resolve([] as Task[]),
+    );
     (fake.runtime.tasks as unknown as { opCatchUp: typeof opCatchUp }).opCatchUp = opCatchUp;
     return { ...fake, opCatchUp };
   }
 
-  it("a full load catches up once", async () => {
+  it("a full load asks the server once, sends nothing of its own and never reopens a repeat itself", async () => {
     const { runtime, opCatchUp } = withCatchUp([doneElsewhere()]);
     const { result } = mount(runtime);
     await waitFor(() => expect(opCatchUp).toHaveBeenCalledTimes(1));
-    expect(result.current.tasks[0]!.status).toBe("todo");
+    expect(opCatchUp.mock.calls[0]![0]).toEqual({ workspaceId: "ws-1", items: [] });
+    await sleep(ECHO_GRACE_MS + 50);
+    expect(result.current.tasks[0]!.status).toBe("done");
   });
 
-  it("coming back to the window refetches without reopening a repeat checked off elsewhere", async () => {
+  it("applies what the server rolled over", async () => {
+    const { runtime, opCatchUp } = withCatchUp([doneElsewhere()]);
+    opCatchUp.mockImplementation(() =>
+      Promise.resolve([
+        { ...doneElsewhere(), status: "todo", updatedAt: new Date().toISOString() },
+      ]),
+    );
+    const { result } = mount(runtime);
+    await waitFor(() => expect(result.current.tasks[0]!.status).toBe("todo"));
+  });
+
+  it("coming back to the window refetches without asking again", async () => {
     const { runtime, server, list, opCatchUp } = withCatchUp([
       task({ scheduledAt: today(), recurrence: rule }),
     ]);
     const { result } = mount(runtime);
-    await waitFor(() => expect(result.current.tasks).toHaveLength(1));
+    await waitFor(() => expect(opCatchUp).toHaveBeenCalledTimes(1));
     await sleep(5_100); // past the first load's refetch throttle
-    expect(opCatchUp).not.toHaveBeenCalled(); // today's occurrence is open: nothing to do
 
     // Checked off on Home while this window was in the background.
     server.tasks[0] = doneElsewhere();
@@ -314,7 +328,7 @@ describe("useTasksModule repeat catch-up and quiet refetches", () => {
     await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(result.current.tasks[0]!.status).toBe("done"));
     await sleep(ECHO_GRACE_MS + 50);
-    expect(opCatchUp).not.toHaveBeenCalled();
+    expect(opCatchUp).toHaveBeenCalledTimes(1);
     expect(result.current.tasks[0]!.status).toBe("done");
 
     // A reconnect refetch is just as quiet.
@@ -324,31 +338,30 @@ describe("useTasksModule repeat catch-up and quiet refetches", () => {
     });
     await waitFor(() => expect(list).toHaveBeenCalledTimes(3));
     await sleep(ECHO_GRACE_MS + 50);
-    expect(opCatchUp).not.toHaveBeenCalled();
+    expect(opCatchUp).toHaveBeenCalledTimes(1);
     expect(result.current.tasks[0]!.status).toBe("done");
 
-    // An explicit reload is a full load and still catches up.
+    // An explicit reload is a full load and asks again.
     await act(async () => {
       await result.current.reload();
     });
-    await waitFor(() => expect(opCatchUp).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(opCatchUp).toHaveBeenCalledTimes(2));
   }, 20_000);
 
-  it("a refused catch-up refetches once and doesn't retry", async () => {
-    // e.g. a repeat you can see but not edit: the write check refuses the batch.
+  it("a failed call refetches once and doesn't retry", async () => {
     const { runtime, list, opCatchUp } = withCatchUp([doneElsewhere()]);
-    opCatchUp.mockImplementation(() => Promise.reject(new Error("You don't have access")));
+    opCatchUp.mockImplementation(() => Promise.reject(new Error("offline")));
     const { result } = mount(runtime);
     await waitFor(() => expect(opCatchUp).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
-    await waitFor(() => expect(result.current.tasks[0]!.status).toBe("done")); // reopen undone
     await sleep(1_500);
     expect(opCatchUp).toHaveBeenCalledTimes(1);
     expect(list).toHaveBeenCalledTimes(2);
     expect(result.current.loading).toBe(false);
+    expect(result.current.tasks[0]!.status).toBe("done");
   });
 
-  it("opened offline: the first refetch that works catches up, once", async () => {
+  it("opened offline: the first refetch that works asks, once", async () => {
     const { runtime, list, opCatchUp } = withCatchUp([doneElsewhere()]);
     list.mockImplementationOnce(() => Promise.reject(new Error("offline")));
     const { result } = mount(runtime);
@@ -360,9 +373,8 @@ describe("useTasksModule repeat catch-up and quiet refetches", () => {
     });
     await waitFor(() => expect(opCatchUp).toHaveBeenCalledTimes(1));
     expect(result.current.error).toBeNull();
-    expect(result.current.tasks[0]!.status).toBe("todo");
 
-    // Later quiet refetches don't run it again.
+    // Later quiet refetches don't ask again.
     await sleep(5_100);
     act(() => {
       h.listener?.({ type: "resync", reason: "return" });

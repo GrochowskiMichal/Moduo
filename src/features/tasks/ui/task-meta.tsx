@@ -1,6 +1,7 @@
 // The quiet marks rows and cards share (tasks-v2 §6, TV-U1): the counts after
 // a title, the bucket as dot + name, the one date, and the "N completed" line.
 
+import { isOpenTaskStatus } from "@contracts/vocabularies";
 import { CircleDashed, Clock, Hash, Inbox, ListChecks, ListTree, Repeat } from "lucide-react";
 import type { ReactNode } from "react";
 import { MetaCount, MetaCounts } from "../../../components/ui/meta-count";
@@ -24,8 +25,8 @@ export function BlockedMarker({
   api: Pick<TasksModuleApi, "blockersByTask">;
   iconClassName?: string;
 }) {
-  const openBlockers = (api.blockersByTask.get(taskId) ?? []).filter(
-    (b) => b.status !== "done" && b.status !== "archived",
+  const openBlockers = (api.blockersByTask.get(taskId) ?? []).filter((b) =>
+    isOpenTaskStatus(b.status),
   );
   const label =
     openBlockers.length === 1

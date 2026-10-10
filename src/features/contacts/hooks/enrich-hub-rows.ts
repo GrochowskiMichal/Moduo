@@ -9,6 +9,7 @@
 // read), and its registry label is already the subject; a desktop follow-up can
 // register email meta the same way.
 
+import { isOpenTaskStatus } from "@contracts/vocabularies";
 import { allTimeCalendarWindow } from "@/features/calendar/window";
 import type { EntityRef } from "@/lib/entity-links";
 import type { ModuoRuntime } from "@/lib/runtime.types";
@@ -53,7 +54,7 @@ export async function enrichHubRows(
           .then(() => runtime.tasks.list(workspaceId))
           .then((bundle) => {
             for (const t of bundle.tasks) {
-              const open = t.status !== "done" && t.status !== "archived";
+              const open = isOpenTaskStatus(t.status);
               const key = entityRefKey({ type: "task", id: t.id });
               if (open) openTaskKeys.add(key);
               if (!wantTask.has(t.id)) continue;

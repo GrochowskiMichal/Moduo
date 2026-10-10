@@ -1,3 +1,4 @@
+import { isOpenTaskStatus } from "@contracts/vocabularies";
 import type { DraggableSyntheticListeners } from "@dnd-kit/core";
 import { Check, ChevronDown, ChevronRight, CornerDownRight, Inbox } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -125,7 +126,7 @@ export function TaskRow({
 }: Props) {
   const done = task.status === "done";
   // A Won't do task kept in view (TV-P0) reads closed, like a done one.
-  const closed = done || task.status === "archived";
+  const closed = !isOpenTaskStatus(task.status);
   const queued = api.queuedTaskIds.has(task.id);
   // Menu items that hand focus to something in the row (the title editor, a
   // chip's popover) run once the context menu has closed: Radix returns focus

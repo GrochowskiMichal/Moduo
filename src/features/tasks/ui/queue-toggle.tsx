@@ -1,3 +1,4 @@
+import { isOpenTaskStatus } from "@contracts/vocabularies";
 import { ListChecks } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import { cn } from "../../../lib/utils";
@@ -71,7 +72,7 @@ export function QueueToggle({
   const claim = useQueueClaim(task.id, api);
   const claimed = claim.names.length > 0;
   const showClaim = claimed && !queued;
-  if (task.status === "done" || task.status === "archived") return null;
+  if (!isOpenTaskStatus(task.status)) return null;
   // Both of us: their claim stays visible next to my toggle (the toggle's
   // label already says "Also in Mike's queue", so the avatar is decoration).
   const besideClaim =

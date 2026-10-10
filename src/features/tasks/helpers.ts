@@ -2,6 +2,7 @@
 // position generation (Lexorank-lite), label maps, datetime formatting, and the
 // grouping logic for the List view. No React, no IO — easy to unit-test.
 
+import { isOpenTaskStatus } from "@contracts/vocabularies";
 import { formatDay, formatStamp, formatWhen } from "../../lib/time-format";
 import type { Bucket, EnergyLevel, PriorityLevel, Task, TaskRelation, TaskStatus } from "./model";
 
@@ -515,7 +516,7 @@ export function canNestUnder(
 
 /** An open task can be worked on; done/archived can't block anything. */
 export function isOpen(task: Pick<Task, "status">): boolean {
-  return task.status !== "done" && task.status !== "archived";
+  return isOpenTaskStatus(task.status);
 }
 
 /**

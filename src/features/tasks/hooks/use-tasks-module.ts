@@ -3,6 +3,7 @@
 // snappy, keyboard-driven editing; on error they reload from the source of truth
 // and surface a toast. Drift is computed client-side via isDrifted().
 
+import { isOpenTaskStatus } from "@contracts/vocabularies";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { TAG_LINKS_SCOPE } from "../../../lib/paged-select";
@@ -50,7 +51,6 @@ import {
   type TaskQueueEntry,
   type TaskRelation,
   type TaskStatus,
-  type TasksCatchUpItem,
   type TasksModuleBundle,
   type TaskTimeResult,
   type TimeBlockMap,
@@ -70,12 +70,7 @@ import {
   withoutTask,
 } from "../queue";
 import { listenTasksLive } from "../realtime";
-import {
-  catchUpItem,
-  catchUpPatch,
-  recurrenceOnStatusChange,
-  skipOccurrencePatch,
-} from "../recurrence-engine";
+import { recurrenceOnStatusChange, skipOccurrencePatch } from "../recurrence-engine";
 
 /** An adjustment `logTimeAdjustment` recorded, as its Undo needs it. */
 export type TimeAdjustment = {
@@ -334,7 +329,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
   const openTaskCountByBucket = useMemo(() => {
     const counts = new Map<string, number>();
     for (const t of liveTasks) {
-      if (t.status === "done" || t.status === "archived") continue;
+      if (!isOpenTaskStatus(t.status)) continue;
       counts.set(t.bucketId, (counts.get(t.bucketId) ?? 0) + 1);
     }
     return counts;
@@ -438,9 +433,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
 
   /** Open-task count per tag — drives the filter menu (counts, hides empties). */
   const openTaskCountByTag = useMemo(() => {
-    const openIds = new Set(
-      liveTasks.filter((t) => t.status !== "done" && t.status !== "archived").map((t) => t.id),
-    );
+    const openIds = new Set(liveTasks.filter((t) => isOpenTaskStatus(t.status)).map((t) => t.id));
     const counts = new Map<string, number>();
     for (const link of tagView.links) {
       if (link.entityType !== "task" || !openIds.has(link.entityId)) continue;
@@ -494,7 +487,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
    *  task of mine stays on show (kept) until the next load; reopening drops it. */
   const queueFollowStatus = useCallback(
     (taskId: string, status: TaskStatus | "deleted") => {
-      if (status === "todo" || status === "in_progress") {
+      if (isOpenTaskStatus(status)) {
         setKeptRows((prev) => prev.filter((e) => e.taskId !== taskId));
         return;
       }
@@ -973,24 +966,26 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       for (const child of movedChildren) {
         patchTaskLocal(child.id, { bucketId: fields.bucketId, updatedAt: stamp });
       }
+      const moving = fields.bucketId !== undefined && fields.bucketId !== existing.bucketId;
       guard(async () => {
-        const saved = await runtime!.tasks.updateTask({
-          workspaceId: workspaceId!,
-          taskId: id,
-          patch: fields,
-        });
-        // Subtasks follow the project the parent really landed in (an unknown
-        // one falls back to Inbox on the server).
-        const savedChildren = await Promise.all(
-          movedChildren.map((child) =>
-            runtime!.tasks.updateTask({
+        // A move is one op (TV-D8): the server moves the subtasks with their
+        // parent in the same transaction and answers with every row it
+        // changed, so each ends on the server's own row (the live gate
+        // compares updated_at). Any other edit answers with the task alone.
+        const saved = moving
+          ? await runtime!.tasks.opUpdateTask({
               workspaceId: workspaceId!,
-              taskId: child.id,
-              patch: { bucketId: saved.bucketId },
-            }),
-          ),
-        );
-        const byId = new Map([saved, ...savedChildren].map((t) => [t.id, t]));
+              taskId: id,
+              patch: fields,
+            })
+          : [
+              await runtime!.tasks.updateTask({
+                workspaceId: workspaceId!,
+                taskId: id,
+                patch: fields,
+              }),
+            ];
+        const byId = new Map(saved.map((t) => [t.id, t]));
         setBundle((prev) => ({ ...prev, tasks: prev.tasks.map((t) => byId.get(t.id) ?? t) }));
       });
     },
@@ -1006,34 +1001,24 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     ],
   );
 
-  // ── recurrence catch-up (spec §5d) ──────────────────────────────────────────
-  // One idempotent pass per successful full load (app open / reload; a quiet
-  // refetch on focus or reconnect doesn't count): reopen done
-  // recurring tasks whose occurrence arrived; collapse missed occurrences
-  // forward (no backfill — there is only the next occurrence). The stamp ref
-  // keeps re-renders from re-running it; view-only sessions skip it (no write
-  // access — stale rows just read as quiet drift).
-  // The whole pass is one batched intent op (tasks.catch_up): optimistic local
-  // patches, a single RPC that enforces structure + logs per-task activity,
-  // then reconcile with the returned rows.
+  // ── recurrence roll-over (TV-D8) ─────────────────────────────────────────────
+  // Repeats come back on the server: at their assignee's midnight (pg_cron),
+  // never on the day they were done. After a successful full load (app open /
+  // reload; a quiet refetch on focus or reconnect doesn't count) the app asks
+  // the server to roll this workspace over now, so a repeat due today is back
+  // without waiting for the next 15-minute run, and applies what it answers.
+  // The client no longer computes or sends anything (the reopen bug, P0 #2).
+  // View-only sessions skip it, and so does a workspace without repeats.
   const caughtUpRef = useRef(0);
   useEffect(() => {
     if (loadStamp === 0 || caughtUpRef.current === loadStamp || !canEdit) return;
     if (!runtime || !workspaceId) return;
     caughtUpRef.current = loadStamp;
-    const now = new Date();
-    const items: TasksCatchUpItem[] = [];
-    for (const t of bundle.tasks) {
-      if (isTempId(t.id)) continue;
-      const patch = catchUpPatch(t, now);
-      if (!patch) continue;
-      items.push(catchUpItem(t, patch));
-      patchTaskLocal(t.id, { ...patch, updatedAt: now.toISOString() });
-    }
-    if (items.length === 0) return;
+    if (!bundle.tasks.some((t) => t.recurrence)) return;
     void runtime.tasks
-      .opCatchUp({ workspaceId, items })
+      .opCatchUp({ workspaceId, items: [] })
       .then((saved) => {
+        if (saved.length === 0) return;
         const byId = new Map(saved.map((t) => [t.id, t]));
         setBundle((prev) => ({
           ...prev,
@@ -1042,13 +1027,12 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         setActivityStamp((s) => s + 1);
       })
       .catch(() => {
-        // A quiet read puts the server's rows back without re-running the
-        // pass (the workspace is already stamped): a full load here looped
-        // whenever the op kept failing, e.g. on a repeat you can see but not
-        // edit. The pass retries on the next full load.
+        // A quiet read, never a full load: a full load re-runs this, and a
+        // call that keeps failing (offline, a database before TV-D8's
+        // migration) would loop. The next full load asks again.
         void loadImpl(true);
       });
-  }, [loadStamp, canEdit, runtime, workspaceId, bundle.tasks, patchTaskLocal, loadImpl]);
+  }, [loadStamp, canEdit, runtime, workspaceId, bundle.tasks, loadImpl]);
 
   const toggleDone = useCallback(
     (task: Task) => {

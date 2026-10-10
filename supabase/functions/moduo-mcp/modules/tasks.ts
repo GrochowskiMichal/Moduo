@@ -15,7 +15,13 @@
  */
 
 import { ATTACHMENTS_BUCKET, ATTACHMENT_LINK_TTL_SECONDS } from "../../_shared/contracts/attachments.ts";
-import { TASK_STATUSES, isTaskStatus } from "../../_shared/contracts/vocabularies.ts";
+import {
+  ENERGY_LEVELS,
+  PRIORITY_LEVELS,
+  TASK_STATUSES,
+  isOpenTaskStatus,
+  isTaskStatus,
+} from "../../_shared/contracts/vocabularies.ts";
 import { assigneeCandidates, resolveAssigneeArg } from "../../_shared/task-people.ts";
 import {
   MAX_PAGE,
@@ -25,13 +31,14 @@ import {
   orderByBucket,
   pageOf,
   parseAssignee,
+  readAllPages,
   queueTaskIds,
   shapeTask,
   subtaskCounts,
   topLevelOnly,
 } from "../../_shared/tasks-connector.ts";
 import type { ConnectorModule, ToolContext } from "../registry.ts";
-import { visibleIds } from "../share.ts";
+import { assertReach, visibleIds } from "../share.ts";
 import {
   pointerOnStatusChange,
   skipOccurrenceTargets,
@@ -40,7 +47,6 @@ import {
 
 type Row = Record<string, any>;
 
-const OPEN_STATUSES = ["todo", "in_progress"] as const;
 // The creator's "completed" notification (TV-D1). The trail already says so
 // through tasks.set_status, so agents don't get it twice (like the app's
 // isTrailEntry).
@@ -76,17 +82,25 @@ async function rows(query: PromiseLike<{ data: Row[] | null; error: { message: s
   return data ?? [];
 }
 
-/** Tasks + the cross-row context needed for computed state, one fetch. */
+/** Tasks + the cross-row context needed for computed state, one fetch. The
+ * big reads go page by page: PostgREST stops at 1,000 rows a request, and a
+ * list past that used to lose tasks silently (TV-D8, AC1.13). */
 async function loadWorkspace(ctx: ToolContext) {
   const ws = ctx.key.workspaceId;
   const visible = await visibleIds(ctx, "task");
-  const [allTasks, relations, tags, tagLinks, members, queueRows] = await Promise.all([
-    rows(ctx.db.from("tasks").select("*").eq("workspace_id", ws).is("deleted_at", null)),
-    rows(ctx.db.from("task_relations").select("*").eq("workspace_id", ws)),
+  const [allTasks, relations, tags, tagLinks, members, queueRows, taskKey] = await Promise.all([
+    readAllPages<Row>((from, to) =>
+      ctx.db.from("tasks").select("*").eq("workspace_id", ws).is("deleted_at", null)
+        .order("id").range(from, to)),
+    readAllPages<Row>((from, to) =>
+      ctx.db.from("task_relations").select("*").eq("workspace_id", ws).order("id").range(from, to)),
     rows(ctx.db.from("tags").select("id, name, color").eq("workspace_id", ws).is("deleted_at", null)),
-    rows(ctx.db.from("tag_links").select("tag_id, entity_type, entity_id").eq("workspace_id", ws).eq("entity_type", "task")),
+    readAllPages<Row>((from, to) =>
+      ctx.db.from("tag_links").select("id, tag_id, entity_type, entity_id").eq("workspace_id", ws)
+        .eq("entity_type", "task").order("id").range(from, to)),
     workspaceMembers(ctx),
     myQueueRows(ctx),
+    workspaceTaskKey(ctx),
   ]);
   const tasks = allTasks.filter((t) => visible.has(t.id));
   // TV-D2: the key creator's own queue, in order (live, visible tasks only).
@@ -95,7 +109,7 @@ async function loadWorkspace(ctx: ToolContext) {
   const byId = new Map(tasks.map((t) => [t.id, t]));
   const open = (id: string) => {
     const t = byId.get(id);
-    return !!t && OPEN_STATUSES.includes(t.status);
+    return !!t && isOpenTaskStatus(t.status);
   };
   const blockedIds = new Set(
     relations.filter((r) => open(r.blocker_task_id) && byId.has(r.blocked_task_id))
@@ -119,7 +133,31 @@ async function loadWorkspace(ctx: ToolContext) {
     subtaskCounts: subtaskCounts(tasks),
     queue,
     queuedByMe: new Set(queue),
+    taskKey,
   };
+}
+
+/** The workspace's task key (TV-D8), or null before that migration. */
+async function workspaceTaskKey(ctx: ToolContext): Promise<string | null> {
+  const { data, error } = await ctx.db.from("workspaces").select("task_key")
+    .eq("id", ctx.key.workspaceId).maybeSingle();
+  if (error) return null;
+  return typeof data?.task_key === "string" ? data.task_key : null;
+}
+
+/** The fields tasks_create / tasks_update take, as the ops want them. */
+function taskFieldsFromArgs(args: Row): Row {
+  const fields: Row = {};
+  if (typeof args.title === "string") fields.title = str(args, "title");
+  if (typeof args.description === "string") fields.description = args.description;
+  for (const name of ["due_date", "scheduled_at"]) {
+    if (!(name in args)) continue;
+    fields[name] = args[name] === null ? null : isoOrThrow(str(args, name), name);
+  }
+  if ("duration_minutes" in args) fields.duration_minutes = args.duration_minutes ?? null;
+  if ("priority" in args) fields.priority = args.priority ?? null;
+  if ("energy_level" in args) fields.energy_level = args.energy_level ?? null;
+  return fields;
 }
 
 /** The key creator's queue rows here (TV-D2). Before the migration: none. */
@@ -258,7 +296,7 @@ export const tasksConnectorModule: ConnectorModule = {
         const bucketId = str(args, "bucket_id", false);
         let list = filterByAssignee(data.tasks, parseAssignee(args.assignee), ctx.key.createdBy);
         if (bucketId) list = list.filter((t) => t.bucket_id === bucketId);
-        if (status === "open") list = list.filter((t) => OPEN_STATUSES.includes(t.status));
+        if (status === "open") list = list.filter((t) => isOpenTaskStatus(t.status));
         else if (isTaskStatus(status)) list = list.filter((t) => t.status === status);
         if (args.top_level === true) list = topLevelOnly(list, new Set(list.map((t) => t.id)));
         const buckets = await rows(
@@ -604,6 +642,78 @@ export const tasksConnectorModule: ConnectorModule = {
       inputSchema: taskIdSchema,
       handler: (args, ctx) =>
         callOp(ctx, "tasks_op_skip_today", { p_task_id: str(args, "task_id") }),
+    },
+    {
+      name: "tasks_create",
+      description:
+        "Create a task. It goes into the project you name (bucket_id, see tasks_list_buckets) or the key creator's Inbox, assigned to the key's creator unless you pass assignee_id (a member, \"me\", or null for Unassigned). It gets its handle (e.g. MOD-142), shows in search at once, and the trail reads \"via\" this key.",
+      access: "edit",
+      inputSchema: {
+        type: "object",
+        properties: {
+          title: { type: "string", description: "What the task is." },
+          bucket_id: { type: "string", description: "Project (bucket) uuid. Default: the key creator's Inbox." },
+          parent_id: { type: "string", description: "Make it a subtask of this task (one level only)." },
+          description: { type: "string", description: "Longer notes (plain text or Markdown)." },
+          due_date: { type: ["string", "null"], description: "When it's due, ISO 8601." },
+          scheduled_at: { type: ["string", "null"], description: "When to work on it, ISO 8601." },
+          duration_minutes: { type: ["number", "null"], description: "Estimate in minutes." },
+          priority: { type: ["string", "null"], enum: [...PRIORITY_LEVELS, null], description: "Priority." },
+          energy_level: { type: ["string", "null"], enum: [...ENERGY_LEVELS, null], description: "Energy it takes." },
+          assignee_id: { type: ["string", "null"], description: "Member uuid (see tasks_list_assignees), \"me\", or null." },
+        },
+        required: ["title"],
+      },
+      handler: async (args, ctx) => {
+        const input: Row = { ...taskFieldsFromArgs(args) };
+        const bucketId = str(args, "bucket_id", false);
+        if (bucketId) {
+          await assertReach(ctx, "bucket", bucketId);
+          input.bucket_id = bucketId;
+        }
+        const parentId = str(args, "parent_id", false);
+        if (parentId) input.parent_id = (await fetchTask(ctx, parentId)).id;
+        if ("assignee_id" in args) {
+          input.assignee_id = resolveAssigneeArg(args.assignee_id, ctx.key.createdBy);
+        }
+        return callOp(ctx, "tasks_op_create", { p_task: input });
+      },
+    },
+    {
+      name: "tasks_update",
+      description:
+        "Edit a task's fields: title, description, project (bucket_id; its subtasks move with it), parent, due date, scheduled time, estimate, priority, energy. Pass only what changes; null clears a date, the estimate, the priority, the energy or the parent. Status and assignee have their own tools (tasks_set_status, tasks_assign).",
+      access: "edit",
+      inputSchema: {
+        type: "object",
+        properties: {
+          task_id: { type: "string", description: "Task uuid." },
+          title: { type: "string", description: "New title." },
+          bucket_id: { type: "string", description: "Move to this project (bucket) uuid." },
+          parent_id: { type: ["string", "null"], description: "Parent task uuid, or null for top level." },
+          description: { type: "string", description: "New description." },
+          due_date: { type: ["string", "null"], description: "ISO 8601, or null to clear." },
+          scheduled_at: { type: ["string", "null"], description: "ISO 8601, or null to clear." },
+          duration_minutes: { type: ["number", "null"], description: "Estimate in minutes, or null." },
+          priority: { type: ["string", "null"], enum: [...PRIORITY_LEVELS, null], description: "Priority, or null." },
+          energy_level: { type: ["string", "null"], enum: [...ENERGY_LEVELS, null], description: "Energy, or null." },
+        },
+        required: ["task_id"],
+      },
+      handler: async (args, ctx) => {
+        const task = await fetchTask(ctx, str(args, "task_id"));
+        const patch: Row = taskFieldsFromArgs(args);
+        const bucketId = str(args, "bucket_id", false);
+        if (bucketId) {
+          await assertReach(ctx, "bucket", bucketId);
+          patch.bucket_id = bucketId;
+        }
+        if ("parent_id" in args) {
+          patch.parent_id = args.parent_id === null ? null : (await fetchTask(ctx, str(args, "parent_id"))).id;
+        }
+        if (Object.keys(patch).length === 0) throw new Error("Nothing to change.");
+        return callOp(ctx, "tasks_op_update", { p_task_id: task.id, p_patch: patch });
+      },
     },
     {
       name: "tasks_set_status",

@@ -6,6 +6,7 @@ import {
   type ExportMeta,
   exportZipName,
   type ModuleReadResult,
+  readTasksExport,
 } from "./advanced";
 
 const META: ExportMeta = {
@@ -172,5 +173,19 @@ describe("attachmentsManifest — the export lists files, not their bytes (AT1-8
     const manifest = attachmentsManifest([record("a")], { shown: 10000, total: 12000 });
 
     expect(manifest.truncated).toEqual({ shown: 10000, total: 12000 });
+  });
+});
+
+describe("the tasks export carries every new tasks table (TV-D8, §Assumptions #26)", () => {
+  it("adds the completions to the tasks bundle", async () => {
+    const data = await readTasksExport(
+      {
+        list: async () => ({ tasks: [{ id: "t1", number: 7 }], buckets: [] }),
+        listCompletions: async () => [{ id: "c1", taskId: "t1", cycleKey: "once" }],
+      },
+      "ws-1",
+    );
+    expect(data.tasks).toEqual([{ id: "t1", number: 7 }]);
+    expect(data.completions).toEqual([{ id: "c1", taskId: "t1", cycleKey: "once" }]);
   });
 });

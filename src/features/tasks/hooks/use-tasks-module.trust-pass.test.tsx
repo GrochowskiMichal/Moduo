@@ -56,6 +56,22 @@ function fakeRuntime(tasks: Task[]) {
       ...byId(taskId),
       ...patch,
     })),
+    // The server's edit op (TV-D8): a move carries the live subtasks along.
+    opUpdateTask: rs.fn(async ({ taskId, patch }: { taskId: string; patch: Partial<Task> }) => {
+      const moved = patch.bucketId
+        ? tasks.filter(
+            (t) => t.parentId === taskId && !t.deletedAt && t.bucketId !== patch.bucketId,
+          )
+        : [];
+      return [
+        { ...byId(taskId), ...patch, updatedAt: "2026-10-10T12:00:00.000Z" },
+        ...moved.map((t) => ({
+          ...t,
+          bucketId: patch.bucketId as string,
+          updatedAt: "2026-10-10T12:00:00.000Z",
+        })),
+      ];
+    }),
     opReschedule: rs.fn(
       async ({ taskId, scheduledAt }: { taskId: string; scheduledAt: string }) => ({
         ...byId(taskId),
@@ -96,13 +112,21 @@ describe("moving a parent moves its subtasks (AC1.8)", () => {
     expect(bucketOf(hook, "child-a")).toBe("p2");
     expect(bucketOf(hook, "child-b")).toBe("p2");
     expect(bucketOf(hook, "other")).toBe("p1");
-    // …and saved: the parent, then each subtask, field by field.
-    await waitFor(() => expect(api.updateTask).toHaveBeenCalledTimes(3));
-    const moved = api.updateTask.mock.calls.map((c) => c[0].taskId).sort();
-    expect(moved).toEqual(["child-a", "child-b", "parent"]);
-    for (const call of api.updateTask.mock.calls) {
-      expect(call[0].patch).toEqual({ bucketId: "p2" });
-    }
+    // …and saved in one op (TV-D8), which moves the subtasks on the server.
+    await waitFor(() => expect(api.opUpdateTask).toHaveBeenCalledTimes(1));
+    expect(api.opUpdateTask).toHaveBeenCalledWith({
+      workspaceId: "w1",
+      taskId: "parent",
+      patch: { bucketId: "p2" },
+    });
+    expect(api.updateTask).not.toHaveBeenCalled();
+    // Every row ends on the server's answer.
+    await waitFor(() =>
+      expect(hook.result.current.tasks.find((t) => t.id === "child-a")?.updatedAt).toBe(
+        "2026-10-10T12:00:00.000Z",
+      ),
+    );
+    expect(bucketOf(hook, "child-b")).toBe("p2");
   });
 
   it("a subtask already in the new project isn't written again", async () => {
@@ -111,8 +135,9 @@ describe("moving a parent moves its subtasks (AC1.8)", () => {
       task("child", { bucketId: "p2", parentId: "parent" }),
     ]);
     act(() => hook.result.current.patchTask("parent", { bucketId: "p2" }));
-    await waitFor(() => expect(api.updateTask).toHaveBeenCalledTimes(1));
-    expect(api.updateTask.mock.calls[0][0].taskId).toBe("parent");
+    await waitFor(() => expect(api.opUpdateTask).toHaveBeenCalledTimes(1));
+    expect(api.opUpdateTask.mock.calls[0][0].taskId).toBe("parent");
+    expect(api.updateTask).not.toHaveBeenCalled();
   });
 
   it("editing anything else touches only the task", async () => {
