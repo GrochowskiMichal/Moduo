@@ -35,7 +35,7 @@ import {
   showsMyTasks,
 } from "../default-view";
 import type { TaskLayout } from "../display";
-import { showsArchived, statusesLetThrough } from "../filters";
+import { type CaptureSeed, showsArchived, statusesLetThrough } from "../filters";
 import { groupsByBucket } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import { isDrifted, PRIVATE_PROJECT_LABEL, type Task } from "../model";
@@ -342,11 +342,25 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     runtime,
     assignees,
     enabled: mode === "plan",
-    // A deep-linked task stays listed past this scope's filters and search
-    // while it's selected; the link never clears saved filters (TV-U2).
-    keepTaskId: linkedTaskId,
+    // A deep-linked task, or the selected one just marked Won't do, stays
+    // listed past this scope's filters and search while it's selected; a link
+    // never clears saved filters (TV-U2).
+    keepTaskId: linkedTaskId ?? keptArchivedId,
   });
   const scopeTasks = filtering.tasks;
+  // What New pre-fills: the filters you can see (none in Focus), and never
+  // someone who can't take the task (a former member a stored filter still
+  // names: the server would refuse the save).
+  const captureSeed = useMemo<CaptureSeed>(() => {
+    if (mode === "execute") return { tagIds: [] };
+    const seed = filtering.seed;
+    const id = seed.assigneeId;
+    if (id && !assignees.some((a) => a.userId === id && a.canTakeTasks)) {
+      const { assigneeId: _dropped, ...rest } = seed;
+      return rest;
+    }
+    return seed;
+  }, [mode, filtering.seed, assignees]);
 
   const scopeTitle =
     selection === "all"
@@ -872,8 +886,8 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
         inbox={inbox}
         defaultBucketId={captureBucketId}
         // New inside a filtered scope pre-fills the filter's tag, assignee and
-        // priority (U2-5).
-        seed={filtering.seed}
+        // priority (U2-5); never in Focus, whose filters aren't on screen.
+        seed={captureSeed}
         tags={api.tags}
         onCreate={(fields, { tagIds }) => {
           const created = createCaptured(fields);

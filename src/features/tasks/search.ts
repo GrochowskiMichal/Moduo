@@ -54,9 +54,45 @@ export function resolveTasksDeepLink(
 
 // ── Live search (`/`, tasks-v2 §7, U2-4) ────────────────────────────────────
 
+const ENTITIES: Record<string, string> = {
+  "&amp;": "&",
+  "&lt;": "<",
+  "&gt;": ">",
+  "&quot;": '"',
+  "&#39;": "'",
+  "&nbsp;": " ",
+};
+
+/** A description's text, lower-cased, cached by its source (they're long and
+ *  searched on every keystroke). */
+const textCache = new Map<string, string>();
+
+/**
+ * The words a description shows: the editor stores HTML (`<p dir="ltr"><span
+ * style="white-space: pre-wrap;">…`), so its tags and attributes are dropped
+ * and entities decoded; otherwise "pre" or "span" would match every task with
+ * a description (TV-U2 review). Plain text is read as it is.
+ */
+export function descriptionText(description: string | null | undefined): string {
+  if (!description) return "";
+  const cached = textCache.get(description);
+  if (cached !== undefined) return cached;
+  const text = (
+    /^\s*</.test(description)
+      ? description
+          .replace(/<[^>]*>/g, " ")
+          .replace(/&[a-z#0-9]+;/gi, (m) => ENTITIES[m.toLowerCase()] ?? m)
+      : description
+  ).toLowerCase();
+  if (textCache.size > 2000) textCache.clear();
+  textCache.set(description, text);
+  return text;
+}
+
 /**
  * Whether a task matches the search box: every word of the query appears in
- * its title or description, ignoring case. An empty query matches everything.
+ * its title or the text of its description, ignoring case. An empty query
+ * matches everything.
  */
 export function taskMatchesQuery(
   task: Pick<Task, "title" | "description">,
@@ -64,7 +100,7 @@ export function taskMatchesQuery(
 ): boolean {
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
   if (words.length === 0) return true;
-  const haystack = `${task.title}\n${task.description ?? ""}`.toLowerCase();
+  const haystack = `${task.title.toLowerCase()}\n${descriptionText(task.description)}`;
   return words.every((word) => haystack.includes(word));
 }
 

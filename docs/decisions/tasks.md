@@ -2,6 +2,46 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index.
 
+## 2026-10-10 · TV-U2 (tasks-v3 block 6): toolbar, Filter, Display, search — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 6 (#330 re-scoped; [specs/tasks-v3.md](../../specs/tasks-v3.md) AC11.2–11.3, AC1.4, AC13.3) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **U2-1 · Group by is Status · Priority · Assignee · Date · Project · None until sections and teams exist** → TV-U2 (`helpers.ts` `GROUP_BYS`, `display.ts`), TV-D10/TV-U10 (Section, Team)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: default l's order with the two missing dimensions left out until TV-D10 creates their data; "None" stays, listed last; Project only across projects; the stored key stays `bucket` until TV-D7. Defaults: All by project, My tasks by status (84), a project, the Inbox and the Queue ungrouped (a project's default becomes Section once it has sections).
+  - Why: a Section or Team choice today would put every task in one "No section" group; None is how a flat project list is asked for.
+  - Rejected: listing Section and Team now; dropping None.
+- **U2-2 · The Date grouping is rolling, and its five days are named in full** → TV-U2 (`dateGroupOf`, `dateGroupLabel`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: Earlier · Today · Tomorrow · the next five days ("Saturday" … "Wednesday") · Later · No date, from the row's date (next session or due, whichever is first by day); "This week" stays only in Filter → Due date / Scheduled.
+  - Why: call 83; rolling days never depend on where the week starts, so Time & region (TV-D14) changes nothing here; a header reads as a word, not a column value.
+  - Rejected: "Sat"-style headers; week-based groups.
+- **U2-3 · Rows: Detailed shows what today's row can carry; the rest waits for the kit Row** → TV-U2 (`row-layout.ts`, `task-row.tsx`), TV-U10, TV-U11
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: Display → Rows: Standard · Detailed, remembered per view (scope), Standard by default. Detailed adds the status name, "1h 20m / ~4h", the assignee's first name and the project on every row; handle, Project › Section, Due and Next session as two columns, waiting, updated and sortable headers come with TV-U10 on DS-6's Row. The Board has no Rows control until TV-U11's cards. The preset is stored per scope only: RESEARCH 2's user-level default (with per-view overrides) and "developers start on Detailed" arrive with onboarding's role question (TV-U17), which will set that default.
+  - Why: a preset that changes nothing would be a lie, and building the full Detailed anatomy on the row that TV-U10 replaces would build it twice.
+  - Rejected: Rows as a placebo control; the full anatomy now.
+- **U2-4 · A Status filter decides the Board's status groups** → TV-U2 (`statusesLetThrough`, `task-board-view.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: "Status is Won't do" shows one Won't do group; "is not Done" shows To do and In progress; without a Status filter the Board shows To do · In progress · Done, plus Won't do only while a kept Won't do card (TV-P0) is on it. Won't do cards fade and strike through like their rows.
+  - Why: AC1.4 — with three fixed columns the Won't do cards sat off-screen to the right of three empty ones.
+  - Rejected: always three columns; a Won't do column on every board.
+- **U2-5 · A link lands on its task past saved filters, and never clears them** → TV-U2 (`useTasksFilters` `keepTaskId`, `tasks-plan-view.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: a deep-linked task (and the selected task just marked Won't do) stays listed, with its parent, past the filters and search it arrived under, while it's selected; changing either lets them decide again. DF-1's "clear the filters that hide the target" is gone. New pre-fills from the filters on screen only (never in Focus) and never names someone who can't take the task.
+  - Why: filters are saved per scope now (#330), so clearing them on a link erased a saved setup, and only the scope you were leaving; the target's own scope could still hide it and the link landed on another task (the validator's MAJOR). Keeping it is how Display already treats a linked completed task (TV-U1).
+  - Rejected: clearing the target scope's saved filters; clearing them in memory only.
+- **U2-6 · "Yesterday" stays in the one grammar; #330's second date formatter is gone** → TV-U2 (`day-buckets.ts` is Filter-only now), DS-6/TV-D14 (owners of 41)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: the verdict's "drop Yesterday" was about #330's duplicate formatter, which is deleted; `src/lib/time-format.ts` keeps "Yesterday" as TV-P0 built and tested it.
+  - Why: one grammar, changed in one place by the blocks that own it.
+  - Rejected: changing the shared grammar from a toolbar block.
+- **U2-7 · Left for later blocks** → TV-U4, TV-U10, DS-6
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: the Board's drag-while-sorted toast keeps #330's words until TV-U4 builds default m ("Sorted by due · Back to manual order" with its action), and a drop on the Won't do group has no Undo until TV-U4's "Undo on every drop"; the checkbox on a listed Won't do task still marks it Done (research §1: clicking a Won't do glyph reopens it, TV-U10's status glyph); a task just checked off under a filter that excludes it leaves at once (TV-U10's "stays listed"); the DisplayMenu/FilterBar primitive stories still show v2's words (Bucket, Time, Archived), and the DropdownMenu primitive doesn't scroll, so a long project picker is cut off at the window's edge (DS-6).
+  - Why: each is those blocks' own work, and DS-6 is rebuilding the primitives in parallel.
+  - Rejected: half of m's copy without its button.
+
 ## 2026-10-10 · TV-P0 trust pass — the agent's choices (deferred to by Maciej)
 
 Built in tasks-v3 block 3 ([specs/tasks-v3.md](../../specs/tasks-v3.md) AC1.3–1.12, 1.15–1.16) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.

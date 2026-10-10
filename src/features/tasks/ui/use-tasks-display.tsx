@@ -111,7 +111,8 @@ export function useTasksDisplay(
         controls={tasksDisplayControls(scope, display.layout)}
         value={display}
         onValueChange={setDisplay}
-        defaultValue={tasksDisplayDefaults(scope)}
+        // Reset puts the choices back, not the layout you're looking at.
+        defaultValue={{ ...tasksDisplayDefaults(scope), layout: display.layout }}
       />
     ),
     viewProps: {

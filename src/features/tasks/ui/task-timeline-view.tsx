@@ -1068,7 +1068,7 @@ function TimelineBarRow({
       <span
         className={cn(
           "min-w-0 truncate font-sans text-xs",
-          bar.done
+          bar.closed
             ? "text-muted-foreground line-through"
             : blocked
               ? "text-muted-foreground"
@@ -1117,7 +1117,7 @@ function TimelineBarRow({
           className={cn(
             "pointer-events-none absolute z-[2] border",
             displayBar.solidRight ? "border-r-0" : "border-l-0",
-            barTone(bar.done),
+            barTone(bar.closed),
           )}
           style={{
             left: displayBar.solidLeft ? solidX + solidW : displayBar.x,
@@ -1146,8 +1146,8 @@ function TimelineBarRow({
           displayBar.solidRight ? "rounded-r-md" : "rounded-r-none border-r-0",
           "transition-colors duration-(--motion-fade) ease-(--ease-out)",
           drag?.started ? "z-[4] cursor-grabbing" : canEdit ? "cursor-grab" : "cursor-pointer",
-          barTone(bar.done),
-          !bar.done && "hover:bg-primary/15",
+          barTone(bar.closed),
+          !bar.closed && "hover:bg-primary/15",
           selected && "ring-2 ring-ring/60",
           // A valid connector target lights up quietly; invalid ones stay mute.
           isConnectorTarget && "ring-2 ring-primary/70",
@@ -1172,7 +1172,7 @@ function TimelineBarRow({
                 gesture only (the detail panel's Add blocker is the keyboard
                 path), and never on a done bar — a completed task can't block
                 anything, so offering the gesture would draw inert arrows. */}
-            {!bar.done ? (
+            {!bar.closed ? (
               <span
                 onPointerDown={(e) => onConnectorStart(task.id, e)}
                 className={cn(

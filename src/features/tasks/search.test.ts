@@ -103,6 +103,21 @@ describe("taskMatchesQuery", () => {
     expect(taskMatchesQuery(task, "")).toBe(true);
     expect(taskMatchesQuery(task, "   ")).toBe(true);
   });
+
+  it("reads a description's words, never its HTML", () => {
+    const rich = {
+      title: "Plan the offsite",
+      description:
+        '<p dir="ltr"><span style="white-space: pre-wrap;">Book the venue &amp; the bus</span></p>',
+    };
+    expect(taskMatchesQuery(rich, "venue")).toBe(true);
+    expect(taskMatchesQuery(rich, "venue & bus")).toBe(true);
+    for (const markup of ["span", "style", "pre-wrap", "dir", "ltr"]) {
+      expect(taskMatchesQuery(rich, markup)).toBe(false);
+    }
+    // Plain text is read as it is, angle brackets included.
+    expect(taskMatchesQuery({ title: "x", description: "a <b> c" }, "<b>")).toBe(true);
+  });
 });
 
 describe("takeSearchTokens", () => {

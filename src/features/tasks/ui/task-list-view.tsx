@@ -328,13 +328,15 @@ export function TaskListView({
       if (collapsed.has(group.key)) continue;
       for (const task of group.tasks) {
         push(task);
-        if (expandedParents.has(task.id)) {
+        // Only nested subtasks sit under their parent; Flat lists them as
+        // rows of their own, in their own place.
+        if (nest && expandedParents.has(task.id)) {
           for (const child of api.subtasksByParent.get(task.id) ?? []) push(child);
         }
       }
     }
     return out;
-  }, [groups, collapsed, expandedParents, api.subtasksByParent]);
+  }, [groups, collapsed, expandedParents, nest, api.subtasksByParent]);
 
   // Keep the selection valid as tasks change. A selected subtask under a
   // visible-but-collapsed parent isn't stolen — its parent expands into view
