@@ -6,7 +6,8 @@
  *
  * Book:   C1 → the booker · C2 → each extra guest, only when Google isn't
  *         inviting them · C3 → the host.
- * Cancel: C4 → the host · C5 → the booker · cancels any queued reminder
+ * Cancel: C4 → the host · C5 → the booker, and to each extra guest when Google
+ *         wasn't inviting them · cancels any queued reminder
  *         (`C7:<booking>`, TX-6). A cancel after the meeting started sends nothing.
  */
 
@@ -81,7 +82,16 @@ function base(facts: BookingFacts, zone: string): BookingEmailData {
   };
 }
 
-const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+/** The extra guests' addresses, lower-cased, once each, never the booker's. */
+function extraGuests(facts: BookingFacts): string[] {
+  const booker = facts.guest.email.trim().toLowerCase();
+  const seen = new Set<string>();
+  for (const address of facts.guests) {
+    const key = address.trim().toLowerCase();
+    if (key && key !== booker) seen.add(key);
+  }
+  return [...seen];
+}
 
 export function bookEmails(
   facts: BookingFacts,
@@ -104,14 +114,10 @@ export function bookEmails(
     },
   ];
   if (!facts.googleInvites) {
-    const seen = new Set<string>();
-    for (const address of facts.guests) {
-      const key = address.trim().toLowerCase();
-      if (!key || seen.has(key) || same(key, facts.guest.email)) continue;
-      seen.add(key);
+    for (const key of extraGuests(facts)) {
       out.push({
         kind: "booking_guest_added",
-        to: address,
+        to: key,
         toUserId: null,
         payload: base(facts, guestZone),
         dedupeKey: `C2:${facts.bookingId}:${key}`,
@@ -161,5 +167,18 @@ export function cancelEmails(
     payload: { ...base(facts, guestZone), rebookUrl: extra.rebookUrl },
     dedupeKey: `C5:${facts.bookingId}`,
   });
+  // Their C2 calendar file put the meeting in their calendars; only ours takes
+  // it out again (Google tells its own invitees itself).
+  if (!facts.googleInvites) {
+    for (const key of extraGuests(facts)) {
+      enqueue.push({
+        kind: "booking_guest_cancelled",
+        to: key,
+        toUserId: null,
+        payload: { ...base(facts, guestZone), recipient: "added" },
+        dedupeKey: `C5:${facts.bookingId}:${key}`,
+      });
+    }
+  }
   return { enqueue, cancelPrefixes };
 }

@@ -131,6 +131,32 @@ describe("booking emails · guest", () => {
   });
 });
 
+describe("booking emails · extra guest cancel", () => {
+  it("tells an added guest the booker canceled, with the cancelling calendar file and no buttons", () => {
+    const queued = BOOKING_QUEUED.booking_guest_cancelled(
+      payload({ ...BOOKING_ZOOM_FIXTURE, recipient: "added", rebookUrl: undefined }),
+    );
+    const { subject, html, text } = renderEmail(queued.doc);
+    expect(queued.fromName).toBe("Anna Carter via Moduo");
+    expect(subject).toBe("Tom Becker canceled the meeting with Anna Carter");
+    expect(text).toContain("Tom Becker canceled the meeting with Anna on Friday 16 October at 14:00.");
+    expect(text).toContain("because Tom Becker added this address");
+    expect(text).not.toContain("Pick another time");
+    expect(text).not.toContain("Scheduled with Moduo");
+    expect(html).not.toContain(`class="m-btn"`);
+    const ics = decode(queued.attachments?.[0]?.content ?? "");
+    expect(ics).toContain("METHOD:CANCEL");
+    expect(ics).toContain("UID:booking-8f0c2a4e-1b6d-4c3a-9e7f-2d5b8a1c6e90@moduo.app");
+  });
+
+  it("uses the plain-name rule for the booker", () => {
+    const queued = BOOKING_QUEUED.booking_guest_cancelled(
+      payload({ ...BOOKING_ZOOM_FIXTURE, recipient: "added", guestName: "Win at casino.example" }),
+    );
+    expect(renderEmail(queued.doc).subject).toBe("Someone canceled the meeting with Anna Carter");
+  });
+});
+
 describe("booking emails · host", () => {
   it("C3 replies to the guest, uses the host's zone, and includes the note and answers", () => {
     const data = {

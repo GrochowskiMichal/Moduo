@@ -9,7 +9,8 @@
  *   inviting them (Zoom-only links, or Google failed).
  * - C3 `booking_host_new` → the host, in the host's zone, replies go to the guest.
  * - C4 `booking_host_guest_cancelled` → the host, replies go to the guest.
- * - C5 `booking_guest_cancelled` → the booker.
+ * - C5 `booking_guest_cancelled` → the booker; on a Zoom-only booking also each
+ *   extra guest (`recipient: "added"`), whose C2 calendar file it cancels.
  *
  * A calendar file goes with C1/C2 (REQUEST) and C5 (CANCEL, same UID) only when
  * Google isn't sending its own invite (`googleInvites === false`).
@@ -67,6 +68,8 @@ export type BookingEmailData = {
   cancelUrl?: string;
   /** C5: the host's booking page, to pick another time. */
   rebookUrl?: string;
+  /** C5: who it goes to. "added" = an extra guest, told the booker canceled. Default "booker". */
+  recipient?: "booker" | "added";
   /** C3: the event in Moduo. */
   openUrl?: string;
   /** C3: what the guest wrote (host emails only). */
@@ -270,11 +273,27 @@ export function bookingHostGuestCancelledEmail(data: BookingEmailData): EmailDoc
   };
 }
 
-/** C5 · You canceled (guest). */
+/** C5 · You canceled (guest), and its extra-guest variant (Zoom-only bookings). */
 export function bookingGuestCancelledEmail(data: BookingEmailData): EmailDoc {
   const w = when(data);
   const host = name(data.hostName);
   const first = firstName(data.hostName);
+  if (data.recipient === "added") {
+    const booker = plainBookerName(data.guestName);
+    const blocks: Block[] = [
+      { type: "host", name: host, avatarUrl: data.hostAvatarUrl ?? null },
+      sentence(`${booker} canceled the meeting with ${first} on `, fixed(w.day), " at ", fixed(w.time), "."),
+    ];
+    if (!data.googleInvites) blocks.push(attachmentNote());
+    return {
+      subject: `${booker} canceled the meeting with ${host}`,
+      preheader: data.googleInvites ? `${w.short} at ${w.time} is off.` : "The attached calendar file takes it off your calendar.",
+      blocks,
+      footer: {
+        reason: `You got this email because ${booker === "Someone" ? "someone" : booker} added this address when booking time with ${host}.`,
+      },
+    };
+  }
   const blocks: Block[] = [
     { type: "host", name: host, avatarUrl: data.hostAvatarUrl ?? null },
     sentence(`You canceled your meeting with ${first} on `, fixed(w.day), " at ", fixed(w.time), "."),
@@ -342,6 +361,7 @@ export function parseBookingPayload(payload: Record<string, unknown>): BookingEm
     at: iso(payload, "at"),
     cancelUrl: optional("cancelUrl"),
     rebookUrl: optional("rebookUrl"),
+    recipient: payload.recipient === "added" ? "added" : "booker",
     openUrl: optional("openUrl"),
     note: optional("note") ?? null,
     answers,

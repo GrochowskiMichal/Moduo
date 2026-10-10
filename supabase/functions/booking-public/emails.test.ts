@@ -88,4 +88,22 @@ describe("booking-public · cancel enqueue", () => {
     expect(enqueue).toEqual([]);
     expect(cancelPrefixes).toEqual(["C7:b1"]);
   });
+
+  it("on a Zoom-only booking, also cancels the extra guests' calendar files", () => {
+    const { enqueue } = cancelEmails(
+      { ...FACTS, googleInvites: false, guests: [...FACTS.guests, "TOM@becker.studio", "sam@lee.design"] },
+      { rebookUrl: "https://moduo.app/book/anna", nowMs: BEFORE },
+    );
+    const added = enqueue.filter((r) => r.payload.recipient === "added");
+    expect(added.map((r) => [r.kind, r.to, r.dedupeKey])).toEqual([
+      ["booking_guest_cancelled", "sam@lee.design", "C5:b1:sam@lee.design"],
+      ["booking_guest_cancelled", "priya@nair.dev", "C5:b1:priya@nair.dev"],
+    ]);
+    expect(added.every((r) => r.payload.rebookUrl === undefined)).toBe(true);
+  });
+
+  it("leaves extra guests to Google when Google invited them", () => {
+    const { enqueue } = cancelEmails(FACTS, { rebookUrl: "https://moduo.app/book/anna", nowMs: BEFORE });
+    expect(enqueue.some((r) => r.payload.recipient === "added")).toBe(false);
+  });
 });
