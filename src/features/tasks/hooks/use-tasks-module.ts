@@ -987,6 +987,8 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
             ];
         const byId = new Map(saved.map((t) => [t.id, t]));
         setBundle((prev) => ({ ...prev, tasks: prev.tasks.map((t) => byId.get(t.id) ?? t) }));
+        // Every edit is in the trail now (TV-D8): refresh it.
+        setActivityStamp((stamp) => stamp + 1);
       });
     },
     [

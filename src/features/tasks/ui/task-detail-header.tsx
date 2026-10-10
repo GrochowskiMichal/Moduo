@@ -154,24 +154,27 @@ export function TaskDetailHeader({
             </button>
           </>
         ) : null}
+        {handle ? (
+          <>
+            <ChevronRight className="size-icon-xs shrink-0 text-muted-foreground/60" aria-hidden />
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={copyHandle}
+                  aria-label={`Copy ${handle}`}
+                  className="flex min-h-(--ctrl-h-sm) shrink-0 items-center whitespace-nowrap rounded-md px-1.5 py-0.5 font-sans text-xs tabular-nums text-muted-foreground outline-none transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
+                >
+                  {handle}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Copy {handle}</TooltipContent>
+            </Tooltip>
+          </>
+        ) : null}
       </nav>
 
       {open ? <QueueButton task={task} api={api} canEdit={canEdit} /> : null}
-      {handle ? (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              onClick={copyHandle}
-              aria-label={`Copy ${handle}`}
-              className="flex min-h-(--ctrl-h-sm) shrink-0 items-center rounded-md px-1.5 py-0.5 font-sans text-xs tabular-nums text-muted-foreground outline-none transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
-            >
-              {handle}
-            </button>
-          </TooltipTrigger>
-          <TooltipContent>Copy {handle}</TooltipContent>
-        </Tooltip>
-      ) : null}
       <IconButton icon={Link2} label="Copy link" onClick={copyLink} />
       {canEdit ? (
         <DropdownMenu>
