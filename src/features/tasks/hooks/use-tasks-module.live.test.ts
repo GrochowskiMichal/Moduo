@@ -334,6 +334,20 @@ describe("useTasksModule repeat catch-up and quiet refetches", () => {
     await waitFor(() => expect(opCatchUp).toHaveBeenCalledTimes(1));
   }, 20_000);
 
+  it("a refused catch-up refetches once and doesn't retry", async () => {
+    // e.g. a repeat you can see but not edit: the write check refuses the batch.
+    const { runtime, list, opCatchUp } = withCatchUp([doneElsewhere()]);
+    opCatchUp.mockImplementation(() => Promise.reject(new Error("You don't have access")));
+    const { result } = mount(runtime);
+    await waitFor(() => expect(opCatchUp).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(result.current.tasks[0]!.status).toBe("done")); // reopen undone
+    await sleep(1_500);
+    expect(opCatchUp).toHaveBeenCalledTimes(1);
+    expect(list).toHaveBeenCalledTimes(2);
+    expect(result.current.loading).toBe(false);
+  });
+
   it("opened offline: the first refetch that works catches up, once", async () => {
     const { runtime, list, opCatchUp } = withCatchUp([doneElsewhere()]);
     list.mockImplementationOnce(() => Promise.reject(new Error("offline")));

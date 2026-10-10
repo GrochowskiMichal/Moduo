@@ -47,8 +47,8 @@ Setup: two sessions on the same workspace. The best setup is two members. One pe
 - **A full open or reload can still reopen a repeat checked off on Home or by MCP the same day** when the pointer it saved is already due: the client catch-up still runs on a full load. TV-D8 moves repeats to the server and removes that pass.
 - **Local stack:** after `bun run local:reset`, re-apply the publication (gotcha above) before testing anything live locally.
 - **No two-session live run yet:** the agent can't sign in to the hosted project, so the D5-1 and D5-3 checks above are the first end-to-end run over a real socket.
-- **Comment counts (D5-1) aren't live:** `comments` is published, but nothing shows a comment count yet; TV-U3 adds the listener.
-- **Attachments aren't published yet:** their table arrived with AT-1, after the publication migration; AT-2 adds it.
+- **Comment counts (D5-1) aren't live:** `comments` is published, but no Tasks surface listens to it yet (TV-U3 landed without a listener); TV-D11a owns it now.
+- **Attachments aren't published yet:** their table arrived with AT-1, after the publication migration; AT-2 changes no schema in the v3 build, so TV-D11a (data lane) adds it.
 - **A row that stops being visible to you** (unshared, or moved where you can't see it) sends no live change, so it stays until the next refetch.
 
 ---

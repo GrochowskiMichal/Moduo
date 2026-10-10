@@ -980,9 +980,13 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         setActivityStamp((s) => s + 1);
       })
       .catch(() => {
-        void load(); // quiet — catch-up retries on the next reload
+        // A quiet read puts the server's rows back without re-running the
+        // pass (the workspace is already stamped): a full load here looped
+        // whenever the op kept failing, e.g. on a repeat you can see but not
+        // edit. The pass retries on the next full load.
+        void loadImpl(true);
       });
-  }, [loadStamp, canEdit, runtime, workspaceId, bundle.tasks, patchTaskLocal, load]);
+  }, [loadStamp, canEdit, runtime, workspaceId, bundle.tasks, patchTaskLocal, loadImpl]);
 
   const toggleDone = useCallback(
     (task: Task) => {
