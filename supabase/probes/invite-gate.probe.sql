@@ -172,6 +172,11 @@ SELECT pg_temp.ok(pg_temp.b1_rows('member@probe.test') = 0 AND pg_temp.b1_rows('
   'a Table Editor flip sends nothing to an existing user or a suppressed address');
 UPDATE public.waitlist SET status = 'pending' WHERE email IN ('member@probe.test', 'bounced@probe.test');
 SELECT pg_temp.fails($$SELECT public.waitlist_invite_email('not an address')$$, '22023', 'a malformed address is refused');
+INSERT INTO public.waitlist (email, source, status) VALUES ('left@probe.test', 'hero', 'cancelled');
+SELECT pg_temp.ok(public.waitlist_invite_email('left@probe.test') = 'cancelled'
+  AND pg_temp.b1_rows('left@probe.test') = 0, 'a cancelled row is not invited by the helper');
+SELECT pg_temp.fails($$UPDATE public.waitlist SET invited_at = NULL WHERE email = 'first@probe.test'$$, '23514',
+  'an invited row cannot lose its invited_at');
 
 -- resend
 SELECT pg_temp.ok(public.waitlist_resend_invite('first@probe.test') = 'already_queued'
@@ -187,6 +192,8 @@ SELECT pg_temp.ok(public.waitlist_resend_invite('nobody@probe.test') = 'not_invi
 -- Leaving and re-entering invited is a new invite.
 UPDATE public.waitlist SET status = 'pending' WHERE email = 'second@probe.test';
 SELECT pg_temp.ok((SELECT invited_at IS NULL FROM public.waitlist WHERE email = 'second@probe.test'), 'back to pending clears invited_at');
+SELECT pg_temp.ok((SELECT bool_and(status = 'cancelled') FROM public.email_outbox WHERE to_email = 'second@probe.test'),
+  'and cancels the B1 that had not gone out');
 UPDATE public.waitlist SET status = 'invited' WHERE email = 'second@probe.test';
 SELECT pg_temp.ok(pg_temp.b1_rows('second@probe.test') = 2, 'inviting it again is a new B1');
 
@@ -225,6 +232,19 @@ SELECT pg_temp.ok(NOT EXISTS (SELECT 1 FROM public.waitlist WHERE email = 'third
 DELETE FROM auth.users WHERE id = :'keen'::uuid;
 SELECT pg_temp.ok(NOT EXISTS (SELECT 1 FROM public.email_subscriptions WHERE email = 'pending@probe.test'),
   'deleting the account deletes its subscription row');
+
+-- ---------------------------------------------------------------------------
+-- New accounts never keep a password
+-- ---------------------------------------------------------------------------
+
+INSERT INTO auth.users (instance_id, id, aud, role, email, encrypted_password, created_at, updated_at)
+VALUES ('00000000-0000-0000-0000-000000000000', gen_random_uuid(), 'authenticated', 'authenticated',
+        'pw@probe.test', '$2a$10$abcdefghijklmnopqrstuuJ8sQ0k3Yx3M1a3m1Y9n2bq7gWm9d2y', now(), now());
+SELECT pg_temp.ok((SELECT encrypted_password = '' FROM auth.users WHERE email = 'pw@probe.test'),
+  'a password given at sign-up is not stored');
+UPDATE auth.users SET encrypted_password = 'kept' WHERE email = 'pw@probe.test';
+SELECT pg_temp.ok((SELECT encrypted_password = 'kept' FROM auth.users WHERE email = 'pw@probe.test'),
+  'a later password change by the account itself is untouched');
 
 -- ---------------------------------------------------------------------------
 -- 12-month purge (AC23)

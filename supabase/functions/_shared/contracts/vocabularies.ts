@@ -394,6 +394,7 @@ export function isWaitlistSource(input: unknown): input is WaitlistSource {
  */
 export const WAITLIST_ROW_SOURCES = [...WAITLIST_SOURCES, "manual"] as const;
 export type WaitlistRowSource = (typeof WAITLIST_ROW_SOURCES)[number];
+export const waitlistRowSourceSchema = z.enum(WAITLIST_ROW_SOURCES);
 
 /** `invited` (TX-4): the person may sign up; set in the dashboard or by the waitlist_invite_* helpers. */
 export const WAITLIST_STATUSES = ["pending", "confirmed", "cancelled", "invited"] as const;
@@ -493,12 +494,15 @@ export function isEmailSuppressionReason(input: unknown): input is EmailSuppress
  */
 export const EMAIL_SUBSCRIPTION_TOPICS = ["build_updates"] as const;
 export type EmailSubscriptionTopic = (typeof EMAIL_SUBSCRIPTION_TOPICS)[number];
+export const emailSubscriptionTopicSchema = z.enum(EMAIL_SUBSCRIPTION_TOPICS);
 
 export const EMAIL_SUBSCRIPTION_STATUSES = ["pending", "subscribed", "unsubscribed"] as const;
 export type EmailSubscriptionStatus = (typeof EMAIL_SUBSCRIPTION_STATUSES)[number];
+export const emailSubscriptionStatusSchema = z.enum(EMAIL_SUBSCRIPTION_STATUSES);
 
 export const EMAIL_SUBSCRIPTION_SOURCES = ["waitlist", "settings"] as const;
 export type EmailSubscriptionSource = (typeof EMAIL_SUBSCRIPTION_SOURCES)[number];
+export const emailSubscriptionSourceSchema = z.enum(EMAIL_SUBSCRIPTION_SOURCES);
 
 // ---------------------------------------------------------------------------
 // Email accounts — provider/status vocabularies.

@@ -15,9 +15,14 @@
 --
 -- Anything else gets {"error":{"http_code":403,"message":"invite_only"}}; no
 -- user is created and no email is sent. The hook reads the sources directly,
--- so revoking an invite or deleting an account takes access away with nothing
--- to keep in step. Existing users never pass through it: it runs only when
--- Auth is about to create a user.
+-- so revoking an invite or deleting an account needs nothing kept in step.
+-- Revoking only helps before the address asks for its first code, though:
+-- that request creates the (unconfirmed) user, and existing users never pass
+-- through the hook again. It runs only when Auth is about to create a user.
+--
+-- New accounts start without a password (trigger on auth.users). Moduo signs
+-- people in with codes only, and the hook can't tell a password sign-up from a
+-- code sign-up, so a password set at sign-up must never survive.
 --
 -- Inviting from the waitlist (flow 2): set a row's status to 'invited' in the
 -- Table Editor, or call one of the helpers below from the SQL editor. Every
@@ -58,6 +63,11 @@ ALTER TABLE public.waitlist ADD CONSTRAINT waitlist_status_check
 ALTER TABLE public.waitlist DROP CONSTRAINT IF EXISTS waitlist_source_check;
 ALTER TABLE public.waitlist ADD CONSTRAINT waitlist_source_check
   CHECK (source IS NULL OR source IN ('nav','hero','close','footer','manual'));
+
+-- An invited row always has its invited_at (the purge's clock), and only then.
+ALTER TABLE public.waitlist DROP CONSTRAINT IF EXISTS waitlist_invited_at_check;
+ALTER TABLE public.waitlist ADD CONSTRAINT waitlist_invited_at_check
+  CHECK ((status = 'invited') = (invited_at IS NOT NULL));
 
 -- The purge reads invited rows by invited_at; the hook reads by email (unique).
 CREATE INDEX IF NOT EXISTS waitlist_invited_at_idx ON public.waitlist (invited_at)
@@ -185,6 +195,11 @@ AS $$
 DECLARE
   v_blocker text;
 BEGIN
+  -- Un-inviting stops a B1 that hasn't gone out yet.
+  IF TG_OP = 'UPDATE' AND OLD.status = 'invited' AND NEW.status IS DISTINCT FROM 'invited' THEN
+    PERFORM public.email_cancel('B1:' || NEW.id::text || ':');
+    RETURN NULL;
+  END IF;
   IF NEW.status = 'invited' AND (TG_OP = 'INSERT' OR OLD.status IS DISTINCT FROM 'invited') THEN
     -- A Table Editor flip gets the same checks as the helpers: no B1 to an
     -- address that bounced or complained, or to someone who already has an
@@ -255,7 +270,9 @@ END;
 $$;
 
 -- Invites an address, adding it to the list (source 'manual') when it isn't
--- there. Returns invited | already_invited | suppressed | already_a_user.
+-- there. Returns invited | already_invited | cancelled | suppressed |
+-- already_a_user. A cancelled row is left alone (the person may have asked to
+-- leave the list); set it to invited in the Table Editor to override.
 CREATE OR REPLACE FUNCTION public.waitlist_invite_email(p_email text)
 RETURNS text
 LANGUAGE plpgsql
@@ -282,10 +299,10 @@ BEGIN
   IF v_status = 'invited' THEN
     RAISE NOTICE 'waitlist_invite_email: already invited; waitlist_resend_invite sends the email again';
     RETURN 'already_invited';
+  ELSIF v_status = 'cancelled' THEN
+    RAISE NOTICE 'waitlist_invite_email: the row is cancelled; not invited';
+    RETURN 'cancelled';
   ELSIF v_status IS NOT NULL THEN
-    IF v_status <> 'pending' THEN
-      RAISE NOTICE 'waitlist_invite_email: the row was %, inviting anyway', v_status;
-    END IF;
     UPDATE public.waitlist w SET status = 'invited' WHERE w.email = v_email;
   ELSE
     INSERT INTO public.waitlist AS w (email, source, status)
@@ -377,6 +394,31 @@ COMMENT ON FUNCTION public.hook_before_user_created(jsonb) IS
   'Supabase Auth before-user-created hook (TX-4, T9): lets an address sign up only when it is invited from the waitlist, has a pending workspace invite, or is a founder. Called by supabase_auth_admin only.';
 
 -- ---------------------------------------------------------------------------
+-- New accounts never keep a password
+-- ---------------------------------------------------------------------------
+
+-- Moduo has no password sign-in (people type a code), but Auth's sign-up
+-- endpoint still accepts one, and the hook sees the same event either way.
+-- Without this, a password chosen by whoever signed an allow-listed address up
+-- first would keep working after the real owner confirms it with their code.
+-- Existing users and later password changes by a signed-in user are untouched.
+CREATE OR REPLACE FUNCTION public.auth_users__no_password()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = ''
+AS $$
+BEGIN
+  NEW.encrypted_password := '';
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS auth_users_no_password ON auth.users;
+CREATE TRIGGER auth_users_no_password
+  BEFORE INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.auth_users__no_password();
+
+-- ---------------------------------------------------------------------------
 -- Sign-up: the waitlist row goes, a build-updates request stays (AC22)
 -- ---------------------------------------------------------------------------
 
@@ -442,7 +484,8 @@ BEGIN
     'public.waitlist_invite_next(integer)',
     'public.waitlist_invite_email(text)',
     'public.waitlist_resend_invite(text)',
-    'public.waitlist__purge()'
+    'public.waitlist__purge()',
+    'public.auth_users__no_password()'
   ]
   LOOP
     EXECUTE format('REVOKE ALL ON FUNCTION %s FROM PUBLIC, anon, authenticated', fn);

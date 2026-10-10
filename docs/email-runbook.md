@@ -176,27 +176,35 @@ Steps 1–2 are agent steps that need Maciej's OK in the session; steps 4–7 ar
    select public.hook_before_user_created('{"user":{"email":"nobody@example.com"}}');
    select jobname, schedule from cron.job where jobname = 'waitlist-purge';
    ```
-   Expect `{"error": {"message": "invite_only", "http_code": 403}}` and one row `29 3 * * *`.
+   ```sql
+   select has_schema_privilege('supabase_auth_admin', 'public', 'USAGE');
+   select tgname from pg_trigger where tgrelid = 'auth.users'::regclass and not tgisinternal order by 1;
+   ```
+   Expect `{"error": {"message": "invite_only", "http_code": 403}}`, one row `29 3 * * *`, `true` (Auth can reach the hook), and the triggers `auth_users_no_password` and `on_auth_user_created`. From here every new account starts without a password: people sign in with codes, and that includes users you create under Authentication → Users.
 3. **The app that asks to create accounts.** The sign-in screen now sends `shouldCreateUser: true`. With sign-ups still off that changes nothing, so it can ship any time before step 6: web through develop → `staging-app` → "Promote to production" → `app`; the Mac app with the next build. An older build keeps asking "never create a user", so an invitee on it is refused until they update.
 4. **Switch the hook on** (Maciej). Authentication → Auth Hooks → Add hook → "Before User Created" → type Postgres → schema `public`, function `hook_before_user_created` → Enable → save. Existing users notice nothing.
 5. **See it refuse** (Maciej), still with sign-ups off. Authentication → Users → "Send invitation" to an address nobody invited (a throwaway). Expect the dashboard to refuse it with `invite_only`, and no new row under Users. (A dashboard invitation goes through the hook; "Add user → Create new user" does not, so don't use that to test.)
-6. **Sign-ups on** (Maciej), once TX-2 is live (its steps 1–8). Authentication → Sign In / Providers → "Allow new users to sign up" on → save. Then at once, on app.moduo.app with a throwaway address nobody invited: ask for a code. Expect "Moduo is invite-only right now. Join the waitlist at moduo.app, or ask the person who invited you to use this address.", no email, and no new user. If a user appears, switch sign-ups off again (that is the rollback) and stop.
+6. **Sign-ups on** (Maciej), once TX-2 is live (its steps 1–8). First check Authentication → Sign In / Providers → Email → "Confirm email" is **on** (it must stay on: with it off, a sign-up gets a session before the address is proven). Then "Allow new users to sign up" on → save. Then at once, on app.moduo.app with a throwaway address nobody invited: ask for a code. Expect "Moduo is invite-only right now. Join the waitlist at moduo.app, or ask the person who invited you to use this address.", no email, and no new user. If a user appears, switch sign-ups off again (that is the rollback) and stop.
 7. **One real invite** (Maciej) to a throwaway inbox you can read: `select public.waitlist_invite_email('<throwaway>');` → B1 arrives within a minute → open app.moduo.app, sign in with that address → the code arrives → you land in onboarding. Then `select count(*) from public.waitlist where email = '<throwaway>';` returns 0. Delete the throwaway account in Settings → Account when done. The full list is in `docs/testing/t-maciej-tx-4-invite-only-gate.md`.
 
 ### Inviting people (flow 2)
 
-- **One person:** Table Editor → `waitlist` → set `status` to `invited` → save. B1 goes out within a minute; `invited_at` fills itself.
+Only after step 6. Before sign-ups are on, an invitee can't create an account: B1 would arrive and the sign-in screen would refuse them.
+
+- **One person:** Table Editor → `waitlist` → set `status` to `invited` → save. B1 goes out within a minute; `invited_at` fills itself. If the address bounced before or already has an account, nothing is sent (the Table Editor doesn't show why; the helpers below say so). Setting it back to `pending` before B1 has gone out cancels it.
 - **A batch, oldest first:** `select * from public.waitlist_invite_next(20);` (at most 50 a call). It skips addresses that bounced or complained and people who already have an account, and lists the addresses it invited.
 - **Someone not on the list:** `select public.waitlist_invite_email('name@example.com');` adds them (source `manual`) and invites them.
 - **Send it again:** `select public.waitlist_resend_invite('name@example.com');`.
 
-The helpers answer in one word: `invited`, `queued`, `already_invited` (use resend), `already_queued` (the first one is still on its way), `not_invited` (invite first), `suppressed` (the address bounced or complained: fix the address, or lift the suppression above), `already_a_user`. Check what went out:
+The helpers answer in one word: `invited`, `queued`, `already_invited` (use resend), `already_queued` (the first one is still on its way), `not_invited` (invite first), `cancelled` (the row was cancelled; set it to `invited` in the Table Editor if you mean it), `suppressed` (the address bounced or complained: fix the address, or lift the suppression above), `already_a_user`. Check what went out:
 ```sql
 select created_at, to_email, status, last_error from public.email_outbox
 where kind = 'waitlist_invite' order by created_at desc limit 20;
 ```
 
 **Dashboard invitations from now on:** "Send invitation" works only for an address the hook lets in, so invite it on the waitlist first; B1 is the invite email to use.
+
+**Taking an invite back** works until the person asks for their first code. That request creates their account (unconfirmed), and an existing account never passes the hook again; to stop them then, delete the user under Authentication → Users.
 
 ### Rollback
 
