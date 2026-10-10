@@ -8,6 +8,7 @@ import {
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { type ReactNode, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
+import { DROP_TARGET, DragOverlaySurface } from "../../../components/ui/drag-visuals";
 import { Eyebrow } from "../../../components/ui/eyebrow";
 import {
   Select,
@@ -245,10 +246,12 @@ export function TaskBoardView({
       api.patchTask(activeId, { position });
       return;
     }
-    const patch: Partial<Task> = { position };
-    if (destCol.dim === "status") patch.status = destCol.value as TaskStatus;
-    else patch.bucketId = destCol.value;
-    api.patchTask(activeId, patch);
+    if (destCol.dim === "status") {
+      api.patchTask(activeId, { position, status: destCol.value as TaskStatus });
+    } else {
+      // Another bucket's column moves it; its subtasks follow (tasks-v2 §8).
+      api.moveTaskToBucket(activeId, destCol.value, { position });
+    }
   };
 
   const activeTask = activeId ? (tasks.find((t) => t.id === activeId) ?? null) : null;
@@ -320,7 +323,8 @@ export function TaskBoardView({
           ? createPortal(
               <DragOverlay>
                 {activeTask ? (
-                  <div className="w-full rounded-lg border border-border bg-background px-3 py-2.5 shadow-lg">
+                  // DS-4's overlay surface, card-shaped (U4-5: one drag look).
+                  <DragOverlaySurface className="w-full items-start rounded-lg px-3 py-2.5 text-sm">
                     <CardBody
                       task={activeTask}
                       bucketName={bucketNameById(activeTask.bucketId)}
@@ -331,7 +335,7 @@ export function TaskBoardView({
                       canEdit={false}
                       api={api}
                     />
-                  </div>
+                  </DragOverlaySurface>
                 ) : null}
               </DragOverlay>,
               document.body,
@@ -389,7 +393,7 @@ function BoardColumn({
           // Linear-quiet: columns are transparent on the canvas; cards carry the
           // elevation (bg-card + hairline). Only a drag-over state lights up.
           "flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto rounded-md p-1 transition-colors duration-(--motion-fade) ease-(--ease-out)",
-          isOver ? "bg-accent/40 ring-1 ring-ring/40" : "bg-transparent",
+          isOver ? DROP_TARGET : "bg-transparent",
         )}
       >
         <SortableContext

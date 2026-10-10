@@ -38,6 +38,13 @@ import {
   resolveDefaultSelection,
   showsMyTasks,
 } from "../default-view";
+import {
+  asRailDropTarget,
+  isSideDroppable,
+  type RailDropTarget,
+  railCollision,
+  railDropAction,
+} from "../dnd/rail-drop";
 import { type GroupBy, groupsByBucket, taskMatchesTagFilter } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import { isDrifted, type Task } from "../model";
@@ -45,7 +52,7 @@ import { resolveTasksDeepLink } from "../search";
 import { sanitizeTimelineZoom, type TimelineZoom } from "../timeline-geometry";
 import { BucketRail, parseCollapsedSections, type TasksMode } from "./bucket-rail";
 import { CaptureModal } from "./capture-modal";
-import { pointerFirstCollision, useTaskDndSensors } from "./dnd/task-dnd";
+import { asTaskDrag, useTaskDndSensors } from "./dnd/task-dnd";
 import { DriftTriageDialog } from "./drift-triage-dialog";
 import { ExecuteView } from "./execute-view";
 import { FrontierOfferDialog } from "./frontier-offer-dialog";
@@ -443,6 +450,48 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     [tasks],
   );
 
+  // ── TV-U4: rail drop targets ──────────────────────────────────────────────
+  // A task dropped on a bucket row moves there (subtasks follow), on Queue
+  // joins my queue (through the blocked-by frontier offer, like every queue
+  // affordance), on My tasks is assigned to me. A row tints only when the drop
+  // would change something (railDropAction).
+  const taskById = useMemo(() => new Map(tasks.map((t) => [t.id, t])), [tasks]);
+  const railCtx = useMemo(
+    () => ({ queuedTaskIds: api.queuedTaskIds, currentUserId }),
+    [api.queuedTaskIds, currentUserId],
+  );
+  const railAccepts = useCallback(
+    (target: RailDropTarget, taskId: string) => {
+      const task = taskById.get(taskId);
+      return !!task && canEdit && railDropAction(target, task, railCtx) !== null;
+    },
+    [taskById, canEdit, railCtx],
+  );
+  const onRailDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const target = asRailDropTarget(event.over?.data.current);
+      const drag = asTaskDrag(event.active.data.current);
+      if (!target || !drag || !canEdit) return;
+      const task = taskById.get(drag.taskId);
+      if (!task) return;
+      const action = railDropAction(target, task, railCtx);
+      if (!action) return;
+      switch (action.kind) {
+        case "move":
+          api.moveTaskToBucket(action.taskId, action.bucketId);
+          toast(`Moved to ${bucketNameById(action.bucketId)}`);
+          return;
+        case "queue":
+          guardedToggleQueue(action.taskId);
+          return;
+        case "assign-me":
+          api.patchTask(action.taskId, { assigneeId: action.userId });
+          return;
+      }
+    },
+    [canEdit, taskById, railCtx, api, bucketNameById, guardedToggleQueue],
+  );
+
   const left = (
     <BucketRail
       mode={mode}
@@ -471,6 +520,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       collapsedSections={collapsedSections}
       onToggleSection={toggleSection}
       navRef={railNavRef}
+      dropAccepts={railAccepts}
     />
   );
 
@@ -692,7 +742,6 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
         onGroupByChange={setGroupBy}
         reorderable={selection === "today"}
         onReorder={api.reorderQueue}
-        nestable={selection !== "today" && !groupsByBucket(selection)}
         revealRequest={revealRequest}
       />
     );
@@ -741,32 +790,32 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     viewRef.current = view;
     selectionRef.current = selection;
   });
-  // One collision for every surface: the hub (a `link:*` droppable) wins whenever
-  // the pointer is actually over it; otherwise each center view keeps its OWN
-  // native strategy over its OWN droppables (link targets filtered out, so a card
-  // dragged toward the right pane never mis-resolves to the hub by corner
-  // distance). The three center strategies must match the internal-mode contexts
-  // byte-for-byte: Board = closestCorners; Queue reorder = closestCenter (NOT
-  // pointer-first — the whole row is the drag activator, so an off-center grab
-  // makes the dragged-rect-centre and the pointer diverge, changing the drop
-  // index); drag-onto-task nest = pointer-first (an expanded parent's `onto-task`
-  // rect is taller than its row, so pointerWithin is required for precision).
+  // One collision for every surface. The hub (`link:*`) and the rail
+  // (`rail:*`, TV-U4) win whenever the pointer is actually over one of their
+  // droppables — prefix-filtered `pointerWithin`, so a drag near them never
+  // snaps to them by distance. Otherwise each centre view keeps its OWN native
+  // strategy over its OWN droppables (hub and rail filtered out): Board =
+  // closestCorners; Queue reorder = closestCenter (NOT pointer-first — the
+  // whole row is the drag activator, so an off-center grab makes the
+  // dragged-rect-centre and the pointer diverge, changing the drop index). The
+  // List has no droppables: it resolves reorder/nest/group from the raw
+  // pointer itself (dnd/drop-mode.ts), so it finds nothing here.
   const appCollision = useCallback<CollisionDetection>((args) => {
     const linkContainers = args.droppableContainers.filter((c) => String(c.id).startsWith("link:"));
     if (linkContainers.length > 0) {
       const hubHits = pointerWithin({ ...args, droppableContainers: linkContainers });
       if (hubHits.length > 0) return hubHits;
     }
-    const centerContainers = args.droppableContainers.filter(
-      (c) => !String(c.id).startsWith("link:"),
-    );
-    const strategy =
-      viewRef.current === "board"
-        ? closestCorners
-        : selectionRef.current === "today"
-          ? closestCenter // the Queue's reorder — mirrors the internal-mode context
-          : pointerFirstCollision; // nest (and inert grouped list)
-    return strategy({ ...args, droppableContainers: centerContainers });
+    const railHits = railCollision(args);
+    if (railHits.length > 0) return railHits;
+    const centerContainers = args.droppableContainers.filter((c) => !isSideDroppable(c.id));
+    if (viewRef.current === "board") {
+      return closestCorners({ ...args, droppableContainers: centerContainers });
+    }
+    if (selectionRef.current === "today") {
+      return closestCenter({ ...args, droppableContainers: centerContainers });
+    }
+    return [];
   }, []);
 
   // Opening a linked task selects it in place; other entity types deep-link out.
@@ -871,7 +920,15 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
 
   return (
     <>
-      <DndContext sensors={pageSensors} collisionDetection={appCollision} onDragEnd={onHubDragEnd}>
+      <DndContext
+        sensors={pageSensors}
+        collisionDetection={appCollision}
+        onDragEnd={(event) => {
+          // Spatially disjoint: each acts only when `over` is its own target.
+          onHubDragEnd(event);
+          onRailDragEnd(event);
+        }}
+      >
         <FeaturePanelsShell
           feature="tasks"
           notice={truncationNotice(api.truncated)}

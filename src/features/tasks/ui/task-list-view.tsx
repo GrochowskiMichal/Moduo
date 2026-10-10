@@ -4,6 +4,7 @@ import {
   type DraggableSyntheticListeners,
   DragOverlay,
   type DragStartEvent,
+  pointerWithin,
 } from "@dnd-kit/core";
 import { arrayMove, SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { ChevronDown, ChevronRight, Plus } from "lucide-react";
@@ -11,6 +12,12 @@ import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } fro
 import { createPortal } from "react-dom";
 
 import { Button } from "../../../components/ui/button";
+import {
+  DROP_TARGET,
+  DragOverlaySurface,
+  InsertionLine,
+  NestPreview,
+} from "../../../components/ui/drag-visuals";
 import { EmptyState as EmptyStateBase } from "../../../components/ui/empty-state";
 import { eyebrowVariants } from "../../../components/ui/eyebrow";
 import { Kbd } from "../../../components/ui/kbd";
@@ -25,8 +32,19 @@ import { cn } from "../../../lib/utils";
 import { useAssignees } from "../assignees";
 import { type CompletedMode, partitionCompleted } from "../completed";
 import {
-  canNestUnder,
+  type ListDropHover,
+  type ListDropPlan,
+  type ListPointerTarget,
+  NEST_INDENT_PX,
+  planListDrop,
+  resolveListHover,
+  sortedOrderNote,
+  type TaskOrder,
+} from "../dnd/drop-mode";
+import { isSideDroppable } from "../dnd/rail-drop";
+import {
   type GroupBy,
+  groupKeyFor,
   groupsByBucket,
   groupTasks,
   isOpen,
@@ -37,11 +55,10 @@ import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { Bucket, Task } from "../model";
 import { DEFAULT_ROW_PROPERTIES, rowColumns } from "../row-layout";
 import {
-  asTaskDropTarget,
+  asTaskDrag,
   DndBoundary,
   type DragActivatorRef,
-  NestableTask,
-  pointerFirstCollision,
+  DraggableTask,
   SortableTask,
   useTaskDndSensors,
 } from "./dnd/task-dnd";
@@ -84,10 +101,12 @@ type Props = {
   reorderable?: boolean;
   /** Persist a reorder — receives the task ids in their new order. */
   onReorder?: (orderedIds: string[]) => void;
-  /** Enable drag-a-task-onto-another → make it a subtask. Applies only to the
-   * flat (`groupBy === "none"`) single-bucket list, never the cross-bucket "All"
-   * or the Queue (which owns drag-to-reorder instead). */
-  nestable?: boolean;
+  /**
+   * Display → Order (tasks-v2 §7; TV-U2 wires the control). Only Manual takes
+   * a drag reorder; a sorted list shows a quiet note instead of the line,
+   * while nesting and cross-group drops still work (U4-2).
+   */
+  order?: TaskOrder;
   /** One-shot deep-link reveal (DF-1): when the selection was set from outside
    * and sits in a collapsed group, expand that group exactly once. */
   revealRequest?: { id: string; seq: number } | null;
@@ -132,7 +151,7 @@ export function TaskListView({
   stayingIds = NO_IDS,
   reorderable = false,
   onReorder,
-  nestable = false,
+  order = "manual",
   revealRequest = null,
   dndMode = "internal",
   api,
@@ -145,12 +164,10 @@ export function TaskListView({
   const [command, setCommand] = useState<{ taskId: string; kind: RowCommand } | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [reordering, setReordering] = useState(false);
-  // The task currently being dragged onto another to nest it (null = not nesting).
-  const [nestActiveId, setNestActiveId] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const dndSensors = useTaskDndSensors();
-  // Nesting is drag-onto-target (no SortableContext) → default keyboard sensor.
-  const nestSensors = useTaskDndSensors({ sortable: false });
+  // List drags have no SortableContext → the default keyboard sensor.
+  const dragSensors = useTaskDndSensors({ sortable: false });
 
   const showBucketTag = showBucketPill(selection, groupBy);
   // Grouping by bucket only makes sense across buckets (All, My tasks).
@@ -192,7 +209,9 @@ export function TaskListView({
   // done leaves it, and a task checked off there stays until the next load.
   const groups = useMemo(() => {
     const all = groupTasks(topLevelTasks, groupBy, { bucketName: bucketNameById });
-    if (selection === "today") return all.map((g) => ({ ...g, hidden: [] as Task[] }));
+    if (selection === "today") {
+      return all.map((g) => ({ ...g, all: g.tasks, hidden: [] as Task[] }));
+    }
     const now = new Date();
     // Kept even when done: staying (checked off or opened in this scope); the
     // selected task and its parent (a deep link or the panel must never point
@@ -204,9 +223,11 @@ export function TaskListView({
       t.id === selectedId ||
       t.id === selectedParentId ||
       (api.subtasksByParent.get(t.id) ?? []).some(isOpen);
+    // `all` keeps every task of the group in order, hidden ones included:
+    // a drop is placed among them (TV-U1's rule, since `position` orders both).
     return all.map((g) => {
       const { shown, hidden } = partitionCompleted(g.tasks, { mode: completed, now, keep });
-      return { ...g, tasks: revealedGroups.has(g.key) ? g.tasks : shown, hidden };
+      return { ...g, all: g.tasks, tasks: revealedGroups.has(g.key) ? g.tasks : shown, hidden };
     });
   }, [
     topLevelTasks,
@@ -520,36 +541,263 @@ export function TaskListView({
     ],
   );
 
-  // A top-level row plus (when expanded) its nested subtasks — shared by the
-  // grouped render and the drag-to-nest render. `drag` wires the whole-row drag
-  // listeners and the live drop-target highlight when this list is in nestable mode.
-  const renderParentRow = (
-    task: Task,
-    drag?: {
+  // ── drag and drop (tasks-v2 §8, TV-U4) ──────────────────────────────────────
+  // Every row is a drag source (the Queue keeps its own sortable below). The
+  // List has no droppables: where a drop lands is resolved from the raw
+  // pointer against the rows' boxes (drop-mode.ts) — left of the indent
+  // reorders (insertion line), right of it nests (the row tints, a "Make
+  // subtask" preview shows), a group header takes it into the group. The
+  // rail and the hub are droppables of the page's one context; a drop on
+  // them is the page's, so this list stands back.
+  const canDrag = canEdit && selection !== "today";
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [hover, setHover] = useState<ListDropHover | null>(null);
+  const pointerRef = useRef<{ x: number; y: number } | null>(null);
+
+  const hasChildren = useCallback(
+    (id: string) => (api.subtasksByParent.get(id)?.length ?? 0) > 0,
+    [api.subtasksByParent],
+  );
+
+  // Every row on screen, with what a drop needs to know about it.
+  const rowIndex = useMemo(() => {
+    const index = new Map<
+      string,
+      { task: Task; depth: 0 | 1; groupKey: string; lastChildId: string | null }
+    >();
+    for (const group of groups) {
+      if (collapsed.has(group.key)) continue;
+      for (const task of group.tasks) {
+        const children =
+          nest && expandedParents.has(task.id) ? (api.subtasksByParent.get(task.id) ?? []) : [];
+        index.set(task.id, {
+          task,
+          depth: 0,
+          groupKey: group.key,
+          lastChildId: children[children.length - 1]?.id ?? null,
+        });
+        for (const child of children) {
+          index.set(child.id, { task: child, depth: 1, groupKey: group.key, lastChildId: null });
+        }
+      }
+    }
+    return index;
+  }, [groups, collapsed, nest, expandedParents, api.subtasksByParent]);
+
+  const dragTask = dragId ? (taskById.get(dragId) ?? null) : null;
+
+  // What's under (x, y) in this list: a row, a group header, `undefined`
+  // inside a row's block but off its rows (the "Make subtask" preview, which
+  // takes no pointer events — the hover stays), or null anywhere else (empty
+  // space, outside the list): releasing there drops nothing.
+  const targetAt = useCallback(
+    (x: number, y: number): ListPointerTarget | null | undefined => {
+      const container = containerRef.current;
+      if (!container) return null;
+      const stack = document.elementsFromPoint(x, y);
+      if (!stack.some((el) => container.contains(el))) return null;
+      for (const el of stack) {
+        if (!container.contains(el)) continue;
+        const rowEl = el.closest<HTMLElement>("[data-list-row]");
+        if (rowEl && container.contains(rowEl)) {
+          const info = rowIndex.get(rowEl.dataset.listRow ?? "");
+          if (!info) return undefined;
+          const r = rowEl.getBoundingClientRect();
+          return { type: "row", ...info, rect: { left: r.left, top: r.top, height: r.height } };
+        }
+        const groupEl = el.closest<HTMLElement>("[data-list-group]");
+        if (groupEl && container.contains(groupEl)) {
+          return { type: "group", groupKey: groupEl.dataset.listGroup ?? "" };
+        }
+        const blockEl = el.closest("[data-list-block]");
+        if (blockEl && container.contains(blockEl)) return undefined;
+      }
+      return null;
+    },
+    [rowIndex],
+  );
+
+  const hoverAt = useCallback(
+    (x: number, y: number, previous: ListDropHover | null): ListDropHover | null => {
+      if (!dragTask) return null;
+      const over = targetAt(x, y);
+      if (over === undefined) return previous;
+      return resolveListHover({
+        active: dragTask,
+        activeNested: rowIndex.get(dragTask.id)?.depth === 1,
+        activeGroupKey: groupKeyFor(dragTask, groupBy),
+        hasChildren,
+        pointer: { x, y },
+        over,
+        order,
+      });
+    },
+    [dragTask, targetAt, rowIndex, groupBy, hasChildren, order],
+  );
+
+  // Track the raw pointer while dragging and re-resolve on every move and on
+  // scroll (auto-scroll moves rows under a still pointer). The drop resolves
+  // again from the same coordinates, never from dnd-kit's delta (gotchas/ui.md).
+  useEffect(() => {
+    if (!dragId) return;
+    const update = () => {
+      const p = pointerRef.current;
+      if (!p) return;
+      setHover((prev) => {
+        const next = hoverAt(p.x, p.y, prev);
+        return sameHover(prev, next) ? prev : next;
+      });
+    };
+    const onMove = (e: PointerEvent) => {
+      pointerRef.current = { x: e.clientX, y: e.clientY };
+      update();
+    };
+    document.addEventListener("pointermove", onMove, { capture: true });
+    const container = containerRef.current;
+    container?.addEventListener("scroll", update, { passive: true });
+    return () => {
+      document.removeEventListener("pointermove", onMove, { capture: true });
+      container?.removeEventListener("scroll", update);
+    };
+  }, [dragId, hoverAt]);
+
+  const onListDragStart = useCallback(
+    (e: DragStartEvent) => {
+      const drag = asTaskDrag(e.active.data.current);
+      if (drag?.from !== "list" || !rowIndex.has(drag.taskId)) return;
+      setReordering(true); // the dnd sensor owns the arrows during a keyboard drag
+      const start = e.activatorEvent;
+      pointerRef.current =
+        start instanceof PointerEvent || start instanceof MouseEvent
+          ? { x: start.clientX, y: start.clientY }
+          : null;
+      setDragId(drag.taskId);
+      setHover(null);
+    },
+    [rowIndex],
+  );
+  const endListDrag = useCallback(() => {
+    setReordering(false);
+    setDragId(null);
+    setHover(null);
+  }, []);
+
+  const applyPlan = useCallback(
+    (plan: ListDropPlan) => {
+      const { taskId, parentId, position, fields, bucketId } = plan;
+      if (bucketId) {
+        // Into another bucket's group: a move, its subtasks follow.
+        api.moveTaskToBucket(taskId, bucketId, { position, parentId });
+        return;
+      }
+      if (parentId && position === undefined && !fields) {
+        // A nest: setTaskParent keeps the one-level rule's own messages.
+        api.setTaskParent(taskId, parentId);
+        if (nest) setExpandedParents((prev) => new Set(prev).add(parentId));
+        return;
+      }
+      if (fields?.status) {
+        // Status rides its intent op (with the position); a parent change is
+        // a field write of its own.
+        if (parentId !== undefined) api.patchTask(taskId, { parentId });
+        api.patchTask(taskId, position === undefined ? fields : { ...fields, position });
+        return;
+      }
+      api.patchTask(taskId, {
+        ...fields,
+        ...(position === undefined ? {} : { position }),
+        ...(parentId === undefined ? {} : { parentId }),
+      });
+      if (parentId && nest) setExpandedParents((prev) => new Set(prev).add(parentId));
+    },
+    [api, nest],
+  );
+
+  const onListDragEnd = useCallback(
+    (e: DragEndEvent) => {
+      const id = dragId;
+      const last = hover;
+      endListDrag();
+      if (!id || String(e.active.id) !== id) return;
+      // The rail and the hub take their own drops (the page handles them).
+      if (e.over && isSideDroppable(e.over.id)) return;
+      const active = taskById.get(id);
+      const p = pointerRef.current;
+      if (!active || !p) return;
+      const final = hoverAt(p.x, p.y, last);
+      if (!final) return;
+      const plan = planListDrop({
+        hover: final,
+        active,
+        activeGroupKey: groupKeyFor(active, groupBy),
+        groupBy,
+        allByPosition: api.tasks,
+        groupTasks: (key) => groups.find((g) => g.key === key)?.all ?? [],
+      });
+      if (plan) applyPlan(plan);
+    },
+    [dragId, hover, endListDrag, taskById, hoverAt, groupBy, api.tasks, groups, applyPlan],
+  );
+
+  // A row as the List renders it: the row, plus the drag marks it carries
+  // (the insertion line or the sorted note on its edge).
+  const renderRow = (task: Task, depth: 0 | 1, extra?: Partial<Parameters<typeof TaskRow>[0]>) => {
+    const line =
+      hover && (hover.kind === "reorder" || hover.kind === "sorted") && hover.line.id === task.id
+        ? hover.line
+        : null;
+    const row = (drag?: {
       dragListeners: DraggableSyntheticListeners;
       dragActivatorRef: DragActivatorRef;
-      dropActive: boolean;
-    },
-  ) => {
-    const children = nest ? (api.subtasksByParent.get(task.id) ?? []) : [];
-    const expanded = expandedParents.has(task.id);
-    return (
-      <>
+    }) => (
+      <div data-list-row={task.id} className="relative">
         <TaskRow
           {...buildRowProps(task)}
-          expandSlot={expandSlot}
-          expandable={children.length > 0}
-          expanded={expanded}
-          onToggleExpand={() => toggleExpandParent(task.id)}
-          parentTitle={parentTitleFor(task)}
+          nested={depth === 1}
+          parentTitle={depth === 0 ? parentTitleFor(task) : null}
           dragListeners={drag?.dragListeners}
           dragActivatorRef={drag?.dragActivatorRef}
-          dropActive={drag?.dropActive ?? false}
+          dropTarget={hover?.kind === "nest" && hover.targetId === task.id}
+          {...extra}
         />
-        {expanded
-          ? children.map((child) => <TaskRow key={child.id} {...buildRowProps(child)} nested />)
-          : null}
-      </>
+        {line && hover?.kind === "reorder" ? (
+          <InsertionLine edge={line.edge} indent={hover.depth * NEST_INDENT_PX} />
+        ) : null}
+        {line && hover?.kind === "sorted" && order !== "manual" ? (
+          <SortedNote edge={line.edge}>{sortedOrderNote(order)}</SortedNote>
+        ) : null}
+      </div>
+    );
+    if (!canDrag) return <div key={task.id}>{row()}</div>;
+    return (
+      <DraggableTask
+        key={task.id}
+        id={task.id}
+        from="list"
+        render={({ dragListeners, dragActivatorRef }) => row({ dragListeners, dragActivatorRef })}
+      />
+    );
+  };
+
+  // A top-level row plus (when expanded) its nested subtasks, and the "Make
+  // subtask" preview under it while it's the nest target.
+  const renderParentRow = (task: Task) => {
+    const children = nest ? (api.subtasksByParent.get(task.id) ?? []) : [];
+    const expanded = expandedParents.has(task.id);
+    const nestHere = hover?.kind === "nest" && hover.targetId === task.id && dragTask;
+    return (
+      <div key={task.id} data-list-block>
+        {renderRow(task, 0, {
+          expandSlot,
+          expandable: children.length > 0,
+          expanded,
+          onToggleExpand: () => toggleExpandParent(task.id),
+        })}
+        {expanded ? children.map((child) => renderRow(child, 1)) : null}
+        {nestHere ? (
+          <NestPreview indent={NEST_INDENT_PX}>{dragTask.title || "Untitled"}</NestPreview>
+        ) : null}
+      </div>
     );
   };
 
@@ -559,10 +807,13 @@ export function TaskListView({
   const queueTasks = groups[0]?.tasks ?? [];
   const queueIds = useMemo(() => queueTasks.map((t) => t.id), [queueTasks]);
   const canReorder = reorderable && canEdit && groupBy === "none" && queueTasks.length > 1;
+  const [queueDragId, setQueueDragId] = useState<string | null>(null);
+  const queueDragTask = queueDragId ? (taskById.get(queueDragId) ?? null) : null;
 
   const onQueueDragEnd = useCallback(
     (e: DragEndEvent) => {
       setReordering(false);
+      setQueueDragId(null);
       const { active, over } = e;
       if (!over || active.id === over.id) return;
       const from = queueIds.indexOf(String(active.id));
@@ -573,61 +824,20 @@ export function TaskListView({
     [queueIds, onReorder],
   );
 
-  // ── drag-a-task-onto-another → subtask (nestable mode) ──────────────────────
-  // The flat single-bucket list (groupBy "none", not the Queue, not cross-bucket
-  // "All"). Top-level rows are drag sources + drop targets; children render
-  // nested as usual. setTaskParent enforces the one-level rule (DB trigger backs it).
-  const nestTasks = groups[0]?.tasks ?? [];
-  const canNest =
-    nestable &&
-    canEdit &&
-    groupBy === "none" &&
-    !groupsByBucket(selection) &&
-    selection !== "today" &&
-    nestTasks.length > 1;
-
-  const hasChildren = useCallback(
-    (id: string) => (api.subtasksByParent.get(id)?.length ?? 0) > 0,
-    [api.subtasksByParent],
-  );
-  // Only a childless task may be dragged — a parent can't itself become a subtask
-  // (one level). Independent of the live drag, so it gates the grip at rest.
-  const canDragRow = useCallback((task: Task) => !hasChildren(task.id), [hasChildren]);
-  // A row accepts the active drag per the one-level eligibility rule (childless
-  // active, top-level target, not a no-op) — shared with `setTaskParent`/the DB.
-  const nestActiveTask = nestActiveId ? (taskById.get(nestActiveId) ?? null) : null;
-  const isNestTarget = useCallback(
-    (task: Task) => (nestActiveTask ? canNestUnder(nestActiveTask, task, hasChildren) : false),
-    [nestActiveTask, hasChildren],
-  );
-
-  const onNestDragStart = useCallback((e: DragStartEvent) => {
-    setReordering(true); // the dnd sensor owns the arrows during a keyboard drag
-    setNestActiveId(String(e.active.id));
-  }, []);
-  const endNestDrag = useCallback(() => {
-    setReordering(false);
-    setNestActiveId(null);
-  }, []);
-  const onNestDragEnd = useCallback(
-    (e: DragEndEvent) => {
-      endNestDrag();
-      const { active, over } = e;
-      if (!over) return;
-      const target = asTaskDropTarget(over.data.current);
-      if (target?.type !== "onto-task") return;
-      const childId = String(active.id);
-      if (target.taskId === childId) return;
-      // Now that this fires under the app-level context (DF-22), only act on a
-      // drag that actually originated from this list's nest rows — a foreign
-      // drag can't nest a stranger (belt to the `isNestTarget`/`canDrop` suspenders).
-      if (!nestTasks.some((t) => t.id === childId)) return;
-      api.setTaskParent(childId, target.taskId);
-      // Reveal the result — expand the new parent so the moved task shows nested.
-      if (nest) setExpandedParents((prev) => new Set(prev).add(target.taskId));
-    },
-    [endNestDrag, api, nest, nestTasks],
-  );
+  const overlayTask = dragTask ?? queueDragTask;
+  const dragOverlay =
+    typeof document !== "undefined"
+      ? createPortal(
+          <DragOverlay>
+            {overlayTask ? (
+              <DragOverlaySurface>
+                <span className="min-w-0 flex-1 truncate">{overlayTask.title || "Untitled"}</span>
+              </DragOverlaySurface>
+            ) : null}
+          </DragOverlay>,
+          document.body,
+        )
+      : null;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -681,16 +891,22 @@ export function TaskListView({
           <EmptyState canEdit={canEdit} onRequestCapture={onRequestCapture} />
         ) : canReorder ? (
           // Queue reorder. In external mode (DF-22) the tasks page owns the one
-          // DndContext (so a row can be dropped on the hub); we bind our reorder
-          // handlers through a monitor. The handlers stay spatially disjoint —
-          // onQueueDragEnd early-returns when `over` isn't a queue row.
+          // DndContext (so a row can be dropped on the hub or the rail); we bind
+          // our reorder handlers through a monitor. The handlers stay spatially
+          // disjoint — onQueueDragEnd early-returns when `over` isn't a queue row.
           <DndBoundary
             dndMode={dndMode}
             sensors={dndSensors}
             collisionDetection={closestCenter}
-            onDragStart={() => setReordering(true)}
+            onDragStart={(e) => {
+              setReordering(true);
+              setQueueDragId(String(e.active.id));
+            }}
             onDragEnd={onQueueDragEnd}
-            onDragCancel={() => setReordering(false)}
+            onDragCancel={() => {
+              setReordering(false);
+              setQueueDragId(null);
+            }}
           >
             <SortableContext items={queueIds} strategy={verticalListSortingStrategy}>
               {queueTasks.map((task) => (
@@ -709,93 +925,126 @@ export function TaskListView({
                 />
               ))}
             </SortableContext>
-          </DndBoundary>
-        ) : canNest ? (
-          // Drag-onto-task → subtask. Same external/internal split; onNestDragEnd
-          // early-returns unless `over` is an `onto-task` droppable, so a drop on
-          // the hub falls through to the page's link handler.
-          <DndBoundary
-            dndMode={dndMode}
-            sensors={nestSensors}
-            collisionDetection={pointerFirstCollision}
-            onDragStart={onNestDragStart}
-            onDragEnd={onNestDragEnd}
-            onDragCancel={endNestDrag}
-          >
-            {nestTasks.map((task) => (
-              <NestableTask
-                key={task.id}
-                id={task.id}
-                from="list"
-                canDrag={canDragRow(task)}
-                canDrop={isNestTarget(task)}
-                render={({ dragListeners, dragActivatorRef, isOver }) =>
-                  renderParentRow(task, { dragListeners, dragActivatorRef, dropActive: isOver })
-                }
-              />
-            ))}
-            <CompletedLine
-              count={groups[0]?.hidden.length ?? 0}
-              shown={revealedGroups.has(groups[0]?.key ?? "")}
-              onToggle={() => toggleRevealGroup(groups[0]?.key ?? "")}
-            />
-            {createPortal(
-              <DragOverlay>
-                {nestActiveTask ? (
-                  <div className="pointer-events-none rounded-md border border-border bg-popover px-2 py-1 font-sans text-md shadow-md">
-                    {nestActiveTask.title || "Untitled"}
-                  </div>
-                ) : null}
-              </DragOverlay>,
-              document.body,
-            )}
+            {dragOverlay}
           </DndBoundary>
         ) : (
-          groups.map((group) => {
-            const isCollapsed = collapsed.has(group.key);
-            return (
-              <div key={group.key} className="mb-1">
-                {groupBy !== "none" ? (
-                  <button
-                    type="button"
-                    onClick={() => toggleGroup(group.key)}
-                    className={cn(
-                      eyebrowVariants(),
-                      "flex w-full items-center gap-1.5 rounded px-1 py-1 text-left hover:text-foreground",
-                    )}
-                  >
-                    {isCollapsed ? (
-                      <ChevronRight className="size-3.5" aria-hidden />
-                    ) : (
-                      <ChevronDown className="size-3.5" aria-hidden />
-                    )}
-                    {group.label}
-                    <span className="font-sans text-muted-foreground/70 tabular-nums">
-                      {revealedGroups.has(group.key)
-                        ? group.tasks.length
-                        : group.tasks.length + group.hidden.length}
-                    </span>
-                  </button>
-                ) : null}
+          <MaybeDnd
+            enabled={canDrag}
+            dndMode={dndMode}
+            sensors={dragSensors}
+            onDragStart={onListDragStart}
+            onDragEnd={onListDragEnd}
+            onDragCancel={endListDrag}
+          >
+            {groups.map((group) => {
+              const isCollapsed = collapsed.has(group.key);
+              const groupTarget = hover?.kind === "group" && hover.groupKey === group.key;
+              return (
+                <div key={group.key} className="mb-1">
+                  {groupBy !== "none" ? (
+                    <button
+                      type="button"
+                      data-list-group={group.key}
+                      onClick={() => toggleGroup(group.key)}
+                      className={cn(
+                        eyebrowVariants(),
+                        "flex w-full items-center gap-1.5 rounded px-1 py-1 text-left hover:text-foreground",
+                        groupTarget && DROP_TARGET,
+                      )}
+                    >
+                      {isCollapsed ? (
+                        <ChevronRight className="size-3.5" aria-hidden />
+                      ) : (
+                        <ChevronDown className="size-3.5" aria-hidden />
+                      )}
+                      {group.label}
+                      <span className="font-sans text-muted-foreground/70 tabular-nums">
+                        {revealedGroups.has(group.key)
+                          ? group.tasks.length
+                          : group.tasks.length + group.hidden.length}
+                      </span>
+                    </button>
+                  ) : null}
 
-                {!isCollapsed ? (
-                  <>
-                    {group.tasks.map((task) => (
-                      <div key={task.id}>{renderParentRow(task)}</div>
-                    ))}
-                    <CompletedLine
-                      count={group.hidden.length}
-                      shown={revealedGroups.has(group.key)}
-                      onToggle={() => toggleRevealGroup(group.key)}
-                    />
-                  </>
-                ) : null}
-              </div>
-            );
-          })
+                  {!isCollapsed ? (
+                    <>
+                      {group.tasks.map((task) => renderParentRow(task))}
+                      <CompletedLine
+                        count={group.hidden.length}
+                        shown={revealedGroups.has(group.key)}
+                        onToggle={() => toggleRevealGroup(group.key)}
+                      />
+                    </>
+                  ) : null}
+                </div>
+              );
+            })}
+            {canDrag ? dragOverlay : null}
+          </MaybeDnd>
         )}
       </div>
     </div>
+  );
+}
+
+/** Two hovers that draw the same thing (so a pointer move doesn't re-render). */
+function sameHover(a: ListDropHover | null, b: ListDropHover | null): boolean {
+  if (a === b) return true;
+  if (!a || !b || a.kind !== b.kind) return false;
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+/** The drag boundary when this list can drag; just the children when it can't. */
+function MaybeDnd({
+  enabled,
+  dndMode,
+  sensors,
+  onDragStart,
+  onDragEnd,
+  onDragCancel,
+  children,
+}: {
+  enabled: boolean;
+  dndMode: "internal" | "external";
+  sensors: ReturnType<typeof useTaskDndSensors>;
+  onDragStart: (e: DragStartEvent) => void;
+  onDragEnd: (e: DragEndEvent) => void;
+  onDragCancel: () => void;
+  children: ReactNode;
+}) {
+  if (!enabled) return <>{children}</>;
+  return (
+    <DndBoundary
+      dndMode={dndMode}
+      sensors={sensors}
+      // The List has no droppables of its own (it resolves from the pointer);
+      // on its own context this only ever finds nothing.
+      collisionDetection={pointerWithin}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      onDragCancel={onDragCancel}
+    >
+      {children}
+    </DndBoundary>
+  );
+}
+
+/**
+ * Under a sorted Order the insertion line becomes this quiet note (tasks-v2
+ * §8): it sits on the same edge, on the popover surface, at the row's end.
+ */
+function SortedNote({ edge, children }: { edge: "top" | "bottom"; children: ReactNode }) {
+  return (
+    <span
+      aria-hidden
+      data-slot="sorted-note"
+      className={cn(
+        "pointer-events-none absolute end-2 z-(--z-sticky) rounded-md border border-hairline bg-popover px-2 py-0.5 font-sans text-xs text-muted-foreground shadow-sm",
+        edge === "top" ? "top-0 -translate-y-1/2" : "bottom-0 translate-y-1/2",
+      )}
+    >
+      {children}
+    </span>
   );
 }
 

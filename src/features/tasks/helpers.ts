@@ -364,7 +364,8 @@ export function groupTasks(tasks: Task[], by: GroupBy, ctx: GroupContext): TaskG
   }));
 }
 
-function groupKeyFor(task: Task, by: GroupBy): string {
+/** The group a task falls in under `by` (its own field, never its parent's). */
+export function groupKeyFor(task: Task, by: GroupBy): string {
   switch (by) {
     case "status":
       return task.status;
