@@ -24,6 +24,10 @@ import {
 
 type TaskRow = { id: string; title: string; status: string; bucket_id: string };
 
+// The panel names the project's status (TV-D9); the seeded default is spelled
+// "Won't do", the app's own label "Won’t do".
+const WONT_DO_STATUS = /^Status: Won[’']t do$/;
+
 let dev: Session;
 let mate: Session;
 let ws: { id: string; inboxId: string };
@@ -94,7 +98,10 @@ function trackWrites(page: Page) {
     const url = req.url();
     if (req.method() === "GET") return;
     const m = /rest\/v1\/(rpc\/tasks_op_[a-z_]+|tasks)\b/.exec(url);
-    if (m) writes.push(`${req.method()} ${m[1]}`);
+    // The repeat roll-over is the app's own, once per load (TV-D8); with the
+    // shared store (TV-D11a) it follows the Done tasks, which arrive after the
+    // open ones are on screen, so it can land inside the window watched here.
+    if (m && m[1] !== "rpc/tasks_op_catch_up") writes.push(`${req.method()} ${m[1]}`);
   });
   return writes;
 }
@@ -109,13 +116,13 @@ test("AC1.4 — a Won't do task stays reachable and reopens", async ({ page }) =
   await expect(page.getByRole("textbox", { name: "Task title" })).toHaveValue(t.title);
   await page.getByRole("button", { name: "More actions" }).click();
   await page.getByRole("menuitem", { name: "Won’t do" }).click();
-  await expect(page.getByRole("button", { name: "Status: Won’t do" })).toBeVisible();
+  await expect(page.getByRole("button", { name: WONT_DO_STATUS })).toBeVisible();
   await expect(page.getByRole("button", { name: "Reopen" })).toBeVisible();
   await expect.poll(async () => (await taskById(t.id)).status).toBe("archived");
 
   // A deep link straight to the Won't do task opens it, with Reopen.
   await page.goto(`/tasks?id=${t.id}`);
-  await expect(page.getByRole("button", { name: "Status: Won’t do" })).toBeVisible({
+  await expect(page.getByRole("button", { name: WONT_DO_STATUS })).toBeVisible({
     timeout: 20_000,
   });
   await page.getByRole("button", { name: "Reopen" }).click();
@@ -144,7 +151,7 @@ test("AC1.4 — Won't do tasks are listed by Filter → Status (TV-U2)", async (
 
   // Listed once, it opens with TV-P0's Reopen.
   await page.getByRole("button", { name: gone.title }).click();
-  await expect(page.getByRole("button", { name: "Status: Won’t do" })).toBeVisible();
+  await expect(page.getByRole("button", { name: WONT_DO_STATUS })).toBeVisible();
   await page.getByRole("button", { name: "Reopen" }).click();
   await expect.poll(async () => (await taskById(gone.id)).status).toBe("todo");
   // Leave the shared dev workspace as it was.

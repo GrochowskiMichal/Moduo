@@ -696,6 +696,15 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       processedUrlIdRef.current = urlTaskId;
       return;
     }
+    // Done, Won't do and Backlog tasks arrive after the open ones (the shared
+    // store, TV-D11a): a link to one waits for them before it reads as gone.
+    if (
+      !api.restLoaded &&
+      !looksLikeHandle(urlTaskId) &&
+      resolveTasksDeepLink(urlTaskId, { tasks, buckets, inboxId }).kind === "none"
+    ) {
+      return;
+    }
     processedUrlIdRef.current = urlTaskId;
     const external = takeEntityOpenIntent(urlTaskId);
     // A handle (`?id=MOD-142`, RF-1): find its task (here, else on the server,
@@ -749,6 +758,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   }, [
     api.loading,
     api.error,
+    api.restLoaded,
     urlTaskId,
     tasks,
     buckets,
