@@ -73,8 +73,10 @@ const altDigit = (n: number, target: EventTarget = window) =>
 describe("the title row names the view and switches it", () => {
   it("shows the active view and its body", () => {
     renderPanel();
-    expect(screen.getByRole("button", { name: "Panel view: Tasks" })).toHaveTextContent("Tasks");
-    expect(screen.getByText("Tasks body")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Panel view: Tasks" }).textContent).toContain(
+      "Tasks",
+    );
+    expect(screen.getByText("Tasks body")).toBeTruthy();
     expect(screen.queryByText("Detail body")).toBeNull();
   });
 
@@ -87,7 +89,7 @@ describe("the title row names the view and switches it", () => {
       expect.stringMatching(/^Notes(⌥|Alt )2$/),
       expect.stringMatching(/^Tasks(⌥|Alt )3$/),
     ]);
-    expect(items[2]).toHaveAttribute("aria-checked", "true");
+    expect(items[2].getAttribute("aria-checked")).toBe("true");
     // One hairline, between Notes (about this) and Tasks (alongside).
     const separators = within(menu).getAllByRole("separator");
     expect(separators).toHaveLength(1);
@@ -110,9 +112,9 @@ describe("the title row names the view and switches it", () => {
         onChange={() => {}}
       />,
     );
-    expect(screen.getByRole("heading", { name: "Details" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Details" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Panel view/ })).toBeNull();
-    expect(screen.getByText("Task details")).toBeInTheDocument();
+    expect(screen.getByText("Task details")).toBeTruthy();
   });
 
   it("only lists the views the page renders", () => {
@@ -153,10 +155,10 @@ describe("the ← item stack", () => {
 
   it("shows the item's name with a back arrow to the view, and its body", () => {
     renderPanel({ items: [item], onBack: () => {} });
-    expect(screen.getByRole("heading", { name: "Collect assets" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Back to Tasks" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Open in Tasks" })).toBeInTheDocument();
-    expect(screen.getByText("Task body")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Collect assets" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Back to Tasks" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Open in Tasks" })).toBeTruthy();
+    expect(screen.getByText("Task body")).toBeTruthy();
     expect(screen.queryByText("Tasks body")).toBeNull();
     expect(screen.queryByRole("button", { name: /Panel view/ })).toBeNull();
   });

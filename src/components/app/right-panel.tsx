@@ -9,15 +9,7 @@
 // goes back one item (keymap.md, rules 4 and 8).
 
 import { ArrowLeft, ChevronDown, ExternalLink, type LucideIcon } from "lucide-react";
-import {
-  Fragment,
-  type KeyboardEvent,
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { Fragment, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 
 import {
   type PanelModule,
@@ -112,9 +104,11 @@ export function RightPanel({
   // ref so the listener is bound once per mount.
   const latest = useRef({ listed, active, item, onChange, onBack, onClearItems });
   latest.current = { listed, active, item, onChange, onBack, onClearItems };
+  const rootRef = useRef<HTMLDivElement>(null);
+  const hasActive = Boolean(active);
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const onKey = (event: globalThis.KeyboardEvent) => {
+    const onKey = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return;
       const n = panelShortcutNumber(event);
       if (n === null || isEditable(event.target)) return;
@@ -129,6 +123,24 @@ export function RightPanel({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // Esc steps back one item, from anywhere inside the panel but a field. A
+  // menu or popover opened from the panel is portaled, so its Esc never
+  // bubbles here; Radix closes it on its own document listener first.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: rebinds once the root exists (no views → no root)
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    const onKey = (event: KeyboardEvent) => {
+      const { item, onBack } = latest.current;
+      if (event.key !== "Escape" || !item || !onBack) return;
+      if (event.defaultPrevented || isEditable(event.target)) return;
+      event.preventDefault();
+      onBack();
+    };
+    root.addEventListener("keydown", onKey);
+    return () => root.removeEventListener("keydown", onKey);
+  }, [hasActive]);
+
   if (!active) return null;
 
   const pick = (id: string) => {
@@ -136,23 +148,10 @@ export function RightPanel({
     if (id !== active.id) onChange(id);
   };
 
-  // Esc steps back one item. A menu or popover inside the panel closes first:
-  // Radix handles its Esc on a document capture listener and prevents it.
-  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key !== "Escape" || !item || !onBack) return;
-    if (event.defaultPrevented || isEditable(event.target)) return;
-    event.preventDefault();
-    onBack();
-  };
-
   const body = item ? item.render() : views[active.id]?.();
 
   return (
-    <div
-      className="flex h-full min-h-0 flex-col gap-2"
-      data-panel-module={module}
-      onKeyDown={onKeyDown}
-    >
+    <div ref={rootRef} className="flex h-full min-h-0 flex-col gap-2" data-panel-module={module}>
       <div className="flex min-h-(--ctrl-h) shrink-0 items-center gap-1">
         {item ? (
           <ItemTitle item={item} backTo={active.label} onBack={onBack} />

@@ -47,12 +47,12 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { UserMenu } from "../user-menu";
 import { WorkspaceSwitcher } from "../workspace-switcher";
 import { AnalyticsConsentPrompt } from "./analytics-consent-prompt";
-import { baseModulesNavItems } from "./app-chrome-constants";
+import { visibleModuleNavItems } from "./app-chrome-constants";
 import type { ModuleNavItem } from "./app-chrome-types";
+import { CaptureShell } from "./capture-shell";
 import { dispatchCreateNew } from "./create-events";
 import { FocusSessionChip } from "./focus-session-chip";
 import { GlobalBottomBar } from "./global-bottom-bar";
-import { GlobalCaptureBar } from "./global-capture-bar";
 import { GlobalCommandPalette } from "./global-command-palette";
 import { GlobalShortcutsDialog } from "./global-shortcuts-dialog";
 import { HelpMenu } from "./help-menu";
@@ -254,14 +254,12 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
 
   const modulesNavItems = useMemo(
     () =>
-      baseModulesNavItems.filter((tab) => {
-        // PERM-1: each module tab follows its own View permission.
-        if (tab.module === "notes") return modulePermissions.notes !== "none";
-        if (tab.module === "tasks") return modulePermissions.tasks !== "none";
-        if (tab.module === "calendar") return modulePermissions.calendar !== "none";
-        if (tab.module === "contacts") return modulePermissions.contacts !== "none";
-        if (tab.module === "chat") return modulePermissions.chat !== "none";
-        return true;
+      visibleModuleNavItems({
+        notes: modulePermissions.notes,
+        tasks: modulePermissions.tasks,
+        calendar: modulePermissions.calendar,
+        contacts: modulePermissions.contacts,
+        chat: modulePermissions.chat,
       }),
     [
       modulePermissions.notes,
@@ -614,7 +612,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
         </div>
       </div>
       <GlobalCommandPalette />
-      <GlobalCaptureBar />
+      <CaptureShell />
       <GlobalShortcutsDialog />
       <SettingsModal />
       <AnalyticsConsentPrompt />
