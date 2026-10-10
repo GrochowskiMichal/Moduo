@@ -1,7 +1,7 @@
 # Manual test checklist — TV-D8 server ops, registry, handles, recurrence, tolerance
 
 > Generated 2026-10-10 · branch `t/maciej/tv-d8-server-ops` → `t/maciej/tasks-v3-build` (local build mode) · **Live-verified:** yes, on the local stack (web, `dev:web` on :8093, signed in as `dev@moduo.local`): time zone saved at sign-in, create through the op (number, registry, trail), ⌘K by handle and by an old-key handle, rename re-registers, Settings → Workspace → Task key (invalid key refused, MW → MOD with the alias kept and every handle refreshed), the handle in the panel header, completing a repeat (server pointer = the app's preview, one completion row), the "Update Moduo" banner with a refused save. Not verified: copying the handle (the preview pane refuses clipboard writes: "Couldn't copy MW-2." — same as Copy link there).
-> Migrations: `20261010160000_tasks_ops_registry_handles.sql`, `20261010161000_tasks_recurrence_server.sql` (local only). SQL tests: `bun run db:test` (176 checks in `supabase/tests/`). The server's repeat engine was also swept against rrule.js on 2,300 random rules (no difference).
+> Migrations: `20261010160000_tasks_ops_registry_handles.sql`, `20261010161000_tasks_recurrence_server.sql` (local only). SQL tests: `bun run db:test` (179 checks in `supabase/tests/`). The server's repeat engine was also swept against rrule.js on 2,300 random rules (no difference).
 
 ## Handles and the registry
 - [ ] **Do:** open any task → **Expect:** its handle (e.g. `MOD-142`) at the end of the header breadcrumb ("Inbox › MOD-142"); hover says "Copy MOD-142" _(both)_

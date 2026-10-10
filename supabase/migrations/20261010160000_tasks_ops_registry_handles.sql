@@ -1002,6 +1002,119 @@ $$;
 REVOKE ALL ON FUNCTION public.tasks_op_update(uuid, uuid, jsonb) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.tasks_op_update(uuid, uuid, jsonb) TO authenticated, service_role;
 
+-- The ops that can answer without writing (nothing to undo) answer only about
+-- a task the caller can see: production's bodies (read from the catalog,
+-- 2026-10-10) with the same check as tasks_op_set_status after the guard.
+-- Same signatures, so the grants stand.
+CREATE OR REPLACE FUNCTION public.tasks_op_uncommit(p_workspace_id uuid, p_task_id uuid)
+RETURNS public.tasks
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  t public.tasks;
+  v_was date;
+  v_dequeued integer := 0;
+BEGIN
+  t := public.tasks_op__guard(p_workspace_id, p_task_id);
+  IF NOT public.can_access('task', t.id, 'view', public.perm_actor_id()) THEN
+    RAISE EXCEPTION 'Task not found in this workspace.';
+  END IF;
+  -- TV-D2: out of the caller's queue.
+  IF public.perm_actor_id() IS NOT NULL THEN
+    PERFORM public.tasks_queue__lock(p_workspace_id, public.perm_actor_id());
+    DELETE FROM public.task_queue q WHERE q.user_id = public.perm_actor_id() AND q.task_id = t.id;
+    GET DIAGNOSTICS v_dequeued = ROW_COUNT;
+  END IF;
+  IF t.committed_for IS NULL AND v_dequeued = 0 THEN
+    RETURN t; -- no-op, no log
+  END IF;
+  v_was := t.committed_for;
+  IF t.committed_for IS NOT NULL THEN
+    PERFORM set_config('tasks.queue_legacy', 'op', true);
+    UPDATE public.tasks
+      SET committed_for = NULL, commit_order = NULL, updated_at = now()
+      WHERE id = t.id
+      RETURNING * INTO t;
+    PERFORM set_config('tasks.queue_legacy', '', true);
+  END IF;
+  PERFORM public.module_activity_log(
+    p_workspace_id, 'tasks', 'task', t.id, 'tasks.uncommit',
+    jsonb_build_object('was', v_was)
+  );
+  RETURN t;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.tasks_op_skip_today(p_workspace_id uuid, p_task_id uuid)
+RETURNS public.tasks
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  t public.tasks;
+  v_dequeued integer := 0;
+BEGIN
+  t := public.tasks_op__guard(p_workspace_id, p_task_id);
+  IF NOT public.can_access('task', t.id, 'view', public.perm_actor_id()) THEN
+    RAISE EXCEPTION 'Task not found in this workspace.';
+  END IF;
+  IF public.perm_actor_id() IS NOT NULL THEN
+    PERFORM public.tasks_queue__lock(p_workspace_id, public.perm_actor_id());
+    DELETE FROM public.task_queue q WHERE q.user_id = public.perm_actor_id() AND q.task_id = t.id;
+    GET DIAGNOSTICS v_dequeued = ROW_COUNT;
+  END IF;
+  IF t.committed_for IS NULL AND v_dequeued = 0 THEN
+    RETURN t; -- nothing to skip out of
+  END IF;
+  IF t.committed_for IS NOT NULL THEN
+    PERFORM set_config('tasks.queue_legacy', 'op', true);
+    UPDATE public.tasks
+      SET committed_for = NULL, commit_order = NULL, updated_at = now()
+      WHERE id = t.id
+      RETURNING * INTO t;
+    PERFORM set_config('tasks.queue_legacy', '', true);
+  END IF;
+  PERFORM public.module_activity_log(
+    p_workspace_id, 'tasks', 'task', t.id, 'tasks.skip_today',
+    jsonb_build_object('reschedule_count', t.reschedule_count)
+  );
+  RETURN t;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.tasks_op_unschedule(p_workspace_id uuid, p_task_id uuid)
+RETURNS public.tasks
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  t public.tasks;
+  v_from timestamptz;
+BEGIN
+  t := public.tasks_op__guard(p_workspace_id, p_task_id);
+  IF NOT public.can_access('task', t.id, 'view', public.perm_actor_id()) THEN
+    RAISE EXCEPTION 'Task not found in this workspace.';
+  END IF;
+  IF t.scheduled_at IS NULL THEN
+    RETURN t; -- already unscheduled
+  END IF;
+  v_from := t.scheduled_at;
+  UPDATE public.tasks
+    SET scheduled_at = NULL, updated_at = now()
+    WHERE id = t.id
+    RETURNING * INTO t;
+  PERFORM public.module_activity_log(
+    p_workspace_id, 'tasks', 'task', t.id, 'tasks.unschedule',
+    jsonb_build_object('from', v_from)
+  );
+  RETURN t;
+END;
+$$;
+
 -- ── 9. One dependency store: a "blocks" link blocks ─────────────────────────
 
 -- A live "blocks" link between two tasks is a dependency (source waits on

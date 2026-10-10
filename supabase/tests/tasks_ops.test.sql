@@ -279,6 +279,12 @@ BEGIN
   PERFORM test.ok(r LIKE '%Task not found%', 'a status it already has reads as missing', r);
   r := test.try('E', format($q$SELECT (public.tasks_op_set_status(%L, %L, 'todo')).title$q$, test.id('W'), test.id('TP')));
   PERFORM test.ok(r LIKE '%Task not found%', 'set_status to the status it has reads as missing', r);
+  r := test.try('E', format($q$SELECT (public.tasks_op_uncommit(%L, %L)).title$q$, test.id('W'), test.id('TP')));
+  PERFORM test.ok(r LIKE '%Task not found%', 'uncommitting a hidden task that isn''t committed reads as missing', r);
+  r := test.try('E', format($q$SELECT (public.tasks_op_skip_today(%L, %L)).title$q$, test.id('W'), test.id('TP')));
+  PERFORM test.ok(r LIKE '%Task not found%', 'skip-today on a hidden task reads as missing', r);
+  r := test.try('E', format($q$SELECT (public.tasks_op_unschedule(%L, %L)).title$q$, test.id('W'), test.id('TP')));
+  PERFORM test.ok(r LIKE '%Task not found%', 'unscheduling a hidden unscheduled task reads as missing', r);
   -- …and can't be a parent (which would also tell whether it exists).
   r := test.try('E', format($q$SELECT public.tasks_op_create(%L, '{"title": "Sneaky", "bucket_id": %s, "parent_id": %s}'::jsonb)$q$,
     test.id('W'), to_json(test.id('SB')::text), to_json(test.id('TP')::text)));

@@ -73,7 +73,7 @@ Built in tasks-v3 block 5 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §Assump
   - Rejected: waiting for D16 (agents would keep no way to capture).
 - **D8-14 · A task you can't see reads as missing in every op answer; a delete promotes subtasks as the server's own work** → TV-D8 (`tasks_op_update`, `tasks_op_set_status`, `tasks__check_parent`)
   - Who: agent's choice, deferred to by Maciej, 2026-10-10.
-  - Decision: the edit and status ops answer "Task not found" for a task the caller can't see, even when nothing would change; a parent must be a task the caller can see (same words when it's missing); deleting a parent promotes all its live subtasks, including ones the deleter can't edit, and answers only with those they can see.
+  - Decision: the edit, status, uncommit, skip-today and unschedule ops answer "Task not found" for a task the caller can't see, even when nothing would change; a parent must be a task the caller can see (same words when it's missing); deleting a parent promotes all its live subtasks, including ones the deleter can't edit, and answers only with those they can see.
   - Why: an op answers with full rows, so it must never answer with one the caller couldn't read; a subtask outliving its parent is the server's consequence of the delete, not a separate edit.
   - Rejected: refusing the delete when a subtask isn't editable (a private step would block deleting your own task).
 - **D8-15 · Completion history follows what was actually done** → TV-D8 (`task_completions`, `tasks__record_completion`)
