@@ -61,7 +61,16 @@ describe("listenTasksLive", () => {
     expect(h.channels).toHaveLength(1);
     const ch = h.channels[0]!;
     expect(ch.topic).toBe("tasks-db:ws-1:me");
-    expect(ch.tables).toEqual(["tasks", "buckets", "tags", "tag_links", "task_queue"]);
+    expect(ch.tables).toEqual([
+      "tasks",
+      "buckets",
+      "tags",
+      "tag_links",
+      "task_queue",
+      // TV-D11a: statuses and comment counts are live too.
+      "project_statuses",
+      "comments",
+    ]);
     expect(new Set(ch.filters)).toEqual(new Set(["workspace_id=eq.ws-1"]));
 
     ch.handlers.get("tag_links")!({ eventType: "DELETE", old: { id: "l1" } });

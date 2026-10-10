@@ -47,6 +47,14 @@ export const READ_CAPS = {
   emailAccounts: 200,
   emailRefs: 5000,
   attachments: 10000,
+  /** The shared store (TV-D11a): done, Won't do and Backlog tasks, read after the open ones. */
+  closedTasks: 20000,
+  /** Comments on tasks, read for their counts only (id + task). */
+  taskComments: 20000,
+  /** One delta read; past it the store reads again from where it stopped. */
+  syncDelta: 5000,
+  /** The store's access check: every live id of a table. */
+  syncIds: 50000,
 } as const;
 
 /** One collection that hit its cap. `null` everywhere else = nothing was cut. */

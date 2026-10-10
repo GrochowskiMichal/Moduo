@@ -14,18 +14,41 @@
 //      coming back to the app refetches (see `use-tasks-module.ts`).
 
 import type { ModuoRuntime } from "../../lib/runtime.types";
+import type { CommentMark } from "../../lib/sync/types";
 import {
   bucketRowToModel,
+  commentMarkRowToModel,
+  projectStatusRowToModel,
   sortQueueEntries,
   tagLinkRowToModel,
   tagRowToModel,
   taskQueueRowToModel,
   taskRowToModel,
 } from "../../lib/task-rows";
-import type { Bucket, Tag, TagLink, Task, TaskQueueEntry, TasksModuleBundle } from "./model";
+import type {
+  Bucket,
+  ProjectStatus,
+  Tag,
+  TagLink,
+  Task,
+  TaskQueueEntry,
+  TasksModuleBundle,
+} from "./model";
 
-/** The tables Tasks listens to (all in the `supabase_realtime` publication). */
-export const LIVE_TABLES = ["tasks", "buckets", "tags", "tag_links", "task_queue"] as const;
+/**
+ * The tables Tasks listens to (all in the `supabase_realtime` publication).
+ * Statuses and comments joined with the shared store (TV-D11a): a status set
+ * edited elsewhere and a teammate's comment (its count) show at once.
+ */
+export const LIVE_TABLES = [
+  "tasks",
+  "buckets",
+  "tags",
+  "tag_links",
+  "task_queue",
+  "project_statuses",
+  "comments",
+] as const;
 export type LiveTable = (typeof LIVE_TABLES)[number];
 
 type Upsert<T extends LiveTable, R> = { table: T; kind: "upsert"; row: R };
@@ -36,6 +59,8 @@ export type LiveChange =
   | Upsert<"tags", Tag>
   | Upsert<"tag_links", TagLink>
   | Upsert<"task_queue", TaskQueueEntry>
+  | Upsert<"project_statuses", ProjectStatus>
+  | Upsert<"comments", CommentMark>
   | { table: LiveTable; kind: "delete"; id: string };
 
 /** The part of a Realtime `postgres_changes` payload we read. */
@@ -69,6 +94,20 @@ export function parseLiveChange(table: LiveTable, payload: LivePayload): LiveCha
         return { table, kind: "upsert", row: tagLinkRowToModel(payload.new) };
       case "task_queue":
         return { table, kind: "upsert", row: taskQueueRowToModel(payload.new) };
+      case "project_statuses": {
+        // The model has no deleted stamp: a soft delete is a delete here.
+        const raw = payload.new as { id?: unknown; deleted_at?: unknown } | null;
+        if (raw?.deleted_at && typeof raw.id === "string") {
+          return { table, kind: "delete", id: raw.id };
+        }
+        return { table, kind: "upsert", row: projectStatusRowToModel(payload.new) };
+      }
+      case "comments": {
+        // Only comments on tasks are counted; the body is never kept.
+        const raw = payload.new as { entity_type?: unknown } | null;
+        if (raw?.entity_type !== "task") return null;
+        return { table, kind: "upsert", row: commentMarkRowToModel(payload.new) };
+      }
     }
   } catch {
     return null;

@@ -75,12 +75,14 @@ import {
   type TaskTimeResult,
   type TrackTimeInput,
 } from "../features/tasks/model";
+import { timestampMicros } from "../features/tasks/live";
 import { toMemberPerm, toMemberRole } from "../features/workspaces/workspace-mappers";
 import { clearIgnoredAuthLink, SUPABASE_AUTH_OPTIONS } from "./auth-url";
 import type { EntityLink, EntityRecord } from "./entity-links";
 import { readOnlyFetch } from "./min-build";
 import {
   collectTruncations,
+  PGRST_MAX_ROWS,
   READ_CAPS,
   readPaged,
   TAG_LINKS_SCOPE,
@@ -110,9 +112,17 @@ import type {
   UserPreferences,
 } from "./runtime.types";
 import { createReferencePreviews } from "./runtime.web.previews";
+import type {
+  SyncIdsResult,
+  SyncReadInput,
+  SyncReadResult,
+  SyncRows,
+  SyncTableName,
+} from "./sync/types";
 import { handleSearchPattern, handleWithCurrentKey } from "./task-handle";
 import {
   bucketRowToModel,
+  commentMarkRowToModel,
   editableTaskFields,
   isMissingColumnError,
   isMissingFunctionError,
@@ -2157,6 +2167,20 @@ export const webRuntime: ModuoRuntime = {
       };
     },
 
+    async syncRead<T extends SyncTableName>(
+      input: SyncReadInput<T>,
+    ): Promise<SyncReadResult<SyncRows[T]>> {
+      return (await syncReadTable(input)) as SyncReadResult<SyncRows[T]>;
+    },
+
+    async syncIds({ workspaceId, table }) {
+      return syncIdsOf(workspaceId, table);
+    },
+
+    async createTask(task) {
+      return createTaskRow(task);
+    },
+
     async listStatuses(workspaceId) {
       const res = await listWorkspaceStatuses(workspaceId);
       return res.statuses;
@@ -2284,48 +2308,7 @@ export const webRuntime: ModuoRuntime = {
           return saved;
         }
       }
-      const created = {
-        ...task,
-        id: task.id?.trim() || crypto.randomUUID(),
-        bucketId,
-        createdAt: task.createdAt || now,
-        updatedAt: now,
-      };
-      // Every create is the server op (TV-D8): it numbers the task, registers
-      // it for search and logs it. The client's id makes a resend idempotent.
-      const input = taskCreateOpInput(created);
-      let op = await supabaseClient.rpc("tasks_op_create", {
-        p_workspace_id: task.workspaceId,
-        p_task: input,
-      });
-      // A database before TV-D9 (the merge-before-apply window). Remove in TV-D7.
-      if (isMissingTvD9FieldError(op.error)) {
-        op = await supabaseClient.rpc("tasks_op_create", {
-          p_workspace_id: task.workspaceId,
-          p_task: withoutTvD9Fields(input),
-        });
-      }
-      if (!op.error) return taskRowToModel(Array.isArray(op.data) ? op.data[0] : op.data);
-      if (!isMissingFunctionError(op.error, "tasks_op_create")) throw new Error(op.error.message);
-      // Before TV-D8's migration: the direct insert. Remove in TV-D7.
-      const user = await getAuthedUser();
-      const actorId = user?.id ?? null;
-      let { data, error } = await supabaseClient
-        .from("tasks")
-        .upsert(taskCreateRow(created, actorId), { onConflict: "id" })
-        .select()
-        .single();
-      // Until the TV-D1 migration reaches the database there is no
-      // assignee_id, and owner_id still holds the assignee. Remove in TV-D7.
-      if (isMissingColumnError(error, "assignee_id")) {
-        ({ data, error } = await supabaseClient
-          .from("tasks")
-          .upsert(taskCreateRowLegacy(created, actorId), { onConflict: "id" })
-          .select()
-          .single());
-      }
-      if (error) throw new Error(error.message);
-      return taskRowToModel(data);
+      return createTaskRow({ ...task, bucketId, createdAt: task.createdAt || now });
     },
 
     async updateTask({ workspaceId, taskId, patch }) {
@@ -3650,6 +3633,280 @@ async function listWorkspaceStatuses(
   return { statuses: mapKnownRows(res.rows, projectStatusRowToModel), truncation: res.truncation };
 }
 
+// ── The shared store's reads (TV-D11a) ─────────────────────────────────────────
+// One table at a time: its live rows on a first load, or every row changed
+// since a server stamp (soft-deleted ones included, so a delete reaches the
+// device copy). Paged by key, never by offset: an offset page shifts when a
+// row is saved mid-read, and the row that slid past the page edge would be
+// lost for good. Tables without `updated_at` + `deleted_at` (the queue, tag
+// links, relations: hard deletes) are read whole every time; they are small.
+
+type SyncSource = {
+  table: string;
+  select: string;
+  map: (raw: unknown) => unknown;
+  cap: number;
+  /** Has `updated_at` + `deleted_at`: read as a delta. */
+  delta: boolean;
+  scope: string;
+  /** Extra filters every read of it carries. */
+  filter?: (q: any) => any;
+  /** Order for a whole-table read (must end in `id`). */
+  order?: (q: any) => any;
+};
+
+const SYNC_SOURCES: Record<SyncTableName, SyncSource> = {
+  tasks: {
+    table: "tasks",
+    select: "*",
+    map: taskRowToModel,
+    cap: READ_CAPS.tasks,
+    delta: true,
+    scope: "tasks",
+  },
+  buckets: {
+    table: "buckets",
+    select: "*",
+    map: bucketRowToModel,
+    cap: READ_CAPS.buckets,
+    delta: true,
+    scope: "buckets",
+  },
+  statuses: {
+    table: "project_statuses",
+    select: "*",
+    map: projectStatusRowToModel,
+    cap: READ_CAPS.projectStatuses,
+    delta: true,
+    scope: "statuses",
+  },
+  completions: {
+    table: "task_completions",
+    select: "*",
+    map: taskCompletionRowToModel,
+    cap: READ_CAPS.taskCompletions,
+    delta: true,
+    scope: "completions",
+  },
+  tags: {
+    table: "tags",
+    select: "*",
+    map: tagRowToModel,
+    cap: READ_CAPS.tags,
+    delta: true,
+    scope: "tags",
+  },
+  comments: {
+    table: "comments",
+    select: "id,entity_id,updated_at,deleted_at",
+    map: commentMarkRowToModel,
+    cap: READ_CAPS.taskComments,
+    delta: true,
+    scope: "comments",
+    filter: (q) => q.eq("entity_type", "task"),
+  },
+  queue: {
+    table: "task_queue",
+    select: "*",
+    map: taskQueueRowToModel,
+    cap: READ_CAPS.taskQueue,
+    delta: false,
+    scope: "queued tasks",
+    order: (q) => q.order("user_id").order("position").order("id"),
+  },
+  tagLinks: {
+    table: "tag_links",
+    select: "*",
+    map: tagLinkRowToModel,
+    cap: READ_CAPS.tagLinks,
+    delta: false,
+    scope: TAG_LINKS_SCOPE,
+    order: (q) => q.order("id"),
+  },
+  relations: {
+    table: "task_relations",
+    select: "*",
+    map: taskRelationRowToModel,
+    cap: READ_CAPS.taskRelations,
+    delta: false,
+    scope: "task dependencies",
+    order: (q) => q.order("id"),
+  },
+};
+
+/** A value PostgREST reads whole inside `or=(…)` (timestamps carry `:` and `+`). */
+const pgrstQuoted = (value: string) => `"${value.replace(/["\\]/g, "\\$&")}"`;
+
+/**
+ * Page a query by key up to `cap` rows: by `id` (a first load), or by
+ * (`updated_at`, `id`) (a delta). `build` makes the filtered query afresh each
+ * page (a builder is single-use).
+ */
+async function readByKey(args: {
+  build: () => any;
+  by: "id" | "updated_at";
+  cap: number;
+  scope: string;
+}): Promise<{ rows: any[]; error: any; truncation: Truncation | null }> {
+  const rows: any[] = [];
+  let last: { id: string; updatedAt: string } | null = null;
+  // One past the cap tells "there is more" without a count.
+  while (rows.length <= args.cap) {
+    const want = Math.min(PGRST_MAX_ROWS, args.cap + 1 - rows.length);
+    let q = args.build();
+    if (args.by === "id") {
+      if (last) q = q.gt("id", last.id);
+      q = q.order("id");
+    } else {
+      if (last) {
+        const at = pgrstQuoted(last.updatedAt);
+        q = q.or(`updated_at.gt.${at},and(updated_at.eq.${at},id.gt.${last.id})`);
+      }
+      q = q.order("updated_at").order("id");
+    }
+    const { data, error } = await q.limit(want);
+    if (error) return { rows, error, truncation: null };
+    const batch = (data ?? []) as any[];
+    rows.push(...batch);
+    if (batch.length < want) break;
+    const tail = batch[batch.length - 1];
+    last = { id: String(tail?.id), updatedAt: String(tail?.updated_at ?? "") };
+  }
+  if (rows.length <= args.cap) return { rows, error: null, truncation: null };
+  return {
+    rows: rows.slice(0, args.cap),
+    error: null,
+    truncation: { scope: args.scope, shown: args.cap, total: null },
+  };
+}
+
+/** The open categories (TV-D9): what the store reads first. */
+const OPEN_CATEGORIES = ["todo", "in_progress"] as const;
+
+async function syncReadTable(input: SyncReadInput): Promise<SyncReadResult<unknown>> {
+  const source = SYNC_SOURCES[input.table];
+  const empty: SyncReadResult<unknown> = {
+    rows: [],
+    deleted: [],
+    maxUpdatedAt: null,
+    truncated: null,
+  };
+  const base = () => {
+    let q = supabaseClient
+      .from(source.table)
+      .select(source.select)
+      .eq("workspace_id", input.workspaceId);
+    if (source.filter) q = source.filter(q);
+    return q;
+  };
+
+  if (!source.delta) {
+    const res = await selectCapped<any>({
+      scope: source.scope,
+      cap: source.cap,
+      build: (opts?: SelectOpts) => {
+        let q = supabaseClient
+          .from(source.table)
+          .select(source.select, opts)
+          .eq("workspace_id", input.workspaceId);
+        if (source.filter) q = source.filter(q);
+        return q;
+      },
+      order: source.order ?? ((q) => q.order("id")),
+    });
+    if (res.error) {
+      if (isMissingTableError(res.error, source.table)) return empty;
+      throw new Error(res.error.message);
+    }
+    return { ...empty, rows: mapKnownRows(res.rows, source.map), truncated: res.truncation };
+  }
+
+  // Tasks' first load comes in two parts (open first); a database before
+  // TV-D9 has no category, so its open part goes by the status word.
+  const partFilter = (q: any, byCategory: boolean) => {
+    if (input.table !== "tasks" || !input.part || input.since) return q;
+    const col = byCategory ? "status_category" : "status";
+    const open = `(${OPEN_CATEGORIES.join(",")})`;
+    return input.part === "open"
+      ? q.in(col, [...OPEN_CATEGORIES])
+      : q.or(`${col}.is.null,${col}.not.in.${open}`);
+  };
+  const run = (byCategory: boolean) =>
+    readByKey({
+      by: input.since ? "updated_at" : "id",
+      cap: input.since
+        ? Math.max(source.cap, READ_CAPS.syncDelta)
+        : input.table === "tasks" && input.part === "rest"
+          ? READ_CAPS.closedTasks
+          : source.cap,
+      scope: source.scope,
+      build: () => {
+        const q = input.since ? base().gte("updated_at", input.since) : base().is("deleted_at", null);
+        return partFilter(q, byCategory);
+      },
+    });
+  let res = await run(true);
+  if (
+    res.error &&
+    input.table === "tasks" &&
+    input.part &&
+    isMissingColumnError(res.error, "status_category")
+  ) {
+    res = await run(false);
+  }
+  if (res.error) {
+    if (isMissingTableError(res.error, source.table)) return empty;
+    throw new Error(res.error.message);
+  }
+  const live: unknown[] = [];
+  const deleted: string[] = [];
+  let maxUpdatedAt: string | null = null;
+  let maxMicros = Number.NEGATIVE_INFINITY;
+  for (const row of res.rows) {
+    const stamp = typeof row?.updated_at === "string" ? row.updated_at : null;
+    const micros = timestampMicros(stamp);
+    if (stamp && micros !== null && micros > maxMicros) {
+      maxMicros = micros;
+      maxUpdatedAt = stamp;
+    }
+    if (row?.deleted_at) {
+      if (typeof row.id === "string") deleted.push(row.id);
+    } else {
+      live.push(row);
+    }
+  }
+  return {
+    rows: mapKnownRows(live, source.map),
+    deleted,
+    maxUpdatedAt,
+    truncated: res.truncation,
+  };
+}
+
+async function syncIdsOf(workspaceId: string, table: SyncTableName): Promise<SyncIdsResult> {
+  const source = SYNC_SOURCES[table];
+  if (!source.delta) return { ids: [], complete: false };
+  const res = await readByKey({
+    by: "id",
+    cap: READ_CAPS.syncIds,
+    scope: source.scope,
+    build: () => {
+      let q = supabaseClient
+        .from(source.table)
+        .select("id")
+        .eq("workspace_id", workspaceId)
+        .is("deleted_at", null);
+      if (source.filter) q = source.filter(q);
+      return q;
+    },
+  });
+  if (res.error) {
+    if (isMissingTableError(res.error, source.table)) return { ids: [], complete: false };
+    throw new Error(res.error.message);
+  }
+  return { ids: res.rows.map((r) => String(r.id)), complete: res.truncation === null };
+}
+
 /**
  * A field-level task edit through `tasks_op_update` (TV-D8): only the changed
  * fields go, the server checks, writes, registers a rename and logs it, and
@@ -3725,6 +3982,55 @@ async function liveBucketOrInbox(
     if (b && b.workspace_id === workspaceId && !b.deleted_at) return bucketId;
   }
   return (await ensureWebInbox(workspaceId)).id;
+}
+
+/**
+ * Create a task under its own id. Every create is the server op (TV-D8): it
+ * numbers the task, registers it for search and logs it; the client's id makes
+ * a resend idempotent (a capture flushed twice from the offline queue is one
+ * task, TV-D11a). No id: a new one.
+ */
+async function createTaskRow(task: Task): Promise<Task> {
+  const now = new Date().toISOString();
+  const created = {
+    ...task,
+    id: task.id?.trim() || crypto.randomUUID(),
+    createdAt: task.createdAt || now,
+    updatedAt: now,
+  };
+  const input = taskCreateOpInput(created);
+  let op = await supabaseClient.rpc("tasks_op_create", {
+    p_workspace_id: task.workspaceId,
+    p_task: input,
+  });
+  // A database before TV-D9 (the merge-before-apply window). Remove in TV-D7.
+  if (isMissingTvD9FieldError(op.error)) {
+    op = await supabaseClient.rpc("tasks_op_create", {
+      p_workspace_id: task.workspaceId,
+      p_task: withoutTvD9Fields(input),
+    });
+  }
+  if (!op.error) return taskRowToModel(Array.isArray(op.data) ? op.data[0] : op.data);
+  if (!isMissingFunctionError(op.error, "tasks_op_create")) throw new Error(op.error.message);
+  // Before TV-D8's migration: the direct insert. Remove in TV-D7.
+  const user = await getAuthedUser();
+  const actorId = user?.id ?? null;
+  let { data, error } = await supabaseClient
+    .from("tasks")
+    .upsert(taskCreateRow(created, actorId), { onConflict: "id" })
+    .select()
+    .single();
+  // Until the TV-D1 migration reaches the database there is no
+  // assignee_id, and owner_id still holds the assignee. Remove in TV-D7.
+  if (isMissingColumnError(error, "assignee_id")) {
+    ({ data, error } = await supabaseClient
+      .from("tasks")
+      .upsert(taskCreateRowLegacy(created, actorId), { onConflict: "id" })
+      .select()
+      .single());
+  }
+  if (error) throw new Error(error.message);
+  return taskRowToModel(data);
 }
 
 function taskRelationRowToModel(raw: unknown): TaskRelation {
