@@ -80,18 +80,24 @@ const CALENDAR_FILE = "invite.ics";
 
 const name = (value: string) => singleLine(value, TEXT_LIMITS.name);
 
-/** Looks like a link, a domain or an address: www., ://, @, or a dot before letters ("x.com", "bit.ly"). */
-const LINKISH = /:\/\/|www\.|@|\.[\p{L}]{2,}/iu;
+/**
+ * A plain name: up to five words of letters (accents and any script), each
+ * allowing inner apostrophes or hyphens and a closing abbreviation dot
+ * ("Dr. Zoë O'Neill-Łukasz"). No digits, no other punctuation, so no link,
+ * domain or address in any spelling (fullwidth or ideographic dots included).
+ */
+const PLAIN_NAME = /^[\p{L}\p{M}]+(?:['\u2019-][\p{L}\p{M}]+)*\.?(?: [\p{L}\p{M}]+(?:['\u2019-][\p{L}\p{M}]+)*\.?){0,4}$/u;
 
 /**
  * The booker's name as C2 shows it to someone who never asked to hear from
  * Moduo. The booking page is public, so this is anyone's free text, mailed
- * from our address to up to ten addresses they typed. A name that carries a
- * link or a domain (the shape spam needs) becomes "Someone".
+ * from our address to up to ten addresses they typed. Only a plain name gets
+ * through (an allow-list: spam needs a link or a number); anything else
+ * becomes "Someone".
  */
 export function plainBookerName(value: string): string {
-  const flat = name(value);
-  if (!flat || LINKISH.test(flat) || Array.from(flat).length > 50) return "Someone";
+  const flat = name(value).replace(/\s+/g, " ").trim();
+  if (!flat || Array.from(flat).length > 50 || !PLAIN_NAME.test(flat)) return "Someone";
   return flat;
 }
 

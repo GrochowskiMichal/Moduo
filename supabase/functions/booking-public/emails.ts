@@ -43,7 +43,7 @@ export type BookingFacts = {
   link: { name: string; durationMinutes: number; hostZone: string };
   start: string;
   end: string;
-  /** The zone the guest picked on the booking page (already checked with guestTimeZone). */
+  /** The zone the guest picked on the booking page, as sent or stored; checked here with guestTimeZone. */
   guestZone: string;
   /** "Google Meet" / "Zoom". */
   video: string;

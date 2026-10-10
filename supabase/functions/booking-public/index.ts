@@ -452,21 +452,24 @@ async function queueEmails(
   enqueue: EnqueueRequest[],
   cancelPrefixes: string[] = [],
 ): Promise<void> {
-  for (const prefix of cancelPrefixes) {
-    const { error } = await db.rpc("email_cancel", { p_dedupe_key_prefix: prefix });
-    if (error) console.error("[booking-public] email_cancel failed:", error.code, error.message);
-  }
-  for (const request of enqueue) {
-    const { error } = await db.rpc("email_enqueue", {
-      p_kind: request.kind,
-      p_to_email: request.to,
-      p_to_user_id: request.toUserId,
-      p_payload: request.payload,
-      p_dedupe_key: request.dedupeKey,
-      p_send_after: null,
-    });
-    if (error) console.error("[booking-public] email_enqueue failed:", request.kind, error.code, error.message);
-  }
+  // Independent rows (each has its own dedupe key), so they go in parallel.
+  await Promise.all([
+    ...cancelPrefixes.map(async (prefix) => {
+      const { error } = await db.rpc("email_cancel", { p_dedupe_key_prefix: prefix });
+      if (error) console.error("[booking-public] email_cancel failed:", error.code, error.message);
+    }),
+    ...enqueue.map(async (request) => {
+      const { error } = await db.rpc("email_enqueue", {
+        p_kind: request.kind,
+        p_to_email: request.to,
+        p_to_user_id: request.toUserId,
+        p_payload: request.payload,
+        p_dedupe_key: request.dedupeKey,
+        p_send_after: null,
+      });
+      if (error) console.error("[booking-public] email_enqueue failed:", request.kind, error.code, error.message);
+    }),
+  ]);
 }
 
 Deno.serve(async (req: Request) => {
@@ -545,13 +548,15 @@ Deno.serve(async (req: Request) => {
       .from("slot_bookings")
       .update({ status: "cancelled", updated_at: cancelledAt.toISOString() })
       .eq("id", row.id);
+    // Whether the guest gets an email about it (not after the meeting started).
+    let emailed = false;
     if (link) {
       const facts: BookingFacts = {
         bookingId: row.id,
         link: { name: link.name || "Meeting", durationMinutes: link.duration_minutes, hostZone: link.host_timezone },
         start: row.start_at,
         end: row.end_at,
-        guestZone: guestTimeZone(row.timezone, link.host_timezone),
+        guestZone: row.timezone ?? "",
         video: zoomId ? VIDEO_LABEL.zoom : VIDEO_LABEL.google_meet,
         joinUrl: row.meeting_link ?? "",
         host: { name: host.name, avatarUrl: host.avatarUrl, email: access?.email || link.owner_email || "" },
@@ -565,9 +570,10 @@ Deno.serve(async (req: Request) => {
         rebookUrl: `${CANONICAL_BOOKING_ORIGIN}/book/${encodeURIComponent(link.slug)}`,
         nowMs: cancelledAt.getTime(),
       });
+      emailed = planned.enqueue.some((request) => request.kind === "booking_guest_cancelled");
       await queueEmails(db, planned.enqueue, planned.cancelPrefixes).catch(() => {});
     }
-    return json({ ok: true, status: "cancelled", googleInvites });
+    return json({ ok: true, status: "cancelled", googleInvites, emailed });
   }
 
   const slug = typeof body.slug === "string" ? body.slug.trim() : "";

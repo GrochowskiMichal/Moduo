@@ -81,7 +81,18 @@ describe("booking emails · guest", () => {
   });
 
   it("C2 never mails a booker's name that carries a link or a domain", () => {
-    for (const spam of ["Cheap pills at pills.example", "visit www.x.co", "http://x", "tom@spam.test", "x".repeat(60)]) {
+    for (const spam of [
+      "Cheap pills at pills.example",
+      "visit www.x.co",
+      "http://x",
+      "tom@spam.test",
+      "x".repeat(60),
+      "casino\u3002example",
+      "casino\uff0eexample",
+      "casino . example",
+      "call 555 0100",
+      "a b c d e f",
+    ]) {
       expect(plainBookerName(spam)).toBe("Someone");
     }
     expect(plainBookerName("Tom Becker")).toBe("Tom Becker");

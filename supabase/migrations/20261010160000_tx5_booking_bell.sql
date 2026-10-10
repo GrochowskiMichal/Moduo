@@ -11,8 +11,10 @@
 -- Same signatures as before (CREATE OR REPLACE keeps the grants; they are
 -- re-stated anyway). Bodies are 20261006210000_perm_sharing.sql's commit and
 -- 20261001180000_booking_links.sql's release, verified identical to prod on
--- 2026-10-10, with only the activity payload changed. Release reads the event
--- before it soft-deletes it: it has no attendee parameters.
+-- 2026-10-10, with only the activity payload changed. Release has no attendee
+-- parameters, so it reads the guest from the booking row (calendar sync can
+-- rewrite a mirrored event's attendees, so the event's list isn't reliable),
+-- and the title and start from the event before soft-deleting it.
 
 CREATE OR REPLACE FUNCTION public.booking_op_commit(
   p_workspace_id uuid,
@@ -141,14 +143,21 @@ AS $$
 DECLARE
   v_title text;
   v_start timestamptz;
-  v_guest jsonb;
+  v_guest_name text;
+  v_guest_email text;
 BEGIN
-  -- booking_op_commit writes the host first and the guest second.
-  SELECT e.title, e.start_time, e.attendees -> 1
-    INTO v_title, v_start, v_guest
+  SELECT e.title, e.start_time
+    INTO v_title, v_start
     FROM public.calendar_events e
    WHERE e.id = p_event_id
      AND e.workspace_id = p_workspace_id;
+
+  SELECT b.attendee_name, b.attendee_email
+    INTO v_guest_name, v_guest_email
+    FROM public.slot_bookings b
+   WHERE b.calendar_event_id = p_event_id
+   ORDER BY b.created_at DESC
+   LIMIT 1;
 
   UPDATE public.calendar_events
     SET deleted_at = now(), updated_at = now()
@@ -169,8 +178,8 @@ BEGIN
     (p_workspace_id, 'calendar', 'event', p_event_id, 'calendar.booking_cancel', 'user', p_owner_id,
      jsonb_strip_nulls(jsonb_build_object(
        'title', v_title,
-       'guest', v_guest ->> 'email',
-       'guest_name', NULLIF(btrim(coalesce(v_guest ->> 'name', '')), ''),
+       'guest', NULLIF(btrim(coalesce(v_guest_email, '')), ''),
+       'guest_name', NULLIF(btrim(coalesce(v_guest_name, '')), ''),
        'start', v_start,
        'notify_user_ids', jsonb_build_array(p_owner_id::text)
      )));
