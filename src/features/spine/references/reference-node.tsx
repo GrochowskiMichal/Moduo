@@ -128,6 +128,14 @@ export class ReferenceNode extends DecoratorNode<ReactNode> {
     self.__display = display;
   }
 
+  /** Forget a stored title and icon (privacy-first surfaces drop old chips' labels). */
+  dropStoredLabel(): void {
+    if (!this.__label && !this.__icon) return;
+    const self = this.getWritable();
+    self.__label = "";
+    self.__icon = null;
+  }
+
   static importJSON(serialized: SerializedReferenceNode): ReferenceNode {
     return $createReferenceNode({
       entityType: serialized.entityType,

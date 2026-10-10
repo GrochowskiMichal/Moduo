@@ -10,6 +10,7 @@ import { afterEach, beforeAll, describe, expect, it, rs } from "@rstest/core";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
 
+import { projectAsEntity } from "./mention";
 import { groupNotifications, type NotificationItem, notificationSummary } from "./notifications";
 import { ReferenceHostProvider, ReferenceStoreProvider } from "./references/context";
 import { PRIVATE_ITEM_LABEL } from "./references/kinds";
@@ -18,7 +19,7 @@ import type { ReferencePreviewApi, TaskPreviewRow } from "./references/rows";
 import { ReferenceStore } from "./references/store";
 import { plainReferenceName, referenceTextToPlain, referenceUri } from "./references/text";
 import type { ReferenceDisplay, ReferenceRef } from "./references/types";
-import { Reference } from "./references/ui/reference";
+import { Reference, ShowAs } from "./references/ui/reference";
 
 beforeAll(() => {
   globalThis.ResizeObserver ??= class {
@@ -290,6 +291,65 @@ describe("deleted, live, batched", () => {
   });
 });
 
+describe("the store's edges", () => {
+  it("a chip read landing after a card read never shrinks the card", async () => {
+    const pending: Array<{ card: boolean; resolve: () => void }> = [];
+    const { previews } = fakePreviews({});
+    const row = taskRow();
+    previews.tasks = (({ card }: { card: boolean }) =>
+      new Promise((res) => {
+        pending.push({
+          card,
+          resolve: () =>
+            res([
+              card ? { ...row, projectName: "Acme", projectIsInbox: false, subtasks: null } : row,
+            ]),
+        });
+      })) as ReferencePreviewApi["tasks"];
+    const store = new ReferenceStore({
+      context: () => ({
+        workspaceId: "w1",
+        previews,
+        taskKey: "MOD",
+        personOf: () => null,
+        now: () => NOW,
+      }),
+      schedule: (fn) => queueMicrotask(fn),
+    });
+    const ref = { type: "task", id: TASK_ID };
+    store.want(ref, "chip");
+    await Promise.resolve();
+    store.want(ref, "card");
+    await Promise.resolve();
+    expect(pending.map((p) => p.card)).toEqual([false, true]);
+    pending[1]?.resolve();
+    await waitFor(() => {
+      const s = store.read(ref);
+      expect(s.status === "ready" && s.facts.card !== null).toBe(true);
+    });
+    pending[0]?.resolve();
+    await new Promise((r) => setTimeout(r, 0));
+    const s = store.read(ref);
+    expect(s.status === "ready" && s.facts.card?.meta.some((m) => m.text === "Acme")).toBe(true);
+  });
+
+  it("a project is stored as a `bucket` (checked per item), never a `project`", () => {
+    expect(projectAsEntity({ id: "b1", name: "Acme" })).toEqual({
+      type: "bucket",
+      id: "b1",
+      label: "Acme",
+      icon: "project",
+    });
+  });
+
+  it("'Show as' offers Link · Chip · Card and reports the pick", () => {
+    const onChange = rs.fn();
+    render(createElement(ShowAs, { value: "chip", kind: "task", onChange }));
+    fireEvent.click(screen.getByRole("radio", { name: "Card" }));
+    expect(onChange).toHaveBeenCalledWith("card");
+  });
+});
+
 describe("the facts behind the forms", () => {
   const ctx = {
     taskKey: "MOD",
@@ -313,5 +373,9 @@ describe("the facts behind the forms", () => {
   it("an excerpt cut mid-reference ends in an ellipsis, never half a URI", () => {
     const cut = `See ${referenceUri({ type: "task", id: TASK_ID }).slice(0, 20)}`;
     expect(referenceTextToPlain(cut, () => "x")).toBe("See …");
+    // Cut inside the word itself, at the server's 140 characters.
+    const long = `${"a".repeat(136)} mod`;
+    expect(referenceTextToPlain(long, () => "x").endsWith(" …")).toBe(true);
+    expect(referenceTextToPlain("short mod", () => "x")).toBe("short mod");
   });
 });

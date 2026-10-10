@@ -13,6 +13,7 @@ import {
   buildMentionCandidates,
   type MentionCandidate,
   type MentionTrigger,
+  projectAsEntity,
   type SearchedEntity,
   type SearchedPerson,
   type SearchedTag,
@@ -28,6 +29,8 @@ type Options = {
   createType?: string | null;
   /** Whether a creator is wired for `createType` (gates the "Create…" item). */
   canCreate?: boolean;
+  /** Create only behind the type's word (`/task Order frames`), see `buildMentionCandidates`. */
+  createNoun?: boolean;
   /** The current user's id — excluded from the people list. */
   currentUserId?: string | null;
   /**
@@ -76,6 +79,7 @@ export function useMentionSearch({
   types,
   createType,
   canCreate,
+  createNoun = false,
   currentUserId,
   includePeople = true,
   includeEntities = true,
@@ -120,43 +124,42 @@ export function useMentionSearch({
             }
             return;
           }
-          let projs: SearchedEntity[] = [];
-          if (includeProjects && runtime.spine.previews) {
-            const found = await runtime.spine.previews.searchProjects({
-              workspaceId,
-              query,
-              limit: 4,
-            });
-            projs = found.map((p) => ({
-              type: "project",
-              id: p.id,
-              label: p.name,
-              icon: "project",
-            }));
-          }
-          let ents: SearchedEntity[] = [];
-          if (includeEntities) {
-            const records = await runtime.spine.searchEntities({
-              workspaceId,
-              query,
-              types: typesKey ? typesKey.split(",") : undefined,
-              limit: 8,
-            });
-            ents = records.map((r) => ({
-              type: r.type,
-              id: r.id,
-              label: r.label,
-              icon: r.icon,
-            }));
-          }
-          let ppl: SearchedPerson[] = [];
-          if (trigger === "mention" && includePeople) {
-            const members = await runtime.workspace.listMembers(workspaceId);
-            ppl = members
-              .map((m) => memberToPerson(m, query))
-              .filter((p): p is SearchedPerson => p !== null && p.memberId !== currentUserId)
-              .slice(0, 6);
-          }
+          // The three reads are independent: run them side by side.
+          const previews = runtime.spine.previews;
+          const [projs, ents, ppl] = await Promise.all([
+            includeProjects && previews
+              ? previews
+                  .searchProjects({ workspaceId, query, limit: 4 })
+                  .then((found) => found.map(projectAsEntity))
+              : Promise.resolve<SearchedEntity[]>([]),
+            includeEntities
+              ? runtime.spine
+                  .searchEntities({
+                    workspaceId,
+                    query,
+                    types: typesKey ? typesKey.split(",") : undefined,
+                    limit: 8,
+                  })
+                  .then((records) =>
+                    records.map(
+                      (r): SearchedEntity => ({
+                        type: r.type,
+                        id: r.id,
+                        label: r.label,
+                        icon: r.icon,
+                      }),
+                    ),
+                  )
+              : Promise.resolve<SearchedEntity[]>([]),
+            trigger === "mention" && includePeople
+              ? runtime.workspace.listMembers(workspaceId).then((members) =>
+                  members
+                    .map((m) => memberToPerson(m, query))
+                    .filter((p): p is SearchedPerson => p !== null && p.memberId !== currentUserId)
+                    .slice(0, 6),
+                )
+              : Promise.resolve<SearchedPerson[]>([]),
+          ]);
           if (reqId === reqRef.current) {
             setEntities(ents);
             setPeople(ppl);
@@ -202,8 +205,20 @@ export function useMentionSearch({
         commands: dateCommands && trigger === "ref" ? matchDateCommands(query) : undefined,
         createType,
         canCreate,
+        createNoun,
       }),
-    [trigger, query, entities, people, projects, tags, dateCommands, createType, canCreate],
+    [
+      trigger,
+      query,
+      entities,
+      people,
+      projects,
+      tags,
+      dateCommands,
+      createType,
+      canCreate,
+      createNoun,
+    ],
   );
 
   return { query, setQuery, candidates, loading };

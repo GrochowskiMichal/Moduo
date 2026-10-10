@@ -72,7 +72,7 @@ export function commentBodyWithReferences(
       const after = out[i + needle.length];
       const atStart = i === 0 || /\s/.test(before ?? "");
       const atEnd = after === undefined || !/\w/.test(after);
-      if (atStart && atEnd) {
+      if (atStart && atEnd && !insidePersonMention(out, i, people)) {
         const uri = referenceUri(thing.ref);
         out = `${out.slice(0, i)}${uri}${out.slice(i + needle.length)}`;
         from = i + uri.length;
@@ -82,6 +82,16 @@ export function commentBodyWithReferences(
     }
   }
   return replaceSlashDates(out, dateUri, now);
+}
+
+/** Whether `@` at `i` starts a picked person's longer name ("@Anna Lee" for a thing "Anna"). */
+function insidePersonMention(text: string, i: number, people: PickedMention[]): boolean {
+  return people.some((p) => {
+    const needle = `@${p.label}`;
+    if (!text.startsWith(needle, i)) return false;
+    const after = text[i + needle.length];
+    return after === undefined || !/\w/.test(after);
+  });
 }
 
 /**

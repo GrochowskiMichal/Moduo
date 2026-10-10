@@ -1,12 +1,21 @@
 // Typed task handles link themselves (RF-1; TV-D8's handles): finish typing
-// `MOD-142` (a space or punctuation after it) in prose and, when it names a
-// task you can see, it becomes a task reference. Only the workspace's own key
-// counts, so `UTF-8` stays text; a handle you can't see stays text too (no
-// "Private item" for something you only typed). Text loaded from storage is
-// never converted (only what you type), and ⌘Z puts the words back.
+// `MOD-142` (a space or punctuation right after it) in prose and, when it
+// names a task you can see, it becomes a task reference. Only the handle you
+// just finished counts: the one ending right before the caret's last
+// character. So text loaded from storage or typed elsewhere in the paragraph
+// is never converted, and after ⌘Z the words stay words (the next keystroke is
+// no longer right after them). Only the workspace's own key counts, so `UTF-8`
+// stays text; a handle you can't see stays text too (no "Private item" for
+// something you only typed).
 
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
-import { $getNodeByKey, $isTextNode, type NodeKey } from "lexical";
+import {
+  $getNodeByKey,
+  $getSelection,
+  $isRangeSelection,
+  $isTextNode,
+  type NodeKey,
+} from "lexical";
 import { useEffect, useRef } from "react";
 
 import { findHandles } from "../grammar";
@@ -17,6 +26,17 @@ import { $createReferenceNode } from "./reference-node";
 export const SEED_TAG = "moduo-seed";
 /** The autolink's own update (it must not re-trigger itself). */
 const AUTOLINK_TAG = "moduo-handle-autolink";
+
+/** The handle just finished at `caret` in `text` (one boundary character typed after it), or null. */
+export function handleFinishedAt(
+  text: string,
+  caret: number,
+  taskKeys: readonly string[],
+): { handle: string; start: number; end: number } | null {
+  if (caret < 1 || /[A-Za-z0-9-]/.test(text[caret - 1] ?? "")) return null;
+  const match = findHandles(text.slice(0, caret), taskKeys).find((m) => m.end === caret - 1);
+  return match ? { handle: match.handle, start: match.start, end: match.end } : null;
+}
 
 export function HandleAutolinkPlugin({
   taskKeys,
@@ -40,43 +60,37 @@ export function HandleAutolinkPlugin({
     return editor.registerUpdateListener(({ dirtyLeaves, tags, editorState }) => {
       if (tags.has(SEED_TAG) || tags.has(AUTOLINK_TAG) || tags.has("historic")) return;
       if (dirtyLeaves.size === 0 || !editor.isEditable()) return;
-      const found: Array<{ key: NodeKey; handle: string }> = [];
+      let found: { key: NodeKey; handle: string; start: number } | null = null;
       editorState.read(() => {
-        for (const key of dirtyLeaves) {
-          const node = $getNodeByKey(key);
-          if (!$isTextNode(node) || !node.isSimpleText()) continue;
-          const text = node.getTextContent();
-          for (const m of findHandles(text, taskKeys)) {
-            // Finished only: something follows it (you may still be typing digits).
-            if (m.end < text.length) found.push({ key, handle: m.handle });
-          }
-        }
+        const selection = $getSelection();
+        if (!$isRangeSelection(selection) || !selection.isCollapsed()) return;
+        const node = selection.anchor.getNode();
+        if (!$isTextNode(node) || !node.isSimpleText() || !dirtyLeaves.has(node.getKey())) return;
+        const hit = handleFinishedAt(node.getTextContent(), selection.anchor.offset, taskKeys);
+        if (hit) found = { key: node.getKey(), handle: hit.handle, start: hit.start };
       });
-      for (const { key, handle } of found) {
-        void store.resolveHandle(handle).then((taskId) => {
-          if (!taskId) return;
-          let linked = false;
-          editor.update(
-            () => {
-              const node = $getNodeByKey(key);
-              if (!$isTextNode(node) || !node.isAttached()) return;
-              const text = node.getTextContent();
-              const match = findHandles(text, taskKeys).find(
-                (m) => m.handle === handle && m.end < text.length,
-              );
-              if (!match) return;
-              const parts = node.splitText(match.start, match.end);
-              const target = match.start === 0 ? parts[0] : parts[1];
-              if (!target) return;
-              target.replace(
-                $createReferenceNode({ entityType: "task", entityId: taskId, display: "chip" }),
-              );
-              linked = true;
-            },
-            { tag: AUTOLINK_TAG, onUpdate: () => linked && onLinkedRef.current?.(taskId) },
-          );
-        });
-      }
+      if (!found) return;
+      const { key, handle, start } = found as { key: NodeKey; handle: string; start: number };
+      void store.resolveHandle(handle).then((taskId) => {
+        if (!taskId) return;
+        let linked = false;
+        editor.update(
+          () => {
+            const node = $getNodeByKey(key);
+            if (!$isTextNode(node) || !node.isAttached()) return;
+            // Still there, as typed (the text may have moved on meanwhile).
+            if (node.getTextContent().slice(start, start + handle.length) !== handle) return;
+            const parts = node.splitText(start, start + handle.length);
+            const target = start === 0 ? parts[0] : parts[1];
+            if (!target) return;
+            target.replace(
+              $createReferenceNode({ entityType: "task", entityId: taskId, display: "chip" }),
+            );
+            linked = true;
+          },
+          { tag: AUTOLINK_TAG, onUpdate: () => linked && onLinkedRef.current?.(taskId) },
+        );
+      });
     });
   }, [editor, store, keysKey]);
 

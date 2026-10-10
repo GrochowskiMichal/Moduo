@@ -45,7 +45,7 @@ import type { MentionInsert } from "../mention-actions";
 import { useReferenceHost } from "../references/context";
 import { DateNode } from "../references/date-node";
 import { HandleAutolinkPlugin, SEED_TAG } from "../references/handle-autolink-plugin";
-import { EntityRefNode } from "./entity-ref-node";
+import { $isEntityRefNode, EntityRefNode } from "./entity-ref-node";
 import { looksLikeRichHtml } from "./entity-rich-html";
 import { MentionMenuPlugin } from "./mention-menu-plugin";
 
@@ -76,6 +76,12 @@ function serialize(editor: Parameters<typeof $generateHtmlFromNodes>[0]): {
       !html.includes("data-moduo-date");
     return { html: isEmpty ? "" : html, text };
   });
+}
+
+/** Drop the stored title of every reference under `node`. */
+function $dropStoredLabels(node: LexicalNode): void {
+  if ($isEntityRefNode(node)) node.dropStoredLabel();
+  if ($isElementNode(node)) for (const child of node.getChildren()) $dropStoredLabels(child);
 }
 
 /** Seed the editor once from the stored value. Our HTML is parsed; foreign /
@@ -125,6 +131,9 @@ function SeedPlugin({ value }: { value: string }) {
           root.append(p);
         }
         if (root.getChildrenSize() === 0) root.append($createParagraphNode());
+        // An older chip carried its item's title in the stored HTML: forget
+        // it, so the next save writes `{type, id, display}` only (RF-1).
+        $dropStoredLabels(root);
       },
       { tag: SEED_TAG },
     );

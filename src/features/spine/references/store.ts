@@ -55,6 +55,8 @@ export type ReferenceStoreOptions = {
 };
 
 const BATCH = 100;
+/** How long "no task has that handle" is believed before asking again. */
+const HANDLE_MISS_TTL_MS = 60_000;
 const LOADING: ReferenceState = { status: "loading" };
 
 export class ReferenceStore {
@@ -66,7 +68,10 @@ export class ReferenceStore {
     { kind: ReferenceKind; type: string; level: ReferenceLevel; ids: Set<string> }
   >();
   private scheduled = false;
-  private handles = new Map<string, Promise<string | null>>();
+  private handles = new Map<
+    string,
+    { at: number; found: boolean; answer: Promise<string | null> }
+  >();
   private readonly schedule: (fn: () => void) => void;
   private readonly now: () => number;
   private readonly maxAgeMs: number;
@@ -92,12 +97,6 @@ export class ReferenceStore {
     return this.entries.get(referenceKey(ref))?.state ?? LOADING;
   }
 
-  /** Whether the card's facts have arrived (the hover preview waits on this). */
-  hasCard(ref: ReferenceRef): boolean {
-    const e = this.entries.get(referenceKey(ref));
-    return !!e && (e.loaded === "card" || e.state.status !== "ready");
-  }
-
   /** Whether any shown reference is of a kind Realtime keeps live (tasks, projects, tags). */
   hasLiveKinds(): boolean {
     for (const e of this.entries.values()) {
@@ -114,15 +113,20 @@ export class ReferenceStore {
    */
   want(ref: ReferenceRef, level: ReferenceLevel = "chip"): () => void {
     const entry = this.entry(ref);
+    const wasLive = isLiveKind(entry.kind) && this.hasLiveKinds();
     if (level === "card") entry.cardViews += 1;
     else entry.chipViews += 1;
     this.ensure(entry, level);
+    // The first live kind on screen turns Realtime on (the provider listens).
+    if (isLiveKind(entry.kind) && !wasLive) this.notify();
     let released = false;
     return () => {
       if (released) return;
       released = true;
       if (level === "card") entry.cardViews = Math.max(0, entry.cardViews - 1);
       else entry.chipViews = Math.max(0, entry.chipViews - 1);
+      // …and the last one off screen turns it off.
+      if (isLiveKind(entry.kind) && !this.hasLiveKinds()) this.notify();
     };
   }
 
@@ -147,16 +151,24 @@ export class ReferenceStore {
           (kind === "project" && !!bucketId && eid === bucketId),
       );
     } else if (change.table === "buckets") {
-      // A rename reaches every task card that names the project.
-      this.invalidate((kind, eid) => (kind === "project" && eid === change.id) || kind === "task");
+      // A rename reaches the project and the task cards that name it.
+      const inProject = new Set<string>();
+      for (const e of this.entries.values()) {
+        if (
+          e.kind === "task" &&
+          e.state.status === "ready" &&
+          e.state.facts.bucketId === change.id
+        ) {
+          inProject.add(e.id);
+        }
+      }
+      this.invalidate(
+        (kind, eid) =>
+          (kind === "project" && eid === change.id) || (kind === "task" && inProject.has(eid)),
+      );
     } else {
       this.invalidate((kind, eid) => kind === "tag" && eid === change.id);
     }
-  }
-
-  /** Whether a card may offer Complete here (the reader can edit tasks). */
-  canCompleteTasks(): boolean {
-    return !!this.opts.context()?.setTaskStatus;
   }
 
   /** A card's one action: complete or reopen a task, then read it again. */
@@ -167,21 +179,37 @@ export class ReferenceStore {
     this.invalidate((kind, id) => kind === "task" && id === taskId);
   }
 
-  /** The id of the task a handle names, if the reader can see it (cached per session). */
+  /**
+   * The id of the task a handle names, if the reader can see it. A task found
+   * stays cached for the session (numbers never move); "not found" is asked
+   * again after a minute (access can be granted, a task can be created).
+   */
   resolveHandle(handle: string): Promise<string | null> {
     const key = handle.trim().toUpperCase();
     const cached = this.handles.get(key);
-    if (cached) return cached;
+    if (cached && (cached.found || this.now() - cached.at < HANDLE_MISS_TTL_MS)) {
+      return cached.answer;
+    }
     const ctx = this.opts.context();
     if (!ctx) return Promise.resolve(null);
-    const pending = ctx.previews
+    const entry = { at: this.now(), found: false, answer: Promise.resolve<string | null>(null) };
+    entry.answer = ctx.previews
       .resolveHandle({ workspaceId: ctx.workspaceId, handle: key })
+      .then((id) => {
+        entry.found = id !== null;
+        return id;
+      })
       .catch(() => {
         this.handles.delete(key);
         return null;
       });
-    this.handles.set(key, pending);
-    return pending;
+    this.handles.set(key, entry);
+    return entry.answer;
+  }
+
+  /** Forget handle answers (the task key changed). */
+  forgetHandles(): void {
+    this.handles.clear();
   }
 
   // ── internals ─────────────────────────────────────────────────────────────
@@ -265,6 +293,9 @@ export class ReferenceStore {
       const e = this.entries.get(`${prefix}:${id}`);
       if (!e) continue;
       if (e.inflight === batch.level) e.inflight = null;
+      // A chip read that lands after a card read must not shrink the answer
+      // (the hover card would sit on "…" with nothing left to ask).
+      if (batch.level === "chip" && e.loaded === "card") continue;
       const answer = answers?.get(id);
       if (!answer) {
         // A failed read keeps what was shown; a first read that failed says so.
@@ -283,11 +314,16 @@ export class ReferenceStore {
       e.stale = e.gen !== e.sentGen;
       if (e.stale && (e.cardViews > 0 || e.chipViews > 0)) this.ensure(e, e.loaded);
     }
+    this.notify();
+  }
+
+  private notify(): void {
     this.version += 1;
     for (const fn of this.listeners) fn();
   }
 }
 
-function isLiveKind(kind: ReferenceKind): boolean {
+/** The kinds Realtime keeps live (through the Tasks link): tasks, projects, tags. */
+export function isLiveKind(kind: ReferenceKind): boolean {
   return kind === "task" || kind === "project" || kind === "tag";
 }

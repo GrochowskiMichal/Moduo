@@ -103,6 +103,7 @@ export function taskFacts(
     fact: due || null,
     factTone: late ? "late" : null,
     handle,
+    bucketId: row.bucketId,
     card: null,
   };
   if (level === "chip") return facts;

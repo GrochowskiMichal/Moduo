@@ -50,10 +50,12 @@ export function triggerAt(before: string, sigils: readonly Sigil[] = SIGILS): Tr
     if ((sigils as readonly string[]).includes(ch) && isTokenStart(before, i)) {
       const sigil = ch as Sigil;
       const query = before.slice(i + 1);
+      // A command starts right after its `/` ("a / b" is prose, never a menu);
+      // `#123` is a number, not a tag being typed.
       const ok =
         sigil === "/"
-          ? spaces < MAX_COMMAND_WORDS && /^[^\s/]*(?: [^\s/]*)*$/.test(query)
-          : spaces === 0 && /^[^\s@#/]*$/.test(query);
+          ? spaces < MAX_COMMAND_WORDS && /^(?:[^\s/]+(?: [^\s/]*)*)?$/.test(query)
+          : spaces === 0 && /^[^\s@#/]*$/.test(query) && !(sigil === "#" && /^\d+$/.test(query));
       return ok ? { sigil, start: i, query } : null;
     }
     // A space ends a mention; only a `/` command can hold a few.

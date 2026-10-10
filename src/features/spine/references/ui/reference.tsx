@@ -33,7 +33,7 @@ import { IconButton } from "../../../../components/ui/icon-button";
 import { SegmentedControl } from "../../../../components/ui/segmented-control";
 import { cn } from "../../../../lib/utils";
 import { resolveEntityIcon } from "../../icon-map";
-import { useReference, useReferenceHost, useReferenceStore } from "../context";
+import { useCanEditTasks, useReference, useReferenceHost, useReferenceStore } from "../context";
 import {
   canShowAsCard,
   deletedLabel,
@@ -144,10 +144,10 @@ function ReadyReference({
 
   if (display === "card") {
     return (
-      <div
+      <span
         data-slot="reference-card"
         className={cn(
-          "group/refcard relative my-1 flex w-fit max-w-full min-w-[min(18rem,100%)] flex-col rounded-lg bg-card px-(--pad-x-sm) py-(--pad-y-sm)",
+          "group/refcard relative my-1 flex w-full max-w-xl flex-col rounded-lg bg-card px-(--pad-x-sm) py-(--pad-y-sm)",
           "ring-1 ring-hairline ring-inset transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover",
           className,
         )}
@@ -155,11 +155,11 @@ function ReadyReference({
         <ReferenceCardBody facts={facts} onOpen={open} onComplete={onComplete} />
         {onDisplayChange ? (
           // Later, "Show as" lives behind the card's ⋯ (research §6).
-          <div className="absolute end-1 top-1 opacity-0 transition-opacity duration-(--motion-fade) ease-(--ease-out) group-focus-within/refcard:opacity-100 group-hover/refcard:opacity-100">
+          <span className="absolute end-1 top-1 opacity-0 transition-opacity duration-(--motion-fade) ease-(--ease-out) group-focus-within/refcard:opacity-100 group-hover/refcard:opacity-100">
             <ShowAsMenu value={display} kind={facts.kind} onChange={onDisplayChange} />
-          </div>
+          </span>
         ) : null}
-      </div>
+      </span>
     );
   }
 
@@ -277,12 +277,13 @@ function useCompleteAction(
 ): ((done: boolean) => void) | undefined {
   const host = useReferenceHost();
   const store = useReferenceStore();
+  const canEdit = useCanEditTasks();
   if (facts.card?.action?.kind !== "complete") return undefined;
   if (host?.setTaskDone && host.canEditTasks !== false) {
     const setTaskDone = host.setTaskDone;
     return (done) => setTaskDone(reference.id, done);
   }
-  if (!store?.canCompleteTasks()) return undefined;
+  if (!store || !canEdit) return undefined;
   return (done) => {
     store.completeTask(reference.id, done).catch((error: unknown) => {
       toast.error(error instanceof Error ? error.message : "Couldn’t change the task.");
@@ -343,7 +344,11 @@ function ShowAsMenu({
       <DropdownMenuTrigger asChild>
         <IconButton icon={MoreHorizontal} label="Show as…" size="sm" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
+      <DropdownMenuContent
+        align="end"
+        // The editor takes focus back after a click inside it: that is not leaving the menu.
+        onFocusOutside={(event) => event.preventDefault()}
+      >
         <DropdownMenuLabel>Show as</DropdownMenuLabel>
         <DropdownMenuRadioGroup
           value={value}
@@ -365,16 +370,16 @@ function ShowAsMenu({
 /** A card-shaped frame for the states that have no facts. */
 function CardFrame({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <div
+    <span
       data-slot="reference-card"
       className={cn(
-        "my-1 flex w-fit max-w-full min-w-[min(18rem,100%)] items-center gap-2 rounded-lg bg-card px-(--pad-x-sm) py-(--pad-y-sm) text-base",
+        "my-1 flex w-full max-w-xl items-center gap-2 rounded-lg bg-card px-(--pad-x-sm) py-(--pad-y-sm) text-base",
         "ring-1 ring-hairline ring-inset",
         className,
       )}
     >
       {children}
-    </div>
+    </span>
   );
 }
 

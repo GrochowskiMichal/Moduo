@@ -35,15 +35,32 @@ export type ReferenceHost = {
 
 const ReferenceHostContext = createContext<ReferenceHost | null>(null);
 
+/** Whether the reader may complete tasks from a card (the Tasks permission). */
+const ReferenceCanEditContext = createContext(false);
+
 /** Hand a store to everything below (the app's provider, a test, a story). */
 export function ReferenceStoreProvider({
   store,
+  canEditTasks = false,
   children,
 }: {
   store: ReferenceStore | null;
+  /** The reader can edit tasks: a card offers Complete. */
+  canEditTasks?: boolean;
   children?: ReactNode;
 }) {
-  return <ReferenceStoreContext.Provider value={store}>{children}</ReferenceStoreContext.Provider>;
+  return (
+    <ReferenceStoreContext.Provider value={store}>
+      <ReferenceCanEditContext.Provider value={canEditTasks}>
+        {children}
+      </ReferenceCanEditContext.Provider>
+    </ReferenceStoreContext.Provider>
+  );
+}
+
+/** Whether a card may offer Complete (reactive: follows the permission as it loads). */
+export function useCanEditTasks(): boolean {
+  return useContext(ReferenceCanEditContext);
 }
 
 /** Say how references open and act on this page. */

@@ -15,7 +15,6 @@ const KIND_BY_TYPE: Record<string, ReferenceKind> = {
   event: "event",
   project: "project",
   bucket: "project",
-  task_project: "project",
   tag: "tag",
 };
 

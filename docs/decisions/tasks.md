@@ -2,6 +2,56 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index.
 
+## 2026-10-10 · RF-1 References (tasks-v3 block 18) — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 18 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §10–11, Assumptions #13; GR-0 folded in and retired) with no migration. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **RF-1-1 · The entity-ref node grew into the Reference node in place** → RF-1 (`spine/references/reference-node.tsx`; `editor/entity-ref-node.tsx` re-exports it)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: same Lexical type `entity-ref`, JSON version 2 with `display: link | chip | card` (a version-1 node is a chip) and an optional label; it always renders the Reference, which resolves what the reader may see and never trusts a stored title inside the app.
+  - Why: Notes' documents, its materializer and markdown transformer, email compose and every stored description keep working with no conversion, and Notes becomes a host by registering nothing new.
+  - Rejected: a second node type (Notes would register two, and old chips would keep rendering their stored titles).
+- **RF-1-2 · A task description stores `{type, id, display}` only; Notes and email compose keep their labels** → RF-1 (`MentionMenuPlugin` `storeLabel`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: references written from the description editor carry no title (their span holds only the type's word for older builds); Notes (not rebuilt) and email compose (the recipient needs words) keep writing the label they had.
+  - Why: research §8: "no title is stored beside a reference"; a teammate who can read the task but not the item never receives its name, and search stops matching it.
+  - Rejected: rewriting stored descriptions server-side (a migration the data lane owns; old chips lose their title the next time the description is edited).
+- **RF-1-3 · Privacy is the module table's row-level security, read per kind** → RF-1 (`runtime.spine.previews`, `src/lib/runtime.web.previews.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: each kind reads its own table in one batched select (tasks, buckets, notes, calendar_events, contacts/companies, email_refs, tags); a row that doesn't come back is "Private item", with no title and no type in the answer at all; a row with `deleted_at` is "Deleted task".
+  - Why: those policies are `can_access`, so the app and MCP agree; projects aren't in the registry and the registry's fallback for unknown types is module-level, which would show a private project's name. So a project reference is stored as type `bucket` (the registry's per-item check), never `project`.
+  - Rejected: the registry label as the source (wrong for projects) and a `can_access` call per reference (one round trip each).
+- **RF-1-4 · Lazy, batched, cached, live** → RF-1 (`spine/references/store.ts`, `provider.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: one store per person and workspace in the app shell; references asked for in one tick go out as one read per kind; a chip reads chip facts, the hover card reads card facts when it opens; tasks, projects and tags stay live through the Tasks Realtime link (held only while one is on screen); everything re-reads when the window comes back or an answer is five minutes old; a loading reference is a fixed-width blank with no title.
+  - Why: research §8 (one batched read per view, hover on intent, Realtime clears the cache); notes, events, contacts and emails have no Realtime feed, and adding one is a migration.
+  - Rejected: a fetch per reference, and showing a stored title while loading (it would flash a private one).
+- **RF-1-5 · Defaults and "Show as"** → RF-1
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: a reference inserted alone on its line is a card (and the caret moves to a new line), in running text a chip; "Show as: Link · Chip · Card" sits under it until the next keystroke; later it is in a chip's or link's hover card and behind a card's ⋯; tags are links only; in comments references are chips.
+  - Why: call 55's defaults; the research's "fades on the next keystroke, later in the hover's ⋯".
+  - Rejected: a permanent "Show as" row on every editable card (noisy).
+- **RF-1-6 · Opening: the page's panel stack, else full** → RF-1 (`ReferenceHostProvider`; Tasks wires `usePanelStack`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: a click opens the item in the page's right panel as "← item" where the page hosts a stack (Tasks today: a task shows its own detail, anything else its card with "Open in …"); ⌘/Ctrl-click opens it full through the entity-open route; pages without a stack (Notes, Calendar, Email until rebuilt) open full on a click; selecting another task clears the stack.
+  - Why: 72a, and Notes is otherwise untouched until its rebuild.
+  - Rejected: building a generic item renderer for every module now.
+- **RF-1-7 · Comments store references as `moduo://type/id`** → RF-1 (`commentBodyWithReferences`, `CommentBody`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: the composer stays a text box: `@` lists people, then things; a picked thing reads `@Title` while typing and is stored as its URI (`moduo://task/<id>`, Notes' existing convention), `/today` · `/tomorrow` · `/next week` as `moduo://date/…`; the body renders them per reader, and the bell names them per reader ("Private item"); a handle in a comment links itself at render time.
+  - Why: notifications excerpt the body server-side (`comments_op_add`), so only a stored form without titles keeps them out of the bell; no migration.
+  - Rejected: a rich-text comment composer (a larger change to a surface Notes shares) and storing `@Title` (leaks into the excerpt).
+- **RF-1-8 · The grammar's details** → RF-1 (`spine/grammar.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: a symbol counts only at a word start; `#123` is a number; `/` must be followed by a non-space (`a / b` stays text); `/` queries run to four words and create only behind the type's word (`/task Order frames from printer`), so Enter on a sentence's `/` never makes something; "next week" is the coming Monday until Time & region; in capture `/today`-family commands set the due date and win over date words; in prose a date chip reads "Today"/"Tomorrow" while true, else the date; `#tag` in prose is a link that goes nowhere yet (no tag page); typed handles link themselves only for the workspace's current key and only as you type (stored text is never converted); `/` creates only tasks ("New task “…”", filed with the open task); `@person` in a description isn't offered until it can notify (TV-D12).
+  - Why: 33, 33a, 92; capture stays TV-U14's beyond the date commands.
+  - Rejected: auto-converting date words or handles already in stored text.
+- **RF-1-9 · No migration; what still needs the server** → RF-1, TV-D12, data lane
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: deleted contacts and events read "Private item" (their `can_access` hides deleted rows from everyone, owner included), and so does anything purged from the trash; notes/events/contacts/emails refresh on return or age, not live; a description's `@person` doesn't notify.
+  - Why: each needs a migration or a new op, which this block was told not to write while TV-D9 owns the database.
+  - Rejected: a reference RPC written here (reported instead).
+
 ## 2026-10-10 · TV-D8 server ops, registry, handles, recurrence, tolerance — the agent's choices (deferred to by Maciej)
 
 Built in tasks-v3 block 5 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §Assumptions #1, #2, #5, #6, #9; migrations `20261010160000_tasks_ops_registry_handles`, `20261010161000_tasks_recurrence_server`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.

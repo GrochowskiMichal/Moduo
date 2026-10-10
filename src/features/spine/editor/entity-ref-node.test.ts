@@ -7,6 +7,7 @@ import { createHeadlessEditor } from "@lexical/headless";
 import { $generateHtmlFromNodes, $generateNodesFromDOM } from "@lexical/html";
 import { describe, expect, it } from "@rstest/core";
 import { $createParagraphNode, $getRoot, $isElementNode, type LexicalNode } from "lexical";
+import { $createDateNode, $isDateNode, DateNode } from "../references/date-node";
 import { $createEntityRefNode, $isEntityRefNode, EntityRefNode } from "./entity-ref-node";
 
 function makeEditor() {
@@ -96,6 +97,60 @@ describe("EntityRefNode HTML round-trip", () => {
   it("degrades a marker missing its address to plain text (no dead chip)", () => {
     const chips = importChips('<p>see <span data-lexical-entity-ref="true">ghost</span></p>');
     expect(chips).toHaveLength(0);
+  });
+});
+
+describe("the date chip node (RF-1, AC10.4)", () => {
+  it("stores the day as a <time> whose text is the plain date, and reads it back", () => {
+    const editor = createHeadlessEditor({
+      namespace: "date-node-test",
+      nodes: [DateNode],
+      onError: (e) => {
+        throw e;
+      },
+    });
+    editor.update(
+      () => {
+        const p = $createParagraphNode();
+        p.append($createDateNode("2026-10-15"));
+        $getRoot().append(p);
+      },
+      { discrete: true },
+    );
+    let html = "";
+    editor.read(() => {
+      html = $generateHtmlFromNodes(editor, null);
+    });
+    expect(html).toContain('data-moduo-date="2026-10-15"');
+    let day: string | null = null;
+    const back = createHeadlessEditor({
+      namespace: "date-node-test-2",
+      nodes: [DateNode],
+      onError: (e) => {
+        throw e;
+      },
+    });
+    back.update(
+      () => {
+        const nodes = $generateNodesFromDOM(
+          back,
+          new DOMParser().parseFromString(html, "text/html"),
+        );
+        const p = $createParagraphNode();
+        p.append(...nodes.filter((n) => !$isElementNode(n)));
+        for (const n of nodes) if ($isElementNode(n)) $getRoot().append(n);
+        $getRoot().append(p);
+      },
+      { discrete: true },
+    );
+    back.read(() => {
+      const visit = (node: LexicalNode) => {
+        if ($isDateNode(node)) day = node.getDay();
+        if ($isElementNode(node)) node.getChildren().forEach(visit);
+      };
+      $getRoot().getChildren().forEach(visit);
+    });
+    expect(day).toBe("2026-10-15");
   });
 });
 

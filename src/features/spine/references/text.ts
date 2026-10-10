@@ -92,5 +92,13 @@ export function referenceTextToPlain(
     })
     .join("");
   // An excerpt cut mid-URI ("moduo://task/1f3a") leaves its start behind.
-  return out.replace(/moduo:\/?\/?[a-z_-]*\/?[A-Za-z0-9-]*$/, "…");
+  const trimmed = out.replace(/moduo:\/?\/?[a-z_-]*\/?[A-Za-z0-9-]*$/, "…");
+  // Cut inside the word itself ("…see mod"): only when the text is as long as
+  // the server's excerpt (`left(body, 140)`), so a real last word stays.
+  return text.length >= EXCERPT_LENGTH
+    ? trimmed.replace(/(^|\s)m(?:o(?:d(?:u(?:o)?)?)?)?$/, "$1…")
+    : trimmed;
 }
+
+/** The server's excerpt length (comments_op_add: `left(body, 140)`). */
+const EXCERPT_LENGTH = 140;

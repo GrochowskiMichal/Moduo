@@ -44,6 +44,16 @@ describe("what a comment stores (RF-1)", () => {
     ).toBe("Ask @Collectors");
   });
 
+  it("never cuts into a person's longer name that starts with a thing's", () => {
+    expect(
+      commentBodyWithReferences(
+        "ping @Anna Lee and @Anna",
+        [{ ref: TASK, label: "Anna" }],
+        [{ id: "u9", label: "Anna Lee" }],
+      ),
+    ).toBe(`ping @Anna Lee and moduo://task/${TASK.id}`);
+  });
+
   it("turns /today, /tomorrow and /next week into date chips", () => {
     expect(commentBodyWithReferences("Ship /tomorrow", [], [], WED)).toBe(
       "Ship moduo://date/2026-10-15",

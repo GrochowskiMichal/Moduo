@@ -33,6 +33,7 @@ export function sectionForType(entityType: string): HubSectionKey {
   switch (entityType) {
     case "task":
     case "project":
+    case "bucket":
       return "open-work";
     case "payment":
     case "invoice":

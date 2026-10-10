@@ -28,9 +28,10 @@
 - [ ] **Do:** type `/` in a description → **Expect:** Today · Tomorrow · Next week · Date… first, then projects and other things; `/tom` narrows to Tomorrow _(both)_
 - [ ] **Do:** pick Tomorrow → **Expect:** a date chip reading "Tomorrow" (hover: the full date); after midnight it reads "Tomorrow" no more, the plain date instead _(both)_
 - [ ] **Do:** pick Date… → **Expect:** a calendar where the menu was; a day inserts its chip; Esc closes it and keeps the caret _(both)_
-- [ ] **Do:** type `/Order frames from printer` (no match) → **Expect:** "New task “Order frames from printer”"; Enter creates it in the open task's project and inserts its chip _(both)_
+- [ ] **Do:** type `/task Order frames from printer` (no match) → **Expect:** "New task “Order frames from printer”"; Enter creates it in the open task's project and inserts its chip; `/Order frames` alone never offers to create _(both)_
 - [ ] **Do:** type `#des` → **Expect:** the workspace's tags; picking one inserts `#design` with its colour dot; the task's own Tags field doesn't change _(both)_
-- [ ] **Do:** type `C#`, `and/or`, `7/11`, an email address → **Expect:** no menu; they stay text _(both)_
+- [ ] **Do:** type `C#`, `#123`, `and/or`, `a / b`, `7/11`, an email address → **Expect:** no menu; they stay text _(both)_
+- [ ] **Do:** type `@` + a project's name → **Expect:** the project is offered (before other things); its hover card shows "N of M done"; a teammate who can't see that project reads "Private item" _(both)_
 - [ ] **Do:** type `MOD-142 ` (your workspace key, a task you can see) → **Expect:** it turns into that task's chip; ⌘Z puts the words back; `UTF-8` stays text _(both)_
 
 ## Comments
@@ -41,7 +42,7 @@
 ## Deep links
 - [ ] **Do:** open `/tasks?id=MOD-142` (your key) → **Expect:** that task opens; the address becomes `?id=<its id>` _(web)_
 - [ ] **Do:** open a handle with an old key (after changing the key in Settings → Workspace) → **Expect:** the same task opens _(web)_
-- [ ] **Do:** open `?id=` with the handle of a task you can't see → **Expect:** "Private item" in the panel, with a way back _(web)_
+- [ ] **Do:** follow a link (a chip, a notification) to the handle of a task you can't see; then paste that `?id=<handle>` into the address bar → **Expect:** never another task: followed, the "can't open" notice; pasted, the id clears quietly _(web)_
 
 ## Capture and search (the one tokenizer)
 - [ ] **Do:** ⌘⇧K, type `Send report /tomorrow`, ⏎ → **Expect:** "Send report" due tomorrow (the command left the title) _(both)_
@@ -64,6 +65,7 @@
 - **Contact cards show role · company and email:** "last contact" and "open tasks" need per-contact rollups (an N fan-out); left for the Contacts rebuild.
 - **Email cards:** no message count yet (one ref per message today).
 - **Project cards:** progress only; status, target and lead arrive with TV-D10's project fields; no project colours until TV-U6.
+- **Purged items read "Private item":** once a deleted task or note is purged from the trash (and its registry row with it), nothing answers "deleted" for it any more. A tombstone that outlives the purge is a server change.
 - **Tag links don't navigate:** there is no tag page yet ("Mentioned in" lives there, 2026-10-08).
 - **Older stored chips keep their title in the stored HTML** until the description is next edited (the DOM, search and MCP's own reads of references never show it).
 - **Verify before release:** an older desktop build reading a description with new references shows the type's word ("task") in a chip; the Notes `/` menu inserting a chip (Notes is a host, not rebuilt).

@@ -43,6 +43,7 @@ import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { Calendar } from "@/components/ui/calendar";
 import { Eyebrow } from "@/components/ui/eyebrow";
+import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import type { EntityRef } from "@/lib/entity-links";
 import type { ModuoRuntime } from "@/lib/runtime.types";
 import { dateCommandDay, isoDay, triggerAt } from "../grammar";
@@ -169,12 +170,19 @@ function removeMentionToken(menu: MentionMenuState): void {
   selection.setTextNodeRange(node, menu.startOffset, node, menu.startOffset);
 }
 
-/** Is the caret's paragraph otherwise empty (a reference there sits alone on its line)? */
+/**
+ * Is the caret's paragraph otherwise empty (a reference there sits alone on
+ * its line)? Only blank text counts as empty: a reference or a date chip on the
+ * line has no text of its own but is something.
+ */
 function $caretLineIsEmpty(): boolean {
   const selection = $getSelection();
   if (!$isRangeSelection(selection)) return false;
   const block = selection.anchor.getNode().getTopLevelElement();
-  return !!block && $isParagraphNode(block) && block.getTextContent().trim() === "";
+  if (!block || !$isParagraphNode(block)) return false;
+  return block
+    .getChildren()
+    .every((child) => $isTextNode(child) && child.getTextContent().trim() === "");
 }
 
 /**
@@ -195,8 +203,10 @@ function $insertReference(
   const node = $createReferenceNode({
     entityType: ref.type,
     entityId: ref.id,
+    // A privacy-first surface stores neither the title nor the item's icon
+    // (a note's emoji says as much as its title).
     label: opts.storeLabel ? label : "",
-    icon,
+    icon: opts.storeLabel ? icon : null,
     display,
   });
   if (display === "card") {
@@ -263,6 +273,8 @@ export function MentionMenuPlugin({
     dateCommands: dateCommands && trigger === "ref",
     createType: onCreateEntity ? createType : null,
     canCreate: Boolean(onCreateEntity) && trigger === "ref",
+    // `/task Order frames` creates; `/` in a sentence never does.
+    createNoun: true,
     enabled: menu !== null,
   });
 
@@ -496,63 +508,53 @@ export function MentionMenuPlugin({
     };
   }, [editor]);
 
-  // The calendar closes on Esc or a click outside it.
-  const pickerRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!datePicker) return;
-    const close = () => {
-      setDatePicker(null);
-      pickerSelection.current = null;
-      editor.focus();
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        close();
-      }
-    };
-    const onDown = (event: PointerEvent) => {
-      if (pickerRef.current && !pickerRef.current.contains(event.target as Node)) close();
-    };
-    window.addEventListener("keydown", onKey, true);
-    window.addEventListener("pointerdown", onDown, true);
-    return () => {
-      window.removeEventListener("keydown", onKey, true);
-      window.removeEventListener("pointerdown", onDown, true);
-    };
-  }, [datePicker, editor]);
+  // `/date`'s calendar: the Popover primitive (the one floating surface, Esc
+  // and outside clicks close it), anchored where the menu was.
+  const closePicker = () => {
+    setDatePicker(null);
+    pickerSelection.current = null;
+    editor.focus();
+  };
 
   if (datePicker) {
-    return createPortal(
-      <div
-        ref={pickerRef}
-        role="dialog"
-        aria-label="Pick a date"
-        className="fixed rounded-md border border-hairline bg-popover text-popover-foreground shadow-lg"
-        style={{ top: datePicker.top, left: datePicker.left, zIndex: "var(--z-popover)" }}
+    return (
+      <Popover
+        open
+        onOpenChange={(open) => {
+          if (!open) closePicker();
+        }}
       >
-        <Calendar
-          mode="single"
-          autoFocus
-          onSelect={(date: Date | undefined) => {
-            if (!date) return;
-            const day = isoDay(date);
-            const saved = pickerSelection.current;
-            setDatePicker(null);
-            pickerSelection.current = null;
-            editor.focus();
-            editor.update(() => {
-              $restoreSelection(saved);
-            });
-            insertDay(day);
-          }}
-        />
-      </div>,
-      document.body,
+        <PopoverAnchor asChild>
+          <span
+            aria-hidden
+            className="pointer-events-none fixed size-0"
+            style={{ top: datePicker.top, left: datePicker.left }}
+          />
+        </PopoverAnchor>
+        <PopoverContent align="start" side="bottom" className="w-auto p-0" aria-label="Pick a date">
+          <Calendar
+            mode="single"
+            autoFocus
+            onSelect={(date: Date | undefined) => {
+              if (!date) return;
+              const day = isoDay(date);
+              const saved = pickerSelection.current;
+              setDatePicker(null);
+              pickerSelection.current = null;
+              editor.focus();
+              editor.update(() => {
+                $restoreSelection(saved);
+              });
+              insertDay(day);
+            }}
+          />
+        </PopoverContent>
+      </Popover>
     );
   }
 
-  if (!menu) return null;
+  // Nothing to offer for a few words after a `/` is ordinary prose: no menu.
+  if (!menu || (menu.query.includes(" ") && !loading && candidates.length === 0)) return null;
 
   return createPortal(
     <div

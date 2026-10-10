@@ -80,6 +80,8 @@ export type ReferenceFacts = {
   factTone?: "late" | null;
   /** A task's handle (`MOD-142`). */
   handle?: string | null;
+  /** A task's project id (not shown): a project rename re-reads only its tasks. */
+  bucketId?: string | null;
   /** The card's facts; null when only the chip level has loaded. */
   card: ReferenceCard | null;
 };

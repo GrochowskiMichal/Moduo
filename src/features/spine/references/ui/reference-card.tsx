@@ -161,9 +161,9 @@ export function ReferenceCardBody({
     <span className="min-w-0 break-words">{facts.title}</span>
   );
   return (
-    <div className="flex min-w-0 flex-col gap-1" aria-busy={pending || undefined}>
+    <span className="flex min-w-0 flex-col gap-1" aria-busy={pending || undefined}>
       {card?.overline ? (
-        <div className="flex min-w-0 items-center gap-2 text-sm text-foreground">
+        <span className="flex min-w-0 items-center gap-2 text-sm text-foreground">
           {card.overline.person ? (
             <PersonAvatar
               name={card.overline.person.name}
@@ -177,17 +177,19 @@ export function ReferenceCardBody({
               {card.overline.trailing}
             </span>
           ) : null}
-        </div>
+        </span>
       ) : null}
-      <div className="flex min-w-0 items-start gap-2 text-base leading-snug text-foreground">
+      <span className="flex min-w-0 items-start gap-2 text-base leading-snug text-foreground">
         <span className="flex h-lh shrink-0 items-center">{lead}</span>
         {title}
-      </div>
+      </span>
       {card?.excerpt ? (
-        <p className="line-clamp-2 ps-6 text-sm text-muted-foreground">{card.excerpt}</p>
+        <span className="line-clamp-2 block ps-6 text-sm text-muted-foreground">
+          {card.excerpt}
+        </span>
       ) : null}
       {card && (card.meta.length > 0 || card.person) ? (
-        <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1 ps-6 text-xs text-muted-foreground tabular-nums">
+        <span className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1 ps-6 text-xs text-muted-foreground tabular-nums">
           {card.meta.map((item) => (
             <MetaItem key={item.key} item={item} />
           ))}
@@ -201,11 +203,11 @@ export function ReferenceCardBody({
               <span className="sr-only">{card.person.name}</span>
             </span>
           ) : null}
-        </div>
+        </span>
       ) : pending ? (
-        <div className="ps-6 text-xs text-subtle-foreground">…</div>
+        <span className="block ps-6 text-xs text-subtle-foreground">…</span>
       ) : null}
       {footer}
-    </div>
+    </span>
   );
 }

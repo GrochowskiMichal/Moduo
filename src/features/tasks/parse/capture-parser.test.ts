@@ -149,6 +149,26 @@ describe("parseCapture — the `/` date commands (33a, RF-1's grammar)", () => {
     expect(local(p.dueDate)?.toDateString()).toBe(new Date(2026, 9, 12).toDateString());
   });
 
+  it("a time with the command schedules on that day; a repeat keeps its own start", () => {
+    const timed = parseCapture("Call Anna at 3pm /tomorrow", FRIDAY_10AM);
+    expect(timed.title).toBe("Call Anna");
+    const at = local(timed.scheduledAt);
+    expect(at?.toDateString()).toBe(new Date(2026, 9, 10).toDateString());
+    expect(at?.getHours()).toBe(15);
+    const repeat = parseCapture("Standup every Monday /next week", FRIDAY_10AM);
+    expect(repeat.recurrence).not.toBeNull();
+    expect(repeat.title).toBe("Standup");
+  });
+
+  it("a repeat typed with a command starts on the command's day", () => {
+    const p = parseCapture("Pay rent /tomorrow every month", FRIDAY_10AM);
+    expect(p.recurrence).not.toBeNull();
+    expect(p.title).toBe("Pay rent");
+    expect(local(p.recurrence?.dtstart ?? null)?.toDateString()).toBe(
+      new Date(2026, 9, 10).toDateString(),
+    );
+  });
+
   it("a slash inside a word is text (and/or)", () => {
     expect(parseCapture("Decide and/or delegate", FRIDAY_10AM).title).toBe(
       "Decide and/or delegate",

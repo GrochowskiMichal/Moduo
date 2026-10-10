@@ -182,6 +182,16 @@ export type SearchedPerson = {
 export type SearchedTag = { id: string; name: string; color: string | null };
 
 /**
+ * A project as a pickable thing. Its registry type is `bucket` (the table it
+ * lives in): the registry's read policy checks `bucket` per item, while an
+ * unknown type such as `project` falls back to module-level access and would
+ * show a private project's name to every member once a link registered it.
+ */
+export function projectAsEntity(row: { id: string; name: string }): SearchedEntity {
+  return { type: "bucket", id: row.id, label: row.name, icon: "project" };
+}
+
+/**
  * Assemble the ordered candidate list a picker shows, from a registry search +
  * (for `@`) workspace members + an optional "create" affordance. Pure so the
  * picker's branching is unit-testable without a runtime. The order follows the
@@ -210,9 +220,24 @@ export function buildMentionCandidates(input: {
   createType?: string | null;
   /** Whether a creator is wired for `createType` (gates the "Create…" item). */
   canCreate?: boolean;
+  /**
+   * Prose: create only behind the type's word (`/task Order frames`), so `/`
+   * in a sentence ("copy it to /tmp then") can never make something on Enter.
+   */
+  createNoun?: boolean;
 }): MentionCandidate[] {
-  const { trigger, query, entities, people, projects, commands, tags, createType, canCreate } =
-    input;
+  const {
+    trigger,
+    query,
+    entities,
+    people,
+    projects,
+    commands,
+    tags,
+    createType,
+    canCreate,
+    createNoun,
+  } = input;
   const candidates: MentionCandidate[] = [];
 
   if (trigger === "tag") {
@@ -248,9 +273,15 @@ export function buildMentionCandidates(input: {
   }
 
   const trimmed = query.trim();
-  const hasExact = things.some((e) => e.label.trim().toLowerCase() === trimmed.toLowerCase());
-  if (trigger === "ref" && canCreate && createType && trimmed.length > 0 && !hasExact) {
-    candidates.push({ kind: "create", entityType: createType, label: trimmed });
+  let createLabel = trimmed;
+  if (createNoun && createType) {
+    const lower = trimmed.toLowerCase();
+    const noun = `${createType.toLowerCase()} `;
+    createLabel = lower.startsWith(noun) ? trimmed.slice(noun.length).trim() : "";
+  }
+  const hasExact = things.some((e) => e.label.trim().toLowerCase() === createLabel.toLowerCase());
+  if (trigger === "ref" && canCreate && createType && createLabel.length > 0 && !hasExact) {
+    candidates.push({ kind: "create", entityType: createType, label: createLabel });
   }
 
   return candidates;

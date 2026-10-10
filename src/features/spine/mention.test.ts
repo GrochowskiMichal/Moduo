@@ -114,6 +114,20 @@ describe("buildMentionCandidates", () => {
     ]);
   });
 
+  it("in prose, `/` creates only behind the type's word (`/task …`)", () => {
+    const base = {
+      trigger: "ref" as const,
+      entities: [],
+      createType: "task",
+      canCreate: true,
+      createNoun: true,
+    };
+    expect(buildMentionCandidates({ ...base, query: "tmp then" })).toEqual([]);
+    expect(buildMentionCandidates({ ...base, query: "task Order frames" })).toEqual([
+      { kind: "create", entityType: "task", label: "Order frames" },
+    ]);
+  });
+
   it("# lists tags only", () => {
     const out = buildMentionCandidates({
       trigger: "tag",

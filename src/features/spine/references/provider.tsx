@@ -21,8 +21,11 @@ import { listenTasksLive } from "../../tasks/realtime";
 import { useWorkspace } from "../../workspaces/workspace-context";
 import { ReferenceStoreProvider } from "./context";
 import type { ResolveContext } from "./resolvers";
-import { ReferenceStore } from "./store";
+import { isLiveKind, ReferenceStore } from "./store";
 import type { ReferencePerson } from "./types";
+
+/** Focus and visibility arrive together on a return: one re-read for both. */
+const RESYNC_COALESCE_MS = 1_000;
 
 export function ReferencesProvider({ children }: { children: ReactNode }) {
   const { runtime, userId } = useAuth();
@@ -91,6 +94,7 @@ export function ReferencesProvider({ children }: { children: ReactNode }) {
   // A rename of the task key re-reads every handle.
   // biome-ignore lint/correctness/useExhaustiveDependencies: taskKey is the cue
   useEffect(() => {
+    store?.forgetHandles();
     store?.invalidate((kind) => kind === "task");
   }, [taskKey]);
 
@@ -102,9 +106,14 @@ export function ReferencesProvider({ children }: { children: ReactNode }) {
   );
   useEffect(() => {
     if (!store || !needsLive || !selectedWorkspaceId || !userId) return;
+    // A return fires focus and visibility together: one re-read per return.
+    let lastResync = 0;
     return listenTasksLive(selectedWorkspaceId, userId, (event) => {
       if (event.type === "resync") {
-        store.invalidate();
+        const now = Date.now();
+        if (now - lastResync < RESYNC_COALESCE_MS) return;
+        lastResync = now;
+        store.invalidate((kind) => isLiveKind(kind));
         return;
       }
       const { change } = event;
@@ -131,12 +140,17 @@ export function ReferencesProvider({ children }: { children: ReactNode }) {
     });
   }, [store, needsLive, selectedWorkspaceId, userId]);
 
-  // Coming back to the window re-reads what's on screen (the kinds Realtime
-  // doesn't carry; the live link covers the rest while it's open).
+  // Coming back to the window re-reads what's on screen of the kinds Realtime
+  // doesn't carry (the live link re-reads its own), once per return.
   useEffect(() => {
     if (!store || typeof window === "undefined") return;
+    let last = 0;
     const onReturn = () => {
-      if (document.visibilityState === "visible") store.invalidate();
+      if (document.visibilityState !== "visible") return;
+      const now = Date.now();
+      if (now - last < RESYNC_COALESCE_MS) return;
+      last = now;
+      store.invalidate((kind) => !isLiveKind(kind));
     };
     window.addEventListener("focus", onReturn);
     document.addEventListener("visibilitychange", onReturn);
@@ -146,5 +160,9 @@ export function ReferencesProvider({ children }: { children: ReactNode }) {
     };
   }, [store]);
 
-  return <ReferenceStoreProvider store={store}>{children}</ReferenceStoreProvider>;
+  return (
+    <ReferenceStoreProvider store={store} canEditTasks={canEditTasks}>
+      {children}
+    </ReferenceStoreProvider>
+  );
 }

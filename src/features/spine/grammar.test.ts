@@ -15,6 +15,7 @@ import {
   takeSlashDates,
   triggerAt,
 } from "./grammar";
+import { handleFinishedAt } from "./references/handle-autolink-plugin";
 
 const WED = new Date(2026, 9, 14, 10, 0, 0); // Wed Oct 14 2026
 
@@ -32,7 +33,11 @@ describe("triggerAt — what the caret sits after", () => {
     expect(triggerAt("ping @ann lee")).toBeNull();
   });
 
-  it("keeps literal symbols as text: C#, and/or, 7/11, an email address", () => {
+  it("keeps literal symbols as text: C#, and/or, 7/11, a / b, #123, an email address", () => {
+    expect(triggerAt("a / b")).toBeNull();
+    expect(triggerAt("Q3 / Q4")).toBeNull();
+    expect(triggerAt("bug #123")).toBeNull();
+    expect(triggerAt("ship /")).toEqual({ sigil: "/", start: 5, query: "" });
     expect(triggerAt("C#")).toBeNull();
     expect(triggerAt("and/or")).toBeNull();
     expect(triggerAt("on 7/11")).toBeNull();
@@ -96,6 +101,24 @@ describe("the date commands (33a)", () => {
     expect(replaceSlashDates("Ship /tomorrow, then rest", (d) => `[${d}]`, WED)).toBe(
       "Ship [2026-10-15], then rest",
     );
+  });
+});
+
+describe("a typed handle links itself only right after you finish it", () => {
+  it("finds the handle that ends one boundary character before the caret", () => {
+    expect(handleFinishedAt("see MOD-142 ", 12, ["MOD"])).toEqual({
+      handle: "MOD-142",
+      start: 4,
+      end: 11,
+    });
+    expect(handleFinishedAt("see MOD-142.", 12, ["MOD"])?.handle).toBe("MOD-142");
+  });
+
+  it("ignores handles elsewhere in the text, one still being typed, and other keys", () => {
+    // Typing later in the paragraph never converts an older handle (or one ⌘Z restored).
+    expect(handleFinishedAt("see MOD-142 and more", 20, ["MOD"])).toBeNull();
+    expect(handleFinishedAt("see MOD-14", 10, ["MOD"])).toBeNull();
+    expect(handleFinishedAt("UTF-8 ", 6, ["MOD"])).toBeNull();
   });
 });
 

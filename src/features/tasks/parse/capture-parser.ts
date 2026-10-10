@@ -37,6 +37,22 @@ export type ParsedCapture = {
   unparsedRecurrence: boolean;
 };
 
+/** English month names, for handing a `/` command's day to chrono. */
+const MONTHS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
 const WEEKDAYS: Record<string, Weekday> = {
   monday: RRule.MO,
   mon: RRule.MO,
@@ -250,14 +266,45 @@ export function parseCapture(input: string, refDate: Date = new Date()): ParsedC
   if (!raw) return empty;
 
   // `/today`, `/tomorrow`, `/next week` (the grammar's date commands, 33a):
-  // an explicit command sets the due date and leaves the title; it wins over
-  // date words, which then stay the person's words.
+  // an explicit command sets the day and leaves the title. It wins over date
+  // words, which then stay the person's words; a clock time still schedules
+  // on that day; a repeat keeps its own start.
   const slash = takeSlashDates(raw, refDate);
-  if (slash.day) {
-    const due = new Date(`${slash.day}T00:00:00`);
+  if (slash.day && !slash.text) {
+    // Only a command: nothing to call the task but its words.
+    const due = new Date(`${slash.day}T12:00:00`);
     return {
       ...empty,
-      title: slash.text || raw,
+      dueDate: due.toISOString(),
+      summary: `due ${chronoLabel(due, false)}`,
+      matched: true,
+    };
+  }
+  if (slash.day && slash.text) {
+    const rest = parseCapture(slash.text, refDate);
+    if (rest.recurrence) {
+      // The command's day starts the repeat, like a typed date does.
+      const day = new Date(`${slash.day}T12:00:00`);
+      const named = `${slash.text} on ${MONTHS[day.getMonth()]} ${day.getDate()} ${day.getFullYear()}`;
+      const started = parseCapture(named, refDate);
+      return started.recurrence ? { ...started, title: rest.title } : rest;
+    }
+    if (rest.scheduledAt) {
+      const at = new Date(rest.scheduledAt);
+      const day = new Date(`${slash.day}T00:00:00`);
+      day.setHours(at.getHours(), at.getMinutes(), 0, 0);
+      return {
+        ...rest,
+        scheduledAt: day.toISOString(),
+        summary: `scheduled ${chronoLabel(day, true)}`,
+      };
+    }
+    // A date alone is due on that day, at noon like a typed date word, so
+    // every time zone reads the same calendar day.
+    const due = new Date(`${slash.day}T12:00:00`);
+    return {
+      ...empty,
+      title: rest.dueDate ? slash.text : rest.title,
       dueDate: due.toISOString(),
       summary: `due ${chronoLabel(due, false)}`,
       matched: true,

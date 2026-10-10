@@ -376,6 +376,9 @@ export function CommentComposer({
     }
     pendingCaret.current = next.caret;
     update(next.text, next.caret);
+    // A picked command stays closed (its words would match it again, and
+    // Enter would pick it again instead of starting a new line).
+    if (item.kind === "command") setDismissedAt(at.start);
     areaRef.current?.focus();
   };
 
