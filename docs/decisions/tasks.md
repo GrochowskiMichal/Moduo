@@ -2,6 +2,66 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index.
 
+## 2026-10-11 · TV-D11a the shared store — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 11 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §Assumptions #7, #27; REPLAN §6.6, §6.11, call 37, default g) on the local stack; no migration. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **D11a-1 · A thin IndexedDB wrapper, not Dexie** → TV-D11a (`src/lib/sync/cache.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: one `moduo-sync` database, one record per person and workspace (`<user>:<workspace>`) holding each table's rows and cursor, the outbox and whether the Done tasks are in; written whole, 800 ms after the last change and on `pagehide`; no IndexedDB → no copy (the store reads the server).
+  - Why: the store reads and writes the copy whole, so none of Dexie's indexes or queries would be used, and the spec rejects one more runtime; the `SyncCache` seam is where per-row storage goes if TV-D11b's 10k fixture needs it.
+  - Rejected: Dexie (unused query layer, ~40 KB); localStorage (5 MB cap, synchronous).
+- **D11a-2 · The device copy is one person's, holds no secrets, and goes on sign-out** → TV-D11a (`attachSyncUser`, auth-provider, account deletion)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11 (hardened at the orchestrator's request the same day).
+  - Decision: keyed by person and workspace; signing out (account deletion signs out too, and also wipes it explicitly) wipes every copy; another person signing in wipes every copy but theirs; rows only (no token, key or session), comments as id + task + stamps (no text), no time entries or agent sessions; rows you lost access to leave the copy at the access check (D11a-6).
+  - Why: a shared or handed-on laptop must never show one account's private projects to the next; the copy is a convenience, the server keeps the truth.
+  - Rejected: keeping copies across sign-out for a faster next sign-in.
+- **D11a-3 · Open tasks first, the rest straight after, not on demand** → TV-D11a (`readFirst`, `restLoaded`, `whenRest`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: a first load reads To do and In progress (and the small tables), shows them, then reads Done, Won't do and Backlog, completions and comment counts; from then on the copy has everything and later reads are deltas. A link to a closed task, and a hub's linked Done task, wait for the rest.
+  - Why: the Board's Done column, the completed fold, counts and Undo already read closed tasks; once they're on the device the cost is paid once.
+  - Rejected: closed tasks only when a view asks (every view would need a loading state for them; TV-D11b can add it with the server search).
+- **D11a-4 · Deltas by the server's stamp, read from a few minutes early, paged by key** → TV-D11a (`syncRead`, `readByKey`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: each table's cursor is the newest `updated_at` a read returned (never the device clock); the next read asks for `updated_at >= cursor − 5 min`, soft-deleted rows included, paged by (`updated_at`, `id`); the queue, tag links and relations (hard deletes, no stamp) are read whole every time; a read past its ceiling reads on from where it stopped.
+  - Why: a save that commits after a read with an earlier stamp would be lost by a strict `>`; offset pages shift when a row is saved mid-read; re-reading five minutes of changes costs little.
+  - Rejected: `updated_at > cursor` with offset paging; a server `sync_since` RPC (needs a migration: noted for TV-D11b).
+- **D11a-5 · Writes are ops laid over the copy; a refusal takes back only its own fields** → TV-D11a (`begin` / `settle` / `fail`, the hook)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: every edit shows at once as an op (op id) on top of the rows the server sent; its answer becomes the row unless the copy already holds a strictly newer one; a Realtime row lands only if strictly newer (an equal stamp is our echo); a refusal drops the op (toast, no reload); a teammate's newer write wins once our op settles. TV-D5's hold-while-saving gate and the refetch-discard are no longer used by the hook.
+  - Why: AC12.8 (one field rolls back, nothing reloads) and "your own pending write is skipped on echo" fall out of one rule set.
+  - Rejected: reloading after any error (the old hook), a server op-id column for echo matching (a migration).
+- **D11a-6 · Rows you can no longer see are dropped by comparing ids** → TV-D11a (`checkAccess`, `syncIds`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: after the first delta of a session and then at most every 10 minutes, the live ids of tasks, projects, statuses, completions, comments and tags are compared with the copy; what the server no longer returns leaves the device (with a task, its comment marks and completions).
+  - Why: RLS hides a row you lost access to, so no delta and no Realtime event ever reports it.
+  - Rejected: never (stale private rows on the device); every read (a full id scan each time).
+- **D11a-7 · Offline: what waits, and what says "Offline"** → TV-D11a (the outbox, the hook)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: captures (the list's add, ⌘⇧K, Home's quick capture, Focus's New, which also queues it once sent) and any status-only change (the checkbox, `x`, Won't do, a status pick) wait on the device under their own ids and go in order when the network is back; a capture is created under the id it was given, so a resend is the same task; everything else says "Offline · This change needs a connection…"; the top bar shows "Offline" and "n waiting to sync" left of the Focus timer. A tag typed in an offline capture is not kept.
+  - Why: default g; the create op is idempotent on its id and a repeated status is a no-op on the server (both checked on the local stack).
+  - Rejected: queuing every edit (conflicts the queue can't resolve without the field-level merge TV-D11b+ may add).
+- **D11a-8 · The store lives in the app shell for the whole session** → TV-D11a (`TasksSyncStatus`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: the selected workspace's store starts when the shell does (with Tasks access) and keeps its Realtime link and outbox running whichever module is open; every surface holds it too while mounted.
+  - Why: every page opens warm, captures sync from anywhere, and Home, the bell and the hubs need no read of their own.
+  - Rejected: a store only while a Tasks surface is mounted (each page would start cold again).
+- **D11a-9 · The workspace list is remembered for an offline launch** → TV-D11a (`features/workspaces/remembered-workspaces.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: the person's workspace list (names, roles, module access) is kept in localStorage; with no network at launch it opens from it (at once when the browser says it's offline) and reads the real list when the network is back; forgotten on sign-out.
+  - Why: without a selected workspace nothing opens, not even the Tasks device copy.
+  - Rejected: the offline open only after the app had loaded online once in the session.
+- **D11a-10 · The store's reads skip the client's retries; the store retries itself** → TV-D11a (`syncReadTable` `.retry(false)`, `scheduleRetry`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: store reads fail at once on a lost connection; the store says "Offline" and tries again after 3 s, doubling to 20 s, and at once on the browser's `online` event or a Realtime rejoin.
+  - Why: postgrest-js retries a failed GET three times (1 + 2 + 4 s), so "Offline" would show 7 s late and the first offline open would wait that long.
+  - Rejected: keeping the client's retries (a long silent wait), a fixed 20 s retry (a short blip would read as offline for 20 s).
+- **D11a-11 · Smaller calls** → TV-D11a
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: Home's quick capture keeps its plain behaviour (no date parsing) through the store; the full data export (Settings → Advanced) keeps its own complete read (an action, not a screen); the repeat roll-over is asked after the first read of a session that reaches the server and on Retry, once per load across all surfaces (`claimCatchUp`); comment counts come from comment ids per task (`commentCounts` on the hook) for TV-U10/U13 to show.
+  - Why: no visible change where none was asked for; one roll-over per load as before.
+  - Rejected: routing the export through the store (an export must be the server's complete answer at that moment, never a device copy that may be mid-sync).
+
 ## 2026-10-10 · TV-D9 statuses, completion, dates — the agent's choices (deferred to by Maciej)
 
 Built in tasks-v3 block 9 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §Assumptions #3, #4, #24, #26–#28; migrations `20261010170000_project_statuses`, `20261010171000_tasks_completion_due_on`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
