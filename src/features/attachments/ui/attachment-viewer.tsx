@@ -4,7 +4,7 @@
 
 import { ATTACHMENT_LINK_TTL_SECONDS } from "@contracts/attachments";
 import { ChevronLeft, ChevronRight, Copy, Download, Trash2, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { IconButton } from "@/components/ui/icon-button";
@@ -38,6 +38,13 @@ export function AttachmentViewer({
   const count = records.length;
   const [originalUrl, setOriginalUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState<"download" | "copy" | null>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  // Opened from a tile, not a Radix trigger: remember where focus was so
+  // closing returns there instead of to the page body (gotchas/ui.md).
+  const returnFocus = useRef<HTMLElement | null>(null);
+  if (open && returnFocus.current == null && typeof document !== "undefined") {
+    returnFocus.current = document.activeElement as HTMLElement | null;
+  }
 
   // Close when the open file goes away (deleted elsewhere, or the last one).
   useEffect(() => {
@@ -111,7 +118,22 @@ export function AttachmentViewer({
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onIndexChange(null)}>
       <DialogContent
+        ref={contentRef}
         showCloseButton={false}
+        // Focus the viewer itself (←/→ work at once) rather than its first
+        // button, whose tooltip would pop open.
+        onOpenAutoFocus={(e) => {
+          e.preventDefault();
+          contentRef.current?.focus();
+        }}
+        onCloseAutoFocus={(e) => {
+          const back = returnFocus.current;
+          returnFocus.current = null;
+          if (back?.isConnected) {
+            e.preventDefault();
+            back.focus();
+          }
+        }}
         className="flex max-h-[90vh] w-[calc(100vw-4rem)] max-w-5xl flex-col gap-0 overflow-hidden p-0"
         onKeyDown={(e) => {
           if (e.key === "ArrowRight") {

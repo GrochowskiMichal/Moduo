@@ -13,14 +13,18 @@ import { signPaths } from "../signed-urls";
 
 /** Start the queue for the signed-in person and wake it when the network or
  *  the window comes back. Mounted once, in the signed-in app shell. */
-export function useUploadQueueBoot(userId: string | null): void {
+export function useUploadQueueBoot(
+  userId: string | null,
+  runtime: Pick<ModuoRuntime, "attachments"> | null,
+): void {
+  const api = runtime?.attachments ?? null;
   useEffect(() => {
     const queue = getUploadQueue();
     if (!userId) {
       queue.stop();
       return;
     }
-    void queue.start(userId);
+    void queue.start(userId, api);
     const wake = () => queue.wake();
     const onVisible = () => {
       if (document.visibilityState === "visible") queue.wake();
@@ -31,7 +35,7 @@ export function useUploadQueueBoot(userId: string | null): void {
       window.removeEventListener("online", wake);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [userId]);
+  }, [userId, api]);
 }
 
 const STATUS_TTL_MS = 60_000;

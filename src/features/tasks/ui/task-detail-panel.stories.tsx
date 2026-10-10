@@ -2,7 +2,8 @@ import type { Meta, StoryObj } from "@storybook/react";
 
 import type { ReactNode } from "react";
 
-import type { ModuoRuntime, SpineComment } from "@/lib/runtime.types";
+import type { AttachmentRecord, ModuoRuntime, SpineComment } from "@/lib/runtime.types";
+import { getUploadQueue } from "@/lib/uploads";
 import type { WorkspaceMember } from "../../workspaces/types";
 import { useWorkspace, WorkspaceContext } from "../../workspaces/workspace-context";
 import { makeTask } from "../helpers";
@@ -151,8 +152,144 @@ function stubApi(t: Task, over: Partial<TasksModuleApi> = {}): TasksModuleApi {
   } as unknown as TasksModuleApi;
 }
 
-function stubRuntime(comments: SpineComment[], mySeconds: number): ModuoRuntime {
+/** A flat picture standing in for a screenshot (no network in stories). */
+function picture(fill: string, accent: string): string {
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='640' height='400'><rect width='640' height='400' fill='${fill}'/><rect x='40' y='48' width='320' height='28' rx='8' fill='${accent}'/><rect x='40' y='104' width='520' height='16' rx='8' fill='${accent}' opacity='.5'/><rect x='40' y='136' width='440' height='16' rx='8' fill='${accent}' opacity='.5'/></svg>`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+
+function attachment(id: string, fileName: string, over: Partial<AttachmentRecord> = {}) {
   return {
+    id,
+    entityType: "task",
+    entityId: "t1",
+    uploaderId: "storybook-user",
+    fileName,
+    mime: "image/png",
+    sizeBytes: 420_000,
+    width: 2880,
+    height: 1800,
+    status: "ready",
+    deletedAt: null,
+    createdAt: ago(60),
+    objectPath: `w1/${id}/original.png`,
+    previewPath: `w1/${id}/preview.png`,
+    previewMime: "image/png",
+    ...over,
+  } satisfies AttachmentRecord;
+}
+
+// Shared by every story's stub: the queue runs on one of them.
+const urls = new Map<string, string>([
+  ["w1/a1/preview.png", picture("dimgray", "gainsboro")],
+  ["w1/a1/original.png", picture("dimgray", "gainsboro")],
+  ["w1/a2/preview.png", picture("darkslategray", "silver")],
+  ["w1/a2/original.png", picture("darkslategray", "silver")],
+]);
+const pending = new Map<string, AttachmentRecord>();
+let n = 0;
+
+/**
+ * AT-2's storage in memory: two screenshots and a PDF, and an upload that
+ * really runs (begin → bytes with progress → finalize), so paste/drop can be
+ * tried in the story. Blobs become object URLs for the "signed" links.
+ */
+function stubAttachments(withFiles: boolean) {
+  const rows: AttachmentRecord[] = withFiles
+    ? [
+        attachment("a1", "black-background.png"),
+        attachment("a2", "settings-panel.png"),
+        attachment("a3", "Landing brief v3.pdf", {
+          mime: "application/pdf",
+          sizeBytes: 2_516_582,
+          previewPath: null,
+          width: null,
+          height: null,
+        }),
+      ]
+    : [];
+  return {
+    listForEntity: async () => rows.filter((r) => !r.deletedAt),
+    signedUrls: async (paths: string[]) =>
+      new Map(paths.filter((p) => urls.has(p)).map((p) => [p, urls.get(p) as string])),
+    status: async () => ({
+      tier: "pro",
+      perFileBytes: 52_428_800,
+      totalBytes: 53_687_091_200,
+      usedBytes: 1_288_490_188,
+      pendingBytes: 0,
+      level: 0,
+      overLimit: false,
+      isOwner: true,
+      ownedWorkspaces: 2,
+    }),
+    begin: async (input: {
+      fileName: string;
+      mime: string;
+      sizeBytes: number;
+      previewMime: string | null;
+      width: number | null;
+      height: number | null;
+    }) => {
+      n += 1;
+      const id = `up${n}`;
+      const row = attachment(id, input.fileName, {
+        mime: input.mime,
+        sizeBytes: input.sizeBytes,
+        status: "pending",
+        createdAt: new Date().toISOString(),
+        objectPath: `w1/${id}/original`,
+        previewPath: input.previewMime ? `w1/${id}/preview` : null,
+        previewMime: input.previewMime,
+        width: input.width,
+        height: input.height,
+      });
+      pending.set(id, row);
+      return row;
+    },
+    uploadObject: async ({
+      path,
+      blob,
+      onProgress,
+    }: {
+      path: string;
+      blob: Blob;
+      onProgress?: (l: number, t: number) => void;
+    }) => {
+      for (let step = 1; step <= 5; step += 1) {
+        await new Promise((r) => setTimeout(r, 250));
+        onProgress?.((blob.size * step) / 5, blob.size);
+      }
+      urls.set(path, URL.createObjectURL(blob));
+    },
+    finalize: async (id: string) => {
+      const row = { ...(pending.get(id) as AttachmentRecord), status: "ready" as const };
+      if (row.previewPath && !urls.has(row.previewPath)) row.previewPath = null;
+      rows.push(row);
+      return row;
+    },
+    remove: async (id: string) => {
+      const row = rows.find((r) => r.id === id) as AttachmentRecord;
+      row.deletedAt = new Date().toISOString();
+      return row;
+    },
+    restore: async (id: string) => {
+      const row = rows.find((r) => r.id === id) as AttachmentRecord;
+      row.deletedAt = null;
+      return row;
+    },
+  };
+}
+
+function stubRuntime(comments: SpineComment[], mySeconds: number, withFiles = true): ModuoRuntime {
+  const attachments = stubAttachments(withFiles);
+  // The queue normally starts in the app shell; here it runs on the stub.
+  void getUploadQueue().start(
+    "storybook-user",
+    attachments as unknown as ModuoRuntime["attachments"],
+  );
+  return {
+    attachments,
     spine: {
       listComments: async () => comments,
       addComment: async () => comments[0],
@@ -221,7 +358,7 @@ export const CorePropertiesOnly: Story = {
   args: {
     task: CORE_ONLY,
     api: stubApi(CORE_ONLY, { queuedTaskIds: new Set() }),
-    runtime: stubRuntime([], 0),
+    runtime: stubRuntime([], 0, false),
   },
 };
 

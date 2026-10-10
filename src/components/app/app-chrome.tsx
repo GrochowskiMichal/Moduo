@@ -114,7 +114,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   const { runtime, userEmail, userId } = useAuth();
   // AT-2: pending uploads resume for whoever is signed in; stray file drops
   // never navigate the window away.
-  useUploadQueueBoot(userId ?? null);
+  useUploadQueueBoot(userId ?? null, runtime);
   useFileDropGuard();
   const { loading, modulePermissions, selectedWorkspaceId } = useWorkspace();
   // Chat tab badge + app-wide presence (you show as online anywhere in Moduo).

@@ -157,6 +157,7 @@ export class UploadQueue {
   private uploadedListeners = new Set<(rec: AttachmentRecord, target: UploadTarget) => void>();
   private snapshot: UploadSnapshot = { items: [], almostFull: {} };
   private userId: string | null = null;
+  private api: AttachmentsApi | null = null;
   private loaded: Promise<void> | null = null;
   private timer: unknown = null;
   private persistAsked = false;
@@ -206,7 +207,8 @@ export class UploadQueue {
   // ── lifecycle ───────────────────────────────────────────────────────────────
 
   /** Start (or resume) for the signed-in person: restores their pending files. */
-  async start(userId: string): Promise<void> {
+  async start(userId: string, api?: AttachmentsApi | null): Promise<void> {
+    if (api) this.api = api;
     if (this.userId !== userId) this.abortAll();
     this.userId = userId;
     this.loaded ??= this.deps.store
@@ -275,7 +277,7 @@ export class UploadQueue {
     status?: StorageStatus | null,
   ): Promise<void> {
     if (files.length === 0) return;
-    const api = this.deps.getApi();
+    const api = this.api ?? this.deps.getApi();
     const pool =
       status !== undefined
         ? status
@@ -419,7 +421,7 @@ export class UploadQueue {
       this.timer = null;
     }
     const userId = this.userId;
-    const api = this.deps.getApi();
+    const api = this.api ?? this.deps.getApi();
     if (!userId || !api) return;
     const now = this.now();
     let next = Number.POSITIVE_INFINITY;
