@@ -166,12 +166,12 @@ select vault.create_secret(replace(gen_random_uuid()::text || gen_random_uuid():
 
 Steps 1–2 are agent steps that need Maciej's OK in the session; steps 4–7 are Maciej's, in the Supabase dashboard (project `wtoonrvuqumihpkbvwvs`). Nothing here touches the TX-2 steps above, but step 6 waits for them: once sign-ups are on, a new person's first code is a `signup` email, which only `auth-email-hook` renders as A1.
 
-1. **Worker first** (agent, with OK). The B1 template (`waitlist_invite`) has to be in the deployed worker before anything can queue it. A deploy replaces the whole worker, so deploy from a branch whose `OUTBOX_TEMPLATES` (`_shared/email/outbox.ts`) holds every kind the live worker already sends: since TX-5 (PR #349) that means merging TX-5 in first, or deploying from `maciej` once both PRs are in; otherwise the booking emails drop out and their queued rows fail after about 80 minutes.
+1. ✅ (2026-10-10, v3, deployed from `maciej` at eeed2460, which held TX-4 but not yet TX-5) **Worker first** (agent, with OK). The B1 template (`waitlist_invite`) has to be in the deployed worker before anything can queue it. A deploy replaces the whole worker, so deploy from a branch whose `OUTBOX_TEMPLATES` (`_shared/email/outbox.ts`) holds every kind the live worker already sends: since TX-5 (PR #349) that means merging TX-5 in first, or deploying from `maciej` once both PRs are in; otherwise the booking emails drop out and their queued rows fail after about 80 minutes.
    ```bash
    supabase functions deploy email-worker --project-ref wtoonrvuqumihpkbvwvs --no-verify-jwt --import-map supabase/functions/deno.json --use-api
    ```
    then `bun run functions:reconcile`.
-2. **Migration** `20261010150000_tx4_invite_only_gate.sql` (agent, with OK). It queues nothing by itself (no row is `invited` yet). Check:
+2. ✅ (2026-10-10, history version `20261010155652`; checks below all as expected, plus a rolled-back invite + sign-up on prod: one B1 queued, the waitlist row gone, the build-updates request pending, no password stored, the profile created) **Migration** `20261010150000_tx4_invite_only_gate.sql` (agent, with OK). It queues nothing by itself (no row is `invited` yet). Check:
    ```sql
    select public.hook_before_user_created('{"user":{"email":"nobody@example.com"}}');
    select jobname, schedule from cron.job where jobname = 'waitlist-purge';
