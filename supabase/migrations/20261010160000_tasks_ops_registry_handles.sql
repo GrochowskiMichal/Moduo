@@ -517,6 +517,100 @@ END;
 $$;
 REVOKE ALL ON FUNCTION public.tasks__check_keys(jsonb, text[]) FROM PUBLIC, anon, authenticated;
 
+-- A repeat rule the app can store: what the server's engine would evaluate
+-- stays within fixed bounds (INTERVAL and COUNT 1–1000, UNTIL and DTSTART
+-- between 1900 and 2200, a short rule), whether or not the engine supports the
+-- rule's frequency. NULL when it's fine, else why not, in words. Enforced by
+-- the ops and by a CHECK on tasks.recurrence (old builds' raw writes too).
+CREATE OR REPLACE FUNCTION public.tasks__recurrence_problem(p_rec jsonb)
+RETURNS text
+LANGUAGE plpgsql
+IMMUTABLE
+SET search_path = ''
+AS $$
+DECLARE
+  v_rule text;
+  v_part text;
+  v_key text;
+  v_val text;
+  v_m text[];
+  v_start timestamptz;
+BEGIN
+  IF p_rec IS NULL OR jsonb_typeof(p_rec) = 'null' THEN
+    RETURN NULL;
+  END IF;
+  IF jsonb_typeof(p_rec) <> 'object' THEN
+    RETURN 'a repeat is a rule';
+  END IF;
+  IF pg_catalog.pg_column_size(p_rec) > 4096 THEN
+    RETURN 'the repeat is too long';
+  END IF;
+  v_rule := p_rec ->> 'rrule';
+  IF v_rule IS NULL OR btrim(v_rule) = '' THEN
+    RETURN 'the repeat has no rule';
+  END IF;
+  IF length(v_rule) > 500 THEN
+    RETURN 'the rule is too long';
+  END IF;
+  FOREACH v_part IN ARRAY string_to_array(regexp_replace(btrim(v_rule), '^RRULE:', '', 'i'), ';') LOOP
+    v_key := upper(btrim(split_part(v_part, '=', 1)));
+    v_val := upper(btrim(split_part(v_part, '=', 2)));
+    IF v_key = 'INTERVAL' AND (v_val !~ '^[0-9]{1,4}$' OR v_val::integer NOT BETWEEN 1 AND 1000) THEN
+      RETURN 'INTERVAL must be 1 to 1000';
+    ELSIF v_key = 'COUNT' AND (v_val !~ '^[0-9]{1,4}$' OR v_val::integer NOT BETWEEN 1 AND 1000) THEN
+      RETURN 'COUNT must be 1 to 1000';
+    ELSIF v_key = 'UNTIL' THEN
+      v_m := regexp_match(v_val, '^([0-9]{4})([0-9]{2})([0-9]{2})(T[0-9]{6}Z?)?$');
+      IF v_m IS NULL OR v_m[1]::integer NOT BETWEEN 1900 AND 2199 THEN
+        RETURN 'UNTIL must be a date between 1900 and 2200';
+      END IF;
+    END IF;
+  END LOOP;
+  IF jsonb_typeof(p_rec -> 'dtstart') = 'string' THEN
+    BEGIN
+      v_start := (p_rec ->> 'dtstart')::timestamptz;
+    EXCEPTION WHEN OTHERS THEN
+      RETURN 'the start isn''t a date';
+    END;
+    IF v_start < '1900-01-01T00:00:00Z'::timestamptz OR v_start >= '2200-01-01T00:00:00Z'::timestamptz THEN
+      RETURN 'the start must be between 1900 and 2200';
+    END IF;
+  END IF;
+  IF jsonb_typeof(p_rec -> 'mode') = 'string' AND p_rec ->> 'mode' <> 'after_completion' THEN
+    RETURN 'unknown repeat mode';
+  END IF;
+  RETURN NULL;
+END;
+$$;
+-- The CHECK below runs it as whoever writes the row, so writers keep EXECUTE
+-- (it only reads its argument).
+REVOKE ALL ON FUNCTION public.tasks__recurrence_problem(jsonb) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.tasks__recurrence_problem(jsonb) TO authenticated, service_role;
+
+-- The ops' check, with the reason in the error.
+CREATE OR REPLACE FUNCTION public.tasks__check_recurrence(p_rec jsonb)
+RETURNS void
+LANGUAGE plpgsql
+IMMUTABLE
+SET search_path = ''
+AS $$
+DECLARE
+  v_problem text := public.tasks__recurrence_problem(p_rec);
+BEGIN
+  IF v_problem IS NOT NULL THEN
+    RAISE EXCEPTION 'That repeat can''t be saved: %.', v_problem USING ERRCODE = '22023';
+  END IF;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.tasks__check_recurrence(jsonb) FROM PUBLIC, anon, authenticated;
+
+-- Every write (raw ones from old builds too) stores only a bounded rule. NOT
+-- VALID: rows saved before today are checked when they are next written.
+ALTER TABLE public.tasks DROP CONSTRAINT IF EXISTS tasks_recurrence_bounded;
+ALTER TABLE public.tasks
+  ADD CONSTRAINT tasks_recurrence_bounded
+  CHECK (public.tasks__recurrence_problem(recurrence) IS NULL) NOT VALID;
+
 -- ── 6. tasks_op_create ──────────────────────────────────────────────────────
 
 -- p_task: id (optional, so a resend answers with the task it made), title,
@@ -557,6 +651,7 @@ BEGIN
     RETURN t;
   END IF;
 
+  PERFORM public.tasks__check_recurrence(public.tasks__json_object(p_task -> 'recurrence'));
   v_status := coalesce(nullif(p_task ->> 'status', ''), 'todo');
   IF v_status NOT IN ('todo', 'in_progress', 'done', 'archived') THEN
     RAISE EXCEPTION 'Unknown task status.';
@@ -632,8 +727,8 @@ DECLARE
   v_delete boolean;
   v_fields text[] := '{}';
   v_payload jsonb := '{}';
-  v_actor uuid := public.perm_actor_id();
-  v_last public.module_activity;
+  -- Who the trail row names: the person, or the API key.
+  v_actor uuid := coalesce(public.module_api_key_id(), public.perm_actor_id());
   v_field text;
 BEGIN
   IF public.tasks_module_permission(p_workspace_id) NOT IN ('edit', 'admin') THEN
@@ -667,6 +762,9 @@ BEGIN
     PERFORM public.module_activity_log(p_workspace_id, 'tasks', 'task', t.id, 'tasks.restore', '{}'::jsonb);
   END IF;
 
+  IF p_patch ? 'recurrence' THEN
+    PERFORM public.tasks__check_recurrence(public.tasks__json_object(p_patch -> 'recurrence'));
+  END IF;
   IF p_patch ? 'bucket_id' THEN
     PERFORM public.tasks__check_bucket(p_workspace_id, nullif(p_patch ->> 'bucket_id', '')::uuid);
   END IF;
@@ -738,17 +836,21 @@ BEGIN
       IF cardinality(v_carried) > 0 THEN
         v_payload := v_payload || jsonb_build_object('subtasks_moved', cardinality(v_carried));
       END IF;
-      -- Typing in the description saves often: one line per stretch of editing.
-      SELECT * INTO v_last FROM public.module_activity a
-      WHERE a.workspace_id = p_workspace_id AND a.module = 'tasks'
-        AND a.entity_type = 'task' AND a.entity_id = t.id
-      ORDER BY a.created_at DESC, a.id DESC
-      LIMIT 1;
-      IF NOT coalesce(v_fields = ARRAY['description']
-              AND v_last.op = 'tasks.update'
-              AND v_last.actor_id IS NOT DISTINCT FROM v_actor
-              AND v_last.payload -> 'fields' = '["description"]'::jsonb
-              AND v_last.created_at > now() - interval '10 minutes', false) THEN
+      -- Typing in the description saves often: one line per stretch of editing
+      -- (the same person's description edit in the last 10 minutes, with
+      -- nothing logged on the task since).
+      IF NOT (v_fields = ARRAY['description'] AND EXISTS (
+            SELECT 1 FROM public.module_activity a
+            WHERE a.workspace_id = p_workspace_id AND a.module = 'tasks'
+              AND a.entity_type = 'task' AND a.entity_id = t.id
+              AND a.op = 'tasks.update' AND a.actor_id IS NOT DISTINCT FROM v_actor
+              AND a.payload -> 'fields' = '["description"]'::jsonb
+              AND a.created_at > now() - interval '10 minutes'
+              AND NOT EXISTS (
+                SELECT 1 FROM public.module_activity b
+                WHERE b.workspace_id = a.workspace_id AND b.module = 'tasks'
+                  AND b.entity_type = 'task' AND b.entity_id = a.entity_id
+                  AND b.created_at > a.created_at))) THEN
         PERFORM public.module_activity_log(p_workspace_id, 'tasks', 'task', t.id, 'tasks.update', v_payload);
       END IF;
     END IF;

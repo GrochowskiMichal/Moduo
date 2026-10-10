@@ -9,6 +9,8 @@
 --     subset reads as "unsupported" and the caller's pointer is kept.
 --     "After completion" (recurrence.mode = 'after_completion', no picker until
 --     TV-D12/TV-U13) counts from the day it was done, in the assignee's zone.
+--     Every evaluation is bounded (rule bounds, a 20-year horizon, a step cap),
+--     and so is each roll-over run (a batch size and a time budget).
 --   * The pointer (recurrence.nextOccurrence) moves only here: when a task is
 --     completed or reopened (every path: the app, Home, Focus, MCP,
 --     calendar_complete_block) and in the roll-over. A completed repeat stays
@@ -135,9 +137,25 @@ $$;
 
 -- ── 3. The occurrence engine ────────────────────────────────────────────────
 
--- RRULE text → its parts, or NULL when it uses anything outside the subset.
--- {freq, interval, count?, until? (UTC wall clock), byday?: [{n, wd}] (wd
--- ISO 1 = Monday; n = 0 for every such weekday), bymonthday?, bymonth?, wkst}.
+-- Every evaluation is bounded. Rules outside the bounds (INTERVAL or COUNT
+-- over 1000, UNTIL or DTSTART outside 1900–2200, a long rule or long lists)
+-- read as unsupported, and the CHECK on tasks.recurrence refuses storing them
+-- (tasks__recurrence_problem, the first TV-D8 migration). The engine jumps to
+-- the period an instant falls in arithmetically, then walks at most
+-- tasks__rrule_max_steps() periods and never past a 20-year horizon, so one
+-- call costs a few hundred small steps at worst.
+
+CREATE OR REPLACE FUNCTION public.tasks__rrule_max_steps()
+RETURNS integer
+LANGUAGE sql
+IMMUTABLE
+SET search_path = ''
+AS $$ SELECT 1500 $$;
+
+-- RRULE text → its parts, or NULL when it uses anything outside the subset or
+-- the bounds. {freq, interval, count?, until? (UTC wall clock), byday?: [{n,
+-- wd}] (wd ISO 1 = Monday; n = 0 for every such weekday), bymonthday?,
+-- bymonth?, wkst}.
 CREATE OR REPLACE FUNCTION public.tasks__rrule_parse(p_rrule text)
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -147,6 +165,7 @@ AS $$
 DECLARE
   v_days constant text[] := ARRAY['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU'];
   v jsonb := '{"interval": 1, "wkst": 1}'::jsonb;
+  v_items text[];
   v_part text;
   v_key text;
   v_val text;
@@ -155,7 +174,7 @@ DECLARE
   v_m text[];
   v_n integer;
 BEGIN
-  IF p_rrule IS NULL OR btrim(p_rrule) = '' THEN
+  IF p_rrule IS NULL OR btrim(p_rrule) = '' OR length(p_rrule) > 500 THEN
     RETURN NULL;
   END IF;
   FOREACH v_part IN ARRAY string_to_array(regexp_replace(btrim(p_rrule), '^RRULE:', '', 'i'), ';') LOOP
@@ -168,59 +187,53 @@ BEGIN
       END IF;
       v := v || jsonb_build_object('freq', v_val);
     ELSIF v_key = 'INTERVAL' THEN
-      IF v_val !~ '^[0-9]{1,4}$' OR v_val::integer < 1 THEN
+      IF v_val !~ '^[0-9]{1,4}$' OR v_val::integer NOT BETWEEN 1 AND 1000 THEN
         RETURN NULL;
       END IF;
       v := v || jsonb_build_object('interval', v_val::integer);
     ELSIF v_key = 'COUNT' THEN
-      IF v_val !~ '^[0-9]{1,5}$' OR v_val::integer < 1 THEN
+      IF v_val !~ '^[0-9]{1,4}$' OR v_val::integer NOT BETWEEN 1 AND 1000 THEN
         RETURN NULL;
       END IF;
       v := v || jsonb_build_object('count', v_val::integer);
     ELSIF v_key = 'UNTIL' THEN
       -- rrule.js reads UNTIL as UTC, with or without the Z.
       v_m := regexp_match(v_val, '^([0-9]{4})([0-9]{2})([0-9]{2})(T([0-9]{2})([0-9]{2})([0-9]{2})Z?)?$');
-      IF v_m IS NULL THEN
+      IF v_m IS NULL OR v_m[1]::integer NOT BETWEEN 1900 AND 2199 THEN
         RETURN NULL;
       END IF;
       v := v || jsonb_build_object('until', format('%s-%s-%s %s:%s:%s', v_m[1], v_m[2], v_m[3],
         coalesce(v_m[5], '00'), coalesce(v_m[6], '00'), coalesce(v_m[7], '00')));
-    ELSIF v_key = 'BYDAY' THEN
+    ELSIF v_key IN ('BYDAY', 'BYMONTHDAY', 'BYMONTH') THEN
+      v_items := string_to_array(v_val, ',');
+      IF cardinality(v_items) > 31 THEN
+        RETURN NULL;
+      END IF;
       v_list := '[]'::jsonb;
-      FOREACH v_item IN ARRAY string_to_array(v_val, ',') LOOP
-        v_m := regexp_match(btrim(v_item), '^([+-]?[0-9]{1,2})?(MO|TU|WE|TH|FR|SA|SU)$');
-        IF v_m IS NULL THEN
-          RETURN NULL;
+      FOREACH v_item IN ARRAY v_items LOOP
+        IF v_key = 'BYDAY' THEN
+          v_m := regexp_match(btrim(v_item), '^([+-]?[0-9]{1,2})?(MO|TU|WE|TH|FR|SA|SU)$');
+          IF v_m IS NULL THEN
+            RETURN NULL;
+          END IF;
+          v_n := coalesce(v_m[1]::integer, 0);
+          IF v_n NOT BETWEEN -5 AND 5 THEN
+            RETURN NULL;
+          END IF;
+          v_list := v_list || jsonb_build_array(jsonb_build_object('n', v_n, 'wd', array_position(v_days, v_m[2])));
+        ELSE
+          IF btrim(v_item) !~ '^[+-]?[0-9]{1,2}$' THEN
+            RETURN NULL;
+          END IF;
+          v_n := btrim(v_item)::integer;
+          IF (v_key = 'BYMONTHDAY' AND (v_n = 0 OR v_n NOT BETWEEN -31 AND 31))
+             OR (v_key = 'BYMONTH' AND v_n NOT BETWEEN 1 AND 12) THEN
+            RETURN NULL;
+          END IF;
+          v_list := v_list || to_jsonb(v_n);
         END IF;
-        v_n := coalesce(v_m[1]::integer, 0);
-        IF v_n NOT BETWEEN -5 AND 5 THEN
-          RETURN NULL;
-        END IF;
-        v_list := v_list || jsonb_build_array(jsonb_build_object('n', v_n, 'wd', array_position(v_days, v_m[2])));
       END LOOP;
-      v := v || jsonb_build_object('byday', v_list);
-    ELSIF v_key = 'BYMONTHDAY' THEN
-      v_list := '[]'::jsonb;
-      FOREACH v_item IN ARRAY string_to_array(v_val, ',') LOOP
-        IF btrim(v_item) !~ '^[+-]?[0-9]{1,2}$' THEN
-          RETURN NULL;
-        END IF;
-        v_n := btrim(v_item)::integer;
-        IF v_n = 0 OR v_n NOT BETWEEN -31 AND 31 THEN
-          RETURN NULL;
-        END IF;
-        v_list := v_list || to_jsonb(v_n);
-      END LOOP;
-      v := v || jsonb_build_object('bymonthday', v_list);
-    ELSIF v_key = 'BYMONTH' THEN
-      v_list := '[]'::jsonb;
-      FOREACH v_item IN ARRAY string_to_array(v_val, ',') LOOP
-        IF btrim(v_item) !~ '^[0-9]{1,2}$' OR btrim(v_item)::integer NOT BETWEEN 1 AND 12 THEN
-          RETURN NULL;
-        END IF;
-        v_list := v_list || to_jsonb(btrim(v_item)::integer);
-      END LOOP;
-      v := v || jsonb_build_object('bymonth', v_list);
+      v := v || jsonb_build_object(lower(v_key), v_list);
     ELSIF v_key = 'WKST' THEN
       IF array_position(v_days, v_val) IS NULL THEN
         RETURN NULL;
@@ -241,9 +254,20 @@ BEGIN
 END;
 $$;
 
--- The days of one month a rule picks (unsorted, may repeat). A weekday with
--- an ordinal counts only in MONTHLY and YEARLY (rrule.js ignores it otherwise,
--- and so does the caller).
+-- DTSTART as a UTC wall clock, or NULL when missing or out of bounds.
+CREATE OR REPLACE FUNCTION public.tasks__rrule_start(p_rec jsonb, p_fallback timestamptz)
+RETURNS timestamp
+LANGUAGE sql
+IMMUTABLE
+SET search_path = ''
+AS $$
+  SELECT CASE WHEN s >= '1900-01-01'::timestamp AND s < '2200-01-01'::timestamp THEN s END
+  FROM (SELECT coalesce(public.tasks__try_ts(p_rec ->> 'dtstart'), p_fallback) AT TIME ZONE 'UTC' AS s) x
+$$;
+
+-- The days of one month a rule picks (unsorted, may repeat): at most 31 day
+-- numbers and 5 per weekday. A weekday with an ordinal counts only in MONTHLY
+-- and YEARLY (rrule.js ignores it otherwise, and so does the caller).
 CREATE OR REPLACE FUNCTION public.tasks__rrule_month_days(p jsonb, p_month date, p_default_day integer)
 RETURNS date[]
 LANGUAGE plpgsql
@@ -252,13 +276,14 @@ SET search_path = ''
 AS $$
 DECLARE
   v_last integer := extract(day FROM (p_month + interval '1 month' - interval '1 day'))::integer;
+  v_end date := p_month + (v_last - 1);
   v_days date[] := '{}';
   v_by date[] := '{}';
   v_md jsonb;
   v_bd jsonb;
   v_d integer;
-  v_first date;
-  v_lastd date;
+  v_wd integer;
+  v_n integer;
   v_x date;
   v_has_md boolean := p ? 'bymonthday';
   v_has_bd boolean := p ? 'byday';
@@ -276,22 +301,24 @@ BEGIN
   END IF;
   IF v_has_bd THEN
     FOR v_bd IN SELECT * FROM jsonb_array_elements(p -> 'byday') LOOP
-      IF (v_bd ->> 'n')::integer = 0 THEN
-        FOR v_d IN 1 .. v_last LOOP
-          IF extract(isodow FROM p_month + (v_d - 1))::integer = (v_bd ->> 'wd')::integer THEN
-            v_by := v_by || (p_month + (v_d - 1));
+      v_wd := (v_bd ->> 'wd')::integer;
+      v_n := (v_bd ->> 'n')::integer;
+      IF v_n >= 0 THEN
+        -- The first such weekday of the month, then every week (n = 0) or the nth.
+        v_x := p_month + (((v_wd - extract(isodow FROM p_month)::integer) + 7) % 7);
+        IF v_n = 0 THEN
+          WHILE v_x <= v_end LOOP
+            v_by := v_by || v_x;
+            v_x := v_x + 7;
+          END LOOP;
+        ELSE
+          v_x := v_x + 7 * (v_n - 1);
+          IF v_x <= v_end THEN
+            v_by := v_by || v_x;
           END IF;
-        END LOOP;
-      ELSIF (v_bd ->> 'n')::integer > 0 THEN
-        v_first := p_month + ((((v_bd ->> 'wd')::integer - extract(isodow FROM p_month)::integer) + 7) % 7);
-        v_x := v_first + 7 * ((v_bd ->> 'n')::integer - 1);
-        IF v_x < p_month + v_last THEN
-          v_by := v_by || v_x;
         END IF;
       ELSE
-        v_lastd := p_month + (v_last - 1);
-        v_x := v_lastd - (((extract(isodow FROM v_lastd)::integer - (v_bd ->> 'wd')::integer) + 7) % 7)
-               - 7 * (abs((v_bd ->> 'n')::integer) - 1);
+        v_x := v_end - (((extract(isodow FROM v_end)::integer - v_wd) + 7) % 7) - 7 * (abs(v_n) - 1);
         IF v_x >= p_month THEN
           v_by := v_by || v_x;
         END IF;
@@ -311,8 +338,33 @@ BEGIN
 END;
 $$;
 
--- The occurrences of period k (0 = DTSTART's day, week, month or year), in
--- order, as UTC wall-clock times. Not yet cut by DTSTART, UNTIL or COUNT.
+-- The first day of period k (0 = DTSTART's day, week, month or year).
+CREATE OR REPLACE FUNCTION public.tasks__rrule_period_start(p jsonb, p_dt0 timestamp, p_k integer)
+RETURNS date
+LANGUAGE plpgsql
+IMMUTABLE
+SET search_path = ''
+AS $$
+DECLARE
+  v_int integer := (p ->> 'interval')::integer;
+  v_day0 date := p_dt0::date;
+BEGIN
+  CASE p ->> 'freq'
+    WHEN 'DAILY' THEN
+      RETURN v_day0 + p_k * v_int;
+    WHEN 'WEEKLY' THEN
+      RETURN v_day0 - ((extract(isodow FROM v_day0)::integer - (p ->> 'wkst')::integer + 7) % 7)
+             + 7 * p_k * v_int;
+    WHEN 'MONTHLY' THEN
+      RETURN (date_trunc('month', v_day0) + make_interval(months => p_k * v_int))::date;
+    ELSE
+      RETURN make_date(extract(year FROM v_day0)::integer + p_k * v_int, 1, 1);
+  END CASE;
+END;
+$$;
+
+-- The occurrences of period k, in order, as UTC wall-clock times. Not yet cut
+-- by DTSTART, UNTIL or COUNT.
 CREATE OR REPLACE FUNCTION public.tasks__rrule_period(p jsonb, p_dt0 timestamp, p_k integer)
 RETURNS timestamp[]
 LANGUAGE plpgsql
@@ -321,15 +373,13 @@ SET search_path = ''
 AS $$
 DECLARE
   v_freq text := p ->> 'freq';
-  v_int integer := (p ->> 'interval')::integer;
   v_tod interval := p_dt0 - date_trunc('day', p_dt0);
   v_day0 date := p_dt0::date;
+  v_start date := public.tasks__rrule_period_start(p, p_dt0, p_k);
   v_plain integer[];
   v_months integer[];
   v_days date[] := '{}';
   v_d date;
-  v_ws date;
-  v_m date;
   v_mon integer;
 BEGIN
   -- Plain weekdays (ordinals ignored outside MONTHLY / YEARLY, as in rrule.js).
@@ -342,35 +392,31 @@ BEGIN
   END IF;
 
   IF v_freq = 'DAILY' THEN
-    v_d := v_day0 + p_k * v_int;
-    IF (v_plain IS NULL OR extract(isodow FROM v_d)::integer = ANY (v_plain))
-       AND (v_months IS NULL OR extract(month FROM v_d)::integer = ANY (v_months))
-       AND (NOT p ? 'bymonthday' OR v_d = ANY (public.tasks__rrule_month_days(
-             jsonb_build_object('bymonthday', p -> 'bymonthday'), date_trunc('month', v_d)::date, 0))) THEN
-      v_days := ARRAY[v_d];
+    IF (v_plain IS NULL OR extract(isodow FROM v_start)::integer = ANY (v_plain))
+       AND (v_months IS NULL OR extract(month FROM v_start)::integer = ANY (v_months))
+       AND (NOT p ? 'bymonthday' OR v_start = ANY (public.tasks__rrule_month_days(
+             jsonb_build_object('bymonthday', p -> 'bymonthday'), date_trunc('month', v_start)::date, 0))) THEN
+      v_days := ARRAY[v_start];
     END IF;
   ELSIF v_freq = 'WEEKLY' THEN
-    v_ws := v_day0 - ((extract(isodow FROM v_day0)::integer - (p ->> 'wkst')::integer + 7) % 7);
-    v_ws := v_ws + 7 * p_k * v_int;
     IF v_plain IS NULL THEN
       v_plain := ARRAY[extract(isodow FROM v_day0)::integer];
     END IF;
     FOR i IN 0 .. 6 LOOP
-      v_d := v_ws + i;
+      v_d := v_start + i;
       IF extract(isodow FROM v_d)::integer = ANY (v_plain)
          AND (v_months IS NULL OR extract(month FROM v_d)::integer = ANY (v_months)) THEN
         v_days := v_days || v_d;
       END IF;
     END LOOP;
   ELSIF v_freq = 'MONTHLY' THEN
-    v_m := (date_trunc('month', v_day0) + make_interval(months => p_k * v_int))::date;
-    IF v_months IS NULL OR extract(month FROM v_m)::integer = ANY (v_months) THEN
-      v_days := public.tasks__rrule_month_days(p, v_m, extract(day FROM v_day0)::integer);
+    IF v_months IS NULL OR extract(month FROM v_start)::integer = ANY (v_months) THEN
+      v_days := public.tasks__rrule_month_days(p, v_start, extract(day FROM v_day0)::integer);
     END IF;
   ELSIF v_freq = 'YEARLY' THEN
     FOREACH v_mon IN ARRAY coalesce(v_months, ARRAY[extract(month FROM v_day0)::integer]) LOOP
-      v_m := make_date(extract(year FROM v_day0)::integer + p_k * v_int, v_mon, 1);
-      v_days := v_days || public.tasks__rrule_month_days(p, v_m, extract(day FROM v_day0)::integer);
+      v_days := v_days || public.tasks__rrule_month_days(
+        p, make_date(extract(year FROM v_start)::integer, v_mon, 1), extract(day FROM v_day0)::integer);
     END LOOP;
   END IF;
 
@@ -378,7 +424,7 @@ BEGIN
 END;
 $$;
 
--- Roughly which period an instant falls in (never past it).
+-- Which period an instant falls in, by arithmetic (never past it).
 CREATE OR REPLACE FUNCTION public.tasks__rrule_period_of(p jsonb, p_dt0 timestamp, p_at timestamp)
 RETURNS integer
 LANGUAGE plpgsql
@@ -388,7 +434,6 @@ AS $$
 DECLARE
   v_int integer := (p ->> 'interval')::integer;
   v_day0 date := p_dt0::date;
-  v_ws date;
 BEGIN
   IF p_at <= p_dt0 THEN
     RETURN 0;
@@ -397,8 +442,7 @@ BEGIN
     WHEN 'DAILY' THEN
       RETURN (p_at::date - v_day0) / v_int;
     WHEN 'WEEKLY' THEN
-      v_ws := v_day0 - ((extract(isodow FROM v_day0)::integer - (p ->> 'wkst')::integer + 7) % 7);
-      RETURN (p_at::date - v_ws) / (7 * v_int);
+      RETURN (p_at::date - public.tasks__rrule_period_start(p, p_dt0, 0)) / (7 * v_int);
     WHEN 'MONTHLY' THEN
       RETURN ((extract(year FROM p_at)::integer - extract(year FROM v_day0)::integer) * 12
               + extract(month FROM p_at)::integer - extract(month FROM v_day0)::integer) / v_int;
@@ -410,7 +454,8 @@ $$;
 
 -- The first occurrence after p_after (or at it, when inclusive), like
 -- rrule.js's after(). DTSTART comes from the rule, else p_fallback (the task's
--- created_at, as in the app). NULL when the rule is unsupported or ends.
+-- created_at, as in the app). NULL when the rule is unsupported or ends, or
+-- when nothing comes within 20 years.
 CREATE OR REPLACE FUNCTION public.tasks__rrule_next(p_rec jsonb, p_after timestamptz, p_fallback timestamptz, p_inclusive boolean DEFAULT false)
 RETURNS timestamptz
 LANGUAGE plpgsql
@@ -419,27 +464,33 @@ SET search_path = ''
 AS $$
 DECLARE
   p jsonb := public.tasks__rrule_parse(p_rec ->> 'rrule');
-  v_dt0 timestamp;
+  v_dt0 timestamp := public.tasks__rrule_start(p_rec, p_fallback);
   v_after timestamp;
+  v_horizon date;
   v_until timestamp;
   v_count integer;
   v_seen integer := 0;
   v_k integer;
   v_c timestamp;
 BEGIN
-  IF p IS NULL OR p_after IS NULL THEN
+  IF p IS NULL OR v_dt0 IS NULL OR p_after IS NULL THEN
     RETURN NULL;
   END IF;
-  v_dt0 := coalesce(public.tasks__try_ts(p_rec ->> 'dtstart'), p_fallback) AT TIME ZONE 'UTC';
-  IF v_dt0 IS NULL THEN
+  v_after := greatest(p_after AT TIME ZONE 'UTC', v_dt0 - interval '1 day');
+  IF v_after >= '2200-01-01'::timestamp THEN
     RETURN NULL;
   END IF;
-  v_after := p_after AT TIME ZONE 'UTC';
+  v_horizon := (v_after + interval '20 years')::date;
   v_until := (p ->> 'until')::timestamp;
   v_count := (p ->> 'count')::integer;
+  -- A counted rule is walked from its start (at most COUNT ≤ 1000 occurrences);
+  -- any other jumps straight to the period p_after falls in.
   v_k := CASE WHEN v_count IS NULL
               THEN greatest(public.tasks__rrule_period_of(p, v_dt0, v_after) - 1, 0) ELSE 0 END;
-  FOR i IN 0 .. 2000 LOOP
+  FOR i IN 0 .. public.tasks__rrule_max_steps() LOOP
+    IF public.tasks__rrule_period_start(p, v_dt0, v_k + i) > v_horizon THEN
+      RETURN NULL;
+    END IF;
     FOREACH v_c IN ARRAY public.tasks__rrule_period(p, v_dt0, v_k + i) LOOP
       CONTINUE WHEN v_c < v_dt0;
       IF v_until IS NOT NULL AND v_c > v_until THEN
@@ -461,6 +512,7 @@ END;
 $$;
 
 -- The last occurrence at or before p_at, like rrule.js's before(at, true).
+-- NULL when there is none within the 20 years before p_at.
 CREATE OR REPLACE FUNCTION public.tasks__rrule_prev(p_rec jsonb, p_at timestamptz, p_fallback timestamptz)
 RETURNS timestamptz
 LANGUAGE plpgsql
@@ -469,8 +521,9 @@ SET search_path = ''
 AS $$
 DECLARE
   p jsonb := public.tasks__rrule_parse(p_rec ->> 'rrule');
-  v_dt0 timestamp;
+  v_dt0 timestamp := public.tasks__rrule_start(p_rec, p_fallback);
   v_at timestamp;
+  v_floor date;
   v_until timestamp;
   v_count integer;
   v_seen integer := 0;
@@ -479,22 +532,18 @@ DECLARE
   v_best timestamp;
   v_list timestamp[];
 BEGIN
-  IF p IS NULL OR p_at IS NULL THEN
+  IF p IS NULL OR v_dt0 IS NULL OR p_at IS NULL THEN
     RETURN NULL;
   END IF;
-  v_dt0 := coalesce(public.tasks__try_ts(p_rec ->> 'dtstart'), p_fallback) AT TIME ZONE 'UTC';
-  IF v_dt0 IS NULL THEN
-    RETURN NULL;
-  END IF;
-  v_at := p_at AT TIME ZONE 'UTC';
+  v_at := least(p_at AT TIME ZONE 'UTC', '2200-01-01'::timestamp);
   IF v_at < v_dt0 THEN
     RETURN NULL;
   END IF;
   v_until := (p ->> 'until')::timestamp;
   v_count := (p ->> 'count')::integer;
   IF v_count IS NOT NULL THEN
-    -- Counted rules: walk from the start.
-    FOR i IN 0 .. 20000 LOOP
+    -- Counted rules: walk from the start; COUNT ≤ 1000 ends it soon.
+    FOR i IN 0 .. public.tasks__rrule_max_steps() LOOP
       FOREACH v_c IN ARRAY public.tasks__rrule_period(p, v_dt0, i) LOOP
         CONTINUE WHEN v_c < v_dt0;
         IF v_c > v_at OR (v_until IS NOT NULL AND v_c > v_until) THEN
@@ -509,9 +558,14 @@ BEGIN
     END LOOP;
     RETURN v_best AT TIME ZONE 'UTC';
   END IF;
+  v_floor := (v_at - interval '20 years')::date;
   v_k := public.tasks__rrule_period_of(p, v_dt0, v_at) + 1;
-  FOR i IN 0 .. 2000 LOOP
+  FOR i IN 0 .. public.tasks__rrule_max_steps() LOOP
     EXIT WHEN v_k - i < 0;
+    -- Periods start in order: once one starts before the floor, stop.
+    IF public.tasks__rrule_period_start(p, v_dt0, v_k - i) < v_floor THEN
+      RETURN NULL;
+    END IF;
     v_list := public.tasks__rrule_period(p, v_dt0, v_k - i);
     FOR j IN REVERSE coalesce(array_length(v_list, 1), 0) .. 1 LOOP
       v_c := v_list[j];
@@ -527,7 +581,7 @@ END;
 $$;
 
 -- "After completion": the same time of day as DTSTART, the interval after the
--- day it was done, in the person's zone.
+-- day it was done, in the person's zone. Arithmetic only.
 CREATE OR REPLACE FUNCTION public.tasks__after_completion_next(p_rec jsonb, p_done_at timestamptz, p_zone text, p_fallback timestamptz)
 RETURNS timestamptz
 LANGUAGE plpgsql
@@ -542,7 +596,7 @@ DECLARE
   v_day date;
   v_tod time;
 BEGIN
-  IF p IS NULL OR p_done_at IS NULL THEN
+  IF p IS NULL OR p_done_at IS NULL OR p_done_at >= '2200-01-01T00:00:00Z'::timestamptz THEN
     RETURN NULL;
   END IF;
   BEGIN
@@ -565,8 +619,9 @@ $$;
 
 -- Where the pointer goes when a repeat is completed now: the next occurrence
 -- after the pending one (completing early skips it) or after now (no
--- backfill), and never one on the day it was done in the task's zone.
--- {supported: false} when the server can't read the rule.
+-- backfill), and never one on the day it was done in the task's zone (at most
+-- two occurrences can share a local day). {supported: false} when the server
+-- can't read the rule.
 CREATE OR REPLACE FUNCTION public.tasks__pointer_on_complete(p_task public.tasks, p_now timestamptz)
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -588,7 +643,7 @@ BEGIN
   ELSE
     v_next := public.tasks__rrule_next(v_rec, greatest(p_now, coalesce(p_task.scheduled_at, p_now)),
                                        p_task.created_at);
-    FOR i IN 1 .. 400 LOOP
+    FOR i IN 1 .. 4 LOOP
       EXIT WHEN v_next IS NULL OR public.tasks__local_date(v_next, v_zone) > v_today;
       v_next := public.tasks__rrule_next(v_rec, v_next, p_task.created_at);
     END LOOP;
@@ -695,11 +750,17 @@ BEGIN
   END IF;
 
   IF jsonb_typeof(t.recurrence) = 'object' AND v_from IS DISTINCT FROM p_status THEN
-    IF p_status = 'done' THEN
-      v_pointer := public.tasks__pointer_on_complete(t, v_now);
-    ELSIF v_from = 'done' AND p_status IN ('todo', 'in_progress') THEN
-      v_pointer := public.tasks__pointer_on_reopen(t, v_now);
-    END IF;
+    BEGIN
+      IF p_status = 'done' THEN
+        v_pointer := public.tasks__pointer_on_complete(t, v_now);
+      ELSIF v_from = 'done' AND p_status IN ('todo', 'in_progress') THEN
+        v_pointer := public.tasks__pointer_on_reopen(t, v_now);
+      END IF;
+    EXCEPTION WHEN OTHERS THEN
+      -- A rule the engine can't evaluate never blocks a status change.
+      RAISE NOTICE 'tasks__apply_status: no pointer for task % (%)', t.id, SQLERRM;
+      v_pointer := '{"supported": false}'::jsonb;
+    END;
     IF v_pointer IS NOT NULL THEN
       IF (v_pointer ->> 'supported')::boolean THEN
         v_rec := t.recurrence || jsonb_build_object('nextOccurrence', v_pointer -> 'next');
@@ -748,8 +809,15 @@ REVOKE ALL ON FUNCTION public.tasks__apply_status(public.tasks, text, jsonb, tex
 -- the next occurrence (never on the day they were done), and moves an open
 -- repeat that missed a whole day to today's occurrence (or gives one with no
 -- time its occurrence). System work: no permission checks, logged as Moduo.
--- One workspace, or all of them (the cron).
-CREATE OR REPLACE FUNCTION public.tasks__roll_over(p_workspace_id uuid DEFAULT NULL, p_now timestamptz DEFAULT now())
+-- One workspace, or all of them (the cron). Bounded: at most p_limit tasks
+-- per run, picked at random among the candidates so none waits forever, and
+-- it stops when p_budget is spent; a task whose rule fails is skipped.
+DROP FUNCTION IF EXISTS public.tasks__roll_over(uuid, timestamptz);
+CREATE OR REPLACE FUNCTION public.tasks__roll_over(
+  p_workspace_id uuid DEFAULT NULL,
+  p_now timestamptz DEFAULT now(),
+  p_limit integer DEFAULT 1000,
+  p_budget interval DEFAULT interval '30 seconds')
 RETURNS SETOF public.tasks
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -766,6 +834,8 @@ DECLARE
   v_next timestamptz;
   v_from timestamptz;
   v_kind text;
+  v_started timestamptz := clock_timestamp();
+  v_changed boolean;
 BEGIN
   FOR t IN
     SELECT * FROM public.tasks x
@@ -778,66 +848,77 @@ BEGIN
            OR (x.status IN ('todo', 'in_progress')
                AND coalesce(x.recurrence ->> 'mode', '') <> 'after_completion'
                AND (x.scheduled_at IS NULL OR x.scheduled_at < p_now)))
-    ORDER BY x.id
+    -- Coming-back repeats first (they're due at a moment), then the rest.
+    ORDER BY (x.status <> 'done'), random()
+    LIMIT greatest(coalesce(p_limit, 1000), 1)
     FOR UPDATE SKIP LOCKED
   LOOP
+    EXIT WHEN clock_timestamp() - v_started > p_budget;
     CONTINUE WHEN public.tasks__rrule_parse(t.recurrence ->> 'rrule') IS NULL;
-    v_zone := public.tasks__zone_of(t);
-    v_today := public.tasks__local_date(p_now, v_zone);
-    v_end := public.tasks__local_midnight(v_today + 1, v_zone) - interval '1 microsecond';
-    v_from := t.scheduled_at;
+    v_changed := false;
+    BEGIN
+      v_zone := public.tasks__zone_of(t);
+      v_today := public.tasks__local_date(p_now, v_zone);
+      v_end := public.tasks__local_midnight(v_today + 1, v_zone) - interval '1 microsecond';
+      v_from := t.scheduled_at;
 
-    IF t.status = 'done' THEN
-      v_pointer := public.tasks__try_ts(t.recurrence ->> 'nextOccurrence');
-      IF v_pointer IS NULL THEN
-        -- Completed before pointers were kept: the occurrence after it was done.
-        v_pointer := public.tasks__rrule_next(t.recurrence, t.updated_at, t.created_at);
-        CONTINUE WHEN v_pointer IS NULL; -- the rule has ended: it stays done
-      END IF;
-      SELECT max(c.completed_at) INTO v_done_at FROM public.task_completions c
-      WHERE c.task_id = t.id AND c.deleted_at IS NULL;
-      v_done_at := coalesce(v_done_at, t.updated_at);
-      CONTINUE WHEN v_today < public.tasks__local_date(v_pointer, v_zone)
-                 OR v_today <= public.tasks__local_date(v_done_at, v_zone);
-      IF t.recurrence ->> 'mode' = 'after_completion' THEN
-        v_cur := v_pointer;
-        v_next := NULL;
+      IF t.status = 'done' THEN
+        v_pointer := public.tasks__try_ts(t.recurrence ->> 'nextOccurrence');
+        IF v_pointer IS NULL THEN
+          -- Completed before pointers were kept: the occurrence after it was done.
+          v_pointer := public.tasks__rrule_next(t.recurrence, t.updated_at, t.created_at);
+          CONTINUE WHEN v_pointer IS NULL; -- the rule has ended: it stays done
+        END IF;
+        SELECT max(c.completed_at) INTO v_done_at FROM public.task_completions c
+        WHERE c.task_id = t.id AND c.deleted_at IS NULL;
+        v_done_at := coalesce(v_done_at, t.updated_at);
+        CONTINUE WHEN v_today < public.tasks__local_date(v_pointer, v_zone)
+                   OR v_today <= public.tasks__local_date(v_done_at, v_zone);
+        IF t.recurrence ->> 'mode' = 'after_completion' THEN
+          v_cur := v_pointer;
+          v_next := NULL;
+        ELSE
+          v_cur := public.tasks__rrule_prev(t.recurrence, v_end, t.created_at);
+          IF v_cur IS NULL OR v_cur < v_pointer THEN
+            v_cur := v_pointer;
+          END IF;
+          v_next := public.tasks__rrule_next(t.recurrence, v_cur, t.created_at);
+        END IF;
+        UPDATE public.tasks
+          SET status = 'todo',
+              scheduled_at = v_cur,
+              recurrence = t.recurrence || jsonb_build_object('nextOccurrence', public.tasks__iso(v_next)),
+              committed_for = NULL,
+              commit_order = NULL,
+              updated_at = now()
+          WHERE id = t.id
+          RETURNING * INTO t;
+        v_kind := 'reopen';
+        v_changed := true;
       ELSE
         v_cur := public.tasks__rrule_prev(t.recurrence, v_end, t.created_at);
-        IF v_cur IS NULL OR v_cur < v_pointer THEN
-          v_cur := v_pointer;
+        IF t.scheduled_at IS NULL THEN
+          v_cur := coalesce(v_cur, public.tasks__rrule_next(t.recurrence, p_now, t.created_at));
+          CONTINUE WHEN v_cur IS NULL;
+          v_kind := 'adopt';
+        ELSE
+          CONTINUE WHEN v_cur IS NULL OR v_cur <= t.scheduled_at
+                     OR public.tasks__local_date(t.scheduled_at, v_zone) >= public.tasks__local_date(v_cur, v_zone);
+          v_kind := 'collapse';
         END IF;
         v_next := public.tasks__rrule_next(t.recurrence, v_cur, t.created_at);
+        UPDATE public.tasks
+          SET scheduled_at = v_cur,
+              recurrence = t.recurrence || jsonb_build_object('nextOccurrence', public.tasks__iso(v_next)),
+              updated_at = now()
+          WHERE id = t.id
+          RETURNING * INTO t;
+        v_changed := true;
       END IF;
-      UPDATE public.tasks
-        SET status = 'todo',
-            scheduled_at = v_cur,
-            recurrence = t.recurrence || jsonb_build_object('nextOccurrence', public.tasks__iso(v_next)),
-            committed_for = NULL,
-            commit_order = NULL,
-            updated_at = now()
-        WHERE id = t.id
-        RETURNING * INTO t;
-      v_kind := 'reopen';
-    ELSE
-      v_cur := public.tasks__rrule_prev(t.recurrence, v_end, t.created_at);
-      IF t.scheduled_at IS NULL THEN
-        v_cur := coalesce(v_cur, public.tasks__rrule_next(t.recurrence, p_now, t.created_at));
-        CONTINUE WHEN v_cur IS NULL;
-        v_kind := 'adopt';
-      ELSE
-        CONTINUE WHEN v_cur IS NULL OR v_cur <= t.scheduled_at
-                   OR public.tasks__local_date(t.scheduled_at, v_zone) >= public.tasks__local_date(v_cur, v_zone);
-        v_kind := 'collapse';
-      END IF;
-      v_next := public.tasks__rrule_next(t.recurrence, v_cur, t.created_at);
-      UPDATE public.tasks
-        SET scheduled_at = v_cur,
-            recurrence = t.recurrence || jsonb_build_object('nextOccurrence', public.tasks__iso(v_next)),
-            updated_at = now()
-        WHERE id = t.id
-        RETURNING * INTO t;
-    END IF;
+    EXCEPTION WHEN OTHERS THEN
+      RAISE NOTICE 'tasks__roll_over: skipped task % (%)', t.id, SQLERRM;
+    END;
+    CONTINUE WHEN NOT v_changed;
 
     -- module_activity_log needs a person or a key; this is Moduo's own work.
     INSERT INTO public.module_activity
@@ -849,7 +930,7 @@ BEGIN
   RETURN;
 END;
 $$;
-REVOKE ALL ON FUNCTION public.tasks__roll_over(uuid, timestamptz) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.tasks__roll_over(uuid, timestamptz, integer, interval) FROM PUBLIC, anon, authenticated;
 
 -- Old and new apps call this after opening a workspace. It now runs the
 -- server's roll-over for the workspace (as system work, so a repeat you can
@@ -881,7 +962,8 @@ BEGIN
 
   v_bypass := current_setting('share.bypass', true);
   PERFORM set_config('share.bypass', '1', true);
-  FOR t IN SELECT * FROM public.tasks__roll_over(p_workspace_id, now()) LOOP
+  -- An app's call is small: this workspace, a short batch, a few seconds.
+  FOR t IN SELECT * FROM public.tasks__roll_over(p_workspace_id, now(), 300, interval '3 seconds') LOOP
     v_ids := v_ids || t.id;
   END LOOP;
   PERFORM set_config('share.bypass', coalesce(v_bypass, ''), true);
@@ -915,6 +997,8 @@ BEGIN
     'tasks__try_ts(text)', 'tasks__try_uuid(text)', 'tasks__iso(timestamptz)',
     'tasks__local_date(timestamptz, text)', 'tasks__local_midnight(date, text)',
     'tasks__zone_of(public.tasks)', 'tasks__rrule_parse(text)',
+    'tasks__rrule_max_steps()', 'tasks__rrule_start(jsonb, timestamptz)',
+    'tasks__rrule_period_start(jsonb, timestamp, integer)',
     'tasks__rrule_month_days(jsonb, date, integer)', 'tasks__rrule_period(jsonb, timestamp, integer)',
     'tasks__rrule_period_of(jsonb, timestamp, timestamp)',
     'tasks__rrule_next(jsonb, timestamptz, timestamptz, boolean)',
@@ -932,10 +1016,12 @@ $$;
 
 -- ── 7. Every 15 minutes (zones with :30 and :45 offsets) ────────────────────
 
+-- Each run is bounded three ways: 2,000 tasks at most, a 60-second budget the
+-- function checks itself, and a statement timeout behind it.
 SELECT cron.schedule(
   'tasks-roll-over',
   '*/15 * * * *',
-  $cron$SELECT count(*) FROM public.tasks__roll_over()$cron$
+  $cron$SET statement_timeout = '120s'; SELECT count(*) FROM public.tasks__roll_over(NULL, now(), 2000, interval '60 seconds')$cron$
 );
 
 -- ── 8. Account erasure covers task_completions (§Assumptions #26) ──────────
