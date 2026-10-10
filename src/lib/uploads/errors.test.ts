@@ -134,6 +134,18 @@ describe("describeProblem — each state's message and action (owner vs member)"
     expect(describeProblem({ kind: "interrupted" }, ctx).actions).toContain("retry");
   });
 
+  it("empty and over Storage's own limit: facts, no Retry", () => {
+    expect(describeProblem({ kind: "empty" }, ctx)).toEqual({
+      text: "Not attached — recording.mov is empty",
+      actions: ["dismiss"],
+    });
+    expect(describeProblem({ kind: "server_too_large", sizeBytes: 60 * MB }, ctx)).toEqual({
+      text: "Not attached — recording.mov (60 MB) is over the upload limit",
+      actions: ["dismiss"],
+    });
+    expect(classifyUploadError(new AttachmentOpError("invalid_size")).kind).toBe("empty");
+  });
+
   it("almost full", () => {
     expect(almostFullCaption(47.6 * GB, 50 * GB)).toBe("Storage almost full — 47.6 of 50 GB");
   });

@@ -94,6 +94,7 @@ function setup(
     api?: ReturnType<typeof fakeApi>;
     store?: ReturnType<typeof memoryUploadStore>;
     online?: () => boolean;
+    claim?: (id: string, fn: () => Promise<void>) => Promise<boolean>;
   } = {},
 ) {
   let clock = 1_000_000;
@@ -110,6 +111,7 @@ function setup(
     random: () => 0.5,
     newId: () => `id${++ids}`,
     isOnline: opts.online ?? (() => true),
+    claim: opts.claim,
     setTimer: (fn, ms) => {
       const t = { fn, at: clock + ms };
       timers.push(t);
@@ -378,6 +380,93 @@ describe("UploadQueue", () => {
     t.queue.dismiss(item.id);
     await settle();
     expect(t.queue.getSnapshot().items).toEqual([]);
+    expect(t.store.items.size).toBe(0);
+  });
+
+  it("a file dismissed while begin is in flight never comes back", async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    const api = fakeApi({ begin: [() => gate] });
+    // begin waits on the gate before answering
+    const begin = api.begin.bind(api);
+    api.begin = async (input: unknown) => {
+      await gate;
+      return begin(input);
+    };
+    const t = setup({ api });
+    await t.queue.start("u1");
+    await t.queue.add([png()], TARGET, "u1", status());
+    await settle();
+    const [item] = t.queue.getSnapshot().items;
+    t.queue.dismiss(item.id);
+    release();
+    await settle();
+    expect(t.store.items.size).toBe(0);
+    expect(api.calls.map((c) => c.step)).toEqual(["begin"]);
+    expect(t.queue.getSnapshot().items).toEqual([]);
+  });
+
+  it("leaves a file another tab is uploading alone, and looks again later", async () => {
+    let held = true;
+    const t = setup({
+      claim: async (_id, fn) => {
+        if (held) return false;
+        await fn();
+        return true;
+      },
+    });
+    await t.queue.start("u1");
+    await t.queue.add([png()], TARGET, "u1", status());
+    await settle();
+    expect(t.api.calls).toEqual([]);
+    expect(t.queue.getSnapshot().items[0].state).toBe("waiting");
+    held = false;
+    await t.advance(30_000);
+    expect(t.uploaded).toHaveLength(1);
+  });
+
+  it("drops a file another tab already finished, without uploading it again", async () => {
+    let online = false;
+    const t = setup({ online: () => online });
+    await t.queue.start("u1");
+    await t.queue.add([png()], TARGET, "u1", status());
+    await settle();
+    expect(t.queue.getSnapshot().items).toHaveLength(1);
+    // The other tab finished it first: it's gone from the shared store.
+    t.store.items.clear();
+    online = true;
+    t.queue.wake();
+    await settle();
+    expect(t.api.calls).toEqual([]);
+    expect(t.queue.getSnapshot().items).toEqual([]);
+  });
+
+  it("refuses an empty file up front, with no Retry loop", async () => {
+    const t = setup();
+    await t.queue.start("u1");
+    await t.queue.add([png("empty.txt", 0)], TARGET, "u1", status());
+    await settle();
+    expect(t.api.calls).toEqual([]);
+    expect(t.queue.getSnapshot().items[0]).toMatchObject({
+      state: "rejected",
+      problem: { kind: "empty" },
+    });
+  });
+
+  it("stops at Storage's own size refusal (413) instead of retrying it", async () => {
+    const api = fakeApi({
+      upload: [new AttachmentOpError("upload_too_large", { size_bytes: 3 }, 413)],
+    });
+    const t = setup({ api });
+    await t.queue.start("u1");
+    await t.queue.add([png()], TARGET, "u1", status());
+    await settle();
+    expect(t.queue.getSnapshot().items[0]).toMatchObject({
+      state: "rejected",
+      problem: { kind: "server_too_large", sizeBytes: 3 },
+    });
     expect(t.store.items.size).toBe(0);
   });
 

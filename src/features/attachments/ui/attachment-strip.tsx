@@ -6,7 +6,7 @@
 // one way forward (AT2-4): facts with numbers, never red, never a dialog.
 // Presentational: the data and actions come from `useEntityAttachments`.
 
-import { CloudOff, Plus, RotateCw, X } from "lucide-react";
+import { CloudOff, FileImage, Plus, RotateCw, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -247,7 +247,12 @@ function ReadyTile({
             onError={() => setBroken(true)}
             className="size-full object-cover"
           />
-        ) : null}
+        ) : (
+          // No link yet (or it couldn't be signed): the file type, not a blank box.
+          <span className="flex size-full items-center justify-center text-muted-foreground">
+            <FileImage className="size-icon-sm" aria-hidden />
+          </span>
+        )}
         {/* the hairline sits over the picture, as in the comp */}
         <span
           aria-hidden

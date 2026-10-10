@@ -2,6 +2,10 @@
 // "Upload errors — mirrors, not walls"; AT2-4). Facts with numbers, never red,
 // never a blocking dialog. Pure: the strip renders what `describeProblem` says.
 
+import {
+  ATTACHMENT_PER_FILE_BYTES,
+  ATTACHMENT_PLATFORM_FILE_CAP_BYTES,
+} from "@contracts/attachments";
 import { isNetworkError } from "@/features/notes/sync/meta-outbox";
 
 /** An attachments op refusal: AT-1 raises machine codes (`attachment_too_large`,
@@ -44,6 +48,10 @@ export type UploadProblem =
   /** Can't add files to this task (view-only, or it's gone). */
   | { kind: "no_access" }
   | { kind: "task_gone" }
+  /** An empty file: nothing to attach. */
+  | { kind: "empty" }
+  /** Storage itself refused the size (413), whatever the plan says. */
+  | { kind: "server_too_large"; sizeBytes: number }
   /** Too many unfinished uploads for this person; waits a little. */
   | { kind: "busy" }
   /** Anything else the server refused. */
@@ -93,6 +101,10 @@ export function classifyUploadError(
         return { kind: "offline" };
       case "upload_mismatch":
         return { kind: "mismatch" };
+      case "invalid_size":
+        return { kind: "empty" };
+      case "upload_too_large":
+        return { kind: "server_too_large", sizeBytes: num(d.size_bytes) };
       case "upload_server":
         // Storage hiccup (5xx): same as a dropped connection.
         return { kind: "interrupted" };
@@ -141,27 +153,15 @@ export function formatUsage(usedBytes: number, totalBytes: number, sep = " of ")
   return `${trim(usedBytes / unit)}${sep}${trim(totalBytes / unit)} ${label}`;
 }
 
-// ── plans (mirrors storage__limits_for_owner + attachments__platform_file_cap in
-// 20261008210500_attachments_storage.sql; change both together) ───────────────
-
-/** The hosted project's global upload cap: every plan's per-file limit is held
- *  under it until the org moves to Supabase Pro (AT-1 decision). */
-export const PLATFORM_FILE_CAP_BYTES = 50 * MiB;
-const PLAN_PER_FILE_BYTES: Record<string, number> = {
-  free: 20 * MiB,
-  pro: 200 * MiB,
-  duo: 200 * MiB,
-  team: 500 * MiB,
-  founder: 500 * MiB,
-};
+// ── plans (the table lives in @contracts/attachments, drift-tested against
+// AT-1's SQL) ───────────────────────────────────────────────────────────────────
 
 /** Would a higher plan take this file? Only then is Upgrade worth offering. */
 export function upgradeAllowsFile(sizeBytes: number, tier: string): boolean {
-  const current = Math.min(
-    PLAN_PER_FILE_BYTES[tier] ?? PLAN_PER_FILE_BYTES.free,
-    PLATFORM_FILE_CAP_BYTES,
-  );
-  const best = Math.min(PLAN_PER_FILE_BYTES.team, PLATFORM_FILE_CAP_BYTES);
+  const perFile: Record<string, number> = ATTACHMENT_PER_FILE_BYTES;
+  const cap = ATTACHMENT_PLATFORM_FILE_CAP_BYTES;
+  const current = Math.min(perFile[tier] ?? perFile.free, cap);
+  const best = Math.min(Math.max(...Object.values(perFile)), cap);
   return best > current && sizeBytes <= best;
 }
 
@@ -218,6 +218,13 @@ export function describeProblem(
       };
     case "task_gone":
       return { text: "Not attached — the task was deleted", actions: ["dismiss"] };
+    case "empty":
+      return { text: `Not attached — ${ctx.fileName} is empty`, actions: ["dismiss"] };
+    case "server_too_large":
+      return {
+        text: `Not attached — ${ctx.fileName}${problem.sizeBytes > 0 ? ` (${formatBytes(problem.sizeBytes)})` : ""} is over the upload limit`,
+        actions: ["dismiss"],
+      };
     case "failed":
       return { text: "Not attached — the upload failed", actions: ["retry", "dismiss"] };
   }

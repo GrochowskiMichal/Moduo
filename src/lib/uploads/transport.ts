@@ -27,8 +27,10 @@ export type UploadObjectInput = {
 };
 
 /** A refused upload: what the queue should do about it. */
-function refusal(status: number, message: string): AttachmentOpError {
-  if (status === 413) return new AttachmentOpError("upload_too_large", null, status);
+function refusal(status: number, message: string, sizeBytes: number): AttachmentOpError {
+  if (status === 413) {
+    return new AttachmentOpError("upload_too_large", { size_bytes: sizeBytes }, status);
+  }
   if (status >= 500) return new AttachmentOpError("upload_server", null, status);
   // 400/403: the pending row moved on (finalized elsewhere, swept, older than
   // 24 h) or the guard refused the path. The queue starts the file over.
@@ -77,7 +79,7 @@ async function uploadStandard(input: UploadObjectInput): Promise<void> {
         resolve();
         return;
       }
-      reject(refusal(xhr.status, xhr.responseText ?? ""));
+      reject(refusal(xhr.status, xhr.responseText ?? "", input.blob.size));
     };
     xhr.onerror = () => reject(new Error("Network error"));
     xhr.ontimeout = () => reject(new Error("Network error: timed out"));
@@ -122,7 +124,7 @@ async function uploadResumable(input: UploadObjectInput): Promise<void> {
         }
         const body =
           "originalResponse" in err && err.originalResponse ? err.originalResponse.getBody() : "";
-        reject(refusal(status, `${err.message} ${body ?? ""}`));
+        reject(refusal(status, `${err.message} ${body ?? ""}`, input.blob.size));
       },
       onSuccess: () => resolve(),
     });

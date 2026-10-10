@@ -67,6 +67,15 @@ export function idbUploadStore(): UploadStore {
       if (!db) return [...memory.values()];
       return withStore("readonly", (s) => req(s.getAll() as IDBRequest<UploadItem[]>), []);
     },
+    async get(id) {
+      const db = await openDb();
+      if (!db) return memory.get(id) ?? null;
+      return withStore<UploadItem | null | undefined>(
+        "readonly",
+        (s) => req(s.get(id) as IDBRequest<UploadItem | undefined>).then((v) => v ?? null),
+        undefined,
+      );
+    },
     async put(item) {
       const db = await openDb();
       if (!db) {

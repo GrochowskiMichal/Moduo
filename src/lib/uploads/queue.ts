@@ -85,6 +85,9 @@ export type UploadSnapshot = {
 
 export type UploadStore = {
   all(): Promise<UploadItem[]>;
+  /** One item as stored now: null when it's gone (finished or dismissed,
+   *  maybe in another tab), undefined when the store can't be read. */
+  get(id: string): Promise<UploadItem | null | undefined>;
   put(item: UploadItem): Promise<void>;
   remove(id: string): Promise<void>;
 };
@@ -97,6 +100,10 @@ export function memoryUploadStore(initial: UploadItem[] = []): UploadStore & {
     items,
     async all() {
       return [...items.values()];
+    },
+    async get(id) {
+      const item = items.get(id);
+      return item ? { ...item } : null;
     },
     async put(item) {
       items.set(item.id, { ...item });
@@ -124,7 +131,23 @@ export type UploadQueueDeps = {
   newId?: () => string;
   /** Asks the browser to keep IndexedDB through storage pressure (web). */
   requestPersist?: () => void;
+  /**
+   * Runs `fn` holding a cross-tab claim on one file, or answers false when
+   * another tab holds it. Every tab loads the same stored queue, so without it
+   * two tabs would upload the same file twice. Default: the Web Locks API.
+   */
+  claim?: (id: string, fn: () => Promise<void>) => Promise<boolean>;
 };
+
+function webLockClaim(id: string, fn: () => Promise<void>): Promise<boolean> {
+  const locks = typeof navigator === "undefined" ? undefined : navigator.locks;
+  if (!locks) return fn().then(() => true);
+  return locks.request(`moduo-upload:${id}`, { ifAvailable: true }, async (lock) => {
+    if (!lock) return false;
+    await fn();
+    return true;
+  });
+}
 
 export const MAX_CONCURRENT = 2;
 /** The INSERT policy only takes a pending row younger than 24 h. */
@@ -133,6 +156,10 @@ const FULL_RETRY_MS = 5 * 60 * 1000;
 const BUSY_RETRY_MS = 60 * 1000;
 const MAX_BACKOFF_MS = 5 * 60 * 1000;
 const MAX_REFUSALS = 2;
+/** Another tab holds the file: look again after this long. */
+const CLAIMED_ELSEWHERE_MS = 30 * 1000;
+/** Progress repaints at most this often. */
+const PROGRESS_EMIT_MS = 100;
 
 /** Exponential backoff with ±20% jitter, capped at 5 minutes. */
 export function backoffMs(attempts: number, problem: UploadProblem | null, random = Math.random) {
@@ -146,7 +173,13 @@ function isAbort(e: unknown): boolean {
   return e instanceof DOMException ? e.name === "AbortError" : (e as Error)?.name === "AbortError";
 }
 
-const REJECTED_KINDS = new Set<UploadProblem["kind"]>(["too_large", "no_access", "task_gone"]);
+const REJECTED_KINDS = new Set<UploadProblem["kind"]>([
+  "too_large",
+  "server_too_large",
+  "empty",
+  "no_access",
+  "task_gone",
+]);
 
 export class UploadQueue {
   private items = new Map<string, UploadItem>();
@@ -161,6 +194,7 @@ export class UploadQueue {
   private loaded: Promise<void> | null = null;
   private timer: unknown = null;
   private persistAsked = false;
+  private progressTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly now: () => number;
   private readonly random: () => number;
   private readonly setTimer: (fn: () => void, ms: number) => unknown;
@@ -176,7 +210,10 @@ export class UploadQueue {
     this.isOnline =
       deps.isOnline ?? (() => (typeof navigator === "undefined" ? true : navigator.onLine));
     this.newId = deps.newId ?? (() => crypto.randomUUID());
+    this.claim = deps.claim ?? webLockClaim;
   }
+
+  private readonly claim: (id: string, fn: () => Promise<void>) => Promise<boolean>;
 
   // ── subscription (useSyncExternalStore) ─────────────────────────────────────
 
@@ -191,6 +228,15 @@ export class UploadQueue {
   onUploaded(fn: (rec: AttachmentRecord, target: UploadTarget) => void): () => void {
     this.uploadedListeners.add(fn);
     return () => this.uploadedListeners.delete(fn);
+  }
+
+  /** Coalesce progress repaints: a big upload reports hundreds of times. */
+  private emitProgress() {
+    if (this.progressTimer != null) return;
+    this.progressTimer = setTimeout(() => {
+      this.progressTimer = null;
+      this.emit();
+    }, PROGRESS_EMIT_MS);
   }
 
   private emit() {
@@ -329,6 +375,11 @@ export class UploadQueue {
         createdAt: now,
       };
       const size = item.sizeBytes + (prepared.preview?.size ?? 0);
+      if (item.sizeBytes === 0) {
+        this.reject(item, { kind: "empty" });
+        this.emit();
+        continue;
+      }
       if (pool && item.sizeBytes > pool.perFileBytes) {
         this.reject(item, {
           kind: "too_large",
@@ -336,6 +387,7 @@ export class UploadQueue {
           perFileBytes: pool.perFileBytes,
           tier: pool.tier,
         });
+        this.emit();
         continue;
       }
       if (pool && pool.usedBytes + pool.pendingBytes + extra + size > pool.totalBytes) {
@@ -356,9 +408,10 @@ export class UploadQueue {
         this.persistAsked = true;
         this.deps.requestPersist?.();
       }
+      // Start this one now; the rest of the batch prepares meanwhile.
+      this.pump();
     }
     this.emit();
-    this.pump();
   }
 
   /** Try now (a failed or waiting file). Starts over when the last try failed. */
@@ -393,7 +446,9 @@ export class UploadQueue {
 
   // ── running ─────────────────────────────────────────────────────────────────
 
+  /** Persist an item still in the queue (a dismissed one must not come back). */
   private async save(item: UploadItem) {
+    if (this.items.get(item.id) !== item) return;
     await this.deps.store.put(item).catch(() => {});
   }
 
@@ -455,7 +510,43 @@ export class UploadQueue {
     item.state = "uploading";
     item.problem = null;
     this.emit();
+    let claimed = true;
     try {
+      claimed = await this.claim(item.id, () => this.runClaimed(item, api, ctrl));
+    } catch {
+      // The claim itself failed (locks unavailable mid-way): try again later.
+      claimed = false;
+    } finally {
+      if (this.running.get(item.id) === ctrl) this.running.delete(item.id);
+    }
+    if (!claimed && this.items.get(item.id) === item) {
+      // Another tab is uploading this file; look again later.
+      item.state = "waiting";
+      item.nextRetryAt = this.now() + CLAIMED_ELSEWHERE_MS;
+    }
+    this.pump();
+  }
+
+  private async runClaimed(item: UploadItem, api: AttachmentsApi, ctrl: AbortController) {
+    try {
+      // Another tab may have finished or moved this file on: work from the
+      // stored copy, and drop it here when it's gone.
+      const stored = await this.deps.store.get(item.id);
+      if (stored === null) {
+        if (this.items.get(item.id) === item) {
+          this.items.delete(item.id);
+          this.progress.delete(item.id);
+        }
+        return;
+      }
+      if (stored) {
+        item.attachmentId = stored.attachmentId;
+        item.objectPath = stored.objectPath;
+        item.previewPath = stored.previewPath;
+        item.begunAt = stored.begunAt;
+        item.originalSent = stored.originalSent;
+        item.previewSent = stored.previewSent;
+      }
       if (
         !item.attachmentId ||
         (item.begunAt != null && this.now() - item.begunAt > BEGIN_STALE_MS)
@@ -472,6 +563,9 @@ export class UploadQueue {
           height: item.height,
         };
         const rec = await api.begin(input);
+        if (ctrl.signal.aborted || this.items.get(item.id) !== item) {
+          throw new DOMException("aborted", "AbortError");
+        }
         this.restart(item);
         item.attachmentId = rec.id;
         item.objectPath = rec.objectPath;
@@ -489,7 +583,7 @@ export class UploadQueue {
           signal: ctrl.signal,
           onProgress: (loaded, total) => {
             this.progress.set(item.id, { loaded, total });
-            this.emit();
+            this.emitProgress();
           },
         });
         item.originalSent = true;
@@ -513,6 +607,7 @@ export class UploadQueue {
       }
       const rec = await api.finalize(item.attachmentId as string);
       if (rec.status !== "ready") throw new AttachmentOpError("upload_mismatch");
+      // Attached, even if dismissed while finalizing: say so truthfully.
       this.items.delete(item.id);
       this.progress.delete(item.id);
       await this.deps.store.remove(item.id).catch(() => {});
@@ -526,15 +621,12 @@ export class UploadQueue {
         delete this.almostFull[key];
       }
     } catch (e) {
-      if (!this.items.has(item.id)) return; // dismissed meanwhile
+      if (this.items.get(item.id) !== item) return; // dismissed meanwhile
       if (isAbort(e)) {
         item.state = "queued";
         return;
       }
       this.fail(item, e);
-    } finally {
-      if (this.running.get(item.id) === ctrl) this.running.delete(item.id);
-      this.pump();
     }
   }
 
