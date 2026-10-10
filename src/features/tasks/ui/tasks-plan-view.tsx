@@ -35,7 +35,7 @@ import {
   showsMyTasks,
 } from "../default-view";
 import type { TaskLayout } from "../display";
-import { showsArchived } from "../filters";
+import { showsArchived, statusesLetThrough } from "../filters";
 import { groupsByBucket } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import { isDrifted, PRIVATE_PROJECT_LABEL, type Task } from "../model";
@@ -309,6 +309,10 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   // Won't do tasks join a scope when Filter → Status asks for them (TV-U2,
   // AC1.4), besides the one kept above.
   const withArchived = showsArchived(tasksDisplay.filters);
+  const statusFilter = useMemo(
+    () => statusesLetThrough(tasksDisplay.filters),
+    [tasksDisplay.filters],
+  );
 
   const scopeTasksAll = useMemo(() => {
     if (selection === "today") return api.queuedTasks;
@@ -665,6 +669,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
         {...displayProps}
         dndMode="external"
         boardGroupBy={tasksDisplay.display.boardGroup}
+        statusFilter={statusFilter}
       />
     ) : view === "timeline" ? (
       <TaskTimelineView {...sharedViewProps} zoom={timelineZoom} onZoomChange={setTimelineZoom} />

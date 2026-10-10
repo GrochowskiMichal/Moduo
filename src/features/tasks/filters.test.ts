@@ -11,6 +11,7 @@ import {
   sanitizeTaskFilters,
   showsArchived,
   showsDone,
+  statusesLetThrough,
   TASK_FILTER_DIMENSIONS,
   type TaskFilterContext,
   taskFilterShape,
@@ -174,6 +175,20 @@ describe("Status brings hidden tasks back", () => {
   it("asking for Done shows done tasks whatever Completed says", () => {
     expect(showsDone([is("status", "done")])).toBe(true);
     expect(showsDone([isNot("status", "done")])).toBe(false);
+  });
+
+  it("the statuses a Status filter lets through (the Board's groups)", () => {
+    expect(statusesLetThrough([is("priority", "high")])).toBeNull();
+    expect([...(statusesLetThrough([is("status", "archived")]) ?? [])]).toEqual(["archived"]);
+    expect([...(statusesLetThrough([is("status", "done", "todo")]) ?? [])]).toEqual([
+      "todo",
+      "done",
+    ]);
+    // "Is not" never brings Won't do in.
+    expect([...(statusesLetThrough([isNot("status", "done")]) ?? [])]).toEqual([
+      "todo",
+      "in_progress",
+    ]);
   });
 });
 

@@ -8,6 +8,7 @@
 // Operators: is / is not / any of, AND across dimensions. Yes/no dimensions
 // (In my queue, Blocked, …) offer only "is".
 
+import { TASK_STATUSES } from "@contracts/vocabularies";
 import {
   type FilterCondition,
   type FilterDimension,
@@ -17,7 +18,7 @@ import {
   toggleFilterValue,
 } from "../../components/ui/filter-model";
 import { dueFilterValues, scheduledFilterValues } from "./day-buckets";
-import type { PriorityLevel, Task } from "./model";
+import type { PriorityLevel, Task, TaskStatus } from "./model";
 
 export const TASK_FILTER_DIMENSIONS = [
   "assignee",
@@ -190,6 +191,24 @@ export function showsArchived(conditions: readonly FilterCondition[]): boolean {
  */
 export function showsDone(conditions: readonly FilterCondition[]): boolean {
   return asksForStatus(conditions, "done");
+}
+
+/**
+ * The statuses a Status filter lets through, or null without one: "is" /
+ * "is any of" its values; "is not" every open or done status it doesn't
+ * name (Won't do only joins when asked). The Board shows a group for each, so
+ * "Status is Won't do" is one Won't do group, not three empty ones (TV-U2).
+ */
+export function statusesLetThrough(
+  conditions: readonly FilterCondition[],
+): ReadonlySet<TaskStatus> | null {
+  const condition = conditions.find((c) => c.dimension === "status");
+  if (!condition) return null;
+  if (condition.operator === "is_not") {
+    const open: TaskStatus[] = ["todo", "in_progress", "done"];
+    return new Set(open.filter((s) => !condition.values.includes(s)));
+  }
+  return new Set(TASK_STATUSES.filter((s) => condition.values.includes(s)));
 }
 
 export type CaptureSeed = {

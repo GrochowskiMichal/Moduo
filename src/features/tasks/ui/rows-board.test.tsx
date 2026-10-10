@@ -442,15 +442,27 @@ describe("Board (U1-4)", () => {
     expect(card("Task d")).toBeTruthy();
   });
 
-  it("a Won't do group appears only when a Won't do task is in scope (Filter → Status)", () => {
-    renderBoard([task("a"), task("w", { status: "archived" })]);
-    const headers = () =>
-      [...document.querySelectorAll("section > header")].map((h) => h.firstChild?.textContent);
-    expect(headers()).toEqual(["To do", "In progress", "Done", "Won’t do"]);
+  const headers = () =>
+    [...document.querySelectorAll("section > header")].map((h) => h.firstChild?.textContent);
+
+  it("Filter → Status shows only the groups it lets through: Won't do on its own", () => {
+    renderBoard([task("w", { status: "archived" })], {
+      statusFilter: new Set(["archived"]),
+      selectedTaskId: "w",
+    });
+    expect(headers()).toEqual(["Won’t do"]);
     expect(card("Task w")).toBeTruthy();
+    cleanup();
+    renderBoard([task("a")], { statusFilter: new Set(["todo", "in_progress"]) });
+    expect(headers()).toEqual(["To do", "In progress"]);
     cleanup();
     renderBoard([task("a")]);
     expect(headers()).toEqual(["To do", "In progress", "Done"]);
+  });
+
+  it("a Won't do card kept in view (TV-P0) brings its group with it", () => {
+    renderBoard([task("a"), task("w", { status: "archived" })], { selectedTaskId: "w" });
+    expect(headers()).toEqual(["To do", "In progress", "Done", "Won’t do"]);
   });
 
   it("a card with nothing to show has no empty meta line", () => {

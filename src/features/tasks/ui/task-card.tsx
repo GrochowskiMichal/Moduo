@@ -104,8 +104,9 @@ export function TaskCard({
         // column (the old bg-background was the inverted-elevation bug).
         "group flex items-start gap-2 rounded-lg border px-3 py-2.5 text-sm transition-colors duration-(--motion-fade) ease-(--ease-out)",
         "select-none",
-        // Done cards fade as a whole (tasks-v2 §6).
-        task.status === "done" && !isDragging && "opacity-50",
+        // Done cards fade as a whole (tasks-v2 §6), and so does a Won't do
+        // card a Status filter lists (TV-U2), like its row.
+        (task.status === "done" || task.status === "archived") && !isDragging && "opacity-50",
         // Selection = the accent tint + the 32% ring a card always carries
         // (R5). The old bright accent border read as a white ring on mono.
         selected ? SELECTED_OPTION : "border-border bg-card hover:border-foreground/30",
@@ -276,8 +277,8 @@ export function CardBody({
         <span
           className={cn(
             "min-w-0 flex-1 break-words font-sans text-base leading-snug",
-            // A done card fades as a whole; no muted colour on top.
-            done
+            // A done (or Won't do) card fades as a whole; no muted colour on top.
+            done || task.status === "archived"
               ? "text-foreground line-through"
               : blocked
                 ? "text-muted-foreground"

@@ -61,6 +61,8 @@ type Props = {
   /** A filter is narrowing the scope: an empty result reads "No tasks match". */
   filterActive?: boolean;
   onClearFilters?: () => void;
+  /** The statuses Filter → Status lets through (null: no Status filter). */
+  statusFilter?: ReadonlySet<TaskStatus> | null;
   /** Display → Completed (tasks-v2 §6). Default: hidden. */
   completed?: CompletedMode;
   /** Display → "Show on rows" — cards follow it too. */
@@ -84,8 +86,10 @@ type Props = {
 // Reading order for status groups (left→right flow), distinct from the List's
 // "open work first" order. Won't do tasks are out of every scope until Filter →
 // Status asks for them (or one is kept selected, TV-P0), so their group shows
-// only then (TV-U2, AC1.4).
+// only then; a Status filter shows only the groups it lets through (TV-U2,
+// AC1.4).
 const BOARD_STATUS_ORDER: TaskStatus[] = ["todo", "in_progress", "done"];
+const ALL_BOARD_STATUSES: TaskStatus[] = [...BOARD_STATUS_ORDER, "archived"];
 
 type Column = {
   id: string;
@@ -120,6 +124,7 @@ export function TaskBoardView({
   header,
   filterActive = false,
   onClearFilters,
+  statusFilter = null,
   completed = "hidden",
   properties = DEFAULT_ROW_PROPERTIES,
   order = "manual",
@@ -188,9 +193,13 @@ export function TaskBoardView({
         ),
       );
     }
-    const statuses: TaskStatus[] = boardTasks.some((t) => t.status === "archived")
-      ? [...BOARD_STATUS_ORDER, "archived"]
+    const shown = statusFilter
+      ? ALL_BOARD_STATUSES.filter((s) => statusFilter.has(s))
       : BOARD_STATUS_ORDER;
+    // A card on the board always has its group (the kept Won't do task).
+    const statuses = ALL_BOARD_STATUSES.filter(
+      (s) => shown.includes(s) || boardTasks.some((t) => t.status === s),
+    );
     return statuses.map((s) =>
       column(
         `col:status:${s}`,
@@ -203,6 +212,7 @@ export function TaskBoardView({
   }, [
     groupDim,
     boardTasks,
+    statusFilter,
     buckets,
     inbox,
     bucketNameById,
