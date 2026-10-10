@@ -1,0 +1,1037 @@
+<!doctype html>
+<html lang="en" data-frame="1">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Calendar structure prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+/* biome-ignore-all lint: a throwaway static prototype, not app code */
+/* Throwaway prototype for round 1 of .design/calendar-v2/REPLAN.md (calls C1–C15).
+   Built on .design/tasks-v3/prototypes/round-2b.html: same tokens, shell (3×3 with
+   the bottom bar), rail, toolbar, panel and harness. Not a spec. */
+
+/* ── Tokens (tokens.css dark theme), as in the Tasks prototypes ─────────── */
+:root {
+  --neutral-50: oklch(0.985 0 0); --neutral-400: oklch(0.72 0 0);
+  --neutral-800: oklch(0.22 0 0); --neutral-850: oklch(0.18 0 0); --neutral-900: oklch(0.14 0 0);
+  --background: oklch(0 0 0); --foreground: var(--neutral-50);
+  --card: var(--neutral-900); --popover: var(--neutral-850); --muted: var(--neutral-850);
+  --muted-foreground: var(--neutral-400);
+  --primary: oklch(0.95 0 0); --primary-foreground: oklch(0.10 0 0);
+  --label-gray: var(--neutral-400); --label-blue: oklch(0.66 0.18 245); --label-green: oklch(0.72 0.17 150);
+  --label-amber: oklch(0.80 0.16 75); --label-violet: oklch(0.66 0.20 295); --label-teal: oklch(0.72 0.13 200);
+  --motion-fade: 100ms; --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --font: "Geist", "Inter", system-ui, -apple-system, sans-serif;
+  --state-hover: color-mix(in oklab, var(--foreground) 5%, transparent);
+  --state-active: color-mix(in oklab, var(--foreground) 9%, transparent);
+  --state-active-hover: color-mix(in oklab, var(--foreground) 14%, transparent);
+  --state-selected: color-mix(in oklab, var(--primary) 13%, transparent);
+  --hairline: color-mix(in oklab, var(--foreground) 10%, transparent);
+  --control-raised: color-mix(in oklab, var(--foreground) 14%, var(--muted));
+  --scroll-thumb: color-mix(in oklab, var(--foreground) 16%, transparent);
+  --hover-solid: color-mix(in oklab, var(--foreground) 5%, var(--card));
+  --row-h: 2.25rem; --row-h-sm: 1.75rem; --ctrl-h: 2rem; --ctrl-h-sm: 1.625rem;
+  --icon-xs: .75rem; --icon-sm: .875rem; --icon: 1rem; --bar-h: 3rem;
+  --radius-sm: .25rem; --radius-md: .5rem; --radius-lg: .75rem; --radius-xl: 1rem; --avatar-radius: 9999px;
+  --text-1: var(--foreground);
+  --text-2: var(--muted-foreground);
+  --text-3: color-mix(in oklab, var(--muted-foreground) 86%, var(--card));
+  --person-ar: color-mix(in oklab, var(--label-blue) 55%, var(--card));
+  --person-so: color-mix(in oklab, var(--label-teal) 50%, var(--card));
+  --person-mc: color-mix(in oklab, var(--label-violet) 52%, var(--card));
+  --person-an: color-mix(in oklab, var(--label-amber) 40%, var(--card));
+  --person-jl: color-mix(in oklab, var(--label-green) 45%, var(--card));
+  --ref-bg: color-mix(in oklab, var(--foreground) 7%, var(--card));
+  /* calendars (token-routed swatches) */
+  --cal-work: var(--label-blue); --cal-personal: var(--label-violet); --cal-family: var(--label-teal); --cal-uni: var(--label-green); --cal-hol: var(--label-gray);
+  /* the grid */
+  --H: 46px;
+}
+
+* { scrollbar-width: thin; scrollbar-color: var(--scroll-thumb) transparent; box-sizing: border-box; margin: 0; }
+[hidden] { display: none !important; }
+html, body { background: var(--background); color: var(--text-1); }
+body { font: 400 14px/1.4 var(--font); -webkit-font-smoothing: antialiased; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; padding: 0; }
+.ic { width: var(--icon-sm); height: var(--icon-sm); stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+.ic-xs { width: var(--icon-xs); height: var(--icon-xs); }
+.ic-md { width: var(--icon); height: var(--icon); }
+.gl { width: 10px; height: 10px; fill: currentColor; stroke: none; flex-shrink: 0; }
+.num { font-variant-numeric: tabular-nums; }
+.t1 { color: var(--text-1); } .t2 { color: var(--text-2); } .t3 { color: var(--text-3); }
+
+/* ── Prototype chrome (NOT part of the app) ──────────────────────────────── */
+.stage { display: flex; flex-direction: column; height: 100vh; min-height: 860px; min-width: 1280px; }
+.strip { flex-shrink: 0; position: relative; z-index: 60; padding: 7px 16px; display: flex; flex-direction: column; gap: 5px; font-size: 12px;
+  background: repeating-linear-gradient(-45deg, color-mix(in oklab, var(--foreground) 4%, var(--popover)) 0 7px, var(--popover) 7px 14px);
+  border-bottom: 1px dashed color-mix(in oklab, var(--foreground) 26%, transparent); }
+.strip .l1, .strip .l2 { display: flex; align-items: center; gap: 12px; min-height: 26px; }
+.ptag { height: 22px; display: inline-flex; align-items: center; padding: 0 8px; border-radius: var(--radius-sm); background: var(--foreground); color: var(--background); font-weight: 600; white-space: nowrap; }
+.pcalls { color: var(--text-2); white-space: nowrap; }
+.pcalls b { color: var(--text-1); font-weight: 500; }
+.strip .grow { flex: 1; }
+.strip .lab { color: var(--text-3); white-space: nowrap; }
+.strip .seg { background: var(--background); flex-shrink: 0; }
+.strip .seg button { font-size: 12px; padding: 0 8px; }
+.strip .l2 { color: var(--text-2); }
+.strip .cap { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.strip .keys { color: var(--text-3); white-space: nowrap; }
+.strip .keys b { color: var(--text-2); font-weight: 500; }
+.ctl { display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.appwrap { flex: 1; min-height: 0; display: flex; justify-content: center; align-items: flex-start; overflow: auto; }
+.appframe { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
+html[data-frame="9"] .appwrap { padding: 18px 0; background: repeating-linear-gradient(-45deg, color-mix(in oklab, var(--foreground) 3%, var(--background)) 0 7px, var(--background) 7px 14px); }
+html[data-frame="9"] .appframe { width: 1024px; height: 700px; flex: none; background: var(--background); outline: 1px dashed color-mix(in oklab, var(--foreground) 30%, transparent); outline-offset: 0; }
+.sizetag { position: absolute; top: -16px; left: 0; font-size: 11px; color: var(--text-3); }
+.pnote { font-size: 11.5px; line-height: 1.45; color: var(--text-2); padding: 4px 8px; border-radius: var(--radius-sm);
+  border: 1px dashed color-mix(in oklab, var(--foreground) 26%, transparent);
+  background: repeating-linear-gradient(-45deg, color-mix(in oklab, var(--foreground) 4%, var(--popover)) 0 7px, var(--popover) 7px 14px); }
+.pnote b { color: var(--text-1); font-weight: 600; }
+
+/* ── Primitives ─────────────────────────────────────────────────────────── */
+.seg { display: inline-flex; align-items: center; gap: 2px; padding: 2px; height: var(--ctrl-h-sm); background: var(--muted); border-radius: var(--radius-md); }
+.seg button { height: 100%; padding: 0 9px; display: inline-flex; align-items: center; gap: 6px; border-radius: calc(var(--radius-md) - 2px); color: var(--text-2); font-size: 13px; font-weight: 500; white-space: nowrap; transition: background-color var(--motion-fade) var(--ease-out), color var(--motion-fade) var(--ease-out); }
+.seg button:hover { color: var(--text-1); }
+.seg button.on { background: var(--control-raised); color: var(--text-1); }
+.btn { height: var(--ctrl-h-sm); padding: 0 8px; display: inline-flex; align-items: center; gap: 6px; border-radius: var(--radius-md); font-size: 14px; font-weight: 500; color: var(--text-2); white-space: nowrap; transition: background-color var(--motion-fade) var(--ease-out), color var(--motion-fade) var(--ease-out); }
+.btn:hover { background: var(--state-hover); color: var(--text-1); }
+.btn.icon { width: var(--ctrl-h-sm); padding: 0; justify-content: center; }
+.btn.primary { background: var(--primary); color: var(--primary-foreground); padding: 0 10px; }
+.btn.secondary { background: var(--state-active); color: var(--text-1); }
+.btn.secondary:hover { background: var(--state-active-hover); }
+.btn.sm { font-size: 13px; }
+.kbd { font-size: 11px; color: var(--text-2); border: 1px solid var(--hairline); border-radius: 4px; padding: 0 4px; line-height: 16px; font-weight: 500; white-space: nowrap; }
+.kbdin { opacity: .6; font-weight: 400; }
+.ava { width: var(--icon); height: var(--icon); border-radius: var(--avatar-radius); display: inline-grid; place-items: center; font-size: 8.5px; font-weight: 600; line-height: 1; color: var(--text-1); background: var(--ava, color-mix(in oklab, var(--foreground) 20%, var(--card))); flex-shrink: 0; }
+.ava.ar { --ava: var(--person-ar); } .ava.so { --ava: var(--person-so); } .ava.mc { --ava: var(--person-mc); } .ava.an { --ava: var(--person-an); } .ava.jl { --ava: var(--person-jl); }
+.ava.lg { width: 26px; height: 26px; font-size: 10.5px; }
+.ava.xl { width: 40px; height: 40px; font-size: 14px; }
+.cb { width: var(--icon-sm); height: var(--icon-sm); border-radius: 9999px; border: 1.5px solid color-mix(in oklab, var(--foreground) 42%, transparent); display: inline-grid; place-items: center; flex-shrink: 0; }
+.cb.done { background: var(--primary); border-color: var(--primary); color: var(--primary-foreground); }
+.cb.done .ic { width: 70%; height: 70%; stroke-width: 3; }
+.tick { width: 14px; height: 14px; border-radius: 4px; box-shadow: inset 0 0 0 1.5px color-mix(in oklab, var(--foreground) 42%, transparent); display: inline-grid; place-items: center; flex-shrink: 0; }
+.tick.on { background: var(--primary); box-shadow: none; color: var(--primary-foreground); }
+.tick.on .ic { width: 10px; height: 10px; stroke-width: 3; }
+.switch { width: 26px; height: 16px; border-radius: 9999px; background: var(--control-raised); position: relative; flex-shrink: 0; }
+.switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 9999px; background: var(--text-2); }
+.switch.on { background: var(--primary); }
+.switch.on::after { left: 12px; background: var(--primary-foreground); }
+.dot { width: 8px; height: 8px; border-radius: 2px; background: var(--c, var(--label-gray)); flex-shrink: 0; }
+.dot.off { background: none; box-shadow: inset 0 0 0 1.5px var(--c); }
+
+/* ── App shell ───────────────────────────────────────────────────────────── */
+.topbar { flex-shrink: 0; height: var(--bar-h); display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 0 20px; }
+.tleft { display: flex; align-items: center; gap: 4px; }
+.mark { width: 28px; height: 28px; color: var(--foreground); margin-right: 2px; }
+.wsbtn { height: 32px; display: inline-flex; align-items: center; gap: 6px; padding: 0 8px; border-radius: var(--radius-md); font-size: 13px; color: var(--text-1); }
+.mtabs { display: flex; gap: 4px; }
+.mtab { height: 32px; display: inline-flex; align-items: center; gap: 8px; padding: 0 12px; border-radius: var(--radius-md); font-size: 13px; color: var(--text-2); }
+.mtab.on { background: var(--state-active); color: var(--text-1); }
+.tright { display: flex; justify-content: flex-end; align-items: center; gap: 8px; }
+.ibtn { width: 32px; height: 32px; display: grid; place-items: center; border-radius: var(--radius-md); color: var(--text-2); }
+.ibtn:hover { background: var(--state-hover); color: var(--text-1); }
+.ttimer { height: 28px; display: inline-flex; align-items: center; gap: 7px; padding: 0 8px; border-radius: var(--radius-md); font-size: 13px; color: var(--text-2); }
+.ttimer .fdot { width: 6px; height: 6px; border-radius: 9999px; background: var(--text-2); }
+html[data-frame="9"] .mtab .ml { display: none; }
+html[data-frame="9"] .mtab { padding: 0 9px; }
+
+.app { position: relative; flex: 1; min-height: 0; display: flex; gap: 12px; padding: 0 16px; }
+.panel { background: var(--card); border: 1px solid var(--hairline); border-radius: var(--radius-lg); min-height: 0; }
+.rail { position: relative; width: 236px; flex-shrink: 0; padding: 8px; display: flex; flex-direction: column; gap: 1px; overflow: auto; }
+.center { flex: 1; min-width: 0; display: flex; flex-direction: column; position: relative; overflow: hidden; }
+.rpanel { position: relative; width: 340px; flex-shrink: 0; display: flex; flex-direction: column; overflow: hidden; }
+html[data-frame="9"] .rail { width: 220px; }
+html[data-frame="9"] .rpanel { width: 300px; }
+
+/* ── Rail ───────────────────────────────────────────────────────────────── */
+.nav { height: var(--row-h-sm); flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding: 0 6px 0 8px; border-radius: var(--radius-md); color: var(--text-2); font-size: 13.5px; font-weight: 500; cursor: pointer; transition: background-color var(--motion-fade) var(--ease-out), color var(--motion-fade) var(--ease-out); }
+.nav:hover { background: var(--state-hover); color: var(--text-1); }
+.nav.active { background: var(--state-active); color: var(--text-1); }
+.nav .slot { width: var(--icon); display: grid; place-items: center; flex-shrink: 0; }
+.nav .lbl { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nav.off .lbl { color: var(--text-3); }
+.nav .count { font-size: 12px; color: var(--text-2); }
+.nav .hov { display: none; color: var(--text-3); }
+.nav:hover .hov { display: inline-flex; }
+.nav:hover .count { display: none; }
+.area { display: flex; flex-direction: column; gap: 1px; flex-shrink: 0; }
+.ghdr { flex-shrink: 0; display: flex; align-items: center; gap: 5px; height: var(--row-h-sm); margin-top: 10px; padding: 0 6px 0 8px; font-size: 13px; font-weight: 500; color: var(--text-2); }
+.ghdr .chev { color: var(--text-3); }
+.ghdr .more { margin-left: auto; width: 20px; height: 20px; display: grid; place-items: center; color: var(--text-3); border-radius: var(--radius-sm); }
+.sub { height: 20px; padding: 6px 8px 0 34px; font-size: 11.5px; color: var(--text-3); display: flex; align-items: center; }
+/* mini-month */
+.mm { padding: 2px 2px 4px; }
+.mmhead { display: flex; align-items: center; height: 30px; padding: 0 0 0 8px; font-size: 13px; font-weight: 600; }
+.mmhead .grow { flex: 1; }
+.mmhead .btn.icon { width: 24px; height: 24px; color: var(--text-3); }
+.mmgrid { display: grid; grid-template-columns: repeat(7, 1fr); row-gap: 2px; padding: 0 2px; }
+.mmgrid .dn { height: 20px; display: grid; place-items: center; font-size: 11px; color: var(--text-3); }
+.mmgrid .d { height: 26px; display: grid; place-items: center; font-size: 12px; color: var(--text-2); position: relative; cursor: pointer; }
+.mmgrid .d.out { color: var(--text-3); }
+.mmgrid .d.wk { background: var(--state-hover); }
+.mmgrid .d.wk.first { border-radius: var(--radius-md) 0 0 var(--radius-md); }
+.mmgrid .d.wk.last { border-radius: 0 var(--radius-md) var(--radius-md) 0; }
+.mmgrid .d.today span { width: 22px; height: 22px; border-radius: 9999px; background: var(--primary); color: var(--primary-foreground); display: grid; place-items: center; font-weight: 600; }
+.mmgrid .d i { position: absolute; bottom: 1px; left: 50%; width: 3px; height: 3px; margin-left: -1.5px; border-radius: 9999px; background: var(--text-3); }
+
+/* ── Toolbar ─────────────────────────────────────────────────────────────── */
+.toolbar { display: flex; align-items: center; gap: 4px; padding: 12px 12px 8px 16px; flex-shrink: 0; }
+.toolbar .title { display: flex; align-items: baseline; gap: 10px; margin-right: auto; min-width: 0; }
+.toolbar h3 { font-size: 18px; font-weight: 600; letter-spacing: -.01em; white-space: nowrap; }
+.toolbar .rng { font-size: 13px; color: var(--text-2); white-space: nowrap; }
+.toolbar .sep { width: 1px; height: 16px; background: var(--hairline); margin: 0 4px; }
+html[data-frame="9"] .toolbar .dlab { display: none; }
+.missline { flex-shrink: 0; display: flex; align-items: center; gap: 8px; height: 28px; margin: 0 12px 6px 16px; padding: 0 4px 0 10px; border-radius: var(--radius-md); font-size: 13px; color: var(--text-2); background: var(--state-hover); }
+.missline .ic { color: var(--text-3); }
+.missline .btn { margin-left: auto; height: 22px; font-size: 12.5px; }
+
+/* ── Week / Day grid ─────────────────────────────────────────────────────── */
+.wk { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 0 12px 0 0; }
+.wkrow { display: grid; grid-template-columns: var(--gut, 56px) repeat(var(--n, 7), minmax(0, 1fr)); }
+.wkhead { height: 34px; align-items: center; }
+.dh { display: flex; align-items: baseline; justify-content: center; gap: 6px; font-size: 12px; color: var(--text-2); white-space: nowrap; }
+.dh .dnum { font-size: 13px; font-weight: 500; color: var(--text-1); }
+.dh.today .dnum { display: inline-grid; place-items: center; min-width: 22px; height: 22px; padding: 0 5px; border-radius: 9999px; background: var(--primary); color: var(--primary-foreground); font-weight: 600; }
+.dh.today .dw { color: var(--text-1); font-weight: 500; }
+.wkall { border-bottom: 1px solid var(--hairline); padding-bottom: 4px; }
+.wkall .gut { font-size: 11px; color: var(--text-3); text-align: right; padding: 4px 8px 0 0; white-space: nowrap; }
+.adc { display: flex; flex-direction: column; gap: 2px; padding: 2px 2px 0; min-width: 0; }
+.chip { height: 20px; display: flex; align-items: center; gap: 5px; padding: 0 6px; border-radius: var(--radius-sm); font-size: 11.5px; font-weight: 500; white-space: nowrap; overflow: hidden; color: var(--text-1); cursor: pointer; }
+.chip .cl { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.chip.ev { background: color-mix(in oklab, var(--c) 24%, var(--card)); }
+.chip.due { background: var(--ref-bg); }
+.chip.due .cb { width: 10px; height: 10px; border-width: 1.25px; }
+.chip.due.late { color: var(--text-2); background: none; box-shadow: inset 0 0 0 1px var(--hairline); }
+.chip.ghost { background: none; box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--foreground) 22%, transparent); color: var(--text-3); }
+.chip.sel { box-shadow: 0 0 0 1.5px var(--text-1); }
+.wkbody { flex: 1; min-height: 0; overflow: auto; position: relative; }
+.wkbody .wkrow { height: calc(var(--H) * 11); }
+.gutcol { position: relative; }
+.gutcol .hl { position: absolute; right: 8px; font-size: 11px; color: var(--text-3); transform: translateY(-50%); white-space: nowrap; }
+.gutcol.two .hl b { font-weight: 400; color: var(--text-3); display: inline-block; width: 46px; text-align: right; }
+.gutcol.two .hl span { display: inline-block; width: 44px; text-align: right; color: var(--text-2); }
+.gutzone { font-size: 10.5px; color: var(--text-3); text-align: right; padding-right: 8px; white-space: nowrap; }
+.col { position: relative; border-left: 1px solid var(--hairline);
+  background-image: repeating-linear-gradient(to bottom, var(--hairline) 0 1px, transparent 1px var(--H)); }
+.col .off { position: absolute; left: 0; right: 0; background: color-mix(in oklab, var(--foreground) 2.5%, transparent); pointer-events: none; }
+.col.wkend { background-color: color-mix(in oklab, var(--foreground) 2%, transparent); }
+.nowline { position: absolute; left: -4px; right: 0; height: 0; border-top: 1.5px solid var(--text-1); z-index: 6; pointer-events: none; }
+.nowline::before { content: ""; position: absolute; left: -1px; top: -5px; width: 8px; height: 8px; border-radius: 9999px; background: var(--text-1); }
+.nowtag { position: absolute; right: calc(100% + 4px); transform: translateY(-50%); font-size: 10.5px; font-weight: 600; color: var(--text-1); background: var(--card); padding: 0 3px; white-space: nowrap; z-index: 7; }
+
+.it { position: absolute; left: 2px; right: 3px; border-radius: var(--radius-sm); padding: 3px 6px; overflow: hidden; font-size: 12px; line-height: 1.3; cursor: pointer; z-index: 2; transition: background-color var(--motion-fade) var(--ease-out); }
+.it .tt { font-weight: 500; color: var(--text-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.it .tm { font-size: 11px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.it .one { display: flex; gap: 5px; align-items: baseline; white-space: nowrap; overflow: hidden; }
+.it .one .tt { flex-shrink: 1; min-width: 0; }
+.it .one .tm { flex-shrink: 0; }
+.it .ln { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.it .ln .ic { color: var(--text-3); }
+.it.ev { background: color-mix(in oklab, var(--c) 24%, var(--card)); }
+.it.ev:hover { background: color-mix(in oklab, var(--c) 31%, var(--card)); }
+.it.ev.past { background: color-mix(in oklab, var(--c) 13%, var(--card)); }
+.it.ev.past .tt { color: var(--text-2); }
+.it.inv { background: color-mix(in oklab, var(--c) 6%, var(--card)); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--c) 62%, transparent); }
+.it.inv .tt { color: var(--text-2); }
+.it.ses { background: var(--card); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--foreground) 20%, transparent); }
+.it.ses:hover { background: var(--hover-solid); }
+.it.ses .sh { display: grid; grid-template-columns: var(--icon-sm) minmax(0, 1fr); column-gap: 6px; align-items: start; }
+.it.ses .cb { margin-top: 1.5px; }
+.it.ses .pd { display: inline-block; width: 6px; height: 6px; border-radius: 2px; background: var(--c); margin-right: 4px; vertical-align: 1px; }
+.it.ses.missed { background: transparent; box-shadow: inset 0 0 0 1px var(--hairline); }
+.it.ses.missed .tt { color: var(--text-2); }
+.it.ses.worked { background: transparent; box-shadow: inset 0 0 0 1px var(--hairline); }
+.it.ses.worked .tt { color: var(--text-2); }
+.it.ghost { background: transparent; border: 1px dashed color-mix(in oklab, var(--foreground) 24%, transparent); }
+.it.ghost .tt { color: var(--text-3); font-weight: 400; }
+.it.busy { background: repeating-linear-gradient(-45deg, color-mix(in oklab, var(--foreground) 8%, transparent) 0 4px, transparent 4px 9px); box-shadow: inset 0 0 0 1px var(--hairline); z-index: 1; }
+.it.busy .tt { color: var(--text-2); font-weight: 400; }
+.it.draft { background: var(--state-selected); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--foreground) 40%, transparent); }
+.it.placed { box-shadow: inset 0 0 0 1.5px var(--text-1); }
+.it.sel { box-shadow: 0 0 0 1.5px var(--text-1); z-index: 4; }
+.it.ses.sel { box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--foreground) 20%, transparent), 0 0 0 1.5px var(--text-1); }
+.it.hov { background: var(--hover-solid); }
+.wash { position: absolute; left: 1px; right: 1px; z-index: 1; border-radius: 2px; background: color-mix(in oklab, var(--foreground) 7%, transparent); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--foreground) 16%, transparent); font-size: 10.5px; color: var(--text-2); padding: 2px 5px; }
+.it.slot { background: transparent; box-shadow: inset 0 0 0 1.5px var(--text-1); z-index: 5; }
+.it.slot.alt { box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--foreground) 45%, transparent); }
+
+/* Day view: more room per item */
+.wk.day .it .tm { font-size: 12px; }
+.wk.day .it { padding: 5px 9px; }
+.ppl { display: inline-flex; gap: 2px; margin-left: 6px; vertical-align: -3px; }
+
+/* the missed session's fixes, on hover or selection */
+.fixrow { position: absolute; z-index: 20; display: flex; align-items: center; gap: 2px; padding: 3px; border-radius: var(--radius-md); background: var(--popover); border: 1px solid var(--hairline); box-shadow: 0 10px 26px rgb(0 0 0 / .5); white-space: nowrap; }
+.fixrow button { height: 26px; padding: 0 8px; border-radius: var(--radius-sm); font-size: 12.5px; color: var(--text-1); display: inline-flex; align-items: center; gap: 5px; }
+.fixrow button:hover { background: var(--state-active); }
+.fixrow .ic { color: var(--text-3); }
+.fixrow .sp { width: 1px; height: 14px; background: var(--hairline); margin: 0 2px; }
+
+/* popover (quick create) */
+.pop { position: absolute; z-index: 20; width: 300px; background: var(--popover); border: 1px solid var(--hairline); border-radius: var(--radius-lg); box-shadow: 0 16px 40px rgb(0 0 0 / .55); padding: 12px 12px 10px; display: flex; flex-direction: column; gap: 8px; }
+.pop .ptitle { font-size: 15px; font-weight: 500; color: var(--text-1); }
+.pop .ptitle .caret { display: inline-block; width: 1.5px; height: 1.05em; background: var(--foreground); vertical-align: -.18em; margin-left: 2px; }
+.pop .pline { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-1); min-height: 24px; }
+.pop .pline > .ic { color: var(--text-3); }
+.pop .lab { font-size: 12px; color: var(--text-2); }
+.slotbtn { height: 26px; padding: 0 9px; border-radius: var(--radius-md); font-size: 12.5px; color: var(--text-1); box-shadow: inset 0 0 0 1px var(--hairline); display: inline-flex; align-items: center; gap: 6px; }
+.slotbtn.on { background: var(--state-active); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--foreground) 30%, transparent); }
+.pop .foot { display: flex; align-items: center; gap: 6px; padding-top: 6px; border-top: 1px solid var(--hairline); }
+.pop .foot .grow { flex: 1; }
+.togl { display: inline-flex; gap: 2px; padding: 2px; border-radius: var(--radius-md); background: var(--muted); }
+.togl span { height: 22px; padding: 0 8px; border-radius: calc(var(--radius-md) - 2px); font-size: 12px; color: var(--text-2); display: inline-flex; align-items: center; }
+.togl span.on { background: var(--control-raised); color: var(--text-1); }
+.gchip { height: 22px; display: inline-flex; align-items: center; gap: 5px; padding: 0 7px 0 3px; border-radius: 9999px; background: var(--ref-bg); font-size: 12px; color: var(--text-1); }
+
+/* ── Month ──────────────────────────────────────────────────────────────── */
+.mo { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 0 12px 12px 16px; }
+.mohead { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); height: 26px; align-items: center; font-size: 12px; color: var(--text-2); }
+.mohead span { padding-left: 8px; }
+.mogrid { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); grid-template-rows: repeat(5, minmax(0, 1fr)); border-top: 1px solid var(--hairline); border-left: 1px solid var(--hairline); }
+.mc { border-right: 1px solid var(--hairline); border-bottom: 1px solid var(--hairline); padding: 4px 4px 2px; display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow: hidden; cursor: pointer; }
+.mc.wkend { background: color-mix(in oklab, var(--foreground) 2%, transparent); }
+.mc.out .mn { color: var(--text-3); }
+.mc.sel { background: var(--state-selected); }
+.mc .mn { font-size: 12px; color: var(--text-2); padding: 1px 4px 2px; height: 22px; display: flex; align-items: center; }
+.mc.today .mn span { display: inline-grid; place-items: center; min-width: 22px; height: 20px; padding: 0 5px; border-radius: 9999px; background: var(--primary); color: var(--primary-foreground); font-weight: 600; margin-left: -4px; }
+.ml { height: 19px; display: flex; align-items: center; gap: 5px; padding: 0 4px; border-radius: var(--radius-sm); font-size: 11.5px; white-space: nowrap; overflow: hidden; color: var(--text-1); }
+.ml:hover { background: var(--state-hover); }
+.ml .md { width: 6px; height: 6px; border-radius: 9999px; background: var(--c); flex-shrink: 0; }
+.ml .mt { color: var(--text-2); flex-shrink: 0; }
+.ml .mx { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.mc .more { font-size: 11.5px; color: var(--text-2); padding: 0 4px; height: 17px; display: flex; align-items: center; }
+
+/* ── Right panel ────────────────────────────────────────────────────────── */
+.rphead { position: relative; flex-shrink: 0; height: 44px; display: flex; align-items: center; gap: 4px; padding: 0 12px 0 16px; }
+.vpick { height: 28px; display: inline-flex; align-items: center; gap: 6px; padding: 0 8px; margin-left: -8px; margin-right: auto; border-radius: var(--radius-md); font-size: 13px; font-weight: 600; color: var(--text-1); white-space: nowrap; }
+.vpick .ic { color: var(--text-2); }
+.vpick:hover, .vpick.open { background: var(--state-active); }
+.backbtn { height: var(--ctrl-h-sm); display: inline-flex; align-items: center; gap: 7px; padding: 0 8px 0 6px; margin-left: -6px; margin-right: auto; border-radius: var(--radius-md); font-size: 13px; font-weight: 500; color: var(--text-2); white-space: nowrap; }
+.backbtn:hover { background: var(--state-hover); color: var(--text-1); }
+.rphead .btn.icon { color: var(--text-3); }
+.rpbody { flex: 1; min-height: 0; overflow: auto; }
+.menu { position: absolute; z-index: 30; min-width: 220px; background: var(--popover); border: 1px solid var(--hairline); border-radius: var(--radius-md); box-shadow: 0 12px 30px rgb(0 0 0 / .5); padding: 4px; top: 40px; left: 8px; }
+.menu .mi { height: 30px; display: flex; align-items: center; gap: 9px; padding: 0 8px; border-radius: var(--radius-sm); font-size: 13px; color: var(--text-1); cursor: pointer; white-space: nowrap; }
+.menu .mi .ic { color: var(--text-2); }
+.menu .mi:hover, .menu .mi.hl { background: var(--state-active); }
+.menu .mi .sc { margin-left: auto; font-size: 12px; color: var(--text-3); }
+.menu .mi .ck { width: 14px; display: grid; place-items: center; }
+.menu .msep { height: 1px; background: var(--hairline); margin: 4px 6px; }
+.menu .mgl { height: 22px; display: flex; align-items: center; padding: 0 8px; font-size: 11.5px; color: var(--text-3); }
+
+/* Tasks view */
+.srch { margin: 0 12px 6px; height: 30px; display: flex; align-items: center; gap: 8px; padding: 0 10px; border-radius: var(--radius-md); background: var(--state-hover); font-size: 13px; color: var(--text-3); }
+.fchip { height: 22px; display: inline-flex; align-items: center; gap: 5px; padding: 0 4px 0 8px; border-radius: 9999px; background: var(--state-active); font-size: 12px; color: var(--text-1); margin-left: auto; }
+.grp { padding: 6px 12px 2px; }
+.gh { height: 28px; display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; color: var(--text-2); }
+.gh .sum { color: var(--text-3); font-weight: 400; }
+.gh .ghb { margin-left: auto; font-size: 12px; color: var(--text-3); font-weight: 400; }
+.tr { margin: 0 -6px; padding: 0 6px; height: var(--row-h-sm); display: grid; grid-template-columns: var(--icon-sm) minmax(0, 1fr) auto; align-items: center; column-gap: 10px; border-radius: var(--radius-md); font-size: 13.5px; cursor: grab; }
+.tr:hover { background: var(--state-hover); }
+.tr .tx { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.tr .tx .pd { display: inline-block; width: 6px; height: 6px; border-radius: 2px; background: var(--c); margin-right: 7px; vertical-align: 1px; }
+.tr .mt { font-size: 12px; color: var(--text-2); white-space: nowrap; }
+.tr.late .mt { color: var(--text-2); }
+.tr.dim .tx { color: var(--text-2); }
+.tr .tick { margin: 0; }
+.tr.rv { grid-template-columns: 14px minmax(0, 1fr) auto; cursor: default; }
+.foldl { margin: 6px 12px 0; height: 28px; display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-2); }
+.foldl .ic { color: var(--text-3); }
+.rvfoot { margin: 12px 12px 0; display: flex; flex-direction: column; gap: 8px; }
+.rvfoot .why { font-size: 12.5px; line-height: 1.5; color: var(--text-2); }
+
+/* Details */
+.dbody { padding: 0 16px 20px; display: flex; flex-direction: column; gap: 12px; }
+.crumb { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-2); }
+.dtitle { font-size: 18px; font-weight: 600; letter-spacing: -.01em; line-height: 1.3; }
+.dwhen { font-size: 13.5px; color: var(--text-1); margin-top: -6px; }
+.dwhen .t2 { font-size: 12.5px; }
+.dacts { display: flex; gap: 6px; flex-wrap: wrap; }
+.props { display: grid; grid-template-columns: 84px minmax(0, 1fr); align-items: start; row-gap: 2px; }
+.plabel { font-size: 13px; color: var(--text-2); min-height: var(--ctrl-h-sm); display: flex; align-items: center; }
+.pval { justify-self: start; max-width: 100%; min-height: var(--ctrl-h-sm); display: inline-flex; align-items: center; gap: 8px; padding: 0 6px; margin-left: -6px; border-radius: var(--radius-md); font-size: 13.5px; color: var(--text-1); }
+.pval:hover { background: var(--state-hover); }
+.pval .ic { color: var(--text-2); }
+.pval.empty { color: var(--text-3); }
+.gl2 { display: flex; flex-direction: column; gap: 2px; padding-top: 4px; }
+.guest { display: flex; align-items: center; gap: 8px; height: 24px; font-size: 13px; color: var(--text-1); }
+.guest .rs { margin-left: auto; font-size: 12px; color: var(--text-2); }
+.guest .rs.no { color: var(--text-3); }
+.guest .ref { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 7px 0 3px; border-radius: 9999px; background: var(--ref-bg); }
+.sech { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; color: var(--text-2); margin-top: 2px; }
+.sech .grow { flex: 1; }
+.cue { display: flex; align-items: center; gap: 10px; min-height: 30px; padding: 0 10px; border-radius: var(--radius-md); box-shadow: inset 0 0 0 1px var(--hairline); font-size: 13px; }
+.cue .t3 { margin-left: auto; font-size: 12px; white-space: nowrap; }
+.lcards { display: flex; flex-direction: column; gap: 6px; }
+.lcard { border-radius: var(--radius-lg); box-shadow: inset 0 0 0 1px var(--hairline); padding: 8px 11px; display: flex; align-items: center; gap: 9px; font-size: 13px; cursor: pointer; }
+.lcard:hover { background: var(--hover-solid); }
+.lcard .ic { color: var(--text-2); }
+.lcard .w { margin-left: auto; font-size: 12px; color: var(--text-3); white-space: nowrap; }
+.notes { font-size: 13px; line-height: 1.55; color: color-mix(in oklab, var(--foreground) 80%, transparent); }
+.feed { display: flex; flex-direction: column; gap: 8px; font-size: 12.5px; color: var(--text-2); }
+.feed .fi { display: flex; align-items: center; gap: 8px; }
+.feed .fi .w { margin-left: auto; color: var(--text-3); white-space: nowrap; }
+.reply { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: var(--radius-lg); box-shadow: inset 0 0 0 1px var(--hairline); font-size: 13px; }
+.reply .seg { margin-left: auto; }
+.sess { display: flex; flex-direction: column; gap: 2px; }
+.srow { display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 8px; margin: 0 -8px; border-radius: var(--radius-md); font-size: 13px; color: var(--text-1); }
+.srow.on { background: var(--state-selected); }
+.srow .w { margin-left: auto; font-size: 12px; color: var(--text-2); white-space: nowrap; }
+.srow.add { color: var(--text-3); }
+.linkbox { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 4px 0 10px; border-radius: var(--radius-md); background: var(--state-hover); font-size: 12.5px; color: var(--text-1); }
+.linkbox .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.setrow { display: flex; align-items: center; gap: 10px; min-height: 30px; font-size: 13px; color: var(--text-1); }
+.setrow .grow { flex: 1; }
+.setrow .t2 { font-size: 12.5px; }
+.cpills2 { display: flex; flex-wrap: wrap; gap: 5px; }
+.minichip { height: 22px; display: inline-flex; align-items: center; gap: 6px; padding: 0 8px; border-radius: 9999px; background: var(--state-active); font-size: 12px; color: var(--text-1); }
+.minichip.off { background: none; box-shadow: inset 0 0 0 1px var(--hairline); color: var(--text-3); }
+.dayl { padding: 0 12px 16px; }
+.dayl .dh2 { padding: 2px 4px 8px; font-size: 13px; font-weight: 600; }
+.dayl .dh2 .t3 { font-weight: 400; }
+.dli { display: grid; grid-template-columns: 66px 8px minmax(0, 1fr); align-items: center; column-gap: 8px; height: 32px; padding: 0 4px; border-radius: var(--radius-md); font-size: 13px; }
+.dli:hover { background: var(--state-hover); }
+.dli .tm { font-size: 12px; color: var(--text-2); white-space: nowrap; }
+.dli .bar { width: 3px; height: 18px; border-radius: 2px; background: var(--c); justify-self: center; }
+.dli .bar.ses { background: none; box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--foreground) 40%, transparent); width: 8px; height: 8px; border-radius: 9999px; }
+.dli .tx { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dli.dim .tx { color: var(--text-2); }
+
+/* ── Bottom bar ─────────────────────────────────────────────────────────── */
+.bbar { flex-shrink: 0; height: var(--bar-h); display: flex; align-items: center; padding: 0 16px; }
+.bside { flex: 1; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.bside.r { justify-content: flex-end; }
+.bmid { display: flex; align-items: center; gap: 8px; }
+.bbtn { width: 32px; height: 32px; display: grid; place-items: center; border-radius: var(--radius-md); color: var(--text-2); }
+.bbtn:hover { background: var(--state-hover); color: var(--text-1); }
+.bbtn.closed { color: var(--text-1); background: var(--state-active); }
+.toast { position: absolute; left: 50%; bottom: 58px; transform: translateX(-50%); z-index: 40; height: 36px; display: flex; align-items: center; gap: 12px; padding: 0 6px 0 14px; border-radius: var(--radius-md); background: var(--popover); border: 1px solid var(--hairline); box-shadow: 0 12px 30px rgb(0 0 0 / .5); font-size: 13px; white-space: nowrap; }
+
+/* ── Capture (⌘⇧K, then ⌘4) ─────────────────────────────────────────────── */
+.scrim { position: absolute; inset: 0; z-index: 90; background: rgb(0 0 0 / .64); display: flex; justify-content: center; align-items: flex-start; padding-top: 112px; }
+.capm { width: 640px; background: var(--popover); border: 1px solid color-mix(in oklab, var(--foreground) 12%, transparent); border-radius: var(--radius-xl); box-shadow: 0 28px 70px rgb(0 0 0 / .65); display: flex; flex-direction: column; }
+.cdest { display: flex; align-items: center; gap: 8px; padding: 12px 14px 0 12px; }
+.cdest .grow { flex: 1; }
+.dbtn { height: 26px; display: inline-flex; align-items: center; gap: 7px; padding: 0 8px; border-radius: var(--radius-md); font-size: 13px; color: var(--text-1); white-space: nowrap; }
+.dbtn .dot { width: 7px; height: 7px; }
+.dbtn .ic { color: var(--text-3); }
+.dbtn.type { background: var(--state-active); }
+.ctitle { padding: 14px 20px 0; font-size: 18px; font-weight: 500; line-height: 1.5; color: var(--text-1); }
+.tok { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 7px 0 4px; margin: 0 1px; border-radius: var(--radius-sm); vertical-align: 1px; font-size: 16px; font-weight: 500; line-height: 1; }
+.tok.contact { background: var(--ref-bg); }
+.tok.date { padding: 0 6px; background: var(--state-selected); box-shadow: inset 0 -1px 0 color-mix(in oklab, var(--foreground) 40%, transparent); }
+.ctitle .caret { display: inline-block; width: 1.5px; height: 1.1em; background: var(--foreground); vertical-align: -.2em; margin-left: 3px; }
+.cdesc { padding: 6px 20px 0; font-size: 14px; color: var(--text-3); }
+.cpills { display: flex; align-items: center; gap: 6px; padding: 18px 16px 14px; flex-wrap: wrap; }
+.cpill { height: 26px; display: inline-flex; align-items: center; gap: 6px; padding: 0 9px; border-radius: var(--radius-md); box-shadow: inset 0 0 0 1px var(--hairline); font-size: 12.5px; color: var(--text-2); white-space: nowrap; }
+.cpill .ic { color: var(--text-3); }
+.cpill.set { color: var(--text-1); background: var(--state-active); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--foreground) 14%, transparent); }
+.cfoot { display: flex; align-items: center; gap: 6px; padding: 10px 12px 10px 18px; border-top: 1px solid var(--hairline); }
+.cfoot .grow { flex: 1; }
+.chint { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-3); white-space: nowrap; }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M21 4h-7"/><path d="M10 4H3"/><path d="M21 12h-9"/><path d="M8 12H3"/><path d="M21 20h-5"/><path d="M12 20H3"/><path d="M14 2v4"/><path d="M8 10v4"/><path d="M16 18v4"/></symbol>
+  <symbol id="i-chev-d" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-chev-l" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+  <symbol id="i-chev-r" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="i-fold" viewBox="0 0 24 24"><path d="m11 17-5-5 5-5"/><path d="m18 17-5-5 5-5"/></symbol>
+  <symbol id="i-unfold" viewBox="0 0 24 24"><path d="m6 17 5-5-5-5"/><path d="m13 17 5-5-5-5"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></symbol>
+  <symbol id="i-cal" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="i-repeat" viewBox="0 0 24 24"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4.5"/><path d="M20 21a8 8 0 0 0-16 0"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></symbol>
+  <symbol id="i-video" viewBox="0 0 24 24"><path d="m16 13 5.22 3.48a.5.5 0 0 0 .78-.42V7.89a.5.5 0 0 0-.76-.43L16 10.5"/><rect x="2" y="6" width="14" height="12" rx="2"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M10.27 21a2 2 0 0 0 3.46 0"/><path d="M3.26 15.33A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.67C19.41 13.96 18 12.5 18 8A6 6 0 0 0 6 8c0 4.5-1.41 5.96-2.74 7.33"/></symbol>
+  <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .71-1.53l7-6a2 2 0 0 1 2.58 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+  <symbol id="i-note" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/></symbol>
+  <symbol id="i-tasks" viewBox="0 0 24 24"><path d="M21 10.66V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12.34"/><path d="m9 11 3 3L22 4"/></symbol>
+  <symbol id="i-mail" viewBox="0 0 24 24"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></symbol>
+  <symbol id="i-contact" viewBox="0 0 24 24"><path d="M16 2v2"/><path d="M7 22v-2a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v2"/><path d="M8 2v2"/><circle cx="12" cy="11" r="3"/><rect x="3" y="4" width="18" height="18" rx="2"/></symbol>
+  <symbol id="i-msg" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5"/><path d="M12 16v-4.5"/><path d="M12 8h.01"/></symbol>
+  <symbol id="i-day" viewBox="0 0 24 24"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></symbol>
+  <symbol id="i-pen" viewBox="0 0 24 24"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+  <symbol id="i-map" viewBox="0 0 24 24"><path d="M20 10c0 4.99-5.54 10.19-7.4 11.8a1 1 0 0 1-1.2 0C9.54 20.19 4 14.99 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></symbol>
+  <symbol id="i-arrow-r" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></symbol>
+  <symbol id="i-sparkle-no" viewBox="0 0 24 24"><path d="M3 12h18"/></symbol>
+  <symbol id="g-play" viewBox="0 0 24 24"><path d="M7 5.2v13.6a1.2 1.2 0 0 0 1.8 1.03l11.2-6.8a1.2 1.2 0 0 0 0-2.06L8.8 4.17A1.2 1.2 0 0 0 7 5.2z"/></symbol>
+  <symbol id="mark" viewBox="0 0 1000 1000"><path fill="currentColor" fill-rule="evenodd" clip-rule="evenodd" d="M621.122 228.124C634.336 227.102 647.241 232.464 655.842 242.551C665.755 254.176 665.755 279.231 665.755 329.34V363.215L746.907 282.348C782.394 246.985 800.138 229.303 815.367 228.125C828.58 227.103 841.485 232.465 850.087 242.552C859.999 254.177 860 279.232 860 329.341V472.45C860 482.617 860 487.701 858.849 492.483C857.829 496.723 856.147 500.776 853.864 504.491C851.289 508.681 847.688 512.268 840.488 519.443L641.582 717.653C606.095 753.016 588.351 770.698 573.122 771.876C559.909 772.898 547.004 767.535 538.403 757.449C528.49 745.824 528.489 720.769 528.489 670.66V637.249L653.561 512.616C661.367 504.838 665.755 494.268 665.755 483.245V363.679L540.684 488.312C532.878 496.091 528.489 506.661 528.489 517.683V636.785L447.338 717.653C411.85 753.016 394.106 770.697 378.878 771.875C365.664 772.897 352.759 767.534 344.158 757.448C334.245 745.823 334.245 720.769 334.245 670.66V636.785L253.093 717.653C217.606 753.016 199.862 770.698 184.633 771.876C171.42 772.898 158.515 767.535 149.913 757.449C140.001 745.824 140 720.769 140 670.66V527.551C140 517.385 140 512.3 141.151 507.518C142.171 503.278 143.853 499.226 146.136 495.511C148.711 491.32 152.312 487.732 159.512 480.557L358.418 282.348C393.905 246.985 411.649 229.303 426.878 228.125C440.091 227.103 452.996 232.465 461.597 242.552C471.51 254.177 471.511 279.232 471.511 329.341V363.214L552.662 282.347C588.15 246.984 605.894 229.302 621.122 228.124ZM346.439 487.848C338.633 495.627 334.245 506.197 334.245 517.219V636.785L459.316 512.152C467.122 504.373 471.511 493.804 471.511 482.781V363.214L346.439 487.848Z"/></symbol>
+</svg>
+
+<div class="stage">
+  <div class="strip" role="banner">
+    <div class="l1">
+      <span class="ptag">Throwaway prototype — not a spec.</span>
+      <span class="pcalls"><b>Calendar round 1</b> · .design/calendar-v2/REPLAN.md · C1–C15</span>
+      <span class="grow"></span>
+      <span class="seg" id="frameSw">
+        <button type="button" data-go="1">1 · Week</button>
+        <button type="button" data-go="2">2 · Day</button>
+        <button type="button" data-go="3">3 · Month</button>
+        <button type="button" data-go="4">4 · Panel</button>
+        <button type="button" data-go="5">5 · Missed</button>
+        <button type="button" data-go="6">6 · Booking link</button>
+        <button type="button" data-go="7">7 · Teammates</button>
+        <button type="button" data-go="8">8 · Capture</button>
+        <button type="button" data-go="9">9 · 1024×700</button>
+      </span>
+    </div>
+    <div class="l2">
+      <span class="cap" id="cap"></span>
+      <span class="ctl" id="ctlVar"><span class="lab" id="varLab"></span><span class="seg" id="varSeg"></span></span>
+      <span class="keys">Keys <b>1–9</b> · <b>V</b> variant</span>
+    </div>
+  </div>
+
+  <div class="appwrap">
+  <div class="appframe" id="appf">
+    <span class="sizetag" id="sizetag" hidden>The minimum window: 1024 × 700</span>
+    <header class="topbar">
+      <div class="tleft">
+        <svg class="mark" aria-label="moduo"><use href="#mark"/></svg>
+        <button type="button" class="wsbtn">Moduo Studio <svg class="ic ic-xs" aria-hidden="true"><use href="#i-chev-d"/></svg></button>
+      </div>
+      <nav class="mtabs" aria-label="Modules">
+        <span class="mtab" title="⌘1"><svg class="ic" aria-hidden="true"><use href="#i-home"/></svg><span class="ml">Home</span></span>
+        <span class="mtab" title="⌘2"><svg class="ic" aria-hidden="true"><use href="#i-note"/></svg><span class="ml">Notes</span></span>
+        <span class="mtab" title="⌘3"><svg class="ic" aria-hidden="true"><use href="#i-tasks"/></svg><span class="ml">Tasks</span></span>
+        <span class="mtab on" title="⌘4"><svg class="ic" aria-hidden="true"><use href="#i-cal"/></svg><span class="ml">Calendar</span></span>
+        <span class="mtab" title="⌘5"><svg class="ic" aria-hidden="true"><use href="#i-mail"/></svg><span class="ml">Email</span></span>
+        <span class="mtab" title="⌘6"><svg class="ic" aria-hidden="true"><use href="#i-contact"/></svg><span class="ml">Contacts</span></span>
+        <span class="mtab" title="⌘7"><svg class="ic" aria-hidden="true"><use href="#i-msg"/></svg><span class="ml">Chat</span></span>
+      </nav>
+      <div class="tright">
+        <span class="ttimer num" title="Focus · Logo concepts"><span class="fdot"></span>18:02</span>
+        <button type="button" class="ibtn" title="Help"><svg class="ic ic-md" aria-hidden="true"><use href="#i-help"/></svg></button>
+        <button type="button" class="ibtn" title="Notifications"><svg class="ic ic-md" aria-hidden="true"><use href="#i-bell"/></svg></button>
+        <span class="ava ar lg" title="Alex Rivera (you)">AR</span>
+      </div>
+    </header>
+
+    <div class="app" id="app">
+      <aside class="panel rail" id="rail"></aside>
+      <main class="panel center" id="center"></main>
+      <aside class="panel rpanel" id="rpanel"></aside>
+    </div>
+
+    <footer class="bbar" id="bbar">
+      <div class="bside">
+        <button type="button" class="bbtn" id="ltoggle" title="Collapse left panel"><svg class="ic ic-md" aria-hidden="true"><use href="#i-fold"/></svg></button>
+      </div>
+      <div class="bmid" role="toolbar" aria-label="Global actions">
+        <button type="button" class="bbtn" title="Search  ⌘K"><svg class="ic ic-md" aria-hidden="true"><use href="#i-search"/></svg></button>
+        <button type="button" class="bbtn" title="Quick capture  ⌘⇧K"><svg class="ic ic-md" aria-hidden="true"><use href="#i-pen"/></svg></button>
+        <button type="button" class="bbtn" title="New event  ⌘N"><svg class="ic ic-md" aria-hidden="true"><use href="#i-plus"/></svg></button>
+      </div>
+      <div class="bside r">
+        <button type="button" class="bbtn" id="rtoggle" title="Collapse right panel"><svg class="ic ic-md" aria-hidden="true"><use href="#i-unfold"/></svg></button>
+      </div>
+    </footer>
+
+    <div class="toast" id="toast" hidden><span>Fit 2 into today</span><button type="button" class="btn sm secondary">Undo<span class="kbdin">⌘Z</span></button></div>
+
+    <div class="scrim" id="scrim" hidden>
+      <div class="capm" role="dialog" aria-label="Capture">
+        <div class="cdest">
+          <button type="button" class="dbtn type" title="Type · ⌘1–7"><svg class="ic" aria-hidden="true"><use href="#i-cal"/></svg>Event<span class="kbd">⌘4</span></button>
+          <button type="button" class="dbtn" title="Which calendar"><span class="dot" style="--c: var(--cal-work)"></span>Work<span class="t3">· Google</span><svg class="ic ic-xs" aria-hidden="true"><use href="#i-chev-d"/></svg></button>
+          <span class="grow"></span>
+        </div>
+        <div class="ctitle">Lunch with <span class="tok contact" title="Contact · becomes a guest"><span class="ava an">AK</span>Anna Kowalski</span> <span class="tok date" title="When · leaves the title on save">Thu 1pm</span><span class="caret"></span></div>
+        <div class="cdesc">Add notes…</div>
+        <div class="cpills">
+          <button type="button" class="cpill set"><svg class="ic" aria-hidden="true"><use href="#i-clock"/></svg><span class="num">Thu, Oct 15 · 1:00 – 2:00 PM</span></button>
+          <button type="button" class="cpill set"><svg class="ic" aria-hidden="true"><use href="#i-users"/></svg>Anna Kowalski</button>
+          <button type="button" class="cpill"><svg class="ic" aria-hidden="true"><use href="#i-repeat"/></svg>Repeat</button>
+          <button type="button" class="cpill"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg>More</button>
+        </div>
+        <div class="cfoot">
+          <span class="chint"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-mail"/></svg>Google sends Anna the invitation · you're free then</span>
+          <span class="grow"></span>
+          <button type="button" class="btn sm">Create more<span class="kbd">⌘⏎</span></button>
+          <button type="button" class="btn primary sm">Create<span class="kbdin">⏎</span></button>
+        </div>
+      </div>
+    </div>
+  </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var html = document.documentElement;
+  var q = new URLSearchParams(location.search);
+  var FRAMES = 9;
+  var VARS = {
+    1: { lab: 'Panel', opts: [['tasks', 'Tasks'], ['event', 'Event open'], ['zone', 'Second time zone']] },
+    2: { lab: 'Selected', opts: [['invite', 'Invitation'], ['session', 'Session']] },
+    4: { lab: 'Panel', opts: [['menu', 'Menu open'], ['ref', 'Guest opened']] },
+    5: { lab: 'Missed', opts: [['grid', 'On the grid'], ['review', 'Review'], ['after', 'After Fit']] },
+    9: { lab: 'Gives way', opts: [['left', 'Left folds'], ['right', 'Right folds'], ['both', 'Both open']] }
+  };
+  var S = { frame: Math.min(FRAMES, Math.max(1, parseInt(q.get('frame'), 10) || 1)), v: {} };
+  Object.keys(VARS).forEach(function (f) { S.v[f] = VARS[f].opts[0][0]; });
+  if (q.get('v') && VARS[S.frame] && VARS[S.frame].opts.some(function (o) { return o[0] === q.get('v'); })) S.v[S.frame] = q.get('v');
+
+  // ── helpers ──────────────────────────────────────────────────────────────
+  var H = 46, START = 8, HOURS = 11, NOW = 11 + 37 / 60, TODAY = 2;
+  function y(h) { return (h - START) * H; }
+  function hm(h) { var hh = Math.floor(h + 1e-6), mm = Math.round((h - hh) * 60); return { h: hh, m: mm }; }
+  function fmt(h, noAp) { var t = hm(h), ap = t.h >= 12 ? 'PM' : 'AM', h12 = t.h % 12 || 12; return h12 + ':' + (t.m < 10 ? '0' : '') + t.m + (noAp ? '' : ' ' + ap); }
+  function ap(h) { return hm(h).h >= 12 ? 'PM' : 'AM'; }
+  function range(s, e) { return ap(s) === ap(e) ? fmt(s, true) + ' – ' + fmt(e) : fmt(s) + ' – ' + fmt(e); }
+  function dur(s, e) { var m = Math.round((e - s) * 60), hh = Math.floor(m / 60), r = m % 60; return hh ? hh + 'h' + (r ? ' ' + r + 'm' : '') : r + 'm'; }
+  function ic(id, cls) { return '<svg class="ic ' + (cls || '') + '" aria-hidden="true"><use href="#' + id + '"/></svg>'; }
+  function av(k, n) { return '<span class="ava ' + k + '" title="' + (n || '') + '">' + k.toUpperCase() + '</span>'; }
+
+  var DAYS = [['Mon', 12], ['Tue', 13], ['Wed', 14], ['Thu', 15], ['Fri', 16], ['Sat', 17], ['Sun', 18]];
+  var C = { work: 'var(--cal-work)', personal: 'var(--cal-personal)', family: 'var(--cal-family)', uni: 'var(--cal-uni)' };
+  var P = { acme: 'var(--label-violet)', site: 'var(--label-teal)', studio: 'var(--label-blue)', ops: 'var(--label-gray)' };
+
+  var ITEMS = [
+    { id: 'su0', d: 0, s: 9, e: 9.25, k: 'ev', c: 'work', t: 'Standup' },
+    { id: 'su1', d: 1, s: 9, e: 9.25, k: 'ev', c: 'work', t: 'Standup' },
+    { id: 'su2', d: 2, s: 9, e: 9.25, k: 'ev', c: 'work', t: 'Standup' },
+    { id: 'su3', d: 3, s: 9, e: 9.25, k: 'ev', c: 'work', t: 'Standup' },
+    { id: 'su4', d: 4, s: 9, e: 9.25, k: 'ev', c: 'work', t: 'Standup' },
+    { id: 'prop', d: 0, s: 10, e: 11.5, k: 'ses', p: 'acme', t: 'Draft Acme proposal', st: 'missed' },
+    { id: 'acme', d: 0, s: 14, e: 15, k: 'ev', c: 'work', t: 'Acme call', sub: 'Anna Kowalski', ppl: ['an', 'mc'] },
+    { id: 'lec', d: 1, s: 11, e: 12, k: 'ev', c: 'uni', t: 'CS 201 lecture', sub: 'Room 2.14' },
+    { id: 'logo1', d: 1, s: 13, e: 14.5, k: 'ses', p: 'acme', t: 'Logo concepts', st: 'worked', note: '1h 32m tracked' },
+    { id: 'intro1', d: 1, s: 16, e: 16.5, k: 'ev', c: 'work', t: 'Intro call', sub: 'Jordan Lee · booked' },
+    { id: 'tests', d: 2, s: 9.5, e: 10.5, k: 'ses', p: 'site', t: 'Write tests', st: 'missed' },
+    { id: 'lunch', d: 2, s: 12, e: 13, k: 'ev', c: 'personal', t: 'Lunch with Anna', ppl: ['an'] },
+    { id: 'sprint', d: 2, s: 14.5, e: 15.5, k: 'ev', c: 'work', t: 'Sprint review', sub: 'Mike, Sam', ppl: ['mc', 'so'] },
+    { id: 'invoice', d: 2, s: 16, e: 17, k: 'ses', p: 'ops', t: 'Invoice run' },
+    { id: 'logo2', d: 3, s: 10, e: 12, k: 'ses', p: 'acme', t: 'Logo concepts' },
+    { id: 'dentist', d: 3, s: 13, e: 14, k: 'ev', c: 'family', t: 'Dentist' },
+    { id: 'crit', d: 3, s: 15, e: 15.75, k: 'inv', c: 'work', t: 'Design crit', sub: 'from Sam · reply?' },
+    { id: 'intro2', d: 3, s: 16, e: 16.5, k: 'ev', c: 'work', t: 'Intro call', sub: 'Priya Shah · booked' },
+    { id: 'oneone', d: 4, s: 11, e: 11.5, k: 'ev', c: 'work', t: '1:1 Mike', ppl: ['mc'] },
+    { id: 'ep12', d: 4, s: 14, e: 16, k: 'ses', p: 'studio', t: 'Episode 12 edit' },
+    { id: 'review', d: 4, s: 16.5, e: 17, k: 'ghost', t: 'Weekly review' },
+    { id: 'gym', d: 5, s: 10, e: 11, k: 'ev', c: 'personal', t: 'Gym' }
+  ];
+  var ALLDAY = [
+    { d: 0, k: 'due late', t: 'Problem set 4' },
+    { d: 1, k: 'ev', c: 'uni', t: 'Term week 6' },
+    { d: 2, k: 'due', t: 'Send invoice #14' },
+    { d: 4, k: 'due', t: 'Episode 12 publish' },
+    { d: 6, k: 'ghost', t: 'Water plants' }
+  ];
+  var BUSY_MIKE = [
+    { d: 0, s: 9, e: 9.25 }, { d: 0, s: 14, e: 15 }, { d: 1, s: 9, e: 9.25 }, { d: 1, s: 10, e: 12.5 }, { d: 2, s: 9, e: 9.25 },
+    { d: 2, s: 10, e: 11.5 }, { d: 2, s: 14.5, e: 15.5 }, { d: 3, s: 9, e: 9.25 }, { d: 3, s: 10, e: 12 }, { d: 3, s: 13, e: 15 },
+    { d: 4, s: 9, e: 9.25 }, { d: 4, s: 11, e: 11.5 }, { d: 4, s: 13, e: 14.5 }
+  ];
+  var WASH_INTRO = [
+    { d: 1, s: 10, e: 11 }, { d: 1, s: 14, e: 16 }, { d: 1, s: 16.5, e: 17 },
+    { d: 2, s: 13, e: 14.5 }, { d: 2, s: 15.5, e: 16 },
+    { d: 3, s: 14, e: 15 }, { d: 3, s: 16.5, e: 17 },
+    { d: 4, s: 10, e: 11 }, { d: 4, s: 11.5, e: 12 }, { d: 4, s: 16, e: 16.5 }
+  ];
+
+  // ── the item on the grid ─────────────────────────────────────────────────
+  function itemHTML(it, o) {
+    o = o || {};
+    var top = y(it.s) + 1, h = Math.max(17, (it.e - it.s) * H - 3);
+    var cls = 'it ' + it.k + (it.st ? ' ' + it.st : '') + (o.sel === it.id ? ' sel' : '') + (o.hov === it.id ? ' hov' : '') + (o.placed && o.placed.indexOf(it.id) > -1 ? ' placed' : '');
+    if (it.k === 'ev' && it.d < TODAY) cls += ' past';
+    if (it.k === 'ev' && it.d === TODAY && it.e <= NOW) cls += ' past';
+    var st = 'top:' + top + 'px;height:' + h + 'px;' + (it.c ? '--c:' + C[it.c] + ';' : '') + (it.p ? '--c:' + P[it.p] + ';' : '');
+    if (o.narrow) st += 'right:38%;';
+    var short = (it.e - it.s) <= 0.5, inner = '';
+    var ppl = o.day && it.ppl ? '<span class="ppl">' + it.ppl.map(function (k) { return av(k); }).join('') + '</span>' : '';
+    if (it.k === 'ses') {
+      var meta = it.st === 'missed' ? 'missed · ' + fmt(it.s) : it.st === 'worked' ? it.note : fmt(it.s) + (o.day ? ' – ' + fmt(it.e) + ' · ' + dur(it.s, it.e) : '');
+      inner = '<div class="sh"><span class="cb"></span><div style="min-width:0"><div class="tt"><span class="pd"></span>' + it.t + '</div>' + (short ? '' : '<div class="tm num">' + meta + '</div>') + '</div></div>';
+    } else if (it.k === 'ghost') {
+      inner = '<div class="ln">' + ic('i-repeat', 'ic-xs') + '<span class="tt">' + it.t + '</span></div>';
+    } else if (it.k === 'busy') {
+      inner = '<div class="ln"><span class="tt">Busy</span>' + av('mc', 'Mike Chen') + '</div>';
+    } else if (short) {
+      inner = '<div class="one"><span class="tt">' + it.t + '</span>' + (o.day ? '<span class="tm num">' + range(it.s, it.e) + (it.sub ? ' · ' + it.sub : '') + '</span>' : '') + '</div>';
+    } else {
+      inner = '<div class="tt">' + it.t + ppl + '</div><div class="tm num">' + (o.day ? range(it.s, it.e) : fmt(it.s)) + (it.sub ? ' · ' + it.sub : '') + '</div>';
+    }
+    return '<div class="' + cls + '" style="' + st + '" data-id="' + it.id + '">' + inner + '</div>';
+  }
+  function chipHTML(a, o) {
+    var k = a.k.split(' ');
+    var cls = 'chip ' + a.k + (o && o.sel === a.t ? ' sel' : '');
+    var lead = k[0] === 'due' ? '<span class="cb"></span>' : k[0] === 'ghost' ? ic('i-repeat', 'ic-xs') : '';
+    return '<div class="' + cls + '" style="' + (a.c ? '--c:' + C[a.c] : '') + '" title="' + (k[0] === 'due' ? 'Due' : '') + '">' + lead + '<span class="cl">' + a.t + '</span></div>';
+  }
+
+  // ── the week ─────────────────────────────────────────────────────────────
+  function renderWeek(o) {
+    o = o || {};
+    var days = o.days || [0, 1, 2, 3, 4, 5, 6];
+    var gut = o.zone ? 100 : 56;
+    var g = '<div class="wk' + (o.day ? ' day' : '') + '" style="--n:' + days.length + ';--gut:' + gut + 'px">';
+    g += '<div class="wkrow wkhead">' + (o.zone ? '<div class="gutzone">Warsaw · New York</div>' : '<div></div>');
+    days.forEach(function (d) { g += '<div class="dh' + (d === TODAY ? ' today' : '') + '"><span class="dw">' + DAYS[d][0] + '</span><span class="dnum num">' + DAYS[d][1] + '</span></div>'; });
+    g += '</div><div class="wkrow wkall"><div class="gut">all-day</div>';
+    days.forEach(function (d) {
+      g += '<div class="adc">' + ALLDAY.filter(function (a) { return a.d === d; }).map(function (a) { return chipHTML(a, o); }).join('') + '</div>';
+    });
+    g += '</div><div class="wkbody" id="wkbody"><div class="wkrow"><div class="gutcol' + (o.zone ? ' two' : '') + '">';
+    for (var h = START + 1; h < START + HOURS; h++) {
+      var lab = (h % 12 || 12) + ' ' + (h >= 12 ? 'PM' : 'AM');
+      var ny = ((h - 6) % 12 || 12) + ' ' + ((h - 6) >= 12 ? 'PM' : 'AM');
+      g += '<span class="hl num" style="top:' + y(h) + 'px">' + (o.zone ? '<b>' + ny + '</b><span>' + lab + '</span>' : lab) + '</span>';
+    }
+    g += '</div>';
+    days.forEach(function (d) {
+      g += '<div class="col' + (d >= 5 ? ' wkend' : '') + '" data-d="' + d + '">';
+      g += '<div class="off" style="top:0;height:' + y(9) + 'px"></div><div class="off" style="top:' + y(18) + 'px;bottom:0"></div>';
+      if (o.wash) WASH_INTRO.filter(function (w) { return w.d === d; }).forEach(function (w) {
+        g += '<div class="wash num" style="top:' + (y(w.s) + 1) + 'px;height:' + ((w.e - w.s) * H - 3) + 'px">' + ((w.e - w.s) >= 0.75 ? 'Open' : '') + '</div>';
+      });
+      if (o.busy) BUSY_MIKE.filter(function (b) { return b.d === d; }).forEach(function (b) {
+        g += itemHTML({ id: 'b', d: d, s: b.s, e: b.e, k: 'busy' }, {}).replace('style="', 'style="left:64%;right:2px;');
+      });
+      var list = ITEMS.slice();
+      if (o.extra) list = list.concat(o.extra);
+      list.filter(function (it) { return it.d === d && !(o.hide && o.hide.indexOf(it.id) > -1); }).forEach(function (it) { g += itemHTML(it, { sel: o.sel, hov: o.hov, day: o.day, narrow: o.busy && it.k !== 'busy', placed: o.placed }); });
+      if (d === TODAY) g += '<div class="nowline" style="top:' + y(NOW) + 'px">' + (days.indexOf(d) === 0 ? '<span class="nowtag num">11:37</span>' : '') + '</div>';
+      g += '</div>';
+    });
+    g += '</div>';
+    if (o.overlay) g += o.overlay;
+    g += '</div></div>';
+    return g;
+  }
+
+  function toolbar(o) {
+    var view = o.view || 'Week';
+    return '<div class="toolbar"><div class="title"><h3>' + (o.title || 'October 2026') + '</h3><span class="rng num">' + (o.rng !== undefined ? o.rng : 'Oct 12 – 18') + '</span></div>' +
+      '<button type="button" class="btn icon" title="Search  /">' + ic('i-search') + '</button>' +
+      '<button type="button" class="btn">' + ic('i-sliders') + '<span class="dlab">Display</span></button><span class="sep"></span>' +
+      '<span class="seg">' + ['Day', 'Week', 'Month'].map(function (v) { return '<button type="button" class="' + (v === view ? 'on' : '') + '" title="' + v[0] + '">' + v + '</button>'; }).join('') + '</span><span class="sep"></span>' +
+      '<button type="button" class="btn icon" title="Previous  ←">' + ic('i-chev-l') + '</button><button type="button" class="btn sm secondary" title="T">Today</button><button type="button" class="btn icon" title="Next  →">' + ic('i-chev-r') + '</button>' +
+      '<span class="sep"></span><button type="button" class="btn primary" title="⌘N">' + ic('i-plus') + 'New</button></div>';
+  }
+  function missline(n) { return '<div class="missline">' + ic('i-clock') + '<span><span class="num">' + n + '</span> missed sessions this week</span><button type="button" class="btn">Review</button></div>'; }
+
+  // ── the month ────────────────────────────────────────────────────────────
+  function renderMonth() {
+    var m = {};
+    function add(day, l) { (m[day] = m[day] || []).push(l); }
+    for (var dd = 1; dd <= 31; dd++) { var wd = (dd + 2) % 7; if (wd < 5) add(dd, { tm: '9:00 AM', t: 'Standup', c: 'work' }); }
+    [6, 13, 20, 27].forEach(function (dd) { add(dd, { tm: '11:00 AM', t: 'CS 201 lecture', c: 'uni' }); });
+    add(2, { due: true, t: 'Problem set 3' }); add(5, { tm: '2:00 PM', t: 'Acme kickoff', c: 'work' }); add(6, { ad: true, t: 'Term week 5', c: 'uni' });
+    add(9, { due: true, t: 'Episode 11 publish' }); add(12, { due: true, late: true, t: 'Problem set 4' }); add(12, { tm: '2:00 PM', t: 'Acme call', c: 'work' });
+    add(13, { ad: true, t: 'Term week 6', c: 'uni' }); add(13, { tm: '4:00 PM', t: 'Intro call', c: 'work' });
+    add(14, { due: true, t: 'Send invoice #14' }); add(14, { tm: '12:00 PM', t: 'Lunch with Anna', c: 'personal' }); add(14, { tm: '2:30 PM', t: 'Sprint review', c: 'work' });
+    add(15, { tm: '1:00 PM', t: 'Dentist', c: 'family' }); add(15, { tm: '3:00 PM', t: 'Design crit', c: 'work', inv: true }); add(15, { tm: '4:00 PM', t: 'Intro call', c: 'work' });
+    add(16, { due: true, t: 'Episode 12 publish' }); add(16, { tm: '11:00 AM', t: '1:1 Mike', c: 'work' }); add(17, { tm: '10:00 AM', t: 'Gym', c: 'personal' });
+    add(20, { ad: true, t: 'Term week 7', c: 'uni' }); add(21, { due: true, t: 'Problem set 5' }); add(21, { tm: '3:00 PM', t: 'Investor call', c: 'work' });
+    add(23, { due: true, t: 'Episode 13 publish' }); add(23, { tm: '7:00 PM', t: 'Dinner at Kasia’s', c: 'personal' }); add(24, { tm: '10:00 AM', t: 'Gym', c: 'personal' });
+    add(27, { tm: '10:00 AM', t: 'Acme review', c: 'work' }); add(30, { due: true, t: 'Monthly invoice run' }); add(31, { ad: true, t: 'Kasia’s birthday', c: 'family' });
+    var g = '<div class="mo"><div class="mohead">' + ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(function (d) { return '<span>' + d + '</span>'; }).join('') + '</div><div class="mogrid">';
+    var dates = [28, 29, 30]; for (var i = 1; i <= 31; i++) dates.push(i); dates.push(1);
+    dates.forEach(function (dd, idx) {
+      var out = idx < 3 || idx > 33, wk = idx % 7 >= 5, lines = out ? [] : (m[dd] || []);
+      lines = lines.slice().sort(function (a, b) { var ra = a.due || a.ad ? 0 : 1, rb = b.due || b.ad ? 0 : 1; return ra - rb; });
+      var cap = 3, shown = lines.length > cap + 1 ? lines.slice(0, cap) : lines;
+      g += '<div class="mc' + (out ? ' out' : '') + (wk ? ' wkend' : '') + (!out && dd === 14 ? ' today sel' : '') + '"><div class="mn num"><span>' + (dd === 1 && !out ? 'Oct 1' : dd === 1 ? 'Nov 1' : dd) + '</span></div>';
+      shown.forEach(function (l) {
+        if (l.due) g += '<div class="chip due' + (l.late ? ' late' : '') + '"><span class="cb"></span><span class="cl">' + l.t + '</span></div>';
+        else if (l.ad) g += '<div class="chip ev" style="--c:' + C[l.c] + '"><span class="cl">' + l.t + '</span></div>';
+        else g += '<div class="ml" style="--c:' + C[l.c] + '"><span class="md"' + (l.inv ? ' style="background:none;box-shadow:inset 0 0 0 1.5px var(--c)"' : '') + '></span><span class="mt num">' + l.tm + '</span><span class="mx">' + l.t + '</span></div>';
+      });
+      if (lines.length > shown.length) g += '<div class="more num">+' + (lines.length - shown.length) + ' more</div>';
+      g += '</div>';
+    });
+    return g + '</div></div>';
+  }
+
+  // ── the left panel ───────────────────────────────────────────────────────
+  function rail(o) {
+    o = o || {};
+    var r = '<div class="mm"><div class="mmhead"><span>October 2026</span><span class="grow"></span><button type="button" class="btn icon">' + ic('i-chev-l') + '</button><button type="button" class="btn icon">' + ic('i-chev-r') + '</button></div><div class="mmgrid">';
+    ['M', 'T', 'W', 'T', 'F', 'S', 'S'].forEach(function (d) { r += '<span class="dn">' + d + '</span>'; });
+    var dates = [28, 29, 30]; for (var i = 1; i <= 31; i++) dates.push(i); dates.push(1);
+    var dens = [5, 12, 13, 14, 15, 16, 21, 23, 27];
+    dates.forEach(function (dd, idx) {
+      var out = idx < 3 || idx > 33, inWk = !out && dd >= 12 && dd <= 18;
+      var cls = 'd' + (out ? ' out' : '') + (inWk && o.week !== false ? ' wk' + (dd === 12 ? ' first' : dd === 18 ? ' last' : '') : '') + (!out && dd === 14 ? ' today' : '');
+      r += '<span class="' + cls + ' num"><span>' + dd + '</span>' + (!out && dens.indexOf(dd) > -1 && dd !== 14 ? '<i></i>' : '') + '</span>';
+    });
+    r += '</div></div>';
+    function nav(lbl, lead, trail, act, off) { return '<div class="nav' + (act ? ' active' : '') + (off ? ' off' : '') + '"><span class="slot">' + lead + '</span><span class="lbl">' + lbl + '</span>' + trail + '</div>'; }
+    function cal(lbl, c, off) { return nav(lbl, '<span class="dot' + (off ? ' off' : '') + '" style="--c:' + c + '"></span>', '<span class="hov" title="Show · Colour · More">' + ic('i-more') + '</span>', false, off); }
+    r += '<div class="area"><div class="ghdr"><span>Calendars</span>' + ic('i-chev-d', 'ic-xs chev') + '<button type="button" class="more" title="Connect a calendar · More">' + ic('i-more') + '</button></div>';
+    r += '<div class="sub" title="Built in">Moduo</div>' + cal('Personal', 'var(--cal-personal)');
+    r += '<div class="sub" title="alex@studio.com">Google</div>' + cal('Work', 'var(--cal-work)') + cal('Holidays in Poland', 'var(--cal-hol)', true);
+    r += '<div class="sub" title="alex@icloud.com">iCloud</div>' + cal('Family', 'var(--cal-family)') + cal('Uni', 'var(--cal-uni)');
+    r += '</div>';
+    r += '<div class="area"><div class="ghdr"><span>People</span>' + ic('i-chev-d', 'ic-xs chev') + '</div>';
+    r += nav('Mike Chen', av('mc', 'Mike Chen'), '<span class="tick' + (o.mike ? ' on' : '') + '" title="Show busy time" style="margin-right:3px">' + (o.mike ? ic('i-check') : '') + '</span>', o.mike);
+    r += nav('Sam Ortiz', av('so', 'Sam Ortiz'), '<span class="tick" title="Show busy time" style="margin-right:3px"></span>');
+    r += '</div>';
+    r += '<div class="area"><div class="ghdr"><span>Booking links</span>' + ic('i-chev-d', 'ic-xs chev') + '<button type="button" class="more" title="New booking link">' + ic('i-plus') + '</button></div>';
+    r += nav('Intro call', '', '<span class="count num" title="2 bookings this week">2</span>', o.link === 'intro');
+    r += nav('Client check-in', '', '<span class="count num" title="1 booking this week">1</span>');
+    r += '</div>';
+    return r;
+  }
+
+  // ── the right panel ──────────────────────────────────────────────────────
+  function head(name, o) {
+    o = o || {};
+    if (o.back) return '<div class="rphead"><button type="button" class="backbtn">' + ic('i-back') + o.back + '</button><button type="button" class="btn icon" title="More">' + ic('i-more') + '</button></div>';
+    var menu = o.menu ? '<div class="menu" role="menu"><div class="mgl">About this</div>' +
+      '<div class="mi' + (name === 'Details' ? ' hl' : '') + '"><span class="ck">' + (name === 'Details' ? ic('i-check', 'ic-xs') : '') + '</span>' + ic('i-info') + 'Details<span class="sc">⌥1</span></div><div class="msep"></div><div class="mgl">Alongside</div>' +
+      '<div class="mi' + (name === 'Tasks' ? ' hl' : '') + '"><span class="ck">' + (name === 'Tasks' ? ic('i-check', 'ic-xs') : '') + '</span>' + ic('i-tasks') + 'Tasks<span class="sc">⌥2</span></div>' +
+      '<div class="mi"><span class="ck"></span>' + ic('i-day') + 'Day<span class="sc">⌥3</span></div></div>' : '';
+    return '<div class="rphead"><button type="button" class="vpick' + (o.menu ? ' open' : '') + '">' + name + ic('i-chev-d', 'ic-xs') + '</button><button type="button" class="btn icon" title="More">' + ic('i-more') + '</button>' + menu + '</div>';
+  }
+  function tr(t, p, mt, o) { o = o || {}; return '<div class="tr' + (o.cls ? ' ' + o.cls : '') + '">' + (o.tick !== undefined ? '<span class="tick' + (o.tick ? ' on' : '') + '">' + (o.tick ? ic('i-check') : '') + '</span>' : '<span class="cb"></span>') + '<span class="tx"><span class="pd" style="--c:' + P[p] + '"></span>' + t + '</span><span class="mt num">' + mt + '</span></div>'; }
+  function tasksView() {
+    return head('Tasks') + '<div class="rpbody"><div class="srch">' + ic('i-search') + 'Search tasks</div>' +
+      '<div class="grp"><div class="gh">Up next<span class="sum num">· 4 · ~5h</span><span class="ghb">Focus</span></div>' +
+      tr('Logo concepts', 'acme', 'Thu 10:00 AM') + tr('Invoice run', 'ops', 'Today 4:00 PM') + tr('Reply to Sam’s review', 'site', '15m') + tr('Episode 12 edit', 'studio', 'Fri 2:00 PM') + '</div>' +
+      '<div class="grp"><div class="gh">Due this week<span class="sum num">· 3</span></div>' +
+      tr('Problem set 4', 'ops', 'Mon', { cls: 'late' }) + tr('Send invoice #14', 'ops', 'Today') + tr('Episode 12 publish', 'studio', 'Fri') + '</div>' +
+      '<div class="grp"><div class="gh">No date<span class="sum num">· 12</span></div>' +
+      tr('Pricing page copy', 'site', '1h') + tr('Plan Q1 content', 'studio', '2h') + tr('Renew domain', 'ops', '5m') +
+      '<div class="foldl num">' + ic('i-chev-d', 'ic-xs') + '9 more</div></div>' +
+      '<div class="grp"><div class="pnote">Rows drag onto the grid (a session) or the all-day row (a due date). Only <b>your</b> tasks: teammates’ unassigned work stays in Upcoming (Tasks default r).</div></div></div>';
+  }
+  function eventDetails(back) {
+    return head('Details', back ? { back: back } : {}) + '<div class="rpbody"><div class="dbody">' +
+      '<div class="crumb"><span class="dot" style="--c:var(--cal-work)"></span>Work · Google</div>' +
+      '<div class="dtitle">Acme call</div><div class="dwhen num">Mon, Oct 12 · 2:00 – 3:00 PM</div>' +
+      '<div class="dacts"><button type="button" class="btn sm secondary">' + ic('i-video') + 'Join Google Meet</button></div>' +
+      '<div class="props">' +
+      '<span class="plabel">Guests</span><div class="gl2">' +
+      '<div class="guest">' + av('ar') + 'Alex Rivera<span class="rs">Organiser</span></div>' +
+      '<div class="guest"><span class="ref">' + av('an') + 'Anna Kowalski</span><span class="rs">Yes</span></div>' +
+      '<div class="guest">' + av('mc') + 'Mike Chen<span class="rs">Maybe</span></div></div>' +
+      '<span class="plabel">Repeat</span><span class="pval empty">Doesn’t repeat</span>' +
+      '<span class="plabel">Reminder</span><span class="pval">' + ic('i-bell') + '10 min before</span>' +
+      '<span class="plabel">Calendar</span><span class="pval"><span class="dot" style="--c:var(--cal-work)"></span>Work</span>' +
+      '</div>' +
+      '<div class="sech">At this meeting <span class="t3" style="font-weight:400">· cues (C12)</span></div>' +
+      '<div class="cue"><span class="cb"></span>Ask Anna about invoice #14<span class="t3">Acme rebrand</span></div>' +
+      '<div class="sech">Linked</div><div class="lcards">' +
+      '<div class="lcard">' + ic('i-note') + 'Acme call notes<span class="w">edited Mon</span></div>' +
+      '<div class="lcard"><span class="cb"></span>Send invoice #14<span class="w">due Today</span></div></div>' +
+      '<div class="sech">Notes</div><div class="notes">Agenda: timeline, budget, next steps. Bring the two logo directions.</div>' +
+      '<div class="sech">Activity</div><div class="feed"><div class="fi">' + av('ar') + 'Alex created this event<span class="w">Oct 8</span></div><div class="fi">' + av('an') + 'Anna replied Yes<span class="w">Oct 8</span></div></div>' +
+      '</div></div>';
+  }
+  function inviteDetails() {
+    return head('Details') + '<div class="rpbody"><div class="dbody">' +
+      '<div class="crumb"><span class="dot" style="--c:var(--cal-work)"></span>Work · Google · from Sam Ortiz</div>' +
+      '<div class="dtitle">Design crit</div><div class="dwhen num">Thu, Oct 15 · 3:00 – 3:45 PM</div>' +
+      '<div class="reply"><span>Going?</span><span class="seg"><button type="button">Yes</button><button type="button">No</button><button type="button">Maybe</button></span></div>' +
+      '<div class="props"><span class="plabel">Guests</span><div class="gl2">' +
+      '<div class="guest">' + av('so') + 'Sam Ortiz<span class="rs">Organiser</span></div>' +
+      '<div class="guest">' + av('mc') + 'Mike Chen<span class="rs">Yes</span></div>' +
+      '<div class="guest">' + av('ar') + 'Alex Rivera (you)<span class="rs no">No reply yet</span></div></div>' +
+      '<span class="plabel">Where</span><span class="pval">' + ic('i-video') + 'Google Meet</span>' +
+      '<span class="plabel">Reminder</span><span class="pval">' + ic('i-bell') + '10 min before</span></div>' +
+      '<div class="pnote">An invitation sits on the grid in an outline until you reply. Your reply goes back through Google, as if you’d answered in Google Calendar (C7).</div>' +
+      '</div></div>';
+  }
+  function sessionDetails() {
+    return head('Details') + '<div class="rpbody"><div class="dbody">' +
+      '<div class="crumb"><span class="dot" style="--c:var(--label-violet)"></span>Acme rebrand › Design · MOD-142</div>' +
+      '<div class="dtitle">Logo concepts</div>' +
+      '<div class="dacts"><button type="button" class="btn sm secondary"><svg class="gl" aria-hidden="true"><use href="#g-play"/></svg>Focus on this<span class="kbd">⇧F</span></button></div>' +
+      '<div class="props">' +
+      '<span class="plabel">Status</span><span class="pval">In progress</span>' +
+      '<span class="plabel">Assignee</span><span class="pval">' + av('ar') + 'Alex Rivera</span>' +
+      '<span class="plabel">Due</span><span class="pval num">' + ic('i-cal') + 'Fri, Oct 16</span>' +
+      '<span class="plabel">Estimate</span><span class="pval num">4h</span>' +
+      '<span class="plabel">Tracked</span><span class="pval num">1h 32m</span></div>' +
+      '<div class="sech">Sessions<span class="t3" style="font-weight:400">· 2 this week</span></div><div class="sess">' +
+      '<div class="srow num">' + ic('i-check', 'ic-xs') + 'Tue, Oct 13 · 1:00 – 2:30 PM<span class="w">worked 1h 32m</span></div>' +
+      '<div class="srow on num">' + ic('i-clock', 'ic-xs') + 'Thu, Oct 15 · 10:00 AM – 12:00 PM<span class="w">2h</span></div>' +
+      '<div class="srow add">' + ic('i-plus', 'ic-xs') + 'Add session</div></div>' +
+      '<div class="pnote">A session is the task’s plan, not its time: tracked time comes only from the clock or “Add time…” (Tasks default r). The task’s Details are Tasks’ own panel.</div>' +
+      '</div></div>';
+  }
+  function dayList() {
+    function li(tm, c, t, o) { o = o || {}; return '<div class="dli' + (o.dim ? ' dim' : '') + '"><span class="tm num">' + tm + '</span><span class="bar' + (o.ses ? ' ses' : '') + '" style="--c:' + c + '"></span><span class="tx">' + t + '</span></div>'; }
+    return head('Day') + '<div class="rpbody"><div class="dayl"><div class="dh2">Wednesday, Oct 14 <span class="t3">· Today</span></div>' +
+      li('All day', 'var(--text-3)', '<span class="cb" style="vertical-align:-2px;margin-right:6px"></span>Send invoice #14 <span class="t3">· due</span>', { ses: true }) +
+      li('9:00 AM', C.work, 'Standup', { dim: true }) + li('9:30 AM', '', 'Write tests <span class="t3">· missed</span>', { ses: true, dim: true }) +
+      li('12:00 PM', C.personal, 'Lunch with Anna') + li('2:30 PM', C.work, 'Sprint review') + li('4:00 PM', '', 'Invoice run <span class="t3">· 1h</span>', { ses: true }) +
+      '<div class="pnote" style="margin-top:12px">Beside Month, the panel shows the picked day in full. Month itself shows events and due dates; sessions appear in Day and Week (Display can add them).</div></div></div>';
+  }
+  function contactRef() {
+    return head('', { back: 'Acme call' }) + '<div class="rpbody"><div class="dbody">' +
+      '<div style="display:flex;align-items:center;gap:12px">' + av('an').replace('class="ava an"', 'class="ava an xl"') + '<div><div class="dtitle">Anna Kowalski</div><div class="t2" style="font-size:13px">Design lead · Acme</div></div></div>' +
+      '<div class="props"><span class="plabel">Last met</span><span class="pval num">Mon, Oct 12 · Acme call</span><span class="plabel">Next</span><span class="pval num">Today 12:00 PM · Lunch with Anna</span><span class="plabel">Email</span><span class="pval">anna@acme.co</span></div>' +
+      '<div class="sech">Open tasks</div><div class="lcards"><div class="lcard"><span class="cb"></span>Send invoice #14<span class="w">due Today</span></div></div>' +
+      '<div class="pnote">A guest who is a contact opens here as “← Acme call”: the References card for a contact. Her hub can now say when you last met and when you meet next (C7).</div></div></div>';
+  }
+  function missedReview(after) {
+    return head('Tasks') + '<div class="rpbody"><div class="srch">' + ic('i-search') + 'Search tasks<span class="fchip">Missed · 2<button type="button" class="btn icon" style="width:18px;height:18px">' + ic('i-x', 'ic-xs') + '</button></span></div>' +
+      '<div class="grp"><div class="gh">Missed this week<span class="sum num">· 2 · 2h 30m</span></div>' +
+      tr('Draft Acme proposal', 'acme', after ? 'Today 1:00 PM' : 'Mon 10:00 AM · 1h 30m', { tick: !after ? true : undefined, cls: after ? '' : 'rv' }) +
+      tr('Write tests', 'site', after ? 'Today 5:00 PM' : 'Today 9:30 AM · 1h', { tick: !after ? true : undefined, cls: after ? '' : 'rv' }) + '</div>' +
+      (after ? '<div class="rvfoot"><div class="why">Both fitted into today’s free time, in this order, inside your working hours (9:00 AM – 6:00 PM). Undo puts them back where they were.</div></div>'
+        : '<div class="rvfoot"><button type="button" class="btn primary" style="justify-content:center">Fit 2 into today</button><div class="why">Places the ticked tasks in today’s free time, in this order, around your events and inside your working hours. Nothing moves until you click; one Undo puts everything back (C11).</div></div>') +
+      '</div>';
+  }
+  function bookingDetails() {
+    return head('Details') + '<div class="rpbody"><div class="dbody">' +
+      '<div class="crumb">' + ic('i-link', 'ic-xs') + 'Booking link</div><div class="dtitle">Intro call</div><div class="dwhen t2 num">30m · Google Meet · Tue – Fri</div>' +
+      '<div class="linkbox"><span class="grow">moduo.app/book/alex/intro-call</span><button type="button" class="btn sm secondary">' + ic('i-copy') + 'Copy</button></div>' +
+      '<div class="sech">This week<span class="t3" style="font-weight:400">· 2 bookings</span></div><div class="lcards">' +
+      '<div class="lcard">' + av('jl') + 'Jordan Lee<span class="w num">Tue 4:00 PM</span></div>' +
+      '<div class="lcard">' + av('so').replace('SO', 'PS') + 'Priya Shah<span class="w num">Thu 4:00 PM</span></div></div>' +
+      '<div class="sech">When you’re open</div><div class="notes num">Tue – Fri · 10:00 AM – 12:00 PM, 2:00 – 5:00 PM</div>' +
+      '<div class="sech">Busy from</div><div class="cpills2"><span class="minichip"><span class="dot" style="--c:var(--cal-work)"></span>Work</span><span class="minichip"><span class="dot" style="--c:var(--cal-personal)"></span>Personal</span><span class="minichip"><span class="dot" style="--c:var(--cal-family)"></span>Family</span><span class="minichip off"><span class="dot off" style="--c:var(--cal-uni)"></span>Uni</span></div>' +
+      '<div class="setrow"><span class="grow">Count my work sessions as busy</span><span class="switch on"></span></div>' +
+      '<div class="setrow"><span class="grow">Email me when someone books</span><span class="switch on"></span></div>' +
+      '<div class="setrow"><span class="grow">Guests can invite others</span><span class="switch on"></span></div>' +
+      '<div class="pnote">Selecting the link washes its open times onto the grid: weekly hours, minus your events on the checked calendars and your sessions (Tasks default d).</div>' +
+      '</div></div>';
+  }
+
+  // ── frames ───────────────────────────────────────────────────────────────
+  var center = document.getElementById('center'), rp = document.getElementById('rpanel'), railEl = document.getElementById('rail');
+  var appf = document.getElementById('appf');
+
+  function caption() {
+    var f = S.frame, v = S.v[f];
+    if (f === 1) {
+      if (v === 'event') return '1 · Week, an event open: guests and replies, Join, a cue for this meeting, Linked, Activity. The panel’s title row names the view.';
+      if (v === 'zone') return '1 · Display → a second time zone: New York beside Warsaw in the hour column (C14).';
+      return '1 · Week (C2, C5): events in their calendar’s colour, sessions neutral with a check, due chips and a repeat in the all-day row, a missed session muted where it was.';
+    }
+    if (f === 2) return v === 'session'
+      ? '2 · Day, a session open: the task’s own Details with its sessions this week, and ▶ Focus on this (one clock).'
+      : '2 · Day, an invitation open: it sits in outline until you reply; Yes · No · Maybe goes back through Google (C7).';
+    if (f === 3) return '3 · Month (C5): due chips and all-day events first, timed events as one line, “+n more”; the panel’s Day view shows the picked day.';
+    if (f === 4) return v === 'ref'
+      ? '4 · A guest opened in the panel: “← Acme call”, Anna’s contact card (References).'
+      : '4 · The panel’s title row is its switch: about this (Details) / alongside (Tasks, Day). Notes moves into Details’ Linked.';
+    if (f === 5) {
+      if (v === 'review') return '5 · Review: the panel’s Tasks view filtered to missed, ticked, and “Fit 2 into today” (C3, C11). Nothing has moved yet.';
+      if (v === 'after') return '5 · After Fit: both placed in today’s free time, outlined until you look away; one Undo puts them back.';
+      return '5 · A missed session stays where it was, muted; hover shows its fixes: Done · Move · Took longer · Unschedule (C3). The line above the grid counts them.';
+    }
+    if (f === 6) return '6 · Booking link selected (C9): its open times wash the grid; Details shows bookings, hours, busy calendars and the sessions switch.';
+    if (f === 7) return '7 · Teammates (C8): Mike ticked in People shows his Busy; drawing an event with guests offers “Find a time”, plain arithmetic.';
+    if (f === 8) return '8 · ⌘⇧K, then ⌘4: capture as Event. Destination row = which calendar; date words and a contact become When and a guest (C10).';
+    if (v === 'right') return '9 · 1024×700 with the right panel folded: the week reads well; the Tasks list (the drag source) is one click away.';
+    if (v === 'both') return '9 · 1024×700 with both panels open: ~60 px per day. Titles go to one word; too tight to plan in.';
+    return '9 · 1024×700 with the left panel folded (recommended): the Tasks list stays beside the week; the mini-month is one click away.';
+  }
+
+  function render() {
+    var f = S.frame, v = S.v[f];
+    var showRail = true, showRp = true, c = '', r = '', railOpts = {};
+    if (f === 1) {
+      c = toolbar({}) + missline(2) + renderWeek({ sel: v === 'event' ? 'acme' : null, zone: v === 'zone' });
+      r = v === 'event' ? eventDetails() : tasksView();
+    } else if (f === 2) {
+      c = toolbar({ view: 'Day', title: 'Thursday, Oct 15', rng: '' }) + renderWeek({ days: [3], day: true, sel: v === 'session' ? 'logo2' : 'crit' });
+      r = v === 'session' ? sessionDetails() : inviteDetails();
+    } else if (f === 3) {
+      c = toolbar({ view: 'Month', rng: '' }) + renderMonth();
+      r = dayList(); railOpts.week = false;
+    } else if (f === 4) {
+      c = toolbar({}) + missline(2) + renderWeek({ sel: 'acme' });
+      r = v === 'ref' ? contactRef() : eventDetails().replace(head('Details'), head('Details', { menu: true }));
+    } else if (f === 5) {
+      var placed = v === 'after' ? [{ id: 'prop2', d: 2, s: 13, e: 14.5, k: 'ses', p: 'acme', t: 'Draft Acme proposal' }, { id: 'tests2', d: 2, s: 17, e: 18, k: 'ses', p: 'site', t: 'Write tests' }] : null;
+      var o5 = { hov: v === 'grid' ? 'tests' : null };
+      if (placed) { o5.extra = placed; o5.hide = ['prop', 'tests']; o5.placed = ['prop2', 'tests2']; }
+      if (v === 'grid') o5.overlay = '<div class="fixrow" id="fixrow"><button type="button"><span class="cb"></span>Done</button><span class="sp"></span><button type="button">Move' + ic('i-chev-d', 'ic-xs') + '</button><button type="button">Took longer</button><button type="button">Unschedule</button></div>';
+      c = toolbar({}) + (placed ? '' : missline(2)) + renderWeek(o5);
+      r = v === 'grid' ? tasksView() : missedReview(v === 'after');
+    } else if (f === 6) {
+      c = toolbar({}) + missline(2) + renderWeek({ wash: true });
+      r = bookingDetails(); railOpts.link = 'intro';
+    } else if (f === 7) {
+      var draft = { id: 'draft', d: 3, s: 12, e: 12.5, k: 'ev draft', t: 'Acme kickoff prep' };
+      var pop = '<div class="pop" id="pop7"><div class="ptitle">Acme kickoff prep<span class="caret"></span></div>' +
+        '<div class="pline">' + ic('i-clock') + '<span class="num">Thu, Oct 15 · 12:00 – 12:30 PM</span></div>' +
+        '<div class="pline">' + ic('i-users') + '<span class="gchip">' + av('mc') + 'Mike Chen</span><span class="gchip">' + av('so') + 'Sam Ortiz</span></div>' +
+        '<div class="lab">Find a time · everyone’s free</div><div style="display:flex;gap:6px;flex-wrap:wrap"><span class="slotbtn on num">Thu 12:00 PM</span><span class="slotbtn num">Fri 10:00 AM</span><span class="slotbtn num">Fri 12:00 PM</span></div>' +
+        '<div class="pline">' + ic('i-cal') + '<span class="dot" style="--c:var(--cal-work)"></span>Work <span class="t3">· Google</span></div>' +
+        '<div class="foot"><span class="togl"><span class="on">Event</span><span>Session</span></span><span class="grow"></span><button type="button" class="btn sm primary">Save<span class="kbdin">⏎</span></button></div></div>';
+      c = toolbar({}) + missline(2) + renderWeek({ busy: true, extra: [draft], sel: 'draft', overlay: pop });
+      r = tasksView(); railOpts.mike = true;
+    } else if (f === 8) {
+      c = toolbar({}) + missline(2) + renderWeek({});
+      r = tasksView();
+    } else if (f === 9) {
+      showRail = v === 'right' || v === 'both';
+      showRp = v === 'left' || v === 'both';
+      c = toolbar({}) + missline(2) + renderWeek({});
+      r = tasksView();
+    }
+    html.dataset.frame = f;
+    center.innerHTML = c;
+    rp.innerHTML = r;
+    railEl.innerHTML = rail(railOpts);
+    railEl.hidden = !showRail; rp.hidden = !showRp;
+    document.getElementById('ltoggle').classList.toggle('closed', !showRail);
+    document.getElementById('rtoggle').classList.toggle('closed', !showRp);
+    document.getElementById('scrim').hidden = f !== 8;
+    document.getElementById('toast').hidden = !(f === 5 && v === 'after');
+    document.getElementById('sizetag').hidden = f !== 9;
+    // scroll the grid so the morning shows; place the floating bits
+    var body = document.getElementById('wkbody');
+    if (body) body.scrollTop = 0;
+    var fr = document.getElementById('fixrow');
+    if (fr) { var t = center.querySelector('.it[data-id="tests"]'); if (t) { var tb = t.getBoundingClientRect(), bx = t.closest('.wkbody'), wb = bx.getBoundingClientRect(); fr.style.top = (tb.bottom - wb.top + bx.scrollTop + 4) + 'px'; fr.style.left = Math.max(8, tb.left - wb.left - 40) + 'px'; } }
+    var pp = document.getElementById('pop7');
+    if (pp) { var dft = center.querySelector('.it[data-id="draft"]'); if (dft) { var db = dft.getBoundingClientRect(), bx2 = dft.closest('.wkbody'), wb2 = bx2.getBoundingClientRect(); pp.style.top = Math.max(8, db.top - wb2.top + bx2.scrollTop - 90) + 'px'; pp.style.left = (db.right - wb2.left + 10) + 'px'; } }
+    document.querySelectorAll('#frameSw [data-go]').forEach(function (b) { b.classList.toggle('on', +b.dataset.go === f); });
+    var cap = document.getElementById('cap'); cap.textContent = caption(); cap.title = caption();
+    renderVariants();
+    try { history.replaceState(null, '', '?frame=' + f + (VARS[f] && S.v[f] !== VARS[f].opts[0][0] ? '&v=' + S.v[f] : '')); } catch (e) { /* file:// may refuse */ }
+  }
+  function renderVariants() {
+    var c = document.getElementById('ctlVar'), seg = document.getElementById('varSeg'), def = VARS[S.frame];
+    c.hidden = !def; if (!def) return;
+    document.getElementById('varLab').textContent = def.lab;
+    seg.innerHTML = '';
+    def.opts.forEach(function (o) { var b = document.createElement('button'); b.type = 'button'; b.textContent = o[1]; b.dataset.vset = o[0]; if (S.v[S.frame] === o[0]) b.className = 'on'; seg.appendChild(b); });
+  }
+  function cycleVar() { var def = VARS[S.frame]; if (!def) return; var i = def.opts.findIndex(function (o) { return o[0] === S.v[S.frame]; }); S.v[S.frame] = def.opts[(i + 1) % def.opts.length][0]; render(); }
+  document.addEventListener('click', function (e) {
+    var go = e.target.closest('[data-go]'); if (go) { S.frame = +go.dataset.go; render(); return; }
+    var vs = e.target.closest('[data-vset]'); if (vs) { S.v[S.frame] = vs.dataset.vset; render(); return; }
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    var k = e.key.toLowerCase();
+    if (k >= '1' && k <= String(FRAMES)) { S.frame = +k; render(); }
+    else if (k === 'v') cycleVar();
+  });
+  window.addEventListener('resize', render);
+  render();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(render);
+})();
+</script>
+</body>
+</html>

@@ -1,14 +1,14 @@
 # Calendar v2 — the re-plan
 
-> **Status (2026-10-10): round 1 sent. Waiting on Maciej's answers to C1–C15.**
+> **Status (2026-10-10): round 1 sent. Waiting on Maciej's answers to C1–C20.**
 >
-> - **Open calls:** C1–C15, all ❓. Load-bearing: ★ C1 (the ceiling), ★ C2 (the shape), ★ C3 (missed sessions).
-> - **Research lanes:** six, in [`research/`](./research/): current state · visual audit · early-decisions audit · competitor structure · role journeys · connectivity. Their findings are folded into §1, §3, §6 and the calls as they land; the appendix says which have.
-> - **Prototype:** [`prototypes/structure.html`](./prototypes/structure.html) (keys 1–9 switch frames, V cycles variants).
-> - **Waiting on Maciej, outside the calls:** whether one line may be added to TV-D10's row on the integration branch (§6 #4, reminders shared by tasks and events).
+> - **Open calls:** C1–C20, all ❓. Load-bearing: ★ C1 (the ceiling), ★ C2 (the shape), ★ C3 (missed sessions), ★ C6 (connected calendars).
+> - **Research lanes:** six, in [`research/`](./research/). Landed and folded in: early-decisions audit, role journeys, connectivity, competitor structure. Still running: current state, visual audit (§5 and the 1024×700 verdict in C2 wait on it).
+> - **Prototype:** [`prototypes/structure.html`](./prototypes/structure.html), keys 1–9 switch frames, V cycles variants.
+> - **Waiting on Maciej, outside the calls:** (1) may one line be added to TV-D10's row on the integration branch (§6 #4, one reminders table for tasks and events); (2) is Google's OAuth consent screen still in "Testing" (§6 #14: if so, every Google connection drops after 7 days).
 > - **Uncommitted:** nothing.
 >
-> **Numbering:** Calendar calls are **C1, C2, …**, numbered once and never renumbered. Tasks v3 calls are cited as "Tasks 64", "Tasks default r", so the two plans never collide.
+> **Numbering:** Calendar calls are **C1, C2, …**, numbered once and never renumbered. Tasks v3 calls are cited as "Tasks 64", "Tasks default r". The decisions audit's contradiction list uses its own "C1–C19"; in this file those are cited as "audit C1".
 >
 > Branch `t/maciej/calendar-replan` (cut from `t/maciej/tasks-v3-build` @ b902fd26). Local build mode (BUILD_ORDER's 🟠 box): local Supabase is prod, no pushes to `maciej`/`develop`, no PRs until Maciej says "release". Process: [`docs/agents/module-replan.md`](../../docs/agents/module-replan.md) (on `t/maciej/tasks-v3-build`). North star: [`specs/tasks-v3.md`](../../specs/tasks-v3.md), [`.design/tasks-v3/REPLAN.md`](../tasks-v3/REPLAN.md).
 
@@ -18,7 +18,7 @@
 | --- | --- |
 | §1 | What's wrong, and why; what's strong; what Calendar must adopt from Tasks v3 |
 | §2 | The proposed shape of Calendar |
-| §3 | One product, every role (filled from the role-journeys lane) |
+| §3 | One product, every role |
 | §4 | Each view, today and its target (round 2's work; a sketch here) |
 | §5 | The visual north star, applied to Calendar (from the visual audit) |
 | §6 | Technical decisions I'm taking, so the designer doesn't have to |
@@ -42,19 +42,21 @@ Calendar was specified on 2026-07-02 for one person:
 
 Tasks' root cause was "a solo-planner assumption stored as a column". Calendar's has the same shape: **a solo planner's habit stored as the data model.** Everything that has since been reversed, or must be, fits it:
 
-| What the old plan stored | The solo assumption | What reversed it |
+| What the old plan stored | The solo assumption | What reversed it, or must |
 | --- | --- | --- |
-| A task block *is* the task row (`scheduled_at` + `duration_minutes`), one placement per task | One person works a task in one sitting | Tasks 25: several work sessions per task (`task_sessions`, TV-D10) |
-| The block's length *is* the estimate ("deliberate", DESIGN_BRIEF §4) | My estimate is my plan | Tasks default r and the contract: a session's length is never the estimate |
+| A task block *is* the task row (`scheduled_at` + `duration_minutes`), one placement per task | One person works a task in one sitting | Tasks 25: several work sessions per task (`task_sessions`, TV-D10). The new table needs a person column; that's the tell |
+| The block's length *is* the estimate ("deliberate", DESIGN_BRIEF §4) | My estimate is my plan | Tasks default r: a session's length is never the estimate |
 | "Took longer" writes the planned span as worked time | Planned = worked, when it's only me | Tasks default r: a planned length never counts as worked time |
-| The grid, the strip and the free-time finder use every task with a time in the workspace; "Move to today" can move a teammate's task | The workspace is one person's day | Tasks default r: your grid shows only your own work |
+| The grid, the strip, the free-time finder and Home's Today widget use every task with a time in the workspace; "Move to today" can move a teammate's task | The workspace is one person's day | Tasks default r: your grid shows only your own work |
 | Block focus runs its own clock, inside the Calendar page | One timer, one screen | Tasks one time engine (TV-F6) |
-| Week start lives in Calendar's own settings | One module, one setting | Tasks 76: Time & region, app-wide |
-| The strip rolls unfinished work forward | A solo planner re-plans their own day | Tasks: missed sessions stay put; the task surfaces in Upcoming; nothing rolls by itself |
-| Connected calendars are read-only "structurally", write-back "v2" | You live in Morgen; Google is somewhere else | Booking links (2026-10-01) already write to Google, and Google calendars are writable on the web; Outlook and iCloud are still read-only, and only sync from the desktop that connected them |
-| No people on events: no guests, invitations or replies; "no rebuilt meeting stack" as a permanent anti-goal | A solo operator's meetings are set up in Google anyway | The new goal: drop Google Calendar as the daily driver; a team of five needs "when are we all free?" |
+| Week start, working hours and weekends live in Calendar's own settings | One module, one setting | Tasks 76: Time & region, app-wide |
+| Repeating events have no time zone; they float in each viewer's local time | Everyone viewing lives in the creator's zone | A shared weekly call between Warsaw and New York must keep its zone |
+| The strip rolls unfinished work forward | A solo planner re-plans their own day | Tasks: missed sessions stay put; the task surfaces in Upcoming; nothing moves by itself |
+| No people on events: no guests, invitations or replies; "no rebuilt meeting stack" as a permanent anti-goal | A solo operator's meetings are set up in Google anyway | The new goal: drop Google Calendar as the daily driver |
 
-Sources: [BRIEF](../calendar/BRIEF.md), [DESIGN_BRIEF](../calendar/DESIGN_BRIEF.md) §1–§11, [specs/calendar.md](../../specs/calendar.md) Assumptions 1–21, [docs/decisions/calendar.md](../../docs/decisions/calendar.md), [Tasks current state](../tasks-v3/research/current-state-focus-calendar-home.md) §3–§4, [the Tasks→Calendar contract](../tasks-v3/research/views-list-upcoming.md) §10. The early-decisions lane tests this table decision by decision ([research/early-decisions-audit.md](./research/early-decisions-audit.md)).
+**A second shape** (from the [decisions audit](./research/early-decisions-audit.md) §0): **a boundary stated as a principle, then crossed feature by feature with no model behind it.** "External calendars are read-only, structurally" was crossed three times in October: creating Google events from the web, booking links writing Google events and Zoom meetings, and cancel deleting them. There is still no write model, so a Google event you create in Moduo turns read-only the moment it's saved.
+
+**A special case of the first shape: "the planner's laptop is the server."** Every connected calendar syncs only while someone has the Calendar page open. Outlook, iCloud and ICS credentials live in one Mac's keychain, so they update only while that Mac runs Moduo. That's right for one person on one machine, and wrong for the web, teammates, booking links, Focus's meeting divider and agents ([connectivity](./research/connectivity.md) §0–§1).
 
 **So the re-plan starts from the data shape:** sessions, ownership, people and sync are decided first, and the grid is drawn on top of them.
 
@@ -64,48 +66,50 @@ Sources: [BRIEF](../calendar/BRIEF.md), [DESIGN_BRIEF](../calendar/DESIGN_BRIEF.
 - **One truth for tasks.** The calendar shows the task itself, never a copy, so Tasks and Calendar can't drift apart. Sessions keep this: a session belongs to its task.
 - **The execution idea.** Complete a task from inside its session; ▶ starts it. No incumbent ships this.
 - **Guilt-free by construction.** Never red, never a modal, never a notification for a session that ran out.
-- **Every event is a spine citizen.** A meeting from Google is linkable to a contact, a note or a task on every device.
-- **Source attribution.** Every event says which calendar it's from.
+- **"Later today" through the free-time finder:** one session moves to the next free gap after now, around meetings, inside working hours, with Undo. It's the honest version of everything "reflow" promised.
+- **Moduo works with no account connected** (its own calendars), unlike Morgen.
+- **Every event is a spine citizen.** A meeting from Google is linkable to a contact, a note or a task on every device. Source attribution on every event.
+- **Sharing is already per person** (the October permissions work): your calendars are private; you share each one as Busy only · Can view · Can edit; a team workspace defaults to Busy only; you can make extra calendars and save sets of calendars.
 - **Repeats in plain words** with an echo before saving ("→ weekly on Tue & Thu · 9:00–9:30").
-- **Booking links** with a page that's one sentence the guest finishes, video choice (Meet, Zoom, theirs), guests, cancel links, rate limiting and the outbox emails. Distinctive, and live with real guests.
-- **Careful sync engineering:** iCloud/CalDAV and ICS feeds, time zones that drop an event rather than shift it, a guard against wiping an account when a feed breaks.
-- **Privacy is already per person.** Since the October permissions work, an event is visible to its owner and to people its calendar is shared with; teammates don't see each other's calendars by default.
+- **Booking links:** one sentence the guest finishes, Meet / Zoom / their choice, up to ten guests, a contact made or matched per booking, cancel links, the outbox emails (live since TX-5), rate limits, connects finished by the signed-in app. Distinctive, and live with real guests.
+- **Careful sync engineering:** iCloud/CalDAV and ICS feeds, repeats with moved and cancelled occurrences, time zones that drop an event rather than shift it, a broken feed that never wipes your events.
 
-**Platform:** native events go through server ops with an activity trail; mirrored events register in the search registry; the loop runs on Tasks' own ops.
+**Platform:** native events go through server ops with an activity trail; mirrored events register in the search registry; a missing migration never blanks the page.
 
 **The big ideas are right. What's wrong is who it was drawn for.**
 
 ### 1.3 What's broken, in five kinds
 
-*Draft from the code read and the Tasks research; the current-state and visual lanes confirm or correct each line.*
+*From the decisions audit, role journeys and connectivity lanes; the current-state and visual lanes confirm or correct each line.*
 
 **A · Structure: a calendar without people.**
-- An event has no guests, no invitations and no replies, so a meeting with Anna isn't linked to Anna unless someone links it by hand.
+- An event has no guests, no invitations and no replies; mirrored meetings arrive without their attendees. So nothing links a meeting with Anna to Anna, and the References event card promises "people" it can't fill.
 - One placement per task, and the block's length is the estimate.
-- No Month view, so a creator's publishing month or a student's term can't be seen at once.
-- Due-only tasks never appear.
-- Teammates' work appears on your grid, and your free-time finder treats it as yours.
+- No Month view; due-only tasks never appear.
+- Teammates' work appears on your grid and your free-time finder treats it as yours.
+- Repeating Moduo events can't end on a date and can't change one occurrence.
 
 **B · Trust: things that make people stop believing it.**
 - "Took longer" logs planned time as worked time.
-- Two clocks: block focus and Focus can run on two tasks at once; leaving the Calendar page ends block focus silently; waking from sleep credits the whole gap.
+- Two clocks: block focus and Focus can run on two tasks at once; leaving the Calendar page ends block focus silently.
 - "Move to today" can move a teammate's task.
-- Outlook and iCloud only update while the desktop that connected them is running, so the web (and anyone else's view) can be hours stale.
-- Keyboard check-off in the Tasks panel opens the task instead; blocks on the grid can't be reached by keyboard.
+- **Connected calendars go stale:** nothing syncs unless a Calendar page is open somewhere; Outlook and iCloud only from the Mac that connected them. A booking guest can pick a slot that was taken this morning.
+- A Google event made in Moduo turns read-only once saved.
+- Booking links see only the primary calendar of whichever Google login was saved last, and a repeating Moduo event blocks only its first date.
 
-**C · Capability gaps for a daily driver.**
-- Can't edit Outlook or iCloud events; can't invite anyone; can't answer an invitation.
-- No reminder before a meeting.
-- No Month view, no search, no "this event only" for repeats.
-- No teammate free time and no "find a time".
-- No second time zone.
+**C · Capability gaps for a daily driver** (the [gap map](./research/role-journeys.md) §8 has all 23):
+- Can't edit or delete anything from Google, Outlook or iCloud; can't invite anyone; can't answer an invitation.
+- **No alert before a meeting.**
+- No Month view, no search, no second time zone.
+- No "find a time"; teammates' Busy blocks don't say whose.
+- No way to set a place on a Moduo event.
 
 **D · Visual seams.** Durations read "240m", panel titles truncate (Tasks research); the rest comes from the visual audit ([research/visual-audit.md](./research/visual-audit.md)).
 
 **E · No way in.**
-- On the web, only Google connects; Outlook and iCloud say "Connect from the desktop app".
+- On the web only Google connects; Outlook, iCloud and ICS say "Connect from the desktop app".
+- Outlook isn't really supported: no Microsoft app is registered, and its connection is read-only.
 - The first open is an empty grid.
-- No import of an existing calendar beyond connecting it.
 
 ### 1.4 What Calendar adopts from Tasks v3 (binding unless Maciej agrees to change it)
 
@@ -137,16 +141,17 @@ Sources: [BRIEF](../calendar/BRIEF.md), [DESIGN_BRIEF](../calendar/DESIGN_BRIEF.
 | ▶ on a block = Focus on this, one clock | Honoured; block focus retires (§6 #3). |
 | "Took longer" is an adjustment, never a planned length | Honoured (C3). |
 | Sessions count as busy for booking links, with a switch per link | Honoured (C9). |
-| Teammates' unassigned tasks stay out of your calendar | Honoured, and extended: teammates' *time* can appear as Busy only when you ask (C8). |
-| Missed sessions stay put; the task surfaces in Upcoming's Earlier; nothing rolls by itself | Honoured. Calendar's "unfinished from earlier" strip is re-expressed on it (C3). |
-| Reminders: one table for tasks | **Renegotiate (technical):** one reminders table for tasks *and* events, so meeting reminders and cues share the sender (§6 #4). |
+| Teammates' unassigned tasks stay out of your calendar | Honoured. A project's dates can be shown on purpose (C18), and teammates' *time* as Busy (C8). |
+| Missed sessions stay put; the task surfaces in Upcoming's Earlier; nothing moves by itself | Honoured. Calendar's "unfinished from earlier" strip is re-expressed on it (C3). |
+| Reminders: one table for tasks | **Renegotiate (technical):** one reminders table for tasks *and* events, so meeting alerts and cues share the sender (§6 #4). |
 
 **What Calendar provides to other modules** (contracts, designed for their rebuilds, not today's code):
-- **Focus:** "your next event you're attending, within two hours" for the Up next divider (Tasks 64). Needs to know which events you're attending (C7).
+- **Focus:** "your next event you're attending, within two hours" for the Up next divider (Tasks 64). Needs attendance on events (C7) and fresh sync (C6).
 - **References:** the event preview (title · time · people) and its chip.
-- **Booking links:** one busy-time answer per person: events on the calendars they choose + sessions (per-link switch).
-- **Contacts (when rebuilt):** "last and next meeting with Anna" from guests matched to contacts (C7).
-- **Email (when rebuilt):** an invitation email can be answered from Calendar, and "an email thread → a meeting" via drag.
+- **One busy-time answer per person:** events on the calendars they choose, expanded repeats, sessions (per-link switch), bookings. Used by the grid's Busy, "Find a time", booking links and MCP.
+- **Contacts (when rebuilt):** "last and next meeting with Anna", from guests matched to contacts (C7).
+- **Email (when rebuilt):** answering an invitation that arrives by email, and "an email thread → a meeting" by drag.
+- **Time (Tasks 75):** a meeting can become a time entry (C20).
 - **Home:** Calendar's widgets (C15).
 
 ---
@@ -157,20 +162,20 @@ Sources: [BRIEF](../calendar/BRIEF.md), [DESIGN_BRIEF](../calendar/DESIGN_BRIEF.
 Top bar (global):   modules · Focus timer · Help · bell · you
 ┌ Left: overview ─────┬ Centre: the grid ───────────────────────┬ Right: context ──────────┐
 │ mini-month          │ Toolbar: October 2026 · range             │ [Details ▾]              │
-│ Calendars           │   Search · Display | Day Week Month |     │  about this:             │
-│   Moduo · Personal  │   ‹ Today ›                               │   Details (event,        │
-│   Google · work@…   │ "3 missed sessions · Review" (only when   │   session, due task,     │
+│ Calendars           │   Search · Display | Day Week Month List |│  about this:             │
+│   Moduo · Personal  │   ‹ Today › · New                         │   Details (event,        │
+│   Google · Work     │ "2 missed sessions · Review" (only when   │   session, due task,     │
 │   iCloud · Family   │   there are some)                         │   booking link)          │
-│ People              │ all-day row: events · due chips           │  alongside:              │
-│   Mike  ○ show busy │ hours: events · sessions · ghosts ·       │   Tasks (to schedule)    │
-│ Booking links       │   teammates' Busy (if shown) · now line   │   Day (the picked day,   │
+│ People              │ all-day row: events · due chips · ghosts  │  alongside:              │
+│   Mike  ☐ busy      │ hours: events · sessions · ghosts ·       │   Tasks (to schedule)    │
+│ Booking links       │   teammates' Busy (if ticked) · now line  │   Day (the picked day,   │
 │   Intro call · 2    │                                           │   as a list)             │
 └─────────────────────┴───────────────────────────────────────────┴──────────────────────────┘
 Bottom bar (module tools): ◧ left toggle · Search · Capture · New · right toggle ◨
                            (a multi-select swaps the centre for its action row, Tasks 82b)
 ```
 
-- **Two kinds of things on the grid**, as today, renamed (C4): **events** (yours, from any calendar) and **sessions** (time you set aside to work on a task). Plus **due chips** in the all-day row, **ghosts** for future repeats, and teammates' **Busy** only when you ask (C8).
+- **Two kinds of things on the grid**, as today, renamed (C4): **events** (yours, from any calendar) and **sessions** (time you set aside to work on a task). Plus **due chips** in the all-day row, **ghosts** for future repeats, and teammates' **Busy** when you tick them (C8).
 - **People are first-class on events** (C7): guests, who's coming, your own reply, and each guest linked to their contact when one exists.
 - **Every connected calendar is writable** and stays fresh with your computer off (C6).
 - **Booking links stay in the left panel** and show their open times on the grid when selected (C9).
@@ -179,7 +184,23 @@ Bottom bar (module tools): ◧ left toggle · Search · Capture · New · right 
 
 ## 3. One product, every role
 
-*Filled from [research/role-journeys.md](./research/role-journeys.md) when the lane lands: each role's normal week, the gap map, and which call closes each gap.*
+From [research/role-journeys.md](./research/role-journeys.md) (a normal week per role, 23 gaps, sources). **Today no role can drop Google Calendar.** Two reasons cover all seven: it's the only place their week reaches the phone and makes a sound before a meeting, and the only place they can invite people or change a meeting someone else made.
+
+| Role | Would they switch today? | What closes the gap |
+| --- | --- | --- |
+| **Student** | Not yet: no alerts, no phone, a timetable that can't end at term or skip a week | C13 alerts, C17 repeats, C5 Month, C16 (your plan reaches the phone through Google/iCloud) |
+| **Developer** | As a layer on top; the company's Google stays | C6 edit + C7 answer invitations from Moduo, C16 sessions visible to colleagues |
+| **PM** | No: the job is moving other people's time | C6, C7, C8 Find a time, C14 zones |
+| **Founder / team of 5** | Partly: booking, many accounts, sets and contacts already beat Calendly-lite | C6, C7, C9 collective links, C14 |
+| **Freelancer / agency** | Closest | C19 reschedule, C20 meetings as billable time, C16 timeboxes clients can see, C13 |
+| **Creator** | Not until Month and a project's dates on a calendar | C5, C18 |
+| **Founder-led sales** | Not yet: Calendly's reschedule, reminders and no-shows, and meetings matched to contacts | C19, C7 (attendees → contacts), C12 cues |
+
+**The two themes behind most gaps:**
+1. **Moduo can't take part in meetings with other people** (gaps G3, G4, G9, G13): it shows them but can't create them with guests, move them, answer them, or know who's in them → C6, C7, C8.
+2. **Moduo's plan stays inside Moduo** (G1, G2, G11): no phone, no alerts, colleagues and outside booking tools see you as free → C13, C16. A Moduo phone app stays out of scope (Tasks 36).
+
+**Outside the target roles:** alerts, invitations, editing, Month, repeat end dates and a place on an event are universal (households, teachers, clinicians). Find a time, project calendars and booking depth are team or client work.
 
 ---
 
@@ -191,24 +212,29 @@ Bottom bar (module tools): ◧ left toggle · Search · Capture · New · right 
 
 ## 5. The visual north star, applied
 
-*Filled from [research/visual-audit.md](./research/visual-audit.md): what would spread if copied, the fix list, and the 1024×700 verdict.*
+*Filled from [research/visual-audit.md](./research/visual-audit.md) when it lands: what would spread if copied, the fix list, and the 1024×700 verdict.*
 
 ---
 
 ## 6. Technical decisions I'm taking
 
-Per the process, these are mine. Each will become a decision entry (who · what · why · rejected) in `docs/decisions/calendar.md` when the spec lands. Listed so nothing surprises anyone; marked *provisional* where a research lane is still out.
+Per the process, these are mine. Each becomes a decision entry (who · what · why · rejected) in `docs/decisions/calendar.md` when the spec lands. Listed so nothing surprises anyone. Evidence: [connectivity](./research/connectivity.md) §2, §4.
 
 1. **Sessions are Tasks' `task_sessions` rows** (TV-D10). Calendar creates, moves, resizes and removes them through Tasks' session ops, with Undo; it never writes `tasks.scheduled_at`. *Rejected:* the Calendar-owned `time_blocks` table from BRIEF §7 (two owners of one fact).
-2. **Calendar reads from the shared store** (TV-D11a): tasks, sessions, and (new) calendars and events, with delta sync and Realtime. *Rejected:* today's separate `useTasksModule` mount on the Calendar page, which reloads every task and runs a writing catch-up on each visit.
-3. **One clock.** ▶ on a session calls the one time engine (TV-F6); `use-block-focus.ts` and its page-local timer are deleted. *Rejected:* keeping a Calendar clock.
-4. **One reminders table for tasks and events.** Tasks' Assumption #4 names `task_reminders(task_id, …)`; Calendar needs the same sender for "10 minutes before" and for meeting cues (C12, C13). Proposal: `reminders(entity_type, entity_id, user_id, at, kind, …)`, created that way by TV-D10. *Rejected:* a second `event_reminders` table and a second sender. **Needs:** one line added to TV-D10's row before it's built (asked in the reply).
-5. **Sync runs on the server for every provider** *(provisional, connectivity lane)*: workers on pg_cron (and provider push where it exists) keep every connected calendar fresh with no desktop running; writes go through the same workers. *Rejected (provisional):* desktop-only sync for Outlook and iCloud (stale for everyone else, and the Focus divider and reminders can't trust it).
-6. **Events keep their repeat rule on the event row**, with exception rows for "this event only" changes *(provisional)*. *Rejected (provisional):* expanding every occurrence into rows.
-7. **Events join References** (RF-1): a preview resolver for the event (title · time · people · calendar), "Private event" when you can't see it, "Deleted event" when it's gone.
-8. **Time & region:** Calendar's `user_preferences.calendar.weekStart` migrates into TV-D14's setting; Calendar keeps only its own settings (working hours for C11, calendar colours and visibility).
-9. **Module contract:** every event write is a server op with activity and registry upkeep; MCP tools and Home widgets are defined in round 2b.
-10. **Block ids** (continue CAL-9… or start a v2 lane): decided at the spec step.
+2. **Calendar reads from the shared store** (TV-D11a): tasks, sessions, and (new) calendars and events, with delta sync and Realtime. Provider changes reach clients because the server sync bumps `updated_at`; no client ever calls a provider. *Rejected:* today's separate `useTasksModule` mount and per-page provider fetches.
+3. **One clock.** ▶ on a session calls the one time engine (TV-F6); `use-block-focus.ts` is deleted. *Rejected:* keeping a Calendar clock.
+4. **One reminders table for tasks and events.** Tasks Assumption #4 names `task_reminders(task_id, …)`; Calendar needs the same sender for meeting alerts (C13) and cues (C12): `reminders(entity_type, entity_id, user_id, at, kind, …)`, created that way by TV-D10. *Rejected:* a second `event_reminders` table and a second sender. **Needs** one line in TV-D10's row before it's built (asked in the status block).
+5. **Sync runs on the server, per person.** pg_cron calls a `calendar-sync` Edge Function that pulls only changes per calendar (Google sync tokens, Microsoft delta, CalDAV sync-collection/ETags, ICS polling), one source per run; a service-role op writes the mirror. Connections belong to the person, not the workspace. Google and Microsoft push notifications come later as a nudge. Desktop Google/Outlook connects move to the same web sign-in (the desktop opens the browser); the keychain path and the old `manage-integration` function retire. *Rejected:* desktop-only sync (stale for everyone else); live provider calls from each client.
+6. **Writes go through a server op and a write queue**, sent with the provider's version check (ETag / If-Match), with a pending state and a conflict notice. Occurrence rows gain a series id and their original start, so "this event · this and following · all" works for every provider. The unused `is_default_target` becomes each person's default calendar. *Rejected:* client-side provider writes.
+7. **Events get a time zone** (an IANA column; null = floating, for all-day and legacy) and **native repeats reuse Tasks' SQL occurrence function** (TV-D8), so every server reader (busy time, reminders, Focus's divider, MCP) expands repeats the same way; the client keeps `rrule` for display, with shared test cases. *Rejected:* client-only expansion (every server reader is wrong today); materialising occurrence rows.
+8. **One busy function** returns only (person, start, end): native occurrences + mirrored events + sessions + bookings. Titles can't leak because the function never returns them. Used by the grid, Find a time, booking links and MCP.
+9. **Attendees are stored** on events (normalised, with your own reply and who organised it), mirrored from providers and written back through them.
+10. **Events join References** (RF-1): a preview resolver (title · time · people · calendar), "Private event", "Deleted event".
+11. **Time & region:** Calendar's `user_preferences.calendar.weekStart` migrates into TV-D14's setting; Calendar keeps only its own settings (working hours, calendar colours, visibility, sets).
+12. **Every new user-keyed table** (connections, sources, write queue, attendees, reminders) joins `account_erase_workspace_data` and the full export in the block that creates it (Tasks Assumption #26).
+13. **Module contract:** every event write is a server op with activity and registry upkeep; MCP tools and Home widgets are defined in round 2b.
+14. **Provider readiness, outside code:** Google's consent screen must be published (in "Testing", refresh tokens expire after 7 days); Microsoft needs an app registration with publisher verification, which needs a registered company (today's interim entity is Ringdove). Both are Maciej's dashboard steps when their blocks come.
+15. **Block ids** (continue CAL-9… or start a v2 lane): decided at the spec step.
 
 ---
 
@@ -218,17 +244,18 @@ Per the process, these are mine. Each will become a decision entry (who · what 
 | --- | --- |
 | SH-1 ✅ | The panel registry and the capture registry (landed) |
 | DS-6 | The kit Calendar is drawn with |
-| TV-D10 | `task_sessions`; reminders (§6 #4) |
+| TV-D8 | The SQL occurrence function native repeats reuse (§6 #7) |
+| TV-D10 | `task_sessions`; the shared reminders table (§6 #4) |
 | TV-D11a | The shared store Calendar reads from |
 | TV-F6 | The one time engine behind ▶ |
 | TV-F8 | Reads Calendar's "next event you're attending" for the Up next divider |
 | TV-D12 | Repeat ghosts, the reminder sender, desktop menu bar + browser notifications |
-| TV-D14 | Time & region |
+| TV-D14 | Time & region; time entries (C20) |
 | RF-1 | References, for the event preview and guests as contacts |
 | TV-U12 | The bottom-bar mode pattern for multi-select |
 | TV-U14 | The capture body the Event type follows |
 
-Round 3 reconciles in-flight work that touches Calendar: these blocks, collective booking links (PERM-8b), and the pending booking-connect deploy (PR #304).
+Round 3 reconciles in-flight work that touches Calendar: these blocks, collective booking links (PERM-8b), TX-6 (guest reminders, host cancel), Moduo Meet (MEET-*), and the pending booking-connect deploy (PR #304).
 
 ---
 
@@ -240,25 +267,26 @@ Round 3 reconciles in-flight work that touches Calendar: these blocks, collectiv
 
 | Status | Calls |
 | --- | --- |
-| ❓ Open, load-bearing | ★ C1, ★ C2, ★ C3 |
-| ❓ Open | C4–C15 |
+| ❓ Open, load-bearing | ★ C1, ★ C2, ★ C3, ★ C6 |
+| ❓ Open | C4, C5, C7–C20 |
 
 **★ C1 · The ceiling: Calendar becomes a daily driver, with a line**
-- **The tension.** The goal is "run a normal week without Google or Apple Calendar". The ratified ceiling is "Morgen-lite", with a permanent anti-goal: "no rebuilt provider meeting stack (RSVP, time-zone matrices)". A daily driver needs things that anti-goal rules out.
-- **What a daily driver must do in its first week** (to be checked against the competitor lane):
+- **The tension.** The goal is "run a normal week without Google or Apple Calendar". The ratified ceiling is "Morgen-lite", with a permanent anti-goal: "no rebuilt provider meeting stack (RSVP, time-zone matrices)". A daily driver needs things that anti-goal rules out; the role lane found no role can switch today for exactly that reason (§3).
+- **What a daily driver must do in its first week:**
   - show all your calendars in one grid ✅ today;
-  - create, edit, move and delete on any of them ◐ (Google only);
+  - create, edit, move and delete on any of them ◐ (create on Google only);
   - invite people and see who's coming ✗;
   - answer an invitation ✗;
-  - remind you before a meeting ✗;
+  - alert you before a meeting ✗;
   - join the call in one click ✅;
   - find a time that suits your team ✗;
-  - a Month view ✗, search ✗, "this event only" for repeats ✗.
+  - Month and a list view ✗, search ✗, repeats that end or change once ✗, a place on an event ✗, holidays and timetable feeds ◐ (desktop only).
 - **The line I recommend:**
-  - **In:** two-way on Google, Microsoft and iCloud; guests and replies, sent through the calendar the event lives on; reminders before events; Month; search; "this event / this and following / all"; teammates' busy time and "Find a time" inside the workspace; a second time zone; booking links (we have them).
-  - **Out, permanently:** rooms and resources; someone else managing your calendar (assistants, delegation); out-of-office and working location; meeting polls; an AI that schedules for you (that's your AI, through MCP); free/busy across other companies.
-  - **The anti-goal is narrowed, not dropped:** we use Google's and Microsoft's own invitations (they send the emails and collect the replies); we don't build our own invitation server.
-- *Recommend: yes, this line.* Rejected: keeping Morgen-lite (Google Calendar stays open beside Moduo, which is the "weakest leg" the product brief warns about, §6); full Google parity (rooms, delegation and out-of-office are large-team needs that a team of five pays for in complexity).
+  - **In:** two-way on Google, Microsoft and iCloud; guests and replies, sent through the calendar the event lives on; alerts before events; Month and List; search; repeats with an end and "this event / this and following / all"; teammates' busy time and "Find a time" inside the workspace; a second time zone; a place on any event; booking links (we have them).
+  - **Out, permanently:** rooms and resources; someone else managing your calendar (assistants, delegation); out-of-office, working location and focus time that declines meetings; meeting polls; an AI that schedules for you (that's your AI, through MCP); free/busy across other companies; sharing a Moduo calendar outside the workspace (put those events on a Google or iCloud calendar and share it there).
+  - **Out for now:** a phone app (Tasks 36). C16 gets your plan onto the phone through the calendar apps you already have.
+  - **The anti-goal is narrowed, not dropped:** Google and Microsoft send the invitations and collect the replies; Moduo sends its own only for a Moduo-calendar event with outside guests (C7). No time-zone comparison grid.
+- *Recommend: yes, this line.* Rejected: keeping Morgen-lite (Google Calendar stays open beside Moduo, the "weakest leg" the product brief warns about, §6); full Google parity (rooms, delegation and out-of-office are large-team needs a team of five pays for in complexity).
 - *Outside the target roles?* Yes: this is what anyone with a calendar expects.
 - (c) re-decides DESIGN_BRIEF §11's anti-goal and the "Morgen-lite" ceiling in PRODUCT_BRIEF §6.
 
@@ -267,37 +295,38 @@ Round 3 reconciles in-flight work that touches Calendar: these blocks, collectiv
 **★ C2 · The shape: what each panel holds**
 - **Left · overview:**
   - the mini-month;
-  - **Calendars**, grouped by where they come from (Moduo first, then each connected account), each with its colour and a show/hide on hover;
-  - **People**: your workspace's members; tick one to see their busy time on your grid (C8);
-  - **Booking links**: one row each, with "2 this week"; selecting one shows its open times on the grid (C9).
+  - **Calendars**, grouped by where they come from (Moduo first, then each connected account), each with its colour and show/hide on hover; teammates' calendars shared with you sit under **Shared with you**; saved sets live in the group's ⋯ menu ("Show set: Work week");
+  - **People**: your workspace's members; tick one to see their busy time on your grid, with their avatar (C8);
+  - **Booking links**: one row each, with "2" bookings this week; selecting one shows its open times on the grid (C9).
   - Same rules as the Tasks sidebar: no glyphs, sentence-case headers, groups collapse, headers only when a group has something.
-- **Centre · the grid:** the Tasks toolbar grammar: "October 2026" and the range · Search · Display | Day · Week · Month | ‹ Today ›. Under it, only when there are some, "3 missed sessions · Review" (C3). Then the all-day row and the hours.
+- **Centre · the grid:** the Tasks toolbar grammar: "October 2026" and the range · Search · Display | Day · Week · Month · List | ‹ Today › · New. Under it, only when there are some, "2 missed sessions this week · Review" (C3). Then the all-day row and the hours.
 - **Right · context**, the title-row dropdown:
   - *about this:* **Details**: the selected event, session, due task or booking link; references inside it open as "← Anna Kowalski";
   - *alongside:* **Tasks**: your work to schedule, grouped Up next (your Focus line-up) · Due this week · No date, with search; rows drag onto the grid. **Day**: the picked day as a list, the default beside Month.
   - Today's "Notes" view goes: linked notes appear in Details' Linked section (References).
 - **Bottom bar:** the left toggle · Search · Capture · New · the right toggle; a multi-select swaps the centre for its action row (Tasks 82b).
-- **At the minimum window (1024×700):** both side panels can't fit beside a readable week. *Recommend:* the left panel folds first (the mini-month and calendar list are glanceable; the Tasks list is the planning tool); the bottom-bar toggle brings it back. To be checked against the visual audit's measurements.
-- *Recommend: yes, this shape.* Rejected: booking links in Settings (they're everyday objects for sales and freelancers, and their bookings live on the grid); people as a panel view (overlaying someone's time is about the grid, so it sits with the calendars).
+- **At the minimum window (1024×700):** both side panels leave about 60 px per day (prototype frame 9). *Recommend:* the left panel folds first (the mini-month and calendars are glanceable; the Tasks list is the planning tool); the bottom-bar toggle brings it back. To be checked against the visual audit's measurements.
+- *Recommend: yes, this shape.* Rejected: booking links in Settings (they're everyday objects for sales and freelancers, and their bookings live on the grid); People as a panel view (overlaying someone's time is about the grid, so it sits with the calendars).
 - *Outside the target roles?* Yes.
 - Prototype frames 1, 2, 3, 4 and 9.
 
 ❓ OK?
 
 **★ C3 · A missed session: one state, one set of fixes, shown where you are**
-- **The problem.** Calendar today has its own fix system: a row inside an elapsed block (Done · Later today · Took longer · Remove) and a strip ("3 unfinished from earlier · Move to today · Review", looking back 7 days). Tasks v3 has since decided: a missed session stays where it was, muted; the task shows in Upcoming's Earlier as "missed 2:00 PM"; nothing moves by itself. Two owners would ship two systems for one fact.
+- **The problem.** Calendar today has its own fix system: a row inside an elapsed block (Done · Later today · Took longer · Remove) and a strip ("3 unfinished from earlier · Move to today · Review", looking back 7 days). Tasks v3 has since decided: a missed session stays where it was, muted; the task shows in Upcoming's Earlier as "missed 2:00 PM"; nothing moves by itself; a late *due date* has its own fixes (Move · Won't do · Break down). Two owners would ship two systems for one fact (audit C1–C3).
 - **Recommend:**
-  - **One state, "missed":** a session whose time passed while its task is still open. Computed once, shown in three places: on the grid (muted, where it was), in Upcoming's Earlier, and in Calendar's quiet line.
+  - **One state, "missed":** a session whose time passed while its task is still open **and no later session is planned for it**. An earlier session of a task that has another one coming just reads as past (with its tracked time, if any). Computed once, shown in three places: on the grid (muted, where it was), in Upcoming's Earlier, and in Calendar's quiet line.
   - **One set of fixes, the same wherever a missed session shows** (on hover or selection, never always):
     - **Done**: completes the task;
-    - **Move ▾**: Next free time today · Tomorrow · Pick…;
+    - **Move ▾**: Next free time today · Tomorrow · Pick… "Today" always means the next free gap after now, never the same clock time (audit C3);
     - **Took longer**: stretches the session to now; if nothing was tracked during it, offers "Add 40m to time?". Planned time never counts by itself;
     - **Unschedule**: removes the session; the task stays.
-  - **The strip becomes one line**, only when there's something: "3 missed sessions · Review". Review opens the panel's Tasks view showing the missed ones with tick boxes, and **"Fit 3 into today"** (C11): one gesture, previewed, one Undo. Nothing moves until you click.
-  - **Late tasks are different:** a passed *due date* keeps Tasks' own fixes (Move · Won't do · Break down). A session is a plan; a due date is a promise.
+  - **The strip becomes one line**, only when there's something: "2 missed sessions this week · Review". Review opens the panel's Tasks view showing the missed ones with tick boxes, and **"Fit 2 into today"** (C11): one gesture, one Undo. Nothing moves until you click.
+  - **Finishing a task early frees its future sessions:** "Done · freed 2 sessions · Undo". The time goes back to your day and your booking links.
+  - **Late tasks keep their own fixes:** a session is a plan; a due date is a promise. Where a task is both late and missed, both sets show.
 - *Recommend: yes.* Rejected: dropping the line and relying on Upcoming alone (Calendar planners lose the batch fix); keeping the 7-day strip as its own list (two lists of the same tasks with different rules).
 - *Outside the target roles?* Yes: anyone who plans their day in blocks has missed one.
-- (c) re-decides DESIGN_BRIEF §6b–§6c. Prototype frame 5 (variants: on the grid · the line · Review open).
+- (c) re-decides DESIGN_BRIEF §6b–§6c. Prototype frame 5 (variants: on the grid · Review · after Fit).
 
 ❓ OK?
 
@@ -305,59 +334,64 @@ Round 3 reconciles in-flight work that touches Calendar: these blocks, collectiv
 - **Event:** anything on the calendar that isn't your work on a task, from any calendar. "Meeting" only in copy, for an event with other people.
 - **Session:** time set aside to work on a task. Never "block", "time block" or "task block". "Schedule" makes one.
 - **Due:** a task's due date, shown as a **due chip** in the all-day row.
-- **Calendar:** a named, coloured set of events. **Account:** a connection (Google, Microsoft, iCloud) that brings calendars.
+- **Calendar:** a named, coloured set of events. **Account:** a connection (Google, Microsoft, iCloud) that brings calendars. **Set:** a saved choice of calendars to show.
 - **Busy:** time someone has taken that you can't see into.
 - **Booking link** (the public link) and **booking** (a meeting someone booked through it).
 - **Guests** (people on an event) and **reply** (Yes · No · Maybe).
-- **Missed:** a session whose time passed with its task open. **Late:** a due date that passed (Tasks 23).
-- **Retired:** block, lens, the strip, "unfinished from earlier", "Later today", "Remove" (→ Unschedule), "Detail" (→ Details).
+- **Missed:** a session whose time passed with its task open and nothing planned after it. **Late:** a due date that passed (Tasks 23).
+- **Retired:** block, lens, the strip, "unfinished from earlier", "Later today" (→ Move ▾ · Next free time today), "Remove" (→ Unschedule), "Detail" (→ Details), "roll forward".
 - *Recommend: yes.* *Outside the target roles?* n/a.
 
 ❓ OK?
 
-**C5 · Views: Day · Week · Month**
+**C5 · Views: Day · Week · Month · List**
 - **Day** and **Week** stay; **Month** arrives (Tasks 26). Week is the default the first time; after that, the last one you used.
-- **Month** shows all-day events and due chips as chips, timed events as one line each ("9:00 AM Standup"), "+3 more" when a day is full; the Day view in the panel shows the picked day in full.
-- **Display** (the Tasks menu) holds: Show weekends · Show declined events · Show due tasks · Show repeats · Days in Week (5 · 7).
-- **Not proposed:** Year (no role needs it weekly; a term or a quarter reads fine in Month), and a separate agenda/list view (Upcoming already lists your tasks by day, and the panel's Day view lists a day's events).
-- *Recommend: yes.* Rejected: Notion Calendar-style "any number of days" (more choice than a week needs).
+- **Month** shows all-day events and due chips first, then timed events as one line each ("9:00 AM Standup"), "+3 more" when a day is full; the panel's Day view shows the picked day in full. Sessions show in Day and Week; Display can add them to Month.
+- **List** *(changed after the competitor lane)*: the coming days as one scrolling list (events, sessions and due chips, under day headers "Thu · Oct 15"), like Google's Schedule view. Both the competitor lane (an agenda list is something a Google user misses in week one) and the decisions audit (students and sales scan the week as a list, especially on a small window) point here. It's the same word as Tasks' List view: rows, grouped. Prototyped in round 2a.
+- **Display** (the Tasks menu) holds: Show weekends · Show declined events · Show due tasks · Show repeats · Days in Week (5 · 7) · Second time zone (C14).
+- **Not proposed:** Year (no role needs it weekly; a term or a quarter reads fine in Month).
+- *Recommend: yes, four views.* Rejected: Notion Calendar-style "any number of days" (more choice than a week needs); no list (Upcoming lists only tasks, so a week of meetings would have no list anywhere).
 - *Outside the target roles?* Yes.
-- Prototype frame 3.
+- Prototype frame 3 (Month).
 
 ❓ OK?
 
-**C6 · Connected calendars: writable everywhere, fresh with your computer off**
-- **Today:** Google calendars are writable on the web. Outlook and iCloud are read-only, connect only from the desktop app, and only update while the desktop that connected them is running.
+**★ C6 · Connected calendars: writable everywhere, fresh with your computer off**
+- **Today:** Google calendars can be created on from the web, but nothing from Google, Outlook or iCloud can be edited, moved or deleted in Moduo, not even events you made there. Outlook and iCloud connect only from the desktop app and update only while that Mac runs Moduo; every provider updates only while a Calendar page is open somewhere.
 - **Recommend:**
-  - every connected calendar can be edited in Moduo, on the web and the desktop;
-  - Moduo keeps them up to date on its servers, so the web, your teammates' Busy view, your reminders and Focus's meeting divider are right even when your laptop is closed;
-  - connect any of them from the web too;
-  - order: Google (nearly there), then Microsoft, then iCloud and other CalDAV.
-- **What you'd feel:** for iCloud and other CalDAV servers, Moduo has to keep your app-specific password, encrypted, on its servers (today it stays in your Mac's keychain). The connect dialog says so in one line. Google and Microsoft use sign-in, so no password is stored.
-- *Recommend: yes.* Rejected: Google-only write-back (Outlook users keep Outlook open; that's most PMs); keeping desktop-only sync (stale for everyone but you).
+  - **every connected calendar is editable in Moduo**, on the web and the desktop, including "this event / this and following / all";
+  - **Moduo keeps them current on its servers**, so the web, teammates' Busy, booking links, alerts and Focus's meeting divider are right even with every laptop closed; changes show within about five minutes;
+  - **connect any of them from the web**; the desktop opens the same sign-in;
+  - **you pick a default calendar** for new events, shown on every create (the "wrong calendar" guard);
+  - **while a change is saving** it shows a faint mark; if Google refuses: "Couldn't save to Google · Retry · Keep in Moduo only"; if someone changed it meanwhile: "Changed in Google since you opened it".
+- **Order:** Google first (nearly there), then iCloud and other CalDAV, then Microsoft. Microsoft is last only because it needs an app registration with publisher verification, which needs a registered company.
+- **The one choice you'd see (iCloud and other CalDAV):** at connect, "Keep this calendar up to date when my Mac is off — your app-specific password is stored encrypted on Moduo's servers" (on by default) or "Keep my password on this Mac only — updates only while Moduo runs here". Google and Microsoft use sign-in, so no password is stored.
+- *Recommend: yes, all of the above.* Rejected: Google-only write-back (Outlook users keep Outlook open; that's most PMs); keeping desktop-only sync (stale for everyone but you); keychain-only for iCloud with no choice (students on the web and anyone's second device never see their Apple calendar).
 - *Outside the target roles?* Yes.
-- *Provisional until the connectivity lane lands* ([research/connectivity.md](./research/connectivity.md)); I'll restate it with its findings.
+- Evidence: [connectivity](./research/connectivity.md) §0–§4.
 
-❓ OK?
+❓ OK? And the order (Google → iCloud → Microsoft)?
 
 **C7 · Guests and invitations**
 - **Recommend:**
   - an event can have **guests**: workspace members, contacts, or any email;
-  - on a Google or Microsoft calendar, Google or Microsoft send the invitation and collect replies, as if you'd used their app;
-  - **invitations you receive** show on your grid in a quieter style until you reply; Details shows Yes · No · Maybe;
-  - **guests become links:** a guest who is a contact links the event to that contact, so Anna's hub shows "last met · next meeting";
-  - on a **Moduo** calendar, guests who are workspace members see the event in their Moduo calendar and reply there; inviting someone outside the workspace asks you to pick a connected calendar (round 2 settles what happens with none).
-- *Recommend: yes.* Rejected: sending our own invitation emails (deliverability and spam risk, and it would duplicate what Google and Microsoft do well).
+  - on a Google, Microsoft or iCloud calendar, that provider sends the invitation and collects replies, as if you'd used its own app; replies come back as a ✓ by each name;
+  - **invitations you receive** show on your grid in an outline until you reply; Details shows Yes · No · Maybe, sent back through the provider;
+  - **guests become links:** a guest who is a contact links the event to that contact, so Anna's hub shows "last met · next meeting"; mirrored meetings keep their attendees for the same reason;
+  - on a **Moduo** calendar: workspace members get it in the bell and on their grid, and reply there; **outside guests get a plain email from Moduo with the event attached and Yes · No · Maybe links**, the only invitation Moduo sends itself.
+- *Recommend: yes.* Rejected: a full invitation server of our own (reading replies from guests' calendar apps by email; the most work for the smallest group); requiring a connected calendar to invite anyone (students and households without Google couldn't invite at all).
 - *Outside the target roles?* Yes.
+- Prototype frames 1 (Event open) and 2 (Invitation).
 
 ❓ OK?
 
 **C8 · Teammates' time, and "Find a time"**
+- **Today:** teammates' calendars shared as Busy only already show as anonymous "Busy" blocks, all of them at once, not saying whose; repeating events count only once and sessions not at all.
 - **Recommend:**
-  - in the left panel's **People**, tick a teammate to see their busy time on your grid, shown as "Busy" blocks (never titles, unless their calendar is shared with you);
+  - in the left panel's **People**, tick a teammate to see their Busy on your grid, with their avatar (nothing shows until you tick, so a team of five doesn't fill your week);
   - when you add guests from the workspace, **"Find a time"** shows the next three slots where everyone is free, inside everyone's working hours. Plain arithmetic, never an assistant;
-  - a teammate's sessions count as Busy (Tasks default d).
-- *Recommend: yes.* Rejected: a team availability grid (large-team tooling; five people fit on one week).
+  - their sessions count as Busy (Tasks default d); titles show only where they've shared a calendar as Can view.
+- *Recommend: yes.* Rejected: a team availability grid (large-team tooling; five people fit on one week); showing every teammate's Busy by default (today's behaviour: anonymous and crowded).
 - *Outside the target roles?* Yes: any two people meeting need it.
 - Prototype frame 7.
 
@@ -365,56 +399,58 @@ Round 3 reconciles in-flight work that touches Calendar: these blocks, collectiv
 
 **C9 · Booking links: where they live, and how they use your time**
 - **Recommend:**
-  - they stay in the left panel (they're there today); selecting one shows **its open times on the grid** as a faint wash, and its Details (settings, upcoming bookings, copy link) on the right;
-  - a booking shows on the grid like any event, with "Booked via Intro call" in its Details;
-  - **busy time:** your chosen calendars + your sessions, with the per-link switch "Count my work sessions as busy" (Tasks default d), on by default;
-  - **collective links** ("a call with me and Mike") use C8's free time, so they finish once C8 lands (PERM-8b);
+  - they stay in the left panel (they're there today); selecting one shows **its open times on the grid** as a faint wash, and its Details (bookings this week, hours, busy calendars, copy link) on the right;
+  - a booking shows on the grid like any event, with "Booked via Intro call" in its Details, and lands on your default calendar (C6), so Outlook and iCloud hosts get a real event too;
+  - **busy time** = every calendar you check, kept fresh (C6), with repeats counted every week + your sessions (switch per link, "Count my work sessions as busy", on by default; Tasks default d) + other bookings;
+  - **collective links** ("a call with me and Mike") use each host's own calendars, then go live (PERM-8b);
   - the sentence page stays.
 - *Recommend: yes.* Rejected: moving links to Settings.
 - *Outside the target roles?* Yes: anyone who's ever traded "when are you free?" emails.
-- Prototype frame 6.
+- Prototype frame 6. More booking depth for client work: C19.
 
 ❓ OK?
 
 **C10 · Creating: draw, ⌘N and the Event capture**
 - **Recommend:**
-  - **Draw on the grid** → a new event with its title being typed and a small popover (time · calendar · guests · repeat). A toggle in that popover turns it into a **session for a task** (pick the task by typing).
+  - **Draw on the grid** → a new event with its title being typed and a small popover (time · calendar · guests · repeat · place). A toggle in that popover, **Event · Session**, turns it into a session for a task (pick the task by typing).
   - **⌘N in Calendar** → a new event at the selected time, or the next half hour.
-  - **⌘⇧K then ⌘4** → capture as Event: a destination row "Event · Personal (Google) ▾", the title with live date words ("Lunch with Anna Thu 1pm"), and the pills When · Guests · Repeat · ⋯ More (place or video link, notes, reminder).
+  - **⌘⇧K then ⌘4** → capture as Event: a destination row "Event · Work (Google) ▾", the title with live date words and people ("Lunch with Anna Thu 1pm" → When and a guest), and the pills When · Guests · Repeat · ⋯ More (place or video, notes, alert, time zone).
   - **Dragging a task** from the panel onto the grid makes a session; onto the all-day row sets its due date (Tasks contract).
-- *Recommend: yes.* Rejected: a separate "New session" button (one more choice; the draw toggle and the drag cover it).
+- *Recommend: yes.* Rejected: a separate "New session" button (one more choice; the toggle and the drag cover it).
 - *Outside the target roles?* Yes.
-- Prototype frame 8.
+- Prototype frames 7 (the popover) and 8 (capture).
 
 ❓ OK?
 
 **C11 · "Fit into today": the one assisted gesture**
-- **What:** pick tasks (your Up next, the missed ones in C3, or a selection) and "Fit 3 into today": Moduo places them in today's free time, in your order, inside your working hours, around your events. You see the result on the grid, and one Undo puts everything back.
-- **It replaces** "Move to today" and "Later today", and the old "reflow my day" idea.
-- **Never:** moving anything by itself, or moving anything you didn't pick.
-- *Recommend: yes.* Rejected: Motion-style automatic scheduling (its top churn reason, and it moves things you didn't ask to move); none at all (Sunsama and Akiflow users plan this way every morning).
+- **What:** pick tasks (your Up next, the missed ones in C3, or a selection) and "Fit 3 into today": Moduo places them in today's free time, in your order, inside your working hours, around your events. You see the result on the grid; one Undo puts everything back.
+- **It replaces** "Move to today", "Later today" for several, and the old "reflow my day". The morning-plan and evening-shutdown rituals are not built: Focus's "Line up today's scheduled tasks" and Upcoming's Earlier cover those moments (audit question 13).
+- **Never:** moving anything by itself, or anything you didn't pick.
+- *Recommend: yes.* Rejected: Motion-style automatic scheduling (its top churn reason); none at all (Sunsama and Akiflow users plan this way every morning).
 - *Outside the target roles?* Yes.
-- Prototype frame 5, variant Review.
+- Prototype frame 5, variants Review and After Fit.
 
 ❓ OK?
 
 **C12 · Cues: "remind me at my next meeting with Anna"** *(Tasks 58, parked until this rebuild)*
 - **Recommend: decide it now, for meetings only.**
   - On a task: Remind me ▸ **At my next meeting with…** a person.
-  - When an event with that person is next on your calendar, the task shows in that event's Details ("Ask Anna: invoice #14"), and the reminder arrives with the meeting's own reminder, through the usual channels (desktop, browser).
+  - When an event with that person is next, the task shows in that event's Details under "At this meeting" ("Ask Anna about invoice #14"), and the reminder arrives with the meeting's own alert, through the usual channels.
   - If the meeting moves, the cue moves with it; if it's cancelled, the cue waits for the next one.
   - The other cue triggers (opening a project, a contact or a thread) wait for those modules' rebuilds.
-- *Recommend: yes, meetings only.* Rejected: parking it again (Calendar owns the trigger, and C7's guests make it possible); all cue kinds now (their triggers live in modules not yet rebuilt).
+- **Depends on** C7 (guests and mirrored attendees) and C13 (alerts).
+- *Recommend: yes, meetings only.* Rejected: parking it again (Calendar owns the trigger); all cue kinds now (their triggers live in modules not yet rebuilt).
 - *Outside the target roles?* Yes: "next time I see her, ask about X" is universal; uniquely Moduo, because the calendar knows who's in the meeting.
+- Prototype frame 1, variant Event open.
 
 ❓ OK?
 
-**C13 · Reminders before events, and Calendar's notification rows**
+**C13 · Alerts before events, and Calendar's notification rows**
 - **Recommend**, inside Tasks 73's channels (desktop menu bar, browser, bell; no email, no feed):
 
   | Event | Who hears | Where | When | Turned off by |
   | --- | --- | --- | --- | --- |
-  | An event is about to start | You | Desktop / browser | 10 min before, by default, for events with other people; none for events with just you | Per event, and a default per calendar |
+  | An event is about to start | You | Desktop / browser | 10 min before by default, for events with other people; none by default for events with just you; a provider's own alert time is respected | Per event, and a default per calendar |
   | You're invited | You | Bell | Grouped by the hour | Settings → Notifications → Invitations |
   | An event you're in changes or is cancelled | You | Bell | At once, quietly | Same |
   | A guest replies | The organiser | Bell | Grouped | Same |
@@ -422,19 +458,21 @@ Round 3 reconciles in-flight work that touches Calendar: these blocks, collectiv
   | A session ends | Nobody | — | — | — |
   | A session is missed | Nobody | Shown on the grid and in Upcoming | — | — |
 
-- **Booking emails** to the host (live since TX-5) stay: they're booking confirmations, not reminders, and the host may not have Moduo open. The per-link switch can turn them off.
-- *Recommend: yes.* *Outside the target roles?* Yes.
+- **Booking emails** to the host (live since TX-5) stay: they're confirmations, not reminders, and the host may not have Moduo open. The link's switch turns them off.
+- *Recommend: yes.* Rejected: no alerts (the role lane's second biggest gap, all seven roles); email alerts (Tasks 73 dropped email).
+- *Outside the target roles?* Yes.
 
 ❓ OK?
 
 **C14 · Time zones: a second zone, and events in other zones**
 - **Recommend:**
   - Time & region (Tasks 76) decides your zone, as everywhere;
-  - Calendar adds an optional **second time zone** column beside the hours (Display);
-  - an event made in another zone shows both when they differ ("3:00 PM · 9:00 AM New York");
-  - creating an event can set its zone (More).
+  - every event keeps the zone it was made in, so "9:00 London every Tuesday" stays 9:00 London for a teammate in Warsaw (shown as 10:00);
+  - an event in another zone shows both when they differ ("3:00 PM · 9:00 AM New York");
+  - Display can add a **second time zone** column beside the hours; creating an event can set its zone (More).
 - *Recommend: yes.* Rejected: a world-clock panel (one column covers the common case: a client or co-founder abroad).
-- *Outside the target roles?* Yes: anyone with a client abroad.
+- *Outside the target roles?* Yes: anyone with a client or family abroad.
+- Prototype frame 1, variant Second time zone.
 
 ❓ OK?
 
@@ -444,27 +482,79 @@ Round 3 reconciles in-flight work that touches Calendar: these blocks, collectiv
 
 ❓ OK?
 
+**C16 · Your plan, outside Moduo** *(opening call; new, from the role lane's gaps G1, G2, G11)*
+- **The gap:** Moduo's plan stays inside Moduo. Sessions and Moduo-calendar events never reach your phone, and colleagues and outside booking tools see you as free during them. A phone app is out of scope (Tasks 36), and the calendar feed was dropped (Tasks round 2c).
+- **Recommend:**
+  - with a connected calendar, new events go there by default (C6), so your phone's Google or Apple Calendar shows them and alerts you, with no Moduo phone app;
+  - **"Show my sessions on Work (Google) as Busy"**, a per-person switch, off by default: each session becomes a private "Busy" event on that calendar, kept in step (moved, removed) by Moduo. Colleagues see you as busy, your phone shows your plan, and outside booking tools respect it;
+  - **the same switch for another calendar's events:** "Show Personal (iCloud) on Work (Google) as Busy", so your dentist appointment stops colleagues booking over it without merging accounts (Notion Calendar does this, [competitors](./research/structure-competitors.md));
+  - Moduo's own calendars stay inside Moduo.
+- *Recommend: yes.* Rejected: bringing the calendar feed back (Google refreshes feeds every 12–24 hours and drops their alerts, Tasks round 2c); session titles on your work calendar by default (they'd be visible to your whole company); Reclaim/Motion's "free until the deadline is at risk, then busy" (it moves your availability by itself).
+- *Outside the target roles?* Yes: anyone who defends focus time in a company calendar.
+
+❓ OK?
+
+**C17 · Repeats for events: one picker with Tasks** *(opening call; gap G6)*
+- **Recommend:** events use Tasks' repeat picker (Tasks 27i): presets, Custom (every n, days, nth weekday, end "until Dec 15" or "after 10 times"), one plain summary line, and the same words in capture. Changing one occurrence asks "This event · This and following · All events" (Tasks says "Just this one · Change the pattern"; events need the middle option because other people's calendars share the series).
+- *Recommend: yes.* Rejected: keeping Calendar's own repeat picker (two pickers, two grammars, audit C9).
+- *Outside the target roles?* Yes: school timetables, courses, a skipped standup.
+
+❓ OK?
+
+**C18 · What else you can show on your calendar** *(opening call; gap G8 and the "not in any role" list)*
+- **Recommend**, each one ticked on in the left panel, off by default, so your grid stays your own work (Tasks default r):
+  - **a project:** its tasks' due dates (anyone's) and its section dates, in the project's colour. A creator's content calendar or a PM's release month in Month view, without leaving Calendar;
+  - **birthdays** from your contacts (Contacts already stores dates);
+  - **public holidays** for your country.
+- *Recommend: yes.* Rejected: project calendars as a separate kind of calendar you manage (more structure; the project already holds the dates).
+- *Outside the target roles?* Yes for birthdays and holidays (households); projects are team work.
+
+❓ OK?
+
+**C19 · Booking links for client work** *(opening call; gaps G13, G15–G17)*
+- **Recommend**, in this order:
+  1. **reschedule** (the guest's email and the booking page offer it; the old slot frees itself);
+  2. **guest reminders and cancelling from your side** (TX-6, already planned);
+  3. **several lengths on one link** (15 · 30 · 45);
+  4. **"Offer times"**: drag a few slots on the grid, copy them as a short message with a link that books one; the held slots free themselves once one is booked (Notion Calendar and Vimcal do this);
+  5. **mark a no-show** on a past booking, counted on the link;
+  6. later: single-use links, round robin ("any of us"), payments.
+- *Recommend: yes, 1–5.* Rejected: routing forms and payments now (Calendly's paid tiers; coaches and tutors, not our roles).
+- *Outside the target roles?* Client-facing work only (coaches, tutors, recruiters).
+
+❓ OK? Strike any.
+
+**C20 · A meeting can become tracked time** *(opening call; gap G19)*
+- **Recommend:** on a past event linked to a task (or a project), **"Add 45m to time"** in its Details logs a time entry (Tasks 75) for you, dated that day, with the event's title as the note. Never automatic. So an agency's client calls reach the client's time report.
+- *Recommend: yes.* Rejected: logging every meeting automatically (time tracking must stay what you chose to record, Tasks 63).
+- *Outside the target roles?* Billing work (consultants, lawyers, agencies).
+
+❓ OK?
+
 ### Consistency pass (round 1)
 
-Checked every call against the others and against Tasks v3:
-1. **"Move" means one thing.** In Tasks, Move on a late task changes its due date; in C3, Move on a missed session moves the session. Both move the thing that's late or missed; the menu says where it goes. Kept.
-2. **"Fit into today" (C11) and "nothing moves by itself" (Tasks).** Fit is a click on tasks you picked, previewed, with one Undo. Consistent.
-3. **Keys.** Calendar's view keys (D · W · M) only apply on the Calendar page; Tasks' D is Date in a multi-select. Calendar's multi-select row (82b) won't use D for Day. The full table comes in round 2.
-4. **The panel's Tasks view (C2)** groups by Up next · Due this week · No date. "Queue" and "Backlog" are retired words (Tasks 61, 53).
-5. **"Busy" (C8) and booking links (C9)** read one busy-time answer per person (§1.5).
+Checked every call against the others, against Tasks v3, and against the decisions audit's contradiction list:
+1. **"Move" means one thing.** On a late task it moves the due date; on a missed session it moves the session; "today" is always the next free gap after now. Kept (C3, audit C2–C3).
+2. **"Fit into today" (C11) and "nothing moves by itself" (Tasks).** Fit is a click on tasks you picked, with one Undo. `calendar_roll_forward` and the MCP "roll forward" verb are renamed accordingly (audit C8).
+3. **Keys.** Calendar's view keys (D · W · M) only apply on the Calendar page; Tasks' D is Date in a multi-select, so Calendar's multi-select row won't use D. The full table comes in round 2.
+4. **The panel's Tasks view (C2)** groups by Up next · Due this week · No date. "Queue", "Today" (committed) and "Backlog" are retired words there (Tasks 61, 53).
+5. **Busy (C8), booking links (C9), Find a time and MCP** read the one busy function (§6 #8).
 6. **Reminders (C13) and cues (C12)** share one table and one sender (§6 #4).
-7. **No red, no rotated text:** Month's day headers are horizontal ("Mon 13"), missed sessions are muted, not coloured.
+7. **Invitations (C7) and "no email" (Tasks 73).** Tasks dropped email *reminders to yourself*. An invitation to an outside guest is a message to a third party, like a booking confirmation. Kept, and limited to Moduo-calendar events (provider calendars send their own).
+8. **Repeats (C17).** One picker for tasks and events; events add "This and following" because a series is shared with other people's calendars (audit C9).
+9. **No red, no rotated text:** Month's day headers are horizontal, missed sessions are muted, not coloured.
+10. **Docs that still state reversed decisions** (audit C19: PRODUCT_BRIEF §6, ROADMAP lines 49 and 52, BRIEF §3–4, DESIGN_BRIEF §1/§8/§11, the MCP manifest's "read-only" line) get edited when the spec lands, with a supersession banner on the old spec.
 
 ---
 
 ## 9. What happens next
 
 1. Maciej answers round 1; answers are recorded under each call, in his words.
-2. The six lanes' findings are folded into §1, §3, §5 and C6; anything that changes a recommendation is re-asked, not slipped in.
+2. The remaining lanes (current state, visual audit, competitors) are folded into §1, §5 and the calls; anything that changes a recommendation is re-asked, not slipped in.
 3. **Round 2a:** the grid (Day, Week, Month) view by view and state by state: empty, loading, error, read-only, offline, very large; the event and session details; the panel views.
 4. **Round 2b:** how Calendar plugs into the shared pieces: its capture type, References previews, MCP tools, notifications, Home widgets; then a gap audit by a separate agent.
-5. **Round 3:** in-flight work (the Tasks v3 blocks Calendar depends on, PERM-8b, PR #304).
-6. **The spec** (`specs/calendar-v2.md`, on Fable 5.1).
+5. **Round 3:** in-flight work (the Tasks v3 blocks Calendar depends on, PERM-8b, TX-6, Moduo Meet, PR #304).
+6. **The spec** (`specs/calendar-v2.md`, on Fable 5.1), then the doc edits in consistency item 10.
 
 ---
 
@@ -474,7 +564,7 @@ Checked every call against the others and against Tasks v3:
 | --- | --- | --- |
 | [research/current-state.md](./research/current-state.md) | Calendar today in code and in the running app: capability matrix, trust bugs, what Tasks v3 already changed | running |
 | [research/visual-audit.md](./research/visual-audit.md) | Measurements against the north-star rules; the 1024×700 verdict | running |
-| [research/early-decisions-audit.md](./research/early-decisions-audit.md) | Every early Calendar decision: keep / adjust / reverse | running |
-| [research/structure-competitors.md](./research/structure-competitors.md) | Views, calendars, people, tasks, booking and write-back across 18 tools | running |
-| [research/role-journeys.md](./research/role-journeys.md) | A normal week per role, and the gap map | running |
-| [research/connectivity.md](./research/connectivity.md) | Sync, write-back, invitations and free/busy: today and options | running |
+| [research/early-decisions-audit.md](./research/early-decisions-audit.md) | Every early Calendar decision: keep / adjust / reverse; 19 contradictions; 15 designer questions | landed, folded into §1, C1–C20 and the consistency pass |
+| [research/structure-competitors.md](./research/structure-competitors.md) | Views, calendars, people, tasks, booking, write-back and complaints across 20 tools | landed, folded into C5, C16, C19 |
+| [research/role-journeys.md](./research/role-journeys.md) | A normal week per role, 23 gaps, who would switch | landed, folded into §3 and C13–C20 |
+| [research/connectivity.md](./research/connectivity.md) | Sync, write-back, invitations and free/busy: today per provider, options, sequencing | landed, folded into §1, §6 and C6–C9 |
