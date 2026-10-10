@@ -9,10 +9,16 @@
 --     group_label stays a mirror of the area's name both ways: a build from
 --     before this migration writes group_label and lands in (or makes) the area
 --     of that name; renaming an area relabels its projects; deleting one makes
---     its projects area-less. An area is read by whoever can see one of its
---     projects (by every Tasks reader while it's empty), so a label typed only
---     on private projects stays as private as they are; sections and project
---     fields follow the project's own access.
+--     its projects area-less. Who reads an area: everyone who reads Tasks
+--     when it was made as a workspace area (areas_op_create); otherwise (made
+--     from a label: the backfill, an old build, the rail's Section menu) its
+--     maker and whoever can see one of its live projects, so a label typed
+--     only on private projects stays as private as they are, also once those
+--     projects are gone. Names are unique only among the areas you can see.
+--   * One gate for project data: projects__visible / projects__editable (the
+--     caller) and projects__visible_to (a given person) wrap can_access on the
+--     project, and every read path (RLS, ops, triggers, the time blocks, the
+--     areas' visibility) and every write path goes through them.
 --   * Project fields on buckets (projects keep the table name until TV-D7):
 --     status Active · On hold · Done (@contracts PROJECT_STATES), starts_on,
 --     target_on, lead_id (a member), client_contact_id (a contact the setter
@@ -51,6 +57,10 @@ CREATE TABLE IF NOT EXISTS public.areas (
   color text,
   -- Order in the sidebar (1, 2, …).
   position integer NOT NULL DEFAULT 1,
+  -- Made as a workspace area (areas_op_create): every Tasks reader sees it.
+  -- Otherwise it was made from a label and follows its projects.
+  shared boolean NOT NULL DEFAULT false,
+  created_by uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   deleted_at timestamptz,
@@ -58,9 +68,10 @@ CREATE TABLE IF NOT EXISTS public.areas (
   CONSTRAINT areas_color_check CHECK (color IS NULL OR char_length(color) BETWEEN 1 AND 32)
 );
 
--- One live area per name (as typed; the old rail told "Clients" and "clients"
--- apart, so the backfill does too).
-CREATE UNIQUE INDEX IF NOT EXISTS areas_name_per_workspace
+-- Names are compared as typed (the old rail told "Clients" and "clients"
+-- apart) and are unique only among the areas a person can see (the ops check
+-- it), so a name nobody else can see never blocks or reveals anything.
+CREATE INDEX IF NOT EXISTS areas_workspace_name
   ON public.areas (workspace_id, name) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS areas_workspace_position
   ON public.areas (workspace_id, position) WHERE deleted_at IS NULL;
@@ -101,14 +112,75 @@ CREATE INDEX IF NOT EXISTS buckets_lead_id_idx ON public.buckets (lead_id) WHERE
 CREATE INDEX IF NOT EXISTS buckets_client_contact_id_idx
   ON public.buckets (client_contact_id) WHERE client_contact_id IS NOT NULL;
 
--- ── 2b. Who sees an area ────────────────────────────────────────────────────
+-- ── 2b. One gate for project data, and who sees an area ─────────────────────
+
+-- Whether this person can see / change a project. Every path that reads or
+-- writes project data or what hangs off a project (areas, sections, time
+-- blocks, team defaults) asks these, so the paths can't drift apart.
+CREATE OR REPLACE FUNCTION public.projects__visible_to(p_project_id uuid, p_user uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT p_user IS NOT NULL AND public.can_access('bucket', p_project_id, 'view', p_user)
+$$;
+
+CREATE OR REPLACE FUNCTION public.projects__editable_to(p_project_id uuid, p_user uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT p_user IS NOT NULL AND public.can_access('bucket', p_project_id, 'edit', p_user)
+$$;
+
+-- The same for the caller (RLS calls this one, so it answers only for them).
+CREATE OR REPLACE FUNCTION public.projects__visible(p_project_id uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT public.projects__visible_to(p_project_id, public.perm_actor_id())
+$$;
+
+CREATE OR REPLACE FUNCTION public.projects__editable(p_project_id uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT public.projects__editable_to(p_project_id, public.perm_actor_id())
+$$;
 
 -- Areas carry no permissions of their own, but a name can say something: a
 -- rail section label lived only on the projects it was typed on, so one used
 -- only on private projects was never seen by anyone else. An area is visible
--- to whoever can read Tasks in the workspace when it holds no live project,
--- or when they can see at least one of its projects. Never the projects
--- themselves: a project stays as private as its own sharing says.
+-- to a person when it was made as a workspace area, when they made it, or
+-- when they can see one of its live projects (never the projects
+-- themselves: a project stays as private as its own sharing says). An area
+-- made from labels whose projects are all gone is seen by nobody but its
+-- maker.
+CREATE OR REPLACE FUNCTION public.areas__visible_to(p_area_id uuid, p_user uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (SELECT 1 FROM public.areas a
+                 WHERE a.id = p_area_id
+                   AND (a.shared OR (p_user IS NOT NULL AND a.created_by = p_user)))
+      OR EXISTS (SELECT 1 FROM public.buckets b
+                 WHERE b.area_id = p_area_id AND b.deleted_at IS NULL
+                   AND public.projects__visible_to(b.id, p_user))
+$$;
+
 CREATE OR REPLACE FUNCTION public.areas__visible(p_area_id uuid)
 RETURNS boolean
 LANGUAGE sql
@@ -116,11 +188,7 @@ STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $$
-  SELECT NOT EXISTS (SELECT 1 FROM public.buckets b
-                     WHERE b.area_id = p_area_id AND b.deleted_at IS NULL)
-      OR EXISTS (SELECT 1 FROM public.buckets b
-                 WHERE b.area_id = p_area_id AND b.deleted_at IS NULL
-                   AND public.can_access('bucket', b.id, 'view', public.perm_actor_id()))
+  SELECT public.areas__visible_to(p_area_id, public.perm_actor_id())
 $$;
 
 DROP POLICY IF EXISTS areas_read ON public.areas;
@@ -157,7 +225,7 @@ ALTER TABLE public.sections ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS sections_read ON public.sections;
 CREATE POLICY sections_read ON public.sections
   FOR SELECT TO authenticated
-  USING (public.perm_can_view(workspace_id, 'tasks') AND public.can_access('bucket', project_id, 'view'));
+  USING (public.perm_can_view(workspace_id, 'tasks') AND public.projects__visible(project_id));
 REVOKE ALL ON public.sections FROM PUBLIC, anon, authenticated;
 GRANT SELECT ON public.sections TO authenticated;
 GRANT ALL ON public.sections TO service_role;
@@ -310,13 +378,13 @@ BEGIN
   PERFORM public.tasks__guard_structure(p_workspace_id);
   SELECT * INTO b FROM public.buckets x
   WHERE x.id = p_project_id AND x.workspace_id = p_workspace_id AND x.deleted_at IS NULL;
-  IF NOT FOUND OR NOT public.can_access('bucket', b.id, 'view', v_actor) THEN
+  IF NOT FOUND OR NOT public.projects__visible_to(b.id, v_actor) THEN
     RAISE EXCEPTION 'That project isn''t in this workspace.' USING ERRCODE = '22023';
   END IF;
   IF b.is_system THEN
     RAISE EXCEPTION 'The Inbox isn''t a project, so it has no project settings or sections.' USING ERRCODE = '22023';
   END IF;
-  IF NOT public.can_access('bucket', b.id, 'edit', v_actor) THEN
+  IF NOT public.projects__editable_to(b.id, v_actor) THEN
     RAISE EXCEPTION 'You don''t have edit access to this project.' USING ERRCODE = '42501';
   END IF;
   RETURN b;
@@ -325,8 +393,10 @@ $$;
 
 -- ── 8. Areas ↔ group_label ──────────────────────────────────────────────────
 
--- The live area of this name in the workspace, made at the end of the sidebar
--- when there's none. NULL for an empty name.
+-- The live area of this name that the caller can see (system work: any),
+-- else a new one made from the label, the caller's, at the end of the
+-- sidebar. NULL for an empty name. An area the caller can't see is never
+-- found, so filing under a name never joins or reveals it.
 CREATE OR REPLACE FUNCTION public.areas__find_or_create(p_workspace_id uuid, p_name text)
 RETURNS uuid
 LANGUAGE plpgsql
@@ -334,27 +404,26 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
-  v_name text := left(btrim(coalesce(p_name, '')), 80);
+  v_name text := btrim(left(btrim(coalesce(p_name, '')), 80));
+  v_actor uuid := public.perm_actor_id();
   v_id uuid;
 BEGIN
-  v_name := btrim(v_name);
   IF v_name = '' THEN
     RETURN NULL;
   END IF;
+  PERFORM pg_advisory_xact_lock(hashtextextended('areas:' || p_workspace_id::text, 0));
   SELECT a.id INTO v_id FROM public.areas a
-  WHERE a.workspace_id = p_workspace_id AND a.name = v_name AND a.deleted_at IS NULL;
+  WHERE a.workspace_id = p_workspace_id AND a.name = v_name AND a.deleted_at IS NULL
+    AND (v_actor IS NULL OR public.areas__visible_to(a.id, v_actor))
+  ORDER BY a.position, a.created_at, a.id
+  LIMIT 1;
   IF v_id IS NOT NULL THEN
     RETURN v_id;
   END IF;
-  INSERT INTO public.areas (workspace_id, name, position)
-  SELECT p_workspace_id, v_name, coalesce(max(a.position), 0) + 1
+  INSERT INTO public.areas (workspace_id, name, position, shared, created_by)
+  SELECT p_workspace_id, v_name, coalesce(max(a.position), 0) + 1, false, v_actor
   FROM public.areas a WHERE a.workspace_id = p_workspace_id AND a.deleted_at IS NULL
-  ON CONFLICT (workspace_id, name) WHERE deleted_at IS NULL DO NOTHING
   RETURNING id INTO v_id;
-  IF v_id IS NULL THEN
-    SELECT a.id INTO v_id FROM public.areas a
-    WHERE a.workspace_id = p_workspace_id AND a.name = v_name AND a.deleted_at IS NULL;
-  END IF;
   RETURN v_id;
 END;
 $$;
@@ -401,7 +470,12 @@ BEGIN
     ELSE
       SELECT a.name INTO v_name FROM public.areas a
       WHERE a.id = NEW.area_id AND a.workspace_id = NEW.workspace_id AND a.deleted_at IS NULL;
-      IF v_name IS NULL THEN
+      -- The same gate as reading areas: an area the writer can't see reads
+      -- as missing (system work aside).
+      IF v_name IS NULL
+         OR (public.perm_actor_id() IS NOT NULL
+             AND coalesce(current_setting('share.bypass', true), '') <> '1'
+             AND NOT public.areas__visible(NEW.area_id)) THEN
         RAISE EXCEPTION 'That area isn''t in this workspace.' USING ERRCODE = '22023';
       END IF;
       NEW.group_label := v_name;
@@ -519,8 +593,13 @@ BEGIN
   IF TG_OP = 'UPDATE' AND NEW.section_id IS NOT DISTINCT FROM OLD.section_id THEN
     RETURN NEW;
   END IF;
+  -- The same gate as every other path to sections: the writer sees the
+  -- project (system work aside).
   IF NOT EXISTS (SELECT 1 FROM public.sections s
-                 WHERE s.id = NEW.section_id AND s.project_id = NEW.bucket_id AND s.deleted_at IS NULL) THEN
+                 WHERE s.id = NEW.section_id AND s.project_id = NEW.bucket_id AND s.deleted_at IS NULL)
+     OR (public.perm_actor_id() IS NOT NULL
+         AND coalesce(current_setting('share.bypass', true), '') <> '1'
+         AND NOT public.projects__visible(NEW.bucket_id)) THEN
     RAISE EXCEPTION 'That section isn''t in this task''s project.' USING ERRCODE = '22023';
   END IF;
   RETURN NEW;
@@ -598,7 +677,7 @@ AS $$
     AND EXISTS (SELECT 1 FROM public.buckets b
                 WHERE b.id = public.tasks__try_uuid(j.value #>> '{}')
                   AND b.workspace_id = p_workspace_id AND b.deleted_at IS NULL
-                  AND public.can_access('bucket', b.id, 'view', p_user))
+                  AND public.projects__visible_to(b.id, p_user))
 $$;
 
 -- Put one person's map for one workspace into their preferences.
@@ -700,9 +779,12 @@ AS $$
 DECLARE
   v text := public.tasks__clean_name(p_name, 'An area', 80);
 BEGIN
+  -- Only an area the caller can see counts: a name they can't see never
+  -- blocks them, or tells them it exists.
   IF EXISTS (SELECT 1 FROM public.areas a
              WHERE a.workspace_id = p_workspace_id AND a.deleted_at IS NULL
-               AND a.name = v AND a.id IS DISTINCT FROM p_except) THEN
+               AND a.name = v AND a.id IS DISTINCT FROM p_except
+               AND public.areas__visible(a.id)) THEN
     RAISE EXCEPTION 'There''s already an area called "%".', v USING ERRCODE = '23505';
   END IF;
   RETURN v;
@@ -726,7 +808,8 @@ BEGIN
 END;
 $$;
 
--- Add an area at the end of the sidebar. Answers with every live area.
+-- Add a workspace area at the end of the sidebar (every Tasks reader sees
+-- it). Answers with every live area the caller can see.
 CREATE OR REPLACE FUNCTION public.areas_op_create(p_workspace_id uuid, p_name text, p_color text DEFAULT NULL)
 RETURNS SETOF public.areas
 LANGUAGE plpgsql
@@ -739,8 +822,9 @@ BEGIN
   PERFORM public.tasks__guard_structure(p_workspace_id);
   PERFORM pg_advisory_xact_lock(hashtextextended('areas:' || p_workspace_id::text, 0));
   v_name := public.areas__check_name(p_workspace_id, p_name, NULL);
-  INSERT INTO public.areas (workspace_id, name, color, position)
-  SELECT p_workspace_id, v_name, public.areas__check_color(to_jsonb(p_color)), coalesce(max(a.position), 0) + 1
+  INSERT INTO public.areas (workspace_id, name, color, position, shared, created_by)
+  SELECT p_workspace_id, v_name, public.areas__check_color(to_jsonb(p_color)), coalesce(max(a.position), 0) + 1,
+         true, public.perm_actor_id()
   FROM public.areas a WHERE a.workspace_id = p_workspace_id AND a.deleted_at IS NULL;
   RETURN QUERY SELECT * FROM public.areas__list(p_workspace_id);
 END;
@@ -808,28 +892,6 @@ BEGIN
     PERFORM set_config('share.bypass', coalesce(v_bypass, ''), true);
   END IF;
   RETURN QUERY SELECT * FROM public.areas__list(p_workspace_id);
-END;
-$$;
-
--- The area of this name (made at the end of the sidebar when there's none),
--- for filing a project under a name (the rail's "Section" menu). Looked up on
--- the server, so a stale list in the app never makes a second one. Answers
--- with that area.
-CREATE OR REPLACE FUNCTION public.areas_op_ensure(p_workspace_id uuid, p_name text)
-RETURNS public.areas
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-  a public.areas;
-  v_id uuid;
-BEGIN
-  PERFORM public.tasks__guard_structure(p_workspace_id);
-  PERFORM pg_advisory_xact_lock(hashtextextended('areas:' || p_workspace_id::text, 0));
-  v_id := public.areas__find_or_create(p_workspace_id, public.tasks__clean_name(p_name, 'An area', 80));
-  SELECT * INTO a FROM public.areas WHERE id = v_id;
-  RETURN a;
 END;
 $$;
 
@@ -968,8 +1030,7 @@ BEGIN
   v_id := coalesce(public.tasks__try_uuid(p_project ->> 'id'), gen_random_uuid());
   SELECT * INTO b FROM public.buckets WHERE id = v_id;
   IF FOUND THEN
-    IF b.workspace_id IS DISTINCT FROM p_workspace_id
-       OR NOT public.can_access('bucket', b.id, 'view', v_actor) THEN
+    IF b.workspace_id IS DISTINCT FROM p_workspace_id OR NOT public.projects__visible_to(b.id, v_actor) THEN
       RAISE EXCEPTION 'That project isn''t in this workspace.' USING ERRCODE = '22023';
     END IF;
     RETURN b;
@@ -1027,6 +1088,27 @@ BEGIN
   WHERE id = b.id
   RETURNING * INTO b;
   RETURN b;
+END;
+$$;
+
+-- File a project under an area by name (the rail's "Section" menu): the area
+-- of that name the caller can see, else a new one made from the label; null
+-- or empty takes it out of its area. Answers with the project.
+CREATE OR REPLACE FUNCTION public.projects_op_file(p_workspace_id uuid, p_project_id uuid, p_area_name text)
+RETURNS public.buckets
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  b public.buckets;
+BEGIN
+  b := public.projects__guard(p_workspace_id, p_project_id);
+  IF nullif(btrim(coalesce(p_area_name, '')), '') IS NOT NULL THEN
+    PERFORM public.tasks__clean_name(p_area_name, 'An area', 80);
+  END IF;
+  RETURN public.projects_op_update(p_workspace_id, b.id,
+    jsonb_build_object('area_id', public.areas__find_or_create(p_workspace_id, p_area_name)));
 END;
 $$;
 
@@ -1162,7 +1244,7 @@ BEGIN
   FOR UPDATE;
   -- A section of a project the caller can't see reads as missing.
   IF NOT FOUND OR (s.deleted_at IS NOT NULL AND NOT v_restore)
-     OR NOT public.can_access('bucket', s.project_id, 'view', public.perm_actor_id()) THEN
+     OR NOT public.projects__visible(s.project_id) THEN
     RAISE EXCEPTION 'Section not found.' USING ERRCODE = '22023';
   END IF;
   PERFORM public.projects__guard(p_workspace_id, s.project_id);
@@ -1216,7 +1298,7 @@ DECLARE
 BEGIN
   SELECT * INTO s FROM public.sections x
   WHERE x.id = p_section_id AND x.workspace_id = p_workspace_id AND x.deleted_at IS NULL;
-  IF NOT FOUND OR NOT public.can_access('bucket', s.project_id, 'view', public.perm_actor_id()) THEN
+  IF NOT FOUND OR NOT public.projects__visible(s.project_id) THEN
     RAISE EXCEPTION 'Section not found.' USING ERRCODE = '22023';
   END IF;
   PERFORM public.projects__guard(p_workspace_id, s.project_id);
@@ -1330,6 +1412,7 @@ BEGIN
   -- Internal: only definer functions and triggers call these.
   FOREACH fn IN ARRAY ARRAY[
     'tasks__is_member(uuid, uuid)', 'tasks__guard_structure(uuid)', 'projects__guard(uuid, uuid)',
+    'projects__visible_to(uuid, uuid)', 'projects__editable_to(uuid, uuid)', 'areas__visible_to(uuid, uuid)',
     'areas__find_or_create(uuid, text)', 'buckets__area_sync()', 'areas__mirror_labels()',
     'buckets__project_check()', 'tasks__section_check()',
     'tasks__clean_time_blocks(uuid, jsonb, uuid)', 'tasks__put_time_blocks(uuid, uuid, jsonb)',
@@ -1344,10 +1427,14 @@ BEGIN
   END LOOP;
   -- Pure helpers: they read only their arguments (tasks__estimate_sync is a
   -- trigger every writer of tasks fires).
-  -- The areas policy calls this, so every reader needs it. It answers only
-  -- for the caller (perm_actor_id), and says nothing but visible or not.
-  REVOKE ALL ON FUNCTION public.areas__visible(uuid) FROM PUBLIC, anon;
-  GRANT EXECUTE ON FUNCTION public.areas__visible(uuid) TO authenticated, service_role;
+  -- The policies call these, so every reader needs them. They answer only
+  -- for the caller (perm_actor_id), and say nothing but yes or no.
+  FOREACH fn IN ARRAY ARRAY[
+    'areas__visible(uuid)', 'projects__visible(uuid)', 'projects__editable(uuid)'] LOOP
+    EXECUTE format('REVOKE ALL ON FUNCTION public.%s FROM PUBLIC', fn);
+    EXECUTE format('REVOKE ALL ON FUNCTION public.%s FROM anon', fn);
+    EXECUTE format('GRANT EXECUTE ON FUNCTION public.%s TO authenticated, service_role', fn);
+  END LOOP;
   FOREACH fn IN ARRAY ARRAY[
     'tasks__reorder(uuid[], uuid, uuid)', 'tasks__clean_name(text, text, integer)',
     'tasks__patch_date(jsonb, text)', 'areas__check_color(jsonb)',
@@ -1359,7 +1446,7 @@ BEGIN
   -- The ops.
   FOREACH fn IN ARRAY ARRAY[
     'areas_op_create(uuid, text, text)', 'areas_op_update(uuid, uuid, jsonb)',
-    'areas_op_move(uuid, uuid, uuid)', 'areas_op_ensure(uuid, text)',
+    'areas_op_move(uuid, uuid, uuid)', 'projects_op_file(uuid, uuid, text)',
     'projects_op_create(uuid, jsonb)', 'projects_op_update(uuid, uuid, jsonb)',
     'projects_op_move(uuid, uuid, uuid, text)',
     'sections_op_create(uuid, uuid, jsonb)', 'sections_op_update(uuid, uuid, jsonb)',

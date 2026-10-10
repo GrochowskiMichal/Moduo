@@ -125,6 +125,8 @@ export const areaRowSchema = z.object({
   name: z.string(),
   color: optStr,
   position: optNum,
+  shared: z.boolean().optional(),
+  created_by: optStr,
   created_at: z.string(),
   updated_at: z.string(),
   deleted_at: optStr,

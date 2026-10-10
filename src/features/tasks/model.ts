@@ -66,6 +66,12 @@ export type Area = {
   name: string;
   color: string | null;
   position: number;
+  /**
+   * Made as a workspace area (every Tasks reader sees it); otherwise made from
+   * a label, and seen by its maker and whoever sees one of its projects.
+   */
+  shared: boolean;
+  createdBy: string | null;
   createdAt: string;
   updatedAt: string;
 };

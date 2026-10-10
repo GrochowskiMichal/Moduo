@@ -212,7 +212,8 @@ CREATE TRIGGER tasks_team_check
 
 -- The project a task for this team goes to when it names none (or sits in an
 -- Inbox): the team's default project, if it's live and the caller can edit
--- it. Raises when there's none.
+-- it (the same gate as filing a task anywhere; a project the caller can't
+-- use reads as no default). Raises when there's none.
 CREATE OR REPLACE FUNCTION public.teams__route_project(p_workspace_id uuid, p_team_id uuid)
 RETURNS uuid
 LANGUAGE plpgsql
@@ -232,7 +233,8 @@ BEGIN
                  WHERE x.id = p_team_id AND x.workspace_id = p_workspace_id AND x.deleted_at IS NULL) THEN
     RAISE EXCEPTION 'That team isn''t in this workspace.' USING ERRCODE = '22023';
   END IF;
-  IF v_project IS NULL THEN
+  IF v_project IS NULL
+     OR (public.perm_actor_id() IS NOT NULL AND NOT public.projects__editable(v_project)) THEN
     RAISE EXCEPTION 'A task for a team needs a project. Pick one, or give the team a default project.'
       USING ERRCODE = '22023';
   END IF;
@@ -307,7 +309,7 @@ BEGIN
   IF v IS NULL OR NOT EXISTS (
        SELECT 1 FROM public.buckets b
        WHERE b.id = v AND b.workspace_id = p_workspace_id AND b.deleted_at IS NULL AND NOT b.is_system)
-     OR NOT public.can_access('bucket', v, 'view', public.perm_actor_id()) THEN
+     OR NOT public.projects__visible(v) THEN
     RAISE EXCEPTION 'That project isn''t in this workspace.' USING ERRCODE = '22023';
   END IF;
   RETURN v;

@@ -97,8 +97,11 @@ BEGIN
   PERFORM test.ok(r LIKE '%already an area called "Product"%', 'two live areas can''t share a name', r);
   r := test.try('V', format($q$SELECT * FROM public.areas_op_create(%L, 'Viewers')$q$, test.id('W')));
   PERFORM test.ok(r LIKE '%don''t have edit access to Tasks%', 'a viewer can''t make areas', r);
-  PERFORM test.ok(test.value_as('V', format($q$SELECT count(*)::text FROM public.areas WHERE workspace_id = %L$q$, test.id('W'))) = '3',
-    'a viewer reads the areas (they carry no permissions)');
+  PERFORM test.ok(test.value_as('V', format($q$SELECT string_agg(name, ',' ORDER BY name) FROM public.areas WHERE workspace_id = %L$q$, test.id('W'))) = 'Customers,Product',
+    'a viewer reads the areas of projects they can see (areas carry no permissions of their own)');
+  PERFORM test.ok(test.value_as('E', format($q$SELECT count(*)::text FROM public.areas WHERE id = %L$q$, test.area('School'))) = '1'
+              AND test.value_as('V', format($q$SELECT count(*)::text FROM public.areas WHERE id = %L$q$, test.area('School'))) = '0',
+    'an area made from a label with no project left is its maker''s alone');
   PERFORM test.ok(test.value_as('X', format($q$SELECT count(*)::text FROM public.areas WHERE workspace_id = %L$q$, test.id('W'))) = '0',
     'someone outside the workspace reads none');
   r := test.try('E', $q$INSERT INTO public.areas (workspace_id, name) VALUES (md5('db-test:W')::uuid, 'Raw')$q$);
@@ -380,5 +383,109 @@ BEGIN
   PERFORM test.ok((SELECT task_time_blocks -> test.id('W')::text FROM public.user_preferences WHERE user_id = test.id('M'))
                   = jsonb_build_object('evening', test.id('CL')),
     'a time block can''t name a project you can''t see', r);
+END;
+$$;
+
+-- ── Every path to the same data uses the same gate ──────────────────────────
+-- M can't see O's private projects PB3 and PB4; each path below is checked
+-- for M: area reads, area ops, filing by name, a raw label or area write,
+-- sections (read, ops, a task's section), project ops, team defaults and
+-- routing, sessions and Waiting on of a task in a private project.
+INSERT INTO public.buckets (id, workspace_id, owner_id, name, is_system, position) VALUES
+  (test.id('PB3'), test.id('W'), test.id('O'), 'O side gig', false, '0006'),
+  (test.id('PB4'), test.id('W'), test.id('O'), 'O vault', false, '0007');
+DELETE FROM public.resource_grants WHERE resource_type = 'bucket' AND resource_id IN (test.id('PB3'), test.id('PB4'));
+
+CREATE FUNCTION test.areas_named(p_who text, p_name text) RETURNS text LANGUAGE sql AS $$
+  SELECT test.value_as(p_who, format($q$SELECT count(*)::text FROM public.areas WHERE workspace_id = %L AND name = %L$q$,
+    test.id('W'), p_name))
+$$;
+
+DO $$
+DECLARE
+  r text;
+  v_o_vault uuid;
+  v_section uuid;
+BEGIN
+  -- Areas from labels on private projects stay private, also once the
+  -- projects are gone (deleted, or moved out).
+  PERFORM test.as_user('O', format($q$UPDATE public.buckets SET group_label = 'Side gig' WHERE id = %L$q$, test.id('PB3')));
+  PERFORM test.as_user('O', format($q$UPDATE public.buckets SET group_label = 'Vault' WHERE id = %L$q$, test.id('PB4')));
+  v_o_vault := (test.bucket('PB4')).area_id;
+  PERFORM test.ok(test.areas_named('M', 'Side gig') = '0' AND test.areas_named('O', 'Side gig') = '1',
+    'path: area read — a label on a private project makes an area only its viewers see');
+  PERFORM test.as_user('O', format($q$UPDATE public.buckets SET deleted_at = now() WHERE id = %L$q$, test.id('PB3')));
+  PERFORM test.ok(test.areas_named('M', 'Side gig') = '0' AND test.areas_named('V', 'Side gig') = '0'
+              AND test.areas_named('O', 'Side gig') = '1',
+    'path: area read — deleting the private project doesn''t publish its area (its maker still sees it)');
+  PERFORM test.as_user('O', format($q$UPDATE public.buckets SET deleted_at = NULL WHERE id = %L$q$, test.id('PB3')));
+  PERFORM test.as_user('O', format($q$SELECT public.projects_op_move(%L, %L, NULL)$q$, test.id('W'), test.id('PB3')));
+  PERFORM test.ok(test.areas_named('M', 'Side gig') = '0',
+    'path: area read — nor does moving it out of the area');
+
+  -- Area ops: a name M can't see neither blocks M nor is joined by M.
+  r := test.as_user('M', format($q$SELECT * FROM public.areas_op_create(%L, 'Side gig')$q$, test.id('W')));
+  PERFORM test.ok(r LIKE 'ok%' AND test.areas_named('M', 'Side gig') = '1' AND test.areas_named('O', 'Side gig') = '2',
+    'path: areas_op_create — a hidden area''s name isn''t "taken" (M gets a workspace area of its own)', r);
+  r := test.as_user('M', format($q$SELECT public.projects_op_file(%L, %L, 'Vault')$q$, test.id('W'), test.id('P2')));
+  PERFORM test.ok(r = 'ok 1' AND (test.bucket('P2')).area_id IS DISTINCT FROM v_o_vault
+              AND (test.bucket('P2')).group_label = 'Vault'
+              AND test.value_as('M', format($q$SELECT count(*)::text FROM public.areas WHERE id = %L$q$, v_o_vault)) = '0',
+    'path: projects_op_file — filing under a hidden area''s name makes M''s own, never joins O''s', r);
+  r := test.as_user('M', format($q$UPDATE public.buckets SET group_label = 'Vault' WHERE id = %L$q$, test.id('P1')));
+  PERFORM test.ok(r = 'ok 1' AND (test.bucket('P1')).area_id = (test.bucket('P2')).area_id,
+    'path: an old build''s label write — lands in the area M can see', r);
+  r := test.try('M', format($q$UPDATE public.buckets SET area_id = %L WHERE id = %L$q$, v_o_vault, test.id('P1')));
+  PERFORM test.ok(r LIKE '%area isn''t in this workspace%', 'path: a raw area_id write — a hidden area reads as missing', r);
+  r := test.try('M', format($q$SELECT public.projects_op_move(%L, %L, %L)$q$, test.id('W'), test.id('P1'), v_o_vault));
+  PERFORM test.ok(r LIKE '%area isn''t in this workspace%', 'path: projects_op_move — the same', r);
+
+  -- Project ops on a private project.
+  r := test.try('M', format($q$SELECT public.projects_op_move(%L, %L, NULL)$q$, test.id('W'), test.id('PB4')));
+  PERFORM test.ok(r LIKE '%project isn''t in this workspace%', 'path: projects_op_move on a private project — missing', r);
+  r := test.try('M', format($q$SELECT public.projects_op_file(%L, %L, 'Mine')$q$, test.id('W'), test.id('PB4')));
+  PERFORM test.ok(r LIKE '%project isn''t in this workspace%', 'path: projects_op_file on a private project — missing', r);
+
+  -- Sections: the ops and a task's section.
+  PERFORM test.as_user('O', format($q$SELECT * FROM public.sections_op_create(%L, %L, '{"name": "Plans"}'::jsonb)$q$,
+    test.id('W'), test.id('PB4')));
+  SELECT s.id INTO v_section FROM public.sections s WHERE s.project_id = test.id('PB4');
+  r := test.try('M', format($q$SELECT * FROM public.sections_op_create(%L, %L, '{"name": "Mine"}'::jsonb)$q$, test.id('W'), test.id('PB4')));
+  PERFORM test.ok(r LIKE '%project isn''t in this workspace%', 'path: sections_op_create on a private project — missing', r);
+  PERFORM test.ok(test.value_as('M', format($q$SELECT count(*)::text FROM public.sections WHERE id = %L$q$, v_section)) = '0',
+    'path: section read — none');
+  -- A task in the private project assigned to M: M edits the task, not the project.
+  PERFORM test.as_user('O', format($q$SELECT public.tasks_op_create(%L, %L::jsonb)$q$, test.id('W'),
+    jsonb_build_object('id', test.id('TP'), 'title', 'For M', 'bucket_id', test.id('PB4'), 'assignee_id', test.id('M'))));
+  PERFORM test.ok(test.value_as('M', format($q$SELECT count(*)::text FROM public.tasks WHERE id = %L$q$, test.id('TP'))) = '1',
+    'M can open the task assigned to them');
+  r := test.try('M', format($q$SELECT * FROM public.tasks_op_update(%L, %L, %L::jsonb)$q$, test.id('W'), test.id('TP'),
+    jsonb_build_object('section_id', v_section)));
+  PERFORM test.ok(r LIKE '%section isn''t in this task''s project%',
+    'path: tasks_op_update section_id — a section of a project M can''t see reads as missing', r);
+  r := test.try('M', format($q$UPDATE public.tasks SET section_id = %L WHERE id = %L$q$, v_section, test.id('TP')));
+  PERFORM test.ok(r LIKE '%section isn''t in this task''s project%', 'path: a raw section_id write — the same', r);
+
+  -- Team defaults and routing.
+  r := test.try('M', format($q$SELECT public.teams_op_create(%L, %L::jsonb)$q$, test.id('W'),
+    jsonb_build_object('name', 'Mine', 'default_project_id', test.id('PB4'))));
+  PERFORM test.ok(r LIKE '%project isn''t in this workspace%', 'path: a team''s default project — must be one you can see', r);
+  PERFORM test.as_user('O', format($q$SELECT public.teams_op_create(%L, %L::jsonb)$q$, test.id('W'),
+    jsonb_build_object('id', test.id('OPS'), 'name', 'Ops', 'default_project_id', test.id('PB4'))));
+  r := test.try('M', format($q$SELECT public.tasks_op_create(%L, %L::jsonb)$q$, test.id('W'),
+    jsonb_build_object('title', 'Ship it', 'team_id', test.id('OPS'))));
+  PERFORM test.ok(r LIKE '%needs a project%' AND r NOT LIKE '%bucket%',
+    'path: routing — a default project M can''t use reads as no default (no word about it)', r);
+
+  -- Sessions and Waiting on of a task in the private project, not M's.
+  PERFORM test.as_user('O', format($q$SELECT public.tasks_op_create(%L, %L::jsonb)$q$, test.id('W'),
+    jsonb_build_object('id', test.id('TQ'), 'title', 'Secret', 'bucket_id', test.id('PB4'),
+                       'scheduled_at', '2030-06-01T09:00:00Z', 'duration_minutes', 45)));
+  PERFORM test.as_user('O', format($q$SELECT * FROM public.tasks_op_waiting_add(%L, %L, '{"kind": "text", "label": "Lawyer"}'::jsonb)$q$,
+    test.id('W'), test.id('TQ')));
+  PERFORM test.ok(test.value_as('M', format($q$SELECT count(*)::text FROM public.task_sessions WHERE task_id = %L$q$, test.id('TQ'))) = '0'
+              AND test.value_as('M', format($q$SELECT count(*)::text FROM public.task_waiting WHERE task_id = %L$q$, test.id('TQ'))) = '0'
+              AND (SELECT count(*) FROM public.task_sessions WHERE task_id = test.id('TQ')) = 1,
+    'path: sessions and Waiting on — none of a task M can''t see');
 END;
 $$;

@@ -253,6 +253,10 @@ export function isTaskReminderKind(value: unknown): value is TaskReminderKind {
 export function parseTaskReminderKind(input: unknown): SafeParseResult<TaskReminderKind> {
   return parseOrError(taskReminderKindSchema, input);
 }
+/** Lax read: a kind this build doesn't know reads as a reminder at its time. */
+export function normalizeTaskReminderKind(input: unknown): TaskReminderKind {
+  return isTaskReminderKind(input) ? input : "at";
+}
 
 /** What a Waiting on… entry waits on (default q): a person, an email thread,
  *  an agent (an API key) or free text. */
@@ -264,6 +268,10 @@ export function isTaskWaitingKind(value: unknown): value is TaskWaitingKind {
 }
 export function parseTaskWaitingKind(input: unknown): SafeParseResult<TaskWaitingKind> {
   return parseOrError(taskWaitingKindSchema, input);
+}
+/** Lax read: a kind this build doesn't know reads as free text. */
+export function normalizeTaskWaitingKind(input: unknown): TaskWaitingKind {
+  return isTaskWaitingKind(input) ? input : "text";
 }
 
 export const ENERGY_LEVELS = ["low", "medium", "high"] as const;

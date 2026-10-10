@@ -436,11 +436,12 @@ export function createTasksStructure(
     },
 
     /**
-     * File a project under an area by name (the rail's "Section" menu): the
-     * server finds the area of that name or makes it (`areas_op_ensure`, so a
-     * stale list here never makes a second one); null takes it out. Answers
-     * with the project and `areas` with that area in it. Before TV-D10's
-     * migration it writes the old label.
+     * File a project under an area by name (the rail's "Section" menu):
+     * `projects_op_file` finds the area of that name you can see, or makes
+     * it, on the server (a stale list here never makes a second one, and an
+     * area you can't see is never joined); null takes it out. Answers with the
+     * project and, when it named an area, the areas you can see now. Before
+     * TV-D10's migration it writes the old label.
      */
     async setProjectArea(input: {
       workspaceId: string;
@@ -449,41 +450,24 @@ export function createTasksStructure(
       areas: Area[];
     }): Promise<{ project: Bucket; areas: Area[] | null }> {
       const name = input.areaName?.trim() || null;
-      let area: Area | null = null;
-      if (name) {
-        const ensured = await rpc("areas_op_ensure", {
-          p_workspace_id: input.workspaceId,
-          p_name: name,
-        });
-        if (ensured.error) {
-          if (isMissingFunctionError(ensured.error, "areas_op_ensure")) {
-            return {
-              project: await deps.upsertBucketLegacy({ ...input.project, group: name }),
-              areas: null,
-            };
-          }
-          fail(ensured.error);
-        }
-        area = one(ensured.data, areaRowToModel);
-      }
-      const moved = await rpc("projects_op_move", {
+      const filed = await rpc("projects_op_file", {
         p_workspace_id: input.workspaceId,
         p_project_id: input.project.id,
-        p_area_id: area?.id ?? null,
-        p_position: null,
+        p_area_name: name,
       });
-      if (moved.error) {
-        if (!isMissingFunctionError(moved.error, "projects_op_move")) fail(moved.error);
+      if (filed.error) {
+        if (!isMissingFunctionError(filed.error, "projects_op_file")) fail(filed.error);
         return {
           project: await deps.upsertBucketLegacy({ ...input.project, group: name }),
           areas: null,
         };
       }
-      const areas =
-        area && !input.areas.some((a) => a.id === area.id)
-          ? [...input.areas, area].sort((a, b) => a.position - b.position)
-          : null;
-      return { project: one(moved.data, bucketRowToModel), areas };
+      const project = one(filed.data, bucketRowToModel);
+      const known = project.areaId == null || input.areas.some((a) => a.id === project.areaId);
+      return {
+        project,
+        areas: known ? null : (await listLive(READS.areas, input.workspaceId)).rows,
+      };
     },
 
     // ── Sections ─────────────────────────────────────────────────────────────

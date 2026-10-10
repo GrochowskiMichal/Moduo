@@ -108,6 +108,12 @@ BEGIN
   r := test.as_user('E', format($q$SELECT public.tasks_op_unschedule(%L, %L)$q$, test.id('W'), test.id('T1')));
   PERFORM test.ok(test.sessions('T1') = '03-07 14:00→15:00' AND test.shown('T1') = '03-07 14:00 / 60',
     'Unschedule removes the shown session too', r);
+  -- (One transaction: rows share created_at, so read them as a set.)
+  PERFORM test.ok((SELECT count(*) FROM public.module_activity a
+                   WHERE a.entity_id = test.id('T1') AND a.op = 'tasks.session_remove') = 1
+              AND NOT EXISTS (SELECT 1 FROM public.module_activity a
+                              WHERE a.entity_id = test.id('T1') AND a.op = 'tasks.unschedule'),
+    'with another session left, the trail says a session was removed (not "cleared the scheduled time")');
   PERFORM test.as_user('E', format($q$SELECT public.tasks_op_unschedule(%L, %L)$q$, test.id('W'), test.id('T1')));
   PERFORM test.ok(test.sessions('T1') IS NULL AND test.shown('T1') = 'none / 60',
     'with no session left the task is unscheduled; duration_minutes is left as the estimate', test.shown('T1'));
@@ -134,6 +140,19 @@ BEGIN
   PERFORM test.as_user('E', format($q$SELECT * FROM public.tasks_op_session_add(%L, %L, '{"starts_at": "2030-04-01T09:00:00Z", "ends_at": "2030-04-01T10:00:00Z"}'::jsonb)$q$,
     test.id('W'), test.id('T3')));
   PERFORM test.ok((test.task('T3')).status_category = 'todo', 'a session on a backlog task moves it to To do');
+  -- The mirror moving to another session isn't scheduling: Backlog stays.
+  PERFORM test.as_user('E', format($q$SELECT * FROM public.tasks_op_session_add(%L, %L, '{"starts_at": "2030-04-03T09:00:00Z", "ends_at": "2030-04-03T10:00:00Z"}'::jsonb)$q$,
+    test.id('W'), test.id('T3')));
+  PERFORM test.as_user('E', format($q$SELECT * FROM public.tasks_op_update(%L, %L, '{"status": "backlog"}'::jsonb)$q$,
+    test.id('W'), test.id('T3')));
+  SELECT s.id INTO v_session FROM public.task_sessions s
+  WHERE s.task_id = test.id('T3') AND s.deleted_at IS NULL ORDER BY s.starts_at LIMIT 1;
+  PERFORM test.as_user('E', format($q$SELECT * FROM public.tasks_op_session_remove(%L, %L)$q$, test.id('W'), v_session));
+  PERFORM test.ok((test.task('T3')).status_category = 'backlog'
+              AND (test.task('T3')).scheduled_at = '2030-04-03T09:00:00Z',
+    'removing a session of a backlog task shows the next one and leaves it in Backlog');
+  PERFORM test.as_user('E', format($q$SELECT * FROM public.tasks_op_update(%L, %L, '{"status": "todo"}'::jsonb)$q$,
+    test.id('W'), test.id('T3')));
   SELECT s.id INTO v_session FROM public.task_sessions s WHERE s.task_id = test.id('T3');
   r := test.as_user('E', format($q$SELECT * FROM public.tasks_op_session_remove(%L, %L)$q$, test.id('W'), v_session));
   PERFORM test.ok(r = 'ok 0' AND (test.task('T3')).scheduled_at IS NULL, 'removing the only session unschedules', r);
@@ -161,6 +180,12 @@ BEGIN
   PERFORM test.ok((SELECT string_agg(to_char(at AT TIME ZONE 'UTC', 'MM-DD HH24:MI'), ', ' ORDER BY at)
                    FROM public.task_reminders WHERE task_id = test.id('R1')) = '05-11 15:30, 05-12 14:30',
     'relative reminders follow a new due date and time');
+  PERFORM test.as_user('E', format($q$UPDATE public.tasks SET due_date = '2030-05-20T12:00:00Z' WHERE id = %L$q$, test.id('R1')));
+  PERFORM test.ok((SELECT string_agg(to_char(at AT TIME ZONE 'UTC', 'MM-DD HH24:MI'), ', ' ORDER BY at)
+                   FROM public.task_reminders WHERE task_id = test.id('R1') AND kind <> 'at') = '05-19 15:30, 05-20 14:30',
+    'they follow an old build''s due_date write too');
+  PERFORM test.as_user('E', format($q$SELECT * FROM public.tasks_op_update(%L, %L, '{"due_on": "2030-05-12", "due_time": "15:30"}'::jsonb)$q$,
+    test.id('W'), test.id('R1')));
   r := test.try('E', format($q$SELECT * FROM public.tasks_op_reminder_add(%L, %L, 'at')$q$, test.id('W'), test.id('R1')));
   PERFORM test.ok(r LIKE '%needs the time%', 'a reminder at a time needs the time', r);
   r := test.as_user('V', format($q$SELECT * FROM public.tasks_op_reminder_add(%L, %L, 'at', '2030-05-01T07:00:00Z')$q$, test.id('W'), test.id('R1')));
@@ -203,6 +228,11 @@ BEGIN
   r := test.as_user('E', format($q$SELECT * FROM public.tasks_op_waiting_add(%L, %L, %L::jsonb)$q$, test.id('W'), test.id('WT'),
     jsonb_build_object('kind', 'person', 'ref', test.id('O'))));
   PERFORM test.ok(r = 'ok 4', 'the same person twice is one entry', r);
+  SELECT w.id INTO v_session FROM public.task_waiting w WHERE w.task_id = test.id('WT') AND w.kind = 'person';
+  PERFORM test.new_task('E', 'WT2');
+  r := test.try('E', format($q$SELECT * FROM public.tasks_op_waiting_add(%L, %L, %L::jsonb)$q$, test.id('W'), test.id('WT2'),
+    jsonb_build_object('id', v_session, 'kind', 'text', 'label', 'x')));
+  PERFORM test.ok(r LIKE '%belongs to another task%', 'an entry''s id from another task is refused, not answered as done', r);
   PERFORM test.ok((SELECT since FROM public.task_waiting WHERE task_id = test.id('WT') AND kind = 'person') = '2030-01-02T10:00:00Z',
     '"since" keeps the time it was given');
   r := test.try('E', format($q$SELECT * FROM public.tasks_op_waiting_add(%L, %L, %L::jsonb)$q$, test.id('W'), test.id('WT'),

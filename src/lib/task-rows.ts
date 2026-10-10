@@ -25,12 +25,12 @@ import {
   teamRowSchema,
 } from "@contracts/rows";
 import {
-  isTaskReminderKind,
-  isTaskWaitingKind,
   legacyTaskStatus,
   normalizeProjectState,
+  normalizeTaskReminderKind,
   normalizeTaskStatus,
   normalizeTaskStatusCategory,
+  normalizeTaskWaitingKind,
   type TaskStatusCategory,
   taskStatusWord,
 } from "@contracts/vocabularies";
@@ -263,6 +263,25 @@ export function withoutTvD10Fields(fields: Record<string, unknown>): Record<stri
   delete out.team_id;
   delete out.imported_from;
   return out;
+}
+
+/**
+ * Send a task op, and when the database is older than the fields sent (the
+ * op answers 'Tasks have no field "…"'), send it again without TV-D10's
+ * fields, then without TV-D9's too. Remove in TV-D7.
+ */
+export async function withFieldFallback<T extends { error: { message?: string } | null }>(
+  fields: Record<string, unknown>,
+  send: (fields: Record<string, unknown>) => PromiseLike<T>,
+): Promise<T> {
+  let res = await send(fields);
+  if (isMissingTvD10FieldError(res.error)) {
+    res = await send(withoutTvD10Fields(fields));
+  }
+  if (isMissingTvD9FieldError(res.error)) {
+    res = await send(withoutTvD9Fields(withoutTvD10Fields(fields)));
+  }
+  return res;
 }
 
 /** The op's answer when it doesn't know a TV-D10 field (a database before it). */
@@ -553,6 +572,8 @@ export function areaRowToModel(raw: unknown): Area {
     name: r.name,
     color: r.color ?? null,
     position: r.position ?? 1,
+    shared: r.shared ?? false,
+    createdBy: r.created_by ?? null,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };
@@ -620,7 +641,7 @@ export function taskReminderRowToModel(raw: unknown): TaskReminder {
     workspaceId: r.workspace_id,
     taskId: r.task_id,
     userId: r.user_id,
-    kind: isTaskReminderKind(r.kind) ? r.kind : "at",
+    kind: normalizeTaskReminderKind(r.kind),
     at: r.at ?? null,
     firedAt: r.fired_at ?? null,
     updatedAt: r.updated_at,
@@ -634,7 +655,7 @@ export function taskWaitingRowToModel(raw: unknown): TaskWaitingEntry {
     id: r.id,
     workspaceId: r.workspace_id,
     taskId: r.task_id,
-    kind: isTaskWaitingKind(r.kind) ? r.kind : "text",
+    kind: normalizeTaskWaitingKind(r.kind),
     ref: r.ref ?? null,
     label: r.label ?? null,
     since: r.since,

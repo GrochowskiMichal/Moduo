@@ -242,6 +242,111 @@ BEGIN
 END;
 $$;
 
+-- tasks__status_sync (newest body: the catalog after 20261010171000, TV-D9),
+-- with one change: the mirror's own scheduled_at writes don't count as
+-- scheduling a backlog task. 20261010170000, 171000 and this file all define
+-- it; apply them in order.
+CREATE OR REPLACE FUNCTION public.tasks__status_sync()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_set uuid := public.tasks__status_set(NEW.bucket_id);
+  s public.project_statuses;
+  v_old public.project_statuses;
+  v_cat text;
+  -- Moduo's own work may set the completion fields: no actor, share.bypass,
+  -- or a write made by another trigger (a foreign key's SET NULL when an
+  -- account goes, while someone is signed in).
+  v_system boolean := public.perm_actor_id() IS NULL
+    OR coalesce(current_setting('share.bypass', true), '') = '1'
+    OR pg_trigger_depth() > 1;
+BEGIN
+  IF NEW.status_id IS NOT NULL
+     AND (TG_OP = 'INSERT' OR NEW.status_id IS DISTINCT FROM OLD.status_id) THEN
+    SELECT * INTO s FROM public.project_statuses x WHERE x.id = NEW.status_id;
+    IF NOT public.tasks__status_in_set(s, NEW.workspace_id, v_set) THEN
+      RAISE EXCEPTION 'That status isn''t in this project.' USING ERRCODE = '22023';
+    END IF;
+  ELSIF TG_OP = 'UPDATE' AND NEW.status IS DISTINCT FROM OLD.status THEN
+    v_cat := public.tasks__status_category_of(NEW.status);
+    IF v_cat IS NULL THEN
+      RAISE EXCEPTION 'Unknown task status.' USING ERRCODE = '22023';
+    END IF;
+    s := public.tasks__first_status(NEW.workspace_id, v_set, v_cat);
+  ELSIF TG_OP = 'UPDATE' AND NEW.status_id IS NOT NULL THEN
+    SELECT * INTO v_old FROM public.project_statuses x WHERE x.id = NEW.status_id;
+    IF public.tasks__status_in_set(v_old, NEW.workspace_id, v_set) THEN
+      s := v_old;
+    ELSE
+      -- Moved: the same name in the new project (same category), else the
+      -- category's first status there.
+      v_cat := coalesce(v_old.category, OLD.status_category,
+                        public.tasks__status_category_of(OLD.status), 'todo');
+      SELECT * INTO s FROM public.project_statuses x
+      WHERE x.category = v_cat AND x.deleted_at IS NULL
+        AND lower(btrim(x.name)) = lower(btrim(v_old.name))
+        AND CASE WHEN v_set IS NULL THEN x.project_id IS NULL AND x.workspace_id = NEW.workspace_id
+                 ELSE x.project_id = v_set END
+      LIMIT 1;
+      IF NOT FOUND THEN
+        s := public.tasks__first_status(NEW.workspace_id, v_set, v_cat);
+      END IF;
+      -- The trail says so when the move changed the status's name (the
+      -- project change is the op's own line).
+      IF lower(btrim(s.name)) IS DISTINCT FROM lower(btrim(v_old.name))
+         AND (auth.uid() IS NOT NULL OR public.module_api_key_id() IS NOT NULL) THEN
+        PERFORM public.module_activity_log(
+          NEW.workspace_id, 'tasks', 'task', NEW.id, 'tasks.set_status',
+          jsonb_build_object('from', OLD.status, 'to', public.tasks__legacy_status(s.category),
+                             'from_category', v_cat, 'to_category', s.category,
+                             'from_name', v_old.name, 'to_name', s.name, 'reason', 'moved'));
+      END IF;
+    END IF;
+  ELSE
+    v_cat := coalesce(public.tasks__status_category_of(NEW.status), 'todo');
+    s := public.tasks__first_status(NEW.workspace_id, v_set, v_cat);
+  END IF;
+
+  -- Scheduling a backlog task moves it to To do (REPLAN 53). TV-D10: the
+  -- session mirror moving scheduled_at (a session removed, the 15-minute
+  -- job) isn't scheduling; the session ops move it themselves.
+  IF s.category = 'backlog' AND NEW.scheduled_at IS NOT NULL
+     AND (TG_OP = 'INSERT' OR NEW.scheduled_at IS DISTINCT FROM OLD.scheduled_at)
+     AND coalesce(current_setting('tasks.session_mirror', true), '') <> '1' THEN
+    s := public.tasks__first_status(NEW.workspace_id, v_set, 'todo');
+    IF TG_OP = 'UPDATE' AND (auth.uid() IS NOT NULL OR public.module_api_key_id() IS NOT NULL) THEN
+      PERFORM public.module_activity_log(
+        NEW.workspace_id, 'tasks', 'task', NEW.id, 'tasks.set_status',
+        jsonb_build_object('from', 'todo', 'to', 'todo',
+                           'from_category', 'backlog', 'to_category', 'todo',
+                           'to_name', s.name, 'reason', 'scheduled'));
+    END IF;
+  END IF;
+
+  NEW.status_id := s.id;
+  NEW.status_category := s.category;
+  NEW.status := public.tasks__legacy_status(s.category);
+
+  -- Completion (REPLAN 77).
+  IF s.category = 'done' THEN
+    IF TG_OP = 'INSERT' OR OLD.status_category IS DISTINCT FROM 'done' THEN
+      NEW.completed_at := now();
+      NEW.completed_by := public.perm_actor_id();
+    ELSIF NOT v_system THEN
+      NEW.completed_at := OLD.completed_at;
+      NEW.completed_by := OLD.completed_by;
+    END IF;
+  ELSE
+    NEW.completed_at := NULL;
+    NEW.completed_by := NULL;
+  END IF;
+  RETURN NEW;
+END;
+$function$;
+
 -- AFTER every session change: the task's mirror follows.
 CREATE OR REPLACE FUNCTION public.task_sessions__mirror()
 RETURNS trigger
@@ -391,6 +496,23 @@ ALTER TABLE public.task_sessions ENABLE TRIGGER USER;
 -- Session ops. Each needs edit on the task and answers with the task's live
 -- sessions in time order; the trail names the change.
 
+-- Scheduling a backlog task moves it to To do, through the status path.
+CREATE OR REPLACE FUNCTION public.tasks__session_unbacklog(p_task_id uuid)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  t public.tasks;
+BEGIN
+  SELECT * INTO t FROM public.tasks WHERE id = p_task_id;
+  IF FOUND AND t.status_category = 'backlog' THEN
+    PERFORM public.tasks__apply_status(t, 'todo', NULL, NULL);
+  END IF;
+END;
+$$;
+
 CREATE OR REPLACE FUNCTION public.tasks__sessions_of(p_task_id uuid)
 RETURNS SETOF public.task_sessions
 LANGUAGE sql
@@ -464,6 +586,9 @@ BEGIN
   VALUES (v_id, p_workspace_id, t.id, v_user, v_times.starts_at, v_times.ends_at);
   PERFORM public.module_activity_log(p_workspace_id, 'tasks', 'task', t.id, 'tasks.session_add',
     jsonb_build_object('starts_at', v_times.starts_at, 'ends_at', v_times.ends_at));
+  -- Scheduling a backlog task moves it to To do (TV-D9's rule; the mirror's
+  -- write doesn't count, so the op does it).
+  PERFORM public.tasks__session_unbacklog(t.id);
   RETURN QUERY SELECT * FROM public.tasks__sessions_of(t.id);
 END;
 $$;
@@ -503,6 +628,7 @@ BEGIN
     WHERE id = s.id;
     PERFORM public.module_activity_log(p_workspace_id, 'tasks', 'task', t.id, 'tasks.session_move',
       jsonb_build_object('from', s.starts_at, 'to', v_times.starts_at, 'ends_at', v_times.ends_at));
+    PERFORM public.tasks__session_unbacklog(t.id);
   END IF;
   RETURN QUERY SELECT * FROM public.tasks__sessions_of(t.id);
 END;
@@ -562,10 +688,16 @@ BEGIN
     WHERE id = t.id;
   PERFORM set_config('tasks.session_op', coalesce(v_flag, ''), true);
   SELECT * INTO t FROM public.tasks WHERE id = t.id;
-  PERFORM public.module_activity_log(
-    p_workspace_id, 'tasks', 'task', t.id, 'tasks.unschedule',
-    jsonb_build_object('from', v_from)
-  );
+  -- With another session left the task is still scheduled: say what happened.
+  IF t.scheduled_at IS NULL THEN
+    PERFORM public.module_activity_log(
+      p_workspace_id, 'tasks', 'task', t.id, 'tasks.unschedule',
+      jsonb_build_object('from', v_from));
+  ELSE
+    PERFORM public.module_activity_log(
+      p_workspace_id, 'tasks', 'task', t.id, 'tasks.session_remove',
+      jsonb_build_object('starts_at', v_from));
+  END IF;
   RETURN t;
 END;
 $$;
@@ -620,12 +752,15 @@ BEGIN
 END;
 $$;
 
+-- The column list names what writers send (an old build sends due_date, and
+-- TV-D9's BEFORE trigger derives due_on from it; an UPDATE OF trigger looks
+-- at the statement's SET list); the WHEN compares the values that count.
 DROP TRIGGER IF EXISTS tasks_reminders_follow_due ON public.tasks;
 CREATE TRIGGER tasks_reminders_follow_due
-  AFTER UPDATE OF due_on, due_time, assignee_id ON public.tasks
+  AFTER UPDATE OF due_on, due_time, due_date, assignee_id, owner_id ON public.tasks
   FOR EACH ROW
   WHEN (OLD.due_on IS DISTINCT FROM NEW.due_on OR OLD.due_time IS DISTINCT FROM NEW.due_time
-        OR OLD.assignee_id IS DISTINCT FROM NEW.assignee_id)
+        OR OLD.assignee_id IS DISTINCT FROM NEW.assignee_id OR OLD.owner_id IS DISTINCT FROM NEW.owner_id)
   EXECUTE FUNCTION public.tasks__reminders_follow_due();
 
 -- The sender, a stub: claims reminders that are due on open tasks (To do, In
@@ -777,6 +912,11 @@ BEGIN
   END IF;
   v_id := coalesce(public.tasks__try_uuid(p_entry ->> 'id'), gen_random_uuid());
   IF EXISTS (SELECT 1 FROM public.task_waiting w WHERE w.id = v_id) THEN
+    -- A resend of an add that landed answers as it did; an id of another
+    -- task's entry is refused.
+    IF NOT EXISTS (SELECT 1 FROM public.task_waiting w WHERE w.id = v_id AND w.task_id = t.id) THEN
+      RAISE EXCEPTION 'That entry belongs to another task.' USING ERRCODE = '22023';
+    END IF;
     RETURN QUERY SELECT * FROM public.tasks__waiting_of(t.id);
     RETURN;
   END IF;
@@ -855,7 +995,7 @@ BEGIN
     'tasks__session_mirror_refresh(integer)', 'tasks__sessions_of(uuid)',
     'tasks__reminder_at(public.tasks, text)', 'tasks__reminders_follow_due()',
     'tasks__fire_reminders(timestamptz, integer)', 'tasks__reminders_of(uuid, uuid)',
-    'tasks__waiting_of(uuid)'] LOOP
+    'tasks__waiting_of(uuid)', 'tasks__session_unbacklog(uuid)', 'tasks__status_sync()'] LOOP
     EXECUTE format('REVOKE ALL ON FUNCTION public.%s FROM PUBLIC', fn);
     EXECUTE format('REVOKE ALL ON FUNCTION public.%s FROM anon', fn);
     EXECUTE format('REVOKE ALL ON FUNCTION public.%s FROM authenticated', fn);

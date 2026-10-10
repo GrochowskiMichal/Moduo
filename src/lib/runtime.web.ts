@@ -120,7 +120,6 @@ import {
   isMissingFunctionError,
   isMissingTableError,
   isMissingTvD9FieldError,
-  isMissingTvD10FieldError,
   projectStatusRowToModel,
   sortQueueEntries,
   type TaskFieldPatch,
@@ -136,8 +135,8 @@ import {
   taskRowToModel,
   taskTimeAnswerToModel,
   taskTimeTotalsRowToModel,
+  withFieldFallback,
   withoutTvD9Fields,
-  withoutTvD10Fields,
 } from "./task-rows";
 
 // ── Supabase client ────────────────────────────────────────────────────────────
@@ -3689,25 +3688,6 @@ async function listWorkspaceStatuses(
     throw new Error(res.error.message);
   }
   return { statuses: mapKnownRows(res.rows, projectStatusRowToModel), truncation: res.truncation };
-}
-
-/**
- * Send a task op, and when the database is older than the fields sent (the
- * op answers 'Tasks have no field "…"'), send it again without TV-D10's
- * fields, then without TV-D9's too. Remove in TV-D7.
- */
-async function withFieldFallback<T extends { error: { message?: string } | null }>(
-  fields: Record<string, unknown>,
-  send: (fields: Record<string, unknown>) => PromiseLike<T>,
-): Promise<T> {
-  let res = await send(fields);
-  if (isMissingTvD10FieldError(res.error)) {
-    res = await send(withoutTvD10Fields(fields));
-  }
-  if (isMissingTvD9FieldError(res.error)) {
-    res = await send(withoutTvD9Fields(withoutTvD10Fields(fields)));
-  }
-  return res;
 }
 
 /**

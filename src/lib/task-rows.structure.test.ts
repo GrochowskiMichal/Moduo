@@ -15,6 +15,7 @@ import {
   taskReminderRowToModel,
   taskRowToModel,
   teamRowToModel,
+  withFieldFallback,
   withoutTvD10Fields,
 } from "./task-rows";
 
@@ -180,5 +181,48 @@ describe("structure rows (TV-D10)", () => {
         updated_at: NOW,
       }).kind,
     ).toBe("at");
+  });
+});
+
+describe("an op sent to an older database is retried without the newer fields", () => {
+  type Answer = { data: unknown; error: { message: string } | null };
+  const sender = (answers: Answer[]) => {
+    const sent: Array<Record<string, unknown>> = [];
+    return {
+      sent,
+      send: async (fields: Record<string, unknown>) => {
+        sent.push(fields);
+        return answers[sent.length - 1] ?? { data: null, error: { message: "no more answers" } };
+      },
+    };
+  };
+  const fields = { title: "x", estimate_minutes: 300, section_id: "s1", due_on: "2026-11-08" };
+
+  it("before TV-D10: the estimate goes as duration_minutes, the section is dropped", async () => {
+    const { sent, send } = sender([
+      { data: null, error: { message: 'Tasks have no field "estimate_minutes".' } },
+      { data: { id: "t1" }, error: null },
+    ]);
+    const res = await withFieldFallback(fields, send);
+    expect(res.error).toBeNull();
+    expect(sent[1]).toEqual({ title: "x", duration_minutes: 300, due_on: "2026-11-08" });
+  });
+
+  it("before TV-D9 too: then the date goes as the old instant", async () => {
+    const { sent, send } = sender([
+      { data: null, error: { message: 'Tasks have no field "section_id".' } },
+      { data: null, error: { message: 'Tasks have no field "due_on".' } },
+      { data: { id: "t1" }, error: null },
+    ]);
+    const res = await withFieldFallback(fields, send);
+    expect(res.error).toBeNull();
+    expect(sent).toHaveLength(3);
+    expect(Object.keys(sent[2]!).sort()).toEqual(["due_date", "duration_minutes", "title"]);
+  });
+
+  it("a current database gets one call, as it was", async () => {
+    const { sent, send } = sender([{ data: { id: "t1" }, error: null }]);
+    await withFieldFallback(fields, send);
+    expect(sent).toEqual([fields]);
   });
 });
