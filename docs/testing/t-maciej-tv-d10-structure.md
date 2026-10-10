@@ -1,7 +1,7 @@
 # Manual test checklist — TV-D10 areas, projects, sections, sessions, reminders, waiting, teams
 
 > Generated 2026-10-11 · branch `t/maciej/tv-d10-structure` → `t/maciej/tasks-v3-build` (local build mode) · **Live-verified:** yes, on the local stack (web, `rsbuild dev` on :8097, signed in as `dev@moduo.local`): the rail's project ⋯ → Section → New section… "Clients" (an area made, the project filed under it, `group_label` mirrored), Rename on that project (the area kept), the panel's Time → Estimate "2h" (saved as the estimate, the trail says "changed the estimate"), a task's trail after a session op ("scheduled a session for Tue"), Calendar → the booking link editor's Busy calendars ("Work sessions from Tasks" checked on an existing link). The booking busy query ran against the local PostgREST as the function runs it (a 10:00–11:30 session hid three 30-minute slots); the full `booking-public` preview can't offer slots locally (no Google or Zoom connected). Not live-verified: the rows marked below. Most of the block is data: the SQL tests cover it.
-> Migrations: `20261010180000_areas_projects_sections.sql`, `20261010181000_task_sessions_reminders_waiting.sql`, `20261010182000_teams.sql` (local only; apply all three, in order). SQL tests: `bun run db:test` (`structure.test.sql` 76, `sessions.test.sql` 48, `teams.test.sql` 37).
+> Migrations: `20261010180000_areas_projects_sections.sql`, `20261010181000_task_sessions_reminders_waiting.sql`, `20261010182000_teams.sql` (local only; apply all three, in order). SQL tests: `bun run db:test` (`structure.test.sql` 79, `sessions.test.sql` 48, `teams.test.sql` 38).
 
 ## Areas (REPLAN 14–15)
 - [ ] **Do:** a project's ⋯ → Section → New section… → type "Clients" → Enter → **Expect:** a "Clients" header in the rail with the project under it _(both)_
@@ -22,7 +22,8 @@
 
 ## The estimate and work sessions (REPLAN 25)
 - [ ] **Do:** open a task → Time → Estimate "2h" → Enter → **Expect:** "of ~2h"; the trail says "changed the estimate" _(both)_
-- [ ] **Do:** schedule a task from the panel or by dragging it onto the Calendar → **Expect:** as before; the task now has one work session _(both; not live-verified in the UI, SQL-tested)_
+- [ ] **Do:** schedule a task from the panel or by dragging it onto the Calendar → **Expect:** as before; the task now has one work session; its estimate doesn't change _(both; not live-verified in the UI, SQL-tested)_
+- [ ] **Do:** resize a scheduled task's block in the Calendar → **Expect:** the block changes; the panel's estimate doesn't _(both; not live-verified)_
 - [ ] **Do:** clear a task's scheduled time in the panel → **Expect:** unscheduled; it stays unscheduled after a reload _(both; not live-verified)_
 - [ ] **Do:** (no UI yet: TV-U13/TV-F6) add a second session through `tasks_op_session_add` → **Expect:** the task's scheduled time shows the earlier one; the estimate doesn't change _(both; SQL-tested)_
 - [ ] **Do:** with a build from before TV-D10, move a scheduled task in the Calendar → **Expect:** the new app shows the session moved _(desktop; verify before release)_
