@@ -43,12 +43,14 @@ export function claimsByTask(
  * completed in this session: the server has dropped them, but the Queue keeps
  * showing them done, where they were, until the next load (tasks-v2 §6).
  * Tasks the list doesn't have (not loaded, no longer shared) are skipped, and
- * so are archived ones.
+ * so are archived ones. A kept row goes once its task is no longer done (a
+ * teammate reopened it live, TV-D5): the server no longer has it queued.
  */
 export function queueTasks(mine: TaskQueueEntry[], kept: TaskQueueEntry[], tasks: Task[]): Task[] {
   const byId = new Map(tasks.map((t) => [t.id, t]));
   const seen = new Set<string>();
-  const rows = [...mine, ...kept].sort(
+  const stillDone = kept.filter((row) => byId.get(row.taskId)?.status === "done");
+  const rows = [...mine, ...stillDone].sort(
     (a, b) => bytewise(a.position, b.position) || bytewise(a.id, b.id),
   );
   const out: Task[] = [];

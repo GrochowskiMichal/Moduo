@@ -12,6 +12,7 @@ import { undoToast } from "../../../lib/undo-toast";
 import { formatAwaySpan } from "../../focus/away-copy";
 import type { FocusSaveContext } from "../../focus/engine";
 import {
+  applyLiveTags,
   createOrAttachByName,
   deleteTag as deleteWorkspaceTag,
   recolorTag,
@@ -35,6 +36,7 @@ import {
   wouldCreateCycle,
 } from "../helpers";
 import { hideBucket, unhideBucket, useHiddenBuckets } from "../hidden-buckets";
+import { LiveGate, mergeBundle, mergeQueue, swapTemp, trackTaskCalls } from "../live";
 import {
   type ActivityEntry,
   type Bucket,
@@ -66,6 +68,7 @@ import {
   withOwnQueue,
   withoutTask,
 } from "../queue";
+import { listenTasksLive } from "../realtime";
 import {
   catchUpItem,
   catchUpPatch,
@@ -102,7 +105,10 @@ function byPosition<T extends { position: string }>(a: T, b: T): number {
 /** Optimistic placeholder id, not yet a real server uuid. */
 const isTempId = (id: string) => id.startsWith("tmp-");
 
-export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
+/** A refetch on focus / reconnect runs at most this often (tasks-v2 decision 10). */
+const REFRESH_THROTTLE_MS = 5_000;
+
+export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params) {
   const { userId, workspaceId, modulePermission = "none" } = params;
   const canRead = modulePermission !== "none";
   const canEdit = modulePermission === "edit" || modulePermission === "admin";
@@ -118,6 +124,27 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
    *  answer is applied, so pending optimistic edits aren't put back meanwhile. */
   const queueSeq = useRef(0);
   const queueChain = useRef<Promise<unknown>>(Promise.resolve());
+
+  // Live updates (TV-D5). Teammates' changes arrive through the gate, which
+  // holds them while this module's own calls are in flight so an echo never
+  // reverts an optimistic edit (live.ts). Every `runtime.tasks` call below
+  // goes through the tracked runtime for that reason. Tag changes go to the
+  // workspace tag store, whose pending ops already sit on top of what it holds.
+  const liveWorkspace = useRef<string | null>(null);
+  const gateRef = useRef<LiveGate | null>(null);
+  if (!gateRef.current) {
+    gateRef.current = new LiveGate((changes) => {
+      const ws = liveWorkspace.current;
+      if (ws) applyLiveTags(ws, changes);
+      setBundle((prev) => changes.reduce((b, c) => mergeBundle(b, c), prev));
+      setQueueRows((prev) => changes.reduce((q, c) => mergeQueue(q, c), prev));
+    });
+  }
+  const gate = gateRef.current;
+  const runtime = useMemo(
+    () => (baseRuntime ? trackTaskCalls(baseRuntime, gate) : null),
+    [baseRuntime, gate],
+  );
   const [timeBlocks, setTimeBlocksState] = useState<TimeBlockMap>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -125,49 +152,129 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
   /** Bumped on every successful load — the recurrence catch-up trigger. */
   const [loadStamp, setLoadStamp] = useState(0);
 
-  const load = useCallback(async () => {
-    if (!runtime || !userId || !workspaceId || !canRead) {
-      setBundle(EMPTY_BUNDLE);
-      setQueueRows([]);
-      setKeptRows([]);
-      setTimeBlocksState({});
-      setLoading(false);
-      return;
-    }
-    const req = ++reqRef.current;
-    const startedAt = Date.now();
-    setLoading(true);
-    try {
-      // Time-blocks ride along with the bundle but never block it — a failed
-      // read just means the default view skips the time-block step. The
-      // queues are part of the list: a failed read fails the load.
-      const [next, queue, blocks] = await Promise.all([
-        runtime.tasks.list(workspaceId),
-        runtime.tasks.listQueue(workspaceId),
-        runtime.tasks.getTimeBlocks(workspaceId).catch((): TimeBlockMap => ({})),
-      ]);
-      if (reqRef.current === req) {
-        setBundle(next);
-        setQueueRows(queue);
+  /**
+   * Read the whole module. A quiet read (a refetch on focus or reconnect)
+   * leaves the loading flag, the error and the done tasks kept in my Queue
+   * alone, and is thrown away when one of our own saves started meanwhile:
+   * its snapshot could predate that save and flick the optimistic edit back.
+   * It then tries again once things settle.
+   */
+  const refresh = useRef({
+    lastAt: 0,
+    timer: null as ReturnType<typeof setTimeout> | null,
+    queued: false,
+  });
+  const requestRefreshRef = useRef<(reason?: "reconnect" | "return") => void>(() => {});
+  const loadImpl = useCallback(
+    async (quiet: boolean) => {
+      if (!baseRuntime || !userId || !workspaceId || !canRead) {
+        setBundle(EMPTY_BUNDLE);
+        setQueueRows([]);
         setKeptRows([]);
-        // Tags live in the workspace tag store, shared by every surface (TV-T1).
-        seedTags(workspaceId, {
-          tags: next.tags,
-          links: next.tagLinks,
-          scope: { kind: "all" },
-          at: startedAt,
-          complete: !next.truncated.some((t) => t.scope === TAG_LINKS_SCOPE),
-        });
-        setTimeBlocksState(blocks);
-        setError(null);
-        setLoadStamp((s) => s + 1); // triggers the recurrence catch-up pass
+        setTimeBlocksState({});
+        setLoading(false);
+        return;
       }
-    } catch (e) {
-      if (reqRef.current === req) setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      if (reqRef.current === req) setLoading(false);
-    }
-  }, [runtime, userId, workspaceId, canRead]);
+      const rt = baseRuntime;
+      const req = ++reqRef.current;
+      const startedAt = Date.now();
+      const writeSeq = gate.writeSeq;
+      // Live changes wait for the snapshot, then land on top of it.
+      const end = gate.begin({ write: false });
+      let settled = true;
+      if (!quiet) setLoading(true);
+      try {
+        // Time-blocks ride along with the bundle but never block it — a failed
+        // read just means the default view skips the time-block step. The
+        // queues are part of the list: a failed read fails the load.
+        const [next, queue, blocks] = await Promise.all([
+          rt.tasks.list(workspaceId),
+          rt.tasks.listQueue(workspaceId),
+          rt.tasks.getTimeBlocks(workspaceId).catch((): TimeBlockMap => ({})),
+        ]);
+        if (reqRef.current === req) {
+          if (quiet && gate.writeSeq !== writeSeq) {
+            settled = false;
+            requestRefreshRef.current();
+            return;
+          }
+          setBundle(next);
+          setQueueRows(queue);
+          if (!quiet) setKeptRows([]);
+          // Tags live in the workspace tag store, shared by every surface (TV-T1).
+          seedTags(workspaceId, {
+            tags: next.tags,
+            links: next.tagLinks,
+            scope: { kind: "all" },
+            at: startedAt,
+            complete: !next.truncated.some((t) => t.scope === TAG_LINKS_SCOPE),
+          });
+          setTimeBlocksState(blocks);
+          setError(null);
+          setLoadStamp((s) => s + 1); // triggers the recurrence catch-up pass
+          refresh.current.lastAt = Date.now(); // a full read counts for the refetch throttle
+        }
+      } catch (e) {
+        if (reqRef.current === req && !quiet) setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        end();
+        if (reqRef.current === req && settled) setLoading(false);
+      }
+    },
+    [baseRuntime, userId, workspaceId, canRead, gate],
+  );
+
+  const load = useCallback(() => loadImpl(false), [loadImpl]);
+
+  // Refetch on focus / reconnect (D5-3), at most once per
+  // REFRESH_THROTTLE_MS and only once our own calls have settled. Coming back
+  // to the window is leading-only (focus and visibility both fire on one
+  // return); a reconnect inside the window also gets one trailing read, since
+  // the socket may have missed changes after the last one.
+  const requestRefresh = useCallback(
+    (reason: "reconnect" | "return" = "reconnect") => {
+      const r = refresh.current;
+      if (r.timer || r.queued) return;
+      const wait = Math.max(0, r.lastAt + REFRESH_THROTTLE_MS - Date.now());
+      if (wait > 0 && reason === "return") return;
+      r.timer = setTimeout(() => {
+        r.timer = null;
+        r.queued = true;
+        gate.whenIdle(() => {
+          r.queued = false;
+          r.lastAt = Date.now();
+          void loadImpl(true);
+        });
+      }, wait);
+    },
+    [gate, loadImpl],
+  );
+  requestRefreshRef.current = requestRefresh;
+
+  useEffect(() => {
+    if (!baseRuntime || !userId || !workspaceId || !canRead) return;
+    liveWorkspace.current = workspaceId;
+    const stop = listenTasksLive(workspaceId, userId, (event) => {
+      if (event.type === "resync") {
+        requestRefreshRef.current(event.reason);
+        return;
+      }
+      const { change } = event;
+      // Deletes aren't filtered by workspace server-side; they carry only an
+      // id, so one from elsewhere matches nothing here.
+      if (change.kind === "upsert" && change.row.workspaceId !== workspaceId) return;
+      gate.push(change);
+    });
+    return () => {
+      stop();
+      gate.reset();
+      liveWorkspace.current = null;
+      const r = refresh.current;
+      if (r.timer) clearTimeout(r.timer);
+      r.timer = null;
+      r.queued = false;
+    };
+  }, [baseRuntime, userId, workspaceId, canRead, gate]);
 
   useEffect(() => {
     void load();
@@ -476,7 +583,7 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
         .then((saved) => {
           setBundle((prev) => ({
             ...prev,
-            tasks: prev.tasks.map((t) => (t.id === tempId ? saved : t)),
+            tasks: swapTemp(prev.tasks, tempId, saved),
           }));
           return saved;
         })
@@ -711,7 +818,7 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
         (saved) => {
           setBundle((prev) => ({
             ...prev,
-            tasks: prev.tasks.map((t) => (t.id === tempId ? saved : t)),
+            tasks: swapTemp(prev.tasks, tempId, saved),
           }));
           setQueueRows((prev) =>
             prev.map((e) => (e.taskId === tempId ? { ...e, taskId: saved.id } : e)),
@@ -1364,7 +1471,7 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
         .then((saved) => {
           setBundle((prev) => ({
             ...prev,
-            buckets: prev.buckets.map((b) => (b.id === tempId ? saved : b)),
+            buckets: swapTemp(prev.buckets, tempId, saved),
           }));
         })
         .catch((e) => {
