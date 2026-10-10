@@ -19,7 +19,8 @@ export const DEFAULT_BLOCK_MINUTES = 30;
 export type LensTask = Pick<
   Task,
   "id" | "title" | "scheduledAt" | "durationMinutes" | "status" | "deletedAt"
->;
+> &
+  Partial<Pick<Task, "statusCategory">>;
 
 /** A task rendered as a block — a projection, never a stored object. */
 export type TaskBlock = {

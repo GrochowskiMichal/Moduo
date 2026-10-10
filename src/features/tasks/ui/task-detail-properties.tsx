@@ -5,21 +5,13 @@
 // once set, and until then sit in one quiet line that names them. Picking a name
 // there shows its row, empty, with its editor open.
 
-import { isOpenTaskStatus } from "@contracts/vocabularies";
 import {
-  Archive,
-  CircleCheck,
-  CircleDot,
-  Circle as CircleIcon,
-  Clock,
-  Flag,
-  Plus,
-  Repeat,
-  SkipForward,
-  Timer,
-  User,
-  Zap,
-} from "lucide-react";
+  isOpenTask,
+  TASK_STATUS_CATEGORIES,
+  type TaskStatusCategory,
+  taskCategoryOf,
+} from "@contracts/vocabularies";
+import { Clock, Flag, Plus, Repeat, SkipForward, Timer, User, Zap } from "lucide-react";
 import { type ReactNode, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -52,34 +44,20 @@ import {
   quietLineProperties,
   shownOptionalProperties,
 } from "../detail-properties";
-import { LEVEL_OPTIONS, STATUS_LABELS } from "../helpers";
+import { LEVEL_OPTIONS } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
-import {
-  type EnergyLevel,
-  isDrifted,
-  type PriorityLevel,
-  type Task,
-  type TaskStatus,
-} from "../model";
+import { type EnergyLevel, isDrifted, type PriorityLevel, type Task } from "../model";
 import {
   RECURRENCE_PRESETS,
   type RecurrencePreset,
   recurrenceFromPreset,
   recurrenceLabel,
 } from "../parse/recurrence";
+import { CATEGORY_LABELS, statusesByCategory, statusNameOf } from "../statuses";
 import { formatMinutes, formatTracked, parseMinutes, timeRow } from "../time-format";
 import { AssigneeAvatar } from "./assignee-avatar";
 import { EnergyIcon, PriorityIcon } from "./level-icons";
-
-// Lifecycle order for the status picker.
-const STATUS_OPTIONS: TaskStatus[] = ["todo", "in_progress", "done", "archived"];
-
-const STATUS_ICONS: Record<TaskStatus, ReactNode> = {
-  todo: <CircleIcon />,
-  in_progress: <CircleDot />,
-  done: <CircleCheck />,
-  archived: <Archive />,
-};
+import { StatusIcon } from "./status-icon";
 
 type Props = {
   task: Task;
@@ -217,31 +195,51 @@ function StatusValue({
   api: TasksModuleApi;
   canEdit: boolean;
 }) {
+  // The project's own statuses, grouped by category (REPLAN 53a); the five
+  // categories when its statuses aren't readable here (a project you can't
+  // see, a database before TV-D9). Hidden ones are listed only while in use.
+  const category = taskCategoryOf(task);
+  const name = statusNameOf(task, api.statusById);
+  const groups = statusesByCategory(api.statusesForBucket(task.bucketId))
+    .map((g) => ({
+      ...g,
+      statuses: g.statuses.filter((s) => !s.hidden || s.id === task.statusId),
+    }))
+    .filter((g) => g.statuses.length > 0);
+  const byName = groups.length > 0;
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild disabled={!canEdit}>
-        <PropertyValue
-          icon={STATUS_ICONS[task.status]}
-          aria-label={`Status: ${STATUS_LABELS[task.status]}`}
-        >
-          {STATUS_LABELS[task.status]}
+        <PropertyValue icon={<StatusIcon category={category} />} aria-label={`Status: ${name}`}>
+          {name}
         </PropertyValue>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-48">
+      <DropdownMenuContent align="start" className="w-56">
         <DropdownMenuRadioGroup
-          value={task.status}
+          value={byName ? (task.statusId ?? "") : category}
           onValueChange={(v) => {
-            if (v !== task.status) api.patchTask(task.id, { status: v as TaskStatus });
+            if (byName) api.setTaskStatus(task.id, { statusId: v });
+            else api.setTaskStatus(task.id, { category: v as TaskStatusCategory });
           }}
         >
-          {STATUS_OPTIONS.map((s) => (
-            <DropdownMenuRadioItem key={s} value={s}>
-              <span className="flex size-icon-sm items-center text-muted-foreground [&_svg]:size-icon-sm">
-                {STATUS_ICONS[s]}
-              </span>
-              {STATUS_LABELS[s]}
-            </DropdownMenuRadioItem>
-          ))}
+          {byName
+            ? groups.map((g, i) => (
+                <div key={g.category}>
+                  {i > 0 ? <DropdownMenuSeparator /> : null}
+                  {g.statuses.map((s) => (
+                    <DropdownMenuRadioItem key={s.id} value={s.id}>
+                      <StatusIcon category={s.category} className="text-muted-foreground" />
+                      {s.name}
+                    </DropdownMenuRadioItem>
+                  ))}
+                </div>
+              ))
+            : TASK_STATUS_CATEGORIES.map((c) => (
+                <DropdownMenuRadioItem key={c} value={c}>
+                  <StatusIcon category={c} className="text-muted-foreground" />
+                  {CATEGORY_LABELS[c]}
+                </DropdownMenuRadioItem>
+              ))}
         </DropdownMenuRadioGroup>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -392,7 +390,7 @@ function RepeatValue({
     );
   };
   const label = task.recurrence ? recurrenceLabel(task.recurrence) : "Doesn’t repeat";
-  const canSkip = canEdit && !!task.recurrence && isOpenTaskStatus(task.status);
+  const canSkip = canEdit && !!task.recurrence && isOpenTask(task);
   return (
     <DropdownMenu defaultOpen={defaultOpen && canEdit}>
       <DropdownMenuTrigger asChild disabled={!canEdit}>

@@ -8,10 +8,10 @@
 // never goes into the Inbox column (a shared task never turns private by a
 // drop).
 
-import { STATUS_LABELS } from "../helpers";
-import type { Task, TaskStatus } from "../model";
+import type { Task } from "../model";
 import type { DragOrder } from "../order";
 import { boardDropPosition } from "../reorder";
+import { STATUS_KEY_LABELS, type StatusKey } from "../statuses";
 import { canMoveInto } from "./drop-mode";
 import type { TaskDropWrite } from "./drop-write";
 import { projectMoveWrite } from "./rail-drop";
@@ -71,11 +71,11 @@ export function planBoardDrop(input: {
 
   const placed = position === null ? {} : { position };
   if (dest.dim === "status") {
-    const status = dest.value as TaskStatus;
+    const status = dest.value as StatusKey;
     return {
       kind: "write",
       write: { taskId: task.id, status, ...placed },
-      label: `Moved to ${STATUS_LABELS[status]}`,
+      label: `Moved to ${STATUS_KEY_LABELS[status]}`,
     };
   }
   if (!boardColumnAccepts(dest, task, input.inboxId)) return { kind: "none" };

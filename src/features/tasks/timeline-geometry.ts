@@ -13,7 +13,7 @@
 
 import { addDays, differenceInCalendarDays, startOfDay } from "date-fns";
 
-import { isOpen } from "./helpers";
+import { isUnfinished } from "./helpers";
 import type { Task, TaskRelation } from "./model";
 
 // ── Zoom ─────────────────────────────────────────────────────────────────────
@@ -253,7 +253,7 @@ export function barForTask(
     width = dw + FADE_PX;
   }
 
-  const open = isOpen(task);
+  const open = isUnfinished(task);
   const knownEnd = endDay ?? startDay;
   return {
     task,
@@ -317,7 +317,7 @@ export function buildTimelineRollup(opts: {
       // by the parent (List/Board hide nested subtasks the same way; dated
       // subtasks DO get their own bars, per spec).
       const nested = !!task.parentId && task.parentId !== task.id && scopeIds.has(task.parentId);
-      if (isOpen(task) && !nested) tray.push(task);
+      if (isUnfinished(task) && !nested) tray.push(task);
       continue;
     }
     const list = barsByBucket.get(task.bucketId);

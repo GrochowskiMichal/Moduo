@@ -3,8 +3,9 @@
 // List's move keys — turns its gesture into one `TaskDropWrite`, and
 // `useTasksModule.dropTask` saves it in order and offers the Undo (call a).
 
-import { PRIORITY_LABELS, STATUS_LABELS } from "../helpers";
-import type { PriorityLevel, Task, TaskStatus } from "../model";
+import { PRIORITY_LABELS } from "../helpers";
+import type { PriorityLevel, Task } from "../model";
+import { STATUS_KEY_LABELS, type StatusKey, statusKeyOf } from "../statuses";
 import type { ListDropPlan } from "./drop-mode";
 
 /**
@@ -22,7 +23,9 @@ export type TaskDropWrite = {
   bucketId?: string;
   position?: string;
   priority?: PriorityLevel | null;
-  status?: TaskStatus;
+  /** A status key: the legacy value, or "backlog" (TV-D9). Saved as its
+   *  category, so Backlog stays Backlog through a drop and its Undo. */
+  status?: StatusKey;
   assigneeId?: string | null;
 };
 
@@ -60,23 +63,27 @@ const same = (a: unknown, b: unknown) => (a ?? null) === (b ?? null);
  */
 export function undoWrite(input: {
   write: TaskDropWrite;
-  before: Pick<Task, DropField>;
+  before: Pick<Task, DropField | "statusCategory">;
   /** The row as the drop saved it. */
-  after: Pick<Task, DropField>;
+  after: Pick<Task, DropField | "statusCategory">;
   /** The row now. */
-  current: Pick<Task, DropField>;
+  current: Pick<Task, DropField | "statusCategory">;
 }): { write: TaskDropWrite | null; kept: DropField[] } {
   const { write, before, after, current } = input;
+  // A status reads as its key, so a backlog task (stored "todo") goes back to
+  // Backlog, not To do (TV-D9).
+  const value = (task: Pick<Task, DropField | "statusCategory">, field: DropField) =>
+    field === "status" ? statusKeyOf(task) : task[field];
   const revert: Record<string, unknown> = {};
   const kept: DropField[] = [];
   for (const field of DROP_FIELDS) {
     if (write[field] === undefined) continue;
-    if (!same(current[field], after[field])) {
+    if (!same(value(current, field), value(after, field))) {
       kept.push(field);
       continue;
     }
-    if (same(before[field], current[field])) continue;
-    revert[field] = before[field] ?? null;
+    if (same(value(before, field), value(current, field))) continue;
+    revert[field] = value(before, field) ?? null;
   }
   if (Object.keys(revert).length === 0) return { write: null, kept };
   return { write: { taskId: write.taskId, ...revert } as TaskDropWrite, kept };
@@ -102,7 +109,7 @@ export function dropLabel(
   // Under a parent says where, its project included (a subtask lives there).
   if (write.parentId) return `Moved under “${names.taskTitle(write.parentId)}”`;
   if (write.bucketId !== undefined) return `Moved to ${names.bucketName(write.bucketId)}`;
-  if (write.status !== undefined) return `Moved to ${STATUS_LABELS[write.status]}`;
+  if (write.status !== undefined) return `Moved to ${STATUS_KEY_LABELS[write.status]}`;
   if (write.assigneeId !== undefined) {
     return write.assigneeId ? `Assigned to ${names.assigneeName(write.assigneeId)}` : "Unassigned";
   }

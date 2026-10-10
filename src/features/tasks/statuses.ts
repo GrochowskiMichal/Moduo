@@ -5,12 +5,40 @@
 // truth and these mirror them for optimistic updates and labels.
 
 import {
-  TASK_STATUS_CATEGORIES,
-  type TaskStatusCategory,
+  isBacklogTask,
   legacyTaskStatus,
+  normalizeTaskStatusCategory,
+  TASK_STATUS_CATEGORIES,
+  type TaskStatus,
+  type TaskStatusCategory,
   taskCategoryOf,
 } from "@contracts/vocabularies";
 import type { Bucket, ProjectStatus, Task } from "./model";
+
+/**
+ * The status a list, a board and Filter → Status group by: the legacy value
+ * (so saved filters and drops keep working), with Backlog its own key instead
+ * of reading as To do.
+ */
+export type StatusKey = TaskStatus | "backlog";
+
+export function statusKeyOf(task: Pick<Task, "status" | "statusCategory">): StatusKey {
+  return isBacklogTask(task) ? "backlog" : legacyTaskStatus(taskCategoryOf(task));
+}
+
+/** The category a status key stands for (archived → Won't do). */
+export function statusKeyCategory(key: StatusKey): TaskStatusCategory {
+  return normalizeTaskStatusCategory(key);
+}
+
+/** What each status key is called ("archived" reads "Won't do", calls 21/23). */
+export const STATUS_KEY_LABELS: Record<StatusKey, string> = {
+  backlog: "Backlog",
+  todo: "To do",
+  in_progress: "In progress",
+  done: "Done",
+  archived: "Won’t do",
+};
 
 /** What each category is called (also the workspace default names). */
 export const CATEGORY_LABELS: Record<TaskStatusCategory, string> = {
@@ -93,11 +121,19 @@ export function optimisticStatus(
   if ("statusId" in target) {
     const s = set.find((x) => x.id === target.statusId);
     const category = s?.category ?? taskCategoryOf(task);
-    return { statusId: target.statusId, statusCategory: category, status: legacyTaskStatus(category) };
+    return {
+      statusId: target.statusId,
+      statusCategory: category,
+      status: legacyTaskStatus(category),
+    };
   }
   const category = target.category;
   if (taskCategoryOf(task) === category && task.statusId) {
-    return { statusId: task.statusId, statusCategory: category, status: legacyTaskStatus(category) };
+    return {
+      statusId: task.statusId,
+      statusCategory: category,
+      status: legacyTaskStatus(category),
+    };
   }
   return {
     statusId: firstStatusOf(set, category)?.id ?? task.statusId ?? null,

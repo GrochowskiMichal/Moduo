@@ -2,9 +2,10 @@
 // position generation (Lexorank-lite), label maps, datetime formatting, and the
 // grouping logic for the List view. No React, no IO — easy to unit-test.
 
-import { isOpenTaskStatus } from "@contracts/vocabularies";
+import { isClosedTask } from "@contracts/vocabularies";
 import { dayOffset, formatDay, formatStamp, formatWhen } from "../../lib/time-format";
 import type { Bucket, EnergyLevel, PriorityLevel, Task, TaskRelation, TaskStatus } from "./model";
+import { STATUS_KEY_LABELS, type StatusKey, statusKeyOf } from "./statuses";
 
 // ── Position (fractional indexing) ───────────────────────────────────────────
 // Order keys are base-36 digit strings compared lexicographically (see
@@ -236,8 +237,9 @@ export const STATUS_LABELS: Record<TaskStatus, string> = {
   archived: "Won’t do",
 };
 
-/** Status order for grouping (open work first, terminal states last). */
-export const STATUS_ORDER: TaskStatus[] = ["in_progress", "todo", "done", "archived"];
+/** Status order for grouping (open work first, terminal states, then Backlog
+ *  last: "lists end with a quiet Backlog line", REPLAN 53). */
+export const STATUS_ORDER: StatusKey[] = ["in_progress", "todo", "done", "archived", "backlog"];
 
 export const ENERGY_LABELS: Record<EnergyLevel, string> = {
   low: "Low energy",
@@ -423,7 +425,7 @@ export function groupTasks(tasks: Task[], by: GroupBy, ctx: GroupContext): TaskG
 export function groupKeyFor(task: Task, by: GroupBy, now: Date = new Date()): string {
   switch (by) {
     case "status":
-      return task.status;
+      return statusKeyOf(task);
     case "bucket":
       return task.bucketId;
     case "assignee":
@@ -466,7 +468,7 @@ function orderedGroupKeys(by: GroupBy, map: Map<string, Task[]>, ctx: GroupConte
 }
 
 function groupLabel(by: GroupBy, key: string, ctx: GroupContext, now: Date): string {
-  if (by === "status") return STATUS_LABELS[key as TaskStatus] ?? key;
+  if (by === "status") return STATUS_KEY_LABELS[key as StatusKey] ?? key;
   if (by === "bucket") return ctx.bucketName(key);
   if (by === "priority")
     return key === "unset" ? UNSET_LABEL : PRIORITY_LABELS[key as PriorityLevel];
@@ -625,9 +627,12 @@ export function canNestUnder(
 
 // ── Blocked-by dependencies (Session 6 — spec §5c) ───────────────────────────
 
-/** An open task can be worked on; done/archived can't block anything. */
-export function isOpen(task: Pick<Task, "status">): boolean {
-  return isOpenTaskStatus(task.status);
+/**
+ * Not finished: To do, In progress or Backlog (TV-D9). A backlog task still
+ * blocks and can still be queued; Done and Won't do can't block anything.
+ */
+export function isUnfinished(task: Pick<Task, "status" | "statusCategory">): boolean {
+  return !isClosedTask(task);
 }
 
 /**
@@ -637,7 +642,7 @@ export function isOpen(task: Pick<Task, "status">): boolean {
  * task) are inert — work is never invisibly stuck behind a ghost.
  */
 export function blockedTaskIds(tasks: Task[], relations: TaskRelation[]): Set<string> {
-  const openIds = new Set(tasks.filter(isOpen).map((t) => t.id));
+  const openIds = new Set(tasks.filter(isUnfinished).map((t) => t.id));
   const blocked = new Set<string>();
   for (const rel of relations) {
     if (rel.blockerTaskId !== rel.blockedTaskId && openIds.has(rel.blockerTaskId)) {
@@ -671,10 +676,10 @@ export function frontierTasks(taskId: string, tasks: Task[], relations: TaskRela
     if (visited.has(id)) continue;
     visited.add(id);
     const task = byId.get(id);
-    if (!task || !isOpen(task)) continue; // inert edge / already done
+    if (!task || !isUnfinished(task)) continue; // inert edge / already done
     const ownBlockers = (blockersOf.get(id) ?? []).filter((b) => {
       const blocker = byId.get(b);
-      return blocker ? isOpen(blocker) : false;
+      return blocker ? isUnfinished(blocker) : false;
     });
     if (ownBlockers.length === 0) frontier.push(task);
     else queue.push(...ownBlockers);

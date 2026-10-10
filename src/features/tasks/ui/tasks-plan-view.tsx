@@ -1,4 +1,4 @@
-import { isOpenTaskStatus } from "@contracts/vocabularies";
+import { isBacklogTask, isClosedTask, isOpenTask } from "@contracts/vocabularies";
 import {
   type CollisionDetection,
   closestCenter,
@@ -46,12 +46,13 @@ import {
   railCollision,
   railDropAction,
 } from "../dnd/rail-drop";
-import { type CaptureSeed, showsArchived, statusesLetThrough } from "../filters";
-import { groupsByBucket, STATUS_LABELS } from "../helpers";
+import { type CaptureSeed, showsArchived, showsBacklog, statusesLetThrough } from "../filters";
+import { groupsByBucket } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
-import { isDrifted, PRIVATE_PROJECT_LABEL, type Task, type TaskStatus } from "../model";
+import { isDrifted, PRIVATE_PROJECT_LABEL, type Task } from "../model";
 import { showsSortedNote, sortedByLabel } from "../order";
 import { resolveTasksDeepLink } from "../search";
+import { STATUS_KEY_LABELS, type StatusKey } from "../statuses";
 import { sanitizeTimelineZoom, type TimelineZoom } from "../timeline-geometry";
 import { BucketRail, parseCollapsedSections, type TasksMode } from "./bucket-rail";
 import { CaptureModal } from "./capture-modal";
@@ -321,6 +322,8 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   // Won't do tasks join a scope when Filter → Status asks for them (TV-U2,
   // AC1.4), besides the one kept above.
   const withArchived = showsArchived(tasksDisplay.filters);
+  // Backlog sits out of My tasks unless a Status filter asks for it (TV-D9).
+  const withBacklog = showsBacklog(tasksDisplay.filters);
   const statusFilter = useMemo(
     () => statusesLetThrough(tasksDisplay.filters),
     [tasksDisplay.filters],
@@ -331,16 +334,32 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     const live = (t: Task) => t.status !== "archived" || withArchived || t.id === keptArchivedId;
     if (selection === "all") return tasks.filter(live);
     if (selection === "mine") {
-      if (!withArchived && !keptArchivedId) return myTasksScope(tasks, currentUserId);
+      if (!withArchived && !withBacklog && !keptArchivedId)
+        return myTasksScope(tasks, currentUserId);
       if (!currentUserId) return myTasksScope(tasks, currentUserId);
-      // My tasks' rule (assigned to me, not Won't do), plus the Won't do ones
-      // a Status filter asks for, plus the kept one.
-      return tasks.filter((t) => t.assigneeId === currentUserId && live(t));
+      // My tasks' rule (assigned to me, not Won't do, not Backlog), plus the
+      // Won't do and Backlog ones a Status filter asks for, plus the kept one.
+      return tasks.filter(
+        (t) =>
+          t.assigneeId === currentUserId &&
+          live(t) &&
+          (!isBacklogTask(t) || withBacklog || t.id === selectedTaskId),
+      );
     }
     const bucketId = selection === "inbox" ? inboxId : selection;
     if (!bucketId) return [];
     return tasks.filter((t) => t.bucketId === bucketId && live(t));
-  }, [selection, tasks, inboxId, api.queuedTasks, currentUserId, keptArchivedId, withArchived]);
+  }, [
+    selection,
+    tasks,
+    inboxId,
+    api.queuedTasks,
+    currentUserId,
+    keptArchivedId,
+    withArchived,
+    withBacklog,
+    selectedTaskId,
+  ]);
 
   // Filters and search narrow the center list/board/timeline (rail counts
   // stay whole).
@@ -396,10 +415,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   const captureQueues = mode === "execute" || selection === "today";
   const createCaptured = captureQueues ? api.createQueuedTask : api.createTask;
 
-  const totalOpenCount = useMemo(
-    () => tasks.filter((t) => isOpenTaskStatus(t.status)).length,
-    [tasks],
-  );
+  const totalOpenCount = useMemo(() => tasks.filter((t) => isOpenTask(t)).length, [tasks]);
   const myOpenCount = useMemo(
     () => (showMyTasks ? openCount(myTasksScope(tasks, currentUserId)) : 0),
     [showMyTasks, tasks, currentUserId],
@@ -463,9 +479,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   const blockedNoteFor = useCallback(
     (task: Task) => {
       if (!api.blockedTaskIds.has(task.id)) return null;
-      const open = (api.blockersByTask.get(task.id) ?? []).filter((b) =>
-        isOpenTaskStatus(b.status),
-      );
+      const open = (api.blockersByTask.get(task.id) ?? []).filter((b) => !isClosedTask(b));
       if (open.length === 0) return null;
       return open.length === 1
         ? `Waiting on “${open[0].title || "Untitled"}”`
@@ -876,7 +890,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       if (id === `${RAIL_DROP_PREFIX}mine`) return "My tasks";
       if (id.startsWith("link:")) return "the open task, to link them";
       if (id.startsWith("col:status:")) {
-        return STATUS_LABELS[id.slice("col:status:".length) as TaskStatus] ?? null;
+        return STATUS_KEY_LABELS[id.slice("col:status:".length) as StatusKey] ?? null;
       }
       if (id.startsWith("col:bucket:")) return bucketNameById(id.slice("col:bucket:".length));
       return taskName(id);

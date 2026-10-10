@@ -17,7 +17,7 @@
 // here — mode / selection / grouping — is a per-device view preference and
 // stays in localStorage.
 
-import { isOpenTaskStatus } from "@contracts/vocabularies";
+import { isBacklogTask, isOpenTask } from "@contracts/vocabularies";
 import { type Task, TIME_BLOCK_SLOTS, type TimeBlockMap, type TimeBlockSlot } from "./model";
 
 export { TIME_BLOCK_SLOTS, type TimeBlockMap, type TimeBlockSlot };
@@ -113,15 +113,19 @@ export function showsMyTasks(activeMemberCount: number): boolean {
 
 /**
  * The "My tasks" scope: tasks assigned to me, across buckets. Like All it
- * leaves archived tasks out and keeps done ones (TV-U1 hides completed tasks
- * everywhere by default).
+ * leaves Won't do tasks out and keeps done ones (TV-U1 hides completed tasks
+ * everywhere by default); Backlog sits out too (TV-D9, REPLAN 53: the folded
+ * "Backlog · n" line is TV-U15's).
  */
 export function myTasksScope(tasks: Task[], userId: string | null): Task[] {
   if (!userId) return [];
-  return tasks.filter((t) => t.assigneeId === userId && t.status !== "archived");
+  return tasks.filter(
+    (t) => t.assigneeId === userId && t.status !== "archived" && !isBacklogTask(t),
+  );
 }
 
-/** Open (not done, not archived) tasks in a list: a rail row's count. */
+/** Open (To do / In progress) tasks in a list: a rail row's count. Backlog,
+ *  Done and Won't do don't count. */
 export function openCount(tasks: Task[]): number {
-  return tasks.filter((t) => isOpenTaskStatus(t.status)).length;
+  return tasks.filter((t) => isOpenTask(t)).length;
 }

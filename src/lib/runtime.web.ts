@@ -2100,39 +2100,40 @@ export const webRuntime: ModuoRuntime = {
           .is("deleted_at", null);
       const all = (table: string) => (opts?: SelectOpts) =>
         supabaseClient.from(table).select("*", opts).eq("workspace_id", workspaceId);
-      const [bucketsRes, tasksRes, tagsRes, linksRes, relationsRes, statusesRes] = await Promise.all([
-        selectCapped<any>({
-          scope: "buckets",
-          cap: READ_CAPS.buckets,
-          build: live("buckets"),
-          order: (q) => q.order("position").order("id"),
-        }),
-        selectCapped<any>({
-          scope: "tasks",
-          cap: READ_CAPS.tasks,
-          build: live("tasks"),
-          order: (q) => q.order("position").order("id"),
-        }),
-        selectCapped<any>({
-          scope: "tags",
-          cap: READ_CAPS.tags,
-          build: live("tags"),
-          order: (q) => q.order("created_at").order("id"),
-        }),
-        selectCapped<any>({
-          scope: TAG_LINKS_SCOPE,
-          cap: READ_CAPS.tagLinks,
-          build: all("tag_links"),
-          order: (q) => q.order("id"),
-        }),
-        selectCapped<any>({
-          scope: "task dependencies",
-          cap: READ_CAPS.taskRelations,
-          build: all("task_relations"),
-          order: (q) => q.order("id"),
-        }),
-        listWorkspaceStatuses(workspaceId),
-      ]);
+      const [bucketsRes, tasksRes, tagsRes, linksRes, relationsRes, statusesRes] =
+        await Promise.all([
+          selectCapped<any>({
+            scope: "buckets",
+            cap: READ_CAPS.buckets,
+            build: live("buckets"),
+            order: (q) => q.order("position").order("id"),
+          }),
+          selectCapped<any>({
+            scope: "tasks",
+            cap: READ_CAPS.tasks,
+            build: live("tasks"),
+            order: (q) => q.order("position").order("id"),
+          }),
+          selectCapped<any>({
+            scope: "tags",
+            cap: READ_CAPS.tags,
+            build: live("tags"),
+            order: (q) => q.order("created_at").order("id"),
+          }),
+          selectCapped<any>({
+            scope: TAG_LINKS_SCOPE,
+            cap: READ_CAPS.tagLinks,
+            build: all("tag_links"),
+            order: (q) => q.order("id"),
+          }),
+          selectCapped<any>({
+            scope: "task dependencies",
+            cap: READ_CAPS.taskRelations,
+            build: all("task_relations"),
+            order: (q) => q.order("id"),
+          }),
+          listWorkspaceStatuses(workspaceId),
+        ]);
       const firstError =
         bucketsRes.error || tasksRes.error || tagsRes.error || linksRes.error || relationsRes.error;
       if (firstError) throw new Error(firstError.message);
@@ -2186,7 +2187,11 @@ export const webRuntime: ModuoRuntime = {
         p_status_id: statusId,
       });
       if (error) throw new Error(error.message);
-      const answer = (data ?? {}) as { moved?: unknown; moved_to?: unknown; moved_to_name?: unknown };
+      const answer = (data ?? {}) as {
+        moved?: unknown;
+        moved_to?: unknown;
+        moved_to_name?: unknown;
+      };
       return {
         moved: typeof answer.moved === "number" ? answer.moved : 0,
         movedTo: typeof answer.moved_to === "string" ? answer.moved_to : null,
@@ -3627,7 +3632,8 @@ async function listWorkspaceStatuses(
     order: (q) => q.order("position").order("id"),
   });
   if (res.error) {
-    if (isMissingTableError(res.error, "project_statuses")) return { statuses: [], truncation: null };
+    if (isMissingTableError(res.error, "project_statuses"))
+      return { statuses: [], truncation: null };
     throw new Error(res.error.message);
   }
   return { statuses: mapKnownRows(res.rows, projectStatusRowToModel), truncation: res.truncation };

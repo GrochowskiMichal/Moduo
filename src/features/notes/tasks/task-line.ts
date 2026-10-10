@@ -9,7 +9,7 @@
  * existing task = `references`. VALUE imports stay relative (vitest gotcha).
  */
 
-import { isOpenTaskStatus } from "@contracts/vocabularies";
+import { isClosedTask } from "@contracts/vocabularies";
 import type { EntityRef, LinkOrigin, RelationKind } from "../../../lib/entity-links";
 import type { NewTaskFields } from "../../tasks/helpers";
 import type { Task } from "../../tasks/model";
@@ -81,7 +81,7 @@ export function applyTaskRename(
 
 /** A task is offerable in the `/task` picker while it's still open work. */
 export function isLinkableTask(task: Task): boolean {
-  return task.deletedAt === null && isOpenTaskStatus(task.status);
+  return task.deletedAt === null && !isClosedTask(task);
 }
 
 /**

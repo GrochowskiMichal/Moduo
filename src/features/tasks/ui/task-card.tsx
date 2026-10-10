@@ -1,4 +1,4 @@
-import { isOpenTaskStatus } from "@contracts/vocabularies";
+import { isClosedTask, isOpenTask } from "@contracts/vocabularies";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { CornerDownRight } from "lucide-react";
@@ -141,12 +141,12 @@ export function TaskCard({
         <ContextMenuItem onSelect={() => api.toggleDone(task)}>
           {task.status === "done" ? "Mark not done" : "Mark done"}
         </ContextMenuItem>
-        {isOpenTaskStatus(task.status) ? (
+        {!isClosedTask(task) ? (
           <ContextMenuItem onSelect={() => api.toggleQueue(task.id)}>
             {api.queuedTaskIds.has(task.id) ? "Remove from queue" : "Add to queue"}
           </ContextMenuItem>
         ) : null}
-        {task.recurrence && isOpenTaskStatus(task.status) ? (
+        {task.recurrence && isOpenTask(task) ? (
           <ContextMenuItem onSelect={() => api.skipOccurrence(task.id)}>
             Skip occurrence
           </ContextMenuItem>

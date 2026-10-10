@@ -39,8 +39,8 @@ import type { RawLinkSuggestion } from "../features/spine/suggest";
 import type {
   ActivityEntry,
   Bucket,
-  QueuePlacement,
   ProjectStatus,
+  QueuePlacement,
   RecurrenceRule,
   Tag,
   TagLink,

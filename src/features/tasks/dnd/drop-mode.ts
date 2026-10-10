@@ -19,6 +19,7 @@
 import { betweenPositions, canNestUnder, type GroupBy } from "../helpers";
 import type { PriorityLevel, Task, TaskStatus } from "../model";
 import type { DragOrder } from "../order";
+import type { StatusKey } from "../statuses";
 
 /** How far into a row (px) the pointer must be to nest instead of reorder.
  *  The nested-row indent (`ml-10`), so the zone edge is where a subtask's
@@ -232,7 +233,10 @@ export type ListDropPlan = {
   bucketId?: string;
 };
 
-type GroupFieldPatch = Partial<Pick<Task, "status" | "priority" | "assigneeId">>;
+type GroupFieldPatch = Partial<Pick<Task, "priority" | "assigneeId">> & {
+  /** A status group: Backlog is its own key (TV-D9). */
+  status?: StatusKey;
+};
 
 /**
  * The field a group stands for, for a task dropped into it (into "High" =
@@ -243,7 +247,7 @@ type GroupFieldPatch = Partial<Pick<Task, "status" | "priority" | "assigneeId">>
 export function groupFieldPatch(groupBy: GroupBy, key: string): GroupFieldPatch | null {
   switch (groupBy) {
     case "status":
-      return { status: key as TaskStatus };
+      return { status: key as StatusKey };
     case "priority":
       return { priority: key === "unset" ? null : (key as PriorityLevel) };
     case "assignee":

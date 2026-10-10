@@ -10,9 +10,11 @@ import {
   type SortingStrategy,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
+import { Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
+import { Button } from "../../../components/ui/button";
 import { DROP_TARGET, DragOverlaySurface } from "../../../components/ui/drag-visuals";
 import { EmptyState } from "../../../components/ui/empty-state";
 import { GroupHeader } from "../../../components/ui/group-header";
@@ -20,17 +22,12 @@ import { cn } from "../../../lib/utils";
 import { type CompletedMode, partitionCompleted } from "../completed";
 import { type BoardGroupBy, orderTasks, type SubtaskMode, type TaskOrder } from "../display";
 import { boardColumnAccepts, planBoardDrop } from "../dnd/board-drop";
-import {
-  groupsByBucket,
-  isOpen,
-  nestedSubtaskIds,
-  STATUS_LABELS,
-  showBucketPill,
-} from "../helpers";
+import { groupsByBucket, isUnfinished, nestedSubtaskIds, showBucketPill } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
-import type { Bucket, Task, TaskStatus } from "../model";
+import type { Bucket, Task } from "../model";
 import { BACK_TO_MANUAL_ORDER, dragOrderFor, sortedByLabel } from "../order";
 import { DEFAULT_ROW_PROPERTIES } from "../row-layout";
+import { STATUS_KEY_LABELS, type StatusKey, statusKeyOf } from "../statuses";
 import { DndBoundary, taskDragAnnouncements, useTaskDndSensors } from "./dnd/task-dnd";
 import type { PlanHeaderControls, PlanView } from "./plan-view-header";
 import { PlanViewHeader } from "./plan-view-header";
@@ -61,7 +58,12 @@ type Props = {
   filterActive?: boolean;
   onClearFilters?: () => void;
   /** The statuses Filter → Status lets through (null: no Status filter). */
-  statusFilter?: ReadonlySet<TaskStatus> | null;
+  statusFilter?: ReadonlySet<StatusKey> | null;
+  /**
+   * "+ Add status" at the end of one project's board grouped by status
+   * (REPLAN 53a): opens that project's Statuses. Absent elsewhere.
+   */
+  onAddStatus?: () => void;
   /** Display → Completed (tasks-v2 §6). Default: hidden. */
   completed?: CompletedMode;
   /** Display → "Show on rows" — cards follow it too. */
@@ -88,9 +90,10 @@ type Props = {
 // "open work first" order. Won't do tasks are out of every scope until Filter →
 // Status asks for them (or one is kept selected, TV-P0), so their group shows
 // only then; a Status filter shows only the groups it lets through (TV-U2,
-// AC1.4).
-const BOARD_STATUS_ORDER: TaskStatus[] = ["todo", "in_progress", "done"];
-const ALL_BOARD_STATUSES: TaskStatus[] = [...BOARD_STATUS_ORDER, "archived"];
+// AC1.4). Backlog comes first and shows only when the board has backlog tasks
+// (TV-D9; the folded Backlog button is TV-U11's).
+const BOARD_STATUS_ORDER: StatusKey[] = ["todo", "in_progress", "done"];
+const ALL_BOARD_STATUSES: StatusKey[] = ["backlog", ...BOARD_STATUS_ORDER, "archived"];
 
 type Column = {
   id: string;
@@ -138,6 +141,7 @@ export function TaskBoardView({
   subtasks = "nested",
   stayingIds = NO_IDS,
   dndMode = "internal",
+  onAddStatus,
   api,
 }: Props) {
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -183,7 +187,7 @@ export function TaskBoardView({
       stayingIds.has(t.id) ||
       t.id === selectedTaskId ||
       t.id === selectedParentId ||
-      (api.subtasksByParent.get(t.id) ?? []).some(isOpen);
+      (api.subtasksByParent.get(t.id) ?? []).some(isUnfinished);
     const column = (id: string, label: string, dim: BoardGroupBy, value: string, all: Task[]) => {
       const { shown, hidden } = partitionCompleted(all, { mode: completed, now, keep });
       return { id, label, dim, value, tasks: revealed.has(id) ? all : shown, all, hidden };
@@ -205,15 +209,15 @@ export function TaskBoardView({
       : BOARD_STATUS_ORDER;
     // A card on the board always has its group (the kept Won't do task).
     const statuses = ALL_BOARD_STATUSES.filter(
-      (s) => shown.includes(s) || boardTasks.some((t) => t.status === s),
+      (s) => shown.includes(s) || boardTasks.some((t) => statusKeyOf(t) === s),
     );
     return statuses.map((s) =>
       column(
         `col:status:${s}`,
-        STATUS_LABELS[s],
+        STATUS_KEY_LABELS[s],
         "status",
         s,
-        boardTasks.filter((t) => t.status === s),
+        boardTasks.filter((t) => statusKeyOf(t) === s),
       ),
     );
   }, [
@@ -338,26 +342,36 @@ export function TaskBoardView({
           ) : filterActive && tasks.length === 0 ? (
             <TasksNoMatch onClearFilters={onClearFilters} />
           ) : (
-            columns.map((col) => (
-              <BoardColumn
-                key={col.id}
-                column={col}
-                canEdit={canEdit}
-                showBucketTag={showBucketTag}
-                showAssignee={showAssignee}
-                properties={properties}
-                buckets={buckets}
-                inbox={inbox}
-                bucketNameById={bucketNameById}
-                selectedTaskId={selectedTaskId}
-                onSelectTask={onSelectTask}
-                revealed={revealed.has(col.id)}
-                onToggleReveal={() => toggleReveal(col.id)}
-                activeTask={activeTask}
-                reorderable={dragOrder === "manual"}
-                api={api}
-              />
-            ))
+            <>
+              {columns.map((col) => (
+                <BoardColumn
+                  key={col.id}
+                  column={col}
+                  canEdit={canEdit}
+                  showBucketTag={showBucketTag}
+                  showAssignee={showAssignee}
+                  properties={properties}
+                  buckets={buckets}
+                  inbox={inbox}
+                  bucketNameById={bucketNameById}
+                  selectedTaskId={selectedTaskId}
+                  onSelectTask={onSelectTask}
+                  revealed={revealed.has(col.id)}
+                  onToggleReveal={() => toggleReveal(col.id)}
+                  activeTask={activeTask}
+                  reorderable={dragOrder === "manual"}
+                  api={api}
+                />
+              ))}
+              {canEdit && onAddStatus && groupDim === "status" ? (
+                <div className="shrink-0 pt-0.5">
+                  <Button variant="ghost" size="sm" onClick={onAddStatus}>
+                    <Plus aria-hidden />
+                    Add status
+                  </Button>
+                </div>
+              ) : null}
+            </>
           )}
         </div>
 

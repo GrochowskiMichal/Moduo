@@ -36,7 +36,7 @@ import { taskHandle } from "../../../lib/task-handle";
 import { taskUrl } from "../../../lib/web-origin";
 import { WorkspaceContext } from "../../workspaces/workspace-context";
 import { duplicateFields } from "../duplicate";
-import { isOpen } from "../helpers";
+import { isUnfinished } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import { type Bucket, PRIVATE_PROJECT_LABEL, type Task } from "../model";
 import { alsoInLabel, claimLabel } from "../queue";
@@ -65,7 +65,7 @@ export function TaskDetailHeader({
   const bucket = bucketOptions.find((b) => b.id === task.bucketId) ?? null;
   // A project you can't see is never shown as Inbox (TV-P0, AC1.10).
   const bucketLabel = bucket?.name ?? PRIVATE_PROJECT_LABEL;
-  const open = isOpen(task);
+  const open = isUnfinished(task);
   // The handle, MOD-142 (TV-D8). Read without requiring the provider, so the
   // panel renders in isolation (stories, tests) without one.
   const taskKey = useContext(WorkspaceContext)?.selectedWorkspace?.taskKey ?? null;

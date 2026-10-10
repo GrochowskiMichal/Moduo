@@ -19,6 +19,7 @@ import {
 } from "../../components/ui/filter-model";
 import { dueFilterValues, scheduledFilterValues } from "./day-buckets";
 import type { PriorityLevel, Task, TaskStatus } from "./model";
+import { type StatusKey, statusKeyOf } from "./statuses";
 
 export const TASK_FILTER_DIMENSIONS = [
   "assignee",
@@ -133,7 +134,7 @@ export function taskFilterValues(
       return ids.length > 0 ? ids : [NONE_VALUE];
     }
     case "status":
-      return [task.status];
+      return [statusKeyOf(task)];
     case "priority":
       return [task.priority ?? NONE_VALUE];
     case "energy":
@@ -201,14 +202,23 @@ export function showsDone(conditions: readonly FilterCondition[]): boolean {
  */
 export function statusesLetThrough(
   conditions: readonly FilterCondition[],
-): ReadonlySet<TaskStatus> | null {
+): ReadonlySet<StatusKey> | null {
   const condition = conditions.find((c) => c.dimension === "status");
   if (!condition) return null;
   if (condition.operator === "is_not") {
-    const open: TaskStatus[] = ["todo", "in_progress", "done"];
+    const open: StatusKey[] = ["todo", "in_progress", "done"];
     return new Set(open.filter((s) => !condition.values.includes(s)));
   }
-  return new Set(TASK_STATUSES.filter((s) => condition.values.includes(s)));
+  const all: StatusKey[] = ["backlog", ...TASK_STATUSES];
+  return new Set(all.filter((s) => condition.values.includes(s)));
+}
+
+/**
+ * Backlog tasks join My tasks when a Status filter asks for them (TV-D9: they
+ * sit out of it otherwise).
+ */
+export function showsBacklog(conditions: readonly FilterCondition[]): boolean {
+  return asksForStatus(conditions, "backlog");
 }
 
 export type CaptureSeed = {

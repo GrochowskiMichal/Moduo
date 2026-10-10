@@ -42,12 +42,13 @@ import {
   type TaskFilterDimension,
   taskFilterShape,
 } from "../filters";
-import { STATUS_LABELS } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { Tag, Task } from "../model";
 import { takeSearchTokens, taskMatchesQuery } from "../search";
+import { STATUS_KEY_LABELS } from "../statuses";
 import { nowOn, useToday } from "../use-today";
 import { AssigneeAvatar } from "./assignee-avatar";
+import { StatusIcon } from "./status-icon";
 import { TaskSearchField } from "./task-search-field";
 
 const DIMENSION_ICONS: Record<TaskFilterDimension, FilterDimension["icon"]> = {
@@ -81,14 +82,26 @@ const LEVELS = (none: string): FilterOption[] => [
 const OPTIONS: Partial<Record<TaskFilterDimension, FilterOption[]>> = {
   // The labels every surface uses ("To do", "Won't do", calls 21/53a). Won't
   // do tasks are out of every scope until this asks for them (TV-U2, AC1.4).
+  // TV-D9: Backlog joins, and each value leads with its category's icon (the
+  // values stay the stored legacy ones, so saved filters keep working).
   status: [
-    { value: "todo", label: STATUS_LABELS.todo, icon: Circle },
-    { value: "in_progress", label: STATUS_LABELS.in_progress, icon: CircleDot },
-    { value: "done", label: STATUS_LABELS.done, icon: CircleCheck },
+    {
+      value: "backlog",
+      label: STATUS_KEY_LABELS.backlog,
+      leading: <StatusIcon category="backlog" />,
+      keywords: ["someday", "not planned"],
+    },
+    { value: "todo", label: STATUS_KEY_LABELS.todo, leading: <StatusIcon category="todo" /> },
+    {
+      value: "in_progress",
+      label: STATUS_KEY_LABELS.in_progress,
+      leading: <StatusIcon category="in_progress" />,
+    },
+    { value: "done", label: STATUS_KEY_LABELS.done, leading: <StatusIcon category="done" /> },
     {
       value: "archived",
-      label: STATUS_LABELS.archived,
-      icon: Ban,
+      label: STATUS_KEY_LABELS.archived,
+      leading: <StatusIcon category="wont_do" />,
       keywords: ["won't do", "wont do", "archived"],
     },
   ],

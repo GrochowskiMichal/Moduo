@@ -80,14 +80,15 @@ import {
   withoutTask,
 } from "../queue";
 import { listenTasksLive } from "../realtime";
+import { recurrenceOnStatusChange, skipOccurrencePatch } from "../recurrence-engine";
 import {
   CATEGORY_LABELS,
   optimisticStatus,
   replaceStatusSet,
   type StatusTarget,
+  statusKeyCategory,
   statusSetFor,
 } from "../statuses";
-import { recurrenceOnStatusChange, skipOccurrencePatch } from "../recurrence-engine";
 
 /** An adjustment `logTimeAdjustment` recorded, as its Undo needs it. */
 export type TimeAdjustment = {
@@ -349,10 +350,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
    *  visible project's (REPLAN 53a). */
   const statuses = useMemo(() => bundle.statuses ?? [], [bundle.statuses]);
   const statusById = useMemo(() => new Map(statuses.map((s) => [s.id, s])), [statuses]);
-  const bucketById = useMemo(
-    () => new Map(bundle.buckets.map((b) => [b.id, b])),
-    [bundle.buckets],
-  );
+  const bucketById = useMemo(() => new Map(bundle.buckets.map((b) => [b.id, b])), [bundle.buckets]);
   /** The statuses a project's tasks use (the Inbox: the workspace default). */
   const statusesForBucket = useCallback(
     (bucketId: string): ProjectStatus[] => statusSetFor(statuses, bucketById.get(bucketId)),
@@ -1176,7 +1174,10 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     const title = task.title.trim() || "This task";
     toast(`${title} is still in Backlog`, {
       description: "Backlog tasks stay out of My tasks, Upcoming and Focus.",
-      action: { label: "Move to To do", onClick: () => setTaskStatus(task.id, { category: "todo" }) },
+      action: {
+        label: "Move to To do",
+        onClick: () => setTaskStatus(task.id, { category: "todo" }),
+      },
     });
   };
 
@@ -1234,7 +1235,9 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
           ...prev,
           statuses: (prev.statuses ?? []).filter((s) => s.id !== status.id),
           tasks: answer.movedTo
-            ? prev.tasks.map((t) => (t.statusId === status.id ? { ...t, statusId: answer.movedTo } : t))
+            ? prev.tasks.map((t) =>
+                t.statusId === status.id ? { ...t, statusId: answer.movedTo } : t,
+              )
             : prev.tasks,
         }));
         const to = answer.movedToName ?? CATEGORY_LABELS[status.category];
@@ -1735,12 +1738,14 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         position: status === undefined ? write.position : undefined,
       });
       const now = new Date();
+      // A status key (Backlog is its own) is saved as its category (TV-D9).
+      const category = status === undefined ? undefined : statusKeyCategory(status);
       const recurrence =
-        status === undefined
+        category === undefined
           ? undefined
           : opts.recurrence !== undefined
             ? opts.recurrence
-            : (recurrenceOnStatusChange(existing, status, now) ?? undefined);
+            : (recurrenceOnStatusChange(existing, legacyTaskStatus(category), now) ?? undefined);
       const followers =
         write.bucketId !== undefined && write.bucketId !== existing.bucketId
           ? tasksRef.current.filter(
@@ -1756,7 +1761,13 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       patchTaskLocal(taskId, {
         ...fields,
         ...(write.position !== undefined ? { position: write.position } : {}),
-        ...(status !== undefined ? { status } : {}),
+        ...(category !== undefined
+          ? optimisticStatus(
+              existing,
+              { category },
+              statusesForBucket(write.bucketId ?? existing.bucketId),
+            )
+          : {}),
         ...(recurrence !== undefined ? { recurrence } : {}),
         ...(assigneeId !== undefined ? { assigneeId } : {}),
         updatedAt: stamp,
@@ -1764,7 +1775,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       for (const child of followers) {
         patchTaskLocal(child.id, { bucketId: write.bucketId, updatedAt: stamp });
       }
-      if (status !== undefined) queueFollowStatus(taskId, status);
+      if (category !== undefined) queueFollowStatus(taskId, category);
 
       try {
         const saved: Task[] = [];
@@ -1784,12 +1795,12 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
             )),
           );
         }
-        if (status !== undefined) {
+        if (category !== undefined) {
           saved.push(
             await rt.tasks.opSetStatus({
               workspaceId: ws,
               taskId,
-              status,
+              status: category,
               recurrence,
               position: write.position,
             }),
@@ -1812,7 +1823,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         return null;
       }
     },
-    [runtime, workspaceId, canEdit, patchTaskLocal, queueFollowStatus, load],
+    [runtime, workspaceId, canEdit, patchTaskLocal, queueFollowStatus, load, statusesForBucket],
   );
 
   /**

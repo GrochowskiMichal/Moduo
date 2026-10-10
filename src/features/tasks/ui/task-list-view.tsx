@@ -43,7 +43,7 @@ import {
   type GroupBy,
   groupKeyFor,
   groupTasks,
-  isOpen,
+  isUnfinished,
   nestedSubtaskIds,
   showBucketPill,
 } from "../helpers";
@@ -233,7 +233,7 @@ export function TaskListView({
       stayingIds.has(t.id) ||
       t.id === selectedId ||
       t.id === selectedParentId ||
-      (api.subtasksByParent.get(t.id) ?? []).some(isOpen);
+      (api.subtasksByParent.get(t.id) ?? []).some(isUnfinished);
     // `all` keeps every task of the group in order, hidden ones included:
     // a drop is placed among them (TV-U1's rule, since `position` orders both).
     return all.map((g) => {

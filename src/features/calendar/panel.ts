@@ -4,7 +4,7 @@
 // show their time and sort to the BOTTOM of their group rather than vanishing
 // (visibility beats purity — the row is how you find what's already placed).
 
-import { isOpenTaskStatus } from "@contracts/vocabularies";
+import { isBacklogTask, isOpenTask } from "@contracts/vocabularies";
 import type { Task } from "../tasks/model";
 import { addDays, localDayKey } from "./lens";
 
@@ -20,7 +20,7 @@ export type PanelGroups = {
 export const BACKLOG_CAP = 50;
 
 function isOpen(t: Task): boolean {
-  return isOpenTaskStatus(t.status) && !t.deletedAt;
+  return isOpenTask(t) && !t.deletedAt;
 }
 
 /** Local calendar-day key of a stored timestamptz (the CO-5 gotcha). */
@@ -64,13 +64,16 @@ export function groupPanelTasks(input: {
   const dueSoon: Task[] = [];
   const backlog: Task[] = [];
   for (const t of input.tasks) {
-    if (!isOpen(t) || inQueue.has(t.id)) continue;
+    // Backlog-status tasks (TV-D9) belong in this panel's Backlog group, never
+    // in Due soon; scheduling one from here moves it to To do.
+    const parked = isBacklogTask(t) && !t.deletedAt;
+    if ((!isOpen(t) && !parked) || inQueue.has(t.id)) continue;
     if (t.parentId) continue; // subtasks stay under their parent, not here
     if (query && !matches(t, query)) continue;
     const due = dueDayKey(t);
     // OVERDUE open tasks count as due-soon too (graceful slippage: the
     // most-urgent rows must never fall off the panel into a capped backlog).
-    if (due && due <= horizonKey) {
+    if (!parked && due && due <= horizonKey) {
       dueSoon.push(t);
       continue;
     }

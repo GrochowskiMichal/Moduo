@@ -1,4 +1,4 @@
-import { isOpenTaskStatus } from "@contracts/vocabularies";
+import { isClosedTask, taskCategoryOf } from "@contracts/vocabularies";
 import type { DraggableSyntheticListeners } from "@dnd-kit/core";
 import { ChevronDown, ChevronRight, CornerDownRight, Inbox } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -31,16 +31,18 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/
 import { cn } from "../../../lib/utils";
 import { assigneeLabel } from "../assignee-options";
 import { useAssignees } from "../assignees";
-import { LEVEL_OPTIONS, STATUS_LABELS } from "../helpers";
+import { LEVEL_OPTIONS } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { EnergyLevel, PriorityLevel, Task } from "../model";
 import { ALL_ROW_COLUMNS, type RowColumns, type RowDate, rowDate, rowTime } from "../row-layout";
+import { statusNameOf } from "../statuses";
 import { AssignContextMenu } from "./assign-context-menu";
 import { AssigneeAvatar } from "./assignee-avatar";
 import type { DragActivatorRef } from "./dnd/task-dnd";
 import { EnergyMark, PriorityMark } from "./level-icons";
 import { ROW_TITLE_ATTR } from "./list-keys";
 import { QueueToggle } from "./queue-toggle";
+import { StatusIcon } from "./status-icon";
 import { BucketLabel, DateMark, TaskCounts } from "./task-meta";
 
 // The blocked marker moved to task-meta; the Timeline still imports it here.
@@ -135,7 +137,7 @@ export function TaskRow({
 }: Props) {
   const done = task.status === "done";
   // A Won't do task kept in view (TV-P0) reads closed, like a done one.
-  const closed = !isOpenTaskStatus(task.status);
+  const closed = isClosedTask(task);
   const queued = api.queuedTaskIds.has(task.id);
   // Menu items that hand focus to something in the row (the title editor, a
   // chip's popover) run once the context menu has closed: Radix returns focus
@@ -301,9 +303,11 @@ export function TaskRow({
         {columns.status ? (
           <span
             data-col="status"
-            className="min-w-24 shrink-0 whitespace-nowrap font-sans text-xs text-muted-foreground"
+            className="flex min-w-24 shrink-0 items-center gap-1.5 whitespace-nowrap font-sans text-xs text-muted-foreground"
           >
-            {STATUS_LABELS[task.status]}
+            {/* The project's own name; the icon is the category's (TV-D9). */}
+            <StatusIcon category={taskCategoryOf(task)} />
+            {statusNameOf(task, api.statusById)}
           </span>
         ) : null}
         {columns.priority ? (

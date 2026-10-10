@@ -6,7 +6,7 @@
 // comments & activity and the metadata line. Edits go through the module api
 // (field-level `patchTask`); comments through the spine's `comments_op_add`.
 
-import { isOpenTaskStatus } from "@contracts/vocabularies";
+import { isClosedTask } from "@contracts/vocabularies";
 import { Ban, CircleDashed, ListChecks, Lock, Plus, RotateCcw, X } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -576,7 +576,7 @@ function RelatedTaskRow({
   onSelect: () => void;
   onRemove?: () => void;
 }) {
-  const closed = !isOpenTaskStatus(task.status);
+  const closed = isClosedTask(task);
   return (
     <div className="group flex min-h-(--ctrl-h-sm) items-center gap-2 rounded-md px-1 transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover">
       <CircleDashed className="size-icon-sm shrink-0 text-muted-foreground/70" aria-hidden />

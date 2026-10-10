@@ -22,7 +22,7 @@ import {
   formatDurationSeconds,
   formatTime,
 } from "../../lib/time-format";
-import { formatTimestamp, isOpen } from "./helpers";
+import { formatTimestamp, isUnfinished } from "./helpers";
 import { isDrifted, type Task } from "./model";
 
 /** The row properties Display can switch on and off, in column order. */
@@ -93,8 +93,10 @@ export function rowColumns(tasks: readonly Task[], ctx: RowColumnsContext): RowC
     assigneeName: detailed && assignee,
     // Done and archived tasks can't be queued, so they never carry the mark.
     // Read-only, the mark only shows what someone has queued.
-    queue: any((t) => isOpen(t) && (ctx.canEdit || ctx.isQueued(t.id) || ctx.isClaimed(t.id))),
-    queueWide: any((t) => isOpen(t) && ctx.isQueued(t.id) && ctx.isClaimed(t.id)),
+    queue: any(
+      (t) => isUnfinished(t) && (ctx.canEdit || ctx.isQueued(t.id) || ctx.isClaimed(t.id)),
+    ),
+    queueWide: any((t) => isUnfinished(t) && ctx.isQueued(t.id) && ctx.isClaimed(t.id)),
   };
 }
 
