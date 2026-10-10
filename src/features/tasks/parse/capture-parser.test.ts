@@ -134,3 +134,55 @@ describe("parseCapture — a date and a repeat both stick", () => {
     expect(p.title).toBe("Water plants every so often");
   });
 });
+
+describe("parseCapture — the `/` date commands (33a, RF-1's grammar)", () => {
+  it("/tomorrow sets the due date and leaves the title", () => {
+    const p = parseCapture("Send the March report /tomorrow", FRIDAY_10AM);
+    expect(p.title).toBe("Send the March report");
+    expect(local(p.dueDate)?.toDateString()).toBe(new Date(2026, 9, 10).toDateString());
+    expect(p.scheduledAt).toBeNull();
+  });
+
+  it("/next week is the coming Monday; an explicit command wins over date words", () => {
+    const p = parseCapture("Prepare Monday notes /next week", FRIDAY_10AM);
+    expect(p.title).toBe("Prepare Monday notes");
+    expect(local(p.dueDate)?.toDateString()).toBe(new Date(2026, 9, 12).toDateString());
+  });
+
+  it("a time with the command schedules on that day; a repeat keeps its own start", () => {
+    const timed = parseCapture("Call Anna at 3pm /tomorrow", FRIDAY_10AM);
+    expect(timed.title).toBe("Call Anna");
+    const at = local(timed.scheduledAt);
+    expect(at?.toDateString()).toBe(new Date(2026, 9, 10).toDateString());
+    expect(at?.getHours()).toBe(15);
+    const worded = parseCapture("Call Anna Friday at 3pm /tomorrow", FRIDAY_10AM);
+    expect(worded.title).toBe("Call Anna Friday");
+    for (const odd of [
+      "Call Anna at 3 p.m. /tomorrow",
+      "Call Anna at 3 o'clock /tomorrow",
+      "Call Anna 3PM-4PM /tomorrow",
+    ]) {
+      const p = parseCapture(odd, FRIDAY_10AM);
+      expect(p.title).toBe("Call Anna");
+    }
+    expect(local(worded.scheduledAt)?.toDateString()).toBe(new Date(2026, 9, 10).toDateString());
+    const repeat = parseCapture("Standup every Monday /next week", FRIDAY_10AM);
+    expect(repeat.recurrence).not.toBeNull();
+    expect(repeat.title).toBe("Standup");
+  });
+
+  it("a repeat typed with a command starts on the command's day", () => {
+    const p = parseCapture("Pay rent /tomorrow every month", FRIDAY_10AM);
+    expect(p.recurrence).not.toBeNull();
+    expect(p.title).toBe("Pay rent");
+    expect(local(p.recurrence?.dtstart ?? null)?.toDateString()).toBe(
+      new Date(2026, 9, 10).toDateString(),
+    );
+  });
+
+  it("a slash inside a word is text (and/or)", () => {
+    expect(parseCapture("Decide and/or delegate", FRIDAY_10AM).title).toBe(
+      "Decide and/or delegate",
+    );
+  });
+});

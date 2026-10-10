@@ -1,41 +1,61 @@
-// Connective-tissue spine — the inline `@mention` Lexical plugin (block CT-4).
+// Connective-tissue spine — the inline `@` / `/` / `#` menu (CT-4; the
+// grammar since RF-1, spine/grammar.ts).
 //
-// Typing `@` in prose opens a registry-backed menu (entities + people); picking
-// an entity inserts a neutral `EntityRefNode` and writes an `entity_link`
-// (`kind=mentions`), picking a person writes a person-targeted activity row
-// (the op lands with CT-5; here it routes through the `onMentionPerson` seam and
-// inserts the person's name). Selection is funnelled through the pure
-// `resolveMention` + `executeMention`. The caret detection / positioning /
-// keyboard handling mirror the notes slash menu (now slash-menu-plugin); only the
-// trigger (`@`) and the menu content/actions differ. Tokens-only (DESIGN_RULES).
+// Typing a sigil at a word start opens a menu (the caret detection is the
+// grammar's one tokenizer, so `C#`, `and/or` and an email's `@` stay text):
+// - `@` mentions: people first (when the host can notify them), then projects,
+//   then things; picking a thing inserts a Reference and writes a `mentions`
+//   link from the surface's own entity;
+// - `/` runs commands: the date commands first (`/today`, `/tomorrow`,
+//   `/next week`, `/date` → a date chip), then things to insert, then
+//   "New task “…”" where the host can create one;
+// - `#` links a tag (a link in prose; it never changes the item's tags).
+// A reference inserted in running text is a chip; alone on its line it is a
+// card (where the surface allows cards); "Show as" follows the insert.
+// Selection funnels through the pure `resolveMention` + `executeMention`.
+// Tokens-only (DESIGN_RULES).
 
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import {
+  $createParagraphNode,
   $createTextNode,
   $getNodeByKey,
+  $getRoot,
   $getSelection,
+  $isParagraphNode,
   $isRangeSelection,
   $isTextNode,
+  $setSelection,
   COMMAND_PRIORITY_HIGH,
   KEY_ARROW_DOWN_COMMAND,
   KEY_ARROW_UP_COMMAND,
   KEY_ENTER_COMMAND,
   KEY_ESCAPE_COMMAND,
+  KEY_TAB_COMMAND,
   type LexicalEditor,
+  type LexicalNode,
   type NodeKey,
+  type RangeSelection,
 } from "lexical";
-import { User } from "lucide-react";
+import { CalendarDays, Plus, User } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
+import { Calendar } from "@/components/ui/calendar";
 import { Eyebrow } from "@/components/ui/eyebrow";
+import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import type { EntityRef } from "@/lib/entity-links";
 import type { ModuoRuntime } from "@/lib/runtime.types";
+import { dateCommandDay, isoDay, triggerAt } from "../grammar";
 import { useMentionSearch } from "../hooks/use-mention-search";
 import { resolveEntityIcon } from "../icon-map";
 import { type MentionCandidate, type MentionTrigger, resolveMention } from "../mention";
-import { executeMention, type MentionContext } from "../mention-actions";
-import { $createEntityRefNode } from "./entity-ref-node";
+import { executeMention, type MentionContext, type MentionInsert } from "../mention-actions";
+import { $createDateNode } from "../references/date-node";
+import { canShowAsCard, referenceKind } from "../references/kinds";
+import { $createReferenceNode, markJustInserted } from "../references/reference-node";
+import type { ReferenceDisplay } from "../references/types";
+import { mentionCandidateKey } from "../ui/mention-picker";
 
 type MentionMenuState = {
   query: string;
@@ -63,28 +83,37 @@ export type MentionMenuPluginProps = {
   /** `@` = workspace people ONLY (the Notes grammar, Wave-3 AC5) — entities
    * leave the picker; they ride the `/` nouns instead. */
   peopleOnly?: boolean;
-  /** The character that opens the menu (default `@`). DF-23 mounts a second
-   * instance with `/` so the same machinery serves `@mention` and `/ref`. */
-  triggerChar?: "@" | "/";
-  /** Relation semantics: `mention` (→ `mentions`) or `ref` (→ `references`).
-   * Defaults to `mention` so existing (Notes) call sites are unchanged. */
+  /** The character that opens the menu (default `@`). */
+  triggerChar?: "@" | "/" | "#";
+  /** Relation semantics: `mention` (→ `mentions`), `ref` (→ `references`),
+   * `tag` (a `#tag` link). Defaults to `mention`. */
   trigger?: MentionTrigger;
+  /**
+   * Store the picked item's title in the document (default true: Notes and
+   * email compose, whose readers need the words). Privacy-first surfaces (task
+   * descriptions) pass false: the document then holds only `{type, id}`.
+   */
+  storeLabel?: boolean;
+  /** A reference alone on its line becomes a card (RF-1 surfaces). */
+  cards?: boolean;
+  /** Offer "Show as: Link · Chip · Card" right after inserting. */
+  showAs?: boolean;
+  /** Offer projects among the things (`@` and `/` in prose). */
+  includeProjects?: boolean;
+  /** `/` lists the date commands first and inserts date chips (33a). */
+  dateCommands?: boolean;
+  /** `/` creates too ("New task “…”"): the host's create, returning the new item. */
+  onCreateEntity?: (entityType: string, label: string) => Promise<MentionInsert | null>;
+  /** The type `/` creates (default "task"). */
+  createType?: string;
 };
 
 const MENU_MIN_WIDTH = 240;
 const MENU_MAX_HEIGHT = 320;
 
-// Caret token grammar per trigger char: the trigger must sit at line start or
-// after whitespace (so it never fires mid-word — e.g. an email address's `@`,
-// or a `7/11` date's `/`), and the query runs until the next whitespace/trigger.
-function mentionTokenRegex(triggerChar: string): RegExp {
-  // Both `@` and `/` are regex-literal here (incl. inside the char class).
-  return new RegExp(`(?:^|\\s)${triggerChar}([^\\s${triggerChar}]*)$`);
-}
-
 function resolveMentionMenuState(
   editor: LexicalEditor,
-  triggerChar: string,
+  triggerChar: "@" | "/" | "#",
 ): MentionMenuState | null {
   return editor.getEditorState().read(() => {
     const selection = $getSelection();
@@ -97,13 +126,9 @@ function resolveMentionMenuState(
     if (!$isTextNode(node) || !node.isSimpleText()) return null;
 
     const textBefore = node.getTextContent().slice(0, anchor.offset);
-    const match = textBefore.match(mentionTokenRegex(triggerChar));
-    if (!match) return null;
-
-    const query = match[1] ?? "";
-    const token = `${triggerChar}${query}`;
-    const startOffset = textBefore.lastIndexOf(token);
-    if (startOffset < 0) return null;
+    // The grammar's one tokenizer: a sigil at a word start, the word since.
+    const found = triggerAt(textBefore, [triggerChar]);
+    if (!found) return null;
 
     const domSelection = window.getSelection();
     if (!domSelection || domSelection.rangeCount === 0) return null;
@@ -121,7 +146,14 @@ function resolveMentionMenuState(
     const maxLeft = Math.max(margin, window.innerWidth - MENU_MIN_WIDTH - margin);
     const left = Math.max(margin, Math.min(rect.left, maxLeft));
 
-    return { query, nodeKey: node.getKey(), startOffset, endOffset: anchor.offset, top, left };
+    return {
+      query: found.query,
+      nodeKey: node.getKey(),
+      startOffset: found.start,
+      endOffset: anchor.offset,
+      top,
+      left,
+    };
   });
 }
 
@@ -138,6 +170,70 @@ function removeMentionToken(menu: MentionMenuState): void {
   selection.setTextNodeRange(node, menu.startOffset, node, menu.startOffset);
 }
 
+/**
+ * Is the caret's paragraph otherwise empty (a reference there sits alone on
+ * its line)? Only blank text counts as empty: a reference or a date chip on the
+ * line has no text of its own but is something.
+ */
+function $caretLineIsEmpty(): boolean {
+  const selection = $getSelection();
+  if (!$isRangeSelection(selection)) return false;
+  const block = selection.anchor.getNode().getTopLevelElement();
+  if (!block || !$isParagraphNode(block)) return false;
+  return block
+    .getChildren()
+    .every((child) => $isTextNode(child) && child.getTextContent().trim() === "");
+}
+
+/**
+ * Insert a reference at the selection: a card alone on its line (then a fresh
+ * line to keep writing on), else a chip and a space. Returns the node's key.
+ */
+function $insertReference(
+  ref: EntityRef,
+  label: string,
+  icon: string | null,
+  opts: { storeLabel: boolean; cards: boolean },
+): NodeKey | null {
+  const selection = $getSelection();
+  if (!$isRangeSelection(selection)) return null;
+  const kind = referenceKind(ref.type);
+  const display: ReferenceDisplay =
+    opts.cards && canShowAsCard(kind) && $caretLineIsEmpty() ? "card" : "chip";
+  const node = $createReferenceNode({
+    entityType: ref.type,
+    entityId: ref.id,
+    // A privacy-first surface stores neither the title nor the item's icon
+    // (a note's emoji says as much as its title).
+    label: opts.storeLabel ? label : "",
+    icon: opts.storeLabel ? icon : null,
+    display,
+  });
+  if (display === "card") {
+    const block = selection.anchor.getNode().getTopLevelElement();
+    selection.insertNodes([node]);
+    const next = $createParagraphNode();
+    (block ?? node.getTopLevelElementOrThrow()).insertAfter(next);
+    next.select();
+  } else {
+    selection.insertNodes([node, $createTextNode(" ")]);
+  }
+  return node.getKey();
+}
+
+/** Put a selection saved before an async step back, or the end of the document. */
+function $restoreSelection(saved: RangeSelection | null): void {
+  if (saved) {
+    const anchor = $getNodeByKey(saved.anchor.key);
+    const focus = $getNodeByKey(saved.focus.key);
+    if (anchor?.isAttached() && focus?.isAttached()) {
+      $setSelection(saved.clone());
+      return;
+    }
+  }
+  $getRoot().selectEnd();
+}
+
 export function MentionMenuPlugin({
   workspaceId,
   runtime,
@@ -149,30 +245,52 @@ export function MentionMenuPlugin({
   peopleOnly = false,
   triggerChar = "@",
   trigger = "mention",
+  storeLabel = true,
+  cards = false,
+  showAs = false,
+  includeProjects = false,
+  dateCommands = false,
+  onCreateEntity,
+  createType = "task",
 }: MentionMenuPluginProps) {
   const [editor] = useLexicalComposerContext();
   const [menu, setMenu] = useState<MentionMenuState | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  // `/date` opens a calendar where the menu was; the pick goes where the caret was.
+  const [datePicker, setDatePicker] = useState<{ top: number; left: number } | null>(null);
+  const pickerSelection = useRef<RangeSelection | null>(null);
 
-  const { query, setQuery, candidates, loading } = useMentionSearch({
+  const { setQuery, candidates, loading } = useMentionSearch({
     runtime,
     workspaceId,
     trigger,
     currentUserId,
-    // People ride the `@`/mention trigger only, and only once a host wires the
-    // person-notification seam (CT-5); a `/ref` menu is entities-only.
+    // People ride the `@` trigger only, and only once a host wires the
+    // person-notification seam (CT-5); a `/` menu is commands and things.
     includePeople: trigger === "mention" && Boolean(onMentionPerson),
     includeEntities: !peopleOnly,
+    includeProjects: includeProjects && !peopleOnly,
+    dateCommands: dateCommands && trigger === "ref",
+    createType: onCreateEntity ? createType : null,
+    canCreate: Boolean(onCreateEntity) && trigger === "ref",
+    // `/task Order frames` creates; `/` in a sentence never does.
+    createNoun: true,
     enabled: menu !== null,
   });
+
+  // Nothing to offer for a few words after a `/` is ordinary prose: no menu
+  // shows, and no key (Esc included) is taken from the editor.
+  const hidden = !menu || (menu.query.includes(" ") && !loading && candidates.length === 0);
 
   const menuRef = useRef<MentionMenuState | null>(null);
   const candidatesRef = useRef<MentionCandidate[]>([]);
   const selectedIndexRef = useRef(0);
+  const hiddenRef = useRef(true);
   useEffect(() => {
     menuRef.current = menu;
     candidatesRef.current = candidates;
     selectedIndexRef.current = selectedIndex;
+    hiddenRef.current = hidden;
   });
 
   // Drive the search off the caret query.
@@ -185,41 +303,109 @@ export function MentionMenuPlugin({
     setSelectedIndex((current) => Math.min(current, Math.max(0, candidates.length - 1)));
   }, [candidates.length]);
 
+  const insertOpts = { storeLabel, cards };
+
+  const insertDay = (day: string) => {
+    editor.update(() => {
+      const selection = $getSelection();
+      if (!$isRangeSelection(selection)) return;
+      selection.insertNodes([$createDateNode(day), $createTextNode(" ")]);
+    });
+  };
+
   const commit = (candidate: MentionCandidate) => {
     const activeMenu = menuRef.current;
     if (!activeMenu || !runtime || !workspaceId) return;
     const resolution = resolveMention({ trigger, candidate });
 
-    // For an existing entity, insert the chip optimistically (we hold its
-    // label/icon already); for a person, insert their name. Then reconcile.
+    // `/date` asks for the day first: keep the caret, open the calendar.
+    if (resolution.action === "insert-date" && resolution.command === "date") {
+      editor.update(() => {
+        removeMentionToken(activeMenu);
+        const selection = $getSelection();
+        pickerSelection.current = $isRangeSelection(selection) ? selection.clone() : null;
+      });
+      setDatePicker({ top: activeMenu.top, left: activeMenu.left });
+      setMenu(null);
+      return;
+    }
+
+    // "New task “…”": create it, then insert it where the token was.
+    if (resolution.action === "create-and-link") {
+      let saved: RangeSelection | null = null;
+      editor.update(() => {
+        removeMentionToken(activeMenu);
+        const selection = $getSelection();
+        saved = $isRangeSelection(selection) ? selection.clone() : null;
+      });
+      setMenu(null);
+      if (!source) return;
+      const ctx: MentionContext = {
+        workspaceId,
+        source,
+        sourceLabel,
+        sourceIcon: sourceIcon ?? null,
+        onCreateEntity,
+      };
+      void executeMention(runtime, ctx, resolution)
+        .then((created) => {
+          if (!created) return;
+          editor.update(() => {
+            $restoreSelection(saved);
+            const key = $insertReference(created.ref, created.label, created.icon, insertOpts);
+            if (key && showAs) markJustInserted(editor, key);
+          });
+        })
+        .catch(() => toast.error("Couldn’t create that."));
+      return;
+    }
+
+    // An entity is inserted at once; a person's name goes in as text; a date
+    // command and a tag are text-like nodes. Then the write reconciles.
     editor.focus();
+    let insertedKey: NodeKey | null = null;
     editor.update(() => {
       removeMentionToken(activeMenu);
       const selection = $getSelection();
       if (!$isRangeSelection(selection)) return;
       if (resolution.action === "link") {
-        selection.insertNodes([
-          $createEntityRefNode({
-            entityType: resolution.target.type,
-            entityId: resolution.target.id,
-            label: resolution.label,
-            icon: resolution.icon,
-          }),
-          $createTextNode(" "),
-        ]);
+        insertedKey = $insertReference(
+          resolution.target,
+          resolution.label,
+          resolution.icon,
+          insertOpts,
+        );
       } else if (resolution.action === "notify-person") {
         selection.insertNodes([$createTextNode(`${triggerChar}${resolution.label} `)]);
+      } else if (resolution.action === "insert-date") {
+        const day = dateCommandDay(resolution.command);
+        if (day) selection.insertNodes([$createDateNode(day), $createTextNode(" ")]);
+      } else if (resolution.action === "insert-tag") {
+        const nodes: LexicalNode[] = [
+          $createReferenceNode({
+            entityType: "tag",
+            entityId: resolution.tagId,
+            label: storeLabel ? resolution.label : "",
+            display: "link",
+          }),
+          $createTextNode(" "),
+        ];
+        selection.insertNodes(nodes);
       }
     });
+    if (insertedKey && showAs) markJustInserted(editor, insertedKey);
     setMenu(null);
 
     // The write just RECONCILES the optimistic insert above (never a
-    // `create-and-link` — that's a picker-only candidate). Skip it when there's
-    // nothing to write against: a `link` with no `source` (insert-only surface),
-    // or a `notify-person` with no host seam. On failure the chip/text stays and
-    // Retry recovers the link — never silently lost.
+    // `create-and-link` — handled above). Skip it when there's nothing to
+    // write against: a `link` with no `source` (insert-only surface), a
+    // `notify-person` with no host seam, or a date / tag (text, no link).
     const needsWrite =
-      resolution.action === "notify-person" ? Boolean(onMentionPerson) : Boolean(source);
+      resolution.action === "notify-person"
+        ? Boolean(onMentionPerson)
+        : resolution.action === "link"
+          ? Boolean(source)
+          : false;
     if (!needsWrite) return;
 
     const ctx: MentionContext = {
@@ -301,7 +487,7 @@ export function MentionMenuPlugin({
     return editor.registerCommand(
       KEY_ESCAPE_COMMAND,
       (event) => {
-        if (!menuRef.current) return false;
+        if (!menuRef.current || hiddenRef.current) return false;
         event?.preventDefault();
         setMenu(null);
         return true;
@@ -310,30 +496,77 @@ export function MentionMenuPlugin({
     );
   }, [editor]);
 
+  // Enter and Tab pick (the grammar's research: "↵ or Tab picks, Esc keeps the text").
   useEffect(() => {
-    return editor.registerCommand(
-      KEY_ENTER_COMMAND,
-      (event) => {
-        const active = candidatesRef.current;
-        if (!menuRef.current || active.length === 0) return false;
-        event?.preventDefault();
-        const candidate = active[selectedIndexRef.current] ?? active[0];
-        if (candidate) commitRef.current(candidate);
-        return true;
-      },
-      COMMAND_PRIORITY_HIGH,
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const pick = (event: KeyboardEvent | null) => {
+      const active = candidatesRef.current;
+      if (!menuRef.current || active.length === 0) return false;
+      event?.preventDefault();
+      const candidate = active[selectedIndexRef.current] ?? active[0];
+      if (candidate) commitRef.current(candidate);
+      return true;
+    };
+    const offEnter = editor.registerCommand(KEY_ENTER_COMMAND, pick, COMMAND_PRIORITY_HIGH);
+    const offTab = editor.registerCommand(KEY_TAB_COMMAND, pick, COMMAND_PRIORITY_HIGH);
+    return () => {
+      offEnter();
+      offTab();
+    };
   }, [editor]);
 
-  if (!menu) return null;
+  // `/date`'s calendar: the Popover primitive (the one floating surface, Esc
+  // and outside clicks close it), anchored where the menu was.
+  const closePicker = () => {
+    setDatePicker(null);
+    pickerSelection.current = null;
+    editor.focus();
+  };
+
+  if (datePicker) {
+    return (
+      <Popover
+        open
+        onOpenChange={(open) => {
+          if (!open) closePicker();
+        }}
+      >
+        <PopoverAnchor asChild>
+          <span
+            aria-hidden
+            className="pointer-events-none fixed size-0"
+            style={{ top: datePicker.top, left: datePicker.left }}
+          />
+        </PopoverAnchor>
+        <PopoverContent align="start" side="bottom" className="w-auto p-0" aria-label="Pick a date">
+          <Calendar
+            mode="single"
+            autoFocus
+            onSelect={(date: Date | undefined) => {
+              if (!date) return;
+              const day = isoDay(date);
+              const saved = pickerSelection.current;
+              setDatePicker(null);
+              pickerSelection.current = null;
+              editor.focus();
+              editor.update(() => {
+                $restoreSelection(saved);
+              });
+              insertDay(day);
+            }}
+          />
+        </PopoverContent>
+      </Popover>
+    );
+  }
+
+  if (!menu || hidden) return null;
 
   return createPortal(
     <div
       className="fixed z-50 max-h-80 min-w-60 overflow-y-auto rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg"
       style={{ top: menu.top, left: menu.left }}
       role="listbox"
-      aria-label={trigger === "ref" ? "Insert reference" : "Mention"}
+      aria-label={trigger === "tag" ? "Link a tag" : trigger === "ref" ? "Insert" : "Mention"}
     >
       {loading && candidates.length === 0 ? (
         <p className="px-2 py-3 text-sm text-muted-foreground">Searching…</p>
@@ -342,15 +575,9 @@ export function MentionMenuPlugin({
       ) : (
         candidates.map((candidate, index) => {
           const isSelected = index === selectedIndex;
-          // The `@` trigger only ever yields entity / person candidates
-          // (`buildMentionCandidates` reserves "create" for `/ref`).
-          const Icon =
-            candidate.kind === "entity"
-              ? resolveEntityIcon(candidate.ref.type, candidate.icon)
-              : User;
           return (
             <button
-              key={`${candidate.kind}:${index}`}
+              key={mentionCandidateKey(candidate)}
               type="button"
               role="option"
               aria-selected={isSelected}
@@ -363,8 +590,14 @@ export function MentionMenuPlugin({
                 commit(candidate);
               }}
             >
-              <Icon className="size-icon-sm shrink-0 text-muted-foreground" aria-hidden />
-              <span className="min-w-0 flex-1 truncate">{candidate.label}</span>
+              <CandidateIcon candidate={candidate} />
+              <span className="min-w-0 flex-1 truncate">
+                {candidate.kind === "tag"
+                  ? `#${candidate.label}`
+                  : candidate.kind === "create"
+                    ? `New ${candidate.entityType} “${candidate.label}”`
+                    : candidate.label}
+              </span>
               {candidate.kind === "person" ? (
                 <Eyebrow className="shrink-0" tone="tag">
                   person
@@ -377,4 +610,25 @@ export function MentionMenuPlugin({
     </div>,
     document.body,
   );
+}
+
+function CandidateIcon({ candidate }: { candidate: MentionCandidate }) {
+  if (candidate.kind === "tag") {
+    return (
+      <span
+        data-label={candidate.color ?? "gray"}
+        className="tag-dot size-2 shrink-0 rounded-full"
+        aria-hidden
+      />
+    );
+  }
+  const Icon =
+    candidate.kind === "entity"
+      ? resolveEntityIcon(candidate.ref.type, candidate.icon)
+      : candidate.kind === "command"
+        ? CalendarDays
+        : candidate.kind === "create"
+          ? Plus
+          : User;
+  return <Icon className="size-icon-sm shrink-0 text-muted-foreground" aria-hidden />;
 }

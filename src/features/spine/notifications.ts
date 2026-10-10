@@ -6,6 +6,8 @@
 // link target for each card. Never a red wall (Experience Principle 3).
 
 import { type SpineActorFields, spineActivityLine, spineActorName } from "./activity";
+import { referencesInText } from "./references/text";
+import type { ReferenceRef } from "./references/types";
 
 /**
  * One normalized notification row — the shape both the spine feed
@@ -234,15 +236,37 @@ export function notificationSummary(
   group: NotificationGroup,
   currentUserId: string | null,
   subject?: string | null,
+  /** Names references in a comment's excerpt for this reader (RF-1); see spineActivityLine. */
+  referenceName?: (ref: ReferenceRef) => string,
 ): string {
   const latest = newestItem(group);
   const actor = spineActorName(latest, currentUserId);
-  const verbRaw = spineActivityLine(latest);
+  const verbRaw = spineActivityLine(latest, { referenceName });
   const verbLine = verbRaw === latest.op ? humanizeVerb(latest.op) : verbRaw;
   const verb = subject ? nameTheItem(verbLine, subject) : verbLine;
   const others = Math.max(0, group.actorIds.length - 1);
   const who = others > 0 ? `${actor} and ${others} ${others === 1 ? "other" : "others"}` : actor;
   return `${who} ${verb}`;
+}
+
+/**
+ * The references the cards' newest excerpts carry (`moduo://task/<id>` in a
+ * comment), so the bell can name each one for this reader (RF-1).
+ */
+export function notificationReferences(groups: NotificationGroup[]): ReferenceRef[] {
+  const seen = new Set<string>();
+  const out: ReferenceRef[] = [];
+  for (const g of groups) {
+    const excerpt = newestItem(g).payload.excerpt;
+    if (typeof excerpt !== "string") continue;
+    for (const ref of referencesInText(excerpt)) {
+      const key = `${ref.type}:${ref.id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(ref);
+    }
+  }
+  return out;
 }
 
 /**

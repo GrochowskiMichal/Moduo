@@ -15,6 +15,7 @@ import * as chrono from "chrono-node";
 import { RRule, type Weekday } from "rrule";
 
 import { formatDay, formatDayTime } from "../../../lib/time-format";
+import { takeSlashDates } from "../../spine/grammar";
 import type { RecurrenceRule } from "../model";
 
 export type ParsedCapture = {
@@ -35,6 +36,26 @@ export type ParsedCapture = {
    */
   unparsedRecurrence: boolean;
 };
+
+/** A clock time ("at 3pm", "15:30", "at 5", "noon"), for a `/` command's title. */
+const CLOCK_TIME =
+  /(?:\bat\s+)?(?:\b\d{1,2}(?::\d{2})?\s*(?:am|pm)\b|\b\d{1,2}:\d{2}\b|\bnoon\b|\bmidnight\b)|\bat\s+\d{1,2}\b/i;
+
+/** English month names, for handing a `/` command's day to chrono. */
+const MONTHS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
 
 const WEEKDAYS: Record<string, Weekday> = {
   monday: RRule.MO,
@@ -247,6 +268,62 @@ export function parseCapture(input: string, refDate: Date = new Date()): ParsedC
     unparsedRecurrence: false,
   };
   if (!raw) return empty;
+
+  // `/today`, `/tomorrow`, `/next week` (the grammar's date commands, 33a):
+  // an explicit command sets the day and leaves the title. It wins over date
+  // words, which then stay the person's words; a clock time still schedules
+  // on that day; a repeat keeps its own start.
+  const slash = takeSlashDates(raw, refDate);
+  if (slash.day && !slash.text) {
+    // Only a command: nothing to call the task but its words.
+    const due = new Date(`${slash.day}T12:00:00`);
+    return {
+      ...empty,
+      dueDate: due.toISOString(),
+      summary: `due ${chronoLabel(due, false)}`,
+      matched: true,
+    };
+  }
+  if (slash.day && slash.text) {
+    const rest = parseCapture(slash.text, refDate);
+    if (rest.recurrence) {
+      // The command's day starts the repeat, like a typed date does.
+      const day = new Date(`${slash.day}T12:00:00`);
+      const named = `${slash.text} on ${MONTHS[day.getMonth()]} ${day.getDate()} ${day.getFullYear()}`;
+      const started = parseCapture(named, refDate);
+      return started.recurrence ? { ...started, title: rest.title } : rest;
+    }
+    if (rest.scheduledAt) {
+      const at = new Date(rest.scheduledAt);
+      const day = new Date(`${slash.day}T00:00:00`);
+      day.setHours(at.getHours(), at.getMinutes(), 0, 0);
+      // Only the clock time leaves the title; a date word stays the person's
+      // ("Call Anna Friday at 3pm /tomorrow" → "Call Anna Friday").
+      // Kept only when it reads exactly like the parser's own title once its
+      // date words go ("3 p.m." or "3PM-4PM" leaving bits behind falls back).
+      const withoutClock = slash.text.replace(CLOCK_TIME, " ").replace(/\s+/g, " ").trim();
+      const cleanCut =
+        withoutClock !== "" &&
+        withoutClock !== slash.text &&
+        parseCapture(withoutClock, refDate).title === rest.title;
+      return {
+        ...rest,
+        title: cleanCut ? withoutClock : rest.title,
+        scheduledAt: day.toISOString(),
+        summary: `scheduled ${chronoLabel(day, true)}`,
+      };
+    }
+    // A date alone is due on that day, at noon like a typed date word, so
+    // every time zone reads the same calendar day.
+    const due = new Date(`${slash.day}T12:00:00`);
+    return {
+      ...empty,
+      title: rest.dueDate ? slash.text : rest.title,
+      dueDate: due.toISOString(),
+      summary: `due ${chronoLabel(due, false)}`,
+      matched: true,
+    };
+  }
 
   const spans: Array<[number, number]> = [];
   let scheduledAt: string | null = null;

@@ -7,6 +7,7 @@ import { createHeadlessEditor } from "@lexical/headless";
 import { $generateHtmlFromNodes, $generateNodesFromDOM } from "@lexical/html";
 import { describe, expect, it } from "@rstest/core";
 import { $createParagraphNode, $getRoot, $isElementNode, type LexicalNode } from "lexical";
+import { $createDateNode, $isDateNode, DateNode } from "../references/date-node";
 import { $createEntityRefNode, $isEntityRefNode, EntityRefNode } from "./entity-ref-node";
 
 function makeEditor() {
@@ -96,5 +97,95 @@ describe("EntityRefNode HTML round-trip", () => {
   it("degrades a marker missing its address to plain text (no dead chip)", () => {
     const chips = importChips('<p>see <span data-lexical-entity-ref="true">ghost</span></p>');
     expect(chips).toHaveLength(0);
+  });
+});
+
+describe("the date chip node (RF-1, AC10.4)", () => {
+  it("stores the day as a <time> whose text is the plain date, and reads it back", () => {
+    const editor = createHeadlessEditor({
+      namespace: "date-node-test",
+      nodes: [DateNode],
+      onError: (e) => {
+        throw e;
+      },
+    });
+    editor.update(
+      () => {
+        const p = $createParagraphNode();
+        p.append($createDateNode("2026-10-15"));
+        $getRoot().append(p);
+      },
+      { discrete: true },
+    );
+    let html = "";
+    editor.read(() => {
+      html = $generateHtmlFromNodes(editor, null);
+    });
+    expect(html).toContain('data-moduo-date="2026-10-15"');
+    let day: string | null = null;
+    const back = createHeadlessEditor({
+      namespace: "date-node-test-2",
+      nodes: [DateNode],
+      onError: (e) => {
+        throw e;
+      },
+    });
+    back.update(
+      () => {
+        const nodes = $generateNodesFromDOM(
+          back,
+          new DOMParser().parseFromString(html, "text/html"),
+        );
+        const p = $createParagraphNode();
+        p.append(...nodes.filter((n) => !$isElementNode(n)));
+        for (const n of nodes) if ($isElementNode(n)) $getRoot().append(n);
+        $getRoot().append(p);
+      },
+      { discrete: true },
+    );
+    back.read(() => {
+      const visit = (node: LexicalNode) => {
+        if ($isDateNode(node)) day = node.getDay();
+        if ($isElementNode(node)) node.getChildren().forEach(visit);
+      };
+      $getRoot().getChildren().forEach(visit);
+    });
+    expect(day).toBe("2026-10-15");
+  });
+});
+
+describe("the Reference node (RF-1)", () => {
+  it("a reference stored without a label writes no title, only the type's word", () => {
+    const html = exportHtml(() => {
+      const p = $createParagraphNode();
+      p.append($createEntityRefNode({ entityType: "task", entityId: "t-1", display: "card" }));
+      $getRoot().append(p);
+    });
+    expect(html).toContain('data-display="card"');
+    expect(html).toContain('data-ref-v="2"');
+    expect(html).toContain(">task<");
+    const [chip] = importChips(html);
+    // The type's word is never read back as a title.
+    expect(chip?.exportJSON()).toMatchObject({ entityId: "t-1", label: "", display: "card" });
+    expect(chip?.getTextContent()).toBe("");
+  });
+
+  it("an older (version 1) node reads as a chip and keeps its address", () => {
+    let json: unknown = null;
+    makeEditor().update(
+      () => {
+        const node = EntityRefNode.importJSON({
+          type: "entity-ref",
+          version: 1,
+          entityType: "note",
+          entityId: "n-1",
+          label: "Brand voice",
+          icon: null,
+        });
+        json = node.exportJSON();
+      },
+      { discrete: true },
+    );
+    expect(json).toMatchObject({ version: 2, display: "chip", entityId: "n-1" });
   });
 });

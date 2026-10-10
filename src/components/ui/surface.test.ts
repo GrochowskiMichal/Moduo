@@ -9,7 +9,7 @@ import { CONTEXT_MENU_SCROLL, DROPDOWN_MENU_SCROLL, FLOATING_SURFACE } from "./s
 
 const ROOT = process.cwd();
 
-const PRIMITIVES = ["popover", "dropdown-menu", "context-menu", "select", "tooltip"];
+const PRIMITIVES = ["popover", "dropdown-menu", "context-menu", "select", "tooltip", "hover-card"];
 
 const FLOATING_TAGS = [
   "PopoverContent",
@@ -19,6 +19,7 @@ const FLOATING_TAGS = [
   "ContextMenuSubContent",
   "SelectContent",
   "TooltipContent",
+  "HoverCardContent",
 ];
 
 /** A second surface recipe smuggled in through a caller's className. */

@@ -5,6 +5,8 @@
 // reads. Newest-first in the hub trail and the notification card.
 
 import { isRelationKind, RELATION_KIND_LABELS } from "../../lib/entity-links";
+import { referenceTextToPlain } from "./references/text";
+import type { ReferenceRef } from "./references/types";
 
 /** The minimal shape an activity/notification row needs to render an actor. */
 export type SpineActorFields = {
@@ -43,11 +45,26 @@ function kindPhrase(kind: string | null): string {
  * Unknown ops fall back to the raw op name so the trail never lies by omission
  * when a newer client adds ops.
  */
-export function spineActivityLine(entry: {
-  op: string;
-  payload?: Record<string, unknown> | null;
-}): string {
+export function spineActivityLine(
+  entry: {
+    op: string;
+    payload?: Record<string, unknown> | null;
+  },
+  opts: {
+    /**
+     * Names a reference stored in a comment's excerpt (`moduo://task/<id>`)
+     * for this reader: its title, "Private item" or "Deleted task" (RF-1).
+     * Without it a reference reads "a linked item", never a title.
+     */
+    referenceName?: (ref: ReferenceRef) => string;
+  } = {},
+): string {
   const p = entry.payload ?? {};
+  // A comment's excerpt stores references, never titles; name them per reader.
+  const excerptText = (v: unknown): string | null => {
+    const s = str(v);
+    return s ? referenceTextToPlain(s, opts.referenceName) : null;
+  };
   switch (entry.op) {
     case "links.create":
     case "contacts.link": {
@@ -66,7 +83,7 @@ export function spineActivityLine(entry: {
     case "contacts.unlink":
       return "removed a link";
     case "comments.add": {
-      const excerpt = str(p.excerpt);
+      const excerpt = excerptText(p.excerpt);
       return excerpt ? `commented: “${excerpt}”` : "left a comment";
     }
     // ── Tasks notifications (DF-9) ────────────────────────────────────────────
