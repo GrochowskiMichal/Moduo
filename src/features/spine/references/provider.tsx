@@ -108,7 +108,7 @@ export function ReferencesProvider({ children }: { children: ReactNode }) {
     if (!store || !needsLive || !selectedWorkspaceId || !userId) return;
     // A return fires focus and visibility together: one re-read per return.
     let lastResync = 0;
-    return listenTasksLive(selectedWorkspaceId, userId, (event) => {
+    const stop = listenTasksLive(selectedWorkspaceId, userId, (event) => {
       if (event.type === "resync") {
         const now = Date.now();
         if (now - lastResync < RESYNC_COALESCE_MS) return;
@@ -138,6 +138,12 @@ export function ReferencesProvider({ children }: { children: ReactNode }) {
         });
       }
     });
+    return () => {
+      stop();
+      // Nothing watches tasks, projects or tags until one is on screen again:
+      // the cached ones are re-read when they next show (no catch-up on join).
+      store.invalidate((kind) => isLiveKind(kind));
+    };
   }, [store, needsLive, selectedWorkspaceId, userId]);
 
   // Coming back to the window re-reads what's on screen of the kinds Realtime

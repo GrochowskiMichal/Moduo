@@ -33,8 +33,11 @@ export function isLiteralWord(sigil: Sigil, word: string): boolean {
 /** What the caret sits right after: a sigil at a token start and the word typed since. */
 export type TriggerQuery = { sigil: Sigil; start: number; query: string };
 
-/** How many words a `/` query may run to ("/next week", "/Order frames from printer"). */
-export const MAX_COMMAND_WORDS = 4;
+/**
+ * How many words a `/` query may run to: the type's word and a four-word
+ * title ("/task Order frames from printer"), or a date command ("/next week").
+ */
+export const MAX_COMMAND_WORDS = 5;
 
 /**
  * The trigger the caret sits right after in `before` (the text up to the

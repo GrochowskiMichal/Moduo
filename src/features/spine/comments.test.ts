@@ -54,6 +54,19 @@ describe("what a comment stores (RF-1)", () => {
     ).toBe(`ping @Anna Lee and moduo://task/${TASK.id}`);
   });
 
+  it("never keeps a thing's title because a shorter person name starts it", () => {
+    expect(
+      commentBodyWithReferences(
+        "ping @Anna and @Anna's laptop, see @Anna Lee review",
+        [
+          { ref: TASK, label: "Anna's laptop" },
+          { ref: NOTE, label: "Anna Lee review" },
+        ],
+        [{ id: "u1", label: "Anna" }],
+      ),
+    ).toBe(`ping @Anna and moduo://task/${TASK.id}, see moduo://note/${NOTE.id}`);
+  });
+
   it("turns /today, /tomorrow and /next week into date chips", () => {
     expect(commentBodyWithReferences("Ship /tomorrow", [], [], WED)).toBe(
       "Ship moduo://date/2026-10-15",

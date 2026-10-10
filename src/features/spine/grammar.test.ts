@@ -29,6 +29,10 @@ describe("triggerAt — what the caret sits after", () => {
   it("lets a `/` command run to a few words (`/next we`), but no mention", () => {
     expect(triggerAt("due /next we")).toEqual({ sigil: "/", start: 4, query: "next we" });
     expect(triggerAt("/Order frames from printer")?.query).toBe("Order frames from printer");
+    expect(triggerAt("/task Order frames from printer")?.query).toBe(
+      "task Order frames from printer",
+    );
+    expect(triggerAt("/task Order frames from ")?.query).toBe("task Order frames from ");
     expect(triggerAt("/this is far too long now")).toBeNull();
     expect(triggerAt("ping @ann lee")).toBeNull();
   });

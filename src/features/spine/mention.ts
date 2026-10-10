@@ -262,7 +262,13 @@ export function buildMentionCandidates(input: {
     }
   }
 
-  const things = [...(projects ?? []), ...entities];
+  const seen = new Set<string>();
+  const things = [...(projects ?? []), ...entities].filter((e) => {
+    const key = `${e.type}:${e.id}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
   for (const e of things) {
     candidates.push({
       kind: "entity",

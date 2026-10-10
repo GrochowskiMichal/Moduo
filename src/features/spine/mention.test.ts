@@ -114,6 +114,16 @@ describe("buildMentionCandidates", () => {
     ]);
   });
 
+  it("lists a project once, its live name first, even when the registry has it too", () => {
+    const out = buildMentionCandidates({
+      trigger: "mention",
+      query: "acme",
+      entities: [{ type: "bucket", id: "p1", label: "Acme (old name)", icon: "project" }],
+      projects: [{ type: "bucket", id: "p1", label: "Acme rebrand", icon: "project" }],
+    });
+    expect(out.map((c) => (c.kind === "entity" ? c.label : c.kind))).toEqual(["Acme rebrand"]);
+  });
+
   it("in prose, `/` creates only behind the type's word (`/task …`)", () => {
     const base = {
       trigger: "ref" as const,

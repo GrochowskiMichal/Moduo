@@ -40,6 +40,9 @@ function excerptOf(text: string | null): string | null {
 }
 
 /** Statuses that count towards progress: Backlog and Won't do sit out (53b). */
+/** A typed `%` or `_` is a character, not a LIKE wildcard. */
+const likeEscape = (text: string): string => text.replace(/[\\%_]/g, (c) => `\\${c}`);
+
 const COUNTED = ["todo", "in_progress", "done"];
 
 export function createReferencePreviews(client: SupabaseClient): ReferencePreviewApi {
@@ -297,7 +300,7 @@ export function createReferencePreviews(client: SupabaseClient): ReferencePrevie
         .eq("is_system", false)
         .is("deleted_at", null);
       const trimmed = query.trim();
-      if (trimmed) q = q.ilike("name", `%${trimmed}%`);
+      if (trimmed) q = q.ilike("name", `%${likeEscape(trimmed)}%`);
       const { data, error } = await q.order("name").limit(limit ?? 5);
       fail(error);
       return ((data ?? []) as Row[]).map((r) => ({
@@ -314,7 +317,7 @@ export function createReferencePreviews(client: SupabaseClient): ReferencePrevie
         .eq("workspace_id", workspaceId)
         .is("deleted_at", null);
       const trimmed = query.trim();
-      if (trimmed) q = q.ilike("name", `%${trimmed}%`);
+      if (trimmed) q = q.ilike("name", `%${likeEscape(trimmed)}%`);
       const { data, error } = await q.order("name").limit(limit ?? 8);
       fail(error);
       return ((data ?? []) as Row[]).map((r) => ({

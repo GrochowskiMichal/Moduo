@@ -28,7 +28,7 @@
 - [ ] **Do:** type `/` in a description → **Expect:** Today · Tomorrow · Next week · Date… first, then projects and other things; `/tom` narrows to Tomorrow _(both)_
 - [ ] **Do:** pick Tomorrow → **Expect:** a date chip reading "Tomorrow" (hover: the full date); after midnight it reads "Tomorrow" no more, the plain date instead _(both)_
 - [ ] **Do:** pick Date… → **Expect:** a calendar where the menu was; a day inserts its chip; Esc closes it and keeps the caret _(both)_
-- [ ] **Do:** type `/task Order frames from printer` (no match) → **Expect:** "New task “Order frames from printer”"; Enter creates it in the open task's project and inserts its chip; `/Order frames` alone never offers to create _(both)_
+- [ ] **Do:** type `/task Order frames from printer` (no match) → **Expect:** "New task “Order frames from printer”"; Enter creates it in the open task's project and inserts it (a card alone on its line, a chip mid-sentence); `/Order frames` alone never offers to create _(both)_
 - [ ] **Do:** type `#des` → **Expect:** the workspace's tags; picking one inserts `#design` with its colour dot; the task's own Tags field doesn't change _(both)_
 - [ ] **Do:** type `C#`, `#123`, `and/or`, `a / b`, `7/11`, an email address → **Expect:** no menu; they stay text _(both)_
 - [ ] **Do:** type `@` + a project's name → **Expect:** the project is offered (before other things); its hover card shows "N of M done"; a teammate who can't see that project reads "Private item" _(both)_

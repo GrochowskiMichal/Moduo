@@ -166,3 +166,26 @@ test("a handle deep link (?id=MOD-142) opens its task", async ({ page }) => {
   });
   await expect(page).toHaveURL(new RegExp(`id=${t.id}`));
 });
+
+test("`/task` + a four-word title offers New task; Enter creates it and inserts it", async ({
+  page,
+}) => {
+  const host = await createTask(dev, { title: `Print run ${tag}`, bucketId: ws.inboxId });
+  await openTask(page, dev, host.id);
+  await expect(page.getByRole("textbox", { name: "Task title" })).toHaveValue(host.title, {
+    timeout: 20_000,
+  });
+  const title = `Order frames from ${tag}`;
+  await panel(page).getByRole("textbox", { name: "Description" }).click();
+  await page.keyboard.type(`/task ${title}`);
+  await expect(page.getByRole("option", { name: `New task “${title}”` })).toBeVisible({
+    timeout: 10_000,
+  });
+  await page.keyboard.press("Enter");
+  // Alone on its line it goes in as a card, and "Show as" offers the other forms.
+  const description = panel(page).getByRole("textbox", { name: "Description" });
+  await expect(description.getByRole("button", { name: title, exact: true })).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect(page.getByRole("radiogroup", { name: "Show as" })).toBeVisible();
+});

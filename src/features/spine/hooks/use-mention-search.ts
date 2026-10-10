@@ -161,7 +161,9 @@ export function useMentionSearch({
               : Promise.resolve<SearchedPerson[]>([]),
           ]);
           if (reqId === reqRef.current) {
-            setEntities(ents);
+            // A linked project is in the registry too, under the name it had
+            // when first linked: the projects list (live names) answers for it.
+            setEntities(includeProjects ? ents.filter((e) => e.type !== "bucket") : ents);
             setPeople(ppl);
             setProjects(projs);
           }

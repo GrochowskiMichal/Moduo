@@ -278,13 +278,19 @@ export function MentionMenuPlugin({
     enabled: menu !== null,
   });
 
+  // Nothing to offer for a few words after a `/` is ordinary prose: no menu
+  // shows, and no key (Esc included) is taken from the editor.
+  const hidden = !menu || (menu.query.includes(" ") && !loading && candidates.length === 0);
+
   const menuRef = useRef<MentionMenuState | null>(null);
   const candidatesRef = useRef<MentionCandidate[]>([]);
   const selectedIndexRef = useRef(0);
+  const hiddenRef = useRef(true);
   useEffect(() => {
     menuRef.current = menu;
     candidatesRef.current = candidates;
     selectedIndexRef.current = selectedIndex;
+    hiddenRef.current = hidden;
   });
 
   // Drive the search off the caret query.
@@ -481,7 +487,7 @@ export function MentionMenuPlugin({
     return editor.registerCommand(
       KEY_ESCAPE_COMMAND,
       (event) => {
-        if (!menuRef.current) return false;
+        if (!menuRef.current || hiddenRef.current) return false;
         event?.preventDefault();
         setMenu(null);
         return true;
@@ -553,8 +559,7 @@ export function MentionMenuPlugin({
     );
   }
 
-  // Nothing to offer for a few words after a `/` is ordinary prose: no menu.
-  if (!menu || (menu.query.includes(" ") && !loading && candidates.length === 0)) return null;
+  if (!menu || hidden) return null;
 
   return createPortal(
     <div

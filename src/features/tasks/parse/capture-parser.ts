@@ -37,6 +37,10 @@ export type ParsedCapture = {
   unparsedRecurrence: boolean;
 };
 
+/** A clock time ("at 3pm", "15:30", "at 5", "noon"), for a `/` command's title. */
+const CLOCK_TIME =
+  /(?:\bat\s+)?(?:\b\d{1,2}(?::\d{2})?\s*(?:am|pm)\b|\b\d{1,2}:\d{2}\b|\bnoon\b|\bmidnight\b)|\bat\s+\d{1,2}\b/i;
+
 /** English month names, for handing a `/` command's day to chrono. */
 const MONTHS = [
   "January",
@@ -293,8 +297,12 @@ export function parseCapture(input: string, refDate: Date = new Date()): ParsedC
       const at = new Date(rest.scheduledAt);
       const day = new Date(`${slash.day}T00:00:00`);
       day.setHours(at.getHours(), at.getMinutes(), 0, 0);
+      // Only the clock time leaves the title; a date word stays the person's
+      // ("Call Anna Friday at 3pm /tomorrow" → "Call Anna Friday").
+      const withoutClock = slash.text.replace(CLOCK_TIME, " ").replace(/\s+/g, " ").trim();
       return {
         ...rest,
+        title: withoutClock && withoutClock !== slash.text ? withoutClock : rest.title,
         scheduledAt: day.toISOString(),
         summary: `scheduled ${chronoLabel(day, true)}`,
       };
