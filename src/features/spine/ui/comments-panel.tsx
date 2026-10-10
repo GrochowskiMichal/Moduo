@@ -104,7 +104,7 @@ export function CommentCard({
     <article className="rounded-lg border border-hairline px-3 py-2.5">
       <header className="mb-1 flex min-w-0 items-center gap-2 font-sans text-xs text-muted-foreground">
         <PersonAvatar person={author} />
-        <span className="truncate font-medium text-foreground">{authorName}</span>
+        <span className="min-w-0 break-words font-medium text-foreground">{authorName}</span>
         <span aria-hidden>·</span>
         <time className="shrink-0 tabular-nums" title={timeTitle}>
           {time}

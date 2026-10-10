@@ -29,6 +29,7 @@ import { dispatchOpenSettings } from "../../features/settings/settings-events";
 import { SettingsModal } from "../../features/settings/settings-modal";
 import { UpdateOnLaunch } from "../../features/updater/update-on-launch";
 import { ENTITY_OPEN_EVENT, entityOpenTarget, markEntityOpenIntent } from "../../lib/entity-open";
+import { initialsOf } from "../../lib/initials";
 import {
   formatShortcut,
   SHORTCUTS,
@@ -457,10 +458,17 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
     );
   }
 
-  const derivedInitial =
-    displayName?.trim().slice(0, 1).toUpperCase() ||
-    userEmail?.trim().slice(0, 1).toUpperCase() ||
-    profileInitial;
+  // Two initials, like every avatar (Tasks v3 call 43).
+  const derivedInitial = displayName?.trim()
+    ? initialsOf(displayName)
+    : userEmail?.trim()
+      ? initialsOf(
+          userEmail
+            .trim()
+            .split("@")[0]
+            .replace(/[._-]+/g, " "),
+        )
+      : profileInitial;
 
   const toggleLeftPanel = () => {
     if (isSettingsRoute || isHomeRoute) return;

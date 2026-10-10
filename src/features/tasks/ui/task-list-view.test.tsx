@@ -230,3 +230,64 @@ describe("TaskListView keys (tasks-v2 Q1-1, Q1-2)", () => {
     expect(selectedTitle()).toBe("Alpha");
   });
 });
+
+// TV-P0 (tasks-v3 AC1.5): the list's states besides rows.
+describe("TaskListView states (TV-P0)", () => {
+  function renderStates(opts: { loaded: boolean; filterActive?: boolean }) {
+    const onClearFilters = rs.fn();
+    const api = {
+      loaded: opts.loaded,
+      tasks: [],
+      queuedTaskIds: new Set(),
+      queueClaims: new Map(),
+      subtasksByParent: new Map(),
+      subtaskProgressByTask: new Map(),
+      tagsByTask: new Map(),
+      blockedTaskIds: new Set(),
+    };
+    render(
+      <TooltipProvider>
+        <TaskListView
+          tasks={[]}
+          scopeTitle="Work"
+          selection="b1"
+          view="list"
+          onViewChange={() => {}}
+          groupBy="none"
+          onGroupByChange={() => {}}
+          buckets={[]}
+          inbox={inbox}
+          bucketNameById={() => "Work"}
+          canEdit
+          onRequestCapture={() => {}}
+          selectedTaskId={null}
+          onSelectTask={() => {}}
+          filterActive={opts.filterActive}
+          onClearFilters={onClearFilters}
+          api={api as never}
+        />
+      </TooltipProvider>,
+    );
+    return { onClearFilters };
+  }
+
+  it("shows a skeleton before the first load, never an empty message", () => {
+    renderStates({ loaded: false });
+    expect(screen.getByRole("status", { name: "Loading tasks" })).toBeTruthy();
+    expect(screen.queryByText(/Nothing here yet|No tasks/)).toBeNull();
+  });
+
+  it("an empty filter says “No tasks match”, and Clear filters clears it", () => {
+    const { onClearFilters } = renderStates({ loaded: true, filterActive: true });
+    expect(screen.getByText("No tasks match")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+    expect(onClearFilters).toHaveBeenCalledTimes(1);
+  });
+
+  it("an empty scope names it and teaches capture", () => {
+    renderStates({ loaded: true });
+    expect(screen.getByText("No tasks in Work")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Add a task" })).toBeTruthy();
+    expect(screen.queryByText("Nothing here yet")).toBeNull();
+  });
+});

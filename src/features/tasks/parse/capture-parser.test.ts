@@ -94,6 +94,19 @@ describe("parseCapture — a date and a repeat both stick", () => {
     expect(RRule.fromString(p.recurrence?.rrule ?? "").options.bymonthday).toEqual([1]);
   });
 
+  it("an ordinal that names a place isn't a day", () => {
+    const p = parseCapture("Clean the office every month on the 3rd floor", FRIDAY_10AM);
+    expect(p.title).toBe("Clean the office on the 3rd floor");
+    expect(p.recurrence?.rrule).not.toContain("BYMONTHDAY");
+  });
+
+  it("a connective before a repeat stays (it's often a verb's)", () => {
+    expect(parseCapture("Log on every day", FRIDAY_10AM).title).toBe("Log on");
+    expect(parseCapture("On-call handover every friday", FRIDAY_10AM).title).toBe(
+      "On-call handover",
+    );
+  });
+
   it("words between the repeat and its day stay in the title", () => {
     const p = parseCapture("Pay rent every month for the flat on the 1st", FRIDAY_10AM);
     expect(p.title).toBe("Pay rent for the flat");

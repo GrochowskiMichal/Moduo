@@ -246,6 +246,27 @@ test("AC1.10 + AC1.7 — a task in a project you can't see: “Private project�
   await expect(page.getByText(`assigned “${t.title}” to you`)).toBeVisible({ timeout: 15_000 });
 });
 
+test("AC1.7 — a comment's notice names its task", async ({ page }) => {
+  const shared = await createProject(dev, `Shared ${tag}`);
+  const t = await createTask(dev, { title: `Commented on ${tag}`, bucketId: shared.id });
+  // The teammate comments; the task's creator (dev) is told.
+  await rpc(mate, "comments_op_add", {
+    p_workspace_id: ws.id,
+    p_entity_type: "task",
+    p_entity_id: t.id,
+    p_body: "Looks good to me",
+    p_entity_label: t.title,
+  });
+  await openTasks(page);
+  await page
+    .getByRole("button", { name: /notifications/i })
+    .first()
+    .click();
+  await expect(page.getByText(`commented on “${t.title}”: “Looks good to me”`)).toBeVisible({
+    timeout: 15_000,
+  });
+});
+
 test("AC1.10 — a link to a task you can't open says “Private item”", async ({ page }) => {
   const secret = await createPrivateProject(dev, `Owner hidden ${tag}`);
   const hidden = await createTask(dev, { title: `Not yours ${tag}`, bucketId: secret.id });
@@ -304,5 +325,15 @@ test("AC1.3 — ⌘A selects the text in capture", async ({ page }) => {
     el.value.length,
   ]);
   expect(selection).toEqual([0, 17, 17]);
+  await page.keyboard.press("Escape");
+
+  // ⌘⇧K, the capture from anywhere, too (once the New dialog has closed).
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page.keyboard.press("ControlOrMeta+Shift+K");
+  const line = page.getByRole("dialog").getByRole("textbox").first();
+  await line.fill("Read chapter 3");
+  await line.press("ControlOrMeta+a");
+  const quick = await line.evaluate((el: HTMLInputElement) => [el.selectionStart, el.selectionEnd]);
+  expect(quick).toEqual([0, 14]);
   await page.keyboard.press("Escape");
 });

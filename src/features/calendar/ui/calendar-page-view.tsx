@@ -802,8 +802,9 @@ export function CalendarPageView({
       markWorked(taskId, false);
       toast("Removed from the calendar", {
         duration: UNDO_TOAST_MS,
-        // Re-schedule from cleared state uses patchTask (the op needs an
-        // existing schedule to move) — an undo restore, not a fresh intent.
+        // Undo puts the time back through patchTask, which since TV-P0 sends
+        // a scheduled time through the reschedule op: the trail shows the
+        // unschedule and the restore, both true.
         action: { label: "Undo", onClick: () => api.patchTask(taskId, { scheduledAt: fromIso }) },
       });
     },

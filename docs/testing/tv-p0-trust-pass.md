@@ -41,8 +41,9 @@
 ## Trail and dates (AC1.11, AC1.12, AC1.15, AC1.16)
 - [ ] **Do:** open any task → **Expect:** the meta line under the trail never says "Rescheduled N×". _(web)_
 - [ ] **Do:** select a row, press **s**, pick Tomorrow, type a time, press Enter → **Expect:** one save; the row shows "Tomorrow"; the trail adds "rescheduled this to Tomorrow, 10:30 AM". Pressing Esc instead saves nothing. _(web)_
+- [ ] **Do:** in a note, open a task line's schedule picker, pick a day and a time, click away → **Expect:** one save when the picker closes (not on the day click); Esc closes it without saving. _(web)_
 - [ ] **Do:** look at dates across a row, a card, the panel, the trail and Calendar's Tasks panel → **Expect:** one form everywhere: Today · Tomorrow · Mon · Oct 16 · Oct 16, 2027 · 3:00 PM · 45m · 1h 30m. _(web)_
-- [ ] **Do:** look at assignee avatars on rows, cards, the panel and the trail → **Expect:** two letters (first and last initial; a one-word name's first two letters); yours never "M". _(web)_
+- [ ] **Do:** look at assignee avatars on rows, cards, the panel, the trail and your avatar in the top bar → **Expect:** two letters (first and last initial; a one-word name's first two letters); yours never "M". _(web)_
 - [ ] **Do:** narrow the right panel, open a task with a long project name and a scheduled time that has passed → **Expect:** values wrap between words ("Today, / 4:15 PM", "passed" under it), nothing ends in "…"; same on cards and in Calendar's Tasks panel. _(web)_
 
 ## Edge cases
@@ -57,6 +58,7 @@
 - "Private item" can't tell a deleted task from a private one (RF-1 / TV-D8 make the registry answer); a stale id restored on refresh clears quietly.
 - A comment notice names its task only once the task is in the entity registry (any comment puts it there); TV-D8 registers every task at creation.
 - Rows and the rail still truncate long titles (TV-U10, TV-U6); group headers still use small caps (DS-6, call 40).
+- In the Queue scope a task marked Won't do leaves the line-up at once (it leaves every queue on the server); reopen it from its link or from All.
 - AC1.13 (MCP lists past 1,000) and AC1.14 ("blocks" links block) are TV-D8's and join `tests/trust-pass.spec.ts` with it.
 
 ---

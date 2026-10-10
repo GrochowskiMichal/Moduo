@@ -18,7 +18,7 @@ Built in tasks-v3 block 3 ([specs/tasks-v3.md](../../specs/tasks-v3.md) AC1.3–
   - Rejected: a word list of month names to skip (misses "Dec 15" vs "December plan" the same way).
 - **P0-3 · "Won't do" reads as one, and stays in view until you move on** → TV-P0 (label), TV-U2 (the Filter → Status list), TV-D7 (the stored value)
   - Who: agent's choice, deferred to by Maciej, 2026-10-10.
-  - Decision: the label is "Won't do" (and "To do" for todo) everywhere now; the ⋯ item says "Won't do"; the panel shows a "Won't do · Reopen" line; the trail says "marked this Won't do" / "reopened this". A task you mark Won't do, or open from a link, stays listed (struck and dimmed, like a done one) and selected until you change scope.
+  - Decision: the label is "Won't do" (and "To do" for todo) everywhere now; the ⋯ item says "Won't do"; the panel shows a "Won't do · Reopen" line; the trail says "marked this Won't do" / "reopened this". A task you mark Won't do, or open from a link, stays listed (struck and dimmed, like a done one) and selected until you change scope. The Queue is the exception: a Won't do task leaves every queue on the server, so it leaves the line-up at once (reopen it from All or its link).
   - Why: AC1.4; Reopen was unreachable because the task vanished the moment it was archived.
   - Rejected: waiting for TV-U2's Filter → Status to make them reachable (the panel was the trap, not the list).
 - **P0-4 · The three empty states** → TV-P0; DS-6 standardises them on the kit

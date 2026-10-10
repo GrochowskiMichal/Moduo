@@ -135,7 +135,9 @@ function detectRecurrence(text: string): RecurrenceMatch | null {
  */
 function withMonthDay(text: string, match: RecurrenceMatch | null): RecurrenceMatch | null {
   if (!match || match.options.freq !== RRule.MONTHLY) return match;
-  const m = /\bon the (\d{1,2})(?:st|nd|rd|th)\b/i.exec(text);
+  // The ordinal must end the phrase (end of line, punctuation, a time):
+  // "on the 3rd floor" is a place, not a day.
+  const m = /\bon the (\d{1,2})(?:st|nd|rd|th)(?=\s*(?:$|[,.;!?]|at\b|\d))/i.exec(text);
   if (!m) return match;
   const day = Number.parseInt(m[1], 10);
   if (day < 1 || day > 31) return match;
@@ -208,24 +210,29 @@ function mergeSpans(spans: Array<[number, number]>): Array<[number, number]> {
   return out;
 }
 
-function stripSpans(text: string, spans: Array<[number, number]>): string {
+function stripSpans(
+  text: string,
+  spans: Array<[number, number]>,
+  /** Where the date phrase starts: only it takes the connective before it. */
+  dateStart: number | null,
+): string {
   // Remove from right to left so indices stay valid.
   const ordered = mergeSpans(spans).sort((a, b) => b[0] - a[0]);
   let out = text;
   for (const [start, end] of ordered) {
-    // The connective right before a date goes with it ("Essay by Dec 15 …").
-    const before = out.slice(0, start).replace(CONNECTIVE_BEFORE, "");
+    // The connective right before a date goes with it ("Essay by Dec 15 …");
+    // never before a repeat ("Log on every day" keeps "on").
+    const head = out.slice(0, start);
+    const before = start === dateStart ? head.replace(CONNECTIVE_BEFORE, "") : head;
     out = `${before} ${out.slice(end)}`;
   }
-  return (
-    out
-      .replace(/\s+/g, " ")
-      .replace(/\s+([,.])/g, "$1")
-      // drop dangling connective words left behind ("at", "on", "by", "every")
-      .replace(/\b(at|on|by|every|each|due|starting)\s*$/i, "")
-      .replace(/^\s*(at|on|by)\b/i, "")
-      .trim()
-  );
+  // No blanket strip of leading/trailing "at"/"on"/"by": the date's own
+  // connective went with it above, and anything else is the person's words
+  // ("On-call handover", "Log on every day").
+  return out
+    .replace(/\s+/g, " ")
+    .replace(/\s+([,.])/g, "$1")
+    .trim();
 }
 
 export function parseCapture(input: string, refDate: Date = new Date()): ParsedCapture {
@@ -315,7 +322,7 @@ export function parseCapture(input: string, refDate: Date = new Date()): ParsedC
   }
 
   const matched = !!recurrence || !!dateResult;
-  const title = stripSpans(raw, spans) || raw;
+  const title = stripSpans(raw, spans, dateResult ? dateResult.index : null) || raw;
   return {
     title,
     scheduledAt,
