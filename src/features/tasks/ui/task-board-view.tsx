@@ -5,7 +5,7 @@ import {
   type DragStartEvent,
   useDroppable,
 } from "@dnd-kit/core";
-import { arrayMove, SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { type ReactNode, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { Eyebrow } from "../../../components/ui/eyebrow";
@@ -17,14 +17,23 @@ import {
   SelectValue,
 } from "../../../components/ui/select";
 import { cn } from "../../../lib/utils";
-import { groupsByBucket, nestedSubtaskIds, STATUS_LABELS, showBucketPill } from "../helpers";
+import { type CompletedMode, partitionCompleted } from "../completed";
+import {
+  groupsByBucket,
+  isOpen,
+  nestedSubtaskIds,
+  STATUS_LABELS,
+  showBucketPill,
+} from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { Bucket, Task, TaskStatus } from "../model";
-import { positionForReorder } from "../reorder";
+import { boardDropPosition } from "../reorder";
+import { DEFAULT_ROW_PROPERTIES } from "../row-layout";
 import { DndBoundary, useTaskDndSensors } from "./dnd/task-dnd";
 import type { PlanView } from "./plan-view-header";
 import { PlanViewHeader } from "./plan-view-header";
 import { CardBody, TaskCard } from "./task-card";
+import { CompletedLine } from "./task-meta";
 
 export type BoardGroupBy = "status" | "bucket";
 
@@ -45,7 +54,17 @@ type Props = {
   onSelectTask: (id: string | null) => void;
   tagFilterControl?: ReactNode;
   activeTagFilters?: ReactNode;
-  onTagFilter?: (tagId: string) => void;
+  /** The Display menu (built by the parent). */
+  displayControl?: ReactNode;
+  /** Display → Completed (tasks-v2 §6). Default: hidden. */
+  completed?: CompletedMode;
+  /** Display → "Show on rows" — cards follow it too. */
+  properties?: readonly string[];
+  /**
+   * Tasks that stay listed whatever Display says, until the scope changes:
+   * checked off here, or opened here (selected, deep-linked).
+   */
+  stayingIds?: ReadonlySet<string>;
   /** "external" = an ancestor owns the DndContext (DF-22: so a card can be
    * dragged onto the right-pane hub to link it); board move/reorder binds via a
    * monitor. Default "internal" (own DndContext) keeps standalone mounts working. */
@@ -57,7 +76,21 @@ type Props = {
 // "open work first" order. Archived is never a board column (out of scope).
 const BOARD_STATUS_ORDER: TaskStatus[] = ["todo", "in_progress", "done"];
 
-type Column = { id: string; label: string; dim: BoardGroupBy; value: string; tasks: Task[] };
+type Column = {
+  id: string;
+  label: string;
+  dim: BoardGroupBy;
+  value: string;
+  /** The cards the column lists. */
+  tasks: Task[];
+  /** Every task in the column, in order: drops are placed among these, so a
+   * new position never collides with a hidden completed task's. */
+  all: Task[];
+  /** Completed tasks Display hides, behind the column's "N completed" line. */
+  hidden: Task[];
+};
+
+const NO_IDS: ReadonlySet<string> = new Set();
 
 export function TaskBoardView({
   tasks,
@@ -76,11 +109,21 @@ export function TaskBoardView({
   onSelectTask,
   tagFilterControl,
   activeTagFilters,
-  onTagFilter,
+  displayControl,
+  completed = "hidden",
+  properties = DEFAULT_ROW_PROPERTIES,
+  stayingIds = NO_IDS,
   dndMode = "internal",
   api,
 }: Props) {
   const [activeId, setActiveId] = useState<string | null>(null);
+  // Columns whose hidden completed cards were asked for ("· show"); forgotten
+  // when the scope changes (the set belongs to the scope it was made in).
+  const [reveal, setReveal] = useState<{ scope: string; ids: ReadonlySet<string> }>({
+    scope: selection,
+    ids: NO_IDS,
+  });
+  const revealed = reveal.scope === selection ? reveal.ids : NO_IDS;
 
   // Columns by bucket only make sense across buckets (All, My tasks); otherwise status.
   const groupDim: BoardGroupBy = groupsByBucket(selection) ? boardGroupBy : "status";
@@ -102,24 +145,64 @@ export function TaskBoardView({
   );
 
   const columns = useMemo<Column[]>(() => {
+    const now = new Date();
+    // Kept even when done: staying (checked off or opened in this scope); the
+    // selected card and its parent (a deep link or the panel must never point
+    // at a card that isn't there); a parent with open subtasks (they live on
+    // its card's n/m).
+    const selectedParentId = selectedTaskId
+      ? (api.tasks.find((t) => t.id === selectedTaskId)?.parentId ?? null)
+      : null;
+    const keep = (t: Task) =>
+      stayingIds.has(t.id) ||
+      t.id === selectedTaskId ||
+      t.id === selectedParentId ||
+      (api.subtasksByParent.get(t.id) ?? []).some(isOpen);
+    const column = (id: string, label: string, dim: BoardGroupBy, value: string, all: Task[]) => {
+      const { shown, hidden } = partitionCompleted(all, { mode: completed, now, keep });
+      return { id, label, dim, value, tasks: revealed.has(id) ? all : shown, all, hidden };
+    };
     if (groupDim === "bucket") {
       const ordered: Bucket[] = inbox ? [inbox, ...buckets] : buckets;
-      return ordered.map((b) => ({
-        id: `col:bucket:${b.id}`,
-        label: bucketNameById(b.id),
-        dim: "bucket" as const,
-        value: b.id,
-        tasks: boardTasks.filter((t) => t.bucketId === b.id),
-      }));
+      return ordered.map((b) =>
+        column(
+          `col:bucket:${b.id}`,
+          bucketNameById(b.id),
+          "bucket",
+          b.id,
+          boardTasks.filter((t) => t.bucketId === b.id),
+        ),
+      );
     }
-    return BOARD_STATUS_ORDER.map((s) => ({
-      id: `col:status:${s}`,
-      label: STATUS_LABELS[s],
-      dim: "status" as const,
-      value: s,
-      tasks: boardTasks.filter((t) => t.status === s),
-    }));
-  }, [groupDim, boardTasks, buckets, inbox, bucketNameById]);
+    return BOARD_STATUS_ORDER.map((s) =>
+      column(
+        `col:status:${s}`,
+        STATUS_LABELS[s],
+        "status",
+        s,
+        boardTasks.filter((t) => t.status === s),
+      ),
+    );
+  }, [
+    groupDim,
+    boardTasks,
+    buckets,
+    inbox,
+    bucketNameById,
+    completed,
+    stayingIds,
+    selectedTaskId,
+    revealed,
+    api.tasks,
+    api.subtasksByParent,
+  ]);
+
+  const toggleReveal = (id: string) => {
+    const next = new Set(revealed);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setReveal({ scope: selection, ids: next });
+  };
 
   const sensors = useTaskDndSensors();
 
@@ -149,24 +232,20 @@ export function TaskBoardView({
       : columns.find((c) => c.tasks.some((t) => t.id === overId));
     if (!task || !sourceCol || !destCol) return;
 
+    // Positions are worked out among EVERY task in the column, hidden
+    // completed ones included (TV-U1, boardDropPosition).
+    const position = boardDropPosition({
+      activeId,
+      overId: overIsColumn ? null : overId,
+      source: sourceCol.all,
+      dest: destCol.all,
+    });
+    if (position === null) return;
     if (sourceCol.id === destCol.id) {
-      // within-column reorder
-      if (overIsColumn) return; // dropped on own column gutter — no move
-      const ids = sourceCol.tasks.map((t) => t.id);
-      const from = ids.indexOf(activeId);
-      const to = ids.indexOf(overId);
-      if (from < 0 || to < 0 || from === to) return;
-      const reordered = arrayMove(sourceCol.tasks, from, to);
-      api.patchTask(activeId, { position: positionForReorder(reordered, to) });
+      api.patchTask(activeId, { position });
       return;
     }
-
-    // cross-column move — insert before the hovered card, or at the column end
-    const destTasks = destCol.tasks; // excludes the active card (other column)
-    const overIdx = overIsColumn ? destTasks.length : destTasks.findIndex((t) => t.id === overId);
-    const at = Math.max(0, Math.min(destTasks.length, overIdx < 0 ? destTasks.length : overIdx));
-    const ordered = [...destTasks.slice(0, at), task, ...destTasks.slice(at)];
-    const patch: Partial<Task> = { position: positionForReorder(ordered, at) };
+    const patch: Partial<Task> = { position };
     if (destCol.dim === "status") patch.status = destCol.value as TaskStatus;
     else patch.bucketId = destCol.value;
     api.patchTask(activeId, patch);
@@ -197,6 +276,7 @@ export function TaskBoardView({
         onViewChange={onViewChange}
         groupControl={groupControl}
         filterControl={tagFilterControl}
+        displayControl={displayControl}
         activeFilters={activeTagFilters}
         canEdit={canEdit}
         onRequestCapture={onRequestCapture}
@@ -223,12 +303,14 @@ export function TaskBoardView({
               canEdit={canEdit}
               showBucketTag={showBucketTag}
               showAssignee={showAssignee}
+              properties={properties}
               buckets={buckets}
               inbox={inbox}
               bucketNameById={bucketNameById}
               selectedTaskId={selectedTaskId}
               onSelectTask={onSelectTask}
-              onTagFilter={onTagFilter}
+              revealed={revealed.has(col.id)}
+              onToggleReveal={() => toggleReveal(col.id)}
               api={api}
             />
           ))}
@@ -238,13 +320,14 @@ export function TaskBoardView({
           ? createPortal(
               <DragOverlay>
                 {activeTask ? (
-                  <div className="w-72 rounded-md border border-border bg-background px-2 py-1.5 shadow-lg">
+                  <div className="w-full rounded-lg border border-border bg-background px-3 py-2.5 shadow-lg">
                     <CardBody
                       task={activeTask}
                       bucketName={bucketNameById(activeTask.bucketId)}
                       inboxId={inbox?.id ?? null}
                       showBucket={showBucketTag}
                       showAssignee={showAssignee}
+                      properties={properties}
                       canEdit={false}
                       api={api}
                     />
@@ -264,35 +347,41 @@ function BoardColumn({
   canEdit,
   showBucketTag,
   showAssignee,
+  properties,
   buckets,
   inbox,
   bucketNameById,
   selectedTaskId,
   onSelectTask,
-  onTagFilter,
+  revealed,
+  onToggleReveal,
   api,
 }: {
   column: Column;
   canEdit: boolean;
   showBucketTag: boolean;
   showAssignee: boolean;
+  properties: readonly string[];
   buckets: Bucket[];
   inbox: Bucket | null;
   bucketNameById: (id: string) => string;
   selectedTaskId: string | null;
   onSelectTask: (id: string | null) => void;
-  onTagFilter?: (tagId: string) => void;
+  revealed: boolean;
+  onToggleReveal: () => void;
   api: TasksModuleApi;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: column.id, disabled: !canEdit });
+  // While revealed, the column lists its completed cards too; the count in
+  // the header is always every task in the column.
+  const total = revealed ? column.tasks.length : column.tasks.length + column.hidden.length;
 
   return (
-    <section className="flex h-full w-72 shrink-0 flex-col">
+    // Columns flex between 280 and 400 px (tasks-v2 §6).
+    <section className="flex h-full min-w-70 max-w-100 flex-1 flex-col">
       <header className="mb-2 flex items-center gap-1.5 px-1">
         <Eyebrow>{column.label}</Eyebrow>
-        <span className="font-sans text-xs tabular-nums text-muted-foreground/70">
-          {column.tasks.length}
-        </span>
+        <span className="font-sans text-xs tabular-nums text-muted-foreground/70">{total}</span>
       </header>
       <div
         ref={setNodeRef}
@@ -307,7 +396,7 @@ function BoardColumn({
           items={column.tasks.map((t) => t.id)}
           strategy={verticalListSortingStrategy}
         >
-          {column.tasks.length === 0 ? (
+          {column.tasks.length === 0 && column.hidden.length === 0 ? (
             <p className="px-2 py-6 text-center text-xs text-muted-foreground/50">
               {canEdit ? "Drop tasks here" : "Empty"}
             </p>
@@ -321,15 +410,21 @@ function BoardColumn({
                 inboxId={inbox?.id ?? null}
                 showBucket={showBucketTag}
                 showAssignee={showAssignee}
+                properties={properties}
                 canEdit={canEdit}
                 selected={task.id === selectedTaskId}
                 onSelect={() => onSelectTask(task.id)}
-                onTagFilter={onTagFilter}
                 api={api}
               />
             ))
           )}
         </SortableContext>
+        <CompletedLine
+          count={column.hidden.length}
+          shown={revealed}
+          onToggle={onToggleReveal}
+          className="px-1"
+        />
       </div>
     </section>
   );

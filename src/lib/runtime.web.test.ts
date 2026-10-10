@@ -83,6 +83,14 @@ describe("patchTask sends only changed columns", () => {
     expect(taskPatchToColumns(fields, NOW)).toEqual({ energy_level: "low", updated_at: NOW });
   });
 
+  // TV-D3: time goes through tasks_op_track_time, so no edit (or re-save of a
+  // whole task) can put back a total someone else's tracked time moved past.
+  it("never sends the time total", () => {
+    const fields = editableTaskFields({ title: "Renamed", timeSpentSeconds: 999 });
+    expect(fields).toEqual({ title: "Renamed" });
+    expect(taskPatchToColumns(fields, NOW)).toEqual({ title: "Renamed", updated_at: NOW });
+  });
+
   it("keeps description NOT NULL (an emptied one is the empty string)", () => {
     expect(taskPatchToColumns({ description: "" }, NOW)).toEqual({
       description: "",

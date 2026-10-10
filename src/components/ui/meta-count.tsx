@@ -15,9 +15,14 @@ type MetaCountProps = Omit<React.ComponentProps<"span">, "children"> & {
    * read as "<count> <noun>"; pass a function to word it yourself (singulars).
    */
   label: string | ((count: number) => string);
+  /**
+   * What the mark shows instead of the bare count, e.g. subtask progress
+   * ("0/3", with `count` = the total). `count` still decides whether it shows.
+   */
+  value?: React.ReactNode;
 };
 
-function MetaCount({ icon: Icon, count, label, className, ...props }: MetaCountProps) {
+function MetaCount({ icon: Icon, count, label, value, className, ...props }: MetaCountProps) {
   if (!Number.isFinite(count) || count <= 0) return null;
   const spoken = typeof label === "function" ? label(count) : `${count} ${label}`;
   return (
@@ -30,7 +35,7 @@ function MetaCount({ icon: Icon, count, label, className, ...props }: MetaCountP
       {...props}
     >
       <Icon aria-hidden className="size-icon-xs shrink-0" />
-      <span aria-hidden>{count}</span>
+      <span aria-hidden>{value ?? count}</span>
       <span className="sr-only">{spoken}</span>
     </span>
   );

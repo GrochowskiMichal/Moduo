@@ -34,6 +34,7 @@ import { useEffect, useMemo, useRef } from "react";
 
 import type { EntityRef } from "@/lib/entity-links";
 import type { ModuoRuntime } from "@/lib/runtime.types";
+import { cn } from "@/lib/utils";
 import { EntityRefNode } from "./entity-ref-node";
 import { looksLikeRichHtml } from "./entity-rich-html";
 import { MentionMenuPlugin } from "./mention-menu-plugin";
@@ -160,8 +161,10 @@ export type EntityTextEditorProps = {
   currentUserId?: string | null;
   placeholder?: string;
   ariaLabel?: string;
-  /** Extra classes for the editable/readable surface. */
+  /** Extra classes for the editable/readable surface (merged: they win over the defaults). */
   className?: string;
+  /** Extra classes for the placeholder (match a changed text size). */
+  placeholderClassName?: string;
   onCommit?: (html: string, text: string) => void;
 };
 
@@ -177,6 +180,7 @@ export function EntityTextEditor({
   placeholder,
   ariaLabel,
   className,
+  placeholderClassName,
   onCommit,
 }: EntityTextEditorProps) {
   const initialConfig = useMemo(
@@ -199,16 +203,21 @@ export function EntityTextEditor({
           contentEditable={
             <ContentEditable
               aria-label={ariaLabel ?? "Description"}
-              className={
-                "min-h-16 rounded-md text-sm leading-relaxed text-foreground outline-none " +
-                (editable ? "focus-visible:ring-2 focus-visible:ring-ring " : "cursor-default ") +
-                (className ?? "")
-              }
+              className={cn(
+                "min-h-16 rounded-md text-sm leading-relaxed text-foreground outline-none",
+                editable ? "focus-visible:ring-2 focus-visible:ring-ring" : "cursor-default",
+                className,
+              )}
             />
           }
           placeholder={
             placeholder ? (
-              <div className="pointer-events-none absolute left-0 top-0 text-sm text-muted-foreground">
+              <div
+                className={cn(
+                  "pointer-events-none absolute left-0 top-0 text-sm text-muted-foreground",
+                  placeholderClassName,
+                )}
+              >
                 {placeholder}
               </div>
             ) : null

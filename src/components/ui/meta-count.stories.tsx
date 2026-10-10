@@ -15,7 +15,7 @@ export const Default: Story = {
   render: () => <MetaCount icon={Paperclip} count={2} label="attachments" />,
 };
 
-/** The quiet-counts group, in its fixed order: tags · attachments · comments · subtasks. Zeros render nothing. */
+/** The quiet-counts group, in its fixed order: tags · attachments · comments · subtasks. Zeros render nothing. Subtasks can show progress ("1/3") through `value`. */
 export const Group: Story = {
   render: () => (
     <div className="flex flex-col gap-3">
@@ -28,6 +28,10 @@ export const Group: Story = {
           count={5}
           label={(n) => (n === 1 ? "1 subtask" : `${n} subtasks`)}
         />
+      </MetaCounts>
+      <MetaCounts>
+        <MetaCount icon={Hash} count={2} label="tags" />
+        <MetaCount icon={ListTree} count={3} value="1/3" label={() => "1 of 3 subtasks done"} />
       </MetaCounts>
       <MetaCounts>
         <MetaCount icon={Hash} count={0} label="tags" />

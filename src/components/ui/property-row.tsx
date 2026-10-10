@@ -14,7 +14,7 @@ type PropertyRowProps = {
    * or top-align it for multi-line / wrapping values (tag lists, sub-items).
    */
   align?: "center" | "start";
-  /** The value: a control, text, chips, a small list. */
+  /** The value: usually a `PropertyValue`; also text, chips, a small list. */
   children: React.ReactNode;
   className?: string;
 };
@@ -22,9 +22,9 @@ type PropertyRowProps = {
 /**
  * One label-left / value-right property row. Stack several and their fixed
  * label column lines them up into a scannable grid — the Linear right-rail
- * pattern. Scalar properties keep the default center align; multi-line values
- * pass `align="start"`. Generic and module-agnostic — the Tasks detail panel is
- * the first consumer; Notes / Mail inherit it next.
+ * pattern. Each row is one small control rung tall (`--ctrl-h-sm`); a
+ * wrapping value passes `align="start"` and the label stays on its first line.
+ * Generic and module-agnostic — the Tasks detail panel is the first consumer.
  */
 function PropertyRow({
   label,
@@ -37,26 +37,80 @@ function PropertyRow({
   const Label = htmlFor ? "label" : "span";
   return (
     <div
+      data-slot="property-row"
       className={cn(
-        "flex gap-3",
-        align === "start" ? "items-start" : "min-h-8 items-center",
+        "flex min-h-(--ctrl-h-sm) gap-2",
+        align === "start" ? "items-start" : "items-center",
         className,
       )}
     >
       <Label
         {...(htmlFor ? { htmlFor } : {})}
-        className={cn(
-          "flex w-24 shrink-0 items-center gap-1.5 font-sans text-xs text-muted-foreground",
-          align === "start" && "pt-1.5",
-        )}
+        className="flex h-(--ctrl-h-sm) w-24 shrink-0 items-center gap-1.5 font-sans text-sm text-muted-foreground"
       >
-        {Icon ? <Icon className="size-3.5 shrink-0 opacity-70" aria-hidden /> : null}
+        {Icon ? <Icon className="size-icon-sm shrink-0 opacity-70" aria-hidden /> : null}
         <span className="truncate">{label}</span>
       </Label>
-      <div className="min-w-0 flex-1">{children}</div>
+      <div className="flex min-w-0 flex-1 items-center">{children}</div>
     </div>
   );
 }
 
-export type { PropertyRowProps };
-export { PropertyRow };
+type PropertyValueProps = React.ComponentProps<"button"> & {
+  /** The 14px slot every value starts behind (an icon, a glyph, an avatar), so values line up. */
+  icon?: React.ReactNode;
+  /** No value yet: the text is a muted placeholder ("Set priority"). */
+  empty?: boolean;
+  /** Extra content after the value that may not truncate (a bar, a share). */
+  trailing?: React.ReactNode;
+};
+
+/**
+ * A property's value as its own quiet control: icon slot + value, no chevron
+ * and no box; hover shows the field (tasks-v2 §9). Use it as the trigger of the
+ * picker that edits the value (`asChild` on a Popover/DropdownMenu trigger).
+ * Disabled (view-only) keeps the value at full strength, just inert.
+ */
+function PropertyValue({
+  icon,
+  empty = false,
+  trailing,
+  className,
+  children,
+  type = "button",
+  ...props
+}: PropertyValueProps) {
+  return (
+    <button
+      type={type}
+      className={cn(
+        "-ml-1.5 inline-flex h-(--ctrl-h-sm) max-w-full min-w-0 items-center gap-2 rounded-md px-1.5",
+        "text-left font-sans text-base text-foreground outline-none",
+        "transition-colors duration-(--motion-fade) ease-(--ease-out)",
+        "hover:bg-state-hover aria-expanded:bg-state-active",
+        "focus-visible:ring-2 focus-visible:ring-ring/50",
+        "disabled:cursor-default disabled:hover:bg-transparent",
+        empty && "text-muted-foreground",
+        className,
+      )}
+      {...props}
+      // After the spread: a Radix trigger (asChild) passes its own data-slot.
+      data-slot="property-value"
+      data-empty={empty || undefined}
+    >
+      {icon !== undefined ? (
+        <span
+          aria-hidden
+          className="flex size-icon-sm shrink-0 items-center justify-center text-muted-foreground [&_svg]:size-icon-sm"
+        >
+          {icon}
+        </span>
+      ) : null}
+      <span className="min-w-0 truncate">{children}</span>
+      {trailing}
+    </button>
+  );
+}
+
+export type { PropertyRowProps, PropertyValueProps };
+export { PropertyRow, PropertyValue };

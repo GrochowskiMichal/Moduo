@@ -12,6 +12,8 @@ import type {
   EnergyLevel,
   PriorityLevel,
   TaskStatus,
+  TaskTimeAction,
+  TaskTimeStatus,
 } from "@contracts/vocabularies";
 import type { Truncation } from "../../lib/paged-select";
 
@@ -20,6 +22,8 @@ export type {
   EnergyLevel,
   PriorityLevel,
   TaskStatus,
+  TaskTimeAction,
+  TaskTimeStatus,
 } from "@contracts/vocabularies";
 
 /** Recurrence definition (rrule.js-compatible). Produced by the capture parser. */
@@ -134,6 +138,51 @@ export type TaskQueueEntry = {
 
 /** Where `opQueueAdd` puts a task: the end (default), or the top (Calendar's "Start focus"). */
 export type QueuePlacement = "end" | "top";
+
+/**
+ * A write of tracked time (TV-D3, `tasks_op_track_time`): a finished focus or
+ * waiting stretch, an adjustment (signed), the adjustment that makes the total
+ * a typed value, or the Undo of your own adjustment. `key` makes a resend of
+ * the same save count once.
+ */
+export type TrackTimeInput = {
+  workspaceId: string;
+  taskId: string;
+  action: TaskTimeAction;
+  /** The stretch's length, the adjustment, or the total to reach. For an Undo,
+   *  the adjustment being undone (used only by a database without entries). */
+  seconds?: number;
+  /** When the stretch ended (now when left out). */
+  endedAt?: string | null;
+  key?: string | null;
+  /** The adjustment an Undo removes. */
+  entryId?: string | null;
+};
+
+/** What a time write answered. Totals are null when the task is gone. */
+export type TaskTimeResult = {
+  status: TaskTimeStatus;
+  taskId: string;
+  /** The entry written (or, for a resend, the one already there). */
+  entryId: string | null;
+  /** The task's total: what `timeSpentSeconds` holds everywhere. */
+  totalSeconds: number | null;
+  /** Your share of it. */
+  mySeconds: number | null;
+  /** Your waiting (in-flight) time on it, never part of the total. */
+  myWaitingSeconds: number | null;
+};
+
+/** A task's time as `tasks_time_totals` reads it for the caller. */
+export type TaskTimeTotals = {
+  taskId: string;
+  totalSeconds: number;
+  mySeconds: number;
+  myWaitingSeconds: number;
+  /** Your share since the asked-for time (legacy time never counts); null when
+   *  none was asked for. */
+  mySecondsSince: number | null;
+};
 
 /** A workspace-level, cross-cutting label. Attached to entities via {@link TagLink}. */
 export type Tag = {

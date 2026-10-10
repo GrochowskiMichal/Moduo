@@ -23,7 +23,7 @@ import {
   toggleFocusPomodoro,
   toggleFocusRunning,
 } from "./engine";
-import { parseRecord } from "./engine-core";
+import { blankRecord, parseRecord, settleFlush, takeFlushBatch } from "./engine-core";
 import type { FocusPhaseNext } from "./phase-alert";
 
 const USER = "user-1";
@@ -53,15 +53,18 @@ function task(id: string, workspaceId = WS) {
 }
 
 /** A sink that records every hand-off; `result` models the Tasks write. */
-function recordingSink(result: () => boolean | "gone" | Promise<boolean> = () => true) {
+function recordingSink(result: () => boolean | "gone" | Promise<boolean | "gone"> = () => true) {
   const calls: Array<{ taskId: string; seconds: number }> = [];
-  const sink: FocusFlushSink = (taskId, seconds) => {
+  /** Each hand-off's idempotency key, in order. */
+  const keys: string[] = [];
+  const sink: FocusFlushSink = (taskId, seconds, context) => {
     calls.push({ taskId, seconds });
+    keys.push(context.key);
     return result();
   };
   const total = (taskId?: string) =>
     calls.filter((c) => !taskId || c.taskId === taskId).reduce((sum, c) => sum + c.seconds, 0);
-  return { calls, sink, total };
+  return { calls, keys, sink, total };
 }
 
 /** The wall clock moves but no timer fires: a suspended webview, a sleeping machine. */
@@ -621,6 +624,87 @@ describe("F1-7 — tracked time is never lost", () => {
     finish(true);
   });
 
+  it("a failed save is sent again as it was, under the same key; new time is its own save", async () => {
+    let answer: () => boolean | Promise<boolean> = () => Promise.reject(new Error("offline"));
+    const { calls, keys, sink } = recordingSink(() => answer());
+    registerFocusFlushSink(WS, sink);
+    bindFocusTask(task("t1"));
+    startFocus();
+    rs.advanceTimersByTime(30_000);
+    toggleFocusRunning(); // the save fails: maybe it reached the server, maybe not
+    await settle();
+    toggleFocusRunning(); // resume: 10 more seconds
+    rs.advanceTimersByTime(10_000);
+    toggleFocusRunning();
+    await settle();
+    answer = () => false; // the retry finds the list loading: still the same save
+    await rs.advanceTimersByTimeAsync(15_000);
+    answer = () => Promise.resolve(true);
+    await rs.advanceTimersByTimeAsync(30_000); // the retry saves the 30 s…
+    await rs.advanceTimersByTimeAsync(60_000); // …and the next flush the 10 s
+    const thirty = calls.flatMap((c, i) => (c.seconds === 30 ? [keys[i]] : []));
+    expect(thirty.length).toBeGreaterThanOrEqual(3);
+    expect(new Set(thirty).size).toBe(1);
+    const ten = keys.filter((_, i) => calls[i]?.seconds === 10);
+    expect(ten).toHaveLength(1);
+    expect(ten[0]).not.toBe(thirty[0]);
+    expect(getFocusSession()).toMatchObject({ accrued: 0, unsaved: false });
+  });
+
+  it("a save cut off by a reload goes again under its key", async () => {
+    const first = recordingSink(() => new Promise<boolean>(() => {})); // never answered
+    registerFocusFlushSink(WS, first.sink);
+    bindFocusTask(task("t1"));
+    startFocus();
+    rs.advanceTimersByTime(30_000);
+    toggleFocusRunning();
+    newPage();
+    rs.advanceTimersByTime(121_000);
+    const retry = recordingSink();
+    registerFocusFlushSink(WS, retry.sink);
+    expect(retry.calls).toEqual([{ taskId: "t1", seconds: 30 }]);
+    expect(retry.keys).toEqual(first.keys);
+    expect(getFocusSession()).toMatchObject({ accrued: 0, unsaved: false });
+  });
+
+  it("a hand-off saved by a build without keys counts as unsaved again once it's stale", () => {
+    localStorage.setItem(
+      KEY,
+      JSON.stringify({
+        ...JSON.parse(localStorage.getItem(KEY) ?? "{}"),
+        v: 1,
+        owner: null,
+        seenAt: Date.now(),
+        task: null,
+        tracking: false,
+        pomodoro: false,
+        phase: "work",
+        longBreak: false,
+        blocks: 0,
+        phaseMs: 0,
+        phaseDoneMs: 0,
+        since: null,
+        sitMs: 0,
+        away: [],
+        credits: {
+          t1: {
+            workspaceId: WS,
+            ms: 5_000,
+            inFlightMs: 20_000,
+            inFlightAt: Date.now() - 200_000,
+            failedAt: null,
+            earnedAt: Date.now() - 200_000,
+          },
+        },
+      }),
+    );
+    newPage();
+    const { calls, keys, sink } = recordingSink();
+    registerFocusFlushSink(WS, sink);
+    expect(calls).toEqual([{ taskId: "t1", seconds: 25 }]);
+    expect(keys[0]).toMatch(/^[A-Za-z0-9_-]{8,64}$/);
+  });
+
   it("with no sink, accrued time is held and drains on register", () => {
     bindFocusTask(task("t1"));
     startFocus();
@@ -741,6 +825,48 @@ describe("F1-7 — tracked time is never lost", () => {
 });
 
 // Two engines over one storage behave like two browser tabs.
+describe("saves and their keys (TV-D3)", () => {
+  const rec = (credit: object) => ({
+    ...blankRecord(Date.now()),
+    credits: {
+      t1: {
+        workspaceId: WS,
+        ms: 0,
+        inFlightMs: 0,
+        inFlightAt: null,
+        failedAt: null,
+        earnedAt: 1_000,
+        ...credit,
+      },
+    },
+  });
+
+  it("a late answer for a save that isn't the task's current one changes nothing", () => {
+    const r = rec({ inFlightMs: 30_000, inFlightAt: 5_000, flightKey: "new-key" });
+    const late = { taskId: "t1", seconds: 20, earnedAt: 1_000, key: "old-key", resend: false };
+    expect(settleFlush(r, late, "saved", 6_000)).toBe(r);
+    expect(settleFlush(r, late, "failed", 6_000)).toBe(r);
+    expect(settleFlush(r, late, "later", 6_000)).toBe(r);
+  });
+
+  it("a resend carries the end time the save had when it was first taken", () => {
+    const first = takeFlushBatch(rec({ ms: 30_000, earnedAt: 2_000 }), WS, 3_000, () => "k1");
+    expect(first.items).toEqual([
+      { taskId: "t1", seconds: 30, earnedAt: 2_000, key: "k1", resend: false },
+    ]);
+    // It fails; more time is earned on the task later.
+    const failed = settleFlush(first.rec, first.items[0]!, "failed", 4_000);
+    const moreTime = {
+      ...failed,
+      credits: { t1: { ...failed.credits.t1!, ms: 10_000, earnedAt: 9_000 } },
+    };
+    const again = takeFlushBatch(moreTime, WS, 10_000, () => "k2");
+    expect(again.items).toEqual([
+      { taskId: "t1", seconds: 30, earnedAt: 2_000, key: "k1", resend: true },
+    ]);
+  });
+});
+
 describe("focus engine — several tabs", () => {
   function memoryStorage() {
     const data = new Map<string, string>();
@@ -763,6 +889,7 @@ describe("focus engine — several tabs", () => {
       alert: () => {},
       singleWindow: () => false,
       tabId,
+      newKey: () => crypto.randomUUID(),
     });
     engine.attach(USER);
     return engine;

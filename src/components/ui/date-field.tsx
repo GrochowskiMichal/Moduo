@@ -7,6 +7,7 @@ import { Button } from "./button";
 import { Calendar } from "./calendar";
 import { Input } from "./input";
 import { Popover, PopoverContent, PopoverTrigger } from "./popover";
+import { PropertyValue } from "./property-row";
 
 type DateFieldProps = {
   value: Date | null;
@@ -14,8 +15,17 @@ type DateFieldProps = {
   /** Pair the calendar with an HH:mm time field. */
   withTime?: boolean;
   placeholder?: string;
-  /** Trigger button variant — `ghost` for inline property rows (default). */
-  variant?: "ghost" | "outline";
+  /**
+   * Trigger look: `ghost` (default) or `outline` buttons, or `property` — a
+   * `PropertyValue` for a detail-panel property row (icon slot, no box).
+   */
+  variant?: "ghost" | "outline" | "property";
+  /** The trigger's icon (default: a calendar). */
+  icon?: React.ReactNode;
+  /** Format the chosen value for the trigger (default "MMM d" / "MMM d, HH:mm"). */
+  formatValue?: (value: Date) => string;
+  /** Open the picker on mount (a property row revealed by picking it). */
+  defaultOpen?: boolean;
   className?: string;
   "aria-label"?: string;
   disabled?: boolean;
@@ -39,11 +49,14 @@ function DateField({
   withTime = false,
   placeholder = "Set date",
   variant = "ghost",
+  icon,
+  formatValue,
+  defaultOpen = false,
   className,
   disabled = false,
   ...props
 }: DateFieldProps) {
-  const [open, setOpen] = React.useState(false);
+  const [open, setOpen] = React.useState(defaultOpen);
   const timeStr = value ? format(value, "HH:mm") : "09:00";
 
   const commitDate = (day: Date | undefined) => {
@@ -75,25 +88,40 @@ function DateField({
     ];
   })();
 
-  const label = value ? format(value, withTime ? "MMM d, HH:mm" : "MMM d") : placeholder;
+  const label = value
+    ? (formatValue?.(value) ?? format(value, withTime ? "MMM d, HH:mm" : "MMM d"))
+    : placeholder;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button
-          variant={variant}
-          size="sm"
-          disabled={disabled}
-          aria-label={props["aria-label"] ?? "Set date"}
-          className={cn(
-            "justify-start gap-1.5 font-normal",
-            !value && "text-muted-foreground",
-            className,
-          )}
-        >
-          <CalendarDays aria-hidden />
-          {label}
-        </Button>
+        {variant === "property" ? (
+          <PropertyValue
+            icon={icon ?? <CalendarDays />}
+            empty={!value}
+            disabled={disabled}
+            // The row's label names the field; the value is the rest of the name.
+            aria-label={props["aria-label"] ? `${props["aria-label"]}: ${label}` : undefined}
+            className={className}
+          >
+            {label}
+          </PropertyValue>
+        ) : (
+          <Button
+            variant={variant}
+            size="sm"
+            disabled={disabled}
+            aria-label={props["aria-label"] ?? "Set date"}
+            className={cn(
+              "justify-start gap-1.5 font-normal",
+              !value && "text-muted-foreground",
+              className,
+            )}
+          >
+            {icon ?? <CalendarDays aria-hidden />}
+            {label}
+          </Button>
+        )}
       </PopoverTrigger>
       <PopoverContent className="w-auto p-0" align="start">
         <div className="flex flex-wrap gap-1 border-b border-border p-2">

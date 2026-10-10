@@ -10,6 +10,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { onCreateNew } from "../../../components/app/create-events";
 import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell";
+import {
+  RightPanelSwitcher,
+  type RightPanelVariant,
+} from "../../../components/app/right-panel-switcher";
 import { truncationNotice } from "../../../components/app/truncation-notice";
 import { Button } from "../../../components/ui/button";
 import { restoreNavFocus } from "../../../components/ui/nav-row";
@@ -51,6 +55,7 @@ import { TASK_DETAIL_REFRESH_EVENT, TaskDetailPanel } from "./task-detail-panel"
 import { TaskListView } from "./task-list-view";
 import { ActiveTagFilters, TagFilterButton } from "./task-tag-filter";
 import { TaskTimelineView } from "./task-timeline-view";
+import { useTasksDisplay } from "./use-tasks-display";
 
 type Props = {
   api: TasksModuleApi;
@@ -111,6 +116,8 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   const [timelineZoom, setTimelineZoom] = useState<TimelineZoom>(() =>
     sanitizeTimelineZoom(readLS(workspaceId, "timelineZoom")),
   );
+  // Which right-panel view is showing (see `panelVariants`).
+  const [panelView, setPanelView] = useState("details");
   // Rail sections the user collapsed stay collapsed (tasks-v2 §11).
   const [collapsedSections, setCollapsedSections] = useState<ReadonlySet<string>>(() =>
     parseCollapsedSections(readLS(workspaceId, "collapsedSections")),
@@ -467,6 +474,16 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     />
   );
 
+  // Display (tasks-v2 §7): Completed + "Show on rows", remembered per
+  // workspace and scope on this device; a task checked off or deep-linked
+  // here stays listed until the scope changes (TV-U1). TV-U2 adds the rest.
+  // A deep link's target (and its parent) stays listed in this scope even
+  // when Display hides completed tasks, while it's the one selected.
+  const linkedTaskId =
+    revealRequest && revealRequest.id === selectedTaskId ? revealRequest.id : null;
+  const tasksDisplay = useTasksDisplay(workspaceId, selection, tasks, linkedTaskId);
+  const isHiddenByDisplay = tasksDisplay.isHidden;
+
   // Resolve the selected task live from the bundle so the rail follows edits and
   // empties when the task is deleted.
   const selectedTask = useMemo(
@@ -485,8 +502,10 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     if (api.loading || inboundPending) return;
     if (selectedTaskId && scopeTasks.some((t) => t.id === selectedTaskId)) return;
     if (selectedTask?.parentId && scopeTasks.some((t) => t.id === selectedTask.parentId)) return;
-    setSelectedTaskId(scopeTasks[0]?.id ?? null);
-  }, [api.loading, inboundPending, selectedTaskId, selectedTask, scopeTasks]);
+    // Never a completed task Display hides (TV-U1): the Board has no
+    // fallback of its own, so it would open the panel on a card it doesn't show.
+    setSelectedTaskId(scopeTasks.find((t) => !isHiddenByDisplay(t))?.id ?? null);
+  }, [api.loading, inboundPending, selectedTaskId, selectedTask, scopeTasks, isHiddenByDisplay]);
 
   // ── DF-1: URL-held selection ─────────────────────────────────────────────────
   // Inbound apply — honor a deep-link target once the bundle is CLEANLY loaded
@@ -628,9 +647,10 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     onSelectTask: setSelectedTaskId,
     tagFilterControl,
     activeTagFilters,
-    onTagFilter: toggleTagFilter,
     api: viewApi,
   };
+  // List and Board follow Display; the Timeline keeps its own rules.
+  const displayProps = tasksDisplay.viewProps;
 
   // Execute mode is enclosed in the center panel (rails stay visible).
   const body =
@@ -643,7 +663,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
         blockedNoteFor={blockedNoteFor}
         onMarkDone={api.markDone}
         onSkip={api.moveQueuedToEnd}
-        onAddTime={api.addTimeSpent}
+        onAddTime={(taskId, seconds) => void api.logTimeAdjustment(taskId, seconds)}
         onSetTime={api.setTimeSpent}
         tagsFor={(id) => api.tagsByTask.get(id) ?? []}
         subtasksFor={(id) => api.subtasksByParent.get(id) ?? []}
@@ -656,6 +676,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     ) : view === "board" ? (
       <TaskBoardView
         {...sharedViewProps}
+        {...displayProps}
         dndMode="external"
         boardGroupBy={boardGroupBy}
         onBoardGroupByChange={setBoardGroupBy}
@@ -665,6 +686,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     ) : (
       <TaskListView
         {...sharedViewProps}
+        {...displayProps}
         dndMode="external"
         groupBy={effectiveGroupBy}
         onGroupByChange={setGroupBy}
@@ -826,12 +848,25 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   );
   // The hub is a drop target within the ONE page-level DndContext (below); no
   // own context — that's exactly what let center rows reach it (DF-22).
-  const right = selectedTask ? (
+  const details = selectedTask ? (
     <HubDropZone target={{ type: "task", id: selectedTask.id }} disabled={!canEdit}>
       {detailPanel}
     </HubDropZone>
   ) : (
     detailPanel
+  );
+  // The right panel is a switchable surface of hand-picked views (never one
+  // purpose): Details today; TV-F4 adds In flight beside it.
+  const panelVariants: RightPanelVariant[] = [
+    { id: "details", label: "Details", render: () => details },
+  ];
+  const right = (
+    <RightPanelSwitcher
+      variants={panelVariants}
+      activeId={panelView}
+      onChange={setPanelView}
+      hideWhenSingle
+    />
   );
 
   return (
