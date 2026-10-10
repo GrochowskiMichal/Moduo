@@ -112,6 +112,12 @@ _Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
 > 4. **The shared local database:** only the **data lane** (TV-D5 → D8 → D9 → D10 → D11a → D11b, and later D12–D16) adds migrations; run one data block at a time. UI, shell and attachments lanes don't change the schema; if one must, it waits for the data lane's current block to land.
 > 5. **Product questions** that come up are answered by the agent and recorded as "agent's choice, deferred to by Maciej" (docs/decisions/tasks.md format). Stop only for a hard blocker.
 > 6. **When a block lands,** spawn the chip for the next ready block in your lane (`spawn_task`), using this section's lane order and the same instructions, so Maciej only has to click.
+>
+> **Carry-forward notes from checkpoint 1 (orchestrator, 2026-10-10; read if your block is named):**
+> - **TV-U10:** Detailed rows truncate titles while the row is mostly empty: the title column must take the free width; fixed columns stay compact.
+> - **TV-U13:** the Time value wraps as "0m of / ~1h" in a 390 px panel (give the value column its own min width, keep the bar on its own line); activity avatars read "ME" for the signed-in user (rule 43: two initials of the person, never "Me"); a gray "?" avatar appears for the signed-in user somewhere in the chrome: trace it.
+> - **TV-U6 / TV-F7:** still old shapes by design until then: "Plan · Focus" switch, "Queue", the "Buckets" label.
+> - **Menus:** long menus scroll now (DS-6), but the cut-off last item needs a bottom fade so it reads as scrollable.
 
 > **Planned 2026-10-10 (`/s1`, the deep re-plan).** Supersedes [`specs/tasks-v2.md`](./tasks-v2.md): v2's blocks 1–10 landed and stay (except TV-D5, v2 block 8, still open, which finishes as block 1 here); v2's blocks 11–21 are re-scoped per the spec's "Carried from v2" paragraph, mapping logged in [BUILD_LOG.md](./BUILD_LOG.md). Companion specs: [`attachments.md`](./attachments.md) (AT-2 = block 2; AT-3 stays there, listed after block 19) and [`design-state-layer.md`](./design-state-layer.md) (DS-5 folded into DS-6 = block 8). Decisions: [docs/decisions/tasks.md](../docs/decisions/tasks.md).
 > - **Land on `maciej` only:** no pushes or merges to `develop` until Maciej says so. Mike is rebuilding on `develop`, so this overrides the standing develop authorization for these blocks.
