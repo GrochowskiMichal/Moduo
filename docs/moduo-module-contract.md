@@ -58,7 +58,11 @@ explicit permission check in step 1 replaces RLS *inside* the op.
 cross-row invariant is an op: queue membership + ordering, counters, computed
 state transitions, recurrence pointer moves. Plain single-field edits (title,
 description, priority, …) may remain raw `upsert` writes for now — they carry
-no invariants and stay covered by RLS. The long-term direction is ops for
+no invariants and stay covered by RLS. As of Tasks v3 (2026-10-10,
+[`specs/tasks-v3.md`](../specs/tasks-v3.md) §Assumptions #1) every create and
+every field edit in Tasks is an op (`tasks_op_create` / `tasks_op_update`) and
+the raw write grants are revoked at TV-D7; other modules follow when they are
+rebuilt. The long-term direction is ops for
 everything (Session 9 agents get *only* ops); new invariant-bearing features
 must not add raw write paths.
 

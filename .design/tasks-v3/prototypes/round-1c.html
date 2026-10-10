@@ -1,0 +1,2009 @@
+<!doctype html>
+<html lang="en" data-frame="1">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Tasks round 1c prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+/* biome-ignore-all lint: a throwaway static prototype, not app code */
+/* Throwaway prototype for the round 1c questions in .design/tasks-v3/REPLAN.md.
+   A sibling of prototypes/structure.html: same tokens, shell, rail, rows, board
+   and panel recipes (copied from there, which copied them from
+   .design/tasks-dogfood/ui-proposal.html with values from src/styles/tokens.css:
+   dark, black shade, mono accent, comfortable density, soft radius). Not a spec. */
+
+/* ── Tokens (tokens.css dark theme) ─────────────────────────────────────── */
+:root {
+  --neutral-50: oklch(0.985 0 0); --neutral-400: oklch(0.72 0 0);
+  --neutral-800: oklch(0.22 0 0); --neutral-850: oklch(0.18 0 0); --neutral-900: oklch(0.14 0 0);
+  --background: oklch(0 0 0); --foreground: var(--neutral-50);
+  --card: var(--neutral-900); --popover: var(--neutral-850); --muted: var(--neutral-850);
+  --muted-foreground: var(--neutral-400);
+  --primary: oklch(0.95 0 0); --primary-foreground: oklch(0.10 0 0);
+  --label-gray: var(--neutral-400); --label-blue: oklch(0.66 0.18 245); --label-green: oklch(0.72 0.17 150);
+  --label-amber: oklch(0.80 0.16 75); --label-violet: oklch(0.66 0.20 295); --label-teal: oklch(0.72 0.13 200);
+  --motion-fade: 100ms; --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --font: "Geist", "Inter", system-ui, -apple-system, sans-serif;
+
+  /* State layer (tokens.css §5b) */
+  --state-hover: color-mix(in oklab, var(--foreground) 5%, transparent);
+  --state-active: color-mix(in oklab, var(--foreground) 9%, transparent);
+  --state-active-hover: color-mix(in oklab, var(--foreground) 14%, transparent);
+  --state-selected: color-mix(in oklab, var(--primary) 13%, transparent);
+  --hairline: color-mix(in oklab, var(--foreground) 10%, transparent);
+  --control-raised: color-mix(in oklab, var(--foreground) 14%, var(--muted));
+  --scroll-thumb: color-mix(in oklab, var(--foreground) 16%, transparent);
+  --scroll-thumb-hover: color-mix(in oklab, var(--foreground) 32%, transparent);
+  /* opaque hover for sticky headers (rows scroll under them) */
+  --hover-solid: color-mix(in oklab, var(--foreground) 5%, var(--card));
+
+  /* Density: comfortable (tokens.css §7) */
+  --row-h: 2.25rem; --row-h-sm: 1.75rem; --ctrl-h: 2rem; --ctrl-h-sm: 1.625rem;
+  --icon-xs: .75rem; --icon-sm: .875rem; --icon: 1rem; --bar-h: 3rem;
+  /* Radius: soft (tokens.css §8) */
+  --radius-sm: .25rem; --radius-md: .5rem; --radius-lg: .75rem; --radius-xl: 1rem; --avatar-radius: 9999px;
+
+  /* Call 38: three readable text levels */
+  --text-1: var(--foreground);
+  --text-2: var(--muted-foreground);
+  --text-3: color-mix(in oklab, var(--muted-foreground) 86%, var(--card));
+  /* Call 43: two initials + one stable colour per person (contacts too) */
+  --person-ar: color-mix(in oklab, var(--label-blue) 55%, var(--card));
+  --person-so: color-mix(in oklab, var(--label-teal) 50%, var(--card));
+  --person-mc: color-mix(in oklab, var(--label-violet) 52%, var(--card));
+  --person-an: color-mix(in oklab, var(--label-amber) 40%, var(--card));
+  /* references in prose: one neutral fill, no hue (EntityRefChip is monochrome) */
+  --ref-bg: color-mix(in oklab, var(--foreground) 7%, var(--card));
+  --ref-bg-hover: color-mix(in oklab, var(--foreground) 12%, var(--card));
+}
+
+* { scrollbar-width: thin; scrollbar-color: var(--scroll-thumb) transparent; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border-radius: 9999px; border: 3px solid transparent; background-clip: content-box; }
+* { box-sizing: border-box; margin: 0; }
+[hidden] { display: none !important; }
+html, body { background: var(--background); color: var(--text-1); }
+body { font: 400 14px/1.4 var(--font); -webkit-font-smoothing: antialiased; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; padding: 0; }
+.ic { width: var(--icon-sm); height: var(--icon-sm); stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+.ic-xs { width: var(--icon-xs); height: var(--icon-xs); }
+.ic-md { width: var(--icon); height: var(--icon); }
+.num { font-variant-numeric: tabular-nums; }
+.t1 { color: var(--text-1); } .t2 { color: var(--text-2); } .t3 { color: var(--text-3); }
+
+/* ── Prototype chrome (NOT part of the app) ──────────────────────────────── */
+.stage { display: flex; flex-direction: column; height: 100vh; min-height: 860px; min-width: 1280px; }
+.strip { flex-shrink: 0; position: relative; z-index: 60; padding: 7px 16px 7px; display: flex; flex-direction: column; gap: 5px; font-size: 12px;
+  background: repeating-linear-gradient(-45deg, color-mix(in oklab, var(--foreground) 4%, var(--popover)) 0 7px, var(--popover) 7px 14px);
+  border-bottom: 1px dashed color-mix(in oklab, var(--foreground) 26%, transparent); }
+.strip .l1, .strip .l2 { display: flex; align-items: center; gap: 12px; min-height: 26px; }
+.ptag { height: 22px; display: inline-flex; align-items: center; padding: 0 8px; border-radius: var(--radius-sm); background: var(--foreground); color: var(--background); font-weight: 600; white-space: nowrap; }
+.pcalls { color: var(--text-2); white-space: nowrap; }
+.pcalls b { color: var(--text-1); font-weight: 500; }
+.strip .grow { flex: 1; }
+.strip .lab { color: var(--text-3); white-space: nowrap; }
+.strip .seg { background: var(--background); flex-shrink: 0; }
+.strip .seg button { font-size: 12px; padding: 0 9px; }
+.strip .l2 { color: var(--text-2); }
+.strip .cap { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.strip .keys { color: var(--text-3); white-space: nowrap; }
+.strip .keys b { color: var(--text-2); font-weight: 500; }
+.ctl { display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.appframe { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+/* annotation inside a frame: striped like the strip, so it never reads as UI */
+.pnote { font-size: 11.5px; line-height: 1.45; color: var(--text-2); padding: 4px 8px; border-radius: var(--radius-sm);
+  border: 1px dashed color-mix(in oklab, var(--foreground) 26%, transparent);
+  background: repeating-linear-gradient(-45deg, color-mix(in oklab, var(--foreground) 4%, var(--popover)) 0 7px, var(--popover) 7px 14px); }
+.pnote b { color: var(--text-1); font-weight: 600; }
+.rail > .pnote { position: absolute; left: 8px; bottom: 8px; }
+
+/* ── Primitives from the comp ────────────────────────────────────────────── */
+.seg { display: inline-flex; align-items: center; gap: 2px; padding: 2px; height: var(--ctrl-h-sm); background: var(--muted); border-radius: var(--radius-md); }
+.seg button { height: 100%; padding: 0 8px; display: inline-flex; align-items: center; gap: 6px; border-radius: calc(var(--radius-md) - 2px); color: var(--text-2); font-size: 13px; font-weight: 500; transition: background-color var(--motion-fade) var(--ease-out), color var(--motion-fade) var(--ease-out); white-space: nowrap; }
+.seg button:hover { color: var(--text-1); }
+.seg button.on { background: var(--control-raised); color: var(--text-1); }
+.seg.icons button { padding: 0 6px; }
+
+.btn { height: var(--ctrl-h-sm); padding: 0 8px; display: inline-flex; align-items: center; gap: 6px; border-radius: var(--radius-md); font-size: 14px; font-weight: 500; color: var(--text-2); transition: background-color var(--motion-fade) var(--ease-out), color var(--motion-fade) var(--ease-out); white-space: nowrap; }
+.btn:hover { background: var(--state-hover); color: var(--text-1); }
+.btn.on { background: var(--state-active); color: var(--text-1); }
+.btn.icon { width: var(--ctrl-h-sm); padding: 0; justify-content: center; }
+.btn.primary { background: var(--primary); color: var(--primary-foreground); padding: 0 10px; }
+.btn.primary:hover { background: color-mix(in oklab, var(--primary) 90%, var(--background)); }
+.btn.secondary { background: var(--state-active); color: var(--text-1); }
+.btn.sm { font-size: 13px; }
+.kbd { font-size: 11px; color: var(--text-2); border: 1px solid var(--hairline); border-radius: 4px; padding: 0 4px; line-height: 16px; }
+
+/* Avatar: 16px, two initials, a stable colour per person (call 43) */
+.ava { width: var(--icon); height: var(--icon); border-radius: var(--avatar-radius); display: inline-grid; place-items: center; font-size: 8.5px; font-weight: 600; letter-spacing: 0; line-height: 1; color: var(--text-1); background: var(--ava, color-mix(in oklab, var(--foreground) 20%, var(--card))); flex-shrink: 0; }
+.ava.ar { --ava: var(--person-ar); }
+.ava.so { --ava: var(--person-so); }
+.ava.mc { --ava: var(--person-mc); }
+.ava.an { --ava: var(--person-an); }
+.ava.none { background: none; border: 1px dashed var(--text-3); }
+.ava.lg { width: 26px; height: 26px; font-size: 10.5px; }
+.ava.xl { width: 32px; height: 32px; font-size: 12px; }
+/* Team avatar: the team's first letter in a rounded square, neutral — no icon, no hue */
+.tava { width: var(--icon); height: var(--icon); border-radius: 4px; display: inline-grid; place-items: center; font-size: 9px; font-weight: 600; line-height: 1; color: var(--text-1); background: color-mix(in oklab, var(--foreground) 16%, var(--card)); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--foreground) 12%, transparent); flex-shrink: 0; }
+
+/* Checkbox (CompleteToggle) — rest border clears 3:1 */
+.cb { width: var(--icon); height: var(--icon); border-radius: 9999px; border: 1.5px solid color-mix(in oklab, var(--foreground) 42%, transparent); display: grid; place-items: center; flex-shrink: 0; transition: border-color var(--motion-fade); }
+.cb:hover { border-color: color-mix(in oklab, var(--foreground) 70%, transparent); }
+.cb.done { background: var(--primary); border-color: var(--primary); color: var(--primary-foreground); }
+.cb.done .ic { width: 70%; height: 70%; stroke-width: 3; }
+.cb.sm { width: var(--icon-sm); height: var(--icon-sm); }
+.cb.dashed { border-style: dashed; border-color: var(--text-3); }
+
+/* Priority glyph — fixed footprint, ghost bars are decoration */
+.pri { width: var(--icon-sm); height: var(--icon-sm); color: var(--text-2); fill: currentColor; flex-shrink: 0; }
+
+/* ── App shell ───────────────────────────────────────────────────────────── */
+.topbar { flex-shrink: 0; height: var(--bar-h); display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 0 20px; }
+.tleft { display: flex; align-items: center; gap: 4px; }
+.mark { width: 28px; height: 28px; color: var(--foreground); margin-right: 2px; }
+.wsbtn { height: 32px; display: inline-flex; align-items: center; gap: 6px; padding: 0 8px; border-radius: var(--radius-md); font-size: 13px; color: var(--text-1); }
+.wsbtn:hover { background: var(--state-hover); }
+.wsbtn .ic { color: var(--text-2); }
+.mtabs { display: flex; gap: 4px; }
+.mtab { height: 32px; display: inline-flex; align-items: center; gap: 8px; padding: 0 12px; border-radius: var(--radius-md); font-size: 13px; color: var(--text-2); transition: background-color var(--motion-fade) var(--ease-out), color var(--motion-fade) var(--ease-out); }
+.mtab:hover { background: var(--state-hover); color: var(--text-1); }
+.mtab.on { background: var(--state-active); color: var(--text-1); }
+.tright { display: flex; justify-content: flex-end; align-items: center; gap: 8px; }
+.ibtn { width: 32px; height: 32px; display: grid; place-items: center; border-radius: var(--radius-md); color: var(--text-2); }
+.ibtn:hover { background: var(--state-hover); color: var(--text-1); }
+
+.app { position: relative; flex: 1; min-height: 0; display: flex; gap: 12px; padding: 0 16px 12px; }
+.panel { background: var(--card); border: 1px solid var(--hairline); border-radius: var(--radius-lg); min-height: 0; }
+.rail { position: relative; width: 236px; flex-shrink: 0; padding: 8px; display: flex; flex-direction: column; gap: 1px; overflow: auto; }
+.center { flex: 1; min-width: 0; display: flex; flex-direction: column; position: relative; overflow: hidden; }
+.detail { position: relative; width: 360px; flex-shrink: 0; display: flex; flex-direction: column; overflow: auto; }
+
+/* ── Rail (NavRow + one header recipe) ───────────────────────────────────── */
+.nav { height: var(--row-h); flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding: 0 6px 0 8px; border-radius: var(--radius-md); color: var(--text-2); font-weight: 500; cursor: pointer; transition: background-color var(--motion-fade) var(--ease-out), color var(--motion-fade) var(--ease-out); }
+.nav:hover { background: var(--state-hover); color: var(--text-1); }
+.nav.active { background: var(--state-active); color: var(--text-1); }
+.nav .slot { width: var(--icon); display: grid; place-items: center; flex-shrink: 0; }
+.nav .lbl { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nav .glyph { color: var(--text-2); }
+.nav.active .glyph, .nav:hover .glyph { color: var(--text-1); }
+.nav.sub { padding-left: 24px; }
+.dot { width: 8px; height: 8px; border-radius: 2px; background: var(--c, var(--label-gray)); flex-shrink: 0; }
+.trail { position: relative; display: flex; align-items: center; justify-content: flex-end; flex-shrink: 0; height: 20px; min-width: 20px; }
+.count { font-size: 12px; color: var(--text-2); transition: opacity var(--motion-fade) var(--ease-out); }
+.more { width: 20px; height: 20px; border-radius: var(--radius-sm); display: grid; place-items: center; color: var(--text-2); opacity: 0; transition: opacity var(--motion-fade) var(--ease-out); }
+.more:hover { background: var(--state-active); color: var(--text-1); }
+.trail .more { position: absolute; right: 0; top: 0; }
+.nav:hover .trail .count, .ghdr:hover .trail .count { opacity: 0; }
+.nav:hover .trail .more, .ghdr:hover .trail .more { opacity: 1; }
+.nav.add { color: var(--text-3); font-weight: 400; margin-top: 4px; }
+.nav.add:hover { color: var(--text-1); }
+.nav .kbd { margin-left: auto; }
+/* run state on the Queue row (frame 8 only) */
+.runct { display: none; align-items: center; gap: 6px; font-size: 12px; color: var(--text-1); }
+html[data-frame="8"] #rail .runct { display: inline-flex; }
+html[data-frame="8"] #rail .qcount { display: none; }
+.live { width: 6px; height: 6px; border-radius: 9999px; background: var(--primary); box-shadow: 0 0 0 3px color-mix(in oklab, var(--primary) 25%, transparent); }
+/* One header recipe for Pinned, Views and every area: sentence case, secondary
+   text, chevron, collapsible. Areas carry their open-task count; Pinned and
+   Views carry none. No small caps anywhere in the sidebar. */
+.area { display: flex; flex-direction: column; gap: 1px; flex-shrink: 0; }
+.ghdr { flex-shrink: 0; display: flex; align-items: center; gap: 5px; height: var(--row-h-sm); margin-top: 8px; padding: 0 6px 0 8px; border-radius: var(--radius-md); font-size: 13px; font-weight: 500; color: var(--text-2); cursor: pointer; transition: color var(--motion-fade) var(--ease-out); }
+.ghdr:hover { color: var(--text-1); }
+.ghdr .chev { color: var(--text-3); transition: transform 140ms var(--ease-out); }
+.ghdr .trail { margin-left: auto; }
+.ghdr .count { color: var(--text-3); }
+.area.collapsed .ghdr .chev { transform: rotate(-90deg); }
+.area.collapsed .kids { display: none; }
+.kids { display: flex; flex-direction: column; gap: 1px; }
+.rgap { height: 8px; flex-shrink: 0; }
+/* your block, then ONE hairline, then the workspace */
+.rdiv { flex-shrink: 0; position: relative; height: 13px; display: flex; align-items: center; padding: 0 8px; }
+.rdiv .line { flex: 1; height: 1px; background: var(--hairline); }
+.rdiv .more { position: absolute; right: 6px; top: -4px; background: var(--card); }
+.rdiv .more:hover { background: color-mix(in oklab, var(--foreground) 9%, var(--card)); color: var(--text-1); }
+.cust-more { opacity: 0; }
+.rail:has(.rdiv:hover) .cust-more { opacity: 1; }
+.rsearch { height: var(--ctrl-h); flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 0 8px; margin-bottom: 6px; border-radius: var(--radius-md); box-shadow: inset 0 0 0 1px var(--hairline); font-size: 13px; color: var(--text-3); cursor: text; }
+.rsearch .kbd { margin-left: auto; }
+
+/* ── Toolbar ─────────────────────────────────────────────────────────────── */
+.toolbar { display: flex; align-items: center; gap: 4px; padding: 12px 12px 8px 16px; flex-shrink: 0; }
+.toolbar .title { display: flex; align-items: baseline; gap: 8px; margin-right: auto; min-width: 0; }
+.toolbar .title.proj { align-items: center; gap: 10px; }
+.toolbar h3 { font-size: 18px; font-weight: 600; letter-spacing: -.01em; white-space: nowrap; }
+.toolbar .tcount { font-size: 14px; color: var(--text-3); }
+.toolbar .tsub { font-size: 13px; color: var(--text-3); white-space: nowrap; }
+.toolbar .sep { width: 1px; height: 16px; background: var(--hairline); margin: 0 4px; }
+.pdot { width: 10px; height: 10px; border-radius: 3px; background: var(--c); flex-shrink: 0; }
+.subline { display: flex; align-items: center; gap: 6px; padding: 0 16px 10px; font-size: 13px; color: var(--text-3); flex-shrink: 0; }
+
+/* Project header meta (client chip · status · target · progress) */
+.pmeta { display: flex; align-items: center; gap: 4px; padding: 0 16px 10px; flex-shrink: 0; }
+.pm { height: 24px; display: inline-flex; align-items: center; gap: 6px; padding: 0 6px; border-radius: var(--radius-md); font-size: 13px; color: var(--text-2); white-space: nowrap; cursor: default; transition: background-color var(--motion-fade) var(--ease-out); }
+.pm:hover { background: var(--state-hover); color: var(--text-1); }
+.pm .ic { color: var(--text-3); }
+.pm .lab { color: var(--text-3); }
+.chip { height: 24px; display: inline-flex; align-items: center; gap: 6px; padding: 0 8px; border-radius: var(--radius-md); font-size: 13px; color: var(--text-1); box-shadow: inset 0 0 0 1px var(--hairline); white-space: nowrap; cursor: pointer; transition: background-color var(--motion-fade) var(--ease-out); }
+.chip:hover { background: var(--state-hover); }
+.chip .ic { color: var(--text-2); }
+.chip .ext { color: var(--text-3); }
+.pmeta .chip { margin-right: 6px; }
+.pbar { width: 44px; height: 3px; border-radius: 9999px; background: var(--hairline); overflow: hidden; }
+.pbar i { display: block; height: 100%; background: var(--text-2); }
+
+/* ── List rows ───────────────────────────────────────────────────────────── */
+.list { flex: 1; min-height: 0; overflow: auto; padding: 0 8px 12px; }
+.row { position: relative; height: var(--row-h); display: grid; grid-template-columns: var(--cols); align-items: center; column-gap: 12px; padding: 0 10px 0 8px; border-radius: var(--radius-md); cursor: default; transition: background-color var(--motion-fade) var(--ease-out); }
+.row:hover, .row.is-hover { background: var(--state-hover); }
+.row.sel, .row.sel:hover { background: var(--state-selected); }
+.tcell { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.t { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; color: var(--text-1); }
+.ind { display: inline-flex; align-items: center; gap: 10px; flex-shrink: 0; color: var(--text-3); font-size: 12px; }
+.ind > span { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
+.ind .wait { color: var(--text-2); gap: 4px; }
+/* an agent on a task: its name in neutral text and a small dot — no colour, no badge */
+.ind .agent, .agent { display: inline-flex; align-items: center; gap: 6px; color: var(--text-2); white-space: nowrap; font-size: 12px; }
+.adot { width: 6px; height: 6px; border-radius: 9999px; background: var(--text-3); flex-shrink: 0; }
+.agent.needs { color: var(--text-1); }
+.agent.needs .adot { background: var(--text-1); }
+.agent.stale { color: var(--text-3); }
+.agent.stale .adot { background: none; box-shadow: inset 0 0 0 1.5px var(--text-3); }
+.agent .ic { color: var(--text-2); }
+.date { font-size: 12px; color: var(--text-2); white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; justify-self: end; }
+.date .late { color: var(--text-3); }
+.qcol { display: grid; place-items: center; color: var(--text-3); opacity: 0; transition: opacity var(--motion-fade) var(--ease-out); }
+.row:hover .qcol, .row.is-hover .qcol, .row.sel .qcol { opacity: 1; }
+.qcol.on { color: var(--text-1); opacity: 1; } /* queued = neutral "on", never the accent (call 46) */
+.proj { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-2); white-space: nowrap; min-width: 0; overflow: hidden; }
+.proj .dot { width: 7px; height: 7px; }
+.proj .ic { color: var(--text-3); }
+.row.ghost .t, .row.ghost .proj, .row.ghost .date { color: var(--text-3); }
+.fix { margin-left: auto; display: inline-flex; gap: 4px; flex-shrink: 0; padding-left: 4px; }
+.xchip { height: 22px; padding: 0 7px; display: inline-flex; align-items: center; border-radius: var(--radius-md); font-size: 12px; color: var(--text-2); box-shadow: inset 0 0 0 1px var(--hairline); white-space: nowrap; transition: background-color var(--motion-fade) var(--ease-out), color var(--motion-fade) var(--ease-out); }
+.xchip:hover { background: var(--state-hover); color: var(--text-1); }
+.hfix { opacity: 0; transition: opacity var(--motion-fade) var(--ease-out); }
+.row:hover .hfix, .row.is-hover .hfix { opacity: 1; }
+
+/* Group header — ONE sentence-case recipe for sections, date groups, status
+   groups and teams (call 40). */
+.sec { display: flex; flex-direction: column; }
+.sec + .sec, .sec + .addrow { margin-top: 8px; }
+.ghead { position: sticky; top: 0; z-index: 2; height: var(--row-h-sm); display: flex; align-items: center; gap: 8px; padding: 0 6px 0 8px; background: var(--card); border-radius: var(--radius-md); font-size: 13px; font-weight: 500; color: var(--text-1); cursor: pointer; transition: background-color var(--motion-fade) var(--ease-out); }
+.ghead:hover, .ghead.is-hover { background: var(--hover-solid); }
+/* the chevron sits in the checkbox column, so the name lines up with task titles */
+.cslot { width: var(--icon); display: grid; place-items: center; flex-shrink: 0; margin-right: 4px; }
+.ghead .chev { color: var(--text-3); transition: transform 140ms var(--ease-out); }
+.sec.collapsed .chev { transform: rotate(-90deg); }
+.sec.collapsed .rows { display: none; }
+.row.done .t { color: var(--text-2); text-decoration: line-through; }
+.row.done .ind, .row.done .date { color: var(--text-3); }
+.sec:not(.show-done) .row.done, .col:not(.show-done) .card.done { display: none; }
+.card.done .ct span:last-child { color: var(--text-2); text-decoration: line-through; }
+.ghead .gc { font-size: 12px; font-weight: 400; color: var(--text-3); }
+.ghead .gsub { font-size: 12px; font-weight: 400; color: var(--text-3); margin-left: -2px; }
+/* date groups show their count once folded: nothing hidden without a count */
+.sec.dated .ghead .gc { display: none; }
+.sec.dated.collapsed .ghead .gc { display: inline; }
+.ghead .acts { margin-left: auto; display: flex; align-items: center; gap: 2px; opacity: 0; transition: opacity var(--motion-fade) var(--ease-out); }
+.ghead:hover .acts, .ghead.is-hover .acts { opacity: 1; }
+.ghead .acts .btn { height: 22px; font-size: 12px; padding: 0 6px; gap: 4px; }
+.ghead .acts .btn.icon { width: 22px; padding: 0; }
+.dchip { height: 20px; padding: 0 6px; display: inline-flex; align-items: center; gap: 4px; border-radius: var(--radius-sm); font-size: 12px; font-weight: 400; color: var(--text-2); box-shadow: inset 0 0 0 1px var(--hairline); white-space: nowrap; }
+.dchip .ic { color: var(--text-3); }
+.completed-line { height: var(--row-h-sm); display: flex; align-items: center; gap: 12px; padding: 0 8px; font-size: 12px; color: var(--text-3); }
+.completed-line .cslot { margin-right: 0; }
+.completed-line button:hover { color: var(--text-1); }
+.addrow { height: var(--row-h); display: flex; align-items: center; gap: 12px; padding: 0 10px 0 8px; color: var(--text-3); border-radius: var(--radius-md); font-size: 14px; cursor: pointer; transition: background-color var(--motion-fade) var(--ease-out), color var(--motion-fade) var(--ease-out); }
+.addrow .slot { width: var(--icon); display: grid; place-items: center; flex-shrink: 0; }
+.addrow:hover { background: var(--state-hover); color: var(--text-1); }
+.addrow .kbd { margin-left: auto; }
+
+/* ── Detail panel ────────────────────────────────────────────────────────── */
+.dhead { display: flex; align-items: center; gap: 4px; padding: 10px 12px 0 16px; flex-shrink: 0; }
+.crumb { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-2); margin-right: auto; height: var(--ctrl-h-sm); white-space: nowrap; }
+.crumb .ic { color: var(--text-3); }
+.dh-title { font-size: 13px; font-weight: 600; color: var(--text-1); margin-right: auto; }
+.dbody { padding: 10px 16px 16px; display: flex; flex-direction: column; gap: 16px; }
+.dtitle { display: flex; gap: 10px; align-items: flex-start; }
+.dtitle .cb { margin-top: 4px; }
+.dtitle h4 { font-size: 18px; font-weight: 600; line-height: 1.35; letter-spacing: -.01em; }
+.desc { font-size: 14px; line-height: 1.55; color: color-mix(in oklab, var(--foreground) 86%, transparent); margin: 6px 0 0 calc(var(--icon) + 10px); }
+.desc0 { font-size: 14px; line-height: 1.55; color: color-mix(in oklab, var(--foreground) 86%, transparent); }
+.props { display: grid; grid-template-columns: 92px minmax(0, 1fr); align-items: center; row-gap: 1px; }
+.plabel { font-size: 13px; color: var(--text-2); height: var(--ctrl-h-sm); display: flex; align-items: center; }
+.pval { justify-self: start; max-width: 100%; height: var(--ctrl-h-sm); display: inline-flex; align-items: center; gap: 8px; padding: 0 6px; margin-left: -6px; border-radius: var(--radius-md); font-size: 14px; color: var(--text-1); white-space: nowrap; cursor: pointer; transition: background-color var(--motion-fade) var(--ease-out); }
+.pval:hover, .pval.open { background: var(--state-hover); }
+.pval .ic, .pval .pri { color: var(--text-2); }
+.pval.empty { color: var(--text-3); }
+.pval.empty .ic { color: var(--text-3); }
+.pval .late { color: var(--text-3); }
+.tag { display: inline-flex; align-items: center; font-size: 13px; color: var(--text-1); }
+.tag b { font-weight: 500; color: var(--c); margin-right: 1px; }
+.addprop { justify-self: start; grid-column: 1 / -1; height: var(--ctrl-h-sm); display: inline-flex; align-items: center; gap: 8px; padding: 0 6px; margin-left: -6px; border-radius: var(--radius-md); color: var(--text-3); font-size: 13px; }
+.addprop:hover { background: var(--state-hover); color: var(--text-1); }
+.shead { display: flex; align-items: center; gap: 6px; height: var(--ctrl-h-sm); font-size: 13px; font-weight: 500; color: var(--text-1); }
+.shead .num { color: var(--text-3); font-weight: 400; }
+.shead .btn { margin-left: auto; }
+.coll { display: flex; flex-direction: column; }
+.divider { height: 1px; background: var(--hairline); }
+.feed { display: flex; flex-direction: column; gap: 10px; }
+.ev { display: flex; gap: 8px; align-items: center; font-size: 12px; color: var(--text-2); min-height: 20px; }
+.ev > span:last-child { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ev b { color: var(--text-1); font-weight: 500; }
+.coll .ev { min-height: 24px; }
+.composer { border-radius: var(--radius-lg); box-shadow: inset 0 0 0 1px var(--hairline); padding: 9px 12px; font-size: 13px; color: var(--text-3); display: flex; align-items: center; justify-content: space-between; }
+.subrow { display: flex; align-items: center; gap: 10px; height: 28px; font-size: 14px; }
+.subrow.done span:last-child { color: var(--text-2); text-decoration: line-through; }
+.cmt { display: grid; grid-template-columns: var(--icon) minmax(0, 1fr); column-gap: 8px; font-size: 13px; line-height: 1.5; color: color-mix(in oklab, var(--foreground) 88%, transparent); }
+.cmt .ava { margin-top: 2px; }
+.cmt .who { font-size: 12px; color: var(--text-2); }
+.cmt .who b { color: var(--text-1); font-weight: 500; }
+.mention { font-weight: 500; color: var(--text-1); background: var(--ref-bg); border-radius: 3px; padding: 0 3px; }
+
+/* ── References: link · chip · card (frames 2, 3, 4) ─────────────────────── */
+/* chip: inline, monochrome fill, type glyph or status circle · title · due */
+.ref { display: inline-block; height: 22px; line-height: 22px; padding: 0 6px; margin: 0 1px; border-radius: var(--radius-sm); background: var(--ref-bg); color: var(--text-1); font-size: .93em; font-weight: 400; white-space: nowrap; vertical-align: baseline; cursor: pointer; transition: background-color var(--motion-fade) var(--ease-out); }
+.ref:hover, .ref.is-hover { background: var(--ref-bg-hover); }
+.ref .st { display: inline-block; width: 12px; height: 12px; border-radius: 9999px; border: 1.5px solid color-mix(in oklab, var(--foreground) 48%, transparent); vertical-align: top; margin: 5px 6px 0 0; }
+.ref .ic { width: 13px; height: 13px; color: var(--text-2); vertical-align: top; margin: 4.5px 5px 0 0; }
+.ref .due { color: var(--text-2); font-size: 12px; margin-left: 6px; }
+.ref .due::before { content: "·"; margin-right: 6px; color: var(--text-3); }
+.ref.person { padding-left: 3px; }
+.ref.person .ava { vertical-align: top; margin: 3px 6px 0 0; }
+/* link: type glyph + underlined title */
+.rlink { cursor: pointer; white-space: nowrap; }
+.rlink .ic { width: 14px; height: 14px; color: var(--text-2); vertical-align: -2px; margin-right: 4px; }
+.rlink u { color: var(--text-1); text-decoration-color: color-mix(in oklab, var(--foreground) 38%, transparent); text-underline-offset: 3px; text-decoration-thickness: 1px; }
+.rlink:hover u { text-decoration-color: var(--foreground); }
+/* card: on its own line */
+.tcard { display: flex; flex-direction: column; gap: 6px; width: fit-content; min-width: 24rem; max-width: 100%; padding: 10px 12px 10px; border-radius: var(--radius-lg); box-shadow: inset 0 0 0 1px var(--hairline); background: var(--card); cursor: default; transition: background-color var(--motion-fade) var(--ease-out); }
+.tcard:hover, .tcard.is-hover { background: var(--hover-solid); }
+.tcard .r1 { display: flex; align-items: center; gap: 10px; font-size: 15px; line-height: 1.35; color: var(--text-1); }
+.tcard .r1 .x1 { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tcard .r2 { display: flex; align-items: center; gap: 12px; padding-left: calc(var(--icon) + 10px); font-size: 12px; line-height: 1.4; color: var(--text-2); white-space: nowrap; }
+.tcard .r2 > span { display: inline-flex; align-items: center; gap: 4px; }
+.tcard .r2 .ic { color: var(--text-3); }
+.tcard .r2 .dot { width: 7px; height: 7px; margin-right: 2px; }
+.tcard .r2 .ava { margin-left: auto; }
+.tcard .r2 .wait { color: var(--text-2); }
+.tcard .crumbsep { color: var(--text-3); margin: 0 1px; }
+
+/* Linked collection cards (frame 3) and previews (frame 4) */
+.lcards { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+.lcard { border-radius: var(--radius-lg); box-shadow: inset 0 0 0 1px var(--hairline); padding: 10px 12px 10px; display: flex; flex-direction: column; gap: 5px; cursor: pointer; transition: background-color var(--motion-fade) var(--ease-out); }
+.lcard:hover, .lcard.is-hover { background: var(--hover-solid); }
+.lcard .lc1 { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-1); min-width: 0; }
+.lcard .lc1 .who { font-weight: 500; white-space: nowrap; }
+.lcard .lc1 .ic { color: var(--text-2); }
+.lcard .lc1 .when { margin-left: auto; font-size: 12px; color: var(--text-3); white-space: nowrap; flex-shrink: 0; }
+.lcard .subj { font-size: 14px; font-weight: 500; color: var(--text-1); line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lcard .snip { font-size: 13px; line-height: 1.5; color: var(--text-2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.lcard .lc3 { display: flex; align-items: center; gap: 12px; margin-top: 2px; font-size: 12px; color: var(--text-3); white-space: nowrap; }
+.lcard .lc3 > span { display: inline-flex; align-items: center; gap: 5px; }
+.lcard .lc3 .wait { color: var(--text-2); margin-left: auto; }
+.lcard .lc3 .ic { color: var(--text-3); }
+
+/* Long description, folded after 8 lines with a soft fade (frame 3) */
+.ldesc { font-size: 14px; line-height: 1.55; color: color-mix(in oklab, var(--foreground) 86%, transparent); margin: 6px 0 0 calc(var(--icon) + 10px); }
+.ldesc > * + * { margin-top: .5em; }
+.ldesc ul { list-style: none; padding: 0; }
+.ldesc li { position: relative; padding-left: 14px; }
+.ldesc li + li { margin-top: 2px; }
+.ldesc li::before { content: ""; position: absolute; left: 3px; top: .7em; width: 4px; height: 4px; border-radius: 9999px; background: var(--text-3); }
+.ldesc .lh { color: var(--text-1); font-weight: 500; }
+.ldesc.folded { max-height: calc(1.55em * 8.6); overflow: hidden; -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 3em), transparent); mask-image: linear-gradient(to bottom, #000 calc(100% - 3em), transparent); }
+.moreline { margin: 2px 0 0 calc(var(--icon) + 10px); height: 24px; display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-3); }
+.moreline button { color: var(--text-2); font-weight: 500; }
+.moreline button:hover { color: var(--text-1); }
+html:not([data-v3="open"]) .f3-open, html[data-v3="open"] .f3-folded { display: none !important; }
+
+/* ── Board ───────────────────────────────────────────────────────────────── */
+.board { flex: 1; min-height: 0; overflow: auto; display: flex; gap: 12px; align-items: flex-start; padding: 2px 12px 16px 12px; --colw: 264px; }
+.col { width: var(--colw); flex-shrink: 0; display: flex; flex-direction: column; }
+.chead { height: 32px; display: flex; align-items: center; gap: 8px; padding: 0 4px 0 6px; margin-bottom: 4px; border-radius: var(--radius-md); font-size: 13px; font-weight: 500; color: var(--text-1); }
+.chead .gc { font-size: 12px; font-weight: 400; color: var(--text-3); }
+.chead .sti { color: var(--text-2); }
+.chead .more { margin-left: auto; }
+.col:hover .chead .more, .col.is-hover .chead .more { opacity: 1; }
+.cards { display: flex; flex-direction: column; gap: 8px; }
+.card { background: var(--card); border-radius: var(--radius-lg); box-shadow: inset 0 0 0 1px var(--hairline); padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; cursor: default; transition: background-color var(--motion-fade) var(--ease-out); }
+.card:hover, .card.is-hover { background: var(--hover-solid); } /* hover = fill, same language as rows (call 39) */
+.card .ct { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; line-height: 1.4; color: var(--text-1); }
+.card .ct .cb { margin-top: 2px; }
+.card .cm { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--text-2); padding-left: calc(var(--icon) + 10px); white-space: nowrap; overflow: hidden; }
+.card .cm .ava, .card .cm .tava { margin-left: auto; }
+.card .cm .cnt { display: inline-flex; align-items: center; gap: 3px; color: var(--text-3); }
+.card .cm .wait { display: inline-flex; align-items: center; gap: 4px; color: var(--text-2); }
+.card .cm .wait .ic { color: var(--text-3); }
+.card .cm .plus { color: var(--text-3); }
+.card.compact { padding: 8px 10px; gap: 6px; }
+.card.compact .ct { font-size: 13px; gap: 8px; }
+.card.compact .cm { padding-left: calc(var(--icon-sm) + 8px); }
+.addcard { height: 32px; display: flex; align-items: center; gap: 8px; padding: 0 8px; margin-top: 4px; border-radius: var(--radius-md); font-size: 13px; color: var(--text-3); opacity: 0; transition: opacity var(--motion-fade) var(--ease-out); }
+.col:hover .addcard, .col.is-hover .addcard { opacity: 1; }
+.addcard:hover { background: var(--state-hover); color: var(--text-1); }
+.col .completed-line { padding-left: 6px; gap: 8px; }
+
+/* ── Popovers and menus ──────────────────────────────────────────────────── */
+.pop { position: absolute; z-index: 20; width: 300px; background: var(--popover); border: 1px solid var(--hairline); border-radius: var(--radius-lg); box-shadow: 0 16px 40px rgb(0 0 0 / .55); padding: 6px; }
+.menu { position: absolute; z-index: 30; min-width: 176px; background: var(--popover); border: 1px solid var(--hairline); border-radius: var(--radius-md); box-shadow: 0 12px 30px rgb(0 0 0 / .5); padding: 4px; }
+.menu .mi { height: 28px; display: flex; align-items: center; gap: 8px; padding: 0 8px; border-radius: var(--radius-sm); font-size: 13px; color: var(--text-1); cursor: pointer; white-space: nowrap; }
+.menu .mi .ic { color: var(--text-2); }
+.menu .mi:hover, .menu .mi.hl { background: var(--state-active); }
+.menu .mi .ck { margin-left: auto; color: var(--text-1); }
+.menu .mi .hint { margin-left: auto; font-size: 12px; color: var(--text-3); }
+.menu hr, .pop hr { border: 0; height: 1px; background: var(--hairline); margin: 4px 0; }
+/* contact hover card (frame 2) */
+.hcard { position: absolute; z-index: 25; width: 292px; background: var(--popover); border: 1px solid var(--hairline); border-radius: var(--radius-lg); box-shadow: 0 16px 40px rgb(0 0 0 / .55); padding: 14px 14px 12px; display: flex; flex-direction: column; gap: 12px; font-size: 13px; line-height: 1.4; }
+.hcard .hc1 { display: flex; gap: 12px; align-items: center; }
+.hcard .nm { font-size: 14px; font-weight: 600; color: var(--text-1); }
+.hcard .rl { font-size: 12px; color: var(--text-2); margin-top: 1px; }
+.hcard .hrows { display: flex; flex-direction: column; gap: 7px; padding-top: 12px; border-top: 1px solid var(--hairline); }
+.hcard .hr { display: flex; align-items: center; gap: 8px; color: var(--text-2); white-space: nowrap; }
+.hcard .hr .ic { color: var(--text-3); }
+.hcard .hr b { color: var(--text-1); font-weight: 400; }
+/* "Show as" — appears right after a reference is inserted (frame 2) */
+.showas { position: absolute; z-index: 25; display: flex; align-items: center; gap: 8px; padding: 3px 3px 3px 10px; background: var(--popover); border: 1px solid var(--hairline); border-radius: var(--radius-md); box-shadow: 0 12px 30px rgb(0 0 0 / .5); font-size: 12px; color: var(--text-2); white-space: nowrap; line-height: 1.4; }
+.showas .seg { height: 24px; background: color-mix(in oklab, var(--foreground) 6%, var(--popover)); }
+.showas .seg button { font-size: 12px; padding: 0 8px; }
+.showas .kbd { margin-left: 2px; }
+/* assignee picker (frame 7) */
+.picker { position: absolute; z-index: 30; width: 266px; background: var(--popover); border: 1px solid var(--hairline); border-radius: var(--radius-lg); box-shadow: 0 16px 40px rgb(0 0 0 / .55); padding: 4px; }
+.picker .srch { height: 34px; display: flex; align-items: center; gap: 8px; padding: 0 8px; margin: 0 -4px 4px; font-size: 13px; color: var(--text-3); border-bottom: 1px solid var(--hairline); }
+.picker .srch .ic { color: var(--text-3); }
+.picker .srch .cur { width: 1.5px; height: 15px; background: var(--foreground); margin-left: -6px; }
+.picker .lh { height: 26px; display: flex; align-items: center; padding: 0 8px; font-size: 12px; font-weight: 500; color: var(--text-2); }
+.picker .pi { height: 30px; display: flex; align-items: center; gap: 10px; padding: 0 8px; border-radius: var(--radius-sm); font-size: 13px; color: var(--text-1); cursor: pointer; white-space: nowrap; }
+.picker .pi:hover, .picker .pi.hl { background: var(--state-active); }
+.picker .pi .hint { margin-left: auto; font-size: 12px; color: var(--text-3); }
+.picker .pi .ck { color: var(--text-1); }
+.picker .pi .hint + .ck { margin-left: 4px; }
+.picker hr { border: 0; height: 1px; background: var(--hairline); margin: 4px 0; }
+.picker .pi.quiet { color: var(--text-2); }
+.picker .pi .tn { color: var(--text-3); }
+
+/* ── Frame 2 · a note (Notes module) ─────────────────────────────────────── */
+.doc { flex: 1; min-height: 0; overflow: auto; position: relative; }
+.prose { width: 42rem; max-width: calc(100% - 64px); margin: 0 auto; padding: 26px 0 120px; font-size: 15px; line-height: 1.7; color: color-mix(in oklab, var(--foreground) 88%, transparent); }
+.prose h1 { font-size: 30px; line-height: 1.2; font-weight: 600; letter-spacing: -.02em; color: var(--text-1); }
+.docmeta { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 13px; line-height: 1.4; color: var(--text-3); }
+.avstack { display: inline-flex; gap: 3px; }
+.prose h2 { font-size: 17px; line-height: 1.4; font-weight: 600; letter-spacing: -.01em; color: var(--text-1); margin-top: 28px; }
+.prose p { margin-top: 12px; }
+.prose h2 + p, .prose h2 + ul, .prose h2 + .blk { margin-top: 8px; }
+.prose .blk { margin-top: 12px; }
+.prose ul { list-style: none; padding: 0; margin-top: 8px; }
+.prose li { position: relative; padding-left: 22px; }
+.prose li + li { margin-top: 4px; }
+.prose li::before { content: ""; position: absolute; left: 8px; top: .78em; width: 5px; height: 5px; border-radius: 9999px; background: var(--text-2); }
+.caret { display: inline-block; width: 1.5px; height: 1.15em; background: var(--foreground); vertical-align: -.2em; margin-left: 2px; }
+#insRef .as-link, #insRef .as-card { display: none; }
+html[data-v2="link"] #insRef .as-chip, html[data-v2="card"] #insRef .as-chip, html[data-v2="card"] #insRef .caret { display: none; }
+html[data-v2="link"] #insRef .as-link { display: inline; }
+html[data-v2="card"] #insRef .as-card { display: flex; margin: 8px 0 2px; }
+
+/* ── Frame 4 · chat ──────────────────────────────────────────────────────── */
+.chath { display: flex; align-items: center; gap: 8px; padding: 12px 12px 12px 16px; border-bottom: 1px solid var(--hairline); flex-shrink: 0; }
+.chath h3 { font-size: 16px; font-weight: 600; letter-spacing: -.01em; }
+.chath > .ic { color: var(--text-2); }
+.chath .topic { font-size: 13px; color: var(--text-3); margin: 0 auto 0 6px; white-space: nowrap; }
+.chath .avstack { margin-right: 6px; }
+.msgs { flex: 1; min-height: 0; overflow: auto; padding: 8px 12px 6px; display: flex; flex-direction: column; justify-content: flex-end; }
+.daydiv { display: flex; align-items: center; gap: 12px; margin: 10px 8px 4px; font-size: 12px; color: var(--text-3); }
+.daydiv::before, .daydiv::after { content: ""; flex: 1; height: 1px; background: var(--hairline); }
+.msg { display: grid; grid-template-columns: 32px minmax(0, 1fr); column-gap: 12px; padding: 8px; border-radius: var(--radius-md); transition: background-color var(--motion-fade) var(--ease-out); }
+.msg:hover, .msg.is-hover { background: var(--state-hover); }
+.msg + .msg.cont { padding-top: 0; }
+.msg.cont .gut { height: 0; }
+.mhd { display: flex; align-items: baseline; gap: 8px; line-height: 1.3; }
+.mhd .nm { font-size: 14px; font-weight: 600; color: var(--text-1); }
+.mhd .tm { font-size: 12px; color: var(--text-3); }
+.mbd { max-width: 46rem; font-size: 14px; line-height: 1.65; color: color-mix(in oklab, var(--foreground) 90%, transparent); margin-top: 2px; }
+.pvs { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; width: 27.5rem; max-width: 100%; }
+.pv { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px 9px; border-radius: var(--radius-md); box-shadow: inset 0 0 0 1px var(--hairline); background: var(--card); cursor: pointer; transition: background-color var(--motion-fade) var(--ease-out); }
+.pv:hover { background: var(--hover-solid); }
+.pv .p1 { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; color: var(--text-1); min-width: 0; }
+.pv .p1 .x1 { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pv .p1 > .ic { color: var(--text-2); }
+.pv .p1 .when { font-size: 12px; font-weight: 400; color: var(--text-3); white-space: nowrap; }
+.pv .p2 { display: flex; align-items: center; gap: 10px; padding-left: 22px; font-size: 12px; color: var(--text-2); white-space: nowrap; overflow: hidden; }
+.pv .p2 > span { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.pv .p2 .ic { color: var(--text-3); }
+.pv .p2 .dot { width: 7px; height: 7px; margin-right: 1px; }
+.pv .p2 > .snip1 { display: block; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.pvtoggle { margin-top: 6px; font-size: 12px; color: var(--text-3); }
+.pvtoggle:hover { color: var(--text-1); }
+html[data-v4="hidden"] .pvs, html[data-v4="hidden"] .pv-hide, html:not([data-v4="hidden"]) .pv-show { display: none; }
+.composer2 { margin: 4px 16px 14px; height: 44px; flex-shrink: 0; border-radius: var(--radius-lg); box-shadow: inset 0 0 0 1px var(--hairline); padding: 0 6px 0 12px; display: flex; align-items: center; gap: 6px; font-size: 14px; color: var(--text-3); }
+.composer2 .grow { flex: 1; }
+
+/* ── Frame 5 · one task, two viewers ─────────────────────────────────────── */
+html[data-frame="5"] .app { padding-top: 0; }
+.halves { flex: 1; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 33px; position: relative; }
+.halves::before { content: ""; position: absolute; top: 10px; bottom: 0; left: 50%; border-left: 1px dashed color-mix(in oklab, var(--foreground) 26%, transparent); }
+.half { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.mbar { height: var(--bar-h); flex-shrink: 0; display: flex; align-items: center; gap: 4px; padding-left: 4px; }
+.mbar .grow { flex: 1; }
+.hpanels { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 12px; }
+.hlist { flex-shrink: 0; display: flex; flex-direction: column; }
+.hlist .list { overflow: visible; flex: none; padding-bottom: 8px; }
+.hdetail { flex: 1; min-height: 0; overflow: auto; position: relative; display: flex; flex-direction: column; }
+.hdetail .dbody { flex: 1; }
+.sess { margin: 8px 0 0 calc(var(--icon) + 10px); }
+.sline { display: flex; align-items: center; gap: 8px; min-height: 28px; padding: 0 6px; margin: 0 -6px; border-radius: var(--radius-md); font-size: 13px; color: var(--text-2); cursor: pointer; white-space: nowrap; transition: background-color var(--motion-fade) var(--ease-out); }
+.sline:hover { background: var(--state-hover); }
+.sline .pr { display: inline-flex; align-items: center; gap: 2px; color: var(--text-1); }
+.sline .pr .ic { width: 11px; height: 11px; color: var(--text-2); }
+.sline .chev { margin-left: auto; color: var(--text-3); transition: transform 140ms var(--ease-out); }
+html[data-v5="closed"] .sline .chev { transform: rotate(180deg); }
+.snotes { margin: 2px 0 0 2px; padding-left: 13px; box-shadow: inset 1px 0 0 var(--hairline); display: flex; flex-direction: column; }
+html[data-v5="closed"] .snotes { display: none; }
+.snote { display: grid; grid-template-columns: 62px minmax(0, 1fr); column-gap: 10px; font-size: 12.5px; line-height: 22px; color: var(--text-2); white-space: nowrap; }
+.snote .tm { color: var(--text-3); }
+.snote.cur { color: var(--text-1); }
+.legend { margin-top: auto; display: flex; flex-direction: column; gap: 2px; padding: 8px 10px 9px; font-size: 12px; }
+.legend .lgh { color: var(--text-2); margin-bottom: 3px; }
+.legend .lr { display: grid; grid-template-columns: 186px minmax(0, 1fr); column-gap: 12px; align-items: center; min-height: 22px; }
+.legend .ag { width: 12px; display: inline-grid; place-items: center; flex-shrink: 0; }
+.legend .lr .sl { color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ── Frame 6 · backlog ───────────────────────────────────────────────────── */
+html:not([data-v6="board"]):not([data-v6="folded"]) .f6-board, html[data-v6="board"] .f6-list, html[data-v6="folded"] .f6-list { display: none !important; }
+html:not([data-v6="open"]) .blrows { display: none; }
+html[data-v6="open"] .bl-show, html:not([data-v6="open"]) .bl-hide { display: none; }
+.blline .cslot .ic { color: var(--text-3); }
+.col.blcol { --colw: 216px; }
+.chead .fold { opacity: 1; color: var(--text-3); }
+.chead .fold:hover { color: var(--text-1); }
+.foldstrip { display: none; }
+html[data-v6="folded"] .blcol { width: 40px; }
+html[data-v6="folded"] .blcol > :not(.foldstrip) { display: none; }
+html[data-v6="folded"] .foldstrip { display: flex; }
+.foldstrip { flex-direction: column; align-items: center; gap: 10px; width: 40px; padding: 8px 0 14px; border-radius: var(--radius-md); box-shadow: inset 0 0 0 1px var(--hairline); color: var(--text-2); font-size: 13px; font-weight: 500; cursor: pointer; transition: background-color var(--motion-fade) var(--ease-out), color var(--motion-fade) var(--ease-out); }
+.foldstrip:hover { background: var(--state-hover); color: var(--text-1); }
+.foldstrip .vt { writing-mode: vertical-rl; display: flex; align-items: center; gap: 8px; }
+.foldstrip .gc { font-size: 12px; font-weight: 400; color: var(--text-3); }
+.foldstrip .sti { color: var(--text-2); }
+
+/* ── Frame 8 · focus run (the comp's run model) ──────────────────────────── */
+.runbar { display: flex; align-items: center; gap: 6px; padding: 12px 12px 2px 16px; flex-shrink: 0; }
+.runbar h3 { font-size: 18px; font-weight: 600; letter-spacing: -.01em; }
+.runstate { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-2); margin: 0 auto 0 10px; }
+.phase { height: var(--ctrl-h-sm); display: inline-flex; align-items: center; gap: 8px; padding: 0 10px; border-radius: var(--radius-md); background: var(--state-active); font-size: 13px; font-weight: 500; white-space: nowrap; }
+.phase .ic { color: var(--text-2); }
+.ring { width: 14px; height: 14px; border-radius: 9999px; flex-shrink: 0; background: conic-gradient(var(--foreground) var(--p), color-mix(in oklab, var(--foreground) 18%, transparent) 0); -webkit-mask: radial-gradient(circle 4.5px, transparent 97%, black 100%); mask: radial-gradient(circle 4.5px, transparent 97%, black 100%); }
+.runsub { display: flex; align-items: center; gap: 6px; padding: 2px 16px 12px; font-size: 13px; color: var(--text-3); flex-shrink: 0; }
+.runsub .ic { color: var(--text-3); }
+.runsub b { color: var(--text-2); font-weight: 400; }
+.runsub button { color: var(--text-2); text-underline-offset: 3px; }
+.runsub button:hover { color: var(--text-1); text-decoration: underline; }
+.nowwrap { padding: 0 16px; flex-shrink: 0; }
+.now { background: var(--popover); border-radius: var(--radius-xl); box-shadow: inset 0 0 0 1px var(--hairline); padding: 16px 20px 12px; display: flex; flex-direction: column; gap: 10px; }
+.now .meta { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--text-2); }
+.now .meta > span { display: inline-flex; align-items: center; gap: 5px; }
+.now .meta .ic { color: var(--text-3); }
+.now .meta .dot { width: 7px; height: 7px; }
+.now h5 { font-size: 22px; font-weight: 600; letter-spacing: -.015em; line-height: 1.25; }
+.now .ndesc { font-size: 14px; line-height: 1.55; color: color-mix(in oklab, var(--foreground) 80%, transparent); max-width: 64ch; }
+.check { display: flex; flex-direction: column; }
+.check .it { display: flex; align-items: center; gap: 10px; height: 26px; font-size: 14px; }
+.check .it.done span:last-child { color: var(--text-2); text-decoration: line-through; }
+.linkchips { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.lchip { height: 26px; display: inline-flex; align-items: center; gap: 6px; padding: 0 9px; border-radius: var(--radius-md); box-shadow: inset 0 0 0 1px var(--hairline); font-size: 13px; color: var(--text-1); white-space: nowrap; }
+.lchip .ic { color: var(--text-2); }
+.minithumbs { display: inline-flex; gap: 6px; margin-left: 4px; }
+.minithumbs i { width: 46px; height: 26px; border-radius: var(--radius-sm); box-shadow: inset 0 0 0 1px var(--hairline); background: var(--g); display: block; }
+.nowfoot { display: flex; align-items: center; gap: 6px; padding-top: 12px; box-shadow: 0 -1px 0 var(--hairline); }
+.kbdin { opacity: .6; font-weight: 400; }
+/* "along the way": one quiet line, only when the next task leaves this project */
+.along { margin: 12px 16px 0; min-height: 36px; padding: 0 4px 0 12px; border-radius: var(--radius-md); background: var(--state-hover); display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-2); flex-shrink: 0; white-space: nowrap; }
+.along > .ic { color: var(--text-3); margin-right: 2px; }
+.along b { color: var(--text-1); font-weight: 500; }
+.along .acts { margin-left: auto; display: flex; gap: 2px; }
+.along .acts .btn { height: 26px; font-size: 13px; }
+.upnext { flex: 1; min-height: 0; overflow: auto; padding: 8px 8px 8px; }
+.sublabel { display: flex; align-items: center; gap: 8px; height: var(--row-h-sm); padding: 0 10px 0 8px; font-size: 13px; font-weight: 500; color: var(--text-1); }
+.sublabel .num { font-weight: 400; color: var(--text-3); }
+.sublabel .sum { margin-left: auto; }
+.qrow { height: var(--row-h); display: grid; grid-template-columns: 14px minmax(0, 1fr) auto auto; align-items: center; column-gap: 12px; padding: 0 10px 0 8px; border-radius: var(--radius-md); transition: background-color var(--motion-fade) var(--ease-out); }
+.qrow:hover { background: var(--state-hover); }
+.qrow .n { font-size: 12px; color: var(--text-2); text-align: right; }
+.qrow .tt { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 10px; min-width: 0; }
+.qrow .tt .x1 { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.qrow .est { font-size: 12px; color: var(--text-2); }
+.qrow .n .g { display: none; color: var(--text-2); }
+.qrow:hover .n b { display: none; }
+.qrow:hover .n .g { display: inline-block; }
+.qrow .n b { font-weight: 400; }
+/* a thin divider wherever the project changes; the name sits in the title column */
+.pdiv { display: flex; align-items: center; gap: 12px; height: 26px; padding: 0 10px 0 8px; font-size: 12px; color: var(--text-3); }
+.pdiv .dslot { width: 14px; display: grid; place-items: center; flex-shrink: 0; }
+.pdiv .dot { width: 7px; height: 7px; }
+.pdiv .line { flex: 1; height: 1px; background: var(--hairline); }
+html[data-v8="arranged"] .uq-queued, html:not([data-v8="arranged"]) .uq-arranged { display: none; }
+.upnext .completed-line { padding-left: 8px; }
+.rtabs { padding: 12px 12px 4px; }
+.rtabs .seg { width: 100%; }
+.rtabs .seg button { flex: 1; justify-content: center; }
+.flight { padding: 8px 12px 12px; display: flex; flex-direction: column; gap: 8px; }
+.fcard { border-radius: var(--radius-lg); box-shadow: inset 0 0 0 1px var(--hairline); padding: 12px; display: flex; flex-direction: column; gap: 10px; cursor: pointer; transition: background-color var(--motion-fade) var(--ease-out); }
+.fcard:hover { background: var(--state-hover); }
+.fcard .ft1 { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; font-weight: 500; line-height: 1.35; }
+.fcard .ft1 .ic { margin-top: 2px; color: var(--text-2); }
+.fcard .fmeta { display: flex; align-items: center; gap: 12px; font-size: 12px; color: var(--text-2); padding-left: calc(var(--icon-sm) + 8px); white-space: nowrap; }
+.fcard .fmeta > span { display: inline-flex; align-items: center; gap: 6px; }
+.fhint { font-size: 12px; color: var(--text-3); padding: 6px 4px 0; line-height: 1.55; }
+.fhint b { color: var(--text-2); font-weight: 500; }
+</style>
+</head>
+<body>
+
+<!-- lucide-style icon sprite (paths from the comp + lucide) -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></symbol>
+  <symbol id="i-queue" viewBox="0 0 24 24"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></symbol>
+  <symbol id="i-inbox" viewBox="0 0 24 24"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></symbol>
+  <symbol id="i-upcoming" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/></symbol>
+  <symbol id="i-mine" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5"/><circle cx="12" cy="10" r="3"/><path d="M7 19.5V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v.5"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-filter" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M7 12h10"/><path d="M10 18h4"/></symbol>
+  <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M21 4h-7"/><path d="M10 4H3"/><path d="M21 12h-9"/><path d="M8 12H3"/><path d="M21 20h-5"/><path d="M12 20H3"/><path d="M14 2v4"/><path d="M8 10v4"/><path d="M16 18v4"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></symbol>
+  <symbol id="i-cols" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="M15 3v18"/></symbol>
+  <symbol id="i-gantt" viewBox="0 0 24 24"><path d="M10 6h8"/><path d="M12 16h6"/><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M8 11h7"/></symbol>
+  <symbol id="i-chev-d" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-chev-u" viewBox="0 0 24 24"><path d="m18 15-6-6-6 6"/></symbol>
+  <symbol id="i-chev-r" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="i-fold" viewBox="0 0 24 24"><path d="m11 17-5-5 5-5"/><path d="m18 17-5-5 5-5"/></symbol>
+  <symbol id="i-unfold" viewBox="0 0 24 24"><path d="m6 17 5-5-5-5"/><path d="m13 17 5-5-5-5"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></symbol>
+  <symbol id="i-cal" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="i-repeat" viewBox="0 0 24 24"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></symbol>
+  <symbol id="i-clip" viewBox="0 0 24 24"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></symbol>
+  <symbol id="i-msg" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+  <symbol id="i-sub" viewBox="0 0 24 24"><path d="M21 12h-8"/><path d="M21 6H8"/><path d="M21 18h-8"/><path d="M3 6v4c0 1.1.9 2 2 2h3"/><path d="M3 10v6c0 1.1.9 2 2 2h3"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-check-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.9"/></symbol>
+  <symbol id="i-x-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="m14.8 9.2-5.6 5.6"/><path d="m9.2 9.2 5.6 5.6"/></symbol>
+  <symbol id="i-hash" viewBox="0 0 24 24"><path d="M4 9h16"/><path d="M4 15h16"/><path d="M10 3 8 21"/><path d="M16 3l-2 18"/></symbol>
+  <symbol id="i-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/></symbol>
+  <symbol id="i-backlog" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" stroke-dasharray="3.4 2.9"/></symbol>
+  <symbol id="i-progress" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5a4.5 4.5 0 0 1 0 9z" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4.5"/><path d="M20 21a8 8 0 0 0-16 0"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></symbol>
+  <symbol id="i-timer" viewBox="0 0 24 24"><path d="M10 2h4"/><path d="M12 14l3-3"/><circle cx="12" cy="14" r="8"/></symbol>
+  <symbol id="i-hourglass" viewBox="0 0 24 24"><path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.17a2 2 0 0 0-.59-1.42L12 12l-4.41 4.41A2 2 0 0 0 7 17.83V22"/><path d="M7 2v4.17a2 2 0 0 0 .59 1.42L12 12l4.41-4.41A2 2 0 0 0 17 6.17V2"/></symbol>
+  <symbol id="i-building" viewBox="0 0 24 24"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/></symbol>
+  <symbol id="i-flag" viewBox="0 0 24 24"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><path d="M4 22v-7"/></symbol>
+  <symbol id="i-corner" viewBox="0 0 24 24"><path d="m15 10 5 5-5 5"/><path d="M4 4v7a4 4 0 0 0 4 4h12"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect width="16" height="11" x="4" y="11" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M10.27 21a2 2 0 0 0 3.46 0"/><path d="M3.26 15.33A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.67C19.41 13.96 18 12.5 18 8A6 6 0 0 0 6 8c0 4.5-1.41 5.96-2.74 7.33"/></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .71-1.53l7-6a2 2 0 0 1 2.58 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+  <symbol id="i-note" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/></symbol>
+  <symbol id="i-tasks" viewBox="0 0 24 24"><path d="M21 10.66V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12.34"/><path d="m9 11 3 3L22 4"/></symbol>
+  <symbol id="i-mail" viewBox="0 0 24 24"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></symbol>
+  <symbol id="i-contact" viewBox="0 0 24 24"><path d="M16 2v2"/><path d="M7 22v-2a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v2"/><path d="M8 2v2"/><circle cx="12" cy="11" r="3"/><rect x="3" y="4" width="18" height="18" rx="2"/></symbol>
+  <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M21.17 6.81a1 1 0 0 0-3.99-3.99L3.84 16.17a2 2 0 0 0-.5.83l-1.32 4.35a.5.5 0 0 0 .62.62l4.35-1.32a2 2 0 0 0 .83-.5z"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></symbol>
+  <symbol id="i-ext" viewBox="0 0 24 24"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></symbol>
+  <symbol id="i-archive" viewBox="0 0 24 24"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></symbol>
+  <symbol id="i-compass" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m16.24 7.76-2.12 6.36-6.36 2.12 2.12-6.36 6.36-2.12z"/></symbol>
+  <symbol id="i-pen-square" viewBox="0 0 24 24"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24"><path d="M14.54 21.69a.5.5 0 0 0 .94-.03l6.5-19a.5.5 0 0 0-.64-.64l-19 6.5a.5.5 0 0 0-.03.94l7.93 3.18a2 2 0 0 1 1.11 1.11z"/><path d="m21.85 2.15-10.94 10.93"/></symbol>
+  <symbol id="i-smile" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 9h.01"/><path d="M15 9h.01"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4v16l13-8z"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/></symbol>
+  <symbol id="i-handoff" viewBox="0 0 24 24"><path d="M3 5v14"/><path d="M21 12H7"/><path d="m15 18 6-6-6-6"/></symbol>
+  <symbol id="i-grip" viewBox="0 0 24 24"><circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="18" r="1"/></symbol>
+  <symbol id="i-group" viewBox="0 0 24 24"><rect width="7" height="7" x="3" y="3" rx="1.5"/><rect width="7" height="7" x="14" y="3" rx="1.5"/><path d="M14 17.5h7"/><path d="M3 17.5h7"/></symbol>
+  <symbol id="p0" viewBox="0 0 16 16"><rect x="2" y="9" width="3" height="5" rx="1" opacity=".25"/><rect x="6.5" y="6" width="3" height="8" rx="1" opacity=".25"/><rect x="11" y="3" width="3" height="11" rx="1" opacity=".25"/></symbol>
+  <symbol id="p1" viewBox="0 0 16 16"><rect x="2" y="9" width="3" height="5" rx="1"/><rect x="6.5" y="6" width="3" height="8" rx="1" opacity=".25"/><rect x="11" y="3" width="3" height="11" rx="1" opacity=".25"/></symbol>
+  <symbol id="p2" viewBox="0 0 16 16"><rect x="2" y="9" width="3" height="5" rx="1"/><rect x="6.5" y="6" width="3" height="8" rx="1"/><rect x="11" y="3" width="3" height="11" rx="1" opacity=".25"/></symbol>
+  <symbol id="p3" viewBox="0 0 16 16"><rect x="2" y="9" width="3" height="5" rx="1"/><rect x="6.5" y="6" width="3" height="8" rx="1"/><rect x="11" y="3" width="3" height="11" rx="1"/></symbol>
+  <symbol id="mark" viewBox="0 0 1000 1000"><path fill="currentColor" fill-rule="evenodd" clip-rule="evenodd" d="M621.122 228.124C634.336 227.102 647.241 232.464 655.842 242.551C665.755 254.176 665.755 279.231 665.755 329.34V363.215L746.907 282.348C782.394 246.985 800.138 229.303 815.367 228.125C828.58 227.103 841.485 232.465 850.087 242.552C859.999 254.177 860 279.232 860 329.341V472.45C860 482.617 860 487.701 858.849 492.483C857.829 496.723 856.147 500.776 853.864 504.491C851.289 508.681 847.688 512.268 840.488 519.443L641.582 717.653C606.095 753.016 588.351 770.698 573.122 771.876C559.909 772.898 547.004 767.535 538.403 757.449C528.49 745.824 528.489 720.769 528.489 670.66V637.249L653.561 512.616C661.367 504.838 665.755 494.268 665.755 483.245V363.679L540.684 488.312C532.878 496.091 528.489 506.661 528.489 517.683V636.785L447.338 717.653C411.85 753.016 394.106 770.697 378.878 771.875C365.664 772.897 352.759 767.534 344.158 757.448C334.245 745.823 334.245 720.769 334.245 670.66V636.785L253.093 717.653C217.606 753.016 199.862 770.698 184.633 771.876C171.42 772.898 158.515 767.535 149.913 757.449C140.001 745.824 140 720.769 140 670.66V527.551C140 517.385 140 512.3 141.151 507.518C142.171 503.278 143.853 499.226 146.136 495.511C148.711 491.32 152.312 487.732 159.512 480.557L358.418 282.348C393.905 246.985 411.649 229.303 426.878 228.125C440.091 227.103 452.996 232.465 461.597 242.552C471.51 254.177 471.511 279.232 471.511 329.341V363.214L552.662 282.347C588.15 246.984 605.894 229.302 621.122 228.124ZM346.439 487.848C338.633 495.627 334.245 506.197 334.245 517.219V636.785L459.316 512.152C467.122 504.373 471.511 493.804 471.511 482.781V363.214L346.439 487.848Z"/></symbol>
+</svg>
+
+<div class="stage">
+
+  <!-- ═══════════ PROTOTYPE STRIP (not part of the app) ═══════════ -->
+  <div class="strip" role="banner">
+    <div class="l1">
+      <span class="ptag">Throwaway prototype — not a spec.</span>
+      <span class="pcalls"><b>Round 1c</b> questions in .design/tasks-v3/REPLAN.md</span>
+      <span class="grow"></span>
+      <span class="seg" id="frameSw">
+        <button type="button" data-go="1">1 · Sidebar</button>
+        <button type="button" data-go="2">2 · Note</button>
+        <button type="button" data-go="3">3 · Description</button>
+        <button type="button" data-go="4">4 · Chat</button>
+        <button type="button" data-go="5">5 · Agent</button>
+        <button type="button" data-go="6">6 · Backlog</button>
+        <button type="button" data-go="7">7 · Teams</button>
+        <button type="button" data-go="8">8 · Focus run</button>
+      </span>
+    </div>
+    <div class="l2">
+      <span class="cap" id="cap"></span>
+      <span class="ctl" id="ctlVar"><span class="lab" id="varLab"></span><span class="seg" id="varSeg"></span></span>
+      <span class="keys">Keys <b>1–8</b> · <b>V</b> variant</span>
+    </div>
+  </div>
+
+  <div class="appframe">
+    <!-- ═══════════ TOP BAR ═══════════ -->
+    <header class="topbar" data-f="1 2 3 4 6 7 8">
+      <div class="tleft">
+        <svg class="mark" aria-label="moduo"><use href="#mark"/></svg>
+        <button type="button" class="wsbtn">Rivera Studio <svg class="ic ic-xs" aria-hidden="true"><use href="#i-chev-d"/></svg></button>
+      </div>
+      <nav class="mtabs" aria-label="Modules">
+        <span class="mtab" data-mod="home"><svg class="ic" aria-hidden="true"><use href="#i-home"/></svg>Home</span>
+        <span class="mtab" data-mod="notes"><svg class="ic" aria-hidden="true"><use href="#i-note"/></svg>Notes</span>
+        <span class="mtab" data-mod="tasks"><svg class="ic" aria-hidden="true"><use href="#i-tasks"/></svg>Tasks</span>
+        <span class="mtab" data-mod="calendar"><svg class="ic" aria-hidden="true"><use href="#i-cal"/></svg>Calendar</span>
+        <span class="mtab" data-mod="email"><svg class="ic" aria-hidden="true"><use href="#i-mail"/></svg>Email</span>
+        <span class="mtab" data-mod="contacts"><svg class="ic" aria-hidden="true"><use href="#i-contact"/></svg>Contacts</span>
+        <span class="mtab" data-mod="chat"><svg class="ic" aria-hidden="true"><use href="#i-msg"/></svg>Chat</span>
+      </nav>
+      <div class="tright">
+        <button type="button" class="ibtn" title="Notifications"><svg class="ic ic-md" aria-hidden="true"><use href="#i-bell"/></svg></button>
+        <span class="ava ar lg" title="Alex Rivera (you)">AR</span>
+      </div>
+    </header>
+
+    <div class="app" id="app">
+
+      <!-- ═══════════ FRAME 1 · RAIL (a): A FRESH WORKSPACE ═══════════ -->
+      <aside class="panel rail" id="railFresh" data-f="1">
+        <div class="nav"><span class="slot"><svg class="ic ic-md" aria-hidden="true"><use href="#i-inbox"/></svg></span><span class="lbl">Inbox</span><span class="trail"><span class="count num">2</span><button type="button" class="more"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button></span></div>
+        <div class="nav"><span class="slot"><svg class="ic ic-md" aria-hidden="true"><use href="#i-queue"/></svg></span><span class="lbl">Queue</span><span class="trail"><button type="button" class="more"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button></span></div>
+        <div class="nav active"><span class="slot"><svg class="ic ic-md" aria-hidden="true"><use href="#i-upcoming"/></svg></span><span class="lbl">Upcoming</span><span class="trail"><button type="button" class="more"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button></span></div>
+        <div class="rdiv"><span class="line"></span><button type="button" class="more cust-more" title="Customize sidebar"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button></div>
+        <div class="nav"><span class="slot"><svg class="ic ic-md" aria-hidden="true"><use href="#i-layers"/></svg></span><span class="lbl">All</span><span class="trail"><span class="count num">14</span><button type="button" class="more"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button></span></div>
+        <div class="rgap"></div>
+        <div class="nav"><span class="slot"><span class="dot" style="--c: var(--label-blue)"></span></span><span class="lbl">Launch v1</span><span class="trail"><span class="count num">6</span><button type="button" class="more"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button></span></div>
+        <div class="nav"><span class="slot"><span class="dot" style="--c: var(--label-teal)"></span></span><span class="lbl">Website</span><span class="trail"><span class="count num">4</span><button type="button" class="more"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button></span></div>
+        <div class="nav"><span class="slot"><span class="dot" style="--c: var(--label-violet)"></span></span><span class="lbl">Acme rebrand</span><span class="trail"><span class="count num">2</span><button type="button" class="more"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button></span></div>
+        <div class="nav add"><span class="slot"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg></span><span class="lbl">New project</span></div>
+        <span class="pnote"><b>a</b> · fresh workspace</span>
+      </aside>
+
+      <!-- ═══════════ TASKS RAIL (b in frame 1; frames 3, 6, 7, 8) ═══════════ -->
+      <aside class="panel rail" id="rail" data-f="1 3 6 7 8">
+        <div class="nav" data-nav="inbox"><span class="slot"><svg class="ic ic-md" aria-hidden="true"><use href="#i-inbox"/></svg></span><span class="lbl">Inbox</span><span class="trail"><span class="count num">3</span><button type="button" class="more"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button></span></div>
+        <div class="nav" data-nav="queue"><span class="slot"><svg class="ic ic-md" aria-hidden="true"><use href="#i-queue"/></svg></span><span class="lbl">Queue</span><span class="trail"><span class="count num qcount">4</span><span class="runct num" title="Run in progress · 2 of 7 done"><span class="live"></span>2/7</span><button type="button" class="more"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button></span></div>
+        <div class="nav" data-nav="upcoming"><span class="slot"><svg class="ic ic-md" aria-hidden="true"><use href="#i-upcoming"/></svg></span><span class="lbl">Upcoming</span><span class="trail"><button type="button" class="more"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button></span></div>
+        <div class="nav" data-nav="mytasks"><span class="slot"><svg class="ic ic-md" aria-hidden="true"><use href="#i-mine"/></svg></span><span class="lbl">My tasks</span><span class="trail"><span class="count num">22</span><button type="button" class="more"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button></span></div>
+        <div class="rdiv"><span class="line"></span><button type="button" class="more cust-more" title="Customize sidebar"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button></div>
+        <div class="nav" data-nav="all"><span class="slot"><svg class="ic ic-md" aria-hidden="true"><use href="#i-layers"/></svg></span><span class="lbl">All</span><span class="trail"><span class="count num">34</span><button type="button" class="more"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button></span></div>
+
+        <div class="area">
+          <div class="ghdr"><span>Pinned</span><svg class="ic ic-xs chev" aria-hidden="true"><use href="#i-chev-d"/></svg><span class="trail"><button type="button" class="more" title="More"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button></span></div>
+          <div class="kids">
+            <div class="nav" data-nav="launch-pin"><span class="slot"><span class="dot" style="--c: var(--label-blue)"></span></span><span class="lbl">Launch v1</span><span class="trail"><span class="count num">8</span><button type="button" class="more"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button></span></div>
+          </div>
+        </div>
+        <div class="area">
+          <div class="ghdr"><span>Views</span><svg class="ic ic-xs chev" aria-hidden="true"><use href="#i-chev-d"/></svg><span class="trail"><button type="button" class="more" title="More"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button></span></div>
+          <div class="kids">
+            <div class="nav" data-nav="view-hp"><span class="slot"></span><span class="lbl">High priority</span><span class="trail"><span class="count num">6</span><button type="button" class="more"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button></span></div>
+            <div class="nav" data-nav="view-pipe"><span class="slot"></span><span class="lbl">Pipeline</span><span class="trail"><span class="count num">10</span><button type="button" class="more"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button></span></div>
+          </div>
+        </div>
+        <div class="area">
+          <div class="ghdr"><span>Product</span><svg class="ic ic-xs chev" aria-hidden="true"><use href="#i-chev-d"/></svg><span class="trail"><span class="count num">17</span><button type="button" class="more" title="New project · More"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button></span></div>
+          <div class="kids">
+            <div class="nav" data-nav="launch"><span class="slot"><span class="dot" style="--c: var(--label-blue)"></span></span><span class="lbl">Launch v1</span><span class="trail"><span class="count num">8</span><button type="button" class="more"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button></span></div>
+            <div class="nav" data-nav="website"><span class="slot"><span class="dot" style="--c: var(--label-teal)"></span></span><span class="lbl">Website</span><span class="trail"><span class="count num">5</span><button type="button" class="more"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button></span></div>
+            <div class="nav" data-nav="bugs"><span class="slot"><span class="dot" style="--c: var(--label-gray)"></span></span><span class="lbl">Bugs</span><span class="trail"><span class="count num">4</span><button type="button" class="more"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button></span></div>
+          </div>
+        </div>
+        <div class="area">
+          <div class="ghdr"><span>Clients</span><svg class="ic ic-xs chev" aria-hidden="true"><use href="#i-chev-d"/></svg><span class="trail"><span class="count num">10</span><button type="button" class="more" title="New project · More"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button></span></div>
+          <div class="kids">
+            <div class="nav" data-nav="acme"><span class="slot"><span class="dot" style="--c: var(--label-violet)"></span></span><span class="lbl">Acme rebrand</span><span class="trail"><span class="count num">7</span><button type="button" class="more"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button></span></div>
+            <div class="nav" data-nav="northwind"><span class="slot"><span class="dot" style="--c: var(--label-green)"></span></span><span class="lbl">Northwind app</span><span class="trail"><span class="count num">3</span><button type="button" class="more"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button></span></div>
+          </div>
+        </div>
+        <div class="area collapsed">
+          <div class="ghdr" title="2 projects, 5 open tasks"><span>School</span><svg class="ic ic-xs chev" aria-hidden="true"><use href="#i-chev-d"/></svg><span class="trail"><span class="count num">5</span><button type="button" class="more" title="New project · More"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button></span></div>
+          <div class="kids">
+            <div class="nav" data-nav="cs201"><span class="slot"><span class="dot" style="--c: var(--label-amber)"></span></span><span class="lbl">CS 201 Algorithms</span><span class="trail"><span class="count num">3</span><button type="button" class="more"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button></span></div>
+            <div class="nav" data-nav="thesis"><span class="slot"><span class="dot" style="--c: var(--label-blue)"></span></span><span class="lbl">Thesis</span><span class="trail"><span class="count num">2</span><button type="button" class="more"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button></span></div>
+          </div>
+        </div>
+        <div class="area">
+          <div class="ghdr"><span>Personal</span><svg class="ic ic-xs chev" aria-hidden="true"><use href="#i-chev-d"/></svg><span class="trail"><span class="count num">2</span><button type="button" class="more" title="New project · More"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button></span></div>
+          <div class="kids">
+            <div class="nav" data-nav="home"><span class="slot"><span class="dot" style="--c: var(--label-teal)"></span></span><span class="lbl">Home</span><span class="trail"><span class="count num">2</span><button type="button" class="more"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button></span></div>
+          </div>
+        </div>
+        <div class="nav add"><span class="slot"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg></span><span class="lbl">New project</span></div>
+        <span class="pnote" data-f="1"><b>b</b> · busy workspace</span>
+      </aside>
+
+      <!-- ═══════════ FRAME 1 · UPCOMING (backdrop) ═══════════ -->
+      <section class="panel center" data-f="1">
+        <div class="toolbar">
+          <div class="title"><h3>Upcoming</h3><span class="tsub">your dated tasks and unassigned ones</span></div>
+          <button type="button" class="btn icon" title="Search  /"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg></button>
+          <button type="button" class="btn"><svg class="ic" aria-hidden="true"><use href="#i-filter"/></svg>Filter</button>
+          <button type="button" class="btn"><svg class="ic" aria-hidden="true"><use href="#i-sliders"/></svg>Display</button>
+          <span class="sep"></span>
+          <button type="button" class="btn primary"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>New</button>
+        </div>
+        <div class="list" style="--cols: var(--icon) minmax(0, 1fr) var(--icon-sm) 7.5rem 5.25rem var(--icon)">
+          <div class="sec dated">
+            <div class="ghead"><span class="cslot"><svg class="ic ic-xs chev" aria-hidden="true"><use href="#i-chev-d"/></svg></span>Earlier<span class="gc num">2</span></div>
+            <div class="rows">
+              <div class="row">
+                <span class="cb"></span>
+                <div class="tcell"><span class="t">Read CLRS ch. 22–23</span><span class="fix"><button type="button" class="xchip">Move</button><button type="button" class="xchip">Won’t do</button><button type="button" class="xchip">Break down</button></span></div>
+                <span></span>
+                <span class="proj"><span class="dot" style="--c: var(--label-amber)"></span>CS 201 Algorithms</span>
+                <span class="date num">Oct 6 <span class="late">· late</span></span>
+                <span class="ava ar">AR</span>
+              </div>
+              <div class="row">
+                <span class="cb"></span>
+                <div class="tcell"><span class="t">Problem set 4 — graph algorithms</span><span class="fix"><button type="button" class="xchip">Move</button><button type="button" class="xchip">Won’t do</button><button type="button" class="xchip">Break down</button></span></div>
+                <svg class="pri" aria-label="High priority"><use href="#p3"/></svg>
+                <span class="proj"><span class="dot" style="--c: var(--label-amber)"></span>CS 201 Algorithms</span>
+                <span class="date num">Oct 8 <span class="late">· late</span></span>
+                <span class="ava ar">AR</span>
+              </div>
+            </div>
+          </div>
+          <div class="sec dated">
+            <div class="ghead"><span class="cslot"><svg class="ic ic-xs chev" aria-hidden="true"><use href="#i-chev-d"/></svg></span>Today<span class="gsub">· Mon, Oct 12</span><span class="gc num">2</span></div>
+            <div class="rows">
+              <div class="row">
+                <span class="cb"></span>
+                <div class="tcell"><span class="t">Finalize pricing page copy</span><span class="ind"><span title="2 comments"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-msg"/></svg>2</span></span></div>
+                <svg class="pri" aria-label="Medium priority"><use href="#p2"/></svg>
+                <span class="proj"><span class="dot" style="--c: var(--label-teal)"></span>Website</span>
+                <span class="date num">3:00 PM</span>
+                <span class="ava ar">AR</span>
+              </div>
+              <div class="row">
+                <span class="cb"></span>
+                <div class="tcell"><span class="t">Set up Stripe webhooks for upgrades</span><span class="ind"><span title="1 of 3 subtasks done"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-sub"/></svg>1/3</span></span></div>
+                <svg class="pri" aria-label="Medium priority"><use href="#p2"/></svg>
+                <span class="proj"><span class="dot" style="--c: var(--label-blue)"></span>Launch v1</span>
+                <span class="date num"></span>
+                <span class="ava ar">AR</span>
+              </div>
+            </div>
+          </div>
+          <div class="sec dated">
+            <div class="ghead"><span class="cslot"><svg class="ic ic-xs chev" aria-hidden="true"><use href="#i-chev-d"/></svg></span>Tomorrow<span class="gc num">1</span></div>
+            <div class="rows">
+              <div class="row">
+                <span class="cb"></span>
+                <div class="tcell"><span class="t">Call accountant re: VAT</span></div>
+                <svg class="pri" aria-label="Medium priority"><use href="#p2"/></svg>
+                <span class="proj"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-inbox"/></svg>Inbox</span>
+                <span class="date num"></span>
+                <span></span>
+              </div>
+            </div>
+          </div>
+          <div class="sec dated">
+            <div class="ghead"><span class="cslot"><svg class="ic ic-xs chev" aria-hidden="true"><use href="#i-chev-d"/></svg></span>This week<span class="gc num">5</span></div>
+            <div class="rows">
+              <div class="row">
+                <span class="cb"></span>
+                <div class="tcell"><span class="t">Logo concepts round 2</span><span class="ind"><span><svg class="ic ic-xs" aria-hidden="true"><use href="#i-clip"/></svg>3</span><span><svg class="ic ic-xs" aria-hidden="true"><use href="#i-msg"/></svg>2</span><span><svg class="ic ic-xs" aria-hidden="true"><use href="#i-sub"/></svg>1/4</span></span></div>
+                <svg class="pri" aria-label="High priority"><use href="#p3"/></svg>
+                <span class="proj"><span class="dot" style="--c: var(--label-violet)"></span>Acme rebrand</span>
+                <span class="date num">Wed</span>
+                <span class="ava ar">AR</span>
+              </div>
+              <div class="row">
+                <span class="cb"></span>
+                <div class="tcell"><span class="t">Fix signup email typo</span></div>
+                <svg class="pri" aria-label="Low priority"><use href="#p1"/></svg>
+                <span class="proj"><span class="dot" style="--c: var(--label-gray)"></span>Bugs</span>
+                <span class="date num">Wed</span>
+                <span class="ava none" title="Unassigned"></span>
+              </div>
+              <div class="row">
+                <span class="cb"></span>
+                <div class="tcell"><span class="t">Midterm exam</span></div>
+                <svg class="pri" aria-label="High priority"><use href="#p3"/></svg>
+                <span class="proj"><span class="dot" style="--c: var(--label-amber)"></span>CS 201 Algorithms</span>
+                <span class="date num">Thu 9:00 AM</span>
+                <span class="ava ar">AR</span>
+              </div>
+              <div class="row">
+                <span class="cb"></span>
+                <div class="tcell"><span class="t">Pay rent</span><span class="ind"><span title="Repeats monthly"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-repeat"/></svg></span></span></div>
+                <span></span>
+                <span class="proj"><span class="dot" style="--c: var(--label-teal)"></span>Home</span>
+                <span class="date num">Thu</span>
+                <span class="ava ar">AR</span>
+              </div>
+              <div class="row">
+                <span class="cb"></span>
+                <div class="tcell"><span class="t">Water plants</span><span class="ind"><span title="Repeats weekly on Thursday"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-repeat"/></svg></span></span></div>
+                <span></span>
+                <span class="proj"><span class="dot" style="--c: var(--label-teal)"></span>Home</span>
+                <span class="date num">Thu</span>
+                <span class="ava ar">AR</span>
+              </div>
+            </div>
+          </div>
+          <div class="sec dated">
+            <div class="ghead"><span class="cslot"><svg class="ic ic-xs chev" aria-hidden="true"><use href="#i-chev-d"/></svg></span>Later<span class="gc num">3</span></div>
+            <div class="rows">
+              <div class="row ghost" title="Next occurrence. It becomes a real task when this week’s is done.">
+                <span class="cb dashed"></span>
+                <div class="tcell"><span class="t">Water plants · repeats Thu</span></div>
+                <span></span>
+                <span class="proj"><span class="dot" style="--c: var(--label-teal)"></span>Home</span>
+                <span class="date num">Oct 22</span>
+                <span></span>
+              </div>
+              <div class="row">
+                <span class="cb"></span>
+                <div class="tcell"><span class="t">Renew passport</span></div>
+                <span></span>
+                <span class="proj"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-inbox"/></svg>Inbox</span>
+                <span class="date num">Oct 30</span>
+                <span></span>
+              </div>
+              <div class="row">
+                <span class="cb"></span>
+                <div class="tcell"><span class="t">Brand guidelines PDF</span><span class="ind"><span><svg class="ic ic-xs" aria-hidden="true"><use href="#i-hash"/></svg>2</span><span><svg class="ic ic-xs" aria-hidden="true"><use href="#i-clip"/></svg>4</span><span><svg class="ic ic-xs" aria-hidden="true"><use href="#i-msg"/></svg>5</span><span><svg class="ic ic-xs" aria-hidden="true"><use href="#i-sub"/></svg>0/6</span></span></div>
+                <svg class="pri" aria-label="High priority"><use href="#p3"/></svg>
+                <span class="proj"><span class="dot" style="--c: var(--label-violet)"></span>Acme rebrand</span>
+                <span class="date num">Nov 7</span>
+                <span class="ava ar">AR</span>
+              </div>
+              <div class="row">
+                <span class="cb"></span>
+                <div class="tcell"><span class="t">Literature review draft</span></div>
+                <span></span>
+                <span class="proj"><span class="dot" style="--c: var(--label-blue)"></span>Thesis</span>
+                <span class="date num">Nov 20</span>
+                <span class="ava ar">AR</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════ FRAME 3 · ACME REBRAND LIST + TASK PANEL ═══════════ -->
+      <section class="panel center" data-f="3">
+        <div class="toolbar">
+          <div class="title proj"><span class="pdot" style="--c: var(--label-violet)"></span><h3>Acme rebrand</h3></div>
+          <button type="button" class="btn icon" title="Search  /"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg></button>
+          <button type="button" class="btn"><svg class="ic" aria-hidden="true"><use href="#i-filter"/></svg>Filter</button>
+          <button type="button" class="btn"><svg class="ic" aria-hidden="true"><use href="#i-sliders"/></svg>Display</button>
+          <span class="sep"></span>
+          <span class="seg icons"><button type="button" class="on" title="List"><svg class="ic" aria-hidden="true"><use href="#i-list"/></svg></button><button type="button" title="Board"><svg class="ic" aria-hidden="true"><use href="#i-cols"/></svg></button><button type="button" title="Timeline"><svg class="ic" aria-hidden="true"><use href="#i-gantt"/></svg></button></span>
+          <span class="sep"></span>
+          <button type="button" class="btn primary"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>New</button>
+        </div>
+        <div class="pmeta">
+          <span class="chip" title="Opens the Acme Inc. contact"><svg class="ic" aria-hidden="true"><use href="#i-building"/></svg>Acme Inc.<svg class="ic ic-xs ext" aria-hidden="true"><use href="#i-ext"/></svg></span>
+          <span class="pm" title="Status"><svg class="ic" aria-hidden="true"><use href="#i-progress"/></svg>Active</span>
+          <span class="pm" title="Target date"><svg class="ic" aria-hidden="true"><use href="#i-flag"/></svg><span class="lab">Target</span>Nov 7</span>
+          <span class="pm" title="Progress"><span class="pbar"><i style="width:42%"></i></span><span class="num">5 of 12 done</span></span>
+        </div>
+        <div class="list" style="--cols: var(--icon) minmax(0, 1fr) var(--icon-sm) 4.75rem var(--icon) var(--icon-sm)">
+          <div class="sec collapsed">
+            <div class="ghead"><span class="cslot"><svg class="ic ic-xs chev" aria-hidden="true"><use href="#i-chev-d"/></svg></span>Discovery<span class="gc num">3/3</span><span class="dchip"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-cal"/></svg>Oct 2</span></div>
+            <div class="rows"></div>
+          </div>
+          <div class="sec">
+            <div class="ghead"><span class="cslot"><svg class="ic ic-xs chev" aria-hidden="true"><use href="#i-chev-d"/></svg></span>Design<span class="gc num">2/5</span><span class="dchip"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-cal"/></svg>Oct 24</span>
+              <span class="acts"><button type="button" class="btn"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-plus"/></svg>Add task</button><button type="button" class="btn icon" title="Rename section · Set date · Delete section…"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button></span></div>
+            <div class="rows">
+              <div class="row">
+                <span class="cb"></span>
+                <div class="tcell"><span class="t">Logo concepts round 2</span><span class="ind"><span title="3 attachments"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-clip"/></svg>3</span><span title="2 comments"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-msg"/></svg>2</span><span title="1 of 4 subtasks done"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-sub"/></svg>1/4</span></span></div>
+                <svg class="pri" aria-label="High priority"><use href="#p3"/></svg>
+                <span class="date num">Wed</span>
+                <span class="ava ar" title="Alex Rivera">AR</span>
+                <span class="qcol on" title="In your queue"><svg class="ic" aria-hidden="true"><use href="#i-queue"/></svg></span>
+              </div>
+              <div class="row sel">
+                <span class="cb"></span>
+                <div class="tcell"><span class="t">Collect brand assets from client</span><span class="ind"><span class="wait" title="Waiting on Anna Novak (Acme) since Fri"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-hourglass"/></svg>Waiting on Anna · 3d</span><span title="2 of 5 subtasks done"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-sub"/></svg>2/5</span></span></div>
+                <svg class="pri" aria-label="Medium priority"><use href="#p2"/></svg>
+                <span class="date num">Fri</span>
+                <span class="ava so" title="Sam Okafor">SO</span>
+                <span class="qcol"><svg class="ic" aria-hidden="true"><use href="#i-queue"/></svg></span>
+              </div>
+              <div class="row">
+                <span class="cb"></span>
+                <div class="tcell"><span class="t">Moodboard v2 for the packaging</span><span class="ind"><span title="1 tag"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-hash"/></svg>1</span></span></div>
+                <span></span>
+                <span class="date num">Thu</span>
+                <span class="ava so" title="Sam Okafor">SO</span>
+                <span class="qcol"><svg class="ic" aria-hidden="true"><use href="#i-queue"/></svg></span>
+              </div>
+              <div class="completed-line"><span class="cslot"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-check"/></svg></span><button type="button">2 completed · show</button></div>
+            </div>
+          </div>
+          <div class="sec">
+            <div class="ghead"><span class="cslot"><svg class="ic ic-xs chev" aria-hidden="true"><use href="#i-chev-d"/></svg></span>Delivery<span class="gc num">0/4</span><span class="dchip"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-cal"/></svg>Nov 7</span>
+              <span class="acts"><button type="button" class="btn"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-plus"/></svg>Add task</button><button type="button" class="btn icon" title="Rename section · Set date · Delete section…"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button></span></div>
+            <div class="rows">
+              <div class="row">
+                <span class="cb"></span>
+                <div class="tcell"><span class="t">Brand guidelines PDF</span><span class="ind"><span title="2 tags"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-hash"/></svg>2</span><span title="4 attachments"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-clip"/></svg>4</span><span title="5 comments"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-msg"/></svg>5</span><span title="0 of 6 subtasks done"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-sub"/></svg>0/6</span></span></div>
+                <svg class="pri" aria-label="High priority"><use href="#p3"/></svg>
+                <span class="date num">Nov 7</span>
+                <span class="ava ar">AR</span>
+                <span class="qcol"><svg class="ic" aria-hidden="true"><use href="#i-queue"/></svg></span>
+              </div>
+              <div class="row">
+                <span class="cb"></span>
+                <div class="tcell"><span class="t">Export logo files (SVG, PNG, PDF)</span></div>
+                <span></span>
+                <span class="date num">Nov 6</span>
+                <span class="ava so">SO</span>
+                <span class="qcol"><svg class="ic" aria-hidden="true"><use href="#i-queue"/></svg></span>
+              </div>
+              <div class="row">
+                <span class="cb"></span>
+                <div class="tcell"><span class="t">Business card print files</span><span class="ind"><span title="1 attachment"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-clip"/></svg>1</span></span></div>
+                <svg class="pri" aria-label="Low priority"><use href="#p1"/></svg>
+                <span class="date num">Nov 5</span>
+                <span class="ava mc">MC</span>
+                <span class="qcol"><svg class="ic" aria-hidden="true"><use href="#i-queue"/></svg></span>
+              </div>
+              <div class="row">
+                <span class="cb"></span>
+                <div class="tcell"><span class="t">Handover call with Anna</span></div>
+                <span></span>
+                <span class="date num">Nov 7</span>
+                <span class="ava ar">AR</span>
+                <span class="qcol"><svg class="ic" aria-hidden="true"><use href="#i-queue"/></svg></span>
+              </div>
+            </div>
+          </div>
+          <div class="addrow"><span class="slot"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg></span>Add section</div>
+        </div>
+      </section>
+      <aside class="panel detail" data-f="3" id="det3">
+        <div class="dhead">
+          <span class="crumb"><span class="dot" style="--c: var(--label-violet)"></span>Acme rebrand<svg class="ic ic-xs" aria-hidden="true"><use href="#i-chev-r"/></svg>Design</span>
+          <button type="button" class="btn sm" title="Add to your queue  Q"><svg class="ic" aria-hidden="true"><use href="#i-queue"/></svg>Queue</button>
+          <button type="button" class="btn icon" title="Copy link"><svg class="ic" aria-hidden="true"><use href="#i-link"/></svg></button>
+          <button type="button" class="btn icon" title="More"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button>
+        </div>
+        <div class="dbody">
+          <div>
+            <div class="dtitle"><span class="cb"></span><h4>Collect brand assets from client</h4></div>
+            <div class="ldesc folded" id="ldesc">
+              <p>Acme’s old identity only exists as exports. We need the source files before Design can close: the PNGs on their site are too small to rebuild from.</p>
+              <p><span class="ref person"><span class="ava an">AN</span>Anna Novak</span> owns this on their side. Legal signs off on anything that leaves Acme, so expect it to be slow.</p>
+              <p class="lh">What we asked for</p>
+              <ul>
+                <li>Logo source files (Illustrator or SVG), every lockup still in use</li>
+                <li>Pantone and CMYK values from their current cards</li>
+                <li>Licences for the two typefaces on their site</li>
+                <li>Photos they own, with credits</li>
+              </ul>
+              <p class="lh">Once it arrives</p>
+              <ul>
+                <li>Rebuild the lockups for <span class="ref"><span class="st"></span>Export logo files (SVG, PNG, PDF)<span class="due num">Nov 6</span></span></li>
+                <li>Add the type licences to <span class="ref"><span class="st"></span>Brand guidelines PDF<span class="due num">Nov 7</span></span></li>
+                <li>Reply on <span class="ref"><svg class="ic" aria-hidden="true"><use href="#i-mail"/></svg>Re: Brand assets for the rebrand</span></li>
+              </ul>
+              <p>If nothing has arrived by Friday, we rebuild from the PNGs and tell Anna what that costs.</p>
+            </div>
+            <div class="moreline f3-folded"><button type="button" class="dtoggle">Show more</button><span>·</span><span class="num">2 tasks</span><span>·</span><span class="num">1 email</span></div>
+            <div class="moreline f3-open"><button type="button" class="dtoggle">Show less</button></div>
+          </div>
+          <div class="props">
+            <span class="plabel">Status</span><span class="pval"><svg class="ic" aria-hidden="true"><use href="#i-progress"/></svg>In progress</span>
+            <span class="plabel">Assignee</span><span class="pval"><span class="ava so">SO</span>Sam Okafor</span>
+            <span class="plabel">Waiting on</span><span class="pval"><svg class="ic" aria-hidden="true"><use href="#i-hourglass"/></svg>Anna Novak<span class="t3 num">· 3d</span></span>
+            <span class="plabel">Priority</span><span class="pval"><svg class="pri" aria-hidden="true"><use href="#p2"/></svg>Medium</span>
+            <span class="plabel">Due</span><span class="pval"><svg class="ic" aria-hidden="true"><use href="#i-cal"/></svg>Fri</span>
+            <button type="button" class="addprop"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Tags · Energy · Scheduled · Time · Repeat</button>
+          </div>
+          <div class="coll">
+            <div class="shead">Linked <span class="num">2</span><button type="button" class="btn icon" title="Link an email, note, contact or event"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg></button></div>
+            <div class="lcards">
+              <div class="lcard" title="Opens the thread in Email">
+                <div class="lc1"><span class="ava an">AN</span><span class="who">Anna Novak</span><span class="when num">Oct 10</span></div>
+                <div class="subj">Re: Brand assets for the rebrand</div>
+                <div class="snip">Sharing what I could find. The logo files sit with our old agency, so I’ve asked them for access; legal still has to clear the typeface licences before I can send those.</div>
+                <div class="lc3"><span><svg class="ic ic-xs" aria-hidden="true"><use href="#i-mail"/></svg><span class="num">3 messages</span></span><span class="wait"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-hourglass"/></svg>Waiting on reply · 2d</span></div>
+              </div>
+              <div class="lcard" title="Opens the note">
+                <div class="lc1"><svg class="ic" aria-hidden="true"><use href="#i-note"/></svg><span class="who">Brand voice and tone</span></div>
+                <div class="snip">Confident, warm, never cute. Short sentences; we say “you”, not “users”, and we never promise what the product can’t do yet.</div>
+                <div class="lc3"><span><span class="ava so">SO</span>Edited by Sam · Oct 8</span></div>
+              </div>
+            </div>
+          </div>
+          <div>
+            <div class="shead">Subtasks <span class="num">2/5</span><button type="button" class="btn icon" title="Add subtask"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg></button></div>
+            <div class="subrow done"><span class="cb sm done"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg></span><span>List every asset on the old site</span></div>
+            <div class="subrow done"><span class="cb sm done"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg></span><span>Send Anna the request</span></div>
+            <div class="subrow"><span class="cb sm"></span><span>Logo source files</span></div>
+            <div class="subrow"><span class="cb sm"></span><span>Typeface licences</span></div>
+            <div class="subrow"><span class="cb sm"></span><span>Photo credits</span></div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- ═══════════ FRAME 2 · NOTES: REFERENCES IN A NOTE ═══════════ -->
+      <aside class="panel rail" data-f="2">
+        <div class="rsearch"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg>Search notes<span class="kbd">/</span></div>
+        <div class="area">
+          <div class="ghdr"><span>Pinned</span><svg class="ic ic-xs chev" aria-hidden="true"><use href="#i-chev-d"/></svg><span class="trail"><button type="button" class="more" title="More"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button></span></div>
+          <div class="kids">
+            <div class="nav"><span class="slot glyph"><svg class="ic" aria-hidden="true"><use href="#i-file"/></svg></span><span class="lbl">Team rituals</span></div>
+          </div>
+        </div>
+        <div class="area">
+          <div class="ghdr"><span>Workspace</span><svg class="ic ic-xs chev" aria-hidden="true"><use href="#i-chev-d"/></svg><span class="trail"><button type="button" class="more" title="New note · More"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button></span></div>
+          <div class="kids">
+            <div class="nav"><span class="slot glyph"><svg class="ic" aria-hidden="true"><use href="#i-file"/></svg></span><span class="lbl">Acme rebrand</span></div>
+            <div class="nav sub active"><span class="slot glyph"><svg class="ic" aria-hidden="true"><use href="#i-file"/></svg></span><span class="lbl">Weekly sync — Oct 12</span></div>
+            <div class="nav sub"><span class="slot glyph"><svg class="ic" aria-hidden="true"><use href="#i-file"/></svg></span><span class="lbl">Brand voice and tone</span></div>
+            <div class="nav sub"><span class="slot glyph"><svg class="ic" aria-hidden="true"><use href="#i-file"/></svg></span><span class="lbl">Kickoff notes</span></div>
+            <div class="nav"><span class="slot glyph"><svg class="ic" aria-hidden="true"><use href="#i-file"/></svg></span><span class="lbl">Launch v1</span></div>
+            <div class="nav"><span class="slot glyph"><svg class="ic" aria-hidden="true"><use href="#i-file"/></svg></span><span class="lbl">Reading list</span></div>
+            <div class="nav"><span class="slot glyph"><svg class="ic" aria-hidden="true"><use href="#i-file"/></svg></span><span class="lbl">Thesis outline</span></div>
+          </div>
+        </div>
+        <div class="rgap"></div>
+        <div class="nav"><span class="slot glyph"><svg class="ic" aria-hidden="true"><use href="#i-globe"/></svg></span><span class="lbl">Published</span></div>
+        <div class="nav"><span class="slot glyph"><svg class="ic" aria-hidden="true"><use href="#i-archive"/></svg></span><span class="lbl">Archive</span></div>
+        <div class="nav"><span class="slot glyph"><svg class="ic" aria-hidden="true"><use href="#i-trash"/></svg></span><span class="lbl">Trash</span></div>
+        <div class="nav add"><span class="slot"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg></span><span class="lbl">New note</span></div>
+      </aside>
+      <section class="panel center" data-f="2">
+        <div class="toolbar">
+          <span class="crumb"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-file"/></svg>Acme rebrand<svg class="ic ic-xs" aria-hidden="true"><use href="#i-chev-r"/></svg>Weekly sync — Oct 12</span>
+          <span class="avstack" title="Sam and Mia are here"><span class="ava so">SO</span><span class="ava mc">MC</span></span>
+          <span class="sep"></span>
+          <button type="button" class="btn sm">Share</button>
+          <button type="button" class="btn icon" title="Copy link"><svg class="ic" aria-hidden="true"><use href="#i-link"/></svg></button>
+          <button type="button" class="btn icon" title="More"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button>
+        </div>
+        <div class="doc" id="docScroll">
+          <div class="prose">
+            <h1>Weekly sync — Oct 12</h1>
+            <div class="docmeta"><span class="avstack"><span class="ava ar">AR</span><span class="ava so">SO</span><span class="ava mc">MC</span></span>Alex, Sam and Mia · edited by Sam · 10:42 AM</div>
+            <p>Anna confirmed the new palette on Thursday, so Design can close as soon as we have the source files. That’s the one blocker left: <span class="ref" title="Task · Acme rebrand › Design"><span class="st"></span>Collect brand assets from client<span class="due num">Fri</span></span>.</p>
+            <p>Legal at Acme has to sign off on anything that leaves the building, and <span class="ref person is-hover" id="annaRef"><span class="ava an">AN</span>Anna Novak</span> is chasing them; she expects an answer by Wednesday.</p>
+            <h2>Blocking Design</h2>
+            <div class="blk">
+              <div class="tcard">
+                <div class="r1"><span class="cb"></span><span class="x1">Collect brand assets from client</span></div>
+                <div class="r2"><span><span class="dot" style="--c: var(--label-violet)"></span>Acme rebrand<span class="crumbsep">›</span>Design</span><span><svg class="ic ic-xs" aria-hidden="true"><use href="#i-cal"/></svg>Fri</span><span title="2 of 5 subtasks done"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-sub"/></svg><span class="num">2/5</span></span><span class="wait" title="Waiting on Anna Novak since Fri"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-hourglass"/></svg>Waiting on Anna · 3d</span><span class="ava so" title="Sam Okafor">SO</span></div>
+              </div>
+            </div>
+            <h2>Notes</h2>
+            <p>Logo round 2 holds up at small sizes, so we keep both directions. Sam will chase <span class="rlink" title="Task · Acme rebrand › Design"><svg class="ic" aria-hidden="true"><use href="#i-tasks"/></svg><u>Collect brand assets from client</u></span> again on Wednesday if nothing has arrived; until then we work from the PNGs on the old site.</p>
+            <h2>Next steps</h2>
+            <ul>
+              <li>Alex walks Anna through the palette on Wednesday’s call</li>
+              <li>Mia checks the print specs with the card printer</li>
+              <li id="insRef">Sam: <span class="ref as-chip"><span class="st"></span>Export logo files (SVG, PNG, PDF)<span class="due num">Nov 6</span></span><span class="rlink as-link"><svg class="ic" aria-hidden="true"><use href="#i-tasks"/></svg><u>Export logo files (SVG, PNG, PDF)</u></span><span class="caret"></span>
+                <div class="tcard as-card">
+                  <div class="r1"><span class="cb"></span><span class="x1">Export logo files (SVG, PNG, PDF)</span></div>
+                  <div class="r2"><span><span class="dot" style="--c: var(--label-violet)"></span>Acme rebrand<span class="crumbsep">›</span>Delivery</span><span><svg class="ic ic-xs" aria-hidden="true"><use href="#i-cal"/></svg>Nov 6</span><span class="ava so" title="Sam Okafor">SO</span></div>
+                </div>
+              </li>
+            </ul>
+          </div>
+          <div class="hcard" id="hcard" role="dialog" aria-label="Anna Novak">
+            <div class="hc1"><span class="ava an xl">AN</span><div><div class="nm">Anna Novak</div><div class="rl">Brand manager · Acme Inc.</div></div></div>
+            <div class="hrows">
+              <div class="hr"><svg class="ic" aria-hidden="true"><use href="#i-mail"/></svg><b>anna.novak@acme.com</b></div>
+              <div class="hr"><svg class="ic" aria-hidden="true"><use href="#i-clock"/></svg><span>Last contact <b>2 days ago</b></span></div>
+              <div class="hr"><svg class="ic" aria-hidden="true"><use href="#i-tasks"/></svg><span><b class="num">3</b> open tasks</span></div>
+            </div>
+          </div>
+          <div class="showas" id="showAs">Show as<span class="seg"><button type="button" data-act="as" data-as="link">Link</button><button type="button" data-act="as" data-as="chip">Chip</button><button type="button" data-act="as" data-as="card">Card</button></span></div>
+        </div>
+      </section>
+
+      <!-- ═══════════ FRAME 4 · CHAT: LINK PREVIEWS ═══════════ -->
+      <aside class="panel rail" data-f="4">
+        <div class="rsearch"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg>Jump to…<span class="kbd">⌘J</span></div>
+        <div class="area">
+          <div class="ghdr"><span>Channels</span><svg class="ic ic-xs chev" aria-hidden="true"><use href="#i-chev-d"/></svg><span class="trail"><button type="button" class="more" title="New channel · More"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button></span></div>
+          <div class="kids">
+            <div class="nav"><span class="slot glyph"><svg class="ic" aria-hidden="true"><use href="#i-hash"/></svg></span><span class="lbl">general</span></div>
+            <div class="nav active"><span class="slot glyph"><svg class="ic" aria-hidden="true"><use href="#i-hash"/></svg></span><span class="lbl">acme-rebrand</span></div>
+            <div class="nav"><span class="slot glyph"><svg class="ic" aria-hidden="true"><use href="#i-hash"/></svg></span><span class="lbl">launch</span><span class="trail"><span class="count num">2</span></span></div>
+            <div class="nav"><span class="slot glyph"><svg class="ic" aria-hidden="true"><use href="#i-hash"/></svg></span><span class="lbl">random</span></div>
+          </div>
+        </div>
+        <div class="nav add"><span class="slot"><svg class="ic" aria-hidden="true"><use href="#i-compass"/></svg></span><span class="lbl">Browse channels</span></div>
+        <div class="area">
+          <div class="ghdr"><span>Direct messages</span><svg class="ic ic-xs chev" aria-hidden="true"><use href="#i-chev-d"/></svg><span class="trail"><button type="button" class="more" title="New message · More"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button></span></div>
+          <div class="kids">
+            <div class="nav"><span class="slot"><span class="ava so">SO</span></span><span class="lbl">Sam Okafor</span></div>
+            <div class="nav"><span class="slot"><span class="ava mc">MC</span></span><span class="lbl">Mia Chen</span><span class="trail"><span class="count num">1</span></span></div>
+          </div>
+        </div>
+      </aside>
+      <section class="panel center" data-f="4">
+        <div class="chath">
+          <svg class="ic ic-md" aria-hidden="true"><use href="#i-hash"/></svg><h3>acme-rebrand</h3><span class="topic">Acme rebrand, day to day</span>
+          <span class="avstack" title="3 members"><span class="ava ar">AR</span><span class="ava so">SO</span><span class="ava mc">MC</span></span>
+          <button type="button" class="btn icon" title="Search this channel"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg></button>
+          <button type="button" class="btn icon" title="More"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button>
+        </div>
+        <div class="msgs">
+          <div class="daydiv">Thursday</div>
+          <div class="msg">
+            <span class="ava so xl">SO</span>
+            <div><div class="mhd"><span class="nm">Sam Okafor</span><span class="tm">3:10 PM</span></div>
+              <div class="mbd">Round 2 exports are in the project files: both directions, light and dark.</div></div>
+          </div>
+          <div class="msg">
+            <span class="ava ar xl">AR</span>
+            <div><div class="mhd"><span class="nm">Alex Rivera</span><span class="tm">3:24 PM</span></div>
+              <div class="mbd">These hold up well at small sizes. Sending them to Anna now.</div></div>
+          </div>
+          <div class="daydiv">Friday</div>
+          <div class="msg">
+            <span class="ava mc xl">MC</span>
+            <div><div class="mhd"><span class="nm">Mia Chen</span><span class="tm">4:40 PM</span></div>
+              <div class="mbd">The card printer wants vector logos in CMYK with 3 mm bleed. I’ll send them our specs on Monday.</div></div>
+          </div>
+          <div class="msg">
+            <span class="ava ar xl">AR</span>
+            <div><div class="mhd"><span class="nm">Alex Rivera</span><span class="tm">5:02 PM</span></div>
+              <div class="mbd">Thanks. Let’s wait for Anna’s feedback before we touch the guidelines again.</div></div>
+          </div>
+          <div class="daydiv">Today</div>
+          <div class="msg">
+            <span class="ava so xl">SO</span>
+            <div><div class="mhd"><span class="nm">Sam Okafor</span><span class="tm">10:12 AM</span></div>
+              <div class="mbd">Anna’s feedback is in: <span class="rlink" title="Email thread"><svg class="ic" aria-hidden="true"><use href="#i-mail"/></svg><u>Re: Guidelines — first round of feedback</u></span>. I’ve put the changes on <span class="rlink" title="Task · Acme rebrand › Delivery"><svg class="ic" aria-hidden="true"><use href="#i-tasks"/></svg><u>Brand guidelines PDF</u></span>. Can you look before Wednesday?</div>
+              <div class="pvs">
+                <div class="pv" title="Opens the task">
+                  <div class="p1"><span class="cb sm"></span><span class="x1">Brand guidelines PDF</span><span class="ava ar" title="Alex Rivera">AR</span></div>
+                  <div class="p2"><span><span class="dot" style="--c: var(--label-violet)"></span>Acme rebrand<span class="crumbsep t3">›</span>Delivery</span><span><svg class="ic ic-xs" aria-hidden="true"><use href="#i-cal"/></svg>Nov 7</span><span title="0 of 6 subtasks done"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-sub"/></svg><span class="num">0/6</span></span><span title="5 comments"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-msg"/></svg><span class="num">5</span></span></div>
+                </div>
+                <div class="pv" title="Opens the thread in Email">
+                  <div class="p1"><svg class="ic" aria-hidden="true"><use href="#i-mail"/></svg><span class="x1">Re: Guidelines — first round of feedback</span><span class="when num">Oct 9</span></div>
+                  <div class="p2"><span><span class="ava an">AN</span>Anna Novak</span><span class="snip1">Love the direction. Two things before we sign off: the secondary palette sits too close to Northwind’s, and the icon set needs a thicker stroke.</span><span><svg class="ic ic-xs" aria-hidden="true"><use href="#i-mail"/></svg><span class="num">3 messages</span></span></div>
+                </div>
+              </div>
+              <button type="button" class="pvtoggle pv-hide" data-act="previews">Hide previews</button>
+              <button type="button" class="pvtoggle pv-show" data-act="previews">2 previews hidden · Show</button>
+            </div>
+          </div>
+          <div class="msg">
+            <span class="ava ar xl">AR</span>
+            <div><div class="mhd"><span class="nm">Alex Rivera</span><span class="tm">10:15 AM</span></div>
+              <div class="mbd">On it. <span class="ref" title="Task · Acme rebrand › Delivery"><span class="st"></span>Export logo files (SVG, PNG, PDF)<span class="due num">Nov 6</span></span> comes right after, so the printer gets files early.</div></div>
+          </div>
+          <div class="msg">
+            <span class="ava mc xl">MC</span>
+            <div><div class="mhd"><span class="nm">Mia Chen</span><span class="tm">10:21 AM</span></div>
+              <div class="mbd">Perfect, I’ll let them know.</div></div>
+          </div>
+        </div>
+        <div class="composer2"><button type="button" class="btn icon" title="Attach or insert"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg></button><span class="grow">Message #acme-rebrand</span><button type="button" class="btn icon" title="Emoji"><svg class="ic" aria-hidden="true"><use href="#i-smile"/></svg></button><button type="button" class="btn icon" title="Send"><svg class="ic" aria-hidden="true"><use href="#i-send"/></svg></button></div>
+      </section>
+
+      <!-- ═══════════ FRAME 5 · AN AGENT ON A TASK, TWO VIEWERS ═══════════
+           Each half is one person's screen, stacked list-over-panel so both fit
+           in half the width. Left: you (Alex). Right: Sam, a teammate. -->
+      <div class="halves" data-f="5">
+        <div class="half">
+          <div class="mbar"><svg class="mark" aria-label="moduo"><use href="#mark"/></svg><button type="button" class="wsbtn">Rivera Studio <svg class="ic ic-xs" aria-hidden="true"><use href="#i-chev-d"/></svg></button><span class="grow"></span><button type="button" class="ibtn" title="Notifications"><svg class="ic ic-md" aria-hidden="true"><use href="#i-bell"/></svg></button><span class="ava ar lg" title="Alex Rivera (you)">AR</span></div>
+          <div class="hpanels">
+            <section class="panel hlist">
+              <div class="toolbar">
+                <div class="title proj"><span class="pdot" style="--c: var(--label-blue)"></span><h3>Launch v1</h3></div>
+                <button type="button" class="btn icon" title="Search  /"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg></button>
+                <button type="button" class="btn"><svg class="ic" aria-hidden="true"><use href="#i-filter"/></svg>Filter</button>
+                <button type="button" class="btn"><svg class="ic" aria-hidden="true"><use href="#i-sliders"/></svg>Display</button>
+                <span class="sep"></span>
+                <button type="button" class="btn primary"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>New</button>
+              </div>
+              <div class="list" style="--cols: var(--icon) minmax(0, 1fr) var(--icon-sm) 3.25rem var(--icon)">
+                <div class="row sel">
+                  <span class="cb"></span>
+                  <div class="tcell"><span class="t">Set up Stripe webhooks for upgrades</span><span class="ind"><span class="agent" title="Claude is working on this for you · Writing tests"><span class="adot"></span>Claude · working</span><span title="1 of 3 subtasks done"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-sub"/></svg>1/3</span></span></div>
+                  <svg class="pri" aria-label="Medium priority"><use href="#p2"/></svg>
+                  <span class="date num">Today</span>
+                  <span class="ava ar">AR</span>
+                </div>
+                <div class="row">
+                  <span class="cb"></span>
+                  <div class="tcell"><span class="t">Fix trial 401 on refresh</span><span class="ind"><span title="3 comments"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-msg"/></svg>3</span></span></div>
+                  <svg class="pri" aria-label="High priority"><use href="#p3"/></svg>
+                  <span class="date num">Wed</span>
+                  <span class="ava ar">AR</span>
+                </div>
+                <div class="row">
+                  <span class="cb"></span>
+                  <div class="tcell"><span class="t">Onboarding checklist copy</span></div>
+                  <span></span>
+                  <span class="date num">Thu</span>
+                  <span class="ava so">SO</span>
+                </div>
+                <div class="row">
+                  <span class="cb"></span>
+                  <div class="tcell"><span class="t">Resend the invite link</span></div>
+                  <svg class="pri" aria-label="Low priority"><use href="#p1"/></svg>
+                  <span class="date num">Fri</span>
+                  <span class="ava mc">MC</span>
+                </div>
+              </div>
+            </section>
+            <aside class="panel hdetail">
+              <div class="dhead">
+                <span class="crumb"><span class="dot" style="--c: var(--label-blue)"></span>Launch v1</span>
+                <button type="button" class="btn sm" title="Add to your queue  Q"><svg class="ic" aria-hidden="true"><use href="#i-queue"/></svg>Queue</button>
+                <button type="button" class="btn icon" title="Copy link"><svg class="ic" aria-hidden="true"><use href="#i-link"/></svg></button>
+                <button type="button" class="btn icon" title="More"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button>
+              </div>
+              <div class="dbody">
+                <div>
+                  <div class="dtitle"><span class="cb"></span><h4>Set up Stripe webhooks for upgrades</h4></div>
+                  <div class="sess">
+                    <div class="sline" data-act="session" title="Only you see this: Claude is working with your key"><span class="adot"></span><span>Claude is working on this · Writing tests · step 3 of 5 · <span class="num">2 min ago</span> · <span class="pr">PR #42<svg class="ic" aria-hidden="true"><use href="#i-ext"/></svg></span></span><svg class="ic ic-xs chev" aria-hidden="true"><use href="#i-chev-u"/></svg></div>
+                    <div class="snotes">
+                      <div class="snote"><span class="tm num">10:02 AM</span><span>Read the task, the Stripe docs and the billing code</span></div>
+                      <div class="snote"><span class="tm num">10:06 AM</span><span>Added the webhook endpoint · step 1</span></div>
+                      <div class="snote"><span class="tm num">10:11 AM</span><span>Signature check passes locally · step 2</span></div>
+                      <div class="snote cur"><span class="tm num">10:16 AM</span><span>Writing tests · step 3</span></div>
+                    </div>
+                  </div>
+                  <p class="desc">Handle subscription updates so an upgrade applies without a reload. Test with the Stripe CLI against the staging keys.</p>
+                </div>
+                <div class="props">
+                  <span class="plabel">Status</span><span class="pval"><svg class="ic" aria-hidden="true"><use href="#i-progress"/></svg>In progress</span>
+                  <span class="plabel">Assignee</span><span class="pval"><span class="ava ar">AR</span>Alex Rivera</span>
+                  <span class="plabel">Priority</span><span class="pval"><svg class="pri" aria-hidden="true"><use href="#p2"/></svg>Medium</span>
+                  <span class="plabel">Due</span><span class="pval"><svg class="ic" aria-hidden="true"><use href="#i-cal"/></svg>Today</span>
+                </div>
+                <div class="coll">
+                  <div class="shead">Activity</div>
+                  <div class="ev"><span class="slot" style="width:var(--icon);display:grid;place-items:center"><span class="adot"></span></span><span><b>Claude</b>, with your key, moved this to In progress · 10:02 AM</span></div>
+                </div>
+                <div class="pnote legend">
+                  <div class="lgh"><b>States</b> · the row mark, and the session line’s words in each state</div>
+                  <div class="lr"><span class="agent"><span class="ag"><span class="adot"></span></span>Claude · working</span><span class="sl">Claude is working on this · Writing tests · step 3 of 5 · 2 min ago</span></div>
+                  <div class="lr"><span class="agent needs"><span class="ag"><span class="adot"></span></span>Claude · needs you</span><span class="sl">Needs you: which plans count as an upgrade? — answer in Claude</span></div>
+                  <div class="lr"><span class="agent"><span class="ag"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-check-circle"/></svg></span>Claude · ready for review</span><span class="sl">Ready for review · PR #42 · 1 min ago</span></div>
+                  <div class="lr"><span class="agent"><span class="ag"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-x-circle"/></svg></span>Claude · failed</span><span class="sl">Stopped: tests fail on CI · 6 min ago · PR #42</span></div>
+                  <div class="lr"><span class="agent stale"><span class="ag"><span class="adot"></span></span>Claude · no update for 40m</span><span class="sl">No update for 40m · last: Writing tests</span></div>
+                </div>
+              </div>
+            </aside>
+          </div>
+        </div>
+
+        <div class="half">
+          <div class="mbar"><svg class="mark" aria-label="moduo"><use href="#mark"/></svg><button type="button" class="wsbtn">Rivera Studio <svg class="ic ic-xs" aria-hidden="true"><use href="#i-chev-d"/></svg></button><span class="grow"></span><button type="button" class="ibtn" title="Notifications"><svg class="ic ic-md" aria-hidden="true"><use href="#i-bell"/></svg></button><span class="ava so lg" title="Sam Okafor">SO</span></div>
+          <div class="hpanels">
+            <section class="panel hlist">
+              <div class="toolbar">
+                <div class="title proj"><span class="pdot" style="--c: var(--label-blue)"></span><h3>Launch v1</h3></div>
+                <button type="button" class="btn icon" title="Search  /"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg></button>
+                <button type="button" class="btn"><svg class="ic" aria-hidden="true"><use href="#i-filter"/></svg>Filter</button>
+                <button type="button" class="btn"><svg class="ic" aria-hidden="true"><use href="#i-sliders"/></svg>Display</button>
+                <span class="sep"></span>
+                <button type="button" class="btn primary"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>New</button>
+              </div>
+              <div class="list" style="--cols: var(--icon) minmax(0, 1fr) var(--icon-sm) 3.25rem var(--icon)">
+                <div class="row sel">
+                  <span class="cb"></span>
+                  <div class="tcell"><span class="t">Set up Stripe webhooks for upgrades</span><span class="ind"><span title="1 of 3 subtasks done"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-sub"/></svg>1/3</span></span></div>
+                  <svg class="pri" aria-label="Medium priority"><use href="#p2"/></svg>
+                  <span class="date num">Today</span>
+                  <span class="ava ar">AR</span>
+                </div>
+                <div class="row">
+                  <span class="cb"></span>
+                  <div class="tcell"><span class="t">Fix trial 401 on refresh</span><span class="ind"><span title="3 comments"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-msg"/></svg>3</span></span></div>
+                  <svg class="pri" aria-label="High priority"><use href="#p3"/></svg>
+                  <span class="date num">Wed</span>
+                  <span class="ava ar">AR</span>
+                </div>
+                <div class="row">
+                  <span class="cb"></span>
+                  <div class="tcell"><span class="t">Onboarding checklist copy</span></div>
+                  <span></span>
+                  <span class="date num">Thu</span>
+                  <span class="ava so">SO</span>
+                </div>
+                <div class="row">
+                  <span class="cb"></span>
+                  <div class="tcell"><span class="t">Resend the invite link</span></div>
+                  <svg class="pri" aria-label="Low priority"><use href="#p1"/></svg>
+                  <span class="date num">Fri</span>
+                  <span class="ava mc">MC</span>
+                </div>
+              </div>
+            </section>
+            <aside class="panel hdetail">
+              <div class="dhead">
+                <span class="crumb"><span class="dot" style="--c: var(--label-blue)"></span>Launch v1</span>
+                <button type="button" class="btn sm" title="Add to your queue  Q"><svg class="ic" aria-hidden="true"><use href="#i-queue"/></svg>Queue</button>
+                <button type="button" class="btn icon" title="Copy link"><svg class="ic" aria-hidden="true"><use href="#i-link"/></svg></button>
+                <button type="button" class="btn icon" title="More"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button>
+              </div>
+              <div class="dbody">
+                <div>
+                  <div class="dtitle"><span class="cb"></span><h4>Set up Stripe webhooks for upgrades</h4></div>
+                  <p class="desc">Handle subscription updates so an upgrade applies without a reload. Test with the Stripe CLI against the staging keys.</p>
+                </div>
+                <div class="props">
+                  <span class="plabel">Status</span><span class="pval"><svg class="ic" aria-hidden="true"><use href="#i-progress"/></svg>In progress</span>
+                  <span class="plabel">Assignee</span><span class="pval"><span class="ava ar">AR</span>Alex Rivera</span>
+                  <span class="plabel">Priority</span><span class="pval"><svg class="pri" aria-hidden="true"><use href="#p2"/></svg>Medium</span>
+                  <span class="plabel">Due</span><span class="pval"><svg class="ic" aria-hidden="true"><use href="#i-cal"/></svg>Today</span>
+                </div>
+                <div class="coll">
+                  <div class="shead">Activity</div>
+                  <div class="ev"><span class="ava ar">AR</span><span><b>Alex</b> moved this to In progress · 10:02 AM</span></div>
+                </div>
+              </div>
+            </aside>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════ FRAME 6 · BACKLOG (Website) ═══════════ -->
+      <section class="panel center" data-f="6">
+        <div class="toolbar">
+          <div class="title proj"><span class="pdot" style="--c: var(--label-teal)"></span><h3>Website</h3></div>
+          <button type="button" class="btn icon" title="Search  /"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg></button>
+          <button type="button" class="btn"><svg class="ic" aria-hidden="true"><use href="#i-filter"/></svg>Filter</button>
+          <button type="button" class="btn"><svg class="ic" aria-hidden="true"><use href="#i-sliders"/></svg>Display</button>
+          <span class="sep"></span>
+          <span class="seg icons" id="f6seg"><button type="button" title="List" data-act="view-list"><svg class="ic" aria-hidden="true"><use href="#i-list"/></svg></button><button type="button" title="Board" data-act="view-board"><svg class="ic" aria-hidden="true"><use href="#i-cols"/></svg></button><button type="button" title="Timeline"><svg class="ic" aria-hidden="true"><use href="#i-gantt"/></svg></button></span>
+          <span class="sep"></span>
+          <button type="button" class="btn primary"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>New</button>
+        </div>
+        <div class="pmeta">
+          <span class="pm" title="Status"><svg class="ic" aria-hidden="true"><use href="#i-progress"/></svg>Active</span>
+          <span class="pm" title="Target date"><svg class="ic" aria-hidden="true"><use href="#i-flag"/></svg><span class="lab">Target</span>Nov 20</span>
+          <span class="pm" title="Progress, not counting the backlog"><span class="pbar"><i style="width:37.5%"></i></span><span class="num">3 of 8 done</span></span>
+        </div>
+        <div class="list f6-list" style="--cols: var(--icon) minmax(0, 1fr) var(--icon-sm) 4.75rem var(--icon) var(--icon-sm)">
+          <div class="row">
+            <span class="cb"></span>
+            <div class="tcell"><span class="t">Finalize pricing page copy</span><span class="ind"><span title="2 comments"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-msg"/></svg>2</span></span></div>
+            <svg class="pri" aria-label="Medium priority"><use href="#p2"/></svg>
+            <span class="date num">Today</span>
+            <span class="ava ar">AR</span>
+            <span class="qcol on" title="In your queue"><svg class="ic" aria-hidden="true"><use href="#i-queue"/></svg></span>
+          </div>
+          <div class="row">
+            <span class="cb"></span>
+            <div class="tcell"><span class="t">Hero illustration for the homepage</span><span class="ind"><span title="2 attachments"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-clip"/></svg>2</span></span></div>
+            <svg class="pri" aria-label="Medium priority"><use href="#p2"/></svg>
+            <span class="date num">Wed</span>
+            <span class="ava so">SO</span>
+            <span class="qcol"><svg class="ic" aria-hidden="true"><use href="#i-queue"/></svg></span>
+          </div>
+          <div class="row">
+            <span class="cb"></span>
+            <div class="tcell"><span class="t">Cookie banner: decline by default</span></div>
+            <svg class="pri" aria-label="High priority"><use href="#p3"/></svg>
+            <span class="date num">Thu</span>
+            <span class="ava mc">MC</span>
+            <span class="qcol"><svg class="ic" aria-hidden="true"><use href="#i-queue"/></svg></span>
+          </div>
+          <div class="row">
+            <span class="cb"></span>
+            <div class="tcell"><span class="t">Fix mobile nav overlap</span></div>
+            <svg class="pri" aria-label="Low priority"><use href="#p1"/></svg>
+            <span class="date num">Fri</span>
+            <span class="ava ar">AR</span>
+            <span class="qcol on" title="In your queue"><svg class="ic" aria-hidden="true"><use href="#i-queue"/></svg></span>
+          </div>
+          <div class="row">
+            <span class="cb"></span>
+            <div class="tcell"><span class="t">Write the changelog page</span></div>
+            <span></span>
+            <span class="date num">Oct 22</span>
+            <span class="ava ar">AR</span>
+            <span class="qcol"><svg class="ic" aria-hidden="true"><use href="#i-queue"/></svg></span>
+          </div>
+          <div class="completed-line"><span class="cslot"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-check"/></svg></span><button type="button">3 completed · show</button></div>
+          <div class="completed-line blline"><span class="cslot"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-backlog"/></svg></span><button type="button" data-act="backlog"><span class="bl-show">Backlog · 6 · show</span><span class="bl-hide">Backlog · 6 · hide</span></button></div>
+          <div class="rows blrows">
+            <div class="row"><span class="cb"></span><div class="tcell"><span class="t">Case study template for the blog</span></div><span></span><span class="date num"></span><span></span><span class="qcol"><svg class="ic" aria-hidden="true"><use href="#i-queue"/></svg></span></div>
+            <div class="row"><span class="cb"></span><div class="tcell"><span class="t">Dark mode for the docs</span><span class="ind"><span title="4 comments"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-msg"/></svg>4</span></span></div><span></span><span class="date num"></span><span class="ava mc">MC</span><span class="qcol"><svg class="ic" aria-hidden="true"><use href="#i-queue"/></svg></span></div>
+            <div class="row"><span class="cb"></span><div class="tcell"><span class="t">Testimonials on the homepage</span></div><svg class="pri" aria-label="Low priority"><use href="#p1"/></svg><span class="date num"></span><span class="ava so">SO</span><span class="qcol"><svg class="ic" aria-hidden="true"><use href="#i-queue"/></svg></span></div>
+            <div class="row"><span class="cb"></span><div class="tcell"><span class="t">Pricing page in German</span></div><span></span><span class="date num"></span><span></span><span class="qcol"><svg class="ic" aria-hidden="true"><use href="#i-queue"/></svg></span></div>
+            <div class="row"><span class="cb"></span><div class="tcell"><span class="t">Status page</span></div><span></span><span class="date num"></span><span></span><span class="qcol"><svg class="ic" aria-hidden="true"><use href="#i-queue"/></svg></span></div>
+            <div class="row"><span class="cb"></span><div class="tcell"><span class="t">Search for the docs site</span></div><span></span><span class="date num"></span><span></span><span class="qcol"><svg class="ic" aria-hidden="true"><use href="#i-queue"/></svg></span></div>
+          </div>
+        </div>
+        <div class="board f6-board">
+          <div class="col blcol">
+            <div class="chead"><svg class="ic sti" aria-hidden="true"><use href="#i-backlog"/></svg>Backlog<span class="gc num">6</span><button type="button" class="more fold" data-act="fold" title="Fold Backlog" style="margin-left:auto"><svg class="ic" aria-hidden="true"><use href="#i-fold"/></svg></button></div>
+            <div class="cards">
+              <div class="card compact"><div class="ct"><span class="cb sm"></span><span>Case study template for the blog</span></div></div>
+              <div class="card compact"><div class="ct"><span class="cb sm"></span><span>Dark mode for the docs</span></div><div class="cm"><span class="cnt" title="4 comments"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-msg"/></svg>4</span><span class="ava mc">MC</span></div></div>
+              <div class="card compact"><div class="ct"><span class="cb sm"></span><span>Testimonials on the homepage</span></div><div class="cm"><svg class="pri" aria-label="Low priority"><use href="#p1"/></svg><span class="ava so">SO</span></div></div>
+              <div class="card compact"><div class="ct"><span class="cb sm"></span><span>Pricing page in German</span></div></div>
+              <div class="card compact"><div class="ct"><span class="cb sm"></span><span>Status page</span></div></div>
+              <div class="card compact"><div class="ct"><span class="cb sm"></span><span>Search for the docs site</span></div></div>
+            </div>
+            <div class="foldstrip" data-act="fold" title="Unfold Backlog"><svg class="ic" aria-hidden="true"><use href="#i-unfold"/></svg><span class="vt"><span>Backlog</span><span class="gc num">6</span></span></div>
+          </div>
+          <div class="col">
+            <div class="chead"><svg class="ic sti" aria-hidden="true"><use href="#i-circle"/></svg>To do<span class="gc num">3</span><button type="button" class="more" title="More"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button></div>
+            <div class="cards">
+              <div class="card"><div class="ct"><span class="cb"></span><span>Cookie banner: decline by default</span></div><div class="cm"><svg class="pri" aria-label="High priority"><use href="#p3"/></svg><span class="num">Thu</span><span class="ava mc">MC</span></div></div>
+              <div class="card"><div class="ct"><span class="cb"></span><span>Fix mobile nav overlap</span></div><div class="cm"><svg class="pri" aria-label="Low priority"><use href="#p1"/></svg><span class="num">Fri</span><span class="ava ar">AR</span></div></div>
+              <div class="card"><div class="ct"><span class="cb"></span><span>Write the changelog page</span></div><div class="cm"><span class="num">Oct 22</span><span class="ava ar">AR</span></div></div>
+            </div>
+            <div class="addcard"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Add task</div>
+          </div>
+          <div class="col">
+            <div class="chead"><svg class="ic sti" aria-hidden="true"><use href="#i-progress"/></svg>In progress<span class="gc num">2</span><button type="button" class="more" title="More"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button></div>
+            <div class="cards">
+              <div class="card"><div class="ct"><span class="cb"></span><span>Finalize pricing page copy</span></div><div class="cm"><svg class="pri" aria-label="Medium priority"><use href="#p2"/></svg><span class="num">Today</span><span class="cnt" title="2 comments"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-msg"/></svg>2</span><span class="ava ar">AR</span></div></div>
+              <div class="card"><div class="ct"><span class="cb"></span><span>Hero illustration for the homepage</span></div><div class="cm"><svg class="pri" aria-label="Medium priority"><use href="#p2"/></svg><span class="num">Wed</span><span class="cnt" title="2 attachments"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-clip"/></svg>2</span><span class="ava so">SO</span></div></div>
+            </div>
+          </div>
+          <div class="col show-done">
+            <div class="chead"><svg class="ic sti" aria-hidden="true"><use href="#i-check-circle"/></svg>Done<span class="gc num">3</span><button type="button" class="more" title="More"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button></div>
+            <div class="cards">
+              <div class="card done"><div class="ct"><span class="cb done"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg></span><span>New favicon set</span></div><div class="cm"><span class="num">Oct 8</span><span class="ava mc">MC</span></div></div>
+              <div class="card done"><div class="ct"><span class="cb done"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg></span><span>Move DNS to the new host</span></div><div class="cm"><span class="num">Oct 5</span><span class="ava so">SO</span></div></div>
+              <div class="card done"><div class="ct"><span class="cb done"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg></span><span>Set up analytics consent</span></div><div class="cm"><span class="num">Oct 2</span><span class="ava ar">AR</span></div></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════ FRAME 7 · TEAMS: MY TASKS + ASSIGNEE PICKER ═══════════ -->
+      <section class="panel center" data-f="7">
+        <div class="toolbar">
+          <div class="title"><h3>My tasks</h3><span class="tcount num">22</span></div>
+          <button type="button" class="btn icon" title="Search  /"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg></button>
+          <button type="button" class="btn"><svg class="ic" aria-hidden="true"><use href="#i-filter"/></svg>Filter</button>
+          <button type="button" class="btn"><svg class="ic" aria-hidden="true"><use href="#i-sliders"/></svg>Display</button>
+          <span class="sep"></span>
+          <button type="button" class="btn primary"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>New</button>
+        </div>
+        <div class="list" style="--cols: var(--icon) minmax(0, 1fr) var(--icon-sm) 7.5rem 5.25rem var(--icon)">
+          <div class="sec">
+            <div class="ghead"><span class="cslot"><svg class="ic ic-xs chev" aria-hidden="true"><use href="#i-chev-d"/></svg></span>For Design<span class="gsub num">· 2 unclaimed</span></div>
+            <div class="rows">
+              <div class="row sel">
+                <span class="cb"></span>
+                <div class="tcell"><span class="t">Social cards for the launch</span><span class="ind"><span title="1 comment"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-msg"/></svg>1</span></span><span class="fix hfix"><button type="button" class="xchip" title="Assign it to you">Take it</button></span></div>
+                <svg class="pri" aria-label="Medium priority"><use href="#p2"/></svg>
+                <span class="proj"><span class="dot" style="--c: var(--label-blue)"></span>Launch v1</span>
+                <span class="date num">Thu</span>
+                <span class="tava" title="Design · unclaimed">D</span>
+              </div>
+              <div class="row is-hover">
+                <span class="cb"></span>
+                <div class="tcell"><span class="t">Empty-state illustrations</span><span class="fix hfix"><button type="button" class="xchip" title="Assign it to you">Take it</button></span></div>
+                <span></span>
+                <span class="proj"><span class="dot" style="--c: var(--label-blue)"></span>Launch v1</span>
+                <span class="date num">Fri</span>
+                <span class="tava" title="Design · unclaimed">D</span>
+              </div>
+            </div>
+          </div>
+          <div class="sec dated">
+            <div class="ghead"><span class="cslot"><svg class="ic ic-xs chev" aria-hidden="true"><use href="#i-chev-d"/></svg></span>Today<span class="gsub">· Mon, Oct 12</span><span class="gc num">2</span></div>
+            <div class="rows">
+              <div class="row">
+                <span class="cb"></span>
+                <div class="tcell"><span class="t">Finalize pricing page copy</span><span class="ind"><span title="2 comments"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-msg"/></svg>2</span></span></div>
+                <svg class="pri" aria-label="Medium priority"><use href="#p2"/></svg>
+                <span class="proj"><span class="dot" style="--c: var(--label-teal)"></span>Website</span>
+                <span class="date num">3:00 PM</span>
+                <span class="ava ar">AR</span>
+              </div>
+              <div class="row">
+                <span class="cb"></span>
+                <div class="tcell"><span class="t">Set up Stripe webhooks for upgrades</span><span class="ind"><span class="agent" title="Claude is working on this for you"><span class="adot"></span>Claude · working</span></span></div>
+                <svg class="pri" aria-label="Medium priority"><use href="#p2"/></svg>
+                <span class="proj"><span class="dot" style="--c: var(--label-blue)"></span>Launch v1</span>
+                <span class="date num"></span>
+                <span class="ava ar">AR</span>
+              </div>
+            </div>
+          </div>
+          <div class="sec dated">
+            <div class="ghead"><span class="cslot"><svg class="ic ic-xs chev" aria-hidden="true"><use href="#i-chev-d"/></svg></span>This week<span class="gc num">3</span></div>
+            <div class="rows">
+              <div class="row">
+                <span class="cb"></span>
+                <div class="tcell"><span class="t">Logo concepts round 2</span><span class="ind"><span><svg class="ic ic-xs" aria-hidden="true"><use href="#i-clip"/></svg>3</span><span><svg class="ic ic-xs" aria-hidden="true"><use href="#i-sub"/></svg>1/4</span></span></div>
+                <svg class="pri" aria-label="High priority"><use href="#p3"/></svg>
+                <span class="proj"><span class="dot" style="--c: var(--label-violet)"></span>Acme rebrand</span>
+                <span class="date num">Wed</span>
+                <span class="ava ar">AR</span>
+              </div>
+              <div class="row">
+                <span class="cb"></span>
+                <div class="tcell"><span class="t">Fix trial 401 on refresh</span></div>
+                <svg class="pri" aria-label="High priority"><use href="#p3"/></svg>
+                <span class="proj"><span class="dot" style="--c: var(--label-blue)"></span>Launch v1</span>
+                <span class="date num">Wed</span>
+                <span class="ava ar">AR</span>
+              </div>
+              <div class="row">
+                <span class="cb"></span>
+                <div class="tcell"><span class="t">Midterm exam</span></div>
+                <svg class="pri" aria-label="High priority"><use href="#p3"/></svg>
+                <span class="proj"><span class="dot" style="--c: var(--label-amber)"></span>CS 201 Algorithms</span>
+                <span class="date num">Thu 9:00 AM</span>
+                <span class="ava ar">AR</span>
+              </div>
+            </div>
+          </div>
+          <div class="sec dated">
+            <div class="ghead"><span class="cslot"><svg class="ic ic-xs chev" aria-hidden="true"><use href="#i-chev-d"/></svg></span>Later<span class="gc num">2</span></div>
+            <div class="rows">
+              <div class="row">
+                <span class="cb"></span>
+                <div class="tcell"><span class="t">Brand guidelines PDF</span><span class="ind"><span><svg class="ic ic-xs" aria-hidden="true"><use href="#i-msg"/></svg>5</span><span><svg class="ic ic-xs" aria-hidden="true"><use href="#i-sub"/></svg>0/6</span></span></div>
+                <svg class="pri" aria-label="High priority"><use href="#p3"/></svg>
+                <span class="proj"><span class="dot" style="--c: var(--label-violet)"></span>Acme rebrand</span>
+                <span class="date num">Nov 7</span>
+                <span class="ava ar">AR</span>
+              </div>
+              <div class="row">
+                <span class="cb"></span>
+                <div class="tcell"><span class="t">Literature review draft</span></div>
+                <span></span>
+                <span class="proj"><span class="dot" style="--c: var(--label-blue)"></span>Thesis</span>
+                <span class="date num">Nov 20</span>
+                <span class="ava ar">AR</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+      <aside class="panel detail" data-f="7" id="det7">
+        <div class="dhead">
+          <span class="crumb"><span class="dot" style="--c: var(--label-blue)"></span>Launch v1</span>
+          <button type="button" class="btn sm" title="Add to your queue  Q"><svg class="ic" aria-hidden="true"><use href="#i-queue"/></svg>Queue</button>
+          <button type="button" class="btn icon" title="Copy link"><svg class="ic" aria-hidden="true"><use href="#i-link"/></svg></button>
+          <button type="button" class="btn icon" title="More"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button>
+        </div>
+        <div class="dbody">
+          <div>
+            <div class="dtitle"><span class="cb"></span><h4>Social cards for the launch</h4></div>
+            <p class="desc">Open Graph images for launch day: one per plan, plus the changelog. Sizes are in the brand guide.</p>
+          </div>
+          <div class="props">
+            <span class="plabel">Status</span><span class="pval"><svg class="ic" aria-hidden="true"><use href="#i-circle"/></svg>To do</span>
+            <span class="plabel">Assignee</span><span class="pval" id="assigneeVal" data-act="picker"><span class="tava">D</span>Design<span class="t3">· unclaimed</span></span>
+            <span class="plabel">Priority</span><span class="pval"><svg class="pri" aria-hidden="true"><use href="#p2"/></svg>Medium</span>
+            <span class="plabel">Due</span><span class="pval"><svg class="ic" aria-hidden="true"><use href="#i-cal"/></svg>Thu</span>
+            <span class="plabel">Tags</span><span class="pval"><span class="tag" style="--c: var(--label-blue)"><b>#</b>launch</span></span>
+          </div>
+          <div class="divider"></div>
+          <div class="feed">
+            <div class="ev"><span class="ava mc">MC</span><span><b>Mia</b> assigned this to Design · 9:38 AM</span></div>
+            <div class="cmt"><span class="ava mc">MC</span><div><div class="who"><b>Mia Chen</b> · 9:40 AM</div><div><span class="mention">@Design</span> can one of you take this before Thursday? The sizes are in the brand guide.</div></div></div>
+            <div class="composer"><span>Leave a comment…</span><svg class="ic" aria-hidden="true"><use href="#i-clip"/></svg></div>
+          </div>
+          <div class="picker" id="picker" role="dialog" aria-label="Assign">
+            <div class="srch"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg><span class="cur"></span>Assign to…</div>
+            <div class="lh">People</div>
+            <div class="pi"><span class="ava ar">AR</span>Alex Rivera<span class="hint">you</span></div>
+            <div class="pi"><span class="ava so">SO</span>Sam Okafor</div>
+            <div class="pi"><span class="ava mc">MC</span>Mia Chen</div>
+            <div class="lh">Teams</div>
+            <div class="pi hl"><span class="tava">D</span>Design <span class="tn num">· 2</span><svg class="ic ck" aria-hidden="true" style="margin-left:auto"><use href="#i-check"/></svg></div>
+            <div class="pi"><span class="tava">D</span>Development <span class="tn num">· 2</span></div>
+            <div class="pi"><span class="tava">B</span>Board <span class="tn num">· 1</span></div>
+            <hr />
+            <div class="pi quiet"><svg class="ic" aria-hidden="true"><use href="#i-user"/></svg>No assignee</div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- ═══════════ FRAME 8 · FOCUS RUN, ALONG THE WAY ═══════════ -->
+      <section class="panel center" data-f="8">
+        <div class="runbar">
+          <h3>Queue</h3>
+          <span class="runstate"><span class="live"></span>Running · <span class="num">2 of 7 done</span></span>
+          <button type="button" class="btn sm" data-act="arrange" title="Keeps each project’s tasks together in Up next. Undo any time."><svg class="ic" aria-hidden="true"><use href="#i-group"/></svg><span class="uq-queued">Arrange by project</span><span class="uq-arranged">Undo arrange</span></button>
+          <span class="phase" title="Pomodoro runs per queue run, not per task"><span class="ring" style="--p: 58%"></span>Focus <span class="num">12:40</span><svg class="ic ic-xs" aria-hidden="true"><use href="#i-chev-d"/></svg></span>
+          <button type="button" class="btn icon" title="Pause run"><svg class="ic" aria-hidden="true"><use href="#i-pause"/></svg></button>
+          <button type="button" class="btn">End run</button>
+        </div>
+        <div class="runsub"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-cal"/></svg><span><span class="num">18 min</span> until <b>Acme call</b></span><span>·</span><button type="button" title="Line them up next">2 quick tasks fit</button></div>
+        <div class="nowwrap">
+          <div class="now">
+            <div class="meta">
+              <span><span class="dot" style="--c: var(--label-violet)"></span>Acme rebrand › Design</span>
+              <span><svg class="pri" aria-hidden="true"><use href="#p3"/></svg>High</span>
+              <span><svg class="ic ic-xs" aria-hidden="true"><use href="#i-cal"/></svg>Due Wed</span>
+              <span><svg class="ic ic-xs" aria-hidden="true"><use href="#i-timer"/></svg><span class="num">18m of ~45m</span></span>
+              <span><svg class="ic ic-xs" aria-hidden="true"><use href="#i-clip"/></svg><span class="num">3</span></span>
+              <span><svg class="ic ic-xs" aria-hidden="true"><use href="#i-msg"/></svg><span class="num">2</span></span>
+            </div>
+            <h5>Logo concepts round 2</h5>
+            <p class="ndesc">Refine the two directions from round 1, the monogram and the wordmark. Anna wants to see both on a business card and in the site header.</p>
+            <div class="check">
+              <div class="it done"><span class="cb done"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg></span><span>Refine the monogram</span></div>
+              <div class="it"><span class="cb"></span><span>Refine the wordmark</span></div>
+              <div class="it"><span class="cb"></span><span>Mock both up on a business card</span></div>
+              <div class="it"><span class="cb"></span><span>Mock both up in the site header</span></div>
+            </div>
+            <div class="linkchips">
+              <span class="lchip"><svg class="ic" aria-hidden="true"><use href="#i-mail"/></svg>Re: Round 1 feedback</span>
+              <span class="lchip"><svg class="ic" aria-hidden="true"><use href="#i-note"/></svg>Brand voice and tone</span>
+              <span class="minithumbs"><i style="--g: linear-gradient(135deg, oklch(0.36 0.06 295), oklch(0.22 0.03 295) 60%, oklch(0.46 0.09 300))"></i><i style="--g: linear-gradient(160deg, oklch(0.30 0.02 60), oklch(0.18 0.01 60))"></i></span>
+            </div>
+            <div class="nowfoot">
+              <button type="button" class="btn primary"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg>Done <span class="kbdin">⏎</span></button>
+              <button type="button" class="btn secondary" title="Moves it to the end of the queue">Skip</button>
+              <button type="button" class="btn" title="Keep it going in the background; it moves to In flight"><svg class="ic" aria-hidden="true"><use href="#i-handoff"/></svg>Hand off <span class="kbd">W</span></button>
+              <button type="button" class="btn icon" style="margin-left:auto" title="Not today · Open in project · …"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button>
+            </div>
+          </div>
+        </div>
+        <div class="along" title="Shows only when the next task is in another project"><svg class="ic" aria-hidden="true"><use href="#i-corner"/></svg><span>Before you leave Acme:</span><b>Send invoice #14</b><span class="t3 num">· 5m</span><span class="acts"><button type="button" class="btn secondary" title="Do it now, before the next task">Take it</button><button type="button" class="btn" title="Hide it for this run">Not now</button></span></div>
+        <div class="upnext">
+          <div class="sublabel">Up next <span class="num">4</span><span class="sum num">~1h</span></div>
+          <div class="uq-queued">
+            <div class="pdiv"><span class="dslot"><span class="dot" style="--c: var(--label-teal)"></span></span>Website<span class="line"></span></div>
+            <div class="qrow"><span class="n num"><b>1</b><svg class="ic ic-xs g" aria-hidden="true"><use href="#i-grip"/></svg></span><span class="tt"><span class="x1">Finalize pricing page copy</span></span><span class="est num">~30m</span><span class="ava ar">AR</span></div>
+            <div class="pdiv"><span class="dslot"><span class="dot" style="--c: var(--label-gray)"></span></span>Bugs<span class="line"></span></div>
+            <div class="qrow"><span class="n num"><b>2</b><svg class="ic ic-xs g" aria-hidden="true"><use href="#i-grip"/></svg></span><span class="tt"><span class="x1">Fix signup email typo</span></span><span class="est num">~10m</span><span class="ava ar">AR</span></div>
+            <div class="pdiv"><span class="dslot"><span class="dot" style="--c: var(--label-teal)"></span></span>Home<span class="line"></span></div>
+            <div class="qrow"><span class="n num"><b>3</b><svg class="ic ic-xs g" aria-hidden="true"><use href="#i-grip"/></svg></span><span class="tt"><span class="x1">Pay rent</span></span><span class="est num">~5m</span><span class="ava ar">AR</span></div>
+            <div class="pdiv"><span class="dslot"><span class="dot" style="--c: var(--label-teal)"></span></span>Website<span class="line"></span></div>
+            <div class="qrow"><span class="n num"><b>4</b><svg class="ic ic-xs g" aria-hidden="true"><use href="#i-grip"/></svg></span><span class="tt"><span class="x1">Fix mobile nav overlap</span></span><span class="est num">~15m</span><span class="ava ar">AR</span></div>
+          </div>
+          <div class="uq-arranged">
+            <div class="pdiv"><span class="dslot"><span class="dot" style="--c: var(--label-teal)"></span></span>Website<span class="line"></span></div>
+            <div class="qrow"><span class="n num"><b>1</b><svg class="ic ic-xs g" aria-hidden="true"><use href="#i-grip"/></svg></span><span class="tt"><span class="x1">Finalize pricing page copy</span></span><span class="est num">~30m</span><span class="ava ar">AR</span></div>
+            <div class="qrow"><span class="n num"><b>2</b><svg class="ic ic-xs g" aria-hidden="true"><use href="#i-grip"/></svg></span><span class="tt"><span class="x1">Fix mobile nav overlap</span></span><span class="est num">~15m</span><span class="ava ar">AR</span></div>
+            <div class="pdiv"><span class="dslot"><span class="dot" style="--c: var(--label-gray)"></span></span>Bugs<span class="line"></span></div>
+            <div class="qrow"><span class="n num"><b>3</b><svg class="ic ic-xs g" aria-hidden="true"><use href="#i-grip"/></svg></span><span class="tt"><span class="x1">Fix signup email typo</span></span><span class="est num">~10m</span><span class="ava ar">AR</span></div>
+            <div class="pdiv"><span class="dslot"><span class="dot" style="--c: var(--label-teal)"></span></span>Home<span class="line"></span></div>
+            <div class="qrow"><span class="n num"><b>4</b><svg class="ic ic-xs g" aria-hidden="true"><use href="#i-grip"/></svg></span><span class="tt"><span class="x1">Pay rent</span></span><span class="est num">~5m</span><span class="ava ar">AR</span></div>
+          </div>
+          <div class="completed-line"><span class="cslot"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-check"/></svg></span><button type="button">2 done this run · 1h 12m · show</button></div>
+        </div>
+      </section>
+      <aside class="panel detail" data-f="8">
+        <div class="rtabs"><span class="seg"><button type="button" class="on">In flight&nbsp;<span class="t3 num">2</span></button><button type="button">Task</button></span></div>
+        <div class="flight">
+          <div class="fcard">
+            <div class="ft1"><svg class="ic" aria-hidden="true"><use href="#i-handoff"/></svg><span>Set up Stripe webhooks for upgrades</span></div>
+            <div class="fmeta"><span class="num">in flight 16m</span><span class="agent"><span class="adot"></span>Claude · working</span></div>
+          </div>
+          <div class="fcard">
+            <div class="ft1"><svg class="ic" aria-hidden="true"><use href="#i-handoff"/></svg><span>Northwind: export the app icons</span></div>
+            <div class="fmeta"><span class="num">in flight 8m</span><span><span class="ring" style="--p: 40%"></span>check in 12m</span></div>
+          </div>
+          <p class="fhint">Press <span class="kbd">W</span> to hand off what you’re on while a build, a reply or an agent runs. When a check-back is due, the card brightens and you get one quiet notification.</p>
+        </div>
+      </aside>
+
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var html = document.documentElement;
+  var q = new URLSearchParams(location.search);
+  var FRAMES = 8;
+  // Each frame's variants: the first one is the default.
+  var VARS = {
+    2: { lab: 'Show as', opts: [['chip', 'Chip'], ['link', 'Link'], ['card', 'Card']] },
+    3: { lab: 'Description', opts: [['folded', 'Folded'], ['open', 'Expanded']] },
+    4: { lab: 'Previews', opts: [['shown', 'Shown'], ['hidden', 'Hidden']] },
+    5: { lab: 'Session notes', opts: [['open', 'Expanded'], ['closed', 'Collapsed']] },
+    6: { lab: 'View', opts: [['list', 'List'], ['open', 'List, backlog open'], ['board', 'Board'], ['folded', 'Board, backlog folded']] },
+    7: { lab: 'Picker', opts: [['open', 'Open'], ['closed', 'Closed']] },
+    8: { lab: 'Up next', opts: [['queued', 'As queued'], ['arranged', 'Arranged by project']] }
+  };
+  var S = { frame: Math.min(FRAMES, Math.max(1, parseInt(q.get('frame'), 10) || 1)), v: {} };
+  Object.keys(VARS).forEach(function (f) { S.v[f] = VARS[f].opts[0][0]; });
+  if (q.get('v') && VARS[S.frame] && VARS[S.frame].opts.some(function (o) { return o[0] === q.get('v'); })) S.v[S.frame] = q.get('v');
+
+  function caption() {
+    var f = S.frame, v = S.v[f];
+    if (f === 1) return '1 · The sidebar as decided: your block, one hairline, All, then Pinned · Views · areas in one header style. a: a fresh workspace. b: a busy one, School folded.';
+    if (f === 2) return '2 · A note with references: a task chip, a contact chip with its hover card, a task card, the same task as a plain link, and “Show as” after inserting one.';
+    if (f === 3) return v === 'open'
+      ? '3 · Expanded: the whole description, with Show less at the end; Linked sits further down the panel.'
+      : '3 · A long description folds after 8 lines with a soft fade; the fold line counts what’s hidden below it. Linked: an email card and a note card.';
+    if (f === 4) return v === 'hidden'
+      ? '4 · Previews hidden: the links stay in the text; “Show previews” brings the cards back.'
+      : '4 · Chat: a message with two links unfurls compact previews (Hide previews). A chip stays inline, with no card.';
+    if (f === 5) return '5 · One task, two viewers. Left: you (Alex) — Claude’s mark on the row and its session line. Right: Sam (teammate) — the same task, no agent information.';
+    if (f === 6) {
+      if (v === 'open') return '6 · Website, List, backlog open: the same quiet line becomes the group’s header, with “hide”.';
+      if (v === 'board') return '6 · Website, Board grouped by status: Backlog comes first, narrower, and folds away.';
+      if (v === 'folded') return '6 · Board with Backlog folded to a slim strip; click it to unfold.';
+      return '6 · Website, List: the backlog folds into one quiet line at the end, in the same style as “3 completed · show”.';
+    }
+    if (f === 7) return '7 · Teams: the assignee picker lists People, then Teams. My tasks opens with “For Design · 2 unclaimed”; hover a row to Take it.';
+    return v === 'arranged'
+      ? '8 · Arranged by project: Up next regroups so each project’s tasks sit together.'
+      : '8 · Focus run, along the way: the next task leaves Acme, so one quiet line offers a quick Acme task first; the time to your next event sits under the title.';
+  }
+  // Rule: dates and times never truncate; meta that doesn't fit drops whole
+  // items (counts first, from the end) behind "+n" with the rest in a tooltip.
+  function fitMeta() {
+    document.querySelectorAll('.card .cm').forEach(function (cm) {
+      var drops = Array.prototype.slice.call(cm.querySelectorAll('.cnt'));
+      if (!drops.length) return;
+      var plus = cm.querySelector('.plus');
+      if (!plus) {
+        plus = document.createElement('span');
+        plus.className = 'plus num';
+        cm.insertBefore(plus, cm.querySelector('.ava, .tava'));
+      }
+      drops.forEach(function (d) { d.hidden = false; });
+      plus.hidden = true;
+      if (!cm.offsetParent) return;
+      var n = 0;
+      while (cm.scrollWidth > cm.clientWidth + 0.5 && n < drops.length) {
+        n += 1;
+        drops[drops.length - n].hidden = true;
+        plus.hidden = false;
+        plus.textContent = '+' + n;
+      }
+      plus.title = drops.slice(drops.length - n).map(function (d) { return d.title; }).join(' · ');
+    });
+  }
+  var NAV = { 1: 'upcoming', 3: 'acme', 6: 'website', 7: 'mytasks', 8: 'queue' };
+  var MOD = { 2: 'notes', 4: 'chat' };
+  var rail = document.getElementById('rail');
+  var app = document.getElementById('app');
+
+  function rel(el, box) {
+    var a = el.getBoundingClientRect(), r = box.getBoundingClientRect();
+    return { l: a.left - r.left, t: a.top - r.top, r: a.right - r.left, b: a.bottom - r.top, w: a.width, h: a.height, bw: r.width, bh: r.height };
+  }
+  // Place a floating element under an anchor, kept inside its positioned box.
+  function place(pop, anchor, box, opts) {
+    if (!pop || !anchor || !box || pop.hidden || !pop.offsetParent) return;
+    opts = opts || {};
+    var a = rel(anchor, box);
+    var left = opts.alignRight ? a.r - pop.offsetWidth : a.l + (opts.dx || 0);
+    left = Math.max(8, Math.min(left, a.bw - pop.offsetWidth - (opts.pad || 12)));
+    pop.style.left = Math.round(left) + 'px';
+    pop.style.top = Math.round(a.b + (opts.dy == null ? 6 : opts.dy)) + 'px';
+  }
+  function placeAll() {
+    var f = S.frame;
+    if (f === 2) {
+      var sc = document.getElementById('docScroll');
+      place(document.getElementById('hcard'), document.getElementById('annaRef'), sc, { dx: -4 });
+      var ins = document.querySelector('#insRef .as-' + S.v[2]);
+      place(document.getElementById('showAs'), ins, sc, { dy: 6 });
+    }
+    if (f === 7) {
+      var d7 = document.getElementById('det7');
+      place(document.getElementById('picker'), document.getElementById('assigneeVal'), d7, { dy: 4, pad: 8 });
+    }
+    fitMeta();
+  }
+
+  function renderVariants() {
+    var c = document.getElementById('ctlVar'), seg = document.getElementById('varSeg');
+    var def = VARS[S.frame];
+    c.hidden = !def;
+    if (!def) return;
+    document.getElementById('varLab').textContent = def.lab;
+    seg.innerHTML = '';
+    def.opts.forEach(function (o) {
+      var b = document.createElement('button');
+      b.type = 'button'; b.textContent = o[1]; b.dataset.vset = o[0];
+      if (S.v[S.frame] === o[0]) b.className = 'on';
+      seg.appendChild(b);
+    });
+  }
+
+  function apply() {
+    var f = S.frame;
+    html.dataset.frame = f;
+    Object.keys(VARS).forEach(function (k) { html.dataset['v' + k] = S.v[k]; });
+    document.querySelectorAll('[data-f]').forEach(function (el) {
+      el.hidden = el.dataset.f.split(' ').indexOf(String(f)) === -1;
+    });
+    rail.querySelectorAll('.nav').forEach(function (n) { n.classList.toggle('active', !!NAV[f] && n.dataset.nav === NAV[f]); });
+    document.querySelectorAll('.topbar .mtab').forEach(function (t) { t.classList.toggle('on', t.dataset.mod === (MOD[f] || 'tasks')); });
+    document.querySelectorAll('#frameSw [data-go]').forEach(function (b) { b.classList.toggle('on', +b.dataset.go === f); });
+    var cap = document.getElementById('cap');
+    cap.textContent = caption(); cap.title = caption();
+    renderVariants();
+    // frame 3 · description fold
+    var ld = document.getElementById('ldesc');
+    if (ld) ld.classList.toggle('folded', S.v[3] !== 'open');
+    if (f === 3) { var d3 = document.getElementById('det3'); if (d3) d3.scrollTop = 0; }
+    // frame 2 · the "Show as" control mirrors the inserted reference
+    document.querySelectorAll('#showAs [data-as]').forEach(function (b) { b.classList.toggle('on', b.dataset.as === S.v[2]); });
+    // frame 6 · the toolbar's layout switch mirrors List / Board
+    var f6 = document.getElementById('f6seg');
+    if (f6) {
+      var board = S.v[6] === 'board' || S.v[6] === 'folded';
+      f6.querySelector('[data-act="view-list"]').classList.toggle('on', !board);
+      f6.querySelector('[data-act="view-board"]').classList.toggle('on', board);
+    }
+    // frame 7 · the assignee field reads as open while its picker is
+    var av = document.getElementById('assigneeVal');
+    if (av) av.classList.toggle('open', S.v[7] === 'open');
+    var pk = document.getElementById('picker');
+    if (pk) pk.hidden = S.v[7] !== 'open';
+    placeAll();
+    try {
+      var p = '?frame=' + f + (VARS[f] && S.v[f] !== VARS[f].opts[0][0] ? '&v=' + S.v[f] : '');
+      history.replaceState(null, '', p);
+    } catch (e) { /* file:// may refuse; harmless */ }
+  }
+  function setVar(f, v) { S.v[f] = v; apply(); }
+  function cycleVar() {
+    var def = VARS[S.frame]; if (!def) return;
+    var i = def.opts.findIndex(function (o) { return o[0] === S.v[S.frame]; });
+    setVar(S.frame, def.opts[(i + 1) % def.opts.length][0]);
+  }
+
+  document.addEventListener('click', function (e) {
+    var go = e.target.closest('[data-go]');
+    if (go) { S.frame = +go.dataset.go; apply(); return; }
+    var vs = e.target.closest('[data-vset]');
+    if (vs) { setVar(S.frame, vs.dataset.vset); return; }
+    var act = e.target.closest('[data-act]');
+    if (act) {
+      var a = act.dataset.act;
+      if (a === 'as') { setVar(2, act.dataset.as); return; }
+      if (a === 'previews') { setVar(4, S.v[4] === 'hidden' ? 'shown' : 'hidden'); return; }
+      if (a === 'session') { setVar(5, S.v[5] === 'closed' ? 'open' : 'closed'); return; }
+      if (a === 'backlog') { setVar(6, S.v[6] === 'open' ? 'list' : 'open'); return; }
+      if (a === 'view-list') { setVar(6, 'list'); return; }
+      if (a === 'view-board') { setVar(6, 'board'); return; }
+      if (a === 'fold') { setVar(6, S.v[6] === 'folded' ? 'board' : 'folded'); return; }
+      if (a === 'picker') { setVar(7, S.v[7] === 'closed' ? 'open' : 'closed'); return; }
+      if (a === 'arrange') { setVar(8, S.v[8] === 'arranged' ? 'queued' : 'arranged'); return; }
+    }
+    if (e.target.closest('.dtoggle')) { setVar(3, S.v[3] === 'open' ? 'folded' : 'open'); return; }
+    var gh = e.target.closest('.ghead');
+    if (gh && !e.target.closest('button')) { gh.parentElement.classList.toggle('collapsed'); placeAll(); return; }
+    var ah = e.target.closest('.rail .ghdr');
+    if (ah && !e.target.closest('button')) { ah.parentElement.classList.toggle('collapsed'); return; }
+    var row = e.target.closest('.list .row');
+    if (row && !row.classList.contains('ghost') && !e.target.closest('button')) {
+      row.closest('.list').querySelectorAll('.row.sel').forEach(function (x) { x.classList.remove('sel'); });
+      row.classList.add('sel');
+      return;
+    }
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    var k = e.key.toLowerCase();
+    if (k >= '1' && k <= String(FRAMES)) { S.frame = +k; apply(); }
+    else if (k === 'v') cycleVar();
+  });
+  window.addEventListener('resize', placeAll);
+  apply();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(placeAll);
+})();
+</script>
+</body>
+</html>

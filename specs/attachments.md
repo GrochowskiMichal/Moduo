@@ -1,6 +1,6 @@
 # Spec: Attachments (platform + Tasks surfaces)
 
-> Status: **AT-1 built and live 2026-10-08** (PR #317; applied to prod, purge scheduled) · AT-2 next, after TV-U3 · no open questions · Owner: maciej · Source: [`.design/tasks-dogfood/REVIEW.md`](../.design/tasks-dogfood/REVIEW.md) T11 + rounds 3/3b (attachments-only, doubled limits, error handling) · Comp: [`ui-proposal.html`](../.design/tasks-dogfood/ui-proposal.html) §5/§6 · First consumer: [`tasks-v2.md`](./tasks-v2.md) · Reuse later: Notes, comments, Chat
+> Status: **AT-1 built and live 2026-10-08** (PR #317; applied to prod, purge scheduled) · AT-2 next, after TV-U3 · **Ledger since 2026-10-10:** AT-2 = tasks-v3 block 2 (finish #327) and AT-3 stays as specced here, listed in [`BUILD_ORDER.md`](./BUILD_ORDER.md) after tasks-v3 block 19 (TV-U14 replaces the TV-U7 dependency) — see [`specs/tasks-v3.md`](./tasks-v3.md) · no open questions · Owner: maciej · Source: [`.design/tasks-dogfood/REVIEW.md`](../.design/tasks-dogfood/REVIEW.md) T11 + rounds 3/3b (attachments-only, doubled limits, error handling) · Comp: [`ui-proposal.html`](../.design/tasks-dogfood/ui-proposal.html) §5/§6 · First consumer: [`tasks-v2.md`](./tasks-v2.md) · Reuse later: Notes, comments, Chat
 
 ## Scope
 

@@ -2,6 +2,802 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index.
 
+## 2026-10-10 · Tasks v3 re-plan (calls 13–98, defaults a–u, §6)
+
+[specs/tasks-v3.md](../../specs/tasks-v3.md) supersedes tasks-v2 as the plan of record and says only *what* to build; the entries below are the *why*. Source: [.design/tasks-v3/REPLAN.md](../../.design/tasks-v3/REPLAN.md) §8 (numbers are stable, never reused); calls 1–12 are in [.design/tasks-dogfood/RESEARCH-2026-10.md](../../.design/tasks-dogfood/RESEARCH-2026-10.md).
+Format (Maciej, 2026-10-10): who · decision · why · rejected, four lines at most. "Agent's choice, deferred to by Maciej" entries are confirmed for building and may be reconsidered.
+
+### 2026-10-10 · Tasks v3 re-plan — structure (13–20a, 28, 87)
+
+- **13 · The container is called "Project"** → TV-U6, TV-D10 (`buckets` keeps its name until TV-D7; MCP aliases kept)
+  - Who: Maciej, 2026-10-09.
+  - Decision: "Project" everywhere in the UI, MCP and docs; the schema renames only at the cleanup.
+  - Why: every target role says project (or course); a client can be told "your project"; the spine already calls it one.
+  - Rejected: "bucket" (nobody's word; Planner uses it for a column).
+- **14 · The shape: Area → Project → Section** → TV-D10, TV-U6, TV-U10
+  - Who: Maciej, 2026-10-10 (re-asked "what do areas and sections do?").
+  - Decision: three levels with distinct jobs; only the project is required; a task never sits in an area, a section never spans projects.
+  - Why: areas tidy the sidebar once projects multiply, sections tidy a project once tasks multiply; a new user sees just Inbox and projects.
+  - Rejected: areas as containers with permissions (candidate B) and tasks on several lists (C).
+- **15 · Areas = today's rail sections, made real** → TV-D10 (`areas` from `group_label`), TV-U6
+  - Who: Maciej, 2026-10-09 ("ok, but explain why").
+  - Decision: an area has name, colour, order; hidden until created; no permissions, no page, no tasks inside; the rail's "Section" becomes "Area".
+  - Why: they already exist as a text label copied onto every bucket; grouping is the first thing every tool adds after projects; kept light so "area or project?" never comes up.
+  - Rejected: keeping the label-per-bucket hack (renaming means relabelling every bucket; nothing else can use it).
+- **16 · What a project carries** → TV-D10, TV-U16
+  - Who: Maciej, 2026-10-09.
+  - Decision: description, status Active · On hold · Done, target date, colour, area, client link, sections; computed progress, time, files, waiting, activity; Archive stays separate.
+  - Why: On hold and Done only change the overview, a dimmed row and MCP, so they never hide tasks; archive is about visibility, not the work.
+  - Rejected: a "health" / "at risk" field and status-update posts (alarm framing).
+- **17 · An optional project Lead** → TV-D10
+  - Who: Maciej, 2026-10-09.
+  - Decision: yes, optional and hidden until set.
+  - Why: PMs and agencies ask "whose project is this?"; cheap.
+  - Rejected: no lead at all (at ≤5 people assignees answer it, but it costs nothing to offer).
+- **18 · Sections inside a project** → TV-D10, TV-U10, TV-U11, TV-TL1
+  - Who: Maciej, 2026-10-09 (reworded by 53a on 2026-10-10).
+  - Decision: ordered, optional, datable parts of a project (phases, weeks, sprints, milestones, topics); never stages of work.
+  - Why: a dated section is a Timeline phase marker with progress; imports land Todoist sections and Trello lists here; stages belong to statuses (53a).
+  - Rejected: grouping the Board by tag (tags aren't exclusive, a card could sit in two columns).
+- **19 · No separate milestone or sprint object** → TV-D10, TV-TL1
+  - Who: Maciej, 2026-10-09.
+  - Decision: a dated section *is* the milestone, phase or sprint; a saved view covers the rest; a due-only task is a point (re-worded by 68).
+  - Why: one object fewer to learn; the Timeline draws sections as bands and diamonds.
+  - Rejected: milestone and sprint tables of their own.
+- **20 · The Inbox is personal; the sidebar shows the split with a hairline** → TV-U6, TV-U15
+  - Who: Maciej, 2026-10-10 (re-asked "why private?").
+  - Decision: per-person Inbox for captures; your block above a hairline, the workspace block below; "Only you see your Inbox…"; assigning an unfiled task moves it to that person's Inbox; filing makes it the project's.
+  - Why: captures are half-thoughts and people capture freely only in private; in a shared pile nobody owns the sorting; privacy lives on projects.
+  - Rejected: small "You" / "Workspace" labels (B; read as clutter, the welcome explains the split) and a shared team intake (deferred until outside intake exists).
+- **20a · Handing an unfiled task to someone asks for a project** → TV-U14, TV-U15
+  - Who: Maciej, 2026-10-10.
+  - Decision: "Assign to Mike · in [Bugs ▾]" in one picker; "Keep unfiled" allowed, then "Created by me" keeps sight of it.
+  - Why: an unfiled task that belongs to someone else belongs to nobody; the founder pair hits "where did it go?" daily.
+  - Rejected: Todoist's "no assigning in the Inbox" and a silent move into a private Inbox (trust bug P0 #10).
+- **28 · Subtasks stay one level** → TV-U18 (deeper levels flatten on import)
+  - Who: Maciej, 2026-10-09.
+  - Decision: one level, as today; imports flatten.
+  - Why: keeps rows, Focus and the panel simple; the vocabulary already says a subtask is never a parent.
+  - Rejected: nested trees.
+- **87 · Finishing a task finishes its open subtasks, with one Undo** → TV-U10, TV-F7
+  - Who: Maciej, 2026-10-10 (round 2d).
+  - Decision: the same everywhere (List, Board, Focus's Done, agents); the toast names them: "Done · also 2 subtasks · Undo".
+  - Why: Todoist does this; Linear's opt-in leaves orphans that look unfinished.
+  - Rejected: leaving subtasks open.
+
+### 2026-10-10 · Tasks v3 re-plan — statuses, dates, repeats (21–27, 53, 53a, 53b, 68b, 77)
+
+- **21 · Four statuses; "Archive" on a task becomes "Won't do"** → TV-P0 (label), TV-D9, TV-D7 (value); superseded in part by 53/53a
+  - Who: Maciej, 2026-10-09.
+  - Decision: To do · In progress · Done · Won't do plus the Waiting field; won't-do tasks get a list and Reopen; "Archive" is kept for projects.
+  - Why: "archived" on a task read as hidden, not finished-without-doing; the label changes now, the stored value at TV-D7.
+  - Rejected: a fifth "Waiting" status (decided in research call 5: the field route).
+- **22 · Board columns from any grouping** → TV-U11
+  - Who: Maciej, 2026-10-09.
+  - Decision: status (default), section, assignee, priority, waiting-on; remembered per project.
+  - Why: one Display grammar for List and Board.
+  - Rejected: —
+- **22a · Custom columns are sections** → TV-U11
+  - Who: Maciej, 2026-10-10.
+  - Decision: "+ Add section" on a section board; rename, reorder, ⋯ → Rename · Set date · Delete (tasks go to "No section"); the UI never says "column"; cross-project boards use shared fields only.
+  - Why: a column field per board would be a hidden custom field (Notion's trap); a section belongs to one project.
+  - Rejected: a separate column field per board; renaming statuses (then re-decided by 53a).
+- **23 · A quiet "late" state for passed due dates** → TV-D9 (server flag), TV-U10
+  - Who: Maciej, 2026-10-09.
+  - Decision: muted, never red; grouped under Earlier; always offers Move · Won't do · Break down; "Rescheduled N×" goes.
+  - Why: alarm colours and debt framing are what "complete but calm" rules out.
+  - Rejected: red overdue, reschedule counters.
+- **24 · Reminders** → TV-D12
+  - Who: Maciej, 2026-10-09.
+  - Decision: "Remind me at…" plus 1 day / 1 hour before due; one precise notification, exempt from the digest.
+  - Why: a reminder is the one notification that must land on time (channels in 73).
+  - Rejected: —
+- **25 · Several work sessions per task** → TV-D10 (`task_sessions`), TV-U13
+  - Who: Maciej, 2026-10-09.
+  - Decision: a task can be scheduled into several calendar blocks; the estimate stops doubling as the block length.
+  - Why: real work on one task spans several sittings; one `scheduled_at` forced a fake single block.
+  - Rejected: one scheduled time per task.
+- **26 · Due dates on the Calendar** → spec §18 (Calendar contract; Calendar-module work)
+  - Who: Maciej, 2026-10-09.
+  - Decision: due-only tasks as all-day chips; Calendar gets a Month view.
+  - Why: students and PMs plan by the month; a due date is a day, not a time.
+  - Rejected: —
+- **27 · Recurrence: one task that comes back, with method a–i** → TV-D8 (server roll-over), TV-D12 (a–i), TV-U13 (picker)
+  - Who: Maciej, 2026-10-09 (parity) and 2026-10-10 (a–i, all of them).
+  - Decision: keep the cycling row; add RRULE rules, repeat-after-completion, due and scheduled moving together, completion history, subtasks resetting, ghosts on the Calendar, move-one/change-pattern, server roll-over, a picker with one summary line.
+  - Why: the copy model piles up overdue copies and duplicates links; the parts people miss from it are history and rules, which the cycling row can carry.
+  - Rejected: a new copy per occurrence (Linear, Asana, Jira), rotating or per-occurrence assignees.
+- **53 · Backlog: a fifth status, named "Backlog"** → TV-D9, TV-U11, TV-U10
+  - Who: Maciej, 2026-10-10 (the status); the word was his "50/50, your call" → agent's choice, deferred to by Maciej (confirmed for building; may be reconsidered).
+  - Decision: Backlog · To do · In progress · Done · Won't do; a backlog task keeps its details, sits out of counts, My tasks, Upcoming, Focus suggestions, drift, late and reminders, folded at the end; queuing or scheduling moves it to To do.
+  - Why: ideas crowd every active view; Linear, Jira and Plane use the word, so imports map one to one; 53a lets a project rename it "Someday".
+  - Rejected: a "someday" flag (odd mixes like someday + in progress) and a section named Backlog (no behaviour, still clutters counts).
+- **53a · Statuses per project, inside five fixed categories** → TV-D9 (`project_statuses`, `status_id`), TV-U11, TV-U13
+  - Who: Maciej, 2026-10-10 (round 2b), with his icon rule.
+  - Decision: each project renames, adds, hides and reorders statuses inside Backlog · To do · In progress · Done · Won't do; new projects start from the workspace default; icons belong to the category only (dotted · empty · half · check · crossed) and nobody edits them.
+  - Why: "done" has to mean one thing for Focus, counts, cross-project boards and agents, while other products let projects name their stages; stages leave sections and become statuses.
+  - Rejected: free-form statuses (every view would need telling what "Shipped" means) and one global custom list (projects differ).
+- **53b · A folded Board column is a small button, never rotated text** → TV-U11
+  - Who: Maciej, 2026-10-10 (round 2b), his version.
+  - Decision: icon · count · chevron stacked, ~32 px wide, in the column's place; hover shows "Backlog · 6"; drops work once unfolded; Backlog starts folded; the List keeps its "Backlog · 6" line.
+  - Why: Backlog shouldn't be a big always-visible panel; sideways text reads ~80 % slower (46a).
+  - Rejected: a full-height folded column with a horizontal header (the agent's first fix) and rotated labels.
+- **68b · Dates that contradict a dependency are shown, never prevented** → TV-TL2
+  - Who: Maciej, 2026-10-10 (round 2c).
+  - Decision: a backwards arrow in the late tone, a "Waits on X, due after this" mark, one-click "Move to Nov 8"; loops stay refused by the database; stubs for undated, cross-project, hidden and same-day blockers.
+  - Why: dates and dependencies are both facts people set, in either order; "mirrors, not walls".
+  - Rejected: refusing the date.
+- **77 · A record of what got done, and when** → TV-D9 (`completed_at` / `completed_by`, per-cycle history)
+  - Who: Maciej, 2026-10-10 (round 2c).
+  - Decision: every completion stores when and who, per cycle; Filter/Group by Completed; "Done this month · 14 · 22h" on the project overview; a seeded "Done last week" view for PMs and founders.
+  - Why: repeat history, the client hub, the weekly review and the time report all need it, and "last 7 days" was guessing from `updated_at`; the trail tells one task's story but can't answer "what got done last week".
+  - Rejected: keeping the `updated_at` guess.
+
+### 2026-10-10 · Tasks v3 re-plan — navigation and views (29–30, 32, 82b–86, 88, 98)
+
+- **29 · The rail's smart views** → TV-U6
+  - Who: Maciej, 2026-10-09 (order renamed by 61).
+  - Decision: Inbox · Focus · Upcoming · My tasks · All, then Views, then areas and projects; Upcoming = your dated tasks plus unassigned ones in projects you can see.
+  - Why: Focus is what I'll do next in my order, Upcoming is what's dated; the two had never been told apart.
+  - Rejected: "Open at" (the time-of-day bucket, 30) and a workspace-wide "today".
+- **29a · Customize sidebar** → TV-U6
+  - Who: Maciej, 2026-10-10.
+  - Decision: a ⋯ shows or hides Focus, Upcoming, My tasks and All; the Inbox is always shown; built-ins can't be reordered.
+  - Why: every teammate's sidebar reads the same.
+  - Rejected: reorderable built-ins.
+- **29b · Pin to sidebar** → TV-U6
+  - Who: Maciej, 2026-10-10.
+  - Decision: "Pin to sidebar" in any project's or view's ⋯ adds it to a Pinned group that exists only once something is pinned; never suggested or pre-filled.
+  - Why: a short path to the few things you live in, without a standing empty group.
+  - Rejected: a pre-filled or suggested Pinned group.
+- **29c · No glyphs on views** → TV-U6
+  - Who: Maciej, 2026-10-10 (he asked to be proven wrong; the agent changed its recommendation to B).
+  - Decision: B — no glyph; view names align with project names; in Pinned, projects keep their colour dot and views show nothing.
+  - Why: most views are lists, so a column of identical glyphs is decoration; the "Views" header already says what they are.
+  - Rejected: A, an automatic layout glyph per view.
+- **29d · Saved views live in one place** → TV-U8
+  - Who: Maciej, 2026-10-10.
+  - Decision: no project tabs; a view saved inside a project keeps that project as a filter and lives in the sidebar's Views group.
+  - Why: one place to look; tabs could be added later without migrating anything if long Views lists show up.
+  - Rejected: views saved inside a project as tabs next to List · Board · Timeline.
+- **29e · Collapsible groups, one header style** → TV-U6
+  - Who: Maciej, 2026-10-10.
+  - Decision: Pinned, Views and each area collapse (remembered per person, open by default); sentence case, secondary text, a chevron; area headers show the open count; no small-caps labels; a fresh workspace has no headers.
+  - Why: one header style for every grouping (consistency item 7); headers only when there's something in them.
+  - Rejected: small-caps group labels.
+- **30 · Landing** → TV-U6
+  - Who: Maciej, 2026-10-09.
+  - Decision: retire "Open at"; Tasks opens where you left it; the first open follows onboarding.
+  - Why: a time-of-day bucket was a solo-planner assumption nobody used.
+  - Rejected: —
+- **32 · A full-page task view** → TV-U13
+  - Who: Maciej, 2026-10-09.
+  - Decision: expand a task from the panel into the whole centre, same route; the panel then shows Project; the description never folds.
+  - Why: long descriptions and subtask-heavy work need room (56).
+  - Rejected: a new route (AGENTS.md rule 7).
+- **82b · Multi-select: a short action row with keys, plus More** → TV-U12
+  - Who: Maciej, 2026-10-10 (round 2d/2e), his version.
+  - Decision: when a bottom-bar mode is active (triage, multi-select), the centre shows at most six actions with their keys, then More ▾: Complete `Space` · Focus `Q` · Assign `@` · Tag `#` · Date `D` · Delete `⌫`; "4 selected · Esc"; the panel's "4 tasks · Mixed" stays.
+  - Why: triage already works this way and he wanted it kept; `@` and `#` match the app grammar; Space (not Enter) completes because Enter opens; Q (not F) because F is Filter.
+  - Rejected: 82, a full row of twelve verbs ("that much horizontally stacked text"), and 82a, "New" turning into one "Actions · 4" menu.
+- **83 · One date grouping everywhere, by day** → TV-U2, TV-U15
+  - Who: Maciej, 2026-10-10 (round 2d).
+  - Decision: Earlier · Today · Tomorrow · the next five day names · Later (+ No date outside Upcoming); day headers carry count and time; one row per task at its next session or due date; no week strip.
+  - Why: "This week" is one day long on a Saturday; the Board layout and the Calendar already give day columns and the grid.
+  - Rejected: a "This week" group (stays as a filter) and a week strip on top.
+- **84 · My tasks groups by status, In progress first** → TV-U2, TV-U15
+  - Who: Maciej, 2026-10-10 (round 2d).
+  - Decision: the team block on top, then In progress · To do · Backlog folded; date grouping one Display choice away.
+  - Why: Upcoming already answers "when"; My tasks answers "what am I in the middle of".
+  - Rejected: date groups (the round-1c prototype).
+- **85 · Swimlanes: one level, off by default** → TV-U11
+  - Who: Maciej, 2026-10-10 (round 2d).
+  - Decision: Display → Lanes: none · assignee · priority · project (across projects) · team; each folds, empty lanes hide; built after the Board basics.
+  - Why: Linear, Jira, GitHub, Notion, ClickUp and now Asana all have them; a second axis has to stay calm and fast.
+  - Rejected: nested lanes, lanes on by default.
+- **86 · Boards always open grouped by status** → TV-U11
+  - Who: Maciej, 2026-10-10 (round 2d).
+  - Decision: status is always the default; Section is one Display choice away and remembered per project.
+  - Why: since 53a sections are phases and weeks, so "Week 1–12" would open as twelve columns.
+  - Rejected: 22a's "a project with sections opens grouped by section".
+- **88 · Reactions on comments: six, fixed, never notifying** → TV-U13
+  - Who: Maciej, 2026-10-10 (round 2d).
+  - Decision: 👍 ✅ 👀 🙏 ❤️ 😄; hover shows who; nobody adds their own.
+  - Why: they replace "ok" / "thanks" comments and the notifications those send.
+  - Rejected: a free emoji picker (the same rule as icons) and no reactions (the gap audit's "not planned").
+- **98 · Archived projects and Recently deleted have no permanent rows** → TV-U6
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10 (confirmed for building; may be reconsidered).
+  - Decision: both open from the sidebar's ⋯ next to Customize sidebar; archived projects show in search labelled "Archived"; a delete's Undo toast links to Recently deleted.
+  - Why: two standing rows at the bottom are the label clutter he dislikes (29e).
+  - Rejected: #328's two permanent sidebar rows.
+
+### 2026-10-10 · Tasks v3 re-plan — shell and the right panel (48b, 72, 72a, 89, 96, 81)
+
+- **48b · The layout is the product's skeleton** → SH-1, spec §19 (a founding rule, in Maciej's words)
+  - Who: Maciej, 2026-10-10.
+  - Decision: top bar global · middle the module · bottom bar the module's tools and each panel's toggle; left overview · centre surface · right context; no edge strips, rails or extra columns.
+  - Why: "it's the love for this layout that made me work on Moduo"; switching inside a panel happens in its own title row.
+  - Rejected: anything that adds a fourth column or a side strip.
+- **72 · One way to switch the right panel, for every module** → SH-1
+  - Who: Maciej, 2026-10-10 (round 2b).
+  - Decision: B — the panel's title row is a dropdown that names the view and switches it; everything below follows.
+  - Why: four segments already crowd a 300 px panel, and the words drift between modules; B adds no width and holds unlimited views.
+  - Rejected: A, a slim icon strip on the window's right edge (the agent's recommendation; it breaks the 3×3 layout, 48b) and C, icon tabs in the header (fits about five).
+- **72a · How the dropdown works** → SH-1 (panel view registry; replaces `RightPanelSwitcher`)
+  - Who: Maciej, 2026-10-10 (round 2c).
+  - Decision: "Details ▾" lists this module's hand-picked views (about six at most) in two groups, *about this* and *alongside*; references open as items with the title becoming the item's name and a back arrow; collapse/expand stay in the bottom bar; Tasks: Details · Project / In flight, plus No date on the Timeline.
+  - Why: items open as a stack, so nothing makes the menu grow (his "20-item list" worry).
+  - Rejected: references as extra views in the menu.
+- **89 · The right panel is never narrower than 280 px** → SH-1 (a shell change for every module)
+  - Who: Maciej, 2026-10-10 (round 2d).
+  - Decision: minimum 280 px; values wrap; the label column narrows from 96 to 76 px under 320 px.
+  - Why: at 240 px a value gets ~110 px, which is where "Wed, …" and "0m of …" come from; at 1,024 px the centre keeps ~450 px.
+  - Rejected: keeping the 240 px minimum and truncating.
+- **96 · Help and the running Focus timer move to the top bar** → SH-0 (its own session)
+  - Who: Maciej, 2026-10-10 (round 2e).
+  - Decision: top right: Focus timer (quiet "18:02" with a dot, only while running; hover pauses, click opens Focus) · Help (Docs, Keyboard shortcuts, Contact support, Report a bug) · bell · avatar; the bottom bar's centre becomes Search · Quick capture · New.
+  - Why: the top bar is global and a session runs whichever module you're in (48b); he wanted Help "even more quiet", next to the bell.
+  - Rejected: the timer chip in the bottom bar and a keyboard button there.
+- **81 · Motion: foundations now, no blur, signature moments last** → SH-1, DS-6 (tokens)
+  - Who: Maciej, 2026-10-10 (round 2c).
+  - Decision: three durations (~100 / 180 / 280 ms), one easing family (ease-out in, quicker ease-in out), four patterns, reduced motion → opacity only; no `backdrop-filter`; signature moments after the modules are done.
+  - Why: motion lives inside components, so adding it after the rebuilds would mean touching each module again; blur is expensive in the desktop webview and "performance comes first".
+  - Rejected: blur-based transitions now (may return later on hovers and small interactions only, if it costs nothing).
+
+### 2026-10-10 · Tasks v3 re-plan — Focus (10, 31, 57, 59, 59a, 60, 61–66)
+
+- **10 · Calibrated estimates** → TV-F8
+  - Who: Maciej, 2026-10-09.
+  - Decision: after ~10 finished tasks with both an estimate and tracked time, "≈ 7h 30m at your usual pace" in Up next's header and the run summary; personal, never changes estimates, can be turned off.
+  - Why: the planning fallacy is among the most replicated findings; TV-D3's entries make actuals available; a mirror, not a wall.
+  - Rejected: auto-adjusting estimates.
+- **31 · "Focus on this" from any task** → TV-F7
+  - Who: Maciej, 2026-10-09.
+  - Decision: ⇧F, the ⋯ menu or the detail header's ▶ puts the task on top and starts a run.
+  - Why: a run shouldn't require building a line-up first; `f` is already Filter, so ⇧F.
+  - Rejected: —
+- **57 · "Along the way" in runs** → TV-F8
+  - Who: Maciej, 2026-10-10.
+  - Decision: at a project change in a run, one offer of a ≤15-minute task from the project you're leaving ("Take it · Not now"), only in the moment between two tasks; three Not-nows → Shrink · Move · Let go; "Arrange by project" in Up next's header.
+  - Why: doing a small task while you're already in a project saves a switch for anyone (48a); task-switch costs are well established.
+  - Rejected: a standing suggestion line on the screen.
+- **59 → 59a · One switch, "Offer quick tasks along the way"** → TV-F8, Settings → Tasks → Focus
+  - Who: Maciej, 2026-10-10 (59 with "I don't fully understand the consequences"; 59a in round 2b).
+  - Decision: one switch, on by default, also in Focus's ⋯; reminders always fire; nothing is suggested outside Focus; nothing changes by itself over time.
+  - Why: with 58 parked and 60 dropped, "Everywhere" had nothing left in it; a task boundary in a run is the cheapest moment to interrupt.
+  - Rejected: Off · During runs · Everywhere (59) and modes that fade as habits form; "Everywhere" may return as a second option after the module rebuilds.
+- **60 · No more ADHD-specific exploration this round** → (none)
+  - Who: Maciej, 2026-10-10.
+  - Decision: not now; the first-step card, the quick sweep and meeting prep stay in REPLAN §10 for later.
+  - Why: 48a, 57 and 59a close enough of the gap.
+  - Rejected: exploring the three in round 2.
+- **61 · The Queue becomes "Focus"** → TV-F7 (words only; the database and MCP keep "queue")
+  - Who: Maciej, 2026-10-10 (round 2b).
+  - Decision: the sidebar item is Focus; the line-up inside is Up next; verbs Start · Pause · Done · Stop; "Add to Focus" keeps the `Q` key.
+  - Why: "Queue" and "Upcoming" both read as "what's coming" while the feature is about doing; six of thirteen tools call the doing surface Focus, none calls the list Queue.
+  - Rejected: keeping "Queue".
+- **62 · One quiet header; the timer sits on the task it times** → TV-F7
+  - Who: Maciej, 2026-10-10 (round 2b: "I like this layout much much more").
+  - Decision: header "Focus ⋯" only; one timer pill on the Now card with Pause inside it; Stop in ⋯ and the top-bar timer with "Stopped · Undo" for 10 s; leaving the view never stops a session; the Now card's top line is project › section · due.
+  - Why: "Running" and the timer repeated each other; a Pause next to End run is risky; every tool checked puts pause on the timer and none a bare End beside it.
+  - Rejected: the two-line header with progress and a bare End-run button.
+- **62a · Timer: Per task · Pomodoro · Off** → TV-F6 (`focus_runs.mode` re-cut), TV-F7
+  - Who: Maciej, 2026-10-10 (round 2c; Pomodoro was his idea, kept).
+  - Decision: Per task (default) is the pill on the card, with an optional countdown of the estimate; Pomodoro puts the rhythm pill in the header beside ⋯ with lengths in the same menu and breaks offered between tasks; time is still recorded per task.
+  - Why: nothing was cut from the old screen, only moved (the before/after table in REPLAN 62a); the card carries no second clock.
+  - Rejected: a run-level timer separate from the task's.
+- **63 · Time tracking is optional, and Off means off** → TV-F7, Settings → Tasks → Focus
+  - Who: Maciej, 2026-10-10 (round 2b/2c), with the ⋯ menu as listed.
+  - Decision: Off shows no pill and records nothing while Start, Done, Skip and Hand off still work; the ⋯ menu is Timer ▸ · Arrange by project · Offer quick tasks ✓ · Show what's done · ─ · Stop.
+  - Why: a task's total time is visible to everyone who can see the task, so quietly recording for someone who turned the clock off would feel like being watched.
+  - Rejected: recording quietly anyway (Amazing Marvin, a one-person app).
+- **64 · The next meeting is a divider inside Up next** → TV-F8
+  - Who: Maciej, 2026-10-10 (round 2b: "it's great").
+  - Decision: "── 2:30 PM · Acme call ──" where the meeting falls by your estimates; only for events you attend within ~2 hours or before the line-up runs out.
+  - Why: no tool checked puts the next event above the task; "2 quick tasks fit" was the "Everywhere" idea 59a removed.
+  - Rejected: the "18 min until Acme call · 2 quick tasks fit" line above the task.
+- **65 → 65a · Subtasks in Focus: the focused task stays, a subtask opens its own details in the panel (C)** → TV-F7
+  - Who: Maciej, 2026-10-10 (round 2b rejected A and B; round 2c took C).
+  - Decision: the Now card keeps the task with its subtasks as an unordered checklist with small marks; click a subtask → its own details in the right panel with a parent breadcrumb; ⇧F makes a subtask the focus; ⏎ is Done for the focused task.
+  - Why: "subtasks are not necessarily ordered as steps… we'd force users to build less complex subtasks"; the same click-opens-details rule as List, Board and Timeline.
+  - Rejected: A, steps you work through one at a time (the agent's recommendation) and B, the current step unfolded inline.
+- **66 · Focus stays visible for everyone, with three ways in** → TV-F7
+  - Who: Maciej, 2026-10-10 (round 2b), with his change.
+  - Decision: visible by default for every role (hideable in Customize sidebar); a line-up, one big task via ⇧F, or today's scheduled tasks shown as real rows with "+" each and "Line up all 3"; the empty state teaches all three.
+  - Why: "useful enough that we shouldn't hide it from users that just started"; people who plan by calendar need a way in too.
+  - Rejected: hiding Focus per role and a one-line "Line up today's 3" summary.
+
+### 2026-10-10 · Tasks v3 re-plan — Timeline (67–71, 68a; 68b above)
+
+- **67 · Rows follow the scope: projects across the workspace, tasks inside a project** → TV-TL1
+  - Who: Maciej, 2026-10-10 (round 2b).
+  - Decision: All/area → area headers then one row per project (bar, dated sections, progress line; expand ▸ to tasks), opening at Quarter; inside a project → the project row, sections and tasks, opening at Month; subtasks hidden by default; an optional "Due per week" count, on for students.
+  - Why: this is the PM's roadmap (Linear, Jira, GitHub, Basecamp draw projects as bars) and the student's term at a glance.
+  - Rejected: today's flat lanes of task bars with no project level.
+- **68 · Tasks are points; projects and sections are spans** → TV-TL1
+  - Who: Maciej, 2026-10-10 (round 2b: "I really like it").
+  - Decision: a task is a 12 px circle on its due day (hollow on its next session, muted when late, hidden when done); a section with one date is a diamond, a range a band; a project is a bar (solid when set, outlined when worked out); the fade goes.
+  - Why: Moduo tasks have no start date, and inventing one is ClickUp's complaint; most "bars" today are fades pretending to be spans.
+  - Rejected: task bars with a start date and Jira's "date unknown" fade.
+- **68a · Section dates on their own row; a project may have no dates** → TV-TL1
+  - Who: Maciej, 2026-10-10 (round 2c: "looks much much better").
+  - Decision: every section has a header row and its date shows there (range = band, end only = diamond); dates are set by the chip, ⋯ → Set dates or dragging; one word per kind: tasks are due, sections end, projects have a target; an undated project's bar is outlined from its contents.
+  - Why: the prototype drew a task-less section at the bottom where it looked like a stray task; the cost of "no task bars" (Gantt-trained PMs) is accepted, duration lives on phases and sessions.
+  - Rejected: a third date field on tasks.
+- **69 · Anatomy: a name column, slim bars, quiet structure** → TV-TL1
+  - Who: Maciej, 2026-10-10 (round 2b).
+  - Decision: a sticky resizable name column (280 px; ⇧[ hides it); rows 36/32/28 px, bars 24/22/20 px with a 3 px colour cap and a 2 px progress line; a two-tier sticky header with a Today pill; hairline grid, weekend tint; Week · Month · Quarter · Year with ⌘-scroll; endless virtualized scroll opening with today a quarter across.
+  - Why: titles in a column are never cut by a bar (Asana's fix); monday's taller bars halved the rows that fit.
+  - Rejected: labels beside bars, small-caps lane headers, a fixed window.
+- **70 · Undated tasks, and working on the canvas** → TV-TL2
+  - Who: Maciej, 2026-10-10 (round 2b).
+  - Decision: the bottom tray goes ("No date · 12" opens the panel's No date view); click an empty spot to set a due date or draw a project bar; the whole canvas takes drops; drag points, diamonds and bars; multi-move; edge scroll; keyboard ↑↓ ⌥←/→ ⇧ D T; dependency lines only for the selected item plus "Show all"; "Also move the 3 that wait on this" is offered, never automatic.
+  - Why: today's 8 px drop strip and fixed window made dragging unreliable; nothing drags between groups so dragging never reassigns.
+  - Rejected: the chip tray and silent cascading moves.
+- **71 · Display options, and what's left out on purpose** → TV-TL1
+  - Who: Maciej, 2026-10-10 (round 2b), after asking what each omission costs.
+  - Decision: Display = Group by · Show done · Colour by · Dependencies · Show sessions · Show repeats · Subtasks · Due per week; out: baselines, critical path, auto-scheduling, workload lanes, scenarios, hidden weekends, red health, packed lanes, task start dates, an Inbox lane, drag-to-reassign.
+  - Why: those are what make Jira, monday and ClickUp timelines heavy, or they're traps (auto-scheduling moves dates without you; workload reads as surveillance); none is ruled out for good.
+  - Rejected: a Gantt feature set.
+
+### 2026-10-10 · Tasks v3 re-plan — capture, references, teams (33, 33a, 54–56, 90–95)
+
+- **33 · Capture follows the app grammar exactly** → TV-U14, RF-1
+  - Who: Maciej, 2026-10-10.
+  - Decision: `@` mentions (a person assigns, a project files, a thing links), `#` tags, `/` commands; plain words for dates, highlighted and undoable; `#CS 201` matching a project offers "@CS 201"; literal symbols stay text.
+  - Why: the first draft used `#` for projects and added `!`, breaking "@ anything · # tag · / command".
+  - Rejected: Todoist's `#project` and a fourth symbol.
+- **33a · Date commands everywhere; a recognised date leaves the title** → TV-U14, RF-1
+  - Who: Maciej, 2026-10-10 (with his follow-up: the date doesn't stay as text).
+  - Decision: `/today`, `/tomorrow`, `/next week`, `/date`, `/due …`, `/schedule …`; in capture they set the date and leave the title on save; in prose they insert a date chip; in an existing title only `/` commands act.
+  - Why: under our grammar `@tom` would mix Tom with Tomorrow, so dates belong under `/`; renaming a task must never change its date by surprise.
+  - Rejected: `@` for dates (Notion, Google Docs) and keeping the date words in the title.
+- **54 · Teams of people: routing now, permissions later** → TV-D10 (`teams`, `tasks.team_id`), TV-D13
+  - Who: Maciej, 2026-10-10.
+  - Decision: named groups from Settings → Members; a task gets an optional team next to its one assignee; members see "For Design · 2 unclaimed" and claim with a click; `@Design` routes in capture and sends one digest from a comment; sharing a project with a team is a later permissions spec.
+  - Why: "give it to Design" when you don't know who; access changes the permission model (Tier 2) and gets its own spec.
+  - Rejected: "Groups" (clashes with Group by) and `@Design` pinging each member like @channel.
+- **55 · References: one spine primitive for links, chips, cards and previews** → RF-1 (absorbs GR-0)
+  - Who: Maciej, 2026-10-10.
+  - Decision: four presentations, live updates, "Show as: Link · Chip · Card" after inserting, per-type previews defined by each module, and "Private item" with no title or preview for anything you can't see; Tasks builds the primitive, Notes and Chat adopt it when rebuilt.
+  - Why: grammar and presentation in one spec can't contradict each other; seven chip languages exist today.
+  - Rejected: per-module ad-hoc chips.
+- **56 · Long descriptions fold at ~8 lines with counts** → TV-U13
+  - Who: Maciej, 2026-10-10.
+  - Decision: "Show more · 2 tasks · 1 email"; editing shows all; a card is never cut; every mentioned item is also in Linked; rows and cards never show the description (hover preview shows three lines; a Board "Description preview" option, off); the full page never folds.
+  - Why: nothing gets lost and the panel stays scannable.
+  - Rejected: descriptions on rows and cards.
+- **90 · Two ways to capture, two destinations** → TV-U14
+  - Who: Maciej, 2026-10-10 (round 2d).
+  - Decision: ⌘⇧K always files to your Inbox and never asks where; ⌘N, "+ New" and `c` file where you are (project, section, the top of Up next).
+  - Why: the Things split (Quick Entry vs New To-Do); muscle memory for the global key.
+  - Rejected: one capture that asks where every time.
+- **90a → 90b · One global capture for every module; ⌘+number switches its type** → TV-U14, SH-1 (capture type registry)
+  - Who: Maciej, 2026-10-10 (round 2e; 90b is his idea).
+  - Decision: ⌘⇧K opens as Task; while open, ⌘1–7 switch the capture's type to that module (⌘1 does nothing); a type chip shows it; typing `/note` keeps its prose meaning; each module registers its type and destination.
+  - Why: "aren't we locking the global workflow into tasks alone?"; the same keys mean "module" everywhere, so nothing new to learn.
+  - Rejected: 90a's switching by typing `/note` as the first word.
+- **91 · Capture shows four pills, with the destination on top** → TV-U14
+  - Who: Maciej, 2026-10-10 (round 2d).
+  - Decision: Assign (people and teams) · Due · Tags · Priority · ⋯ More (scheduled, reminder, estimate, repeat, waiting on, template); a destination row "Inbox ▾" / "Acme rebrand › Design ▾"; ⏎ creates, ⌘⏎ creates more.
+  - Why: eight pills were noise; the destination is where 20a's empty project slot shows.
+  - Rejected: —
+- **92 · What leaves the title, and what stays** → TV-U14
+  - Who: Maciej, 2026-10-10 (round 2d).
+  - Decision: tokens that set a property (person, team, project, tag, date, `/` command) leave the title on save; tokens that link a thing (contact, note, email, event, task) stay as chips.
+  - Why: "Call @Anna about @Acme rebrand" keeps reading as a sentence.
+  - Rejected: —
+- **93 · The thing you're looking at rides along, linked by default** → TV-U14
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10 (round 2e: "connections are super important"; confirmed for building; may be reconsidered).
+  - Decision: capturing while an email, note, event or contact is open links it in every case, ⌘⇧K included, as a visible "From: …" chip that one key removes.
+  - Why: a suggestion keeps far fewer links because people skip optional steps; a missed link is silent, a wrong one is visible and removable; privacy holds through "Private item".
+  - Rejected: suggest-only for ⌘⇧K (the agent's revised version; calmer for unrelated thoughts). Revisit if dogfooding shows many removed links.
+- **94 · A task routed to a team needs a project** → TV-U14, TV-D13
+  - Who: Maciej, 2026-10-10 (round 2d).
+  - Decision: a team can name a default project; without one, capture asks for a project before ⏎.
+  - Why: unfiled tasks are private (20) and a routed task has to be visible to the team (54).
+  - Rejected: a shared "Requests" intake (deferred with 20).
+- **95 · Team marks: a rounded square with two letters** → TV-D13
+  - Who: Maciej, 2026-10-10 (round 2d).
+  - Decision: people are round, teams are rounded squares; two automatic letters (DS, DV) and a stable colour; letters editable, nothing picked from a list.
+  - Why: solves the "D" clash from round 1c without an icon picker.
+  - Rejected: picked icons.
+
+### 2026-10-10 · Tasks v3 re-plan — agents, switching, onboarding (9, 34–36, 51, 52, 58, 79)
+
+- **9 · Templates, the minimal version** → TV-D15
+  - Who: Maciej, 2026-10-10 (re-asked "prove that this solves problems").
+  - Decision: "Save as template" on a real task keeps the work (subtasks with details, tags, priority, estimate, dependencies, lasting links, dates as offsets) and drops the run (comments, time, done states, repeats, one-off links, files); the template task is the editor; "From template…" asks for one date; a small list in Settings → Tasks.
+  - Why: consultants, agencies and creators list it as a must, every tool we replace has it, and checklists cut forgotten steps; no editor or gallery keeps it from becoming "system-building as procrastination".
+  - Rejected: deferring until the Duplicate data shows repeated procedures; variables, automations, a gallery.
+- **34 · Onboarding: one role question, then a per-module welcome** → TV-U17
+  - Who: Maciej, 2026-10-09 (role question) and 2026-10-10 (welcome, with two changes).
+  - Decision: the role question sets defaults only; each module shows a first-open welcome once per person: basics, "Learn more" (up to three clip steps recorded by script) / "Explore on my own", reopenable from ⋯; Tasks' steps: above the line is yours · line things up in Focus · `@` `#` `/`.
+  - Why: completion is highest around three steps; "a feature worth showing doesn't have to be unusual" (so not "Show me what's different"); step 3 should cover all three symbols.
+  - Rejected: modal tours, forced steps, ten-item checklists, roles turning features on or off.
+- **35 · Import: through your AI first, then native importers** → TV-D16, TV-U18
+  - Who: Maciej, 2026-10-09.
+  - Decision: "bring Todoist / Linear / Trello through your AI" right after MCP writes; then Todoist CSV → Trello JSON → Linear/Jira/Asana CSV; old IDs stay findable.
+  - Why: no importer to build per service, and every service with an AI connector works on day one (74).
+  - Rejected: native importers first.
+- **36 · Mobile stays out of scope** → (none)
+  - Who: Maciej, 2026-10-09.
+  - Decision: capture on the phone goes through your AI app (MCP); not mentioned on the pricing page.
+  - Why: desktop-first; phones get their own plan once the desktop app is done (73).
+  - Rejected: —
+- **51 · How an agent's changes are recorded** → TV-D16, TV-F8
+  - Who: Maciej, 2026-10-10.
+  - Decision: no comment per change; every write is an attributed trail row ("Claude, via Alex's key, set due → Fri"); one hand-back summary, kept with the private session until "Post as comment"; comments only when a person asks.
+  - Why: the trail is complete, uneditable and doesn't bury people's comments (Linear's and GitHub's precedent).
+  - Rejected: a comment per change.
+- **52 · Moduo shows agent status, not conversation** → TV-D16 (`agent_sessions`), TV-F8
+  - Who: Maciej, 2026-10-10 (re-asked: "agent work shouldn't be forced public").
+  - Decision: five fields (state, note, step n of m, links, times) in one line under the title and a quiet "Claude · working" on rows; no reply box; private by default with "Show my agent work to teammates"; the trail always says "Alex · via Claude Desktop" (the key's name).
+  - Why: agent tools change monthly, so drawing their questions and diffs means chasing other products forever; one line plus one mark needs no change when the agents change.
+  - Rejected: a question/approval UI in Moduo, transcripts, and the plain "Alex" trail from the prototype.
+- **58 · Cues: "Remind me when…"** → parked
+  - Who: Maciej, 2026-10-10.
+  - Decision: parked; time-based reminders (24) go ahead.
+  - Why: its triggers live in projects, contacts, threads and meetings, which may be rebuilt soon.
+  - Rejected: building cues now.
+- **79 · "Duplicate project…" and project templates** → TV-D15
+  - Who: Maciej, 2026-10-10 (round 2b), with his addition of project templates.
+  - Decision: Duplicate copies sections, statuses and open tasks with dates shifted from a new start; "Save as template" on a project keeps description, sections, statuses and open tasks with offsets; the template is its own editor; yours until shared with the workspace.
+  - Why: repeat projects (next term, season 2, every client onboarding) are a must for PMs and agencies; "if someone always goes through the same phases".
+  - Rejected: Duplicate only, with project templates waiting for evidence.
+
+### 2026-10-10 · Tasks v3 re-plan — the visual rules every module inherits (38–46a)
+
+- **38 · Three readable text levels plus one decorative** → DS-6
+  - Who: Maciej, 2026-10-10 (re-asked "won't fewer greys impair structure?").
+  - Decision: primary, secondary (8.5:1), tertiary (≥4.5:1, a new step) as app-wide tokens, plus one decorative level for things that carry no information; states (done, past, disabled) are treatments, not colours; a lint guard blocks new fades.
+  - Why: the /60, /50, /40 steps measured 2–3.5:1 and were hiding information, not structuring it; Primer, Material and Apple all use three.
+  - Rejected: keeping ad-hoc opacity fades.
+- **39 · One interaction language** → DS-6, TV-U4 (drag visuals)
+  - Who: Maciej, 2026-10-09.
+  - Decision: hover = fill everywhere; one selection tint, focus ring, drop target and drag preview.
+  - Why: the visual audit found surfaces answering the same gesture differently.
+  - Rejected: —
+- **40 · Never capitalise people's words** → DS-6
+  - Who: Maciej, 2026-10-09.
+  - Decision: names appear as typed; every grouping header uses one sentence-case style; small caps only for fixed chrome labels.
+  - Why: small-caps group headers were showing project names (consistency item 7).
+  - Rejected: small-caps headers that carry user text.
+- **41 · One date, time and duration grammar** → DS-6, TV-D14 (`time-format`)
+  - Who: Maciej, 2026-10-09.
+  - Decision: Today · Tomorrow · Mon · Oct 16 · Oct 16, 2027 · 3:00 PM · 45m · 1h 30m · 4h; dates, times and counts never truncate.
+  - Why: the audit found truncated dates in the panel, on cards and in Calendar.
+  - Rejected: —
+- **42 · Titles give way first** → DS-6
+  - Who: Maciej, 2026-10-09.
+  - Decision: meta drops whole items behind "+n", never fragments.
+  - Why: a fragment ("Wed, …") reads as broken.
+  - Rejected: —
+- **43 · Avatars: two initials plus a stable per-person colour** → DS-6
+  - Who: Maciej, 2026-10-09.
+  - Decision: never "M" for "Me".
+  - Why: one initial can't tell teammates apart.
+  - Rejected: —
+- **44 · Density applies to everything** → DS-6
+  - Who: Maciej, 2026-10-09.
+  - Decision: cards, menus, tabs and pills follow the density setting, not only rows.
+  - Why: a dense list beside comfortable menus reads as two apps.
+  - Rejected: —
+- **45 · One chip, one count language** → DS-6
+  - Who: Maciej, 2026-10-09.
+  - Decision: one chip component and one way to show a count ("· 3", never a coloured badge).
+  - Why: seven chip languages exist today (55).
+  - Rejected: —
+- **46 · An accent budget** → DS-6
+  - Who: Maciej, 2026-10-09.
+  - Decision: selection > today/now > done check > queued; queued becomes neutral.
+  - Why: the accent only means something when few things carry it.
+  - Rejected: an accented queue mark.
+- **46a · Text is never rotated** → DS-6, TV-U11, TV-TL1
+  - Who: Maciej, 2026-10-10 (round 2b, following his 53b answer).
+  - Decision: no sideways labels anywhere: folded columns, Timeline lanes, chart axes.
+  - Why: horizontal text reads ~80 % faster than text turned 90° (Yu et al. 2010), worse still with astigmatism.
+  - Rejected: rotated folded-column labels.
+
+### 2026-10-10 · Tasks v3 re-plan — principles and ceilings (37, 47–50, 48a)
+
+- **37 · A performance target: instant at 10,000 tasks** → TV-D11a, TV-D11b
+  - Who: Maciej, 2026-10-09 ("a scale bar? what do you mean?").
+  - Decision: opening a task, searching and switching views under ~200 ms in a 10,000-task workspace; a copy on the device, delta sync, open tasks first, server search, virtualized lists; each code layer evolves, consolidates or rebuilds per the table in REPLAN 37.
+  - Why: today ~10 screens each download every task and stop at 5,000; it decides whether "replace Linear/Jira" holds in month six.
+  - Rejected: a backend from scratch (weeks of migration and permission re-testing for nothing new) and keeping per-screen refetch.
+- **47 · Tasks' bar in the brief** → spec §Scope (PRODUCT_BRIEF §6 edited when the spec lands)
+  - Who: Maciej, 2026-10-09.
+  - Decision: "complete for students, developers, PMs and small teams", with the deliberately-not-built list as non-goals.
+  - Why: a stated ceiling stops the module from drifting toward Jira.
+  - Rejected: —
+- **48 · Principle wording** → spec §Scope
+  - Who: Maciej, 2026-10-09.
+  - Decision: ADHD becomes a design lens, not the target user; "Defaults decide; options are few, named and easy to find."
+  - Why: the research found the ADHD-first framing narrowed who the module was built for.
+  - Rejected: ADHD as the named target user.
+- **48a · ADHD features serve everyone** → every later call states it
+  - Who: Maciej, 2026-10-10 (in his words).
+  - Decision: "The ADHD solutions in our app always have to serve non-ADHD people as well, not work as a trade."
+  - Why: a founding rule; every proposal from here on says whether someone without ADHD would want it.
+  - Rejected: features that help one group at the other's cost.
+- **49 · A trust pass before new features** → TV-P0, TV-D8
+  - Who: Maciej, 2026-10-09.
+  - Decision: REPLAN §7 P0 (search, repeats, parser, won't-do reach, loading states, time saves, notifications, deep links…) comes first.
+  - Why: bugs that lose data or hide tasks undo any new feature.
+  - Rejected: features first.
+- **50 · Named target roles; founder-led sales in, quota reps out** → spec §Scope
+  - Who: Maciej, 2026-10-09 (the role list) and 2026-10-10 (sales).
+  - Decision: the six roles plus researchers and ops generalists; founder-led sales and small-team business development are a target; follow-ups that resurface move from P4 to P3.
+  - Why: Contacts already makes Moduo a light CRM; quota-carrying reps have a mandated CRM with forecasting and dialers Moduo shouldn't chase.
+  - Rejected: sales reps as spillover (the first draft) and chasing Salesforce/HubSpot.
+
+### 2026-10-10 · Tasks v3 re-plan — gaps nobody had named (73–78, 80)
+
+- **73 · Reminders reach you when Moduo is closed: desktop tray plus browser notifications** → TV-D12
+  - Who: Maciej, 2026-10-10 (round 2c).
+  - Decision: the desktop app keeps running in the menu bar when its window closes; opt-in browser notifications on the web; reminders fire in any workspace.
+  - Why: a 4 pm reminder was lost with the laptop shut; too many emails teach people to ignore the important ones.
+  - Rejected: email reminders and a private calendar feed (Google refreshes feeds every 12–24 h and drops alerts); phones get their own plan later.
+- **74 · "Import through your AI" can do what 35 promises** → TV-D16
+  - Who: Maciej, 2026-10-10 (round 2c).
+  - Decision: agents create projects, sections, areas and statuses, file tasks with dates, repeats and tags, keep an "imported from" key, re-run as updates, and "Undo this import" ships on day one; paste-a-list is the no-AI fallback; tested end to end with Claude + Todoist's connector before it's announced.
+  - Why: the cheapest first way in (no importer per service), but call 7's tools only dropped tasks into the Inbox and a second run duplicated everything; it needs only Tasks' own tools, not the other modules.
+  - Rejected: native importers first.
+- **75 · Time you can bill: entries, "Add time…", a report with PDF and CSV** → TV-D14
+  - Who: Maciej, 2026-10-10 (round 2c), with his addition of the PDF.
+  - Decision: every tracked stretch is an entry; "Add time…" with date and note; a report sheet from a project's overview and a client's hub (period · by task or day · totals · 15-minute rounding); teammates' time reaches the owner only with "Share my tracked time with the workspace owner"; Export PDF (one branded printable layout) · CSV; no rates or invoices.
+  - Why: time by client is what lets freelancers drop Toggl or Harvest; a designed document is what gets sent to a client (his years of Jira and Clockify exports); no-surveillance holds through the opt-in.
+  - Rejected: CSV only; invoicing inside Moduo.
+- **76 · One "Time & region" setting for the whole app** → TV-D14 (`profiles.time_zone …`), Settings → General
+  - Who: Maciej, 2026-10-10 (round 2c).
+  - Decision: time zone, week start, 12/24 h and date order, defaulting from the device; a due date is the same date for everyone, times and reminders are moments in each viewer's zone, a repeat rolls over at its assignee's midnight; Calendar's week-start setting moves here; a travel prompt once.
+  - Why: nothing decided whose clock counts (Email forced 24 h, Tasks hard-coded Monday); it's small and should land before the date work spreads.
+  - Rejected: per-module time settings.
+- **78 · When people and projects go away** → TV-U6 (delete), TV-U16 (done/archive prompt), TV-D13 (teams)
+  - Who: Maciej, 2026-10-10 (round 2c).
+  - Decision: removing a member sends Inbox tasks others created back to their creators and the rest to the remover, clears Lead, hands private projects on or to Recently deleted; Done or archive with open tasks asks once "Won't do · Move · Keep"; archived projects never remind or repeat but stay searchable; deleting a project moves only open tasks, with one quiet notice per assignee.
+  - Why: only "their tasks become unassigned" (PRIV-2) was decided; v3 adds private projects, Lead, teams, templates and views that need an owner.
+  - Rejected: fanning every task of a deleted project into private Inboxes silently (20's rule) and #328's radio choice.
+- **80 · One notification table** → TV-D12, spec §13
+  - Who: Maciej, 2026-10-10 (round 2c: "happy to go with your suggestion").
+  - Decision: the spec carries event → who → where → grouped or alone → mute switch; one action on many tasks sends one notice; reminders and check-backs reach you in any workspace; §3's "never changes" line is struck.
+  - Why: each call had decided its own notification on the side, so nobody could check that the whole stays quiet.
+  - Rejected: per-feature notification rules.
+
+### 2026-10-10 · Tasks v3 re-plan — defaults a–u (agent's choices, deferred to by Maciej: "I trust you with them"; confirmed for building; may be reconsidered)
+
+- **a · Undo on every change** → TV-U4, TV-TL2, TV-U12
+  - Decision: every change from a list, board, timeline, key or the bulk bar shows Undo for 8 s and ⌘Z works while it shows; creating many at once undoes as one; Undo never overwrites a teammate's later change.
+  - Why: no confirm dialogs; a wrong drop costs one key.
+  - Rejected: "are you sure?" prompts.
+- **b · Inbox triage keys** → TV-U15
+  - Decision: Accept files and assigns to you; Decline hands it back with a note; "Duplicate of…" merges comments and links then marks Won't do; Snooze hides until a date; 1 · 2 · 3 · H; one key map table covers every v3 concept.
+  - Why: Linear's keys, because A and D already mean Assign and Due.
+  - Rejected: —
+- **c · Several workspaces** → spec §Edge cases
+  - Decision: one workspace with private projects is the intended setup, and onboarding says so; reminders and the Focus timer reach you in any workspace; no "move to another workspace".
+  - Why: cross-workspace moves would need every reference re-checked.
+  - Rejected: —
+- **d · Work sessions and booking links** → spec §18 (Calendar contract)
+  - Decision: scheduled sessions count as busy for your booking links, with a switch per link; teammates see "Busy", never the title.
+  - Why: a planned session is time you've committed.
+  - Rejected: —
+- **e · Bulk actions** → TV-U12
+  - Decision: the bulk bar gains Date (+1 day · Next week · Pick…), Status, Section, Waiting on and Team, under one Undo.
+  - Why: the gap audit found bulk editing stopped at assign and tag.
+  - Rejected: —
+- **f · Getting a list out** → not yet placed in a block (flagged)
+  - Decision: "Copy as text" on any selection, view or project overview; "Export view as CSV" and a print layout; the full export covers every new object.
+  - Why: a list has to paste cleanly into email or Slack.
+  - Rejected: —
+- **g · Capture offline** → TV-D11a
+  - Decision: until full offline, everything opens read-only from the device copy; captures and check-offs queue and send when back ("2 waiting to sync"); other edits say "Offline".
+  - Why: the first step toward offline that the device copy (§6.11) makes cheap.
+  - Rejected: full offline editing now.
+- **h · New Inbox items on top** → TV-U15
+  - Decision: newest first, with manual drag.
+  - Why: the newest thing is usually the one you're about to deal with, as in email.
+  - Rejected: adding at the bottom (Todoist, Things).
+- **i · A quiet hover** → TV-U10
+  - Decision: hover shows only the Focus mark, a date picker in an empty date cell and the late task's fixes.
+  - Why: icons on every hovered row are noise and invite misclicks.
+  - Rejected: a hover toolbar.
+- **j · Status names in Detailed; dates size the column** → TV-U10
+  - Decision: Detailed adds a status-name column; columns drop in a fixed order as the centre narrows; the date column sizes to its widest value.
+  - Why: icons follow the category (53a), so "In review" and "In progress" look identical; dates never truncate (41).
+  - Rejected: —
+- **k · Click the status icon to finish; ⇧S for the menu; `>` `<` nest** → TV-U10
+  - Decision: as stated; ⌘[ and ⌘] stay Back and Forward.
+  - Why: finishing is the most common action, so it gets one click; ⌘[ / ⌘] are browser keys.
+  - Rejected: a status menu on click.
+- **l · No grouping by tag or energy** → TV-U2, TV-U10
+  - Decision: Group by = Section · Status · Priority · Assignee · Team · Date · Project.
+  - Why: a task with three tags would appear three times.
+  - Rejected: —
+- **m · Manual order inside one project only** → TV-U4, TV-U10
+  - Decision: sorting shows "Sorted by due · Back to manual order"; dragging while sorted asks to switch back; cross-project views only sort.
+  - Why: one shared order can't survive two views sorted differently; competitors either block dragging while sorted or lose your order.
+  - Rejected: manual order across projects (#329's version).
+- **n · "+" in each group header, adding at the top** → TV-U10, TV-U11
+  - Decision: a "+" that stays visible and adds with the group's value filled in; same on the Board.
+  - Why: the end of a long group can be hundreds of rows away; the header is always visible.
+  - Rejected: an add row at the bottom.
+- **o · Fixed card widths, hidden empty columns, no WIP limits** → TV-U11
+  - Decision: one Card at 296 / 280 / 264 px by density; status, section and priority columns always show; assignee, team, project and waiting columns hide when empty ("3 hidden"); each column scrolls and virtualizes on its own.
+  - Why: fixed widths stop the board reflowing as you scroll; WIP limits are process tooling for large teams.
+  - Rejected: flexing columns (TV-U1's 280–400 px) and WIP limits.
+- **p · The panel shows the project when nothing is selected** → TV-U13
+  - Decision: inside a project with nothing selected, the Project view; with a task open full-page, the panel shows Project and anything clicked opens there with a back arrow.
+  - Why: the right panel is context (48b), and the project is the context.
+  - Rejected: an empty panel.
+- **q · One activity feed with "All · Comments", no threads** → TV-U13
+  - Decision: comments can be edited and deleted; Waiting on is a list, not a property row.
+  - Why: threads split a small team's conversation; the switch hides the change log when you only want the talk; Waiting on can hold several people.
+  - Rejected: threaded comments.
+- **r · Your calendar shows only your work** → spec §18 (Calendar contract)
+  - Decision: only your own due dates and sessions; unassigned team tasks stay in Upcoming; a session's planned length is never recorded as worked time.
+  - Why: the calendar is your time; a block's length is a plan, not work done.
+  - Rejected: teammates' unassigned tasks on your grid.
+- **s · Unclaimed team tasks are quiet** → TV-D13
+  - Decision: members hear once, grouped by the hour; after 3 days unclaimed, or the day before due, the creator gets one check-back; no round-robin.
+  - Why: owning work stays a human choice.
+  - Rejected: automatic assignment.
+- **t · Any member can create a team; creator, owner or admin deletes** → TV-D13
+  - Decision: as stated; Upcoming leaves out unassigned tasks routed to a team you're not in.
+  - Why: teams only route and hide nothing, so the risk is low; deleting affects others.
+  - Rejected: admin-only teams.
+- **u · References: six types in four forms; two fixes first** → RF-1, TV-D8 (registration on create)
+  - Decision: the per-type table in capture-references-teams.md §6–8 becomes the References spec; tasks register when created, not when first linked; a deleted item reads "Deleted task".
+  - Why: today search and `@` can't find a task until it's linked somewhere; a struck-through title reads as "done".
+  - Rejected: —
+
+### 2026-10-10 · Tasks v3 re-plan — platform (REPLAN §6, the agent's technical calls under /s1)
+
+- **§6.1 · Every create and every field edit is a server op** → TV-D8 (`tasks_op_create`, `tasks_op_update`), TV-D7 (raw grants revoked)
+  - Who: agent (technical call, /s1 §6).
+  - Decision: UI, ⌘⇧K, MCP, import and templates all go through ops that register the entity, re-register on rename, assign the handle and log activity.
+  - Why: fixes search and mentions, gives agents capture, makes handles possible, one attribution path.
+  - Rejected: the module contract's "single-field raw writes for now" clause, which is exactly what left tasks unregistered.
+- **§6.2 · Status, recurrence and next occurrence are computed on the server** → TV-D8 (pg_cron roll-over), TV-D12
+  - Who: agent (technical call, /s1 §6).
+  - Decision: one SQL occurrence function; the pointer moves only in `tasks_op_set_status` and the cron; the client engine previews only.
+  - Why: the reopen bug comes from client catch-up on page load; agents and other devices never saw a roll-over.
+  - Rejected: keeping client catch-up.
+- **§6.3 · The client tolerates statuses it doesn't know; one "is open" rule** → TV-D8
+  - Who: agent (technical call, /s1 §6).
+  - Decision: unknown values render by category and never drop rows; "is open" lives in one place, shipped before any vocabulary change.
+  - Why: today such rows are silently dropped, so a new status would vanish from old builds.
+  - Rejected: changing the vocabulary first.
+- **§6.4 · `due_date` becomes a calendar date; due time is its own field** → TV-D9
+  - Who: agent (technical call, /s1 §6).
+  - Decision: `date` plus optional `due_time`; sessions are rows (`task_sessions`); all moments are `timestamptz`.
+  - Why: a timestamp gives off-by-one days across time zones.
+  - Rejected: a third "start date" on tasks (68a).
+- **§6.5 · One store for dependencies** → TV-D8 (`task_relations` canonical)
+  - Who: agent (technical call, /s1 §6).
+  - Decision: a hub or MCP "blocks" link writes a relation; cycles refused by the existing trigger; duplicate rows cleaned at TV-D7.
+  - Why: today a "blocks" link made from the hub or MCP doesn't block anything.
+  - Rejected: two stores kept in sync.
+- **§6.6 · One shared task store per workspace** → TV-D11a (store), TV-D11b (virtualization)
+  - Who: agent (technical call, /s1 §6).
+  - Decision: an IndexedDB (Dexie) cache per workspace, delta sync by `updated_at`, Realtime merge with echo-skip, open tasks first, server search, one-field rollback, an offline queue; every Tasks, Calendar and Home surface reads from it; TanStack Virtual for lists.
+  - Why: replaces the full reload ~10 surfaces do on mount (37 sets the bar); the first step toward offline.
+  - Rejected: a generic ORM/sync framework (one more runtime) and per-screen refetch.
+- **§6.7 · A minimum client build, checked at boot** → TV-D8 (`app_settings.min_build`), TV-D7 (raised)
+  - Who: agent (technical call, /s1 §6).
+  - Decision: below the minimum the app shows "Update Moduo" and runs read-only.
+  - Why: the next schema reversal then costs one migration instead of three code paths.
+  - Rejected: open-ended shims for every old build.
+- **§6.8 · Manual order lives on the project and its sections** → TV-U4, TV-F6 (Board reorder in Focus disabled)
+  - Who: agent (technical call, /s1 §6).
+  - Decision: `tasks.position` scoped to (project, section); cross-project views sort, never reorder.
+  - Why: as tasks-v2 already says, one order can't serve two views.
+  - Rejected: a per-view order table.
+- **§6.9 · One TV-D7 cleanup for every reversal** → TV-D7 (after ≥2 desktop releases and 14 days past TV-D9)
+  - Who: agent (technical call, /s1 §6).
+  - Decision: status label and value, `due_date` type, `reschedule_count`, `task_time_blocks`, `group_label` → areas, `committed_for`, the owner shim, duplicate dependency rows, MCP aliases and raw grants all go in one migration.
+  - Why: every change before the cleanup adds a shim; expand → migrate → contract holds, nothing dropped before D7.
+  - Rejected: a cleanup per reversal.
+- **§6.10 · One time engine for the whole app** → TV-F6
+  - Who: agent (technical call, /s1 §6).
+  - Decision: Focus, Calendar block focus, the Home pomodoro and the top-bar timer share `features/focus/engine`; saves go through `tasks_op_track_time` from any page.
+  - Why: three clocks ran separately and Focus time was lost when saved from another page (P0 #6).
+  - Rejected: per-surface clocks.
+- **§6.11 · Speed at 10,000 tasks, in detail** → TV-D11a, TV-D11b (`tests/perf/tasks-10k.spec.ts`, 200 ms budget in CI)
+  - Who: agent (technical call, /s1 §6).
+  - Decision: one local copy per workspace shared by every module, delta sync on open and reconnect, lazy done/won't-do/backlog, server search, virtualised and memoised rows, per-field retry or rollback, a CI fixture against the budget.
+  - Why: 37's target has no visible feature; this is what makes it hold.
+  - Rejected: optimising screen by screen.
+- **§6.12 · Status tolerance before Backlog** → superseded
+  - Who: agent (technical call, /s1 §6).
+  - Decision: void — it applied only if 53a was declined; with per-project statuses, old builds read the category in today's status column, so Backlog doesn't wait for a desktop release.
+  - Why: 53a was accepted on 2026-10-10.
+  - Rejected: holding Backlog for a release train.
+
+### 2026-10-10 · Tasks v3 re-plan — the six paused PRs reconciled (group L, 97, 98)
+
+- **L · Verdicts for #315, #327, #330, #329, #328, #323** → blocks 1, 2, 6, 7, 13, 22–23
+  - Who: agent's choices, deferred to by Maciej, 2026-10-10 (confirmed for building; may be reconsidered).
+  - Decision: #315 (TV-D5) finish and merge first with a window-focus guard; #327 (AT-2) finish and merge; #330 (TV-U2), #329 (TV-U4) and #328 (TV-U6) re-scoped to the decided calls (83, 84, default m, 78, 30); #323 (TV-F2) closed and salvaged into TV-F6/F7, its unapplied `focus_runs` migration re-cut to Timer modes first.
+  - Why: #315's migrations are already on prod and it's the first brick of the shared store; #323's screen was built to the comp 61–66 replace, while its run record, takeover and claims carry.
+  - Rejected: merging #323 as is; applying its migration unchanged.
+- **L · Display wording: "Rows: Standard · Detailed" and "Lanes"** → TV-U2, TV-U11
+  - Who: agent's choice, deferred to by Maciej (confirmed for building; may be reconsidered).
+  - Decision: the preset is "Rows", swimlanes are "Lanes".
+  - Why: one word shouldn't mean two things.
+  - Rejected: "Density" or "Columns" for either.
+- **L · Dropping a task on the Inbox row does nothing** → TV-U4
+  - Who: agent's choice, deferred to by Maciej (confirmed for building; may be reconsidered).
+  - Decision: the Inbox sidebar row is not a drop target.
+  - Why: a shared task would quietly become private (20).
+  - Rejected: drop-to-unfile.
+- **L · DS-5's sweep of the other modules is superseded; only its lint guards stay** → DS-6
+  - Who: agent's choice, deferred to by Maciej (confirmed for building; may be reconsidered).
+  - Decision: no repo-wide primitive migration now.
+  - Why: those modules are rebuilt after Tasks and would be swept twice.
+  - Rejected: sweeping now.
+- **97 · Resume #315 and #327 now, before the spec; skip the ultra review for #315** → blocks 1 and 2
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10 (he moved on to the spec without objecting; confirmed for building; may be reconsidered).
+  - Decision: each finished in its own session with the validator, `/code-review high` and the security scan; #315's Tier 2 ultra review is skipped.
+  - Why: both are independent of the re-plan, and #315 brings the repo back in line with prod; its migrations are already live, so an ultra review could only find problems after the fact.
+  - Rejected: holding both until the spec landed.
+
+### 2026-10-10 · Tasks v3 re-plan — carried from the research round (RESEARCH 1–8, 11, 12; decided 2026-10-09)
+
+- **1 · "Complete but calm" replaces "quiet and minimal"** → spec §Scope, §19 (PRODUCT_BRIEF §7 edited when the spec lands)
+  - Who: Maciej, 2026-10-09.
+  - Decision: quiet = low visual weight, no alarm colours, no debt framing; the default shows everything needed for the next decision, nothing hidden without a count, grouping does the calming.
+  - Why: relevant load helps, clutter is visual variety not item count, "too sparse" is a documented switching reason.
+  - Rejected: fewer facts as the way to calm.
+- **2 · Row presets: Standard and Detailed** → TV-U2 (Display → Rows), TV-U10
+  - Who: Maciej, 2026-10-09.
+  - Decision: one preset for which properties show on rows, separate from Density; Detailed adds handle, project › section, tag names, estimate/time, created/updated and sortable headers; user-level default, overridable per view.
+  - Why: Asana, ClickUp and Akiflow users ask for exactly this pair; user-set static presets beat adaptive ones.
+  - Rejected: a third Calm preset (only if dogfooding asks) and a fourth Table view.
+- **3 · Task handles: workspace key + permanent number** → TV-D8 (`workspaces.task_key`, `tasks.number`)
+  - Who: Maciej, 2026-10-09.
+  - Decision: `MOD-142`; key from the workspace name, editable, old key kept as an alias; no zero-padding; numbers never reused; moving never changes a handle; free on every plan; never grants access.
+  - Why: people say and search it, agents mix up fewer IDs than UUIDs, developers put it in branch names.
+  - Rejected: per-project prefixes (every capture lands in Inbox and moves at triage, leaving stale references) — the hybrid prefix is a possible later display option.
+- **4 · Handles: hidden on rows by default, everywhere else always** → TV-D8, TV-U10, RF-1 (text behaviour)
+  - Who: Maciej, 2026-10-09.
+  - Decision: off in Standard, on in Detailed; always in the detail header, ⌘K search and deep links; every MCP tool accepts the handle or the UUID; a typed handle auto-links in text.
+  - Why: rows stay calm; references need to resolve wherever they're typed.
+  - Rejected: a fourth glyph for handles in text.
+- **5 · "Waiting on…" is a field, not a status** → TV-D10 (`task_waiting`), TV-F8 (In flight)
+  - Who: Maciej, 2026-10-09 (the field route).
+  - Decision: a task waits on a person, contact, email thread, agent, link or note, with an optional check-back; visible on rows, in Filter/Group by, the contact's hub and MCP; clears itself where it can; In flight becomes the run's view of hand-offs.
+  - Why: works with any status and needs no vocabulary change; a cue-based reminder beats a timed one for ADHD; agents need it.
+  - Rejected: a fifth "waiting" status (contract change, old builds don't know the value) and a separate "In review" status.
+- **6 · Agents are delegates; a human stays accountable** → TV-D16
+  - Who: Maciej, 2026-10-09.
+  - Decision: the assignee stays human; an agent shows as waiting-on with a session state; one notification at needs you / ready / failed; attribution "Claude, via Maciej's key".
+  - Why: Linear's delegate model, GitHub co-authorship and Jira's private-until-publish all keep a human accountable with exactly one loud moment.
+  - Rejected: agents as assignees.
+- **7 · Agents write tasks: pulled ahead from MCP-1** → TV-D16
+  - Who: Maciej, 2026-10-09.
+  - Decision: a server create op, then capture/update/subtasks/dependencies/comment tools, output schemas and annotations, a read-only preset, and three prompts (Plan my day, Weekly review, Break this down).
+  - Why: every used agent workflow starts with creating tasks (syllabus → dated tasks, meeting notes → tasks).
+  - Rejected: waiting for the rest of MCP-1.
+- **8 · The client loop: project ↔ client, project overview, time by client** → TV-U16, TV-D14
+  - Who: Maciej, 2026-10-09 (carries over to "project").
+  - Decision: link a project to a contact or company in one gesture; a project overview as a right-panel view (progress, waiting, due this week, time, files, client, activity); the client's hub shows their projects, open tasks and time; time export for invoicing elsewhere.
+  - Why: client work is where the spine is structurally ahead; no task tool links task + contact + email + time.
+  - Rejected: "at risk" alarms on the overview; a finance module.
+- **11 · A client status link (no login)** → parked
+  - Who: Maciej, 2026-10-09.
+  - Decision: park until 5 and 8 have landed.
+  - Why: it needs a PERM review, a Tier 2 security review and the waiting state first, or the page has nothing honest to say.
+  - Rejected: building it in this wave.
+- **12 · Team load widget on Home** → TV-H1
+  - Who: Maciej, 2026-10-09.
+  - Decision: one row per member — queue size and lined-up time, in progress, waiting, due this week; nothing about runs or time per person.
+  - Why: show ownership, not surveillance; claims already make queues visible, so no new exposure.
+  - Rejected: per-person time or run stats.
+
+## Earlier entries (tasks-v2 and before)
+
 - **2026-10-09 · TV-U1: rows get fixed right-hand columns and quiet counts, completed tasks hide behind a "N completed · show" line, and board cards carry one meta line** (`specs/tasks-v2.md` block 9; no migration).
   - **Row anatomy:** checkbox · title · quiet counts right after it (`# N` tags, subtasks done/total, blocked, repeats; muted, hidden at zero), then fixed columns: priority · [energy] · date · assignee · queue. Each cell has a set width (`w-icon-sm`, `w-19`, `w-icon`), so the columns line up at every density. `rowColumns` (`src/features/tasks/row-layout.ts`) decides them once per list, from the listed rows and their subtasks (expanding a parent never pops a column in): a column empty on every row collapses. Read-only, the queue column shows only when something is queued or claimed.
   - **One date column:** the scheduled time or the due date, whichever comes first by day; on the same day the scheduled time wins. A time today shows as the time; otherwise Today / Tomorrow / Yesterday, a weekday for the coming week, else the date. A clock marks a scheduled time; a passed one is the quiet drift emphasis. The tooltip names both dates. A click opens the editor for the date shown; `s` / `d` and the menu open either one in the same cell. An empty cell holds its place but isn't clickable.

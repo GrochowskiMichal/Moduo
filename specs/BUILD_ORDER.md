@@ -103,52 +103,87 @@ _Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
 
 _Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
 
-## Tasks v2 — dogfood rework · [`specs/tasks-v2.md`](./tasks-v2.md) + [`specs/design-state-layer.md`](./design-state-layer.md) + [`specs/attachments.md`](./attachments.md)
+## Tasks v3 — the re-planned module · [`specs/tasks-v3.md`](./tasks-v3.md)
 
-> **Planned 2026-10-07 (`/s1`, from [`.design/tasks-dogfood/REVIEW.md`](../.design/tasks-dogfood/REVIEW.md)).**
+> **Planned 2026-10-10 (`/s1`, the deep re-plan).** Supersedes [`specs/tasks-v2.md`](./tasks-v2.md): v2's blocks 1–10 landed and stay (except TV-D5, v2 block 8, still open, which finishes as block 1 here); v2's blocks 11–21 are re-scoped per the spec's "Carried from v2" paragraph, mapping logged in [BUILD_LOG.md](./BUILD_LOG.md). Companion specs: [`attachments.md`](./attachments.md) (AT-2 = block 2; AT-3 stays there, listed after block 19) and [`design-state-layer.md`](./design-state-layer.md) (DS-5 folded into DS-6 = block 8). Decisions: [docs/decisions/tasks.md](../docs/decisions/tasks.md).
 > - **Land on `maciej` only:** no pushes or merges to `develop` until Maciej says so. Mike is rebuilding on `develop`, so this overrides the standing develop authorization for these blocks.
-> - **DoR status:** ✅ means ready now; the rest follow their dependencies. All designer calls are answered (2026-10-08).
-> - **Order:** top to bottom, every dep listed above its dependents. The lane table below shows what can run at once.
+> - **DoR status:** ✅ means ready now; the rest follow their dependencies. Ids = `tasks-v3 block N` (the spec table's row numbers); PERM-W and SH-0 are external blocks with their own sessions.
+> - **Order:** top to bottom, every dep listed above its dependants. The lane table below shows what can run at once. Migrations (spec §Assumptions #24): local stack first (`bun run local:reset`), prod only on a release train with Maciej's OK, function bodies probed before `CREATE OR REPLACE`; nothing is dropped before TV-D7.
 
-- [ ] **TV-D5 — Live updates (Realtime)** · tasks-v2 block 8 · deps: TV-D2 · lane data · adds tables to the `supabase_realtime` publication
-- [ ] **TV-F2 — Queue run (line-up, run, Now/Up next, claims "is on this")** · tasks-v2 block 11 · deps: TV-F1, TV-D2, TV-D3, DS-2 · lane focus · migration (`focus_runs`)
-- [ ] **TV-F3 — Pomodoro per run, break, summary, empty, Home pomodoro widget** · tasks-v2 block 12 · deps: TV-F2 · lane focus
-- [ ] **TV-U2 — Toolbar, Filter, Display, search** · tasks-v2 block 13 · deps: DS-4, TV-U1, TV-D4 · lane tasks-ui
-- [ ] **TV-U4 — Drag and drop (reorder vs nest, sidebar drops, cross-group)** · tasks-v2 block 14 · deps: TV-U1, DS-4, TV-D4 · lane tasks-ui
-- [ ] **TV-U5 — Multi-select, bulk actions, keyboard, `?` sheet** · tasks-v2 block 15 · deps: TV-U4 · lane tasks-ui
-- [ ] **TV-U6 — Sidebar: bucket colours/reorder, archive, delete-with-tasks, Recently deleted** · tasks-v2 block 16 · deps: DS-3, TV-D4, AT-1 · lane tasks-ui · migration (`buckets.color/archived_at`, batch ids) · note: TV-Q1 hides a deleted bucket for the whole session (`src/features/tasks/hidden-buckets.ts`), so a Restore must call `unhideBucket` or rework that store
-- [ ] **TV-U7 — Capture v2 (`#tag`, pills, queue switch, filter seed)** · tasks-v2 block 17 · deps: DS-2, TV-T1, TV-D2, TV-U2 · lane tasks-ui
-- [ ] **TV-F4 — In flight (hand-off, check-backs, linked waits)** · tasks-v2 block 18 · deps: TV-F3, TV-U3 · lane focus · migration (`focus_in_flight`)
-- [ ] **TV-F5 — Calendar & Home on one engine** · tasks-v2 block 19 · deps: TV-F2, TV-D3 · lane focus
-- [ ] **AT-2 — Upload pipeline + panel attachments + viewer** · attachments block 2 · deps: AT-1, TV-U3 · lane attachments
-- [ ] **AT-3 — Attachments everywhere + Settings → Storage** · attachments block 3 · deps: AT-2, TV-U1, TV-U7 · lane attachments
-- [ ] **TV-U8 — Saved views** · tasks-v2 block 20 · deps: TV-U2, TV-U6 · lane tasks-ui · migration (`task_views`)
-- [ ] **DS-5 — Sweep: NavRow + state layer in every module, lint guards** · design-state-layer block 5 · deps: DS-3, DS-4 · lane design
-- [ ] 🔴 **TV-D7 — Contract cleanup (drop legacy columns, view, shims, MCP aliases)** · tasks-v2 block 21 · deps: all TV-* above + ≥2 desktop releases and 14 days after TV-D3 ships
-- [ ] **GR-0 — `/s1` the app-wide reference grammar (`@` / `#` / `/`)** · own spec, not written yet · deps: — · `#tag` in text = Link (decided 2026-10-08)
+- [ ] **PERM-W — The private write-checks branch** · external, own session · deps: — · lands (prod first, then PR) before TV-D10 touches `buckets`; its migration timestamp precedes TV-D9's (spec §Assumptions #25)
+- [~] **SH-0 — Help menu + Focus timer in the top bar** · external, own session, running · deps: — · lands before TV-F7
+- [ ] **TV-D5 — Live updates (Realtime)** ✅ · tasks-v3 block 1 · deps: — · lane data · finish #315: merge as is + the window-focus guard that stops the client repeat catch-up (P0 #2 path), docs conflicts resolved; its two migrations are already on prod
+- [ ] **AT-2 — Attachments: upload pipeline + panel + viewer** ✅ · tasks-v3 block 2 (attachments block 2) · deps: — · lane attachments · finish #327: shared drop-highlight fix, validator + review + Tier 2 (contracts file), Finder-drop check, merge
+- [ ] **TV-P0 — Trust pass, client side** ✅ · tasks-v3 block 3 · deps: — · lane ui · parser words/5 PM/date+repeat/⌘A; the "Won't do" label and Reopen in the panel (value at D7; the list is Filter → Status in TV-U2); skeletons + "No tasks match"; notifications name the task; parent moves subtasks; New from Focus queues; unseen project never "Inbox" + "Private item" deep link; no "Rescheduled N×"; date popovers save once + trail; avatar initials + one date grammar; no truncation (P0 #3–5, 7–12, 15–16)
+- [ ] **SH-1 — Shell: panel dropdown, capture shell, motion** ✅ · tasks-v3 block 4 · deps: — · lane shell/kit · right-panel view registry + "Details ▾" title dropdown + "← item" stack replacing `RightPanelSwitcher`, panel min 280 px; the app capture shell with a type registry (Task registered, ⌘1–7 switching); motion tokens + four patterns + reduced motion; Calendar/Email/Notes/Contacts keep working through the registry
+- [ ] **TV-D8 — Server ops, registry, handles, recurrence, tolerance** · tasks-v3 block 5 · deps: TV-D5 · lane data · `tasks_op_create` / `tasks_op_update` for every field edit, registration + rename in the entities registry, `workspaces.task_key` + `tasks.number` (handles), server-side status/recurrence/next-occurrence + pg_cron roll-over, one dependency store ("blocks" always blocks), MCP list paging, client status tolerance + one "is open" rule, minimum client build check · migrations `tasks_ops_registry_handles`, `tasks_recurrence_server`
+- [ ] **TV-U2 — Toolbar, Filter, Display, search** · tasks-v3 block 6 · deps: TV-P0 · lane ui · re-scope #330: keep toolbar/Filter/search/Display; Group by set + one Date grouping; My tasks by status; "To do"/"Won't do" labels; "Group by" never "Columns"; Rows Standard · Detailed; the red test
+- [ ] **TV-U4 — Drag and drop** · tasks-v3 block 7 · deps: TV-U2 · lane ui · re-scope #329: the two drop planners + shared drag visuals; validator MAJOR/MINORs; manual order inside one project only + sorted-note action; Undo on every drop; #330's sort type; Inbox row drop does nothing
+- [ ] **DS-6 — North-star kit, fix list, guards** · tasks-v3 block 8 (design-state-layer; DS-5 folded in, guards only) · deps: SH-1 · lane shell/kit · Row · Card · GroupHeader · MetaCount · PropertyRow/Value · CollectionHeader · NavRow · Toolbar · FilterBar/DisplayMenu · Chip · Picker pill · EmptyState · Feed · DateField · Progress · Avatar standardised with stories at three densities; the §5.1 fix list; lint guards for rotated text and small-caps user words; DS-5's other-module sweep retired
+- [ ] **TV-D9 — Expand I: statuses, completion, dates** · tasks-v3 block 9 · deps: TV-D8 · lane data · `project_statuses` + `tasks.status_id` (legacy `status` mirrored to the category), workspace default statuses in settings, `tasks.completed_at/completed_by` + per-cycle history, `due_date` → date + `due_time`, late state server flag, backfill, old-build mapping · migrations `project_statuses`, `tasks_completion_due_date`
+- [ ] **TV-D10 — Expand II: areas, projects, sections, sessions, reminders, waiting, teams** · tasks-v3 block 10 · deps: TV-D9, PERM-W · lane data · `areas` (from `group_label`), project fields, `sections` + `tasks.section_id`, `task_sessions`, `reminders`, `waiting_on`, `teams` + `team_members` + `tasks.team_id` + team default project, `tasks.imported_from`; ops for each; "bucket" aliases kept · migrations `areas_projects_sections`, `task_sessions_reminders_waiting`, `teams`
+- [ ] **TV-D11a — The shared store** *(large)* · tasks-v3 block 11 · deps: TV-D5, TV-D8, TV-D9 · lane data · one store per workspace: IndexedDB cache, open-tasks-first load, delta sync by `updated_at`, Realtime merge (from TV-D5), echo skip, one-field rollback, offline read-only + queued captures/check-offs; every Tasks surface and the Calendar/Home widgets read from it; the ~10 per-screen fetches deleted
+- [ ] **TV-D11b — Virtualization + the 10k fixture** · tasks-v3 block 12 · deps: TV-D11a · lane data · virtualized List/Board columns/Timeline rows (TanStack Virtual), memoised rows, server search; the 10,000-task fixture + `tests/perf` in CI with the 200 ms budget
+- [ ] **TV-U6 — Sidebar v3** · tasks-v3 block 13 · deps: TV-U2, TV-D10 · lane ui · re-scope #328: projects/areas/Pinned/Views groups, hairline, collapsible, no glyphs, Customize sidebar, Pin, colours, reorder, archive, delete per 78 (open tasks → assignees with one notice; batch to Recently deleted; Restore), Archived + Recently deleted in ⋯, "Open at" removed, the word "project" everywhere · note: TV-Q1 hides a deleted bucket for the whole session (`src/features/tasks/hidden-buckets.ts`), so a Restore must call `unhideBucket` or rework that store
+- [ ] **TV-U10 — List v3** · tasks-v3 block 14 · deps: DS-6, TV-D11a, TV-D11b, TV-U4 · lane ui · Standard/Detailed anatomy on the kit Row, sortable headers, sticky GroupHeaders with "+" at the top, section grouping default inside a project, folded Backlog/completed lines, hover rule, status-icon completes + ⇧S + `>`/`<`, states (skeleton, empty filter, read-only, offline)
+- [ ] **TV-U11 — Board v3** · tasks-v3 block 15 · deps: TV-U10 · lane ui · status default + "+ Add status"/"+ Add section", per-project status columns, folded button, fixed-width Card, hidden empty columns, lanes, cross-project category columns, per-column virtualization, one context menu
+- [ ] **TV-U12 — Multi-select and the bottom-bar mode pattern** · tasks-v3 block 16 · deps: TV-U10, SH-1 · lane ui · selection model (⇧/⌘ click, ⇧↑↓), the bar's mode row Complete · Focus · Assign · Tag · Date · Delete · More ▾ + "n selected · Esc" (replacing the bar's centre while selecting), the panel's "n tasks · Mixed" editor, one Undo, bulk Date/Status/Section/Waiting/Team
+- [ ] **TV-U13 — Detail panel v3 + full page** · tasks-v3 block 17 · deps: DS-6, TV-D9, TV-D10, SH-1 · lane ui · anatomy §9 on the kit, always/+ properties, folded description with counts, subtasks inline + open-with-back-arrow, Linked cards, agent session line slot, one feed with All · Comments, edit/delete, six reactions, Project view when nothing selected, full-page mode, tombstone/Private item/read-only states; pickers incl. repeat picker + summary line
+- [ ] **RF-1 — References** *(large)* · tasks-v3 block 18 (GR-0 folded in and retired) · deps: TV-D8, SH-1 · lane references/capture · the primitive: link/chip/card/hover for task · email · contact · note · event · project, "Show as", live updates, "Deleted …", "Private item" with no leakage, lazy cached previews, open-in-panel + ⌘-click; the prose grammar `@` `#` `/` incl. `/today` date chips (`#tag` in text = Link, decided 2026-10-08); registration-on-create + tombstone fixes
+- [ ] **TV-U14 — Capture v3** · tasks-v3 block 19 (TV-U7 superseded) · deps: RF-1, TV-D10, SH-1 · lane references/capture · ⌘⇧K → Task · Inbox, ⌘N/`c` → here, destination row, four pills + More, token highlighting + the leave-the-title rule, `@team` routing with default project, "From:" chip, subtasks inline, paste-a-list (≤500, one Undo), offline queue, `/template` hook
+- [ ] **AT-3 — Attachments everywhere + Settings → Storage** · attachments block 3 (stays as specced there) · deps: AT-2, TV-U14 · lane attachments · row/card drop targets, capture paste chip, 📎 mark on every surface, Settings → Storage
+- [ ] **TV-U15 — Upcoming, Inbox, My tasks, All** · tasks-v3 block 20 · deps: TV-U10, TV-D10 · lane ui · Upcoming rows + day headers + drag-reschedule + coverage rule; Inbox newest-first + source chips + triage keys 1·2·3·H + zero state; My tasks team block + status groups; All by area/project; Won't do list
+- [ ] **TV-U8 — Saved views** · tasks-v3 block 21 · deps: TV-U2, TV-U6 · lane ui · migration `task_views` · re-scope: `task_views` personal + synced, Views group in the sidebar only, save/rename/delete, `?view=` (no project tabs)
+- [ ] **TV-F6 — Focus salvage + one time engine** · tasks-v3 block 22 · deps: TV-D9, TV-D11a · lane focus · from #323: the run record re-cut to Timer: Per task · Pomodoro · Off, claims "is on this", cross-device takeover, run rules, capture default (P0 #9); one time engine app-wide so saves work from any page (P0 #6); the Calendar's block focus and Home pomodoro on it (TV-F5 folded in) · migration `focus_runs` (re-cut; replaces #323's unapplied file)
+- [ ] **TV-F7 — Focus screen v3** *(large)* · tasks-v3 block 23 · deps: TV-F6, TV-U13, SH-1, SH-0 · lane focus · the sidebar rename, "Focus ⋯" header, Now card with one timer pill / header Pomodoro pill / none, Pause in the pill, Stop in ⋯ with Undo, ⋯ menu, subtasks open in the panel + ⇧F + ⏎, Up next with dividers, the done line, the empty state with today's rows, ⇧F from any task, Timer settings
+- [ ] **TV-F8 — Along the way, meeting divider, pace, In flight view** · tasks-v3 block 24 · deps: TV-F7, RF-1 · lane focus · the between-tasks offer + three-Not-nows rule + the switch, "Arrange by project", the meeting divider, usual pace, In flight as the panel's second view with check-backs (TV-F4 reshaped), agent session line rendering
+- [ ] **TV-TL1 — Timeline rebuild I** *(large)* · tasks-v3 block 25 · deps: TV-D11b, TV-D10, TV-U10 · lane timeline · rows by scope (projects → expand → tasks; sections + tasks inside a project), points/hollow/late/done, bars solid/outlined with segments, bands and diamonds on section rows, sticky resizable name column, two-tier header + Today pill, grid + weekend tint, Week · Month · Quarter · Year + ⌘-scroll, endless virtualized scroll, Display menu, Due per week, empty state
+- [ ] **TV-TL2 — Timeline interactions** · tasks-v3 block 26 · deps: TV-TL1 · lane timeline · drag point/diamond/bar, click-to-create, multi-move, edge scroll, Undo, keyboard (↑↓ ⌥←→ ⇧ D T Space ⏎), dependency lines for selected + Show all + "Also move the 3", 68b contradictions, "No date · n" panel view, old tray removed
+- [ ] **TV-D12 — Recurrence a–i, reminders, notifications** · tasks-v3 block 27 · deps: TV-D9, TV-D10 · lane server features · RRULE parity + after-completion + due/scheduled together + history + subtask reset + ghosts + move-one/change-pattern; reminder scheduling (pg_cron) + channels: desktop keeps running in the menu bar (tray / close-to-tray) + web push (VAPID keys, an Edge Function sender, service worker) + the bell; the §13 notification table as one generator with mute switches; backlog cancels reminders · migrations `notifications_v3`, `reminders_push`
+- [ ] **TV-D13 — Teams: routing, marks, settings** · tasks-v3 block 28 · deps: TV-D10, TV-D12 · lane server features · Settings → Members → Teams (create/membership/delete rule), team marks, routing ops (TV-U15 wires the My tasks claim block against them), filters/grouping by team, `@Team` digest, unclaimed check-backs, member-leaves rules · migration `teams_routing`
+- [ ] **TV-D14 — Time entries, report, Time & region** · tasks-v3 block 29 · deps: TV-D9 · lane server features · "Add time…" + own entries list; the share switch; the report sheet (project overview + client hub) with PDF (print layout + Tauri/browser print-to-PDF) and CSV; Settings → General → Time & region used by every module + travel prompt; Copy as text / Export view as CSV / print layout / full export (default f) · migrations `time_entries_add`, `profiles_time_region`
+- [ ] **TV-D15 — Templates and Duplicate project** · tasks-v3 block 30 · deps: TV-D10, TV-U13, TV-U14 · lane references/capture · task templates (keep/drop rule, template-as-editor, `/template`), project templates, "Duplicate project…" with date shift, sharing rule · migration `templates`
+- [ ] **TV-D16 — Agents and MCP v3** · tasks-v3 block 31 · deps: TV-D8, TV-D10, TV-D13 · lane server features · the tool surface in spec §Assumptions #14 (create/update/file/status by category or name/assign/team/sessions/session status/import keys/re-run update/undo import/paging), scopes, "via <key>", private sessions + the share setting, the AI-import end-to-end test with Todoist, connector docs refreshed · migrations `imports`, `agent_sessions`
+- [ ] **TV-H1 — Home widgets for Tasks** · tasks-v3 block 32 · deps: TV-D11a, TV-D13, TV-D14 · lane server features · Tasks widget = Focus/Open; time widget on task entries; team load; Upcoming widget — all on the shared store
+- [ ] **TV-U16 — Project overview, archive/done prompts, departures** · tasks-v3 block 33 · deps: TV-U6, TV-U13, TV-D14 · lane ui · the Project panel view (progress, time, files, waiting, activity, "Done this month"), Done/archive-with-open-tasks prompt, archived stays searchable, member-removal hand-offs
+- [ ] **TV-U17 — Onboarding and welcome** · tasks-v3 block 34 · deps: TV-U15, TV-F7 · lane ui · the role question + defaults/seeds, Tasks' welcome (three steps, clips recorded by script), reopen from ⋯
+- [ ] **TV-U18 — Native importers** · tasks-v3 block 35 · deps: TV-D16 · lane server features · Todoist CSV → Trello JSON → Linear/Jira/Asana CSV, mapping rules, old ids, "imported from", undo
+- [ ] 🔴 **TV-D7 — Contract cleanup** · tasks-v3 block 36 · deps: all of the above + ≥2 desktop releases and 14 days after TV-D9 ships · lane data (last) · drop the legacy `status` mirror and values, the old `due_date`, `scheduled_at`, `duration_minutes`, `time_spent_seconds`, `committed_for`, `commit_order`, `reschedule_count`, `task_time_blocks`, `group_label`, the owner shim, duplicate dependency rows, MCP aliases (`tasks_today`, `tasks_commit`, `tasks_list_buckets`…), raw write grants; the minimum build raised (§6.9) · migration `tasks_v3_contract`
 
-_Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
+_Finished blocks of this section (and the v2 blocks that landed): [BUILD_LOG.md](./BUILD_LOG.md)._
 
-### Tasks v2 lanes (parallel once merged into `maciej`)
+### Tasks v3 lanes (parallel once merged into `maciej`)
+
+**By id** (the spec's suggestion): *data* D5 → D8 → D9 → D10 → D11a → D11b · *shell/kit* SH-1 → DS-6 · *ui* P0 → U2 → U4 → U6 → U10 → U11 → U12 → U13 → U15 → U8 → U16 → U17 · *references/capture* RF-1 → U14 → D15 · *focus* F6 → F7 → F8 · *timeline* TL1 → TL2 · *server features* D12 → D13 → D14 → D16 → H1 → U18 · **D7 last**. PERM-W and SH-0 run in their own sessions. The ui lane waits at U6 for the data lane (D10, which needs PERM-W) and at U10 for DS-6 + D11b.
 
 | Once merged into `maciej` | Ready to run in parallel | Width |
 | --- | --- | --- |
-| *(start)* | **TV-Q1** · **TV-F1** · **DS-1** · **TV-D1** · **AT-1** | 5 (recommend 3–4 live at once) |
-| DS-1 | **DS-2** | 1 |
-| TV-D1 | **TV-D2** · **TV-T1** (+ **TV-D3** once TV-F1 is in) | 2–3 |
-| DS-2 (+ TV-Q1) | **DS-3** · **DS-4** | 2 |
-| TV-D2 + DS-3 | **TV-D4** · **TV-D5** | 2 |
-| DS-2, D1, D3 | **TV-U3** | 1 |
-| TV-D4 | **TV-U1** → then **TV-U2** · **TV-U4** | 2 |
-| F1, D2, D3, DS-2 | **TV-F2** → **TV-F3** → **TV-F4** · **TV-F5** | 1–2 |
+| *(start)* | **TV-D5** · **AT-2** · **TV-P0** · **SH-1** (+ **PERM-W**, **SH-0** in their own sessions) | 4 (recommend 3 live at once) |
+| TV-D5 | **TV-D8** | 1 |
+| SH-1 | **DS-6** | 1 |
+| TV-P0 | **TV-U2** → **TV-U4** | 1 |
+| TV-D8 (+ SH-1) | **TV-D9** · **RF-1** | 2 |
+| TV-D9 (+ PERM-W) | **TV-D10** · **TV-D14** | 2 |
+| TV-D5, D8, D9 | **TV-D11a** → **TV-D11b** | 1 |
+| TV-D10 + U2 | **TV-U6** → **TV-U8** | 1 |
+| TV-D9, D10 | **TV-D12** | 1 |
+| DS-6, D11b, U4 | **TV-U10** → **TV-U11** · **TV-U12** | 1–2 |
+| DS-6, D9, D10, SH-1 | **TV-U13** | 1 |
+| RF-1, D10, SH-1 | **TV-U14** → **AT-3** · **TV-D15** (needs U13 too) | 1–2 |
+| U10, D10 | **TV-U15** → **TV-D13** (needs D12 too) → **TV-D16** → **TV-U18** | 1 |
+| D9, D11a | **TV-F6** → **TV-F7** (needs U13 + SH-0) → **TV-F8** (needs RF-1) | 1 |
+| D11b, D10, U10 | **TV-TL1** → **TV-TL2** | 1 |
+| D11a, D13, D14 | **TV-H1** | 1 |
+| U6, U13, D14 · U15, F7 | **TV-U16** · **TV-U17** | 2 |
+| everything + ≥2 desktop releases + 14 days after D9 | 🔴 **TV-D7** | 1 |
 
-**Tasks v2 serialization points** (they share files, so expect small merges if run together):
-- **`src/lib/runtime.web.ts` + `runtime.types.ts`** — D1, D2, D3, T1, AT-1, F2.
-- **`src/features/tasks/hooks/use-tasks-module.ts`** — Q1, D1, D2, D3, T1, D4.
-- **`task-row.tsx` / `task-card.tsx`** — Q1, D1, D4, U1.
-- **`bucket-rail.tsx`** — Q1, DS-3, U6.
-- **`tokens.css` / `global.css`** — DS-1, DS-2.
-- **Migrations** — D1, D2, D3, F2, F4, U6, U8, AT-1, all with distinct timestamps. Never two sessions altering `tasks` at once: D1, D2 and D3 are sequential for that reason.
+**Tasks v3 serialization points** (they share files, so expect small merges if run together):
+- **Migrations** — D8, D9, D10, D12, D13, D14, D15, D16, F6, D7 (file names in spec §Assumptions #24), distinct timestamps, all after PERM-W's. Never two sessions altering `tasks` or `buckets` at once: D8 → D9 → D10 → D12 are sequential for that reason.
+- **`src/lib/runtime.web.ts` + `runtime.types.ts`** — D5, D8, D9, D10, D11a, D12, D13, D14, D15, D16, F6, AT-2.
+- **`src/features/tasks/ui/tasks-plan-view.tsx`** — P0, U2, U4, U6, U10, U11, U12, U15, TL1.
+- **`src/features/focus/`** — SH-0, F6, F7, F8.
+- **Shell registries** (`src/lib/panel-registry.ts`, `src/lib/capture-registry.ts`) — SH-1 creates them; U13, U14, F8 and AT-3 register into them.
+- **`tokens.css` / `global.css`** — SH-1 (motion tokens), DS-6.
 
 ## Brand system · [`.design/brand/BRAND_BRIEF.md`](../.design/brand/BRAND_BRIEF.md) (§16)
 
