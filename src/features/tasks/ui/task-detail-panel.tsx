@@ -6,7 +6,7 @@
 // comments & activity and the metadata line. Edits go through the module api
 // (field-level `patchTask`); comments through the spine's `comments_op_add`.
 
-import { CircleDashed, ListChecks, Plus, X } from "lucide-react";
+import { Ban, CircleDashed, ListChecks, Lock, Plus, RotateCcw, X } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useEntityHub } from "@/features/spine/hooks/use-entity-hub";
@@ -15,6 +15,7 @@ import { EntityHub } from "@/features/spine/ui/entity-hub";
 import type { EntityLink, EntityRef, RelationKind } from "@/lib/entity-links";
 import { ENTITY_OPEN_EVENT } from "@/lib/entity-open";
 import type { ModuoRuntime } from "@/lib/runtime.types";
+import { Button } from "../../../components/ui/button";
 import { CollectionHeader } from "../../../components/ui/collection-header";
 import {
   Command,
@@ -252,6 +253,13 @@ function DetailBody({
             ) : null}
           </div>
 
+          {task.status === "archived" ? (
+            <WontDoLine
+              canEdit={canEdit}
+              onReopen={() => api.patchTask(task.id, { status: "todo" })}
+            />
+          ) : null}
+
           <TaskDetailProperties task={task} api={api} canEdit={canEdit} mySeconds={mySeconds} />
 
           <div className="flex flex-col gap-2">
@@ -460,13 +468,14 @@ function SubtaskRow({
   const done = subtask.status === "done";
   const queued = api.queuedTaskIds.has(subtask.id);
   return (
-    <div className="group flex h-(--ctrl-h-sm) items-center gap-2 rounded-md px-1 transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover">
+    <div className="group flex min-h-(--ctrl-h-sm) items-center gap-2 rounded-md px-1 transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover">
       <CompleteToggle done={done} disabled={!canEdit} onToggle={() => api.toggleDone(subtask)} />
       <button
         type="button"
         onClick={onSelect}
         className={cn(
-          "min-w-0 flex-1 truncate text-left font-sans text-base",
+          // Titles wrap in the panel, never truncate (TV-P0, AC1.16).
+          "min-w-0 flex-1 break-words py-0.5 text-left font-sans text-base",
           done ? "text-muted-foreground line-through" : "text-foreground",
         )}
       >
@@ -568,13 +577,13 @@ function RelatedTaskRow({
 }) {
   const closed = task.status === "done" || task.status === "archived";
   return (
-    <div className="group flex h-(--ctrl-h-sm) items-center gap-2 rounded-md px-1 transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover">
+    <div className="group flex min-h-(--ctrl-h-sm) items-center gap-2 rounded-md px-1 transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover">
       <CircleDashed className="size-icon-sm shrink-0 text-muted-foreground/70" aria-hidden />
       <button
         type="button"
         onClick={onSelect}
         className={cn(
-          "min-w-0 flex-1 truncate text-left font-sans text-base",
+          "min-w-0 flex-1 break-words py-0.5 text-left font-sans text-base",
           closed ? "text-muted-foreground line-through" : "text-foreground",
         )}
       >
@@ -628,7 +637,7 @@ function BlockerPicker({ task, api }: { task: Task; api: TasksModuleApi }) {
                     setOpen(false);
                   }}
                 >
-                  <span className="min-w-0 flex-1 truncate">{t.title || "Untitled"}</span>
+                  <span className="min-w-0 flex-1 break-words">{t.title || "Untitled"}</span>
                 </CommandItem>
               ))}
             </CommandGroup>
@@ -640,6 +649,45 @@ function BlockerPicker({ task, api }: { task: Task; api: TasksModuleApi }) {
 }
 
 // ── empty / teaching state ─────────────────────────────────────────────────────
+
+/**
+ * A Won't do task reads as one, with Reopen right there (TV-P0, tasks-v3
+ * AC1.4): Won't do ends a task without doing it, and it can always come back.
+ */
+function WontDoLine({ canEdit, onReopen }: { canEdit: boolean; onReopen: () => void }) {
+  return (
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md bg-muted px-2 py-1.5 font-sans text-sm text-muted-foreground">
+      <Ban className="size-icon-sm shrink-0" aria-hidden />
+      <span className="min-w-0 flex-1">Won’t do</span>
+      {canEdit ? (
+        <Button variant="ghost" size="sm" onClick={onReopen}>
+          <RotateCcw aria-hidden />
+          Reopen
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * A link to a task you can't open (TV-P0, AC1.10): "Private item", never
+ * another task in its place. It may also have been deleted; the panel can't
+ * tell the two apart without the server (RF-1 makes the registry answer).
+ */
+export function PrivateItemPanel({ onBack }: { onBack: () => void }) {
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-2 px-2 text-center">
+      <Lock className="size-icon text-muted-foreground" aria-hidden />
+      <p className="font-display text-sm text-foreground">Private item</p>
+      <p className="text-xs text-muted-foreground">
+        This task isn’t shared with you, or it no longer exists.
+      </p>
+      <Button variant="ghost" size="sm" className="mt-1" onClick={onBack}>
+        Back to your tasks
+      </Button>
+    </div>
+  );
+}
 
 function DetailEmptyState({
   canEdit,

@@ -66,7 +66,9 @@ function GroupHeader({
         />
       ) : null}
       {leading ? <span className="flex shrink-0 items-center">{leading}</span> : null}
-      <span className="min-w-0 truncate">{label}</span>
+      <span data-slot="group-header-label" className="min-w-0 truncate">
+        {label}
+      </span>
       {sub ? (
         <span className="shrink-0 font-sans text-xs font-normal whitespace-nowrap text-subtle-foreground">
           {sub}

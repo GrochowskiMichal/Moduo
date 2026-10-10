@@ -24,7 +24,6 @@ import type { EntityRef } from "../../../lib/entity-links";
 import { ENTITY_OPEN_EVENT, takeEntityOpenIntent } from "../../../lib/entity-open";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { HubDropZone } from "../../contacts/ui/hub-drop-zone";
-import { flushFocusSession, registerFocusFlushSink } from "../../focus/engine";
 import { consumeFocusViewRequest, FOCUS_VIEW_REQUEST_EVENT } from "../../focus/view-request";
 import { createLinkWithToast } from "../../spine/ui/drop-link-toast";
 import { useAssignees } from "../assignees";
@@ -35,9 +34,11 @@ import {
   resolveDefaultSelection,
   showsMyTasks,
 } from "../default-view";
-import { type GroupBy, groupsByBucket, taskMatchesTagFilter } from "../helpers";
+import type { TaskLayout } from "../display";
+import { type CaptureSeed, showsArchived, statusesLetThrough } from "../filters";
+import { groupsByBucket } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
-import { isDrifted, type Task } from "../model";
+import { isDrifted, PRIVATE_PROJECT_LABEL, type Task } from "../model";
 import { resolveTasksDeepLink } from "../search";
 import { sanitizeTimelineZoom, type TimelineZoom } from "../timeline-geometry";
 import { BucketRail, parseCollapsedSections, type TasksMode } from "./bucket-rail";
@@ -46,13 +47,13 @@ import { pointerFirstCollision, useTaskDndSensors } from "./dnd/task-dnd";
 import { DriftTriageDialog } from "./drift-triage-dialog";
 import { ExecuteView } from "./execute-view";
 import { FrontierOfferDialog } from "./frontier-offer-dialog";
-import type { PlanView } from "./plan-view-header";
-import { type BoardGroupBy, TaskBoardView } from "./task-board-view";
-import { TASK_DETAIL_REFRESH_EVENT, TaskDetailPanel } from "./task-detail-panel";
+import type { PlanHeaderControls, PlanView } from "./plan-view-header";
+import { TaskBoardView } from "./task-board-view";
+import { PrivateItemPanel, TASK_DETAIL_REFRESH_EVENT, TaskDetailPanel } from "./task-detail-panel";
 import { TaskListView } from "./task-list-view";
-import { ActiveTagFilters, TagFilterButton } from "./task-tag-filter";
 import { TaskTimelineView } from "./task-timeline-view";
 import { useTasksDisplay } from "./use-tasks-display";
+import { useTasksFilters } from "./use-tasks-filters";
 
 type Props = {
   api: TasksModuleApi;
@@ -67,8 +68,9 @@ type Props = {
 // The selection→URL mirror writes only at rest (see the mirror effect).
 const URL_MIRROR_DEBOUNCE_MS = 250;
 
-// Per-workspace UI state (selection / mode / view / grouping) persisted locally —
-// these are view preferences, not synced data.
+// Per-workspace UI state (selection / mode / zoom) persisted locally — these
+// are view preferences, not synced data. Layout, grouping and filters are
+// per scope, in Display (use-tasks-display.tsx).
 function lsKey(workspaceId: string, part: string): string {
   return `moduo:tasks:${part}:${workspaceId}`;
 }
@@ -95,7 +97,9 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   const [mode, setMode] = useState<TasksMode>(() =>
     readLS(workspaceId, "mode") === "execute" ? "execute" : "plan",
   );
-  const [view, setView] = useState<PlanView>(() => {
+  // The workspace-wide view from before layouts were per scope: a scope
+  // that doesn't remember a layout yet starts with it.
+  const [legacyLayout] = useState<TaskLayout>(() => {
     const stored = readLS(workspaceId, "view");
     return stored === "board" || stored === "timeline" ? stored : "list";
   });
@@ -103,12 +107,6 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   // default is resolved once the bucket bundle has loaded (see effect below).
   const [selection, setSelection] = useState<string>(
     () => readLS(workspaceId, "lastBucket") ?? "inbox",
-  );
-  const [groupBy, setGroupBy] = useState<GroupBy>(
-    () => (readLS(workspaceId, "groupBy") as GroupBy) ?? "none",
-  );
-  const [boardGroupBy, setBoardGroupBy] = useState<BoardGroupBy>(() =>
-    readLS(workspaceId, "boardGroupBy") === "bucket" ? "bucket" : "status",
   );
   const [timelineZoom, setTimelineZoom] = useState<TimelineZoom>(() =>
     sanitizeTimelineZoom(readLS(workspaceId, "timelineZoom")),
@@ -164,52 +162,19 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   // for a deep-link target — ordinary selection fallbacks never touch
   // collapse state (a group the user closes stays closed).
   const [revealRequest, setRevealRequest] = useState<{ id: string; seq: number } | null>(null);
-  // Tag filter — narrows the center list/board (rail counts stay whole). Held in
-  // memory (a transient view state, not a persisted preference); reset per
-  // workspace so a filter never bleeds across workspaces.
-  const [filterTagIds, setFilterTagIds] = useState<string[]>([]);
-  useEffect(() => setFilterTagIds([]), [workspaceId]);
-  const toggleTagFilter = useCallback(
-    (tagId: string) =>
-      setFilterTagIds((prev) =>
-        prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId],
-      ),
-    [],
-  );
-  // Only filter by ids that still resolve to a live tag. A tag deleted while in
-  // the filter (or an optimistic `tmp-` id captured by a chip click that's since
-  // been reconciled to a real id) would otherwise apply forever — hiding every
-  // task with no chip/Clear to recover. Reading the derived set everywhere keeps
-  // the raw state harmless; it's pruned lazily on the next toggle/clear.
-  const liveFilterTagIds = useMemo(() => {
-    if (filterTagIds.length === 0) return filterTagIds;
-    const live = new Set(api.tags.map((t) => t.id));
-    return filterTagIds.filter((id) => live.has(id));
-  }, [filterTagIds, api.tags]);
+  // An opened link to a task you can't see: the panel says "Private item"
+  // until you move to another task (TV-P0, AC1.10). The scope's first pick on
+  // arrival (from no selection) doesn't count as moving.
+  const [privateLinkId, setPrivateLinkId] = useState<string | null>(null);
+  const prevSelectedRef = useRef<string | null>(null);
+  useEffect(() => {
+    const prev = prevSelectedRef.current;
+    prevSelectedRef.current = selectedTaskId;
+    if (prev !== null && prev !== selectedTaskId) setPrivateLinkId(null);
+  }, [selectedTaskId]);
 
-  // DF-11 / TV-F1 — the app-level Focus engine saves tracked time through the
-  // Tasks module's write path, so register `persistFocusTime` as this
-  // workspace's sink while /tasks is mounted. A ref keeps the callback current
-  // without re-registering (which would re-drain each render); registering
-  // drains any backlog accrued while the module was unmounted, and the cleanup
-  // banks accrued-so-far on navigation away.
-  const apiRef = useRef(api);
-  useEffect(() => {
-    apiRef.current = api;
-  });
-  useEffect(
-    () =>
-      registerFocusFlushSink(workspaceId, (taskId, seconds, context) =>
-        apiRef.current.persistFocusTime(taskId, seconds, context),
-      ),
-    [workspaceId],
-  );
-  // Once the bundle is loaded, drain any seconds the register-time flush had to
-  // retain because it fired against the still-empty bundle on remount — so time
-  // accrued while /tasks was unmounted actually lands (DF-11).
-  useEffect(() => {
-    if (!api.loading) flushFocusSession();
-  }, [api.loading]);
+  // Focus time is saved by the app shell's sink (TV-P0, use-focus-time-saver.ts),
+  // from any page; the module shows each saved total (FOCUS_TIME_SAVED_EVENT).
 
   // The chrome chip's "open Focus" request → enter Execute mode. The one-shot
   // flag covers the fresh-mount case (chip clicked from another route, event
@@ -231,9 +196,6 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
 
   // Persist preferences.
   useEffect(() => writeLS(workspaceId, "mode", mode), [workspaceId, mode]);
-  useEffect(() => writeLS(workspaceId, "view", view), [workspaceId, view]);
-  useEffect(() => writeLS(workspaceId, "groupBy", groupBy), [workspaceId, groupBy]);
-  useEffect(() => writeLS(workspaceId, "boardGroupBy", boardGroupBy), [workspaceId, boardGroupBy]);
   useEffect(() => writeLS(workspaceId, "timelineZoom", timelineZoom), [workspaceId, timelineZoom]);
   useEffect(
     () => writeLS(workspaceId, "collapsedSections", JSON.stringify([...collapsedSections])),
@@ -295,44 +257,110 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     if (!buckets.some((b) => b.id === selection)) setSelection("inbox");
   }, [selection, buckets, inboxId, showMyTasks, assignees.length]);
 
-  // All and My tasks imply bucket grouping in List; a single bucket flattens
-  // it. Nudge groupBy on scope changes so the control stays meaningful (user
-  // can override).
   const isAll = groupsByBucket(selection);
-  useEffect(() => {
-    if (isAll && groupBy === "none") setGroupBy("bucket");
-    if (!isAll && groupBy === "bucket") setGroupBy("none");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAll]);
 
+  // A task can sit in a project you can't see (it was assigned to you): that
+  // project reads "Private project", never "Inbox" (TV-P0, AC1.10).
   const bucketNameById = useCallback(
     (id: string) => {
       if (inbox && id === inbox.id) return "Inbox";
-      return buckets.find((b) => b.id === id)?.name ?? "Inbox";
+      return buckets.find((b) => b.id === id)?.name ?? PRIVATE_PROJECT_LABEL;
     },
     [buckets, inbox],
   );
 
+  // Won't do (archived) tasks leave every scope, except the one you're looking
+  // at: it stays listed, and in the panel with Reopen, until you change scope
+  // (TV-P0, AC1.4 — the TV-U1 rule for a task you check off). While the
+  // selected task is open the pin follows the scope; once it's Won't do the
+  // pin freezes there. Read at render so the backstops below see it at once.
+  const selectedTaskForScope = selectedTaskId
+    ? (tasks.find((t) => t.id === selectedTaskId) ?? null)
+    : null;
+  const archivedPinRef = useRef<{ id: string; scope: string } | null>(null);
+  if (
+    selectedTaskForScope &&
+    (archivedPinRef.current?.id !== selectedTaskForScope.id ||
+      selectedTaskForScope.status !== "archived")
+  ) {
+    archivedPinRef.current = { id: selectedTaskForScope.id, scope: selection };
+  }
+  const keptArchivedId =
+    selectedTaskForScope?.status === "archived" &&
+    archivedPinRef.current?.id === selectedTaskForScope.id &&
+    archivedPinRef.current.scope === selection
+      ? selectedTaskForScope.id
+      : null;
+
+  // Display and filters (tasks-v2 §7), remembered per workspace and scope on
+  // this device; a task checked off or deep-linked here stays listed until
+  // the scope changes (TV-U1). A deep link's target (and its parent) stays
+  // listed in this scope even when Display hides completed tasks, while it's
+  // the one selected.
+  const linkedTaskId =
+    revealRequest && revealRequest.id === selectedTaskId ? revealRequest.id : null;
+  const tasksDisplay = useTasksDisplay(workspaceId, selection, tasks, linkedTaskId, legacyLayout);
+  const isHiddenByDisplay = tasksDisplay.isHidden;
+  const view: PlanView = tasksDisplay.display.layout;
+  const setView = useCallback(
+    (layout: PlanView) => tasksDisplay.setDisplay({ ...tasksDisplay.display, layout }),
+    [tasksDisplay.setDisplay, tasksDisplay.display],
+  );
+  // Won't do tasks join a scope when Filter → Status asks for them (TV-U2,
+  // AC1.4), besides the one kept above.
+  const withArchived = showsArchived(tasksDisplay.filters);
+  const statusFilter = useMemo(
+    () => statusesLetThrough(tasksDisplay.filters),
+    [tasksDisplay.filters],
+  );
+
   const scopeTasksAll = useMemo(() => {
     if (selection === "today") return api.queuedTasks;
-    if (selection === "all") return tasks.filter((t) => t.status !== "archived");
-    if (selection === "mine") return myTasksScope(tasks, currentUserId);
+    const live = (t: Task) => t.status !== "archived" || withArchived || t.id === keptArchivedId;
+    if (selection === "all") return tasks.filter(live);
+    if (selection === "mine") {
+      if (!withArchived && !keptArchivedId) return myTasksScope(tasks, currentUserId);
+      if (!currentUserId) return myTasksScope(tasks, currentUserId);
+      // My tasks' rule (assigned to me, not Won't do), plus the Won't do ones
+      // a Status filter asks for, plus the kept one.
+      return tasks.filter((t) => t.assigneeId === currentUserId && live(t));
+    }
     const bucketId = selection === "inbox" ? inboxId : selection;
     if (!bucketId) return [];
-    return tasks.filter((t) => t.bucketId === bucketId && t.status !== "archived");
-  }, [selection, tasks, inboxId, api.queuedTasks, currentUserId]);
+    return tasks.filter((t) => t.bucketId === bucketId && live(t));
+  }, [selection, tasks, inboxId, api.queuedTasks, currentUserId, keptArchivedId, withArchived]);
 
-  // Apply the tag filter on top of the bucket scope (center only; rail counts
-  // stay whole). OR/union — a task matches if it carries any selected tag.
-  const scopeTasks = useMemo(() => {
-    if (liveFilterTagIds.length === 0) return scopeTasksAll;
-    return scopeTasksAll.filter((t) =>
-      taskMatchesTagFilter(
-        (api.tagsByTask.get(t.id) ?? []).map((tag) => tag.id),
-        liveFilterTagIds,
-      ),
-    );
-  }, [scopeTasksAll, liveFilterTagIds, api.tagsByTask]);
+  // Filters and search narrow the center list/board/timeline (rail counts
+  // stay whole).
+  const filtering = useTasksFilters({
+    workspaceId,
+    scope: selection,
+    scopeTasks: scopeTasksAll,
+    conditions: tasksDisplay.filters,
+    onConditionsChange: tasksDisplay.setFilters,
+    api,
+    runtime,
+    assignees,
+    enabled: mode === "plan",
+    // A deep-linked task, or the selected one just marked Won't do, stays
+    // listed past this scope's filters and search while it's selected; a link
+    // never clears saved filters (TV-U2).
+    keepTaskId: linkedTaskId ?? keptArchivedId,
+  });
+  const scopeTasks = filtering.tasks;
+  // What New pre-fills: the filters you can see (none in Focus), and never
+  // someone who can't take the task (a former member a stored filter still
+  // names: the server would refuse the save).
+  const captureSeed = useMemo<CaptureSeed>(() => {
+    if (mode === "execute") return { tagIds: [] };
+    const seed = filtering.seed;
+    const id = seed.assigneeId;
+    if (id && !assignees.some((a) => a.userId === id && a.canTakeTasks)) {
+      const { assigneeId: _dropped, ...rest } = seed;
+      return rest;
+    }
+    return seed;
+  }, [mode, filtering.seed, assignees]);
 
   const scopeTitle =
     selection === "all"
@@ -346,11 +374,15 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
             : bucketNameById(selection);
 
   // The Queue is one ordered line-up, so its List view is never grouped.
-  const effectiveGroupBy = selection === "today" ? "none" : groupBy;
+  const effectiveGroupBy = selection === "today" ? "none" : tasksDisplay.display.group;
 
   // Where a captured task lands: the selected bucket, else Inbox.
   const captureBucketId =
     isAll || selection === "today" ? inboxId : selection === "inbox" ? inboxId : selection;
+  // New in Focus or the Queue lands in Up next (TV-P0, AC1.9): created and
+  // queued at the end of my line-up. The top of Up next is TV-U14's (call 90).
+  const captureQueues = mode === "execute" || selection === "today";
+  const createCaptured = captureQueues ? api.createQueuedTask : api.createTask;
 
   const totalOpenCount = useMemo(
     () => tasks.filter((t) => t.status !== "done" && t.status !== "archived").length,
@@ -471,16 +503,6 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     />
   );
 
-  // Display (tasks-v2 §7): Completed + "Show on rows", remembered per
-  // workspace and scope on this device; a task checked off or deep-linked
-  // here stays listed until the scope changes (TV-U1). TV-U2 adds the rest.
-  // A deep link's target (and its parent) stays listed in this scope even
-  // when Display hides completed tasks, while it's the one selected.
-  const linkedTaskId =
-    revealRequest && revealRequest.id === selectedTaskId ? revealRequest.id : null;
-  const tasksDisplay = useTasksDisplay(workspaceId, selection, tasks, linkedTaskId);
-  const isHiddenByDisplay = tasksDisplay.isHidden;
-
   // Resolve the selected task live from the bundle so the rail follows edits and
   // empties when the task is deleted.
   const selectedTask = useMemo(
@@ -509,9 +531,11 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   // (a failed fetch leaves an empty bundle with api.error set; resolving
   // against that would wrongly strip a valid id — hold until Retry succeeds).
   // A fresh external open (marked by the app-chrome listener) gets the full
-  // "take me there" treatment: plan mode + tag filter cleared if it hides the
-  // target. A mirrored id arriving back on refresh/back-forward restores the
-  // selection quietly and keeps the user's mode/filter. Scope snaps to the
+  // "take me there" treatment: plan mode. Filters and search are never
+  // cleared (they're saved per scope): the target stays listed past them
+  // while it's selected (`keepTaskId`, TV-U2). A mirrored id arriving back on
+  // refresh/back-forward restores the selection quietly and keeps the user's
+  // mode. Scope snaps to the
   // task's bucket unless the current scope already shows it. A bucket id (a
   // `project` link) scopes the rail; a stale or archived id clears quietly and
   // the backstop above picks the default (AC: no crash).
@@ -528,17 +552,18 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     }
     processedUrlIdRef.current = urlTaskId;
     const external = takeEntityOpenIntent(urlTaskId);
-    // Archived tasks are invisible in every scope — selecting one would just
-    // feed the backstop a random replacement; treat like a stale id instead.
-    const target = resolveTasksDeepLink(urlTaskId, {
-      tasks: tasks.filter((t) => t.status !== "archived"),
-      buckets,
-      inboxId,
-    });
+    // Won't do tasks open too: the selected one stays in scope with Reopen
+    // (see `keptArchivedId`). A task in a project you can't see opens in All.
+    const target = resolveTasksDeepLink(urlTaskId, { tasks, buckets, inboxId });
     if (target.kind === "none") {
+      // A link someone followed (a notification, a chip) to a task you can't
+      // open says so, never lands on another task (AC1.10). A stale id that
+      // only comes back on refresh or back/forward clears quietly.
+      if (external) setPrivateLinkId(urlTaskId);
       onUrlTaskIdChange(null);
       return;
     }
+    setPrivateLinkId(null);
     if (external) setMode("plan");
     if (target.kind === "bucket") {
       setSelection(target.scope);
@@ -547,12 +572,6 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       setSelectedTaskId(null);
       return;
     }
-    if (external) {
-      const targetTagIds = (api.tagsByTask.get(target.taskId) ?? []).map((t) => t.id);
-      if (liveFilterTagIds.length > 0 && !taskMatchesTagFilter(targetTagIds, liveFilterTagIds)) {
-        setFilterTagIds([]);
-      }
-    }
     if (!scopeTasksAll.some((t) => t.id === target.taskId)) setSelection(target.scope);
     setSelectedTaskId(target.taskId);
     setRevealRequest((prev) => ({ id: target.taskId, seq: (prev?.seq ?? 0) + 1 }));
@@ -560,12 +579,10 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   }, [
     api.loading,
     api.error,
-    api.tagsByTask,
     urlTaskId,
     tasks,
     buckets,
     inboxId,
-    liveFilterTagIds,
     scopeTasksAll,
     onUrlTaskIdChange,
   ]);
@@ -606,28 +623,16 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     requestAnimationFrame(reveal);
   }, [api.loading, urlTaskId]);
 
-  // Tag-filter header control + active-chip row, passed to both views as nodes so
-  // List/Board stay unaware of the filter machinery.
-  const tagFilterControl =
-    api.tags.length > 0 ? (
-      <TagFilterButton
-        tags={api.tags}
-        filterTagIds={liveFilterTagIds}
-        countByTag={api.openTaskCountByTag}
-        onToggle={toggleTagFilter}
-      />
-    ) : undefined;
-  const activeTagFilters =
-    liveFilterTagIds.length > 0 ? (
-      <ActiveTagFilters
-        tags={api.tags}
-        filterTagIds={liveFilterTagIds}
-        matchCount={scopeTasks.length}
-        scopeCount={scopeTasksAll.length}
-        onToggle={toggleTagFilter}
-        onClear={() => setFilterTagIds([])}
-      />
-    ) : undefined;
+  // The toolbar's page-owned pieces, passed to every view as nodes so List,
+  // Board and Timeline stay unaware of the filter and Display machinery. The
+  // count is the scope's open tasks, as in the rail.
+  const header: PlanHeaderControls = {
+    count: openCount(scopeTasksAll),
+    search: filtering.search,
+    filter: filtering.filter,
+    display: tasksDisplay.displayControl,
+    activeFilters: filtering.activeFilters,
+  };
 
   const sharedViewProps = {
     tasks: scopeTasks,
@@ -642,8 +647,9 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     onRequestCapture: openCapture,
     selectedTaskId,
     onSelectTask: setSelectedTaskId,
-    tagFilterControl,
-    activeTagFilters,
+    header,
+    filterActive: filtering.active,
+    onClearFilters: filtering.clear,
     api: viewApi,
   };
   // List and Board follow Display; the Timeline keeps its own rules.
@@ -675,8 +681,8 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
         {...sharedViewProps}
         {...displayProps}
         dndMode="external"
-        boardGroupBy={boardGroupBy}
-        onBoardGroupByChange={setBoardGroupBy}
+        boardGroupBy={tasksDisplay.display.boardGroup}
+        statusFilter={statusFilter}
       />
     ) : view === "timeline" ? (
       <TaskTimelineView {...sharedViewProps} zoom={timelineZoom} onZoomChange={setTimelineZoom} />
@@ -686,7 +692,6 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
         {...displayProps}
         dndMode="external"
         groupBy={effectiveGroupBy}
-        onGroupByChange={setGroupBy}
         reorderable={selection === "today"}
         onReorder={api.reorderQueue}
         nestable={selection !== "today" && !groupsByBucket(selection)}
@@ -845,7 +850,9 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   );
   // The hub is a drop target within the ONE page-level DndContext (below); no
   // own context — that's exactly what let center rows reach it (DF-22).
-  const details = selectedTask ? (
+  const details = privateLinkId ? (
+    <PrivateItemPanel onBack={() => setPrivateLinkId(null)} />
+  ) : selectedTask ? (
     <HubDropZone target={{ type: "task", id: selectedTask.id }} disabled={!canEdit}>
       {detailPanel}
     </HubDropZone>
@@ -880,7 +887,17 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
         buckets={buckets}
         inbox={inbox}
         defaultBucketId={captureBucketId}
-        onCreate={api.createTask}
+        // New inside a filtered scope pre-fills the filter's tag, assignee and
+        // priority (U2-5); never in Focus, whose filters aren't on screen.
+        seed={captureSeed}
+        tags={api.tags}
+        onCreate={(fields, { tagIds }) => {
+          const created = createCaptured(fields);
+          for (const id of tagIds) {
+            const tag = api.tags.find((t) => t.id === id);
+            if (tag) api.createTagForTask(tag.name, created);
+          }
+        }}
       />
       <DriftTriageDialog
         open={triageBucketId !== null}

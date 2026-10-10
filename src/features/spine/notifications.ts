@@ -181,23 +181,80 @@ function humanizeVerb(op: string): string {
   return tail.replace(/[_-]+/g, " ").trim() || op;
 }
 
+function newestItem(group: NotificationGroup): NotificationItem {
+  return group.items.reduce((a, b) => (a.createdAt >= b.createdAt ? a : b));
+}
+
+/**
+ * The task a card is about, by name (TV-P0, tasks-v3 AC1.7): the title its
+ * event carried (the assigned / completed / unblocked notices store it), else a
+ * label the caller resolved for the target (`labels`, keyed by target id — a
+ * comment's notice carries only an excerpt). Null when neither is known, or
+ * when the card isn't about a task.
+ */
+export function notificationSubject(
+  group: NotificationGroup,
+  labels?: ReadonlyMap<string, string>,
+): string | null {
+  if (group.targetType !== "task") return null;
+  const title = newestItem(group).payload.title;
+  if (typeof title === "string" && title.trim()) return title.trim();
+  const label = group.targetId ? labels?.get(group.targetId)?.trim() : "";
+  return label || null;
+}
+
+/**
+ * Name the item in a verb line: "assigned this to you" → "assigned “Brief” to
+ * you". Only the vocabulary's own "this" is replaced, never one inside quoted
+ * user text (a comment excerpt, a blocker's title).
+ */
+function nameTheItem(verb: string, subject: string): string {
+  const named = `“${subject}”`;
+  if (verb.startsWith("commented: ")) return verb.replace("commented: ", `commented on ${named}: `);
+  if (verb === "left a comment") return `left a comment on ${named}`;
+  // Split into vocabulary and quoted runs; quoted runs (odd indexes) stay as typed.
+  const runs = verb.split(/(“[^”]*”)/);
+  for (let i = 0; i < runs.length; i += 2) {
+    if (/\bthis\b/.test(runs[i])) {
+      runs[i] = runs[i].replace(/\bthis\b/, named);
+      return runs.join("");
+    }
+  }
+  return `${verb} · ${named}`;
+}
+
 /**
  * The card's human sentence: "<Actor>[ and N others] <verb>". The verb comes
  * from the spine activity vocabulary; an unrecognized op (e.g. a legacy
  * workspace event) is humanized instead of shown raw. The actor resolves to
- * You / a name / a quiet fallback. Never raw JSON.
+ * You / a name / a quiet fallback. Never raw JSON. With a `subject` (see
+ * {@link notificationSubject}) the item is named instead of "this".
  */
 export function notificationSummary(
   group: NotificationGroup,
   currentUserId: string | null,
+  subject?: string | null,
 ): string {
-  const latest = group.items.reduce((a, b) => (a.createdAt >= b.createdAt ? a : b));
+  const latest = newestItem(group);
   const actor = spineActorName(latest, currentUserId);
   const verbRaw = spineActivityLine(latest);
-  const verb = verbRaw === latest.op ? humanizeVerb(latest.op) : verbRaw;
+  const verbLine = verbRaw === latest.op ? humanizeVerb(latest.op) : verbRaw;
+  const verb = subject ? nameTheItem(verbLine, subject) : verbLine;
   const others = Math.max(0, group.actorIds.length - 1);
   const who = others > 0 ? `${actor} and ${others} ${others === 1 ? "other" : "others"}` : actor;
   return `${who} ${verb}`;
+}
+
+/**
+ * Target ids whose card needs a resolved name: task cards whose event carried
+ * no title (comments). The caller looks them up in the entity registry.
+ */
+export function unnamedTaskTargets(groups: NotificationGroup[]): string[] {
+  const ids = new Set<string>();
+  for (const g of groups) {
+    if (g.targetType === "task" && g.targetId && !notificationSubject(g)) ids.add(g.targetId);
+  }
+  return [...ids];
 }
 
 /** A deep-link target for a card, or null when the type isn't routable yet. */

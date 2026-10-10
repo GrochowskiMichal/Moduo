@@ -1,12 +1,27 @@
 // Row anatomy rules for the List (tasks-v2 §6, TV-U1): which fixed right-hand
 // columns a view shows, and which one date a row's date column carries.
 //
-// A row is: checkbox · title · quiet counts · [priority] [energy] [date]
-// [assignee] [queue]. The columns are fixed-width so their contents line up
-// down the list, and a column that would be empty on every row of the view
-// collapses. Display → "Show on rows" turns a property column off (energy is
-// off by default; it always shows in the detail panel).
+// A row is: checkbox · title · quiet counts · [status name] [priority]
+// [energy] [date] [time] [assignee] [queue]. The columns are fixed-width so
+// their contents line up down the list, and a column that would be empty on
+// every row of the view collapses. Display → "Show on rows" turns a property
+// column off (energy is off by default; it always shows in the detail panel).
+//
+// Display → Rows (tasks-v3 §4, TV-U2): Standard is the row above without the
+// status name and time; Detailed adds the status name, estimate / tracked
+// time, the assignee's name beside the avatar and the project on every row.
+// The rest of Detailed (handle, Project › Section, Due and Next session as
+// two columns, waiting, updated, sortable headers) is the List rebuild's
+// (TV-U10), on the kit Row.
 
+import {
+  dayOffset,
+  formatDate,
+  formatDay,
+  formatDuration,
+  formatDurationSeconds,
+  formatTime,
+} from "../../lib/time-format";
 import { formatTimestamp, isOpen } from "./helpers";
 import { isDrifted, type Task } from "./model";
 
@@ -22,10 +37,16 @@ export type RowColumns = Readonly<
   Record<RowProperty | "queue", boolean> & {
     /** Some row is in my queue and someone else's: its cell fits both marks. */
     queueWide: boolean;
+    /** Detailed: the status name ("In progress", "Won’t do"). */
+    status: boolean;
+    /** Detailed: estimate and tracked time ("1h 20m / ~4h"). */
+    time: boolean;
+    /** Detailed: the assignee's first name beside the avatar. */
+    assigneeName: boolean;
   }
 >;
 
-/** Every column on: a row rendered on its own (tests, stories) shows everything. */
+/** Every Standard column on: a row rendered on its own (tests, stories). */
 export const ALL_ROW_COLUMNS: RowColumns = {
   priority: true,
   energy: false,
@@ -33,11 +54,16 @@ export const ALL_ROW_COLUMNS: RowColumns = {
   assignee: true,
   queue: true,
   queueWide: false,
+  status: false,
+  time: false,
+  assigneeName: false,
 };
 
 export type RowColumnsContext = {
   /** Display → "Show on rows". */
   properties: readonly string[];
+  /** Display → Rows. Standard when absent. */
+  rows?: RowPreset;
   /** A team workspace, outside My tasks (where every row is mine, D4-4). */
   showAssignee: boolean;
   canEdit: boolean;
@@ -55,16 +81,38 @@ export type RowColumnsContext = {
 export function rowColumns(tasks: readonly Task[], ctx: RowColumnsContext): RowColumns {
   const on = new Set(ctx.properties);
   const any = (test: (task: Task) => boolean) => tasks.some(test);
+  const detailed = ctx.rows === "detailed";
+  const assignee = on.has("assignee") && ctx.showAssignee && any((t) => !!t.assigneeId);
   return {
+    status: detailed && tasks.length > 0,
     priority: on.has("priority") && any((t) => t.priority !== null),
     energy: on.has("energy") && any((t) => t.energyLevel !== null),
     date: on.has("date") && any((t) => t.scheduledAt !== null || t.dueDate !== null),
-    assignee: on.has("assignee") && ctx.showAssignee && any((t) => !!t.assigneeId),
+    time: detailed && any((t) => rowTime(t) !== null),
+    assignee,
+    assigneeName: detailed && assignee,
     // Done and archived tasks can't be queued, so they never carry the mark.
     // Read-only, the mark only shows what someone has queued.
     queue: any((t) => isOpen(t) && (ctx.canEdit || ctx.isQueued(t.id) || ctx.isClaimed(t.id))),
     queueWide: any((t) => isOpen(t) && ctx.isQueued(t.id) && ctx.isClaimed(t.id)),
   };
+}
+
+/** Display → Rows. */
+export type RowPreset = "standard" | "detailed";
+
+/**
+ * Detailed's time cell: tracked time and the estimate, "1h 20m / ~4h", or
+ * either one alone ("1h 20m", "~4h"); null when the task has neither.
+ */
+export function rowTime(task: Pick<Task, "durationMinutes" | "timeSpentSeconds">): string | null {
+  const tracked = task.timeSpentSeconds > 0 ? formatDurationSeconds(task.timeSpentSeconds) : null;
+  const estimate =
+    task.durationMinutes && task.durationMinutes > 0
+      ? `~${formatDuration(task.durationMinutes)}`
+      : null;
+  if (tracked && estimate) return `${tracked} / ${estimate}`;
+  return tracked ?? estimate;
 }
 
 // ── The date column ─────────────────────────────────────────────────────────
@@ -80,37 +128,13 @@ export type RowDate = {
   description: string;
 };
 
-const TIME_FMT = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
-const WEEKDAY_FMT = new Intl.DateTimeFormat(undefined, { weekday: "short" });
-const DAY_FMT = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
-const DAY_YEAR_FMT = new Intl.DateTimeFormat(undefined, {
-  month: "short",
-  day: "numeric",
-  year: "numeric",
-});
-
-function startOfDay(d: Date): number {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-}
-
-function dayOffset(d: Date, now: Date): number {
-  return Math.round((startOfDay(d) - startOfDay(now)) / 86_400_000);
-}
-
 /**
  * A date as short as the column allows: Today / Tomorrow / Yesterday, the
  * weekday for the rest of the coming week, else the month and day (with the
- * year when it isn't this year's).
+ * year when it isn't this year's) — the one grammar, src/lib/time-format.ts.
  */
 export function formatShortDate(iso: string, now: Date = new Date()): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  const offset = dayOffset(d, now);
-  if (offset === 0) return "Today";
-  if (offset === 1) return "Tomorrow";
-  if (offset === -1) return "Yesterday";
-  if (offset > 1 && offset < 7) return WEEKDAY_FMT.format(d);
-  return d.getFullYear() === now.getFullYear() ? DAY_FMT.format(d) : DAY_YEAR_FMT.format(d);
+  return formatDay(iso, now);
 }
 
 /**
@@ -126,11 +150,11 @@ export function rowDate(
   const scheduled = validDate(task.scheduledAt);
   const due = validDate(task.dueDate);
   if (!scheduled && !due) return null;
-  const useDue = due && (!scheduled || startOfDay(due) < startOfDay(scheduled));
+  const useDue = due && (!scheduled || dayOffset(due, scheduled) < 0);
   // The date shown comes first, so the cell's name matches the editor it opens.
   const parts: string[] = [];
   if (scheduled) parts.push(`Scheduled ${formatTimestamp(task.scheduledAt)}`);
-  if (due) parts[useDue ? "unshift" : "push"](`Due ${DAY_YEAR_FMT.format(due)}`);
+  if (due) parts[useDue ? "unshift" : "push"](`Due ${formatDate(due, now)}`);
   const description = parts.join(" · ");
   if (useDue && task.dueDate) {
     return { kind: "due", label: formatShortDate(task.dueDate, now), drifted: false, description };
@@ -138,7 +162,7 @@ export function rowDate(
   const at = scheduled as Date;
   return {
     kind: "scheduled",
-    label: dayOffset(at, now) === 0 ? TIME_FMT.format(at) : formatShortDate(at.toISOString(), now),
+    label: dayOffset(at, now) === 0 ? formatTime(at) : formatDay(at, now),
     drifted: isDrifted(task, now),
     description,
   };

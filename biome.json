@@ -12,6 +12,7 @@
       "!.cursor",
       "!.claude",
       "!.design-sync",
+      "!.design",
       "!dist",
       "!src-tauri",
       "!supabase",

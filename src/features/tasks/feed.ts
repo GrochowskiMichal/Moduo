@@ -5,6 +5,7 @@
 // Pure.
 
 import type { SpineComment } from "@/lib/runtime.types";
+import { dayOffset, formatDate, formatTime } from "@/lib/time-format";
 import { isTrailEntry } from "./activity";
 import type { ActivityEntry, Task } from "./model";
 
@@ -63,24 +64,8 @@ export function foldFeed(
   return { lead, hidden: body.length - visible, rest: body.slice(body.length - visible) };
 }
 
-const FEED_TIME = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
-const FEED_DAY = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
-const FEED_DAY_YEAR = new Intl.DateTimeFormat(undefined, {
-  month: "short",
-  day: "numeric",
-  year: "numeric",
-});
-
 /** The feed's quiet time: "7:20 PM" today, "Oct 6" this year, "Oct 6, 2025" before. */
 export function feedTime(iso: string, now: Date = new Date()): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  if (
-    d.getFullYear() === now.getFullYear() &&
-    d.getMonth() === now.getMonth() &&
-    d.getDate() === now.getDate()
-  ) {
-    return FEED_TIME.format(d);
-  }
-  return d.getFullYear() === now.getFullYear() ? FEED_DAY.format(d) : FEED_DAY_YEAR.format(d);
+  if (dayOffset(iso, now) === 0) return formatTime(iso);
+  return formatDate(iso, now);
 }

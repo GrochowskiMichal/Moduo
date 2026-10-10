@@ -156,6 +156,7 @@ export function stubApi(tasks: Task[] = TASKS): TasksModuleApi {
   const blocker = tasks.find((t) => t.id === "policy");
   return {
     loading: false,
+    loaded: true,
     tasks,
     queuedTaskIds: new Set(["review", "notes"]),
     queueClaims: new Map([

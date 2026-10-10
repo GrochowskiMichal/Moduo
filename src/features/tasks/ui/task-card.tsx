@@ -104,8 +104,9 @@ export function TaskCard({
         // column (the old bg-background was the inverted-elevation bug).
         "group flex items-start gap-2 rounded-lg border px-3 py-2.5 text-sm transition-colors duration-(--motion-fade) ease-(--ease-out)",
         "select-none",
-        // Done cards fade as a whole (tasks-v2 §6).
-        task.status === "done" && !isDragging && "opacity-50",
+        // Done cards fade as a whole (tasks-v2 §6), and so does a Won't do
+        // card a Status filter lists (TV-U2), like its row.
+        (task.status === "done" || task.status === "archived") && !isDragging && "opacity-50",
         // Selection = the accent tint + the 32% ring a card always carries
         // (R5). The old bright accent border read as a white ring on mono.
         selected ? SELECTED_OPTION : "border-border bg-card hover:border-foreground/30",
@@ -276,8 +277,8 @@ export function CardBody({
         <span
           className={cn(
             "min-w-0 flex-1 break-words font-sans text-base leading-snug",
-            // A done card fades as a whole; no muted colour on top.
-            done
+            // A done (or Won't do) card fades as a whole; no muted colour on top.
+            done || task.status === "archived"
               ? "text-foreground line-through"
               : blocked
                 ? "text-muted-foreground"
@@ -289,22 +290,20 @@ export function CardBody({
       </div>
 
       {hasMeta ? (
-        <div className="flex min-w-0 items-center gap-2.5 overflow-hidden pl-6 font-sans text-xs whitespace-nowrap text-muted-foreground">
+        // The meta wraps onto a second line rather than cut anything (TV-P0,
+        // AC1.16); each item keeps its words together.
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1 pl-6 font-sans text-xs text-muted-foreground">
           <PriorityMark level={priority} />
           <EnergyMark level={energy} />
           {date ? <DateMark date={date} className="shrink-0" /> : null}
           <TaskCounts task={task} api={api} />
           {showBucket ? (
-            <BucketLabel
-              name={bucketName}
-              isInbox={task.bucketId === inboxId}
-              className="shrink-3"
-            />
+            <BucketLabel name={bucketName} isInbox={task.bucketId === inboxId} wrap />
           ) : null}
           {parent ? (
-            <span className="flex min-w-0 shrink-3 items-center gap-1">
+            <span className="flex min-w-0 items-center gap-1">
               <CornerDownRight className="size-icon-xs shrink-0 opacity-70" aria-hidden />
-              <span className="truncate">{parent.title || "Untitled"}</span>
+              <span className="min-w-0 break-words">{parent.title || "Untitled"}</span>
             </span>
           ) : null}
           <span className="ml-auto flex shrink-0 items-center gap-1.5">

@@ -1,19 +1,18 @@
 // How a task's time reads in the detail panel's Time row (tasks-v2 §5, §9):
 // "1h 20m of ~4h", a hairline bar, and "you 50m" for your share. Estimates are
-// whole minutes (`durationMinutes`); tracked time is seconds. Pure.
+// whole minutes (`durationMinutes`); tracked time is seconds. Pure. The
+// grammar itself is src/lib/time-format.ts (decision 41).
+
+import { formatDuration, formatDurationSeconds } from "../../lib/time-format";
 
 /** "0m" · "45m" · "1h" · "1h 20m", from seconds (rounded to the minute). */
 export function formatTracked(seconds: number): string {
-  return formatMinutes(Math.max(0, Math.round(seconds / 60)));
+  return formatDurationSeconds(Math.max(0, seconds));
 }
 
-/** "45m" · "4h" · "1h 30m", from whole minutes. */
+/** "45m" · "4h" · "1h 30m", from whole minutes (the one grammar). */
 export function formatMinutes(minutes: number): string {
-  const total = Math.max(0, Math.round(minutes));
-  const h = Math.floor(total / 60);
-  const m = total % 60;
-  if (h === 0) return `${m}m`;
-  return m === 0 ? `${h}h` : `${h}h ${m}m`;
+  return formatDuration(minutes);
 }
 
 /**

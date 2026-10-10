@@ -58,8 +58,13 @@ function useDraftField<T>({
   // leave the field blank over a real value. A controlled field shows what its
   // owner holds.
   const [commits, setCommits] = React.useState(0);
+  // While someone types, the text stays as typed even if the owner's value
+  // moves under it (a live owner hears each readable keystroke).
+  const typing = React.useRef(false);
   // biome-ignore lint/correctness/useExhaustiveDependencies: `commits` is the trigger
-  React.useEffect(() => setDraft(shown), [shown, commits]);
+  React.useEffect(() => {
+    if (!typing.current) setDraft(shown);
+  }, [shown, commits]);
 
   const latest = React.useRef({ draft, value, parse, format, onValueChange });
   latest.current = { draft, value, parse, format, onValueChange };
@@ -79,8 +84,15 @@ function useDraftField<T>({
     [],
   );
 
+  /** Text typed into the field (onChange). */
+  const type = (text: string) => {
+    typing.current = true;
+    setDraft(text);
+  };
+
   /** Put a value in: save it when it changed, then show what the owner holds. */
   const set = (next: T) => {
+    typing.current = false;
     if (next !== value) onValueChange(next);
     setCommits((n) => n + 1);
   };
@@ -88,18 +100,19 @@ function useDraftField<T>({
   /** Commit the draft: a readable change saves; anything else reverts. */
   const commit = () => {
     const next = parse(draft);
-    if (next === undefined) setDraft(shown);
+    if (next === undefined) revert();
     else set(next);
   };
 
   /** Throw the draft away (Esc). Also cleared from the unmount commit at once,
    *  so an Esc that closes the field's popover in the same tick saves nothing. */
-  const revert = () => {
+  function revert() {
+    typing.current = false;
     latest.current.draft = shown;
     setDraft(shown);
-  };
+  }
 
-  return { draft, setDraft, commit, set, revert };
+  return { draft, type, commit, set, revert };
 }
 
 type NumberInputProps = Omit<InputProps, "value" | "defaultValue" | "onChange" | "type"> & {
@@ -149,7 +162,7 @@ function NumberInput({
       inputMode="numeric"
       autoComplete="off"
       value={field.draft}
-      onChange={(e) => field.setDraft(e.target.value)}
+      onChange={(e) => field.type(e.target.value)}
       onBlur={(e) => {
         field.commit();
         onBlur?.(e);

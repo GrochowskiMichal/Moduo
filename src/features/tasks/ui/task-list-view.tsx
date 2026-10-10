@@ -6,23 +6,13 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { arrayMove, SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { Plus } from "lucide-react";
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
-import { Button } from "../../../components/ui/button";
-import { EmptyState as EmptyStateBase } from "../../../components/ui/empty-state";
 import { GroupHeader } from "../../../components/ui/group-header";
-import { Kbd } from "../../../components/ui/kbd";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../../../components/ui/select";
 import { useAssignees } from "../assignees";
 import { type CompletedMode, partitionCompleted } from "../completed";
+import { orderTasks, type RowPreset, type SubtaskMode, type TaskOrder } from "../display";
 import {
   canNestUnder,
   type GroupBy,
@@ -35,6 +25,7 @@ import {
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { Bucket, Task } from "../model";
 import { DEFAULT_ROW_PROPERTIES, rowColumns } from "../row-layout";
+import { nowOn, useToday } from "../use-today";
 import {
   asTaskDropTarget,
   DndBoundary,
@@ -45,9 +36,10 @@ import {
   useTaskDndSensors,
 } from "./dnd/task-dnd";
 import { listKeyActionFor } from "./list-keys";
-import { type PlanView, PlanViewHeader } from "./plan-view-header";
+import { type PlanHeaderControls, type PlanView, PlanViewHeader } from "./plan-view-header";
 import { CompletedLine } from "./task-meta";
 import { type RowCommand, TaskRow } from "./task-row";
+import { TaskListSkeleton, TasksEmptyScope, TasksNoMatch } from "./task-view-states";
 
 type Props = {
   tasks: Task[];
@@ -55,8 +47,8 @@ type Props = {
   selection: string; // "all" | "mine" | "today" | "inbox" | bucketId
   view: PlanView;
   onViewChange: (view: PlanView) => void;
+  /** Display → Group by (the Queue is never grouped). */
   groupBy: GroupBy;
-  onGroupByChange: (next: GroupBy) => void;
   buckets: Bucket[];
   inbox: Bucket | null;
   bucketNameById: (id: string) => string;
@@ -65,15 +57,21 @@ type Props = {
   /** Lifted task selection — drives the keyboard cursor and the detail rail. */
   selectedTaskId: string | null;
   onSelectTask: (id: string | null) => void;
-  /** Tag-filter header control + active-chip row (built by the parent). */
-  tagFilterControl?: ReactNode;
-  activeTagFilters?: ReactNode;
-  /** The Display menu (built by the parent). */
-  displayControl?: ReactNode;
+  /** The toolbar's search, Filter, Display and count (built by the page). */
+  header?: PlanHeaderControls;
+  /** A filter is narrowing the scope: an empty result reads "No tasks match". */
+  filterActive?: boolean;
+  onClearFilters?: () => void;
   /** Display → Completed (tasks-v2 §6). Default: hidden. The Queue ignores it. */
   completed?: CompletedMode;
   /** Display → "Show on rows". */
   properties?: readonly string[];
+  /** Display → Rows: Standard · Detailed. */
+  rows?: RowPreset;
+  /** Display → Order by, inside each group. The Queue keeps its line-up. */
+  order?: TaskOrder;
+  /** Display → Subtasks: nested under their parent, or rows of their own. */
+  subtasks?: SubtaskMode;
   /**
    * Tasks that stay listed whatever Display says, until the scope changes:
    * checked off here, or opened here (selected, deep-linked).
@@ -100,14 +98,6 @@ type Props = {
 
 const NO_IDS: ReadonlySet<string> = new Set();
 
-const GROUP_OPTIONS: Array<{ value: GroupBy; label: string }> = [
-  { value: "none", label: "None" },
-  { value: "status", label: "Status" },
-  { value: "bucket", label: "Bucket" },
-  { value: "priority", label: "Priority" },
-  { value: "energy", label: "Energy" },
-];
-
 export function TaskListView({
   tasks,
   scopeTitle,
@@ -115,7 +105,6 @@ export function TaskListView({
   view,
   onViewChange,
   groupBy,
-  onGroupByChange,
   buckets,
   inbox,
   bucketNameById,
@@ -123,11 +112,14 @@ export function TaskListView({
   onRequestCapture,
   selectedTaskId,
   onSelectTask,
-  tagFilterControl,
-  activeTagFilters,
-  displayControl,
+  header,
+  filterActive = false,
+  onClearFilters,
   completed = "hidden",
   properties = DEFAULT_ROW_PROPERTIES,
+  rows: rowPreset = "standard",
+  order = "manual",
+  subtasks = "nested",
   stayingIds = NO_IDS,
   reorderable = false,
   onReorder,
@@ -151,19 +143,18 @@ export function TaskListView({
   // Nesting is drag-onto-target (no SortableContext) → default keyboard sensor.
   const nestSensors = useTaskDndSensors({ sortable: false });
 
-  const showBucketTag = showBucketPill(selection, groupBy);
-  // Grouping by bucket only makes sense across buckets (All, My tasks).
-  const groupOptions = GROUP_OPTIONS.filter(
-    (o) => o.value !== "bucket" || groupsByBucket(selection),
-  );
+  // Detailed names the project on every row (tasks-v3 §4); Standard only
+  // where it isn't implied.
+  const showBucketTag = rowPreset === "detailed" || showBucketPill(selection, groupBy);
   // In My tasks every row is mine, so rows leave the avatar out (D4-4).
   const showAssignee = selection !== "mine";
+  const { assignees } = useAssignees();
 
-  // Subtasks nest under their parent (hidden from the top level) except in
-  // Today — the commit queue is an ordered flat list, and subtasks are
-  // individually committable. A subtask whose parent isn't in this scope
-  // renders as a normal top-level row instead (never invisible).
-  const nest = selection !== "today";
+  // Subtasks nest under their parent (hidden from the top level) unless
+  // Display says Flat, and never in the Queue — an ordered flat line-up whose
+  // subtasks are queued one by one. A subtask whose parent isn't in this
+  // scope renders as a normal top-level row instead (never invisible).
+  const nest = selection !== "today" && subtasks === "nested";
   const nestedIds = useMemo(() => nestedSubtaskIds(tasks, nest), [tasks, nest]);
   const topLevelTasks = useMemo(
     () => (nestedIds.size === 0 ? tasks : tasks.filter((t) => !nestedIds.has(t.id))),
@@ -189,10 +180,20 @@ export function TaskListView({
   // Completed tasks Display hides drop out of each group, behind its
   // "N completed · show" line (tasks-v2 §6). The Queue keeps its own rule:
   // done leaves it, and a task checked off there stays until the next load.
+  // The Date groups and "7 days" roll over at midnight.
+  const today = useToday();
   const groups = useMemo(() => {
-    const all = groupTasks(topLevelTasks, groupBy, { bucketName: bucketNameById });
+    const now = nowOn(today);
+    // Sort, then group, so every group keeps the order (the Queue keeps its
+    // line-up). Project groups follow the rail; each task is in one group.
+    const ordered = orderTasks(topLevelTasks, selection === "today" ? "manual" : order);
+    const all = groupTasks(ordered, groupBy, {
+      bucketName: bucketNameById,
+      bucketOrder: [...(inbox ? [inbox.id] : []), ...buckets.map((b) => b.id)],
+      assignees,
+      now,
+    });
     if (selection === "today") return all.map((g) => ({ ...g, hidden: [] as Task[] }));
-    const now = new Date();
     // Kept even when done: staying (checked off or opened in this scope); the
     // selected task and its parent (a deep link or the panel must never point
     // at a row that isn't there, and a subtask nests under its parent); a
@@ -208,9 +209,14 @@ export function TaskListView({
       return { ...g, tasks: revealedGroups.has(g.key) ? g.tasks : shown, hidden };
     });
   }, [
+    today,
     topLevelTasks,
+    order,
     groupBy,
     bucketNameById,
+    inbox,
+    buckets,
+    assignees,
     selection,
     completed,
     stayingIds,
@@ -223,19 +229,37 @@ export function TaskListView({
   // Reset collapse state when the scope/grouping changes. For bucket grouping,
   // open one group by default (per the "one open by default" rule); otherwise
   // everything is expanded.
+  // The selected task's group stays open too (TV-P0): a deep link into All
+  // lands before the bucket grouping does, and must not be folded away.
   const groupSignature = `${selection}:${groupBy}:${groups.map((g) => g.key).join(",")}`;
   const initRef = useRef("");
+  const selectedForInitRef = useRef(selectedId);
+  useEffect(() => {
+    selectedForInitRef.current = selectedId;
+  });
   useEffect(() => {
     if (initRef.current === groupSignature) return;
     initRef.current = groupSignature;
     if (groupBy === "bucket" && groups.length > 1) {
-      setCollapsed(new Set(groups.slice(1).map((g) => g.key)));
+      const selected = selectedForInitRef.current;
+      const parentId = selected ? taskById.get(selected)?.parentId : null;
+      const holding = groups.find((g) =>
+        g.tasks.some((t) => t.id === selected || (parentId && t.id === parentId)),
+      )?.key;
+      setCollapsed(
+        new Set(
+          groups
+            .slice(1)
+            .map((g) => g.key)
+            .filter((key) => key !== holding),
+        ),
+      );
     } else {
       setCollapsed(new Set());
     }
     setExpandedParents(new Set());
     setRevealedGroups(NO_IDS);
-  }, [groupSignature, groupBy, groups]);
+  }, [groupSignature, groupBy, groups, taskById]);
 
   const toggleRevealGroup = useCallback((key: string) => {
     setRevealedGroups((prev) => {
@@ -249,7 +273,6 @@ export function TaskListView({
   // The right-hand columns, from every row the view can show (the listed
   // rows and their subtasks), so the meta lines up and an empty column
   // collapses (tasks-v2 §6, U1-1).
-  const { assignees } = useAssignees();
   const columns = useMemo(() => {
     const rows: Task[] = [];
     for (const group of groups) {
@@ -260,6 +283,7 @@ export function TaskListView({
     }
     return rowColumns(rows, {
       properties,
+      rows: rowPreset,
       showAssignee: showAssignee && assignees.length > 1,
       canEdit,
       isQueued: (id) => api.queuedTaskIds.has(id),
@@ -272,6 +296,7 @@ export function TaskListView({
     api.queuedTaskIds,
     api.queueClaims,
     properties,
+    rowPreset,
     showAssignee,
     assignees.length,
     canEdit,
@@ -288,19 +313,28 @@ export function TaskListView({
 
   // Flat, visually-ordered list of navigable tasks (skips collapsed groups,
   // includes the children of expanded parents — keyboard order = visual order).
+  // A task is one stop, at its first row (a guard: every grouping lists it once).
   const visibleTasks = useMemo(() => {
     const out: Task[] = [];
+    const seen = new Set<string>();
+    const push = (task: Task) => {
+      if (seen.has(task.id)) return;
+      seen.add(task.id);
+      out.push(task);
+    };
     for (const group of groups) {
       if (collapsed.has(group.key)) continue;
       for (const task of group.tasks) {
-        out.push(task);
-        if (expandedParents.has(task.id)) {
-          out.push(...(api.subtasksByParent.get(task.id) ?? []));
+        push(task);
+        // Only nested subtasks sit under their parent; Flat lists them as
+        // rows of their own, in their own place.
+        if (nest && expandedParents.has(task.id)) {
+          for (const child of api.subtasksByParent.get(task.id) ?? []) push(child);
         }
       }
     }
     return out;
-  }, [groups, collapsed, expandedParents, api.subtasksByParent]);
+  }, [groups, collapsed, expandedParents, nest, api.subtasksByParent]);
 
   // Keep the selection valid as tasks change. A selected subtask under a
   // visible-but-collapsed parent isn't stolen — its parent expands into view
@@ -637,26 +671,7 @@ export function TaskListView({
         onViewChange={onViewChange}
         canEdit={canEdit}
         onRequestCapture={onRequestCapture}
-        filterControl={tagFilterControl}
-        displayControl={displayControl}
-        activeFilters={activeTagFilters}
-        groupControl={
-          <div className="flex items-center gap-1.5">
-            <span className="font-sans text-xs text-muted-foreground">Group</span>
-            <Select value={groupBy} onValueChange={(v) => onGroupByChange(v as GroupBy)}>
-              <SelectTrigger size="sm" variant="ghost" className="w-28">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {groupOptions.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        }
+        controls={header}
       />
 
       {/* list */}
@@ -677,8 +692,18 @@ export function TaskListView({
         aria-label={`${scopeTitle} tasks`}
         className="pane-scroll min-h-0 flex-1 overflow-auto rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
-        {tasks.length === 0 ? (
-          <EmptyState canEdit={canEdit} onRequestCapture={onRequestCapture} />
+        {!api.loaded ? (
+          <TaskListSkeleton />
+        ) : tasks.length === 0 ? (
+          filterActive ? (
+            <TasksNoMatch onClearFilters={onClearFilters} />
+          ) : (
+            <TasksEmptyScope
+              scopeTitle={scopeTitle}
+              canEdit={canEdit}
+              onRequestCapture={onRequestCapture}
+            />
+          )
         ) : canReorder ? (
           // Queue reorder. In external mode (DF-22) the tasks page owns the one
           // DndContext (so a row can be dropped on the hub); we bind our reorder
@@ -788,34 +813,5 @@ export function TaskListView({
         )}
       </div>
     </div>
-  );
-}
-
-function EmptyState({
-  canEdit,
-  onRequestCapture,
-}: {
-  canEdit: boolean;
-  onRequestCapture: () => void;
-}) {
-  return (
-    <EmptyStateBase
-      title="Nothing here yet."
-      action={
-        canEdit ? (
-          <Button variant="secondary" size="sm" onClick={onRequestCapture}>
-            <Plus aria-hidden />
-            Add a task
-          </Button>
-        ) : undefined
-      }
-      hint={
-        canEdit ? (
-          <>
-            or press <Kbd>c</Kbd> to capture
-          </>
-        ) : undefined
-      }
-    />
   );
 }

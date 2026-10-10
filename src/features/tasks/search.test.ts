@@ -3,7 +3,12 @@
 // scope only; unknown → none, so the page degrades without a crash).
 
 import { describe, expect, it } from "@rstest/core";
-import { resolveTasksDeepLink, validateTasksSearch } from "./search";
+import {
+  resolveTasksDeepLink,
+  takeSearchTokens,
+  taskMatchesQuery,
+  validateTasksSearch,
+} from "./search";
 
 describe("validateTasksSearch", () => {
   it("keeps a non-empty string id", () => {
@@ -59,9 +64,117 @@ describe("resolveTasksDeepLink", () => {
     expect(resolveTasksDeepLink("nope", ctx)).toEqual({ kind: "none" });
   });
 
+  it("a task in a project you can't see opens in All, never Inbox (TV-P0, AC1.10)", () => {
+    const withPrivate = {
+      ...ctx,
+      tasks: [...ctx.tasks, { id: "assigned-to-me", bucketId: "b-someone-elses" }],
+    };
+    expect(resolveTasksDeepLink("assigned-to-me", withPrivate)).toEqual({
+      kind: "task",
+      taskId: "assigned-to-me",
+      scope: "all",
+    });
+  });
+
   it("handles a missing inbox (no crash on a fresh workspace)", () => {
     expect(
       resolveTasksDeepLink("t1", { tasks: ctx.tasks, buckets: ctx.buckets, inboxId: null }),
     ).toEqual({ kind: "task", taskId: "t1", scope: "b1" });
+  });
+});
+
+// TV-U2 · U2-4 — `/` search over title + description; `#tag` and `@name`
+// become filter chips.
+describe("taskMatchesQuery", () => {
+  const task = { title: "Fix the Capture modal", description: "Assignee picker is too big" };
+
+  it("matches the title or the description, ignoring case", () => {
+    expect(taskMatchesQuery(task, "capture")).toBe(true);
+    expect(taskMatchesQuery(task, "PICKER")).toBe(true);
+    expect(taskMatchesQuery(task, "calendar")).toBe(false);
+  });
+
+  it("needs every word, wherever it is", () => {
+    expect(taskMatchesQuery(task, "modal big")).toBe(true);
+    expect(taskMatchesQuery(task, "modal small")).toBe(false);
+  });
+
+  it("an empty query matches everything", () => {
+    expect(taskMatchesQuery(task, "")).toBe(true);
+    expect(taskMatchesQuery(task, "   ")).toBe(true);
+  });
+
+  it("reads a description's words, never its HTML", () => {
+    const rich = {
+      title: "Plan the offsite",
+      description:
+        '<p dir="ltr"><span style="white-space: pre-wrap;">Book the venue &amp; the bus</span></p>',
+    };
+    expect(taskMatchesQuery(rich, "venue")).toBe(true);
+    expect(taskMatchesQuery(rich, "venue & bus")).toBe(true);
+    for (const markup of ["span", "style", "pre-wrap", "dir", "ltr"]) {
+      expect(taskMatchesQuery(rich, markup)).toBe(false);
+    }
+    // Plain text is read as it is, angle brackets included.
+    expect(taskMatchesQuery({ title: "x", description: "a <b> c" }, "<b>")).toBe(true);
+  });
+});
+
+describe("takeSearchTokens", () => {
+  const ctx = {
+    tags: [
+      { id: "t1", name: "design" },
+      { id: "t2", name: "Bug" },
+      { id: "t3", name: "backend" },
+    ],
+    people: [
+      { userId: "u1", name: "Me", isMe: true },
+      { userId: "u2", name: "Mike Grochowski" },
+      { userId: "u3", name: "Ola" },
+    ],
+  };
+
+  it("a finished #tag word becomes a Tag value and leaves the query", () => {
+    expect(takeSearchTokens("modal #design ", ctx)).toEqual({
+      query: "modal ",
+      tokens: [{ dimension: "tag", value: "t1" }],
+    });
+    expect(takeSearchTokens("#bug ", ctx)).toEqual({
+      query: "",
+      tokens: [{ dimension: "tag", value: "t2" }],
+    });
+  });
+
+  it("waits while the word is still being typed; Enter finishes it", () => {
+    expect(takeSearchTokens("#des", ctx)).toEqual({ query: "#des", tokens: [] });
+    expect(takeSearchTokens("fix #des", ctx, true)).toEqual({
+      query: "fix",
+      tokens: [{ dimension: "tag", value: "t1" }],
+    });
+  });
+
+  it("@name becomes an Assignee value: @me, a first name, a unique prefix", () => {
+    expect(takeSearchTokens("@me ", ctx).tokens).toEqual([{ dimension: "assignee", value: "u1" }]);
+    expect(takeSearchTokens("@mike ", ctx).tokens).toEqual([
+      { dimension: "assignee", value: "u2" },
+    ]);
+    expect(takeSearchTokens("@ol ", ctx).tokens).toEqual([{ dimension: "assignee", value: "u3" }]);
+  });
+
+  it("several at once", () => {
+    expect(takeSearchTokens("#design @ola notes ", ctx)).toEqual({
+      query: "notes ",
+      tokens: [
+        { dimension: "tag", value: "t1" },
+        { dimension: "assignee", value: "u3" },
+      ],
+    });
+  });
+
+  it("no match, or more than one, stays text; so do #123 and C#", () => {
+    expect(takeSearchTokens("#b ", ctx)).toEqual({ query: "#b ", tokens: [] });
+    expect(takeSearchTokens("#123 ", ctx)).toEqual({ query: "#123 ", tokens: [] });
+    expect(takeSearchTokens("C# ", ctx)).toEqual({ query: "C# ", tokens: [] });
+    expect(takeSearchTokens("@nobody ", ctx)).toEqual({ query: "@nobody ", tokens: [] });
   });
 });

@@ -2,6 +2,7 @@ import { cva } from "class-variance-authority";
 import { Avatar as AvatarPrimitive } from "radix-ui";
 import type * as React from "react";
 
+import { initialsOf, teamLettersOf } from "@/lib/initials";
 import { cn } from "@/lib/utils";
 
 function Avatar({
@@ -44,7 +45,7 @@ function AvatarFallback({
     <AvatarPrimitive.Fallback
       data-slot="avatar-fallback"
       className={cn(
-        "flex size-full items-center justify-center rounded-avatar bg-muted text-sm text-muted-foreground group-data-[size=sm]/avatar:text-xs group-data-[size=icon]/avatar:text-2xs group-data-[size=icon]/avatar:font-medium",
+        "flex size-full items-center justify-center rounded-avatar bg-muted text-sm text-muted-foreground group-data-[size=sm]/avatar:text-xs group-data-[size=icon]/avatar:text-3xs group-data-[size=icon]/avatar:font-medium",
         className,
       )}
       {...props}
@@ -111,46 +112,6 @@ function avatarHue(key: string): AvatarHue {
     hash = Math.imul(hash, 0x01000193);
   }
   return AVATAR_HUES[(hash >>> 0) % AVATAR_HUES.length];
-}
-
-const firstLetter = (word: string) => [...word][0] ?? "";
-
-/** Words of a name; an email's local part is split on `.`, `_` and `-` too. */
-function nameWords(name: string): string[] {
-  const trimmed = name.trim();
-  const base = /^\S+@\S+$/.test(trimmed) ? trimmed.slice(0, trimmed.indexOf("@")) : trimmed;
-  return base
-    .split(/[\s._-]+/)
-    .map((w) => w.replace(/^[^\p{L}\p{N}]+/u, ""))
-    .filter(Boolean);
-}
-
-/**
- * A person's two initials (call 43): first and last word ("Maciej Grzywacz" →
- * "MG"), or the first two letters of a single word ("Maciej" → "MA", "Mike" →
- * "MI"), so two people who share a first letter still differ. Never one letter
- * and never "Me": pass the person's own name, not a pronoun.
- */
-function initialsOf(name: string | null | undefined): string {
-  const words = nameWords(name ?? "");
-  if (words.length === 0) return "?";
-  if (words.length === 1) return [...words[0]].slice(0, 2).join("").toUpperCase();
-  return (firstLetter(words[0]) + firstLetter(words[words.length - 1])).toUpperCase();
-}
-
-/**
- * A team's two automatic letters (call 95): the first letters of the first two
- * words ("Customer success" → "CS"), or a single word's first letter plus its
- * next consonant ("Design" → "DS", "Development" → "DV"). A team can edit its
- * letters (TV-D10 stores them); pass them as `letters` when set.
- */
-function teamLettersOf(name: string | null | undefined): string {
-  const words = nameWords(name ?? "");
-  if (words.length === 0) return "?";
-  if (words.length > 1) return (firstLetter(words[0]) + firstLetter(words[1])).toUpperCase();
-  const letters = [...words[0]];
-  const consonant = letters.slice(1).find((ch) => /\p{L}/u.test(ch) && !/[aeiouy]/i.test(ch));
-  return (letters[0] + (consonant ?? letters[1] ?? "")).toUpperCase();
 }
 
 // Initials sit on the label hue mixed into the card (bg-label-fill), in the

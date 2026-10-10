@@ -50,6 +50,7 @@ function task(id: string, over: Partial<Task> = {}): Task {
 
 function api(queued: string[], claims: Record<string, string[]>) {
   return {
+    loaded: true,
     queuedTaskIds: new Set(queued),
     queueClaims: new Map(Object.entries(claims)),
     toggleQueue: rs.fn(),
@@ -200,7 +201,7 @@ describe("List, Board and cards in My tasks (D4-4)", () => {
   it("the List leaves the avatar out in My tasks and keeps it in All", () => {
     render(
       <TooltipProvider>
-        <TaskListView {...shared("mine")} groupBy="none" onGroupByChange={() => {}} />
+        <TaskListView {...shared("mine")} groupBy="none" />
       </TooltipProvider>,
     );
     expect(screen.getAllByRole("row")).toHaveLength(2);
@@ -208,7 +209,7 @@ describe("List, Board and cards in My tasks (D4-4)", () => {
     cleanup();
     render(
       <TooltipProvider>
-        <TaskListView {...shared("all")} groupBy="none" onGroupByChange={() => {}} />
+        <TaskListView {...shared("all")} groupBy="none" />
       </TooltipProvider>,
     );
     expect(avatars()).toBe(2);
@@ -217,7 +218,7 @@ describe("List, Board and cards in My tasks (D4-4)", () => {
   it("the Board leaves the avatar out in My tasks and keeps it in All", () => {
     render(
       <TooltipProvider>
-        <TaskBoardView {...shared("mine")} boardGroupBy="status" onBoardGroupByChange={() => {}} />
+        <TaskBoardView {...shared("mine")} boardGroupBy="status" />
       </TooltipProvider>,
     );
     expect(screen.getByText("Task t1")).toBeTruthy();
@@ -225,7 +226,7 @@ describe("List, Board and cards in My tasks (D4-4)", () => {
     cleanup();
     render(
       <TooltipProvider>
-        <TaskBoardView {...shared("all")} boardGroupBy="status" onBoardGroupByChange={() => {}} />
+        <TaskBoardView {...shared("all")} boardGroupBy="status" />
       </TooltipProvider>,
     );
     expect(avatars()).toBe(2);

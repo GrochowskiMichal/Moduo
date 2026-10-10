@@ -32,7 +32,7 @@ type TasksDisplay = {
 
 const DEFAULTS: TasksDisplay = {
   layout: "list",
-  groupBy: "bucket",
+  groupBy: "project",
   orderBy: "manual",
   completed: "hidden",
   subtasks: "nested",
@@ -57,12 +57,13 @@ const CONTROLS: DisplayControl<TasksDisplay>[] = [
     id: "groupBy",
     label: "Group by",
     options: [
-      { value: "none", label: "None" },
+      // The v3 Group by set (TV-U2): Status · Priority · Assignee · Date · Project · None.
       { value: "status", label: "Status" },
-      { value: "bucket", label: "Bucket" },
-      { value: "assignee", label: "Assignee" },
       { value: "priority", label: "Priority" },
-      { value: "time", label: "Time" },
+      { value: "assignee", label: "Assignee" },
+      { value: "date", label: "Date" },
+      { value: "project", label: "Project" },
+      { value: "none", label: "None" },
     ],
   },
   {

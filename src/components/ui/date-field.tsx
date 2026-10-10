@@ -2,6 +2,7 @@ import { addDays, format, startOfWeek } from "date-fns";
 import { CalendarDays, Clock, X } from "lucide-react";
 import * as React from "react";
 
+import { formatDay, formatDayTime } from "@/lib/time-format";
 import { cn } from "@/lib/utils";
 import { Button } from "./button";
 import { Calendar } from "./calendar";
@@ -22,7 +23,8 @@ type DateFieldProps = {
   variant?: "ghost" | "outline" | "property";
   /** The trigger's icon (default: a calendar). */
   icon?: React.ReactNode;
-  /** Format the chosen value for the trigger (default "MMM d" / "MMM d, HH:mm"). */
+  /** Format the chosen value for the trigger (default: the one grammar, "Tomorrow" /
+   * "Tomorrow, 3:00 PM" — src/lib/time-format.ts). */
   formatValue?: (value: Date) => string;
   /** Open the picker on mount (a property row revealed by picking it). */
   defaultOpen?: boolean;
@@ -82,18 +84,26 @@ type TimeInputProps = Omit<
   onValueChange: (hhmm: string) => void;
   /** Minutes ↑ / ↓ move the time by (default 15). */
   step?: number;
+  /**
+   * Also report every keystroke that reads as a time, not only on Enter or
+   * blur: for an owner that holds a draft until its picker closes (DateField
+   * saves once), since a click outside closes the picker before any blur.
+   */
+  live?: boolean;
 };
 
 /**
  * TimeInput — the token time field that replaces the native
  * `<input type="time">` (DS-6, the §5.1 fix list): an `Input` that shows
  * "3:00 PM", takes "15:00", "3pm" or "1530", commits on Enter or blur, reverts
- * text that isn't a time, and moves by `step` minutes on ↑ / ↓.
+ * text that isn't a time, and moves by `step` minutes on ↑ / ↓. While you type
+ * the text stays as typed; it reads back as "3:00 PM" once committed.
  */
 function TimeInput({
   value,
   onValueChange,
   step = 15,
+  live = false,
   size = "sm",
   className,
   onBlur,
@@ -125,7 +135,12 @@ function TimeInput({
       size={size}
       value={field.draft}
       placeholder={placeholder}
-      onChange={(e) => field.setDraft(e.target.value)}
+      onChange={(e) => {
+        field.type(e.target.value);
+        if (!live) return;
+        const parsed = parseTimeText(e.target.value);
+        if (parsed && parsed !== value) onValueChange(parsed);
+      }}
       onBlur={(e) => {
         field.commit();
         onBlur?.(e);
@@ -148,57 +163,113 @@ function TimeInput({
   );
 }
 
-type DatePickerPanelProps = {
-  value: Date | null;
-  onChange: (value: Date | null) => void;
-  /** Pair the calendar with a time field. */
-  withTime?: boolean;
-  /** A pick that ends the edit: a date-only day, a preset, or Clear. */
-  onDone?: () => void;
-  /** A small heading over the presets ("Due date"). */
-  heading?: string;
-};
+const sameMoment = (a: Date | null, b: Date | null) =>
+  (a?.getTime() ?? null) === (b?.getTime() ?? null);
 
 /**
- * The date picker's body — presets (Today / Tomorrow / Next week, the phrases
- * the capture parser understands), the Calendar, an optional TimeInput and
- * Clear — for a surface that owns its own popover (a task row's date cell,
- * opened from `s` / `d`). DateField renders the same panel.
- *
- * Each pick saves once. A date-only pick ends the edit; with a time the panel
- * stays open so the time can be set, keeping the existing time (or 9:00 AM).
- * Clicking the chosen day again keeps it: Clear is the way to remove a date.
+ * The editing state behind a date picker that saves once (TV-P0). A date-only
+ * pick saves and closes at once. With a time, the day and the time are a
+ * draft while the picker is open, and `close()` saves it in one change — so
+ * typing "10:30" is one write, not four; Esc drops the draft (`cancel`, from
+ * the content's `onEscapeKeyDown`). `close` is what the popover's
+ * `onOpenChange(false)` calls; `done` closes the popover itself.
  */
-function DatePickerPanel({
+function useDateDraft({
   value,
   onChange,
-  withTime = false,
-  onDone,
-  heading,
-}: DatePickerPanelProps) {
-  const pick = (day: Date | undefined) => {
-    if (!day) return;
-    if (withTime) {
-      onChange(applyTime(day, value ? value.getHours() : 9, value ? value.getMinutes() : 0));
-    } else {
-      onChange(applyTime(day, 0, 0));
-      onDone?.();
+  withTime,
+  open,
+  done,
+}: {
+  value: Date | null;
+  onChange: (value: Date | null) => void;
+  withTime: boolean;
+  /** Whether the picker is showing: a picker closed from outside drops its draft. */
+  open: boolean;
+  done: () => void;
+}) {
+  // `undefined` = nothing edited since the picker opened. The ref mirrors it
+  // so a second close in the same turn (Radix's focus-outside firing as the
+  // content unmounts, on the previous render's handlers) finds nothing left.
+  const [draft, setDraftState] = React.useState<Date | null | undefined>(undefined);
+  const draftRef = React.useRef<Date | null | undefined>(undefined);
+  const setDraft = (next: Date | null | undefined) => {
+    draftRef.current = next;
+    setDraftState(next);
+  };
+  React.useEffect(() => {
+    if (!open) {
+      draftRef.current = undefined;
+      setDraftState(undefined);
     }
+  }, [open]);
+  const shown = draft === undefined ? value : draft;
+  const timeStr = shown ? format(shown, "HH:mm") : "09:00";
+
+  const close = () => {
+    const pending = draftRef.current;
+    draftRef.current = undefined;
+    if (pending !== undefined && !sameMoment(pending, value)) onChange(pending);
+    setDraftState(undefined);
+    done();
   };
 
-  const commitTime = (hhmm: string) => {
-    const [h, m] = hhmm.split(":").map(Number);
-    if (Number.isNaN(h) || Number.isNaN(m)) return;
-    onChange(applyTime(value ?? new Date(), h, m));
+  const pickDay = (day: Date | undefined) => {
+    if (!day) {
+      // Clicking the selected day again: a date-only field clears it.
+      if (!withTime) {
+        if (value) onChange(null);
+        done();
+      }
+      return;
+    }
+    if (withTime) {
+      const [h, m] = timeStr.split(":").map(Number);
+      setDraft(applyTime(day, shown ? shown.getHours() : h, shown ? shown.getMinutes() : m));
+      return;
+    }
+    const next = applyTime(day, 0, 0);
+    if (!sameMoment(next, value)) onChange(next);
+    done();
   };
 
-  const today = new Date();
-  const presets = [
-    { label: "Today", date: today },
-    { label: "Tomorrow", date: addDays(today, 1) },
-    { label: "Next week", date: addDays(startOfWeek(today, { weekStartsOn: 1 }), 7) },
-  ];
+  const setTime = (next: string) => {
+    if (!open) return;
+    const match = /^(\d{1,2}):(\d{2})$/.exec(next);
+    if (!match) return; // a half-typed or cleared field moves nothing
+    const h = Number(match[1]);
+    const m = Number(match[2]);
+    setDraft(applyTime(shown ?? new Date(), h, m));
+  };
 
+  const clear = () => {
+    setDraft(undefined);
+    if (value) onChange(null);
+    done();
+  };
+
+  /** Esc: drop the draft, so the close that follows saves nothing. */
+  const cancel = () => setDraft(undefined);
+
+  return { shown, timeStr, withTime, close, pickDay, setTime, clear, cancel };
+}
+
+type DateDraft = ReturnType<typeof useDateDraft>;
+
+/**
+ * The picker's body — presets (Today / Tomorrow / Next week, the phrases the
+ * capture parser understands), the Calendar, an optional time field and Clear —
+ * for any popover that edits a date through {@link useDateDraft}.
+ */
+function DatePickerPanel({ draft, heading }: { draft: DateDraft; heading?: string }) {
+  const presets: Array<{ label: string; date: Date }> = (() => {
+    const today = new Date();
+    return [
+      { label: "Today", date: today },
+      { label: "Tomorrow", date: addDays(today, 1) },
+      { label: "Next week", date: addDays(startOfWeek(today, { weekStartsOn: 1 }), 7) },
+    ];
+  })();
   return (
     <>
       {heading ? (
@@ -206,37 +277,40 @@ function DatePickerPanel({
       ) : null}
       <div className="flex flex-wrap gap-1 border-b border-hairline p-2">
         {presets.map((p) => (
-          <Button key={p.label} variant="ghost" size="sm" onClick={() => pick(p.date)}>
+          <Button key={p.label} variant="ghost" size="sm" onClick={() => draft.pickDay(p.date)}>
             {p.label}
           </Button>
         ))}
       </div>
       <Calendar
         mode="single"
-        selected={value ?? undefined}
-        onSelect={pick}
-        defaultMonth={value ?? undefined}
+        selected={draft.shown ?? undefined}
+        onSelect={draft.pickDay}
+        defaultMonth={draft.shown ?? undefined}
       />
-      {withTime ? (
+      {draft.withTime ? (
         <div className="flex items-center gap-2 border-t border-hairline p-2">
           <Clock className="size-icon-sm text-muted-foreground" aria-hidden />
+          {/* The token time field (DS-6), live into the draft: Enter commits
+              the typed time, then saves and closes (TV-P0: saves once). */}
           <TimeInput
-            value={value ? format(value, "HH:mm") : ""}
-            onValueChange={commitTime}
+            live
+            value={draft.shown ? draft.timeStr : ""}
+            onValueChange={draft.setTime}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") draft.close();
+            }}
             aria-label="Time"
           />
         </div>
       ) : null}
-      {value ? (
+      {draft.shown ? (
         <div className="border-t border-hairline p-1">
           <Button
             variant="ghost"
             size="sm"
             className="w-full justify-start gap-1.5 text-muted-foreground"
-            onClick={() => {
-              onChange(null);
-              onDone?.();
-            }}
+            onClick={draft.clear}
           >
             <X aria-hidden />
             Clear
@@ -249,9 +323,8 @@ function DatePickerPanel({
 
 /**
  * Token-routed date (and optional time) picker — replaces the native
- * <input type="date"/datetime-local>. A Button trigger opens a Popover with
- * quick presets (Today / Tomorrow / Next week — the same phrases the capture
- * parser understands), the Calendar, an optional time field, and Clear.
+ * <input type="date"/datetime-local>. A trigger opens a Popover with the
+ * {@link DatePickerPanel}; it saves once (see {@link useDateDraft}).
  */
 function DateField({
   value,
@@ -267,13 +340,14 @@ function DateField({
   ...props
 }: DateFieldProps) {
   const [open, setOpen] = React.useState(defaultOpen);
+  const draft = useDateDraft({ value, onChange, withTime, open, done: () => setOpen(false) });
 
   const label = value
-    ? (formatValue?.(value) ?? format(value, withTime ? "MMM d, h:mm a" : "MMM d"))
+    ? (formatValue?.(value) ?? (withTime ? formatDayTime(value) : formatDay(value)))
     : placeholder;
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={(next) => (next ? setOpen(true) : draft.close())}>
       <PopoverTrigger asChild>
         {variant === "property" ? (
           <PropertyValue
@@ -303,17 +377,12 @@ function DateField({
           </Button>
         )}
       </PopoverTrigger>
-      <PopoverContent className="w-auto p-0" align="start">
-        <DatePickerPanel
-          value={value}
-          onChange={onChange}
-          withTime={withTime}
-          onDone={() => setOpen(false)}
-        />
+      <PopoverContent className="w-auto p-0" align="start" onEscapeKeyDown={draft.cancel}>
+        <DatePickerPanel draft={draft} />
       </PopoverContent>
     </Popover>
   );
 }
 
-export type { DateFieldProps, DatePickerPanelProps, TimeInputProps };
-export { DateField, DatePickerPanel, formatTimeText, parseTimeText, TimeInput };
+export type { DateDraft, DateFieldProps, TimeInputProps };
+export { DateField, DatePickerPanel, formatTimeText, parseTimeText, TimeInput, useDateDraft };

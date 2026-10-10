@@ -86,7 +86,7 @@ function FeedCard({
     >
       <header className="mb-1 flex min-w-0 items-center gap-2 font-sans text-xs text-muted-foreground">
         {avatar ? <span className="flex shrink-0">{avatar}</span> : null}
-        <span className="truncate font-medium text-foreground">{author}</span>
+        <span className="min-w-0 break-words font-medium text-foreground">{author}</span>
         {time ? (
           <>
             <span aria-hidden className="text-subtle-foreground">

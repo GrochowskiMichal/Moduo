@@ -58,7 +58,7 @@ const DIMENSIONS: FilterDimension[] = [
       { value: "todo", label: "To do" },
       { value: "doing", label: "In progress" },
       { value: "done", label: "Done" },
-      { value: "archived", label: "Archived" },
+      { value: "wont_do", label: "Won’t do" },
     ],
   },
   {
@@ -141,7 +141,7 @@ export const Default: Story = {
 export const Operators: Story = {
   render: () => {
     const [value, setValue] = useState<FilterCondition[]>([
-      { dimension: "status", operator: "is_not", values: ["done", "archived"] },
+      { dimension: "status", operator: "is_not", values: ["done", "wont_do"] },
       { dimension: "blocked", operator: "is", values: ["yes"] },
       { dimension: "tag", operator: "any_of", values: ["ui", "fix", "docs"] },
     ]);

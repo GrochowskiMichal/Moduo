@@ -5,7 +5,6 @@
 // once set, and until then sit in one quiet line that names them. Picking a name
 // there shows its row, empty, with its editor open.
 
-import { format } from "date-fns";
 import {
   Archive,
   CircleCheck,
@@ -135,7 +134,6 @@ export function TaskDetailProperties({ task, api, canEdit, mySeconds }: Props) {
           variant="property"
           value={task.dueDate ? new Date(task.dueDate) : null}
           onChange={(d) => api.patchTask(task.id, { dueDate: d ? d.toISOString() : null })}
-          formatValue={(d) => format(d, "EEE, MMM d")}
           placeholder="Set date"
           aria-label="Due"
           disabled={!canEdit}
@@ -149,8 +147,6 @@ export function TaskDetailProperties({ task, api, canEdit, mySeconds }: Props) {
             icon={<Clock />}
             value={task.scheduledAt ? new Date(task.scheduledAt) : null}
             onChange={(d) => api.patchTask(task.id, { scheduledAt: d ? d.toISOString() : null })}
-            // One time grammar with its TimeInput: "3:00 PM" (call 41).
-            formatValue={(d) => format(d, "EEE, MMM d · h:mm a")}
             placeholder="Set time"
             aria-label="Scheduled"
             disabled={!canEdit}

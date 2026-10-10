@@ -10,6 +10,7 @@ import { Input, NumberInput } from "../../../components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import { type FocusPrefs, useFocusPrefs } from "../../../lib/focus-prefs";
+import { formatDurationSeconds } from "../../../lib/time-format";
 import { cn } from "../../../lib/utils";
 import {
   bindFocusTask,
@@ -662,11 +663,8 @@ function formatClock(totalSeconds: number): string {
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
+/** A tracked total in the one grammar ("45m", "1h 30m"); under a minute, seconds. */
 function formatDuration(totalSeconds: number): string {
   const s = Math.max(0, Math.round(totalSeconds));
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  if (h > 0) return `${h}h ${m}m`;
-  if (m > 0) return `${m}m`;
-  return `${s}s`;
+  return s < 60 ? `${s}s` : formatDurationSeconds(s);
 }

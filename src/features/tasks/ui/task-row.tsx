@@ -1,7 +1,6 @@
 import type { DraggableSyntheticListeners } from "@dnd-kit/core";
 import { ChevronDown, ChevronRight, CornerDownRight, Inbox } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { DatePickerPanel } from "@/components/ui/date-field";
 import { SELECTED_ROW } from "@/components/ui/selection";
 import { CompleteToggle } from "../../../components/ui/complete-toggle";
 import {
@@ -16,6 +15,7 @@ import {
   ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "../../../components/ui/context-menu";
+import { DatePickerPanel, useDateDraft } from "../../../components/ui/date-field";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -29,10 +29,10 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/
 import { cn } from "../../../lib/utils";
 import { assigneeLabel } from "../assignee-options";
 import { useAssignees } from "../assignees";
-import { LEVEL_OPTIONS } from "../helpers";
+import { LEVEL_OPTIONS, STATUS_LABELS } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { EnergyLevel, PriorityLevel, Task } from "../model";
-import { ALL_ROW_COLUMNS, type RowColumns, type RowDate, rowDate } from "../row-layout";
+import { ALL_ROW_COLUMNS, type RowColumns, type RowDate, rowDate, rowTime } from "../row-layout";
 import { AssignContextMenu } from "./assign-context-menu";
 import { AssigneeAvatar } from "./assignee-avatar";
 import type { DragActivatorRef } from "./dnd/task-dnd";
@@ -99,8 +99,9 @@ type Props = {
 /**
  * One task in the List (tasks-v2 §6): checkbox · title · quiet counts, then
  * fixed right-hand columns (priority · [energy] · date · assignee · queue) so
- * the meta lines up down the list. A done row dims as a whole except its
- * checkbox; selection is the tint (DS-2), never a bar.
+ * the meta lines up down the list. Display → Rows: Detailed adds the status
+ * name, the time and the assignee's name (TV-U2). A done row dims as a whole
+ * except its checkbox; selection is the tint (DS-2), never a bar.
  */
 export function TaskRow({
   task,
@@ -131,6 +132,8 @@ export function TaskRow({
   api,
 }: Props) {
   const done = task.status === "done";
+  // A Won't do task kept in view (TV-P0) reads closed, like a done one.
+  const closed = done || task.status === "archived";
   const queued = api.queuedTaskIds.has(task.id);
   // Menu items that hand focus to something in the row (the title editor, a
   // chip's popover) run once the context menu has closed: Radix returns focus
@@ -147,6 +150,7 @@ export function TaskRow({
   const assigneeName = assigneeLabel(task.assigneeId, byId);
   // Solo workspaces have nobody to tell apart — the avatar only appears with teammates.
   const withAssignee = columns.assignee && showAssignee && assignees.length > 1;
+  const time = columns.time ? rowTime(task) : null;
   const dateCommand = command === "schedule" || command === "due";
 
   const row = (
@@ -232,7 +236,7 @@ export function TaskRow({
       ) : (
         <div
           data-slot="row-title"
-          className={cn("flex min-w-0 flex-1 items-center gap-2.5", done && "opacity-40")}
+          className={cn("flex min-w-0 flex-1 items-center gap-2.5", closed && "opacity-40")}
         >
           <button
             type="button"
@@ -245,7 +249,7 @@ export function TaskRow({
               "min-w-0 truncate text-left font-sans text-md",
               // Done dims through the cell's opacity, like the comp; a muted
               // colour on top would dim it twice.
-              done
+              closed
                 ? "text-foreground line-through"
                 : blocked
                   ? "text-muted-foreground"
@@ -289,8 +293,18 @@ export function TaskRow({
           the list, and an empty cell still holds its place. */}
       <div
         data-slot="row-columns"
-        className={cn("flex shrink-0 items-center gap-3", done && "opacity-40")}
+        className={cn("flex shrink-0 items-center gap-3", closed && "opacity-40")}
       >
+        {/* Detailed's cells hold their width (min-w, so a longer value widens
+            the cell rather than truncate, call 41). */}
+        {columns.status ? (
+          <span
+            data-col="status"
+            className="min-w-24 shrink-0 whitespace-nowrap font-sans text-xs text-muted-foreground"
+          >
+            {STATUS_LABELS[task.status]}
+          </span>
+        ) : null}
         {columns.priority ? (
           <span data-col="priority" className="flex w-icon-sm shrink-0 items-center justify-center">
             <PriorityMark level={task.priority} />
@@ -311,7 +325,27 @@ export function TaskRow({
             api={api}
           />
         ) : null}
-        {withAssignee ? (
+        {columns.time ? (
+          <span
+            data-col="time"
+            className="min-w-22 shrink-0 whitespace-nowrap text-right font-sans text-xs tabular-nums text-muted-foreground"
+          >
+            {time}
+          </span>
+        ) : null}
+        {withAssignee && columns.assigneeName ? (
+          <span
+            data-col="assignee"
+            className="flex min-w-24 shrink-0 items-center gap-1.5 whitespace-nowrap font-sans text-xs text-muted-foreground"
+          >
+            {task.assigneeId ? (
+              <>
+                <AssigneeAvatar assignee={assignee} size="icon" />
+                {assignee ? firstName(assignee.name) : assigneeName}
+              </>
+            ) : null}
+          </span>
+        ) : withAssignee ? (
           <span data-col="assignee" className="flex w-icon shrink-0 items-center justify-center">
             {task.assigneeId ? (
               <Tooltip>
@@ -519,9 +553,27 @@ function DateCell({
   api: TasksModuleApi;
 }) {
   const date = rowDate(task);
-  const cell = "flex w-19 shrink-0 items-center justify-end";
-  if (!date && !command) return <span data-col="date" className={cell} aria-hidden />;
+  // At least the column's width; a wider date (another year's) widens it
+  // rather than truncate (call 41).
+  const cell = "flex min-w-19 shrink-0 items-center justify-end";
   const kind = command ?? (date?.kind === "due" ? "due" : "schedule");
+  // One save when the popover closes (TV-P0): a scheduled time goes through
+  // the reschedule op, so it lands in the task's trail.
+  const current = kind === "schedule" ? task.scheduledAt : task.dueDate;
+  const draft = useDateDraft({
+    value: current ? new Date(current) : null,
+    onChange: (d) =>
+      api.patchTask(
+        task.id,
+        kind === "schedule"
+          ? { scheduledAt: d ? d.toISOString() : null }
+          : { dueDate: d ? d.toISOString() : null },
+      ),
+    withTime: kind === "schedule",
+    open: command !== null,
+    done: onClearCommand,
+  });
+  if (!date && !command) return <span data-col="date" className={cell} aria-hidden />;
   // With a date, its description names it ("Scheduled …", "Due …").
   const label = date ? date.description : kind === "due" ? "Due date" : "Scheduled time";
 
@@ -560,20 +612,20 @@ function DateCell({
   return (
     <Popover
       open={command !== null}
-      onOpenChange={(o) => (o ? onRequestCommand(kind) : onClearCommand())}
+      onOpenChange={(o) => (o ? onRequestCommand(kind) : draft.close())}
     >
       {date ? <DateTip date={date}>{trigger}</DateTip> : trigger}
       <PopoverContent
         className="w-auto p-0"
         onClick={(e) => e.stopPropagation()}
         onCloseAutoFocus={keepListFocus}
+        onEscapeKeyDown={draft.cancel}
         align="end"
       >
-        {kind === "schedule" ? (
-          <ScheduleEditor task={task} api={api} onDone={onClearCommand} />
-        ) : (
-          <DueEditor task={task} api={api} onDone={onClearCommand} />
-        )}
+        <DatePickerPanel
+          draft={draft}
+          heading={kind === "schedule" ? "Scheduled time" : "Due date"}
+        />
       </PopoverContent>
     </Popover>
   );
@@ -586,76 +638,6 @@ function DateTip({ date, children }: { date: RowDate; children: React.ReactNode 
       <TooltipTrigger asChild>{children}</TooltipTrigger>
       <TooltipContent>{date.description}</TooltipContent>
     </Tooltip>
-  );
-}
-
-function ScheduleEditor({
-  task,
-  api,
-  onDone,
-}: {
-  task: Task;
-  api: TasksModuleApi;
-  onDone: () => void;
-}) {
-  return (
-    <DateEditor
-      label="Scheduled time"
-      value={validDate(task.scheduledAt)}
-      withTime
-      onChange={(next) => api.patchTask(task.id, { scheduledAt: next ? next.toISOString() : null })}
-      onDone={onDone}
-    />
-  );
-}
-
-function DueEditor({ task, api, onDone }: { task: Task; api: TasksModuleApi; onDone: () => void }) {
-  return (
-    <DateEditor
-      label="Due date"
-      value={validDate(task.dueDate)}
-      withTime={false}
-      onChange={(next) => api.patchTask(task.id, { dueDate: next ? next.toISOString() : null })}
-      onDone={onDone}
-    />
-  );
-}
-
-function validDate(iso: string | null): Date | null {
-  if (!iso) return null;
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? null : d;
-}
-
-/**
- * The row's date editor: the kit's `DatePickerPanel` (presets · Calendar ·
- * TimeInput · Clear, the body DateField renders too) inside the row's own
- * popover. DateField owns its open state and trigger, and this popover opens
- * from `s` / `d` and the menu and hands focus back to the list on close, so the
- * row keeps its popover. Each pick saves once: a due date closes the editor; a
- * scheduled day stays open so its time can be set.
- */
-function DateEditor({
-  label,
-  value,
-  withTime,
-  onChange,
-  onDone,
-}: {
-  label: string;
-  value: Date | null;
-  withTime: boolean;
-  onChange: (next: Date | null) => void;
-  onDone: () => void;
-}) {
-  return (
-    <DatePickerPanel
-      heading={label}
-      value={value}
-      withTime={withTime}
-      onChange={onChange}
-      onDone={onDone}
-    />
   );
 }
 
@@ -699,6 +681,7 @@ function BucketPopover({
           onClick={(e) => e.stopPropagation()}
           aria-label={`Bucket: ${bucketName}`}
           tabIndex={showLabel ? undefined : -1}
+          data-implied={showLabel ? undefined : ""}
           className={cn(
             "flex min-w-0 shrink-3 rounded-sm px-1 transition-colors duration-(--motion-fade) ease-(--ease-out)",
             canEdit && "hover:bg-state-hover",
@@ -730,4 +713,9 @@ function BucketPopover({
       </DropdownMenuContent>
     </DropdownMenu>
   );
+}
+
+/** Detailed's assignee cell: the first name ("Mike" of "Mike Grochowski"; "Me" stays). */
+function firstName(name: string): string {
+  return name.trim().split(/\s+/)[0] ?? name;
 }

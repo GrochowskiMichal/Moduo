@@ -1,12 +1,106 @@
-// DS-6 (the §5.1 fix list): the token time and number fields that replaced the
-// native `<input type="time">` / `type="number"`.
-import { describe, expect, it, rs } from "@rstest/core";
-import { fireEvent, render, screen } from "@testing-library/react";
+// TV-P0 (tasks-v3 AC1.12) — a date picker saves once: typing a time or
+// clicking a day only moves the draft; closing the picker writes it, once.
+import { afterEach, beforeAll, describe, expect, it, rs } from "@rstest/core";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 
-import { formatTimeText, parseTimeText, TimeInput } from "./date-field";
+import { DateField, formatTimeText, parseTimeText, TimeInput } from "./date-field";
 import { NumberInput } from "./input";
 
+beforeAll(() => {
+  globalThis.ResizeObserver ??= class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as never;
+  Element.prototype.scrollIntoView ??= () => {};
+  Element.prototype.hasPointerCapture ??= () => false;
+  Element.prototype.releasePointerCapture ??= () => {};
+});
+afterEach(cleanup);
+
+function setup(props: { withTime?: boolean; value?: Date | null }) {
+  const calls: Array<Date | null> = [];
+  render(
+    <DateField
+      value={props.value ?? null}
+      onChange={(d) => calls.push(d)}
+      withTime={props.withTime}
+      defaultOpen
+      aria-label="When"
+    />,
+  );
+  return calls;
+}
+
+describe("DateField saves once", () => {
+  it("typing a time, segment by segment, writes nothing until the picker closes", () => {
+    const calls = setup({ withTime: true, value: new Date(2026, 9, 9, 9, 0) });
+    const time = screen.getByLabelText("Time");
+    for (const v of ["1", "10", "10:3", "10:30"]) fireEvent.change(time, { target: { value: v } });
+    expect(calls).toHaveLength(0);
+    fireEvent.keyDown(time, { key: "Enter" });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.getHours()).toBe(10);
+    expect(calls[0]?.getMinutes()).toBe(30);
+  });
+
+  it("closing without a change writes nothing", () => {
+    const calls = setup({ withTime: true, value: new Date(2026, 9, 9, 9, 0) });
+    fireEvent.keyDown(screen.getByLabelText("Time"), { key: "Enter" });
+    expect(calls).toHaveLength(0);
+  });
+
+  it("a date-only pick writes once and closes", () => {
+    const calls = setup({ withTime: false });
+    fireEvent.click(screen.getByRole("button", { name: "Tomorrow" }));
+    expect(calls).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: "Tomorrow" })).toBeNull();
+  });
+
+  it("Clear writes null once", () => {
+    const calls = setup({ withTime: true, value: new Date(2026, 9, 9, 9, 0) });
+    fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+    expect(calls).toEqual([null]);
+  });
+});
+
+describe("DateField Esc", () => {
+  it("Esc drops the draft: nothing is written", () => {
+    const calls = setup({ withTime: true, value: new Date(2026, 9, 9, 9, 0) });
+    const time = screen.getByLabelText("Time");
+    fireEvent.change(time, { target: { value: "10:30" } });
+    fireEvent.keyDown(time, { key: "Escape" });
+    expect(calls).toHaveLength(0);
+    expect(screen.queryByLabelText("Time")).toBeNull();
+  });
+});
+
+describe("DateField closes once", () => {
+  it("a second close in the same turn (focus leaving as it unmounts) writes nothing more", () => {
+    const calls: Array<Date | null> = [];
+    render(
+      <DateField
+        value={new Date(2026, 9, 9, 9, 0)}
+        onChange={(d) => calls.push(d)}
+        withTime
+        defaultOpen
+        aria-label="When"
+      />,
+    );
+    const time = screen.getByLabelText("Time");
+    fireEvent.change(time, { target: { value: "10:30" } });
+    // Enter saves and closes; the input losing focus as the picker unmounts
+    // must not save the same draft again.
+    fireEvent.keyDown(time, { key: "Enter" });
+    fireEvent.blur(time);
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(calls).toHaveLength(1);
+  });
+});
+
+// DS-6 (the §5.1 fix list): the token time and number fields that replaced the
+// native `<input type="time">` / `type="number"`.
 describe("parseTimeText / formatTimeText", () => {
   it("reads the ways people type a time", () => {
     expect(parseTimeText("15:00")).toBe("15:00");

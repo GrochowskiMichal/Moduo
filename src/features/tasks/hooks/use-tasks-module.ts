@@ -11,6 +11,7 @@ import { editableTaskFields } from "../../../lib/task-rows";
 import { undoToast } from "../../../lib/undo-toast";
 import { formatAwaySpan } from "../../focus/away-copy";
 import type { FocusSaveContext } from "../../focus/engine";
+import { FOCUS_TIME_SAVED_EVENT, type FocusTimeSaved } from "../../focus/time-sink";
 import {
   applyLiveTags,
   createOrAttachByName,
@@ -147,6 +148,9 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
   );
   const [timeBlocks, setTimeBlocksState] = useState<TimeBlockMap>({});
   const [loading, setLoading] = useState(true);
+  /** The first load has answered (data or an error): before it, views show a
+   *  skeleton, never "empty" (TV-P0). Later reloads keep the rows on screen. */
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const reqRef = useRef(0);
   /**
@@ -179,6 +183,9 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         setKeptRows([]);
         setTimeBlocksState({});
         setLoading(false);
+        // Nothing to read yet (no workspace, person or access): not a first
+        // load, so the views keep their skeleton until a real answer.
+        setLoaded(false);
         return;
       }
       const rt = baseRuntime;
@@ -231,7 +238,10 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         if (reqRef.current === req && !quiet) setError(e instanceof Error ? e.message : String(e));
       } finally {
         end();
-        if (reqRef.current === req && settled) setLoading(false);
+        if (reqRef.current === req && settled) {
+          setLoading(false);
+          setLoaded(true);
+        }
       }
     },
     [baseRuntime, userId, workspaceId, canRead, gate],
@@ -797,38 +807,33 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
   );
 
   /**
-   * Capture a new task straight into my queue (Focus's empty-queue affordance,
-   * DF-11). Created in the Inbox, assigned to me, shown queued at once; once
-   * the server has it, it's added to the end of my queue.
+   * Create a task and line it up at the end of my queue, in one gesture: shown
+   * queued at once; once the server has the task, it's added to the end of my
+   * queue (behind earlier queue ops). New in Focus or the Queue lands in Up next
+   * this way (TV-P0, AC1.9). An assignee left unchosen is me. Resolves to the
+   * saved task, or null, like `createTask` (so a capture can tag it).
    */
-  const captureToQueue = useCallback(
-    (title: string) => {
-      const trimmed = title.trim();
-      if (!trimmed) return;
-      if (!runtime || !workspaceId || !canEdit || !inbox || !userId) {
+  const createQueuedTask = useCallback(
+    (fields: Omit<NewTaskFields, "workspaceId" | "position">): Promise<Task | null> => {
+      if (!fields.title.trim()) return Promise.resolve(null);
+      if (!runtime || !workspaceId || !canEdit || !userId) {
         if (!canEdit) toast.error("You don't have edit access to Tasks in this workspace.");
-        return;
+        return Promise.resolve(null);
       }
       const rt = runtime;
       const ws = workspaceId;
       const me = userId;
-      const bucketId = inbox.id;
-      const position = endPosition(liveTasks.filter((t) => t.bucketId === bucketId));
-      const optimistic = makeTask({
-        bucketId,
-        title: trimmed,
-        workspaceId: ws,
-        position,
-        assigneeId: me,
-      });
+      const position = endPosition(liveTasks.filter((t) => t.bucketId === fields.bucketId));
+      const optimistic = makeTask({ ...fields, workspaceId: ws, position });
       optimistic.creatorId = me;
+      if (optimistic.assigneeId === "") optimistic.assigneeId = me;
       const tempId = `tmp-${crypto.randomUUID()}`;
       optimistic.id = tempId;
       const placeholder = optimisticEntry(tempId, endOfQueue(myQueueEntries));
       setBundle((prev) => ({ ...prev, tasks: [...prev.tasks, optimistic] }));
       setQueueRows((prev) => [...prev, placeholder]);
-      void rt.tasks.upsertTask({ ...optimistic, id: "" }).then(
-        (saved) => {
+      return rt.tasks.upsertTask({ ...optimistic, id: "" }).then(
+        (saved): Task => {
           setBundle((prev) => ({
             ...prev,
             tasks: swapTemp(prev.tasks, tempId, saved),
@@ -838,11 +843,13 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
           );
           // The task exists now; queuing it waits behind earlier queue ops.
           sendQueueOp(ws, me, () => rt.tasks.opQueueAdd({ workspaceId: ws, taskId: saved.id }));
+          return saved;
         },
-        (e) => {
+        (e): null => {
           setBundle((prev) => ({ ...prev, tasks: prev.tasks.filter((t) => t.id !== tempId) }));
           setQueueRows((prev) => prev.filter((row) => row.id !== placeholder.id));
           toast.error(e instanceof Error ? e.message : "Couldn't create task.");
+          return null;
         },
       );
     },
@@ -850,13 +857,29 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       runtime,
       workspaceId,
       canEdit,
-      inbox,
       userId,
       liveTasks,
       myQueueEntries,
       optimisticEntry,
       sendQueueOp,
     ],
+  );
+
+  /**
+   * Capture a new task straight into my queue (Focus's empty-queue affordance,
+   * DF-11): in the Inbox, assigned to me, queued at the end.
+   */
+  const captureToQueue = useCallback(
+    (title: string) => {
+      const trimmed = title.trim();
+      if (!trimmed) return;
+      if (!inbox) {
+        if (!canEdit) toast.error("You don't have edit access to Tasks in this workspace.");
+        return;
+      }
+      void createQueuedTask({ bucketId: inbox.id, title: trimmed, assigneeId: userId });
+    },
+    [inbox, userId, canEdit, createQueuedTask],
   );
 
   const patchTask = useCallback(
@@ -872,7 +895,8 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
           patch = { ...patch, recurrence: advanced };
           if (patch.status === "done" && advanced.nextOccurrence) {
             // Quiet, factual mirror — when this comes back (never a wall).
-            toast(`Done — next ${formatScheduled(advanced.nextOccurrence)}`);
+            // "Done — next: Tomorrow, 9:00 AM" (the one grammar reads "Tomorrow").
+            toast(`Done — next: ${formatScheduled(advanced.nextOccurrence)}`);
           }
         }
       }
@@ -914,6 +938,19 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         );
         return;
       }
+      // A scheduled time on its own is an intent op (tasks.reschedule /
+      // tasks.unschedule), so setting it from a row, the panel or a menu lands
+      // in the task's trail (TV-P0). The server op checks access and logs.
+      if (Object.keys(patch).length === 1 && "scheduledAt" in patch) {
+        const scheduledAt = patch.scheduledAt ?? null;
+        if ((existing.scheduledAt ?? null) === scheduledAt) return;
+        applyOp(id, { scheduledAt }, () =>
+          scheduledAt
+            ? runtime!.tasks.opReschedule({ workspaceId: workspaceId!, taskId: id, scheduledAt })
+            : runtime!.tasks.opUnschedule({ workspaceId: workspaceId!, taskId: id }),
+        );
+        return;
+      }
       // Field-level save (TV-D1): only the changed columns go to the server,
       // so this edit can't put back a field a teammate changed meanwhile.
       const fields = editableTaskFields(patch);
@@ -922,14 +959,42 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         toast.error("Still saving that task — try again in a moment.");
         return;
       }
-      patchTaskLocal(id, { ...fields, updatedAt: new Date().toISOString() });
+      // Moving a parent takes its subtasks along (TV-P0): a subtask never
+      // stays behind in the old project. `bundle.tasks` has the real buckets.
+      const movedChildren =
+        fields.bucketId !== undefined && fields.bucketId !== existing.bucketId
+          ? bundle.tasks.filter(
+              (t) =>
+                t.parentId === id &&
+                !t.deletedAt &&
+                !isTempId(t.id) &&
+                t.bucketId !== fields.bucketId,
+            )
+          : [];
+      const stamp = new Date().toISOString();
+      patchTaskLocal(id, { ...fields, updatedAt: stamp });
+      for (const child of movedChildren) {
+        patchTaskLocal(child.id, { bucketId: fields.bucketId, updatedAt: stamp });
+      }
       guard(async () => {
         const saved = await runtime!.tasks.updateTask({
           workspaceId: workspaceId!,
           taskId: id,
           patch: fields,
         });
-        setBundle((prev) => ({ ...prev, tasks: prev.tasks.map((t) => (t.id === id ? saved : t)) }));
+        // Subtasks follow the project the parent really landed in (an unknown
+        // one falls back to Inbox on the server).
+        const savedChildren = await Promise.all(
+          movedChildren.map((child) =>
+            runtime!.tasks.updateTask({
+              workspaceId: workspaceId!,
+              taskId: child.id,
+              patch: { bucketId: saved.bucketId },
+            }),
+          ),
+        );
+        const byId = new Map([saved, ...savedChildren].map((t) => [t.id, t]));
+        setBundle((prev) => ({ ...prev, tasks: prev.tasks.map((t) => byId.get(t.id) ?? t) }));
       });
     },
     [
@@ -1056,6 +1121,19 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     [runtime, bundle.tasks, patchTaskLocal],
   );
 
+  // Focus time is saved by the app shell's sink, from any page (TV-P0): show
+  // each saved total here as it lands.
+  useEffect(() => {
+    if (!workspaceId) return;
+    const onSaved = (event: Event) => {
+      const saved = (event as CustomEvent<FocusTimeSaved>).detail;
+      if (!saved || saved.workspaceId !== workspaceId) return;
+      patchTaskLocal(saved.taskId, { timeSpentSeconds: saved.totalSeconds });
+    };
+    window.addEventListener(FOCUS_TIME_SAVED_EVENT, onSaved);
+    return () => window.removeEventListener(FOCUS_TIME_SAVED_EVENT, onSaved);
+  }, [workspaceId, patchTaskLocal]);
+
   /** Why a time write can't be sent right now, or null. */
   const timeWriteBlocked = useCallback(
     (id: string): string | null => {
@@ -1132,8 +1210,11 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
   );
 
   /**
-   * The Focus engine's flush sink (TV-F1, saving through time entries since
-   * TV-D3): record `seconds` of focus that ended at `earnedAt` as one stretch,
+   * The module's own Focus sink (TV-F1, saving through time entries since
+   * TV-D3). Since TV-P0 the engine saves through the app shell's sink
+   * (features/focus/time-sink.ts) so time saves from any page; this one is no
+   * longer registered and stays, with its tests, until TV-F6's one time engine
+   * replaces both. It records `seconds` of focus that ended at `earnedAt` as one stretch,
    * under the save's key, so a resend after a reload or a lost answer counts
    * once. Only the task's time changes.
    *  - `false` right away: not now (no workspace yet, a task still being
@@ -1270,7 +1351,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
           releaseCommit: "committedFor" in patch,
         }),
       );
-      toast(`Skipped — next ${formatScheduled(scheduledAt)}`);
+      toast(`Skipped — next: ${formatScheduled(scheduledAt)}`);
     },
     [bundle.tasks, applyOp, runtime, workspaceId],
   );
@@ -1676,6 +1757,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
 
   return {
     loading,
+    loaded,
     error,
     canRead,
     canEdit,
@@ -1700,6 +1782,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     queueCount,
     reload: load,
     createTask,
+    createQueuedTask,
     captureToQueue,
     patchTask,
     toggleDone,

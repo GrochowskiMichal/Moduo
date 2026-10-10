@@ -18,13 +18,13 @@ import { CompleteToggle } from "../../../components/ui/complete-toggle";
 import { Eyebrow } from "../../../components/ui/eyebrow";
 import { IconButton } from "../../../components/ui/icon-button";
 import { Input } from "../../../components/ui/input";
+import { formatDay, formatDuration, formatTime } from "../../../lib/time-format";
 import { formatDue, formatScheduled } from "../../tasks/helpers";
 import type { TasksModuleApi } from "../../tasks/hooks/use-tasks-module";
 import type { Task } from "../../tasks/model";
 import { taskDrag } from "../../tasks/ui/dnd/task-dnd";
 import { groupPanelTasks } from "../panel";
 import type { StripItem } from "../strip";
-import { formatDayLabel, formatTimeOfDay } from "./time-format";
 
 export type ReviewController = {
   items: StripItem[];
@@ -169,7 +169,8 @@ function ReviewRow({
     data: taskDrag(item.taskId, "list"),
     disabled: !canEdit,
   });
-  const origin = `${formatDayLabel(item.scheduledAtMs)} · ${formatTimeOfDay(item.scheduledAtMs)} · ${item.durationMinutes}m`;
+  // One grammar (Tasks v3 call 41): "Tomorrow · 3:00 PM · 1h 30m".
+  const origin = `${formatDay(item.scheduledAtMs)} · ${formatTime(item.scheduledAtMs)} · ${formatDuration(item.durationMinutes)}`;
 
   return (
     <div
@@ -188,8 +189,9 @@ function ReviewRow({
         className="size-3.5 shrink-0 accent-primary"
       />
       <div {...listeners} {...attributes} className="flex min-w-0 flex-1 cursor-grab flex-col">
-        <span className="truncate text-sm text-foreground">{item.title}</span>
-        <span className="truncate text-2xs text-muted-foreground">{origin}</span>
+        {/* Titles and dates wrap, never truncate (TV-P0, AC1.16). */}
+        <span className="break-words text-sm text-foreground">{item.title}</span>
+        <span className="break-words text-2xs text-muted-foreground">{origin}</span>
       </div>
       {canEdit ? (
         <IconButton icon={X} label={`Remove ${item.title} from the schedule`} onClick={onRemove} />
@@ -266,9 +268,13 @@ function PanelTaskRow({
         onToggle={() => api.toggleDone(task)}
         aria-label={task.status === "done" ? `Reopen ${task.title}` : `Complete ${task.title}`}
       />
-      <span className="min-w-0 flex-1 truncate text-sm text-foreground">{task.title}</span>
+      <span className="min-w-0 flex-1 break-words py-0.5 text-sm text-foreground">
+        {task.title}
+      </span>
       {task.durationMinutes ? (
-        <span className="shrink-0 text-2xs text-muted-foreground">{task.durationMinutes}m</span>
+        <span className="shrink-0 text-2xs text-muted-foreground">
+          {formatDuration(task.durationMinutes)}
+        </span>
       ) : null}
       {scheduled ? (
         <span

@@ -9,6 +9,7 @@ import { useAuth } from "../../providers/auth-provider";
 import { useWorkspace } from "../workspaces/workspace-context";
 import { type Assignee, toAssignees } from "./assignee-options";
 
+export { initialsOf } from "../../lib/initials";
 export type { Assignee } from "./assignee-options";
 
 /** Null when they can already see the bucket. Otherwise the picker warning. */
