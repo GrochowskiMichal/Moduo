@@ -309,6 +309,9 @@ export const attachmentRowSchema = z.object({
   status: z.unknown(),
   deleted_at: z.string().nullable().optional(),
   created_at: z.string(),
+  object_path: z.string().nullable().optional(),
+  preview_path: z.string().nullable().optional(),
+  preview_mime: z.string().nullable().optional(),
 });
 
 export const contactChannelSchema = z.object({

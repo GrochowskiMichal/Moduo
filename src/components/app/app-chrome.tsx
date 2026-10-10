@@ -2,6 +2,8 @@ import { Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { ChevronsLeft, ChevronsRight, Pencil, Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { useUploadQueueBoot } from "@/features/attachments/hooks/use-attachments";
+import { useFileDropGuard } from "@/features/attachments/hooks/use-file-drop-guard";
 import { ensureProfileAvatar } from "../../features/branding/profile-avatar";
 import { useChatBadge } from "../../features/chat/hooks/use-chat-badge";
 import {
@@ -111,6 +113,10 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   // useShortcut wiring here for the rest.
   useShortcut("new-item", () => dispatchCreateNew());
   const { runtime, userEmail, userId } = useAuth();
+  // AT-2: pending uploads resume for whoever is signed in; stray file drops
+  // never navigate the window away.
+  useUploadQueueBoot(userId ?? null, runtime);
+  useFileDropGuard();
   const { loading, modulePermissions, selectedWorkspaceId } = useWorkspace();
   // Chat tab badge + app-wide presence (you show as online anywhere in Moduo).
   const chatBadge = useChatBadge({ runtime, workspaceId: selectedWorkspaceId, userId });
