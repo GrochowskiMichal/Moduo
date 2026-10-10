@@ -7,20 +7,14 @@ import {
 } from "@dnd-kit/core";
 import { arrayMove, SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { ChevronDown, ChevronRight } from "lucide-react";
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { eyebrowVariants } from "../../../components/ui/eyebrow";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../../../components/ui/select";
 import { cn } from "../../../lib/utils";
 import { useAssignees } from "../assignees";
 import { type CompletedMode, partitionCompleted } from "../completed";
+import { orderTasks, type SubtaskMode, type TaskOrder } from "../display";
 import {
   canNestUnder,
   type GroupBy,
@@ -43,7 +37,7 @@ import {
   useTaskDndSensors,
 } from "./dnd/task-dnd";
 import { listKeyActionFor } from "./list-keys";
-import { type PlanView, PlanViewHeader } from "./plan-view-header";
+import { type PlanHeaderControls, type PlanView, PlanViewHeader } from "./plan-view-header";
 import { CompletedLine } from "./task-meta";
 import { type RowCommand, TaskRow } from "./task-row";
 import { TaskListSkeleton, TasksEmptyScope, TasksNoMatch } from "./task-view-states";
@@ -54,8 +48,8 @@ type Props = {
   selection: string; // "all" | "mine" | "today" | "inbox" | bucketId
   view: PlanView;
   onViewChange: (view: PlanView) => void;
+  /** Display → Group by (the Queue is never grouped). */
   groupBy: GroupBy;
-  onGroupByChange: (next: GroupBy) => void;
   buckets: Bucket[];
   inbox: Bucket | null;
   bucketNameById: (id: string) => string;
@@ -64,18 +58,19 @@ type Props = {
   /** Lifted task selection — drives the keyboard cursor and the detail rail. */
   selectedTaskId: string | null;
   onSelectTask: (id: string | null) => void;
+  /** The toolbar's search, Filter, Display and count (built by the page). */
+  header?: PlanHeaderControls;
   /** A filter is narrowing the scope: an empty result reads "No tasks match". */
   filterActive?: boolean;
   onClearFilters?: () => void;
-  /** Tag-filter header control + active-chip row (built by the parent). */
-  tagFilterControl?: ReactNode;
-  activeTagFilters?: ReactNode;
-  /** The Display menu (built by the parent). */
-  displayControl?: ReactNode;
   /** Display → Completed (tasks-v2 §6). Default: hidden. The Queue ignores it. */
   completed?: CompletedMode;
   /** Display → "Show on rows". */
   properties?: readonly string[];
+  /** Display → Order by, inside each group. The Queue keeps its line-up. */
+  order?: TaskOrder;
+  /** Display → Subtasks: nested under their parent, or rows of their own. */
+  subtasks?: SubtaskMode;
   /**
    * Tasks that stay listed whatever Display says, until the scope changes:
    * checked off here, or opened here (selected, deep-linked).
@@ -102,14 +97,6 @@ type Props = {
 
 const NO_IDS: ReadonlySet<string> = new Set();
 
-const GROUP_OPTIONS: Array<{ value: GroupBy; label: string }> = [
-  { value: "none", label: "None" },
-  { value: "status", label: "Status" },
-  { value: "bucket", label: "Bucket" },
-  { value: "priority", label: "Priority" },
-  { value: "energy", label: "Energy" },
-];
-
 export function TaskListView({
   tasks,
   scopeTitle,
@@ -117,7 +104,6 @@ export function TaskListView({
   view,
   onViewChange,
   groupBy,
-  onGroupByChange,
   buckets,
   inbox,
   bucketNameById,
@@ -125,13 +111,13 @@ export function TaskListView({
   onRequestCapture,
   selectedTaskId,
   onSelectTask,
+  header,
   filterActive = false,
   onClearFilters,
-  tagFilterControl,
-  activeTagFilters,
-  displayControl,
   completed = "hidden",
   properties = DEFAULT_ROW_PROPERTIES,
+  order = "manual",
+  subtasks = "nested",
   stayingIds = NO_IDS,
   reorderable = false,
   onReorder,
@@ -156,18 +142,15 @@ export function TaskListView({
   const nestSensors = useTaskDndSensors({ sortable: false });
 
   const showBucketTag = showBucketPill(selection, groupBy);
-  // Grouping by bucket only makes sense across buckets (All, My tasks).
-  const groupOptions = GROUP_OPTIONS.filter(
-    (o) => o.value !== "bucket" || groupsByBucket(selection),
-  );
   // In My tasks every row is mine, so rows leave the avatar out (D4-4).
   const showAssignee = selection !== "mine";
+  const { assignees } = useAssignees();
 
-  // Subtasks nest under their parent (hidden from the top level) except in
-  // Today — the commit queue is an ordered flat list, and subtasks are
-  // individually committable. A subtask whose parent isn't in this scope
-  // renders as a normal top-level row instead (never invisible).
-  const nest = selection !== "today";
+  // Subtasks nest under their parent (hidden from the top level) unless
+  // Display says Flat, and never in the Queue — an ordered flat line-up whose
+  // subtasks are queued one by one. A subtask whose parent isn't in this
+  // scope renders as a normal top-level row instead (never invisible).
+  const nest = selection !== "today" && subtasks === "nested";
   const nestedIds = useMemo(() => nestedSubtaskIds(tasks, nest), [tasks, nest]);
   const topLevelTasks = useMemo(
     () => (nestedIds.size === 0 ? tasks : tasks.filter((t) => !nestedIds.has(t.id))),
@@ -194,7 +177,16 @@ export function TaskListView({
   // "N completed · show" line (tasks-v2 §6). The Queue keeps its own rule:
   // done leaves it, and a task checked off there stays until the next load.
   const groups = useMemo(() => {
-    const all = groupTasks(topLevelTasks, groupBy, { bucketName: bucketNameById });
+    // Sort, then group, so every group keeps the order (the Queue keeps its
+    // line-up). Bucket groups follow the rail; a task with two tags lists
+    // under both when grouped by tag.
+    const ordered = orderTasks(topLevelTasks, selection === "today" ? "manual" : order);
+    const all = groupTasks(ordered, groupBy, {
+      bucketName: bucketNameById,
+      bucketOrder: [...(inbox ? [inbox.id] : []), ...buckets.map((b) => b.id)],
+      assignees,
+      tagsFor: (id) => api.tagsByTask.get(id) ?? [],
+    });
     if (selection === "today") return all.map((g) => ({ ...g, hidden: [] as Task[] }));
     const now = new Date();
     // Kept even when done: staying (checked off or opened in this scope); the
@@ -213,8 +205,13 @@ export function TaskListView({
     });
   }, [
     topLevelTasks,
+    order,
     groupBy,
     bucketNameById,
+    inbox,
+    buckets,
+    assignees,
+    api.tagsByTask,
     selection,
     completed,
     stayingIds,
@@ -271,7 +268,6 @@ export function TaskListView({
   // The right-hand columns, from every row the view can show (the listed
   // rows and their subtasks), so the meta lines up and an empty column
   // collapses (tasks-v2 §6, U1-1).
-  const { assignees } = useAssignees();
   const columns = useMemo(() => {
     const rows: Task[] = [];
     for (const group of groups) {
@@ -310,14 +306,21 @@ export function TaskListView({
 
   // Flat, visually-ordered list of navigable tasks (skips collapsed groups,
   // includes the children of expanded parents — keyboard order = visual order).
+  // A task listed twice (grouped by tag) is one stop, at its first row.
   const visibleTasks = useMemo(() => {
     const out: Task[] = [];
+    const seen = new Set<string>();
+    const push = (task: Task) => {
+      if (seen.has(task.id)) return;
+      seen.add(task.id);
+      out.push(task);
+    };
     for (const group of groups) {
       if (collapsed.has(group.key)) continue;
       for (const task of group.tasks) {
-        out.push(task);
+        push(task);
         if (expandedParents.has(task.id)) {
-          out.push(...(api.subtasksByParent.get(task.id) ?? []));
+          for (const child of api.subtasksByParent.get(task.id) ?? []) push(child);
         }
       }
     }
@@ -658,26 +661,7 @@ export function TaskListView({
         onViewChange={onViewChange}
         canEdit={canEdit}
         onRequestCapture={onRequestCapture}
-        filterControl={tagFilterControl}
-        displayControl={displayControl}
-        activeFilters={activeTagFilters}
-        groupControl={
-          <div className="flex items-center gap-1.5">
-            <span className="font-sans text-xs text-muted-foreground">Group</span>
-            <Select value={groupBy} onValueChange={(v) => onGroupByChange(v as GroupBy)}>
-              <SelectTrigger size="sm" variant="ghost" className="w-28">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {groupOptions.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        }
+        controls={header}
       />
 
       {/* list */}

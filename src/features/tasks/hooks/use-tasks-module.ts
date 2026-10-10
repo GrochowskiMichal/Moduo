@@ -810,14 +810,15 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
    * Create a task and line it up at the end of my queue, in one gesture: shown
    * queued at once; once the server has the task, it's added to the end of my
    * queue (behind earlier queue ops). New in Focus or the Queue lands in Up next
-   * this way (TV-P0, AC1.9). An assignee left unchosen is me.
+   * this way (TV-P0, AC1.9). An assignee left unchosen is me. Resolves to the
+   * saved task, or null, like `createTask` (so a capture can tag it).
    */
   const createQueuedTask = useCallback(
-    (fields: Omit<NewTaskFields, "workspaceId" | "position">) => {
-      if (!fields.title.trim()) return;
+    (fields: Omit<NewTaskFields, "workspaceId" | "position">): Promise<Task | null> => {
+      if (!fields.title.trim()) return Promise.resolve(null);
       if (!runtime || !workspaceId || !canEdit || !userId) {
         if (!canEdit) toast.error("You don't have edit access to Tasks in this workspace.");
-        return;
+        return Promise.resolve(null);
       }
       const rt = runtime;
       const ws = workspaceId;
@@ -831,8 +832,8 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       const placeholder = optimisticEntry(tempId, endOfQueue(myQueueEntries));
       setBundle((prev) => ({ ...prev, tasks: [...prev.tasks, optimistic] }));
       setQueueRows((prev) => [...prev, placeholder]);
-      void rt.tasks.upsertTask({ ...optimistic, id: "" }).then(
-        (saved) => {
+      return rt.tasks.upsertTask({ ...optimistic, id: "" }).then(
+        (saved): Task => {
           setBundle((prev) => ({
             ...prev,
             tasks: swapTemp(prev.tasks, tempId, saved),
@@ -842,11 +843,13 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
           );
           // The task exists now; queuing it waits behind earlier queue ops.
           sendQueueOp(ws, me, () => rt.tasks.opQueueAdd({ workspaceId: ws, taskId: saved.id }));
+          return saved;
         },
-        (e) => {
+        (e): null => {
           setBundle((prev) => ({ ...prev, tasks: prev.tasks.filter((t) => t.id !== tempId) }));
           setQueueRows((prev) => prev.filter((row) => row.id !== placeholder.id));
           toast.error(e instanceof Error ? e.message : "Couldn't create task.");
+          return null;
         },
       );
     },
@@ -874,7 +877,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         if (!canEdit) toast.error("You don't have edit access to Tasks in this workspace.");
         return;
       }
-      createQueuedTask({ bucketId: inbox.id, title: trimmed, assigneeId: userId });
+      void createQueuedTask({ bucketId: inbox.id, title: trimmed, assigneeId: userId });
     },
     [inbox, userId, canEdit, createQueuedTask],
   );

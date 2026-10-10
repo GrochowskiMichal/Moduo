@@ -3,7 +3,23 @@
 // grouping logic for the List view. No React, no IO — easy to unit-test.
 
 import { formatDay, formatStamp, formatWhen } from "../../lib/time-format";
-import type { Bucket, EnergyLevel, PriorityLevel, Task, TaskRelation, TaskStatus } from "./model";
+import {
+  dayGroupKey,
+  dayGroupLabel,
+  TIME_GROUP_LABELS,
+  TIME_GROUPS,
+  type TimeGroup,
+  timeGroupOf,
+} from "./day-buckets";
+import type {
+  Bucket,
+  EnergyLevel,
+  PriorityLevel,
+  Tag,
+  Task,
+  TaskRelation,
+  TaskStatus,
+} from "./model";
 
 // ── Position (fractional indexing) ───────────────────────────────────────────
 // Order keys are base-36 digit strings compared lexicographically (see
@@ -295,7 +311,20 @@ export function toDateInputValue(iso: string | null): string {
 
 // ── Grouping ─────────────────────────────────────────────────────────────────
 
-export type GroupBy = "none" | "status" | "bucket" | "energy" | "priority";
+/** Display → Group by (tasks-v2 §7). The List groups by any of these. */
+export const GROUP_BYS = [
+  "none",
+  "status",
+  "bucket",
+  "assignee",
+  "priority",
+  "energy",
+  "tag",
+  "due",
+  "scheduled",
+  "time",
+] as const;
+export type GroupBy = (typeof GROUP_BYS)[number];
 
 export type TaskGroup = {
   key: string;
@@ -305,52 +334,90 @@ export type TaskGroup = {
 
 export type GroupContext = {
   bucketName: (bucketId: string) => string;
+  /** Bucket groups follow the rail (Inbox first), not the order tasks arrive. */
+  bucketOrder?: readonly string[];
+  /** Workspace members in picker order (me first). An assignee not listed
+   *  (a former member) groups after them. */
+  assignees?: ReadonlyArray<{ userId: string; name: string }>;
+  /** A task's tags, for Group by Tag. */
+  tagsFor?: (taskId: string) => ReadonlyArray<Pick<Tag, "id" | "name">>;
+  now?: Date;
 };
 
 const UNSET_LABEL = "Unset";
+const NO_KEY = "none";
 
 /**
- * Partition tasks into ordered, labeled groups for the List view. "bucket"
- * grouping is the implicit mode used in the cross-bucket "All" selection.
+ * Partition tasks into ordered, labeled groups for the List view. Tasks keep
+ * their order inside a group (sort first, then group). "bucket" grouping is
+ * the implicit mode used in the cross-bucket "All" selection. Group by Tag
+ * lists a task under each of its tags, so it can appear more than once.
  */
 export function groupTasks(tasks: Task[], by: GroupBy, ctx: GroupContext): TaskGroup[] {
   if (by === "none") {
     return [{ key: "all", label: "", tasks }];
   }
+  const now = ctx.now ?? new Date();
 
   const map = new Map<string, Task[]>();
-  for (const task of tasks) {
-    const key = groupKeyFor(task, by);
+  const labels = new Map<string, string>();
+  const add = (key: string, task: Task) => {
     const list = map.get(key);
     if (list) list.push(task);
     else map.set(key, [task]);
+  };
+  for (const task of tasks) {
+    if (by === "tag") {
+      const tags = ctx.tagsFor?.(task.id) ?? [];
+      if (tags.length === 0) add(NO_KEY, task);
+      for (const tag of tags) {
+        labels.set(tag.id, tag.name);
+        add(tag.id, task);
+      }
+      continue;
+    }
+    add(groupKeyFor(task, by, now), task);
   }
 
-  const orderedKeys = orderedGroupKeys(by, map);
+  const orderedKeys = orderedGroupKeys(by, map, ctx, labels);
   return orderedKeys.map((key) => ({
     key,
-    label: groupLabel(by, key, ctx),
+    label: groupLabel(by, key, ctx, labels, now),
     tasks: map.get(key) ?? [],
   }));
 }
 
-function groupKeyFor(task: Task, by: GroupBy): string {
+function groupKeyFor(task: Task, by: GroupBy, now: Date): string {
   switch (by) {
     case "status":
       return task.status;
     case "bucket":
       return task.bucketId;
+    case "assignee":
+      return task.assigneeId ?? NO_KEY;
     case "energy":
       return task.energyLevel ?? "unset";
     case "priority":
       return task.priority ?? "unset";
+    case "due":
+      return dayGroupKey(task.dueDate, now);
+    case "scheduled":
+      return dayGroupKey(task.scheduledAt, now);
+    case "time":
+      return timeGroupOf(task, now);
     default:
       return "all";
   }
 }
 
-function orderedGroupKeys(by: GroupBy, map: Map<string, Task[]>): string[] {
+function orderedGroupKeys(
+  by: GroupBy,
+  map: Map<string, Task[]>,
+  ctx: GroupContext,
+  labels: ReadonlyMap<string, string>,
+): string[] {
   const present = new Set(map.keys());
+  const keys = [...map.keys()];
   if (by === "status") {
     return STATUS_ORDER.filter((s) => present.has(s));
   }
@@ -359,16 +426,54 @@ function orderedGroupKeys(by: GroupBy, map: Map<string, Task[]>): string[] {
     if (present.has("unset")) ranked.push("unset");
     return ranked;
   }
-  // bucket: keep map insertion order (already position-sorted upstream)
-  return [...map.keys()];
+  if (by === "bucket") {
+    // The rail's order; a bucket it doesn't list keeps its first-seen place
+    // after the known ones.
+    const order = ctx.bucketOrder ?? [];
+    return [...order.filter((id) => present.has(id)), ...keys.filter((k) => !order.includes(k))];
+  }
+  if (by === "assignee") {
+    const known = (ctx.assignees ?? []).map((a) => a.userId).filter((id) => present.has(id));
+    const former = keys.filter((k) => k !== NO_KEY && !known.includes(k));
+    return [...known, ...former, ...(present.has(NO_KEY) ? [NO_KEY] : [])];
+  }
+  if (by === "tag") {
+    const named = keys
+      .filter((k) => k !== NO_KEY)
+      .sort((a, b) => (labels.get(a) ?? "").localeCompare(labels.get(b) ?? ""));
+    return present.has(NO_KEY) ? [...named, NO_KEY] : named;
+  }
+  if (by === "due" || by === "scheduled") {
+    // "earlier" < "d:YYYY-MM-DD" (ISO days sort as text) < "none".
+    const rank = (k: string) => (k === "earlier" ? 0 : k === NO_KEY ? 2 : 1);
+    return keys.sort((a, b) => rank(a) - rank(b) || (a < b ? -1 : a > b ? 1 : 0));
+  }
+  if (by === "time") {
+    return TIME_GROUPS.filter((g) => present.has(g));
+  }
+  return keys;
 }
 
-function groupLabel(by: GroupBy, key: string, ctx: GroupContext): string {
+function groupLabel(
+  by: GroupBy,
+  key: string,
+  ctx: GroupContext,
+  labels: ReadonlyMap<string, string>,
+  now: Date,
+): string {
   if (by === "status") return STATUS_LABELS[key as TaskStatus] ?? key;
   if (by === "bucket") return ctx.bucketName(key);
   if (by === "energy") return key === "unset" ? UNSET_LABEL : ENERGY_LABELS[key as EnergyLevel];
   if (by === "priority")
     return key === "unset" ? UNSET_LABEL : PRIORITY_LABELS[key as PriorityLevel];
+  if (by === "assignee") {
+    if (key === NO_KEY) return "Unassigned";
+    return ctx.assignees?.find((a) => a.userId === key)?.name ?? "Former member";
+  }
+  if (by === "tag") return key === NO_KEY ? "No tag" : (labels.get(key) ?? key);
+  if (by === "due") return dayGroupLabel(key, now, "No due date");
+  if (by === "scheduled") return dayGroupLabel(key, now, "Not scheduled");
+  if (by === "time") return TIME_GROUP_LABELS[key as TimeGroup] ?? key;
   return key;
 }
 
@@ -595,23 +700,6 @@ export function wouldCreateCycle(
     if (visited.has(id)) continue;
     visited.add(id);
     queue.push(...(downstreamOf.get(id) ?? []));
-  }
-  return false;
-}
-
-/**
- * Tag filter predicate (OR / union): a task matches when no tags are selected,
- * or it carries at least one of them. Union is the intuitive "show me #x or #y";
- * the dominant single-tag case is identical under either rule.
- */
-export function taskMatchesTagFilter(
-  taskTagIds: Iterable<string>,
-  filterTagIds: string[],
-): boolean {
-  if (filterTagIds.length === 0) return true;
-  const wanted = new Set(filterTagIds);
-  for (const id of taskTagIds) {
-    if (wanted.has(id)) return true;
   }
   return false;
 }

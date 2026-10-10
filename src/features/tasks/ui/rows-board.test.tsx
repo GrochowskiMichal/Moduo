@@ -92,7 +92,6 @@ function renderList(tasks: Task[], extra: ListExtra = {}, apiExtra: Record<strin
         view="list"
         onViewChange={() => {}}
         groupBy="none"
-        onGroupByChange={() => {}}
         buckets={[]}
         inbox={null}
         bucketNameById={() => "Work"}
@@ -338,7 +337,6 @@ describe("Board (U1-4)", () => {
           view="board"
           onViewChange={() => {}}
           boardGroupBy="status"
-          onBoardGroupByChange={() => {}}
           buckets={[]}
           inbox={null}
           bucketNameById={() => "Work"}
@@ -395,5 +393,116 @@ describe("Board (U1-4)", () => {
   it("a card with nothing to show has no empty meta line", () => {
     renderBoard([task("d", { status: "done" })], { completed: "all", canEdit: false });
     expect(card("Task d").querySelector(".whitespace-nowrap")).toBeNull();
+  });
+});
+
+// TV-U2 · U2-1/U2-3 — Display drives the List and the Board: group, order and
+// subtasks; the toolbar carries the page's search, Filter, Display and count.
+describe("Display on the List and Board (U2-1, U2-3)", () => {
+  it("the toolbar shows the title, its count and the page's controls; Group isn't in it", () => {
+    renderList([task("a")], {
+      header: {
+        count: 7,
+        search: <button type="button">Search</button>,
+        filter: <button type="button">Filter</button>,
+        display: <button type="button">Display</button>,
+      },
+    });
+    const toolbar = screen.getByRole("toolbar");
+    expect(within(toolbar).getByRole("heading", { name: "Work" })).toBeTruthy();
+    expect(within(toolbar).getByText("7")).toBeTruthy();
+    for (const name of ["Search", "Filter", "Display", "New"]) {
+      expect(within(toolbar).getByRole("button", { name })).toBeTruthy();
+    }
+    expect(within(toolbar).queryByText("Group")).toBeNull();
+    expect(within(toolbar).queryByRole("combobox")).toBeNull();
+  });
+
+  it("orders rows inside each group", () => {
+    renderList(
+      [
+        task("a", { priority: "low", energyLevel: "high" }),
+        task("b", { priority: "high", energyLevel: "high" }),
+        task("c", { priority: "medium", energyLevel: "low" }),
+      ],
+      { groupBy: "energy", order: "priority" },
+    );
+    expect(screen.getByRole("button", { name: /High energy/ })).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: /^Task / }).map((b) => b.textContent)).toEqual([
+      "Task b",
+      "Task a",
+      "Task c",
+    ]);
+  });
+
+  it("grouped by tag, a task with two tags is listed under both", () => {
+    const tagsByTask = new Map([
+      [
+        "a",
+        [
+          { id: "t1", name: "bug" },
+          { id: "t2", name: "ux" },
+        ],
+      ],
+      ["b", [{ id: "t2", name: "ux" }]],
+    ]);
+    renderList([task("a"), task("b"), task("c")], { groupBy: "tag" }, { tagsByTask });
+    expect(screen.getAllByRole("button", { name: "Task a" })).toHaveLength(2);
+    expect(screen.getByRole("button", { name: /^bug/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^No tag/ })).toBeTruthy();
+  });
+
+  it("Subtasks · Flat lists a subtask as its own row", () => {
+    const parent = task("p");
+    const child = task("c", { parentId: "p" });
+    const apiExtra = { subtasksByParent: new Map([["p", [child]]]) };
+    renderList([parent, child], { subtasks: "nested" }, apiExtra);
+    expect(screen.queryByRole("button", { name: "Task c" })).toBeNull();
+    cleanup();
+    renderList([parent, child], { subtasks: "flat" }, apiExtra);
+    expect(screen.getByRole("button", { name: "Task c" })).toBeTruthy();
+  });
+
+  it("the Queue keeps its line-up whatever Order says", () => {
+    renderList([task("a", { priority: "low" }), task("b", { priority: "high" })], {
+      selection: "today",
+      order: "priority",
+    });
+    expect(screen.getAllByRole("button", { name: /^Task / }).map((b) => b.textContent)).toEqual([
+      "Task a",
+      "Task b",
+    ]);
+  });
+
+  it("the Board orders cards inside each column, and flattens subtasks on Flat", () => {
+    const parent = task("p", { dueDate: "2026-10-20T00:00:00.000Z" });
+    const child = task("c", { parentId: "p", dueDate: "2026-10-10T00:00:00.000Z" });
+    const api = viewApi([parent, child], { subtasksByParent: new Map([["p", [child]]]) });
+    render(
+      <TooltipProvider>
+        <TaskBoardView
+          tasks={[parent, child]}
+          scopeTitle="Work"
+          selection="b1"
+          view="board"
+          onViewChange={() => {}}
+          boardGroupBy="status"
+          buckets={[]}
+          inbox={null}
+          bucketNameById={() => "Work"}
+          canEdit
+          onRequestCapture={() => {}}
+          selectedTaskId={null}
+          onSelectTask={() => {}}
+          order="due"
+          subtasks="flat"
+          api={api as never}
+        />
+      </TooltipProvider>,
+    );
+    const cards = [...document.querySelectorAll<HTMLElement>("[data-task-id]")].map(
+      (el) => el.dataset.taskId,
+    );
+    expect(cards).toEqual(["c", "p"]);
   });
 });

@@ -6,18 +6,13 @@ import {
   useDroppable,
 } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { type ReactNode, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
+import { toast } from "sonner";
 import { Eyebrow } from "../../../components/ui/eyebrow";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../../../components/ui/select";
 import { cn } from "../../../lib/utils";
 import { type CompletedMode, partitionCompleted } from "../completed";
+import { type BoardColumnsBy, orderTasks, type SubtaskMode, type TaskOrder } from "../display";
 import {
   groupsByBucket,
   isOpen,
@@ -30,13 +25,21 @@ import type { Bucket, Task, TaskStatus } from "../model";
 import { boardDropPosition } from "../reorder";
 import { DEFAULT_ROW_PROPERTIES } from "../row-layout";
 import { DndBoundary, useTaskDndSensors } from "./dnd/task-dnd";
-import type { PlanView } from "./plan-view-header";
+import type { PlanHeaderControls, PlanView } from "./plan-view-header";
 import { PlanViewHeader } from "./plan-view-header";
 import { CardBody, TaskCard } from "./task-card";
 import { CompletedLine } from "./task-meta";
 import { TaskBoardSkeleton, TasksNoMatch } from "./task-view-states";
 
-export type BoardGroupBy = "status" | "bucket";
+export type BoardGroupBy = BoardColumnsBy;
+
+const ORDER_NAMES: Record<Exclude<TaskOrder, "manual">, string> = {
+  due: "due date",
+  scheduled: "scheduled time",
+  priority: "priority",
+  created: "created",
+  updated: "last updated",
+};
 
 type Props = {
   tasks: Task[];
@@ -44,8 +47,8 @@ type Props = {
   selection: string; // "all" | "mine" | "inbox" | "today" | bucketId
   view: PlanView;
   onViewChange: (view: PlanView) => void;
+  /** Display → Columns (Bucket only across buckets). */
   boardGroupBy: BoardGroupBy;
-  onBoardGroupByChange: (next: BoardGroupBy) => void;
   buckets: Bucket[];
   inbox: Bucket | null;
   bucketNameById: (id: string) => string;
@@ -53,17 +56,19 @@ type Props = {
   onRequestCapture: () => void;
   selectedTaskId: string | null;
   onSelectTask: (id: string | null) => void;
-  tagFilterControl?: ReactNode;
-  activeTagFilters?: ReactNode;
+  /** The toolbar's search, Filter, Display and count (built by the page). */
+  header?: PlanHeaderControls;
   /** A filter is narrowing the scope: an empty result reads "No tasks match". */
   filterActive?: boolean;
   onClearFilters?: () => void;
-  /** The Display menu (built by the parent). */
-  displayControl?: ReactNode;
   /** Display → Completed (tasks-v2 §6). Default: hidden. */
   completed?: CompletedMode;
   /** Display → "Show on rows" — cards follow it too. */
   properties?: readonly string[];
+  /** Display → Order by, inside each column. */
+  order?: TaskOrder;
+  /** Display → Subtasks: on their parent's card, or cards of their own. */
+  subtasks?: SubtaskMode;
   /**
    * Tasks that stay listed whatever Display says, until the scope changes:
    * checked off here, or opened here (selected, deep-linked).
@@ -103,7 +108,6 @@ export function TaskBoardView({
   view,
   onViewChange,
   boardGroupBy,
-  onBoardGroupByChange,
   buckets,
   inbox,
   bucketNameById,
@@ -111,13 +115,13 @@ export function TaskBoardView({
   onRequestCapture,
   selectedTaskId,
   onSelectTask,
-  tagFilterControl,
-  activeTagFilters,
+  header,
   filterActive = false,
   onClearFilters,
-  displayControl,
   completed = "hidden",
   properties = DEFAULT_ROW_PROPERTIES,
+  order = "manual",
+  subtasks = "nested",
   stayingIds = NO_IDS,
   dndMode = "internal",
   api,
@@ -138,17 +142,19 @@ export function TaskBoardView({
   const showAssignee = selection !== "mine";
 
   // Subtasks whose parent is on this board stay off it — the parent card
-  // carries the quiet n/m mirror and the detail panel lists them. Today stays
-  // flat (committed subtasks are first-class queue items), and a subtask whose
-  // parent isn't on the board renders as a normal card (never invisible).
+  // carries the quiet n/m mirror and the detail panel lists them — unless
+  // Display says Flat. The Queue stays flat (queued subtasks are first-class
+  // queue items), and a subtask whose parent isn't on the board renders as a
+  // normal card (never invisible). Cards follow Display → Order by.
   const nestedIds = useMemo(
-    () => nestedSubtaskIds(tasks, selection !== "today"),
-    [tasks, selection],
+    () => nestedSubtaskIds(tasks, selection !== "today" && subtasks === "nested"),
+    [tasks, selection, subtasks],
   );
-  const boardTasks = useMemo(
-    () => (nestedIds.size === 0 ? tasks : tasks.filter((t) => !nestedIds.has(t.id))),
-    [tasks, nestedIds],
-  );
+  const sorted = order !== "manual" && selection !== "today";
+  const boardTasks = useMemo(() => {
+    const top = nestedIds.size === 0 ? tasks : tasks.filter((t) => !nestedIds.has(t.id));
+    return sorted ? orderTasks(top, order) : top;
+  }, [tasks, nestedIds, sorted, order]);
 
   const columns = useMemo<Column[]>(() => {
     const now = new Date();
@@ -248,9 +254,19 @@ export function TaskBoardView({
     });
     if (position === null) return;
     if (sourceCol.id === destCol.id) {
+      // Under a sort the cards' order isn't theirs to change: a new position
+      // would only move the task in Manual, out of sight.
+      if (sorted) {
+        toast(`Ordered by ${ORDER_NAMES[order as Exclude<TaskOrder, "manual">]}`, {
+          description: "Set Display → Order by to Manual to reorder.",
+        });
+        return;
+      }
       api.patchTask(activeId, { position });
       return;
     }
+    // Across columns only the column's field changes under a sort; the
+    // position is still worked out so Manual has a sensible place for it.
     const patch: Partial<Task> = { position };
     if (destCol.dim === "status") patch.status = destCol.value as TaskStatus;
     else patch.bucketId = destCol.value;
@@ -259,31 +275,13 @@ export function TaskBoardView({
 
   const activeTask = activeId ? (tasks.find((t) => t.id === activeId) ?? null) : null;
 
-  const groupControl = groupsByBucket(selection) ? (
-    <div className="flex items-center gap-1.5">
-      <span className="font-sans text-xs text-muted-foreground">Columns</span>
-      <Select value={boardGroupBy} onValueChange={(v) => onBoardGroupByChange(v as BoardGroupBy)}>
-        <SelectTrigger size="sm" variant="ghost" className="w-28">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="status">Status</SelectItem>
-          <SelectItem value="bucket">Bucket</SelectItem>
-        </SelectContent>
-      </Select>
-    </div>
-  ) : undefined;
-
   return (
     <div className="flex h-full min-h-0 flex-col">
       <PlanViewHeader
         title={scopeTitle}
         view={view}
         onViewChange={onViewChange}
-        groupControl={groupControl}
-        filterControl={tagFilterControl}
-        displayControl={displayControl}
-        activeFilters={activeTagFilters}
+        controls={header}
         canEdit={canEdit}
         onRequestCapture={onRequestCapture}
       />

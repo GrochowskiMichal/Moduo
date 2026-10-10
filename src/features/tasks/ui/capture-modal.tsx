@@ -14,6 +14,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import { TagChip } from "../../../components/tag-chip";
 import { Button } from "../../../components/ui/button";
 import { Calendar } from "../../../components/ui/calendar";
 import {
@@ -39,8 +40,9 @@ import { formatDay, formatDayTime } from "../../../lib/time-format";
 import { cn } from "../../../lib/utils";
 import { assigneeOptions, fromAssigneeValue, toAssigneeValue } from "../assignee-options";
 import { useAssignees } from "../assignees";
+import type { CaptureSeed } from "../filters";
 import { ENERGY_LABELS, type NewTaskFields, PRIORITY_LABELS } from "../helpers";
-import type { Bucket, EnergyLevel, PriorityLevel, RecurrenceRule } from "../model";
+import type { Bucket, EnergyLevel, PriorityLevel, RecurrenceRule, Tag } from "../model";
 import { parseCapture } from "../parse/capture-parser";
 import {
   RECURRENCE_PRESETS,
@@ -57,8 +59,17 @@ type Props = {
   inbox: Bucket | null;
   /** Bucket a captured task lands in by default (current selection, or Inbox). */
   defaultBucketId: string | null;
-  onCreate: (fields: Omit<NewTaskFields, "workspaceId" | "position">) => void;
+  /** What the scope's filters pre-fill: tags, assignee, priority (TV-U2, U2-5). */
+  seed?: CaptureSeed;
+  /** The workspace's tags, to show the seeded ones. */
+  tags?: readonly Tag[];
+  onCreate: (
+    fields: Omit<NewTaskFields, "workspaceId" | "position">,
+    extras: { tagIds: string[] },
+  ) => void;
 };
+
+const NO_SEED: CaptureSeed = { tagIds: [] };
 
 /** A field that the parser can fill but the user may override manually. */
 type Override<T> = { manual: boolean; value: T };
@@ -77,6 +88,8 @@ export function CaptureModal({
   buckets,
   inbox,
   defaultBucketId,
+  seed = NO_SEED,
+  tags = [],
   onCreate,
 }: Props) {
   const [raw, setRaw] = useState("");
@@ -91,6 +104,7 @@ export function CaptureModal({
     auto<RecurrenceRule>(),
   );
   const [createMore, setCreateMore] = useState(false);
+  const [tagIds, setTagIds] = useState<string[]>([]);
   const { assignees, currentUserId, byId } = useAssignees();
   // undefined = me (the default, which the backend fills in); null = Unassigned.
   const [assigneeId, setAssigneeId] = useState<string | null | undefined>(undefined);
@@ -100,10 +114,13 @@ export function CaptureModal({
     assigneeId === undefined ? (currentUserId ?? "") : toAssigneeValue(assigneeId);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Each fresh form starts from the scope's filters (a filtered scope's New
+  // pre-fills its tag, assignee and priority, so the task shows where you are).
   const resetFields = (keepBucket: boolean) => {
     setRaw("");
     setDescription("");
-    setPriority(null);
+    setPriority(seed.priority ?? null);
+    setTagIds(seed.tagIds);
     setEnergy(null);
     setDuration(null);
     setDue(auto<string>());
@@ -112,7 +129,7 @@ export function CaptureModal({
     // Every fresh capture starts assigned to me; "Create more" keeps bucket + assignee.
     if (!keepBucket) {
       setBucketId(defaultBucketId);
-      setAssigneeId(undefined);
+      setAssigneeId(seed.assigneeId);
     }
   };
 
@@ -146,20 +163,23 @@ export function CaptureModal({
       toast.error("Couldn't load your buckets yet — try reloading Tasks.");
       return;
     }
-    onCreate({
-      bucketId,
-      title,
-      description: description.trim() || undefined,
-      dueDate: effDue,
-      // A recurring capture materializes its first occurrence as the scheduled
-      // time (spec §5d) — the occurrence IS scheduledAt in the single-row model.
-      scheduledAt: effScheduled ?? effRecurrence?.nextOccurrence ?? null,
-      recurrence: effRecurrence,
-      priority,
-      energyLevel: energy,
-      durationMinutes: duration,
-      assigneeId,
-    });
+    onCreate(
+      {
+        bucketId,
+        title,
+        description: description.trim() || undefined,
+        dueDate: effDue,
+        // A recurring capture materializes its first occurrence as the scheduled
+        // time (spec §5d) — the occurrence IS scheduledAt in the single-row model.
+        scheduledAt: effScheduled ?? effRecurrence?.nextOccurrence ?? null,
+        recurrence: effRecurrence,
+        priority,
+        energyLevel: energy,
+        durationMinutes: duration,
+        assigneeId,
+      },
+      { tagIds },
+    );
     toast(title, {
       description: summarize(effScheduled, effDue, effRecurrence, bucketName(bucketId)),
     });
@@ -421,6 +441,22 @@ export function CaptureModal({
                 ))}
               </div>
             </InputPill>
+
+            {/* Tags the scope's filter asks for (TV-U7 adds the tag picker). */}
+            {tagIds.flatMap((id) => {
+              const tag = tags.find((t) => t.id === id);
+              return tag
+                ? [
+                    <TagChip
+                      key={id}
+                      name={tag.name}
+                      color={tag.color}
+                      size="md"
+                      onRemove={() => setTagIds((prev) => prev.filter((t) => t !== id))}
+                    />,
+                  ]
+                : [];
+            })}
           </div>
         </div>
 

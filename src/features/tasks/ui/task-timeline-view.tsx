@@ -59,7 +59,7 @@ import {
   xForDay,
 } from "../timeline-geometry";
 import { asTaskDrag, asTaskDropTarget, taskDrag, useTaskDndSensors } from "./dnd/task-dnd";
-import type { PlanView } from "./plan-view-header";
+import type { PlanHeaderControls, PlanView } from "./plan-view-header";
 import { PlanViewHeader } from "./plan-view-header";
 import { BlockedMarker } from "./task-row";
 
@@ -76,8 +76,8 @@ type Props = {
   onRequestCapture: () => void;
   selectedTaskId: string | null;
   onSelectTask: (id: string | null) => void;
-  tagFilterControl?: ReactNode;
-  activeTagFilters?: ReactNode;
+  /** The toolbar's search, Filter, Display and count (built by the page). */
+  header?: PlanHeaderControls;
   api: TasksModuleApi;
 };
 
@@ -120,8 +120,7 @@ export function TaskTimelineView({
   onRequestCapture,
   selectedTaskId,
   onSelectTask,
-  tagFilterControl,
-  activeTagFilters,
+  header,
   api,
 }: Props) {
   // Lane collapse + tray visibility are transient view state (per mount);
@@ -437,7 +436,7 @@ export function TaskTimelineView({
     [],
   );
 
-  const groupControl = (
+  const viewControls = (
     <div className="flex items-center gap-1.5">
       <Button size="sm" variant="ghost" onClick={() => centerToday(true)}>
         Today
@@ -458,9 +457,8 @@ export function TaskTimelineView({
         title={scopeTitle}
         view={view}
         onViewChange={onViewChange}
-        groupControl={groupControl}
-        filterControl={tagFilterControl}
-        activeFilters={activeTagFilters}
+        viewControls={viewControls}
+        controls={header}
         canEdit={canEdit}
         onRequestCapture={onRequestCapture}
       />

@@ -103,7 +103,6 @@ function renderList({ queue = false }: { queue?: boolean } = {}) {
           view="list"
           onViewChange={() => {}}
           groupBy="none"
-          onGroupByChange={() => {}}
           buckets={[]}
           inbox={inbox}
           bucketNameById={() => "Work"}
@@ -254,7 +253,6 @@ describe("TaskListView states (TV-P0)", () => {
           view="list"
           onViewChange={() => {}}
           groupBy="none"
-          onGroupByChange={() => {}}
           buckets={[]}
           inbox={inbox}
           bucketNameById={() => "Work"}
