@@ -216,16 +216,16 @@ where kind = 'waitlist_invite' order by created_at desc limit 20;
 
 All agent steps, each needing Maciej's OK in the session, in this order. The worker goes first: `booking-public` starts queueing the five booking kinds the moment it's deployed, and a worker without their templates only retries them (for up to ~80 minutes).
 
-1. **Worker** (agent, with OK), **from `maciej` after TX-5 has merged** (and after TX-4 too, if TX-4 has merged by then). A function deploy replaces the whole bundle, and TX-4 adds its own template to the same registry: a deploy from either task branch drops the other block's kinds, and their queued emails retry for ~80 minutes, then fail. Check first that no newer worker is live (`supabase functions list --project-ref wtoonrvuqumihpkbvwvs`, then compare with the last deploy recorded here):
+1. ✅ (2026-10-10, v4, deployed from `t/maciej/tx-5-booking-emails` at db2cb7e8 = `maciej` eeed2460 with TX-4 + TX-5) **Worker** (agent, with OK), **from `maciej` after TX-5 has merged** (and after TX-4 too, if TX-4 has merged by then). A function deploy replaces the whole bundle, and TX-4 adds its own template to the same registry: a deploy from either task branch drops the other block's kinds, and their queued emails retry for ~80 minutes, then fail. Check first that no newer worker is live (`supabase functions list --project-ref wtoonrvuqumihpkbvwvs`, then compare with the last deploy recorded here):
    ```bash
    supabase functions deploy email-worker --project-ref wtoonrvuqumihpkbvwvs --no-verify-jwt --import-map supabase/functions/deno.json --use-api
    ```
-2. **Migration** `20261010160000_tx5_booking_bell.sql` (agent, with OK): the host's bell. Check:
+2. ✅ (2026-10-10, history version `20261010160147`; both ops carry `notify_user_ids`, grants service_role only) **Migration** `20261010160000_tx5_booking_bell.sql` (agent, with OK): the host's bell. Check:
    ```sql
    select position('notify_user_ids' in prosrc) > 0 from pg_proc where proname in ('booking_op_commit', 'booking_op_release');
    ```
    Expect two `true` rows. Until it's applied, bookings still work; the host just gets no bell line.
-3. **Booking function** (agent, with OK):
+3. ✅ (2026-10-10, v24; `functions:reconcile` OK; smoke: unknown slug and token answer 404) **Booking function** (agent, with OK):
    ```bash
    supabase functions deploy booking-public --project-ref wtoonrvuqumihpkbvwvs --no-verify-jwt --import-map supabase/functions/deno.json --use-api
    ```
