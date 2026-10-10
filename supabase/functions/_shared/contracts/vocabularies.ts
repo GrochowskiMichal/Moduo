@@ -269,6 +269,19 @@ export function isShareResourceType(value: unknown): value is ShareResourceType 
 export const GRANT_SUBJECT_TYPES = ["member", "workspace", "public_link"] as const;
 export type GrantSubjectType = (typeof GRANT_SUBJECT_TYPES)[number];
 
+/**
+ * Where a grant came from (`resource_grants.origin`, CHECK in
+ * 20261010120000_tighten_write_checks.sql). `assign` grants come and go with a
+ * task's assignee; `manual` ones are shares set by hand and are never revoked
+ * by reassigning.
+ */
+export const GRANT_ORIGINS = ["assign", "manual"] as const;
+export type GrantOrigin = (typeof GRANT_ORIGINS)[number];
+export const grantOriginSchema = z.enum(GRANT_ORIGINS);
+export function isGrantOrigin(value: unknown): value is GrantOrigin {
+  return typeof value === "string" && (GRANT_ORIGINS as readonly string[]).includes(value);
+}
+
 /** Workspace default for a new container. `private` writes no workspace grant. */
 export const SHARE_DEFAULT_LEVELS = ["private", "freebusy", "view", "edit", "full"] as const;
 export type ShareDefaultLevel = (typeof SHARE_DEFAULT_LEVELS)[number];

@@ -104,7 +104,7 @@ Steps 1–3 are agent steps that need Maciej's OK in the session; step 4 is Maci
    select status, attempts, provider_id, last_error from public.email_outbox
    where kind = 'ops_alert' order by created_at desc limit 1;
    ```
-4. **Resend webhook** (Maciej), once the privacy policy mentions the do-not-email list (it holds addresses until they're erased). Resend dashboard → Webhooks → Add endpoint → URL `https://wtoonrvuqumihpkbvwvs.supabase.co/functions/v1/resend-webhook`, events `email.bounced`, `email.complained`, `email.suppressed`, `email.delivered` → Add. Open the endpoint, copy its signing secret (`whsec_…`), then in your own terminal:
+4. **Resend webhook** (Maciej), once the privacy policy mentions the do-not-email list (it holds addresses until they're erased): PR #350 into `prod-landing`, live when `curl -s https://moduo.app/privacy | grep -c 'Do-not-email list'` prints `1` (Mike merges and redeploys landing). Resend dashboard → Webhooks → Add endpoint → URL `https://wtoonrvuqumihpkbvwvs.supabase.co/functions/v1/resend-webhook`, events `email.bounced`, `email.complained`, `email.suppressed`, `email.delivered` → Add. Open the endpoint, copy its signing secret (`whsec_…`), then in your own terminal:
    ```bash
    supabase secrets set --project-ref wtoonrvuqumihpkbvwvs RESEND_WEBHOOK_SECRET='<paste here>'
    ```

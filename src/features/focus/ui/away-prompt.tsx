@@ -5,9 +5,9 @@ import { cn } from "../../../lib/utils";
 import { awayPromptCopy } from "../away-copy";
 import { type FocusAwaySummary, resolveFocusAway } from "../engine";
 
-// The full prompt (the Focus view's Now card) and the compact one (beside the
-// chrome chip) can be on screen together; while a full one is mounted the
-// compact one stays hidden, so the question is asked once.
+// The full prompt (the Focus view's Now card) and the compact one (the top-bar
+// timer's popover) can both be mounted; while a full one is, the compact one
+// stays hidden and the timer doesn't offer it, so the question is asked once.
 let fullPromptsMounted = 0;
 const listeners = new Set<() => void>();
 
@@ -27,11 +27,16 @@ function setFullPromptMounted(delta: number): void {
   for (const listener of listeners) listener();
 }
 
+/** True while the full prompt is on screen (the Focus view is asking already). */
+export function useFullAwayPromptShown(): boolean {
+  return useSyncExternalStore(subscribe, isFullPromptMounted, isFullPromptMounted);
+}
+
 /**
  * "You were away 42m — Keep · Discard · Count as break" (spec §5, F1-3). Quiet
  * and non-modal: away time is held, not credited, until it's answered, and it
  * is discarded if the session ends unanswered. `compact` drops the pomodoro
- * detail line (the chrome bottom bar).
+ * detail line (the top-bar timer's popover).
  */
 export function FocusAwayPrompt({
   away,
@@ -42,7 +47,7 @@ export function FocusAwayPrompt({
   compact?: boolean;
   className?: string;
 }) {
-  const fullShown = useSyncExternalStore(subscribe, isFullPromptMounted, isFullPromptMounted);
+  const fullShown = useFullAwayPromptShown();
   useEffect(() => {
     if (compact) return;
     setFullPromptMounted(1);

@@ -81,8 +81,8 @@ type Story = StoryObj<typeof meta>;
  * Default chrome: data-tabs="auto", three workspaces (so the switcher
  * trigger is visible in the top-left), router seeded at "/". The user
  * sees the Moduo Mark + Workspace trigger on the left, the six module
- * tabs centred in the viewport, and NotificationCenter + Avatar on the
- * right.
+ * tabs centred in the viewport, and Help + NotificationCenter + Avatar on
+ * the right (the Focus timer joins them, left of Help, while a session runs).
  */
 export const Default: Story = {
   render: () => (

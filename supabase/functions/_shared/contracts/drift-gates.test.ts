@@ -21,6 +21,8 @@ import {
   CALENDAR_PROVIDERS,
   EMAIL_ACCOUNT_STATUSES,
   EMAIL_PROVIDERS,
+  GRANT_LEVELS,
+  GRANT_ORIGINS,
   MEMBER_DB_PERMISSIONS,
   MEMBER_DB_ROLES,
   PLAN_TIERS,
@@ -116,6 +118,18 @@ describe("cross-runtime drift guards", () => {
     expect(sql).toContain(`preview_mime IN (${inList(ATTACHMENT_PREVIEW_MIMES)})`);
     expect(sql).toContain(`p_preview_mime NOT IN (${inList(ATTACHMENT_PREVIEW_MIMES)})`);
     expect(sql).toContain(`bucket_id = '${ATTACHMENTS_BUCKET}'`);
+  });
+
+  it("grant origins match the resource_grants CHECK", () => {
+    const sql = readFileSync(
+      resolve(MIGRATIONS_DIR, "20261010120000_tighten_write_checks.sql"),
+      "utf8",
+    );
+    const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(",");
+    expect(sql).toContain(`origin IN (${inList(GRANT_ORIGINS)})`);
+    // The hand-set level an assignment raised: only levels below Edit.
+    const belowEdit = GRANT_LEVELS.slice(0, GRANT_LEVELS.indexOf("edit"));
+    expect(sql).toContain(`manual_level IN (${inList(belowEdit)})`);
   });
 
   it("task statuses stay the closed set used by MCP parsers", () => {

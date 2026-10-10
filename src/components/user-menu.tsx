@@ -20,7 +20,7 @@ export function UserMenu({ avatarDataUrl, profileInitial = "U", onOpenSettings }
       <TooltipTrigger
         type="button"
         onClick={() => onOpenSettings?.()}
-        className="relative inline-flex h-8 w-8 items-center justify-center overflow-hidden rounded-avatar border border-border bg-muted text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+        className="relative inline-flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-avatar border border-border bg-muted text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         aria-label="Open settings"
       >
         <Avatar size="sm" className="h-full w-full">
