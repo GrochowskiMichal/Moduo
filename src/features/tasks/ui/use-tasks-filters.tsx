@@ -5,7 +5,7 @@
 // Display (use-tasks-display.tsx), so both are remembered per scope.
 
 import {
-  Archive,
+  Ban,
   CalendarDays,
   Circle,
   CircleCheck,
@@ -42,6 +42,7 @@ import {
   type TaskFilterDimension,
   taskFilterShape,
 } from "../filters";
+import { STATUS_LABELS } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { Tag, Task } from "../model";
 import { takeSearchTokens, taskMatchesQuery } from "../search";
@@ -77,11 +78,18 @@ const LEVELS = (none: string): FilterOption[] => [
 ];
 
 const OPTIONS: Partial<Record<TaskFilterDimension, FilterOption[]>> = {
+  // The labels every surface uses ("To do", "Won't do", calls 21/53a). Won't
+  // do tasks are out of every scope until this asks for them (TV-U2, AC1.4).
   status: [
-    { value: "todo", label: "Todo", icon: Circle },
-    { value: "in_progress", label: "In progress", icon: CircleDot },
-    { value: "done", label: "Done", icon: CircleCheck },
-    { value: "archived", label: "Archived", icon: Archive, keywords: ["won't do"] },
+    { value: "todo", label: STATUS_LABELS.todo, icon: Circle },
+    { value: "in_progress", label: STATUS_LABELS.in_progress, icon: CircleDot },
+    { value: "done", label: STATUS_LABELS.done, icon: CircleCheck },
+    {
+      value: "archived",
+      label: STATUS_LABELS.archived,
+      icon: Ban,
+      keywords: ["won't do", "wont do", "archived"],
+    },
   ],
   priority: LEVELS("No priority"),
   energy: LEVELS("No energy"),

@@ -12,7 +12,7 @@ import { toast } from "sonner";
 import { Eyebrow } from "../../../components/ui/eyebrow";
 import { cn } from "../../../lib/utils";
 import { type CompletedMode, partitionCompleted } from "../completed";
-import { type BoardColumnsBy, orderTasks, type SubtaskMode, type TaskOrder } from "../display";
+import { type BoardGroupBy, orderTasks, type SubtaskMode, type TaskOrder } from "../display";
 import {
   groupsByBucket,
   isOpen,
@@ -31,7 +31,7 @@ import { CardBody, TaskCard } from "./task-card";
 import { CompletedLine } from "./task-meta";
 import { TaskBoardSkeleton, TasksNoMatch } from "./task-view-states";
 
-export type BoardGroupBy = BoardColumnsBy;
+export type { BoardGroupBy };
 
 const ORDER_NAMES: Record<Exclude<TaskOrder, "manual">, string> = {
   due: "due date",
@@ -47,7 +47,7 @@ type Props = {
   selection: string; // "all" | "mine" | "inbox" | "today" | bucketId
   view: PlanView;
   onViewChange: (view: PlanView) => void;
-  /** Display → Columns (Bucket only across buckets). */
+  /** Display → Group by (Project only across projects). */
   boardGroupBy: BoardGroupBy;
   buckets: Bucket[];
   inbox: Bucket | null;
@@ -81,8 +81,10 @@ type Props = {
   api: TasksModuleApi;
 };
 
-// Reading order for status columns (left→right flow), distinct from the List's
-// "open work first" order. Archived is never a board column (out of scope).
+// Reading order for status groups (left→right flow), distinct from the List's
+// "open work first" order. Won't do tasks are out of every scope until Filter →
+// Status asks for them (or one is kept selected, TV-P0), so their group shows
+// only then (TV-U2, AC1.4).
 const BOARD_STATUS_ORDER: TaskStatus[] = ["todo", "in_progress", "done"];
 
 type Column = {
@@ -135,7 +137,7 @@ export function TaskBoardView({
   });
   const revealed = reveal.scope === selection ? reveal.ids : NO_IDS;
 
-  // Columns by bucket only make sense across buckets (All, My tasks); otherwise status.
+  // Grouping by project only makes sense across projects (All, My tasks); otherwise status.
   const groupDim: BoardGroupBy = groupsByBucket(selection) ? boardGroupBy : "status";
   const showBucketTag = showBucketPill(selection, groupDim);
   // In My tasks every card is mine, so cards leave the avatar out (D4-4).
@@ -186,7 +188,10 @@ export function TaskBoardView({
         ),
       );
     }
-    return BOARD_STATUS_ORDER.map((s) =>
+    const statuses: TaskStatus[] = boardTasks.some((t) => t.status === "archived")
+      ? [...BOARD_STATUS_ORDER, "archived"]
+      : BOARD_STATUS_ORDER;
+    return statuses.map((s) =>
       column(
         `col:status:${s}`,
         STATUS_LABELS[s],

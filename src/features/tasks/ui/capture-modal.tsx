@@ -442,7 +442,7 @@ export function CaptureModal({
               </div>
             </InputPill>
 
-            {/* Tags the scope's filter asks for (TV-U7 adds the tag picker). */}
+            {/* Tags the scope's filter asks for (the capture rebuild, TV-U14, adds the tag picker). */}
             {tagIds.flatMap((id) => {
               const tag = tags.find((t) => t.id === id);
               return tag

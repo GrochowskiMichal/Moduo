@@ -101,9 +101,9 @@ describe("useTasksDisplay", () => {
     });
     const high = { dimension: "priority", operator: "is" as const, values: ["high"] };
     act(() => result.current.setFilters([high]));
-    act(() => result.current.setDisplay({ ...result.current.display, group: "energy" }));
+    act(() => result.current.setDisplay({ ...result.current.display, group: "date" }));
     expect(result.current.filters).toEqual([high]);
-    expect(result.current.display.group).toBe("energy");
+    expect(result.current.display.group).toBe("date");
     const stored = JSON.parse(window.localStorage.getItem("moduo:tasks:view:w1:b1") ?? "{}");
     expect(stored.filters).toEqual([high]);
 

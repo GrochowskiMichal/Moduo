@@ -123,6 +123,32 @@ test("AC1.4 — a Won't do task stays reachable and reopens", async ({ page }) =
   await expect.poll(async () => (await taskById(t.id)).status).toBe("todo");
 });
 
+test("AC1.4 — Won't do tasks are listed by Filter → Status (TV-U2)", async ({ page }) => {
+  const project = await createProject(dev, `Filter me ${tag}`);
+  const open = await createTask(dev, { title: `Still open ${tag}`, bucketId: project.id });
+  const gone = await createTask(dev, {
+    title: `Not doing ${tag}`,
+    bucketId: project.id,
+    status: "archived",
+  });
+  await openTasks(page, open.id);
+  await expect(page.getByRole("button", { name: open.title })).toBeVisible();
+  await expect(page.getByRole("button", { name: gone.title })).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Filter", exact: true }).click();
+  await page.getByRole("option", { name: "Status" }).click();
+  await page.getByRole("option", { name: /Won’t do/ }).click();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("group", { name: "Status is Won’t do" })).toBeVisible();
+  await expect(page.getByRole("button", { name: open.title })).toHaveCount(0);
+
+  // Listed once, it opens with TV-P0's Reopen.
+  await page.getByRole("button", { name: gone.title }).click();
+  await expect(page.getByRole("button", { name: "Status: Won’t do" })).toBeVisible();
+  await page.getByRole("button", { name: "Reopen" }).click();
+  await expect.poll(async () => (await taskById(gone.id)).status).toBe("todo");
+});
+
 test("AC1.5 — a skeleton while loading, never “Nothing here yet”", async ({ page }) => {
   await signInPage(page, dev);
   // Hold the task list back so the first paint is the loading state.

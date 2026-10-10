@@ -664,7 +664,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
         {...sharedViewProps}
         {...displayProps}
         dndMode="external"
-        boardGroupBy={tasksDisplay.display.columns}
+        boardGroupBy={tasksDisplay.display.boardGroup}
       />
     ) : view === "timeline" ? (
       <TaskTimelineView {...sharedViewProps} zoom={timelineZoom} onZoomChange={setTimelineZoom} />

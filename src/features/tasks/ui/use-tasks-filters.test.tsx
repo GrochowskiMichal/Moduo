@@ -132,6 +132,21 @@ describe("Filter", () => {
     expect(rows()).toEqual(["Filter chips"]);
   });
 
+  it("Status reads To do and Won’t do, the words every surface uses", () => {
+    render(
+      <Harness
+        initial={[
+          { dimension: "status", operator: "is", values: ["archived"] },
+          { dimension: "priority", operator: "is_not", values: ["low"] },
+        ]}
+      />,
+    );
+    expect(screen.getByRole("group", { name: "Status is Won’t do" })).toBeTruthy();
+    cleanup();
+    render(<Harness initial={[{ dimension: "status", operator: "is_not", values: ["todo"] }]} />);
+    expect(screen.getByRole("group", { name: "Status is not To do" })).toBeTruthy();
+  });
+
   it("New pre-fills what the filter asks for", () => {
     render(
       <Harness

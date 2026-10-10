@@ -109,7 +109,7 @@ describe("Filter dimensions", () => {
     expect(run([is("tag", "t2", "none")])).toEqual(["b", "c", "d"]);
   });
 
-  it("Status, including Archived", () => {
+  it("Status, including Won't do (stored as archived until TV-D7)", () => {
     expect(run([is("status", "archived")])).toEqual(["d"]);
     expect(run([is("status", "todo", "in_progress")])).toEqual(["a", "b"]);
     expect(run([isNot("status", "done")])).toEqual(["a", "b", "d"]);
@@ -164,7 +164,7 @@ describe("Filter dimensions", () => {
 });
 
 describe("Status brings hidden tasks back", () => {
-  it("Archived joins the scope only when Status asks for it", () => {
+  it("Won't do joins the scope only when Status asks for it", () => {
     expect(showsArchived([is("status", "archived")])).toBe(true);
     expect(showsArchived([is("status", "todo", "archived")])).toBe(true);
     expect(showsArchived([isNot("status", "archived")])).toBe(false);

@@ -2,24 +2,8 @@
 // position generation (Lexorank-lite), label maps, datetime formatting, and the
 // grouping logic for the List view. No React, no IO — easy to unit-test.
 
-import { formatDay, formatStamp, formatWhen } from "../../lib/time-format";
-import {
-  dayGroupKey,
-  dayGroupLabel,
-  TIME_GROUP_LABELS,
-  TIME_GROUPS,
-  type TimeGroup,
-  timeGroupOf,
-} from "./day-buckets";
-import type {
-  Bucket,
-  EnergyLevel,
-  PriorityLevel,
-  Tag,
-  Task,
-  TaskRelation,
-  TaskStatus,
-} from "./model";
+import { dayOffset, formatDay, formatStamp, formatWhen } from "../../lib/time-format";
+import type { Bucket, EnergyLevel, PriorityLevel, Task, TaskRelation, TaskStatus } from "./model";
 
 // ── Position (fractional indexing) ───────────────────────────────────────────
 // Order keys are base-36 digit strings compared lexicographically (see
@@ -311,19 +295,14 @@ export function toDateInputValue(iso: string | null): string {
 
 // ── Grouping ─────────────────────────────────────────────────────────────────
 
-/** Display → Group by (tasks-v2 §7). The List groups by any of these. */
-export const GROUP_BYS = [
-  "none",
-  "status",
-  "bucket",
-  "assignee",
-  "priority",
-  "energy",
-  "tag",
-  "due",
-  "scheduled",
-  "time",
-] as const;
+/**
+ * Display → Group by (tasks-v3 default l): Section · Status · Priority ·
+ * Assignee · Team · Date · Project, then None. Never Tag or Energy (a task
+ * with three tags would be listed three times; both stay filters). Section
+ * and Team join when their data exists (TV-D10); "bucket" is the stored key
+ * for Project until the contract step (TV-D7) renames buckets.
+ */
+export const GROUP_BYS = ["status", "priority", "assignee", "date", "bucket", "none"] as const;
 export type GroupBy = (typeof GROUP_BYS)[number];
 
 export type TaskGroup = {
@@ -339,8 +318,6 @@ export type GroupContext = {
   /** Workspace members in picker order (me first). An assignee not listed
    *  (a former member) groups after them. */
   assignees?: ReadonlyArray<{ userId: string; name: string }>;
-  /** A task's tags, for Group by Tag. */
-  tagsFor?: (taskId: string) => ReadonlyArray<Pick<Tag, "id" | "name">>;
   now?: Date;
 };
 
@@ -348,10 +325,77 @@ const UNSET_LABEL = "Unset";
 const NO_KEY = "none";
 
 /**
+ * The one Date grouping (tasks-v3 call 83), the same in every view: Earlier ·
+ * Today · Tomorrow · the next five days by name · Later, and No date (which
+ * only Upcoming leaves out). Rolling, so it never depends on where the week
+ * starts; "This week" is a filter, not a group. Keys sort in this order.
+ */
+export const DATE_GROUPS = [
+  "earlier",
+  "today",
+  "tomorrow",
+  "day2",
+  "day3",
+  "day4",
+  "day5",
+  "day6",
+  "later",
+  "none",
+] as const;
+export type DateGroup = (typeof DATE_GROUPS)[number];
+
+/** The moment a task's row date stands for: its scheduled time or its due
+ *  date, whichever comes first by day (the row's date column, TV-U1). */
+export function rowDateOf(task: Pick<Task, "scheduledAt" | "dueDate">): Date | null {
+  const scheduled = validDate(task.scheduledAt);
+  const due = validDate(task.dueDate);
+  if (scheduled && due) return dayOffset(due, scheduled) < 0 ? due : scheduled;
+  return scheduled ?? due;
+}
+
+/** A task's Date group, from its row date. */
+export function dateGroupOf(
+  task: Pick<Task, "scheduledAt" | "dueDate">,
+  now: Date = new Date(),
+): DateGroup {
+  const at = rowDateOf(task);
+  if (!at) return "none";
+  const offset = dayOffset(at, now);
+  if (offset < 0) return "earlier";
+  if (offset === 0) return "today";
+  if (offset === 1) return "tomorrow";
+  if (offset <= 6) return `day${offset}` as DateGroup;
+  return "later";
+}
+
+const WEEKDAY_LONG = new Intl.DateTimeFormat(undefined, { weekday: "long" });
+
+/** A Date group's header: "Earlier", "Today", "Tomorrow", "Thursday", "Later", "No date". */
+export function dateGroupLabel(group: DateGroup, now: Date = new Date()): string {
+  switch (group) {
+    case "earlier":
+      return "Earlier";
+    case "today":
+      return "Today";
+    case "tomorrow":
+      return "Tomorrow";
+    case "later":
+      return "Later";
+    case "none":
+      return "No date";
+    default: {
+      const offset = Number(group.slice(3));
+      const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset);
+      return WEEKDAY_LONG.format(day);
+    }
+  }
+}
+
+/**
  * Partition tasks into ordered, labeled groups for the List view. Tasks keep
- * their order inside a group (sort first, then group). "bucket" grouping is
- * the implicit mode used in the cross-bucket "All" selection. Group by Tag
- * lists a task under each of its tags, so it can appear more than once.
+ * their order inside a group (sort first, then group), and each task is in
+ * exactly one group. "bucket" (Project) grouping is the default across
+ * projects (All).
  */
 export function groupTasks(tasks: Task[], by: GroupBy, ctx: GroupContext): TaskGroup[] {
   if (by === "none") {
@@ -360,29 +404,16 @@ export function groupTasks(tasks: Task[], by: GroupBy, ctx: GroupContext): TaskG
   const now = ctx.now ?? new Date();
 
   const map = new Map<string, Task[]>();
-  const labels = new Map<string, string>();
-  const add = (key: string, task: Task) => {
+  for (const task of tasks) {
+    const key = groupKeyFor(task, by, now);
     const list = map.get(key);
     if (list) list.push(task);
     else map.set(key, [task]);
-  };
-  for (const task of tasks) {
-    if (by === "tag") {
-      const tags = ctx.tagsFor?.(task.id) ?? [];
-      if (tags.length === 0) add(NO_KEY, task);
-      for (const tag of tags) {
-        labels.set(tag.id, tag.name);
-        add(tag.id, task);
-      }
-      continue;
-    }
-    add(groupKeyFor(task, by, now), task);
   }
 
-  const orderedKeys = orderedGroupKeys(by, map, ctx, labels);
-  return orderedKeys.map((key) => ({
+  return orderedGroupKeys(by, map, ctx).map((key) => ({
     key,
-    label: groupLabel(by, key, ctx, labels, now),
+    label: groupLabel(by, key, ctx, now),
     tasks: map.get(key) ?? [],
   }));
 }
@@ -395,33 +426,22 @@ function groupKeyFor(task: Task, by: GroupBy, now: Date): string {
       return task.bucketId;
     case "assignee":
       return task.assigneeId ?? NO_KEY;
-    case "energy":
-      return task.energyLevel ?? "unset";
     case "priority":
       return task.priority ?? "unset";
-    case "due":
-      return dayGroupKey(task.dueDate, now);
-    case "scheduled":
-      return dayGroupKey(task.scheduledAt, now);
-    case "time":
-      return timeGroupOf(task, now);
+    case "date":
+      return dateGroupOf(task, now);
     default:
       return "all";
   }
 }
 
-function orderedGroupKeys(
-  by: GroupBy,
-  map: Map<string, Task[]>,
-  ctx: GroupContext,
-  labels: ReadonlyMap<string, string>,
-): string[] {
+function orderedGroupKeys(by: GroupBy, map: Map<string, Task[]>, ctx: GroupContext): string[] {
   const present = new Set(map.keys());
   const keys = [...map.keys()];
   if (by === "status") {
     return STATUS_ORDER.filter((s) => present.has(s));
   }
-  if (by === "energy" || by === "priority") {
+  if (by === "priority") {
     const ranked: string[] = LEVEL_ORDER.filter((l) => present.has(l));
     if (present.has("unset")) ranked.push("unset");
     return ranked;
@@ -437,44 +457,29 @@ function orderedGroupKeys(
     const former = keys.filter((k) => k !== NO_KEY && !known.includes(k));
     return [...known, ...former, ...(present.has(NO_KEY) ? [NO_KEY] : [])];
   }
-  if (by === "tag") {
-    const named = keys
-      .filter((k) => k !== NO_KEY)
-      .sort((a, b) => (labels.get(a) ?? "").localeCompare(labels.get(b) ?? ""));
-    return present.has(NO_KEY) ? [...named, NO_KEY] : named;
-  }
-  if (by === "due" || by === "scheduled") {
-    // "earlier" < "d:YYYY-MM-DD" (ISO days sort as text) < "none".
-    const rank = (k: string) => (k === "earlier" ? 0 : k === NO_KEY ? 2 : 1);
-    return keys.sort((a, b) => rank(a) - rank(b) || (a < b ? -1 : a > b ? 1 : 0));
-  }
-  if (by === "time") {
-    return TIME_GROUPS.filter((g) => present.has(g));
+  if (by === "date") {
+    return DATE_GROUPS.filter((g) => present.has(g));
   }
   return keys;
 }
 
-function groupLabel(
-  by: GroupBy,
-  key: string,
-  ctx: GroupContext,
-  labels: ReadonlyMap<string, string>,
-  now: Date,
-): string {
+function groupLabel(by: GroupBy, key: string, ctx: GroupContext, now: Date): string {
   if (by === "status") return STATUS_LABELS[key as TaskStatus] ?? key;
   if (by === "bucket") return ctx.bucketName(key);
-  if (by === "energy") return key === "unset" ? UNSET_LABEL : ENERGY_LABELS[key as EnergyLevel];
   if (by === "priority")
     return key === "unset" ? UNSET_LABEL : PRIORITY_LABELS[key as PriorityLevel];
   if (by === "assignee") {
     if (key === NO_KEY) return "Unassigned";
     return ctx.assignees?.find((a) => a.userId === key)?.name ?? "Former member";
   }
-  if (by === "tag") return key === NO_KEY ? "No tag" : (labels.get(key) ?? key);
-  if (by === "due") return dayGroupLabel(key, now, "No due date");
-  if (by === "scheduled") return dayGroupLabel(key, now, "Not scheduled");
-  if (by === "time") return TIME_GROUP_LABELS[key as TimeGroup] ?? key;
+  if (by === "date") return dateGroupLabel(key as DateGroup, now);
   return key;
+}
+
+function validDate(iso: string | null): Date | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? null : d;
 }
 
 /**

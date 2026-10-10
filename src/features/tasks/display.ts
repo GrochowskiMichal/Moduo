@@ -1,8 +1,9 @@
 // Tasks' Display menu (tasks-v2 §7), remembered per workspace and scope on
 // this device through the view-prefs helper (DS-4). TV-U1 shipped Completed
-// and "Show on rows"; TV-U2 adds layout, group, order and subtasks, and moves
-// Group out of the toolbar. The same stored object also holds the scope's
-// filters (see `TasksViewPrefs`), so one key remembers how a scope is set up.
+// and "Show on rows"; TV-U2 adds layout, Group by, order, subtasks and the
+// Rows preset (Standard · Detailed), and moves grouping out of the toolbar.
+// The same stored object also holds the scope's filters (see
+// `TasksViewPrefs`), so one key remembers how a scope is set up.
 
 import { ChartGantt, Columns3, List } from "lucide-react";
 import { type DisplayControl, sanitizeDisplayValue } from "../../components/ui/display-menu";
@@ -10,25 +11,29 @@ import type { FilterCondition } from "../../components/ui/filter-model";
 import { viewPrefsKey } from "../../lib/view-prefs";
 import type { CompletedMode } from "./completed";
 import { sanitizeTaskFilters } from "./filters";
-import { type GroupBy, groupsByBucket, LEVEL_ORDER } from "./helpers";
+import { GROUP_BYS, type GroupBy, groupsByBucket, LEVEL_ORDER } from "./helpers";
 import type { Task } from "./model";
-import { DEFAULT_ROW_PROPERTIES, type RowProperty } from "./row-layout";
+import { DEFAULT_ROW_PROPERTIES, type RowPreset, type RowProperty } from "./row-layout";
 
 export type TaskLayout = "list" | "board" | "timeline";
-/** The Board's columns: a drop on a column sets its field. */
-export type BoardColumnsBy = "status" | "bucket";
+/** The Board's Group by: a drop on a group sets its field. Assignee and
+ *  priority join with the drop rewrite (TV-U4); "bucket" is Project. */
+export type BoardGroupBy = "status" | "bucket";
 export type TaskOrder = "manual" | "due" | "scheduled" | "priority" | "created" | "updated";
 export type SubtaskMode = "nested" | "flat";
+/** Display → Rows (tasks-v3 §4): which facts a row carries. Height is Density's. */
+export type { RowPreset };
 
 export type TasksDisplay = {
   layout: TaskLayout;
   /** The List's Group by. */
   group: GroupBy;
-  /** The Board's columns. */
-  columns: BoardColumnsBy;
+  /** The Board's Group by (it always opens by status, call 86). */
+  boardGroup: BoardGroupBy;
   order: TaskOrder;
   completed: CompletedMode;
   subtasks: SubtaskMode;
+  rows: RowPreset;
   properties: RowProperty[];
 };
 
@@ -38,21 +43,25 @@ export type TasksViewPrefs = TasksDisplay & { filters: FilterCondition[] };
 export const TASKS_DISPLAY_DEFAULTS: TasksDisplay = {
   layout: "list",
   group: "none",
-  columns: "status",
+  boardGroup: "status",
   order: "manual",
   completed: "hidden",
   subtasks: "nested",
+  rows: "standard",
   properties: [...DEFAULT_ROW_PROPERTIES],
 };
 
 /**
- * A scope's defaults. All and My tasks group by bucket (their tasks come from
- * every bucket); a single bucket, Inbox and the Queue don't group.
+ * A scope's defaults:
+ * - My tasks groups by status, In progress first (call 84);
+ * - All groups by project (its tasks come from every project);
+ * - a project, the Inbox and the Queue don't group (a project's default
+ *   becomes Section once sections exist, TV-D10).
  */
 export function tasksDisplayDefaults(scope: string): TasksDisplay {
-  return groupsByBucket(scope)
-    ? { ...TASKS_DISPLAY_DEFAULTS, group: "bucket" }
-    : { ...TASKS_DISPLAY_DEFAULTS };
+  if (scope === "mine") return { ...TASKS_DISPLAY_DEFAULTS, group: "status" };
+  if (groupsByBucket(scope)) return { ...TASKS_DISPLAY_DEFAULTS, group: "bucket" };
+  return { ...TASKS_DISPLAY_DEFAULTS };
 }
 
 export function tasksViewDefaults(scope: string, layout?: TaskLayout): TasksViewPrefs {
@@ -72,24 +81,19 @@ const LAYOUT_CONTROL: DisplayControl<TasksDisplay> = {
   ],
 };
 
-const GROUP_LABELS: Record<GroupBy, string> = {
-  none: "None",
+/** Group by's choices, in the menu's order (default l; never Tag or Energy). */
+export const GROUP_LABELS: Record<GroupBy, string> = {
   status: "Status",
-  bucket: "Bucket",
-  assignee: "Assignee",
   priority: "Priority",
-  energy: "Energy",
-  tag: "Tag",
-  due: "Due date",
-  scheduled: "Scheduled",
-  time: "Time",
+  assignee: "Assignee",
+  date: "Date",
+  bucket: "Project",
+  none: "None",
 };
 
 function groupControl(scope: string): DisplayControl<TasksDisplay> {
-  // Grouping by bucket only means something across buckets (All, My tasks).
-  const groups = (Object.keys(GROUP_LABELS) as GroupBy[]).filter(
-    (g) => g !== "bucket" || groupsByBucket(scope),
-  );
+  // Grouping by project only means something across projects (All, My tasks).
+  const groups = GROUP_BYS.filter((g) => g !== "bucket" || groupsByBucket(scope));
   return {
     type: "select",
     id: "group",
@@ -98,13 +102,20 @@ function groupControl(scope: string): DisplayControl<TasksDisplay> {
   };
 }
 
-const COLUMNS_CONTROL: DisplayControl<TasksDisplay> = {
-  type: "select",
-  id: "columns",
-  label: "Columns",
+/** The Board's Group by: "Group by" too, never "Columns" (call 22a). */
+function boardGroupControl(scope: string): DisplayControl<TasksDisplay> {
+  const options = [{ value: "status", label: "Status" }];
+  if (groupsByBucket(scope)) options.push({ value: "bucket", label: "Project" });
+  return { type: "select", id: "boardGroup", label: "Group by", options };
+}
+
+const ROWS_CONTROL: DisplayControl<TasksDisplay> = {
+  type: "segmented",
+  id: "rows",
+  label: "Rows",
   options: [
-    { value: "status", label: "Status" },
-    { value: "bucket", label: "Bucket" },
+    { value: "standard", label: "Standard" },
+    { value: "detailed", label: "Detailed" },
   ],
 };
 
@@ -161,23 +172,37 @@ const PROPERTIES_CONTROL: DisplayControl<TasksDisplay> = {
  *   (done tasks leave every queue; one you check off there stays until the
  *   next load, TV-D4) or subtask nesting.
  * - The Timeline keeps its own rules: only the layout switch.
- * - The Board picks columns instead of groups; Bucket columns only across
- *   buckets.
+ * - The Board has its own Group by (Project only across projects) and no
+ *   Rows preset: cards get theirs with the Board rebuild (TV-U11).
  */
 export function tasksDisplayControls(
   scope: string,
   layout: TaskLayout = "list",
 ): DisplayControl<TasksDisplay>[] {
   if (layout === "timeline") return [LAYOUT_CONTROL];
-  if (scope === "today") return [LAYOUT_CONTROL, PROPERTIES_CONTROL];
-  const grouping =
-    layout === "board" ? (groupsByBucket(scope) ? [COLUMNS_CONTROL] : []) : [groupControl(scope)];
+  if (scope === "today") {
+    return layout === "board"
+      ? [LAYOUT_CONTROL, PROPERTIES_CONTROL]
+      : [LAYOUT_CONTROL, ROWS_CONTROL, PROPERTIES_CONTROL];
+  }
+  if (layout === "board") {
+    const grouping = groupsByBucket(scope) ? [boardGroupControl(scope)] : [];
+    return [
+      LAYOUT_CONTROL,
+      ...grouping,
+      ORDER_CONTROL,
+      COMPLETED_CONTROL,
+      SUBTASKS_CONTROL,
+      PROPERTIES_CONTROL,
+    ];
+  }
   return [
     LAYOUT_CONTROL,
-    ...grouping,
+    groupControl(scope),
     ORDER_CONTROL,
     COMPLETED_CONTROL,
     SUBTASKS_CONTROL,
+    ROWS_CONTROL,
     PROPERTIES_CONTROL,
   ];
 }
@@ -187,10 +212,11 @@ function scopeControls(scope: string): DisplayControl<TasksDisplay>[] {
   return [
     LAYOUT_CONTROL,
     groupControl(scope),
-    COLUMNS_CONTROL,
+    boardGroupControl(scope),
     ORDER_CONTROL,
     COMPLETED_CONTROL,
     SUBTASKS_CONTROL,
+    ROWS_CONTROL,
     PROPERTIES_CONTROL,
   ];
 }

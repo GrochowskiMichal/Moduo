@@ -1,11 +1,12 @@
-// TV-U1 + TV-U2 (U2-3) — the Tasks Display value as stored per workspace and
-// scope (layout, group, columns, order, completed, subtasks, row properties,
-// plus the scope's filters), the controls each scope offers, the Order by
-// rules and the Group by groupings (Time and Energy included).
+// TV-U1 + TV-U2 — the Tasks Display value as stored per workspace and scope
+// (layout, group, the Board's group, order, completed, subtasks, the Rows
+// preset, row properties, plus the scope's filters), the controls each scope
+// offers, the Order by rules and the Group by set (tasks-v3 default l, calls
+// 83, 84: AC11.2, AC11.3).
 
 import { describe, expect, it } from "@rstest/core";
-import { dayGroupKey, timeGroupOf } from "./day-buckets";
 import {
+  GROUP_LABELS,
   orderTasks,
   sanitizeTasksView,
   TASKS_DISPLAY_DEFAULTS,
@@ -14,7 +15,7 @@ import {
   tasksDisplayKey,
   tasksViewDefaults,
 } from "./display";
-import { groupTasks, makeTask } from "./helpers";
+import { dateGroupOf, groupTasks, makeTask } from "./helpers";
 import type { Task } from "./model";
 
 // Thursday 2026-10-08, 10:00 local.
@@ -32,19 +33,22 @@ function task(id: string, over: Partial<Task> = {}): Task {
 const ids = (tasks: readonly Task[]) => tasks.map((t) => t.id);
 
 describe("Tasks Display — stored value", () => {
-  it("defaults: list, no grouping in one bucket, bucket grouping across buckets", () => {
+  it("defaults: Standard rows, the Board by status; All by project, My tasks by status", () => {
     expect(TASKS_DISPLAY_DEFAULTS).toEqual({
       layout: "list",
       group: "none",
-      columns: "status",
+      boardGroup: "status",
       order: "manual",
       completed: "hidden",
       subtasks: "nested",
+      rows: "standard",
       properties: ["priority", "date", "assignee"],
     });
     expect(tasksDisplayDefaults("all").group).toBe("bucket");
-    expect(tasksDisplayDefaults("mine").group).toBe("bucket");
+    // Call 84: My tasks answers "what am I in the middle of".
+    expect(tasksDisplayDefaults("mine").group).toBe("status");
     expect(tasksDisplayDefaults("b-42").group).toBe("none");
+    expect(tasksDisplayDefaults("inbox").group).toBe("none");
   });
 
   it("a scope without a stored layout starts with the old workspace-wide one", () => {
@@ -56,11 +60,12 @@ describe("Tasks Display — stored value", () => {
   it("keeps every stored choice it still offers, filters included", () => {
     const stored = {
       layout: "board",
-      group: "time",
-      columns: "bucket",
+      group: "date",
+      boardGroup: "bucket",
       order: "priority",
       completed: "week",
       subtasks: "flat",
+      rows: "detailed",
       properties: ["energy", "priority"],
       filters: [{ dimension: "priority", operator: "is", values: ["high"] }],
     };
@@ -78,6 +83,7 @@ describe("Tasks Display — stored value", () => {
       order: "random",
       completed: "forever",
       subtasks: "deep",
+      rows: "compact",
       properties: ["priority", "mood"],
       filters: [{ dimension: "mood", operator: "is", values: ["happy"] }, "junk"],
     };
@@ -91,10 +97,18 @@ describe("Tasks Display — stored value", () => {
     );
   });
 
-  it("bucket grouping only across buckets, even from storage", () => {
-    const stored = { group: "bucket" };
-    expect(sanitizeTasksView(stored, tasksViewDefaults("b1"), "b1").group).toBe("none");
-    expect(sanitizeTasksView(stored, tasksViewDefaults("all"), "all").group).toBe("bucket");
+  it("project grouping only across projects, even from storage (List and Board)", () => {
+    const stored = { group: "bucket", boardGroup: "bucket" };
+    const one = sanitizeTasksView(stored, tasksViewDefaults("b1"), "b1");
+    expect([one.group, one.boardGroup]).toEqual(["none", "status"]);
+    const all = sanitizeTasksView(stored, tasksViewDefaults("all"), "all");
+    expect([all.group, all.boardGroup]).toEqual(["bucket", "bucket"]);
+  });
+
+  it("v2's groupings (Tag, Energy, Time, Due, Scheduled) fall back to the scope's default", () => {
+    for (const group of ["tag", "energy", "time", "due", "scheduled"]) {
+      expect(sanitizeTasksView({ group }, tasksViewDefaults("mine"), "mine").group).toBe("status");
+    }
   });
 
   it("is remembered per workspace and scope", () => {
@@ -108,51 +122,61 @@ describe("Tasks Display — controls per scope and layout", () => {
   const controlIds = (scope: string, layout?: "list" | "board" | "timeline") =>
     tasksDisplayControls(scope, layout).map((c) => c.id);
 
-  it("the List: layout, group, order, completed, subtasks, row properties", () => {
+  it("the List: layout, group, order, completed, subtasks, rows, row properties", () => {
     expect(controlIds("inbox", "list")).toEqual([
       "layout",
       "group",
       "order",
       "completed",
       "subtasks",
+      "rows",
       "properties",
     ]);
   });
 
-  it("offers Bucket grouping only across buckets, and every §7 grouping", () => {
-    const groups = (scope: string) => {
-      const control = tasksDisplayControls(scope, "list").find((c) => c.id === "group");
-      return control?.options.map((o) => o.value);
-    };
-    expect(groups("all")).toEqual([
-      "none",
-      "status",
-      "bucket",
-      "assignee",
-      "priority",
-      "energy",
-      "tag",
-      "due",
-      "scheduled",
-      "time",
-    ]);
-    expect(groups("b1")).not.toContain("bucket");
+  it("Rows is Standard · Detailed", () => {
+    const rows = tasksDisplayControls("b1", "list").find((c) => c.id === "rows");
+    expect(rows?.label).toBe("Rows");
+    expect(rows?.options.map((o) => o.label)).toEqual(["Standard", "Detailed"]);
   });
 
-  it("the Board picks columns (across buckets only); one bucket's board is by status", () => {
+  it("Group by: Status · Priority · Assignee · Date · Project · None, never Tag or Energy", () => {
+    const groups = (scope: string) => {
+      const control = tasksDisplayControls(scope, "list").find((c) => c.id === "group");
+      return control?.options.map((o) => o.label);
+    };
+    expect(groups("all")).toEqual(["Status", "Priority", "Assignee", "Date", "Project", "None"]);
+    // Project only across projects.
+    expect(groups("b1")).toEqual(["Status", "Priority", "Assignee", "Date", "None"]);
+    const every = Object.values(GROUP_LABELS);
+    for (const gone of ["Tag", "Energy", "Time", "Due date", "Scheduled", "Bucket"]) {
+      expect(every).not.toContain(gone);
+    }
+  });
+
+  it("the Board says Group by, never Columns (across projects only)", () => {
     expect(controlIds("all", "board")).toEqual([
       "layout",
-      "columns",
+      "boardGroup",
       "order",
       "completed",
       "subtasks",
       "properties",
     ]);
-    expect(controlIds("b1", "board")).not.toContain("columns");
+    const control = tasksDisplayControls("all", "board").find((c) => c.id === "boardGroup");
+    expect(control?.label).toBe("Group by");
+    expect(control?.options.map((o) => o.label)).toEqual(["Status", "Project"]);
+    expect(controlIds("b1", "board")).not.toContain("boardGroup");
+    const labels = (scope: string, layout: "list" | "board") =>
+      tasksDisplayControls(scope, layout).map((c) => c.label);
+    for (const layout of ["list", "board"] as const) {
+      expect(labels("all", layout)).not.toContain("Columns");
+    }
   });
 
   it("the Queue is a line-up (no Completed choice: done leaves the queue)", () => {
-    expect(controlIds("today", "list")).toEqual(["layout", "properties"]);
+    expect(controlIds("today", "list")).toEqual(["layout", "rows", "properties"]);
+    expect(controlIds("today", "board")).toEqual(["layout", "properties"]);
   });
 
   it("the Timeline keeps its own rules", () => {
@@ -214,63 +238,76 @@ describe("Group by", () => {
   const groupsOf = (tasks: Task[], by: Parameters<typeof groupTasks>[1], extra = {}) =>
     groupTasks(tasks, by, { ...ctx, ...extra }).map((g) => [g.label, ids(g.tasks)]);
 
-  it("Energy: high, medium, low, then unset", () => {
-    const tasks = [
-      task("u"),
-      task("l", { energyLevel: "low" }),
-      task("h", { energyLevel: "high" }),
-      task("m", { energyLevel: "medium" }),
-    ];
-    expect(groupsOf(tasks, "energy")).toEqual([
-      ["High energy", ["h"]],
-      ["Medium energy", ["m"]],
-      ["Low energy", ["l"]],
-      ["Unset", ["u"]],
-    ]);
-  });
-
-  it("Time: Earlier · Today · Tomorrow · This week · Later · No date, by the row's date", () => {
-    // Thursday: "This week" is Saturday and Sunday.
+  it("Date: Earlier · Today · Tomorrow · the next five day names · Later · No date", () => {
+    // Thursday 8 Oct: the five names run Saturday to Wednesday.
     const tasks = [
       task("none"),
-      task("later", { dueDate: day(10) }),
-      task("week", { scheduledAt: day(3) }),
+      task("later", { dueDate: day(7) }),
+      task("wed", { scheduledAt: day(6) }),
+      task("sat", { dueDate: day(2) }),
+      task("mon", { dueDate: day(4) }),
       task("tomorrow", { dueDate: day(1) }),
       task("today", { scheduledAt: day(0, 8) }),
       task("earlier", { dueDate: day(-2) }),
-      // The earlier of the two dates wins.
+      // The row's date: whichever of the two comes first by day.
       task("both", { dueDate: day(9), scheduledAt: day(1) }),
     ];
-    expect(groupsOf(tasks, "time")).toEqual([
+    expect(groupsOf(tasks, "date")).toEqual([
       ["Earlier", ["earlier"]],
       ["Today", ["today"]],
       ["Tomorrow", ["tomorrow", "both"]],
-      ["This week", ["week"]],
+      ["Saturday", ["sat"]],
+      ["Monday", ["mon"]],
+      ["Wednesday", ["wed"]],
       ["Later", ["later"]],
       ["No date", ["none"]],
     ]);
-    expect(timeGroupOf({ scheduledAt: null, dueDate: day(4) }, NOW)).toBe("later");
   });
 
-  it("Due date and Scheduled: one group per day, Earlier first, no date last", () => {
+  it("Date is rolling: no This week, the same five names on any weekday", () => {
+    // A Saturday: This week would be one day long; the next five still have names.
+    const saturday = new Date(2026, 9, 10, 10, 0);
+    const at = (offset: number) => new Date(2026, 9, 10 + offset, 9, 0).toISOString();
+    const groups = [1, 2, 3, 4, 5, 6, 7].map((offset) =>
+      dateGroupOf({ scheduledAt: null, dueDate: at(offset) }, saturday),
+    );
+    expect(groups).toEqual(["tomorrow", "day2", "day3", "day4", "day5", "day6", "later"]);
+    const labels = groupTasks(
+      [2, 3, 4, 5, 6].map((offset) => task(`d${offset}`, { dueDate: at(offset) })),
+      "date",
+      { bucketName: (id) => id, now: saturday },
+    ).map((g) => g.label);
+    expect(labels).toEqual(["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]);
+  });
+
+  it("Status: In progress first, then To do, Done, Won't do (the labels everyone reads)", () => {
     const tasks = [
-      task("none"),
-      task("fri", { dueDate: day(1) }),
-      task("past", { dueDate: day(-3) }),
-      task("thu", { dueDate: day(0) }),
-      task("fri2", { dueDate: day(1, 18) }),
+      task("w", { status: "archived" }),
+      task("d", { status: "done" }),
+      task("t"),
+      task("p", { status: "in_progress" }),
     ];
-    expect(groupsOf(tasks, "due")).toEqual([
-      ["Earlier", ["past"]],
-      ["Today", ["thu"]],
-      ["Tomorrow", ["fri", "fri2"]],
-      ["No due date", ["none"]],
+    expect(groupsOf(tasks, "status")).toEqual([
+      ["In progress", ["p"]],
+      ["To do", ["t"]],
+      ["Done", ["d"]],
+      ["Won’t do", ["w"]],
     ]);
-    expect(groupsOf([task("s", { scheduledAt: day(1) }), task("n")], "scheduled")).toEqual([
-      ["Tomorrow", ["s"]],
-      ["Not scheduled", ["n"]],
+  });
+
+  it("Priority: high, medium, low, then unset", () => {
+    const tasks = [
+      task("u"),
+      task("l", { priority: "low" }),
+      task("h", { priority: "high" }),
+      task("m", { priority: "medium" }),
+    ];
+    expect(groupsOf(tasks, "priority")).toEqual([
+      ["High priority", ["h"]],
+      ["Medium priority", ["m"]],
+      ["Low priority", ["l"]],
+      ["Unset", ["u"]],
     ]);
-    expect(dayGroupKey(day(1), NOW)).toBe("d:2026-10-09");
   });
 
   it("Assignee: members in picker order, former members, then Unassigned", () => {
@@ -292,23 +329,7 @@ describe("Group by", () => {
     ]);
   });
 
-  it("Tag: by tag name, a task under each of its tags, untagged last", () => {
-    const tags: Record<string, Array<{ id: string; name: string }>> = {
-      both: [
-        { id: "t2", name: "ux" },
-        { id: "t1", name: "bug" },
-      ],
-      one: [{ id: "t1", name: "bug" }],
-    };
-    const tasks = [task("both"), task("one"), task("none")];
-    expect(groupsOf(tasks, "tag", { tagsFor: (id: string) => tags[id] ?? [] })).toEqual([
-      ["bug", ["both", "one"]],
-      ["ux", ["both"]],
-      ["No tag", ["none"]],
-    ]);
-  });
-
-  it("Bucket groups follow the rail, not the order tasks arrive in", () => {
+  it("Project groups follow the rail, not the order tasks arrive in", () => {
     const tasks = [task("x", { bucketId: "b2" }), task("y", { bucketId: "inbox" })];
     expect(groupsOf(tasks, "bucket", { bucketOrder: ["inbox", "b1", "b2"] })).toEqual([
       ["INBOX", ["y"]],
@@ -318,12 +339,9 @@ describe("Group by", () => {
 
   it("sorting first keeps the order inside every group", () => {
     const tasks = orderTasks(
-      [
-        task("a", { energyLevel: "high", priority: "low" }),
-        task("b", { energyLevel: "high", priority: "high" }),
-      ],
+      [task("a", { status: "todo", priority: "low" }), task("b", { priority: "high" })],
       "priority",
     );
-    expect(groupsOf(tasks, "energy")).toEqual([["High energy", ["b", "a"]]]);
+    expect(groupsOf(tasks, "status")).toEqual([["To do", ["b", "a"]]]);
   });
 });

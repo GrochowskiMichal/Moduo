@@ -26,6 +26,7 @@ import type { Task } from "../model";
 export type TasksDisplayProps = {
   completed: TasksDisplay["completed"];
   properties: TasksDisplay["properties"];
+  rows: TasksDisplay["rows"];
   order: TasksDisplay["order"];
   subtasks: TasksDisplay["subtasks"];
   stayingIds: ReadonlySet<string>;
@@ -116,6 +117,7 @@ export function useTasksDisplay(
     viewProps: {
       completed,
       properties: display.properties,
+      rows: display.rows,
       order: display.order,
       subtasks: display.subtasks,
       stayingIds,

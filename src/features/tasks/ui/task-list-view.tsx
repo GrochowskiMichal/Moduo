@@ -14,7 +14,7 @@ import { eyebrowVariants } from "../../../components/ui/eyebrow";
 import { cn } from "../../../lib/utils";
 import { useAssignees } from "../assignees";
 import { type CompletedMode, partitionCompleted } from "../completed";
-import { orderTasks, type SubtaskMode, type TaskOrder } from "../display";
+import { orderTasks, type RowPreset, type SubtaskMode, type TaskOrder } from "../display";
 import {
   canNestUnder,
   type GroupBy,
@@ -67,6 +67,8 @@ type Props = {
   completed?: CompletedMode;
   /** Display → "Show on rows". */
   properties?: readonly string[];
+  /** Display → Rows: Standard · Detailed. */
+  rows?: RowPreset;
   /** Display → Order by, inside each group. The Queue keeps its line-up. */
   order?: TaskOrder;
   /** Display → Subtasks: nested under their parent, or rows of their own. */
@@ -116,6 +118,7 @@ export function TaskListView({
   onClearFilters,
   completed = "hidden",
   properties = DEFAULT_ROW_PROPERTIES,
+  rows: rowPreset = "standard",
   order = "manual",
   subtasks = "nested",
   stayingIds = NO_IDS,
@@ -141,7 +144,9 @@ export function TaskListView({
   // Nesting is drag-onto-target (no SortableContext) → default keyboard sensor.
   const nestSensors = useTaskDndSensors({ sortable: false });
 
-  const showBucketTag = showBucketPill(selection, groupBy);
+  // Detailed names the project on every row (tasks-v3 §4); Standard only
+  // where it isn't implied.
+  const showBucketTag = rowPreset === "detailed" || showBucketPill(selection, groupBy);
   // In My tasks every row is mine, so rows leave the avatar out (D4-4).
   const showAssignee = selection !== "mine";
   const { assignees } = useAssignees();
@@ -178,14 +183,12 @@ export function TaskListView({
   // done leaves it, and a task checked off there stays until the next load.
   const groups = useMemo(() => {
     // Sort, then group, so every group keeps the order (the Queue keeps its
-    // line-up). Bucket groups follow the rail; a task with two tags lists
-    // under both when grouped by tag.
+    // line-up). Project groups follow the rail; each task is in one group.
     const ordered = orderTasks(topLevelTasks, selection === "today" ? "manual" : order);
     const all = groupTasks(ordered, groupBy, {
       bucketName: bucketNameById,
       bucketOrder: [...(inbox ? [inbox.id] : []), ...buckets.map((b) => b.id)],
       assignees,
-      tagsFor: (id) => api.tagsByTask.get(id) ?? [],
     });
     if (selection === "today") return all.map((g) => ({ ...g, hidden: [] as Task[] }));
     const now = new Date();
@@ -211,7 +214,6 @@ export function TaskListView({
     inbox,
     buckets,
     assignees,
-    api.tagsByTask,
     selection,
     completed,
     stayingIds,
@@ -278,6 +280,7 @@ export function TaskListView({
     }
     return rowColumns(rows, {
       properties,
+      rows: rowPreset,
       showAssignee: showAssignee && assignees.length > 1,
       canEdit,
       isQueued: (id) => api.queuedTaskIds.has(id),
@@ -290,6 +293,7 @@ export function TaskListView({
     api.queuedTaskIds,
     api.queueClaims,
     properties,
+    rowPreset,
     showAssignee,
     assignees.length,
     canEdit,

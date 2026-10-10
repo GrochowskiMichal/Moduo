@@ -22,10 +22,10 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/
 import { cn } from "../../../lib/utils";
 import { assigneeLabel } from "../assignee-options";
 import { useAssignees } from "../assignees";
-import { LEVEL_OPTIONS } from "../helpers";
+import { LEVEL_OPTIONS, STATUS_LABELS } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { EnergyLevel, PriorityLevel, Task } from "../model";
-import { ALL_ROW_COLUMNS, type RowColumns, type RowDate, rowDate } from "../row-layout";
+import { ALL_ROW_COLUMNS, type RowColumns, type RowDate, rowDate, rowTime } from "../row-layout";
 import { AssignContextMenu } from "./assign-context-menu";
 import { AssigneeAvatar } from "./assignee-avatar";
 import type { DragActivatorRef } from "./dnd/task-dnd";
@@ -92,8 +92,9 @@ type Props = {
 /**
  * One task in the List (tasks-v2 §6): checkbox · title · quiet counts, then
  * fixed right-hand columns (priority · [energy] · date · assignee · queue) so
- * the meta lines up down the list. A done row dims as a whole except its
- * checkbox; selection is the tint (DS-2), never a bar.
+ * the meta lines up down the list. Display → Rows: Detailed adds the status
+ * name, the time and the assignee's name (TV-U2). A done row dims as a whole
+ * except its checkbox; selection is the tint (DS-2), never a bar.
  */
 export function TaskRow({
   task,
@@ -142,6 +143,7 @@ export function TaskRow({
   const assigneeName = assigneeLabel(task.assigneeId, byId);
   // Solo workspaces have nobody to tell apart — the avatar only appears with teammates.
   const withAssignee = columns.assignee && showAssignee && assignees.length > 1;
+  const time = columns.time ? rowTime(task) : null;
   const dateCommand = command === "schedule" || command === "due";
 
   const row = (
@@ -285,6 +287,16 @@ export function TaskRow({
         data-slot="row-columns"
         className={cn("flex shrink-0 items-center gap-3", closed && "opacity-40")}
       >
+        {/* Detailed's cells hold their width (min-w, so a longer value widens
+            the cell rather than truncate, call 41). */}
+        {columns.status ? (
+          <span
+            data-col="status"
+            className="min-w-24 shrink-0 whitespace-nowrap font-sans text-xs text-muted-foreground"
+          >
+            {STATUS_LABELS[task.status]}
+          </span>
+        ) : null}
         {columns.priority ? (
           <span data-col="priority" className="flex w-icon-sm shrink-0 items-center justify-center">
             <PriorityMark level={task.priority} />
@@ -305,7 +317,27 @@ export function TaskRow({
             api={api}
           />
         ) : null}
-        {withAssignee ? (
+        {columns.time ? (
+          <span
+            data-col="time"
+            className="min-w-22 shrink-0 whitespace-nowrap text-right font-sans text-xs tabular-nums text-muted-foreground"
+          >
+            {time}
+          </span>
+        ) : null}
+        {withAssignee && columns.assigneeName ? (
+          <span
+            data-col="assignee"
+            className="flex min-w-24 shrink-0 items-center gap-1.5 whitespace-nowrap font-sans text-xs text-muted-foreground"
+          >
+            {task.assigneeId ? (
+              <>
+                <AssigneeAvatar assignee={assignee} size="icon" />
+                {assignee ? firstName(assignee.name) : assigneeName}
+              </>
+            ) : null}
+          </span>
+        ) : withAssignee ? (
           <span data-col="assignee" className="flex w-icon shrink-0 items-center justify-center">
             {task.assigneeId ? (
               <Tooltip>
@@ -668,4 +700,9 @@ function BucketPopover({
       </PopoverContent>
     </Popover>
   );
+}
+
+/** Detailed's assignee cell: the first name ("Mike" of "Mike Grochowski"; "Me" stays). */
+function firstName(name: string): string {
+  return name.trim().split(/\s+/)[0] ?? name;
 }
