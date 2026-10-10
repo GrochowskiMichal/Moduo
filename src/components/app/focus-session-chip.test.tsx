@@ -1,6 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it, rs } from "@rstest/core";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, rs } from "@rstest/core";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
-
+import { formatFocusClock } from "../../features/focus/clock";
 import {
   __resetFocusEngineForTest,
   attachFocusUser,
@@ -13,9 +13,18 @@ import {
 } from "../../features/focus/engine";
 import { FocusAwayPrompt } from "../../features/focus/ui/away-prompt";
 import { TooltipProvider } from "../ui/tooltip";
-import { FocusSessionChip, formatClock } from "./focus-session-chip";
+import { FocusSessionChip } from "./focus-session-chip";
 
 rs.mock("@tanstack/react-router", () => ({ useNavigate: () => () => {} }));
+
+beforeAll(() => {
+  // The away popover measures itself.
+  globalThis.ResizeObserver ??= class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as never;
+});
 
 beforeEach(() => {
   rs.useFakeTimers();
@@ -91,15 +100,26 @@ describe("FocusSessionChip (the top-bar Focus timer)", () => {
       rs.advanceTimersByTime(1000);
     });
 
-    const trigger = screen.getByRole("button", { name: /^You were away 10m/ });
+    const trigger = screen.getByRole("button", {
+      name: /^You were away 10m · .* click to answer$/,
+    });
     expect(trigger.textContent?.replace(/\s/g, " ")).toBe("Away 10m");
     fireEvent.click(trigger);
     expect(screen.queryByText("You were away 10m.")).not.toBeNull();
     expect(screen.getByRole("button", { name: "Open Focus" })).not.toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Count as break" }));
+    const answer = screen.getByRole("button", { name: "Count as break" });
+    answer.focus();
+    fireEvent.click(answer);
+    act(() => {
+      rs.advanceTimersByTime(10);
+    });
     expect(getFocusSession().away).toBeNull();
     expect(screen.queryByRole("button", { name: /^You were away/ })).toBeNull();
+    // The popover went with the question; focus stays in the timer.
+    expect(document.activeElement).toBe(
+      screen.getByRole("button", { name: /^Focus — Write spec/ }),
+    );
   });
 
   it("leaves the away question to the Focus view while it's asking (asked once)", () => {
@@ -125,11 +145,11 @@ function AwayOnFocusView() {
   return session.away ? <FocusAwayPrompt away={session.away} /> : null;
 }
 
-describe("formatClock", () => {
+describe("formatFocusClock", () => {
   it("drops the leading zero under an hour and adds hours from an hour on", () => {
-    expect(formatClock(0)).toBe("0:00");
-    expect(formatClock(252)).toBe("4:12");
-    expect(formatClock(1082)).toBe("18:02");
-    expect(formatClock(3852)).toBe("1:04:12");
+    expect(formatFocusClock(0)).toBe("0:00");
+    expect(formatFocusClock(252)).toBe("4:12");
+    expect(formatFocusClock(1082)).toBe("18:02");
+    expect(formatFocusClock(3852)).toBe("1:04:12");
   });
 });

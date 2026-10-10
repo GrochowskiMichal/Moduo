@@ -65,7 +65,7 @@ export function HelpMenu() {
               aria-label="Help"
               className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background data-[state=open]:bg-state-active data-[state=open]:text-foreground"
             >
-              <CircleQuestionMark className="size-4" aria-hidden />
+              <CircleQuestionMark className="size-3.5" aria-hidden />
             </DropdownMenuTrigger>
           </TooltipTrigger>
           <TooltipContent>Help</TooltipContent>

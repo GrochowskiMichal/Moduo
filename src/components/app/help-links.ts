@@ -54,8 +54,10 @@ const SUBJECT_MAX = 60;
 export function bugReportSubject(description: string): string {
   const firstLine = description.trim().split("\n")[0]?.trim() ?? "";
   if (!firstLine) return "Bug report";
+  // Cut by code point: half an emoji would make encodeURIComponent throw.
+  const chars = Array.from(firstLine);
   const cut =
-    firstLine.length > SUBJECT_MAX ? `${firstLine.slice(0, SUBJECT_MAX).trimEnd()}…` : firstLine;
+    chars.length > SUBJECT_MAX ? `${chars.slice(0, SUBJECT_MAX).join("").trimEnd()}…` : firstLine;
   return `Bug: ${cut}`;
 }
 

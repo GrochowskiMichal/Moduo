@@ -1,7 +1,9 @@
 import { useNavigate } from "@tanstack/react-router";
 import { CloudOff, Coffee, Pause, Play } from "lucide-react";
+import { useRef } from "react";
 
 import { formatAwaySpan } from "../../features/focus/away-copy";
+import { formatFocusClock } from "../../features/focus/clock";
 import { toggleFocusRunning, useFocusSession } from "../../features/focus/engine";
 import { FocusAwayPrompt, useFullAwayPromptShown } from "../../features/focus/ui/away-prompt";
 import { requestFocusView } from "../../features/focus/view-request";
@@ -39,6 +41,7 @@ export function FocusSessionChip() {
   // On the Focus view the Now card already asks "while you were away".
   const awayAskedThere = useFullAwayPromptShown();
   const navigate = useNavigate();
+  const clockRef = useRef<HTMLButtonElement>(null);
   const openFocus = () => {
     requestFocusView();
     void navigate({ to: "/tasks" });
@@ -72,6 +75,7 @@ export function FocusSessionChip() {
   const tip = `Focus — ${label}${phaseTip}${state}${unsaved} · click to open`;
   const away = awayAskedThere ? null : session.away;
   const awaySpan = away ? formatAwaySpan(away.awaySeconds) : "";
+  const awayTip = `You were away ${awaySpan} · Focus — ${label} · click to answer`;
   const toggleLabel = session.running ? "Pause Focus" : "Resume Focus";
   const ToggleIcon = session.running ? Pause : Play;
 
@@ -86,7 +90,7 @@ export function FocusSessionChip() {
         <TooltipTrigger
           onClick={() => toggleFocusRunning()}
           aria-label={toggleLabel}
-          className={`flex size-5 shrink-0 items-center justify-center rounded-sm hover:text-foreground ${buttonFocus}`}
+          className={`flex size-6 shrink-0 items-center justify-center rounded-sm hover:text-foreground ${buttonFocus}`}
         >
           {/* At rest: a dot while it runs (a cup on a narrow break), pause while paused. */}
           <span className="flex group-hover:hidden group-has-focus-visible:hidden" aria-hidden>
@@ -112,16 +116,24 @@ export function FocusSessionChip() {
         <Popover>
           <Tooltip>
             <TooltipTrigger asChild>
-              <PopoverTrigger
-                aria-label={`You were away ${awaySpan} · ${tip}`}
-                className={`${clockClass} text-foreground`}
-              >
+              <PopoverTrigger aria-label={awayTip} className={`${clockClass} text-foreground`}>
                 Away<span className="hidden @2xs:inline">&nbsp;{awaySpan}</span>
               </PopoverTrigger>
             </TooltipTrigger>
-            <TooltipContent>{tip}</TooltipContent>
+            <TooltipContent>{awayTip}</TooltipContent>
           </Tooltip>
-          <PopoverContent align="end" className="w-80 space-y-1 p-3">
+          <PopoverContent
+            align="end"
+            className="w-80 space-y-1 p-3"
+            onCloseAutoFocus={(event) => {
+              // Answering unmounts this popover with focus inside it; once the
+              // clock is back, focus goes there rather than to <body>.
+              const clock = clockRef.current;
+              if (!clock) return;
+              event.preventDefault();
+              clock.focus();
+            }}
+          >
             <FocusAwayPrompt away={away} compact />
             <Button variant="ghost" size="sm" onClick={openFocus}>
               Open Focus
@@ -130,26 +142,22 @@ export function FocusSessionChip() {
         </Popover>
       ) : (
         <Tooltip>
-          <TooltipTrigger onClick={openFocus} aria-label={tip} className={clockClass}>
+          <TooltipTrigger
+            ref={clockRef}
+            onClick={openFocus}
+            aria-label={tip}
+            className={clockClass}
+          >
             {onBreak ? (
               <span className="hidden @2xs:inline">{capitalize(session.phaseLabel)}&nbsp;</span>
             ) : null}
-            {formatClock(session.bigClock)}
+            {formatFocusClock(session.bigClock)}
           </TooltipTrigger>
           <TooltipContent>{tip}</TooltipContent>
         </Tooltip>
       )}
     </div>
   );
-}
-
-/** "4:12" under an hour, "1:04:12" from an hour on. */
-export function formatClock(totalSeconds: number): string {
-  const seconds = Math.max(0, Math.floor(totalSeconds));
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = String(seconds % 60).padStart(2, "0");
-  return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${m}:${s}`;
 }
 
 function capitalize(text: string): string {

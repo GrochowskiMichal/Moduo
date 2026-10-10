@@ -38,5 +38,6 @@
 ## Known gaps / not-yet-testable
 - **support@moduo.app has to exist** before Contact support is useful (Maciej's call, 2026-10-10).
 - **moduo.app/docs falls through to the landing page** until there are docs.
-- The desktop paths (copy instead of mail) were not run in the desktop app this session; they're covered by the code branch on `IS_DESKTOP` only.
+- The desktop paths (copy instead of mail) were not run in the desktop app this session; they're unit-tested (`help-menu.desktop.test.tsx`), so the desktop items above confirm rather than discover.
+- The Focus view's own clock still reads "04:12" while the top bar reads "4:12"; Focus is rebuilt later (REPLAN 62a), and the shared helper is `src/features/focus/clock.ts`.
 - PR #323 (queue runs) rewrites the same timer file; when it lands, its run state needs porting to this quieter form.

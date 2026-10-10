@@ -75,7 +75,13 @@ export function BugReportDialog({
   const send = async () => {
     if (!canSend) return;
     const report = formatBugReport(description, context);
-    if (IS_DESKTOP) {
+    let mailto: string | null = null;
+    try {
+      mailto = mailtoUrl(BUG_REPORT_EMAIL, bugReportSubject(description), report);
+    } catch {
+      // A broken character can't go in a link (URIError); copying still works.
+    }
+    if (IS_DESKTOP || !mailto) {
       if (!(await copyText(report))) {
         toast("Couldn't copy the report", {
           description: `Write to ${BUG_REPORT_EMAIL} and say what happened.`,
@@ -84,7 +90,7 @@ export function BugReportDialog({
       }
       toast("Report copied", { description: `Paste it into an email to ${BUG_REPORT_EMAIL}.` });
     } else {
-      openMailto(mailtoUrl(BUG_REPORT_EMAIL, bugReportSubject(description), report));
+      openMailto(mailto);
       // A browser with no mail app does nothing, so say what should happen.
       toast("Opening your email app", {
         description: `Nothing opened? Copy the report and send it to ${BUG_REPORT_EMAIL}.`,

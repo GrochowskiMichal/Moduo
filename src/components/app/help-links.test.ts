@@ -38,6 +38,10 @@ describe("bug report", () => {
     expect(bugReportSubject("   ")).toBe("Bug report");
     const long = bugReportSubject("x".repeat(80));
     expect(long).toBe(`Bug: ${"x".repeat(60)}…`);
+    // An emoji across the cut stays whole, so the mailto link can be built.
+    const emoji = bugReportSubject(`${"a".repeat(59)}😀 and the rest of the line`);
+    expect(emoji).toBe(`Bug: ${"a".repeat(59)}😀…`);
+    expect(() => mailtoUrl("hello@moduo.app", emoji)).not.toThrow();
   });
 
   it("encodes the subject and body of the mailto link", () => {

@@ -24,9 +24,12 @@ function clearStoredSession() {
 /** Puts the app-level focus engine in a known state for one story. */
 function FocusFixture({
   setup,
+  narrow = false,
   children,
 }: {
   setup: () => undefined | (() => void);
+  /** The top bar's right group at the 1024px minimum window (about 180px). */
+  narrow?: boolean;
   children: ReactNode;
 }) {
   const [ready, setReady] = useState(false);
@@ -47,10 +50,14 @@ function FocusFixture({
       bindFocusTask(null);
       attachFocusUser(null);
       clearStoredSession();
+      __resetFocusEngineForTest(); // back to the real phase-end alert
     };
   }, [setup]);
   // Sits where the top bar puts it: right-aligned in a container, left of Help.
-  return ready ? <div className="@container flex justify-end p-4">{children}</div> : null;
+  if (!ready) return null;
+  return (
+    <div className={`@container flex justify-end p-4 ${narrow ? "w-44" : ""}`}>{children}</div>
+  );
 }
 
 const meta: Meta<typeof FocusSessionChip> = {
@@ -104,6 +111,18 @@ export const Paused: Story = {
 export const NotSavedYet: Story = {
   render: () => (
     <FocusFixture setup={notSaved}>
+      <FocusSessionChip />
+    </FocusFixture>
+  ),
+};
+
+/**
+ * Stopped while a save retries, where the top bar is narrow (the 1024px
+ * window): the words give way to an icon; the tooltip still says it.
+ */
+export const NotSavedYetNarrow: Story = {
+  render: () => (
+    <FocusFixture setup={notSaved} narrow>
       <FocusSessionChip />
     </FocusFixture>
   ),
