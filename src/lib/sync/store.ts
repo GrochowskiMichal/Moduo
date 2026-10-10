@@ -432,7 +432,13 @@ export class WorkspaceStore {
     this.tables.clear();
     this.overlays = [];
     this.outbox = [];
+    this.lineup = null;
+    this.kept = [];
     this.renderedCache.clear();
+    // A component still holding it (unmounting after sign-out) reads nothing.
+    this.snapshot = null;
+    this.lastSnapshot = null;
+    this.queueView = null;
   }
 
   private onBrowserOffline = () => this.setOffline(true);
