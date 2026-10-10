@@ -23,6 +23,7 @@ import {
 import type { EntityRef } from "../../../lib/entity-links";
 import { ENTITY_OPEN_EVENT, takeEntityOpenIntent } from "../../../lib/entity-open";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
+import { undoToast } from "../../../lib/undo-toast";
 import { HubDropZone } from "../../contacts/ui/hub-drop-zone";
 import { consumeFocusViewRequest, FOCUS_VIEW_REQUEST_EVENT } from "../../focus/view-request";
 import { createLinkWithToast } from "../../spine/ui/drop-link-toast";
@@ -38,23 +39,26 @@ import type { TaskLayout } from "../display";
 import {
   asRailDropTarget,
   isSideDroppable,
+  projectMoveWrite,
+  RAIL_DROP_PREFIX,
   type RailDropTarget,
   railCollision,
   railDropAction,
 } from "../dnd/rail-drop";
 import { type CaptureSeed, showsArchived, statusesLetThrough } from "../filters";
-import { groupsByBucket } from "../helpers";
+import { groupsByBucket, STATUS_LABELS } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
-import { isDrifted, PRIVATE_PROJECT_LABEL, type Task } from "../model";
+import { isDrifted, PRIVATE_PROJECT_LABEL, type Task, type TaskStatus } from "../model";
+import { showsSortedNote, sortedByLabel } from "../order";
 import { resolveTasksDeepLink } from "../search";
 import { sanitizeTimelineZoom, type TimelineZoom } from "../timeline-geometry";
 import { BucketRail, parseCollapsedSections, type TasksMode } from "./bucket-rail";
 import { CaptureModal } from "./capture-modal";
-import { asTaskDrag, useTaskDndSensors } from "./dnd/task-dnd";
+import { asTaskDrag, taskDragAnnouncements, useTaskDndSensors } from "./dnd/task-dnd";
 import { DriftTriageDialog } from "./drift-triage-dialog";
 import { ExecuteView } from "./execute-view";
 import { FrontierOfferDialog } from "./frontier-offer-dialog";
-import type { PlanHeaderControls, PlanView } from "./plan-view-header";
+import { type PlanHeaderControls, type PlanView, SortedOrderLine } from "./plan-view-header";
 import { TaskBoardView } from "./task-board-view";
 import { PrivateItemPanel, TASK_DETAIL_REFRESH_EVENT, TaskDetailPanel } from "./task-detail-panel";
 import { TaskListView } from "./task-list-view";
@@ -480,14 +484,16 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   );
 
   // ── TV-U4: rail drop targets ──────────────────────────────────────────────
-  // A task dropped on a bucket row moves there (subtasks follow), on Queue
-  // joins my queue (through the blocked-by frontier offer, like every queue
-  // affordance), on My tasks is assigned to me. A row tints only when the drop
-  // would change something (railDropAction).
+  // A task dropped on a project row moves there (subtasks follow, to the
+  // project's end), on Queue joins my queue (through the blocked-by frontier
+  // offer, like every queue affordance), on My tasks is assigned to me; on the
+  // Inbox row nothing happens (a shared task never turns private by a drop).
+  // A row tints only when the drop would change something (railDropAction),
+  // and every drop that saved offers Undo.
   const taskById = useMemo(() => new Map(tasks.map((t) => [t.id, t])), [tasks]);
   const railCtx = useMemo(
-    () => ({ queuedTaskIds: api.queuedTaskIds, currentUserId }),
-    [api.queuedTaskIds, currentUserId],
+    () => ({ queuedTaskIds: api.queuedTaskIds, currentUserId, inboxId: inbox?.id ?? null }),
+    [api.queuedTaskIds, currentUserId, inbox],
   );
   const railAccepts = useCallback(
     (target: RailDropTarget, taskId: string) => {
@@ -506,15 +512,34 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       const action = railDropAction(target, task, railCtx);
       if (!action) return;
       switch (action.kind) {
-        case "move":
-          api.moveTaskToBucket(action.taskId, action.bucketId);
-          toast(`Moved to ${bucketNameById(action.bucketId)}`);
+        case "move": {
+          const parent = task.parentId ? (taskById.get(task.parentId) ?? null) : null;
+          void api.dropTask(
+            projectMoveWrite(task, action.bucketId, parent),
+            `Moved to ${bucketNameById(action.bucketId)}`,
+          );
           return;
-        case "queue":
-          guardedToggleQueue(action.taskId);
+        }
+        case "queue": {
+          // A blocked task opens the frontier offer (its own explicit choice).
+          const blocked =
+            api.blockedTaskIds.has(action.taskId) && api.frontierFor(action.taskId).length > 0;
+          if (blocked) {
+            guardedToggleQueue(action.taskId);
+            return;
+          }
+          api.addToQueue(action.taskId, "end", () =>
+            undoToast("Added to your queue", {
+              onUndo: () => api.removeFromQueue(action.taskId),
+            }),
+          );
           return;
+        }
         case "assign-me":
-          api.patchTask(action.taskId, { assigneeId: action.userId });
+          void api.dropTask(
+            { taskId: action.taskId, assigneeId: action.userId },
+            "Assigned to you",
+          );
           return;
       }
     },
@@ -676,12 +701,25 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   // The toolbar's page-owned pieces, passed to every view as nodes so List,
   // Board and Timeline stay unaware of the filter and Display machinery. The
   // count is the scope's open tasks, as in the rail.
+  // Manual order lives inside one project (default m): a sorted project view
+  // says so and goes back in one click; a drag there asks the same.
+  const order = tasksDisplay.display.order;
+  const setDisplay = tasksDisplay.setDisplay;
+  const display = tasksDisplay.display;
+  const backToManualOrder = useCallback(
+    () => setDisplay({ ...display, order: "manual" }),
+    [setDisplay, display],
+  );
   const header: PlanHeaderControls = {
     count: openCount(scopeTasksAll),
     search: filtering.search,
     filter: filtering.filter,
     display: tasksDisplay.displayControl,
     activeFilters: filtering.activeFilters,
+    sortedNote:
+      view !== "timeline" && order !== "manual" && showsSortedNote(selection, order) ? (
+        <SortedOrderLine label={sortedByLabel(order)} onManualOrder={backToManualOrder} />
+      ) : null,
   };
 
   const sharedViewProps = {
@@ -733,6 +771,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
         dndMode="external"
         boardGroupBy={tasksDisplay.display.boardGroup}
         statusFilter={statusFilter}
+        onManualOrder={backToManualOrder}
       />
     ) : view === "timeline" ? (
       <TaskTimelineView {...sharedViewProps} zoom={timelineZoom} onZoomChange={setTimelineZoom} />
@@ -744,6 +783,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
         groupBy={effectiveGroupBy}
         reorderable={selection === "today"}
         onReorder={api.reorderQueue}
+        onManualOrder={backToManualOrder}
         revealRequest={revealRequest}
       />
     );
@@ -819,6 +859,29 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     }
     return [];
   }, []);
+
+  // What a screen reader hears during a drag, for every surface on the page:
+  // titles and the names of the rows and columns, never ids (TV-U4).
+  const dragAnnouncements = useMemo(() => {
+    const taskName = (id: string) => {
+      const task = taskById.get(id);
+      return task ? `“${task.title || "Untitled"}”` : null;
+    };
+    const targetName = (id: string): string | null => {
+      if (id.startsWith(`${RAIL_DROP_PREFIX}bucket:`)) {
+        return bucketNameById(id.slice(`${RAIL_DROP_PREFIX}bucket:`.length));
+      }
+      if (id === `${RAIL_DROP_PREFIX}queue`) return "the Queue";
+      if (id === `${RAIL_DROP_PREFIX}mine`) return "My tasks";
+      if (id.startsWith("link:")) return "the open task, to link them";
+      if (id.startsWith("col:status:")) {
+        return STATUS_LABELS[id.slice("col:status:".length) as TaskStatus] ?? null;
+      }
+      if (id.startsWith("col:bucket:")) return bucketNameById(id.slice("col:bucket:".length));
+      return taskName(id);
+    };
+    return taskDragAnnouncements({ taskName: (id) => taskName(id) ?? "the task", targetName });
+  }, [taskById, bucketNameById]);
 
   // Opening a linked task selects it in place; other entity types deep-link out.
   const handleOpenEntity = useCallback(
@@ -924,6 +987,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       <DndContext
         sensors={pageSensors}
         collisionDetection={appCollision}
+        accessibility={{ announcements: dragAnnouncements }}
         onDragEnd={(event) => {
           // Spatially disjoint: each acts only when `over` is its own target.
           onHubDragEnd(event);

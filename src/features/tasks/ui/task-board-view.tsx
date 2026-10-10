@@ -14,6 +14,8 @@ import { Eyebrow } from "../../../components/ui/eyebrow";
 import { cn } from "../../../lib/utils";
 import { type CompletedMode, partitionCompleted } from "../completed";
 import { type BoardGroupBy, orderTasks, type SubtaskMode, type TaskOrder } from "../display";
+import { canMoveInto } from "../dnd/drop-mode";
+import { projectMoveWrite } from "../dnd/rail-drop";
 import {
   groupsByBucket,
   isOpen,
@@ -23,9 +25,10 @@ import {
 } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { Bucket, Task, TaskStatus } from "../model";
+import { BACK_TO_MANUAL_ORDER, dragOrderFor, sortedByLabel } from "../order";
 import { boardDropPosition } from "../reorder";
 import { DEFAULT_ROW_PROPERTIES } from "../row-layout";
-import { DndBoundary, useTaskDndSensors } from "./dnd/task-dnd";
+import { DndBoundary, taskDragAnnouncements, useTaskDndSensors } from "./dnd/task-dnd";
 import type { PlanHeaderControls, PlanView } from "./plan-view-header";
 import { PlanViewHeader } from "./plan-view-header";
 import { CardBody, TaskCard } from "./task-card";
@@ -33,14 +36,6 @@ import { CompletedLine } from "./task-meta";
 import { TaskBoardSkeleton, TasksNoMatch } from "./task-view-states";
 
 export type { BoardGroupBy };
-
-const ORDER_NAMES: Record<Exclude<TaskOrder, "manual">, string> = {
-  due: "due date",
-  scheduled: "scheduled time",
-  priority: "priority",
-  created: "created",
-  updated: "last updated",
-};
 
 type Props = {
   tasks: Task[];
@@ -70,6 +65,8 @@ type Props = {
   properties?: readonly string[];
   /** Display → Order by, inside each column. */
   order?: TaskOrder;
+  /** Display → Order by back to Manual: the sorted drop toast's action. */
+  onManualOrder?: () => void;
   /** Display → Subtasks: on their parent's card, or cards of their own. */
   subtasks?: SubtaskMode;
   /**
@@ -129,6 +126,7 @@ export function TaskBoardView({
   completed = "hidden",
   properties = DEFAULT_ROW_PROPERTIES,
   order = "manual",
+  onManualOrder,
   subtasks = "nested",
   stayingIds = NO_IDS,
   dndMode = "internal",
@@ -234,6 +232,28 @@ export function TaskBoardView({
 
   const sensors = useTaskDndSensors();
 
+  // Manual order lives inside one project (order.ts, default m): only a
+  // project's or the Inbox's board, under Manual, takes a reorder.
+  const dragOrder = dragOrderFor(selection, order);
+  const askManualOrder = () => {
+    if (order === "manual") return;
+    toast(sortedByLabel(order), {
+      action: onManualOrder ? { label: BACK_TO_MANUAL_ORDER, onClick: onManualOrder } : undefined,
+    });
+  };
+  // Screen readers hear titles and column names, never ids (standalone
+  // mounts; on the tasks page the page's one context speaks).
+  const announcements = useMemo(() => {
+    const cardName = (id: string) => {
+      const task = tasks.find((t) => t.id === id);
+      return task ? `“${task.title || "Untitled"}”` : null;
+    };
+    return taskDragAnnouncements({
+      taskName: (id) => cardName(id) ?? "the task",
+      targetName: (id) => columns.find((c) => c.id === id)?.label ?? cardName(id),
+    });
+  }, [tasks, columns]);
+
   const onDragStart = (e: DragStartEvent) => {
     if (!canEdit) return;
     setActiveId(String(e.active.id));
@@ -261,34 +281,45 @@ export function TaskBoardView({
     if (!task || !sourceCol || !destCol) return;
 
     // Positions are worked out among EVERY task in the column, hidden
-    // completed ones included (TV-U1, boardDropPosition).
-    const position = boardDropPosition({
-      activeId,
-      overId: overIsColumn ? null : overId,
-      source: sourceCol.all,
-      dest: destCol.all,
-    });
-    if (position === null) return;
+    // completed ones included (TV-U1, boardDropPosition) — and only where the
+    // board is one project's manual order (order.ts, default m).
+    const position =
+      dragOrder === "manual"
+        ? boardDropPosition({
+            activeId,
+            overId: overIsColumn ? null : overId,
+            source: sourceCol.all,
+            dest: destCol.all,
+          })
+        : null;
     if (sourceCol.id === destCol.id) {
-      // Under a sort the cards' order isn't theirs to change: a new position
-      // would only move the task in Manual, out of sight.
-      if (sorted) {
-        toast(`Ordered by ${ORDER_NAMES[order as Exclude<TaskOrder, "manual">]}`, {
-          description: "Set Display → Order by to Manual to reorder.",
-        });
-        return;
-      }
-      api.patchTask(activeId, { position });
+      // A sorted project board asks to switch back first; a board across
+      // projects (All, My tasks, the Queue) has no manual order to change.
+      if (dragOrder === "sorted") askManualOrder();
+      if (dragOrder !== "manual" || position === null) return;
+      void api.dropTask({ taskId: activeId, position }, "Moved");
       return;
     }
-    // Across columns only the column's field changes under a sort; the
-    // position is still worked out so Manual has a sensible place for it.
+    // Across columns the column's field changes; the place only where the
+    // order is manual (else it keeps its place in the order).
+    const placed = position === null ? {} : { position };
     if (destCol.dim === "status") {
-      api.patchTask(activeId, { position, status: destCol.value as TaskStatus });
-    } else {
-      // Another bucket's column moves it; its subtasks follow (tasks-v2 §8).
-      api.moveTaskToBucket(activeId, destCol.value, { position });
+      const status = destCol.value as TaskStatus;
+      void api.dropTask(
+        { taskId: activeId, status, ...placed },
+        `Moved to ${STATUS_LABELS[status]}`,
+      );
+      return;
     }
+    // Another project's column moves it there, its subtasks following; never
+    // into the Inbox from a project (a shared task never turns private by a
+    // drop). Unplaced, it goes to the project's end.
+    if (!canMoveInto(destCol.value, task, inbox?.id ?? null)) return;
+    const parent = task.parentId ? (api.tasks.find((t) => t.id === task.parentId) ?? null) : null;
+    void api.dropTask(
+      { ...projectMoveWrite(task, destCol.value, parent), ...placed },
+      `Moved to ${bucketNameById(destCol.value)}`,
+    );
   };
 
   const activeTask = activeId ? (tasks.find((t) => t.id === activeId) ?? null) : null;
@@ -316,6 +347,7 @@ export function TaskBoardView({
         onDragStart={onDragStart}
         onDragEnd={onDragEnd}
         onDragCancel={() => setActiveId(null)}
+        announcements={announcements}
       >
         <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto pb-1">
           {!api.loaded ? (

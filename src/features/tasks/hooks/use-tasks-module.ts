@@ -24,7 +24,8 @@ import {
 } from "../../tags/store";
 import { WorkspaceContext } from "../../workspaces/workspace-context";
 import { setBucketTimeBlock } from "../default-view";
-import { bucketMovePatches } from "../dnd/rail-drop";
+import { type TaskDropWrite, undoWrite } from "../dnd/drop-write";
+import { bucketEndPosition } from "../dnd/rail-drop";
 import {
   betweenPositions,
   blockedTaskIds as computeBlockedTaskIds,
@@ -622,7 +623,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
 
   /** Send one queue op after the ones before it; apply its answer if it's the newest. */
   const sendQueueOp = useCallback(
-    (ws: string, me: string, op: () => Promise<TaskQueueEntry[]>) => {
+    (ws: string, me: string, op: () => Promise<TaskQueueEntry[]>, onSaved?: () => void) => {
       const seq = ++queueSeq.current;
       const run = queueChain.current.then(op);
       queueChain.current = run.catch(() => {});
@@ -630,6 +631,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         .then((own) => {
           if (queueSeq.current === seq) setQueueRows((prev) => withOwnQueue(prev, ws, me, own));
           setActivityStamp((s) => s + 1);
+          onSaved?.();
         })
         .catch((e) => {
           toast.error(e instanceof Error ? e.message : "Couldn't update your queue.");
@@ -644,11 +646,13 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
    * RPC, which answers with my whole queue in order. Only the newest op's answer
    * is applied, so two quick toggles can't put back an older line-up. On error:
    * toast and reload. Returns false when it couldn't start (no access).
+   * `onSaved` runs once the server has taken it (a drop's Undo toast).
    */
   const runQueueOp = useCallback(
     (
       optimistic: (mine: TaskQueueEntry[]) => TaskQueueEntry[],
       op: (rt: ModuoRuntime, ws: string) => Promise<TaskQueueEntry[]>,
+      onSaved?: () => void,
     ): boolean => {
       if (!runtime || !workspaceId || !canEdit || !userId) {
         toast.error("You don't have edit access to Tasks in this workspace.");
@@ -670,7 +674,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
           ),
         ),
       );
-      sendQueueOp(ws, me, () => op(rt, ws));
+      sendQueueOp(ws, me, () => op(rt, ws), onSaved);
       return true;
     },
     [runtime, workspaceId, canEdit, userId, sendQueueOp],
@@ -696,9 +700,10 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
   /**
    * Add a task to my queue: the end, or the top (Calendar's "Start focus").
    * Queuing a task someone else has queued too is fine, with a quiet note.
+   * `onSaved` runs once the server has it queued (the rail drop's Undo).
    */
   const addToQueue = useCallback(
-    (id: string, at: QueuePlacement = "end") => {
+    (id: string, at: QueuePlacement = "end", onSaved?: () => void) => {
       const task = liveTasks.find((t) => t.id === id);
       if (!task) return;
       if (isTempId(id)) {
@@ -722,6 +727,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
           return [...rest, optimisticEntry(id, position)];
         },
         (rt, ws) => rt.tasks.opQueueAdd({ workspaceId: ws, taskId: id, at }),
+        onSaved,
       );
       const others = queueClaims.get(id) ?? [];
       if (started && others.length > 0) toast(alsoInLabel(others.map(memberName)));
@@ -776,9 +782,10 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
   /**
    * A drag in the Queue: `orderedIds` is the list as it now looks. One task
    * moved; it goes right after the queued task it now follows (or to the top).
+   * `onSaved` runs once the server has the new order (the drop's Undo).
    */
   const reorderQueue = useCallback(
-    (orderedIds: string[]) => {
+    (orderedIds: string[], onSaved?: () => void) => {
       if (!canEdit) return;
       const move = queueMove(
         myQueueEntries.map((e) => e.taskId),
@@ -802,6 +809,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
             taskId: move.taskId,
             afterTaskId: move.afterTaskId,
           }),
+        onSaved,
       );
     },
     [canEdit, myQueueEntries, runQueueOp],
@@ -1464,33 +1472,183 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     [liveTasks, subtasksByParent, patchTask],
   );
 
+  // ── drops (TV-U4) ───────────────────────────────────────────────────────────
+  /** The rows as they are now, for a save or an Undo that runs later. */
+  const tasksRef = useRef(bundle.tasks);
+  tasksRef.current = bundle.tasks;
+
   /**
-   * Move a task to another bucket by drag (tasks-v2 §8): its subtasks follow
-   * it, and it goes to the end of that bucket's manual order unless the drop
-   * placed it (`position`). `parentId` rides along when the drop also
-   * changed it.
+   * Save one task's drop writes (`TaskDropWrite`): shown at once, then sent
+   * in order, each after the one before has landed — the field-level write
+   * (parent, project with every subtask following, Won't do and done ones
+   * too; place; priority), then the status op (with the place, when it
+   * rides), then the assign op. Resolves to the saved row, or null when
+   * anything failed: then it has said so and reloaded. `recurrence` replaces
+   * the advance a status change would make (Undo puts the rule back).
    */
-  const moveTaskToBucket = useCallback(
-    (id: string, bucketId: string, opts: { position?: string; parentId?: string | null } = {}) => {
-      const task = liveTasks.find((t) => t.id === id);
-      if (!task) return;
-      const patches = bucketMovePatches({
-        task,
-        subtasks: subtasksByParent.get(id) ?? [],
-        bucketId,
-        allByPosition: liveTasks,
-        position: opts.position,
+  const saveTaskWrite = useCallback(
+    async (
+      write: TaskDropWrite,
+      opts: { recurrence?: RecurrenceRule | null } = {},
+    ): Promise<Task | null> => {
+      if (!runtime || !workspaceId || !canEdit) {
+        toast.error("You don't have edit access to Tasks in this workspace.");
+        return null;
+      }
+      const { taskId, status, assigneeId } = write;
+      if (isTempId(taskId)) {
+        toast.error("Still saving that task — try again in a moment.");
+        return null;
+      }
+      const existing = tasksRef.current.find((t) => t.id === taskId);
+      if (!existing) return null;
+      const rt = runtime;
+      const ws = workspaceId;
+      const fields = editableTaskFields({
+        parentId: write.parentId,
+        bucketId: write.bucketId,
+        priority: write.priority,
+        // The place rides with the status op when there is one.
+        position: status === undefined ? write.position : undefined,
       });
-      for (const { id: taskId, patch } of patches) {
-        patchTask(
-          taskId,
-          taskId === id && opts.parentId !== undefined
-            ? { ...patch, parentId: opts.parentId }
-            : patch,
-        );
+      const now = new Date();
+      const recurrence =
+        status === undefined
+          ? undefined
+          : opts.recurrence !== undefined
+            ? opts.recurrence
+            : (recurrenceOnStatusChange(existing, status, now) ?? undefined);
+      const followers =
+        write.bucketId !== undefined && write.bucketId !== existing.bucketId
+          ? tasksRef.current.filter(
+              (t) =>
+                t.parentId === taskId &&
+                !t.deletedAt &&
+                !isTempId(t.id) &&
+                t.bucketId !== write.bucketId,
+            )
+          : [];
+
+      const stamp = now.toISOString();
+      patchTaskLocal(taskId, {
+        ...fields,
+        ...(write.position !== undefined ? { position: write.position } : {}),
+        ...(status !== undefined ? { status } : {}),
+        ...(recurrence !== undefined ? { recurrence } : {}),
+        ...(assigneeId !== undefined ? { assigneeId } : {}),
+        updatedAt: stamp,
+      });
+      for (const child of followers) {
+        patchTaskLocal(child.id, { bucketId: write.bucketId, updatedAt: stamp });
+      }
+      if (status !== undefined) queueFollowStatus(taskId, status);
+
+      try {
+        const saved: Task[] = [];
+        if (Object.keys(fields).length > 0) {
+          const row = await rt.tasks.updateTask({ workspaceId: ws, taskId, patch: fields });
+          saved.push(row);
+          // Subtasks follow the project the parent really landed in.
+          saved.push(
+            ...(await Promise.all(
+              followers.map((child) =>
+                rt.tasks.updateTask({
+                  workspaceId: ws,
+                  taskId: child.id,
+                  patch: { bucketId: row.bucketId },
+                }),
+              ),
+            )),
+          );
+        }
+        if (status !== undefined) {
+          saved.push(
+            await rt.tasks.opSetStatus({
+              workspaceId: ws,
+              taskId,
+              status,
+              recurrence,
+              position: write.position,
+            }),
+          );
+        }
+        if (assigneeId !== undefined) {
+          saved.push(await rt.tasks.opAssign({ workspaceId: ws, taskId, assigneeId }));
+        }
+        // The last answer for a row is the newest.
+        const byId = new Map(saved.map((t) => [t.id, t]));
+        setBundle((prev) => ({ ...prev, tasks: prev.tasks.map((t) => byId.get(t.id) ?? t) }));
+        setActivityStamp((s) => s + 1);
+        if (status === "done" && opts.recurrence === undefined && recurrence?.nextOccurrence) {
+          toast(`Done — next: ${formatScheduled(recurrence.nextOccurrence)}`);
+        }
+        return byId.get(taskId) ?? null;
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Something went wrong.");
+        void load();
+        return null;
       }
     },
-    [liveTasks, subtasksByParent, patchTask],
+    [runtime, workspaceId, canEdit, patchTaskLocal, queueFollowStatus, load],
+  );
+
+  /**
+   * A drop, or a move key (TV-U4): save `write` (`saveTaskWrite`), and once
+   * the server has taken all of it, say `label` with an 8 s Undo (call a). A
+   * move into another project that didn't place the task sends it to that
+   * project's end. Undo puts back each field the drop changed, unless it
+   * changed again since: it never overwrites a newer change, and says so.
+   * Resolves to whether the drop saved; a failed one shows no Undo.
+   */
+  const dropTask = useCallback(
+    async (write: TaskDropWrite, label: string): Promise<boolean> => {
+      const before = tasksRef.current.find((t) => t.id === write.taskId);
+      if (!before) return false;
+      const moving =
+        write.bucketId !== undefined &&
+        write.bucketId !== before.bucketId &&
+        write.position === undefined;
+      const saving: TaskDropWrite = moving
+        ? {
+            ...write,
+            position: bucketEndPosition({
+              moving: new Set([
+                write.taskId,
+                ...tasksRef.current.filter((t) => t.parentId === write.taskId).map((t) => t.id),
+              ]),
+              bucketId: write.bucketId as string,
+              allByPosition: liveTasks,
+            }),
+          }
+        : write;
+      const after = await saveTaskWrite(saving);
+      if (!after) return false;
+      undoToast(label, {
+        onUndo: () => {
+          const current = tasksRef.current.find((t) => t.id === write.taskId);
+          const title = `“${before.title || "Untitled"}”`;
+          if (!current || current.deletedAt) {
+            toast(`${title} is gone, so there’s nothing to undo.`);
+            return;
+          }
+          const undo = undoWrite({ write: saving, before, after, current });
+          const keptNote = () => {
+            if (undo.kept.length > 0) toast(`Undo kept a newer change to ${title}.`);
+          };
+          if (!undo.write) {
+            keptNote();
+            return;
+          }
+          void saveTaskWrite(undo.write, {
+            recurrence: undo.write.status !== undefined ? before.recurrence : undefined,
+          }).then((saved) => {
+            if (saved) keptNote();
+          });
+        },
+      });
+      return true;
+    },
+    [liveTasks, saveTaskWrite],
   );
 
   // ── blocked-by mutations (edges, not statuses — spec §5c) ────────────────────
@@ -1840,7 +1998,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     subtaskProgressByTask,
     addSubtask,
     setTaskParent,
-    moveTaskToBucket,
+    dropTask,
     blockedTaskIds: blockedIds,
     taskRelations: bundle.taskRelations,
     /** SCALE-1: collections the read had to cut — the page must show these. */

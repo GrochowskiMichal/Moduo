@@ -207,6 +207,9 @@ export function BucketRail({
             />
           ) : null}
           {inbox ? (
+            // A droppable that never accepts (railDropAction): a task dropped
+            // here does nothing — a shared task never turns private by a drop
+            // — and the drop doesn't fall through to the Board's nearest column.
             <RailRow
               drop={{
                 target: { type: "rail", target: "bucket", bucketId: inbox.id },

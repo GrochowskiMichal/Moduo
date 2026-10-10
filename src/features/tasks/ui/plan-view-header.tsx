@@ -6,6 +6,7 @@ import { SegmentedControl } from "../../../components/ui/segmented-control";
 import { Separator } from "../../../components/ui/separator";
 import { Toolbar } from "../../../components/ui/toolbar";
 import type { TaskLayout } from "../display";
+import { BACK_TO_MANUAL_ORDER } from "../order";
 
 export type PlanView = TaskLayout;
 
@@ -21,6 +22,9 @@ export type PlanHeaderControls = {
   display?: ReactNode;
   /** The active-filter row under the toolbar, when a filter is on. */
   activeFilters?: ReactNode;
+  /** "Sorted by due date · Back to manual order", when a project view is
+   *  sorted (`SortedOrderLine`, default m). */
+  sortedNote?: ReactNode;
 };
 
 /**
@@ -48,7 +52,7 @@ export function PlanViewHeader({
   canEdit: boolean;
   onRequestCapture: () => void;
 }) {
-  const { count, search, filter, display, activeFilters } = controls;
+  const { count, search, filter, display, activeFilters, sortedNote } = controls;
   return (
     <div className="mb-3 shrink-0 space-y-1.5">
       <Toolbar gap="snug">
@@ -78,7 +82,36 @@ export function PlanViewHeader({
         </Toolbar.Primary>
       </Toolbar>
       {activeFilters}
+      {sortedNote}
     </div>
+  );
+}
+
+/**
+ * A sorted project view says so, and goes back to its manual order in one
+ * click (tasks-v3 §4, default m): "Sorted by due date · Back to manual order".
+ * The manual order is kept untouched underneath while it's sorted.
+ */
+export function SortedOrderLine({
+  label,
+  onManualOrder,
+}: {
+  /** "Sorted by due date" (`sortedByLabel`). */
+  label: string;
+  onManualOrder: () => void;
+}) {
+  return (
+    <p className="flex items-center gap-1.5 px-1 font-sans text-xs text-muted-foreground">
+      <span>{label}</span>
+      <span aria-hidden>·</span>
+      <button
+        type="button"
+        onClick={onManualOrder}
+        className="rounded-sm text-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+      >
+        {BACK_TO_MANUAL_ORDER}
+      </button>
+    </p>
   );
 }
 

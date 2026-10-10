@@ -1,43 +1,31 @@
-// Where a List drag lands (tasks-v2 §8, TV-U4). Pure: no React, no DOM, no IO.
+// Where a List drag lands (tasks-v3 §4, TV-U4). Pure: no React, no DOM, no IO.
 //
 // One gesture, two outcomes, decided from the raw pointer (the notes tree's
-// `resolveDrop` pattern, spec decision 14):
+// `resolveDrop` pattern):
 //   • pointer LEFT of the subtask indent (NEST_INDENT_PX into the row) →
 //     reorder, drawn as an insertion line on the hovered row's top or bottom;
 //   • pointer RIGHT of it → make it a subtask of the hovered row (the row
 //     tints, a "Make subtask" preview shows under it).
-// Dropping into another group rewrites that group's field (status, bucket,
-// priority, energy). With a sorted Order a plain reorder is refused and the
-// line becomes a quiet note; a cross-group drop still lands.
+// Dropping into another group rewrites that group's field (status, priority,
+// assignee, project). The order follows `order.ts` (default m): a reorder
+// writes a position only in one project's manual order; sorted, it's refused
+// and the line becomes the sorted note; across projects there's no reorder
+// and no position at all, only the group's field.
 //
 // The page resolves the hover on every pointer move AND again at drop time
 // from the same raw coordinates (dnd-kit's delta folds auto-scroll in, see
 // gotchas/ui.md), so what the line shows is what the drop does.
 
-import type { TaskOrder } from "../display";
 import { betweenPositions, canNestUnder, type GroupBy } from "../helpers";
 import type { PriorityLevel, Task, TaskStatus } from "../model";
+import type { DragOrder } from "../order";
 
 /** How far into a row (px) the pointer must be to nest instead of reorder.
  *  The nested-row indent (`ml-10`), so the zone edge is where a subtask's
  *  checkbox would sit. */
 export const NEST_INDENT_PX = 40;
 
-
-const ORDER_NOTE_LABEL: Record<Exclude<TaskOrder, "manual">, string> = {
-  due: "due date",
-  scheduled: "scheduled date",
-  priority: "priority",
-  created: "date created",
-  updated: "last update",
-};
-
-/** The quiet note that replaces the insertion line under a sorted Order. */
-export function sortedOrderNote(order: Exclude<TaskOrder, "manual">): string {
-  return `Sorted by ${ORDER_NOTE_LABEL[order]} — switch to Manual to reorder`;
-}
-
-type DragTask = Pick<Task, "id" | "parentId">;
+type DragTask = Pick<Task, "id" | "parentId" | "bucketId">;
 
 /** What the pointer is over in the List, measured at the moment of asking. */
 export type ListPointerTarget =
@@ -68,16 +56,54 @@ export type ListDropHover =
       /** The group the task lands in (top level only). */
       groupKey: string | null;
     }
-  /** A reorder a sorted Order refuses: the note takes the line's place. */
+  /** A reorder a sorted Order refuses: the sorted note takes the line's place. */
   | { kind: "sorted"; line: { id: string; edge: "top" | "bottom" } }
   /** Make the dragged task a subtask of `targetId`. */
   | { kind: "nest"; targetId: string }
   /**
    * Into a group as a whole: its field changes. From the group's header
-   * (`place`), the task goes first in it; under a sorted Order a drop into
-   * another group lands here too, with no place to keep.
+   * (`place`, manual order only) the task goes first in it; otherwise it
+   * keeps its place in the order.
    */
   | { kind: "group"; groupKey: string; parentId: string | null; place: boolean };
+
+/**
+ * Whether a task may be dropped into another group, whose field it then
+ * takes. Never a group without a field to write (Date: Upcoming's day drop is
+ * its own block), a former member's (they can't take tasks), or the Inbox
+ * for a task from a project: the Inbox is private, and a shared task never
+ * turns private by a drop (tasks-v3 §edge cases).
+ */
+export function groupAccepts(
+  groupBy: GroupBy,
+  key: string,
+  active: Pick<Task, "bucketId">,
+  ctx: { inboxId: string | null; assignableIds: ReadonlySet<string> },
+): boolean {
+  switch (groupBy) {
+    case "status":
+    case "priority":
+      return true;
+    case "assignee":
+      return key === NO_ASSIGNEE || ctx.assignableIds.has(key);
+    case "bucket":
+      return canMoveInto(key, active, ctx.inboxId);
+    default:
+      return false;
+  }
+}
+
+/** A task can move to a project; into the Inbox only from the Inbox. */
+export function canMoveInto(
+  bucketId: string,
+  active: Pick<Task, "bucketId">,
+  inboxId: string | null,
+): boolean {
+  return bucketId !== inboxId || active.bucketId === inboxId;
+}
+
+/** The assignee grouping's "No assignee" key (`groupKeyFor`). */
+const NO_ASSIGNEE = "none";
 
 export function resolveListHover(input: {
   active: DragTask;
@@ -88,7 +114,12 @@ export function resolveListHover(input: {
   hasChildren: (id: string) => boolean;
   pointer: { x: number; y: number };
   over: ListPointerTarget | null;
-  order: TaskOrder;
+  /** How this view treats the order (`dragOrderFor`). */
+  order: DragOrder;
+  /** Whether the task may move into another group (`groupAccepts`). */
+  accepts: (groupKey: string) => boolean;
+  /** Whether it may become a subtask of `parent` (the parent's project). */
+  canNestInto: (parent: DragTask) => boolean;
 }): ListDropHover | null {
   const { active, activeNested, activeGroupKey, hasChildren, pointer, over, order } = input;
   if (!over) return null;
@@ -100,20 +131,37 @@ export function resolveListHover(input: {
   // At top level: keep a not-nested-here subtask's parent (reordering it among
   // top-level rows mustn't quietly un-nest it); a nested one comes out.
   const topLevelParent = activeNested ? null : (active.parentId ?? null);
-  const sorted = order !== "manual";
 
   if (over.type === "group") {
-    if (sorted && over.groupKey === activeGroupKey && !activeNested) return null;
-    return { kind: "group", groupKey: over.groupKey, parentId: topLevelParent, place: !sorted };
+    if (over.groupKey !== activeGroupKey) {
+      if (!input.accepts(over.groupKey)) return null;
+      return {
+        kind: "group",
+        groupKey: over.groupKey,
+        parentId: topLevelParent,
+        place: order === "manual",
+      };
+    }
+    // Its own group's header: first in the group (manual order), or out of
+    // its parent into the group (any order).
+    if (order === "manual") {
+      return { kind: "group", groupKey: over.groupKey, parentId: topLevelParent, place: true };
+    }
+    return activeNested
+      ? { kind: "group", groupKey: over.groupKey, parentId: null, place: false }
+      : null;
   }
 
   const target = over.task;
   if (target.id === active.id) return null;
 
-  // Right of the indent on a top-level row → nest, when the one-level rule allows.
+  // Right of the indent on a top-level row → nest, when the one-level rule
+  // and the parent's project allow it.
   const inNestZone = pointer.x >= over.rect.left + NEST_INDENT_PX;
-  if (over.depth === 0 && inNestZone && canNestUnder(active, target, hasChildren)) {
-    return { kind: "nest", targetId: target.id };
+  if (over.depth === 0 && inNestZone) {
+    return canNestUnder(active, target, hasChildren) && input.canNestInto(target)
+      ? { kind: "nest", targetId: target.id }
+      : null;
   }
 
   const lower = pointer.y >= over.rect.top + over.rect.height / 2;
@@ -123,15 +171,19 @@ export function resolveListHover(input: {
     const parentId = target.parentId ?? null;
     if (!parentId || parentId === active.id || hasChildren(active.id)) return null;
     const line = { id: target.id, edge: lower ? "bottom" : "top" } as const;
-    if (sorted && currentParent === parentId) return { kind: "sorted", line };
-    return {
-      kind: "reorder",
-      ref: { id: target.id, edge: lower ? "after" : "before" },
-      line,
-      depth: 1,
-      parentId,
-      groupKey: null,
-    };
+    if (order === "manual") {
+      return {
+        kind: "reorder",
+        ref: { id: target.id, edge: lower ? "after" : "before" },
+        line,
+        depth: 1,
+        parentId,
+        groupKey: null,
+      };
+    }
+    if (currentParent === parentId) return order === "sorted" ? { kind: "sorted", line } : null;
+    // Joining another parent with no place to keep: a nest under it.
+    return { kind: "nest", targetId: parentId };
   }
 
   // A top-level slot. Below an expanded parent the next row is its first
@@ -142,20 +194,23 @@ export function resolveListHover(input: {
       ? ({ id: over.lastChildId, edge: "bottom" } as const)
       : ({ id: target.id, edge: lower ? "bottom" : "top" } as const);
   const changesGroup = over.groupKey !== activeGroupKey;
-  if (sorted) {
-    // A sorted list has no place to keep: a plain reorder is refused, and a
-    // drop into another group (or out of a parent) lands in the group.
-    if (!changesGroup && !activeNested) return { kind: "sorted", line };
-    return { kind: "group", groupKey: over.groupKey, parentId: topLevelParent, place: false };
+  if (changesGroup && !input.accepts(over.groupKey)) return null;
+  if (order === "manual") {
+    return {
+      kind: "reorder",
+      ref: { id: target.id, edge: lower ? "after" : "before" },
+      line,
+      depth: 0,
+      parentId: topLevelParent,
+      groupKey: over.groupKey,
+    };
   }
-  return {
-    kind: "reorder",
-    ref: { id: target.id, edge: lower ? "after" : "before" },
-    line,
-    depth: 0,
-    parentId: topLevelParent,
-    groupKey: over.groupKey,
-  };
+  // No place to keep (sorted, or across projects): a plain reorder is refused
+  // — sorted, the note says why; across projects there's no manual order to
+  // show — and a drop into another group (or out of a parent) lands in the
+  // group, keeping its place in the order.
+  if (!changesGroup && !activeNested) return order === "sorted" ? { kind: "sorted", line } : null;
+  return { kind: "group", groupKey: over.groupKey, parentId: topLevelParent, place: false };
 }
 
 // ── turning a hover into writes ──────────────────────────────────────────────
@@ -167,27 +222,28 @@ export type ListDropPlan = {
   parentId?: string | null;
   /** Manual order only. */
   position?: string;
-  /** The group's field (status / priority / energy). */
-  fields?: Partial<Pick<Task, "status" | "priority">>;
-  /** Grouped by bucket: move it (its subtasks follow). */
+  /** The group's field (status / priority / assignee). */
+  fields?: GroupFieldPatch;
+  /** Into another project: it moves there, and its subtasks follow. */
   bucketId?: string;
 };
 
+type GroupFieldPatch = Partial<Pick<Task, "status" | "priority" | "assigneeId">>;
+
 /**
- * The field a group stands for, for a task dropped into it (tasks-v2 §8:
- * into "High" = priority high, into a status = status). Bucket groups move
- * the task instead (see {@link ListDropPlan.bucketId}). Null = this grouping
- * has no field to write.
+ * The field a group stands for, for a task dropped into it (into "High" =
+ * priority high, into a status = that status, Won't do included; into a
+ * person = assigned to them). Project groups move the task instead (see
+ * {@link ListDropPlan.bucketId}). Null = this grouping has no field to write.
  */
-export function groupFieldPatch(
-  groupBy: GroupBy,
-  key: string,
-): Partial<Pick<Task, "status" | "priority">> | null {
+export function groupFieldPatch(groupBy: GroupBy, key: string): GroupFieldPatch | null {
   switch (groupBy) {
     case "status":
-      return key === "archived" ? null : { status: key as TaskStatus };
+      return { status: key as TaskStatus };
     case "priority":
       return { priority: key === "unset" ? null : (key as PriorityLevel) };
+    case "assignee":
+      return { assigneeId: key === NO_ASSIGNEE ? null : key };
     default:
       return null;
   }
@@ -195,7 +251,7 @@ export function groupFieldPatch(
 
 /**
  * A key right next to `ref` among EVERY task, wherever it lives. Each list is
- * a filter of the one position order (all buckets, done and filtered-out
+ * a filter of the one position order (all projects, done and filtered-out
  * tasks included), so landing next to `ref` there lands next to it in every
  * view, and the key can never equal a hidden task's (TV-U1's rule).
  */
@@ -212,7 +268,7 @@ export function positionNextTo(
     : betweenPositions(rest[i].position, rest[i + 1]?.position ?? null);
 }
 
-/** Whether the task already sits at that spot (a no-op drop). */
+/** Whether the task already sits at that spot in the one order. */
 function alreadyThere(
   allByPosition: ReadonlyArray<Pick<Task, "id">>,
   ref: { id: string; edge: "before" | "after" },
@@ -236,7 +292,17 @@ export function planListDrop(input: {
 }): ListDropPlan | null {
   const { hover, active, activeGroupKey, groupBy, allByPosition } = input;
   if (hover.kind === "sorted") return null;
-  if (hover.kind === "nest") return { taskId: active.id, parentId: hover.targetId };
+  const byId = (id: string | null | undefined) =>
+    id ? (allByPosition.find((t) => t.id === id) ?? null) : null;
+
+  if (hover.kind === "nest") {
+    // A subtask lives in its parent's project: nesting across projects moves
+    // it there (research §3).
+    const parent = byId(hover.targetId);
+    const plan: ListDropPlan = { taskId: active.id, parentId: hover.targetId };
+    if (parent && parent.bucketId !== active.bucketId) plan.bucketId = parent.bucketId;
+    return plan;
+  }
 
   const plan: ListDropPlan = { taskId: active.id };
   const intoGroup = (key: string) => {
@@ -247,6 +313,17 @@ export function planListDrop(input: {
       if (fields) plan.fields = fields;
     }
   };
+  // Lands next to `ref`. Where it already sits there nothing needs writing —
+  // unless it also moves project, where an absent position would send it to
+  // the project's end (the move's own rule): then it keeps the one it has.
+  const placeAt = (ref: { id: string; edge: "before" | "after" }) => {
+    if (alreadyThere(allByPosition, ref, active.id)) {
+      if (plan.bucketId !== undefined) plan.position = active.position;
+      return;
+    }
+    const position = positionNextTo(allByPosition, ref, active.id);
+    if (position !== null) plan.position = position;
+  };
 
   if ((active.parentId ?? null) !== hover.parentId) plan.parentId = hover.parentId;
 
@@ -256,28 +333,29 @@ export function planListDrop(input: {
     const first = hover.place
       ? input.groupTasks(hover.groupKey).find((t) => t.id !== active.id)
       : undefined;
-    if (first) {
-      const ref = { id: first.id, edge: "before" } as const;
-      const position = alreadyThere(allByPosition, ref, active.id)
-        ? null
-        : positionNextTo(allByPosition, ref, active.id);
-      if (position !== null) plan.position = position;
-    }
-    return hasWrites(plan) ? plan : null;
+    if (first) placeAt({ id: first.id, edge: "before" });
+  } else {
+    if (hover.depth === 0 && hover.groupKey !== null) intoGroup(hover.groupKey);
+    // Joining a parent in another project moves it there, like a nest.
+    const parent = hover.depth === 1 ? byId(hover.parentId) : null;
+    if (parent && parent.bucketId !== active.bucketId) plan.bucketId = parent.bucketId;
+    placeAt(hover.ref);
   }
-
-  if (hover.depth === 0 && hover.groupKey !== null) intoGroup(hover.groupKey);
-  if (!alreadyThere(allByPosition, hover.ref, active.id)) {
-    const position = positionNextTo(allByPosition, hover.ref, active.id);
-    if (position !== null) plan.position = position;
+  // A subtask moved to another project on its own leaves its parent behind:
+  // it comes out to the top level there (a subtask lives in its parent's
+  // project).
+  const parentAfter = plan.parentId !== undefined ? plan.parentId : (active.parentId ?? null);
+  if (plan.bucketId !== undefined && parentAfter) {
+    const parent = byId(parentAfter);
+    if (!parent || parent.bucketId !== plan.bucketId) plan.parentId = null;
   }
-  return hasWrites(plan) ? plan : null;
+  return hasWrites(plan, active) ? plan : null;
 }
 
-function hasWrites(plan: ListDropPlan): boolean {
+function hasWrites(plan: ListDropPlan, active: Task): boolean {
   return (
     plan.parentId !== undefined ||
-    plan.position !== undefined ||
+    (plan.position !== undefined && plan.position !== active.position) ||
     plan.fields !== undefined ||
     plan.bucketId !== undefined
   );

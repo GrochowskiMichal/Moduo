@@ -1,4 +1,5 @@
 import {
+  type Announcements,
   closestCenter,
   type DragEndEvent,
   type DraggableSyntheticListeners,
@@ -10,32 +11,38 @@ import { arrayMove, SortableContext, verticalListSortingStrategy } from "@dnd-ki
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { toast } from "sonner";
 
 import {
   DROP_TARGET,
   DragOverlaySurface,
   InsertionLine,
   NestPreview,
+  SortedNote,
 } from "../../../components/ui/drag-visuals";
 import { eyebrowVariants } from "../../../components/ui/eyebrow";
+import { undoToast } from "../../../lib/undo-toast";
 import { cn } from "../../../lib/utils";
 import { useAssignees } from "../assignees";
 import { type CompletedMode, partitionCompleted } from "../completed";
 import { orderTasks, type RowPreset, type SubtaskMode, type TaskOrder } from "../display";
 import {
+  canMoveInto,
+  groupAccepts,
   type ListDropHover,
   type ListDropPlan,
   type ListPointerTarget,
   NEST_INDENT_PX,
   planListDrop,
+  positionNextTo,
   resolveListHover,
-  sortedOrderNote,
 } from "../dnd/drop-mode";
+import { type DropNames, dropLabel, type TaskDropWrite, writeFromPlan } from "../dnd/drop-write";
 import { isSideDroppable } from "../dnd/rail-drop";
 import {
+  canNestUnder,
   type GroupBy,
   groupKeyFor,
-  groupsByBucket,
   groupTasks,
   isOpen,
   nestedSubtaskIds,
@@ -43,6 +50,7 @@ import {
 } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { Bucket, Task } from "../model";
+import { BACK_TO_MANUAL_ORDER, dragOrderFor, sortedByLabel } from "../order";
 import { DEFAULT_ROW_PROPERTIES, rowColumns } from "../row-layout";
 import { nowOn, useToday } from "../use-today";
 import {
@@ -51,6 +59,7 @@ import {
   type DragActivatorRef,
   DraggableTask,
   SortableTask,
+  taskDragAnnouncements,
   useTaskDndSensors,
 } from "./dnd/task-dnd";
 import { listKeyActionFor } from "./list-keys";
@@ -101,8 +110,11 @@ type Props = {
   stayingIds?: ReadonlySet<string>;
   /** Enable drag-to-reorder (the Queue): a flat, ungrouped, ordered list. */
   reorderable?: boolean;
-  /** Persist a reorder — receives the task ids in their new order. */
-  onReorder?: (orderedIds: string[]) => void;
+  /** Persist a reorder — receives the task ids in their new order, and runs
+   *  `onSaved` once the server has it (the drop's Undo toast). */
+  onReorder?: (orderedIds: string[], onSaved?: () => void) => void;
+  /** Display → Order by back to Manual: the sorted drop toast's action. */
+  onManualOrder?: () => void;
   /** One-shot deep-link reveal (DF-1): when the selection was set from outside
    * and sits in a collapsed group, expand that group exactly once. */
   revealRequest?: { id: string; seq: number } | null;
@@ -141,6 +153,7 @@ export function TaskListView({
   stayingIds = NO_IDS,
   reorderable = false,
   onReorder,
+  onManualOrder,
   revealRequest = null,
   dndMode = "internal",
   api,
@@ -420,6 +433,142 @@ export function TaskListView({
 
   const selectedTask = visibleTasks.find((t) => t.id === selectedId) ?? null;
 
+  // ── drops and move keys (TV-U4) ──────────────────────────────────────────────
+  // Manual order lives inside one project (order.ts, default m): a drag or a
+  // move key writes a position only in a project or the Inbox under Manual.
+  // Every drop ends in one Undo toast, shown once it saved (api.dropTask).
+  const dragOrder = dragOrderFor(selection, order);
+  const inboxId = inbox?.id ?? null;
+  const assignableIds = useMemo(
+    () => new Set(assignees.filter((a) => a.canTakeTasks).map((a) => a.userId)),
+    [assignees],
+  );
+  const dropNames = useMemo<DropNames>(
+    () => ({
+      bucketName: bucketNameById,
+      assigneeName: (id) => {
+        const person = assignees.find((a) => a.userId === id);
+        return person ? (person.isMe ? "you" : person.name) : "a former member";
+      },
+      taskTitle: (id) => taskById.get(id)?.title || "Untitled",
+    }),
+    [bucketNameById, assignees, taskById],
+  );
+  const drop = useCallback(
+    (write: TaskDropWrite, before: Task, label?: string) => {
+      void api.dropTask(write, label ?? dropLabel(write, dropNames, before));
+    },
+    [api, dropNames],
+  );
+  // A sorted project view asks to switch back before a reorder (default m).
+  const askManualOrder = useCallback(() => {
+    if (order === "manual") return;
+    toast(sortedByLabel(order), {
+      action: onManualOrder ? { label: BACK_TO_MANUAL_ORDER, onClick: onManualOrder } : undefined,
+    });
+  }, [order, onManualOrder]);
+  const refuseReorder = useCallback(() => {
+    if (dragOrder === "sorted") askManualOrder();
+    else toast("Tasks keep their order inside each project.");
+  }, [dragOrder, askManualOrder]);
+
+  // The task's siblings as listed: its parent's subtasks when nested here,
+  // else the top-level rows of its group.
+  const siblingsOf = useCallback(
+    (task: Task): Task[] => {
+      if (task.parentId && nestedIds.has(task.id)) {
+        return api.subtasksByParent.get(task.parentId) ?? [];
+      }
+      return groups.find((g) => g.tasks.some((t) => t.id === task.id))?.tasks ?? [];
+    },
+    [nestedIds, api.subtasksByParent, groups],
+  );
+
+  /** `>`: a subtask of the row above (one level; a subtask lives in its
+   *  parent's project, so across projects it moves there). */
+  const nestUnderAbove = useCallback(
+    (task: Task) => {
+      if (nestedIds.has(task.id)) return; // already a subtask here
+      const siblings = siblingsOf(task);
+      const above = siblings[siblings.findIndex((t) => t.id === task.id) - 1];
+      if (!above) return;
+      const hasKids = (id: string) => (api.subtasksByParent.get(id)?.length ?? 0) > 0;
+      if (!canNestUnder(task, above, hasKids)) {
+        toast(
+          hasKids(task.id)
+            ? "Subtasks are one level — this task has subtasks of its own."
+            : "Subtasks are one level — that task is already a subtask.",
+        );
+        return;
+      }
+      if (!canMoveInto(above.bucketId, task, inboxId)) {
+        toast("A project’s task can’t become a subtask of an Inbox task.");
+        return;
+      }
+      const write: TaskDropWrite = { taskId: task.id, parentId: above.id };
+      if (above.bucketId !== task.bucketId) write.bucketId = above.bucketId;
+      if (nest) setExpandedParents((prev) => new Set(prev).add(above.id));
+      drop(write, task);
+    },
+    [nestedIds, siblingsOf, api.subtasksByParent, inboxId, nest, drop],
+  );
+
+  /** `<`: out of its parent, to the top level right after the parent (where
+   *  the order is manual; elsewhere it keeps its place in the order). */
+  const unnest = useCallback(
+    (task: Task) => {
+      if (!task.parentId) return;
+      const write: TaskDropWrite = { taskId: task.id, parentId: null };
+      if (dragOrder === "manual") {
+        const position = positionNextTo(api.tasks, { id: task.parentId, edge: "after" }, task.id);
+        if (position !== null) write.position = position;
+      }
+      drop(write, task);
+    },
+    [dragOrder, api.tasks, drop],
+  );
+
+  /** ⌥⇧↑/↓: one place up or down among its siblings, in the manual order. */
+  const moveInOrder = useCallback(
+    (task: Task, delta: 1 | -1) => {
+      if (dragOrder !== "manual") {
+        refuseReorder();
+        return;
+      }
+      const siblings = siblingsOf(task);
+      const neighbour = siblings[siblings.findIndex((t) => t.id === task.id) + delta];
+      if (!neighbour) return;
+      const position = positionNextTo(
+        api.tasks,
+        { id: neighbour.id, edge: delta < 0 ? "before" : "after" },
+        task.id,
+      );
+      if (position === null) return;
+      drop({ taskId: task.id, position }, task, delta < 0 ? "Moved up" : "Moved down");
+    },
+    [dragOrder, refuseReorder, siblingsOf, api.tasks, drop],
+  );
+
+  // The Queue's line-up is the queue's own (`task_queue`): a drag or a move
+  // key there reorders it, with the same Undo once it saved.
+  const reorderQueueWithUndo = useCallback(
+    (previous: string[], next: string[], label: string) => {
+      onReorder?.(next, () => undoToast(label, { onUndo: () => onReorder?.(previous) }));
+    },
+    [onReorder],
+  );
+  const moveInQueue = useCallback(
+    (task: Task, delta: 1 | -1) => {
+      if (!reorderable) return;
+      const ids = (groups[0]?.tasks ?? []).map((t) => t.id);
+      const from = ids.indexOf(task.id);
+      const to = from + delta;
+      if (from < 0 || to < 0 || to >= ids.length) return;
+      reorderQueueWithUndo(ids, arrayMove(ids, from, to), delta < 0 ? "Moved up" : "Moved down");
+    },
+    [reorderable, groups, reorderQueueWithUndo],
+  );
+
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
       // While inline-editing a title, the Input stops propagation. During a
@@ -495,6 +644,24 @@ export function TaskListView({
           e.preventDefault();
           api.deleteTask(selectedTask.id);
           return;
+        // The Queue keeps its own line-up: these keys are the lists' (TV-U4).
+        case "nest":
+          if (!selectedTask || !canEdit || selection === "today") return;
+          e.preventDefault();
+          nestUnderAbove(selectedTask);
+          return;
+        case "unnest":
+          if (!selectedTask || !canEdit || selection === "today") return;
+          e.preventDefault();
+          unnest(selectedTask);
+          return;
+        case "move-up":
+        case "move-down":
+          if (!selectedTask || !canEdit) return;
+          e.preventDefault();
+          if (selection === "today") moveInQueue(selectedTask, action === "move-up" ? -1 : 1);
+          else moveInOrder(selectedTask, action === "move-up" ? -1 : 1);
+          return;
       }
     },
     [
@@ -510,6 +677,11 @@ export function TaskListView({
       expandedParents,
       toggleExpandParent,
       setSelectedId,
+      selection,
+      nestUnderAbove,
+      unnest,
+      moveInOrder,
+      moveInQueue,
     ],
   );
 
@@ -656,14 +828,16 @@ export function TaskListView({
       return resolveListHover({
         active: dragTask,
         activeNested: rowIndex.get(dragTask.id)?.depth === 1,
-        activeGroupKey: groupKeyFor(dragTask, groupBy),
+        activeGroupKey: groupKeyFor(dragTask, groupBy, nowOn(today)),
         hasChildren,
         pointer: { x, y },
         over,
-        order,
+        order: dragOrder,
+        accepts: (key) => groupAccepts(groupBy, key, dragTask, { inboxId, assignableIds }),
+        canNestInto: (parent) => canMoveInto(parent.bucketId, dragTask, inboxId),
       });
     },
-    [dragTask, targetAt, rowIndex, groupBy, hasChildren, order],
+    [dragTask, targetAt, rowIndex, groupBy, today, hasChildren, dragOrder, inboxId, assignableIds],
   );
 
   // Track the raw pointer while dragging and re-resolve on every move and on
@@ -713,35 +887,15 @@ export function TaskListView({
     setHover(null);
   }, []);
 
+  // A plan becomes one write, saved in order (field-level, then status, then
+  // assignee: never two writes to the row at once) with one Undo.
   const applyPlan = useCallback(
-    (plan: ListDropPlan) => {
-      const { taskId, parentId, position, fields, bucketId } = plan;
-      if (bucketId) {
-        // Into another bucket's group: a move, its subtasks follow.
-        api.moveTaskToBucket(taskId, bucketId, { position, parentId });
-        return;
-      }
-      if (parentId && position === undefined && !fields) {
-        // A nest: setTaskParent keeps the one-level rule's own messages.
-        api.setTaskParent(taskId, parentId);
-        if (nest) setExpandedParents((prev) => new Set(prev).add(parentId));
-        return;
-      }
-      if (fields?.status) {
-        // Status rides its intent op (with the position); a parent change is
-        // a field write of its own.
-        if (parentId !== undefined) api.patchTask(taskId, { parentId });
-        api.patchTask(taskId, position === undefined ? fields : { ...fields, position });
-        return;
-      }
-      api.patchTask(taskId, {
-        ...fields,
-        ...(position === undefined ? {} : { position }),
-        ...(parentId === undefined ? {} : { parentId }),
-      });
+    (plan: ListDropPlan, active: Task) => {
+      const parentId = plan.parentId;
       if (parentId && nest) setExpandedParents((prev) => new Set(prev).add(parentId));
+      drop(writeFromPlan(plan), active);
     },
-    [api, nest],
+    [nest, drop],
   );
 
   const onListDragEnd = useCallback(
@@ -757,17 +911,34 @@ export function TaskListView({
       if (!active || !p) return;
       const final = hoverAt(p.x, p.y, last);
       if (!final) return;
+      // Dragging while sorted asks to switch back first (default m).
+      if (final.kind === "sorted") {
+        askManualOrder();
+        return;
+      }
       const plan = planListDrop({
         hover: final,
         active,
-        activeGroupKey: groupKeyFor(active, groupBy),
+        activeGroupKey: groupKeyFor(active, groupBy, nowOn(today)),
         groupBy,
         allByPosition: api.tasks,
         groupTasks: (key) => groups.find((g) => g.key === key)?.all ?? [],
       });
-      if (plan) applyPlan(plan);
+      if (plan) applyPlan(plan, active);
     },
-    [dragId, hover, endListDrag, taskById, hoverAt, groupBy, api.tasks, groups, applyPlan],
+    [
+      dragId,
+      hover,
+      endListDrag,
+      taskById,
+      hoverAt,
+      askManualOrder,
+      groupBy,
+      today,
+      api.tasks,
+      groups,
+      applyPlan,
+    ],
   );
 
   // A row as the List renders it: the row, plus the drag marks it carries
@@ -795,7 +966,7 @@ export function TaskListView({
           <InsertionLine edge={line.edge} indent={hover.depth * NEST_INDENT_PX} />
         ) : null}
         {line && hover?.kind === "sorted" && order !== "manual" ? (
-          <SortedNote edge={line.edge}>{sortedOrderNote(order)}</SortedNote>
+          <SortedNote edge={line.edge}>{sortedByLabel(order)}</SortedNote>
         ) : null}
       </div>
     );
@@ -850,10 +1021,20 @@ export function TaskListView({
       const from = queueIds.indexOf(String(active.id));
       const to = queueIds.indexOf(String(over.id));
       if (from < 0 || to < 0) return;
-      onReorder?.(arrayMove(queueIds, from, to));
+      reorderQueueWithUndo(queueIds, arrayMove(queueIds, from, to), "Moved");
     },
-    [queueIds, onReorder],
+    [queueIds, reorderQueueWithUndo],
   );
+
+  // Screen readers hear titles, never ids (standalone mounts; on the tasks
+  // page the page's one context speaks for every surface).
+  const announcements = useMemo(() => {
+    const name = (id: string) => {
+      const task = taskById.get(id);
+      return task ? `“${task.title || "Untitled"}”` : null;
+    };
+    return taskDragAnnouncements({ taskName: (id) => name(id) ?? "the task", targetName: name });
+  }, [taskById]);
 
   const overlayTask = dragTask ?? queueDragTask;
   const dragOverlay =
@@ -929,6 +1110,7 @@ export function TaskListView({
               setReordering(false);
               setQueueDragId(null);
             }}
+            announcements={announcements}
           >
             <SortableContext items={queueIds} strategy={verticalListSortingStrategy}>
               {queueTasks.map((task) => (
@@ -957,6 +1139,7 @@ export function TaskListView({
             onDragStart={onListDragStart}
             onDragEnd={onListDragEnd}
             onDragCancel={endListDrag}
+            announcements={announcements}
           >
             {groups.map((group) => {
               const isCollapsed = collapsed.has(group.key);
@@ -1024,6 +1207,7 @@ function MaybeDnd({
   onDragStart,
   onDragEnd,
   onDragCancel,
+  announcements,
   children,
 }: {
   enabled: boolean;
@@ -1032,6 +1216,7 @@ function MaybeDnd({
   onDragStart: (e: DragStartEvent) => void;
   onDragEnd: (e: DragEndEvent) => void;
   onDragCancel: () => void;
+  announcements: Announcements;
   children: ReactNode;
 }) {
   if (!enabled) return <>{children}</>;
@@ -1045,27 +1230,9 @@ function MaybeDnd({
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
       onDragCancel={onDragCancel}
+      announcements={announcements}
     >
       {children}
     </DndBoundary>
-  );
-}
-
-/**
- * Under a sorted Order the insertion line becomes this quiet note (tasks-v2
- * §8): it sits on the same edge, on the popover surface, at the row's end.
- */
-function SortedNote({ edge, children }: { edge: "top" | "bottom"; children: ReactNode }) {
-  return (
-    <span
-      aria-hidden
-      data-slot="sorted-note"
-      className={cn(
-        "pointer-events-none absolute end-2 z-(--z-sticky) rounded-md border border-hairline bg-popover px-2 py-0.5 font-sans text-xs text-muted-foreground shadow-sm",
-        edge === "top" ? "top-0 -translate-y-1/2" : "bottom-0 translate-y-1/2",
-      )}
-    >
-      {children}
-    </span>
   );
 }

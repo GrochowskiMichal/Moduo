@@ -1,7 +1,7 @@
-// tasks-v2 U4-4 — a task dropped on the rail: a bucket moves it (subtasks
-// follow), the Queue queues it, My tasks assigns it to me. The rail droppables
-// resolve through a prefix-filtered pointerWithin, so only the row actually
-// under the pointer takes the drop.
+// TV-U4 — a task dropped on the rail: a project moves it (to its end, subtasks
+// following), the Inbox does nothing, the Queue queues it, My tasks assigns it
+// to me. The rail droppables resolve through a prefix-filtered pointerWithin,
+// so only the row actually under the pointer takes the drop.
 
 import type { ClientRect, DroppableContainer } from "@dnd-kit/core";
 import { describe, expect, it } from "@rstest/core";
@@ -10,8 +10,9 @@ import { makeTask } from "../helpers";
 import type { Task } from "../model";
 import {
   asRailDropTarget,
-  bucketMovePatches,
+  bucketEndPosition,
   isSideDroppable,
+  projectMoveWrite,
   railCollision,
   railDropAction,
   railDroppableId,
@@ -21,7 +22,7 @@ function task(id: string, position: string, fields: Partial<Task> = {}): Task {
   return { ...makeTask({ workspaceId: "w", bucketId: "b1", title: id, position }), id, ...fields };
 }
 
-const ctx = { queuedTaskIds: new Set(["queued"]), currentUserId: "me" };
+const ctx = { queuedTaskIds: new Set(["queued"]), currentUserId: "me", inboxId: "inbox" };
 
 describe("railDropAction", () => {
   it("a bucket row moves the task, unless it's already there", () => {
@@ -32,6 +33,12 @@ describe("railDropAction", () => {
       bucketId: "b2",
     });
     expect(railDropAction({ type: "rail", target: "bucket", bucketId: "b1" }, t, ctx)).toBeNull();
+  });
+
+  it("the Inbox row does nothing: a shared task never turns private by a drop", () => {
+    const inboxRow = { type: "rail", target: "bucket", bucketId: "inbox" } as const;
+    expect(railDropAction(inboxRow, task("t", "a"), ctx)).toBeNull();
+    expect(railDropAction(inboxRow, task("t", "a", { bucketId: "inbox" }), ctx)).toBeNull();
   });
 
   it("the Queue row adds it to my queue, unless queued or done", () => {
@@ -126,46 +133,44 @@ describe("railCollision — prefix-filtered pointerWithin", () => {
   });
 });
 
-describe("bucketMovePatches — subtasks follow their parent", () => {
+describe("projectMoveWrite — a subtask lives in its parent's project", () => {
+  it("moves a top-level task; its subtasks follow in the save", () => {
+    expect(projectMoveWrite(task("p", "a"), "b2", null)).toEqual({ taskId: "p", bucketId: "b2" });
+  });
+
+  it("a subtask moved on its own comes out of its parent", () => {
+    const sub = task("s", "a", { parentId: "p" });
+    expect(projectMoveWrite(sub, "b2", { bucketId: "b1" })).toEqual({
+      taskId: "s",
+      bucketId: "b2",
+      parentId: null,
+    });
+    // its parent already there: it stays a subtask
+    expect(projectMoveWrite(sub, "b2", { bucketId: "b2" })).toEqual({
+      taskId: "s",
+      bucketId: "b2",
+    });
+  });
+});
+
+describe("bucketEndPosition — an unplaced move goes to the project's end", () => {
   const P = task("p", "0000000010");
   const X = task("x", "0000000020", { bucketId: "b2" });
   const S1 = task("s1", "0000000030", { parentId: "p" });
-  const S2 = task("s2", "0000000040", { parentId: "p", bucketId: "b2" });
   const Y = task("y", "0000000050");
-  const all = [P, X, S1, S2, Y];
+  const all = [P, X, S1, Y];
 
-  it("moves the task to the end of the bucket and brings its subtasks", () => {
-    const patches = bucketMovePatches({
-      task: P,
-      subtasks: [S1, S2],
+  it("lands after the project's last task, before what follows it", () => {
+    const pos = bucketEndPosition({
+      moving: new Set(["p", "s1"]),
       bucketId: "b2",
       allByPosition: all,
     });
-    expect(patches.map((p) => p.id)).toEqual(["p", "s1"]); // s2 is already there
-    const pos = patches[0].patch.position!;
-    // after b2's last other task (x), before what follows it (y)
     expect(pos > X.position && pos < Y.position).toBe(true);
-    expect(patches[1].patch).toEqual({ bucketId: "b2" });
   });
 
-  it("an empty bucket takes the very end", () => {
-    const [first] = bucketMovePatches({
-      task: Y,
-      subtasks: [],
-      bucketId: "b9",
-      allByPosition: all,
-    });
-    expect(first.patch.position! > Y.position).toBe(true);
-  });
-
-  it("keeps a position a drop chose", () => {
-    const [first] = bucketMovePatches({
-      task: Y,
-      subtasks: [],
-      bucketId: "b2",
-      allByPosition: all,
-      position: "0000000001",
-    });
-    expect(first.patch).toEqual({ bucketId: "b2", position: "0000000001" });
+  it("an empty project takes the very end", () => {
+    const pos = bucketEndPosition({ moving: new Set(["y"]), bucketId: "b9", allByPosition: all });
+    expect(pos > S1.position).toBe(true);
   });
 });

@@ -16,6 +16,7 @@
 // dnd-kit does the geometry; this module is the shared contract on top of it.
 
 import {
+  type Announcements,
   type CollisionDetection,
   DndContext,
   type DragCancelEvent,
@@ -26,6 +27,7 @@ import {
   PointerSensor,
   type SensorDescriptor,
   type SensorOptions,
+  type UniqueIdentifier,
   useDndMonitor,
   useDraggable,
   useSensor,
@@ -80,6 +82,35 @@ export type TaskDropTarget =
 export function asTaskDropTarget(data: unknown): TaskDropTarget | null {
   const t = (data as { type?: unknown } | null)?.type;
   return t === "column" || t === "timeline-axis" ? (data as TaskDropTarget) : null;
+}
+
+// ── screen-reader announcements ──────────────────────────────────────────────
+
+/**
+ * What a screen reader hears during a task drag, in words: dnd-kit's own
+ * announcements read the raw ids ("Picked up draggable item 3f2c…").
+ * `taskName` names a task ("“Write the brief”"); `targetName` a droppable id
+ * (a sidebar row, a Board column, a card, the hub), or null for none.
+ */
+export function taskDragAnnouncements(names: {
+  taskName: (id: string) => string;
+  targetName: (id: string) => string | null;
+}): Announcements {
+  const target = (over: { id: UniqueIdentifier } | null) =>
+    over ? names.targetName(String(over.id)) : null;
+  return {
+    onDragStart: ({ active }) => `Picked up ${names.taskName(String(active.id))}.`,
+    onDragOver: ({ active, over }) => {
+      const where = target(over);
+      return where ? `${names.taskName(String(active.id))} is over ${where}.` : undefined;
+    },
+    onDragEnd: ({ active, over }) => {
+      const where = target(over);
+      const what = names.taskName(String(active.id));
+      return where ? `Dropped ${what} on ${where}.` : `Dropped ${what}.`;
+    },
+    onDragCancel: ({ active }) => `Stopped moving ${names.taskName(String(active.id))}.`,
+  };
 }
 
 // ── sensors ──────────────────────────────────────────────────────────────────
@@ -157,6 +188,7 @@ export function DndBoundary({
   onDragStart,
   onDragEnd,
   onDragCancel,
+  announcements,
   children,
 }: {
   dndMode: "internal" | "external";
@@ -165,6 +197,9 @@ export function DndBoundary({
   onDragStart?: (event: DragStartEvent) => void;
   onDragEnd?: (event: DragEndEvent) => void;
   onDragCancel?: (event: DragCancelEvent) => void;
+  /** Internal mode's screen-reader words (`taskDragAnnouncements`); external
+   *  mode hears the page context's. */
+  announcements?: Announcements;
   children: ReactNode;
 }) {
   if (dndMode === "external") {
@@ -186,6 +221,7 @@ export function DndBoundary({
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
       onDragCancel={onDragCancel}
+      accessibility={announcements ? { announcements } : undefined}
     >
       {children}
     </DndContext>

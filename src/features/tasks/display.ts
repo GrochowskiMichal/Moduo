@@ -16,8 +16,9 @@ import type { Task } from "./model";
 import { DEFAULT_ROW_PROPERTIES, type RowPreset, type RowProperty } from "./row-layout";
 
 export type TaskLayout = "list" | "board" | "timeline";
-/** The Board's Group by: a drop on a group sets its field. Assignee and
- *  priority join with the drop rewrite (TV-U4); "bucket" is Project. */
+/** The Board's Group by: a drop on a group sets its field. Assignee,
+ *  priority and the rest join with the Board rebuild (TV-U11), on the drop
+ *  writes TV-U4 built; "bucket" is Project. */
 export type BoardGroupBy = "status" | "bucket";
 export type TaskOrder = "manual" | "due" | "scheduled" | "priority" | "created" | "updated";
 export type SubtaskMode = "nested" | "flat";

@@ -1,18 +1,22 @@
-// tasks-v2 U4-1 (reorder vs nest from the pointer), U4-2 (a sorted Order
-// refuses a reorder), U4-3 (a cross-group drop rewrites the group's field).
+// TV-U4 — the List's drop planner: reorder vs nest from the pointer, the
+// order rule (manual inside one project, sorted asks, none across projects),
+// cross-group drops that rewrite the group's field, and the validator's #329
+// findings (the MAJOR's lost position, the nest across projects).
 
 import { describe, expect, it } from "@rstest/core";
 
 import { makeTask } from "../helpers";
 import type { Task } from "../model";
+import type { DragOrder } from "../order";
 import {
+  canMoveInto,
+  groupAccepts,
   groupFieldPatch,
   type ListPointerTarget,
   NEST_INDENT_PX,
   planListDrop,
   positionNextTo,
   resolveListHover,
-  sortedOrderNote,
 } from "./drop-mode";
 
 function task(id: string, position: string, fields: Partial<Task> = {}): Task {
@@ -48,7 +52,13 @@ function hover(
   active: Task,
   over: ListPointerTarget | null,
   pointer: { x: number; y: number },
-  opts: { order?: "manual" | "due"; activeNested?: boolean; activeGroupKey?: string } = {},
+  opts: {
+    order?: DragOrder;
+    activeNested?: boolean;
+    activeGroupKey?: string;
+    accepts?: (key: string) => boolean;
+    canNestInto?: (parent: Pick<Task, "bucketId">) => boolean;
+  } = {},
 ) {
   return resolveListHover({
     active,
@@ -58,10 +68,12 @@ function hover(
     pointer,
     over,
     order: opts.order ?? "manual",
+    accepts: opts.accepts ?? (() => true),
+    canNestInto: opts.canNestInto ?? (() => true),
   });
 }
 
-describe("resolveListHover — U4-1 reorder vs nest", () => {
+describe("resolveListHover — reorder vs nest (manual order)", () => {
   it("left of the indent reorders, with the line on the hovered row's edge", () => {
     expect(hover(A, rowOver(B), { x: LEFT, y: UPPER })).toMatchObject({
       kind: "reorder",
@@ -86,19 +98,19 @@ describe("resolveListHover — U4-1 reorder vs nest", () => {
     expect(hover(A, shifted, { x: 300 + NEST_INDENT_PX, y: UPPER })?.kind).toBe("nest");
   });
 
-  it("falls back to reorder where the one-level rule forbids nesting", () => {
+  it("right of the indent is no drop where the one-level rule forbids nesting", () => {
     // c has subtasks, so it can't become one
-    expect(hover(C, rowOver(A), { x: RIGHT, y: UPPER })?.kind).toBe("reorder");
+    expect(hover(C, rowOver(A), { x: RIGHT, y: UPPER })).toBeNull();
     // a subtask listed top level (its parent is elsewhere) can't take children
     const orphan = task("o", "0000000050", { parentId: "elsewhere" });
-    expect(hover(A, rowOver(orphan), { x: RIGHT, y: UPPER })?.kind).toBe("reorder");
-    // already its parent → nothing to nest
-    expect(hover(S1, rowOver(C), { x: RIGHT, y: UPPER }, { activeNested: true })?.kind).toBe(
-      "reorder",
-    );
+    expect(hover(A, rowOver(orphan), { x: RIGHT, y: UPPER })).toBeNull();
   });
 
-  it("a row over itself is no drop", () => {
+  it("right of the indent is no drop where the parent's project won't take it", () => {
+    expect(hover(A, rowOver(B), { x: RIGHT, y: UPPER }, { canNestInto: () => false })).toBeNull();
+  });
+
+  it("a row over itself, or nothing under the pointer, is no drop", () => {
     expect(hover(A, rowOver(A), { x: LEFT, y: UPPER })).toBeNull();
     expect(hover(A, null, { x: LEFT, y: UPPER })).toBeNull();
   });
@@ -133,53 +145,163 @@ describe("resolveListHover — U4-1 reorder vs nest", () => {
       parentId: null,
     });
   });
+
+  it("its own group's header puts it first there", () => {
+    expect(hover(A, { type: "group", groupKey: "all" }, { x: 0, y: 0 })).toEqual({
+      kind: "group",
+      groupKey: "all",
+      parentId: null,
+      place: true,
+    });
+  });
 });
 
-describe("resolveListHover — U4-2 a sorted Order refuses a reorder", () => {
-  it("replaces the line with the note within the same group", () => {
-    expect(hover(A, rowOver(B), { x: LEFT, y: UPPER }, { order: "due" })).toEqual({
+describe("resolveListHover — sorted: a reorder asks to switch back", () => {
+  it("replaces the line with the sorted note within the same group", () => {
+    expect(hover(A, rowOver(B), { x: LEFT, y: UPPER }, { order: "sorted" })).toEqual({
       kind: "sorted",
       line: { id: "b", edge: "top" },
     });
-    expect(sortedOrderNote("due")).toBe("Sorted by due date — switch to Manual to reorder");
+    // among its own parent's subtasks too
+    const sibling = task("s2", "0000000045", { parentId: "c" });
+    const over = rowOver(sibling, { depth: 1 });
+    expect(
+      hover(S1, over, { x: LEFT, y: UPPER }, { order: "sorted", activeNested: true })?.kind,
+    ).toBe("sorted");
   });
 
   it("still nests (that isn't a reorder)", () => {
-    expect(hover(A, rowOver(B), { x: RIGHT, y: UPPER }, { order: "due" })?.kind).toBe("nest");
+    expect(hover(A, rowOver(B), { x: RIGHT, y: UPPER }, { order: "sorted" })?.kind).toBe("nest");
+  });
+
+  it("among another parent's subtasks it nests under that parent (no place to keep)", () => {
+    const over = rowOver(S1, { depth: 1 });
+    expect(hover(A, over, { x: LEFT, y: UPPER }, { order: "sorted" })).toEqual({
+      kind: "nest",
+      targetId: "c",
+    });
   });
 
   it("still lands a drop into another group, without a place", () => {
     const over = rowOver(B, { groupKey: "high" });
-    expect(hover(A, over, { x: LEFT, y: UPPER }, { order: "due", activeGroupKey: "low" })).toEqual({
-      kind: "group",
-      groupKey: "high",
-      parentId: null,
-      place: false,
-    });
+    expect(
+      hover(A, over, { x: LEFT, y: UPPER }, { order: "sorted", activeGroupKey: "low" }),
+    ).toEqual({ kind: "group", groupKey: "high", parentId: null, place: false });
   });
 
-  it("a header of its own group is no drop; another group's header is", () => {
+  it("its own group's header is no drop; another group's header is", () => {
     const header = (groupKey: string) => ({ type: "group", groupKey }) as const;
     expect(
-      hover(A, header("low"), { x: 0, y: 0 }, { order: "due", activeGroupKey: "low" }),
+      hover(A, header("low"), { x: 0, y: 0 }, { order: "sorted", activeGroupKey: "low" }),
     ).toBeNull();
     expect(
-      hover(A, header("high"), { x: 0, y: 0 }, { order: "due", activeGroupKey: "low" }),
+      hover(A, header("high"), { x: 0, y: 0 }, { order: "sorted", activeGroupKey: "low" }),
     ).toMatchObject({ kind: "group", place: false });
   });
 });
 
-describe("groupFieldPatch — U4-3 the group's field", () => {
-  it("writes status, priority and energy; unset clears", () => {
-    expect(groupFieldPatch("status", "in_progress")).toEqual({ status: "in_progress" });
-    expect(groupFieldPatch("priority", "high")).toEqual({ priority: "high" });
-    expect(groupFieldPatch("priority", "unset")).toEqual({ priority: null });
+describe("resolveListHover — across projects: no reorder, the group's field only", () => {
+  const none = { order: "none" } as const;
+
+  it("a slot in its own group is no drop, and draws nothing", () => {
+    expect(hover(A, rowOver(B), { x: LEFT, y: UPPER }, none)).toBeNull();
+    expect(hover(A, { type: "group", groupKey: "all" }, { x: 0, y: 0 }, none)).toBeNull();
   });
 
-  it("has nothing to write for no grouping, buckets (a move) or archived", () => {
+  it("another group takes it as a whole, keeping its place in the order", () => {
+    const over = rowOver(B, { groupKey: "done" });
+    expect(hover(A, over, { x: LEFT, y: LOWER }, { ...none, activeGroupKey: "todo" })).toEqual({
+      kind: "group",
+      groupKey: "done",
+      parentId: null,
+      place: false,
+    });
+    expect(
+      hover(
+        A,
+        { type: "group", groupKey: "done" },
+        { x: 0, y: 0 },
+        { ...none, activeGroupKey: "todo" },
+      ),
+    ).toMatchObject({ kind: "group", place: false });
+  });
+
+  it("a nested subtask dragged out comes out to the top level of its group", () => {
+    expect(hover(S1, rowOver(A), { x: LEFT, y: UPPER }, { ...none, activeNested: true })).toEqual({
+      kind: "group",
+      groupKey: "all",
+      parentId: null,
+      place: false,
+    });
+    expect(
+      hover(
+        S1,
+        { type: "group", groupKey: "all" },
+        { x: 0, y: 0 },
+        { ...none, activeNested: true },
+      ),
+    ).toEqual({ kind: "group", groupKey: "all", parentId: null, place: false });
+  });
+
+  it("nesting still works (that isn't a reorder)", () => {
+    expect(hover(A, rowOver(B), { x: RIGHT, y: UPPER }, none)).toEqual({
+      kind: "nest",
+      targetId: "b",
+    });
+  });
+});
+
+describe("resolveListHover — a group that won't take it", () => {
+  const refuse = { accepts: () => false, activeGroupKey: "low" };
+
+  it("is no drop on its rows or its header, in any order", () => {
+    const over = rowOver(B, { groupKey: "high" });
+    for (const order of ["manual", "sorted", "none"] as const) {
+      expect(hover(A, over, { x: LEFT, y: UPPER }, { ...refuse, order })).toBeNull();
+      expect(
+        hover(A, { type: "group", groupKey: "high" }, { x: 0, y: 0 }, { ...refuse, order }),
+      ).toBeNull();
+    }
+  });
+});
+
+describe("groupFieldPatch — the group's field", () => {
+  it("writes status (Won't do too), priority and assignee; unset clears", () => {
+    expect(groupFieldPatch("status", "in_progress")).toEqual({ status: "in_progress" });
+    expect(groupFieldPatch("status", "archived")).toEqual({ status: "archived" });
+    expect(groupFieldPatch("priority", "high")).toEqual({ priority: "high" });
+    expect(groupFieldPatch("priority", "unset")).toEqual({ priority: null });
+    expect(groupFieldPatch("assignee", "u1")).toEqual({ assigneeId: "u1" });
+    expect(groupFieldPatch("assignee", "none")).toEqual({ assigneeId: null });
+  });
+
+  it("has nothing to write for no grouping, dates or projects (a move)", () => {
     expect(groupFieldPatch("none", "all")).toBeNull();
+    expect(groupFieldPatch("date", "today")).toBeNull();
     expect(groupFieldPatch("bucket", "b2")).toBeNull();
-    expect(groupFieldPatch("status", "archived")).toBeNull();
+  });
+});
+
+describe("groupAccepts — where a cross-group drop may land", () => {
+  const ctx = { inboxId: "inbox", assignableIds: new Set(["u1"]) };
+
+  it("statuses and priorities always; a date group never", () => {
+    expect(groupAccepts("status", "done", A, ctx)).toBe(true);
+    expect(groupAccepts("priority", "unset", A, ctx)).toBe(true);
+    expect(groupAccepts("date", "tomorrow", A, ctx)).toBe(false);
+  });
+
+  it("a person who can take tasks, or nobody; never a former member", () => {
+    expect(groupAccepts("assignee", "u1", A, ctx)).toBe(true);
+    expect(groupAccepts("assignee", "none", A, ctx)).toBe(true);
+    expect(groupAccepts("assignee", "gone", A, ctx)).toBe(false);
+  });
+
+  it("a project; the Inbox only for a task already there", () => {
+    expect(groupAccepts("bucket", "b2", A, ctx)).toBe(true);
+    expect(groupAccepts("bucket", "inbox", A, ctx)).toBe(false);
+    expect(canMoveInto("inbox", { bucketId: "inbox" }, "inbox")).toBe(true);
+    expect(canMoveInto("b2", { bucketId: "inbox" }, "inbox")).toBe(true);
   });
 });
 
@@ -206,15 +328,29 @@ describe("planListDrop", () => {
       ...extra,
     });
 
-  it("U4-1: a reorder writes a position right next to the hovered row", () => {
+  it("a reorder writes a position right next to the hovered row", () => {
     const p = plan(hover(A, rowOver(C), { x: LEFT, y: LOWER })!, A);
     expect(p?.parentId).toBeUndefined();
     expect(positionOf(p) > C.position).toBe(true);
     expect(positionOf(p) < S1.position).toBe(true);
   });
 
-  it("U4-1: a nest writes the parent only", () => {
+  it("a nest in the same project writes the parent only", () => {
     expect(plan({ kind: "nest", targetId: "b" }, A)).toEqual({ taskId: "a", parentId: "b" });
+  });
+
+  it("a nest under a task in another project moves it there (#329 MINOR)", () => {
+    const other = task("x", "0000000025", { bucketId: "b2" });
+    expect(
+      planListDrop({
+        hover: { kind: "nest", targetId: "x" },
+        active: A,
+        activeGroupKey: "b1",
+        groupBy: "bucket",
+        allByPosition: [A, B, other, C, S1],
+        groupTasks: () => [],
+      }),
+    ).toEqual({ taskId: "a", parentId: "x", bucketId: "b2" });
   });
 
   it("dropping where it already is writes nothing", () => {
@@ -222,7 +358,7 @@ describe("planListDrop", () => {
     expect(plan({ kind: "sorted", line: { id: "b", edge: "top" } }, A)).toBeNull();
   });
 
-  it("U4-3: into another priority group rewrites priority and places it", () => {
+  it("into another priority group rewrites priority and places it", () => {
     const over = rowOver(B, { groupKey: "high" });
     const p = plan(hover(A, over, { x: LEFT, y: LOWER }, { activeGroupKey: "unset" })!, A, {
       activeGroupKey: "unset",
@@ -232,9 +368,17 @@ describe("planListDrop", () => {
     expect(positionOf(p) > B.position && positionOf(p) < C.position).toBe(true);
   });
 
-  it("U4-3: into another bucket's group moves it (no field patch)", () => {
-    const over = rowOver(B, { groupKey: "b2" });
-    const p = plan(hover(A, over, { x: LEFT, y: UPPER }, { activeGroupKey: "b1" })!, A, {
+  it("into another person's group assigns it to them", () => {
+    const p = plan({ kind: "group", groupKey: "u1", parentId: null, place: false }, A, {
+      activeGroupKey: "none",
+      groupBy: "assignee",
+    });
+    expect(p).toEqual({ taskId: "a", fields: { assigneeId: "u1" } });
+  });
+
+  it("into another project's group moves it (no field patch)", () => {
+    const over = rowOver(C, { groupKey: "b2" });
+    const p = plan(hover(A, over, { x: LEFT, y: LOWER }, { activeGroupKey: "b1" })!, A, {
       activeGroupKey: "b1",
       groupBy: "bucket",
     });
@@ -242,7 +386,53 @@ describe("planListDrop", () => {
     expect(p?.fields).toBeUndefined();
   });
 
-  it("U4-3: a header drop under a sorted Order rewrites the field only", () => {
+  it("MAJOR (#329): a placed move into another project keeps its place when it's already there", () => {
+    // a sits right before b in the one order; dropped before b's row in the
+    // b2 group, it's already in place, but the move must still say where, or
+    // it would go to the project's end.
+    const b2 = task("b", "0000000020", { bucketId: "b2" });
+    const p = planListDrop({
+      hover: {
+        kind: "reorder",
+        ref: { id: "b", edge: "before" },
+        line: { id: "b", edge: "top" },
+        depth: 0,
+        parentId: null,
+        groupKey: "b2",
+      },
+      active: A,
+      activeGroupKey: "b1",
+      groupBy: "bucket",
+      allByPosition: [A, b2, C, S1],
+      groupTasks: () => [b2],
+    });
+    expect(p).toEqual({ taskId: "a", bucketId: "b2", position: A.position });
+  });
+
+  it("MAJOR (#329): a header drop into another project goes first there, even when adjacent", () => {
+    const b2 = task("b", "0000000020", { bucketId: "b2" });
+    const p = planListDrop({
+      hover: { kind: "group", groupKey: "b2", parentId: null, place: true },
+      active: A,
+      activeGroupKey: "b1",
+      groupBy: "bucket",
+      allByPosition: [A, b2, C, S1],
+      groupTasks: () => [b2],
+    });
+    expect(p).toEqual({ taskId: "a", bucketId: "b2", position: A.position });
+  });
+
+  it("a subtask moved to another project on its own comes out of its parent", () => {
+    const orphan = task("o", "0000000050", { parentId: "c" });
+    const p = plan({ kind: "group", groupKey: "b2", parentId: "c", place: false }, orphan, {
+      activeGroupKey: "b1",
+      groupBy: "bucket",
+      allByPosition: [...ALL, orphan],
+    });
+    expect(p).toEqual({ taskId: "o", bucketId: "b2", parentId: null });
+  });
+
+  it("a header drop under a sort rewrites the field only", () => {
     const p = plan({ kind: "group", groupKey: "done", parentId: null, place: false }, A, {
       activeGroupKey: "todo",
       groupBy: "status",
