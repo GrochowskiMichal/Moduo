@@ -149,7 +149,10 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const reqRef = useRef(0);
-  /** Bumped on every successful load — the recurrence catch-up trigger. */
+  /**
+   * Bumped on every successful full load (open, reload, workspace switch),
+   * never on a quiet refetch: the recurrence catch-up trigger.
+   */
   const [loadStamp, setLoadStamp] = useState(0);
 
   /**
@@ -211,7 +214,10 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
           });
           setTimeBlocksState(blocks);
           setError(null);
-          setLoadStamp((s) => s + 1); // triggers the recurrence catch-up pass
+          // A full load triggers the recurrence catch-up pass; a quiet refetch
+          // never does (it would reopen a repeat checked off on Home the same
+          // day: Tasks v3 P0 #2).
+          if (!quiet) setLoadStamp((s) => s + 1);
           refresh.current.lastAt = Date.now(); // a full read counts for the refetch throttle
         }
       } catch (e) {
@@ -932,7 +938,8 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
   );
 
   // ── recurrence catch-up (spec §5d) ──────────────────────────────────────────
-  // One idempotent pass per successful load (app open / reload): reopen done
+  // One idempotent pass per successful full load (app open / reload; a quiet
+  // refetch on focus or reconnect doesn't count): reopen done
   // recurring tasks whose occurrence arrived; collapse missed occurrences
   // forward (no backfill — there is only the next occurrence). The stamp ref
   // keeps re-renders from re-running it; view-only sessions skip it (no write

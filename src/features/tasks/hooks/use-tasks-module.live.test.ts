@@ -6,6 +6,7 @@ import { makeTask } from "../helpers";
 import { ECHO_GRACE_MS, type LiveChange } from "../live";
 import type { Task, TaskQueueEntry, TasksModuleBundle } from "../model";
 import type { TasksLiveEvent } from "../realtime";
+import { currentOccurrence } from "../recurrence-engine";
 import { useTasksModule } from "./use-tasks-module";
 
 // TV-D5 through the real hook: a teammate's change shows up (D5-1), our own
@@ -257,5 +258,79 @@ describe("useTasksModule live updates", () => {
     });
     expect(list).toHaveBeenCalledTimes(3);
     expect(result.current.tasks[0]!.title).toBe("Typed meanwhile");
+  }, 20_000);
+});
+
+// The repeat catch-up (reopen a done repeating task whose next occurrence has
+// arrived) runs after a full load only. A quiet refetch on coming back to the
+// window must not re-run it: a repeat checked off on Home or through MCP can
+// carry a pointer that's already due, and the catch-up would reopen it the
+// same day (Tasks v3 P0 #2; the server-side fix is TV-D8).
+describe("useTasksModule repeat catch-up and quiet refetches", () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  const rule = {
+    rrule: "FREQ=DAILY;INTERVAL=1",
+    dtstart: new Date(Date.now() - 3 * DAY).toISOString(),
+    nextOccurrence: null,
+  };
+  const today = () => currentOccurrence(rule, new Date())!.toISOString();
+  /** Checked off elsewhere without moving the pointer past today. */
+  const doneElsewhere = () =>
+    task({
+      status: "done",
+      scheduledAt: today(),
+      recurrence: { ...rule, nextOccurrence: today() },
+      updatedAt: new Date().toISOString(),
+    });
+
+  function withCatchUp(rows: Task[]) {
+    const fake = fakeRuntime(rows);
+    const opCatchUp = rs.fn(() => Promise.resolve([] as Task[]));
+    (fake.runtime.tasks as unknown as { opCatchUp: typeof opCatchUp }).opCatchUp = opCatchUp;
+    return { ...fake, opCatchUp };
+  }
+
+  it("a full load catches up once", async () => {
+    const { runtime, opCatchUp } = withCatchUp([doneElsewhere()]);
+    const { result } = mount(runtime);
+    await waitFor(() => expect(opCatchUp).toHaveBeenCalledTimes(1));
+    expect(result.current.tasks[0]!.status).toBe("todo");
+  });
+
+  it("coming back to the window refetches without reopening a repeat checked off elsewhere", async () => {
+    const { runtime, server, list, opCatchUp } = withCatchUp([
+      task({ scheduledAt: today(), recurrence: rule }),
+    ]);
+    const { result } = mount(runtime);
+    await waitFor(() => expect(result.current.tasks).toHaveLength(1));
+    await sleep(5_100); // past the first load's refetch throttle
+    expect(opCatchUp).not.toHaveBeenCalled(); // today's occurrence is open: nothing to do
+
+    // Checked off on Home while this window was in the background.
+    server.tasks[0] = doneElsewhere();
+    act(() => {
+      h.listener?.({ type: "resync", reason: "return" });
+    });
+    await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(result.current.tasks[0]!.status).toBe("done"));
+    await sleep(ECHO_GRACE_MS + 50);
+    expect(opCatchUp).not.toHaveBeenCalled();
+    expect(result.current.tasks[0]!.status).toBe("done");
+
+    // A reconnect refetch is just as quiet.
+    await sleep(5_100);
+    act(() => {
+      h.listener?.({ type: "resync", reason: "reconnect" });
+    });
+    await waitFor(() => expect(list).toHaveBeenCalledTimes(3));
+    await sleep(ECHO_GRACE_MS + 50);
+    expect(opCatchUp).not.toHaveBeenCalled();
+    expect(result.current.tasks[0]!.status).toBe("done");
+
+    // An explicit reload is a full load and still catches up.
+    await act(async () => {
+      await result.current.reload();
+    });
+    await waitFor(() => expect(opCatchUp).toHaveBeenCalledTimes(1));
   }, 20_000);
 });

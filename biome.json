@@ -118,7 +118,7 @@
       }
     },
     {
-      "includes": ["landing/**"],
+      "includes": ["landing/**", ".design/**/prototypes/**"],
       "linter": {
         "enabled": false
       }
