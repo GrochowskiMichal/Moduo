@@ -32,7 +32,7 @@ import {
   readLocalPreferences,
   usePreferencesValue,
 } from "../lib/preferences";
-import { isNetworkError } from "../lib/sync/network";
+import { browserOffline, isNetworkError } from "../lib/sync/network";
 import { useAuth } from "./auth-provider";
 
 /** Map a legacy workspace notification into the source-agnostic feed item. */
@@ -167,19 +167,25 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
       return [];
     }
 
+    // Offline at launch (TV-D11a): open the workspaces this person had, as this
+    // device remembers them, so the Tasks device copy can show. With no
+    // network at all, without waiting for the read's retries; it reads again
+    // when the network is back (the boot effect's `online` listener).
+    const remembered = rememberedWorkspaces(userId);
     let next: WorkspaceSummary[];
-    try {
-      const rows = await runtime.workspace.list();
-      next = rows
-        .map((row) => mapWorkspace(row, userId))
-        .filter((workspace) => !workspace.isDeleted);
-      rememberWorkspaces(userId, next);
-    } catch (e) {
-      // Offline at launch (TV-D11a): open the workspaces this person had, as
-      // this device remembers them, so the Tasks device copy can show.
-      const remembered = isNetworkError(e) ? rememberedWorkspaces(userId) : null;
-      if (!remembered) throw e;
+    if (remembered && browserOffline()) {
       next = remembered;
+    } else {
+      try {
+        const rows = await runtime.workspace.list();
+        next = rows
+          .map((row) => mapWorkspace(row, userId))
+          .filter((workspace) => !workspace.isDeleted);
+        rememberWorkspaces(userId, next);
+      } catch (e) {
+        if (!remembered || !isNetworkError(e)) throw e;
+        next = remembered;
+      }
     }
     setWorkspaces(next);
 
@@ -587,8 +593,15 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
     };
 
     void run();
+    // Opened offline from the remembered list: read the real one once the
+    // network is back (TV-D11a).
+    const onOnline = () => {
+      void refreshWorkspaces().catch(() => {});
+    };
+    window.addEventListener("online", onOnline);
     return () => {
       active = false;
+      window.removeEventListener("online", onOnline);
     };
   }, [refreshWorkspaces, runtime, userId]);
 

@@ -3791,11 +3791,14 @@ async function syncReadTable(input: SyncReadInput): Promise<SyncReadResult<unkno
     maxUpdatedAt: null,
     truncated: null,
   };
+  // No client retries: the store tries again itself, and a lost network must
+  // read as "Offline" at once rather than after seconds of backoff.
   const base = () => {
     let q = supabaseClient
       .from(source.table)
       .select(source.select)
-      .eq("workspace_id", input.workspaceId);
+      .eq("workspace_id", input.workspaceId)
+      .retry(false);
     if (source.filter) q = source.filter(q);
     return q;
   };
@@ -3808,7 +3811,8 @@ async function syncReadTable(input: SyncReadInput): Promise<SyncReadResult<unkno
         let q = supabaseClient
           .from(source.table)
           .select(source.select, opts)
-          .eq("workspace_id", input.workspaceId);
+          .eq("workspace_id", input.workspaceId)
+          .retry(false);
         if (source.filter) q = source.filter(q);
         return q;
       },

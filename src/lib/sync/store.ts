@@ -1033,23 +1033,29 @@ export class WorkspaceStore {
     if (this.offline === offline) return;
     this.offline = offline;
     if (offline) this.scheduleRetry();
-    else if (this.retryTimer) {
-      clearTimeout(this.retryTimer);
+    else {
+      this.retries = 0;
+      if (this.retryTimer) clearTimeout(this.retryTimer);
       this.retryTimer = null;
     }
     if (!opts.quiet) this.changed();
     else this.snapshot = null;
   }
 
+  /** Tries while offline: soon at first (a blip passes quickly), then less often. */
+  private retries = 0;
+
   private scheduleRetry(): void {
     if (this.retryTimer || this.disposed) return;
+    const wait = Math.min(this.timing.retryMs, 3_000 * 2 ** this.retries);
+    this.retries += 1;
     this.retryTimer = setTimeout(() => {
       this.retryTimer = null;
       if (!this.offline || this.disposed || this.refs <= 0) return;
       void this.sync("quiet").then(() => {
         if (this.offline) this.scheduleRetry();
       });
-    }, this.timing.retryMs);
+    }, wait);
   }
 
   /** Whether writes other than captures and check-offs must wait ("Offline"). */
