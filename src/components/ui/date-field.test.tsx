@@ -1,7 +1,7 @@
 // TV-P0 (tasks-v3 AC1.12) — a date picker saves once: typing a time or
 // clicking a day only moves the draft; closing the picker writes it, once.
 import { afterEach, beforeAll, describe, expect, it, rs } from "@rstest/core";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 
 import { DateField, formatTimeText, parseTimeText, TimeInput } from "./date-field";
@@ -62,6 +62,42 @@ describe("DateField saves once", () => {
     const calls = setup({ withTime: true, value: new Date(2026, 9, 9, 9, 0) });
     fireEvent.click(screen.getByRole("button", { name: "Clear" }));
     expect(calls).toEqual([null]);
+  });
+});
+
+describe("DateField: a typed time survives a click outside (DS-6, live TimeInput)", () => {
+  // A mouse press on something outside, the way Radix listens for it.
+  const clickOutside = () => {
+    const outside = document.createElement("button");
+    document.body.appendChild(outside);
+    fireEvent.pointerDown(outside, { button: 0, pointerType: "mouse" });
+    fireEvent.mouseDown(outside, { button: 0 });
+    outside.focus();
+    fireEvent.pointerUp(outside, { button: 0, pointerType: "mouse" });
+    fireEvent.mouseUp(outside, { button: 0 });
+    fireEvent.click(outside, { button: 0 });
+    outside.remove();
+  };
+  // Radix arms its outside-click listener on the next tick after opening.
+  const armed = () => act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+
+  it("the click closes the picker before any blur, and the time is still saved once", async () => {
+    const calls = setup({ withTime: true, value: new Date(2026, 9, 9, 9, 0) });
+    await armed();
+    const time = screen.getByLabelText("Time");
+    for (const v of ["4", "4p", "4pm"]) fireEvent.change(time, { target: { value: v } });
+    clickOutside();
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.getHours()).toBe(16);
+  });
+
+  it("erasing what was typed saves nothing", async () => {
+    const calls = setup({ withTime: true, value: new Date(2026, 9, 9, 9, 0) });
+    await armed();
+    const time = screen.getByLabelText("Time");
+    for (const v of ["5", "5pm", "5p", ""]) fireEvent.change(time, { target: { value: v } });
+    clickOutside();
+    expect(calls).toHaveLength(0);
   });
 });
 

@@ -29,7 +29,8 @@ import {
  * A comment author's (or a mentioned person's) small avatar: the kit's two
  * initials on a stable colour (DS-6, call 43), keyed on the person's id when
  * known so it matches every other surface. Decorative: a name always sits
- * beside it. No person (an API key, a former member) draws the empty ring.
+ * beside it. Someone the app can't resolve (an API key, a former member) is a
+ * gray "?", like an unknown assignee; never the empty "unassigned" ring.
  */
 export function PersonAvatar({
   person,
@@ -40,7 +41,7 @@ export function PersonAvatar({
 }) {
   return (
     <KitPersonAvatar
-      name={person?.name ?? null}
+      name={person?.name || "?"}
       id={person?.id}
       src={person?.avatarUrl}
       size="icon"

@@ -231,6 +231,22 @@ describe("TaskRow context menu", () => {
   });
 });
 
+describe("TaskRow bucket menu (DS-6: a radio menu, not a hand-rolled list)", () => {
+  it("picking a project from the menu moves the task once and hands focus back", async () => {
+    const { api, grid } = renderList();
+    await settle();
+    grid.focus();
+    fireEvent.keyDown(grid, { key: "b", code: "KeyB" });
+    await settle();
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Inbox" }));
+    await settle();
+    expect(api.patchTask).toHaveBeenCalledTimes(1);
+    expect(api.patchTask).toHaveBeenCalledWith("a", { bucketId: "inbox" });
+    expect(popover()).toBeNull();
+    expect(document.activeElement).toBe(grid);
+  });
+});
+
 describe("TaskRow popovers: the other ways in", () => {
   for (const { key, text } of POPOVERS) {
     it(`"${key}" opens the selected row's popover; Esc hands focus back to the list`, async () => {

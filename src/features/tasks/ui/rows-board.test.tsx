@@ -236,8 +236,9 @@ describe("Display → Rows: Standard · Detailed", () => {
   // The project's control is in every editable row; inside the project it
   // stays out of sight in Standard (implied by the scope).
   // Where the project is implied the trigger stays, taking no width (DS-6).
+  // (It is aria-hidden then, so look it up by its label, not its role.)
   const projectShown = (row: HTMLElement) =>
-    !within(row).getByRole("button", { name: "Bucket: Work" }).hasAttribute("data-implied");
+    !row.querySelector('[aria-label="Bucket: Work"]')?.hasAttribute("data-implied");
 
   it("Standard keeps TV-U1's columns", () => {
     renderList(rows);

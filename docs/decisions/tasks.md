@@ -31,7 +31,7 @@ Full entries for this area, newest first. The one-line index of every area is [d
   - Rejected: a denylist of "user-looking" property names (misses the next one); fixing the three other-module sites now (DS-5's sweep is retired).
 - **Native date, time and number inputs give way to `DateField`, `TimeInput` and `NumberInput`** → DS-6 (`date-field.tsx`, `input.tsx`)
   - Who: agent's choice, deferred to by Maciej, 2026-10-10.
-  - Decision: `TimeInput` is a token text field that shows "3:00 PM", takes "15:00", "3pm" or "1530", commits on Enter or blur and steps 15 minutes on ↑ / ↓; `NumberInput` takes digits only, clamps and steps; DateField's trigger reads "Oct 16, 3:00 PM" (call 41). Tasks adopts them now; Calendar, Email, Contacts, Settings and the dashboard keep their native inputs until each is rebuilt.
+  - Decision: `TimeInput` is a token text field that shows "3:00 PM", takes "15:00", "3pm" or "1530", commits on Enter or blur and steps 15 minutes on ↑ / ↓; `NumberInput` takes digits only, clamps and steps; DateField's trigger reads "Oct 16, 3:00 PM" (call 41). Tasks adopts them now; Calendar, Email, Contacts, Settings and the dashboard keep their native inputs until each is rebuilt. Inside a date picker (TV-P0's save-once draft) the time field is "live": a time that looks finished ("3pm", "15:30", "1530") goes into the draft as you type, so a click outside that closes the picker before any blur keeps it, and clearing the field puts back the time from before you typed (an empty field never saves a stray digit).
   - Why: the fix list's "native inputs"; a native time field draws browser chrome inside token UI and ignores the 12-hour grammar.
   - Rejected: keeping `<Input type="time">` inside DateField (still the browser's own control).
 

@@ -340,7 +340,7 @@ export function TaskRow({
           >
             {task.assigneeId ? (
               <>
-                <AssigneeAvatar assignee={assignee} size="icon" />
+                <AssigneeAvatar assignee={assignee} assigneeId={task.assigneeId} size="icon" />
                 {assignee ? firstName(assignee.name) : assigneeName}
               </>
             ) : null}
@@ -681,18 +681,20 @@ function BucketPopover({
           onClick={(e) => e.stopPropagation()}
           aria-label={`Bucket: ${bucketName}`}
           tabIndex={showLabel ? undefined : -1}
+          aria-hidden={showLabel ? undefined : true}
           data-implied={showLabel ? undefined : ""}
           className={cn(
             "flex min-w-0 shrink-3 rounded-sm px-1 transition-colors duration-(--motion-fade) ease-(--ease-out)",
             canEdit && "hover:bg-state-hover",
-            !showLabel && "pointer-events-none w-0 overflow-hidden px-0 opacity-0",
+            // Takes no width and gives back the row's gap, so nothing shifts.
+            !showLabel && "pointer-events-none -ms-2.5 w-0 overflow-hidden px-0 opacity-0",
           )}
         >
           <BucketLabel name={bucketName} isInbox={task.bucketId === inboxId} />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
-        className="max-h-64 w-48 overflow-auto"
+        className="w-48"
         onClick={(e) => e.stopPropagation()}
         onCloseAutoFocus={keepListFocus}
         align="end"

@@ -258,7 +258,11 @@ function isNotWords(expr: string): boolean {
   if (/^(["'])(?:(?!\1).)*\1$/.test(e)) return true;
   if (/^\d+$/.test(e)) return true;
   if (/\.length$/.test(e)) return true;
-  if (/^[\w.?]*(?:count|Count|total|Total)\w*$/.test(e)) return true;
+  // A count: the last segment is `count` / `total` or ends in `…Count` /
+  // `…Total` (`openCount`, `item.count`), never a name that merely contains
+  // the letters (`accountName`, `contact.country`, `discount`).
+  const last = e.split(/\?\.|\./).pop() ?? "";
+  if (/^(?:count|total)s?$/.test(last) || /[a-z0-9](?:Count|Total)s?$/.test(last)) return true;
   const template = /^`([^`]*)`$/.exec(e);
   if (template) {
     return [...template[1].matchAll(/\$\{([^}]*)\}/g)].every((hole) => isNotWords(hole[1]));

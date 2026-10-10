@@ -276,7 +276,11 @@ export function CaptureModal({
               active={shownAssigneeId !== currentUserId}
               icon={
                 shownAssigneeId ? (
-                  <AssigneeAvatar assignee={byId(shownAssigneeId)} size="icon" />
+                  <AssigneeAvatar
+                    assignee={byId(shownAssigneeId)}
+                    assigneeId={shownAssigneeId}
+                    size="icon"
+                  />
                 ) : (
                   User
                 )

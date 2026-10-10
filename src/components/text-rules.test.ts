@@ -87,8 +87,12 @@ describe("small caps never carry people's words (call 40)", () => {
     expect(hits(`<Eyebrow asChild><label htmlFor={\`d-\${id}\`}>Depth</label></Eyebrow>`)).toEqual(
       [],
     );
-    expect(isNotWords("total")).toBe(true);
-    expect(isNotWords("task.title")).toBe(false);
+    for (const count of ["count", "totals", "item.count", "openCount", "taskTotal"]) {
+      expect(isNotWords(count), count).toBe(true);
+    }
+    for (const words of ["task.title", "account", "accountName", "contact.country", "discount"]) {
+      expect(isNotWords(words), words).toBe(false);
+    }
   });
 
   it("fails the recipe outside the primitives, capitalize, and font-variant small caps", () => {

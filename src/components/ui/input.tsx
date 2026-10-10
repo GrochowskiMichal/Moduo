@@ -112,7 +112,7 @@ function useDraftField<T>({
     setDraft(shown);
   }
 
-  return { draft, type, commit, set, revert };
+  return { draft, type, commit, set, revert, isTyping: () => typing.current };
 }
 
 type NumberInputProps = Omit<InputProps, "value" | "defaultValue" | "onChange" | "type"> & {

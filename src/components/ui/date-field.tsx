@@ -65,6 +65,14 @@ function parseTimeText(input: string): string | null {
   return `${pad2(hours)}:${pad2(minutes)}`;
 }
 
+/** A typed time that reads as finished: a meridiem, `:mm`, three or four digits, a word. */
+function looksFinished(text: string): boolean {
+  const t = text.trim().toLowerCase().replace(/\./g, "");
+  return (
+    /[ap]m?$/.test(t) || /:\d{2}$/.test(t) || /^\d{3,4}$/.test(t) || /^(noon|midnight)$/.test(t)
+  );
+}
+
 /** "15:00" → "3:00 PM": the one time grammar (tasks-v3 call 41). */
 function formatTimeText(hhmm: string): string {
   const [h, m] = hhmm.split(":").map(Number);
@@ -119,6 +127,9 @@ function TimeInput({
     onValueChange,
   });
 
+  // The time the field showed when typing began, for a cleared field.
+  const typedFrom = React.useRef(value);
+
   const nudge = (direction: 1 | -1) => {
     const from = parseTimeText(field.draft) ?? (value || "09:00");
     const [h, m] = from.split(":").map(Number);
@@ -136,9 +147,18 @@ function TimeInput({
       value={field.draft}
       placeholder={placeholder}
       onChange={(e) => {
-        field.type(e.target.value);
+        const text = e.target.value;
+        if (!field.isTyping()) typedFrom.current = value;
+        field.type(text);
         if (!live) return;
-        const parsed = parseTimeText(e.target.value);
+        // Clearing the field puts back the time from before typing (an empty
+        // field never saves the last digit typed); otherwise only a time that
+        // looks finished goes into the draft ("3pm", "15:30", "1530", not "3").
+        if (text.trim() === "") {
+          if (typedFrom.current && typedFrom.current !== value) onValueChange(typedFrom.current);
+          return;
+        }
+        const parsed = looksFinished(text) ? parseTimeText(text) : null;
         if (parsed && parsed !== value) onValueChange(parsed);
       }}
       onBlur={(e) => {
