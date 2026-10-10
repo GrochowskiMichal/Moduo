@@ -429,13 +429,22 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     return false;
   }, [runtime, workspaceId, canEdit, store]);
 
-  /** A write the server refused: its fields are back to the server's, and it says why. */
+  /**
+   * A write that didn't go through: its fields are back to the server's, and
+   * it says why. A lost connection (the browser may not know yet) is
+   * "Offline", and the store holds further edits until it's back.
+   */
   const refused = useCallback(
     (write: PendingWrite, e: unknown, fallback = "Something went wrong.") => {
       write.fail();
+      if (isNetworkError(e)) {
+        store?.wentOffline();
+        sayOffline();
+        return;
+      }
       toast.error(e instanceof Error ? e.message : fallback);
     },
-    [],
+    [store],
   );
 
   /** A backlog task's move to To do (queuing or scheduling it, REPLAN 53), for
@@ -1701,8 +1710,8 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         ...follow.changes,
       ]);
 
+      const saved: Task[] = [];
       try {
-        const saved: Task[] = [];
         if (Object.keys(fields).length > 0) {
           const row = await rt.tasks.updateTask({ workspaceId: ws, taskId, patch: fields });
           saved.push(row);
@@ -1744,7 +1753,9 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         }
         return byId.get(taskId) ?? null;
       } catch (e) {
-        // What already saved stays; the rest shows the server's again.
+        // What already saved stays (its rows become the copy); the rest shows
+        // the server's again.
+        if (saved.length > 0) store.answer({ tasks: saved });
         refused(shown, e);
         if (category !== undefined) store.unkeep(taskId);
         return null;

@@ -51,6 +51,7 @@ import {
   type CachedWorkspace,
   cacheKey,
   deviceCache,
+  isKeyOf,
   type SyncCache,
 } from "./cache";
 import { browserOffline, isNetworkError } from "./network";
@@ -199,13 +200,24 @@ type TableState = {
   /** When each row was last applied (local ms): a whole read that started
    *  earlier can't drop it (it may have been created after the read began). */
   seenAt: Map<string, number>;
-  /** Ids a live delete removed, with when: a read that started earlier can't bring them back. */
+  /** Ids removed (any delete: an answer, Realtime, a delta, a queue op), with
+   *  when: a read that started earlier can't bring them back. */
   goneAt: Map<string, number>;
+  /** Soft-deleted rows' server stamps: an older version of the row (a late
+   *  echo, a read in flight) never brings it back; a restore is newer. */
+  tombstones: Map<string, { stamp: string; at: number }>;
   truncated: Truncation | null;
 };
 
 function emptyTable(): TableState {
-  return { rows: new Map(), cursor: null, seenAt: new Map(), goneAt: new Map(), truncated: null };
+  return {
+    rows: new Map(),
+    cursor: null,
+    seenAt: new Map(),
+    goneAt: new Map(),
+    tombstones: new Map(),
+    truncated: null,
+  };
 }
 
 /** Realtime table → store table. */
@@ -234,6 +246,10 @@ export type StoreTiming = {
   goneTtlMs: number;
   /** The access check (rows you can no longer see) runs at most this often. */
   accessCheckMs: number;
+  /** Everything is read whole again at least this often: a delta never re-reads
+   *  a row the server changed without a new stamp (a backfill with triggers off),
+   *  nor fills a field a newer build reads. */
+  fullReadMs: number;
 };
 
 export const DEFAULT_TIMING: StoreTiming = {
@@ -243,6 +259,7 @@ export const DEFAULT_TIMING: StoreTiming = {
   retryMs: 20_000,
   goneTtlMs: 60_000,
   accessCheckMs: 10 * 60_000,
+  fullReadMs: 24 * 60 * 60_000,
 };
 
 /** A server stamp moved back by `ms`, keeping its microseconds. */
@@ -290,6 +307,8 @@ export class WorkspaceStore {
   private error: string | null = null;
   private fromCache = false;
   private restLoaded = false;
+  /** When everything was last read whole (0: never). */
+  private fullReadAt = 0;
   private offline = browserOffline();
   private loadStamp = 0;
   private reachedServer = false;
@@ -367,6 +386,11 @@ export class WorkspaceStore {
     });
   }
 
+  /** Stopped for good (signed out, another person). */
+  isDisposed(): boolean {
+    return this.disposed;
+  }
+
   /** Whether a capture is waiting in the outbox under this task id. */
   isQueuedCreate(taskId: string): boolean {
     return this.outbox.some((e) => e.kind === "create" && e.task.id === taskId);
@@ -403,6 +427,8 @@ export class WorkspaceStore {
     }
     this.hydrated ??= this.hydrate();
     void this.hydrated.then(() => this.sync("open"));
+    // Restarted while still offline: keep trying.
+    if (this.offline) this.scheduleRetry();
   }
 
   private stop(opts: { persist?: boolean } = {}): void {
@@ -439,6 +465,10 @@ export class WorkspaceStore {
     this.snapshot = null;
     this.lastSnapshot = null;
     this.queueView = null;
+    // Nobody waits for a first answer that will never come.
+    const waiters = this.loadWaiters;
+    this.loadWaiters = [];
+    for (const fn of waiters) fn();
   }
 
   private onBrowserOffline = () => this.setOffline(true);
@@ -462,6 +492,7 @@ export class WorkspaceStore {
       this.renderedCache.delete(t.name);
     }
     this.restLoaded = copy.restLoaded;
+    this.fullReadAt = copy.fullReadAt ?? 0;
     this.outbox = Array.isArray(copy.outbox) ? (copy.outbox as OutboxEntry[]) : [];
     for (const entry of this.outbox) this.showOutboxEntry(entry);
     const hasRows = [...this.tables.values()].some((t) => t.rows.size > 0);
@@ -472,9 +503,13 @@ export class WorkspaceStore {
     this.changed();
   }
 
+  /**
+   * Write the copy a moment after a change. Throttled, not debounced: a busy
+   * workspace's steady stream of live changes must not put the write off for
+   * ever (it did, with a debounce, while teammates kept saving).
+   */
   private schedulePersist(): void {
-    if (this.disposed) return;
-    if (this.persistTimer) clearTimeout(this.persistTimer);
+    if (this.disposed || this.persistTimer) return;
     this.persistTimer = setTimeout(() => {
       this.persistTimer = null;
       this.persistNow();
@@ -496,6 +531,7 @@ export class WorkspaceStore {
       savedAt: Date.now(),
       tables,
       restLoaded: this.restLoaded,
+      fullReadAt: this.fullReadAt,
       outbox: this.outbox,
     });
   };
@@ -557,7 +593,10 @@ export class WorkspaceStore {
   private async syncOnce(kind: "open" | "quiet" | "reload"): Promise<void> {
     const startedAt = Date.now();
     const delta =
-      !!this.runtime.tasks.syncRead && this.table("tasks").cursor !== null && this.restLoaded;
+      !!this.runtime.tasks.syncRead &&
+      this.table("tasks").cursor !== null &&
+      this.restLoaded &&
+      startedAt - this.fullReadAt < this.timing.fullReadMs;
     try {
       if (!this.runtime.tasks.syncRead) await this.readBundle();
       else if (!delta) await this.readFirst();
@@ -601,12 +640,14 @@ export class WorkspaceStore {
       this.changed();
       return;
     }
-    // A failed first load with nothing to show is an error; later reads fail quietly.
+    // A failed first load with nothing to show is an error; later reads fail
+    // quietly, but what the other tables already read shows and is kept.
     if (!this.loaded) {
       this.error = e instanceof Error ? e.message : String(e);
       this.markLoaded();
-      this.changed();
     }
+    this.changed();
+    this.schedulePersist();
   }
 
   private markLoaded(): void {
@@ -638,6 +679,7 @@ export class WorkspaceStore {
       null,
     );
     this.restLoaded = true;
+    this.fullReadAt = started;
     this.seedTagStore(started);
   }
 
@@ -666,7 +708,7 @@ export class WorkspaceStore {
     for (const [name, res] of results) {
       if (name === "tasks") {
         // The rest isn't read yet: keep the copy's other rows until it is.
-        this.applyRows("tasks", res.rows as AnyRow[], "answer");
+        this.applyRows("tasks", res.rows as AnyRow[], "answer", started);
         for (const r of res.rows as AnyRow[]) openTasks.add(r.id);
         this.table("tasks").truncated = res.truncated;
         continue;
@@ -706,6 +748,7 @@ export class WorkspaceStore {
     this.applyWhole("comments", comments.rows as AnyRow[], started, comments.truncated);
     this.table("comments").cursor = comments.maxUpdatedAt ?? this.table("comments").cursor;
     this.restLoaded = true;
+    this.fullReadAt = started;
   }
 
   /** A later read: only what changed since each cursor (whole for stampless tables). */
@@ -719,6 +762,7 @@ export class WorkspaceStore {
           return;
         }
         const state = this.table(t.name);
+        this.pruneGone(state);
         if (!state.cursor) {
           // Never had a row: read its live rows ("" keeps an empty table's place).
           const res = await this.read(t.name, null);
@@ -730,8 +774,8 @@ export class WorkspaceStore {
         // A delta past its ceiling reads on from where it stopped.
         for (let round = 0; round < 20; round += 1) {
           const res = await this.read(t.name, since);
-          this.applyRows(t.name, res.rows as AnyRow[], "answer");
-          this.forgetRows(t.name, res.deleted);
+          this.applyRows(t.name, res.rows as AnyRow[], "answer", started);
+          this.forgetRows(t.name, res.deleted, started);
           state.cursor = newestOf(state.cursor, res.maxUpdatedAt);
           if (!res.truncated || !res.maxUpdatedAt) break;
           since = res.maxUpdatedAt;
@@ -819,12 +863,25 @@ export class WorkspaceStore {
    * Realtime, where an equal stamp is our own echo). A soft-deleted row
    * removes it.
    */
-  private applyRows(name: SyncTableName, rows: readonly AnyRow[], rule: "answer" | "live"): void {
+  /**
+   * `readStartedAt`: the rows come from a read that began then; a row removed
+   * since (a delete it couldn't know about) stays removed.
+   */
+  private applyRows(
+    name: SyncTableName,
+    rows: readonly AnyRow[],
+    rule: "answer" | "live",
+    readStartedAt?: number,
+  ): void {
     const state = this.table(name);
     const now = Date.now();
     let touched = false;
     for (const row of rows) {
       if (!row || typeof row.id !== "string") continue;
+      if (readStartedAt !== undefined && (state.goneAt.get(row.id) ?? -1) >= readStartedAt)
+        continue;
+      const tomb = state.tombstones.get(row.id);
+      if (tomb && row.updatedAt !== undefined && !isNewer(row.updatedAt, tomb.stamp)) continue;
       const local = state.rows.get(row.id);
       if (local && row.updatedAt !== undefined && local.updatedAt !== undefined) {
         const newer = isNewer(row.updatedAt, local.updatedAt);
@@ -834,11 +891,14 @@ export class WorkspaceStore {
       if (row.deletedAt) {
         if (state.rows.delete(row.id)) touched = true;
         state.seenAt.delete(row.id);
+        state.goneAt.set(row.id, now);
+        if (row.updatedAt) state.tombstones.set(row.id, { stamp: row.updatedAt, at: now });
         continue;
       }
       state.rows.set(row.id, row);
       state.seenAt.set(row.id, now);
       state.goneAt.delete(row.id);
+      state.tombstones.delete(row.id);
       touched = true;
     }
     if (touched) this.renderedCache.delete(name);
@@ -854,7 +914,7 @@ export class WorkspaceStore {
     const state = this.table(name);
     this.pruneGone(state);
     const fresh = rows.filter((r) => (state.goneAt.get(r.id) ?? -1) < startedAt);
-    this.applyRows(name, fresh, "answer");
+    this.applyRows(name, fresh, "answer", startedAt);
     // A read cut at its ceiling can't tell absent from not-reached.
     if (!truncated) {
       const present = new Set(rows.map((r) => r.id));
@@ -869,11 +929,16 @@ export class WorkspaceStore {
     this.renderedCache.delete(name);
   }
 
-  private forgetRows(name: SyncTableName, ids: readonly string[]): void {
+  /**
+   * Remove rows the server says are gone. `readStartedAt`: they come from a
+   * read that began then, so a row applied since (restored meanwhile) stays.
+   */
+  private forgetRows(name: SyncTableName, ids: readonly string[], readStartedAt?: number): void {
     if (ids.length === 0) return;
     const state = this.table(name);
     const now = Date.now();
     for (const id of ids) {
+      if (readStartedAt !== undefined && (state.seenAt.get(id) ?? 0) >= readStartedAt) continue;
       state.rows.delete(id);
       state.seenAt.delete(id);
       state.goneAt.set(id, now);
@@ -884,6 +949,7 @@ export class WorkspaceStore {
   private pruneGone(state: TableState): void {
     const cutoff = Date.now() - this.timing.goneTtlMs;
     for (const [id, at] of state.goneAt) if (at < cutoff) state.goneAt.delete(id);
+    for (const [id, tomb] of state.tombstones) if (tomb.at < cutoff) state.tombstones.delete(id);
   }
 
   private onLive = (event: TasksLiveEvent): void => {
@@ -1007,16 +1073,20 @@ export class WorkspaceStore {
   lineupAnswered(seq: number, mine: TaskQueueEntry[]): void {
     const state = this.table("queue");
     const now = Date.now();
+    const kept = new Set(mine.map((e) => e.id));
     for (const [id, row] of state.rows) {
       const e = row as unknown as TaskQueueEntry;
       if (e.userId === this.userId && e.workspaceId === this.workspaceId) {
         state.rows.delete(id);
         state.seenAt.delete(id);
+        // Left my queue: a read already on its way can't put it back.
+        if (!kept.has(id)) state.goneAt.set(id, now);
       }
     }
     for (const e of mine) {
       state.rows.set(e.id, e as unknown as AnyRow);
       state.seenAt.set(e.id, now);
+      state.goneAt.delete(e.id);
     }
     if (this.lineup && this.lineup.seq <= seq) this.lineup = null;
     this.renderedCache.delete("queue");
@@ -1193,9 +1263,14 @@ export class WorkspaceStore {
         : await tasks.upsertTask(entry.task);
       let queue: TaskQueueEntry[] = [];
       if (entry.queue) {
+        // A lost connection keeps the entry (sent again: the create is the same
+        // task, the add a no-op); a refused add leaves the task unqueued.
         queue = await tasks
           .opQueueAdd({ workspaceId: this.workspaceId, taskId: saved.id })
-          .catch(() => []);
+          .catch((e) => {
+            if (isNetworkError(e)) throw e;
+            return [];
+          });
         if (queue.length > 0) this.lineupAnswered(0, queue);
       }
       return { tasks: [saved] };
@@ -1403,21 +1478,55 @@ export function findWorkspaceStore(
   return registries.get(runtime.tasks)?.get(workspaceId) ?? null;
 }
 
-/**
- * Who is signed in now (the auth shell calls this on every change). Signed
- * out (null; account deletion signs out too): every store and every device
- * copy goes. Someone signed in: stores and device copies of anyone else go, so
- * a second account on this device never reads the first one's rows.
- */
-export function attachSyncUser(userId: string | null): Promise<void> {
+function disposeStores(keep: (store: WorkspaceStore) => boolean, persist: boolean): void {
   for (const store of [...everyStore]) {
-    if (userId !== null && store.userId === userId) continue;
-    store.dispose({ persist: false });
+    if (keep(store)) continue;
+    store.dispose({ persist });
     if (registries.get(store.runtime.tasks)?.get(store.workspaceId) === store) {
       registries.get(store.runtime.tasks)?.delete(store.workspaceId);
     }
     everyStore.delete(store);
   }
-  const cache = storeOptions.cache ?? deviceCache();
-  return userId === null ? cache.clear() : cache.keepOnly(userId);
+}
+
+/**
+ * Who is signed in now (the auth shell calls this on every change).
+ *  - Someone: stores and device copies of anyone else go, so a second
+ *    account on this device never reads the first one's rows.
+ *  - Nobody (null): the stores stop, but the copy stays. A session can be
+ *    null without a sign-out (an expired token that couldn't refresh offline);
+ *    its waiting captures must survive until it's back. A real sign-out calls
+ *    `wipeSyncCopies`.
+ */
+export function attachSyncUser(userId: string | null): Promise<void> {
+  if (userId === null) {
+    disposeStores(() => false, true);
+    return Promise.resolve();
+  }
+  disposeStores((store) => store.userId === userId, false);
+  return (storeOptions.cache ?? deviceCache()).deleteWhere((key) => !isKeyOf(key, userId));
+}
+
+/** Signed out, or the account was deleted: every store and every device copy go. */
+export function wipeSyncCopies(): Promise<void> {
+  disposeStores(() => false, false);
+  return (storeOptions.cache ?? deviceCache()).clear();
+}
+
+/**
+ * The person's workspace list came back: device copies of workspaces not on
+ * it (left, removed, deleted) go, and so do their stores.
+ */
+export function keepWorkspaceCopies(
+  userId: string,
+  workspaceIds: readonly string[],
+): Promise<void> {
+  const keep = new Set(workspaceIds.map((ws) => cacheKey(userId, ws)));
+  disposeStores(
+    (store) => store.userId !== userId || keep.has(cacheKey(store.userId, store.workspaceId)),
+    false,
+  );
+  return (storeOptions.cache ?? deviceCache()).deleteWhere(
+    (key) => isKeyOf(key, userId) && !keep.has(key),
+  );
 }

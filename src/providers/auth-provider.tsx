@@ -18,7 +18,7 @@ import {
   type RuntimeSession,
   runtimeConfigError,
 } from "../lib/runtime";
-import { attachSyncUser } from "../lib/sync/store";
+import { attachSyncUser, wipeSyncCopies } from "../lib/sync/store";
 
 export type { PlanTier } from "@contracts/vocabularies";
 
@@ -178,6 +178,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
         // refresh after the account was deleted elsewhere, must not send an event that
         // brings back the PostHog person the deletion erased (PRIV-3).
         void setAnalyticsUser(null);
+        // A real sign-out (never a session that merely failed to load, e.g. an
+        // expired token offline): the Tasks device copy, its waiting captures
+        // and the remembered workspace list go (TV-D11a).
+        void wipeSyncCopies();
+        forgetRememberedWorkspaces();
       } else if (!uid) {
         void setAnalyticsUser(null);
       }
@@ -194,17 +199,16 @@ export function AuthProvider({ children }: PropsWithChildren) {
   // The focus session is persisted per person: resume it on sign-in, hand it
   // back on sign-out (TV-F1). The workspace tag store starts over for another
   // person (TV-T1). The shared Tasks store and its device copy are one
-  // person's: signed out (account deletion included) every copy is wiped, and
-  // another person signing in wipes every copy but theirs (TV-D11a). Skipped
-  // while the cached session is still loading.
+  // person's (TV-D11a): another person signing in wipes every copy but theirs;
+  // no session stops the stores but keeps the copy (a session that failed to
+  // load offline comes back; a real sign-out wipes it above). Skipped while
+  // the cached session is still loading.
   const sessionUserId = session?.user?.id ?? null;
   useEffect(() => {
     if (loading) return;
     attachFocusUser(sessionUserId);
     attachTagUser(sessionUserId);
     void attachSyncUser(sessionUserId);
-    // The workspace list kept for opening offline is one person's too.
-    if (!sessionUserId) forgetRememberedWorkspaces();
   }, [loading, sessionUserId]);
 
   const signOut = async () => {

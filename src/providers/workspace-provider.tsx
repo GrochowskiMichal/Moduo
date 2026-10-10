@@ -33,6 +33,7 @@ import {
   usePreferencesValue,
 } from "../lib/preferences";
 import { browserOffline, isNetworkError } from "../lib/sync/network";
+import { keepWorkspaceCopies } from "../lib/sync/store";
 import { useAuth } from "./auth-provider";
 
 /** Map a legacy workspace notification into the source-agnostic feed item. */
@@ -182,6 +183,11 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
           .map((row) => mapWorkspace(row, userId))
           .filter((workspace) => !workspace.isDeleted);
         rememberWorkspaces(userId, next);
+        // Tasks device copies of workspaces you left or that went away go too.
+        void keepWorkspaceCopies(
+          userId,
+          next.map((workspace) => workspace.id),
+        );
       } catch (e) {
         if (!remembered || !isNetworkError(e)) throw e;
         next = remembered;

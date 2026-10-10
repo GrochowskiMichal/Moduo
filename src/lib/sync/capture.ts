@@ -17,6 +17,7 @@ export async function captureTaskToStore(
   fields: CapturedFields,
 ): Promise<{ saved: Task | null; queued: boolean }> {
   await store.whenLoaded();
+  if (store.isDisposed()) throw new Error("Signed out.");
   const { bundle } = store.getSnapshot();
   const systems = bundle.buckets.filter((b) => b.isSystem && !b.deletedAt);
   let inbox = systems.find((b) => b.ownerId === store.userId) ?? systems[0] ?? null;

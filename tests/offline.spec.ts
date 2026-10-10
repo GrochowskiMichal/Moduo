@@ -79,14 +79,20 @@ async function waitForDeviceCopy(page: Page, title: string) {
           ([key, wanted]) =>
             new Promise<boolean>((resolve) => {
               const open = indexedDB.open("moduo-sync");
+              // Not there yet: don't create it (the app makes it with its store).
+              open.onupgradeneeded = () => open.transaction?.abort();
               open.onerror = () => resolve(false);
               open.onsuccess = () => {
                 const db = open.result;
-                if (!db.objectStoreNames.contains("workspaces")) return resolve(false);
+                if (!db.objectStoreNames.contains("workspaces")) {
+                  db.close();
+                  return resolve(false);
+                }
                 const get = db.transaction("workspaces").objectStore("workspaces").get(key);
                 get.onerror = () => resolve(false);
                 get.onsuccess = () => {
                   const rows = (get.result?.tables?.tasks?.rows ?? []) as { title: string }[];
+                  db.close();
                   resolve(rows.some((r) => r.title === wanted));
                 };
               };

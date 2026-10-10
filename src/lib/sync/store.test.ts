@@ -26,9 +26,11 @@ import type { ModuoRuntime } from "../runtime.types";
 import { cacheKey, memoryCache } from "./cache";
 import {
   attachSyncUser,
+  keepWorkspaceCopies,
   setStoreOptionsForTests,
   stampMinus,
   WorkspaceStore,
+  wipeSyncCopies,
   workspaceStore,
 } from "./store";
 import type { SyncReadInput, SyncReadResult, SyncTableName } from "./types";
@@ -359,7 +361,124 @@ describe("one-field rollback (AC12.8)", () => {
   });
 });
 
+describe("a delete stays deleted", () => {
+  /** Hold the next read of `table`; `release(rows)` answers it with those rows. */
+  function holdRead(server: ReturnType<typeof fakeServer>, table: SyncTableName) {
+    const real = server.syncRead.getMockImplementation();
+    let release: (rows: ServerRow[]) => void = () => {};
+    let held = false;
+    server.syncRead.mockImplementation(async (input: SyncReadInput) => {
+      if (input.table !== table || held || !real) return real?.(input) as never;
+      held = true;
+      const rows = await new Promise<ServerRow[]>((resolve) => {
+        release = resolve;
+      });
+      return {
+        rows,
+        deleted: [],
+        maxUpdatedAt:
+          rows
+            .map((r) => r.updatedAt ?? "")
+            .sort()
+            .pop() ?? null,
+        truncated: null,
+      };
+    });
+    return (rows: ServerRow[]) => release(rows);
+  }
+
+  it("a read that started before a delete answer doesn't bring the row back", async () => {
+    const server = fakeServer();
+    server.tables.tasks = [task("a", { updatedAt: at(5) }), task("b", { updatedAt: at(5) })];
+    const { store } = makeStore(server);
+    await settled(store);
+    const release = holdRead(server, "tasks");
+    const reading = store.syncNow();
+    await tick();
+    const write = store.begin([{ table: "tasks", remove: "a" }]);
+    write.settle({ tasks: [task("a", { deletedAt: at(20), updatedAt: at(20) })] });
+    release([task("a", { updatedAt: at(5) }), task("b", { updatedAt: at(5) })]);
+    await reading;
+    await settled(store);
+    expect(store.getSnapshot().bundle.tasks.map((t) => t.id)).toEqual(["b"]);
+  });
+
+  it("nor before a teammate's delete arriving live", async () => {
+    const server = fakeServer();
+    server.tables.tasks = [task("a", { updatedAt: at(5) })];
+    const { store } = makeStore(server);
+    await settled(store);
+    const release = holdRead(server, "tasks");
+    const reading = store.syncNow();
+    await tick();
+    emit({
+      table: "tasks",
+      kind: "upsert",
+      row: task("a", { deletedAt: at(20), updatedAt: at(20) }),
+    });
+    release([task("a", { updatedAt: at(5) })]);
+    await reading;
+    await settled(store);
+    expect(store.getSnapshot().bundle.tasks).toEqual([]);
+    // A later restore (a newer stamp) still comes back.
+    emit({ table: "tasks", kind: "upsert", row: task("a", { updatedAt: at(25) }) });
+    expect(store.getSnapshot().bundle.tasks.map((t) => t.id)).toEqual(["a"]);
+  });
+
+  it("a task leaving my queue isn't put back by a read already on its way", async () => {
+    const server = fakeServer();
+    const entry: TaskQueueEntry = {
+      id: "q1",
+      workspaceId: WS,
+      userId: ME,
+      taskId: "a",
+      position: "0000000001",
+      queuedAt: at(1),
+      updatedAt: at(1),
+    };
+    server.tables.tasks = [task("a")];
+    server.tables.queue = [entry];
+    const { store } = makeStore(server);
+    await settled(store);
+    expect(store.getSnapshot().queue.map((e) => e.id)).toEqual(["q1"]);
+    const release = holdRead(server, "queue");
+    const reading = store.syncNow();
+    await tick();
+    // The queue op's answer: my queue is empty now.
+    store.lineupAnswered(1, []);
+    release([entry]);
+    await reading;
+    await settled(store);
+    expect(store.getSnapshot().queue).toEqual([]);
+  });
+});
+
 describe("offline: captures and check-offs (default g)", () => {
+  it("what waited on the device is sent after a reload, once", async () => {
+    const server = fakeServer();
+    server.tables.tasks = [task("a", { updatedAt: at(5) })];
+    const first = makeStore(server);
+    await settled(first.store);
+    server.goOffline();
+    first.store.wentOffline();
+    first.store.enqueue({ kind: "create", id: "op-1", task: task("kept", { title: "Kept" }) });
+    first.release();
+    first.store.dispose();
+
+    // Reopened (the app reloaded), the network back.
+    server.goOnline();
+    const store = new WorkspaceStore(server.runtime, ME, WS, {
+      cache: first.cache,
+      timing: { persistMs: 0, throttleMs: 0 },
+    });
+    const release = store.acquire();
+    await settled(store);
+    expect(store.getSnapshot().pending).toBe(0);
+    expect(server.created.map((t) => t.id)).toEqual(["kept"]);
+    expect(titleOf(store, "kept")).toBe("Kept");
+    release();
+  });
+
   it("queue on the device and flush in order on reconnect, without duplicates", async () => {
     const server = fakeServer();
     server.tables.tasks = [task("a", { updatedAt: at(5) })];
@@ -450,13 +569,55 @@ describe("the device copy is one person's", () => {
       await persisted(store);
       expect(cache.records.size).toBe(1);
 
-      await attachSyncUser(null);
+      // What the SIGNED_OUT event and account deletion call.
+      await wipeSyncCopies();
       expect(cache.records.size).toBe(0);
       // Nothing is written back after sign-out.
       store.persistNow();
       await tick();
       expect(cache.records.size).toBe(0);
       release();
+    } finally {
+      setStoreOptionsForTests({});
+    }
+  });
+
+  it("a session that merely failed to load (an expired token offline) keeps the copy and what waits", async () => {
+    const cache = memoryCache();
+    setStoreOptionsForTests({ cache, timing: { persistMs: 0, throttleMs: 0 } });
+    try {
+      const server = fakeServer();
+      server.tables.tasks = [task("a")];
+      const store = workspaceStore(server.runtime, ME, WS);
+      const release = store.acquire();
+      await persisted(store);
+      store.wentOffline();
+      store.enqueue({ kind: "create", id: "op-1", task: task("on-the-plane") });
+      release();
+
+      await attachSyncUser(null);
+      const copy = cache.records.get(cacheKey(ME, WS));
+      expect(copy?.outbox).toHaveLength(1);
+      expect(((copy?.tables.tasks?.rows ?? []) as Task[]).map((t) => t.id)).toEqual(["a"]);
+    } finally {
+      setStoreOptionsForTests({});
+    }
+  });
+
+  it("copies of workspaces no longer on your list go", async () => {
+    const cache = memoryCache();
+    setStoreOptionsForTests({ cache, timing: { persistMs: 0, throttleMs: 0 } });
+    try {
+      const server = fakeServer();
+      server.tables.tasks = [task("a")];
+      for (const ws of ["ws-kept", "ws-left"]) {
+        const store = workspaceStore(server.runtime, ME, ws);
+        const release = store.acquire();
+        await persisted(store);
+        release();
+      }
+      await keepWorkspaceCopies(ME, ["ws-kept"]);
+      expect([...cache.records.keys()]).toEqual([cacheKey(ME, "ws-kept")]);
     } finally {
       setStoreOptionsForTests({});
     }

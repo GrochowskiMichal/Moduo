@@ -8,7 +8,7 @@ import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
 import { stopAnalyticsForDeletedAccount } from "../../../lib/analytics";
 import { SUPABASE_URL, supabaseClient } from "../../../lib/runtime.web";
-import { attachSyncUser } from "../../../lib/sync/store";
+import { wipeSyncCopies } from "../../../lib/sync/store";
 import { useAuth } from "../../../providers/auth-provider";
 import { validateImageFile } from "../../branding/image-asset";
 import { ensureProfileAvatar } from "../../branding/profile-avatar";
@@ -108,7 +108,7 @@ export function AccountSection() {
           void stopAnalyticsForDeletedAccount(userId);
           forgetFocusUser(userId);
           // The Tasks device copy (TV-D11a): the account is gone, so is its copy.
-          void attachSyncUser(null);
+          void wipeSyncCopies();
         },
         goToSignInWithNotice: () => navigate({ to: "/auth", search: { deleted: 1 } }),
         signOut,

@@ -29,6 +29,8 @@ export type CachedWorkspace = {
   tables: Partial<Record<SyncTableName, CachedTable>>;
   /** Done, Won't do and Backlog tasks have been read (the first load's 2nd part). */
   restLoaded: boolean;
+  /** When everything was last read whole (a delta never re-reads an unchanged row). */
+  fullReadAt?: number;
   /** Captures and check-offs waiting to be sent (the offline queue). */
   outbox: unknown[];
 };
@@ -38,8 +40,8 @@ export interface SyncCache {
   write(key: string, value: CachedWorkspace): Promise<void>;
   /** Wipe every copy (sign-out). */
   clear(): Promise<void>;
-  /** Wipe every copy that isn't this person's (another account signed in on this device). */
-  keepOnly(userId: string): Promise<void>;
+  /** Wipe the copies whose key matches (another person's, a workspace you left). */
+  deleteWhere(match: (key: string) => boolean): Promise<void>;
 }
 
 export function cacheKey(userId: string, workspaceId: string): string {
@@ -66,8 +68,8 @@ export function memoryCache(): SyncCache & { records: Map<string, CachedWorkspac
     async clear() {
       records.clear();
     },
-    async keepOnly(userId) {
-      for (const key of [...records.keys()]) if (!isKeyOf(key, userId)) records.delete(key);
+    async deleteWhere(match) {
+      for (const key of [...records.keys()]) if (match(key)) records.delete(key);
     },
   };
 }
@@ -91,18 +93,41 @@ function requestToPromise<T>(request: IDBRequest<T>): Promise<T> {
 /** The device copy in IndexedDB. Any failure reads as "no copy" (never fatal). */
 export function idbCache(factory: IDBFactory): SyncCache {
   let db: Promise<IDBDatabase> | null = null;
-  const open = (): Promise<IDBDatabase> => {
-    db ??= new Promise<IDBDatabase>((resolve, reject) => {
-      const request = factory.open(DB_NAME, 1);
+  /**
+   * Open the database with its store. A database that exists without the
+   * store (opened elsewhere without an upgrade, or left half-made) is opened
+   * again one version up, which creates it: otherwise every write would fail
+   * quietly for good.
+   */
+  const openAt = (version?: number): Promise<IDBDatabase> =>
+    new Promise<IDBDatabase>((resolve, reject) => {
+      const request =
+        version === undefined ? factory.open(DB_NAME) : factory.open(DB_NAME, version);
       request.onupgradeneeded = () => {
         if (!request.result.objectStoreNames.contains(STORE)) {
           request.result.createObjectStore(STORE);
         }
       };
-      request.onsuccess = () => resolve(request.result);
+      request.onsuccess = () => {
+        const opened = request.result;
+        if (opened.objectStoreNames.contains(STORE)) {
+          // Another tab upgrading must not wait on this one; the next write reopens.
+          opened.onversionchange = () => {
+            opened.close();
+            db = null;
+          };
+          resolve(opened);
+          return;
+        }
+        const next = opened.version + 1;
+        opened.close();
+        openAt(next).then(resolve, reject);
+      };
       request.onerror = () => reject(request.error);
       request.onblocked = () => reject(new Error("The device copy is blocked by another tab."));
-    }).catch((e) => {
+    });
+  const open = (): Promise<IDBDatabase> => {
+    db ??= openAt().catch((e) => {
       db = null;
       throw e;
     });
@@ -135,13 +160,13 @@ export function idbCache(factory: IDBFactory): SyncCache {
         // Nothing to wipe.
       }
     },
-    async keepOnly(userId) {
+    async deleteWhere(match) {
       try {
         const store = await tx("readwrite");
         const keys = (await requestToPromise(store.getAllKeys())) as IDBValidKey[];
         await Promise.all(
           keys
-            .filter((key) => typeof key !== "string" || !isKeyOf(key, userId))
+            .filter((key) => typeof key !== "string" || match(key))
             .map((key) => requestToPromise(store.delete(key))),
         );
       } catch {
@@ -156,7 +181,7 @@ export const noCache: SyncCache = {
   read: async () => null,
   write: async () => {},
   clear: async () => {},
-  keepOnly: async () => {},
+  deleteWhere: async () => {},
 };
 
 let shared: SyncCache | null = null;
