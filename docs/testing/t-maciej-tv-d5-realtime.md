@@ -1,6 +1,7 @@
 # Manual test checklist — TV-D5 Live updates (Realtime)
 
 > Generated 2026-10-09 · branch `t/maciej/tv-d5-realtime` · **Live-verified: partly.** The production database side was checked: the publication lists the 6 tables, and the `updated_at` trigger is on tasks, buckets and tags (a rolled-back write showed the server's time). The app side is proven by tests against a faked socket (`live.test.ts`, `realtime.test.ts`, `use-tasks-module.live.test.ts`, `tags/store.live.test.ts`). Nobody has opened two real sessions yet: the agent can't sign in to the hosted project.
+> **Finished as Tasks v3 block 1, 2026-10-10** · branch `t/maciej/tv-d5-live-updates` (local build mode: landed on `t/maciej/tasks-v3-build`; the local Supabase stack stands in for prod). **Live-verified on the local stack:** two signed-in clients over a real socket; a title change by one reached the other's `postgres_changes` listener in ~0.1 s, and the `updated_at` it sent (3 h ahead) came back as the server's time. That needed the publication re-applied locally first (docs/gotchas/supabase.md, "The local stack has no Realtime"). The window-focus guard is proven by `use-tasks-module.live.test.ts` (red before the fix).
 > Run top-to-bottom; check off as you go. Each item is a step → what you should see → where.
 
 Setup: two sessions on the same workspace. The best setup is two members. One person in two browsers (or the web app plus desktop) also works for everything except claims. Open Tasks in both, side by side. Call them **A** and **B**.
@@ -28,6 +29,11 @@ Setup: two sessions on the same workspace. The best setup is two members. One pe
 - [ ] **Do:** In A, complete a task that's in your Queue, switch away and back → **Expect:** it still shows done in place in the Queue until a full reload (TV-D4 behaviour kept). _(both)_
 - [ ] **Do:** Then, in B, reopen that task → **Expect:** it leaves A's Queue (it's no longer queued) instead of showing there as open. _(both)_
 
+## Repeats stay done when you come back (Tasks v3 block 1, P0 #2 path)
+- [ ] **Do:** In A, make a task repeat daily and leave it open for today. In B (or on Home), check it off. Switch A away and back → **Expect:** A shows it done, and it stays done; it doesn't reopen as today's task. _(both)_
+- [ ] **Do:** Same, but turn A's network off and on instead of switching away → **Expect:** it stays done. _(both)_
+- [ ] **Do:** Open A with the network off (the list fails to load), then turn the network on → **Expect:** the list fills in by itself within a few seconds, and repeats whose next day has come are open again, as after a normal open. _(desktop)_
+
 ## Edge cases
 - [ ] **Do:** Switch A to another workspace while B keeps editing the first → **Expect:** nothing from the first workspace appears in A's second workspace. _(both)_
 - [ ] **Do:** In A, delete a tag and wait for the Undo toast; meanwhile B renames that tag; then Undo in A → **Expect:** the tag comes back in A, showing B's new name within a few seconds. _(both)_
@@ -38,6 +44,8 @@ Setup: two sessions on the same workspace. The best setup is two members. One pe
 - [ ] **Do:** Edit a task title in the Table editor, setting `updated_at` to a time in the future → **Expect:** the saved `updated_at` is "now" (the `zz_stamp_updated_at` trigger). _(—)_
 
 ## Known gaps / not-yet-testable
+- **A full open or reload can still reopen a repeat checked off on Home or by MCP the same day** when the pointer it saved is already due: the client catch-up still runs on a full load. TV-D8 moves repeats to the server and removes that pass.
+- **Local stack:** after `bun run local:reset`, re-apply the publication (gotcha above) before testing anything live locally.
 - **No two-session live run yet:** the agent can't sign in to the hosted project, so the D5-1 and D5-3 checks above are the first end-to-end run over a real socket.
 - **Comment counts (D5-1) aren't live:** `comments` is published, but nothing shows a comment count yet; TV-U3 adds the listener.
 - **Attachments aren't published yet:** their table arrived with AT-1, after the publication migration; AT-2 adds it.

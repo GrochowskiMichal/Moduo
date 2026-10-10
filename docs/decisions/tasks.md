@@ -2,6 +2,14 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index.
 
+## 2026-10-10 · TV-D5 finished (tasks-v3 block 1): a quiet refetch never runs the repeat catch-up
+
+- **The client repeat catch-up runs after a full load only** → TV-D5 (`src/features/tasks/hooks/use-tasks-module.ts`, the `loadStamp` bump in `loadImpl`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10 (confirmed for building; may be reconsidered).
+  - Decision: opening Tasks, a reload or a workspace switch reopens due repeats as before; coming back to the window or reconnecting refetches without it, unless that refetch is the first read of the workspace that worked (the app opened offline).
+  - Why: #315 refetches on every return, and the pass would reopen a repeat checked off on Home or by MCP the same day (P0 #2); TV-D8's server roll-over replaces the client pass.
+  - Rejected: landing TV-D8's server fix first (it depends on this block); keeping the pass on reconnect (a reconnect hits the same bug).
+
 ## 2026-10-10 · Tasks v3 re-plan (calls 13–98, defaults a–u, §6)
 
 [specs/tasks-v3.md](../../specs/tasks-v3.md) supersedes tasks-v2 as the plan of record and says only *what* to build; the entries below are the *why*. Source: [.design/tasks-v3/REPLAN.md](../../.design/tasks-v3/REPLAN.md) §8 (numbers are stable, never reused); calls 1–12 are in [.design/tasks-dogfood/RESEARCH-2026-10.md](../../.design/tasks-dogfood/RESEARCH-2026-10.md).

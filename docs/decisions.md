@@ -220,6 +220,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Tasks and Timeline → [decisions/tasks.md](decisions/tasks.md)
 
+- 2026-10-10 · TV-D5 finished (v3 block 1): a quiet refetch (focus, reconnect) never runs the client repeat catch-up; a full load, or the first read that works, still does → decisions/tasks.md
 - 2026-10-10 · Tasks v3 re-plan — structure: Project/Areas/Sections, personal Inbox with the hairline, handing an unfiled task asks for a project, one-level subtasks that finish with their parent (REPLAN 13–20a, 28, 87) → decisions/tasks.md
 - 2026-10-10 · Tasks v3 re-plan — statuses, dates, repeats: per-project statuses in five fixed categories with Backlog, Won't do, a quiet late state, reminders, sessions, recurrence a–i, the completion record, contradicting dates shown not prevented (21–27, 53–53b, 68b, 77) → decisions/tasks.md
 - 2026-10-10 · Tasks v3 re-plan — navigation and views: the rail order, Customize sidebar, Pin, no view glyphs, views in one place, collapsible groups, the multi-select action row, day grouping, My tasks by status, lanes, boards open by status, six reactions, no permanent Archived/Recently deleted rows (29–30, 32, 82b–86, 88, 98) → decisions/tasks.md
