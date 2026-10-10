@@ -2,6 +2,76 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index.
 
+## 2026-10-10 · TV-P0 trust pass — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 3 ([specs/tasks-v3.md](../../specs/tasks-v3.md) AC1.3–1.12, 1.15–1.16) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **P0-1 · A bare hour is daytime: 1–6 means the afternoon** → TV-P0 (`parse/capture-parser.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: "at 5" is 5 PM and "at 5:30" is 17:30; 7–11 stay morning, 12 is noon; an explicit am/pm, a 24-hour hour ("at 17") or a zero-padded clock ("05:30") is taken as typed. With no day named, today if it's still ahead, else tomorrow.
+  - Why: REPLAN P0 #3 asks for daytime; 1–6 AM is almost never what a task means, 7 is split (wake vs dinner), so it stays morning.
+  - Rejected: 1–7 PM (turns "wake at 7" into the evening); always the next occurrence (chrono's default, the bug).
+- **P0-2 · Only a clear date phrase is a date** → TV-P0
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: a phrase is read as a date only if it names a day ("3 May", "tomorrow"), a weekday or a clock time; a month or a year alone stays a word ("Send March report"). A date typed with a repeat starts the repeat there ("tomorrow 3pm every week"); "every month … on the 1st" repeats on the 1st, and the words in between stay. The connective before a date ("by", "on", "at", "due", "from") goes with it.
+  - Why: AC1.3, "keeps the words people typed".
+  - Rejected: a word list of month names to skip (misses "Dec 15" vs "December plan" the same way).
+- **P0-3 · "Won't do" reads as one, and stays in view until you move on** → TV-P0 (label), TV-U2 (the Filter → Status list), TV-D7 (the stored value)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: the label is "Won't do" (and "To do" for todo) everywhere now; the ⋯ item says "Won't do"; the panel shows a "Won't do · Reopen" line; the trail says "marked this Won't do" / "reopened this". A task you mark Won't do, or open from a link, stays listed (struck and dimmed, like a done one) and selected until you change scope.
+  - Why: AC1.4; Reopen was unreachable because the task vanished the moment it was archived.
+  - Rejected: waiting for TV-U2's Filter → Status to make them reachable (the panel was the trap, not the list).
+- **P0-4 · The three empty states** → TV-P0; DS-6 standardises them on the kit
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: a skeleton until the first load answers (later reloads keep the rows); "No tasks match · Clear filters" when a filter hides everything; "No tasks in <scope>" + Add a task + "press c" for an empty scope.
+  - Why: AC1.5 and spec §8 "States for every view".
+  - Rejected: keeping "Nothing here yet" for the truly empty case (it read as broken when it flashed).
+- **P0-5 · A notice names its task, in quotes** → TV-P0; TV-D12 rebuilds the notice table
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: "Mike assigned “Draft the brief” to you", "Ola commented on “Q4 plan”: “looks good”". The name is the title the event carried (assigned, completed, unblocked); a comment's notice, which carries only an excerpt, looks the task up in the entity registry (RLS-checked, so a task you can't see is never named). Only the sentence's own "this" is replaced, never one in the user's words.
+  - Why: AC1.7. No schema change: the triggers already store the title.
+  - Rejected: a server-side label join in `notifications_list` (a migration in a no-migration block).
+- **P0-6 · Moving a parent moves all its subtasks** → TV-P0
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: done subtasks too, to the project the parent actually landed in; one write per subtask; no Undo (bulk Undo is TV-U12's).
+  - Why: AC1.8; a subtask left behind showed at the top level of the old project.
+  - Rejected: moving open subtasks only (splits a finished checklist across projects).
+- **P0-7 · New in Focus or the Queue goes to the end of Up next** → TV-P0; the top of Up next stays TV-U14's (call 90)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: ⌘N / New / `c` while in Focus or the Queue scope creates the task and queues it at the end of my line-up.
+  - Why: AC1.9 says "lands in Up next"; call 90's "top of Up next" comes with capture v3.
+  - Rejected: the top now (two queue ops racing, and it would take the Now card's place).
+- **P0-8 · "Private project", and a "Private item" panel for links you can't open** → TV-P0; RF-1 tells deleted from private
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: a task in a project you can't see shows its project as "Private project" (lock icon) wherever a project name shows; its deep link opens it in All. A link someone followed (notification, chip, widget) to a task you can't open shows "Private item · This task isn't shared with you, or it no longer exists · Back to your tasks" in the panel; a stale id that only returns on refresh or back/forward clears quietly.
+  - Why: AC1.10; the old fallback labelled it Inbox and the deep link landed on another task.
+  - Rejected: "Deleted task" vs "Private item" now (the client can't tell them apart without the registry, RF-1).
+- **P0-9 · Date pickers keep a draft and save once** → TV-P0; DS-6's DateField builds on it
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: a date-only pick saves and closes; with a time, the day and time are a draft saved when the picker closes or on Enter, and Esc throws the draft away. Rows use the same picker as the panel (presets, calendar, time). A scheduled time on its own goes through the reschedule/unschedule op, so it's in the trail from any surface; a due date stays a field write until TV-D8's update op.
+  - Why: AC1.12; typing "10:30" in the old native input fired four writes.
+  - Rejected: debouncing the native input (still several writes, still not in the trail).
+- **P0-10 · Two initials, from the person's own name** → TV-P0; DS-6 adds the stable colour and the team squares
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: first and last name's initials, or a one-word name's first two letters; never from the picker's "Me"; "?" for someone without a name. The icon-rung avatar gets a `--text-3xs` (9 px) token so two letters fit at 16 px.
+  - Why: AC1.15 and call 43.
+  - Rejected: bumping row avatars to 20 px (changes every row's column widths before TV-U10).
+- **P0-11 · The one grammar lives in `src/lib/time-format.ts` now** → TV-P0; TV-D14 feeds it Settings → Time & region
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: call 41's forms; a day and a time join as "Tomorrow, 3:00 PM"; past dates read absolute ("Oct 6"), except Yesterday; the trail and the meta line use "Oct 6, 12:07 PM"; Focus's running total shows seconds under a minute. Day order and 12/24 h follow the device.
+  - Why: AC1.15; the spec puts the module at D14, but the grammar is P0's.
+  - Rejected: per-surface Intl formatters (the source of the drift).
+- **P0-12 · Nothing truncates in the panel, on cards or in Calendar's Tasks panel** → TV-P0; rows and the rail follow in TV-U10/TV-U6
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: property values and names wrap between words (never mid-word), a value's note ("passed") wraps under it, card meta wraps to a second line, a date keeps its full width (a row's date column grows for another year's date).
+  - Why: AC1.16 and calls 41, 89.
+  - Rejected: call 42's "+n" for card meta now (DS-6's, with the kit's MetaCount).
+- **P0-13 · Focus time saves from the app shell** → TV-P0; TV-F6 builds the one time engine
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: the engine's save sink is registered once in the app chrome and writes straight through `tasks_op_track_time` (the server keeps the total and answers "gone"); a mounted Tasks page shows each saved total. The module's old sink stays, unregistered, with its tests, for TV-F6.
+  - Why: AC1.6; time tracked on Notes waited until Tasks was opened again.
+  - Rejected: keeping the Tasks module mounted in the background (loads every task on every page).
+
 ## 2026-10-10 · Tasks v3 re-plan (calls 13–98, defaults a–u, §6)
 
 [specs/tasks-v3.md](../../specs/tasks-v3.md) supersedes tasks-v2 as the plan of record and says only *what* to build; the entries below are the *why*. Source: [.design/tasks-v3/REPLAN.md](../../.design/tasks-v3/REPLAN.md) §8 (numbers are stable, never reused); calls 1–12 are in [.design/tasks-dogfood/RESEARCH-2026-10.md](../../.design/tasks-dogfood/RESEARCH-2026-10.md).
