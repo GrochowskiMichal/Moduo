@@ -39,10 +39,10 @@ function excerptOf(text: string | null): string | null {
   return `${(space > 160 ? cut.slice(0, space) : cut).trimEnd()}…`;
 }
 
-/** Statuses that count towards progress: Backlog and Won't do sit out (53b). */
 /** A typed `%` or `_` is a character, not a LIKE wildcard. */
 const likeEscape = (text: string): string => text.replace(/[\\%_]/g, (c) => `\\${c}`);
 
+/** Statuses that count towards progress: Backlog and Won't do sit out (53b). */
 const COUNTED = ["todo", "in_progress", "done"];
 
 export function createReferencePreviews(client: SupabaseClient): ReferencePreviewApi {

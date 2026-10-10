@@ -57,22 +57,34 @@ export function commentBodyWithReferences(
   now: Date = new Date(),
 ): string {
   const personLabels = new Set(people.map((p) => p.label));
-  // Longest first, so "@Brand guidelines PDF" wins over "@Brand".
+  // Longest first, so "@Brand guidelines PDF" wins over "@Brand"; things that
+  // share a title keep the order they were picked in (the sort is stable).
+  const byLabel = new Map<string, PickedThing[]>();
   const picked = [...things]
     .filter((t) => !personLabels.has(t.label))
     .sort((a, b) => b.label.length - a.label.length);
+  for (const t of picked) {
+    const group = byLabel.get(t.label) ?? [];
+    if (!group.some((g) => g.ref.type === t.ref.type && g.ref.id === t.ref.id)) group.push(t);
+    byLabel.set(t.label, group);
+  }
   let out = text;
-  for (const thing of picked) {
-    const needle = `@${thing.label}`;
+  for (const [label, group] of byLabel) {
+    const needle = `@${label}`;
     let from = 0;
+    // A task "Plan" and a note "Plan": the first "@Plan" is the first picked.
+    let nth = 0;
     for (;;) {
       const i = out.indexOf(needle, from);
       if (i < 0) break;
       const before = out[i - 1];
       const after = out[i + needle.length];
-      const atStart = i === 0 || /\s/.test(before ?? "");
+      // "(@Title)" counts too; "name@Title" (an address) doesn't.
+      const atStart = i === 0 || !/\w/.test(before ?? "");
       const atEnd = after === undefined || !/\w/.test(after);
-      if (atStart && atEnd && !insidePersonMention(out, i, people, thing.label)) {
+      if (atStart && atEnd && !insidePersonMention(out, i, people, label)) {
+        const thing = group[Math.min(nth, group.length - 1)] as PickedThing;
+        nth += 1;
         const uri = referenceUri(thing.ref);
         out = `${out.slice(0, i)}${uri}${out.slice(i + needle.length)}`;
         from = i + uri.length;

@@ -67,6 +67,25 @@ describe("what a comment stores (RF-1)", () => {
     ).toBe(`ping @Anna and moduo://task/${TASK.id}, see moduo://note/${NOTE.id}`);
   });
 
+  it("stores a picked thing after punctuation, and two things sharing a title in pick order", () => {
+    expect(
+      commentBodyWithReferences("(@Secret plan)", [{ ref: TASK, label: "Secret plan" }], []),
+    ).toBe(`(moduo://task/${TASK.id})`);
+    expect(
+      commentBodyWithReferences(
+        "x @Plan and @Plan",
+        [
+          { ref: TASK, label: "Plan" },
+          { ref: NOTE, label: "Plan" },
+        ],
+        [],
+      ),
+    ).toBe(`x moduo://task/${TASK.id} and moduo://note/${NOTE.id}`);
+    expect(commentBodyWithReferences("mail ann@Plan", [{ ref: TASK, label: "Plan" }], [])).toBe(
+      "mail ann@Plan",
+    );
+  });
+
   it("turns /today, /tomorrow and /next week into date chips", () => {
     expect(commentBodyWithReferences("Ship /tomorrow", [], [], WED)).toBe(
       "Ship moduo://date/2026-10-15",

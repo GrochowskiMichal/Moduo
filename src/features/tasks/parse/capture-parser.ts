@@ -299,10 +299,16 @@ export function parseCapture(input: string, refDate: Date = new Date()): ParsedC
       day.setHours(at.getHours(), at.getMinutes(), 0, 0);
       // Only the clock time leaves the title; a date word stays the person's
       // ("Call Anna Friday at 3pm /tomorrow" → "Call Anna Friday").
+      // Kept only when it reads exactly like the parser's own title once its
+      // date words go ("3 p.m." or "3PM-4PM" leaving bits behind falls back).
       const withoutClock = slash.text.replace(CLOCK_TIME, " ").replace(/\s+/g, " ").trim();
+      const cleanCut =
+        withoutClock !== "" &&
+        withoutClock !== slash.text &&
+        parseCapture(withoutClock, refDate).title === rest.title;
       return {
         ...rest,
-        title: withoutClock && withoutClock !== slash.text ? withoutClock : rest.title,
+        title: cleanCut ? withoutClock : rest.title,
         scheduledAt: day.toISOString(),
         summary: `scheduled ${chronoLabel(day, true)}`,
       };

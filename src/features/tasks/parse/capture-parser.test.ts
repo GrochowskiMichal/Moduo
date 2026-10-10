@@ -157,6 +157,14 @@ describe("parseCapture — the `/` date commands (33a, RF-1's grammar)", () => {
     expect(at?.getHours()).toBe(15);
     const worded = parseCapture("Call Anna Friday at 3pm /tomorrow", FRIDAY_10AM);
     expect(worded.title).toBe("Call Anna Friday");
+    for (const odd of [
+      "Call Anna at 3 p.m. /tomorrow",
+      "Call Anna at 3 o'clock /tomorrow",
+      "Call Anna 3PM-4PM /tomorrow",
+    ]) {
+      const p = parseCapture(odd, FRIDAY_10AM);
+      expect(p.title).toBe("Call Anna");
+    }
     expect(local(worded.scheduledAt)?.toDateString()).toBe(new Date(2026, 9, 10).toDateString());
     const repeat = parseCapture("Standup every Monday /next week", FRIDAY_10AM);
     expect(repeat.recurrence).not.toBeNull();
