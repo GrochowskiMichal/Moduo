@@ -162,14 +162,38 @@ BEGIN
 END;
 $$;
 
+-- Why an address shouldn't get B1 now, or NULL when it should.
+CREATE OR REPLACE FUNCTION public.waitlist__invite_blocker(p_email text)
+RETURNS text
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+  SELECT CASE
+    WHEN EXISTS (SELECT 1 FROM public.email_suppressions s WHERE s.email = p_email) THEN 'suppressed'
+    WHEN EXISTS (SELECT 1 FROM auth.users u WHERE lower(u.email) = p_email) THEN 'already_a_user'
+  END;
+$$;
+
 CREATE OR REPLACE FUNCTION public.waitlist__enqueue_invite()
 RETURNS trigger
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = ''
 AS $$
+DECLARE
+  v_blocker text;
 BEGIN
   IF NEW.status = 'invited' AND (TG_OP = 'INSERT' OR OLD.status IS DISTINCT FROM 'invited') THEN
+    -- A Table Editor flip gets the same checks as the helpers: no B1 to an
+    -- address that bounced or complained, or to someone who already has an
+    -- account (the row stays invited; the hook lets the address in either way).
+    v_blocker := public.waitlist__invite_blocker(NEW.email);
+    IF v_blocker IS NOT NULL THEN
+      RAISE NOTICE 'waitlist: no invite email to % (%)', NEW.email, v_blocker;
+      RETURN NULL;
+    END IF;
     PERFORM public.waitlist__queue_invite(
       NEW.id,
       NEW.email,
@@ -186,20 +210,6 @@ DROP TRIGGER IF EXISTS waitlist_enqueue_invite ON public.waitlist;
 CREATE TRIGGER waitlist_enqueue_invite
   AFTER INSERT OR UPDATE OF status ON public.waitlist
   FOR EACH ROW EXECUTE FUNCTION public.waitlist__enqueue_invite();
-
--- Why an address shouldn't get B1 now, or NULL when it should.
-CREATE OR REPLACE FUNCTION public.waitlist__invite_blocker(p_email text)
-RETURNS text
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = ''
-AS $$
-  SELECT CASE
-    WHEN EXISTS (SELECT 1 FROM public.email_suppressions s WHERE s.email = p_email) THEN 'suppressed'
-    WHEN EXISTS (SELECT 1 FROM auth.users u WHERE lower(u.email) = p_email) THEN 'already_a_user'
-  END;
-$$;
 
 -- ---------------------------------------------------------------------------
 -- Dashboard helpers (SQL editor). Each returns what it did per address.
@@ -230,7 +240,8 @@ BEGIN
     SELECT w.id
       FROM public.waitlist w
      WHERE w.status = 'pending'
-       AND public.waitlist__invite_blocker(w.email) IS NULL
+       AND NOT EXISTS (SELECT 1 FROM public.email_suppressions s WHERE s.email = w.email)
+       AND NOT EXISTS (SELECT 1 FROM auth.users u WHERE lower(u.email) = w.email)
      ORDER BY w.created_at, w.id
      LIMIT v_limit
      FOR UPDATE OF w SKIP LOCKED
@@ -257,7 +268,7 @@ DECLARE
   v_status text;
 BEGIN
   IF char_length(v_email) NOT BETWEEN 3 AND 254
-     OR v_email !~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$' THEN
+     OR v_email !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' THEN
     RAISE EXCEPTION 'waitlist_invite_email: invalid address' USING ERRCODE = '22023';
   END IF;
 
@@ -272,6 +283,9 @@ BEGIN
     RAISE NOTICE 'waitlist_invite_email: already invited; waitlist_resend_invite sends the email again';
     RETURN 'already_invited';
   ELSIF v_status IS NOT NULL THEN
+    IF v_status <> 'pending' THEN
+      RAISE NOTICE 'waitlist_invite_email: the row was %, inviting anyway', v_status;
+    END IF;
     UPDATE public.waitlist w SET status = 'invited' WHERE w.email = v_email;
   ELSE
     INSERT INTO public.waitlist AS w (email, source, status)

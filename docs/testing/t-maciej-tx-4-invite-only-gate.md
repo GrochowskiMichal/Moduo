@@ -1,6 +1,6 @@
 # Manual test checklist — TX-4 invite-only gate + waitlist invites
 
-> Generated 2026-10-10 · branch `t/maciej/tx-4-invite-only-gate` · **Live-verified:** partial. The migration ran on the local stack (50 database checks, `supabase/probes/invite-gate.probe.sql`), and a real Auth server (GoTrue v2.197.0, a throwaway container beside the local stack with the hook switched on) was driven through every allow source and the full code sign-in. Nothing is on prod yet: the worker deploy, the migration and the dashboard steps wait for Maciej's OK (docs/email-runbook.md §TX-4).
+> Generated 2026-10-10 · branch `t/maciej/tx-4-invite-only-gate` · **Live-verified:** partial. The migration ran on the local stack (51 database checks, `supabase/probes/invite-gate.probe.sql`, also run with every new function owned by the non-superuser `postgres` role, as on prod), and a real Auth server (GoTrue v2.197.0, a throwaway container beside the local stack with the hook switched on) was driven through every allow source and the full code sign-in. Nothing is on prod yet: the worker deploy, the migration and the dashboard steps wait for Maciej's OK (docs/email-runbook.md §TX-4).
 > Run top-to-bottom; check off as you go. Each item is a step → what you should see → where.
 
 ## Done in the session (agent)
@@ -10,7 +10,7 @@
   ```bash
   psql "postgresql://supabase_admin:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -q -f supabase/probes/invite-gate.probe.sql
   ```
-  → **Expect:** 50 PASS lines and `ALL PASSED`. _(AC20 hook cases incl. case/space, expired/revoked/accepted invites, founders, grants; AC21 B1 once per invite, invite_next oldest-first with skips and the 50 cap, invite_email/resend outcomes; AC22 row deleted at sign-up, build-updates request kept as pending, gone with the account; AC23 12-month purge + job)_
+  → **Expect:** 51 PASS lines and `ALL PASSED`. _(AC20 hook cases incl. case/space, expired/revoked/accepted invites, founders, grants; AC21 B1 once per invite, invite_next oldest-first with skips and the 50 cap, invite_email/resend outcomes; AC22 row deleted at sign-up, build-updates request kept as pending, gone with the account; AC23 12-month purge + job)_
 - [x] **Real Auth, hook on** (throwaway GoTrue on port 59999, same database; `POST /otp` with `create_user: true`, as the new client sends):
   - uninvited address → `403 {"error_code":"unknown","msg":"invite_only"}`, no user created
   - pending (not invited) waitlist row → the same refusal
@@ -43,4 +43,6 @@
 
 - Founder access grants (`plan_grants`) are not an allow source yet: that table arrives in TX-9b, which adds the branch to the hook.
 - The Mac download line in B1 stays hidden until the notarized download has a public link (`MAC_DOWNLOAD_URL` in `waitlist-invite.ts`).
+- B1 rows are logged with no account id, so after an account deletion the invite's log row (with the address) stays until the 30-day purge; erasing by address is TX-8 (AC43).
+- The footer's join date is the UTC day, so someone who joined just after midnight in Europe reads the day before.
 - The local Auth server's code email used a stub template; on prod the code email for a first sign-in is A1 from `auth-email-hook` (TX-2's `signup` action).

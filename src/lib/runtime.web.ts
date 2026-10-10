@@ -558,7 +558,7 @@ export const webRuntime: ModuoRuntime = {
           // happen only for an invited address; anyone else is refused with
           // `invite_only` and no account or email. Existing users never reach the
           // hook. Until sign-ups are switched on, Auth refuses new addresses as
-          // `signup_disabled`; both map to the same message (otp-send-error.ts).
+          // `signup_disabled` (otp-send-error.ts has the copy for each).
           options: { shouldCreateUser: true },
         });
         if (error) return { data: {}, error: toOtpSendError(error) };

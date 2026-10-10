@@ -6,6 +6,7 @@ import {
   formatCountdown,
   OTP_INVITE_ONLY_MESSAGE,
   OTP_SEND_FAILED_MESSAGE,
+  OTP_SIGNUPS_OFF_MESSAGE,
   OTP_TOO_MANY_MESSAGE,
   OTP_VALID_MINUTES,
 } from "./otp-send-error";
@@ -65,14 +66,14 @@ describe("describeOtpSendError", () => {
       kind: "message",
       message: OTP_INVITE_ONLY_MESSAGE,
     });
-    // Sign-ups still off on the project.
+    // Sign-ups still off on the project: a dashboard invitee still needs the link hint.
     expect(
       describeOtpSendError({
         message: "Signups not allowed for this instance",
         code: "signup_disabled",
         status: 422,
       }),
-    ).toEqual({ kind: "message", message: OTP_INVITE_ONLY_MESSAGE });
+    ).toEqual({ kind: "message", message: OTP_SIGNUPS_OFF_MESSAGE });
     expect(OTP_INVITE_ONLY_MESSAGE).toBe(
       "Moduo is invite-only right now. Join the waitlist at moduo.app, or ask the person who invited you to use this address.",
     );

@@ -167,6 +167,10 @@ SELECT pg_temp.ok(public.waitlist_invite_email('new.person@probe.test') = 'alrea
 SELECT pg_temp.ok(public.waitlist_invite_email('bounced@probe.test') = 'suppressed'
   AND pg_temp.b1_rows('bounced@probe.test') = 0, 'a suppressed address is refused');
 SELECT pg_temp.ok(public.waitlist_invite_email('member@probe.test') = 'already_a_user', 'an existing user is refused');
+UPDATE public.waitlist SET status = 'invited' WHERE email IN ('member@probe.test', 'bounced@probe.test');
+SELECT pg_temp.ok(pg_temp.b1_rows('member@probe.test') = 0 AND pg_temp.b1_rows('bounced@probe.test') = 0,
+  'a Table Editor flip sends nothing to an existing user or a suppressed address');
+UPDATE public.waitlist SET status = 'pending' WHERE email IN ('member@probe.test', 'bounced@probe.test');
 SELECT pg_temp.fails($$SELECT public.waitlist_invite_email('not an address')$$, '22023', 'a malformed address is refused');
 
 -- resend
