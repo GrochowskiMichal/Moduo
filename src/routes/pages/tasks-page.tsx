@@ -42,6 +42,8 @@ export function TasksPage() {
     userId,
     workspaceId: selectedWorkspaceId,
     modulePermission: modulePermissions.tasks,
+    // Recently deleted lives in the Tasks rail only (TV-U6).
+    includeTrash: true,
   });
 
   const canRender = useMemo(

@@ -58,6 +58,16 @@ export type Bucket = {
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
+  /**
+   * The rail dot's label hue (a `LABEL_COLORS` name); null or absent = neutral
+   * (TV-U6). Read through `normalizeLabelColor`, like a tag's colour.
+   */
+  color?: string | null;
+  /**
+   * Set while the bucket is archived (TV-U6): it and its tasks are hidden from
+   * All, My tasks, search, counts and queues, and listed under Archived.
+   */
+  archivedAt?: string | null;
 };
 
 /**
@@ -272,7 +282,36 @@ export type TasksModuleBundle = {
    * this field exists to kill.
    */
   truncated: Truncation[];
+  /**
+   * Archived buckets and their tasks (TV-U6), kept out of `buckets` and
+   * `tasks` so every reader of the bundle hides them without knowing about
+   * archiving. Only the Tasks module shows them (under Archived).
+   */
+  archivedBuckets?: Bucket[];
+  archivedTasks?: Task[];
 };
+
+/** A bucket in Recently deleted (TV-U6). */
+export type TrashedBucket = {
+  bucket: Bucket;
+  /** Shared with the tasks (and files) deleted with it; null for a delete from before TV-U6. */
+  batchId: string | null;
+  /** The tasks its "Move the tasks to Inbox" delete moved; a Restore moves them back. */
+  movedTaskIds: string[];
+};
+
+/** A task in Recently deleted (TV-U6). */
+export type TrashedTask = {
+  task: Task;
+  /** The batch it was deleted in (with a bucket), or null when deleted on its own. */
+  batchId: string | null;
+};
+
+/** What Recently deleted holds: everything deleted in the last 30 days. */
+export type TasksTrash = { buckets: TrashedBucket[]; tasks: TrashedTask[] };
+
+/** Days a deleted task, bucket or file stays restorable before the purge. */
+export const TRASH_DAYS = 30;
 
 /** Coarse time-of-day slots that a bucket can be mapped to (spec §9). */
 export type TimeBlockSlot = "morning" | "afternoon" | "evening";

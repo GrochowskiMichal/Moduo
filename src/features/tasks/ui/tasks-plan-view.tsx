@@ -6,6 +6,7 @@ import {
   type DragEndEvent,
   pointerWithin,
 } from "@dnd-kit/core";
+import { Archive } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { onCreateNew } from "../../../components/app/create-events";
@@ -43,13 +44,21 @@ import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import { isDrifted, type Task } from "../model";
 import { resolveTasksDeepLink } from "../search";
 import { sanitizeTimelineZoom, type TimelineZoom } from "../timeline-geometry";
-import { BucketRail, parseCollapsedSections, type TasksMode } from "./bucket-rail";
+import { trashEntries } from "../trash";
+import {
+  BucketRail,
+  parseCollapsedSections,
+  RAIL_BUCKET_PREFIX,
+  type TasksMode,
+  TRASH_SELECTION,
+} from "./bucket-rail";
 import { CaptureModal } from "./capture-modal";
 import { pointerFirstCollision, useTaskDndSensors } from "./dnd/task-dnd";
 import { DriftTriageDialog } from "./drift-triage-dialog";
 import { ExecuteView } from "./execute-view";
 import { FrontierOfferDialog } from "./frontier-offer-dialog";
 import type { PlanView } from "./plan-view-header";
+import { RecentlyDeletedView } from "./recently-deleted-view";
 import { type BoardGroupBy, TaskBoardView } from "./task-board-view";
 import { TASK_DETAIL_REFRESH_EVENT, TaskDetailPanel } from "./task-detail-panel";
 import { TaskListView } from "./task-list-view";
@@ -93,7 +102,7 @@ function writeLS(workspaceId: string, part: string, value: string): void {
 }
 
 export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskIdChange }: Props) {
-  const { canEdit, buckets, inbox, tasks } = api;
+  const { buckets, inbox, tasks, archivedBuckets, archivedTasks } = api;
 
   const [mode, setMode] = useState<TasksMode>(() =>
     readLS(workspaceId, "mode") === "execute" ? "execute" : "plan",
@@ -130,7 +139,13 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       return next;
     });
   }, []);
+  // Archived starts collapsed and stays the way it was left (TV-U6).
+  const [archivedOpen, setArchivedOpen] = useState(
+    () => readLS(workspaceId, "archivedOpen") === "1",
+  );
   const [captureOpen, setCaptureOpen] = useState(false);
+  // A bucket's hover "+" captures straight into that bucket (TV-U6).
+  const [captureInto, setCaptureInto] = useState<string | null>(null);
   const [triageBucketId, setTriageBucketId] = useState<string | null>(null);
   // Triage opens from a rail row and has no trigger to hand focus back to.
   const railNavRef = useRef<HTMLElement | null>(null);
@@ -242,13 +257,32 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     () => writeLS(workspaceId, "collapsedSections", JSON.stringify([...collapsedSections])),
     [workspaceId, collapsedSections],
   );
+  useEffect(
+    () => writeLS(workspaceId, "archivedOpen", archivedOpen ? "1" : "0"),
+    [workspaceId, archivedOpen],
+  );
 
-  // Remember the last concrete bucket scope (never "all" / "mine" / "today") so
-  // the next open can land back on it (spec §9.2).
+  // Remember the last concrete bucket scope (never "all" / "mine" / "today" /
+  // Recently deleted) so the next open can land back on it (spec §9.2).
   useEffect(() => {
-    if (selection === "all" || selection === "mine" || selection === "today") return;
+    if (
+      selection === "all" ||
+      selection === "mine" ||
+      selection === "today" ||
+      selection === TRASH_SELECTION
+    )
+      return;
     writeLS(workspaceId, "lastBucket", selection);
   }, [workspaceId, selection]);
+
+  // An archived bucket opens read-only (TV-U6): it's off every list until it's
+  // unarchived. Recently deleted has its own view.
+  const archivedScope = useMemo(
+    () => archivedBuckets.find((b) => b.id === selection) ?? null,
+    [archivedBuckets, selection],
+  );
+  const isTrash = selection === TRASH_SELECTION;
+  const canEdit = api.canEdit && !archivedScope;
 
   // Time-blocks are workspace data, loaded with the bundle (api.timeBlocks).
   const timeBlocks = api.timeBlocks;
@@ -288,15 +322,25 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
 
   // Keep selection valid; "inbox" resolves against the seeded Inbox bucket.
   useEffect(() => {
-    if (selection === "all" || selection === "inbox" || selection === "today") return;
+    if (
+      selection === "all" ||
+      selection === "inbox" ||
+      selection === "today" ||
+      selection === TRASH_SELECTION
+    )
+      return;
     if (selection === "mine") {
       // Members load with the workspace; wait for them before ruling.
       if (!showMyTasks && assignees.length > 0) setSelection("inbox");
       return;
     }
     if (inboxId && selection === inboxId) return;
-    if (!buckets.some((b) => b.id === selection)) setSelection("inbox");
-  }, [selection, buckets, inboxId, showMyTasks, assignees.length]);
+    if (
+      !buckets.some((b) => b.id === selection) &&
+      !archivedBuckets.some((b) => b.id === selection)
+    )
+      setSelection("inbox");
+  }, [selection, buckets, archivedBuckets, inboxId, showMyTasks, assignees.length]);
 
   // All and My tasks imply bucket grouping in List; a single bucket flattens
   // it. Nudge groupBy on scope changes so the control stays meaningful (user
@@ -311,19 +355,45 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   const bucketNameById = useCallback(
     (id: string) => {
       if (inbox && id === inbox.id) return "Inbox";
-      return buckets.find((b) => b.id === id)?.name ?? "Inbox";
+      return (
+        buckets.find((b) => b.id === id)?.name ??
+        archivedBuckets.find((b) => b.id === id)?.name ??
+        "Inbox"
+      );
     },
-    [buckets, inbox],
+    [buckets, archivedBuckets, inbox],
+  );
+  // Recently deleted names only buckets that still exist.
+  const liveBucketName = useCallback(
+    (id: string) => {
+      if (inbox && id === inbox.id) return "Inbox";
+      return (
+        buckets.find((b) => b.id === id)?.name ??
+        archivedBuckets.find((b) => b.id === id)?.name ??
+        null
+      );
+    },
+    [buckets, archivedBuckets, inbox],
+  );
+  const trashCount = useMemo(
+    () => trashEntries(api.trash, { bucketName: liveBucketName }).length,
+    [api.trash, liveBucketName],
   );
 
   const scopeTasksAll = useMemo(() => {
+    if (selection === TRASH_SELECTION) return [];
+    if (archivedScope) {
+      return archivedTasks.filter(
+        (t) => t.bucketId === archivedScope.id && t.status !== "archived",
+      );
+    }
     if (selection === "today") return api.queuedTasks;
     if (selection === "all") return tasks.filter((t) => t.status !== "archived");
     if (selection === "mine") return myTasksScope(tasks, currentUserId);
     const bucketId = selection === "inbox" ? inboxId : selection;
     if (!bucketId) return [];
     return tasks.filter((t) => t.bucketId === bucketId && t.status !== "archived");
-  }, [selection, tasks, inboxId, api.queuedTasks, currentUserId]);
+  }, [selection, tasks, inboxId, api.queuedTasks, currentUserId, archivedScope, archivedTasks]);
 
   // Apply the tag filter on top of the bucket scope (center only; rail counts
   // stay whole). OR/union — a task matches if it carries any selected tag.
@@ -346,14 +416,20 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
           ? "Queue"
           : selection === "inbox"
             ? "Inbox"
-            : bucketNameById(selection);
+            : isTrash
+              ? "Recently deleted"
+              : bucketNameById(selection);
 
   // The Queue is one ordered line-up, so its List view is never grouped.
   const effectiveGroupBy = selection === "today" ? "none" : groupBy;
 
-  // Where a captured task lands: the selected bucket, else Inbox.
+  // Where a captured task lands: the bucket whose "+" was used, else the
+  // selected bucket, else Inbox (never an archived bucket or the trash).
   const captureBucketId =
-    isAll || selection === "today" ? inboxId : selection === "inbox" ? inboxId : selection;
+    captureInto ??
+    (isAll || selection === "today" || selection === "inbox" || isTrash || archivedScope
+      ? inboxId
+      : selection);
 
   const totalOpenCount = useMemo(
     () => tasks.filter((t) => t.status !== "done" && t.status !== "archived").length,
@@ -375,8 +451,18 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   }, [triageBucketId, tasks]);
 
   const openCapture = useCallback(() => {
-    if (canEdit) setCaptureOpen(true);
-  }, [canEdit]);
+    if (!api.canEdit) return;
+    setCaptureInto(null);
+    setCaptureOpen(true);
+  }, [api.canEdit]);
+  const captureIntoBucket = useCallback(
+    (bucketId: string) => {
+      if (!api.canEdit) return;
+      setCaptureInto(bucketId);
+      setCaptureOpen(true);
+    },
+    [api.canEdit],
+  );
 
   // cmd+n / global "+" → capture (this listener is only mounted on /tasks).
   useEffect(() => onCreateNew(openCapture), [openCapture]);
@@ -451,16 +537,23 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       onSelect={setSelection}
       buckets={buckets}
       inbox={inbox}
+      archivedBuckets={archivedBuckets}
+      trashCount={trashCount}
       openCountByBucket={api.openTaskCountByBucket}
       taskCountByBucket={api.taskCountByBucket}
       driftCountByBucket={api.driftCountByBucket}
       totalOpenCount={totalOpenCount}
       queueCount={api.queueCount}
       myTasksCount={showMyTasks ? myOpenCount : null}
-      canEdit={canEdit}
+      canEdit={api.canEdit}
       onCreateBucket={api.createBucket}
       onRenameBucket={api.renameBucket}
-      onDeleteBucket={api.deleteBucket}
+      onDeleteBucket={(id, withTasks) => api.deleteBucket(id, { withTasks })}
+      onArchiveBucket={api.archiveBucket}
+      onUnarchiveBucket={api.unarchiveBucket}
+      onSetBucketColor={api.setBucketColor}
+      onMoveBucket={api.moveBucket}
+      onCaptureInto={captureIntoBucket}
       onTriageBucket={(id) => {
         triageFromRef.current = id;
         setTriageBucketId(id);
@@ -470,6 +563,8 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       onSetBucketGroup={api.setBucketGroup}
       collapsedSections={collapsedSections}
       onToggleSection={toggleSection}
+      archivedOpen={archivedOpen}
+      onToggleArchived={() => setArchivedOpen((open) => !open)}
       navRef={railNavRef}
     />
   );
@@ -486,10 +581,11 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
 
   // Resolve the selected task live from the bundle so the rail follows edits and
   // empties when the task is deleted.
-  const selectedTask = useMemo(
-    () => (selectedTaskId ? (tasks.find((t) => t.id === selectedTaskId) ?? null) : null),
-    [selectedTaskId, tasks],
-  );
+  const selectedTask = useMemo(() => {
+    if (!selectedTaskId) return null;
+    const pool = archivedScope ? archivedTasks : tasks;
+    return pool.find((t) => t.id === selectedTaskId) ?? null;
+  }, [selectedTaskId, tasks, archivedScope, archivedTasks]);
 
   // Scope-level selection validity (the state lives here, so its backstop does
   // too): when the selected task leaves the scope (archived, moved, deleted,
@@ -533,9 +629,10 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     const external = takeEntityOpenIntent(urlTaskId);
     // Archived tasks are invisible in every scope — selecting one would just
     // feed the backstop a random replacement; treat like a stale id instead.
+    // A task in an archived bucket opens that bucket, read-only (TV-U6).
     const target = resolveTasksDeepLink(urlTaskId, {
-      tasks: tasks.filter((t) => t.status !== "archived"),
-      buckets,
+      tasks: [...tasks, ...archivedTasks].filter((t) => t.status !== "archived"),
+      buckets: [...buckets, ...archivedBuckets],
       inboxId,
     });
     if (target.kind === "none") {
@@ -566,7 +663,9 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     api.tagsByTask,
     urlTaskId,
     tasks,
+    archivedTasks,
     buckets,
+    archivedBuckets,
     inboxId,
     liveFilterTagIds,
     scopeTasksAll,
@@ -654,7 +753,15 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
 
   // Execute mode is enclosed in the center panel (rails stay visible).
   const body =
-    mode === "execute" ? (
+    mode !== "execute" && isTrash ? (
+      <RecentlyDeletedView
+        trash={api.trash}
+        bucketName={liveBucketName}
+        canEdit={api.canEdit}
+        onRestore={(target, label) => void api.restoreFromTrash(target, { label })}
+        onDeleteForever={api.deleteForever}
+      />
+    ) : mode === "execute" ? (
       <ExecuteView
         workspaceId={workspaceId}
         queuedTasks={api.queuedTasks}
@@ -670,7 +777,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
         onToggleSubtask={api.toggleDone}
         onExit={exitExecute}
         loading={api.loading}
-        canEdit={canEdit}
+        canEdit={api.canEdit}
         onCaptureToQueue={api.captureToQueue}
       />
     ) : view === "board" ? (
@@ -718,6 +825,23 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
           </Button>
         </div>
       ) : null}
+      {archivedScope && mode !== "execute" ? (
+        <div className="mb-3 flex shrink-0 items-center gap-3 rounded-md border border-hairline px-3 py-2 text-sm">
+          <Archive className="size-icon-sm shrink-0 text-muted-foreground" aria-hidden />
+          <span className="min-w-0 flex-1 font-sans text-muted-foreground">
+            Archived. Its tasks are hidden from every list, search and queue.
+          </span>
+          {api.canEdit ? (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => api.unarchiveBucket(archivedScope.id)}
+            >
+              Unarchive
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
       <div className="min-h-0 flex-1">{body}</div>
     </div>
   );
@@ -752,13 +876,23 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   // index); drag-onto-task nest = pointer-first (an expanded parent's `onto-task`
   // rect is taller than its row, so pointerWithin is required for precision).
   const appCollision = useCallback<CollisionDetection>((args) => {
+    // A bucket dragged in the rail sorts among the rail's buckets only (TV-U6);
+    // nothing else ever lands on them until TV-U4's rail drops.
+    if (String(args.active.id).startsWith(RAIL_BUCKET_PREFIX)) {
+      return closestCenter({
+        ...args,
+        droppableContainers: args.droppableContainers.filter((c) =>
+          String(c.id).startsWith(RAIL_BUCKET_PREFIX),
+        ),
+      });
+    }
     const linkContainers = args.droppableContainers.filter((c) => String(c.id).startsWith("link:"));
     if (linkContainers.length > 0) {
       const hubHits = pointerWithin({ ...args, droppableContainers: linkContainers });
       if (hubHits.length > 0) return hubHits;
     }
     const centerContainers = args.droppableContainers.filter(
-      (c) => !String(c.id).startsWith("link:"),
+      (c) => !String(c.id).startsWith("link:") && !String(c.id).startsWith(RAIL_BUCKET_PREFIX),
     );
     const strategy =
       viewRef.current === "board"
@@ -882,7 +1016,10 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       </DndContext>
       <CaptureModal
         open={captureOpen}
-        onOpenChange={setCaptureOpen}
+        onOpenChange={(open) => {
+          setCaptureOpen(open);
+          if (!open) setCaptureInto(null);
+        }}
         buckets={buckets}
         inbox={inbox}
         defaultBucketId={captureBucketId}
@@ -893,7 +1030,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
         onOpenChange={(o) => !o && setTriageBucketId(null)}
         bucketName={triageBucketId ? bucketNameById(triageBucketId) : ""}
         tasks={driftTasks}
-        canEdit={canEdit}
+        canEdit={api.canEdit}
         onReschedule={(id, days) => api.rescheduleScheduledAt(id, days)}
         onArchive={api.archiveTask}
         onIgnore={api.unscheduleTask}

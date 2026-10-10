@@ -116,7 +116,7 @@ _Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
 - [ ] **TV-U2 — Toolbar, Filter, Display, search** · tasks-v2 block 13 · deps: DS-4, TV-U1, TV-D4 · lane tasks-ui
 - [ ] **TV-U4 — Drag and drop (reorder vs nest, sidebar drops, cross-group)** · tasks-v2 block 14 · deps: TV-U1, DS-4, TV-D4 · lane tasks-ui
 - [ ] **TV-U5 — Multi-select, bulk actions, keyboard, `?` sheet** · tasks-v2 block 15 · deps: TV-U4 · lane tasks-ui
-- [ ] **TV-U6 — Sidebar: bucket colours/reorder, archive, delete-with-tasks, Recently deleted** · tasks-v2 block 16 · deps: DS-3, TV-D4, AT-1 · lane tasks-ui · migration (`buckets.color/archived_at`, batch ids) · note: TV-Q1 hides a deleted bucket for the whole session (`src/features/tasks/hidden-buckets.ts`), so a Restore must call `unhideBucket` or rework that store
+- [~] **TV-U6 — Sidebar: bucket colours/reorder, archive, delete-with-tasks, Recently deleted** · tasks-v2 block 16 · deps: DS-3, TV-D4, AT-1 · lane tasks-ui · migration (`buckets.color/archived_at`, batch ids) · note: TV-Q1 hides a deleted bucket for the whole session (`src/features/tasks/hidden-buckets.ts`), so a Restore must call `unhideBucket` or rework that store
 - [ ] **TV-U7 — Capture v2 (`#tag`, pills, queue switch, filter seed)** · tasks-v2 block 17 · deps: DS-2, TV-T1, TV-D2, TV-U2 · lane tasks-ui
 - [ ] **TV-F4 — In flight (hand-off, check-backs, linked waits)** · tasks-v2 block 18 · deps: TV-F3, TV-U3 · lane focus · migration (`focus_in_flight`)
 - [ ] **TV-F5 — Calendar & Home on one engine** · tasks-v2 block 19 · deps: TV-F2, TV-D3 · lane focus
