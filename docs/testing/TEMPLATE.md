@@ -1,23 +1,14 @@
-# Manual test checklist — <sprint / branch>
+# Sitting checklist — [<ID>] <block name> · PR #<n> · <date> · _(web / desktop / both)_
 
-> Generated <date> · branch `<branch>` · **Live-verified:** <yes / partial / no — note what>.
-> Run top-to-bottom; check off as you go. Each item is a step → what you should see → where.
+> Path: `docs/testing/<ISO-week>/<ID>.md` (e.g. `docs/testing/2026-W41/TV-U5.md`): one file per landed PR, so parallel lanes never edit the same file, and the week folder is what you run in **one sitting** at the surfaces. `/s2` writes it before landing a user-visible change. Items are **questions**, each with the observation the agent expects and a blank for what you actually saw: write the observation even when it matches, because a checklist that only gets ticks confirms instead of discovers. Anything surprising goes to the PR as a comment or becomes a block.
 
-## <Feature / surface 1>
-- [ ] **Do:** … → **Expect:** … _(web / desktop / both)_
-- [ ] **Do:** … → **Expect:** … _(web)_
+**Agent verified live:** <yes / partial / no, and what>
 
-## <Feature / surface 2>
-- [ ] **Do:** … → **Expect:** … _(desktop)_
+- **What happens when** …? → **Expected:** … → **Seen:** ____
+- **What happens when** <the data source errors / the list is empty / you lack permission / two people edit at once / the entity was deleted / there are 500 of them>? → **Expected:** … → **Seen:** ____
+- **Migration / data:** how do you confirm the schema change applied? → **Expected:** … → **Seen:** ____
 
-## Edge cases
-- [ ] **Do:** <empty / error / conflict / large-N / deleted-entity / permission-denied> → **Expect:** …
-
-## Migrations / data
-- [ ] **Do:** <what schema/data changed; how to confirm it applied> → **Expect:** …
-
-## Known gaps / not-yet-testable
-- <anything the agent could not verify, and why>
+**Not verified by the agent:** <what, and why>
 
 ---
-*Convention defined in [AGENTS.md](../../AGENTS.md) → "Working posture" (Wrap). One file per sprint/branch so history is preserved.*
+*Convention: AGENTS.md → "Working posture". Older per-branch checklists live beside the week folders; the gardener archives anything untouched for two weeks.*

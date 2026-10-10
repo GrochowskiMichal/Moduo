@@ -33,6 +33,9 @@
     "format:fix": "biome check --write .",
     "test": "rstest",
     "test:watch": "rstest --watch",
+    "next": "bun ./scripts/next-blocks.ts",
+    "test:hooks": "bash ./scripts/test-hooks.sh",
+    "gen:decisions-index": "bun ./scripts/gen-decisions-index.ts",
     "verify": "bun run typecheck && bun run lint:js && bun run lint:tw && bun run lint:css && bun run test",
     "e2e": "playwright test"
   },
