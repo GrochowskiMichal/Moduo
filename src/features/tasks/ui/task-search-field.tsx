@@ -6,6 +6,7 @@
 import { Search, X } from "lucide-react";
 import { type RefObject, useEffect } from "react";
 import { Button } from "../../../components/ui/button";
+import { IconButton } from "../../../components/ui/icon-button";
 import { Input } from "../../../components/ui/input";
 import { Kbd } from "../../../components/ui/kbd";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
@@ -90,17 +91,16 @@ export function TaskSearchField({
         }}
       />
       {value ? (
-        <button
-          type="button"
-          aria-label="Clear search"
-          className="absolute right-1.5 flex size-icon items-center justify-center rounded-sm text-muted-foreground outline-none transition-colors duration-(--motion-fade) ease-(--ease-out) hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
+        <IconButton
+          icon={X}
+          label="Clear search"
+          tooltip={null}
+          className="absolute right-0 text-muted-foreground hover:text-foreground"
           onClick={() => {
             onValueChange("");
             inputRef.current?.focus();
           }}
-        >
-          <X aria-hidden className="size-icon-xs" />
-        </button>
+        />
       ) : null}
     </div>
   );

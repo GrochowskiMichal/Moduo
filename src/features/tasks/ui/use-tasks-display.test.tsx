@@ -140,8 +140,10 @@ describe("useTasksDisplay", () => {
     expect(result.current.display.layout).toBe("timeline");
   });
 
-  it("All and My tasks group by bucket until told otherwise", () => {
+  it("All groups by project and My tasks by status until told otherwise", () => {
     const { result } = renderHook(() => useTasksDisplay("w1", "all", []));
     expect(result.current.display.group).toBe("bucket");
+    const mine = renderHook(() => useTasksDisplay("w1", "mine", []));
+    expect(mine.result.current.display.group).toBe("status");
   });
 });

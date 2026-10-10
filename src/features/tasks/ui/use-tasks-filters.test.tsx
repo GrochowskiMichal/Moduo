@@ -72,7 +72,7 @@ const api = {
   subtasksByParent: new Map<string, Task[]>(),
 } as unknown as TasksModuleApi;
 
-function Harness({ initial = [] as FilterCondition[] }) {
+function Harness({ initial = [] as FilterCondition[], keep = null as string | null }) {
   const [conditions, setConditions] = useState<FilterCondition[]>(initial);
   const f = useTasksFilters({
     workspaceId: "w1",
@@ -84,6 +84,7 @@ function Harness({ initial = [] as FilterCondition[] }) {
     runtime: null,
     assignees: ASSIGNEES,
     enabled: true,
+    keepTaskId: keep,
   });
   return (
     <TooltipProvider>
@@ -145,6 +146,27 @@ describe("Filter", () => {
     cleanup();
     render(<Harness initial={[{ dimension: "status", operator: "is_not", values: ["todo"] }]} />);
     expect(screen.getByRole("group", { name: "Status is not To do" })).toBeTruthy();
+  });
+
+  it("a deep-linked task stays listed past the filters, which stay as they were", () => {
+    const filters: FilterCondition[] = [
+      { dimension: "priority", operator: "is", values: ["high"] },
+    ];
+    render(<Harness initial={filters} keep="b" />);
+    // In scope order: the linked task joins the one the filter lets through.
+    expect(rows()).toEqual(["Toolbar polish", "Filter chips"]);
+    expect(screen.getByTestId("conditions").textContent).toBe(JSON.stringify(filters));
+    // Searching (or changing the filters) ends it: they decide again.
+    act(() => {
+      fireEvent.keyDown(document.body, { key: "/" });
+    });
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search tasks" }), {
+      target: { value: "polish" },
+    });
+    expect(rows()).toEqual(["Toolbar polish"]);
+    cleanup();
+    render(<Harness initial={filters} />);
+    expect(rows()).toEqual(["Toolbar polish"]);
   });
 
   it("New pre-fills what the filter asks for", () => {

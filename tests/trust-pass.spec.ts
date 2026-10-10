@@ -147,6 +147,16 @@ test("AC1.4 — Won't do tasks are listed by Filter → Status (TV-U2)", async (
   await expect(page.getByRole("button", { name: "Status: Won’t do" })).toBeVisible();
   await page.getByRole("button", { name: "Reopen" }).click();
   await expect.poll(async () => (await taskById(gone.id)).status).toBe("todo");
+  // Leave the shared dev workspace as it was.
+  const at = new Date().toISOString();
+  await rest("service", `tasks?bucket_id=eq.${project.id}`, {
+    method: "PATCH",
+    body: { deleted_at: at },
+  });
+  await rest("service", `buckets?id=eq.${project.id}`, {
+    method: "PATCH",
+    body: { deleted_at: at },
+  });
 });
 
 test("AC1.5 — a skeleton while loading, never “Nothing here yet”", async ({ page }) => {
@@ -206,7 +216,13 @@ test("AC1.8 — moving a parent moves its subtasks", async ({ page }) => {
   });
   await openTasks(page, parent.id);
   await page.getByRole("button", { name: /^Bucket: .*Move to another bucket$/ }).click();
-  await page.getByRole("menuitemradio", { name: `Move here ${tag}` }).click();
+  // Pick by typing: the dev workspace's project list outgrows the window,
+  // and the menu doesn't scroll (a primitive gap, noted for DS-6).
+  const item = page.getByRole("menuitemradio", { name: `Move here ${tag}` });
+  await expect(item).toHaveCount(1);
+  await page.keyboard.type(`Move here ${tag}`);
+  await expect(item).toBeFocused();
+  await page.keyboard.press("Enter");
   await expect.poll(async () => (await taskById(a.id)).bucket_id).toBe(project.id);
   await expect.poll(async () => (await taskById(b.id)).bucket_id).toBe(project.id);
   expect((await taskById(parent.id)).bucket_id).toBe(project.id);

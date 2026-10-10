@@ -342,6 +342,9 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     runtime,
     assignees,
     enabled: mode === "plan",
+    // A deep-linked task stays listed past this scope's filters and search
+    // while it's selected; the link never clears saved filters (TV-U2).
+    keepTaskId: linkedTaskId,
   });
   const scopeTasks = filtering.tasks;
 
@@ -553,10 +556,6 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       setSelectedTaskId(null);
       return;
     }
-    if (external) {
-      const targetTask = tasks.find((t) => t.id === target.taskId);
-      if (targetTask && filtering.hides(targetTask)) filtering.clear();
-    }
     if (!scopeTasksAll.some((t) => t.id === target.taskId)) setSelection(target.scope);
     setSelectedTaskId(target.taskId);
     setRevealRequest((prev) => ({ id: target.taskId, seq: (prev?.seq ?? 0) + 1 }));
@@ -568,8 +567,6 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     tasks,
     buckets,
     inboxId,
-    filtering.hides,
-    filtering.clear,
     scopeTasksAll,
     onUrlTaskIdChange,
   ]);

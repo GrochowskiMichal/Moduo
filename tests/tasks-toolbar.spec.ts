@@ -36,6 +36,21 @@ test.beforeAll(async () => {
   tag = runTag();
 });
 
+/** Projects this run made; soft-deleted at the end so the shared dev
+ *  workspace's project menus don't grow with every run. */
+const created: string[] = [];
+
+test.afterAll(async () => {
+  if (created.length === 0) return;
+  const ids = created.join(",");
+  const at = new Date().toISOString();
+  await rest("service", `tasks?bucket_id=in.(${ids})`, {
+    method: "PATCH",
+    body: { deleted_at: at },
+  });
+  await rest("service", `buckets?id=in.(${ids})`, { method: "PATCH", body: { deleted_at: at } });
+});
+
 /** Local noon `offset` days from today (the row's date is a day). */
 const dayAt = (offset: number) => {
   const now = new Date();
@@ -69,6 +84,7 @@ async function createProject(name: string): Promise<{ id: string }> {
     method: "POST",
     body: { workspace_id: ws.id, owner_id: dev.user.id, name, position: `z${tag}${name}` },
   });
+  created.push(row.id);
   return row;
 }
 
@@ -140,6 +156,39 @@ test("AC11.3 / call 84 — My tasks groups by status, In progress first", async 
   await expect
     .poll(async () => (await groupHeaders(page)).slice(0, 2))
     .toEqual(["In progress", "To do"]);
+});
+
+test("a link into a filtered project lands on its task and keeps both projects' filters", async ({
+  page,
+}) => {
+  const here = await createProject(`Here ${tag}`);
+  const there = await createProject(`There ${tag}`);
+  const start = await createTask({ title: `Start ${tag}`, bucketId: here.id });
+  const target = await createTask({ title: `Linked ${tag}`, bucketId: there.id });
+  // Each project has a saved filter; the one in "There" hides the linked task.
+  const saved = (scope: string, values: string[]) => [
+    `moduo:tasks:view:${ws.id}:${scope}`,
+    JSON.stringify({ filters: [{ dimension: "status", operator: "is", values }] }),
+  ];
+  const prefs = [saved(here.id, ["todo"]), saved(there.id, ["done"])];
+  await page.addInitScript((pairs) => {
+    for (const [key, value] of pairs) window.localStorage.setItem(key, value);
+  }, prefs);
+  await openTasks(page, start.id);
+  await expect(page.getByRole("group", { name: "Status is To do" })).toBeVisible();
+
+  // A notification or chip opens the task in the other project.
+  await page.evaluate((id) => {
+    window.dispatchEvent(new CustomEvent("moduo:entity:open", { detail: { type: "task", id } }));
+  }, target.id);
+  await expect(page.getByRole("textbox", { name: "Task title" })).toHaveValue(target.title);
+  await expect(page.locator(`[role="row"][data-task-id="${target.id}"]`)).toBeVisible();
+  await expect(page.getByRole("group", { name: "Status is Done" })).toBeVisible();
+  // It stays selected (the URL keeps it), and the first project's filter is untouched.
+  await page.waitForTimeout(600);
+  expect(new URL(page.url()).searchParams.get("id")).toBe(target.id);
+  await page.getByRole("button", { name: `Here ${tag} , 1 open`, exact: true }).click();
+  await expect(page.getByRole("group", { name: "Status is To do" })).toBeVisible();
 });
 
 test("AC11.2 — Rows: Detailed adds the status name, remembered per view", async ({ page }) => {

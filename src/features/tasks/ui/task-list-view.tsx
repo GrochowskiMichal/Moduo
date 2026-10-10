@@ -27,6 +27,7 @@ import {
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { Bucket, Task } from "../model";
 import { DEFAULT_ROW_PROPERTIES, rowColumns } from "../row-layout";
+import { nowOn, useToday } from "../use-today";
 import {
   asTaskDropTarget,
   DndBoundary,
@@ -181,7 +182,10 @@ export function TaskListView({
   // Completed tasks Display hides drop out of each group, behind its
   // "N completed · show" line (tasks-v2 §6). The Queue keeps its own rule:
   // done leaves it, and a task checked off there stays until the next load.
+  // The Date groups and "7 days" roll over at midnight.
+  const today = useToday();
   const groups = useMemo(() => {
+    const now = nowOn(today);
     // Sort, then group, so every group keeps the order (the Queue keeps its
     // line-up). Project groups follow the rail; each task is in one group.
     const ordered = orderTasks(topLevelTasks, selection === "today" ? "manual" : order);
@@ -189,9 +193,9 @@ export function TaskListView({
       bucketName: bucketNameById,
       bucketOrder: [...(inbox ? [inbox.id] : []), ...buckets.map((b) => b.id)],
       assignees,
+      now,
     });
     if (selection === "today") return all.map((g) => ({ ...g, hidden: [] as Task[] }));
-    const now = new Date();
     // Kept even when done: staying (checked off or opened in this scope); the
     // selected task and its parent (a deep link or the panel must never point
     // at a row that isn't there, and a subtask nests under its parent); a
@@ -207,6 +211,7 @@ export function TaskListView({
       return { ...g, tasks: revealedGroups.has(g.key) ? g.tasks : shown, hidden };
     });
   }, [
+    today,
     topLevelTasks,
     order,
     groupBy,
@@ -310,7 +315,7 @@ export function TaskListView({
 
   // Flat, visually-ordered list of navigable tasks (skips collapsed groups,
   // includes the children of expanded parents — keyboard order = visual order).
-  // A task listed twice (grouped by tag) is one stop, at its first row.
+  // A task is one stop, at its first row (a guard: every grouping lists it once).
   const visibleTasks = useMemo(() => {
     const out: Task[] = [];
     const seen = new Set<string>();

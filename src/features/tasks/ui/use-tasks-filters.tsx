@@ -46,6 +46,7 @@ import { STATUS_LABELS } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { Tag, Task } from "../model";
 import { takeSearchTokens, taskMatchesQuery } from "../search";
+import { nowOn, useToday } from "../use-today";
 import { AssigneeAvatar } from "./assignee-avatar";
 import { TaskSearchField } from "./task-search-field";
 
@@ -284,8 +285,6 @@ export type TasksFilterControls = {
   activeFilters: ReactNode | undefined;
   /** A filter or a search is narrowing the scope ("No tasks match" when empty). */
   active: boolean;
-  /** Whether filters or search hide this task (a deep link clears them). */
-  hides: (task: Task) => boolean;
   /** Clears every filter and the search. */
   clear: () => void;
   /** What New pre-fills (U2-5). */
@@ -295,7 +294,11 @@ export type TasksFilterControls = {
 /**
  * `scopeTasks` is the scope before filtering (archived tasks only when a
  * Status filter asks for them). `enabled` turns the `/` and `f` keys on
- * (off while the page shows something else, like Execute).
+ * (off while the page shows something else, like Execute). `keepTaskId` (a
+ * deep-linked task while it's selected) stays listed, with its parent, past
+ * the filters and search it arrived under: a link lands on its task without
+ * clearing anyone's saved filters (TV-U2), as Display keeps it past
+ * Completed (TV-U1). Changing the filters or the search ends that.
  */
 export function useTasksFilters({
   workspaceId,
@@ -307,6 +310,7 @@ export function useTasksFilters({
   runtime,
   assignees,
   enabled,
+  keepTaskId = null,
 }: {
   workspaceId: string;
   scope: string;
@@ -317,6 +321,7 @@ export function useTasksFilters({
   runtime: ModuoRuntime | null;
   assignees: readonly Assignee[];
   enabled: boolean;
+  keepTaskId?: string | null;
 }): TasksFilterControls {
   // Search is a live narrowing, not a preference: a new scope starts empty.
   const scopeKey = `${workspaceId}:${scope}`;
@@ -341,6 +346,9 @@ export function useTasksFilters({
   const attachmentsOn = conditions.some((c) => c.dimension === "attachments");
   const attachmentCount = useAttachmentCounts(runtime, workspaceId, attachmentsOn);
 
+  // Today's date keys the context, so "Today" and "This week" roll over at
+  // midnight.
+  const today = useToday();
   const ctx = useMemo<TaskFilterContext>(
     () => ({
       now: new Date(),
@@ -350,19 +358,45 @@ export function useTasksFilters({
       hasSubtasks: (id) => (api.subtasksByParent.get(id)?.length ?? 0) > 0,
       attachmentCount,
     }),
-    [api.tagsByTask, api.queuedTaskIds, api.blockedTaskIds, api.subtasksByParent, attachmentCount],
+    [
+      today,
+      api.tagsByTask,
+      api.queuedTaskIds,
+      api.blockedTaskIds,
+      api.subtasksByParent,
+      attachmentCount,
+    ],
   );
+
+  // The linked task is kept past the filters and search it arrived under;
+  // once you change either, they decide again. Read at render, like the
+  // page's kept Won't do task.
+  const arrivedUnder = useRef<{
+    id: string;
+    conditions: readonly FilterCondition[];
+    query: string;
+  } | null>(null);
+  if (keepTaskId !== (arrivedUnder.current?.id ?? null)) {
+    arrivedUnder.current = keepTaskId ? { id: keepTaskId, conditions, query } : null;
+  }
+  const keeping =
+    arrivedUnder.current &&
+    arrivedUnder.current.conditions === conditions &&
+    arrivedUnder.current.query === query
+      ? arrivedUnder.current.id
+      : null;
 
   const tasks = useMemo(() => {
     const filtered = filterTasks(scopeTasks, conditions, ctx);
-    return query.trim() ? filtered.filter((t) => taskMatchesQuery(t, query)) : filtered;
-  }, [scopeTasks, conditions, ctx, query]);
-
-  const hides = useCallback(
-    (task: Task) =>
-      filterTasks([task], conditions, ctx).length === 0 || !taskMatchesQuery(task, query),
-    [conditions, ctx, query],
-  );
+    const passing = query.trim() ? filtered.filter((t) => taskMatchesQuery(t, query)) : filtered;
+    if (!keeping) return passing;
+    const kept = new Set([keeping]);
+    const parentId = scopeTasks.find((t) => t.id === keeping)?.parentId;
+    if (parentId) kept.add(parentId);
+    if ([...kept].every((id) => passing.some((t) => t.id === id))) return passing;
+    const pass = new Set(passing.map((t) => t.id));
+    return scopeTasks.filter((t) => pass.has(t.id) || kept.has(t.id));
+  }, [scopeTasks, conditions, ctx, query, keeping]);
 
   const tokenContext = useMemo(
     () => ({
@@ -417,7 +451,6 @@ export function useTasksFilters({
   return {
     tasks,
     active: conditions.length > 0 || query.trim() !== "",
-    hides,
     clear,
     seed: useMemo(() => captureSeed(conditions), [conditions]),
     search: (
