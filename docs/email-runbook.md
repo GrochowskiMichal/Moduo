@@ -164,7 +164,7 @@ select vault.create_secret(replace(gen_random_uuid()::text || gen_random_uuid():
 
 All agent steps, each needing Maciej's OK in the session, in this order. The worker goes first: `booking-public` starts queueing the five booking kinds the moment it's deployed, and a worker without their templates only retries them (for up to ~80 minutes).
 
-1. **Worker** (agent, with OK), from the branch that has the booking templates:
+1. **Worker** (agent, with OK), **from `maciej` after TX-5 has merged** (and after TX-4 too, if TX-4 has merged by then). A function deploy replaces the whole bundle, and TX-4 adds its own template to the same registry: a deploy from either task branch drops the other block's kinds, and their queued emails retry for ~80 minutes, then fail. Check first that no newer worker is live (`supabase functions list --project-ref wtoonrvuqumihpkbvwvs`, then compare with the last deploy recorded here):
    ```bash
    supabase functions deploy email-worker --project-ref wtoonrvuqumihpkbvwvs --no-verify-jwt --import-map supabase/functions/deno.json --use-api
    ```

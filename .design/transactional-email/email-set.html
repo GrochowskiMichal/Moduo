@@ -424,7 +424,7 @@ const EMAILS = [
     ],
     why: "You got this email because you booked time with Anna Carter through Moduo.",
     sent: true,
-    notes: ["Today it's four lines of plain text.", "Attaches a calendar file only when Google isn't sending an invite, as on Zoom-only links (Q32).", "The guest's own note is left out on purpose, so the booking form can't be used to send someone spam.", "Times use the zone the guest picked on the booking page (Q37).", "When Moduo Meet ships, the button becomes \"Join call\"."] },
+    notes: ["Today it's four lines of plain text.", "Attaches a calendar file only when Google isn't sending an invite, as on Zoom-only links (Q32).", "The guest's own note is left out on purpose, so the booking form can't be used to send someone spam.", "Times use the zone the guest picked on the booking page (Q37).", "When Moduo Meet ships, the button becomes \"Join call\".", "TX-5 (agent copy, flagged for Maciej): when Google isn't inviting (Zoom-only links), the paragraph is \"30 minutes on Zoom, Warsaw time.\" and the calendar-file chip shows instead of \"Google is sending the calendar invite separately.\""] },
 
   { g: "bookings", id: "C2", name: "Added to a booking (extra guest)", status: "new",
     when: "The booker adds people, and Google isn't sending them an invite (Zoom-only links).",
@@ -440,7 +440,7 @@ const EMAILS = [
     ],
     why: "You got this email because Tom Becker added this address when booking time with Anna Carter.",
     sent: true,
-    notes: ["Today these people get nothing at all on Zoom-only links (Q33).", "No cancel link: only the person who booked can cancel."] },
+    notes: ["Today these people get nothing at all on Zoom-only links (Q33).", "No cancel link: only the person who booked can cancel.", "TX-5 (agent copy, flagged for Maciej): a booker name that isn't a plain name (a link, a domain, digits, other punctuation, more than five words or 50 characters) shows as \"Someone added you: …\", \"Let the person who booked know.\" and \"…because someone added this address…\", so the public booking form can't mail free text to strangers."] },
 
   { g: "bookings", id: "C3", name: "New booking (host)", status: "new",
     when: "A guest books time on one of your links.",
@@ -455,7 +455,7 @@ const EMAILS = [
     ],
     why: "You got this email because someone booked time through your Moduo booking link.",
     settings: true,
-    notes: ["Plus a bell notification. Today the host hears nothing at all (Q30).", "Times are in the host's own zone."] },
+    notes: ["Plus a bell notification. Today the host hears nothing at all (Q30).", "Times are in the host's own zone.", "TX-5 (agent copy, flagged for Maciej): when Google didn't create the event, the last line is \"It's on your Moduo calendar. Reply to this email to reach Tom.\""] },
 
   { g: "bookings", id: "C4", name: "Guest canceled (host)", status: "new",
     when: "A guest uses the cancel link.",
@@ -468,7 +468,7 @@ const EMAILS = [
     ],
     why: "You got this email because a booking on your Moduo booking link was canceled.",
     settings: true,
-    notes: ["Plus a bell notification (Q34)."] },
+    notes: ["Plus a bell notification (Q34).", "TX-5 (agent copy, flagged for Maciej): when Google didn't create the event, \"We took it off your calendar\" (singular)."] },
 
   { g: "bookings", id: "C5", name: "You canceled (guest)", status: "new",
     when: "A guest uses the cancel link.",
