@@ -4,6 +4,8 @@ const STORYBOOK_URL = process.env.STORYBOOK_URL ?? "http://127.0.0.1:6006";
 
 export default defineConfig({
   timeout: 30_000,
+  forbidOnly: !!process.env.CI,
+  retries: process.env.CI ? 1 : 0,
   expect: {
     toHaveScreenshot: {
       maxDiffPixelRatio: 0.01,

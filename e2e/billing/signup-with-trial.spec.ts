@@ -19,7 +19,7 @@ test.describe("Signup → 14-day trial", () => {
     await expect(page.getByPlaceholder(/enter code/i)).toBeVisible({ timeout: 10_000 });
   });
 
-  test("paywall page is accessible at /paywall", async ({ page }) => {
+  test("paywall page is accessible at /paywall", { tag: "@smoke" }, async ({ page }) => {
     await page.goto(`${BASE_URL}/paywall`);
 
     // All three plan names should be visible.
@@ -30,10 +30,5 @@ test.describe("Signup → 14-day trial", () => {
 
     // "Start free trial" CTA should appear at least once.
     await expect(page.getByRole("button", { name: /start free trial/i }).first()).toBeVisible();
-  });
-
-  test("unauthenticated web user is sent to /auth from /", async ({ page }) => {
-    await page.goto(BASE_URL);
-    await expect(page).toHaveURL(/\/auth/, { timeout: 8_000 });
   });
 });

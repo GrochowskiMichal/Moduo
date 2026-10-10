@@ -14,7 +14,7 @@
 import { expect, test } from "@playwright/test";
 import { BASE_URL } from "./helpers";
 
-test.describe("Invite paywall", () => {
+test.describe("Invite paywall", { tag: "@smoke" }, () => {
   test("paywall page renders the Team plan invite features", async ({ page }) => {
     await page.goto(`${BASE_URL}/paywall`);
 
@@ -23,13 +23,11 @@ test.describe("Invite paywall", () => {
     await expect(teamSection).toBeVisible();
   });
 
-  test('UpgradeModal copy contains "Upgrade" when triggered', async ({ page }) => {
-    // Navigate to paywall which itself contains upgrade CTAs.
+  test("paywall offers a trial CTA for each paid plan", async ({ page }) => {
     await page.goto(`${BASE_URL}/paywall`);
 
-    const upgradeButtons = page.getByRole("button", { name: /upgrade/i });
-    // There may be zero or more such buttons depending on auth state.
-    // We just assert the page loaded without error.
-    await expect(page).toHaveURL(`${BASE_URL}/paywall`);
+    for (const plan of ["Pro", "Duo", "Team"]) {
+      await expect(page.getByRole("button", { name: `Start free trial — ${plan}` })).toBeVisible();
+    }
   });
 });
