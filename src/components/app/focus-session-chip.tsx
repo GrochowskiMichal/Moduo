@@ -1,19 +1,36 @@
 import { useNavigate } from "@tanstack/react-router";
-import { Pause } from "lucide-react";
+import { CloudOff, Coffee, Pause, Play } from "lucide-react";
 
-import { useFocusSession } from "../../features/focus/engine";
+import { formatAwaySpan } from "../../features/focus/away-copy";
+import { toggleFocusRunning, useFocusSession } from "../../features/focus/engine";
 import { FocusAwayPrompt } from "../../features/focus/ui/away-prompt";
 import { requestFocusView } from "../../features/focus/view-request";
+import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 
+const buttonFocus =
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background";
+
 /**
- * Quiet chrome indicator for a running Focus session (DF-11). It mirrors the
- * app-level focus engine from anywhere in the app and, on click, takes you back
- * to Focus. It never pauses or stops the clock (the live tracker stays
- * Focus-only per the 2026-06-16 lock); the one thing it answers is "while you
- * were away" (TV-F1, spec §5), so held time can be kept from any screen.
- * Renders nothing when no session is being tracked, unless tracked time is
- * still waiting to be saved.
+ * The running Focus session's timer, in the top bar left of Help (tasks-v3
+ * call 96; it was the bottom-bar chip of DF-11). A session runs whichever
+ * module you're in, so it sits with the global controls (principle 48b).
+ *
+ * Quiet on purpose: the clock in secondary text with a small dot ("18:02";
+ * "Break 4:12" on a pomodoro break), no box until hovered, and the task only in
+ * the tooltip. Hovering swaps the dot for pause (or resume), and a click on the
+ * clock opens Focus. Pausing from here reverses the 2026-06-16 lock that kept
+ * the controls Focus-only (call 96).
+ *
+ * "While you were away" (TV-F1) still waits for an answer from any screen: the
+ * timer reads "Away 42m" and a click asks the question in a popover. Stopped
+ * with tracked time still unsaved, it says so until the retry lands (F1-7).
+ * Renders nothing otherwise.
+ *
+ * At the 1024px minimum window the right of the top bar has room for about
+ * "1:04:12", so the wordy states are shortened below `xl`: a cup for "Break",
+ * "Away" without its length, and an icon for "not saved yet". Their tooltips
+ * and labels always say it in full.
  */
 export function FocusSessionChip() {
   const session = useFocusSession();
@@ -29,11 +46,13 @@ export function FocusSessionChip() {
     return (
       <Tooltip>
         <TooltipTrigger
+          data-slot="focus-timer"
           onClick={openFocus}
           aria-label="Focus time not saved yet · retrying, nothing is lost · click to open"
-          className="flex h-8 items-center gap-1.5 rounded-md bg-card px-2.5 font-sans text-xs text-muted-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          className={`flex h-8 min-w-8 shrink-0 items-center justify-center rounded-md font-sans text-xs text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground xl:px-2 ${buttonFocus}`}
         >
-          Focus time not saved yet
+          <CloudOff className="size-4 xl:hidden" aria-hidden />
+          <span className="hidden xl:inline">Focus time not saved yet</span>
         </TooltipTrigger>
         <TooltipContent>Retrying — nothing is lost · click to open Focus</TooltipContent>
       </Tooltip>
@@ -42,44 +61,89 @@ export function FocusSessionChip() {
   if (!session.taskId) return null;
 
   const label = session.taskTitle || "Untitled";
-  const phase = session.pomodoro ? `${session.phaseLabel} · ` : "";
+  const onBreak = session.pomodoro && session.phase === "break";
+  const phaseTip = session.pomodoro ? ` · ${session.phaseLabel}` : "";
   const state = session.running ? "" : " (paused)";
   const unsaved = session.unsaved ? " · time not saved yet" : "";
-  const tip = `Focus — ${label}${state}${unsaved} · click to open`;
+  const tip = `Focus — ${label}${phaseTip}${state}${unsaved} · click to open`;
+  const awaySpan = session.away ? formatAwaySpan(session.away.awaySeconds) : "";
+  const toggleLabel = session.running ? "Pause Focus" : "Resume Focus";
+  const ToggleIcon = session.running ? Pause : Play;
+
+  const clockClass = `flex h-8 shrink-0 items-center rounded-md pr-1.5 pl-0.5 font-sans text-xs tabular-nums transition-colors duration-(--motion-fade) ease-(--ease-out) group-hover:text-foreground ${buttonFocus}`;
 
   return (
-    <>
+    <div
+      data-slot="focus-timer"
+      className="group flex h-8 shrink-0 items-center rounded-md text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover has-focus-visible:bg-state-hover"
+    >
       <Tooltip>
         <TooltipTrigger
-          onClick={openFocus}
-          aria-label={tip}
-          className="flex h-8 max-w-[16rem] items-center gap-1.5 rounded-md bg-card px-2.5 text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          onClick={() => toggleFocusRunning()}
+          aria-label={toggleLabel}
+          className={`flex size-5 shrink-0 items-center justify-center rounded-sm hover:text-foreground ${buttonFocus}`}
         >
-          {session.running ? (
-            <span
-              className="track-pulse size-1.5 shrink-0 rounded-full bg-muted-foreground"
-              aria-hidden
-            />
-          ) : (
-            <Pause className="size-3 shrink-0 text-muted-foreground" aria-hidden />
-          )}
-          <span className="shrink-0 font-sans text-xs tabular-nums text-foreground">
-            {phase}
-            {formatClock(session.bigClock)}
+          {/* At rest: a dot while it runs (a cup on a narrow break), pause while paused. */}
+          <span className="flex group-hover:hidden group-has-focus-visible:hidden" aria-hidden>
+            {!session.running ? (
+              <Pause className="size-3" />
+            ) : onBreak ? (
+              <>
+                <Coffee className="size-3 xl:hidden" />
+                <span className="hidden size-1.5 rounded-full bg-muted-foreground xl:block" />
+              </>
+            ) : (
+              <span className="size-1.5 rounded-full bg-muted-foreground" />
+            )}
           </span>
-          <span className="min-w-0 flex-1 truncate font-sans text-xs text-muted-foreground">
-            {label}
-          </span>
+          <ToggleIcon
+            className="hidden size-3 group-hover:block group-has-focus-visible:block"
+            aria-hidden
+          />
         </TooltipTrigger>
-        <TooltipContent>{tip}</TooltipContent>
+        <TooltipContent>{toggleLabel}</TooltipContent>
       </Tooltip>
-      {session.away ? <FocusAwayPrompt away={session.away} compact /> : null}
-    </>
+      {session.away ? (
+        <Popover>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <PopoverTrigger
+                aria-label={`You were away ${awaySpan} · ${tip}`}
+                className={`${clockClass} text-foreground`}
+              >
+                Away<span className="hidden xl:inline">&nbsp;{awaySpan}</span>
+              </PopoverTrigger>
+            </TooltipTrigger>
+            <TooltipContent>{tip}</TooltipContent>
+          </Tooltip>
+          <PopoverContent align="end" className="w-80 p-3">
+            <FocusAwayPrompt away={session.away} />
+          </PopoverContent>
+        </Popover>
+      ) : (
+        <Tooltip>
+          <TooltipTrigger onClick={openFocus} aria-label={tip} className={clockClass}>
+            {onBreak ? (
+              <span className="hidden xl:inline">{capitalize(session.phaseLabel)}&nbsp;</span>
+            ) : null}
+            {formatClock(session.bigClock)}
+          </TooltipTrigger>
+          <TooltipContent>{tip}</TooltipContent>
+        </Tooltip>
+      )}
+    </div>
   );
 }
 
-function formatClock(totalSeconds: number): string {
-  const m = Math.floor(totalSeconds / 60);
-  const s = totalSeconds % 60;
-  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+/** "4:12" under an hour, "1:04:12" from an hour on. */
+export function formatClock(totalSeconds: number): string {
+  const seconds = Math.max(0, Math.floor(totalSeconds));
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = String(seconds % 60).padStart(2, "0");
+  return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${m}:${s}`;
+}
+
+function capitalize(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }

@@ -1,6 +1,6 @@
 // The app-wide keyboard-shortcuts help sheet (DF-16 / critique CC-10: there was
 // no shortcuts legend anywhere in the shell). Opened by `?` from anywhere and by
-// the bottom bar's help button. Keys stay in lockstep with the canonical
+// Help → Keyboard shortcuts in the top bar (call 96). Keys stay in lockstep with the canonical
 // `SHORTCUTS` list so they can never drift from what actually fires; the
 // descriptions are hand-written for clarity (the raw labels read "Module 1"…).
 //
