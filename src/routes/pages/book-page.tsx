@@ -29,13 +29,18 @@ import {
 } from "../../features/calendar/booking/public-client";
 import { bookingPublicOrigin } from "../../features/calendar/booking/public-origin";
 import {
+  clockIn,
   type DayPart,
+  dayLongOfKey,
+  dayShortOfKey,
   daysBetween,
   durationPhrase,
   firstName,
   groupByDay,
   groupByPart,
   quickPicks,
+  timeLabel,
+  weekdayShortOfKey,
   zoneKey,
   zonePlace,
 } from "../../features/calendar/booking/sentence";
@@ -43,13 +48,9 @@ import {
   Blank,
   BlankInput,
   Chip,
-  clockIn,
   DayStrip,
-  dayLong,
-  dayShort,
   Fixed,
   Tray,
-  timeLabel,
 } from "../../features/calendar/booking/sentence-ui";
 import { VIDEO_LABEL, type VideoProvider } from "../../features/calendar/booking/video";
 import { cn } from "../../lib/utils";
@@ -66,6 +67,8 @@ type Phase =
       meetLink: string;
       video: VideoProvider;
       guests: string[];
+      /** Google created the event, so its invite reaches the guests (else Moduo's email carries a calendar file). */
+      googleInvites: boolean;
     };
 
 type TrayKind = "video" | "day" | "time" | "zone";
@@ -92,16 +95,24 @@ function initials(name: string): string {
   return (first + last).toUpperCase() || "?";
 }
 
+/**
+ * What the confirmation says is on its way (AC29): a Google invite plus our
+ * short email when Google created the event, else our email with a calendar file.
+ */
+export function confirmationNotice(googleInvites: boolean, email: string): string {
+  return googleInvites
+    ? `A calendar invite from Google and a short email with a way to cancel are on their way to ${email}.`
+    : `A short email with the details and a calendar file is on its way to ${email}.`;
+}
+
 function relativeDay(key: string, todayKey: string): string {
   const diff = daysBetween(todayKey, key);
   if (diff === 0) return "Today";
   if (diff === 1) return "Tomorrow";
   if (diff > 1 && diff < 7) {
-    return new Intl.DateTimeFormat(undefined, { weekday: "short", timeZone: "UTC" }).format(
-      new Date(`${key}T12:00:00Z`),
-    );
+    return weekdayShortOfKey(key);
   }
-  return dayShort(key);
+  return dayShortOfKey(key);
 }
 
 function Page({ children }: { children: ReactNode }) {
@@ -308,13 +319,13 @@ export function BookPage() {
         <Host preview={preview} />
         <section className="flex animate-in flex-col gap-6 fade-in-0 duration-[var(--motion-slow)]">
           <p className={SENTENCE} role="status">
-            You're meeting {host} on <Fixed>{dayLong(key)}</Fixed> at{" "}
+            You're meeting {host} on <Fixed>{dayLongOfKey(key)}</Fixed> at{" "}
             <Fixed>{timeLabel(phase.start, zone)}</Fixed>.
           </p>
           <div className="flex max-w-prose flex-col gap-2 font-sans text-md text-muted-foreground">
             <p>
-              {durationPhrase(preview.durationMinutes)} on {VIDEO_LABEL[phase.video]}. A calendar
-              invite and a short email with a way to cancel are on their way to {email.trim()}.
+              {durationPhrase(preview.durationMinutes)} on {VIDEO_LABEL[phase.video]}.{" "}
+              {confirmationNotice(phase.googleInvites, email.trim())}
             </p>
             {echo(phase.start) ? <p>{echo(phase.start)}</p> : null}
             {phase.guests.length > 0 ? <p>Also invited: {phase.guests.join(", ")}.</p> : null}
@@ -510,6 +521,8 @@ export function BookPage() {
       video:
         res.json.video === "zoom" || res.json.video === "google_meet" ? res.json.video : platform,
       guests: invited.emails,
+      // A function deployed before TX-5 doesn't say; keep the Google wording it always showed.
+      googleInvites: res.json.googleInvites !== false,
     });
     window.scrollTo({ top: 0 });
   };
@@ -555,7 +568,7 @@ export function BookPage() {
           <Blank
             ref={dayBlank}
             label="Day"
-            value={activeDay ? dayLong(activeDay) : null}
+            value={activeDay ? dayLongOfKey(activeDay) : null}
             placeholder="which day"
             open={tray === "day"}
             controls="book-tray"
@@ -638,7 +651,7 @@ export function BookPage() {
                         <Chip
                           key={slot}
                           data-first={index === 0 ? "" : undefined}
-                          aria-label={`${dayLong(zoneKey(new Date(slot), zone))} at ${timeLabel(slot, zone)}`}
+                          aria-label={`${dayLongOfKey(zoneKey(new Date(slot), zone))} at ${timeLabel(slot, zone)}`}
                           onClick={() => pickSlot(slot)}
                         >
                           <span className="text-muted-foreground">
@@ -660,8 +673,8 @@ export function BookPage() {
             {tray === "time" && activeDay ? (
               <Tray
                 id="book-tray"
-                label={`Times on ${dayLong(activeDay)}`}
-                heading={dayLong(activeDay)}
+                label={`Times on ${dayLongOfKey(activeDay)}`}
+                heading={dayLongOfKey(activeDay)}
                 aside={
                   <button
                     type="button"
@@ -891,7 +904,7 @@ export function BookPage() {
               ? "Booking…"
               : nextStep
                 ? nextStep.label
-                : `Book ${start ? `${dayShort(zoneKey(new Date(start), zone))} at ${timeLabel(start, zone)}` : ""}`}
+                : `Book ${start ? `${dayShortOfKey(zoneKey(new Date(start), zone))} at ${timeLabel(start, zone)}` : ""}`}
           </Button>
           <div
             className="flex min-w-0 flex-col gap-1 font-sans text-sm text-muted-foreground"

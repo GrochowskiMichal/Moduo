@@ -1,12 +1,20 @@
-import { describe, expect, test } from "@rstest/core";
+import { describe, expect, it, test } from "@rstest/core";
 import {
+  clockIn,
+  dayLong,
+  dayLongOfKey,
   dayPart,
+  dayPartsOfKey,
+  dayShortOfKey,
   daysBetween,
   durationPhrase,
   firstName,
   groupByDay,
   groupByPart,
   quickPicks,
+  time24,
+  timeLabel,
+  weekdayShortOfKey,
   zoneKey,
   zonePlace,
 } from "./sentence";
@@ -61,5 +69,29 @@ describe("booking sentence helpers", () => {
     expect(zonePlace("America/New_York")).toBe("New York");
     expect(zonePlace("UTC")).toBe("UTC");
     expect(daysBetween("2026-10-30", "2026-11-02")).toBe(3);
+  });
+});
+
+describe("dates as Moduo writes them (page and emails)", () => {
+  const MEETING = "2026-10-16T12:00:00Z";
+
+  it("writes day before month and a 24-hour clock, whatever the reader's locale", () => {
+    expect(dayLongOfKey("2026-10-16")).toBe("Friday 16 October");
+    expect(dayShortOfKey("2026-10-16")).toBe("Fri 16 Oct");
+    expect(weekdayShortOfKey("2026-10-16")).toBe("Fri");
+    expect(dayPartsOfKey("2026-10-16")).toEqual({ weekday: "Fri", day: "16", month: "Oct" });
+    expect(timeLabel(MEETING, "Europe/Warsaw")).toBe("14:00");
+    expect(timeLabel("2026-10-16T21:05:00Z", "Europe/Warsaw")).toBe("23:05");
+  });
+
+  it("matches what the emails write for the same instant", () => {
+    const at = new Date(MEETING);
+    expect(dayLong(at, "Europe/Warsaw")).toBe(dayLongOfKey(zoneKey(at, "Europe/Warsaw")));
+    expect(time24(at, "Europe/Warsaw")).toBe(timeLabel(MEETING, "Europe/Warsaw"));
+  });
+
+  it("reads a clock in a zone, and stays quiet for one it doesn't know", () => {
+    expect(clockIn("Asia/Tokyo", new Date(MEETING))).toBe("21:00");
+    expect(clockIn("Mars/Olympus")).toBe("");
   });
 });
