@@ -25,6 +25,7 @@ import {
   RELATION_KINDS,
   SYNCABLE_PROVIDERS,
   TASK_STATUSES,
+  WAITLIST_ROW_SOURCES,
   WAITLIST_SOURCES,
   WAITLIST_STATUSES,
   WORKSPACE_ROLES,
@@ -112,8 +113,11 @@ describe("vocabulary value sets", () => {
 
   it("waitlist vocabularies pin the landing CTA sources and row statuses", () => {
     expect(WAITLIST_SOURCES).toEqual(["nav", "hero", "close", "footer"]);
-    expect(WAITLIST_STATUSES).toEqual(["pending", "confirmed", "cancelled"]);
+    expect(WAITLIST_ROW_SOURCES).toEqual(["nav", "hero", "close", "footer", "manual"]);
+    expect(WAITLIST_STATUSES).toEqual(["pending", "confirmed", "cancelled", "invited"]);
     expect(isWaitlistSource("hero")).toBe(true);
+    // A manual invite is a row source only; the landing can't claim it.
+    expect(isWaitlistSource("manual")).toBe(false);
     expect(isWaitlistSource("sidebar")).toBe(false);
     expect(isWaitlistSource(undefined)).toBe(false);
   });

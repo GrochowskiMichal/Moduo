@@ -553,11 +553,13 @@ export const webRuntime: ModuoRuntime = {
       try {
         const { error } = await supabaseClient.auth.signInWithOtp({
           email,
-          // Invite-only: sign-ups are off on the Supabase project, so only confirmed
-          // users get a code. A dashboard invitee is confirmed by clicking the invite
-          // link once; before that, GoTrue routes them through sign-up and refuses
-          // ("Signups not allowed for this instance"). Never create a user from here.
-          options: { shouldCreateUser: false },
+          // Invite-only (TX-4): a first sign-in creates the account, and Supabase's
+          // before-user-created hook (public.hook_before_user_created) lets that
+          // happen only for an invited address; anyone else is refused with
+          // `invite_only` and no account or email. Existing users never reach the
+          // hook. Until sign-ups are switched on, Auth refuses new addresses as
+          // `signup_disabled` (otp-send-error.ts has the copy for each).
+          options: { shouldCreateUser: true },
         });
         if (error) return { data: {}, error: toOtpSendError(error) };
         return { data: {}, error: null };

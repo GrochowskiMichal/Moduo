@@ -374,9 +374,11 @@ export const inviteStatusSchema = z.enum(INVITE_STATUSES);
 
 // ---------------------------------------------------------------------------
 // Landing waitlist — public.waitlist.source / .status (CHECKs in
-// 20261001160000 + 20261001170000 waitlist migrations). Source = which landing CTA.
+// 20261010150000_tx4_invite_only_gate.sql; the join function's source list in
+// 20261001170000_waitlist_footer_source.sql).
 // ---------------------------------------------------------------------------
 
+/** The landing CTAs a person can join from: what `waitlist-join` / `waitlist_join()` accept. */
 export const WAITLIST_SOURCES = ["nav", "hero", "close", "footer"] as const;
 export type WaitlistSource = (typeof WAITLIST_SOURCES)[number];
 export const waitlistSourceSchema = z.enum(WAITLIST_SOURCES);
@@ -385,7 +387,17 @@ export function isWaitlistSource(input: unknown): input is WaitlistSource {
   return waitlistSourceSchema.safeParse(input).success;
 }
 
-export const WAITLIST_STATUSES = ["pending", "confirmed", "cancelled"] as const;
+/**
+ * Every source a waitlist row can have (the CHECK): the landing CTAs plus
+ * `manual`, a person invited by `waitlist_invite_email()` without joining
+ * (TX-4). Never accepted from the landing.
+ */
+export const WAITLIST_ROW_SOURCES = [...WAITLIST_SOURCES, "manual"] as const;
+export type WaitlistRowSource = (typeof WAITLIST_ROW_SOURCES)[number];
+export const waitlistRowSourceSchema = z.enum(WAITLIST_ROW_SOURCES);
+
+/** `invited` (TX-4): the person may sign up; set in the dashboard or by the waitlist_invite_* helpers. */
+export const WAITLIST_STATUSES = ["pending", "confirmed", "cancelled", "invited"] as const;
 export type WaitlistStatus = (typeof WAITLIST_STATUSES)[number];
 export const waitlistStatusSchema = z.enum(WAITLIST_STATUSES);
 
@@ -473,6 +485,24 @@ export const emailSuppressionReasonSchema = z.enum(EMAIL_SUPPRESSION_REASONS);
 export function isEmailSuppressionReason(input: unknown): input is EmailSuppressionReason {
   return emailSuppressionReasonSchema.safeParse(input).success;
 }
+
+/**
+ * Build-updates subscriptions (T21), public.email_subscriptions. TX-4 creates
+ * the table so a waitlist person's build-updates request survives their
+ * sign-up (AC22); TX-8 and TX-10 add confirming, Settings and unsubscribing.
+ * CHECKs in 20261010150000_tx4_invite_only_gate.sql.
+ */
+export const EMAIL_SUBSCRIPTION_TOPICS = ["build_updates"] as const;
+export type EmailSubscriptionTopic = (typeof EMAIL_SUBSCRIPTION_TOPICS)[number];
+export const emailSubscriptionTopicSchema = z.enum(EMAIL_SUBSCRIPTION_TOPICS);
+
+export const EMAIL_SUBSCRIPTION_STATUSES = ["pending", "subscribed", "unsubscribed"] as const;
+export type EmailSubscriptionStatus = (typeof EMAIL_SUBSCRIPTION_STATUSES)[number];
+export const emailSubscriptionStatusSchema = z.enum(EMAIL_SUBSCRIPTION_STATUSES);
+
+export const EMAIL_SUBSCRIPTION_SOURCES = ["waitlist", "settings"] as const;
+export type EmailSubscriptionSource = (typeof EMAIL_SUBSCRIPTION_SOURCES)[number];
+export const emailSubscriptionSourceSchema = z.enum(EMAIL_SUBSCRIPTION_SOURCES);
 
 // ---------------------------------------------------------------------------
 // Email accounts — provider/status vocabularies.

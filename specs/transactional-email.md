@@ -1,6 +1,6 @@
 # Spec: Transactional email (every email Moduo sends)
 
-> Status: **In progress — TX-1 done 2026-10-08; TX-2 built and merged into maciej 2026-10-08 (PR #310), going live per [docs/email-runbook.md](../docs/email-runbook.md) once the app promotion puts the logo files on app.moduo.app and the policy lines (PR #319) are on moduo.app; TX-3 built and live 2026-10-09 (PR #321: worker + webhook deployed, migration applied, outbox test sent); the Resend webhook is Maciej's runbook §TX-3 step 4** · Owner: maciej · Planned 2026-10-07/08 (`/s1`, session "[Platform] Transactional email system plan")
+> Status: **In progress — TX-1 done 2026-10-08; TX-2 built and merged into maciej 2026-10-08 (PR #310), going live per [docs/email-runbook.md](../docs/email-runbook.md) once the app promotion puts the logo files on app.moduo.app and the policy lines (PR #319) are on moduo.app; TX-3 built and live 2026-10-09 (PR #321: worker + webhook deployed, migration applied, outbox test sent); the Resend webhook is Maciej's runbook §TX-3 step 4; TX-4 built 2026-10-10 (PR #348), going live per runbook §TX-4** · Owner: maciej · Planned 2026-10-07/08 (`/s1`, session "[Platform] Transactional email system plan")
 > **The ratified copy and look of every email is [`.design/transactional-email/email-set.html`](../.design/transactional-email/email-set.html)** (open it in a browser; also published as the private artifact "Moduo email set"). It is the source of truth for subjects, preheaders, body copy, footers and the shell. This spec is the execution contract: behavior, triggers, data, acceptance criteria, tests and blocks. Do not restate or re-word the copy here; if a block needs a copy change, change the HTML file and say so in the block report.
 
 ## Scope
@@ -168,7 +168,7 @@ Sign-in countdown and copy (TX-2), invite-only message (TX-4), booking page copy
 - **AC19** — If any sign-in code fails, or 3 or more emails fail within 10 minutes, hello@ gets one alert email (at most one per 30 minutes).
 
 **Gate + waitlist invite (TX-4)**
-- **AC20** — An address that is invited (waitlist `invited`, a pending unexpired workspace invite, an active founder grant, or a founder) can sign in with a code and gets an account; any other address sees the invite-only message and no account or email is created.
+- **AC20** — An address that is invited (waitlist `invited`, a pending unexpired workspace invite, an active founder grant, or a founder) can sign in with a code and gets an account; any other address sees the invite-only message and no account or email is created. *(TX-4 built the waitlist, workspace-invite and founder sources; the founder-grant source lands with `plan_grants` in TX-9b.)*
 - **AC21** — Setting a waitlist row to `invited` in the dashboard sends B1 exactly once; `waitlist_invite_next(n)` invites the n oldest pending rows (max 50); `waitlist_invite_email(addr)` invites an address not on the list; `waitlist_resend_invite(addr)` sends it again.
 - **AC22** — When an invited person's account is created, their waitlist row is deleted and any build-updates choice is kept.
 - **AC23** — Invited rows unused 12 months after `invited_at` are deleted.

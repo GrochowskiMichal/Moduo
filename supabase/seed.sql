@@ -26,5 +26,9 @@ begin
     values (gen_random_uuid(), uid, uid::text,
       jsonb_build_object('sub', uid::text, 'email', 'dev@moduo.local', 'email_verified', true),
       'email', now(), now(), now());
+    -- New accounts start without a password (TX-4's auth_users_no_password
+    -- trigger, BEFORE INSERT only), so the local test password is set afterwards.
+    update auth.users set encrypted_password = extensions.crypt('localdev', extensions.gen_salt('bf'))
+     where id = uid;
   end if;
 end $$;

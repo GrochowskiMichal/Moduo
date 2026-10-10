@@ -6,6 +6,7 @@ import {
   formatCountdown,
   OTP_INVITE_ONLY_MESSAGE,
   OTP_SEND_FAILED_MESSAGE,
+  OTP_SIGNUPS_OFF_MESSAGE,
   OTP_TOO_MANY_MESSAGE,
   OTP_VALID_MINUTES,
 } from "./otp-send-error";
@@ -59,14 +60,23 @@ describe("describeOtpSendError", () => {
     }
   });
 
-  it("keeps the invite-only guidance for an unconfirmed address", () => {
+  it("shows the invite-only line for an address nobody invited", () => {
+    // The before-user-created hook's refusal (TX-4).
+    expect(describeOtpSendError({ message: "invite_only", status: 403 })).toEqual({
+      kind: "message",
+      message: OTP_INVITE_ONLY_MESSAGE,
+    });
+    // Sign-ups still off on the project: a dashboard invitee still needs the link hint.
     expect(
       describeOtpSendError({
         message: "Signups not allowed for this instance",
         code: "signup_disabled",
         status: 422,
       }),
-    ).toEqual({ kind: "message", message: OTP_INVITE_ONLY_MESSAGE });
+    ).toEqual({ kind: "message", message: OTP_SIGNUPS_OFF_MESSAGE });
+    expect(OTP_INVITE_ONLY_MESSAGE).toBe(
+      "Moduo is invite-only right now. Join the waitlist at moduo.app, or ask the person who invited you to use this address.",
+    );
   });
 
   it("passes anything else through", () => {
