@@ -62,3 +62,37 @@ describe("DateField saves once", () => {
     expect(calls).toEqual([null]);
   });
 });
+
+describe("DateField Esc", () => {
+  it("Esc drops the draft: nothing is written", () => {
+    const calls = setup({ withTime: true, value: new Date(2026, 9, 9, 9, 0) });
+    const time = screen.getByLabelText("Time");
+    fireEvent.change(time, { target: { value: "10:30" } });
+    fireEvent.keyDown(time, { key: "Escape" });
+    expect(calls).toHaveLength(0);
+    expect(screen.queryByLabelText("Time")).toBeNull();
+  });
+});
+
+describe("DateField closes once", () => {
+  it("a second close in the same turn (focus leaving as it unmounts) writes nothing more", () => {
+    const calls: Array<Date | null> = [];
+    render(
+      <DateField
+        value={new Date(2026, 9, 9, 9, 0)}
+        onChange={(d) => calls.push(d)}
+        withTime
+        defaultOpen
+        aria-label="When"
+      />,
+    );
+    const time = screen.getByLabelText("Time");
+    fireEvent.change(time, { target: { value: "10:30" } });
+    // Enter saves and closes; the input losing focus as the picker unmounts
+    // must not save the same draft again.
+    fireEvent.keyDown(time, { key: "Enter" });
+    fireEvent.blur(time);
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(calls).toHaveLength(1);
+  });
+});

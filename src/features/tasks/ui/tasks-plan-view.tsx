@@ -367,19 +367,10 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   // Where a captured task lands: the selected bucket, else Inbox.
   const captureBucketId =
     isAll || selection === "today" ? inboxId : selection === "inbox" ? inboxId : selection;
-  // New in Focus or the Queue lands in Up next (TV-P0, AC1.9): created, then
+  // New in Focus or the Queue lands in Up next (TV-P0, AC1.9): created and
   // queued at the end of my line-up. The top of Up next is TV-U14's (call 90).
   const captureQueues = mode === "execute" || selection === "today";
-  const createCaptured = useCallback(
-    (fields: Parameters<TasksModuleApi["createTask"]>[0]) => {
-      const created = api.createTask(fields);
-      if (!captureQueues) return;
-      void created.then((task) => {
-        if (task) api.addToQueue(task.id);
-      });
-    },
-    [api, captureQueues],
-  );
+  const createCaptured = captureQueues ? api.createQueuedTask : api.createTask;
 
   const totalOpenCount = useMemo(
     () => tasks.filter((t) => t.status !== "done" && t.status !== "archived").length,

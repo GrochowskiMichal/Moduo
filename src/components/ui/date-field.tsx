@@ -46,7 +46,8 @@ const sameMoment = (a: Date | null, b: Date | null) =>
  * The editing state behind a date picker that saves once (TV-P0). A date-only
  * pick saves and closes at once. With a time, the day and the time are a
  * draft while the picker is open, and `close()` saves it in one change — so
- * typing "10:30" is one write, not four. `close` is what the popover's
+ * typing "10:30" is one write, not four; Esc drops the draft (`cancel`, from
+ * the content's `onEscapeKeyDown`). `close` is what the popover's
  * `onOpenChange(false)` calls; `done` closes the popover itself.
  */
 function useDateDraft({
@@ -63,17 +64,29 @@ function useDateDraft({
   open: boolean;
   done: () => void;
 }) {
-  // `undefined` = nothing edited since the picker opened.
-  const [draft, setDraft] = React.useState<Date | null | undefined>(undefined);
+  // `undefined` = nothing edited since the picker opened. The ref mirrors it
+  // so a second close in the same turn (Radix's focus-outside firing as the
+  // content unmounts, on the previous render's handlers) finds nothing left.
+  const [draft, setDraftState] = React.useState<Date | null | undefined>(undefined);
+  const draftRef = React.useRef<Date | null | undefined>(undefined);
+  const setDraft = (next: Date | null | undefined) => {
+    draftRef.current = next;
+    setDraftState(next);
+  };
   React.useEffect(() => {
-    if (!open) setDraft(undefined);
+    if (!open) {
+      draftRef.current = undefined;
+      setDraftState(undefined);
+    }
   }, [open]);
   const shown = draft === undefined ? value : draft;
   const timeStr = shown ? format(shown, "HH:mm") : "09:00";
 
   const close = () => {
-    if (draft !== undefined && !sameMoment(draft, value)) onChange(draft);
-    setDraft(undefined);
+    const pending = draftRef.current;
+    draftRef.current = undefined;
+    if (pending !== undefined && !sameMoment(pending, value)) onChange(pending);
+    setDraftState(undefined);
     done();
   };
 
@@ -110,7 +123,10 @@ function useDateDraft({
     done();
   };
 
-  return { shown, timeStr, withTime, close, pickDay, setTime, clear };
+  /** Esc: drop the draft, so the close that follows saves nothing. */
+  const cancel = () => setDraft(undefined);
+
+  return { shown, timeStr, withTime, close, pickDay, setTime, clear, cancel };
 }
 
 type DateDraft = ReturnType<typeof useDateDraft>;
@@ -236,7 +252,7 @@ function DateField({
           </Button>
         )}
       </PopoverTrigger>
-      <PopoverContent className="w-auto p-0" align="start">
+      <PopoverContent className="w-auto p-0" align="start" onEscapeKeyDown={draft.cancel}>
         <DatePickerPanel draft={draft} />
       </PopoverContent>
     </Popover>

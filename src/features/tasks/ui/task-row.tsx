@@ -124,6 +124,8 @@ export function TaskRow({
   api,
 }: Props) {
   const done = task.status === "done";
+  // A Won't do task kept in view (TV-P0) reads closed, like a done one.
+  const closed = done || task.status === "archived";
   const queued = api.queuedTaskIds.has(task.id);
   // Menu items that hand focus to something in the row (the title editor, a
   // chip's popover) run once the context menu has closed: Radix returns focus
@@ -224,7 +226,7 @@ export function TaskRow({
       ) : (
         <div
           data-slot="row-title"
-          className={cn("flex min-w-0 flex-1 items-center gap-2.5", done && "opacity-40")}
+          className={cn("flex min-w-0 flex-1 items-center gap-2.5", closed && "opacity-40")}
         >
           <button
             type="button"
@@ -237,7 +239,7 @@ export function TaskRow({
               "min-w-0 truncate text-left font-sans text-md",
               // Done dims through the cell's opacity, like the comp; a muted
               // colour on top would dim it twice.
-              done
+              closed
                 ? "text-foreground line-through"
                 : blocked
                   ? "text-muted-foreground"
@@ -281,7 +283,7 @@ export function TaskRow({
           the list, and an empty cell still holds its place. */}
       <div
         data-slot="row-columns"
-        className={cn("flex shrink-0 items-center gap-3", done && "opacity-40")}
+        className={cn("flex shrink-0 items-center gap-3", closed && "opacity-40")}
       >
         {columns.priority ? (
           <span data-col="priority" className="flex w-icon-sm shrink-0 items-center justify-center">
@@ -573,6 +575,7 @@ function DateCell({
         className="w-auto p-0"
         onClick={(e) => e.stopPropagation()}
         onCloseAutoFocus={keepListFocus}
+        onEscapeKeyDown={draft.cancel}
         align="end"
       >
         <p className="px-3 pt-2.5 font-sans text-xs font-medium text-muted-foreground">

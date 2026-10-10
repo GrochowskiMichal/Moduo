@@ -67,9 +67,10 @@ export function activityLine(entry: Pick<ActivityEntry, "op" | "payload">): stri
       const from = str(p.from) as TaskStatus | null;
       const to = str(p.to) as TaskStatus | null;
       if (to === "done") return "completed this";
-      if (to === "archived") return "archived this";
+      // "archived" reads "Won't do" everywhere (calls 21, 23).
+      if (to === "archived") return "marked this Won’t do";
       if (to === "in_progress") return "started this";
-      if (from === "done" && to === "todo") return "reopened this";
+      if ((from === "done" || from === "archived") && to === "todo") return "reopened this";
       return to ? `set this to ${STATUS_LABELS[to] ?? to}` : "changed the status";
     }
     case "tasks.reschedule": {

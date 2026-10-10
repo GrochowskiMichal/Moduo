@@ -56,7 +56,10 @@ describe("activityLine", () => {
       "reopened this",
     );
     expect(activityLine(entry("tasks.set_status", { from: "todo", to: "archived" }))).toBe(
-      "archived this",
+      "marked this Won’t do",
+    );
+    expect(activityLine(entry("tasks.set_status", { from: "archived", to: "todo" }))).toBe(
+      "reopened this",
     );
     expect(activityLine(entry("tasks.set_status", { from: "todo", to: "in_progress" }))).toBe(
       "started this",

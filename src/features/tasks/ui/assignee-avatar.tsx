@@ -16,7 +16,8 @@ export function AssigneeAvatar({
   size?: "sm" | "icon";
   className?: string;
 }) {
-  const initials = assignee ? initialsOf(assignee.fullName ?? assignee.name) : "?";
+  // Initials come from the person's own name, never the picker's "Me".
+  const initials = assignee?.fullName ? initialsOf(assignee.fullName) : "?";
   return (
     <Avatar size={size} className={cn(size === "sm" && "size-5", className)}>
       {assignee?.avatarUrl ? <AvatarImage src={assignee.avatarUrl} alt="" /> : null}

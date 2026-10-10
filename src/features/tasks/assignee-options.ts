@@ -10,7 +10,8 @@ export type Assignee = {
   userId: string;
   /** How pickers name them: "Me" for you. */
   name: string;
-  /** Their own name, for initials ("Me" must never become "M", call 43). */
+  /** Their own name, for initials ("Me" must never become "M", call 43);
+   *  empty when they haven't set one (the avatar then shows "?"). */
   fullName: string;
   avatarUrl: string | null;
   isMe: boolean;
@@ -28,7 +29,7 @@ export function toAssignees(members: WorkspaceMember[], userId: string | null): 
     .map((m) => ({
       userId: m.userId,
       name: m.userId === userId ? "Me" : m.displayName?.trim() || "Member",
-      fullName: m.displayName?.trim() || "Member",
+      fullName: m.displayName?.trim() || "",
       avatarUrl: m.avatarUrl,
       isMe: m.userId === userId,
       canTakeTasks: canBeAssignee(m.perms),

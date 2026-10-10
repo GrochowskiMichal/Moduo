@@ -227,19 +227,35 @@ export function TaskListView({
   // Reset collapse state when the scope/grouping changes. For bucket grouping,
   // open one group by default (per the "one open by default" rule); otherwise
   // everything is expanded.
+  // The selected task's group stays open too (TV-P0): a deep link into All
+  // lands before the bucket grouping does, and must not be folded away.
   const groupSignature = `${selection}:${groupBy}:${groups.map((g) => g.key).join(",")}`;
   const initRef = useRef("");
+  const selectedForInitRef = useRef(selectedId);
+  selectedForInitRef.current = selectedId;
   useEffect(() => {
     if (initRef.current === groupSignature) return;
     initRef.current = groupSignature;
     if (groupBy === "bucket" && groups.length > 1) {
-      setCollapsed(new Set(groups.slice(1).map((g) => g.key)));
+      const selected = selectedForInitRef.current;
+      const parentId = selected ? api.tasks.find((t) => t.id === selected)?.parentId : null;
+      const holding = groups.find((g) =>
+        g.tasks.some((t) => t.id === selected || (parentId && t.id === parentId)),
+      )?.key;
+      setCollapsed(
+        new Set(
+          groups
+            .slice(1)
+            .map((g) => g.key)
+            .filter((key) => key !== holding),
+        ),
+      );
     } else {
       setCollapsed(new Set());
     }
     setExpandedParents(new Set());
     setRevealedGroups(NO_IDS);
-  }, [groupSignature, groupBy, groups]);
+  }, [groupSignature, groupBy, groups, api.tasks]);
 
   const toggleRevealGroup = useCallback((key: string) => {
     setRevealedGroups((prev) => {

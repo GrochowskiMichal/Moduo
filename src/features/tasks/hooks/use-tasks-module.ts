@@ -685,31 +685,25 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
   );
 
   /**
-   * Capture a new task straight into my queue (Focus's empty-queue affordance,
-   * DF-11). Created in the Inbox, assigned to me, shown queued at once; once
-   * the server has it, it's added to the end of my queue.
+   * Create a task and line it up at the end of my queue, in one gesture: shown
+   * queued at once; once the server has the task, it's added to the end of my
+   * queue (behind earlier queue ops). New in Focus or the Queue lands in Up next
+   * this way (TV-P0, AC1.9). An assignee left unchosen is me.
    */
-  const captureToQueue = useCallback(
-    (title: string) => {
-      const trimmed = title.trim();
-      if (!trimmed) return;
-      if (!runtime || !workspaceId || !canEdit || !inbox || !userId) {
+  const createQueuedTask = useCallback(
+    (fields: Omit<NewTaskFields, "workspaceId" | "position">) => {
+      if (!fields.title.trim()) return;
+      if (!runtime || !workspaceId || !canEdit || !userId) {
         if (!canEdit) toast.error("You don't have edit access to Tasks in this workspace.");
         return;
       }
       const rt = runtime;
       const ws = workspaceId;
       const me = userId;
-      const bucketId = inbox.id;
-      const position = endPosition(liveTasks.filter((t) => t.bucketId === bucketId));
-      const optimistic = makeTask({
-        bucketId,
-        title: trimmed,
-        workspaceId: ws,
-        position,
-        assigneeId: me,
-      });
+      const position = endPosition(liveTasks.filter((t) => t.bucketId === fields.bucketId));
+      const optimistic = makeTask({ ...fields, workspaceId: ws, position });
       optimistic.creatorId = me;
+      if (optimistic.assigneeId === "") optimistic.assigneeId = me;
       const tempId = `tmp-${crypto.randomUUID()}`;
       optimistic.id = tempId;
       const placeholder = optimisticEntry(tempId, endOfQueue(myQueueEntries));
@@ -738,13 +732,25 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
       runtime,
       workspaceId,
       canEdit,
-      inbox,
       userId,
       liveTasks,
       myQueueEntries,
       optimisticEntry,
       sendQueueOp,
     ],
+  );
+
+  /**
+   * Capture a new task straight into my queue (Focus's empty-queue affordance,
+   * DF-11): in the Inbox, assigned to me, queued at the end.
+   */
+  const captureToQueue = useCallback(
+    (title: string) => {
+      const trimmed = title.trim();
+      if (!trimmed || !inbox) return;
+      createQueuedTask({ bucketId: inbox.id, title: trimmed, assigneeId: userId });
+    },
+    [inbox, userId, createQueuedTask],
   );
 
   const patchTask = useCallback(
@@ -1641,6 +1647,7 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     queueCount,
     reload: load,
     createTask,
+    createQueuedTask,
     captureToQueue,
     patchTask,
     toggleDone,
