@@ -13,6 +13,8 @@ How Moduo's own emails are switched on, checked and rolled back. The build plan 
 | Logos | `https://app.moduo.app/email/{lockup,mark}-{light,dark}@2x.png` | From BRAND-1's export in `public/email/`. Served once the web app is deployed with them. |
 | Queue | `public.email_outbox` + Edge Function `email-worker` | Since TX-3. Features call `email_enqueue(...)`; an insert trigger and the pg_cron job `email-outbox-worker` (every minute) kick the worker over pg_net. One run at a time (`email_outbox_runner` lease). Temporary failures are tried again after 1, 5, 15 and 60 minutes, then marked failed. Every send carries `Idempotency-Key = dedupe_key`. |
 | Suppressions | `public.email_suppressions` + Edge Function `resend-webhook` | Since TX-3. Hard bounces and spam complaints from Resend; such an address gets nothing more except sign-in codes. |
+| Invite-only gate | Postgres auth hook `public.hook_before_user_created` | Since TX-4. Auth asks it before creating any user; it lets in an address that is invited on the waitlist, has a pending unexpired workspace invite, or is in `founder_emails`, and refuses anyone else with `invite_only`. Existing users never pass through it. |
+| Waitlist invites | `public.waitlist` + the `waitlist_invite_*` helpers | Since TX-4. A row becoming `invited` queues B1 once. The row is deleted when the account is created (a build-updates request moves to `email_subscriptions`); unused invites go 12 months after `invited_at` (pg_cron `waitlist-purge`, 03:29 UTC). |
 | Alerts | pg_cron `email-outbox-health` (every 5 minutes) | One `ops_alert` to hello@ when a sign-in code failed or 3+ emails failed in 10 minutes (counting emails still retrying after two failures); at most one per 30 minutes. If Resend itself is down the alert can't go out either: Resend's status page is the backstop. |
 
 ### Secrets (Edge Functions)
@@ -159,3 +161,45 @@ delete from vault.secrets where name = 'email_worker_secret';
 select vault.create_secret(replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', ''), 'email_worker_secret');
 ```
 
+
+## TX-4 · Invite-only gate + waitlist invites: going live
+
+Steps 1–2 are agent steps that need Maciej's OK in the session; steps 4–7 are Maciej's, in the Supabase dashboard (project `wtoonrvuqumihpkbvwvs`). Nothing here touches the TX-2 steps above, but step 6 waits for them: once sign-ups are on, a new person's first code is a `signup` email, which only `auth-email-hook` renders as A1.
+
+1. **Worker first** (agent, with OK). The B1 template (`waitlist_invite`) has to be in the deployed worker before anything can queue it:
+   ```bash
+   supabase functions deploy email-worker --project-ref wtoonrvuqumihpkbvwvs --no-verify-jwt --import-map supabase/functions/deno.json --use-api
+   ```
+   then `bun run functions:reconcile`.
+2. **Migration** `20261010150000_tx4_invite_only_gate.sql` (agent, with OK). It queues nothing by itself (no row is `invited` yet). Check:
+   ```sql
+   select public.hook_before_user_created('{"user":{"email":"nobody@example.com"}}');
+   select jobname, schedule from cron.job where jobname = 'waitlist-purge';
+   ```
+   Expect `{"error": {"message": "invite_only", "http_code": 403}}` and one row `29 3 * * *`.
+3. **The app that asks to create accounts.** The sign-in screen now sends `shouldCreateUser: true`. With sign-ups still off that changes nothing, so it can ship any time before step 6: web through develop → `staging-app` → "Promote to production" → `app`; the Mac app with the next build. An older build keeps asking "never create a user", so an invitee on it is refused until they update.
+4. **Switch the hook on** (Maciej). Authentication → Auth Hooks → Add hook → "Before User Created" → type Postgres → schema `public`, function `hook_before_user_created` → Enable → save. Existing users notice nothing.
+5. **See it refuse** (Maciej), still with sign-ups off. Authentication → Users → "Send invitation" to an address nobody invited (a throwaway). Expect the dashboard to refuse it with `invite_only`, and no new row under Users. (A dashboard invitation goes through the hook; "Add user → Create new user" does not, so don't use that to test.)
+6. **Sign-ups on** (Maciej), once TX-2 is live (its steps 1–8). Authentication → Sign In / Providers → "Allow new users to sign up" on → save. Then at once, on app.moduo.app with a throwaway address nobody invited: ask for a code. Expect "Moduo is invite-only right now. Join the waitlist at moduo.app, or ask the person who invited you to use this address.", no email, and no new user. If a user appears, switch sign-ups off again (that is the rollback) and stop.
+7. **One real invite** (Maciej) to a throwaway inbox you can read: `select public.waitlist_invite_email('<throwaway>');` → B1 arrives within a minute → open app.moduo.app, sign in with that address → the code arrives → you land in onboarding. Then `select count(*) from public.waitlist where email = '<throwaway>';` returns 0. Delete the throwaway account in Settings → Account when done. The full list is in `docs/testing/t-maciej-tx-4-invite-only-gate.md`.
+
+### Inviting people (flow 2)
+
+- **One person:** Table Editor → `waitlist` → set `status` to `invited` → save. B1 goes out within a minute; `invited_at` fills itself.
+- **A batch, oldest first:** `select * from public.waitlist_invite_next(20);` (at most 50 a call). It skips addresses that bounced or complained and people who already have an account, and lists the addresses it invited.
+- **Someone not on the list:** `select public.waitlist_invite_email('name@example.com');` adds them (source `manual`) and invites them.
+- **Send it again:** `select public.waitlist_resend_invite('name@example.com');`.
+
+The helpers answer in one word: `invited`, `queued`, `already_invited` (use resend), `already_queued` (the first one is still on its way), `not_invited` (invite first), `suppressed` (the address bounced or complained: fix the address, or lift the suppression above), `already_a_user`. Check what went out:
+```sql
+select created_at, to_email, status, last_error from public.email_outbox
+where kind = 'waitlist_invite' order by created_at desc limit 20;
+```
+
+**Dashboard invitations from now on:** "Send invitation" works only for an address the hook lets in, so invite it on the waitlist first; B1 is the invite email to use.
+
+### Rollback
+
+- **Let nobody new in:** Authentication → Sign In / Providers → "Allow new users to sign up" off. Existing users keep signing in; invitees wait.
+- **The hook misbehaves** (for example every new sign-up fails): switch sign-ups off first, then the hook (Auth Hooks → Before User Created → Enable off). Never leave sign-ups on with the hook off: then anyone can create an account.
+- **Stop B1** without touching the rest of the queue: `alter table public.waitlist disable trigger waitlist_enqueue_invite;` (and `enable` to resume). Rows already queued still go out; cancel them with `select public.email_cancel('B1:');`.
