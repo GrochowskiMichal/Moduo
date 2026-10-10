@@ -204,7 +204,8 @@ function FeedEvent({
   );
 }
 
-/** "Created by Maciej · Oct 6, 12:07 PM · Updated 7:20 PM" (· Rescheduled 3×). */
+/** "Created by Maciej · Oct 6, 12:07 PM · Updated 7:20 PM". No "Rescheduled N×":
+ *  the counter stopped counting at TV-D2 (TV-P0, AC1.11). */
 function MetaLine({ task }: { task: Task }) {
   const { byId } = useAssignees();
   const by = createdByLabel(task, byId);
@@ -213,8 +214,7 @@ function MetaLine({ task }: { task: Task }) {
       ? `Created by ${by} · ${formatTimestamp(task.createdAt)}`
       : `Created ${formatTimestamp(task.createdAt)}`,
     `Updated ${feedTime(task.updatedAt)}`,
-    task.rescheduleCount > 0 ? `Rescheduled ${task.rescheduleCount}×` : null,
-  ].filter(Boolean);
+  ];
   return (
     <p className="font-sans text-2xs text-muted-foreground tabular-nums">{parts.join(" · ")}</p>
   );

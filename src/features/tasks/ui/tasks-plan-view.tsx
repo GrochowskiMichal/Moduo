@@ -27,7 +27,6 @@ import type { EntityRef } from "../../../lib/entity-links";
 import { ENTITY_OPEN_EVENT, takeEntityOpenIntent } from "../../../lib/entity-open";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { HubDropZone } from "../../contacts/ui/hub-drop-zone";
-import { flushFocusSession, registerFocusFlushSink } from "../../focus/engine";
 import { consumeFocusViewRequest, FOCUS_VIEW_REQUEST_EVENT } from "../../focus/view-request";
 import { createLinkWithToast } from "../../spine/ui/drop-link-toast";
 import { useAssignees } from "../assignees";
@@ -200,29 +199,8 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     return filterTagIds.filter((id) => live.has(id));
   }, [filterTagIds, api.tags]);
 
-  // DF-11 / TV-F1 — the app-level Focus engine saves tracked time through the
-  // Tasks module's write path, so register `persistFocusTime` as this
-  // workspace's sink while /tasks is mounted. A ref keeps the callback current
-  // without re-registering (which would re-drain each render); registering
-  // drains any backlog accrued while the module was unmounted, and the cleanup
-  // banks accrued-so-far on navigation away.
-  const apiRef = useRef(api);
-  useEffect(() => {
-    apiRef.current = api;
-  });
-  useEffect(
-    () =>
-      registerFocusFlushSink(workspaceId, (taskId, seconds, context) =>
-        apiRef.current.persistFocusTime(taskId, seconds, context),
-      ),
-    [workspaceId],
-  );
-  // Once the bundle is loaded, drain any seconds the register-time flush had to
-  // retain because it fired against the still-empty bundle on remount — so time
-  // accrued while /tasks was unmounted actually lands (DF-11).
-  useEffect(() => {
-    if (!api.loading) flushFocusSession();
-  }, [api.loading]);
+  // Focus time is saved by the app shell's sink (TV-P0, use-focus-time-saver.ts),
+  // from any page; the module shows each saved total (FOCUS_TIME_SAVED_EVENT).
 
   // The chrome chip's "open Focus" request → enter Execute mode. The one-shot
   // flag covers the fresh-mount case (chip clicked from another route, event

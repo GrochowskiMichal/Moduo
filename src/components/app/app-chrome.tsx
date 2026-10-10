@@ -14,6 +14,7 @@ import {
 } from "../../features/dashboard/edit-mode-events";
 import { PageDots } from "../../features/dashboard/ui/page-dots";
 import { EmailDueWebSweep } from "../../features/email/hooks/use-email-due-web-sweep";
+import { useFocusTimeSaver } from "../../features/focus/use-focus-time-saver";
 import {
   dispatchLayoutPanelsApply,
   type FeatureLayoutKey,
@@ -103,6 +104,8 @@ function ModuleTab({ item, active, index, onClick, badgeCount = 0 }: ModuleTabPr
 }
 
 export function AppChrome({ profileInitial }: { profileInitial: string }) {
+  // Focus time saves from any page (TV-P0): the engine's sink lives here.
+  useFocusTimeSaver();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const navigate = useNavigate();
   useGlobalShortcuts();

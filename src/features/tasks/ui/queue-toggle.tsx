@@ -37,7 +37,8 @@ export function ClaimAvatar({
   return (
     <AssigneeAvatar
       assignee={assignee}
-      size={size}
+      // Two initials fit the icon rung's type (call 43); "sm" is just larger.
+      size="icon"
       className={cn(size === "sm" && "size-4", "ring-1 ring-foreground/35", className)}
     />
   );

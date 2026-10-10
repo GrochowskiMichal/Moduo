@@ -507,7 +507,9 @@ function DateCell({
   api: TasksModuleApi;
 }) {
   const date = rowDate(task);
-  const cell = "flex w-19 shrink-0 items-center justify-end";
+  // At least the column's width; a wider date (another year's) widens it
+  // rather than truncate (call 41).
+  const cell = "flex min-w-19 shrink-0 items-center justify-end";
   const kind = command ?? (date?.kind === "due" ? "due" : "schedule");
   // One save when the popover closes (TV-P0): a scheduled time goes through
   // the reschedule op, so it lands in the task's trail.

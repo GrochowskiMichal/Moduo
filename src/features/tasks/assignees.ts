@@ -9,15 +9,8 @@ import { useAuth } from "../../providers/auth-provider";
 import { useWorkspace } from "../workspaces/workspace-context";
 import { type Assignee, toAssignees } from "./assignee-options";
 
+export { initialsOf } from "../../lib/initials";
 export type { Assignee } from "./assignee-options";
-
-export function initialsOf(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "?";
-  const first = parts[0][0] ?? "";
-  const last = parts.length > 1 ? (parts[parts.length - 1][0] ?? "") : "";
-  return (first + last).toUpperCase();
-}
 
 /** Null when they can already see the bucket. Otherwise the picker warning. */
 export async function previewAssign(bucketId: string, userId: string): Promise<string | null> {

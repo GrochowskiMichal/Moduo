@@ -289,22 +289,20 @@ export function CardBody({
       </div>
 
       {hasMeta ? (
-        <div className="flex min-w-0 items-center gap-2.5 overflow-hidden pl-6 font-sans text-xs whitespace-nowrap text-muted-foreground">
+        // The meta wraps onto a second line rather than cut anything (TV-P0,
+        // AC1.16); each item keeps its words together.
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1 pl-6 font-sans text-xs text-muted-foreground">
           <PriorityMark level={priority} />
           <EnergyMark level={energy} />
           {date ? <DateMark date={date} className="shrink-0" /> : null}
           <TaskCounts task={task} api={api} />
           {showBucket ? (
-            <BucketLabel
-              name={bucketName}
-              isInbox={task.bucketId === inboxId}
-              className="shrink-3"
-            />
+            <BucketLabel name={bucketName} isInbox={task.bucketId === inboxId} wrap />
           ) : null}
           {parent ? (
-            <span className="flex min-w-0 shrink-3 items-center gap-1">
+            <span className="flex min-w-0 items-center gap-1">
               <CornerDownRight className="size-icon-xs shrink-0 opacity-70" aria-hidden />
-              <span className="truncate">{parent.title || "Untitled"}</span>
+              <span className="min-w-0 break-words">{parent.title || "Untitled"}</span>
             </span>
           ) : null}
           <span className="ml-auto flex shrink-0 items-center gap-1.5">

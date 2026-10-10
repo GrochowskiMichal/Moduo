@@ -11,6 +11,7 @@ import { editableTaskFields } from "../../../lib/task-rows";
 import { undoToast } from "../../../lib/undo-toast";
 import { formatAwaySpan } from "../../focus/away-copy";
 import type { FocusSaveContext } from "../../focus/engine";
+import { FOCUS_TIME_SAVED_EVENT, type FocusTimeSaved } from "../../focus/time-sink";
 import {
   createOrAttachByName,
   deleteTag as deleteWorkspaceTag,
@@ -979,6 +980,19 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     [runtime, bundle.tasks, patchTaskLocal],
   );
 
+  // Focus time is saved by the app shell's sink, from any page (TV-P0): show
+  // each saved total here as it lands.
+  useEffect(() => {
+    if (!workspaceId) return;
+    const onSaved = (event: Event) => {
+      const saved = (event as CustomEvent<FocusTimeSaved>).detail;
+      if (!saved || saved.workspaceId !== workspaceId) return;
+      patchTaskLocal(saved.taskId, { timeSpentSeconds: saved.totalSeconds });
+    };
+    window.addEventListener(FOCUS_TIME_SAVED_EVENT, onSaved);
+    return () => window.removeEventListener(FOCUS_TIME_SAVED_EVENT, onSaved);
+  }, [workspaceId, patchTaskLocal]);
+
   /** Why a time write can't be sent right now, or null. */
   const timeWriteBlocked = useCallback(
     (id: string): string | null => {
@@ -1055,8 +1069,11 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
   );
 
   /**
-   * The Focus engine's flush sink (TV-F1, saving through time entries since
-   * TV-D3): record `seconds` of focus that ended at `earnedAt` as one stretch,
+   * The module's own Focus sink (TV-F1, saving through time entries since
+   * TV-D3). Since TV-P0 the engine saves through the app shell's sink
+   * (features/focus/time-sink.ts) so time saves from any page; this one is no
+   * longer registered and stays, with its tests, until TV-F6's one time engine
+   * replaces both. It records `seconds` of focus that ended at `earnedAt` as one stretch,
    * under the save's key, so a resend after a reload or a lost answer counts
    * once. Only the task's time changes.
    *  - `false` right away: not now (no workspace yet, a task still being

@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { IconButton } from "@/components/ui/icon-button";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
+import { initialsOf } from "@/lib/initials";
 import { cn } from "@/lib/utils";
 import {
   type CommentPerson,
@@ -24,12 +25,6 @@ import {
   splitMentions,
 } from "../comments";
 
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "?";
-  return ((parts[0][0] ?? "") + (parts.length > 1 ? (parts.at(-1)?.[0] ?? "") : "")).toUpperCase();
-}
-
 /** A comment author's (or a mentioned person's) small round avatar. */
 export function PersonAvatar({
   person,
@@ -40,9 +35,10 @@ export function PersonAvatar({
 }) {
   return (
     // Decorative: a name always sits beside it.
-    <Avatar size="sm" aria-hidden className={cn("size-4", className)}>
+    // Two initials, on the icon rung's type so they fit (call 43).
+    <Avatar size="icon" aria-hidden className={cn("size-4", className)}>
       {person?.avatarUrl ? <AvatarImage src={person.avatarUrl} alt="" /> : null}
-      <AvatarFallback className="text-2xs">{person ? initials(person.name) : null}</AvatarFallback>
+      <AvatarFallback>{person ? initialsOf(person.name) : null}</AvatarFallback>
     </Avatar>
   );
 }

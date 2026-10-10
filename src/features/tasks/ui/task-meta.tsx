@@ -126,10 +126,14 @@ export function TaskCounts({
 export function BucketLabel({
   name,
   isInbox,
+  wrap = false,
   className,
 }: {
   name: string;
   isInbox: boolean;
+  /** Wrap a long name instead of cutting it (cards, TV-P0). Rows still cut
+   *  until TV-U10's row anatomy gives the name its own room. */
+  wrap?: boolean;
   className?: string;
 }) {
   return (
@@ -144,7 +148,7 @@ export function BucketLabel({
       ) : (
         <NavRowDot className="size-1.5" />
       )}
-      <span className="truncate">{name}</span>
+      <span className={wrap ? "min-w-0 break-words" : "truncate"}>{name}</span>
     </span>
   );
 }
@@ -161,7 +165,8 @@ export function DateMark({ date, className }: { date: RowDate; className?: strin
       )}
     >
       {date.kind === "scheduled" ? <Clock className="size-icon-xs shrink-0" aria-hidden /> : null}
-      <span className="truncate">{date.label}</span>
+      {/* A date never truncates (call 41): it keeps its width. */}
+      <span className="whitespace-nowrap">{date.label}</span>
     </span>
   );
 }

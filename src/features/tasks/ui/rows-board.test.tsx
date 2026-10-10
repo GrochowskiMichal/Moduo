@@ -372,7 +372,8 @@ describe("Board (U1-4)", () => {
     ]);
     const el = card("Task a");
     for (const cls of SELECTED_OPTION.split(" ")) expect(el.className).toContain(cls);
-    const meta = el.querySelector(".whitespace-nowrap") as HTMLElement;
+    // One meta line, which wraps rather than cut anything (TV-P0, AC1.16).
+    const meta = el.querySelector(".flex-wrap") as HTMLElement;
     expect(meta).not.toBeNull();
     expect(meta.contains(screen.getByLabelText("High priority"))).toBe(true);
     expect(meta.contains(screen.getByLabelText("Assignee: Mike"))).toBe(true);

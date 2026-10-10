@@ -4,9 +4,11 @@
 
 import { useMemo } from "react";
 import { timeAgo } from "@/features/notes/recent";
+import { useNotificationLabels } from "@/features/spine/hooks/use-notification-labels";
 import {
   groupNotifications,
   notificationDeepLink,
+  notificationSubject,
   notificationSummary,
 } from "@/features/spine/notifications";
 import { isNotificationEnabled, usePreferencesValue } from "@/lib/preferences";
@@ -45,6 +47,8 @@ export function ActivityFeedWidget({ size }: WidgetComponentProps) {
     }),
     [notifications.data, prefs.notifications],
   );
+  // Every task card names its task (TV-P0): comment notices carry no title.
+  const labels = useNotificationLabels(groups);
 
   if (notifications.loading && groups.length === 0) return <WidgetLoading />;
   if (groups.length === 0) return <WidgetEmpty>No activity yet.</WidgetEmpty>;
@@ -71,7 +75,7 @@ export function ActivityFeedWidget({ size }: WidgetComponentProps) {
                   aria-hidden
                 />
               }
-              title={notificationSummary(group, userId)}
+              title={notificationSummary(group, userId, notificationSubject(group, labels))}
               trailing={timeAgo(group.latestAt, now)}
               emphasis={unread}
               onClick={link ? () => openEntity(link.entityType, link.entityId) : undefined}

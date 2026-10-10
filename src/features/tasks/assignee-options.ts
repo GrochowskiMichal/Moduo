@@ -8,7 +8,10 @@ import type { Task } from "./model";
 
 export type Assignee = {
   userId: string;
+  /** How pickers name them: "Me" for you. */
   name: string;
+  /** Their own name, for initials ("Me" must never become "M", call 43). */
+  fullName: string;
   avatarUrl: string | null;
   isMe: boolean;
   /** Viewers can't complete tasks, so they can't be assigned. */
@@ -24,7 +27,8 @@ export function toAssignees(members: WorkspaceMember[], userId: string | null): 
     .filter((m) => m.isActive && !m.removedAt)
     .map((m) => ({
       userId: m.userId,
-      name: m.userId === userId ? "Me" : (m.displayName?.trim() ?? "Member"),
+      name: m.userId === userId ? "Me" : m.displayName?.trim() || "Member",
+      fullName: m.displayName?.trim() || "Member",
       avatarUrl: m.avatarUrl,
       isMe: m.userId === userId,
       canTakeTasks: canBeAssignee(m.perms),

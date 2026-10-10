@@ -46,10 +46,10 @@ function PropertyRow({
     >
       <Label
         {...(htmlFor ? { htmlFor } : {})}
-        className="flex h-(--ctrl-h-sm) w-24 shrink-0 items-center gap-1.5 font-sans text-sm text-muted-foreground"
+        className="flex min-h-(--ctrl-h-sm) w-24 shrink-0 items-center gap-1.5 font-sans text-sm text-muted-foreground"
       >
         {Icon ? <Icon className="size-icon-sm shrink-0 opacity-70" aria-hidden /> : null}
-        <span className="truncate">{label}</span>
+        <span className="min-w-0 break-words">{label}</span>
       </Label>
       <div className="flex min-w-0 flex-1 items-center">{children}</div>
     </div>
@@ -61,7 +61,7 @@ type PropertyValueProps = React.ComponentProps<"button"> & {
   icon?: React.ReactNode;
   /** No value yet: the text is a muted placeholder ("Set priority"). */
   empty?: boolean;
-  /** Extra content after the value that may not truncate (a bar, a share). */
+  /** Extra content after the value (a bar, a share). */
   trailing?: React.ReactNode;
 };
 
@@ -84,7 +84,9 @@ function PropertyValue({
     <button
       type={type}
       className={cn(
-        "-ml-1.5 inline-flex h-(--ctrl-h-sm) max-w-full min-w-0 items-center gap-2 rounded-md px-1.5",
+        // Values wrap, never truncate (Tasks v3 calls 41, 89): a long date or
+        // name takes a second line instead of "Wed, …".
+        "-ml-1.5 inline-flex min-h-(--ctrl-h-sm) max-w-full min-w-0 items-center gap-2 rounded-md px-1.5 py-0.5",
         "text-left font-sans text-base text-foreground outline-none",
         "transition-colors duration-(--motion-fade) ease-(--ease-out)",
         "hover:bg-state-hover aria-expanded:bg-state-active",
@@ -106,7 +108,7 @@ function PropertyValue({
           {icon}
         </span>
       ) : null}
-      <span className="min-w-0 truncate">{children}</span>
+      <span className="min-w-0 break-words">{children}</span>
       {trailing}
     </button>
   );

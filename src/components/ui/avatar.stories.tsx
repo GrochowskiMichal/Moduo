@@ -21,8 +21,9 @@ type Story = StoryObj<typeof meta>;
 export const FallbackOnly: Story = {
   render: () => (
     <div className="flex items-center gap-4">
+      {/* Two initials at every size, the icon rung included (call 43). */}
       <Avatar size="icon">
-        <AvatarFallback>E</AvatarFallback>
+        <AvatarFallback>EN</AvatarFallback>
       </Avatar>
       <Avatar size="sm">
         <AvatarFallback>EN</AvatarFallback>

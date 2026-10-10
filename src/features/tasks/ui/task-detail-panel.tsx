@@ -484,13 +484,14 @@ function SubtaskRow({
   const done = subtask.status === "done";
   const queued = api.queuedTaskIds.has(subtask.id);
   return (
-    <div className="group flex h-(--ctrl-h-sm) items-center gap-2 rounded-md px-1 transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover">
+    <div className="group flex min-h-(--ctrl-h-sm) items-center gap-2 rounded-md px-1 transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover">
       <CompleteToggle done={done} disabled={!canEdit} onToggle={() => api.toggleDone(subtask)} />
       <button
         type="button"
         onClick={onSelect}
         className={cn(
-          "min-w-0 flex-1 truncate text-left font-sans text-base",
+          // Titles wrap in the panel, never truncate (TV-P0, AC1.16).
+          "min-w-0 flex-1 break-words py-0.5 text-left font-sans text-base",
           done ? "text-muted-foreground line-through" : "text-foreground",
         )}
       >
@@ -591,13 +592,13 @@ function RelatedTaskRow({
 }) {
   const closed = task.status === "done" || task.status === "archived";
   return (
-    <div className="group flex h-(--ctrl-h-sm) items-center gap-2 rounded-md px-1 transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover">
+    <div className="group flex min-h-(--ctrl-h-sm) items-center gap-2 rounded-md px-1 transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover">
       <CircleDashed className="size-icon-sm shrink-0 text-muted-foreground/70" aria-hidden />
       <button
         type="button"
         onClick={onSelect}
         className={cn(
-          "min-w-0 flex-1 truncate text-left font-sans text-base",
+          "min-w-0 flex-1 break-words py-0.5 text-left font-sans text-base",
           closed ? "text-muted-foreground line-through" : "text-foreground",
         )}
       >
@@ -655,7 +656,7 @@ function BlockerPicker({ task, api }: { task: Task; api: TasksModuleApi }) {
                     setOpen(false);
                   }}
                 >
-                  <span className="min-w-0 flex-1 truncate">{t.title || "Untitled"}</span>
+                  <span className="min-w-0 flex-1 break-words">{t.title || "Untitled"}</span>
                 </CommandItem>
               ))}
             </CommandGroup>

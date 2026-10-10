@@ -11,8 +11,10 @@ import {
   type NotificationItem,
   notificationDeepLink,
   notificationDeepLinkNoun,
+  notificationSubject,
   notificationSummary,
   partitionBySource,
+  unnamedTaskTargets,
   unreadCount,
 } from "./notifications";
 
@@ -420,5 +422,53 @@ describe("notificationDeepLinkNoun", () => {
     expect(notificationDeepLinkNoun("email_thread")).toBe("email");
     expect(notificationDeepLinkNoun("task")).toBe("task");
     expect(notificationDeepLinkNoun("contact")).toBe("contact");
+  });
+});
+
+// TV-P0 (tasks-v3 AC1.7): a task's notice names the task.
+describe("notifications name the task", () => {
+  const one = (over: Partial<NotificationItem>) =>
+    groupNotifications([item({ id: "a", createdAt: "2026-10-10T10:00:00Z", ...over })])[0];
+
+  it("uses the title the event carried, in place of “this”", () => {
+    const assigned = one({ op: "tasks.assigned", payload: { title: "Draft the brief" } });
+    expect(notificationSummary(assigned, "me", notificationSubject(assigned))).toBe(
+      "Mike assigned “Draft the brief” to you",
+    );
+    const done = one({ op: "tasks.completed", payload: { title: "Ship it" } });
+    expect(notificationSummary(done, "me", notificationSubject(done))).toBe(
+      "Mike completed “Ship it”",
+    );
+    const unblocked = one({
+      op: "tasks.unblocked",
+      payload: { title: "Launch", blocker_title: "Ship the API" },
+    });
+    expect(notificationSummary(unblocked, "me", notificationSubject(unblocked))).toBe(
+      "Mike finished “Ship the API”, unblocking “Launch”",
+    );
+  });
+
+  it("a comment's card takes a resolved name, kept apart from the excerpt", () => {
+    const comment = one({ op: "comments.add", payload: { excerpt: "looks good" } });
+    expect(notificationSubject(comment)).toBeNull();
+    expect(unnamedTaskTargets([comment])).toEqual(["t1"]);
+    const labels = new Map([["t1", "Q4 plan"]]);
+    expect(notificationSummary(comment, "me", notificationSubject(comment, labels))).toBe(
+      "Mike commented on “Q4 plan”: “looks good”",
+    );
+    const bare = one({ op: "comments.add" });
+    expect(notificationSummary(bare, "me", notificationSubject(bare, labels))).toBe(
+      "Mike left a comment on “Q4 plan”",
+    );
+  });
+
+  it("names only tasks, and says “this” when the name isn't known", () => {
+    const note = one({ op: "comments.add", targetType: "note", payload: { title: "Hidden" } });
+    expect(notificationSubject(note, new Map([["t1", "x"]]))).toBeNull();
+    expect(unnamedTaskTargets([note])).toEqual([]);
+    const unknown = one({ op: "tasks.assigned" });
+    expect(notificationSummary(unknown, "me", notificationSubject(unknown))).toBe(
+      "Mike assigned this to you",
+    );
   });
 });

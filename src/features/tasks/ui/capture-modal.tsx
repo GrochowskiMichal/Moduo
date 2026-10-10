@@ -247,7 +247,7 @@ export function CaptureModal({
               active={shownAssigneeId !== currentUserId}
               icon={
                 shownAssigneeId ? (
-                  <AssigneeAvatar assignee={byId(shownAssigneeId)} className="size-4" />
+                  <AssigneeAvatar assignee={byId(shownAssigneeId)} size="icon" className="size-4" />
                 ) : (
                   <User className="size-3.5" />
                 )
@@ -263,7 +263,7 @@ export function CaptureModal({
                   onSelect={() => setAssigneeId(fromAssigneeValue(o.value))}
                 >
                   {o.assignee ? (
-                    <AssigneeAvatar assignee={o.assignee} className="size-4" />
+                    <AssigneeAvatar assignee={o.assignee} size="icon" className="size-4" />
                   ) : (
                     <User className="size-4 text-muted-foreground" aria-hidden />
                   )}
