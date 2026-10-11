@@ -33,7 +33,7 @@ Built in tasks-v3 block 19 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §10, A
   - Rejected: `references` (loses the direction) and a new link origin (a migration).
 - **U14-6 · New captures go on top; a pasted list keeps its order on top; subtasks take only the place and the person** → TV-U14
   - Who: agent's choice, deferred to by Maciej, 2026-10-11 (default h).
-  - Decision: a capture is placed before the first task of its destination (keys split evenly, so 500 pasted lines stay short keys). Typed subtasks and pasted subtasks get the parent's project, section and assignee, nothing else; pasted top-level lines get the pills, and a line's own `@ # /` and date words win.
+  - Decision: a capture is placed before the first task of its destination (keys split evenly, so 500 pasted lines stay short keys). Typed subtasks and pasted subtasks get the parent's project, section and assignee (a team task's are nobody's, like it), nothing else, unless the line names its own person; a subtask of a parent still waiting offline waits behind it. Pasted top-level lines get the pills, a line's own `@ # /` and date words win, and a line with its own `@team` goes to that team's default project.
   - Why: the newest thing is usually the next thing (h); a subtask with the parent's due date would read late twice.
   - Rejected: appending at the end (what the old quick capture did).
 - **U14-7 · Paste a list: an inline panel, a preview, 500 at most, one Undo** → TV-U14 (`parse/paste-list.ts`)
@@ -52,6 +52,12 @@ Built in tasks-v3 block 19 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §10, A
   - Decision: Esc, a click outside or another overlay keeps the draft on the device under the person and the workspace; any open restores it ("Draft restored · Clear"); creating clears it. It keeps typed words and ids, never a linked item's, person's, team's or tag's name (looked up again on restore: an item the person can no longer open reads "Private item" and leaves the title and the links), never the "From:" item or files. Every draft goes on sign-out; a deleted account's go with it.
   - Why: a second person on the device, or a lost permission, must never see a title through a draft.
   - Rejected: one draft per workspace (another person on the device saw it) and storing names.
+- **U14-11 · A refused capture is kept apart and comes back by "Restore"** → TV-U14 (`capture-draft.ts` slot `refused`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11 (the orchestrator's review round 2).
+  - Decision: when the server refuses a capture with nothing saved, it goes straight back into the capture if that's open and empty; otherwise it's kept in its own slot on the device (same rules as the draft: per person and workspace, ids and the person's own words, a refused pasted list included, wiped on sign-out) and the toast offers "Restore", which puts it into the open capture or opens one with it. The next open with no draft brings it back by itself. A list that saved only in part says "n of m saved" with one Undo for what saved.
+  - Why: the refused capture never overwrites what's being typed now, and typing never overwrites it.
+  - Rejected: writing it over the draft (one of the two was lost either way).
+
 - **U14-10 · The pills and More** → TV-U14 (`capture-pills.tsx`), TV-D15 (templates), AT-2/AT-3 (files)
   - Who: agent's choice, deferred to by Maciej, 2026-10-11.
   - Decision: Assign (people, Unassigned, teams), Due, Tags (existing; new ones by `#`), Priority (no Urgent), More (Scheduled, Reminder, Estimate presets, Repeat presets, Waiting on people). What More holds joins the row as chips with ×; the row wraps for now. "Template…" and `/template` show only once a template provider registers (TV-D15); pasted or dropped files go to a registered upload handler (AT-2/AT-3), else a toast says to add them on the task. The description is a plain text field that grows to about six lines (⌘⏎ creates more there): there's no task yet for its mentions to link from.
