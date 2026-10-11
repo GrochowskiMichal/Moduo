@@ -35,7 +35,7 @@ import { type MutableRefObject, useEffect, useMemo, useRef } from "react";
 
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { cn } from "../../../lib/utils";
-import { MentionMenuPlugin } from "../../spine/editor/mention-menu-plugin";
+import { MentionMenuPlugin, type MenuPickApi } from "../../spine/editor/mention-menu-plugin";
 import type { MentionCandidate } from "../../spine/mention";
 import { type CaptureToken, type TitleSegment, tokenText } from "../parse/capture-tokens";
 import { $createCaptureTokenNode, $isCaptureTokenNode, CaptureTokenNode } from "./token-node";
@@ -57,10 +57,7 @@ export type TitleEditorApi = {
   hasFocus: () => boolean;
 };
 
-export type MenuPick = (
-  candidate: MentionCandidate,
-  api: { removeQuery: () => void; insert: (nodes: LexicalNode[]) => void },
-) => boolean;
+export type MenuPick = (candidate: MentionCandidate) => ((api: MenuPickApi) => void) | null;
 
 type Props = {
   apiRef: MutableRefObject<TitleEditorApi | null>;

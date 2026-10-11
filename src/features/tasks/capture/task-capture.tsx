@@ -41,6 +41,7 @@ import { undoToast } from "../../../lib/undo-toast";
 import { cn } from "../../../lib/utils";
 import { useAuth } from "../../../providers/auth-provider";
 import { useWorkspace } from "../../../providers/workspace-provider";
+import type { MenuPickApi } from "../../spine/editor/mention-menu-plugin";
 import { dateCommandDay } from "../../spine/grammar";
 import { resolveEntityIcon } from "../../spine/icon-map";
 import type { MentionCandidate } from "../../spine/mention";
@@ -435,81 +436,87 @@ export function TaskCaptureBody({
     setHint(`@${label} moved into the destination`);
   };
 
-  const onPick: MenuPick = (candidate, api) => {
-    const insertToken = (token: CaptureToken) => {
+  /** A token in place of the typed `@word` (one per single-value field). */
+  const tokenEdit =
+    (token: CaptureToken) =>
+    (api: MenuPickApi): void => {
       api.removeQuery();
       // One value per field: an earlier token of the kind falls back to words.
       if (SINGLE_VALUE_KINDS.has(token.kind)) $tokensToText((t) => t.kind === token.kind);
-      clearHandValue(token.kind);
       const node = $createCaptureTokenNode(token);
       api.insert([node, $createTextNode(" ")]);
       justInserted.current = { key: node.getKey(), baseline: null };
     };
-    switch (candidate.kind) {
-      case "person": {
-        const person = people.find((p) => p.userId === candidate.memberId);
-        insertToken({
-          kind: "person",
-          userId: candidate.memberId,
-          label: person?.name ?? candidate.label,
-        });
-        return true;
-      }
-      case "team":
-        insertToken({
-          kind: "team",
-          teamId: candidate.teamId,
-          label: candidate.label,
-          letters: candidate.letters,
-        });
-        return true;
-      case "entity":
-        if (candidate.ref.type === "bucket") {
-          api.removeQuery();
-          pickDestination(candidate.ref.id, null, candidate.label);
-          return true;
+  /** The typed `@word` goes, and something else happens (the destination, a pill). */
+  const elsewhere =
+    (run: () => void) =>
+    (api: MenuPickApi): void => {
+      api.removeQuery();
+      run();
+    };
+
+  const onPick: MenuPick = (candidate) => {
+    const token = ((): CaptureToken | null => {
+      switch (candidate.kind) {
+        case "person":
+          return {
+            kind: "person",
+            userId: candidate.memberId,
+            label: people.find((p) => p.userId === candidate.memberId)?.name ?? candidate.label,
+          };
+        case "team":
+          return {
+            kind: "team",
+            teamId: candidate.teamId,
+            label: candidate.label,
+            letters: candidate.letters,
+          };
+        case "entity":
+          return candidate.ref.type === "bucket"
+            ? null
+            : { kind: "thing", ref: candidate.ref, label: candidate.label };
+        case "tag":
+          return {
+            kind: "tag",
+            tagId: candidate.tagId,
+            label: candidate.label,
+            color: candidate.color,
+          };
+        case "command": {
+          const day = candidate.command === "date" ? null : dateCommandDay(candidate.command);
+          return day ? { kind: "due", day, label: candidate.label } : null;
         }
-        insertToken({ kind: "thing", ref: candidate.ref, label: candidate.label });
-        return true;
-      case "tag":
-        insertToken({
-          kind: "tag",
-          tagId: candidate.tagId,
-          label: candidate.label,
-          color: candidate.color,
-        });
-        return true;
-      case "command": {
-        if (candidate.command === "date") {
-          api.removeQuery();
-          setOpenPill("due");
-          return true;
+        case "action": {
+          const effect = effectOf(candidate.id);
+          return effect?.kind === "token" ? effect.token : null;
         }
-        const day = dateCommandDay(candidate.command);
-        if (!day) return false;
-        insertToken({ kind: "due", day, label: candidate.label });
-        return true;
+        default:
+          return null;
       }
-      case "action": {
-        const effect =
-          effects.current["/"]?.get(candidate.id) ??
-          effects.current["@"]?.get(candidate.id) ??
-          effects.current["#"]?.get(candidate.id);
-        if (!effect) return false;
-        if (effect.kind === "token") insertToken(effect.token);
-        else if (effect.kind === "destination") {
-          api.removeQuery();
-          pickDestination(effect.projectId, effect.sectionId, effect.label);
-        } else {
-          api.removeQuery();
-          openField(effect.field);
-        }
-        return true;
-      }
-      default:
-        return false;
+    })();
+    if (token) {
+      clearHandValue(token.kind);
+      return tokenEdit(token);
     }
+    if (candidate.kind === "entity" && candidate.ref.type === "bucket") {
+      const { id } = candidate.ref;
+      const label = candidate.label;
+      return elsewhere(() => pickDestination(id, null, label));
+    }
+    if (candidate.kind === "command" && candidate.command === "date") {
+      return elsewhere(() => setOpenPill("due"));
+    }
+    if (candidate.kind === "action") {
+      const effect = effectOf(candidate.id);
+      if (effect?.kind === "destination") {
+        return elsewhere(() => pickDestination(effect.projectId, effect.sectionId, effect.label));
+      }
+      if (effect?.kind === "open") return elsewhere(() => openField(effect.field));
+    }
+    return null;
   };
+  const effectOf = (id: string): EntryEffect | undefined =>
+    effects.current["/"]?.get(id) ?? effects.current["@"]?.get(id) ?? effects.current["#"]?.get(id);
 
   // ── title changes ─────────────────────────────────────────────────────────
   const onTitleChange = (next: TitleSegment[], keys: Array<NodeKey | null>) => {
@@ -661,6 +668,19 @@ export function TaskCaptureBody({
     };
   };
 
+  /** A pasted line as the preview shows it. */
+  const describeLine = (line: string): { title: string; facts: string[] } => {
+    const read = resolveTitle(segmentsFromLine(line, lineContext));
+    const when = captureDates(read);
+    const facts: string[] = [];
+    if (when.scheduledAt) facts.push(formatDayTime(when.scheduledAt));
+    else if (when.dueDay) facts.push(`Due ${formatDay(new Date(`${when.dueDay}T00:00:00`))}`);
+    if (read.single.person) facts.push(read.single.person.label);
+    if (read.single.team) facts.push(read.single.team.label);
+    for (const t of read.tags) facts.push(`#${t.label}`);
+    return { title: read.title || line, facts };
+  };
+
   const snapshot = (): CaptureDraft => ({ segments, keep, description, subtasks, fields });
 
   /** Clear for the next one; "Create more" keeps the pills and the destination. */
@@ -725,9 +745,10 @@ export function TaskCaptureBody({
       const n = result.created.length;
       undoToast(`${n} ${n === 1 ? "task" : "tasks"} created`, {
         onUndo: () => {
-          void undoCapture(runtime, plan.workspaceId, result.created)
-            .then((deleted) => announceCaptured({ workspaceId: plan.workspaceId, tasks: deleted }))
-            .catch(() => toast.error("Couldn't undo that. Delete them from the list."));
+          void undoCapture(runtime, plan.workspaceId, result.created).then(({ deleted, error }) => {
+            announceCaptured({ workspaceId: plan.workspaceId, tasks: deleted });
+            if (error) toast.error("Some weren't undone. Delete them from the list.");
+          });
         },
       });
       return result.created;
@@ -1037,6 +1058,7 @@ export function TaskCaptureBody({
         {pastedList ? (
           <PastePanel
             list={pastedList}
+            describe={describeLine}
             buttonRef={createListRef}
             onCreate={() => createPasted(false)}
             onKeep={keepPastedAsOne}
@@ -1166,12 +1188,15 @@ function ProjectItems({
 
 function PastePanel({
   list,
+  describe,
   buttonRef,
   onCreate,
   onKeep,
   onCancel,
 }: {
   list: ReturnType<typeof parsePastedList>;
+  /** What a line becomes: its title, and what its words set ("Due Oct 12"). */
+  describe: (line: string) => { title: string; facts: string[] };
   buttonRef: React.RefObject<HTMLButtonElement | null>;
   onCreate: () => void;
   onKeep: () => void;
@@ -1186,14 +1211,22 @@ function PastePanel({
     >
       <p className="font-display text-base text-foreground">{`Create ${n} ${n === 1 ? "task" : "tasks"}?`}</p>
       <ul className="flex flex-col gap-0.5 font-sans text-sm text-muted-foreground">
-        {preview.map((item, i) => (
-          // biome-ignore lint/suspicious/noArrayIndexKey: pasted lines can repeat
-          <li key={`${i}-${item.title}`} className="truncate">
-            <Circle className="me-1.5 inline size-icon-xs" aria-hidden />
-            {item.title}
-            {item.children.length ? ` · ${item.children.length} subtasks` : ""}
-          </li>
-        ))}
+        {preview.map((item, i) => {
+          // Each line as it will be made, so "Send March report → due 1 March" shows first.
+          const line = describe(item.title);
+          const facts = [
+            ...line.facts,
+            ...(item.children.length ? [`${item.children.length} subtasks`] : []),
+          ];
+          return (
+            // biome-ignore lint/suspicious/noArrayIndexKey: pasted lines can repeat
+            <li key={`${i}-${item.title}`} className="truncate">
+              <Circle className="me-1.5 inline size-icon-xs" aria-hidden />
+              <span className="text-foreground">{line.title}</span>
+              {facts.length ? ` · ${facts.join(" · ")}` : ""}
+            </li>
+          );
+        })}
         {list.items.length > preview.length ? (
           <li>{`and ${list.items.length - preview.length} more`}</li>
         ) : null}

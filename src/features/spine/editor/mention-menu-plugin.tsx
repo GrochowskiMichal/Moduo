@@ -121,16 +121,21 @@ export type MentionMenuPluginProps = {
     loading: boolean,
   ) => MentionCandidate[];
   /**
-   * Carry out a pick instead of the menu (inside the editor update): call
-   * `removeQuery` to take the typed `@word` out, `insert` to put nodes at the
-   * caret, and return true. Return false to let the menu do its usual thing.
+   * Carry out a pick instead of the menu. Decide at once: return null to let
+   * the menu do its usual thing, or the edit to make, which runs inside the
+   * editor update (call `removeQuery` to take the typed `@word` out, `insert`
+   * to put nodes at the caret). The decision can't wait for the update: a pick
+   * by key runs inside a command, where an update only runs after it.
    */
-  onPick?: (
-    candidate: MentionCandidate,
-    api: { removeQuery: () => void; insert: (nodes: LexicalNode[]) => void },
-  ) => boolean;
+  onPick?: (candidate: MentionCandidate) => ((api: MenuPickApi) => void) | null;
   /** Told when the menu shows or hides (a host that handles Esc itself). */
   onMenuChange?: (open: boolean) => void;
+};
+
+/** What a host's pick can do to the editor (inside the update). */
+export type MenuPickApi = {
+  removeQuery: () => void;
+  insert: (nodes: LexicalNode[]) => void;
 };
 
 const MENU_MIN_WIDTH = 240;
@@ -362,23 +367,20 @@ export function MentionMenuPlugin({
     const activeMenu = menuRef.current;
     if (!activeMenu) return;
     // The host carries it out (capture), if it wants to.
-    const hostPick = onPickRef.current;
-    if (hostPick) {
-      let claimed = false;
+    const hostEdit = onPickRef.current?.(candidate) ?? null;
+    if (hostEdit) {
       editor.focus();
-      editor.update(() => {
-        claimed = hostPick(candidate, {
+      editor.update(() =>
+        hostEdit({
           removeQuery: () => removeMentionToken(activeMenu),
           insert: (nodes) => {
             const selection = $getSelection();
             if ($isRangeSelection(selection)) selection.insertNodes(nodes);
           },
-        });
-      });
-      if (claimed) {
-        setMenu(null);
-        return;
-      }
+        }),
+      );
+      setMenu(null);
+      return;
     }
     if (!runtime || !workspaceId) return;
     const resolution = resolveMention({ trigger, candidate });

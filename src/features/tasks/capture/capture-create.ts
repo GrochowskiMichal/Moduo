@@ -102,18 +102,51 @@ export type CaptureDeps = {
   userId: string | null;
 };
 
+/** How many saves a capture of many sends at once. */
+const AT_ONCE = 6;
+
 /**
- * Make every task in the plan, in order, then its extras. Stops at the first
- * task the server refuses or the network drops; the ones made stay made (the
- * same plan sent again picks up where it stopped: same ids).
+ * Run `work` over `items`, a few at a time, in order of start. Stops starting
+ * new ones after the first that throws (the ones running finish).
+ */
+async function inBatches<T>(
+  items: readonly T[],
+  work: (item: T) => Promise<void>,
+): Promise<unknown> {
+  let failure: unknown = null;
+  let next = 0;
+  const lane = async () => {
+    while (failure === null && next < items.length) {
+      const item = items[next++];
+      try {
+        await work(item);
+      } catch (error) {
+        if (failure === null) failure = error;
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(AT_ONCE, items.length) }, lane));
+  return failure;
+}
+
+/**
+ * Make every task in the plan, then its extras: the top-level tasks first, a
+ * few at a time, then the subtasks of the ones that were made. Stops at the
+ * first task the server refuses or the network drops; the ones made stay
+ * made, and the same plan sent again picks up where it stopped (same ids).
  */
 export async function runCapture(plan: CapturePlan, deps: CaptureDeps): Promise<CaptureResult> {
   const { runtime, userId } = deps;
   const { workspaceId } = plan;
-  const created: Task[] = [];
+  const made = new Map<string, Task>();
   let extrasFailed = 0;
   const tagCtx: TagContext = { runtime, workspaceId, userId };
-  let sourceRef: EntityRef | null | undefined;
+  // The "From:" item joins the registry once, however many tasks link it.
+  let sourceRef: Promise<EntityRef | null> | null = null;
+  const source = () => {
+    sourceRef ??= Promise.resolve(plan.source?.ref ?? plan.source?.resolve?.() ?? null);
+    return sourceRef;
+  };
 
   const extra = async (run: () => Promise<unknown>) => {
     try {
@@ -123,14 +156,9 @@ export async function runCapture(plan: CapturePlan, deps: CaptureDeps): Promise<
     }
   };
 
-  for (const item of plan.tasks) {
-    let saved: Task;
-    try {
-      saved = await runtime.tasks.upsertTask(planToTask(workspaceId, item));
-    } catch (error) {
-      return { created, error, extrasFailed };
-    }
-    created.push(saved);
+  const make = async (item: CaptureTaskPlan) => {
+    const saved = await runtime.tasks.upsertTask(planToTask(workspaceId, item));
+    made.set(item.id, saved);
     const entity = { entityType: "task", entityId: saved.id };
     for (const tag of item.tags) {
       if (tag.id) attachTag(tagCtx, entity, tag.id);
@@ -151,14 +179,12 @@ export async function runCapture(plan: CapturePlan, deps: CaptureDeps): Promise<
     }
     if (item.fromSource && plan.source) {
       await extra(async () => {
-        if (sourceRef === undefined) {
-          sourceRef = plan.source?.ref ?? (await plan.source?.resolve?.()) ?? null;
-        }
-        if (!sourceRef) return;
+        const target = await source();
+        if (!target) return;
         await runtime.spine.createLink({
           workspaceId,
           source: { type: "task", id: saved.id },
-          target: sourceRef,
+          target,
           relationKind: "spawned-from",
           origin: "manual",
           sourceLabel: saved.title,
@@ -177,31 +203,51 @@ export async function runCapture(plan: CapturePlan, deps: CaptureDeps): Promise<
         runtime.tasks.addWaiting({ workspaceId, taskId: saved.id, kind: "person", ref: person }),
       );
     }
-  }
+  };
 
-  if (plan.queueTop) {
+  const tops = plan.tasks.filter((t) => !t.parentId);
+  let error = await inBatches(tops, make);
+  if (error === null) {
+    const subtasks = plan.tasks.filter((t) => t.parentId && made.has(t.parentId));
+    error = await inBatches(subtasks, make);
+  }
+  // In the plan's order, parents first (what the caller announces and undoes).
+  const created = plan.tasks.flatMap((t) => {
+    const saved = made.get(t.id);
+    return saved ? [saved] : [];
+  });
+
+  if (plan.queueTop && error === null) {
     // Top of Up next, in the order captured: the last goes in first.
-    const tops = created.filter((t) => !t.parentId).reverse();
-    for (const task of tops) {
+    for (const task of created.filter((t) => !t.parentId).reverse()) {
       await extra(() => runtime.tasks.opQueueAdd({ workspaceId, taskId: task.id, at: "top" }));
     }
   }
-  return { created, error: null, extrasFailed };
+  return { created, error, extrasFailed };
 }
 
 /**
  * Undo a capture of many (one Undo for the batch, default a): subtasks first,
- * so no parent hands them up on its way out. Answers with the deleted rows.
+ * so no parent hands them up on its way out. Answers with the deleted rows
+ * (and what stopped it, if something did).
  */
 export async function undoCapture(
   runtime: ModuoRuntime,
   workspaceId: string,
   created: readonly Task[],
-): Promise<Task[]> {
-  const order = [...created.filter((t) => t.parentId), ...created.filter((t) => !t.parentId)];
+): Promise<{ deleted: Task[]; error: unknown }> {
   const deleted: Task[] = [];
-  for (const task of order) {
+  const remove = async (task: Task) => {
     deleted.push(await runtime.tasks.deleteTask({ workspaceId, taskId: task.id }));
-  }
-  return deleted;
+  };
+  const failed =
+    (await inBatches(
+      created.filter((t) => t.parentId),
+      remove,
+    )) ??
+    (await inBatches(
+      created.filter((t) => !t.parentId),
+      remove,
+    ));
+  return { deleted, error: failed };
 }
