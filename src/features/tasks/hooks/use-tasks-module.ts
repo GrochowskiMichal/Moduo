@@ -32,6 +32,7 @@ import {
   useTagView,
 } from "../../tags/store";
 import { WorkspaceContext } from "../../workspaces/workspace-context";
+import { onCaptured, shareTasksBundle } from "../capture/capture-data";
 import { setBucketTimeBlock } from "../default-view";
 import { type TaskDropWrite, undoWrite } from "../dnd/drop-write";
 import { bucketEndPosition } from "../dnd/rail-drop";
@@ -317,6 +318,29 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       r.queued = false;
     };
   }, [baseRuntime, userId, workspaceId, canRead, gate]);
+
+  // The app's capture (TV-U14) saves through the runtime, from any page: the
+  // rows it saved land here at once, like a teammate's change (Realtime then
+  // brings the same rows, which merge by id).
+  useEffect(() => {
+    if (!workspaceId || !canRead) return;
+    return onCaptured((detail) => {
+      if (detail.workspaceId !== workspaceId) return;
+      for (const row of detail.tasks) gate.push({ table: "tasks", kind: "upsert", row });
+    });
+  }, [workspaceId, canRead, gate]);
+
+  // The capture reads what this screen already holds (projects, sections,
+  // teams, where each list starts) instead of reading it again.
+  const shareOwner = useRef(Symbol("tasks-bundle"));
+  useEffect(() => {
+    const owner = shareOwner.current;
+    shareTasksBundle(owner, workspaceId && canRead ? { workspaceId, bundle } : null);
+  }, [workspaceId, canRead, bundle]);
+  useEffect(() => {
+    const owner = shareOwner.current;
+    return () => shareTasksBundle(owner, null);
+  }, []);
 
   useEffect(() => {
     void load();

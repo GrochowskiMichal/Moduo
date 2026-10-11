@@ -77,6 +77,7 @@ import { ContactImportDialog } from "../../features/contacts/ui/contact-import-d
 import { HubDropZone } from "../../features/contacts/ui/hub-drop-zone";
 import { contactToVCard } from "../../features/contacts/vcard";
 import { LinkedNotesPanel } from "../../features/notes/ui/linked-notes-panel";
+import { type CaptureSource, useCaptureSource } from "../../lib/capture-source";
 
 function openEntity(ref: EntityRef) {
   if (typeof window === "undefined") return;
@@ -151,6 +152,16 @@ export function ContactsPage() {
     () => (selectedContact ? { type: "contact", id: selectedContact.id } : null),
     [selectedContact],
   );
+  // An open contact rides along on a capture as "From: …" (tasks-v3 call 93).
+  const contactName = selectedContact ? selectedContact.name || "Contact" : null;
+  const captureSource = useMemo<CaptureSource | null>(
+    () =>
+      contactFocus && contactName
+        ? { kind: "contact", label: contactName, ref: contactFocus }
+        : null,
+    [contactFocus, contactName],
+  );
+  useCaptureSource(captureSource);
   const companyFocus = useMemo<EntityRef | null>(
     () => (selectedCompany ? { type: "company", id: selectedCompany.id } : null),
     [selectedCompany],

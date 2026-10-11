@@ -133,7 +133,7 @@ describe("opening", () => {
     unlisten();
   });
 
-  it("always reopens as Task with an empty line", async () => {
+  it("reopens as Task and keeps the draft (Esc keeps it, TV-U14)", async () => {
     const { unlisten } = renderShell([TASK, NOTE]);
     await openWithShortcut();
     press({ metaKey: true, key: "2" });
@@ -147,8 +147,52 @@ describe("opening", () => {
     });
     expect(chip().getAttribute("aria-label")).toBe("Capture type: Task");
     expect((screen.getByRole("textbox", { name: "Task title" }) as HTMLInputElement).value).toBe(
-      "",
+      "Pick up keys",
     );
+    unlisten();
+  });
+
+  it("⌘N's request reaches the body as its context; ⌘⇧K opens with none", async () => {
+    let seen: CaptureBodyProps["context"] | undefined;
+    const SPY: CaptureTypeDef = {
+      ...TASK,
+      Body: (props: CaptureBodyProps) => {
+        seen = props.context;
+        return <input aria-label="Task title" />;
+      },
+    };
+    const { unlisten } = renderShell([SPY]);
+    await act(async () => {
+      dispatchOpenCapture({ destination: { projectId: "p1", sectionId: "s1" }, queueTop: true });
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(seen?.destination).toEqual({ projectId: "p1", sectionId: "s1" });
+    expect(seen?.queueTop).toBe(true);
+    press({ metaKey: true, shiftKey: true, key: "K" }); // closes
+    await openWithShortcut();
+    expect(seen?.destination).toBeUndefined();
+    unlisten();
+  });
+
+  it("a body that claims Esc keeps the capture open", async () => {
+    let claims = true;
+    const CLAIMS: CaptureTypeDef = {
+      ...TASK,
+      Body: ({ registerEscape }: CaptureBodyProps) => {
+        registerEscape?.(() => claims);
+        return <input aria-label="Task title" />;
+      },
+    };
+    const { unlisten } = renderShell([CLAIMS]);
+    await openWithShortcut();
+    press({ key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeTruthy();
+    claims = false;
+    press({ key: "Escape" });
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(screen.queryByRole("dialog")).toBeNull();
     unlisten();
   });
 });

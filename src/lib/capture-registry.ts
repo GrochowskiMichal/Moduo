@@ -10,16 +10,43 @@
 // had, so nothing that worked stops working).
 
 import type { LucideIcon } from "lucide-react";
-import type { ComponentType } from "react";
+import type { ComponentType, ReactNode } from "react";
 
 import { calendarCaptureType } from "../features/calendar/capture-type";
 import { contactsCaptureType } from "../features/contacts/capture-type";
 import { notesCaptureType } from "../features/notes/capture-type";
 import { taskCaptureType } from "../features/tasks/capture-type";
 import type { ModulePermissions } from "../features/workspaces/types";
+import type { CaptureSource } from "./capture-source";
 
 /** A top-bar module, by the key its tab carries (app-chrome-constants.ts). */
 export type CaptureModule = "notes" | "tasks" | "calendar" | "email" | "contacts" | "chat";
+
+/**
+ * Where a capture was opened from (tasks-v3 call 90). ⌘⇧K opens with nothing
+ * here: the type's own default (Task → your Inbox), never asking where. ⌘N,
+ * "+ New" and `c` pass "here": the project, the section, the top of Up next.
+ */
+export type CaptureRequest = {
+  /** File into this project (and section), not the type's default. */
+  destination?: { projectId: string; sectionId?: string | null };
+  /** Put the new task at the top of your Up next (⌘N in Focus). */
+  queueTop?: boolean;
+  /** What a filtered scope pre-fills: its tags, assignee and priority. */
+  seed?: {
+    tagIds?: string[];
+    assigneeId?: string | null;
+    priority?: "low" | "medium" | "high" | null;
+  };
+};
+
+/** A request as the body gets it: plus what was open when it was opened (93). */
+export type CaptureContext = CaptureRequest & {
+  /** The email, note, event or contact open when the capture opened. */
+  source: CaptureSource | null;
+  /** Bumped on every open, so a body can tell a fresh open from a re-render. */
+  openId: number;
+};
 
 /** What the capture hands the type's body. */
 export type CaptureBodyProps = {
@@ -30,6 +57,15 @@ export type CaptureBodyProps = {
   writable: boolean;
   /** Close the capture (after a create that isn't "Create more"). */
   onDone: () => void;
+  /** Where it was opened from and what was open (types with `ownsHeader` read it). */
+  context?: CaptureContext;
+  /** The type chip, for a body that lays out its own header row. */
+  typeChip?: ReactNode;
+  /**
+   * A body that claims Esc before the capture closes (a menu, a recognition to
+   * undo, research §5) registers a handler: it returns true when it used the key.
+   */
+  registerEscape?: (handler: (() => boolean) | null) => void;
 };
 
 export type CaptureTypeDef = {
@@ -44,6 +80,11 @@ export type CaptureTypeDef = {
   destination: string;
   canWrite: (perms: ModulePermissions) => boolean;
   Body: ComponentType<CaptureBodyProps>;
+  /**
+   * The body lays out its own header row (the type chip it's handed, its own
+   * destination picker and "From:" chip): Task. Others get "Type ▾ · Destination".
+   */
+  ownsHeader?: boolean;
 };
 
 /** Registered types, Task first: the capture always opens as the first one. */

@@ -6,17 +6,26 @@
 // bar and never reach the app behind: the shell claims them in the capture
 // phase, so the global module keys bail (gotchas/ui.md). A number without a
 // type does nothing. Typing "/note" no longer switches anything: one way per job.
+//
+// TV-U14: ⌘⇧K opens as Task → your Inbox and never asks; ⌘N, "+ New" and `c`
+// open it with "here" (`dispatchOpenCapture({ destination })`). What was open
+// (an email, note, event, contact) rides along as the body's `context.source`.
+// Esc keeps the draft: the next open restores it (research §1.8). A body may
+// claim Esc first (a menu, a recognition to undo) through `registerEscape`.
 
 import { ChevronDown } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   CAPTURE_TYPES,
+  type CaptureContext,
+  type CaptureRequest,
   type CaptureTypeDef,
   captureDigitFor,
   captureDigitKey,
   captureTypeForDigit,
 } from "../../lib/capture-registry";
+import { getCaptureSource } from "../../lib/capture-source";
 import { isMacPlatform, onShortcut } from "../../lib/shortcuts";
 import { useWorkspace } from "../../providers/workspace-provider";
 import { Button } from "../ui/button";
@@ -35,10 +44,15 @@ import { announceOverlayOpen, onOtherOverlayOpen } from "./global-overlay-events
 const OVERLAY_ID = "capture";
 const CAPTURE_OPEN_EVENT = "moduo:capture:open";
 
-/** Open the capture as Task (the bottom bar's button, other entry points). */
-export function dispatchOpenCapture(): void {
+/**
+ * Open the capture as Task: with no request, to your Inbox (⌘⇧K, the bottom
+ * bar); with one, "here" (⌘N, "+ New", `c`: tasks-v3 call 90).
+ */
+export function dispatchOpenCapture(request?: CaptureRequest): void {
   if (typeof window === "undefined") return;
-  window.dispatchEvent(new CustomEvent(CAPTURE_OPEN_EVENT));
+  window.dispatchEvent(
+    new CustomEvent<CaptureRequest | undefined>(CAPTURE_OPEN_EVENT, { detail: request }),
+  );
 }
 
 type Props = {
@@ -51,6 +65,12 @@ export function CaptureShell({ types = CAPTURE_TYPES }: Props) {
   const [open, setOpen] = useState(false);
   const [typeId, setTypeId] = useState(types[0]?.type ?? "");
   const [draft, setDraft] = useState("");
+  const [context, setContext] = useState<CaptureContext>({ source: null, openId: 0 });
+  // Esc goes to the body first when it asks for it (its menu, a recognition).
+  const escapeRef = useRef<(() => boolean) | null>(null);
+  const registerEscape = useCallback((handler: (() => boolean) | null) => {
+    escapeRef.current = handler;
+  }, []);
   // Where focus was when the capture opened. Opened by a key or an event, the
   // dialog has no trigger, so Radix alone would drop focus on <body> (ui.md).
   const returnFocusRef = useRef<HTMLElement | null>(null);
@@ -66,16 +86,23 @@ export function CaptureShell({ types = CAPTURE_TYPES }: Props) {
 
   const active = types.find((t) => t.type === typeId) ?? types[0];
 
-  const show = useCallback(() => {
-    // Already open: keep the type and what's typed.
-    if (openRef.current) return;
-    const focused = document.activeElement;
-    returnFocusRef.current = focused instanceof HTMLElement ? focused : null;
-    // Always opens as the first type, Task (90b), with a fresh line.
-    setTypeId(types[0]?.type ?? "");
-    setDraft("");
-    setOpen(true);
-  }, [types]);
+  const show = useCallback(
+    (request?: CaptureRequest) => {
+      // Already open: keep the type and what's typed.
+      if (openRef.current) return;
+      const focused = document.activeElement;
+      returnFocusRef.current = focused instanceof HTMLElement ? focused : null;
+      // Always opens as the first type, Task (90b). The draft stays: Esc kept it.
+      setTypeId(types[0]?.type ?? "");
+      setContext((prev) => ({
+        ...(request ?? {}),
+        source: getCaptureSource(),
+        openId: prev.openId + 1,
+      }));
+      setOpen(true);
+    },
+    [types],
+  );
 
   useEffect(
     () =>
@@ -88,7 +115,8 @@ export function CaptureShell({ types = CAPTURE_TYPES }: Props) {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const onOpen = () => show();
+    const onOpen = (event: Event) =>
+      show((event as CustomEvent<CaptureRequest | undefined>).detail);
     window.addEventListener(CAPTURE_OPEN_EVENT, onOpen);
     return () => window.removeEventListener(CAPTURE_OPEN_EVENT, onOpen);
   }, [show]);
@@ -133,12 +161,71 @@ export function CaptureShell({ types = CAPTURE_TYPES }: Props) {
   const Body = active.Body;
   const isMac = isMacPlatform();
 
+  const typeChip = (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="sm"
+          aria-label={`Capture type: ${active.label}`}
+          className="gap-1.5"
+        >
+          <ActiveIcon aria-hidden />
+          {active.label}
+          <ChevronDown className="text-muted-foreground" aria-hidden />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="start"
+        className="min-w-44"
+        // Back to the title line, not the chip, so typing just goes on.
+        onCloseAutoFocus={(event) => {
+          const field = bodyRef.current?.querySelector<HTMLElement>(
+            "[data-capture-title], input, textarea",
+          );
+          if (!field) return;
+          event.preventDefault();
+          field.focus();
+        }}
+      >
+        <DropdownMenuRadioGroup
+          value={active.type}
+          onValueChange={(value) => pick(types.find((t) => t.type === value))}
+        >
+          {types.map((type) => {
+            const digit = captureDigitFor(type, visibleModules);
+            return (
+              <DropdownMenuRadioItem key={type.type} value={type.type} disabled={!writable(type)}>
+                <type.icon aria-hidden />
+                {type.label}
+                {digit ? (
+                  <DropdownMenuShortcut>
+                    {isMac ? `⌘${digit}` : `Ctrl ${digit}`}
+                  </DropdownMenuShortcut>
+                ) : null}
+              </DropdownMenuRadioItem>
+            );
+          })}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent
         showCloseButton={false}
         aria-describedby="capture-shell-description"
         className="top-[12%] translate-y-0 gap-0 overflow-hidden p-0 sm:max-w-xl"
+        // Radix reads Esc first (a document capture listener): the body's menu
+        // or recognition takes it before the capture closes, and the key then
+        // stops here so the editor doesn't act on it twice (gotchas/ui.md).
+        onEscapeKeyDown={(event) => {
+          if (escapeRef.current?.()) {
+            event.preventDefault();
+            event.stopPropagation();
+          }
+        }}
         onCloseAutoFocus={(event) => {
           const target = returnFocusRef.current;
           if (target?.isConnected) {
@@ -151,69 +238,26 @@ export function CaptureShell({ types = CAPTURE_TYPES }: Props) {
         <DialogDescription id="capture-shell-description" className="sr-only">
           {`Capture a ${active.label.toLowerCase()}. ${isMac ? "⌘" : "Ctrl"} plus a module's number switches what you capture.`}
         </DialogDescription>
-        <div className="flex items-center gap-1 px-2 pt-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                aria-label={`Capture type: ${active.label}`}
-                className="gap-1.5"
-              >
-                <ActiveIcon aria-hidden />
-                {active.label}
-                <ChevronDown className="text-muted-foreground" aria-hidden />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="start"
-              className="min-w-44"
-              // Back to the title line, not the chip, so typing just goes on.
-              onCloseAutoFocus={(event) => {
-                const field = bodyRef.current?.querySelector<HTMLElement>("input, textarea");
-                if (!field) return;
-                event.preventDefault();
-                field.focus();
-              }}
-            >
-              <DropdownMenuRadioGroup
-                value={active.type}
-                onValueChange={(value) => pick(types.find((t) => t.type === value))}
-              >
-                {types.map((type) => {
-                  const digit = captureDigitFor(type, visibleModules);
-                  return (
-                    <DropdownMenuRadioItem
-                      key={type.type}
-                      value={type.type}
-                      disabled={!writable(type)}
-                    >
-                      <type.icon aria-hidden />
-                      {type.label}
-                      {digit ? (
-                        <DropdownMenuShortcut>
-                          {isMac ? `⌘${digit}` : `Ctrl ${digit}`}
-                        </DropdownMenuShortcut>
-                      ) : null}
-                    </DropdownMenuRadioItem>
-                  );
-                })}
-              </DropdownMenuRadioGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <span className="text-muted-foreground" aria-hidden>
-            ·
-          </span>
-          <span className="px-1 font-display text-base text-muted-foreground">
-            {active.destination}
-          </span>
-        </div>
+        {active.ownsHeader ? null : (
+          <div className="flex items-center gap-1 px-2 pt-2">
+            {typeChip}
+            <span className="text-muted-foreground" aria-hidden>
+              ·
+            </span>
+            <span className="px-1 font-display text-base text-muted-foreground">
+              {active.destination}
+            </span>
+          </div>
+        )}
         <div key={active.type} ref={bodyRef} className="motion-view">
           <Body
             draft={draft}
             onDraftChange={setDraft}
             writable={writable(active)}
             onDone={() => setOpen(false)}
+            context={context}
+            typeChip={active.ownsHeader ? typeChip : undefined}
+            registerEscape={registerEscape}
           />
         </div>
       </DialogContent>

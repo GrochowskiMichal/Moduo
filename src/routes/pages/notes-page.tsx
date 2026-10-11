@@ -78,6 +78,7 @@ import {
   TASK_DETAIL_REFRESH_EVENT,
   TaskDetailPanel,
 } from "../../features/tasks/ui/task-detail-panel";
+import { type CaptureSource, useCaptureSource } from "../../lib/capture-source";
 import { asDragPayload, asDropLinkTarget, isSelfDrop, targetAccepts } from "../../lib/drag-payload";
 import type { EntityLink, EntityRef } from "../../lib/entity-links";
 import { supabaseClient } from "../../lib/runtime.web";
@@ -127,6 +128,16 @@ export function NotesPage() {
     () => (selectedId ? (notes.find((n) => n.id === selectedId) ?? null) : null),
     [notes, selectedId],
   );
+  // An open note rides along on a capture as "From: …" (tasks-v3 call 93).
+  const selectedNoteTitle = selectedNote ? displayTitle(selectedNote.title) : null;
+  const captureSource = useMemo<CaptureSource | null>(
+    () =>
+      selectedId && selectedNoteTitle !== null
+        ? { kind: "note", label: selectedNoteTitle, ref: { type: "note", id: selectedId } }
+        : null,
+    [selectedId, selectedNoteTitle],
+  );
+  useCaptureSource(captureSource);
 
   const select = useCallback(
     (id: string | null, replace = false) => {

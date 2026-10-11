@@ -2,6 +2,7 @@ import { describe, expect, it } from "@rstest/core";
 import { RRule } from "rrule";
 
 import { parseCapture } from "./capture-parser";
+import { captureDates, resolveTitle, segmentsFromLine, type TitleSegment } from "./capture-tokens";
 
 // Friday 9 October 2026, 10:00 local — the research probe's reference time.
 const FRIDAY_10AM = new Date(2026, 9, 9, 10, 0, 0, 0);
@@ -184,5 +185,169 @@ describe("parseCapture — the `/` date commands (33a, RF-1's grammar)", () => {
     expect(parseCapture("Decide and/or delegate", FRIDAY_10AM).title).toBe(
       "Decide and/or delegate",
     );
+  });
+});
+
+describe("parseCapture — keeps the words people typed: Esc on a highlight (AC10.5)", () => {
+  it("reports where the recognised words are, for the highlight", () => {
+    const text = "Call Anna tomorrow 3pm";
+    const p = parseCapture(text, FRIDAY_10AM);
+    expect(p.spans.map(([a, b]) => text.slice(a, b))).toEqual(["tomorrow 3pm"]);
+    expect(parseCapture("Send March report", FRIDAY_10AM).spans).toEqual([]);
+  });
+
+  it("a kept phrase stays words and is never read as a date", () => {
+    const p = parseCapture("Prepare Monday notes", FRIDAY_10AM, { keep: ["Monday"] });
+    expect(p.title).toBe("Prepare Monday notes");
+    expect(p.matched).toBe(false);
+    expect(p.dueDate).toBeNull();
+  });
+
+  it("keeping one phrase leaves the others read", () => {
+    const p = parseCapture("Prepare Monday notes tomorrow", FRIDAY_10AM, { keep: ["monday"] });
+    expect(p.title).toBe("Prepare Monday notes");
+    expect(local(p.dueDate)?.getDate()).toBe(10);
+  });
+
+  it("an ignored range (a linked thing's name) is never a date", () => {
+    const p = parseCapture("Read Friday recap at 5", FRIDAY_10AM, { ignore: [[5, 17]] });
+    expect(p.title).toBe("Read Friday recap");
+    expect(local(p.scheduledAt)?.getHours()).toBe(17);
+    expect(local(p.scheduledAt)?.getDate()).toBe(9);
+  });
+});
+
+describe("capture title tokens — grammar tokens (AC10.3, AC10.4)", () => {
+  const CTX = {
+    people: [
+      { userId: "u-sam", name: "Sam Ortiz" },
+      { userId: "u-ana", name: "Ana Lee" },
+    ],
+    teams: [{ id: "t-design", name: "Design", letters: "DS" }],
+    tags: [{ id: "g-client", name: "client", color: "blue" }],
+  };
+
+  it("@person assigns and leaves the title", () => {
+    const r = resolveTitle(
+      [
+        { text: "Review the brief " },
+        { token: { kind: "person", userId: "u-sam", label: "Sam Ortiz" } },
+      ],
+      { now: FRIDAY_10AM },
+    );
+    expect(r.title).toBe("Review the brief");
+    expect(r.single.person?.userId).toBe("u-sam");
+  });
+
+  it("@Anna (a contact) stays in the title as words and becomes a link", () => {
+    const anna = { type: "contact", id: "c-anna" };
+    const r = resolveTitle(
+      [
+        { text: "Call " },
+        { token: { kind: "thing", ref: anna, label: "Anna Kowalski" } },
+        { text: " about the launch" },
+      ],
+      { now: FRIDAY_10AM },
+    );
+    expect(r.title).toBe("Call Anna Kowalski about the launch");
+    expect(r.things.map((t) => t.ref)).toEqual([anna]);
+  });
+
+  it("/tomorrow sets the due date and leaves the title, typed or picked", () => {
+    const typed = resolveTitle(segmentsFromLine("Send invoice /tomorrow", CTX), {
+      now: FRIDAY_10AM,
+    });
+    expect(typed.title).toBe("Send invoice");
+    expect(captureDates(typed).dueDay).toBe("2026-10-10");
+    const picked = resolveTitle(
+      [{ text: "Send invoice " }, { token: { kind: "due", day: "2026-10-10", label: "Tomorrow" } }],
+      { now: FRIDAY_10AM },
+    );
+    expect(picked.title).toBe("Send invoice");
+    expect(captureDates(picked).dueDay).toBe("2026-10-10");
+  });
+
+  it("C#, #123 and and/or stay text", () => {
+    for (const text of ["Learn C# basics", "Fix #123", "Decide and/or delegate"]) {
+      const r = resolveTitle(segmentsFromLine(text, CTX), { now: FRIDAY_10AM });
+      expect(r.title).toBe(text);
+      expect(r.tags).toEqual([]);
+    }
+  });
+
+  it("a typed line: @first-name assigns, @Team routes, #tag tags; an unknown @ stays", () => {
+    const r = resolveTitle(segmentsFromLine("Banner @design @sam #client for @nobody", CTX), {
+      now: FRIDAY_10AM,
+    });
+    expect(r.title).toBe("Banner for @nobody");
+    expect(r.single.team?.teamId).toBe("t-design");
+    expect(r.single.person?.userId).toBe("u-sam");
+    expect(r.tags.map((t) => t.tagId)).toEqual(["g-client"]);
+  });
+
+  it("an explicit date wins: date words then stay the person's words", () => {
+    const r = resolveTitle(
+      [
+        { text: "Prepare Monday notes " },
+        { token: { kind: "due", day: "2026-10-14", label: "Oct 14" } },
+      ],
+      { now: FRIDAY_10AM },
+    );
+    expect(r.title).toBe("Prepare Monday notes");
+    expect(r.highlights).toEqual([]);
+    expect(captureDates(r).dueDay).toBe("2026-10-14");
+    // A date set on the pill counts the same.
+    const pill = resolveTitle([{ text: "Prepare Monday notes" }], {
+      now: FRIDAY_10AM,
+      manualDates: { dueDay: "2026-10-20" },
+    });
+    expect(pill.title).toBe("Prepare Monday notes");
+    expect(captureDates(pill, { dueDay: "2026-10-20" }).dueDay).toBe("2026-10-20");
+  });
+
+  it("date words leave the title, highlighted where they are; Esc keeps them", () => {
+    const segments: TitleSegment[] = [
+      { text: "Call " },
+      { token: { kind: "person", userId: "u-ana", label: "Ana Lee" } },
+      { text: " tomorrow 3pm" },
+    ];
+    const r = resolveTitle(segments, { now: FRIDAY_10AM });
+    expect(r.title).toBe("Call");
+    expect(r.phrases).toEqual(["tomorrow 3pm"]);
+    const at = new Date(captureDates(r).scheduledAt ?? "");
+    expect(at.getDate()).toBe(10);
+    expect(at.getHours()).toBe(15);
+    const kept = resolveTitle(segments, { now: FRIDAY_10AM, keep: ["tomorrow 3pm"] });
+    expect(kept.title).toBe("Call tomorrow 3pm");
+    expect(kept.highlights).toEqual([]);
+  });
+
+  it("a thing named like a date stays a name", () => {
+    const r = resolveTitle(
+      [
+        { text: "Read " },
+        { token: { kind: "thing", ref: { type: "note", id: "n1" }, label: "Monday notes" } },
+      ],
+      { now: FRIDAY_10AM },
+    );
+    expect(r.title).toBe("Read Monday notes");
+    expect(captureDates(r).dueDay).toBeNull();
+  });
+
+  it("the last token of a single-value field wins; tags add up", () => {
+    const r = resolveTitle(
+      [
+        { token: { kind: "priority", level: "low", label: "Low" } },
+        { text: "Ship it " },
+        { token: { kind: "tag", tagId: "a", label: "one" } },
+        { token: { kind: "tag", tagId: null, label: "two" } },
+        { token: { kind: "tag", tagId: "a", label: "one" } },
+        { token: { kind: "priority", level: "high", label: "High" } },
+      ],
+      { now: FRIDAY_10AM },
+    );
+    expect(r.title).toBe("Ship it");
+    expect(r.single.priority?.level).toBe("high");
+    expect(r.tags.map((t) => t.label)).toEqual(["one", "two"]);
   });
 });

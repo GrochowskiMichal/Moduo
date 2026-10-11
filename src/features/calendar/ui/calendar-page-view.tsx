@@ -16,7 +16,7 @@ import {
 } from "@dnd-kit/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-
+import { dispatchOpenCapture } from "../../../components/app/capture-shell";
 import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell";
 import { RightPanel } from "../../../components/app/right-panel";
 import { truncationNotice } from "../../../components/app/truncation-notice";
@@ -29,6 +29,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../../../components/ui/dialog";
+import { type CaptureSource, useCaptureSource } from "../../../lib/capture-source";
 import { asDragPayload } from "../../../lib/drag-payload";
 import { ENTITY_OPEN_EVENT, takeEntityOpenIntent } from "../../../lib/entity-open";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
@@ -36,7 +37,6 @@ import { UNDO_TOAST_MS } from "../../../lib/undo-toast";
 import { dispatchLayoutPanelsSet, readFeaturePanelState } from "../../layout/panel-events";
 import { LinkedNotesPanel } from "../../notes/ui/linked-notes-panel";
 import type { TasksModuleApi } from "../../tasks/hooks/use-tasks-module";
-import { CaptureModal } from "../../tasks/ui/capture-modal";
 import { TaskDetailPanel } from "../../tasks/ui/task-detail-panel";
 import { accountSourceLabel, resolveAccountHues, syncAgeLabel, visibleEvents } from "../accounts";
 import { cleanupCredentialsForRemoval } from "../caldav-connect";
@@ -363,7 +363,6 @@ export function CalendarPageView({
     [userId, workspaceId],
   );
   const [detailTarget, setDetailTarget] = useState<DetailTarget>(null);
-  const [captureOpen, setCaptureOpen] = useState(false);
 
   const openDetail = useCallback(
     (target: NonNullable<DetailTarget>) => {
@@ -878,6 +877,17 @@ export function CalendarPageView({
       : null;
   const detailEvent =
     detailTarget?.type === "event" ? (eventsById.get(detailTarget.id) ?? null) : null;
+  // An open event rides along on a capture as "From: …" (tasks-v3 call 93).
+  const detailEventId = detailEvent?.id ?? null;
+  const detailEventTitle = detailEvent ? detailEvent.title || "Event" : null;
+  const captureSource = useMemo<CaptureSource | null>(
+    () =>
+      detailEventId && detailEventTitle
+        ? { kind: "event", label: detailEventTitle, ref: { type: "event", id: detailEventId } }
+        : null,
+    [detailEventId, detailEventTitle],
+  );
+  useCaptureSource(captureSource);
 
   // The registered views (features/calendar/panel-views.ts), unchanged from the
   // old tabs: the menu lists Detail and Notes, then Tasks below the hairline.
@@ -887,7 +897,7 @@ export function CalendarPageView({
         <CalendarTasksPanel
           api={api}
           onOpenTask={(taskId) => openDetail({ type: "task", id: taskId })}
-          onRequestCapture={() => setCaptureOpen(true)}
+          onRequestCapture={() => dispatchOpenCapture()}
           review={
             reviewMode
               ? {
@@ -924,7 +934,7 @@ export function CalendarPageView({
             buckets={api.buckets}
             inbox={api.inbox}
             canEdit={api.canEdit}
-            onRequestCapture={() => setCaptureOpen(true)}
+            onRequestCapture={() => dispatchOpenCapture()}
             onSelectTask={(id) => setDetailTarget({ type: "task", id })}
             api={api}
             runtime={runtime}
@@ -1167,15 +1177,6 @@ export function CalendarPageView({
           onClose={() => setTaskPopover(null)}
         />
       ) : null}
-
-      <CaptureModal
-        open={captureOpen}
-        onOpenChange={setCaptureOpen}
-        buckets={api.buckets}
-        inbox={api.inbox}
-        defaultBucketId={api.inbox?.id ?? null}
-        onCreate={api.createTask}
-      />
 
       <Dialog open={deleteEvent !== null} onOpenChange={(open) => !open && setDeleteEventId(null)}>
         <DialogContent className="max-w-sm">

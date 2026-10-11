@@ -36,11 +36,20 @@ export function mentionCandidateKey(candidate: MentionCandidate): string {
       return `command:${candidate.command}`;
     case "tag":
       return `tag:${candidate.tagId}`;
+    case "team":
+      return `team:${candidate.teamId}`;
+    case "action":
+      return `action:${candidate.id}`;
   }
 }
 
 function CandidateRow({ candidate }: { candidate: MentionCandidate }) {
-  if (candidate.kind === "command" || candidate.kind === "tag") {
+  if (
+    candidate.kind === "command" ||
+    candidate.kind === "tag" ||
+    candidate.kind === "team" ||
+    candidate.kind === "action"
+  ) {
     // The picker lists things; commands and tags belong to the inline menu.
     return <span className="min-w-0 flex-1 truncate">{candidate.label}</span>;
   }
