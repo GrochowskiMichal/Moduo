@@ -17,7 +17,7 @@
 import type { SyncTableName } from "./types";
 
 /** Bumped when the persisted shape changes: an older copy is ignored. */
-export const CACHE_VERSION = 1;
+export const CACHE_VERSION = 2;
 
 /** One table's rows and its delta cursor. */
 export type CachedTable = { rows: unknown[]; cursor: string | null };

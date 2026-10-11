@@ -27,7 +27,7 @@ import { FocusAwayPrompt } from "../../focus/ui/away-prompt";
 import { dispatchOpenSettings } from "../../settings/settings-events";
 import { EntityRichText } from "../../spine/ui/entity-rich-text";
 import { formatDue, formatScheduled } from "../helpers";
-import type { Tag, Task } from "../model";
+import { estimateOf, type Tag, type Task } from "../model";
 
 type Props = {
   /** The workspace the tracked time is saved into (the engine flushes per workspace). */
@@ -304,13 +304,14 @@ function NowCard({
     [
       parentTitle ? `Part of ${parentTitle}` : null,
       scheduled ? `Scheduled ${scheduled}` : null,
-      task.durationMinutes ? `~${task.durationMinutes}m est` : null,
+      estimateOf(task) ? `~${estimateOf(task)}m est` : null,
     ]
       .filter(Boolean)
       .join("  ·  ");
 
   const trackedTotal = task.timeSpentSeconds + accrued;
-  const estimateSeconds = task.durationMinutes ? task.durationMinutes * 60 : null;
+  const estimateMinutes = estimateOf(task);
+  const estimateSeconds = estimateMinutes ? estimateMinutes * 60 : null;
 
   return (
     // elevated: --popover sits one step lighter than the --card panel (no shadow —

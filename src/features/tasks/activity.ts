@@ -41,6 +41,10 @@ const FIELD_NAMES: Record<string, string> = {
   recurrence: "the repeat",
   energy_level: "the energy",
   priority: "the priority",
+  // TV-D10
+  section_id: "the section",
+  team_id: "the team",
+  estimate_minutes: "the estimate",
 };
 
 /** `{from, to}` of one field in a tasks.update payload. */
@@ -89,12 +93,34 @@ function updateLine(p: Record<string, unknown>): string {
       }
       case "recurrence":
         return to ? "changed how this repeats" : "stopped this repeating";
+      // TV-D10
+      case "section_id":
+        return to ? "moved this to a section" : "moved this to No section";
+      case "team_id":
+        return to ? "routed this to a team" : "took this off its team";
     }
   }
   const names = fields.map((f) => FIELD_NAMES[f] ?? f);
   if (names.length === 0) return "edited this";
   if (names.length === 1) return `changed ${names[0]}`;
   return `changed ${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
+/**
+ * A Waiting on… line (TV-D10). The trail doesn't name who or what: the panel's
+ * Waiting on list does, through references, so an email's subject stays with
+ * whoever can open it. Only a typed note is quoted.
+ */
+function waitingLine(verb: string, p: Record<string, unknown>): string {
+  const kind = str(p.kind);
+  if (kind === "text") {
+    const label = str(p.label);
+    return label ? `${verb} “${label}”` : `${verb} something`;
+  }
+  if (kind === "email") return `${verb} an email`;
+  if (kind === "agent") return `${verb} an agent`;
+  if (kind === "person") return `${verb} someone`;
+  return `${verb} something`;
 }
 
 /**
@@ -165,6 +191,21 @@ export function activityLine(entry: Pick<ActivityEntry, "op" | "payload">): stri
     }
     case "tasks.unschedule":
       return "cleared the scheduled time";
+    // TV-D10: several work sessions per task; Waiting on… is a list.
+    case "tasks.session_add": {
+      const at = formatScheduled(str(p.starts_at));
+      return at ? `scheduled a session for ${at}` : "scheduled a session";
+    }
+    case "tasks.session_move": {
+      const at = formatScheduled(str(p.to));
+      return at ? `moved a session to ${at}` : "moved a session";
+    }
+    case "tasks.session_remove":
+      return "removed a session";
+    case "tasks.waiting_add":
+      return waitingLine("is waiting on", p);
+    case "tasks.waiting_remove":
+      return waitingLine("stopped waiting on", p);
     case "tasks.skip_occurrence": {
       const to = formatScheduled(str(p.to));
       return to ? `skipped an occurrence — next ${to}` : "skipped an occurrence";

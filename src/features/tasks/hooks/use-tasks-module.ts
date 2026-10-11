@@ -109,6 +109,8 @@ function byPosition<T extends { position: string }>(a: T, b: T): number {
 const isTempId = (id: string) => id.startsWith("tmp-");
 
 const NO_EDIT = "You don't have edit access to Tasks in this workspace.";
+/** One empty list for every absent collection (a stable identity for memos). */
+const NO_ROWS: never[] = [];
 const STILL_SAVING = "Still saving that task — try again in a moment.";
 
 /** A change that can't wait for the network (default g): said once, never queued. */
@@ -1959,28 +1961,13 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         deletedAt: null,
       };
       const write = store.begin([{ table: "buckets", insert: optimistic }]);
+      // TV-D10: through the project op (the old save on a database before it).
       void runtime.tasks
-        .upsertBucket({ ...optimistic, id: "" })
+        .createProject({ workspaceId, fields: { name: trimmed, position } })
         .then((saved) => write.settle({ buckets: [saved] }))
         .catch((e) => refused(write, e, "Couldn't create bucket."));
     },
     [editBlocked, runtime, workspaceId, store, bundle.buckets, userId, refused],
-  );
-
-  /** Save a bucket's edited fields (rename, section): shown at once, settled by the server's row. */
-  const saveBucket = useCallback(
-    (existing: Bucket, fields: Partial<Bucket>) => {
-      if (editBlocked() || !store) return;
-      const updated = { ...existing, ...fields, updatedAt: new Date().toISOString() };
-      const write = store.begin([
-        { table: "buckets", patch: { id: existing.id, fields: fields as Record<string, unknown> } },
-      ]);
-      void runtime!.tasks
-        .upsertBucket(updated)
-        .then((saved) => write.settle({ buckets: [saved] }))
-        .catch((e) => refused(write, e));
-    },
-    [editBlocked, store, runtime, refused],
   );
 
   const renameBucket = useCallback(
@@ -1988,9 +1975,22 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       const trimmed = name.trim();
       const existing = bundle.buckets.find((b) => b.id === id);
       if (!existing || !trimmed || trimmed === existing.name) return;
-      saveBucket(existing, { name: trimmed });
+      if (editBlocked() || !store) return;
+      const updated = { ...existing, name: trimmed, updatedAt: new Date().toISOString() };
+      const write = store.begin([{ table: "buckets", patch: { id, fields: { name: trimmed } } }]);
+      // Only the name goes (TV-D10), so a rename can't put back a teammate's
+      // newer area or place.
+      void runtime!.tasks
+        .updateProject({
+          workspaceId: existing.workspaceId,
+          projectId: id,
+          patch: { name: trimmed },
+          fallback: updated,
+        })
+        .then((saved) => write.settle({ buckets: [saved] }))
+        .catch((e) => refused(write, e));
     },
-    [bundle.buckets, saveBucket],
+    [bundle.buckets, editBlocked, store, runtime, refused],
   );
 
   /**
@@ -2004,9 +2004,25 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       if (!existing) return;
       const next = group?.trim() ? group.trim() : null;
       if (next === (existing.group ?? null)) return;
-      saveBucket(existing, { group: next });
+      if (editBlocked() || !store) return;
+      const updated = { ...existing, group: next, updatedAt: new Date().toISOString() };
+      const write = store.begin([{ table: "buckets", patch: { id, fields: { group: next } } }]);
+      // TV-D10: the rail's sections are areas. The area of that name is found
+      // or made, and the project moves into it (the old label write on a
+      // database before it).
+      void runtime!.tasks
+        .setProjectArea({
+          workspaceId: existing.workspaceId,
+          project: updated,
+          areaName: next,
+          areas: bundle.areas ?? [],
+        })
+        .then(({ project, areas }) =>
+          write.settle({ buckets: [project], ...(areas ? { areas } : {}) }),
+        )
+        .catch((e) => refused(write, e));
     },
-    [bundle.buckets, saveBucket],
+    [bundle.buckets, bundle.areas, editBlocked, store, runtime, refused],
   );
 
   /**
@@ -2146,6 +2162,15 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     restLoaded: !!store && snap.restLoaded,
     /** Live comments per task (TV-D11a; TV-D5's promised counts). */
     commentCounts: snap.commentCounts,
+    /** TV-D10's structure, live from the store: areas, sections, teams, members. */
+    areas: bundle.areas ?? NO_ROWS,
+    sections: bundle.sections ?? NO_ROWS,
+    teams: bundle.teams ?? NO_ROWS,
+    teamMembers: bundle.teamMembers ?? NO_ROWS,
+    /** Work sessions on tasks you can see, your own reminders, Waiting on… (TV-D10). */
+    sessions: snap.sessions,
+    reminders: snap.reminders,
+    waiting: snap.waiting,
     buckets,
     inbox,
     tasks: liveTasks,

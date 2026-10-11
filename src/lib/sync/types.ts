@@ -3,18 +3,27 @@
 // Every table the store keeps is named here with the model it holds. The
 // runtime's `tasks.syncRead` reads one table at a time (a delta since a
 // server stamp, or its live rows), and the store keeps one map per table.
-// Adding a table (TV-D10's areas, sections, sessions…) is one entry here, one
-// source in `runtime.web.ts` (SYNC_SOURCES) and one line in `tables.ts`.
+// Adding a table is one entry here, one source in `runtime.web.ts`
+// (SYNC_SOURCES), one line in `store.ts` (SYNC_TABLES, and ACCESS_CHECKED for
+// a delta table RLS can hide rows of) and its Realtime mapping in
+// `features/tasks/live.ts` if it is published.
 
 import type {
+  Area,
   Bucket,
   ProjectStatus,
+  Section,
   Tag,
   TagLink,
   Task,
   TaskCompletion,
   TaskQueueEntry,
   TaskRelation,
+  TaskReminder,
+  TaskSession,
+  TaskWaitingEntry,
+  Team,
+  TeamMember,
 } from "../../features/tasks/model";
 import type { Truncation } from "../paged-select";
 
@@ -40,6 +49,15 @@ export type SyncRows = {
   tags: Tag;
   tagLinks: TagLink;
   comments: CommentMark;
+  // TV-D10's structure and the task's own rows.
+  areas: Area;
+  sections: Section;
+  teams: Team;
+  teamMembers: TeamMember;
+  sessions: TaskSession;
+  /** Only your own (RLS returns nobody else's). */
+  reminders: TaskReminder;
+  waiting: TaskWaitingEntry;
 };
 
 export type SyncTableName = keyof SyncRows;
@@ -58,6 +76,8 @@ export type SyncReadInput<T extends SyncTableName = SyncTableName> = {
   table: T;
   since: string | null;
   part?: "open" | "rest";
+  /** Only these rows (live ones): what the access check found you can see now. */
+  ids?: readonly string[];
 };
 
 export type SyncReadResult<R = unknown> = {

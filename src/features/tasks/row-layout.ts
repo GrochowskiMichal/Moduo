@@ -23,7 +23,7 @@ import {
   formatTime,
 } from "../../lib/time-format";
 import { formatTimestamp, isUnfinished } from "./helpers";
-import { isDrifted, type Task } from "./model";
+import { estimateOf, isDrifted, type Task } from "./model";
 
 /** The row properties Display can switch on and off, in column order. */
 export const ROW_PROPERTIES = ["priority", "energy", "date", "assignee"] as const;
@@ -107,12 +107,12 @@ export type RowPreset = "standard" | "detailed";
  * Detailed's time cell: tracked time and the estimate, "1h 20m / ~4h", or
  * either one alone ("1h 20m", "~4h"); null when the task has neither.
  */
-export function rowTime(task: Pick<Task, "durationMinutes" | "timeSpentSeconds">): string | null {
+export function rowTime(
+  task: Pick<Task, "durationMinutes" | "estimateMinutes" | "timeSpentSeconds">,
+): string | null {
   const tracked = task.timeSpentSeconds > 0 ? formatDurationSeconds(task.timeSpentSeconds) : null;
-  const estimate =
-    task.durationMinutes && task.durationMinutes > 0
-      ? `~${formatDuration(task.durationMinutes)}`
-      : null;
+  const minutes = estimateOf(task);
+  const estimate = minutes && minutes > 0 ? `~${formatDuration(minutes)}` : null;
   if (tracked && estimate) return `${tracked} / ${estimate}`;
   return tracked ?? estimate;
 }

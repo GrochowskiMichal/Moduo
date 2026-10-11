@@ -40,7 +40,10 @@ import type {
   Task,
   TaskCompletion,
   TaskQueueEntry,
+  TaskReminder,
+  TaskSession,
   TasksModuleBundle,
+  TaskWaitingEntry,
 } from "../../features/tasks/model";
 import { listenTasksLive, type TasksLiveEvent } from "../../features/tasks/realtime";
 import { TAG_LINKS_SCOPE, type Truncation } from "../paged-select";
@@ -128,6 +131,10 @@ export type StoreSnapshot = {
   completions: TaskCompletion[];
   /** Live comments per task. */
   commentCounts: ReadonlyMap<string, number>;
+  /** TV-D10: work sessions on tasks you can see, your own reminders, Waiting on… entries. */
+  sessions: TaskSession[];
+  reminders: TaskReminder[];
+  waiting: TaskWaitingEntry[];
 };
 
 const EMPTY_BUNDLE: TasksModuleBundle = {
@@ -137,6 +144,10 @@ const EMPTY_BUNDLE: TasksModuleBundle = {
   tagLinks: [],
   taskRelations: [],
   statuses: [],
+  areas: [],
+  sections: [],
+  teams: [],
+  teamMembers: [],
   truncated: [],
 };
 
@@ -155,6 +166,9 @@ export const EMPTY_SNAPSHOT: StoreSnapshot = {
   kept: [],
   completions: [],
   commentCounts: new Map(),
+  sessions: [],
+  reminders: [],
+  waiting: [],
 };
 
 // ── Tables ──────────────────────────────────────────────────────────────────
@@ -166,15 +180,27 @@ export const EMPTY_SNAPSHOT: StoreSnapshot = {
  * teams, team members): each has `workspace_id`, `updated_at`, `deleted_at`.
  */
 export const SYNC_TABLES: readonly { name: SyncTableName; delta: boolean; phase: 1 | 2 }[] = [
-  { name: "buckets", delta: true, phase: 1 },
-  { name: "statuses", delta: true, phase: 1 },
-  { name: "tasks", delta: true, phase: 1 },
+  // Read whole every time: small, and what you can see of them changes with
+  // sharing, which bumps no stamp (a project shared with you, an area that
+  // shows because one of its projects does: TV-D10's `areas__visible`).
+  { name: "buckets", delta: false, phase: 1 },
+  { name: "statuses", delta: false, phase: 1 },
+  { name: "areas", delta: false, phase: 1 },
+  { name: "sections", delta: false, phase: 1 },
+  { name: "teams", delta: false, phase: 1 },
+  { name: "teamMembers", delta: false, phase: 1 },
+  // No stamps (hard deletes): read whole.
   { name: "queue", delta: false, phase: 1 },
-  { name: "tags", delta: true, phase: 1 },
   { name: "tagLinks", delta: false, phase: 1 },
   { name: "relations", delta: false, phase: 1 },
+  // Deltas; the access check covers what sharing shows or hides.
+  { name: "tasks", delta: true, phase: 1 },
+  { name: "tags", delta: true, phase: 1 },
   { name: "completions", delta: true, phase: 2 },
   { name: "comments", delta: true, phase: 2 },
+  { name: "sessions", delta: true, phase: 2 },
+  { name: "reminders", delta: true, phase: 2 },
+  { name: "waiting", delta: true, phase: 2 },
 ];
 
 /**
@@ -184,13 +210,17 @@ export const SYNC_TABLES: readonly { name: SyncTableName; delta: boolean; phase:
  * The whole-read tables (queue, tag links, relations) drop such rows on every
  * read already.
  */
-const ACCESS_CHECKED: readonly SyncTableName[] = [
-  "tasks",
-  "buckets",
-  "statuses",
-  "completions",
+const ACCESS_CHECKED: readonly SyncTableName[] = SYNC_TABLES.filter((t) => t.delta).map(
+  (t) => t.name,
+);
+
+/** Tables whose rows belong to one task (`taskId`): they go with it. */
+const TASK_ROWS: readonly SyncTableName[] = [
   "comments",
-  "tags",
+  "completions",
+  "sessions",
+  "reminders",
+  "waiting",
 ];
 
 type TableState = {
@@ -229,6 +259,13 @@ const LIVE_TO_TABLE: Record<LiveChange["table"], SyncTableName> = {
   task_queue: "queue",
   project_statuses: "statuses",
   comments: "comments",
+  areas: "areas",
+  sections: "sections",
+  teams: "teams",
+  team_members: "teamMembers",
+  task_sessions: "sessions",
+  task_reminders: "reminders",
+  task_waiting: "waiting",
 };
 
 // ── Timing ──────────────────────────────────────────────────────────────────
@@ -672,6 +709,10 @@ export class WorkspaceStore {
     this.applyWhole("tagLinks", bundle.tagLinks, started, truncated(TAG_LINKS_SCOPE));
     this.applyWhole("relations", bundle.taskRelations, started, truncated("task dependencies"));
     this.applyWhole("statuses", bundle.statuses ?? [], started, truncated("statuses"));
+    this.applyWhole("areas", bundle.areas ?? [], started, truncated("areas"));
+    this.applyWhole("sections", bundle.sections ?? [], started, truncated("sections"));
+    this.applyWhole("teams", bundle.teams ?? [], started, truncated("teams"));
+    this.applyWhole("teamMembers", bundle.teamMembers ?? [], started, truncated("team members"));
     this.applyWhole(
       "queue",
       queue.filter((e) => e.workspaceId === this.workspaceId),
@@ -724,10 +765,10 @@ export class WorkspaceStore {
     this.markLoaded();
     this.changed();
 
-    const [rest, completions, comments] = await Promise.all([
+    const phase2 = SYNC_TABLES.filter((t) => t.phase === 2);
+    const [rest, ...later] = await Promise.all([
       this.read("tasks", null, "rest"),
-      this.read("completions", null),
-      this.read("comments", null),
+      ...phase2.map((t) => this.read(t.name, null).then((res) => [t.name, res] as const)),
     ]);
     const all = new Map<string, AnyRow>();
     for (const id of openTasks) {
@@ -743,10 +784,10 @@ export class WorkspaceStore {
     );
     // "" = read, but empty: later reads take its live rows until it has a stamp.
     this.table("tasks").cursor = newestOf(openStamp, rest.maxUpdatedAt) ?? "";
-    this.applyWhole("completions", completions.rows as AnyRow[], started, completions.truncated);
-    this.table("completions").cursor = completions.maxUpdatedAt ?? this.table("completions").cursor;
-    this.applyWhole("comments", comments.rows as AnyRow[], started, comments.truncated);
-    this.table("comments").cursor = comments.maxUpdatedAt ?? this.table("comments").cursor;
+    for (const [name, res] of later) {
+      this.applyWhole(name, res.rows as AnyRow[], started, res.truncated);
+      this.table(name).cursor = res.maxUpdatedAt ?? this.table(name).cursor;
+    }
     this.restLoaded = true;
     this.fullReadAt = started;
   }
@@ -807,12 +848,28 @@ export class WorkspaceStore {
         const gone = [...state.rows.keys()].filter(
           (id) => !keep.has(id) && (state.seenAt.get(id) ?? 0) < started,
         );
+        // Shared with you since (a project's grant, a task's): no stamp moved,
+        // so no delta brings them. Read them by id.
+        const known = new Set(state.rows.keys());
+        const added = res.ids.filter((id) => !known.has(id) && !state.goneAt.has(id));
+        if (added.length > 0 && this.runtime.tasks.syncRead) {
+          const got = await this.runtime.tasks.syncRead({
+            workspaceId: this.workspaceId,
+            table,
+            since: null,
+            ids: added,
+          });
+          if (got.rows.length > 0) {
+            this.applyRows(table, got.rows as AnyRow[], "answer", started);
+            dropped = true;
+          }
+        }
         if (gone.length === 0) continue;
         dropped = true;
         this.forgetRows(table, gone);
         if (table === "tasks") {
           const goneTasks = new Set(gone);
-          for (const dependent of ["comments", "completions"] as const) {
+          for (const dependent of TASK_ROWS) {
             const rows = this.table(dependent).rows;
             const ofGone = [...rows.values()]
               .filter((r) => goneTasks.has((r as { taskId?: string }).taskId ?? ""))
@@ -971,6 +1028,9 @@ export class WorkspaceStore {
     }
     if (change.kind === "delete") this.forgetRows(name, [change.id]);
     else this.applyRows(name, [change.row as AnyRow], "live");
+    // An area shows while one of its projects does (TV-D10): a project
+    // change can show or hide an area with no event of its own. Read again.
+    if (name === "buckets") this.requestSync("reconnect");
     this.changed();
     this.schedulePersist();
   };
@@ -1345,6 +1405,10 @@ export class WorkspaceStore {
     const tagLinks = this.rendered("tagLinks");
     const relations = this.rendered("relations");
     const statuses = this.rendered("statuses");
+    const areas = this.rendered("areas");
+    const sections = this.rendered("sections");
+    const teams = this.rendered("teams");
+    const teamMembers = this.rendered("teamMembers");
     const truncated: Truncation[] = [];
     for (const t of SYNC_TABLES) {
       const cut = this.table(t.name).truncated;
@@ -1358,6 +1422,10 @@ export class WorkspaceStore {
       prev.bundle.tagLinks === tagLinks &&
       prev.bundle.taskRelations === relations &&
       prev.bundle.statuses === statuses &&
+      prev.bundle.areas === areas &&
+      prev.bundle.sections === sections &&
+      prev.bundle.teams === teams &&
+      prev.bundle.teamMembers === teamMembers &&
       sameTruncations(prev.bundle.truncated, truncated);
     const bundle: TasksModuleBundle = sameBundle
       ? prev.bundle
@@ -1368,6 +1436,10 @@ export class WorkspaceStore {
           tagLinks,
           taskRelations: relations,
           statuses,
+          areas,
+          sections,
+          teams,
+          teamMembers,
           truncated,
         };
     const comments = this.rendered("comments");
@@ -1391,6 +1463,9 @@ export class WorkspaceStore {
       kept: this.kept,
       completions: this.rendered("completions"),
       commentCounts,
+      sessions: this.rendered("sessions"),
+      reminders: this.rendered("reminders"),
+      waiting: this.rendered("waiting"),
     };
     this.lastSnapshot = { snapshot, bundle, commentsSource: comments };
     return snapshot;

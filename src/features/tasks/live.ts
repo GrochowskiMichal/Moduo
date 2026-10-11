@@ -16,29 +16,44 @@
 import type { ModuoRuntime } from "../../lib/runtime.types";
 import type { CommentMark } from "../../lib/sync/types";
 import {
+  areaRowToModel,
   bucketRowToModel,
   commentMarkRowToModel,
   projectStatusRowToModel,
+  sectionRowToModel,
   sortQueueEntries,
   tagLinkRowToModel,
   tagRowToModel,
   taskQueueRowToModel,
+  taskReminderRowToModel,
   taskRowToModel,
+  taskSessionRowToModel,
+  taskWaitingRowToModel,
+  teamMemberRowToModel,
+  teamRowToModel,
 } from "../../lib/task-rows";
 import type {
+  Area,
   Bucket,
   ProjectStatus,
+  Section,
   Tag,
   TagLink,
   Task,
   TaskQueueEntry,
+  TaskReminder,
+  TaskSession,
   TasksModuleBundle,
+  TaskWaitingEntry,
+  Team,
+  TeamMember,
 } from "./model";
 
 /**
  * The tables Tasks listens to (all in the `supabase_realtime` publication).
  * Statuses and comments joined with the shared store (TV-D11a): a status set
- * edited elsewhere and a teammate's comment (its count) show at once.
+ * edited elsewhere and a teammate's comment (its count) show at once; so did
+ * TV-D10's areas, sections, teams, members, sessions, reminders and waiting.
  */
 export const LIVE_TABLES = [
   "tasks",
@@ -48,6 +63,13 @@ export const LIVE_TABLES = [
   "task_queue",
   "project_statuses",
   "comments",
+  "areas",
+  "sections",
+  "teams",
+  "team_members",
+  "task_sessions",
+  "task_reminders",
+  "task_waiting",
 ] as const;
 export type LiveTable = (typeof LIVE_TABLES)[number];
 
@@ -61,7 +83,25 @@ export type LiveChange =
   | Upsert<"task_queue", TaskQueueEntry>
   | Upsert<"project_statuses", ProjectStatus>
   | Upsert<"comments", CommentMark>
+  | Upsert<"areas", Area>
+  | Upsert<"sections", Section>
+  | Upsert<"teams", Team>
+  | Upsert<"team_members", TeamMember>
+  | Upsert<"task_sessions", TaskSession>
+  | Upsert<"task_reminders", TaskReminder>
+  | Upsert<"task_waiting", TaskWaitingEntry>
   | { table: LiveTable; kind: "delete"; id: string };
+
+/**
+ * A row whose model has no deleted stamp, mapped with it: a soft delete still
+ * reaches the store as a deleted row, carrying its server stamp, so an older
+ * echo of the row can't bring it back.
+ */
+function softRow<T>(map: (raw: unknown) => T, raw: unknown): T {
+  const row = map(raw);
+  const deletedAt = (raw as { deleted_at?: unknown } | null)?.deleted_at;
+  return typeof deletedAt === "string" ? { ...row, deletedAt } : row;
+}
 
 /** The part of a Realtime `postgres_changes` payload we read. */
 export type LivePayload = {
@@ -94,20 +134,28 @@ export function parseLiveChange(table: LiveTable, payload: LivePayload): LiveCha
         return { table, kind: "upsert", row: tagLinkRowToModel(payload.new) };
       case "task_queue":
         return { table, kind: "upsert", row: taskQueueRowToModel(payload.new) };
-      case "project_statuses": {
-        // The model has no deleted stamp: a soft delete is a delete here.
-        const raw = payload.new as { id?: unknown; deleted_at?: unknown } | null;
-        if (raw?.deleted_at && typeof raw.id === "string") {
-          return { table, kind: "delete", id: raw.id };
-        }
-        return { table, kind: "upsert", row: projectStatusRowToModel(payload.new) };
-      }
+      case "project_statuses":
+        return { table, kind: "upsert", row: softRow(projectStatusRowToModel, payload.new) };
       case "comments": {
         // Only comments on tasks are counted; the body is never kept.
         const raw = payload.new as { entity_type?: unknown } | null;
         if (raw?.entity_type !== "task") return null;
         return { table, kind: "upsert", row: commentMarkRowToModel(payload.new) };
       }
+      case "areas":
+        return { table, kind: "upsert", row: softRow(areaRowToModel, payload.new) };
+      case "sections":
+        return { table, kind: "upsert", row: softRow(sectionRowToModel, payload.new) };
+      case "teams":
+        return { table, kind: "upsert", row: softRow(teamRowToModel, payload.new) };
+      case "team_members":
+        return { table, kind: "upsert", row: softRow(teamMemberRowToModel, payload.new) };
+      case "task_sessions":
+        return { table, kind: "upsert", row: softRow(taskSessionRowToModel, payload.new) };
+      case "task_reminders":
+        return { table, kind: "upsert", row: softRow(taskReminderRowToModel, payload.new) };
+      case "task_waiting":
+        return { table, kind: "upsert", row: softRow(taskWaitingRowToModel, payload.new) };
     }
   } catch {
     return null;

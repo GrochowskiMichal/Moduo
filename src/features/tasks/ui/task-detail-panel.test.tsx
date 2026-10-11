@@ -403,7 +403,8 @@ describe("validator round", () => {
     );
     fireEvent.change(estimate, { target: { value: "5h" } });
     fireEvent.keyDown(estimate, { key: "Enter" });
-    expect(a.patchTask).toHaveBeenCalledWith("t1", { durationMinutes: 300 });
+    // TV-D10: the estimate is its own field.
+    expect(a.patchTask).toHaveBeenCalledWith("t1", { estimateMinutes: 300 });
     expect(a.setTimeSpent).not.toHaveBeenCalled();
   });
 
@@ -437,7 +438,8 @@ describe("validator round", () => {
     fireEvent.change(estimate, { target: { value: "5h" } });
     fireEvent.keyDown(estimate, { key: "Enter" });
     expect(a.setTimeSpent).toHaveBeenCalledTimes(1);
-    expect(a.patchTask).toHaveBeenCalledWith("t1", { durationMinutes: 300 });
+    // TV-D10: the estimate is its own field.
+    expect(a.patchTask).toHaveBeenCalledWith("t1", { estimateMinutes: 300 });
   });
 
   it("reads a task's comments once when it opens", async () => {

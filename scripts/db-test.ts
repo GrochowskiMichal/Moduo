@@ -64,7 +64,8 @@ for (const file of files) {
   } else {
     failed += 1;
     console.log(`✗ ${file}`);
-    const errors = lines.filter((l) => /ERROR|FAIL|psql:/.test(l));
+    // PASS notices also start with "psql:"; leave them out so a failure shows.
+    const errors = lines.filter((l) => /ERROR|FAIL|psql:/.test(l) && !/NOTICE: {2}PASS/.test(l));
     for (const line of (errors.length ? errors : fails).slice(0, 40)) console.log(`  ${line}`);
   }
 }

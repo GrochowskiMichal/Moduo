@@ -67,9 +67,16 @@ describe("listenTasksLive", () => {
       "tags",
       "tag_links",
       "task_queue",
-      // TV-D11a: statuses and comment counts are live too.
+      // TV-D11a: statuses and comment counts are live too, and TV-D10's tables.
       "project_statuses",
       "comments",
+      "areas",
+      "sections",
+      "teams",
+      "team_members",
+      "task_sessions",
+      "task_reminders",
+      "task_waiting",
     ]);
     expect(new Set(ch.filters)).toEqual(new Set(["workspace_id=eq.ws-1"]));
 

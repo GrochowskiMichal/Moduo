@@ -176,6 +176,13 @@ describe("attachmentsManifest — the export lists files, not their bytes (AT1-8
   });
 });
 
+/** TV-D10's reads, empty: for the tests about other tables. */
+const noD10Reads = {
+  listSessions: async () => ({ sessions: [], truncated: [] }),
+  listReminders: async () => ({ reminders: [], truncated: [] }),
+  listWaiting: async () => ({ waiting: [], truncated: [] }),
+};
+
 describe("the tasks export carries every new tasks table (TV-D8, §Assumptions #26)", () => {
   it("adds the completions to the tasks bundle", async () => {
     const data = await readTasksExport(
@@ -185,6 +192,7 @@ describe("the tasks export carries every new tasks table (TV-D8, §Assumptions #
           completions: [{ id: "c1", taskId: "t1", cycleKey: "once" }],
           truncated: [],
         }),
+        ...noD10Reads,
       },
       "ws-1",
     );
@@ -200,6 +208,7 @@ describe("the tasks export carries every new tasks table (TV-D8, §Assumptions #
       {
         list: async () => ({ tasks: [], buckets: [], truncated: [tasksCut] }),
         listCompletions: async () => ({ completions: [], truncated: [completionsCut] }),
+        ...noD10Reads,
       },
       "ws-1",
     );
@@ -221,10 +230,58 @@ describe("the tasks export carries every new tasks table (TV-D8, §Assumptions #
       {
         list: async () => ({ tasks: [task], buckets: [], statuses: [status], truncated: [] }),
         listCompletions: async () => ({ completions: [], truncated: [] }),
+        ...noD10Reads,
       },
       "ws-1",
     );
     expect(data.statuses).toEqual([status]);
     expect(data.tasks).toEqual([task]);
+  });
+
+  it("carries areas, sections, teams, sessions, your reminders and Waiting on (TV-D10)", async () => {
+    const project = {
+      id: "p1",
+      status: "on_hold",
+      areaId: "a1",
+      leadId: "u1",
+      targetOn: "2026-12-18",
+    };
+    const bundle = {
+      tasks: [{ id: "t1", sectionId: "s1", teamId: "tm1", estimateMinutes: 90 }],
+      buckets: [project],
+      areas: [{ id: "a1", name: "Clients" }],
+      sections: [{ id: "s1", projectId: "p1", name: "Week 1", endsOn: "2026-09-13" }],
+      teams: [{ id: "tm1", name: "Design", mark: "DS" }],
+      teamMembers: [{ id: "m1", teamId: "tm1", userId: "u1" }],
+      truncated: [],
+    };
+    const session = { id: "x1", taskId: "t1", startsAt: "2030-03-04T09:00:00Z" };
+    const sessionsCut = { scope: "work sessions", shown: 20000, total: 20500 };
+    const data = await readTasksExport(
+      {
+        list: async () => bundle,
+        listCompletions: async () => ({ completions: [], truncated: [] }),
+        listSessions: async () => ({ sessions: [session], truncated: [sessionsCut] }),
+        listReminders: async () => ({
+          reminders: [{ id: "r1", kind: "day_before" }],
+          truncated: [],
+        }),
+        listWaiting: async () => ({
+          waiting: [{ id: "w1", kind: "text", label: "Feedback" }],
+          truncated: [],
+        }),
+      },
+      "ws-1",
+    );
+    expect(data.buckets).toEqual([project]);
+    expect(data.areas).toEqual(bundle.areas);
+    expect(data.sections).toEqual(bundle.sections);
+    expect(data.teams).toEqual(bundle.teams);
+    expect(data.teamMembers).toEqual(bundle.teamMembers);
+    expect(data.tasks).toEqual(bundle.tasks);
+    expect(data.sessions).toEqual([session]);
+    expect(data.reminders).toEqual([{ id: "r1", kind: "day_before" }]);
+    expect(data.waiting).toEqual([{ id: "w1", kind: "text", label: "Feedback" }]);
+    expect(data.truncated).toEqual([sessionsCut]);
   });
 });

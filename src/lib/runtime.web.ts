@@ -74,6 +74,7 @@ import {
   type TaskQueueEntry,
   type TaskRelation,
   type TaskTimeResult,
+  type TimeBlockMap,
   type TrackTimeInput,
 } from "../features/tasks/model";
 import { toMemberPerm, toMemberRole } from "../features/workspaces/workspace-mappers";
@@ -112,6 +113,7 @@ import type {
   UserPreferences,
 } from "./runtime.types";
 import { createReferencePreviews } from "./runtime.web.previews";
+import { createTasksStructure } from "./runtime.web.structure";
 import type {
   SyncIdsResult,
   SyncReadInput,
@@ -121,6 +123,7 @@ import type {
 } from "./sync/types";
 import { handleSearchPattern, handleWithCurrentKey } from "./task-handle";
 import {
+  areaRowToModel,
   bucketRowToModel,
   commentMarkRowToModel,
   editableTaskFields,
@@ -129,6 +132,7 @@ import {
   isMissingTableError,
   isMissingTvD9FieldError,
   projectStatusRowToModel,
+  sectionRowToModel,
   sortQueueEntries,
   type TaskFieldPatch,
   tagLinkRowToModel,
@@ -140,9 +144,15 @@ import {
   taskPatchToColumns,
   taskPatchToOpFields,
   taskQueueRowToModel,
+  taskReminderRowToModel,
   taskRowToModel,
+  taskSessionRowToModel,
   taskTimeAnswerToModel,
   taskTimeTotalsRowToModel,
+  taskWaitingRowToModel,
+  teamMemberRowToModel,
+  teamRowToModel,
+  withFieldFallback,
   withoutTvD9Fields,
 } from "./task-rows";
 
@@ -373,6 +383,14 @@ export const webCapabilities: RuntimeCapabilities = {
 };
 
 // ── Runtime implementation ────────────────────────────────────────────────────
+
+/** TV-D10's structure reads and ops (runtime.web.structure.ts). */
+const tasksStructure = createTasksStructure(supabaseClient, {
+  userId: async () => (await getAuthedUser())?.id ?? null,
+  upsertBucketLegacy: (bucket) => upsertBucketRow(bucket),
+  getTimeBlocksLegacy: (workspaceId) => getWorkspaceTimeBlocks(workspaceId),
+  setTimeBlocksLegacy: (workspaceId, blocks) => setWorkspaceTimeBlocks(workspaceId, blocks),
+});
 
 export const webRuntime: ModuoRuntime = {
   capabilities: webCapabilities,
@@ -2100,6 +2118,8 @@ export const webRuntime: ModuoRuntime = {
   // model fields map to snake_case columns via the helpers at the bottom of this
   // file.
   tasks: {
+    // TV-D10: areas, projects, sections, teams, sessions, reminders, waiting.
+    ...tasksStructure,
     async list(workspaceId) {
       // Best effort: a Viewer can't create their own Inbox (no tasks.create),
       // and that must not stop them reading the shared buckets.
@@ -2112,7 +2132,7 @@ export const webRuntime: ModuoRuntime = {
           .is("deleted_at", null);
       const all = (table: string) => (opts?: SelectOpts) =>
         supabaseClient.from(table).select("*", opts).eq("workspace_id", workspaceId);
-      const [bucketsRes, tasksRes, tagsRes, linksRes, relationsRes, statusesRes] =
+      const [bucketsRes, tasksRes, tagsRes, linksRes, relationsRes, statusesRes, structure] =
         await Promise.all([
           selectCapped<any>({
             scope: "buckets",
@@ -2145,6 +2165,8 @@ export const webRuntime: ModuoRuntime = {
             order: (q) => q.order("id"),
           }),
           listWorkspaceStatuses(workspaceId),
+          // TV-D10: areas, sections, teams and their members.
+          tasksStructure.listStructure(workspaceId),
         ]);
       const firstError =
         bucketsRes.error || tasksRes.error || tagsRes.error || linksRes.error || relationsRes.error;
@@ -2156,14 +2178,21 @@ export const webRuntime: ModuoRuntime = {
         tagLinks: mapKnownRows(linksRes.rows, tagLinkRowToModel),
         taskRelations: mapKnownRows(relationsRes.rows, taskRelationRowToModel),
         statuses: statusesRes.statuses,
-        truncated: collectTruncations(
-          bucketsRes.truncation,
-          tasksRes.truncation,
-          tagsRes.truncation,
-          linksRes.truncation,
-          relationsRes.truncation,
-          statusesRes.truncation,
-        ),
+        areas: structure.areas,
+        sections: structure.sections,
+        teams: structure.teams,
+        teamMembers: structure.teamMembers,
+        truncated: [
+          ...collectTruncations(
+            bucketsRes.truncation,
+            tasksRes.truncation,
+            tagsRes.truncation,
+            linksRes.truncation,
+            relationsRes.truncation,
+            statusesRes.truncation,
+          ),
+          ...structure.truncated,
+        ],
       };
     },
 
@@ -2229,41 +2258,10 @@ export const webRuntime: ModuoRuntime = {
       return ensureWebInbox(workspaceId);
     },
 
+    // The pre-TV-D10 save, kept as the "bucket" alias: a raw insert or an
+    // update of the editable columns (createProject / updateProject are the ops).
     async upsertBucket(bucket) {
-      const id = bucket.id?.trim() || crypto.randomUUID();
-      const user = await getAuthedUser();
-      const now = new Date().toISOString();
-      const { data: prev } = await supabaseClient
-        .from("buckets")
-        .select("id")
-        .eq("id", id)
-        .maybeSingle();
-      // A saved project's owner, workspace and Inbox flag never change (the
-      // server refuses it), so a re-save writes its editable fields only.
-      const editable = {
-        name: bucket.name,
-        group_label: bucket.group ?? null,
-        position: bucket.position ?? "",
-        updated_at: now,
-        deleted_at: bucket.deletedAt ?? null,
-      };
-      const { data, error } = prev
-        ? await supabaseClient.from("buckets").update(editable).eq("id", id).select().single()
-        : await supabaseClient
-            .from("buckets")
-            .insert({
-              ...editable,
-              id,
-              workspace_id: bucket.workspaceId,
-              owner_id: bucket.ownerId || user?.id || null,
-              // is_system is owned by the seeding path (ensureWebInbox) only.
-              is_system: false,
-              created_at: bucket.createdAt || now,
-            })
-            .select()
-            .single();
-      if (error) throw new Error(error.message);
-      return bucketRowToModel(data);
+      return upsertBucketRow(bucket);
     },
 
     async deleteBucket({ workspaceId, bucketId }) {
@@ -2566,28 +2564,14 @@ export const webRuntime: ModuoRuntime = {
       if (error) throw new Error(error.message);
     },
 
+    // Each person's own since TV-D10 (user_preferences.task_time_blocks); the
+    // workspace table before it.
     async getTimeBlocks(workspaceId) {
-      const { data, error } = await supabaseClient
-        .from("task_time_blocks")
-        .select("blocks")
-        .eq("workspace_id", workspaceId)
-        .maybeSingle();
-      if (error) throw new Error(error.message);
-      return sanitizeTimeBlocks(data?.blocks);
+      return tasksStructure.getTimeBlocks(workspaceId);
     },
 
     async setTimeBlocks({ workspaceId, blocks }) {
-      const clean = sanitizeTimeBlocks(blocks);
-      const { data, error } = await supabaseClient
-        .from("task_time_blocks")
-        .upsert(
-          { workspace_id: workspaceId, blocks: clean, updated_at: new Date().toISOString() },
-          { onConflict: "workspace_id" },
-        )
-        .select("blocks")
-        .single();
-      if (error) throw new Error(error.message);
-      return sanitizeTimeBlocks(data?.blocks);
+      return tasksStructure.setTimeBlocks(workspaceId, blocks);
     },
 
     // ── intent ops (docs/moduo-module-contract.md) ─────────────────────────
@@ -3607,6 +3591,72 @@ async function ensureWebInbox(workspaceId: string): Promise<Bucket> {
   return bucketRowToModel(data);
 }
 
+/** The workspace's time blocks, the pre-TV-D10 way (one row per workspace). */
+async function getWorkspaceTimeBlocks(workspaceId: string): Promise<TimeBlockMap> {
+  const { data, error } = await supabaseClient
+    .from("task_time_blocks")
+    .select("blocks")
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return sanitizeTimeBlocks(data?.blocks);
+}
+
+async function setWorkspaceTimeBlocks(
+  workspaceId: string,
+  blocks: TimeBlockMap,
+): Promise<TimeBlockMap> {
+  const clean = sanitizeTimeBlocks(blocks);
+  const { data, error } = await supabaseClient
+    .from("task_time_blocks")
+    .upsert(
+      { workspace_id: workspaceId, blocks: clean, updated_at: new Date().toISOString() },
+      { onConflict: "workspace_id" },
+    )
+    .select("blocks")
+    .single();
+  if (error) throw new Error(error.message);
+  return sanitizeTimeBlocks(data?.blocks);
+}
+
+/** The pre-TV-D10 project save (also the "bucket" alias). */
+async function upsertBucketRow(bucket: Bucket): Promise<Bucket> {
+  const id = bucket.id?.trim() || crypto.randomUUID();
+  const user = await getAuthedUser();
+  const now = new Date().toISOString();
+  const { data: prev } = await supabaseClient
+    .from("buckets")
+    .select("id")
+    .eq("id", id)
+    .maybeSingle();
+  // A saved project's owner, workspace and Inbox flag never change (the
+  // server refuses it), so a re-save writes its editable fields only.
+  const editable = {
+    name: bucket.name,
+    group_label: bucket.group ?? null,
+    position: bucket.position ?? "",
+    updated_at: now,
+    deleted_at: bucket.deletedAt ?? null,
+  };
+  const { data, error } = prev
+    ? await supabaseClient.from("buckets").update(editable).eq("id", id).select().single()
+    : await supabaseClient
+        .from("buckets")
+        .insert({
+          ...editable,
+          id,
+          workspace_id: bucket.workspaceId,
+          owner_id: bucket.ownerId || user?.id || null,
+          // is_system is owned by the seeding path (ensureWebInbox) only.
+          is_system: false,
+          created_at: bucket.createdAt || now,
+        })
+        .select()
+        .single();
+  if (error) throw new Error(error.message);
+  return bucketRowToModel(data);
+}
+
 /**
  * Every status the reader can see in a workspace (TV-D9): the default set and
  * each visible project's. Empty on a database before TV-D9.
@@ -3732,7 +3782,68 @@ const SYNC_SOURCES: Record<SyncTableName, SyncSource> = {
     scope: "task dependencies",
     order: (q) => q.order("id"),
   },
+  // TV-D10. Plain selects under each table's RLS, which goes through the
+  // access helpers (`areas__visible`, `projects__visible`, `can_access`).
+  areas: {
+    table: "areas",
+    select: "*",
+    map: areaRowToModel,
+    cap: READ_CAPS.areas,
+    delta: true,
+    scope: "areas",
+  },
+  sections: {
+    table: "sections",
+    select: "*",
+    map: sectionRowToModel,
+    cap: READ_CAPS.sections,
+    delta: true,
+    scope: "sections",
+  },
+  teams: {
+    table: "teams",
+    select: "*",
+    map: teamRowToModel,
+    cap: READ_CAPS.teams,
+    delta: true,
+    scope: "teams",
+  },
+  teamMembers: {
+    table: "team_members",
+    select: "*",
+    map: teamMemberRowToModel,
+    cap: READ_CAPS.teamMembers,
+    delta: true,
+    scope: "team members",
+  },
+  sessions: {
+    table: "task_sessions",
+    select: "*",
+    map: taskSessionRowToModel,
+    cap: READ_CAPS.taskSessions,
+    delta: true,
+    scope: "work sessions",
+  },
+  reminders: {
+    table: "task_reminders",
+    select: "*",
+    map: taskReminderRowToModel,
+    cap: READ_CAPS.taskReminders,
+    delta: true,
+    scope: "reminders",
+  },
+  waiting: {
+    table: "task_waiting",
+    select: "*",
+    map: taskWaitingRowToModel,
+    cap: READ_CAPS.taskWaiting,
+    delta: true,
+    scope: "waiting entries",
+  },
 };
+
+/** How many ids one `id=in.(…)` read carries (a URL stays well under its limit). */
+const IDS_PER_READ = 150;
 
 /** A value PostgREST reads whole inside `or=(…)` (timestamps carry `:` and `+`). */
 const pgrstQuoted = (value: string) => `"${value.replace(/["\\]/g, "\\$&")}"`;
@@ -3823,6 +3934,25 @@ async function syncReadTable(input: SyncReadInput): Promise<SyncReadResult<unkno
       throw new Error(res.error.message);
     }
     return { ...empty, rows: mapKnownRows(res.rows, source.map), truncated: res.truncation };
+  }
+
+  // Rows the access check found you can see now (shared with you since):
+  // read by id, live ones only.
+  if (input.ids) {
+    const rows: any[] = [];
+    for (let i = 0; i < input.ids.length; i += IDS_PER_READ) {
+      const chunk = input.ids.slice(i, i + IDS_PER_READ);
+      const { data, error } = await base()
+        .in("id", chunk)
+        .is("deleted_at", null)
+        .limit(PGRST_MAX_ROWS);
+      if (error) {
+        if (isMissingTableError(error, source.table)) return empty;
+        throw new Error(error.message);
+      }
+      rows.push(...((data ?? []) as any[]));
+    }
+    return { ...empty, rows: mapKnownRows(rows, source.map) };
   }
 
   // Tasks' first load comes in two parts (open first); a database before
@@ -3924,20 +4054,15 @@ async function opUpdateTaskRows(
   taskId: string,
   patch: TaskFieldPatch,
 ): Promise<Task[]> {
-  const fields = taskPatchToOpFields(patch);
-  let { data, error } = await supabaseClient.rpc("tasks_op_update", {
-    p_workspace_id: workspaceId,
-    p_task_id: taskId,
-    p_patch: fields,
-  });
-  // A database before TV-D9 (the merge-before-apply window). Remove in TV-D7.
-  if (isMissingTvD9FieldError(error)) {
-    ({ data, error } = await supabaseClient.rpc("tasks_op_update", {
+  // A database before TV-D10 / TV-D9 (the merge-before-apply window) refuses
+  // the newer fields: retry without them. Remove in TV-D7.
+  const { data, error } = await withFieldFallback(taskPatchToOpFields(patch), (fields) =>
+    supabaseClient.rpc("tasks_op_update", {
       p_workspace_id: workspaceId,
       p_task_id: taskId,
-      p_patch: withoutTvD9Fields(fields),
-    }));
-  }
+      p_patch: fields,
+    }),
+  );
   if (!error) {
     const rows = mapKnownRows(data, taskRowToModel);
     if (!rows.length) throw new Error("The task edit returned nothing.");
@@ -4005,17 +4130,14 @@ async function createTaskRow(task: Task): Promise<Task> {
     updatedAt: now,
   };
   const input = taskCreateOpInput(created);
-  let op = await supabaseClient.rpc("tasks_op_create", {
-    p_workspace_id: task.workspaceId,
-    p_task: input,
-  });
-  // A database before TV-D9 (the merge-before-apply window). Remove in TV-D7.
-  if (isMissingTvD9FieldError(op.error)) {
-    op = await supabaseClient.rpc("tasks_op_create", {
+  // A database before TV-D10 / TV-D9 (the merge-before-apply window)
+  // refuses the newer fields: retry without them. Remove in TV-D7.
+  const op = await withFieldFallback(input, (fields) =>
+    supabaseClient.rpc("tasks_op_create", {
       p_workspace_id: task.workspaceId,
-      p_task: withoutTvD9Fields(input),
-    });
-  }
+      p_task: fields,
+    }),
+  );
   if (!op.error) return taskRowToModel(Array.isArray(op.data) ? op.data[0] : op.data);
   if (!isMissingFunctionError(op.error, "tasks_op_create")) throw new Error(op.error.message);
   // Before TV-D8's migration: the direct insert. Remove in TV-D7.

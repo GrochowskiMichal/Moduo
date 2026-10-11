@@ -46,7 +46,7 @@ import {
 } from "../detail-properties";
 import { LEVEL_OPTIONS } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
-import { type EnergyLevel, isDrifted, type PriorityLevel, type Task } from "../model";
+import { type EnergyLevel, estimateOf, isDrifted, type PriorityLevel, type Task } from "../model";
 import {
   RECURRENCE_PRESETS,
   type RecurrencePreset,
@@ -445,8 +445,8 @@ function TimeValue({
   defaultOpen: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen && canEdit);
-  const row = timeRow(task.timeSpentSeconds, task.durationMinutes, mySeconds);
-  const hasAny = task.durationMinutes != null || task.timeSpentSeconds > 0;
+  const row = timeRow(task.timeSpentSeconds, estimateOf(task), mySeconds);
+  const hasAny = estimateOf(task) != null || task.timeSpentSeconds > 0;
   const spoken = [row.tracked, row.estimate, row.mine].filter(Boolean).join(", ");
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -539,7 +539,7 @@ function TimeEditor({
   // left as it was must never write back a total it showed earlier (that would
   // take away the time saved meanwhile).
   const baseline = useRef({
-    estimate: task.durationMinutes != null ? formatMinutes(task.durationMinutes) : "",
+    estimate: estimateOf(task) != null ? formatMinutes(estimateOf(task) as number) : "",
     tracked: formatTracked(task.timeSpentSeconds),
   });
   const [estimate, setEstimate] = useState(baseline.current.estimate);
@@ -555,7 +555,8 @@ function TimeEditor({
     }
     baseline.current.estimate = typed;
     const next = minutes && minutes > 0 ? minutes : null;
-    if (next !== task.durationMinutes) api.patchTask(task.id, { durationMinutes: next });
+    // TV-D10: the estimate has its own field (a scheduled session keeps its length).
+    if (next !== estimateOf(task)) api.patchTask(task.id, { estimateMinutes: next });
   };
   const commitTracked = () => {
     const typed = tracked.trim();

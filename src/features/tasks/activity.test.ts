@@ -187,6 +187,29 @@ describe("activityLine", () => {
     expect(activityLine(entry("tasks.completed"))).toBe("completed this");
   });
 
+  it("names sections, teams, sessions and Waiting on (TV-D10)", () => {
+    const update = (field: string, to: unknown) =>
+      entry("tasks.update", { fields: [field], [field]: { from: null, to } });
+    expect(activityLine(update("section_id", "s1"))).toBe("moved this to a section");
+    expect(activityLine(update("section_id", null))).toBe("moved this to No section");
+    expect(activityLine(update("team_id", "tm1"))).toBe("routed this to a team");
+    expect(activityLine(update("estimate_minutes", 90))).toBe("changed the estimate");
+    expect(activityLine(entry("tasks.session_add", { starts_at: null }))).toBe(
+      "scheduled a session",
+    );
+    expect(activityLine(entry("tasks.session_remove"))).toBe("removed a session");
+    expect(
+      activityLine(entry("tasks.waiting_add", { kind: "text", label: "Client feedback" })),
+    ).toBe("is waiting on “Client feedback”");
+    // An email's subject never reaches the trail.
+    expect(activityLine(entry("tasks.waiting_add", { kind: "email", ref: "e1" }))).toBe(
+      "is waiting on an email",
+    );
+    expect(activityLine(entry("tasks.waiting_remove", { kind: "person", ref: "u2" }))).toBe(
+      "stopped waiting on someone",
+    );
+  });
+
   it("never lies by omission — unknown ops fall back to the op name", () => {
     expect(activityLine(entry("tasks.future_op"))).toBe("tasks.future_op");
   });
