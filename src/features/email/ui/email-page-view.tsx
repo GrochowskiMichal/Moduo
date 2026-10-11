@@ -16,6 +16,7 @@ import { Button } from "../../../components/ui/button";
 import { EmptyState } from "../../../components/ui/empty-state";
 import { Eyebrow } from "../../../components/ui/eyebrow";
 import { IconButton } from "../../../components/ui/icon-button";
+import { type CaptureSource, useCaptureSource } from "../../../lib/capture-source";
 import type { EntityRef } from "../../../lib/entity-links";
 import { takeEntityOpenIntent } from "../../../lib/entity-open";
 import type { EmailThreadRef } from "../../../lib/runtime.types";
@@ -639,6 +640,23 @@ export function EmailPageView({
       }),
     [],
   );
+
+  // An open thread rides along on a capture as "From: …" (tasks-v3 call 93);
+  // it joins the registry only if the capture keeps the link.
+  const captureSource = useMemo<CaptureSource | null>(() => {
+    if (!selectedThread || !runtime || !workspaceId) return null;
+    const thread = selectedThread;
+    return {
+      kind: "email",
+      label: thread.subject || "(no subject)",
+      ref: selectedRefId ? { type: "email_thread", id: selectedRefId } : undefined,
+      resolve: async () => {
+        const ref = await runtime.email.upsertRef({ workspaceId, ...refArgsForThread(thread) });
+        return { type: "email_thread", id: ref.id };
+      },
+    };
+  }, [selectedThread, selectedRefId, runtime, workspaceId, refArgsForThread]);
+  useCaptureSource(captureSource);
 
   /**
    * Best-effort reverse teardown of everything a convert created — shared by

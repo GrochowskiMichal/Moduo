@@ -23,6 +23,7 @@ import {
   useState,
 } from "react";
 import { toast } from "sonner";
+import { dispatchOpenCapture } from "../../../components/app/capture-shell";
 import { onCreateNew } from "../../../components/app/create-events";
 import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell";
 import { type PanelItem, RightPanel, usePanelStack } from "../../../components/app/right-panel";
@@ -80,7 +81,6 @@ import {
   railSortCollision,
 } from "../dnd/rail-drop";
 import { type CaptureSeed, showsArchived, showsBacklog, statusesLetThrough } from "../filters";
-import { groupsByBucket } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import { type Bucket, isDrifted, PRIVATE_PROJECT_LABEL, type Task } from "../model";
 import { showsSortedNote, sortedByLabel } from "../order";
@@ -98,7 +98,6 @@ import {
   TRASH_SELECTION,
   UPCOMING_SELECTION,
 } from "./bucket-rail";
-import { CaptureModal } from "./capture-modal";
 import { ArchiveProjectDialog, DeleteBucketDialog } from "./delete-bucket-dialog";
 import { asTaskDrag, taskDragAnnouncements, useTaskDndSensors } from "./dnd/task-dnd";
 import { DriftTriageDialog } from "./drift-triage-dialog";
@@ -220,7 +219,6 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     bucket: Bucket;
     open: boolean;
   } | null>(null);
-  const [captureOpen, setCaptureOpen] = useState(false);
   const [triageBucketId, setTriageBucketId] = useState<string | null>(null);
   // Statuses (TV-D9): a project's (its ⋯, or "+ Add status" on its board), or
   // the workspace default set (the Inbox's ⋯). Null = closed.
@@ -395,8 +393,6 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     [api.archivedBuckets, selection],
   );
 
-  const isAll = groupsByBucket(selection);
-
   // A task can sit in a project you can't see (it was assigned to you): that
   // project reads "Private project", never "Inbox" (TV-P0, AC1.10).
   // An archived project's tasks show only when you open it or search, and
@@ -564,24 +560,21 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   // The Queue is one ordered line-up, so its List view is never grouped.
   const effectiveGroupBy = selection === "today" ? "none" : tasksDisplay.display.group;
 
-  // Where a captured task lands: the selected project (or the one whose "+"
-  // was clicked), else the Inbox.
-  const [captureInto, setCaptureInto] = useState<string | null>(null);
-  const captureBucketId =
-    captureInto ??
-    (isAll ||
-    selection === "today" ||
-    selection === "inbox" ||
-    selection === UPCOMING_SELECTION ||
-    selection === ARCHIVED_SELECTION ||
-    selection === TRASH_SELECTION ||
-    archivedProject
-      ? inboxId
-      : selection);
-  // New in Focus or the Queue lands in Up next (TV-P0, AC1.9): created and
-  // queued at the end of my line-up. The top of Up next is TV-U14's (call 90).
-  const captureQueues = mode === "execute" || selection === "today";
-  const createCaptured = captureQueues ? api.createQueuedTask : api.createTask;
+  // ⌘N, "+ New" and `c` capture "here" (tasks-v3 call 90, TV-U14): in a
+  // project, that project; with a task of a section selected there, that
+  // section (TV-U10's group "+" passes its own); in Focus or the Queue, the
+  // top of Up next. Anywhere else, the capture's own default: your Inbox.
+  const captureHere = useMemo(() => {
+    // An archived project's page, Upcoming, Archived and Recently deleted
+    // aren't places to file into: the capture's own default (your Inbox).
+    const project = archivedProject
+      ? null
+      : (buckets.find((b) => b.id === selection && !b.isSystem) ?? null);
+    return {
+      projectId: project?.id ?? null,
+      queueTop: mode === "execute" || selection === "today",
+    };
+  }, [buckets, selection, mode, archivedProject]);
 
   const totalOpenCount = useMemo(() => tasks.filter((t) => isOpenTask(t)).length, [tasks]);
   const myOpenCount = useMemo(
@@ -597,12 +590,25 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     return tasks.filter((t) => t.bucketId === triageBucketId && isDrifted(t, now));
   }, [triageBucketId, tasks]);
 
-  const openCapture = useCallback(() => {
-    if (canEdit) setCaptureOpen(true);
-  }, [canEdit]);
+  const openCapture = useCallback(
+    (at?: { sectionId?: string | null }) => {
+      if (!canEdit) return;
+      const { projectId, queueTop } = captureHere;
+      const open = selectedTaskId ? tasks.find((t) => t.id === selectedTaskId) : null;
+      const sectionId =
+        at?.sectionId ??
+        (projectId && open?.bucketId === projectId ? (open.sectionId ?? null) : null);
+      dispatchOpenCapture({
+        destination: projectId ? { projectId, sectionId } : undefined,
+        queueTop,
+        seed: captureSeed,
+      });
+    },
+    [canEdit, captureHere, selectedTaskId, tasks, captureSeed],
+  );
 
   // cmd+n / global "+" → capture (this listener is only mounted on /tasks).
-  useEffect(() => onCreateNew(openCapture), [openCapture]);
+  useEffect(() => onCreateNew(() => openCapture()), [openCapture]);
 
   const exitExecute = useCallback(() => setMode("plan"), []);
 
@@ -782,8 +788,8 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       onMoveBucket={api.moveBucket}
       onMoveBucketToArea={api.moveBucketToArea}
       onCaptureInto={(id) => {
-        setCaptureInto(id);
-        setCaptureOpen(true);
+        // A project's "+" in the sidebar: capture into that project.
+        if (canEdit) dispatchOpenCapture({ destination: { projectId: id }, seed: captureSeed });
       }}
       onTriageBucket={(id) => {
         triageFromRef.current = id;
@@ -1400,27 +1406,6 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
           right={right}
         />
       </DndContext>
-      <CaptureModal
-        open={captureOpen}
-        onOpenChange={(open) => {
-          setCaptureOpen(open);
-          if (!open) setCaptureInto(null);
-        }}
-        buckets={buckets}
-        inbox={inbox}
-        defaultBucketId={captureBucketId}
-        // New inside a filtered scope pre-fills the filter's tag, assignee and
-        // priority (U2-5); never in Focus, whose filters aren't on screen.
-        seed={captureSeed}
-        tags={api.tags}
-        onCreate={(fields, { tagIds }) => {
-          const created = createCaptured(fields);
-          for (const id of tagIds) {
-            const tag = api.tags.find((t) => t.id === id);
-            if (tag) api.createTagForTask(tag.name, created);
-          }
-        }}
-      />
       <StatusesDialog
         open={statusesEditor !== null}
         projectName={statusesEditor?.projectId ? bucketNameById(statusesEditor.projectId) : null}

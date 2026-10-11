@@ -9,6 +9,7 @@ import {
 } from "react";
 import { attachFocusUser } from "../features/focus/engine";
 import { attachTagUser } from "../features/tags/store";
+import { forgetCaptureDrafts, keepCaptureDraftsOf } from "../features/tasks/capture/capture-draft";
 import { forgetRememberedWorkspaces } from "../features/workspaces/remembered-workspaces";
 import { Analytics, setAnalyticsUser } from "../lib/analytics";
 import { sendDeviceTimeZone } from "../lib/device-time-zone";
@@ -173,6 +174,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
       if (event === "SIGNED_OUT") {
         setPlanTier("free");
+        // Kept capture drafts never outlive a sign-out on this device (TV-U14).
+        forgetCaptureDrafts();
         // Analytics opts out and forgets them. `app_signed_out` is tracked in signOut(),
         // only when the person signs out: one auth-js does on its own, like a refused
         // refresh after the account was deleted elsewhere, must not send an event that
@@ -209,6 +212,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
     attachFocusUser(sessionUserId);
     attachTagUser(sessionUserId);
     void attachSyncUser(sessionUserId);
+    // Another person's kept capture drafts go too (TV-U14).
+    if (sessionUserId) keepCaptureDraftsOf(sessionUserId);
   }, [loading, sessionUserId]);
 
   const signOut = async () => {
@@ -221,6 +226,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     // SIGNED_OUT event follows) (TV-D11a).
     void wipeSyncCopies();
     forgetRememberedWorkspaces();
+    forgetCaptureDrafts();
     setSession(null);
   };
 

@@ -364,25 +364,20 @@ test("AC1.12 — a date popover writes once, and scheduling is in the trail", as
 
 test("AC1.3 — ⌘A selects the text in capture", async ({ page }) => {
   await openTasks(page);
+  // The capture's title is one editor since TV-U14 (New, ⌘N and ⌘⇧K open it).
   await page.getByRole("button", { name: "New", exact: true }).click();
-  const input = page.getByRole("textbox").first();
+  const input = page.getByRole("dialog").getByRole("textbox", { name: "Task title" });
   await input.fill("Send March report");
   await input.press("ControlOrMeta+a");
-  const selection = await input.evaluate((el: HTMLInputElement) => [
-    el.selectionStart,
-    el.selectionEnd,
-    el.value.length,
-  ]);
-  expect(selection).toEqual([0, 17, 17]);
+  expect(await page.evaluate(() => window.getSelection()?.toString())).toBe("Send March report");
   await page.keyboard.press("Escape");
 
   // ⌘⇧K, the capture from anywhere, too (once the New dialog has closed).
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await page.keyboard.press("ControlOrMeta+Shift+K");
-  const line = page.getByRole("dialog").getByRole("textbox").first();
+  const line = page.getByRole("dialog").getByRole("textbox", { name: "Task title" });
   await line.fill("Read chapter 3");
   await line.press("ControlOrMeta+a");
-  const quick = await line.evaluate((el: HTMLInputElement) => [el.selectionStart, el.selectionEnd]);
-  expect(quick).toEqual([0, 14]);
+  expect(await page.evaluate(() => window.getSelection()?.toString())).toBe("Read chapter 3");
   await page.keyboard.press("Escape");
 });

@@ -9,6 +9,8 @@
 // slash `/ref` plugin funnel their selection through `resolveMention`; the
 // UI/runtime halves only *execute* the returned plan. Mirrors entity-links.ts.
 
+import type { ComponentType } from "react";
+
 import type { EntityRef, LinkOrigin, RelationKind } from "@/lib/entity-links";
 import type { DateCommand, DateCommandId } from "./grammar";
 
@@ -60,12 +62,40 @@ export type MentionTagCandidate = {
   color: string | null;
 };
 
+/**
+ * A team (capture's `@`, TV-U14: a team routes the task). Teams aren't registry
+ * entities, so only a host that lists them (`candidatesFor`) offers them.
+ */
+export type MentionTeamCandidate = {
+  kind: "team";
+  teamId: string;
+  label: string;
+  /** The team's own two letters, when edited. */
+  letters: string | null;
+};
+
+/**
+ * A host's own entry, which the host carries out (`onPick`): capture's
+ * `/priority high`, "Create #name", a project's section.
+ */
+export type MentionActionCandidate = {
+  kind: "action";
+  /** Stable within the menu: "priority:high", "tag-new:design". */
+  id: string;
+  label: string;
+  /** Quiet words after the label ("Due", "Project"). */
+  hint?: string;
+  icon?: ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
+};
+
 export type MentionCandidate =
   | MentionEntityCandidate
   | MentionPersonCandidate
   | MentionCreateCandidate
   | MentionCommandCandidate
-  | MentionTagCandidate;
+  | MentionTagCandidate
+  | MentionTeamCandidate
+  | MentionActionCandidate;
 
 /** Link an existing entity (entity `@mention` or `/ref`). */
 export type LinkMentionResolution = {
@@ -100,12 +130,19 @@ export type InsertDateResolution = { action: "insert-date"; command: DateCommand
 /** `#tag` in prose: insert a link to the tag (its tags field is never changed). */
 export type InsertTagResolution = { action: "insert-tag"; tagId: string; label: string };
 
+/** A team or a host's own entry: the host that listed it carries it out. */
+export type HostResolution = {
+  action: "host";
+  candidate: MentionTeamCandidate | MentionActionCandidate;
+};
+
 export type MentionResolution =
   | LinkMentionResolution
   | NotifyPersonResolution
   | CreateAndLinkResolution
   | InsertDateResolution
-  | InsertTagResolution;
+  | InsertTagResolution
+  | HostResolution;
 
 /** The relation kind a trigger implies: `@` → `mentions`, `/ref` → `references`. */
 export function relationKindForTrigger(trigger: MentionTrigger): RelationKind {
@@ -160,6 +197,9 @@ export function resolveMention(input: {
       return { action: "insert-date", command: candidate.command };
     case "tag":
       return { action: "insert-tag", tagId: candidate.tagId, label: candidate.label };
+    case "team":
+    case "action":
+      return { action: "host", candidate };
   }
 }
 

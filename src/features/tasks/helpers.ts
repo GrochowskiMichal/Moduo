@@ -124,6 +124,28 @@ export function positionsAfter(count: number, existing: Array<string> = []): str
 }
 
 /**
+ * `count` keys in ascending order, all sorting BEFORE `first` (the top of a
+ * list: new captures go on top, tasks-v3 default h). Split evenly, so a long
+ * pasted list stays short keys. With no `first`, the list is empty: plain steps.
+ */
+export function positionsBefore(count: number, first: string | null): string[] {
+  const n = Math.max(0, Math.floor(count));
+  if (n === 0) return [];
+  if (first === null) return positionsAfter(n, []);
+  const out: string[] = [];
+  const fill = (lo: string | null, hi: string, k: number) => {
+    if (k <= 0) return;
+    const mid = betweenPositions(lo, hi);
+    const left = Math.floor((k - 1) / 2);
+    fill(lo, mid, left);
+    out.push(mid);
+    fill(mid, hi, k - 1 - left);
+  };
+  fill(null, first, n);
+  return out;
+}
+
+/**
  * A position string strictly between `a` and `b` (either bound may be null).
  * Uses a fixed-width integer midpoint while neighbours still have room between
  * them (lexicographic order == integer order only at equal width, so this is

@@ -13,6 +13,9 @@
 // A reference inserted in running text is a chip; alone on its line it is a
 // card (where the surface allows cards); "Show as" follows the insert.
 // Selection funnels through the pure `resolveMention` + `executeMention`.
+// A host can add its own entries (`candidatesFor`: capture's people, teams and
+// commands, TV-U14) and carry out a pick itself (`onPick`: capture turns a
+// person into an assignee token, a project into the destination).
 // Tokens-only (DESIGN_RULES).
 
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
@@ -41,6 +44,7 @@ import { CalendarDays, Plus, User } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
+import { TeamMark } from "@/components/ui/avatar";
 import { Calendar } from "@/components/ui/calendar";
 import { Eyebrow } from "@/components/ui/eyebrow";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
@@ -106,6 +110,32 @@ export type MentionMenuPluginProps = {
   onCreateEntity?: (entityType: string, label: string) => Promise<MentionInsert | null>;
   /** The type `/` creates (default "task"). */
   createType?: string;
+  /**
+   * The host's say on what the menu lists: it gets the query and the menu's
+   * own candidates (and whether they're still loading) and returns the list to
+   * show, adding its own entries (people, teams, commands) or dropping some.
+   */
+  candidatesFor?: (
+    query: string,
+    candidates: MentionCandidate[],
+    loading: boolean,
+  ) => MentionCandidate[];
+  /**
+   * Carry out a pick instead of the menu. Decide at once: return null to let
+   * the menu do its usual thing, or the edit to make, which runs inside the
+   * editor update (call `removeQuery` to take the typed `@word` out, `insert`
+   * to put nodes at the caret). The decision can't wait for the update: a pick
+   * by key runs inside a command, where an update only runs after it.
+   */
+  onPick?: (candidate: MentionCandidate) => ((api: MenuPickApi) => void) | null;
+  /** Told when the menu shows or hides (a host that handles Esc itself). */
+  onMenuChange?: (open: boolean) => void;
+};
+
+/** What a host's pick can do to the editor (inside the update). */
+export type MenuPickApi = {
+  removeQuery: () => void;
+  insert: (nodes: LexicalNode[]) => void;
 };
 
 const MENU_MIN_WIDTH = 240;
@@ -252,6 +282,9 @@ export function MentionMenuPlugin({
   dateCommands = false,
   onCreateEntity,
   createType = "task",
+  candidatesFor,
+  onPick,
+  onMenuChange,
 }: MentionMenuPluginProps) {
   const [editor] = useLexicalComposerContext();
   const [menu, setMenu] = useState<MentionMenuState | null>(null);
@@ -260,7 +293,11 @@ export function MentionMenuPlugin({
   const [datePicker, setDatePicker] = useState<{ top: number; left: number } | null>(null);
   const pickerSelection = useRef<RangeSelection | null>(null);
 
-  const { setQuery, candidates, loading } = useMentionSearch({
+  const {
+    setQuery,
+    candidates: found,
+    loading,
+  } = useMentionSearch({
     runtime,
     workspaceId,
     trigger,
@@ -278,9 +315,22 @@ export function MentionMenuPlugin({
     enabled: menu !== null,
   });
 
+  const candidates = candidatesFor ? candidatesFor(menu?.query ?? "", found, loading) : found;
+
   // Nothing to offer for a few words after a `/` is ordinary prose: no menu
   // shows, and no key (Esc included) is taken from the editor.
   const hidden = !menu || (menu.query.includes(" ") && !loading && candidates.length === 0);
+
+  const onMenuChangeRef = useRef(onMenuChange);
+  const onPickRef = useRef(onPick);
+  useEffect(() => {
+    onMenuChangeRef.current = onMenuChange;
+    onPickRef.current = onPick;
+  });
+  useEffect(() => {
+    onMenuChangeRef.current?.(!hidden);
+  }, [hidden]);
+  useEffect(() => () => onMenuChangeRef.current?.(false), []);
 
   const menuRef = useRef<MentionMenuState | null>(null);
   const candidatesRef = useRef<MentionCandidate[]>([]);
@@ -315,8 +365,30 @@ export function MentionMenuPlugin({
 
   const commit = (candidate: MentionCandidate) => {
     const activeMenu = menuRef.current;
-    if (!activeMenu || !runtime || !workspaceId) return;
+    if (!activeMenu) return;
+    // The host carries it out (capture), if it wants to.
+    const hostEdit = onPickRef.current?.(candidate) ?? null;
+    if (hostEdit) {
+      editor.focus();
+      editor.update(() =>
+        hostEdit({
+          removeQuery: () => removeMentionToken(activeMenu),
+          insert: (nodes) => {
+            const selection = $getSelection();
+            if ($isRangeSelection(selection)) selection.insertNodes(nodes);
+          },
+        }),
+      );
+      setMenu(null);
+      return;
+    }
+    if (!runtime || !workspaceId) return;
     const resolution = resolveMention({ trigger, candidate });
+    // A team or a host's own entry that no host took: nothing to do.
+    if (resolution.action === "host") {
+      setMenu(null);
+      return;
+    }
 
     // `/date` asks for the day first: keep the caret, open the calendar.
     if (resolution.action === "insert-date" && resolution.command === "date") {
@@ -563,7 +635,9 @@ export function MentionMenuPlugin({
 
   return createPortal(
     <div
-      className="fixed z-50 max-h-80 min-w-60 overflow-y-auto rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg"
+      // Above a dialog (the capture), and clickable while a modal dialog has
+      // turned pointer events off on <body> (TV-U14).
+      className="pointer-events-auto fixed z-[var(--z-popover)] max-h-80 min-w-60 overflow-y-auto rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg"
       style={{ top: menu.top, left: menu.left }}
       role="listbox"
       aria-label={trigger === "tag" ? "Link a tag" : trigger === "ref" ? "Insert" : "Mention"}
@@ -598,9 +672,17 @@ export function MentionMenuPlugin({
                     ? `New ${candidate.entityType} “${candidate.label}”`
                     : candidate.label}
               </span>
+              {candidate.kind === "action" && candidate.hint ? (
+                <span className="shrink-0 text-muted-foreground">{candidate.hint}</span>
+              ) : null}
               {candidate.kind === "person" ? (
                 <Eyebrow className="shrink-0" tone="tag">
                   person
+                </Eyebrow>
+              ) : null}
+              {candidate.kind === "team" ? (
+                <Eyebrow className="shrink-0" tone="tag">
+                  team
                 </Eyebrow>
               ) : null}
             </button>
@@ -613,6 +695,13 @@ export function MentionMenuPlugin({
 }
 
 function CandidateIcon({ candidate }: { candidate: MentionCandidate }) {
+  if (candidate.kind === "team") {
+    return <TeamMark name={candidate.label} id={candidate.teamId} letters={candidate.letters} />;
+  }
+  if (candidate.kind === "action") {
+    const Own = candidate.icon ?? Plus;
+    return <Own className="size-icon-sm shrink-0 text-muted-foreground" aria-hidden />;
+  }
   if (candidate.kind === "tag") {
     return (
       <span

@@ -15,7 +15,7 @@ import * as chrono from "chrono-node";
 import { RRule, type Weekday } from "rrule";
 
 import { formatDay, formatDayTime } from "../../../lib/time-format";
-import { takeSlashDates } from "../../spine/grammar";
+import { findSlashDates, takeSlashDates } from "../../spine/grammar";
 import type { RecurrenceRule } from "../model";
 
 export type ParsedCapture = {
@@ -35,6 +35,26 @@ export type ParsedCapture = {
    * vocabulary could not parse. The UI surfaces a polite note rather than a guess.
    */
   unparsedRecurrence: boolean;
+  /**
+   * Where the recognised words are, as `[start, end)` offsets into the trimmed
+   * input: what capture highlights while you type (TV-U14, 33a). Empty when
+   * nothing was recognised.
+   */
+  spans: Array<[number, number]>;
+};
+
+/** What to leave alone while reading dates (TV-U14). */
+export type CaptureParseOptions = {
+  /**
+   * Phrases the person kept as words (Esc on a highlight, 33a): never read as a
+   * date, wherever they appear (any case).
+   */
+  keep?: readonly string[];
+  /**
+   * `[start, end)` ranges of the trimmed input that are never read as dates (a
+   * linked thing's name in a capture title: "Prepare @Monday notes").
+   */
+  ignore?: ReadonlyArray<readonly [number, number]>;
 };
 
 /** A clock time ("at 3pm", "15:30", "at 5", "noon"), for a `/` command's title. */
@@ -256,7 +276,72 @@ function stripSpans(
     .trim();
 }
 
-export function parseCapture(input: string, refDate: Date = new Date()): ParsedCapture {
+/** A character no date word contains: what a kept or ignored range reads as. */
+const MASK = "\uE000";
+
+/** `[start, end)` ranges sorted and merged where they touch or overlap. */
+function mergeRanges(ranges: ReadonlyArray<readonly [number, number]>): Array<[number, number]> {
+  const sorted = ranges
+    .map(([a, b]): [number, number] => [Math.min(a, b), Math.max(a, b)])
+    .filter(([a, b]) => b > a)
+    .sort((x, y) => x[0] - y[0]);
+  const out: Array<[number, number]> = [];
+  for (const [a, b] of sorted) {
+    const last = out[out.length - 1];
+    if (last && a <= last[1]) last[1] = Math.max(last[1], b);
+    else out.push([a, b]);
+  }
+  return out;
+}
+
+/** Every occurrence of the kept phrases in `text` (any case, whole words). */
+function keptRanges(text: string, keep: readonly string[]): Array<[number, number]> {
+  const out: Array<[number, number]> = [];
+  const lower = text.toLowerCase();
+  for (const phrase of keep) {
+    const needle = phrase.trim().toLowerCase();
+    if (!needle) continue;
+    for (let i = lower.indexOf(needle); i !== -1; i = lower.indexOf(needle, i + 1)) {
+      out.push([i, i + needle.length]);
+    }
+  }
+  return out;
+}
+
+/**
+ * Read a captured line: its date or time, its repeat, and the title without
+ * them. With `opts`, kept phrases and ignored ranges stay words: they're
+ * hidden from the date reader and put back, unchanged, in the title.
+ */
+export function parseCapture(
+  input: string,
+  refDate: Date = new Date(),
+  opts: CaptureParseOptions = {},
+): ParsedCapture {
+  const raw = input.trim();
+  const ranges = mergeRanges([
+    ...(opts.ignore ?? []).map(([a, b]): [number, number] => [
+      Math.max(0, a),
+      Math.min(raw.length, b),
+    ]),
+    ...keptRanges(raw, opts.keep ?? []),
+  ]);
+  if (ranges.length === 0) return parseRaw(raw, refDate);
+  // Same length and offsets, so the spans still point into `raw`.
+  let masked = raw;
+  for (const [a, b] of ranges) masked = masked.slice(0, a) + MASK.repeat(b - a) + masked.slice(b);
+  const parsed = parseRaw(masked, refDate);
+  // Each masked run is one merged range, in order: put the words back.
+  let n = 0;
+  const unmask = (text: string) =>
+    text.replace(new RegExp(`${MASK}+`, "g"), () => {
+      const range = ranges[n++];
+      return range ? raw.slice(range[0], range[1]) : "";
+    });
+  return { ...parsed, title: unmask(parsed.title) };
+}
+
+function parseRaw(input: string, refDate: Date): ParsedCapture {
   const raw = input.trim();
   const empty: ParsedCapture = {
     title: raw,
@@ -266,6 +351,7 @@ export function parseCapture(input: string, refDate: Date = new Date()): ParsedC
     summary: "",
     matched: false,
     unparsedRecurrence: false,
+    spans: [],
   };
   if (!raw) return empty;
 
@@ -274,6 +360,7 @@ export function parseCapture(input: string, refDate: Date = new Date()): ParsedC
   // words, which then stay the person's words; a clock time still schedules
   // on that day; a repeat keeps its own start.
   const slash = takeSlashDates(raw, refDate);
+  const slashSpans = slash.day ? findSlashDates(raw) : [];
   if (slash.day && !slash.text) {
     // Only a command: nothing to call the task but its words.
     const due = new Date(`${slash.day}T12:00:00`);
@@ -282,16 +369,19 @@ export function parseCapture(input: string, refDate: Date = new Date()): ParsedC
       dueDate: due.toISOString(),
       summary: `due ${chronoLabel(due, false)}`,
       matched: true,
+      spans: slashSpans,
     };
   }
   if (slash.day && slash.text) {
-    const rest = parseCapture(slash.text, refDate);
+    const rest = parseRaw(slash.text, refDate);
     if (rest.recurrence) {
       // The command's day starts the repeat, like a typed date does.
       const day = new Date(`${slash.day}T12:00:00`);
       const named = `${slash.text} on ${MONTHS[day.getMonth()]} ${day.getDate()} ${day.getFullYear()}`;
-      const started = parseCapture(named, refDate);
-      return started.recurrence ? { ...started, title: rest.title } : rest;
+      const started = parseRaw(named, refDate);
+      return started.recurrence
+        ? { ...started, title: rest.title, spans: slashSpans }
+        : { ...rest, spans: slashSpans };
     }
     if (rest.scheduledAt) {
       const at = new Date(rest.scheduledAt);
@@ -305,12 +395,17 @@ export function parseCapture(input: string, refDate: Date = new Date()): ParsedC
       const cleanCut =
         withoutClock !== "" &&
         withoutClock !== slash.text &&
-        parseCapture(withoutClock, refDate).title === rest.title;
+        parseRaw(withoutClock, refDate).title === rest.title;
+      const clock = CLOCK_TIME.exec(raw);
       return {
         ...rest,
         title: cleanCut ? withoutClock : rest.title,
         scheduledAt: day.toISOString(),
         summary: `scheduled ${chronoLabel(day, true)}`,
+        spans:
+          clock && cleanCut
+            ? mergeSpans([...slashSpans, [clock.index, clock.index + clock[0].length]])
+            : slashSpans,
       };
     }
     // A date alone is due on that day, at noon like a typed date word, so
@@ -322,6 +417,7 @@ export function parseCapture(input: string, refDate: Date = new Date()): ParsedC
       dueDate: due.toISOString(),
       summary: `due ${chronoLabel(due, false)}`,
       matched: true,
+      spans: slashSpans,
     };
   }
 
@@ -408,6 +504,7 @@ export function parseCapture(input: string, refDate: Date = new Date()): ParsedC
     summary: parts.join(" · "),
     matched,
     unparsedRecurrence,
+    spans: matched ? mergeSpans(spans) : [],
   };
 }
 

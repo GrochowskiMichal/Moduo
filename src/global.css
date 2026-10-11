@@ -199,6 +199,15 @@ body,
   background-color: var(--label);
 }
 
+/* TV-U14 · capture: date words the title will read ("tomorrow 3pm") are
+   marked while you type (33a), through the CSS Custom Highlight API, so the
+   words stay plain text in the editor. The active fill a token chip has, plus
+   a dotted underline: recognised, not yet a token. Esc keeps them as words. */
+::highlight(capture-date) {
+  background-color: var(--state-active);
+  text-decoration: underline dotted var(--muted-foreground);
+}
+
 /* CAL-6: external calendar chips + the left-rail swatch carry their account hue
    through the SAME [data-label] tokens as tags (§13b) — the raw provider hex
    maps to a bounded label name, never an inline color. `.cal-swatch` is the

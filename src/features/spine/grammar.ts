@@ -179,6 +179,16 @@ export function replaceSlashDates(
   });
 }
 
+/** Where `/today`, `/tomorrow` and `/next week` sit in `text`: `[start, end)` of each command. */
+export function findSlashDates(text: string): Array<[number, number]> {
+  const out: Array<[number, number]> = [];
+  for (const m of text.matchAll(SLASH_DATE)) {
+    const start = (m.index ?? 0) + m[1].length;
+    out.push([start, start + 1 + m[2].length]);
+  }
+  return out;
+}
+
 /**
  * `/today`, `/tomorrow` and `/next week` typed in a capture line: the day the
  * last one names and the line without them (a date command leaves the title,
