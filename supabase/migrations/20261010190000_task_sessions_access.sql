@@ -15,9 +15,10 @@
 --     caller's own). A session goes in the caller's own calendar or the task's
 --     assignee's (scheduling the assignee's work), and only for someone who sees
 --     the task and can work on tasks; that holds for the ops and for a write of
---     scheduled_at / duration_minutes (an old build, the app's picker, the
---     repeat engine). Moving, resizing or removing a session on a task you can
---     edit keeps its person.
+--     scheduled_at / duration_minutes (an old build, the app's picker; system
+--     work such as the repeat engine's catch-up never fills the calendar of
+--     whoever's app ran it). Moving, resizing or removing a session on a task
+--     you can edit keeps its person.
 --   * The reminder sender claims a reminder for delivery only while its person
 --     can see the task; one whose person can't is retired at its time, unsent.
 --   * Booking links read a host's work sessions through tasks__busy_sessions:
@@ -139,6 +140,21 @@ END;
 $$;
 
 -- ── 4. Whose calendar a session goes in ─────────────────────────────────────
+
+-- Whether this person may hold a work session on this task: in the workspace,
+-- able to work on tasks there, and seeing the task.
+CREATE OR REPLACE FUNCTION public.tasks__can_hold_session(p_task_id uuid, p_workspace_id uuid, p_user uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT p_user IS NOT NULL
+     AND public.tasks__is_member(p_workspace_id, p_user)
+     AND public.perm_user_has(p_workspace_id, p_user, 'tasks.edit')
+     AND public.tasks__visible_to(p_task_id, p_user)
+$$;
 
 -- The caller's own (they passed tasks__guard_edit), or the task's assignee's:
 -- scheduling the assignee's work is the one way to put a block in someone
@@ -277,9 +293,12 @@ $$;
 
 -- tasks__session_legacy (TV-D10's body) behind the same gate as the ops: a
 -- signed-in writer needs edit on the task (PERM-W's write check asks too; this
--- keeps the session side from depending on it), and a new session is the
--- assignee's only when they see the task, else the writer's (system work with
--- neither: the creator's). Moving the shown session keeps its person.
+-- keeps the session side from depending on it). A new session is the
+-- assignee's when they may hold it (tasks__can_hold_session), else the
+-- writer's; system work (no actor, or share.bypass, as the repeat engine's
+-- catch-up runs from anyone's app) never uses the caller: the creator's when
+-- they may hold it, else nobody's (it blocks no one's booking links). Moving
+-- the shown session keeps its person.
 CREATE OR REPLACE FUNCTION public.tasks__session_legacy()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -306,9 +325,11 @@ BEGIN
   IF NOT v_system AND NOT public.tasks__editable_to(NEW.id, v_actor) THEN
     RAISE EXCEPTION 'You don''t have access to this task.' USING ERRCODE = '42501';
   END IF;
-  v_user := CASE WHEN NEW.assignee_id IS NOT NULL AND public.tasks__visible_to(NEW.id, NEW.assignee_id)
-                   THEN NEW.assignee_id
-                 ELSE coalesce(v_actor, NEW.owner_id) END;
+  v_user := CASE
+    WHEN public.tasks__can_hold_session(NEW.id, NEW.workspace_id, NEW.assignee_id) THEN NEW.assignee_id
+    WHEN NOT v_system THEN v_actor
+    WHEN public.tasks__can_hold_session(NEW.id, NEW.workspace_id, NEW.owner_id) THEN NEW.owner_id
+  END;
   v_len := make_interval(mins => coalesce(nullif(NEW.duration_minutes, 0), 30));
 
   IF TG_OP = 'INSERT' THEN
@@ -688,6 +709,7 @@ BEGIN
   FOREACH fn IN ARRAY ARRAY[
     'tasks__visible_to(uuid, uuid)', 'tasks__editable_to(uuid, uuid)',
     'tasks__guard_edit(uuid, uuid)', 'tasks__check_session_person(public.tasks, uuid)',
+    'tasks__can_hold_session(uuid, uuid, uuid)',
     'tasks__session_legacy()', 'tasks__fire_reminders(timestamptz, integer)',
     'tasks__busy_sessions(uuid, uuid, timestamptz, timestamptz)',
     'buckets__area_sync()', 'buckets__project_check()'] LOOP

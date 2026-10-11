@@ -349,6 +349,77 @@ BEGIN
   r := test.as_user('E', format($q$SELECT * FROM public.tasks_op_update(%L, %L, '{"scheduled_at": "2030-05-03T09:00:00Z"}'::jsonb)$q$,
     test.id('W'), test.id('TS')));
   PERFORM test.ok(test.people('TS') = 'A,A', 'path: the edit op''s schedule moves the shown session, keeping its person', r);
+
+  -- A viewer (the role) sees TS's sessions and entries but changes none.
+  PERFORM test.as_user('E', format($q$SELECT * FROM public.tasks_op_waiting_add(%L, %L, '{"kind": "text", "label": "Specs"}'::jsonb)$q$,
+    test.id('W'), test.id('TS')));
+  PERFORM test.ok(test.reads('V', 'task_sessions', 'TS') = '2' AND test.reads('V', 'task_waiting', 'TS') = '1',
+    'read: a viewer sees the sessions and entries of a task they can see');
+  r := test.try('V', format($q$SELECT * FROM public.tasks_op_session_update(%L, %L, '{"starts_at": "2030-06-01T09:00:00Z", "ends_at": "2030-06-01T10:00:00Z"}'::jsonb)$q$,
+    test.id('W'), v_session));
+  PERFORM test.ok(r LIKE '%don''t have edit access to Tasks%', 'write: a viewer can''t move a session', r);
+  r := test.try('V', format($q$SELECT * FROM public.tasks_op_session_remove(%L, %L)$q$, test.id('W'), v_session));
+  PERFORM test.ok(r LIKE '%don''t have edit access to Tasks%', 'write: a viewer can''t remove one', r);
+  r := test.try('V', format($q$SELECT * FROM public.tasks_op_waiting_remove(%L, %L)$q$, test.id('W'),
+    (SELECT id FROM public.task_waiting WHERE task_id = test.id('TS'))));
+  PERFORM test.ok(r LIKE '%don''t have edit access to Tasks%', 'write: a viewer can''t clear an entry', r);
+
+  -- An assignee who can no longer work on tasks here (made a viewer): no
+  -- new session is theirs, through the op or a write of scheduled_at.
+  PERFORM test.new_task('E', 'TD', 'SB', jsonb_build_object('assignee_id', test.id('A')));
+  UPDATE public.workspace_members SET role = 'viewer' WHERE workspace_id = test.id('W') AND user_id = test.id('A');
+  r := test.try('E', format($q$SELECT * FROM public.tasks_op_session_add(%L, %L, %L::jsonb)$q$, test.id('W'), test.id('TD'),
+    jsonb_build_object('starts_at', '2030-06-02T09:00:00Z', 'ends_at', '2030-06-02T10:00:00Z', 'user_id', test.id('A'))));
+  PERFORM test.ok(r LIKE '42501%Viewers can''t be assigned%', 'person: an assignee made a viewer gets no session (op)', r);
+  r := test.as_user('E', format($q$UPDATE public.tasks SET scheduled_at = '2030-06-02T09:00:00Z' WHERE id = %L$q$, test.id('TD')));
+  PERFORM test.ok(r = 'ok 1' AND test.people('TD') = 'E',
+    'person: nor through a write of scheduled_at (the writer''s instead)', r);
+  UPDATE public.workspace_members SET role = 'member' WHERE workspace_id = test.id('W') AND user_id = test.id('A');
+END;
+$$;
+
+-- ── System work never fills the caller's calendar ───────────────────────────
+-- The repeat engine's catch-up runs as system work from whichever app calls
+-- it: a repeat with no time yet gets today's occurrence, and its session is
+-- the creator's (who may hold it), never the caller's.
+DO $$
+DECLARE
+  r text;
+  v_rule jsonb := jsonb_build_object('rrule', 'FREQ=DAILY', 'dtstart', public.tasks__iso(now() - interval '10 days'));
+BEGIN
+  PERFORM test.as_op('O', format($q$INSERT INTO public.tasks (id, workspace_id, bucket_id, owner_id, assignee_id, title, status, recurrence)
+      VALUES (%L, %L, %L, %L, NULL, 'Daily private', 'todo', %L::jsonb), (%L, %L, %L, %L, NULL, 'Daily shared', 'todo', %L::jsonb)$q$,
+    test.id('CU1'), test.id('W'), test.id('PB'), test.id('O'), v_rule,
+    test.id('CU2'), test.id('W'), test.id('SB'), test.id('O'), v_rule));
+  r := test.as_user('E', format($q$SELECT * FROM public.tasks_op_catch_up(%L, '[]'::jsonb)$q$, test.id('W')));
+  PERFORM test.ok(r LIKE 'ok%' AND (SELECT scheduled_at FROM public.tasks WHERE id = test.id('CU1')) IS NOT NULL
+              AND (SELECT scheduled_at FROM public.tasks WHERE id = test.id('CU2')) IS NOT NULL,
+    'the catch-up from E''s app gave both repeats today''s occurrence', r);
+  PERFORM test.ok((SELECT count(*) FROM public.tasks WHERE id IN (test.id('CU1'), test.id('CU2')) AND assignee_id IS NULL) = 2
+              AND test.people('CU1') = 'O' AND test.people('CU2') = 'O',
+    'path: the repeat engine — the session is the creator''s, never the caller''s',
+    coalesce(test.people('CU1'), '-') || ' / ' || coalesce(test.people('CU2'), '-'));
+END;
+$$;
+
+-- ── An agent (API key) acts as its person, through the same gate ────────────
+INSERT INTO public.workspace_api_keys (id, workspace_id, name, key_prefix, key_hash, scopes, created_by) VALUES
+  (test.id('KN'), test.id('W'), 'N agent', 'mdo_kn', md5('db-test-kn'), '{"tasks": "edit"}'::jsonb, test.id('N')),
+  (test.id('KM'), test.id('W'), 'M agent', 'mdo_km', md5('db-test-km'), '{"tasks": "edit"}'::jsonb, test.id('M'));
+DO $$
+DECLARE
+  r text;
+BEGIN
+  r := test.as_key('KN', format($q$SELECT public.tasks_op_unschedule(%L, %L)$q$, test.id('W'), test.id('TV')));
+  PERFORM test.ok(r LIKE '42501%don''t have access to this task%', 'path: an agent of a view-only person can''t unschedule', r);
+  r := test.as_key('KN', format($q$SELECT * FROM public.tasks_op_session_add(%L, %L, '{"starts_at": "2030-06-03T09:00:00Z", "ends_at": "2030-06-03T10:00:00Z"}'::jsonb)$q$,
+    test.id('W'), test.id('TV')));
+  PERFORM test.ok(r LIKE '42501%don''t have access to this task%', 'path: nor add a session', r);
+  r := test.as_key('KM', format($q$SELECT public.tasks_op_unschedule(%L, %L)$q$, test.id('W'), test.id('TP')));
+  PERFORM test.ok(r LIKE '%Task not found%', 'path: an agent of a member without access finds no task', r);
+  PERFORM test.ok((SELECT scheduled_at FROM public.tasks WHERE id = test.id('TV')) IS NOT NULL
+              AND (SELECT scheduled_at FROM public.tasks WHERE id = test.id('TP')) IS NOT NULL,
+    'and both stay scheduled');
 END;
 $$;
 
