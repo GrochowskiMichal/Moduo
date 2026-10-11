@@ -27,7 +27,8 @@
 --     for any write another trigger made; now only for what a foreign key's
 --     SET NULL does (clearing a project's area, lead or client).
 --
--- Apply after TV-D10's three files (20261010180000, 181000, 182000).
+-- Apply after TV-D10's three files (20261010180000, 181000, 182000). Numbered
+-- after TV-U6's 20261011100000, which it shares no function with.
 -- Verified on the local stack by supabase/tests/sessions_access.test.sql (and
 -- sessions.test.sql, structure.test.sql).
 

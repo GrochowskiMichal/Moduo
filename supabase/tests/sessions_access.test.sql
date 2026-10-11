@@ -1,5 +1,5 @@
 -- TV-D10-fix · Work sessions, reminders and Waiting on… behind the task's gate
--- on every path (supabase/migrations/20261010190000_task_sessions_access.sql).
+-- on every path (supabase/migrations/20261011110000_task_sessions_access.sql).
 -- specs/tasks-v3.md §1–2, §Assumptions #4, #24; decisions "TV-D10-fix".
 --
 -- Cast: O owns workspace W. E works on tasks, A is the assignee of E's task,

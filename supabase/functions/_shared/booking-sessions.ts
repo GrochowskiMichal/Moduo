@@ -2,7 +2,7 @@
  * A booking link's host is busy during their work sessions from Tasks
  * (TV-D10, REPLAN default d), when the link's busy list has the pseudo-
  * calendar "tasks". The read goes through `tasks__busy_sessions` (TV-D10-fix,
- * `20261010190000_task_sessions_access.sql`), the same task gate as every
+ * `20261011110000_task_sessions_access.sql`), the same task gate as every
  * other path: only the host's live sessions on open tasks they can see, and
  * only the times. What the work is never reaches the guest.
  *

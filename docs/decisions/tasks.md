@@ -4,7 +4,7 @@ Full entries for this area, newest first. The one-line index of every area is [d
 
 ## 2026-10-11 · TV-D10-fix sessions, reminders and Waiting on behind the task's gate — the agent's choices (deferred to by Maciej)
 
-A follow-up to TV-D10 ([specs/tasks-v3.md](../../specs/tasks-v3.md) block 10, §Assumptions #4, #24; REPLAN 24, 25, default d; migration `20261010190000_task_sessions_access`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+A follow-up to TV-D10 ([specs/tasks-v3.md](../../specs/tasks-v3.md) block 10, §Assumptions #4, #24; REPLAN 24, 25, default d; migration `20261011110000_task_sessions_access`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
 
 - **D10F-1 · One gate for a task, on every path** → TV-D10-fix (`tasks__visible` / `tasks__editable` for the caller, `tasks__visible_to` / `tasks__editable_to` for a given person), TV-D12, TV-D16
   - Who: agent's choice, deferred to by Maciej, 2026-10-11.

@@ -165,7 +165,7 @@ describe("cross-runtime drift guards", () => {
   });
 
   it("the booking busy read leaves out the closed categories (TV-D10-fix)", () => {
-    const sql = readFileSync(resolve(MIGRATIONS_DIR, "20261010190000_task_sessions_access.sql"), "utf8");
+    const sql = readFileSync(resolve(MIGRATIONS_DIR, "20261011110000_task_sessions_access.sql"), "utf8");
     const opList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(", ");
     expect(sql).toContain(`'todo') NOT IN (${opList(TASK_CLOSED_CATEGORIES)})`);
   });
