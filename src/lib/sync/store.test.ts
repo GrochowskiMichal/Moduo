@@ -745,7 +745,42 @@ describe("what changes without a stamp (sharing, TV-D10)", () => {
     release();
   });
 
-  it("projects, areas and sections are read whole each time, so one shown or hidden by sharing follows", async () => {
+  it("a project shared with you brings its statuses at once (the access check runs when the projects change)", async () => {
+    const server = fakeServer();
+    const project = (id: string) => ({
+      id,
+      workspaceId: WS,
+      ownerId: "u-mate",
+      name: id,
+      isSystem: false,
+      group: null,
+      position: id,
+      createdAt: at(0),
+      updatedAt: at(1),
+      deletedAt: null,
+    });
+    server.tables.buckets = [project("mine")];
+    const store = new WorkspaceStore(server.runtime, ME, WS, {
+      cache: memoryCache(),
+      // Not the periodic check: only the projects changing can run it.
+      timing: { persistMs: 0, throttleMs: 0, accessCheckMs: 60 * 60_000 },
+    });
+    const release = store.acquire();
+    await settled(store);
+    // A first delta, so the store is past its first load.
+    await store.syncNow();
+    await settled(store);
+    server.tables.buckets = [project("mine"), project("shared")];
+    server.tables.statuses = [
+      { id: "st-shared", projectId: "shared", updatedAt: "2026-10-01T08:00:00.000000+00:00" },
+    ] as unknown as ServerRow[];
+    await store.syncNow();
+    await settled(store);
+    expect(store.getSnapshot().bundle.statuses?.map((s) => s.id)).toEqual(["st-shared"]);
+    release();
+  });
+
+  it("projects and areas are read whole each time, so one shown or hidden by sharing follows", async () => {
     const server = fakeServer();
     const area = (id: string) => ({ id, workspaceId: WS, name: id, updatedAt: at(1) });
     server.tables.areas = [area("work")];

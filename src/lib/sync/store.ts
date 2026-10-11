@@ -185,11 +185,11 @@ export const EMPTY_SNAPSHOT: StoreSnapshot = {
 export const SYNC_TABLES: readonly { name: SyncTableName; delta: boolean; phase: 1 | 2 }[] = [
   // Read whole every time: small, and what you can see of them changes with
   // sharing, which bumps no stamp (a project shared with you, an area that
-  // shows because one of its projects does: TV-D10's `areas__visible`).
+  // shows because one of its projects does: TV-D10's `areas__visible`). A
+  // change in the projects you see runs the access check at once, which
+  // brings (or drops) the delta tables' rows of those projects.
   { name: "buckets", delta: false, phase: 1 },
-  { name: "statuses", delta: false, phase: 1 },
   { name: "areas", delta: false, phase: 1 },
-  { name: "sections", delta: false, phase: 1 },
   { name: "teams", delta: false, phase: 1 },
   { name: "teamMembers", delta: false, phase: 1 },
   // No stamps (hard deletes): read whole.
@@ -197,6 +197,8 @@ export const SYNC_TABLES: readonly { name: SyncTableName; delta: boolean; phase:
   { name: "tagLinks", delta: false, phase: 1 },
   { name: "relations", delta: false, phase: 1 },
   // Deltas; the access check covers what sharing shows or hides.
+  { name: "statuses", delta: true, phase: 1 },
+  { name: "sections", delta: true, phase: 1 },
   { name: "tasks", delta: true, phase: 1 },
   { name: "tags", delta: true, phase: 1 },
   { name: "completions", delta: true, phase: 2 },
@@ -733,12 +735,18 @@ export class WorkspaceStore {
     this.schedulePersist();
     void this.flush();
     // A first load (or a whole read) checked everything; after deltas, check
-    // now and then what's still yours.
+    // now and then what's still yours, and at once when the projects you can
+    // see changed (one shared with you or taken away: no stamp moves).
+    const projectsChanged = this.projectsChanged;
+    this.projectsChanged = false;
     if (!delta) this.accessCheckedAt = startedAt;
-    else if (Date.now() - this.accessCheckedAt >= this.timing.accessCheckMs) {
+    else if (projectsChanged || Date.now() - this.accessCheckedAt >= this.timing.accessCheckMs) {
       void this.checkAccess();
     }
   }
+
+  /** The last whole read of projects added or dropped one. */
+  private projectsChanged = false;
 
   private onReadFailed(e: unknown): void {
     if (isNetworkError(e)) {
@@ -913,7 +921,14 @@ export class WorkspaceStore {
       SYNC_TABLES.map(async (t) => {
         if (!t.delta) {
           const res = await this.read(t.name, null);
+          const before = t.name === "buckets" ? new Set(this.table("buckets").rows.keys()) : null;
           this.applyWhole(t.name, res.rows as AnyRow[], started, res.truncated);
+          if (before) {
+            const after = this.table("buckets").rows;
+            if (after.size !== before.size || [...after.keys()].some((id) => !before.has(id))) {
+              this.projectsChanged = true;
+            }
+          }
           return;
         }
         const state = this.table(t.name);
