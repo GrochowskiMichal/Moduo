@@ -237,6 +237,59 @@ BEGIN
 END;
 $$;
 
+-- ── Realtime: who a change streams to ────────────────────────────────────────
+-- realtime.apply_rls is what the Realtime server runs for each change: it
+-- checks every subscriber's SELECT on the row under their own claims.
+CREATE FUNCTION test.wal(p_table text, p_id uuid) RETURNS jsonb LANGUAGE plpgsql AS $$
+DECLARE
+  v jsonb;
+BEGIN
+  EXECUTE format('SELECT to_jsonb(x) FROM public.%I x WHERE id = %L', p_table, p_id) INTO v;
+  RETURN jsonb_build_object('action', 'U', 'schema', 'public', 'table', p_table,
+    'pk', jsonb_build_array(jsonb_build_object('name', 'id', 'type', 'uuid')),
+    'columns', (SELECT jsonb_agg(jsonb_build_object('name', a.attname, 'type', format_type(a.atttypid, NULL),
+                                                    'value', v -> a.attname) ORDER BY a.attnum)
+                FROM pg_attribute a
+                WHERE a.attrelid = ('public.' || p_table)::regclass AND a.attnum > 0 AND NOT a.attisdropped));
+END;
+$$;
+-- Who of O, M, N and V gets the change to this row.
+CREATE FUNCTION test.streams_to(p_table text, p_id uuid) RETURNS text LANGUAGE plpgsql AS $$
+DECLARE
+  v_who text;
+BEGIN
+  DELETE FROM realtime.subscription WHERE subscription_id IN (test.id('sub:O'), test.id('sub:M'), test.id('sub:N'), test.id('sub:V'));
+  INSERT INTO realtime.subscription (subscription_id, entity, claims)
+  SELECT test.id('sub:' || n), ('public.' || p_table)::regclass,
+         jsonb_build_object('sub', test.id(n), 'role', 'authenticated')
+  FROM unnest(ARRAY['O', 'M', 'N', 'V']) AS n;
+  SELECT coalesce(string_agg(n, ',' ORDER BY n), '') INTO v_who
+  FROM unnest(ARRAY['O', 'M', 'N', 'V']) AS n
+  WHERE test.id('sub:' || n) IN (SELECT unnest(r.subscription_ids) FROM realtime.apply_rls(test.wal(p_table, p_id)) r);
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '{}', true);
+  RETURN v_who;
+END;
+$$;
+
+DO $$
+DECLARE
+  v_who text;
+BEGIN
+  v_who := test.streams_to('task_sessions', test.session_of('TP'));
+  PERFORM test.ok(v_who = 'O', 'path: Realtime — a session on O''s private task streams to O only', v_who);
+  v_who := test.streams_to('task_waiting', (SELECT id FROM public.task_waiting WHERE task_id = test.id('TP')));
+  PERFORM test.ok(v_who = 'O', 'path: Realtime — its Waiting on entry streams to O only', v_who);
+  v_who := test.streams_to('task_reminders', (SELECT id FROM public.task_reminders WHERE task_id = test.id('TP')));
+  PERFORM test.ok(v_who = 'O', 'path: Realtime — O''s reminder streams to O only', v_who);
+  v_who := test.streams_to('task_sessions', test.session_of('TV'));
+  PERFORM test.ok(v_who = 'N,O', 'path: Realtime — a session on a task N can view streams to N too, never to M or V', v_who);
+  v_who := test.streams_to('task_reminders', (SELECT id FROM public.task_reminders WHERE task_id = test.id('TV') AND user_id = test.id('N')));
+  PERFORM test.ok(v_who = 'N', 'path: Realtime — N''s own reminder streams to N alone (not even to the owner)', v_who);
+  DELETE FROM realtime.subscription WHERE subscription_id IN (test.id('sub:O'), test.id('sub:M'), test.id('sub:N'), test.id('sub:V'));
+END;
+$$;
+
 -- ── Whose calendar a session goes in ─────────────────────────────────────────
 DO $$
 DECLARE
