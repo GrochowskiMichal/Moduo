@@ -22,6 +22,14 @@ const SECRET = "Acquire Northwind quietly";
 const h = rs.hoisted(() => ({
   userId: "u-me",
   runtime: null as unknown,
+  bundle: null as unknown,
+}));
+
+// The workspace's shared store, as a loaded snapshot (no store: saves go
+// straight to the runtime, the store's own behaviour is its tests').
+rs.mock("../../../lib/sync/react", () => ({
+  useWorkspaceStore: () => null,
+  useStoreSnapshot: () => ({ loaded: true, bundle: h.bundle }),
 }));
 
 rs.mock("../../../providers/auth-provider", () => ({
@@ -96,23 +104,24 @@ const team = (id: string, name: string, defaultProjectId: string | null): Team =
 function fakeRuntime() {
   const saved: Task[] = [];
   const links: unknown[] = [];
+  const bundle = {
+    buckets: [
+      bucket("inbox-me", "Inbox", { isSystem: true }),
+      bucket("p-acme", "Acme rebrand"),
+      bucket("p-requests", "Design requests"),
+    ],
+    tasks: [],
+    tags: [],
+    tagLinks: [],
+    taskRelations: [],
+    sections: [],
+    teams: [team("t-design", "Design", "p-requests"), team("t-ops", "Ops", null)],
+    teamMembers: [],
+    truncated: [],
+  };
   const runtime = {
     tasks: {
-      list: rs.fn(async () => ({
-        buckets: [
-          bucket("inbox-me", "Inbox", { isSystem: true }),
-          bucket("p-acme", "Acme rebrand"),
-          bucket("p-requests", "Design requests"),
-        ],
-        tasks: [],
-        tags: [],
-        tagLinks: [],
-        taskRelations: [],
-        sections: [],
-        teams: [team("t-design", "Design", "p-requests"), team("t-ops", "Ops", null)],
-        teamMembers: [],
-        truncated: [],
-      })),
+      seedInbox: rs.fn(async () => bucket("inbox-me", "Inbox", { isSystem: true })),
       upsertTask: rs.fn(async (task: Task) => {
         saved.push(task);
         return task;
@@ -130,7 +139,7 @@ function fakeRuntime() {
       searchEntities: rs.fn(async () => []),
     },
   };
-  return { runtime, saved, links };
+  return { runtime, saved, links, bundle };
 }
 
 /** A references store where `rows` are the tasks this reader may open. */
@@ -173,12 +182,13 @@ function referenceStore(rows: Record<string, { title: string }>) {
 function renderBody(
   context: Partial<CaptureContext> = {},
   store: ReferenceStore | null = referenceStore({}),
+  draft = "",
 ) {
   const onDone = rs.fn();
   const utils = render(
     <ReferenceStoreProvider store={store}>
       <TaskCaptureBody
-        draft=""
+        draft={draft}
         onDraftChange={() => {}}
         writable
         onDone={onDone}
@@ -196,6 +206,7 @@ let fake: ReturnType<typeof fakeRuntime>;
 beforeEach(() => {
   fake = fakeRuntime();
   h.runtime = fake.runtime;
+  h.bundle = fake.bundle;
   h.userId = ME;
 });
 afterEach(() => {
@@ -219,6 +230,30 @@ describe("a restored draft", () => {
     expect(await screen.findByText(/Draft restored/)).toBeTruthy();
     expect(await screen.findByText("Private item")).toBeTruthy();
     expect(document.body.textContent).not.toContain(SECRET);
+  });
+
+  it("closed with Esc and opened again, its tokens come back as tokens (not words)", async () => {
+    saveDraft(ME, WS, {
+      segments: [
+        { text: "Fix the banner " },
+        { token: { kind: "person", userId: SAM, label: "" } },
+      ],
+      keep: [],
+      description: "",
+      subtasks: [],
+      fields: EMPTY_FIELDS,
+    });
+    // The shell kept the words the body last told it, names and all.
+    const first = renderBody({}, referenceStore({}));
+    await waitFor(() =>
+      expect(destination().getAttribute("aria-label")).toBe("Destination: No project"),
+    );
+    first.unmount();
+    renderBody({}, referenceStore({}), "Fix the banner @Sam Ortiz");
+    await waitFor(() =>
+      expect(destination().getAttribute("aria-label")).toBe("Destination: No project"),
+    );
+    expect(document.querySelector('[data-capture-token="person"]')).toBeTruthy();
   });
 
   it("a second person on this device never sees it", async () => {
@@ -302,6 +337,27 @@ describe("where it goes (AC10.1, AC10.2; calls 20a, 94)", () => {
   });
 });
 
+describe("a team task (54, 94)", () => {
+  it("routed to a team with no one picked, it's nobody's, for the team to claim", async () => {
+    saveDraft(ME, WS, {
+      segments: [{ text: "Banner " }, { token: { kind: "team", teamId: "t-design", label: "" } }],
+      keep: [],
+      description: "",
+      subtasks: [],
+      fields: EMPTY_FIELDS,
+    });
+    renderBody();
+    await waitFor(() =>
+      expect(destination().getAttribute("aria-label")).toBe("Destination: Design requests"),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /^Create\s*⏎$/ }));
+    await waitFor(() => expect(fake.saved.length).toBe(1));
+    expect(fake.saved[0].assigneeId).toBeNull();
+    expect(fake.saved[0].teamId).toBe("t-design");
+    expect(fake.saved[0].bucketId).toBe("p-requests");
+  });
+});
+
 describe("Create (AC10.3, AC5.4)", () => {
   async function createWith(context: Partial<CaptureContext>, removeSource = false) {
     saveDraft(ME, WS, {
@@ -315,7 +371,6 @@ describe("Create (AC10.3, AC5.4)", () => {
       fields: EMPTY_FIELDS,
     });
     const { onDone } = renderBody(context);
-    await waitFor(() => expect(fake.runtime.tasks.list).toHaveBeenCalled());
     await screen.findByText(/Draft restored/);
     if (removeSource) fireEvent.click(screen.getByRole("button", { name: "Don't link it" }));
     fireEvent.click(screen.getByRole("button", { name: /^Create\s*⏎$/ }));

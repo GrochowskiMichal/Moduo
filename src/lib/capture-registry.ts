@@ -9,14 +9,15 @@
 // then Notes, Calendar and Contacts register the one-line captures ⌘⇧K already
 // had, so nothing that worked stops working).
 
+import type { PriorityLevel } from "@contracts/vocabularies";
 import type { LucideIcon } from "lucide-react";
 import type { ComponentType, ReactNode } from "react";
-
 import { calendarCaptureType } from "../features/calendar/capture-type";
 import { contactsCaptureType } from "../features/contacts/capture-type";
 import { notesCaptureType } from "../features/notes/capture-type";
 import { taskCaptureType } from "../features/tasks/capture-type";
 import type { ModulePermissions } from "../features/workspaces/types";
+
 import type { CaptureSource } from "./capture-source";
 
 /** A top-bar module, by the key its tab carries (app-chrome-constants.ts). */
@@ -36,7 +37,7 @@ export type CaptureRequest = {
   seed?: {
     tagIds?: string[];
     assigneeId?: string | null;
-    priority?: "low" | "medium" | "high" | null;
+    priority?: PriorityLevel | null;
   };
 };
 

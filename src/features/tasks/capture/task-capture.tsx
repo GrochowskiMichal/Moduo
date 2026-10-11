@@ -36,6 +36,7 @@ import { Textarea } from "../../../components/ui/textarea";
 import type { CaptureBodyProps } from "../../../lib/capture-registry";
 import type { CaptureSourceKind } from "../../../lib/capture-source";
 import { isMacPlatform } from "../../../lib/shortcuts";
+import { useStoreSnapshot, useWorkspaceStore } from "../../../lib/sync/react";
 import { formatDay, formatDayTime } from "../../../lib/time-format";
 import { undoToast } from "../../../lib/undo-toast";
 import { cn } from "../../../lib/utils";
@@ -48,7 +49,7 @@ import type { MentionCandidate } from "../../spine/mention";
 import { useReferences } from "../../spine/references/context";
 import { openReferenceFull } from "../../spine/references/open";
 import { useAssignees } from "../assignees";
-import { positionsAfter, positionsBefore } from "../helpers";
+import { positionsAfter } from "../helpers";
 import type { Bucket, Task } from "../model";
 import {
   type CaptureToken,
@@ -62,13 +63,12 @@ import {
 import { isPastedList, keepAsOne, parsePastedList } from "../parse/paste-list";
 import {
   type CapturePlan,
+  type CaptureResult,
   type CaptureTaskPlan,
-  isNetworkError,
   newTaskId,
   runCapture,
   undoCapture,
 } from "./capture-create";
-import { announceCaptured, useCaptureBundle } from "./capture-data";
 import {
   type CaptureDraft,
   clearDraft,
@@ -97,6 +97,14 @@ const SOURCE_ICON: Record<CaptureSourceKind, typeof Mail> = {
   event: CalendarDays,
   contact: User,
 };
+
+/**
+ * The title's words as the Task body last told the shell. When the shell's
+ * draft still matches, the stored draft (with its tokens) is the one to
+ * restore; when it doesn't, the words were changed under another type (⌘2,
+ * then back) and come along as words.
+ */
+let lastTitleWords = "";
 
 /** The plain words of a title (tokens as their words): what the shell carries between types. */
 function plainText(segments: readonly TitleSegment[]): string {
@@ -138,16 +146,23 @@ export function TaskCaptureBody({
   const { runtime, userId } = useAuth();
   const { selectedWorkspaceId: workspaceId } = useWorkspace();
   const { assignees } = useAssignees();
-  const bundle = useCaptureBundle(runtime, workspaceId, context?.openId ?? 0);
+  // What the workspace holds, from its shared store (TV-D11a): the app shell
+  // keeps it warm, so projects, sections, teams and tags are there at once.
+  const store = useWorkspaceStore(runtime, userId, workspaceId, writable);
+  const snapshot = useStoreSnapshot(store);
+  const bundle = snapshot.loaded ? snapshot.bundle : null;
   const isMac = isMacPlatform();
+  // The draft belongs to whoever opened the capture, where they opened it:
+  // a switch while it's open never files it under another (the shell closes).
+  const [owner] = useState(() => ({ userId, workspaceId }));
 
   // ── the draft (restored on open, research §1.8) ──────────────────────────
   const [initial] = useState(() => {
-    const stored = loadDraft(userId, workspaceId);
+    const stored = loadDraft(owner.userId, owner.workspaceId);
     const restored = stored && draftHasContent(stored) ? stored : null;
     let start: CaptureDraft = restored ?? EMPTY_DRAFT;
     // Typed under another type (⌘2, then back): those words come along.
-    if (shellDraft.trim() && shellDraft.trim() !== plainText(start.segments)) {
+    if (shellDraft.trim() && shellDraft !== lastTitleWords) {
       start = { ...start, segments: [{ text: shellDraft }] };
     }
     // A filtered scope pre-fills its tags, assignee and priority (U2-5).
@@ -195,8 +210,8 @@ export function TaskCaptureBody({
 
   // Keep the draft on the device as it changes.
   useEffect(() => {
-    saveDraft(userId, workspaceId, { segments, keep, description, subtasks, fields });
-  }, [userId, workspaceId, segments, keep, description, subtasks, fields]);
+    saveDraft(owner.userId, owner.workspaceId, { segments, keep, description, subtasks, fields });
+  }, [owner, segments, keep, description, subtasks, fields]);
 
   // The title takes the caret once the dialog has settled.
   useEffect(() => {
@@ -212,10 +227,6 @@ export function TaskCaptureBody({
   }, [hint]);
 
   // ── what the bundle knows ─────────────────────────────────────────────────
-  const inbox = useMemo(
-    () => bundle?.buckets.find((b) => b.isSystem && b.ownerId === userId && !b.deletedAt) ?? null,
-    [bundle, userId],
-  );
   const projects = useMemo(
     () =>
       (bundle?.buckets ?? [])
@@ -271,6 +282,7 @@ export function TaskCaptureBody({
   // that's gone (a member who left, a deleted tag) leaves the title.
   const hydrated = useRef(false);
   useEffect(() => {
+    // Only once the store has answered: an empty bundle would read as "gone".
     if (hydrated.current || !bundle || people.length === 0) return;
     hydrated.current = true;
     titleApi.current?.mapTokens((token) => {
@@ -522,7 +534,8 @@ export function TaskCaptureBody({
   const onTitleChange = (next: TitleSegment[], keys: Array<NodeKey | null>) => {
     setSegments(next);
     setSegmentKeys(keys);
-    onDraftChange(plainText(next));
+    lastTitleWords = plainText(next);
+    onDraftChange(lastTitleWords);
     const just = justInserted.current;
     if (just) {
       const now = JSON.stringify(next);
@@ -622,15 +635,18 @@ export function TaskCaptureBody({
     [menuPeople, teams, tags],
   );
 
-  const bucketFor = (id: string | null) => id ?? inbox?.id ?? "";
-  const topOf = (bucketId: string): string | null => {
-    let first: string | null = null;
-    for (const t of bundle?.tasks ?? []) {
-      if (t.bucketId !== bucketId || t.parentId || t.deletedAt) continue;
-      if (first === null || t.position < first) first = t.position;
-    }
-    return first;
-  };
+  /**
+   * Who a task goes to: the person named, else the one picked on the pill,
+   * else nobody when it's for a team (so the team can claim it, 54), else you.
+   */
+  const assigneeFor = (person: string | undefined, teamId: string | null) =>
+    person !== undefined
+      ? person
+      : values.assigneeId !== undefined
+        ? values.assigneeId
+        : teamId
+          ? null
+          : undefined;
 
   /** One typed line (a subtask, a pasted line) as a task, the pills under its own words. */
   const lineTask = (
@@ -642,14 +658,15 @@ export function TaskCaptureBody({
     if (!words) return null;
     const own = captureDates(read);
     const hasOwnDate = Boolean(own.dueDay || own.scheduledAt || own.recurrence);
+    const teamId = read.single.team?.teamId ?? (base.parentId ? null : values.teamId);
     return {
       id: newTaskId(),
       title: words,
       description: "",
       projectId: base.bucketId,
       sectionId,
-      teamId: read.single.team?.teamId ?? (base.parentId ? null : values.teamId),
-      assigneeId: read.single.person ? read.single.person.userId : values.assigneeId,
+      teamId,
+      assigneeId: assigneeFor(read.single.person?.userId, teamId),
       parentId: base.parentId,
       position: base.position,
       dueDay: hasOwnDate ? own.dueDay : base.parentId ? null : values.dueDay,
@@ -681,7 +698,33 @@ export function TaskCaptureBody({
     return { title: read.title || line, facts };
   };
 
-  const snapshot = (): CaptureDraft => ({ segments, keep, description, subtasks, fields });
+  const currentDraft = (): CaptureDraft => ({ segments, keep, description, subtasks, fields });
+
+  // Still open (Create more), with nothing typed since: a capture that didn't
+  // save comes back into it. Otherwise it's kept as the draft.
+  const mounted = useRef(true);
+  useEffect(
+    () => () => {
+      mounted.current = false;
+    },
+    [],
+  );
+  const segmentsRef = useRef(segments);
+  useEffect(() => {
+    segmentsRef.current = segments;
+  });
+  const putBack = (kept: CaptureDraft) => {
+    const empty = segmentsRef.current.every((x) => "text" in x && !x.text.trim());
+    if (mounted.current && empty) {
+      titleApi.current?.setSegments(kept.segments);
+      setKeep(kept.keep);
+      setDescription(kept.description);
+      setSubtasks(kept.subtasks);
+      setFields(kept.fields);
+      return;
+    }
+    saveDraft(owner.userId, owner.workspaceId, kept);
+  };
 
   /** Clear for the next one; "Create more" keeps the pills and the destination. */
   const resetForMore = () => {
@@ -709,44 +752,42 @@ export function TaskCaptureBody({
     batch: boolean,
   ): Promise<Task[]> => {
     if (!runtime) return [];
-    const result = await runCapture(plan, { runtime, userId });
-    if (result.created.length > 0 && workspaceId) {
-      announceCaptured({ workspaceId: plan.workspaceId, tasks: result.created });
+    const deps = { runtime, userId, store };
+    let result: CaptureResult;
+    try {
+      result = await runCapture(plan, deps);
+    } catch (error) {
+      result = { created: [], queued: [], error, extrasFailed: 0 };
     }
+    const landed = result.created.length + result.queued.length;
     if (result.error) {
-      // What didn't land is kept: the draft comes back on the next open,
-      // and a resend lands the same tasks (same ids), never doubles.
-      if (kept) saveDraft(userId, plan.workspaceId, kept);
-      const remaining: CapturePlan = {
-        ...plan,
-        tasks: plan.tasks.filter((t) => !result.created.some((c) => c.id === t.id)),
-      };
-      const offline = isNetworkError(result.error);
-      toast.error(
-        offline
-          ? "Couldn't reach Moduo, so the task isn't saved yet."
-          : result.error instanceof Error
-            ? result.error.message
-            : "Couldn't create the task.",
-        {
-          description: offline ? "It's kept here; try again when you're back online." : undefined,
-          action: {
-            label: "Try again",
-            onClick: () => {
-              if (kept) clearDraft(userId, plan.workspaceId);
-              void send(remaining, kept, batch);
-            },
-          },
-        },
-      );
+      // The network never fails a capture (it waits on the device); this is
+      // the server saying no. With nothing saved, the capture comes back.
+      const message =
+        result.error instanceof Error ? result.error.message : "Couldn't create the task.";
+      if (landed === 0) {
+        if (kept) putBack(kept);
+        toast.error(message, {
+          description: kept ? "Your capture is kept: open it again to change it." : undefined,
+        });
+      } else {
+        toast.error(`${landed} of ${plan.tasks.length} saved`, { description: message });
+      }
+      return result.created;
+    }
+    if (result.queued.length > 0) {
+      // Offline: they wait on this device and go once it's back (default g).
+      const n = plan.tasks.length;
+      toast(n > 1 ? `${n} tasks waiting to sync` : (plan.tasks[0]?.title ?? "Task"), {
+        description: n > 1 ? undefined : `Waiting to sync · ${placeLabel}`,
+      });
       return result.created;
     }
     if (batch) {
       const n = result.created.length;
       undoToast(`${n} ${n === 1 ? "task" : "tasks"} created`, {
         onUndo: () => {
-          void undoCapture(runtime, plan.workspaceId, result.created).then(({ deleted, error }) => {
-            announceCaptured({ workspaceId: plan.workspaceId, tasks: deleted });
+          void undoCapture(deps, plan.workspaceId, result.created).then(({ error }) => {
             if (error) toast.error("Some weren't undone. Delete them from the list.");
           });
         },
@@ -756,7 +797,7 @@ export function TaskCaptureBody({
     const first = result.created[0];
     if (!first) return result.created;
     if (result.extrasFailed > 0) {
-      toast.error("The task is saved, but a link, tag or reminder didn't save.");
+      toast.error("The task is saved, but a link or reminder didn't save.");
     }
     toast(first.title, {
       description: summaryText,
@@ -794,8 +835,8 @@ export function TaskCaptureBody({
       setDestinationOpen(true);
       return;
     }
-    const bucketId = bucketFor(projectId);
-    const [position] = positionsBefore(1, topOf(bucketId));
+    // "" is your Inbox; the position is set on the way, first in its list.
+    const bucketId = projectId ?? "";
     const main: CaptureTaskPlan = {
       id: newTaskId(),
       title,
@@ -803,9 +844,9 @@ export function TaskCaptureBody({
       projectId: bucketId,
       sectionId,
       teamId: values.teamId,
-      assigneeId: values.assigneeId,
+      assigneeId: assigneeFor(undefined, values.teamId),
       parentId: null,
-      position,
+      position: "",
       dueDay: values.dueDay,
       scheduledAt: values.scheduledAt,
       recurrence: values.recurrence,
@@ -829,13 +870,14 @@ export function TaskCaptureBody({
       source: context?.source ?? null,
       queueTop: Boolean(context?.queueTop),
     };
-    const kept = snapshot();
+    const kept = currentDraft();
     const handler = files.length > 0 ? captureAttachments() : null;
     const filesNow = files;
     // The capture closes (or clears) at once; the task saves behind it.
     if (more) resetForMore();
     else {
-      clearDraft(userId, workspaceId);
+      clearDraft(owner.userId, owner.workspaceId);
+      lastTitleWords = "";
       onDraftChange("");
       onDone();
     }
@@ -851,7 +893,7 @@ export function TaskCaptureBody({
   const pastedList = useMemo(() => (pasted ? parsePastedList(pasted) : null), [pasted]);
 
   const createPasted = (more: boolean) => {
-    if (!pastedList || !workspaceId || !runtime) return;
+    if (!pastedList || pastedList.count === 0 || !workspaceId || !runtime) return;
     if (!writable) {
       toast.error("You have view-only access to tasks.");
       return;
@@ -861,11 +903,10 @@ export function TaskCaptureBody({
       setDestinationOpen(true);
       return;
     }
-    const bucketId = bucketFor(projectId);
-    const topPositions = positionsBefore(pastedList.items.length, topOf(bucketId));
+    const bucketId = projectId ?? "";
     const tasks: CaptureTaskPlan[] = [];
-    pastedList.items.forEach((item, i) => {
-      const parent = lineTask(item.title, { bucketId, parentId: null, position: topPositions[i] });
+    pastedList.items.forEach((item) => {
+      const parent = lineTask(item.title, { bucketId, parentId: null, position: "" });
       if (!parent) return;
       tasks.push(parent);
       const childPositions = positionsAfter(item.children.length, []);
@@ -895,6 +936,21 @@ export function TaskCaptureBody({
     titleApi.current?.focus();
   };
 
+  /** The highlighted date words the caret sits right after (only spaces between), if any. */
+  const phraseBeforeCaret = (caret: { key: NodeKey; offset: number } | null): string | null => {
+    if (!caret) return null;
+    const index = segmentKeys.indexOf(caret.key);
+    const segment = titleSegments[index];
+    if (index < 0 || !segment || !("text" in segment)) return null;
+    for (const h of highlights) {
+      if (h.index !== index || h.end > caret.offset) continue;
+      if (segment.text.slice(h.end, caret.offset).trim() === "") {
+        return segment.text.slice(h.start, h.end);
+      }
+    }
+    return null;
+  };
+
   // ── Esc: a menu, then the last recognition, then close (keeping the draft) ─
   const handleEscape = () => {
     if (pasted) {
@@ -910,7 +966,9 @@ export function TaskCaptureBody({
       justInserted.current = null;
       if (api.tokenToText(just.key)) return true;
     }
-    const phrase = resolved.phrases.at(-1);
+    // Only words recognised right before the caret ("tomorrow 3pm|"); dates
+    // further back stay as they are and Esc closes.
+    const phrase = phraseBeforeCaret(api.caret());
     if (phrase) {
       setKeep((k) => [...k, phrase]);
       return true;
@@ -932,7 +990,7 @@ export function TaskCaptureBody({
   }, [pasted]);
 
   const discardDraft = () => {
-    clearDraft(userId, workspaceId);
+    clearDraft(owner.userId, owner.workspaceId);
     titleApi.current?.setSegments([]);
     setKeep([]);
     setDescription("");
@@ -1311,10 +1369,15 @@ function Subtasks({
                 it.title,
                 ...it.children,
               ]);
-              const next = [...lines.slice(0, i), ...pastedLines, ...lines.slice(i + 1)].filter(
-                (l, j) => l.trim() !== "" || j === lines.length - 1,
-              );
-              onChange(next);
+              // Into an empty line they take its place; after a line with words.
+              const here = line.trim() ? [line] : [];
+              const next = [
+                ...lines.slice(0, i),
+                ...here,
+                ...pastedLines,
+                ...lines.slice(i + 1),
+              ].filter((l) => l.trim() !== "");
+              onChange(next.length ? next : [""]);
             }}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.nativeEvent.isComposing) {

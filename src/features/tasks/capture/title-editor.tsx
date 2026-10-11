@@ -16,6 +16,7 @@ import { PlainTextPlugin } from "@lexical/react/LexicalPlainTextPlugin";
 import {
   $createParagraphNode,
   $createTextNode,
+  $getNodeByKey,
   $getRoot,
   $getSelection,
   $isElementNode,
@@ -27,7 +28,6 @@ import {
   type EditorState,
   KEY_ENTER_COMMAND,
   KEY_ESCAPE_COMMAND,
-  type LexicalNode,
   type NodeKey,
   PASTE_COMMAND,
 } from "lexical";
@@ -51,6 +51,8 @@ export type TitleEditorApi = {
   mapTokens: (fn: (token: CaptureToken) => CaptureToken | null) => void;
   /** Turn one token back into words (Esc right after it was recognised). */
   tokenToText: (key: NodeKey) => boolean;
+  /** Where the caret is: a text node and an offset in it (null when not in text). */
+  caret: () => { key: NodeKey; offset: number } | null;
   /** Close an open `@ # /` menu; false when none is open. */
   closeMenu: () => boolean;
   /** Is the caret in the title? */
@@ -190,19 +192,25 @@ function Behaviour({
           }
         }),
       tokenToText: (key) => {
-        let done = false;
+        // Decided on a read: an update may run later than this call returns.
+        const there = editor.getEditorState().read(() => $isCaptureTokenNode($getNodeByKey(key)));
+        if (!there) return false;
         editor.update(() => {
-          const node = editor.getEditorState()._nodeMap.get(key);
-          const live = node ? node.getLatest() : null;
-          if ($isCaptureTokenNode(live) && live.isAttached()) {
-            const text = $createTextNode(tokenText(live.getToken()));
-            live.replace(text);
-            text.selectEnd();
-            done = true;
-          }
+          const live = $getNodeByKey(key);
+          if (!$isCaptureTokenNode(live)) return;
+          const text = $createTextNode(tokenText(live.getToken()));
+          live.replace(text);
+          text.selectEnd();
         });
-        return done;
+        return true;
       },
+      caret: () =>
+        editor.getEditorState().read(() => {
+          const selection = $getSelection();
+          if (!$isRangeSelection(selection) || !selection.isCollapsed()) return null;
+          if (selection.anchor.type !== "text") return null;
+          return { key: selection.anchor.key, offset: selection.anchor.offset };
+        }),
       closeMenu: () => {
         if (!Object.values(menuOpen.current).some(Boolean)) return false;
         editor.dispatchCommand(KEY_ESCAPE_COMMAND, new KeyboardEvent("keydown", { key: "Escape" }));

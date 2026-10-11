@@ -501,7 +501,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   );
 
   // cmd+n / global "+" → capture (this listener is only mounted on /tasks).
-  useEffect(() => onCreateNew(openCapture), [openCapture]);
+  useEffect(() => onCreateNew(() => openCapture()), [openCapture]);
 
   const exitExecute = useCallback(() => setMode("plan"), []);
 

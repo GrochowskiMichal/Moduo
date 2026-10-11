@@ -1,15 +1,18 @@
-// Creating what a capture holds (TV-U14). Every task goes through the create
-// op with an id minted here, so a resend after a dropped connection lands the
-// same task, never a second one (spec edge case "Offline ⌘⇧K"; the durable
-// device queue is the shared store's, TV-D11a). Then, per task: its tags, its
-// links (the linked things in its title and the "From:" item), its reminder,
-// what it's waiting on, and a place at the top of Up next when asked.
+// Creating what a capture holds (TV-U14), through the workspace's shared store
+// (TV-D11a): every task shows at once on every surface, goes to the server
+// under an id minted here, and when the connection is gone it waits on the
+// device under that id and is sent once it's back (default g; no duplicate).
+// Then, per task once it exists: its tags, its links (the linked things in
+// its title and the "From:" item), its reminder, what it's waiting on, and a
+// place at the top of Up next when asked.
 
 import type { CaptureSource } from "../../../lib/capture-source";
 import type { EntityRef } from "../../../lib/entity-links";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
+import type { WorkspaceStore } from "../../../lib/sync/store";
+import { dueOnToLocalInstant } from "../../../lib/task-rows";
 import { attachTag, createOrAttachByName, type TagContext } from "../../tags/store";
-import { makeTask } from "../helpers";
+import { makeTask, positionsBefore } from "../helpers";
 import type { PriorityLevel, RecurrenceRule, Task } from "../model";
 
 /** One task a capture makes. Parents come before their subtasks. */
@@ -18,13 +21,14 @@ export type CaptureTaskPlan = {
   id: string;
   title: string;
   description: string;
-  /** The project, or your Inbox. */
+  /** The project; "" for your Inbox. */
   projectId: string;
   sectionId: string | null;
   teamId: string | null;
   /** Undefined: you (the creator). Null: nobody. */
   assigneeId: string | null | undefined;
   parentId: string | null;
+  /** A subtask's place under its parent; "" puts a top-level task first in its list (default h). */
   position: string;
   dueDay: string | null;
   scheduledAt: string | null;
@@ -68,7 +72,7 @@ export function planToTask(workspaceId: string, plan: CaptureTaskPlan): Task {
     parentId: plan.parentId,
     assigneeId: plan.assigneeId,
     // The day it stands for, at local midnight (the app's due date reading).
-    dueDate: plan.dueDay ? new Date(`${plan.dueDay}T00:00:00`).toISOString() : null,
+    dueDate: dueOnToLocalInstant(plan.dueDay),
     scheduledAt: plan.scheduledAt ?? plan.recurrence?.nextOccurrence ?? null,
     recurrence: plan.recurrence,
     priority: plan.priority,
@@ -81,25 +85,22 @@ export function planToTask(workspaceId: string, plan: CaptureTaskPlan): Task {
   return task;
 }
 
-/** Is this error the network, not the server saying no? (Then a resend is safe.) */
-export function isNetworkError(error: unknown): boolean {
-  if (typeof navigator !== "undefined" && navigator.onLine === false) return true;
-  const message = error instanceof Error ? error.message : String(error ?? "");
-  return /failed to fetch|network|load failed|fetch failed|offline/i.test(message);
-}
-
 export type CaptureResult = {
-  /** Every task created, parents first (also any a resend found already made). */
+  /** Tasks the server has, in the plan's order (parents first). */
   created: Task[];
-  /** What stopped it, if something did; the tasks after it weren't sent. */
+  /** Ids waiting on this device to be sent (offline): their extras follow once they're sent. */
+  queued: string[];
+  /** What stopped it, if the server refused something; the tasks after it weren't sent. */
   error: unknown;
-  /** Extras that didn't save (a tag, a link): the tasks are there, these aren't. */
+  /** Extras that didn't save (a link, a reminder): the tasks are there, these aren't. */
   extrasFailed: number;
 };
 
 export type CaptureDeps = {
   runtime: ModuoRuntime;
   userId: string | null;
+  /** The workspace's shared store; without one (no Tasks read) straight to the server. */
+  store: WorkspaceStore | null;
 };
 
 /** How many saves a capture of many sends at once. */
@@ -129,16 +130,68 @@ async function inBatches<T>(
   return failure;
 }
 
+/** Resolves once a waiting create has been sent (true), or the store stopped (false). */
+function whenSent(store: WorkspaceStore, taskId: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    let done = false;
+    let off: () => void = () => {};
+    const check = () => {
+      if (done) return;
+      if (store.isDisposed() || !store.isQueuedCreate(taskId)) {
+        done = true;
+        off();
+        resolve(!store.isDisposed());
+      }
+    };
+    off = store.subscribe(check);
+    check();
+  });
+}
+
+/**
+ * Where the plan's tasks go: "" becomes your Inbox, and each top-level task
+ * gets a key before the first task of its list, in the plan's order.
+ */
+async function place(plan: CapturePlan, deps: CaptureDeps): Promise<CaptureTaskPlan[]> {
+  const { runtime, userId, store } = deps;
+  if (store) await store.whenLoaded();
+  const bundle = store && !store.isDisposed() ? store.getSnapshot().bundle : null;
+  const systems = (bundle?.buckets ?? []).filter((b) => b.isSystem && !b.deletedAt);
+  let inboxId = (systems.find((b) => b.ownerId === userId) ?? systems[0])?.id ?? "";
+  if (!inboxId && plan.tasks.some((t) => !t.projectId)) {
+    inboxId = (await runtime.tasks.seedInbox(plan.workspaceId)).id;
+  }
+  const tasks = plan.tasks.map((t) => ({ ...t, projectId: t.projectId || inboxId }));
+  const tops = new Map<string, CaptureTaskPlan[]>();
+  for (const t of tasks) {
+    if (t.parentId || t.position) continue;
+    tops.set(t.projectId, [...(tops.get(t.projectId) ?? []), t]);
+  }
+  for (const [bucketId, list] of tops) {
+    let first: string | null = null;
+    for (const t of bundle?.tasks ?? []) {
+      if (t.bucketId !== bucketId || t.parentId || t.deletedAt) continue;
+      if (first === null || t.position < first) first = t.position;
+    }
+    const keys = positionsBefore(list.length, first);
+    list.forEach((t, i) => {
+      t.position = keys[i];
+    });
+  }
+  return tasks;
+}
+
 /**
  * Make every task in the plan, then its extras: the top-level tasks first, a
- * few at a time, then the subtasks of the ones that were made. Stops at the
- * first task the server refuses or the network drops; the ones made stay
- * made, and the same plan sent again picks up where it stopped (same ids).
+ * few at a time, then the subtasks of the ones that were made (or are waiting
+ * to be sent, which the store sends in order). Stops at the first task the
+ * server refuses; the ones made stay made.
  */
 export async function runCapture(plan: CapturePlan, deps: CaptureDeps): Promise<CaptureResult> {
-  const { runtime, userId } = deps;
+  const { runtime, userId, store } = deps;
   const { workspaceId } = plan;
   const made = new Map<string, Task>();
+  const queued: string[] = [];
   let extrasFailed = 0;
   const tagCtx: TagContext = { runtime, workspaceId, userId };
   // The "From:" item joins the registry once, however many tasks link it.
@@ -156,11 +209,10 @@ export async function runCapture(plan: CapturePlan, deps: CaptureDeps): Promise<
     }
   };
 
-  const make = async (item: CaptureTaskPlan) => {
-    const saved = await runtime.tasks.upsertTask(planToTask(workspaceId, item));
-    made.set(item.id, saved);
-    const entity = { entityType: "task", entityId: saved.id };
+  const extrasFor = async (item: CaptureTaskPlan, taskId: string, title: string) => {
+    const entity = { entityType: "task", entityId: taskId };
     for (const tag of item.tags) {
+      // The tag store shows these at once and says itself when one fails.
       if (tag.id) attachTag(tagCtx, entity, tag.id);
       else createOrAttachByName(tagCtx, tag.name, entity);
     }
@@ -168,11 +220,11 @@ export async function runCapture(plan: CapturePlan, deps: CaptureDeps): Promise<
       await extra(() =>
         runtime.spine.createLink({
           workspaceId,
-          source: { type: "task", id: saved.id },
+          source: { type: "task", id: taskId },
           target: link.ref,
           relationKind: "mentions",
           origin: "mention",
-          sourceLabel: saved.title,
+          sourceLabel: title,
           sourceIcon: "task",
         }),
       );
@@ -183,64 +235,101 @@ export async function runCapture(plan: CapturePlan, deps: CaptureDeps): Promise<
         if (!target) return;
         await runtime.spine.createLink({
           workspaceId,
-          source: { type: "task", id: saved.id },
+          source: { type: "task", id: taskId },
           target,
           relationKind: "spawned-from",
           origin: "manual",
-          sourceLabel: saved.title,
+          sourceLabel: title,
           sourceIcon: "task",
         });
       });
     }
     if (item.remindAt) {
       const at = item.remindAt;
-      await extra(() =>
-        runtime.tasks.addReminder({ workspaceId, taskId: saved.id, kind: "at", at }),
-      );
+      await extra(() => runtime.tasks.addReminder({ workspaceId, taskId, kind: "at", at }));
     }
     for (const person of item.waitingOn) {
       await extra(() =>
-        runtime.tasks.addWaiting({ workspaceId, taskId: saved.id, kind: "person", ref: person }),
+        runtime.tasks.addWaiting({ workspaceId, taskId, kind: "person", ref: person }),
       );
     }
   };
 
-  const tops = plan.tasks.filter((t) => !t.parentId);
-  let error = await inBatches(tops, make);
+  const make = async (item: CaptureTaskPlan) => {
+    const task = planToTask(workspaceId, item);
+    if (store && !store.isDisposed()) {
+      const { saved, queued: waiting } = await store.sendCreate(task, {
+        queue: plan.queueTop && !item.parentId,
+      });
+      if (waiting || !saved) {
+        queued.push(item.id);
+        // Its extras follow once it's sent (while this app stays open).
+        void whenSent(store, item.id).then((sent) => {
+          if (sent) void extrasFor(item, item.id, item.title);
+        });
+        return;
+      }
+      made.set(item.id, saved);
+      await extrasFor(item, saved.id, saved.title);
+      return;
+    }
+    const saved = await runtime.tasks.upsertTask(task);
+    made.set(item.id, saved);
+    await extrasFor(item, saved.id, saved.title);
+  };
+
+  const tasks = await place(plan, deps);
+  let error = await inBatches(
+    tasks.filter((t) => !t.parentId),
+    make,
+  );
   if (error === null) {
-    const subtasks = plan.tasks.filter((t) => t.parentId && made.has(t.parentId));
-    error = await inBatches(subtasks, make);
+    const ready = new Set([...made.keys(), ...queued]);
+    error = await inBatches(
+      tasks.filter((t) => t.parentId && ready.has(t.parentId)),
+      make,
+    );
   }
-  // In the plan's order, parents first (what the caller announces and undoes).
-  const created = plan.tasks.flatMap((t) => {
+  // In the plan's order, parents first (what the caller names and undoes).
+  const created = tasks.flatMap((t) => {
     const saved = made.get(t.id);
     return saved ? [saved] : [];
   });
 
   if (plan.queueTop && error === null) {
-    // Top of Up next, in the order captured: the last goes in first.
+    // Top of Up next, in the order captured: the last goes in first. (A
+    // capture waiting offline joins the end of the line-up when it's sent.)
     for (const task of created.filter((t) => !t.parentId).reverse()) {
-      await extra(() => runtime.tasks.opQueueAdd({ workspaceId, taskId: task.id, at: "top" }));
+      await extra(async () => {
+        const add = () => runtime.tasks.opQueueAdd({ workspaceId, taskId: task.id, at: "top" });
+        if (store && !store.isDisposed()) await store.queueOp(null, add);
+        else await add();
+      });
     }
   }
-  return { created, error, extrasFailed };
+  return { created, queued, error, extrasFailed };
 }
 
 /**
- * Undo a capture of many (one Undo for the batch, default a): subtasks first,
- * so no parent hands them up on its way out. Answers with the deleted rows
- * (and what stopped it, if something did).
+ * Undo a capture of many (one Undo for the batch, default a): gone from every
+ * surface at once, then deleted, subtasks first so no parent hands them up on
+ * its way out. Answers with the deleted rows and what stopped it, if anything.
  */
 export async function undoCapture(
-  runtime: ModuoRuntime,
+  deps: CaptureDeps,
   workspaceId: string,
   created: readonly Task[],
 ): Promise<{ deleted: Task[]; error: unknown }> {
+  const { runtime, store } = deps;
+  const shown =
+    store && !store.isDisposed()
+      ? store.begin(created.map((t) => ({ table: "tasks" as const, remove: t.id })))
+      : null;
   const deleted: Task[] = [];
   const remove = async (task: Task) => {
     deleted.push(await runtime.tasks.deleteTask({ workspaceId, taskId: task.id }));
   };
-  const failed =
+  const error =
     (await inBatches(
       created.filter((t) => t.parentId),
       remove,
@@ -249,5 +338,7 @@ export async function undoCapture(
       created.filter((t) => !t.parentId),
       remove,
     ));
-  return { deleted, error: failed };
+  // What was deleted stays gone; anything the server kept shows again.
+  shown?.settle({ tasks: deleted });
+  return { deleted, error };
 }

@@ -9,10 +9,7 @@ import {
 } from "react";
 import { attachFocusUser } from "../features/focus/engine";
 import { attachTagUser } from "../features/tags/store";
-import {
-  forgetCaptureDrafts,
-  keepCaptureDraftsOf,
-} from "../features/tasks/capture/capture-draft";
+import { forgetCaptureDrafts, keepCaptureDraftsOf } from "../features/tasks/capture/capture-draft";
 import { forgetRememberedWorkspaces } from "../features/workspaces/remembered-workspaces";
 import { Analytics, setAnalyticsUser } from "../lib/analytics";
 import { sendDeviceTimeZone } from "../lib/device-time-zone";

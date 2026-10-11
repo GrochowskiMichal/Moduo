@@ -17,7 +17,7 @@
 // wins over date words, which then stay the person's words.
 
 import type { EntityRef } from "../../../lib/entity-links";
-import { findSigilWords } from "../../spine/grammar";
+import { findSigilWords, isoDay } from "../../spine/grammar";
 import type { PriorityLevel, RecurrenceRule } from "../model";
 import { type ParsedCapture, parseCapture } from "./capture-parser";
 
@@ -218,10 +218,7 @@ export type CaptureDates = {
 
 /** A local day (`YYYY-MM-DD`) from an ISO time. */
 export function localDay(iso: string): string {
-  const d = new Date(iso);
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${d.getFullYear()}-${m}-${day}`;
+  return isoDay(new Date(iso));
 }
 
 export function captureDates(resolved: ResolvedTitle, manual: ManualDates = {}): CaptureDates {
