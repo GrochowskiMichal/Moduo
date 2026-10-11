@@ -115,6 +115,7 @@ import type {
 } from "./runtime.types";
 import { createReferencePreviews } from "./runtime.web.previews";
 import { createTasksStructure } from "./runtime.web.structure";
+import { deltaCursor } from "./sync/delta-cursor";
 import type {
   AccessChange,
   SyncAccessResult,
@@ -4096,17 +4097,11 @@ async function readTombstonedChanges(
     if (isMissingTableError(graves.error, "sync_tombstones")) return null;
     throw new Error(graves.error.message);
   }
-  let maxUpdatedAt: string | null = null;
-  let maxMicros = Number.NEGATIVE_INFINITY;
-  const stamps = [...rows.rows.map((r) => r?.updated_at), ...graves.rows.map((g) => g?.deleted_at)];
-  for (const value of stamps) {
-    const stamp = typeof value === "string" ? value : null;
-    const micros = timestampMicros(stamp);
-    if (stamp && micros !== null && micros > maxMicros) {
-      maxMicros = micros;
-      maxUpdatedAt = stamp;
-    }
-  }
+  // Where the next read starts: a stream cut at its ceiling holds it back.
+  const maxUpdatedAt = deltaCursor(
+    { stamps: rows.rows.map((r) => r?.updated_at), cut: rows.truncation !== null },
+    { stamps: graves.rows.map((g) => g?.deleted_at), cut: graves.truncation !== null },
+  );
   // A row deleted and made again under the same id (never: ids are random)
   // would be both; the live row wins.
   const liveIds = new Set(rows.rows.map((r) => String(r?.id)));
@@ -4147,22 +4142,29 @@ async function readAccessChanges(
       supported: true,
     };
   }
-  const { data, error } = await supabaseClient
-    .from("access_changes")
-    .select("id,resource_type,resource_id,changed_at")
-    .eq("workspace_id", workspaceId)
-    .gte("changed_at", since)
-    .order("changed_at")
-    .order("id")
-    .limit(PGRST_MAX_ROWS)
-    .retry(false);
-  if (error) {
-    if (isMissingTableError(error, "access_changes")) return none;
-    throw new Error(error.message);
+  // Paged by (changed_at, id): a burst of changes (a bulk move) past one page
+  // never makes every read answer the same first page.
+  const res = await readByKey({
+    by: "updated_at",
+    stampColumn: "changed_at",
+    keyColumn: "id",
+    cap: READ_CAPS.syncDelta,
+    scope: "access changes",
+    build: () =>
+      supabaseClient
+        .from("access_changes")
+        .select("id,resource_type,resource_id,changed_at")
+        .eq("workspace_id", workspaceId)
+        .gte("changed_at", since)
+        .retry(false),
+  });
+  if (res.error) {
+    if (isMissingTableError(res.error, "access_changes")) return none;
+    throw new Error(res.error.message);
   }
   const changes: AccessChange[] = [];
   let maxChangedAt: string | null = null;
-  for (const row of (data ?? []) as Array<Record<string, unknown>>) {
+  for (const row of res.rows as Array<Record<string, unknown>>) {
     if (typeof row.resource_type !== "string" || typeof row.resource_id !== "string") continue;
     const changedAt = typeof row.changed_at === "string" ? row.changed_at : "";
     changes.push({

@@ -6,7 +6,7 @@ import {
   PERF_USER,
   seedPerfFixture,
 } from "../../scripts/perf/seed-tasks-10k";
-import { rest, type Session, signIn, signInPage } from "../support/local-stack";
+import { rest, rpc, type Session, signIn, signInPage } from "../support/local-stack";
 
 /**
  * Tasks v3 AC12.3 + AC12.4 — the 200 ms budget on the 10,000-task fixture
@@ -203,6 +203,20 @@ test("AC12.3 — opening a task, searching and switching views stay under 200 ms
     await expect.poll(() => listRows(page).count()).toBeGreaterThan(20);
   }
   report("search", searches);
+
+  // The server's search (`tasks_search`), which the views ask only while the
+  // copy can't answer alone: timed at 10,000 tasks, a rare word and a common one.
+  for (const q of [PERF_SEARCH_WORD, "the"]) {
+    const t0 = performance.now();
+    const ids = await rpc<string[]>(perf, "tasks_search", {
+      p_workspace_id: workspaceId,
+      p_query: q,
+      p_limit: 200,
+    });
+    const ms = performance.now() - t0;
+    console.log(`server search "${q}": ${ids.length} ids in ${ms.toFixed(0)} ms`);
+    expect(ms).toBeLessThan(BUDGET_MS);
+  }
 
   expect(median(opens)).toBeLessThan(BUDGET_MS);
   expect(median(switches)).toBeLessThan(BUDGET_MS);

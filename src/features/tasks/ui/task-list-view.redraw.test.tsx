@@ -179,4 +179,24 @@ describe("one edit redraws one row (TV-D11b)", () => {
     setProjects(PROJECTS.map((p) => (p.id === "p3" ? { ...p, name: "Renamed" } : p)));
     expect(draws.n).toBe(LIST_DRAW * 2);
   });
+
+  it("at midnight a row's date label rolls over (rows hear the new day)", () => {
+    rs.useFakeTimers();
+    try {
+      rs.setSystemTime(new Date(2026, 9, 1, 23, 59, 30));
+      const { initial, setTasks } = renderList();
+      const due = new Date(2026, 9, 2, 12).toISOString();
+      setTasks(initial.map((t) => (t.id === "7" ? { ...t, dueDate: due } : t)));
+      expect(screen.getByText("Tomorrow")).toBeTruthy();
+      // Past midnight: the same task, no change of its own.
+      act(() => {
+        rs.setSystemTime(new Date(2026, 9, 2, 0, 0, 40));
+        rs.advanceTimersByTime(40_000);
+      });
+      expect(screen.queryByText("Tomorrow")).toBeNull();
+      expect(screen.getByText("Today")).toBeTruthy();
+    } finally {
+      rs.useRealTimers();
+    }
+  });
 });

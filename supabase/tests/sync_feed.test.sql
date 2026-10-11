@@ -129,6 +129,27 @@ BEGIN
   r := test.value_as('M', format($q$SELECT count(*)::text FROM public.tasks_search(%L, 'quokka', 1)$q$, test.id('W')));
   PERFORM test.ok(r = '1', 'the limit holds', r);
 
+  -- ── Deletes that cascade still go through (an account's erasure) ─────────
+  INSERT INTO public.workspaces (id, owner_id, name) VALUES (test.id('W3'), test.id('X'), 'Gone soon');
+  INSERT INTO public.buckets (id, workspace_id, owner_id, name, is_system) VALUES
+    (test.id('GB'), test.id('W3'), test.id('X'), 'Shared there', false);
+  INSERT INTO public.tasks (id, workspace_id, owner_id, bucket_id, title, position) VALUES
+    (test.id('GT'), test.id('W3'), test.id('X'), test.id('GB'), 'Queued there', 'a');
+  INSERT INTO public.task_queue (workspace_id, user_id, task_id, position)
+    VALUES (test.id('W3'), test.id('X'), test.id('GT'), 'a0');
+  INSERT INTO public.resource_grants (workspace_id, resource_type, resource_id, subject_type, subject_id, level)
+    VALUES (test.id('W3'), 'bucket', test.id('GB'), 'workspace', NULL, 'view');
+  r := test.as_op(NULL, format($q$DELETE FROM public.workspaces WHERE id = %L$q$, test.id('W3')));
+  PERFORM test.ok(r = 'ok 1'
+      AND NOT EXISTS (SELECT 1 FROM public.sync_tombstones WHERE workspace_id = test.id('W3'))
+      AND NOT EXISTS (SELECT 1 FROM public.access_changes WHERE workspace_id = test.id('W3')),
+    'deleting a workspace cascades through its queue and shares, leaving no marks behind', r);
+  PERFORM test.as_op('O', format($q$INSERT INTO public.resource_grants (workspace_id, resource_type, resource_id, subject_type, subject_id, level)
+    VALUES (%L, 'bucket', %L, 'member', %L, 'view')$q$, test.id('W'), test.id('PB'), test.id('V')));
+  r := test.as_op(NULL, format($q$DELETE FROM auth.users WHERE id = %L$q$, test.id('V')));
+  PERFORM test.ok(r = 'ok 1' AND NOT EXISTS (SELECT 1 FROM public.access_changes WHERE user_id = test.id('V')),
+    'deleting a member''s account cascades through their shares; their feed rows go with them', r);
+
   -- ── Realtime ──────────────────────────────────────────────────────────────
   PERFORM test.ok(
     (SELECT count(*) FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND schemaname = 'public'

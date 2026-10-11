@@ -172,6 +172,7 @@ describe("TaskRow in My tasks (D4-4)", () => {
           showAssignee={showAssignee}
           facts={facts(api([], {}), t)}
           actions={noActions}
+          today="2026-10-01"
         />
       </TooltipProvider>,
     );
@@ -269,6 +270,7 @@ describe("List, Board and cards in My tasks (D4-4)", () => {
           facts={facts(api([], {}), tasks[0])}
           parentTitle={null}
           actions={noActions}
+          today="2026-10-01"
         />
       </TooltipProvider>
     );

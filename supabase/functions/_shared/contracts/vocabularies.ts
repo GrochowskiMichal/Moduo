@@ -308,6 +308,10 @@ export function isSyncTombstoneTable(value: unknown): value is SyncTombstoneTabl
 export function parseSyncTombstoneTable(input: unknown): SafeParseResult<SyncTombstoneTable> {
   return parseOrError(syncTombstoneTableSchema, input);
 }
+/** Lax read: a table this build doesn't know isn't one it keeps (null). */
+export function normalizeSyncTombstoneTable(input: unknown): SyncTombstoneTable | null {
+  return isSyncTombstoneTable(input) ? input : null;
+}
 
 export const ENERGY_LEVELS = ["low", "medium", "high"] as const;
 export type EnergyLevel = (typeof ENERGY_LEVELS)[number];

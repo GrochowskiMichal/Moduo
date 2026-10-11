@@ -115,6 +115,12 @@ SECURITY DEFINER
 SET search_path TO ''
 AS $$
 BEGIN
+  -- The workspace itself is going (its delete cascades here, an owner's
+  -- account erasure included): nothing to tell, and a mark would point at a
+  -- row that no longer exists.
+  IF NOT EXISTS (SELECT 1 FROM public.workspaces w WHERE w.id = OLD.workspace_id) THEN
+    RETURN OLD;
+  END IF;
   INSERT INTO public.sync_tombstones (table_name, row_id, workspace_id, deleted_at)
   VALUES (TG_TABLE_NAME, OLD.id, OLD.workspace_id, clock_timestamp())
   ON CONFLICT (table_name, row_id)
@@ -180,7 +186,12 @@ SECURITY DEFINER
 SET search_path TO ''
 AS $$
 BEGIN
-  IF p_workspace_id IS NULL OR p_resource_id IS NULL THEN
+  -- Nothing to tell when the workspace or the person is going (a delete
+  -- cascading from either, an account's erasure): the row would point at
+  -- something that no longer exists.
+  IF p_workspace_id IS NULL OR p_resource_id IS NULL
+     OR NOT EXISTS (SELECT 1 FROM public.workspaces w WHERE w.id = p_workspace_id)
+     OR (p_user_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM auth.users u WHERE u.id = p_user_id)) THEN
     RETURN;
   END IF;
   INSERT INTO public.access_changes (workspace_id, user_id, resource_type, resource_id)

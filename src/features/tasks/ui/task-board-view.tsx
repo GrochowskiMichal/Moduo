@@ -28,6 +28,7 @@ import type { Bucket, Task } from "../model";
 import { BACK_TO_MANUAL_ORDER, dragOrderFor, sortedByLabel } from "../order";
 import { DEFAULT_ROW_PROPERTIES } from "../row-layout";
 import { STATUS_KEY_LABELS, type StatusKey, statusKeyOf } from "../statuses";
+import { useToday } from "../use-today";
 import { DndBoundary, taskDragAnnouncements, useTaskDndSensors } from "./dnd/task-dnd";
 import type { PlanHeaderControls, PlanView } from "./plan-view-header";
 import { PlanViewHeader } from "./plan-view-header";
@@ -187,6 +188,14 @@ export function TaskBoardView({
   // A card's facts and actions (row-facts.ts, TV-D11b): each card redraws
   // only when its own task or facts change.
   const actions = useRowActions(api);
+  // Each new selection is brought into view once in its column (a deep
+  // link, the panel's subtask list), again when selected again.
+  const [selectionSeq, setSelectionSeq] = useState({ id: selectedTaskId, seq: 0 });
+  if (selectionSeq.id !== selectedTaskId) {
+    setSelectionSeq({ id: selectedTaskId, seq: selectionSeq.seq + 1 });
+  }
+  // The cards\' date labels roll over at midnight.
+  const today = useToday();
   const taskById = useMemo(() => new Map(api.tasks.map((t) => [t.id, t])), [api.tasks]);
   const factsOf = (task: Task) => taskFactsOf(task, api);
   const parentTitleOf = (task: Task): string | null => {
@@ -377,6 +386,7 @@ export function TaskBoardView({
                     inbox={inbox}
                     bucketNameById={bucketNameById}
                     selectedTaskId={selectedTaskId}
+                    selectionSeq={selectionSeq.seq}
                     onSelectTask={onSelectTask}
                     revealed={revealed.has(col.id)}
                     onToggleReveal={() => toggleReveal(col.id)}
@@ -385,6 +395,7 @@ export function TaskBoardView({
                     factsOf={factsOf}
                     parentTitleOf={parentTitleOf}
                     actions={actions}
+                    today={today}
                   />
                 ))}
                 {canEdit && onAddStatus && groupDim === "status" ? (
@@ -416,6 +427,7 @@ export function TaskBoardView({
                         facts={factsOf(activeTask)}
                         parentTitle={parentTitleOf(activeTask)}
                         actions={actions}
+                        today={today}
                       />
                     </DragOverlaySurface>
                   ) : null}
@@ -438,6 +450,7 @@ function BoardColumn({
   inbox,
   bucketNameById,
   selectedTaskId,
+  selectionSeq,
   onSelectTask,
   revealed,
   onToggleReveal,
@@ -446,6 +459,7 @@ function BoardColumn({
   factsOf,
   parentTitleOf,
   actions,
+  today,
 }: {
   column: Column;
   canEdit: boolean;
@@ -455,6 +469,8 @@ function BoardColumn({
   inbox: Bucket | null;
   bucketNameById: (id: string) => string;
   selectedTaskId: string | null;
+  /** Bumped by each new selection: it is brought into view once. */
+  selectionSeq: number;
   onSelectTask: (id: string | null) => void;
   revealed: boolean;
   onToggleReveal: () => void;
@@ -465,6 +481,7 @@ function BoardColumn({
   factsOf: (task: Task) => TaskFacts;
   parentTitleOf: (task: Task) => string | null;
   actions: TaskRowActions;
+  today: string;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: column.id, disabled: !canEdit });
   // The column scrolls on its own and draws only the cards on screen once it
@@ -491,8 +508,8 @@ function BoardColumn({
   const pinned = useMemo(() => (activeIndex >= 0 ? [activeIndex] : []), [activeIndex]);
   // The selected card is brought into view once (a deep link into a long column).
   const scrollTo = useMemo(
-    () => (selectedTaskId ? { key: selectedTaskId, seq: 0 } : null),
-    [selectedTaskId],
+    () => (selectedTaskId ? { key: selectedTaskId, seq: selectionSeq } : null),
+    [selectedTaskId, selectionSeq],
   );
   const inboxId = inbox?.id ?? null;
 
@@ -543,6 +560,7 @@ function BoardColumn({
                   facts={factsOf(task)}
                   parentTitle={parentTitleOf(task)}
                   actions={actions}
+                  today={today}
                 />
               )}
             />

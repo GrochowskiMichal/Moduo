@@ -759,6 +759,7 @@ export function TaskListView({
     canEdit,
     facts: taskFactsOf(t, api),
     actions,
+    today,
     onSelect: setSelectedId,
     onStartEdit: setEditingId,
     onEndEdit: endEdit,

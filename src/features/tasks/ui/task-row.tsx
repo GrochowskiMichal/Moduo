@@ -34,6 +34,7 @@ import { LEVEL_OPTIONS } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { EnergyLevel, PriorityLevel, Task } from "../model";
 import { ALL_ROW_COLUMNS, type RowColumns, type RowDate, rowDate, rowTime } from "../row-layout";
+import { nowOn } from "../use-today";
 import { AssignContextMenu } from "./assign-context-menu";
 import { AssigneeAvatar } from "./assignee-avatar";
 import type { DragActivatorRef } from "./dnd/task-dnd";
@@ -68,6 +69,11 @@ type Props = {
   facts: TaskFacts;
   /** The row's actions: one object for the life of the view (`useRowActions`). */
   actions: TaskRowActions;
+  /**
+   * Today's date key (`useToday`): the date column says "Today", "Tomorrow"
+   * or "late" against it, so a row left open over midnight redraws then.
+   */
+  today: string;
   /** Callbacks take the task's id, so one function serves every row. */
   onSelect: (taskId: string) => void;
   onStartEdit: (taskId: string) => void;
@@ -156,6 +162,7 @@ function TaskRowView({
   showAssignee = true,
   facts,
   actions,
+  today,
 }: Props) {
   const done = task.status === "done";
   // A Won't do task kept in view (TV-P0) reads closed, like a done one.
@@ -346,6 +353,7 @@ function TaskRowView({
             task={task}
             canEdit={canEdit}
             command={dateCommand ? command : null}
+            today={today}
             onRequestCommand={(kind) => onRequestCommand(task.id, kind)}
             onClearCommand={onClearCommand}
             api={actions}
@@ -582,6 +590,7 @@ function DateCell({
   task,
   canEdit,
   command,
+  today,
   onRequestCommand,
   onClearCommand,
   api,
@@ -589,11 +598,13 @@ function DateCell({
   task: Task;
   canEdit: boolean;
   command: "schedule" | "due" | null;
+  /** Today's date key: the labels are worked out against it. */
+  today: string;
   onRequestCommand: (command: RowCommand) => void;
   onClearCommand: () => void;
   api: Pick<TasksModuleApi, "patchTask">;
 }) {
-  const date = rowDate(task);
+  const date = rowDate(task, nowOn(today));
   // At least the column's width; a wider date (another year's) widens it
   // rather than truncate (call 41).
   const cell = "flex min-w-19 shrink-0 items-center justify-end";

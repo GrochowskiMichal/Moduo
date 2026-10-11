@@ -25,6 +25,7 @@ import { useAssignees } from "../assignees";
 import { LEVEL_OPTIONS } from "../helpers";
 import type { EnergyLevel, PriorityLevel, Task } from "../model";
 import { DEFAULT_ROW_PROPERTIES, rowDate } from "../row-layout";
+import { nowOn } from "../use-today";
 import { AssignContextMenu } from "./assign-context-menu";
 import { AssigneeAvatar } from "./assignee-avatar";
 import { taskDrag } from "./dnd/task-dnd";
@@ -55,6 +56,8 @@ type Props = {
   parentTitle: string | null;
   /** One object for the life of the board (`useRowActions`). */
   actions: TaskRowActions;
+  /** Today's date key (`useToday`): the card's date label is worked out against it. */
+  today: string;
 };
 
 /** A sortable kanban card. Drag reorders within a column; dropping on another
@@ -80,6 +83,7 @@ function TaskCardView({
   facts,
   parentTitle,
   actions,
+  today,
 }: Props) {
   const {
     attributes,
@@ -145,6 +149,7 @@ function TaskCardView({
         facts={facts}
         parentTitle={parentTitle}
         actions={actions}
+        today={today}
       />
     </div>
   );
@@ -247,6 +252,7 @@ export function CardBody({
   facts,
   parentTitle,
   actions,
+  today,
 }: {
   task: Task;
   bucketName: string;
@@ -260,12 +266,14 @@ export function CardBody({
   facts: TaskFacts;
   parentTitle: string | null;
   actions: Pick<TaskRowActions, "toggleDone" | "toggleQueue">;
+  /** Today's date key: the date label is worked out against it. */
+  today: string;
 }) {
   const done = task.status === "done";
   const queued = facts.queued;
   const claimed = facts.claims.length > 0;
   const on = new Set(properties);
-  const date = on.has("date") ? rowDate(task) : null;
+  const date = on.has("date") ? rowDate(task, nowOn(today)) : null;
   // Blocked — computed, ambient: dim + a quiet icon, never red (spec §5c).
   const blocked = facts.blockedLabel !== null;
   const { assignees, byId } = useAssignees();
