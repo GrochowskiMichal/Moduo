@@ -1550,11 +1550,10 @@ export class WorkspaceStore {
       const saved = tasks.createTask
         ? await tasks.createTask(entry.task)
         : await tasks.upsertTask(entry.task);
-      let queue: TaskQueueEntry[] = [];
       if (entry.queue) {
         // A lost connection keeps the entry (sent again: the create is the same
         // task, the add a no-op); a refused add leaves the task unqueued.
-        queue = await this.queueOp(null, () =>
+        await this.queueOp(null, () =>
           tasks.opQueueAdd({ workspaceId: this.workspaceId, taskId: saved.id }),
         ).catch((e) => {
           if (isNetworkError(e)) throw e;

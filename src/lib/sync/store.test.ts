@@ -845,7 +845,7 @@ describe("staying honest about the copy", () => {
     tabB.persistNow();
     await tabB.whenPersisted();
     const copy = cache.records.get(cacheKey(ME, WS));
-    expect((copy?.outbox as { id: string }[]).map((e) => e.id)).toEqual(["from-a"]);
+    expect(((copy?.outbox ?? []) as { id: string }[]).map((e) => e.id)).toEqual(["from-a"]);
     expect(tabB.getSnapshot().pending).toBe(1);
     releaseA();
     releaseB();
