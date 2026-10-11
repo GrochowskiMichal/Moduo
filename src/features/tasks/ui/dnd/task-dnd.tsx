@@ -148,6 +148,13 @@ export const overlayBesideCursor: Modifier = ({ transform, activatorEvent, dragg
  * surfaces (e.g. nesting) have no sortable context, so they pass `sortable:false`
  * to fall back to the default step-and-detect keyboard behaviour.
  */
+// Sensor options as constants: the sensors (and every draggable's listeners)
+// keep their identity across renders, so a memoised row never redraws because
+// of them (TV-D11b), with or without the React Compiler.
+const POINTER_OPTIONS = { activationConstraint: { distance: 6 } };
+const SORTABLE_KEYBOARD = { coordinateGetter: sortableKeyboardCoordinates };
+const NO_KEYBOARD = { keyboardCodes: { start: [], cancel: [], end: [] } };
+
 export function useTaskDndSensors(opts?: { sortable?: boolean; keyboard?: boolean }) {
   const sortable = opts?.sortable ?? true;
   // `keyboard: false` for surfaces whose DROP resolution is pointer-derived
@@ -155,15 +162,8 @@ export function useTaskDndSensors(opts?: { sortable?: boolean; keyboard?: boolea
   // drag affordance that silently no-ops is worse than none.
   const keyboard = opts?.keyboard ?? true;
   return useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(
-      KeyboardSensor,
-      keyboard
-        ? sortable
-          ? { coordinateGetter: sortableKeyboardCoordinates }
-          : undefined
-        : { keyboardCodes: { start: [], cancel: [], end: [] } },
-    ),
+    useSensor(PointerSensor, POINTER_OPTIONS),
+    useSensor(KeyboardSensor, keyboard ? (sortable ? SORTABLE_KEYBOARD : undefined) : NO_KEYBOARD),
   );
 }
 

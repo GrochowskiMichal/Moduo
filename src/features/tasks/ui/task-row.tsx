@@ -1,7 +1,7 @@
 import { isClosedTask, taskCategoryOf } from "@contracts/vocabularies";
 import type { DraggableSyntheticListeners } from "@dnd-kit/core";
 import { ChevronDown, ChevronRight, CornerDownRight, Inbox } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { SELECTED_ROW } from "@/components/ui/selection";
 import { CompleteToggle } from "../../../components/ui/complete-toggle";
 import {
@@ -35,13 +35,13 @@ import { LEVEL_OPTIONS } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { EnergyLevel, PriorityLevel, Task } from "../model";
 import { ALL_ROW_COLUMNS, type RowColumns, type RowDate, rowDate, rowTime } from "../row-layout";
-import { statusNameOf } from "../statuses";
 import { AssignContextMenu } from "./assign-context-menu";
 import { AssigneeAvatar } from "./assignee-avatar";
 import type { DragActivatorRef } from "./dnd/task-dnd";
 import { EnergyMark, PriorityMark } from "./level-icons";
 import { ROW_TITLE_ATTR } from "./list-keys";
 import { QueueToggle } from "./queue-toggle";
+import { sameTaskFacts, sameValues, type TaskFacts, type TaskRowActions } from "./row-facts";
 import { StatusIcon } from "./status-icon";
 import { BucketLabel, DateMark, TaskCounts } from "./task-meta";
 
@@ -61,11 +61,20 @@ type Props = {
   editing: boolean;
   command: RowCommand;
   canEdit: boolean;
-  onSelect: () => void;
-  onStartEdit: () => void;
+  /**
+   * What the row shows beyond its task (queue, claims, blocked, tags,
+   * subtasks, status name): its own facts only, so it redraws when they
+   * change and not when another task does (row-facts.ts, TV-D11b).
+   */
+  facts: TaskFacts;
+  /** The row's actions: one object for the life of the view (`useRowActions`). */
+  actions: TaskRowActions;
+  /** Callbacks take the task's id, so one function serves every row. */
+  onSelect: (taskId: string) => void;
+  onStartEdit: (taskId: string) => void;
   onEndEdit: () => void;
   onClearCommand: () => void;
-  onRequestCommand: (command: RowCommand) => void;
+  onRequestCommand: (taskId: string, command: RowCommand) => void;
   /**
    * The right-hand columns this view shows (computed once per list, so every
    * row's meta lines up). A row rendered on its own shows them all.
@@ -79,7 +88,7 @@ type Props = {
   /** Subtask nesting (Session 5): this row has children → chevron + n/m mirror. */
   expandable?: boolean;
   expanded?: boolean;
-  onToggleExpand?: () => void;
+  onToggleExpand?: (taskId: string) => void;
   /** Render indented one level (the row is a nested subtask). */
   nested?: boolean;
   /** Parent title caption for subtasks rendered flat (Today queue, or a scope
@@ -97,7 +106,6 @@ type Props = {
   dropTarget?: boolean;
   /** False in My tasks, where every row is mine (D4-4). */
   showAssignee?: boolean;
-  api: TasksModuleApi;
 };
 
 /**
@@ -107,7 +115,22 @@ type Props = {
  * name, the time and the assignee's name (TV-U2). A done row dims as a whole
  * except its checkbox; selection is the tint (DS-2), never a bar.
  */
-export function TaskRow({
+export const TaskRow = memo(TaskRowView, sameRowProps);
+
+/** Two rows' props that draw the same row: facts and columns by value. */
+function sameRowProps(a: Props, b: Props): boolean {
+  for (const key of Object.keys(a) as (keyof Props)[]) {
+    if (key === "facts" || key === "columns") continue;
+    if (!Object.is(a[key], b[key])) return false;
+  }
+  if (Object.keys(a).length !== Object.keys(b).length) return false;
+  if (!sameTaskFacts(a.facts, b.facts)) return false;
+  return (
+    a.columns === b.columns || (!!a.columns && !!b.columns && sameValues(a.columns, b.columns))
+  );
+}
+
+function TaskRowView({
   task,
   bucketName,
   buckets,
@@ -133,12 +156,13 @@ export function TaskRow({
   dragActivatorRef,
   dropTarget = false,
   showAssignee = true,
-  api,
+  facts,
+  actions,
 }: Props) {
   const done = task.status === "done";
   // A Won't do task kept in view (TV-P0) reads closed, like a done one.
   const closed = isClosedTask(task);
-  const queued = api.queuedTaskIds.has(task.id);
+  const queued = facts.queued;
   // Menu items that hand focus to something in the row (the title editor, a
   // chip's popover) run once the context menu has closed: Radix returns focus
   // to the list a tick after the menu unmounts, and whatever opened sooner
@@ -148,7 +172,7 @@ export function TaskRow({
     pendingMenuAction.current = action;
   };
   // Blocked — computed, ambient: dim + a quiet icon, never red (spec §5c).
-  const blocked = api.blockedTaskIds.has(task.id);
+  const blocked = facts.blockedLabel !== null;
   const { assignees, byId } = useAssignees();
   const assignee = byId(task.assigneeId);
   const assigneeName = assigneeLabel(task.assigneeId, byId);
@@ -164,7 +188,7 @@ export function TaskRow({
       aria-selected={selected}
       data-task-id={task.id}
       data-done={done || undefined}
-      onClick={onSelect}
+      onClick={() => onSelect(task.id)}
       {...(editing ? {} : dragListeners)}
       className={cn(
         "group relative flex items-center gap-3 rounded-md py-0.5 pr-2.5 pl-2 text-sm",
@@ -205,7 +229,7 @@ export function TaskRow({
                 )}
                 onClick={(e) => {
                   e.stopPropagation();
-                  onToggleExpand?.();
+                  onToggleExpand?.(task.id);
                 }}
               >
                 {expanded ? (
@@ -221,7 +245,7 @@ export function TaskRow({
           <span className="size-4 shrink-0" aria-hidden />
         )
       ) : null}
-      <CompleteToggle done={done} disabled={!canEdit} onToggle={() => api.toggleDone(task)} />
+      <CompleteToggle done={done} disabled={!canEdit} onToggle={() => actions.toggleDone(task)} />
 
       {/* A done row dims as a whole, except its checkbox (tasks-v2 §6). */}
       {editing ? (
@@ -230,7 +254,7 @@ export function TaskRow({
             initial={task.title}
             onCommit={(value) => {
               const next = value.trim();
-              if (next && next !== task.title) api.patchTask(task.id, { title: next });
+              if (next && next !== task.title) actions.patchTask(task.id, { title: next });
               onEndEdit();
             }}
             onCancel={onEndEdit}
@@ -260,16 +284,16 @@ export function TaskRow({
             )}
             onClick={(e) => {
               e.stopPropagation();
-              onSelect();
+              onSelect(task.id);
             }}
             onDoubleClick={(e) => {
               e.stopPropagation();
-              if (canEdit) onStartEdit();
+              if (canEdit) onStartEdit(task.id);
             }}
           >
             {task.title || "Untitled"}
           </button>
-          <TaskCounts task={task} api={api} />
+          <TaskCounts task={task} facts={facts} />
           {parentTitle ? (
             <span className="flex min-w-0 shrink-3 items-center gap-1 truncate font-sans text-xs text-muted-foreground">
               <CornerDownRight className="size-icon-xs shrink-0 opacity-70" aria-hidden />
@@ -285,8 +309,8 @@ export function TaskRow({
               showLabel={showBucket}
               canEdit={canEdit}
               open={command === "bucket"}
-              onOpenChange={(o) => (o ? onRequestCommand("bucket") : onClearCommand())}
-              api={api}
+              onOpenChange={(o) => (o ? onRequestCommand(task.id, "bucket") : onClearCommand())}
+              api={actions}
             />
           ) : null}
         </div>
@@ -307,7 +331,7 @@ export function TaskRow({
           >
             {/* The project's own name; the icon is the category's (TV-D9). */}
             <StatusIcon category={taskCategoryOf(task)} />
-            {statusNameOf(task, api.statusById)}
+            {facts.statusName}
           </span>
         ) : null}
         {columns.priority ? (
@@ -325,9 +349,9 @@ export function TaskRow({
             task={task}
             canEdit={canEdit}
             command={dateCommand ? command : null}
-            onRequestCommand={onRequestCommand}
+            onRequestCommand={(kind) => onRequestCommand(task.id, kind)}
             onClearCommand={onClearCommand}
-            api={api}
+            api={actions}
           />
         ) : null}
         {columns.time ? (
@@ -381,7 +405,14 @@ export function TaskRow({
               columns.queueWide ? "w-[calc(var(--icon)*2_+_0.25rem)]" : "w-icon",
             )}
           >
-            <QueueToggle task={task} api={api} canEdit={canEdit} revealOnHover />
+            <QueueToggle
+              task={task}
+              queued={facts.queued}
+              claims={facts.claims}
+              onToggle={actions.toggleQueue}
+              canEdit={canEdit}
+              revealOnHover
+            />
           </span>
         ) : null}
       </div>
@@ -403,44 +434,50 @@ export function TaskRow({
           action();
         }}
       >
-        <ContextMenuItem onSelect={() => afterMenuClose(onStartEdit)}>Rename</ContextMenuItem>
-        <ContextMenuItem onSelect={() => api.toggleDone(task)}>
+        <ContextMenuItem onSelect={() => afterMenuClose(() => onStartEdit(task.id))}>
+          Rename
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={() => actions.toggleDone(task)}>
           {done ? "Mark not done" : "Mark done"}
         </ContextMenuItem>
         {!done && task.status !== "archived" ? (
-          <ContextMenuItem onSelect={() => api.toggleQueue(task.id)}>
+          <ContextMenuItem onSelect={() => actions.toggleQueue(task.id)}>
             {queued ? "Remove from queue" : "Add to queue"}
           </ContextMenuItem>
         ) : null}
         {task.recurrence && !done && task.status !== "archived" ? (
-          <ContextMenuItem onSelect={() => api.skipOccurrence(task.id)}>
+          <ContextMenuItem onSelect={() => actions.skipOccurrence(task.id)}>
             Skip occurrence
           </ContextMenuItem>
         ) : null}
         <ContextMenuSeparator />
-        <ContextMenuItem onSelect={() => afterMenuClose(() => onRequestCommand("schedule"))}>
+        <ContextMenuItem
+          onSelect={() => afterMenuClose(() => onRequestCommand(task.id, "schedule"))}
+        >
           Schedule…
         </ContextMenuItem>
-        <ContextMenuItem onSelect={() => afterMenuClose(() => onRequestCommand("due"))}>
+        <ContextMenuItem onSelect={() => afterMenuClose(() => onRequestCommand(task.id, "due"))}>
           Set due date…
         </ContextMenuItem>
-        <ContextMenuItem onSelect={() => afterMenuClose(() => onRequestCommand("bucket"))}>
+        <ContextMenuItem onSelect={() => afterMenuClose(() => onRequestCommand(task.id, "bucket"))}>
           Move to bucket…
         </ContextMenuItem>
         {task.parentId ? (
-          <ContextMenuItem onSelect={() => api.setTaskParent(task.id, null)}>
+          <ContextMenuItem onSelect={() => actions.setTaskParent(task.id, null)}>
             Detach from parent
           </ContextMenuItem>
         ) : null}
         <ContextMenuSeparator />
-        <AssignContextMenu task={task} api={api} />
+        <AssignContextMenu task={task} api={actions} />
         <ContextMenuSub>
           <ContextMenuSubTrigger>Priority</ContextMenuSubTrigger>
           <ContextMenuSubContent>
             <ContextMenuRadioGroup
               value={task.priority ?? "none"}
               onValueChange={(v) =>
-                api.patchTask(task.id, { priority: v === "none" ? null : (v as PriorityLevel) })
+                actions.patchTask(task.id, {
+                  priority: v === "none" ? null : (v as PriorityLevel),
+                })
               }
             >
               <ContextMenuRadioItem value="none">None</ContextMenuRadioItem>
@@ -458,7 +495,9 @@ export function TaskRow({
             <ContextMenuRadioGroup
               value={task.energyLevel ?? "none"}
               onValueChange={(v) =>
-                api.patchTask(task.id, { energyLevel: v === "none" ? null : (v as EnergyLevel) })
+                actions.patchTask(task.id, {
+                  energyLevel: v === "none" ? null : (v as EnergyLevel),
+                })
               }
             >
               <ContextMenuRadioItem value="none">None</ContextMenuRadioItem>
@@ -471,7 +510,7 @@ export function TaskRow({
           </ContextMenuSubContent>
         </ContextMenuSub>
         <ContextMenuSeparator />
-        <ContextMenuItem variant="destructive" onSelect={() => api.deleteTask(task.id)}>
+        <ContextMenuItem variant="destructive" onSelect={() => actions.deleteTask(task.id)}>
           Delete
         </ContextMenuItem>
       </ContextMenuContent>
@@ -555,7 +594,7 @@ function DateCell({
   command: "schedule" | "due" | null;
   onRequestCommand: (command: RowCommand) => void;
   onClearCommand: () => void;
-  api: TasksModuleApi;
+  api: Pick<TasksModuleApi, "patchTask">;
 }) {
   const date = rowDate(task);
   // At least the column's width; a wider date (another year's) widens it
@@ -667,7 +706,7 @@ function BucketPopover({
   canEdit: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  api: TasksModuleApi;
+  api: Pick<TasksModuleApi, "patchTask">;
 }) {
   const options = inboxId
     ? [{ id: inboxId, name: "Inbox", isSystem: true }, ...buckets.filter((b) => b.id !== inboxId)]

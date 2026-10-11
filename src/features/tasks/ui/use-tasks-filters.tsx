@@ -304,6 +304,9 @@ export type TasksFilterControls = {
   seed: CaptureSeed;
 };
 
+/** A pause in typing before the server is asked (the copy answers at once). */
+const SERVER_SEARCH_DELAY_MS = 250;
+
 /**
  * `scopeTasks` is the scope before filtering (archived tasks only when a
  * Status filter asks for them). `enabled` turns the `/` and `f` keys on
@@ -399,9 +402,35 @@ export function useTasksFilters({
       ? arrivedUnder.current.id
       : null;
 
+  // The server's search (TV-D11b), while the copy can't answer alone (closed
+  // tasks still loading, a read cut at its ceiling): the store reads the
+  // matches it lacks, and they pass here by id. The copy's own matches show
+  // at once; these join a moment later.
+  const searchServer = api.searchTasks;
+  const [serverHits, setServerHits] = useState<{ query: string; ids: ReadonlySet<string> } | null>(
+    null,
+  );
+  useEffect(() => {
+    const q = query.trim();
+    if (!q || !searchServer) return;
+    let live = true;
+    const timer = setTimeout(() => {
+      void searchServer(q).then((ids) => {
+        if (live && ids) setServerHits({ query: q, ids: new Set(ids) });
+      });
+    }, SERVER_SEARCH_DELAY_MS);
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+  }, [query, searchServer]);
+  const serverIds = serverHits && serverHits.query === query.trim() ? serverHits.ids : null;
+
   const tasks = useMemo(() => {
     const filtered = filterTasks(scopeTasks, conditions, ctx);
-    const passing = query.trim() ? filtered.filter((t) => taskMatchesQuery(t, query)) : filtered;
+    const passing = query.trim()
+      ? filtered.filter((t) => taskMatchesQuery(t, query) || !!serverIds?.has(t.id))
+      : filtered;
     if (!keeping) return passing;
     const kept = new Set([keeping]);
     const parentId = scopeTasks.find((t) => t.id === keeping)?.parentId;
@@ -409,7 +438,7 @@ export function useTasksFilters({
     if ([...kept].every((id) => passing.some((t) => t.id === id))) return passing;
     const pass = new Set(passing.map((t) => t.id));
     return scopeTasks.filter((t) => pass.has(t.id) || kept.has(t.id));
-  }, [scopeTasks, conditions, ctx, query, keeping]);
+  }, [scopeTasks, conditions, ctx, query, keeping, serverIds]);
 
   const tokenContext = useMemo(
     () => ({

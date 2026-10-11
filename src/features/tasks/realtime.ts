@@ -16,10 +16,37 @@
 // Like chat and notes realtime (NO-6) this imports the Supabase client
 // directly: Realtime is a socket concern, not an RPC, so it sits outside the
 // runtime seam.
+//
+// TV-D11b's tables (completions, and the grant feed `access_changes`) listen
+// on channels of their own: a channel naming a table that isn't published yet
+// (a build ahead of its database) silently delivers nothing for any table.
 
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { supabaseClient } from "@/lib/runtime.web";
-import { LIVE_TABLES, type LiveChange, type LivePayload, parseLiveChange } from "./live";
+import type { AccessChange } from "@/lib/sync/types";
+import {
+  LIVE_SIDE_TABLES,
+  LIVE_TABLES,
+  type LiveChange,
+  type LivePayload,
+  parseLiveChange,
+} from "./live";
+
+/** A grant feed row (`access_changes`) → the change, or null. */
+export function parseAccessChange(payload: LivePayload): AccessChange | null {
+  if (payload.eventType !== "INSERT") return null;
+  const raw = payload.new as
+    | { id?: unknown; resource_type?: unknown; resource_id?: unknown; changed_at?: unknown }
+    | null
+    | undefined;
+  if (typeof raw?.resource_type !== "string" || typeof raw.resource_id !== "string") return null;
+  return {
+    id: raw.id === undefined || raw.id === null ? undefined : String(raw.id),
+    resourceType: raw.resource_type,
+    resourceId: raw.resource_id,
+    changedAt: typeof raw.changed_at === "string" ? raw.changed_at : "",
+  };
+}
 
 /**
  * `resync` asks for a refetch: `reconnect` after the socket rejoined or the
@@ -28,12 +55,16 @@ import { LIVE_TABLES, type LiveChange, type LivePayload, parseLiveChange } from 
  */
 export type TasksLiveEvent =
   | { type: "change"; change: LiveChange }
-  | { type: "resync"; reason: "reconnect" | "return" };
+  | { type: "resync"; reason: "reconnect" | "return" }
+  /** Who can see a project or a task changed (the grant feed, TV-D11b). */
+  | { type: "access"; change: AccessChange };
 type Listener = (event: TasksLiveEvent) => void;
 
 class TasksLink {
   private refs = 0;
   private channel: RealtimeChannel | null = null;
+  /** TV-D11b's tables, one channel each (see the header). */
+  private sideChannels: RealtimeChannel[] = [];
   private joinedOnce = false;
   private listeners = new Set<Listener>();
 
@@ -82,6 +113,38 @@ class TasksLink {
       this.joinedOnce = true;
     });
     this.channel = channel;
+    this.sideChannels = [
+      ...LIVE_SIDE_TABLES.map((table) =>
+        supabaseClient
+          .channel(`tasks-db:${table}:${ws}:${this.selfId}`)
+          .on(
+            "postgres_changes",
+            { event: "*", schema: "public", table, filter: `workspace_id=eq.${ws}` },
+            (payload) => {
+              const change = parseLiveChange(table, payload as LivePayload);
+              if (change) this.emit({ type: "change", change });
+            },
+          )
+          .subscribe(),
+      ),
+      // The grant feed: rows for you or for everyone in the workspace (RLS).
+      supabaseClient
+        .channel(`tasks-access:${ws}:${this.selfId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "access_changes",
+            filter: `workspace_id=eq.${ws}`,
+          },
+          (payload) => {
+            const change = parseAccessChange(payload as LivePayload);
+            if (change) this.emit({ type: "access", change });
+          },
+        )
+        .subscribe(),
+    ];
     if (typeof window !== "undefined") {
       window.addEventListener("focus", this.onReturn);
       window.addEventListener("online", this.onOnline);
@@ -94,6 +157,8 @@ class TasksLink {
   private close(): void {
     if (this.channel) void supabaseClient.removeChannel(this.channel);
     this.channel = null;
+    for (const side of this.sideChannels) void supabaseClient.removeChannel(side);
+    this.sideChannels = [];
     this.joinedOnce = false;
     if (typeof window !== "undefined") {
       window.removeEventListener("focus", this.onReturn);

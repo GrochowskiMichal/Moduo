@@ -185,6 +185,17 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     await store?.reload();
   }, [store]);
 
+  /**
+   * Search every task on the server while the copy can't answer alone
+   * (TV-D11b): the ids that match; the store reads the rows it lacks, so they
+   * show like any other. Null when the copy is enough (or offline).
+   */
+  const searchTasks = useCallback(
+    (query: string): Promise<string[] | null> =>
+      store ? store.searchTasks(query) : Promise.resolve(null),
+    [store],
+  );
+
   // ── derived ────────────────────────────────────────────────────────────────
   // Buckets deleted this session drop out here, and their tasks show in Inbox,
   // before the server delete lands (see `deleteBucket` and hidden-buckets.ts).
@@ -2190,6 +2201,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     /** My open queued tasks — the rail's Queue count. */
     queueCount,
     reload: load,
+    searchTasks,
     /** Every status this reader can see (TV-D9). */
     statuses,
     statusById,

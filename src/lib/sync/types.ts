@@ -83,14 +83,49 @@ export type SyncReadInput<T extends SyncTableName = SyncTableName> = {
 export type SyncReadResult<R = unknown> = {
   /** Live rows, mapped (rows that couldn't be read are dropped). */
   rows: R[];
-  /** Ids of rows deleted since `since` (soft deletes). */
+  /** Ids of rows deleted since `since` (soft deletes, or tombstones of hard ones). */
   deleted: string[];
   /** The newest server `updated_at` among the rows read (live or deleted). */
   maxUpdatedAt: string | null;
   /** Set when the read stopped at its ceiling. */
   truncated: Truncation | null;
+  /**
+   * The answer is every live row, though changes were asked for: a table
+   * without stamps or tombstones on this database (before TV-D11b's
+   * migration) is read whole. What it lacks is gone.
+   */
+  whole?: boolean;
 };
 
 /** Every live id of a table the reader can see: the access check (rows that
  *  were taken away from you never show up in a delta). */
 export type SyncIdsResult = { ids: string[]; complete: boolean };
+
+/**
+ * One change in what someone can see (TV-D11b's grant feed): a project or a
+ * task was shared or unshared, a task moved project, or a member's role
+ * changed (`workspace`). It names the thing, never its contents.
+ */
+export type AccessChange = {
+  /** The feed row's id: a read that overlaps an earlier one handles it once. */
+  id?: string;
+  resourceType: "bucket" | "task" | "workspace" | (string & {});
+  resourceId: string;
+  changedAt: string;
+};
+
+export type SyncAccessResult = {
+  changes: AccessChange[];
+  /** The newest `changedAt` read (the next read's cursor). */
+  maxChangedAt: string | null;
+  /** False when the database has no feed yet (before TV-D11b's migration). */
+  supported: boolean;
+};
+
+/** The server's search over every task you can see (`tasks_search`, TV-D11b). */
+export type TaskSearchResult = {
+  /** Matching task ids, newest change first. */
+  ids: string[];
+  /** False when the database has no `tasks_search` yet: search the copy only. */
+  supported: boolean;
+};

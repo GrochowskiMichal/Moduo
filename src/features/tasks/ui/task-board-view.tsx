@@ -11,7 +11,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { Plus } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { Button } from "../../../components/ui/button";
@@ -31,9 +31,11 @@ import { STATUS_KEY_LABELS, type StatusKey, statusKeyOf } from "../statuses";
 import { DndBoundary, taskDragAnnouncements, useTaskDndSensors } from "./dnd/task-dnd";
 import type { PlanHeaderControls, PlanView } from "./plan-view-header";
 import { PlanViewHeader } from "./plan-view-header";
+import { type TaskFacts, type TaskRowActions, taskFactsOf, useRowActions } from "./row-facts";
 import { CardBody, TaskCard } from "./task-card";
 import { CompletedLine } from "./task-meta";
 import { TaskBoardSkeleton, TasksNoMatch } from "./task-view-states";
+import { VirtualStack } from "./virtual-stack";
 
 export type { BoardGroupBy };
 
@@ -116,6 +118,13 @@ const NO_IDS: ReadonlySet<string> = new Set();
  *  make. */
 const NO_SHIFT: SortingStrategy = () => null;
 
+/** A column draws only the cards on screen from this many (TV-D11b, AC12.4). */
+const VIRTUALIZE_CARDS_FROM = 40;
+/** A first guess at a card's height (px), corrected once it's drawn. */
+const CARD_ESTIMATE = 72;
+/** The column's `gap-1.5`, for the drawn-on-screen layout. */
+const CARD_GAP = 6;
+
 export function TaskBoardView({
   tasks,
   scopeTitle,
@@ -174,6 +183,17 @@ export function TaskBoardView({
     return sorted ? orderTasks(top, order) : top;
   }, [tasks, nestedIds, sorted, order]);
 
+  // A card's facts and actions (row-facts.ts, TV-D11b): each card redraws
+  // only when its own task or facts change.
+  const actions = useRowActions(api);
+  const taskById = useMemo(() => new Map(api.tasks.map((t) => [t.id, t])), [api.tasks]);
+  const factsOf = (task: Task) => taskFactsOf(task, api);
+  const parentTitleOf = (task: Task): string | null => {
+    if (!task.parentId) return null;
+    const parent = taskById.get(task.parentId);
+    return parent ? parent.title || "Untitled" : null;
+  };
+
   const columns = useMemo<Column[]>(() => {
     const now = new Date();
     // Kept even when done: staying (checked off or opened in this scope); the
@@ -181,7 +201,7 @@ export function TaskBoardView({
     // at a card that isn't there); a parent with open subtasks (they live on
     // its card's n/m).
     const selectedParentId = selectedTaskId
-      ? (api.tasks.find((t) => t.id === selectedTaskId)?.parentId ?? null)
+      ? (taskById.get(selectedTaskId)?.parentId ?? null)
       : null;
     const keep = (t: Task) =>
       stayingIds.has(t.id) ||
@@ -231,7 +251,7 @@ export function TaskBoardView({
     stayingIds,
     selectedTaskId,
     revealed,
-    api.tasks,
+    taskById,
     api.subtasksByParent,
   ]);
 
@@ -297,7 +317,7 @@ export function TaskBoardView({
     // project's manual order (board-drop.ts, default m).
     const decision = planBoardDrop({
       task,
-      parent: task.parentId ? (api.tasks.find((t) => t.id === task.parentId) ?? null) : null,
+      parent: task.parentId ? (taskById.get(task.parentId) ?? null) : null,
       source: sourceCol,
       dest: destCol,
       overId: overIsColumn ? null : overId,
@@ -360,7 +380,9 @@ export function TaskBoardView({
                   onToggleReveal={() => toggleReveal(col.id)}
                   activeTask={activeTask}
                   reorderable={dragOrder === "manual"}
-                  api={api}
+                  factsOf={factsOf}
+                  parentTitleOf={parentTitleOf}
+                  actions={actions}
                 />
               ))}
               {canEdit && onAddStatus && groupDim === "status" ? (
@@ -389,7 +411,9 @@ export function TaskBoardView({
                       showAssignee={showAssignee}
                       properties={properties}
                       canEdit={false}
-                      api={api}
+                      facts={factsOf(activeTask)}
+                      parentTitle={parentTitleOf(activeTask)}
+                      actions={actions}
                     />
                   </DragOverlaySurface>
                 ) : null}
@@ -417,7 +441,9 @@ function BoardColumn({
   onToggleReveal,
   activeTask,
   reorderable,
-  api,
+  factsOf,
+  parentTitleOf,
+  actions,
 }: {
   column: Column;
   canEdit: boolean;
@@ -435,9 +461,21 @@ function BoardColumn({
   activeTask: Task | null;
   /** The board is one project's manual order: cards part to make room. */
   reorderable: boolean;
-  api: TasksModuleApi;
+  factsOf: (task: Task) => TaskFacts;
+  parentTitleOf: (task: Task) => string | null;
+  actions: TaskRowActions;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: column.id, disabled: !canEdit });
+  // The column scrolls on its own and draws only the cards on screen once it
+  // is long (TV-D11b): its droppable box is also its scroller.
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const setColumnRef = useCallback(
+    (el: HTMLDivElement | null) => {
+      scrollRef.current = el;
+      setNodeRef(el);
+    },
+    [setNodeRef],
+  );
   // Only a column that would take the card lights up (never the Inbox for a
   // project's task).
   const accepting =
@@ -445,6 +483,18 @@ function BoardColumn({
   // While revealed, the column lists its completed cards too; the count in
   // the header is always every task in the column.
   const total = revealed ? column.tasks.length : column.tasks.length + column.hidden.length;
+  const ids = useMemo(() => column.tasks.map((t) => t.id), [column.tasks]);
+  // The card being dragged stays drawn while its column scrolls (dnd-kit
+  // loses a draggable that unmounts mid-drag).
+  const activeIndex = activeTask ? ids.indexOf(activeTask.id) : -1;
+  const pinned = useMemo(() => (activeIndex >= 0 ? [activeIndex] : []), [activeIndex]);
+  // The selected card is brought into view once (a deep link into a long column).
+  const scrollTo = useMemo(
+    () => (selectedTaskId ? { key: selectedTaskId, seq: 0 } : null),
+    [selectedTaskId],
+  );
+  const bucketsForCards = buckets;
+  const inboxId = inbox?.id ?? null;
 
   return (
     // Columns flex between 280 and 400 px (tasks-v2 §6).
@@ -454,7 +504,7 @@ function BoardColumn({
         <GroupHeader label={column.label} count={total} />
       </header>
       <div
-        ref={setNodeRef}
+        ref={setColumnRef}
         className={cn(
           // Linear-quiet: columns are transparent on the canvas; cards carry the
           // elevation (bg-card + hairline). Only a drag-over state lights up.
@@ -463,28 +513,40 @@ function BoardColumn({
         )}
       >
         <SortableContext
-          items={column.tasks.map((t) => t.id)}
+          items={ids}
           strategy={reorderable ? verticalListSortingStrategy : NO_SHIFT}
         >
           {column.tasks.length === 0 && column.hidden.length === 0 ? (
             <EmptyState size="inline" title={canEdit ? "Drop tasks here" : "Empty"} />
           ) : (
-            column.tasks.map((task) => (
-              <TaskCard
-                key={task.id}
-                task={task}
-                bucketName={bucketNameById(task.bucketId)}
-                buckets={buckets}
-                inboxId={inbox?.id ?? null}
-                showBucket={showBucketTag}
-                showAssignee={showAssignee}
-                properties={properties}
-                canEdit={canEdit}
-                selected={task.id === selectedTaskId}
-                onSelect={() => onSelectTask(task.id)}
-                api={api}
-              />
-            ))
+            <VirtualStack
+              items={column.tasks}
+              itemKey={(task) => task.id}
+              estimateSize={() => CARD_ESTIMATE}
+              scrollRef={scrollRef}
+              gap={CARD_GAP}
+              gapClassName="gap-1.5"
+              virtualizeFrom={VIRTUALIZE_CARDS_FROM}
+              pinned={pinned}
+              scrollTo={scrollTo}
+              render={(task) => (
+                <TaskCard
+                  task={task}
+                  bucketName={bucketNameById(task.bucketId)}
+                  buckets={bucketsForCards}
+                  inboxId={inboxId}
+                  showBucket={showBucketTag}
+                  showAssignee={showAssignee}
+                  properties={properties}
+                  canEdit={canEdit}
+                  selected={task.id === selectedTaskId}
+                  onSelect={onSelectTask}
+                  facts={factsOf(task)}
+                  parentTitle={parentTitleOf(task)}
+                  actions={actions}
+                />
+              )}
+            />
           )}
         </SortableContext>
         <CompletedLine

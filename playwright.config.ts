@@ -19,7 +19,17 @@ export default defineConfig({
   projects: [
     {
       name: "e2e",
-      testIgnore: ["**/visual/**"],
+      testIgnore: ["**/visual/**", "**/perf/**"],
+      use: {
+        ...devices["Desktop Chrome"],
+        baseURL: E2E_BASE_URL ?? "http://127.0.0.1:8081",
+      },
+    },
+    {
+      // The 10,000-task budget (TV-D11b): `bun run perf`, on the local stack.
+      name: "perf",
+      testMatch: ["**/perf/**/*.spec.ts"],
+      timeout: 120_000,
       use: {
         ...devices["Desktop Chrome"],
         baseURL: E2E_BASE_URL ?? "http://127.0.0.1:8081",

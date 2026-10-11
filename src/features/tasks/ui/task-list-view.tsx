@@ -64,9 +64,11 @@ import {
 } from "./dnd/task-dnd";
 import { listKeyActionFor } from "./list-keys";
 import { type PlanHeaderControls, type PlanView, PlanViewHeader } from "./plan-view-header";
+import { taskFactsOf, useRowActions } from "./row-facts";
 import { CompletedLine } from "./task-meta";
 import { type RowCommand, TaskRow } from "./task-row";
 import { TaskListSkeleton, TasksEmptyScope, TasksNoMatch } from "./task-view-states";
+import { VirtualStack } from "./virtual-stack";
 
 type Props = {
   tasks: Task[];
@@ -127,6 +129,30 @@ type Props = {
 };
 
 const NO_IDS: ReadonlySet<string> = new Set();
+
+/**
+ * One line of the List as drawn (TV-D11b): the groups flattened, so the
+ * stack can draw only what's on screen. A row knows its block (a top-level
+ * task and its nested subtasks), whose last row carries the "Make subtask"
+ * preview while a drag would nest into the block's parent.
+ */
+type ListItem =
+  | { kind: "header"; key: string; groupKey: string }
+  | {
+      kind: "row";
+      key: string;
+      task: Task;
+      depth: 0 | 1;
+      groupKey: string;
+      /** The block's top-level task. */
+      blockId: string;
+      /** The block's last drawn row. */
+      blockEnd: boolean;
+    }
+  | { kind: "end"; key: string; groupKey: string };
+
+/** First guesses at heights (px), corrected once an item is drawn. */
+const ITEM_HEIGHT = { header: 28, row: 34, end: 4 } as const;
 
 export function TaskListView({
   tasks,
@@ -695,55 +721,51 @@ export function TaskListView({
   };
 
   // Row props, shared by the grouped and the reorderable (Queue) renders.
-  const buildRowProps = useCallback(
-    (t: Task) => ({
-      task: t,
-      bucketName: bucketNameById(t.bucketId),
-      buckets,
-      inboxId: inbox?.id ?? null,
-      showBucket: showBucketTag,
-      showAssignee,
-      selected: t.id === selectedId,
-      editing: t.id === editingId,
-      command: command?.taskId === t.id ? command.kind : null,
-      canEdit,
-      onSelect: () => setSelectedId(t.id),
-      onStartEdit: () => setEditingId(t.id),
-      onEndEdit: () => {
-        setEditingId(null);
-        containerRef.current?.focus();
-      },
-      onClearCommand: () => {
-        setCommand(null);
-        // Back to the list, unless closing came from clicking into another field.
-        const active = document.activeElement;
-        const leftForElsewhere =
-          active instanceof HTMLElement &&
-          active !== document.body &&
-          !containerRef.current?.contains(active) &&
-          // The row's own editors: the date popovers and the bucket menu.
-          !active.closest('[data-slot="popover-content"], [data-slot="dropdown-menu-content"]');
-        if (!leftForElsewhere) containerRef.current?.focus();
-      },
-      onRequestCommand: (kind: RowCommand) => setCommand({ taskId: t.id, kind }),
-      columns,
-      api,
-    }),
-    [
-      bucketNameById,
-      buckets,
-      inbox,
-      showBucketTag,
-      showAssignee,
-      selectedId,
-      editingId,
-      command,
-      canEdit,
-      setSelectedId,
-      columns,
-      api,
-    ],
+  // Every callback takes the task's id and keeps its identity, and the
+  // actions object never changes, so a memoised row redraws only when its
+  // own task, facts or state do (TV-D11b: one edit, one row).
+  const actions = useRowActions(api);
+  const endEdit = useCallback(() => {
+    setEditingId(null);
+    containerRef.current?.focus();
+  }, []);
+  const clearCommand = useCallback(() => {
+    setCommand(null);
+    // Back to the list, unless closing came from clicking into another field.
+    const active = document.activeElement;
+    const leftForElsewhere =
+      active instanceof HTMLElement &&
+      active !== document.body &&
+      !containerRef.current?.contains(active) &&
+      // The row's own editors: the date popovers and the bucket menu.
+      !active.closest('[data-slot="popover-content"], [data-slot="dropdown-menu-content"]');
+    if (!leftForElsewhere) containerRef.current?.focus();
+  }, []);
+  const requestCommand = useCallback(
+    (taskId: string, kind: RowCommand) => setCommand({ taskId, kind }),
+    [],
   );
+  const inboxIdForRows = inbox?.id ?? null;
+  const buildRowProps = (t: Task) => ({
+    task: t,
+    bucketName: bucketNameById(t.bucketId),
+    buckets,
+    inboxId: inboxIdForRows,
+    showBucket: showBucketTag,
+    showAssignee,
+    selected: t.id === selectedId,
+    editing: t.id === editingId,
+    command: command?.taskId === t.id ? command.kind : null,
+    canEdit,
+    facts: taskFactsOf(t, api),
+    actions,
+    onSelect: setSelectedId,
+    onStartEdit: setEditingId,
+    onEndEdit: endEdit,
+    onClearCommand: clearCommand,
+    onRequestCommand: requestCommand,
+    columns,
+  });
 
   // ── drag and drop (tasks-v2 §8, TV-U4) ──────────────────────────────────────
   // Every row is a drag source (the Queue keeps its own sortable below). The
@@ -995,25 +1017,131 @@ export function TaskListView({
     );
   };
 
-  // A top-level row plus (when expanded) its nested subtasks, and the "Make
-  // subtask" preview under it while it's the nest target.
-  const renderParentRow = (task: Task) => {
-    const children = nest ? (api.subtasksByParent.get(task.id) ?? []) : [];
-    const expanded = expandedParents.has(task.id);
-    const nestHere = hover?.kind === "nest" && hover.targetId === task.id && dragTask;
+  // The List flattened (TV-D11b): a header per group, each top-level task
+  // with its expanded subtasks, and the group's end (its "N completed" line
+  // and the gap after it). Collapsed groups keep their header and end.
+  const items = useMemo(() => {
+    const out: ListItem[] = [];
+    for (const group of groups) {
+      if (groupBy !== "none") {
+        out.push({ kind: "header", key: `h:${group.key}`, groupKey: group.key });
+      }
+      if (!collapsed.has(group.key)) {
+        for (const task of group.tasks) {
+          const children =
+            nest && expandedParents.has(task.id) ? (api.subtasksByParent.get(task.id) ?? []) : [];
+          out.push({
+            kind: "row",
+            key: `r:${task.id}`,
+            task,
+            depth: 0,
+            groupKey: group.key,
+            blockId: task.id,
+            blockEnd: children.length === 0,
+          });
+          children.forEach((child, i) => {
+            out.push({
+              kind: "row",
+              key: `r:${task.id}:${child.id}`,
+              task: child,
+              depth: 1,
+              groupKey: group.key,
+              blockId: task.id,
+              blockEnd: i === children.length - 1,
+            });
+          });
+        }
+      }
+      out.push({ kind: "end", key: `e:${group.key}`, groupKey: group.key });
+    }
+    return out;
+  }, [groups, groupBy, collapsed, nest, expandedParents, api.subtasksByParent]);
+
+  const stickyIndexes = useMemo(
+    () => items.flatMap((item, i) => (item.kind === "header" ? [i] : [])),
+    [items],
+  );
+  const groupByKey = useMemo(() => new Map(groups.map((g) => [g.key, g])), [groups]);
+
+  // The row being dragged stays drawn wherever the list scrolls (dnd-kit
+  // loses a draggable that unmounts mid-drag); a moved selection is brought
+  // into view (j/k past the edge, a deep link into a long list).
+  const pinned = useMemo(() => {
+    if (!dragId) return [];
+    const index = items.findIndex((item) => item.kind === "row" && item.task.id === dragId);
+    return index >= 0 ? [index] : [];
+  }, [items, dragId]);
+  const [selectionSeq, setSelectionSeq] = useState({ id: selectedId, seq: 0 });
+  if (selectionSeq.id !== selectedId)
+    setSelectionSeq({ id: selectedId, seq: selectionSeq.seq + 1 });
+  const scrollTo = useMemo(() => {
+    if (!selectedId) return null;
+    const item = items.find((it) => it.kind === "row" && it.task.id === selectedId);
+    return item ? { key: item.key, seq: selectionSeq.seq } : null;
+  }, [items, selectedId, selectionSeq.seq]);
+
+  const renderItem = (item: ListItem) => {
+    if (item.kind === "header") {
+      const group = groupByKey.get(item.groupKey);
+      if (!group) return null;
+      const groupTarget = hover?.kind === "group" && hover.groupKey === group.key;
+      return (
+        // The group's name as typed (a bucket, a status): sentence case,
+        // never small caps (call 40). It's also the group's drop target
+        // (TV-U4): it lights up when a drop would land in the group.
+        <GroupHeader
+          data-list-group={group.key}
+          className={cn(groupTarget && DROP_TARGET)}
+          label={group.label}
+          count={
+            revealedGroups.has(group.key)
+              ? group.tasks.length
+              : group.tasks.length + group.hidden.length
+          }
+          onToggle={() => toggleGroup(group.key)}
+          collapsed={collapsed.has(group.key)}
+        />
+      );
+    }
+    if (item.kind === "end") {
+      const group = groupByKey.get(item.groupKey);
+      if (!group) return null;
+      return (
+        <div className="pb-1">
+          {!collapsed.has(group.key) ? (
+            <CompletedLine
+              count={group.hidden.length}
+              shown={revealedGroups.has(group.key)}
+              onToggle={() => toggleRevealGroup(group.key)}
+            />
+          ) : null}
+        </div>
+      );
+    }
+    const { task, depth } = item;
+    const children = depth === 0 && nest ? (api.subtasksByParent.get(task.id) ?? []) : [];
+    const row = renderRow(
+      task,
+      depth,
+      depth === 0
+        ? {
+            expandSlot,
+            expandable: children.length > 0,
+            expanded: expandedParents.has(task.id),
+            onToggleExpand: toggleExpandParent,
+          }
+        : undefined,
+    );
+    const nestHere =
+      item.blockEnd && hover?.kind === "nest" && hover.targetId === item.blockId && dragTask;
+    if (!nestHere) return row;
     return (
-      <div key={task.id} data-list-block>
-        {renderRow(task, 0, {
-          expandSlot,
-          expandable: children.length > 0,
-          expanded,
-          onToggleExpand: () => toggleExpandParent(task.id),
-        })}
-        {expanded ? children.map((child) => renderRow(child, 1)) : null}
-        {nestHere ? (
+      <>
+        {row}
+        <div data-list-block>
           <NestPreview indent={NEST_INDENT_PX}>{dragTask.title || "Untitled"}</NestPreview>
-        ) : null}
-      </div>
+        </div>
+      </>
     );
   };
 
@@ -1158,43 +1286,18 @@ export function TaskListView({
             onDragCancel={endListDrag}
             announcements={announcements}
           >
-            {groups.map((group) => {
-              const isCollapsed = collapsed.has(group.key);
-              const groupTarget = hover?.kind === "group" && hover.groupKey === group.key;
-              return (
-                <div key={group.key} className="mb-1">
-                  {groupBy !== "none" ? (
-                    // The group's name as typed (a bucket, a status): sentence
-                    // case, never small caps (call 40). It's also the group's
-                    // drop target (TV-U4): it lights up when a drop would
-                    // land in the group.
-                    <GroupHeader
-                      data-list-group={group.key}
-                      className={cn(groupTarget && DROP_TARGET)}
-                      label={group.label}
-                      count={
-                        revealedGroups.has(group.key)
-                          ? group.tasks.length
-                          : group.tasks.length + group.hidden.length
-                      }
-                      onToggle={() => toggleGroup(group.key)}
-                      collapsed={isCollapsed}
-                    />
-                  ) : null}
-
-                  {!isCollapsed ? (
-                    <>
-                      {group.tasks.map((task) => renderParentRow(task))}
-                      <CompletedLine
-                        count={group.hidden.length}
-                        shown={revealedGroups.has(group.key)}
-                        onToggle={() => toggleRevealGroup(group.key)}
-                      />
-                    </>
-                  ) : null}
-                </div>
-              );
-            })}
+            <VirtualStack
+              items={items}
+              itemKey={(item) => item.key}
+              estimateSize={(item) => ITEM_HEIGHT[item.kind]}
+              scrollRef={containerRef}
+              render={(item) => renderItem(item)}
+              stickyIndexes={stickyIndexes}
+              // The pane's own surface, above the rows that pass under it.
+              stickyClassName="z-(--z-sticky) bg-card"
+              pinned={pinned}
+              scrollTo={scrollTo}
+            />
             {canDrag ? dragOverlay : null}
           </MaybeDnd>
         )}

@@ -115,11 +115,14 @@ import type {
 import { createReferencePreviews } from "./runtime.web.previews";
 import { createTasksStructure } from "./runtime.web.structure";
 import type {
+  AccessChange,
+  SyncAccessResult,
   SyncIdsResult,
   SyncReadInput,
   SyncReadResult,
   SyncRows,
   SyncTableName,
+  TaskSearchResult,
 } from "./sync/types";
 import { handleSearchPattern, handleWithCurrentKey } from "./task-handle";
 import {
@@ -2206,6 +2209,14 @@ export const webRuntime: ModuoRuntime = {
       return syncIdsOf(workspaceId, table);
     },
 
+    async syncAccessChanges({ workspaceId, since }) {
+      return readAccessChanges(workspaceId, since);
+    },
+
+    async searchTasks({ workspaceId, query, limit }) {
+      return searchTasksOnServer(workspaceId, query, limit);
+    },
+
     async createTask(task) {
       return createTaskRow(task);
     },
@@ -3688,16 +3699,19 @@ async function listWorkspaceStatuses(
 // since a server stamp (soft-deleted ones included, so a delete reaches the
 // device copy). Paged by key, never by offset: an offset page shifts when a
 // row is saved mid-read, and the row that slid past the page edge would be
-// lost for good. Tables without `updated_at` + `deleted_at` (the queue, tag
-// links, relations: hard deletes) are read whole every time; they are small.
+// lost for good. The queue, tag links and relations delete for real: since
+// TV-D11b's migration they carry `updated_at` and each delete leaves a row in
+// `sync_tombstones`, so they delta too; a database without it answers whole.
 
 type SyncSource = {
   table: string;
   select: string;
   map: (raw: unknown) => unknown;
   cap: number;
-  /** Has `updated_at` + `deleted_at`: read as a delta. */
+  /** Has `updated_at` (and soft deletes, or tombstones): read as a delta. */
   delta: boolean;
+  /** Deletes are hard and leave a `sync_tombstones` row (TV-D11b), not `deleted_at`. */
+  tombstones?: boolean;
   scope: string;
   /** Extra filters every read of it carries. */
   filter?: (q: any) => any;
@@ -3760,27 +3774,27 @@ const SYNC_SOURCES: Record<SyncTableName, SyncSource> = {
     select: "*",
     map: taskQueueRowToModel,
     cap: READ_CAPS.taskQueue,
-    delta: false,
+    delta: true,
+    tombstones: true,
     scope: "queued tasks",
-    order: (q) => q.order("user_id").order("position").order("id"),
   },
   tagLinks: {
     table: "tag_links",
     select: "*",
     map: tagLinkRowToModel,
     cap: READ_CAPS.tagLinks,
-    delta: false,
+    delta: true,
+    tombstones: true,
     scope: TAG_LINKS_SCOPE,
-    order: (q) => q.order("id"),
   },
   relations: {
     table: "task_relations",
     select: "*",
     map: taskRelationRowToModel,
     cap: READ_CAPS.taskRelations,
-    delta: false,
+    delta: true,
+    tombstones: true,
     scope: "task dependencies",
-    order: (q) => q.order("id"),
   },
   // TV-D10. Plain selects under each table's RLS, which goes through the
   // access helpers (`areas__visible`, `projects__visible`, `can_access`).
@@ -3858,7 +3872,12 @@ async function readByKey(args: {
   by: "id" | "updated_at";
   cap: number;
   scope: string;
+  /** The stamp and key columns (`sync_tombstones` pages by `deleted_at`, `row_id`). */
+  stampColumn?: string;
+  keyColumn?: string;
 }): Promise<{ rows: any[]; error: any; truncation: Truncation | null }> {
+  const stamp = args.stampColumn ?? "updated_at";
+  const key = args.keyColumn ?? "id";
   const rows: any[] = [];
   let last: { id: string; updatedAt: string } | null = null;
   // One past the cap tells "there is more" without a count.
@@ -3866,14 +3885,14 @@ async function readByKey(args: {
     const want = Math.min(PGRST_MAX_ROWS, args.cap + 1 - rows.length);
     let q = args.build();
     if (args.by === "id") {
-      if (last) q = q.gt("id", last.id);
-      q = q.order("id");
+      if (last) q = q.gt(key, last.id);
+      q = q.order(key);
     } else {
       if (last) {
         const at = pgrstQuoted(last.updatedAt);
-        q = q.or(`updated_at.gt.${at},and(updated_at.eq.${at},id.gt.${last.id})`);
+        q = q.or(`${stamp}.gt.${at},and(${stamp}.eq.${at},${key}.gt.${last.id})`);
       }
-      q = q.order("updated_at").order("id");
+      q = q.order(stamp).order(key);
     }
     const { data, error } = await q.limit(want);
     if (error) return { rows, error, truncation: null };
@@ -3881,7 +3900,7 @@ async function readByKey(args: {
     rows.push(...batch);
     if (batch.length < want) break;
     const tail = batch[batch.length - 1];
-    last = { id: String(tail?.id), updatedAt: String(tail?.updated_at ?? "") };
+    last = { id: String(tail?.[key]), updatedAt: String(tail?.[stamp] ?? "") };
   }
   if (rows.length <= args.cap) return { rows, error: null, truncation: null };
   return {
@@ -3936,16 +3955,23 @@ async function syncReadTable(input: SyncReadInput): Promise<SyncReadResult<unkno
     return { ...empty, rows: mapKnownRows(res.rows, source.map), truncated: res.truncation };
   }
 
+  /** Live rows only: soft-deleted ones are skipped; a tombstoned table has none. */
+  const live = (q: any) => (source.tombstones ? q : q.is("deleted_at", null));
+
+  // A hard-delete table's changes: rows stamped since, plus its tombstones.
+  // A database before TV-D11b's migration has neither: read it whole.
+  if (source.tombstones && input.since && !input.ids) {
+    const changed = await readTombstonedChanges(source, input.workspaceId, input.since);
+    if (changed) return changed;
+  }
+
   // Rows the access check found you can see now (shared with you since):
   // read by id, live ones only.
   if (input.ids) {
     const rows: any[] = [];
     for (let i = 0; i < input.ids.length; i += IDS_PER_READ) {
       const chunk = input.ids.slice(i, i + IDS_PER_READ);
-      const { data, error } = await base()
-        .in("id", chunk)
-        .is("deleted_at", null)
-        .limit(PGRST_MAX_ROWS);
+      const { data, error } = await live(base().in("id", chunk)).limit(PGRST_MAX_ROWS);
       if (error) {
         if (isMissingTableError(error, source.table)) return empty;
         throw new Error(error.message);
@@ -3967,7 +3993,7 @@ async function syncReadTable(input: SyncReadInput): Promise<SyncReadResult<unkno
   };
   const run = (byCategory: boolean) =>
     readByKey({
-      by: input.since ? "updated_at" : "id",
+      by: input.since && !source.tombstones ? "updated_at" : "id",
       cap: input.since
         ? Math.max(source.cap, READ_CAPS.syncDelta)
         : input.table === "tasks" && input.part === "rest"
@@ -3975,9 +4001,8 @@ async function syncReadTable(input: SyncReadInput): Promise<SyncReadResult<unkno
           : source.cap,
       scope: source.scope,
       build: () => {
-        const q = input.since
-          ? base().gte("updated_at", input.since)
-          : base().is("deleted_at", null);
+        const q =
+          input.since && !source.tombstones ? base().gte("updated_at", input.since) : live(base());
         return partFilter(q, byCategory);
       },
     });
@@ -3994,7 +4019,7 @@ async function syncReadTable(input: SyncReadInput): Promise<SyncReadResult<unkno
     if (isMissingTableError(res.error, source.table)) return empty;
     throw new Error(res.error.message);
   }
-  const live: unknown[] = [];
+  const liveRows: unknown[] = [];
   const deleted: string[] = [];
   let maxUpdatedAt: string | null = null;
   let maxMicros = Number.NEGATIVE_INFINITY;
@@ -4008,14 +4033,16 @@ async function syncReadTable(input: SyncReadInput): Promise<SyncReadResult<unkno
     if (row?.deleted_at) {
       if (typeof row.id === "string") deleted.push(row.id);
     } else {
-      live.push(row);
+      liveRows.push(row);
     }
   }
   return {
-    rows: mapKnownRows(live, source.map),
+    rows: mapKnownRows(liveRows, source.map),
     deleted,
     maxUpdatedAt,
     truncated: res.truncation,
+    // Changes were asked of a table this database can't read changes of.
+    ...(source.tombstones && input.since ? { whole: true } : {}),
   };
 }
 
@@ -4027,11 +4054,8 @@ async function syncIdsOf(workspaceId: string, table: SyncTableName): Promise<Syn
     cap: READ_CAPS.syncIds,
     scope: source.scope,
     build: () => {
-      let q = supabaseClient
-        .from(source.table)
-        .select("id")
-        .eq("workspace_id", workspaceId)
-        .is("deleted_at", null);
+      let q = supabaseClient.from(source.table).select("id").eq("workspace_id", workspaceId);
+      if (!source.tombstones) q = q.is("deleted_at", null);
       if (source.filter) q = source.filter(q);
       return q;
     },
@@ -4041,6 +4065,154 @@ async function syncIdsOf(workspaceId: string, table: SyncTableName): Promise<Syn
     throw new Error(res.error.message);
   }
   return { ids: res.rows.map((r) => String(r.id)), complete: res.truncation === null };
+}
+
+/**
+ * Changes of a hard-delete table (TV-D11b): rows stamped since `since`, keyset
+ * paged, plus the ids its deletes left in `sync_tombstones`. Null when this
+ * database has no stamps or tombstones for it yet (the caller reads it whole).
+ */
+async function readTombstonedChanges(
+  source: SyncSource,
+  workspaceId: string,
+  since: string,
+): Promise<SyncReadResult<unknown> | null> {
+  const rows = await readByKey({
+    by: "updated_at",
+    cap: Math.max(source.cap, READ_CAPS.syncDelta),
+    scope: source.scope,
+    build: () => {
+      let q = supabaseClient
+        .from(source.table)
+        .select(source.select)
+        .eq("workspace_id", workspaceId)
+        .gte("updated_at", since)
+        .retry(false);
+      if (source.filter) q = source.filter(q);
+      return q;
+    },
+  });
+  if (rows.error) {
+    if (isMissingColumnError(rows.error, "updated_at")) return null;
+    if (isMissingTableError(rows.error, source.table)) return null;
+    throw new Error(rows.error.message);
+  }
+  const graves = await readByKey({
+    by: "updated_at",
+    stampColumn: "deleted_at",
+    keyColumn: "row_id",
+    cap: READ_CAPS.syncDelta,
+    scope: source.scope,
+    build: () =>
+      supabaseClient
+        .from("sync_tombstones")
+        .select("row_id,deleted_at")
+        .eq("workspace_id", workspaceId)
+        .eq("table_name", source.table)
+        .gte("deleted_at", since)
+        .retry(false),
+  });
+  if (graves.error) {
+    if (isMissingTableError(graves.error, "sync_tombstones")) return null;
+    throw new Error(graves.error.message);
+  }
+  let maxUpdatedAt: string | null = null;
+  let maxMicros = Number.NEGATIVE_INFINITY;
+  const stamps = [...rows.rows.map((r) => r?.updated_at), ...graves.rows.map((g) => g?.deleted_at)];
+  for (const value of stamps) {
+    const stamp = typeof value === "string" ? value : null;
+    const micros = timestampMicros(stamp);
+    if (stamp && micros !== null && micros > maxMicros) {
+      maxMicros = micros;
+      maxUpdatedAt = stamp;
+    }
+  }
+  // A row deleted and made again under the same id (never: ids are random)
+  // would be both; the live row wins.
+  const liveIds = new Set(rows.rows.map((r) => String(r?.id)));
+  return {
+    rows: mapKnownRows(rows.rows, source.map),
+    deleted: graves.rows.map((g) => String(g?.row_id)).filter((id) => !liveIds.has(id)),
+    maxUpdatedAt,
+    truncated: rows.truncation ?? graves.truncation,
+  };
+}
+
+/**
+ * The grant feed (TV-D11b, `access_changes`): what changed in who sees which
+ * project or task since `since`. With `since` null, only the newest stamp
+ * (a session's starting point). RLS returns your rows and the workspace's.
+ */
+async function readAccessChanges(
+  workspaceId: string,
+  since: string | null,
+): Promise<SyncAccessResult> {
+  const none: SyncAccessResult = { changes: [], maxChangedAt: null, supported: false };
+  if (since === null) {
+    const { data, error } = await supabaseClient
+      .from("access_changes")
+      .select("changed_at")
+      .eq("workspace_id", workspaceId)
+      .order("changed_at", { ascending: false })
+      .limit(1)
+      .retry(false);
+    if (error) {
+      if (isMissingTableError(error, "access_changes")) return none;
+      throw new Error(error.message);
+    }
+    const stamp = (data as Array<{ changed_at?: unknown }> | null)?.[0]?.changed_at;
+    return {
+      changes: [],
+      maxChangedAt: typeof stamp === "string" ? stamp : null,
+      supported: true,
+    };
+  }
+  const { data, error } = await supabaseClient
+    .from("access_changes")
+    .select("id,resource_type,resource_id,changed_at")
+    .eq("workspace_id", workspaceId)
+    .gte("changed_at", since)
+    .order("changed_at")
+    .order("id")
+    .limit(PGRST_MAX_ROWS)
+    .retry(false);
+  if (error) {
+    if (isMissingTableError(error, "access_changes")) return none;
+    throw new Error(error.message);
+  }
+  const changes: AccessChange[] = [];
+  let maxChangedAt: string | null = null;
+  for (const row of (data ?? []) as Array<Record<string, unknown>>) {
+    if (typeof row.resource_type !== "string" || typeof row.resource_id !== "string") continue;
+    const changedAt = typeof row.changed_at === "string" ? row.changed_at : "";
+    changes.push({
+      id: String(row.id),
+      resourceType: row.resource_type,
+      resourceId: row.resource_id,
+      changedAt,
+    });
+    if (changedAt) maxChangedAt = changedAt;
+  }
+  return { changes, maxChangedAt, supported: true };
+}
+
+/** `tasks_search` (TV-D11b): ids of the tasks you can see that match every word. */
+async function searchTasksOnServer(
+  workspaceId: string,
+  query: string,
+  limit = 200,
+): Promise<TaskSearchResult> {
+  const { data, error } = await supabaseClient
+    .rpc("tasks_search", { p_workspace_id: workspaceId, p_query: query, p_limit: limit })
+    .retry(false);
+  if (error) {
+    if (isMissingFunctionError(error, "tasks_search")) return { ids: [], supported: false };
+    throw new Error(error.message);
+  }
+  const ids = ((data ?? []) as Array<string | { id?: unknown }>)
+    .map((row) => (typeof row === "string" ? row : typeof row?.id === "string" ? row.id : null))
+    .filter((id): id is string => id !== null);
+  return { ids, supported: true };
 }
 
 /**

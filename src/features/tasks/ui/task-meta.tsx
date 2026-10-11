@@ -1,7 +1,6 @@
 // The quiet marks rows and cards share (tasks-v2 §6, TV-U1): the counts after
 // a title, the bucket as dot + name, the one date, and the "N completed" line.
 
-import { isClosedTask } from "@contracts/vocabularies";
 import { CircleDashed, Clock, Hash, Inbox, ListChecks, ListTree, Repeat } from "lucide-react";
 import type { ReactNode } from "react";
 import { MetaCount, MetaCounts } from "../../../components/ui/meta-count";
@@ -9,27 +8,21 @@ import { NavRowDot } from "../../../components/ui/nav-row";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import { cn } from "../../../lib/utils";
 import { completedLabel } from "../completed";
-import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { Task } from "../model";
 import { recurrenceLabel } from "../parse/recurrence";
 import type { RowDate } from "../row-layout";
+import type { TaskFacts } from "./row-facts";
 
 // ── blocked marker (computed, ambient — dim/quiet, never red; spec §5c) ───────
 
 export function BlockedMarker({
-  taskId,
-  api,
+  label,
   iconClassName = "size-3.5",
 }: {
-  taskId: string;
-  api: Pick<TasksModuleApi, "blockersByTask">;
+  /** "Blocked by …" (`blockedLabelOf`). */
+  label: string;
   iconClassName?: string;
 }) {
-  const openBlockers = (api.blockersByTask.get(taskId) ?? []).filter((b) => !isClosedTask(b));
-  const label =
-    openBlockers.length === 1
-      ? `Blocked by “${openBlockers[0].title || "Untitled"}”`
-      : `Blocked by ${openBlockers.length} tasks`;
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -57,36 +50,31 @@ function Tip({ label, children }: { label: string; children: ReactNode }) {
  * done/total · blocked · repeats. Muted, each hidden at zero. Tags are a count
  * here, never chips (U1-2); their names are in the tooltip. Attachments (📎)
  * and comments (💬) join between tags and subtasks when their data lands
- * (AT-3, TV-U3).
+ * (AT-3, TV-U3). The facts are the row's own (row-facts.ts, TV-D11b).
  */
-type CountsApi = Pick<
-  TasksModuleApi,
-  "tagsByTask" | "subtaskProgressByTask" | "blockedTaskIds" | "blockersByTask"
->;
+type CountsFacts = Pick<TaskFacts, "tags" | "progress" | "blockedLabel">;
 
 /** Whether `TaskCounts` has anything to show for this task. */
-export function hasTaskCounts(task: Task, api: CountsApi): boolean {
+export function hasTaskCounts(task: Task, facts: CountsFacts): boolean {
   return (
-    (api.tagsByTask.get(task.id)?.length ?? 0) > 0 ||
-    (api.subtaskProgressByTask.get(task.id)?.total ?? 0) > 0 ||
-    api.blockedTaskIds.has(task.id) ||
+    facts.tags.length > 0 ||
+    (facts.progress?.total ?? 0) > 0 ||
+    facts.blockedLabel !== null ||
     !!task.recurrence
   );
 }
 
 export function TaskCounts({
   task,
-  api,
+  facts,
   className,
 }: {
   task: Task;
-  api: CountsApi;
+  facts: CountsFacts;
   className?: string;
 }) {
-  if (!hasTaskCounts(task, api)) return null;
-  const tags = api.tagsByTask.get(task.id) ?? [];
-  const progress = api.subtaskProgressByTask.get(task.id) ?? null;
-  const blocked = api.blockedTaskIds.has(task.id);
+  if (!hasTaskCounts(task, facts)) return null;
+  const { tags, progress, blockedLabel } = facts;
   return (
     <MetaCounts className={className}>
       {tags.length > 0 ? (
@@ -94,7 +82,7 @@ export function TaskCounts({
           <MetaCount
             icon={Hash}
             count={tags.length}
-            label={(n) => (n === 1 ? `1 tag: ${tags[0].name}` : `${n} tags`)}
+            label={(n) => (n === 1 ? `1 tag: ${tags[0]?.name}` : `${n} tags`)}
           />
         </Tip>
       ) : null}
@@ -106,7 +94,9 @@ export function TaskCounts({
           label={() => `${progress.done} of ${progress.total} subtasks done`}
         />
       ) : null}
-      {blocked ? <BlockedMarker taskId={task.id} api={api} iconClassName="size-icon-xs" /> : null}
+      {blockedLabel !== null ? (
+        <BlockedMarker label={blockedLabel} iconClassName="size-icon-xs" />
+      ) : null}
       {task.recurrence ? (
         <Tip label={recurrenceLabel(task.recurrence)}>
           <span className="flex items-center text-muted-foreground" role="img" aria-label="Repeats">

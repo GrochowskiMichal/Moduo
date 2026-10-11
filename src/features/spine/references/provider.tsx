@@ -116,6 +116,12 @@ export function ReferencesProvider({ children }: { children: ReactNode }) {
         store.invalidate((kind) => isLiveKind(kind));
         return;
       }
+      // Who can see a project or a task changed (TV-D11b's grant feed): a
+      // reference may turn into "Private item", or back.
+      if (event.type === "access") {
+        store.invalidate((kind) => isLiveKind(kind));
+        return;
+      }
       const { change } = event;
       if (change.table === "tasks") {
         if (change.kind === "delete") store.applyLive({ table: "tasks", id: change.id });

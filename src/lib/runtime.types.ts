@@ -62,11 +62,13 @@ import type { EntityLink, EntityRecord, EntityRef, LinkOrigin, RelationKind } fr
 import type { Truncation } from "./paged-select";
 import type { TasksStructureApi } from "./runtime.web.structure";
 import type {
+  SyncAccessResult,
   SyncIdsResult,
   SyncReadInput,
   SyncReadResult,
   SyncRows,
   SyncTableName,
+  TaskSearchResult,
 } from "./sync/types";
 import type { TaskFieldPatch } from "./task-rows";
 
@@ -894,6 +896,25 @@ export type ModuoRuntime = {
     /** Every live id of a table you can see (tasks, buckets, statuses): what
      *  the store keeps after access was taken away. */
     syncIds?(input: { workspaceId: string; table: SyncTableName }): Promise<SyncIdsResult>;
+    /**
+     * The grant feed (TV-D11b): what changed in who can see which project or
+     * task since a stamp (yours and the workspace's), so the store checks
+     * access at once instead of at its next periodic check.
+     */
+    syncAccessChanges?(input: {
+      workspaceId: string;
+      since: string | null;
+    }): Promise<SyncAccessResult>;
+    /**
+     * Search every task you can see on the server (`tasks_search`, TV-D11b):
+     * every word in the title or the description's text. Ids only; the rows
+     * come from the store (which reads the ones it lacks).
+     */
+    searchTasks?(input: {
+      workspaceId: string;
+      query: string;
+      limit?: number;
+    }): Promise<TaskSearchResult>;
     /**
      * Create a task under the id it carries (`tasks_op_create`, idempotent on
      * a resent id), so a capture sent again after a lost answer, or from the

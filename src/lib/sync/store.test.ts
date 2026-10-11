@@ -2,7 +2,9 @@
 // and then reads only what changed, a Realtime echo of your own pending write
 // never flicks it back, a refused write rolls back that one field without a
 // reload, and offline captures and check-offs are sent in order once, each
-// under its own id.
+// under its own id. TV-D11b: the queue, tag links and relations delta through
+// tombstones (whole on an older database), the grant feed shows and hides
+// what sharing changed at once, and the server's search fills the copy.
 
 import { beforeEach, describe, expect, it, rs } from "@rstest/core";
 
@@ -33,7 +35,13 @@ import {
   wipeSyncCopies,
   workspaceStore,
 } from "./store";
-import type { SyncReadInput, SyncReadResult, SyncTableName } from "./types";
+import type {
+  AccessChange,
+  SyncAccessResult,
+  SyncReadInput,
+  SyncReadResult,
+  SyncTableName,
+} from "./types";
 
 const WS = "ws-1";
 const ME = "u-me";
@@ -82,6 +90,14 @@ type ServerRow = { id: string; updatedAt?: string; deletedAt?: string | null };
 /** A server that answers `syncRead` like PostgREST does, and records each read. */
 function fakeServer() {
   const tables: Partial<Record<SyncTableName, ServerRow[]>> = { tasks: [] };
+  /** Hard deletes' tombstones (TV-D11b): id and when. */
+  const graves: Partial<Record<SyncTableName, { id: string; at: string }[]>> = {};
+  /** Tables this database can only read whole (before TV-D11b's migration). */
+  const wholeOnly = new Set<SyncTableName>();
+  /** The grant feed (TV-D11b). */
+  const feed: AccessChange[] = [];
+  /** Holds the first load's second part (Done, Won't do, Backlog) until released. */
+  let restGate: Promise<void> | null = null;
   const reads: SyncReadInput[] = [];
   const created: Task[] = [];
   const statusCalls: { taskId: string; status: string }[] = [];
@@ -92,6 +108,7 @@ function fakeServer() {
   const isOpen = (t: Task) => t.statusCategory === "todo" || t.statusCategory === "in_progress";
 
   const syncRead = rs.fn(async (input: SyncReadInput): Promise<SyncReadResult<unknown>> => {
+    if (input.part === "rest" && restGate) await restGate;
     if (offline) throw offlineError();
     if (refuse) throw new Error(refuse);
     reads.push(input);
@@ -99,6 +116,16 @@ function fakeServer() {
     const stamps = (rows: ServerRow[]) =>
       rows.map((r) => r.updatedAt).filter((s): s is string => !!s);
     let rows: ServerRow[];
+    if (input.since && wholeOnly.has(input.table)) {
+      const live = all.filter((r) => !r.deletedAt);
+      return {
+        rows: live,
+        deleted: [],
+        maxUpdatedAt: stamps(live).sort().pop() ?? null,
+        truncated: null,
+        whole: true,
+      };
+    }
     if (input.ids) {
       const wanted = new Set(input.ids);
       rows = all.filter((r) => wanted.has(r.id) && !r.deletedAt);
@@ -110,18 +137,44 @@ function fakeServer() {
         rows = rows.filter((r) => isOpen(r as Task) === (input.part === "open"));
       }
     }
-    const maxUpdatedAt = stamps(rows).sort().pop() ?? null;
+    const buried =
+      input.since && !input.ids
+        ? (graves[input.table] ?? []).filter((g) => g.at >= (input.since as string))
+        : [];
+    const maxUpdatedAt = [...stamps(rows), ...buried.map((g) => g.at)].sort().pop() ?? null;
     return {
       rows: rows.filter((r) => !r.deletedAt),
-      deleted: rows.filter((r) => r.deletedAt).map((r) => r.id),
+      deleted: [...rows.filter((r) => r.deletedAt).map((r) => r.id), ...buried.map((g) => g.id)],
       maxUpdatedAt,
       truncated: null,
     };
   });
 
+  const syncAccessChanges = rs.fn(
+    async ({ since }: { since: string | null }): Promise<SyncAccessResult> => {
+      if (offline) throw offlineError();
+      const sorted = [...feed].sort((a, b) => a.changedAt.localeCompare(b.changedAt));
+      if (since === null) {
+        return { changes: [], maxChangedAt: sorted.at(-1)?.changedAt ?? null, supported: true };
+      }
+      const changes = sorted.filter((c) => c.changedAt >= since);
+      return { changes, maxChangedAt: changes.at(-1)?.changedAt ?? null, supported: true };
+    },
+  );
+  /** Every live task whose title has every word (the server's `tasks_search`). */
+  const searchTasks = rs.fn(async ({ query }: { query: string }) => {
+    const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+    const ids = ((tables.tasks ?? []) as Task[])
+      .filter((t) => !t.deletedAt && words.every((w) => t.title.toLowerCase().includes(w)))
+      .map((t) => t.id);
+    return { ids, supported: true };
+  });
+
   const runtime = {
     tasks: {
       syncRead,
+      syncAccessChanges,
+      searchTasks,
       list: rs.fn(),
       listQueue: rs.fn(),
       syncIds: rs.fn(async ({ table }: { table: SyncTableName }) => ({
@@ -175,6 +228,11 @@ function fakeServer() {
   return {
     runtime,
     tables,
+    graves,
+    wholeOnly,
+    feed,
+    syncAccessChanges,
+    searchTasks,
     reads,
     created,
     statusCalls,
@@ -187,6 +245,17 @@ function fakeServer() {
     },
     refuseReads: (message: string | null) => {
       refuse = message;
+    },
+    /** Hold the closed tasks' read; call the answer to let it through. */
+    holdRest: () => {
+      let release = () => {};
+      restGate = new Promise<void>((resolve) => {
+        release = () => {
+          restGate = null;
+          resolve();
+        };
+      });
+      return release;
     },
   };
 }
@@ -913,5 +982,281 @@ describe("staying honest about the copy", () => {
     expect(store.getSnapshot().queue.map((e) => e.taskId)).toEqual(["a", "b"]);
     await two;
     expect(store.getSnapshot().queue.map((e) => e.taskId)).toEqual(["a", "b"]);
+  });
+});
+
+// ── TV-D11b ─────────────────────────────────────────────────────────────────
+
+const queueRow = (id: string, taskId: string, updatedAt: string): TaskQueueEntry => ({
+  id,
+  workspaceId: WS,
+  userId: ME,
+  taskId,
+  position: id,
+  queuedAt: updatedAt,
+  updatedAt,
+});
+
+const tagLink = (id: string, entityId: string, updatedAt: string) => ({
+  id,
+  workspaceId: WS,
+  tagId: "tag-1",
+  entityType: "task",
+  entityId,
+  createdAt: updatedAt,
+  updatedAt,
+});
+
+describe("tombstones: hard deletes delta too (TV-D11b)", () => {
+  it("the queue and tag links read only what changed, and a hard delete leaves the copy", async () => {
+    const server = fakeServer();
+    server.tables.tasks = [task("a"), task("b")];
+    server.tables.queue = [queueRow("q-a", "a", at(2)), queueRow("q-b", "b", at(2))];
+    server.tables.tagLinks = [tagLink("l-a", "a", at(2)), tagLink("l-b", "b", at(2))];
+    const { store } = makeStore(server);
+    await settled(store);
+    expect(
+      store
+        .getSnapshot()
+        .queue.map((e) => e.id)
+        .sort(),
+    ).toEqual(["q-a", "q-b"]);
+
+    // A teammate takes b out of my queue and a tag off a; a new link lands.
+    server.tables.queue = [queueRow("q-a", "a", at(2))];
+    server.graves.queue = [{ id: "q-b", at: at(20) }];
+    server.tables.tagLinks = [tagLink("l-b", "b", at(2)), tagLink("l-c", "a", at(21))];
+    server.graves.tagLinks = [{ id: "l-a", at: at(20) }];
+    server.reads.length = 0;
+    await store.syncNow();
+    await settled(store);
+
+    const queueRead = server.reads.find((r) => r.table === "queue");
+    expect(queueRead?.since).toBe(stampMinus(at(2), 5 * 60_000));
+    expect(store.getSnapshot().queue.map((e) => e.id)).toEqual(["q-a"]);
+    expect(
+      store
+        .getSnapshot()
+        .bundle.tagLinks.map((l) => l.id)
+        .sort(),
+    ).toEqual(["l-b", "l-c"]);
+  });
+
+  it("a database without tombstones answers whole, and the copy follows it", async () => {
+    const server = fakeServer();
+    server.tables.tasks = [task("a")];
+    server.tables.relations = [
+      { id: "r-1", updatedAt: at(2) },
+      { id: "r-2", updatedAt: at(2) },
+    ] as unknown as ServerRow[];
+    server.wholeOnly.add("relations");
+    const { store } = makeStore(server);
+    await settled(store);
+    expect(
+      store
+        .getSnapshot()
+        .bundle.taskRelations.map((r) => r.id)
+        .sort(),
+    ).toEqual(["r-1", "r-2"]);
+    // r-2 deleted for real, and no tombstone to say so: the whole answer does.
+    server.tables.relations = [{ id: "r-1", updatedAt: at(2) }] as unknown as ServerRow[];
+    await store.syncNow();
+    await settled(store);
+    expect(store.getSnapshot().bundle.taskRelations.map((r) => r.id)).toEqual(["r-1"]);
+  });
+
+  it("a tombstone older than a row the copy got since doesn't take it away", async () => {
+    const server = fakeServer();
+    server.tables.tasks = [task("a")];
+    server.tables.queue = [queueRow("q-a", "a", at(2))];
+    const { store } = makeStore(server);
+    await settled(store);
+    // Live: my queue op re-added it after the delete the delta is about to report.
+    live.listener?.({
+      type: "change",
+      change: { table: "task_queue", kind: "upsert", row: queueRow("q-new", "a", at(25)) },
+    });
+    server.tables.queue = [queueRow("q-new", "a", at(25))];
+    server.graves.queue = [{ id: "q-a", at: at(20) }];
+    await store.syncNow();
+    await settled(store);
+    expect(store.getSnapshot().queue.map((e) => e.id)).toEqual(["q-new"]);
+  });
+});
+
+describe("the grant feed (TV-D11b)", () => {
+  function sharedStore(server: ReturnType<typeof fakeServer>) {
+    return new WorkspaceStore(server.runtime, ME, WS, {
+      cache: memoryCache(),
+      // Not the periodic check: only the feed can bring these at once.
+      timing: { persistMs: 0, throttleMs: 0, accessCheckMs: 60 * 60_000, accessDebounceMs: 0 },
+    });
+  }
+
+  it("a task shared with you alone arrives at once, read by id, with its own rows", async () => {
+    const server = fakeServer();
+    server.tables.tasks = [task("a", { updatedAt: at(5) })];
+    const store = sharedStore(server);
+    const release = store.acquire();
+    await settled(store);
+    await store.syncNow();
+    await settled(store);
+    // Shared with you: an old task (its stamp is past any delta's lookback)
+    // and its comment. No project changed.
+    (server.tables.tasks as Task[]).push(
+      task("shared", { updatedAt: "2026-10-01T08:00:00.000000+00:00" }),
+    );
+    server.tables.comments = [
+      { id: "c-1", taskId: "shared", updatedAt: "2026-10-01T08:00:00.000000+00:00" },
+    ] as unknown as ServerRow[];
+    live.listener?.({
+      type: "access",
+      change: { id: "1", resourceType: "task", resourceId: "shared", changedAt: at(30) },
+    });
+    await settled(store);
+    expect(
+      store
+        .getSnapshot()
+        .bundle.tasks.map((t) => t.id)
+        .sort(),
+    ).toEqual(["a", "shared"]);
+    expect(server.reads.some((r) => r.table === "tasks" && r.ids?.includes("shared"))).toBe(true);
+    // A task new to you brings its comment count through the whole check.
+    expect(store.getSnapshot().commentCounts.get("shared")).toBe(1);
+    release();
+  });
+
+  it("a task moved into a project you can't see leaves at once, with its rows", async () => {
+    const server = fakeServer();
+    server.tables.tasks = [task("a"), task("moved")];
+    server.tables.completions = [
+      { id: "done-1", taskId: "moved", updatedAt: at(2) },
+    ] as unknown as ServerRow[];
+    const cache = memoryCache();
+    const store = new WorkspaceStore(server.runtime, ME, WS, {
+      cache,
+      timing: { persistMs: 0, throttleMs: 0, accessCheckMs: 60 * 60_000, accessDebounceMs: 0 },
+    });
+    const release = store.acquire();
+    await settled(store);
+    // RLS hides it now; Realtime sends nothing for a row you can't see.
+    server.tables.tasks = [task("a")];
+    server.tables.completions = [];
+    live.listener?.({
+      type: "access",
+      change: { id: "2", resourceType: "task", resourceId: "moved", changedAt: at(30) },
+    });
+    await settled(store);
+    expect(store.getSnapshot().bundle.tasks.map((t) => t.id)).toEqual(["a"]);
+    expect(store.getSnapshot().completions).toEqual([]);
+    // And off the device at once.
+    await store.whenPersisted();
+    const copy = cache.records.get(cacheKey(ME, WS));
+    expect(((copy?.tables.tasks?.rows ?? []) as Task[]).map((t) => t.id)).toEqual(["a"]);
+    release();
+  });
+
+  it("a project shared or unshared runs the whole check", async () => {
+    const server = fakeServer();
+    server.tables.tasks = [task("a"), task("in-p1", { bucketId: "p1" })];
+    const store = sharedStore(server);
+    const release = store.acquire();
+    await settled(store);
+    const syncIds = server.runtime.tasks.syncIds as unknown as { mock: { calls: unknown[] } };
+    const before = syncIds.mock.calls.length;
+    server.tables.tasks = [task("a")];
+    live.listener?.({
+      type: "access",
+      change: { id: "3", resourceType: "bucket", resourceId: "p1", changedAt: at(30) },
+    });
+    await settled(store);
+    expect(syncIds.mock.calls.length).toBeGreaterThan(before);
+    expect(store.getSnapshot().bundle.tasks.map((t) => t.id)).toEqual(["a"]);
+    release();
+  });
+
+  it("a change missed while away is read with the next delta, and handled once", async () => {
+    const server = fakeServer();
+    server.tables.tasks = [task("a", { updatedAt: at(5) })];
+    server.feed.push({ id: "0", resourceType: "task", resourceId: "old", changedAt: at(1) });
+    const store = sharedStore(server);
+    const release = store.acquire();
+    await settled(store);
+    // The session started after "0": the first read only takes the cursor.
+    expect(server.syncAccessChanges.mock.calls[0]?.[0]).toMatchObject({ since: null });
+    (server.tables.tasks as Task[]).push(
+      task("shared", { updatedAt: "2026-10-01T08:00:00.000000+00:00" }),
+    );
+    server.feed.push({ id: "4", resourceType: "task", resourceId: "shared", changedAt: at(31) });
+    await store.syncNow();
+    await settled(store);
+    expect(
+      store
+        .getSnapshot()
+        .bundle.tasks.map((t) => t.id)
+        .sort(),
+    ).toEqual(["a", "shared"]);
+    const readsOfShared = () =>
+      server.reads.filter((r) => r.table === "tasks" && r.ids?.includes("shared")).length;
+    const once = readsOfShared();
+    // The next delta re-reads the feed's lookback window: "4" isn't handled again.
+    await store.syncNow();
+    await settled(store);
+    expect(readsOfShared()).toBe(once);
+    expect(server.reads.some((r) => r.ids?.includes("old"))).toBe(false);
+    release();
+  });
+});
+
+describe("search (TV-D11b)", () => {
+  it("while the closed tasks are still loading, the server finds them and the store reads them in", async () => {
+    const server = fakeServer();
+    server.tables.tasks = [
+      task("open-quokka", { title: "quokka open" }),
+      task("done-quokka", { title: "quokka done", status: "done", statusCategory: "done" }),
+    ];
+    const release = server.holdRest();
+    const { store } = makeStore(server);
+    await store.whenLoaded();
+    // Mid-load: the open tasks are in, the closed ones aren't yet.
+    expect(store.getSnapshot().restLoaded).toBe(false);
+    expect(store.coversSearch()).toBe(false);
+    const ids = await store.searchTasks("quokka");
+    expect(ids?.sort()).toEqual(["done-quokka", "open-quokka"]);
+    expect(server.reads.some((r) => r.table === "tasks" && r.ids?.includes("done-quokka"))).toBe(
+      true,
+    );
+    expect(store.getSnapshot().bundle.tasks.some((t) => t.id === "done-quokka")).toBe(true);
+    release();
+    await settled(store);
+    // Once the copy holds everything, it answers alone: no server search.
+    const calls = server.searchTasks.mock.calls.length;
+    expect(store.coversSearch()).toBe(true);
+    expect(await store.searchTasks("quokka")).toBeNull();
+    expect(server.searchTasks.mock.calls.length).toBe(calls);
+  });
+
+  it("a copy cut at its ceiling asks the server, and reads only the matches it lacks", async () => {
+    const server = fakeServer();
+    server.tables.tasks = [task("held", { title: "plan held" })];
+    const { store } = makeStore(server);
+    await settled(store);
+    // A task past the read's ceiling: the copy never got it.
+    (server.tables.tasks as Task[]).push(task("beyond", { title: "plan beyond" }));
+    (store as unknown as { table(n: string): { truncated: unknown } }).table("tasks").truncated = {
+      scope: "tasks",
+      shown: 1,
+      total: null,
+    };
+    server.reads.length = 0;
+    const ids = await store.searchTasks("plan");
+    expect(ids?.sort()).toEqual(["beyond", "held"]);
+    expect(server.reads.map((r) => r.ids)).toEqual([["beyond"]]);
+    expect(
+      store
+        .getSnapshot()
+        .bundle.tasks.map((t) => t.id)
+        .sort(),
+    ).toEqual(["beyond", "held"]);
   });
 });

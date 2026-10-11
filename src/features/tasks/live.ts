@@ -24,6 +24,7 @@ import {
   sortQueueEntries,
   tagLinkRowToModel,
   tagRowToModel,
+  taskCompletionRowToModel,
   taskQueueRowToModel,
   taskReminderRowToModel,
   taskRowToModel,
@@ -40,6 +41,7 @@ import type {
   Tag,
   TagLink,
   Task,
+  TaskCompletion,
   TaskQueueEntry,
   TaskReminder,
   TaskSession,
@@ -71,7 +73,16 @@ export const LIVE_TABLES = [
   "task_reminders",
   "task_waiting",
 ] as const;
-export type LiveTable = (typeof LIVE_TABLES)[number];
+
+/**
+ * Tables published by TV-D11b's migration, each on a channel of its own: a
+ * `postgres_changes` channel that names a table outside the publication still
+ * reports SUBSCRIBED but delivers nothing for ANY of its tables, so one not
+ * yet published (a build ahead of its database) must not share the main one.
+ */
+export const LIVE_SIDE_TABLES = ["task_completions"] as const;
+
+export type LiveTable = (typeof LIVE_TABLES)[number] | (typeof LIVE_SIDE_TABLES)[number];
 
 type Upsert<T extends LiveTable, R> = { table: T; kind: "upsert"; row: R };
 
@@ -90,6 +101,7 @@ export type LiveChange =
   | Upsert<"task_sessions", TaskSession>
   | Upsert<"task_reminders", TaskReminder>
   | Upsert<"task_waiting", TaskWaitingEntry>
+  | Upsert<"task_completions", TaskCompletion>
   | { table: LiveTable; kind: "delete"; id: string };
 
 /**
@@ -156,6 +168,8 @@ export function parseLiveChange(table: LiveTable, payload: LivePayload): LiveCha
         return { table, kind: "upsert", row: softRow(taskReminderRowToModel, payload.new) };
       case "task_waiting":
         return { table, kind: "upsert", row: softRow(taskWaitingRowToModel, payload.new) };
+      case "task_completions":
+        return { table, kind: "upsert", row: taskCompletionRowToModel(payload.new) };
     }
   } catch {
     return null;

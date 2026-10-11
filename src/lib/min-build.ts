@@ -99,6 +99,7 @@ export const READ_RPCS: ReadonlySet<string> = new Set([
   "share_can",
   "share_defaults_get",
   "share_op_state",
+  "tasks_search",
   "tasks_time_totals",
 ]);
 

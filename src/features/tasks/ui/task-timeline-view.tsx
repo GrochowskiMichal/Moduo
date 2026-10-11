@@ -63,6 +63,7 @@ import {
 import { asTaskDrag, asTaskDropTarget, taskDrag, useTaskDndSensors } from "./dnd/task-dnd";
 import type { PlanHeaderControls, PlanView } from "./plan-view-header";
 import { PlanViewHeader } from "./plan-view-header";
+import { blockedLabelOf } from "./row-facts";
 import { BlockedMarker } from "./task-row";
 
 type Props = {
@@ -1066,7 +1067,9 @@ function TimelineBarRow({
       >
         {task.title || "Untitled"}
       </span>
-      {blocked ? <BlockedMarker taskId={task.id} api={api} /> : null}
+      {blocked ? (
+        <BlockedMarker label={blockedLabelOf(api.blockersByTask.get(task.id) ?? [])} />
+      ) : null}
       {bar.pastEnd ? (
         <Tooltip>
           <TooltipTrigger asChild>

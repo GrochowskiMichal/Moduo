@@ -20,6 +20,13 @@
 //     changes again: Realtime is a latency layer, never the source of truth.
 //   - **Rows you can no longer see** never show up in a delta, so once per
 //     session the store checks which ids are still yours and drops the rest.
+//   - **The grant feed** (TV-D11b, `access_changes`) says when that may have
+//     changed (a project or a task shared or unshared, a task moved, a role
+//     changed): a task is checked by id at once, anything wider runs the
+//     whole check. Live through Realtime, and read with every delta.
+//   - **Search** (TV-D11b): the views search the copy; while the copy can't
+//     answer alone (closed tasks still loading, a read cut at its ceiling)
+//     the server's `tasks_search` finds the rest and the store reads them in.
 //
 // Writes are ops laid over the rows the server sent (`begin`). Each op has an
 // id; an op's fields stay on top until its answer comes back (a Realtime echo
@@ -58,7 +65,7 @@ import {
   type SyncCache,
 } from "./cache";
 import { browserOffline, isNetworkError } from "./network";
-import type { SyncReadResult, SyncRows, SyncTableName } from "./types";
+import type { AccessChange, SyncReadResult, SyncRows, SyncTableName } from "./types";
 
 // ── Shapes ──────────────────────────────────────────────────────────────────
 
@@ -192,10 +199,11 @@ export const SYNC_TABLES: readonly { name: SyncTableName; delta: boolean; phase:
   { name: "areas", delta: false, phase: 1 },
   { name: "teams", delta: false, phase: 1 },
   { name: "teamMembers", delta: false, phase: 1 },
-  // No stamps (hard deletes): read whole.
-  { name: "queue", delta: false, phase: 1 },
-  { name: "tagLinks", delta: false, phase: 1 },
-  { name: "relations", delta: false, phase: 1 },
+  // Hard deletes: stamped and tombstoned since TV-D11b's migration, so they
+  // delta too; a database without it answers whole (`whole`).
+  { name: "queue", delta: true, phase: 1 },
+  { name: "tagLinks", delta: true, phase: 1 },
+  { name: "relations", delta: true, phase: 1 },
   // Deltas; the access check covers what sharing shows or hides.
   { name: "statuses", delta: true, phase: 1 },
   { name: "sections", delta: true, phase: 1 },
@@ -212,8 +220,8 @@ export const SYNC_TABLES: readonly { name: SyncTableName; delta: boolean; phase:
  * Tables whose live ids are checked against the server now and then: a row
  * you lost access to (a project made private, you left it) is hidden by RLS
  * and never shows up in a delta, so this is how it leaves the device copy.
- * The whole-read tables (queue, tag links, relations) drop such rows on every
- * read already.
+ * The whole-read tables (projects, areas, teams, members) drop such rows on
+ * every read already.
  */
 const ACCESS_CHECKED: readonly SyncTableName[] = SYNC_TABLES.filter((t) => t.delta).map(
   (t) => t.name,
@@ -271,6 +279,7 @@ const LIVE_TO_TABLE: Record<LiveChange["table"], SyncTableName> = {
   task_sessions: "sessions",
   task_reminders: "reminders",
   task_waiting: "waiting",
+  task_completions: "completions",
 };
 
 // ── Timing ──────────────────────────────────────────────────────────────────
@@ -292,6 +301,8 @@ export type StoreTiming = {
    *  a row the server changed without a new stamp (a backfill with triggers off),
    *  nor fills a field a newer build reads. */
   fullReadMs: number;
+  /** Grant feed changes that arrive together are handled once, after this. */
+  accessDebounceMs: number;
 };
 
 export const DEFAULT_TIMING: StoreTiming = {
@@ -302,6 +313,7 @@ export const DEFAULT_TIMING: StoreTiming = {
   goneTtlMs: 60_000,
   accessCheckMs: 10 * 60_000,
   fullReadMs: 24 * 60 * 60_000,
+  accessDebounceMs: 400,
 };
 
 /** A server stamp moved back by `ms`, keeping its microseconds. */
@@ -314,6 +326,12 @@ export function stampMinus(stamp: string, ms: number): string {
   // toISOString gives milliseconds; add the remaining microseconds.
   return new Date(whole).toISOString().replace(/Z$/, `${frac}+00:00`);
 }
+
+/** The grant feed's start when it was empty at the session's first read. */
+const EPOCH = "1970-01-01T00:00:00+00:00";
+
+/** How many ids one server search answers with. */
+const SEARCH_LIMIT = 200;
 
 // ── The store ───────────────────────────────────────────────────────────────
 
@@ -361,6 +379,15 @@ export class WorkspaceStore {
   /** When rows you can no longer see were last dropped (0: not this session). */
   private accessCheckedAt = 0;
   private accessChecking = false;
+  /** A check was asked for while one ran: run again once it's done. */
+  private accessAgain = false;
+  /** The grant feed's cursor (null: not read this session; "" read, empty). */
+  private accessCursor: string | null = null;
+  /** Feed rows already handled (a delta re-reads its lag window), with when. */
+  private accessSeen = new Map<string, number>();
+  /** What the feed asked for, handled together (`accessDebounceMs`). */
+  private accessQueue: { full: boolean; tasks: Set<string> } = { full: false, tasks: new Set() };
+  private accessTimer: ReturnType<typeof setTimeout> | null = null;
   private hydrated: Promise<void> | null = null;
 
   private refs = 0;
@@ -488,8 +515,10 @@ export class WorkspaceStore {
     }
     if (this.syncTimer) clearTimeout(this.syncTimer);
     if (this.retryTimer) clearTimeout(this.retryTimer);
+    if (this.accessTimer) clearTimeout(this.accessTimer);
     this.syncTimer = null;
     this.retryTimer = null;
+    this.accessTimer = null;
     if (opts.persist !== false) this.persistNow();
   }
 
@@ -717,9 +746,13 @@ export class WorkspaceStore {
       this.restLoaded &&
       startedAt - this.fullReadAt < this.timing.fullReadMs;
     try {
+      // The grant feed's starting point is taken before the tables are read,
+      // so a change made while they load is still seen by the next read.
+      const feed = this.accessCursor === null ? this.readAccessFeed() : null;
       if (!this.runtime.tasks.syncRead) await this.readBundle();
       else if (!delta) await this.readFirst();
       else await this.readChanges();
+      await (feed ?? this.readAccessFeed());
     } catch (e) {
       this.onReadFailed(e);
       return;
@@ -952,6 +985,13 @@ export class WorkspaceStore {
         // A delta past its ceiling reads on from where it stopped.
         for (let round = 0; round < 20; round += 1) {
           const res = await this.read(t.name, since);
+          if (res.whole) {
+            // This database can't read the table's changes (no stamps or
+            // tombstones yet): it answered with every live row.
+            this.applyWhole(t.name, res.rows as AnyRow[], started, res.truncated);
+            state.cursor = newestOf(state.cursor, res.maxUpdatedAt);
+            break;
+          }
           this.applyRows(t.name, res.rows as AnyRow[], "answer", started);
           this.forgetRows(t.name, res.deleted, started);
           state.cursor = newestOf(state.cursor, res.maxUpdatedAt);
@@ -972,7 +1012,12 @@ export class WorkspaceStore {
    */
   checkAccess = async (): Promise<void> => {
     const ids = this.runtime.tasks.syncIds;
-    if (!ids || this.accessChecking || this.disposed) return;
+    if (!ids || this.disposed) return;
+    if (this.accessChecking) {
+      // A change arrived while a check ran (which may have read past it).
+      this.accessAgain = true;
+      return;
+    }
     this.accessChecking = true;
     const started = Date.now();
     try {
@@ -1003,17 +1048,7 @@ export class WorkspaceStore {
         }
         if (gone.length === 0) continue;
         dropped = true;
-        this.forgetRows(table, gone);
-        if (table === "tasks") {
-          const goneTasks = new Set(gone);
-          for (const dependent of TASK_ROWS) {
-            const rows = this.table(dependent).rows;
-            const ofGone = [...rows.values()]
-              .filter((r) => goneTasks.has((r as { taskId?: string }).taskId ?? ""))
-              .map((r) => r.id);
-            this.forgetRows(dependent, ofGone);
-          }
-        }
+        this.dropRows(table, gone);
       }
       this.accessCheckedAt = started;
       if (dropped) {
@@ -1026,8 +1061,181 @@ export class WorkspaceStore {
       // Tried again after the next delta.
     } finally {
       this.accessChecking = false;
+      if (this.accessAgain && !this.disposed) {
+        this.accessAgain = false;
+        void this.checkAccess();
+      }
     }
   };
+
+  /** Forget rows you can no longer see; a task takes its own rows with it. */
+  private dropRows(table: SyncTableName, ids: readonly string[]): void {
+    this.forgetRows(table, ids);
+    if (table !== "tasks") return;
+    const goneTasks = new Set(ids);
+    for (const dependent of TASK_ROWS) {
+      const rows = this.table(dependent).rows;
+      const ofGone = [...rows.values()]
+        .filter((r) => goneTasks.has((r as { taskId?: string }).taskId ?? ""))
+        .map((r) => r.id);
+      this.forgetRows(dependent, ofGone);
+    }
+  }
+
+  // ── The grant feed (TV-D11b) ──────────────────────────────────────────────
+
+  /**
+   * Read what changed in who sees what since the feed's cursor. The first
+   * read of a session only takes the cursor: the session's first access
+   * check covers everything before it.
+   */
+  private async readAccessFeed(): Promise<void> {
+    const feed = this.runtime.tasks.syncAccessChanges;
+    if (!feed || this.disposed) return;
+    const first = this.accessCursor === null;
+    const since = first
+      ? null
+      : this.accessCursor === ""
+        ? EPOCH
+        : stampMinus(this.accessCursor as string, this.timing.lagMs);
+    let res: Awaited<ReturnType<typeof feed>>;
+    try {
+      res = await feed({ workspaceId: this.workspaceId, since });
+    } catch {
+      // Read again with the next delta (the tables' reads report a lost
+      // network themselves; this one never fails a sync).
+      return;
+    }
+    if (!res.supported || this.disposed) return;
+    if (first) this.accessStart = res.maxChangedAt;
+    this.accessCursor = newestOf(this.accessCursor || null, res.maxChangedAt) ?? "";
+    if (first) return;
+    // What the lookback re-reads from before the session began is the
+    // session's first access check's (it ran after it).
+    const start = this.accessStart;
+    this.noteAccessChanges(
+      start ? res.changes.filter((c) => isNewer(c.changedAt, start)) : res.changes,
+    );
+  }
+
+  /** The feed's newest stamp when the session began (null: it was empty). */
+  private accessStart: string | null = null;
+
+  /** Changes from the feed (a read, or Realtime): handled together, once each. */
+  private noteAccessChanges(changes: readonly AccessChange[]): void {
+    const now = Date.now();
+    for (const [key, at] of this.accessSeen) {
+      if (at < now - this.timing.lagMs * 2) this.accessSeen.delete(key);
+    }
+    for (const c of changes) {
+      const key = c.id ?? `${c.resourceType}:${c.resourceId}:${c.changedAt}`;
+      if (this.accessSeen.has(key)) continue;
+      this.accessSeen.set(key, now);
+      if (c.resourceType === "task") this.accessQueue.tasks.add(c.resourceId);
+      else this.accessQueue.full = true;
+    }
+    const queued = this.accessQueue.full || this.accessQueue.tasks.size > 0;
+    if (!queued || this.accessTimer || this.disposed) return;
+    this.accessTimer = setTimeout(() => {
+      this.accessTimer = null;
+      void this.applyAccessQueue();
+    }, this.timing.accessDebounceMs);
+  }
+
+  private async applyAccessQueue(): Promise<void> {
+    if (this.disposed) return;
+    const { full, tasks } = this.accessQueue;
+    this.accessQueue = { full: false, tasks: new Set() };
+    // The whole check reads every table's ids, the tasks' included.
+    if (full) await this.checkAccess();
+    else if (tasks.size > 0) await this.recheckTasks([...tasks]);
+  }
+
+  /**
+   * Tasks the feed named (shared with you, unshared, moved): read them by id.
+   * One you can see lands; one you held and can't see any more leaves with
+   * its own rows. A task new to you brings its comments, completions and
+   * sessions through the whole check.
+   */
+  private async recheckTasks(ids: readonly string[]): Promise<void> {
+    const read = this.runtime.tasks.syncRead;
+    if (!read || ids.length === 0 || this.disposed) return;
+    const started = Date.now();
+    let got: SyncReadResult<SyncRows["tasks"]>;
+    try {
+      got = await read({ workspaceId: this.workspaceId, table: "tasks", since: null, ids });
+    } catch {
+      // The next delta's access check (or the periodic one) catches it.
+      return;
+    }
+    if (this.disposed) return;
+    const state = this.table("tasks");
+    const present = new Set(got.rows.map((r) => r.id));
+    const fresh = got.rows.some((r) => !state.rows.has(r.id));
+    this.applyRows("tasks", got.rows as AnyRow[], "answer", started);
+    const gone = ids.filter(
+      (id) => !present.has(id) && state.rows.has(id) && (state.seenAt.get(id) ?? 0) < started,
+    );
+    if (gone.length > 0) this.dropRows("tasks", gone);
+    if (got.rows.length > 0 || gone.length > 0) {
+      this.changed();
+      // Leave no private row on the device a moment longer than needed.
+      if (gone.length > 0) this.persistNow();
+      else this.schedulePersist();
+    }
+    if (fresh) void this.checkAccess();
+  }
+
+  // ── Search (TV-D11b) ──────────────────────────────────────────────────────
+
+  /**
+   * Whether the copy holds every task you can see, so searching it is
+   * searching everything: the closed tasks are in and no read was cut.
+   */
+  coversSearch(): boolean {
+    return this.restLoaded && this.table("tasks").truncated === null;
+  }
+
+  /**
+   * Search every task on the server (`tasks_search`) when the copy can't
+   * answer alone, and read the matches it lacks into the copy. Null when the
+   * copy is enough, or when the server can't search (offline, an older
+   * database): the views search the copy either way.
+   */
+  async searchTasks(query: string): Promise<string[] | null> {
+    const search = this.runtime.tasks.searchTasks;
+    const q = query.trim();
+    if (!search || !q || this.offline || this.disposed || this.coversSearch()) return null;
+    let ids: string[];
+    try {
+      const res = await search({ workspaceId: this.workspaceId, query: q, limit: SEARCH_LIMIT });
+      if (!res.supported) return null;
+      ids = res.ids;
+    } catch {
+      return null;
+    }
+    const read = this.runtime.tasks.syncRead;
+    const missing = ids.filter((id) => !this.table("tasks").rows.has(id));
+    if (missing.length > 0 && read && !this.disposed) {
+      const started = Date.now();
+      try {
+        const got = await read({
+          workspaceId: this.workspaceId,
+          table: "tasks",
+          since: null,
+          ids: missing,
+        });
+        if (!this.disposed && got.rows.length > 0) {
+          this.applyRows("tasks", got.rows as AnyRow[], "answer", started);
+          this.changed();
+          this.schedulePersist();
+        }
+      } catch {
+        // The ids still narrow what the copy holds.
+      }
+    }
+    return ids;
+  }
 
   /** Tags live in the workspace tag store (TV-T1): hand it every tag and link. */
   private seedTagStore(at: number): void {
@@ -1151,6 +1359,10 @@ export class WorkspaceStore {
     if (this.disposed) return;
     if (event.type === "resync") {
       this.requestSync(event.reason);
+      return;
+    }
+    if (event.type === "access") {
+      this.noteAccessChanges([event.change]);
       return;
     }
     const { change } = event;
