@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import type { Task } from "@/features/tasks/model";
 import { queueOrOpen } from "@/features/tasks/queue";
 import { getRuntime } from "@/lib/runtime";
+import { findWorkspaceStore } from "@/lib/sync/store";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 
@@ -89,8 +90,17 @@ export function TasksWidget({ widget, size, canWrite }: WidgetComponentProps) {
       const runtime = getRuntime();
       if (!canWrite || !workspaceId || !runtime) return;
       setDoneIds((prev) => new Set(prev).add(task.id));
-      void runtime.tasks
-        .opSetStatus({ workspaceId, taskId: task.id, status: "done" })
+      // Through the shared store (TV-D11a): every surface shows it done at
+      // once, and offline it waits on the device like any check-off.
+      const store = findWorkspaceStore(runtime, workspaceId);
+      const sent = store
+        ? store.sendStatus({
+            taskId: task.id,
+            status: "done",
+            fields: { status: "done", statusCategory: "done" },
+          })
+        : runtime.tasks.opSetStatus({ workspaceId, taskId: task.id, status: "done" });
+      void sent
         .then(() => requestDashboardDataRefresh())
         .catch(() => {
           setDoneIds((prev) => {

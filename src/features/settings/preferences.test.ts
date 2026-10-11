@@ -37,6 +37,7 @@ describe("DEFAULT_PREFERENCES", () => {
         storage: true,
       },
       confirmBeforeQuit: false,
+      tasksSidebar: { hidden: [], pinned: {} },
     });
   });
 });
@@ -75,6 +76,7 @@ describe("sanitizePreferences", () => {
         storage: true,
       },
       confirmBeforeQuit: true,
+      tasksSidebar: { hidden: [], pinned: {} },
     });
   });
 
@@ -107,6 +109,21 @@ describe("sanitizePreferences", () => {
       unblocked: false,
       overdueTasks: false,
       storage: true,
+    });
+  });
+
+  it("keeps the Tasks sidebar's hidden rows and pins, dropping bad entries (TV-U6)", () => {
+    expect(
+      sanitizePreferences({
+        tasksSidebar: {
+          hidden: ["focus", "all", "focus", "inbox", 3],
+          pinned: { ws1: ["p1", "p2", "p1", "", 7], ws2: "nope", ws3: [] },
+        },
+      }).tasksSidebar,
+    ).toEqual({ hidden: ["focus", "all"], pinned: { ws1: ["p1", "p2"] } });
+    expect(sanitizePreferences({ tasksSidebar: "nope" }).tasksSidebar).toEqual({
+      hidden: [],
+      pinned: {},
     });
   });
 

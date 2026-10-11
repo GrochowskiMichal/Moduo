@@ -3,6 +3,7 @@
 // links (dashboard widget rows, contact-hub rollups, note /task chips) land on
 // the right task instead of whatever the page last showed.
 
+import { findSigilWords } from "../spine/grammar";
 import type { Bucket, Task } from "./model";
 
 export type TasksSearch = {
@@ -15,7 +16,8 @@ export function validateTasksSearch(search: Record<string, unknown>): TasksSearc
 }
 
 // ── inbound-target resolution ────────────────────────────────────────────────
-// Pure: an inbound `?id=` is a task id (select it, scoped to its bucket), a
+// Pure: an inbound `?id=` is a task id (select it, scoped to its bucket — or
+// All when that bucket isn't one you can see), a
 // bucket id (a `project` deep link — scope to it), or unknown/stale (degrade
 // to the default selection, never crash). The scope value is the plan view's
 // bucket-scope selection ("inbox" is the alias the rail uses for the system
@@ -26,6 +28,22 @@ export type TasksDeepLinkTarget =
   | { kind: "bucket"; scope: string }
   | { kind: "none" };
 
+/**
+ * A handle deep link (`?id=MOD-142`, RF-1) resolved against the loaded tasks:
+ * the task whose number it names under the workspace's current key, or null
+ * (not loaded, an old key, someone else's: the server answers those).
+ */
+export function taskIdForHandle(
+  handle: string,
+  tasks: ReadonlyArray<Pick<Task, "id" | "number">>,
+  taskKey: string | null,
+): string | null {
+  const m = /^([A-Za-z]{2,5})-(\d{1,9})$/.exec(handle.trim());
+  if (!m || !taskKey || m[1].toUpperCase() !== taskKey.toUpperCase()) return null;
+  const number = Number(m[2]);
+  return tasks.find((t) => t.number === number)?.id ?? null;
+}
+
 export function resolveTasksDeepLink(
   id: string,
   ctx: {
@@ -34,11 +52,139 @@ export function resolveTasksDeepLink(
     inboxId: string | null;
   },
 ): TasksDeepLinkTarget {
-  const scopeFor = (bucketId: string) => (bucketId === ctx.inboxId ? "inbox" : bucketId);
+  // A task in a project you can't see (it was assigned to you there) opens in
+  // All, which lists it; scoping to that project would bounce to Inbox and
+  // select another task (TV-P0, AC1.10).
+  const scopeFor = (bucketId: string) =>
+    bucketId === ctx.inboxId
+      ? "inbox"
+      : ctx.buckets.some((b) => b.id === bucketId)
+        ? bucketId
+        : "all";
   const task = ctx.tasks.find((t) => t.id === id);
   if (task) return { kind: "task", taskId: task.id, scope: scopeFor(task.bucketId) };
   if (id === ctx.inboxId || ctx.buckets.some((b) => b.id === id)) {
     return { kind: "bucket", scope: scopeFor(id) };
   }
   return { kind: "none" };
+}
+
+// ── Live search (`/`, tasks-v2 §7, U2-4) ────────────────────────────────────
+
+const ENTITIES: Record<string, string> = {
+  "&amp;": "&",
+  "&lt;": "<",
+  "&gt;": ">",
+  "&quot;": '"',
+  "&#39;": "'",
+  "&nbsp;": " ",
+};
+
+/** A description's text, lower-cased, cached by its source (they're long and
+ *  searched on every keystroke). */
+const textCache = new Map<string, string>();
+
+/**
+ * The words a description shows: the editor stores HTML (`<p dir="ltr"><span
+ * style="white-space: pre-wrap;">…`), so its tags and attributes are dropped
+ * and entities decoded; otherwise "pre" or "span" would match every task with
+ * a description (TV-U2 review). Plain text is read as it is.
+ */
+export function descriptionText(description: string | null | undefined): string {
+  if (!description) return "";
+  const cached = textCache.get(description);
+  if (cached !== undefined) return cached;
+  const text = (
+    /^\s*</.test(description)
+      ? description
+          // A reference's stored text is never searchable: an older chip kept
+          // a title the reader may not be allowed to see (RF-1).
+          .replace(/<span\b[^>]*\bdata-lexical-entity-ref\b[^>]*>[^<]*<\/span>/g, " ")
+          .replace(/<[^>]*>/g, " ")
+          .replace(/&[a-z#0-9]+;/gi, (m) => ENTITIES[m.toLowerCase()] ?? m)
+      : description
+  ).toLowerCase();
+  if (textCache.size > 2000) textCache.clear();
+  textCache.set(description, text);
+  return text;
+}
+
+/**
+ * Whether a task matches the search box: every word of the query appears in
+ * its title or the text of its description, ignoring case. An empty query
+ * matches everything.
+ */
+export function taskMatchesQuery(
+  task: Pick<Task, "title" | "description">,
+  query: string,
+): boolean {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return true;
+  const haystack = `${task.title.toLowerCase()}\n${descriptionText(task.description)}`;
+  return words.every((word) => haystack.includes(word));
+}
+
+/** What a `#tag` or `@name` in the search box became. */
+export type SearchToken = { dimension: "tag" | "assignee"; value: string };
+
+export type SearchTokenContext = {
+  tags: ReadonlyArray<{ id: string; name: string }>;
+  /** Members in picker order; the current user is named "Me" there. */
+  people: ReadonlyArray<{ userId: string; name: string; isMe?: boolean }>;
+};
+
+/** One name, by exact match (ignoring case) or else a single prefix match. */
+function resolveName<T>(
+  word: string,
+  items: readonly T[],
+  namesOf: (item: T) => string[],
+): T | null {
+  const w = word.toLowerCase();
+  const exact = items.filter((item) => namesOf(item).some((n) => n.toLowerCase() === w));
+  if (exact.length === 1) return exact[0] ?? null;
+  if (exact.length > 1) return null;
+  const prefixed = items.filter((item) => namesOf(item).some((n) => n.toLowerCase().startsWith(w)));
+  return prefixed.length === 1 ? (prefixed[0] ?? null) : null;
+}
+
+/**
+ * Turns finished `#tag` and `@name` words in the search box into filter
+ * values (U2-4). A word is finished once a space follows it, or on Enter
+ * (`final`), so `#des` doesn't jump to a filter while you're still typing
+ * `#design`. `@me` is you; a person matches by their whole name or first
+ * name. A word that matches nothing, or more than one tag or person, stays
+ * in the query as text (`#123` and `C#` stay text unless a tag has that name).
+ */
+export function takeSearchTokens(
+  query: string,
+  ctx: SearchTokenContext,
+  final = false,
+): { query: string; tokens: SearchToken[] } {
+  const tokens: SearchToken[] = [];
+  // The app's one tokenizer (spine/grammar.ts, RF-1): the same `#` and `@`
+  // words capture and prose read.
+  const words = findSigilWords(query, { sigils: ["#", "@"], final });
+  let rest = "";
+  let last = 0;
+  for (const w of words) {
+    let value: SearchToken | null = null;
+    if (w.sigil === "#") {
+      const tag = resolveName(w.word, ctx.tags, (t) => [t.name]);
+      if (tag) value = { dimension: "tag", value: tag.id };
+    } else {
+      const person = resolveName(w.word, ctx.people, (p) =>
+        p.isMe ? ["me"] : [p.name, p.name.split(/\s+/)[0] ?? p.name],
+      );
+      if (person) value = { dimension: "assignee", value: person.userId };
+    }
+    if (!value) continue;
+    tokens.push(value);
+    rest += query.slice(last, w.start);
+    last = w.end;
+  }
+  rest += query.slice(last);
+  if (final) rest += " ";
+  if (tokens.length === 0) return { query, tokens };
+  const cleaned = rest.replace(/\s{2,}/g, " ").replace(/^\s+/, "");
+  return { query: final ? cleaned.trimEnd() : cleaned, tokens };
 }

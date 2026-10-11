@@ -1,10 +1,12 @@
 // The detail panel's "Comments & activity" feed (tasks-v2 §9): comments and the
 // quiet activity trail in one list, oldest first, so the composer sits under the
-// latest thing said or done. Creation leads it (it logs no activity row, module
-// contract §3). Long histories fold their older items behind "Show N earlier".
+// latest thing said or done. Creation leads it: the `tasks.create` row since
+// TV-D8 (it names who, an agent's key included), else the task row's own
+// creator and time. Long histories fold their older items behind "Show N earlier".
 // Pure.
 
 import type { SpineComment } from "@/lib/runtime.types";
+import { dayOffset, formatDate, formatTime } from "@/lib/time-format";
 import { isTrailEntry } from "./activity";
 import type { ActivityEntry, Task } from "./model";
 
@@ -22,9 +24,10 @@ export function buildTaskFeed(input: {
   comments: SpineComment[];
 }): FeedItem[] {
   const { task, activity, comments } = input;
+  const createEntry = activity.find((e) => e.op === "tasks.create");
   const items: FeedItem[] = [
     ...activity
-      .filter(isTrailEntry)
+      .filter((entry) => isTrailEntry(entry) && entry !== createEntry)
       .map((entry): FeedItem => ({ kind: "activity", id: entry.id, at: entry.createdAt, entry })),
     ...comments
       .filter((c) => !c.deletedAt)
@@ -38,12 +41,14 @@ export function buildTaskFeed(input: {
       ),
   ];
   items.sort((a, b) => Date.parse(a.at) - Date.parse(b.at) || a.id.localeCompare(b.id));
-  const created: FeedItem = {
-    kind: "created",
-    id: `created:${task.id}`,
-    at: task.createdAt,
-    actorId: task.creatorUnknown || !task.creatorId ? null : task.creatorId,
-  };
+  const created: FeedItem = createEntry
+    ? { kind: "activity", id: createEntry.id, at: createEntry.createdAt, entry: createEntry }
+    : {
+        kind: "created",
+        id: `created:${task.id}`,
+        at: task.createdAt,
+        actorId: task.creatorUnknown || !task.creatorId ? null : task.creatorId,
+      };
   return [created, ...items];
 }
 
@@ -63,24 +68,8 @@ export function foldFeed(
   return { lead, hidden: body.length - visible, rest: body.slice(body.length - visible) };
 }
 
-const FEED_TIME = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
-const FEED_DAY = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
-const FEED_DAY_YEAR = new Intl.DateTimeFormat(undefined, {
-  month: "short",
-  day: "numeric",
-  year: "numeric",
-});
-
 /** The feed's quiet time: "7:20 PM" today, "Oct 6" this year, "Oct 6, 2025" before. */
 export function feedTime(iso: string, now: Date = new Date()): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  if (
-    d.getFullYear() === now.getFullYear() &&
-    d.getMonth() === now.getMonth() &&
-    d.getDate() === now.getDate()
-  ) {
-    return FEED_TIME.format(d);
-  }
-  return d.getFullYear() === now.getFullYear() ? FEED_DAY.format(d) : FEED_DAY_YEAR.format(d);
+  if (dayOffset(iso, now) === 0) return formatTime(iso);
+  return formatDate(iso, now);
 }

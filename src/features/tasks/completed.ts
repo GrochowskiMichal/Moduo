@@ -14,15 +14,15 @@ export type CompletedMode = (typeof COMPLETED_MODES)[number];
 /** "7 days" keeps the tasks completed within this many days. */
 export const COMPLETED_WINDOW_DAYS = 7;
 
-type CompletedTask = Pick<Task, "id" | "status" | "updatedAt">;
+type CompletedTask = Pick<Task, "id" | "status" | "updatedAt"> & Pick<Partial<Task>, "completedAt">;
 
 /**
- * Whether a done task is recent enough for "7 days". Completion time isn't
- * stored, so a done task's last update stands in for it: a done task is
- * rarely edited after it's checked off (and the server stamps `updated_at`).
+ * Whether a done task is recent enough for "7 days": when it was finished
+ * (`completedAt`, kept by the server since TV-D9), else its last update (a
+ * row read before TV-D9).
  */
 export function completedWithin(task: CompletedTask, now: Date, days: number): boolean {
-  const at = new Date(task.updatedAt).getTime();
+  const at = new Date(task.completedAt ?? task.updatedAt).getTime();
   if (Number.isNaN(at)) return false;
   return now.getTime() - at <= days * 86_400_000;
 }

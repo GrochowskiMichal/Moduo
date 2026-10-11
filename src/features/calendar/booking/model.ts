@@ -61,7 +61,17 @@ export function questionsFromJson(raw: unknown): GuestQuestion[] {
   return out;
 }
 
+/**
+ * The busy list's pseudo-calendar for work sessions from Tasks (TV-D10,
+ * default d): with it, the host's scheduled sessions block slots. Guests see
+ * only that a time is taken, never the task.
+ */
+export const TASKS_BUSY_ID = "tasks";
+
+/** A new link's busy list: Moduo's calendar and your work sessions. */
+export const DEFAULT_BUSY_IDS: readonly string[] = ["moduo", TASKS_BUSY_ID];
+
 export function busyIdsFromJson(raw: unknown): string[] {
-  if (!Array.isArray(raw)) return ["moduo"];
+  if (!Array.isArray(raw)) return [...DEFAULT_BUSY_IDS];
   return raw.filter((id): id is string => typeof id === "string" && id.length > 0);
 }

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button } from "./button";
 import { FilterBar, FilterButton, FilterMenu } from "./filter-bar";
 import { type FilterCondition, type FilterDimension, matchesFilters } from "./filter-model";
+import { AtThreeDensities } from "./kit-densities";
 import { Toolbar } from "./toolbar";
 
 const meta: Meta<typeof FilterBar> = {
@@ -57,7 +58,7 @@ const DIMENSIONS: FilterDimension[] = [
       { value: "todo", label: "To do" },
       { value: "doing", label: "In progress" },
       { value: "done", label: "Done" },
-      { value: "archived", label: "Archived" },
+      { value: "wont_do", label: "Won’t do" },
     ],
   },
   {
@@ -140,7 +141,7 @@ export const Default: Story = {
 export const Operators: Story = {
   render: () => {
     const [value, setValue] = useState<FilterCondition[]>([
-      { dimension: "status", operator: "is_not", values: ["done", "archived"] },
+      { dimension: "status", operator: "is_not", values: ["done", "wont_do"] },
       { dimension: "blocked", operator: "is", values: ["yes"] },
       { dimension: "tag", operator: "any_of", values: ["ui", "fix", "docs"] },
     ]);
@@ -162,6 +163,27 @@ export const MenuOpen: Story = {
           </Button>
         </FilterMenu>
       </div>
+    );
+  },
+};
+
+/** The chip row at the three density steps: chips sit on the small control rung. */
+export const Densities: Story = {
+  render: () => {
+    const [value, setValue] = useState<FilterCondition[]>([
+      { dimension: "assignee", operator: "is", values: ["me"] },
+      { dimension: "tag", operator: "any_of", values: ["ui", "fix"] },
+    ]);
+    return (
+      <AtThreeDensities direction="column">
+        <FilterBar
+          dimensions={DIMENSIONS}
+          value={value}
+          onValueChange={setValue}
+          matchCount={3}
+          totalCount={9}
+        />
+      </AtThreeDensities>
     );
   },
 };

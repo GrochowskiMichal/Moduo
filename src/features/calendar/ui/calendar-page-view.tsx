@@ -16,12 +16,9 @@ import {
 } from "@dnd-kit/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-
+import { dispatchOpenCapture } from "../../../components/app/capture-shell";
 import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell";
-import {
-  RightPanelSwitcher,
-  type RightPanelVariant,
-} from "../../../components/app/right-panel-switcher";
+import { RightPanel } from "../../../components/app/right-panel";
 import { truncationNotice } from "../../../components/app/truncation-notice";
 import { Button } from "../../../components/ui/button";
 import {
@@ -32,6 +29,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../../../components/ui/dialog";
+import { type CaptureSource, useCaptureSource } from "../../../lib/capture-source";
 import { asDragPayload } from "../../../lib/drag-payload";
 import { ENTITY_OPEN_EVENT, takeEntityOpenIntent } from "../../../lib/entity-open";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
@@ -39,7 +37,6 @@ import { UNDO_TOAST_MS } from "../../../lib/undo-toast";
 import { dispatchLayoutPanelsSet, readFeaturePanelState } from "../../layout/panel-events";
 import { LinkedNotesPanel } from "../../notes/ui/linked-notes-panel";
 import type { TasksModuleApi } from "../../tasks/hooks/use-tasks-module";
-import { CaptureModal } from "../../tasks/ui/capture-modal";
 import { TaskDetailPanel } from "../../tasks/ui/task-detail-panel";
 import { accountSourceLabel, resolveAccountHues, syncAgeLabel, visibleEvents } from "../accounts";
 import { cleanupCredentialsForRemoval } from "../caldav-connect";
@@ -366,7 +363,6 @@ export function CalendarPageView({
     [userId, workspaceId],
   );
   const [detailTarget, setDetailTarget] = useState<DetailTarget>(null);
-  const [captureOpen, setCaptureOpen] = useState(false);
 
   const openDetail = useCallback(
     (target: NonNullable<DetailTarget>) => {
@@ -805,8 +801,9 @@ export function CalendarPageView({
       markWorked(taskId, false);
       toast("Removed from the calendar", {
         duration: UNDO_TOAST_MS,
-        // Re-schedule from cleared state uses patchTask (the op needs an
-        // existing schedule to move) — an undo restore, not a fresh intent.
+        // Undo puts the time back through patchTask, which since TV-P0 sends
+        // a scheduled time through the reschedule op: the trail shows the
+        // unschedule and the restore, both true.
         action: { label: "Undo", onClick: () => api.patchTask(taskId, { scheduledAt: fromIso }) },
       });
     },
@@ -880,99 +877,98 @@ export function CalendarPageView({
       : null;
   const detailEvent =
     detailTarget?.type === "event" ? (eventsById.get(detailTarget.id) ?? null) : null;
+  // An open event rides along on a capture as "From: …" (tasks-v3 call 93).
+  const detailEventId = detailEvent?.id ?? null;
+  const detailEventTitle = detailEvent ? detailEvent.title || "Event" : null;
+  const captureSource = useMemo<CaptureSource | null>(
+    () =>
+      detailEventId && detailEventTitle
+        ? { kind: "event", label: detailEventTitle, ref: { type: "event", id: detailEventId } }
+        : null,
+    [detailEventId, detailEventTitle],
+  );
+  useCaptureSource(captureSource);
 
-  const panelVariants = useMemo<RightPanelVariant[]>(
-    () => [
-      {
-        id: "tasks",
-        label: "Tasks",
-        render: () => (
-          <CalendarTasksPanel
-            api={api}
-            onOpenTask={(taskId) => openDetail({ type: "task", id: taskId })}
-            onRequestCapture={() => setCaptureOpen(true)}
-            review={
-              reviewMode
-                ? {
-                    items: strip,
-                    onMove: (taskIds) => {
-                      const byId = new Map(strip.map((i) => [i.taskId, i]));
-                      rollForward(
-                        taskIds.map((id) => byId.get(id)).filter((i): i is StripItem => Boolean(i)),
-                      );
-                    },
-                    onRemove: onTriageRemove,
-                    onClose: () => setReviewMode(false),
-                  }
-                : null
-            }
-          />
-        ),
-      },
-      {
-        id: "detail",
-        label: "Detail",
-        render: () =>
-          detailEvent ? (
-            <EventDetailPanel
-              runtime={runtime}
-              workspaceId={workspaceId}
-              currentUserId={userId}
-              event={detailEvent}
-              accounts={calendar.accounts}
-              canEdit={calendar.canEdit}
-              onPatch={(eventId, patch) => void calendar.updateEvent(eventId, patch)}
-              onDeleteRequest={setDeleteEventId}
-              onClose={() => setPanelVariant("tasks")}
-            />
-          ) : detailTask ? (
-            <TaskDetailPanel
-              task={detailTask}
-              buckets={api.buckets}
-              inbox={api.inbox}
-              canEdit={api.canEdit}
-              onRequestCapture={() => setCaptureOpen(true)}
-              onSelectTask={(id) => setDetailTarget({ type: "task", id })}
-              api={api}
-              runtime={runtime}
-              workspaceId={workspaceId}
-            />
-          ) : (
-            <div className="grid h-full place-content-center px-3 text-center">
-              <span className="text-sm text-muted-foreground">
-                Select something on the calendar.
-              </span>
-            </div>
-          ),
-      },
-      {
-        // "Notes" rail (NO-7b, AC8): the notes linked to the selected event/task,
-        // plus New-linked-note. Focus follows the same detail selection.
-        id: "notes",
-        label: "Notes",
-        render: () => (
-          <LinkedNotesPanel
+  // The registered views (features/calendar/panel-views.ts), unchanged from the
+  // old tabs: the menu lists Detail and Notes, then Tasks below the hairline.
+  const panelViews = useMemo(
+    () => ({
+      tasks: () => (
+        <CalendarTasksPanel
+          api={api}
+          onOpenTask={(taskId) => openDetail({ type: "task", id: taskId })}
+          onRequestCapture={() => dispatchOpenCapture()}
+          review={
+            reviewMode
+              ? {
+                  items: strip,
+                  onMove: (taskIds) => {
+                    const byId = new Map(strip.map((i) => [i.taskId, i]));
+                    rollForward(
+                      taskIds.map((id) => byId.get(id)).filter((i): i is StripItem => Boolean(i)),
+                    );
+                  },
+                  onRemove: onTriageRemove,
+                  onClose: () => setReviewMode(false),
+                }
+              : null
+          }
+        />
+      ),
+      detail: () =>
+        detailEvent ? (
+          <EventDetailPanel
             runtime={runtime}
             workspaceId={workspaceId}
-            focus={detailTarget ? { type: detailTarget.type, id: detailTarget.id } : null}
-            focusLabel={detailEvent?.title ?? detailTask?.title ?? undefined}
-            focusIcon={
-              detailTarget?.type === "event"
-                ? "calendar"
-                : detailTarget?.type === "task"
-                  ? "check-square"
-                  : null
-            }
+            currentUserId={userId}
+            event={detailEvent}
+            accounts={calendar.accounts}
             canEdit={calendar.canEdit}
-            onOpenNote={(id) =>
-              window.dispatchEvent(
-                new CustomEvent(ENTITY_OPEN_EVENT, { detail: { type: "note", id } }),
-              )
-            }
+            onPatch={(eventId, patch) => void calendar.updateEvent(eventId, patch)}
+            onDeleteRequest={setDeleteEventId}
+            onClose={() => setPanelVariant("tasks")}
           />
+        ) : detailTask ? (
+          <TaskDetailPanel
+            task={detailTask}
+            buckets={api.buckets}
+            inbox={api.inbox}
+            canEdit={api.canEdit}
+            onRequestCapture={() => dispatchOpenCapture()}
+            onSelectTask={(id) => setDetailTarget({ type: "task", id })}
+            api={api}
+            runtime={runtime}
+            workspaceId={workspaceId}
+          />
+        ) : (
+          <div className="grid h-full place-content-center px-3 text-center">
+            <span className="text-sm text-muted-foreground">Select something on the calendar.</span>
+          </div>
         ),
-      },
-    ],
+      // "Notes" rail (NO-7b, AC8): the notes linked to the selected event/task,
+      // plus New-linked-note. Focus follows the same detail selection.
+      notes: () => (
+        <LinkedNotesPanel
+          runtime={runtime}
+          workspaceId={workspaceId}
+          focus={detailTarget ? { type: detailTarget.type, id: detailTarget.id } : null}
+          focusLabel={detailEvent?.title ?? detailTask?.title ?? undefined}
+          focusIcon={
+            detailTarget?.type === "event"
+              ? "calendar"
+              : detailTarget?.type === "task"
+                ? "check-square"
+                : null
+          }
+          canEdit={calendar.canEdit}
+          onOpenNote={(id) =>
+            window.dispatchEvent(
+              new CustomEvent(ENTITY_OPEN_EVENT, { detail: { type: "note", id } }),
+            )
+          }
+        />
+      ),
+    }),
     [
       api,
       calendar,
@@ -1047,8 +1043,9 @@ export function CalendarPageView({
           />
         }
         right={
-          <RightPanelSwitcher
-            variants={panelVariants}
+          <RightPanel
+            module="calendar"
+            views={panelViews}
             activeId={panelVariant}
             onChange={(id) => setPanelVariant(id as PanelVariantId)}
           />
@@ -1180,15 +1177,6 @@ export function CalendarPageView({
           onClose={() => setTaskPopover(null)}
         />
       ) : null}
-
-      <CaptureModal
-        open={captureOpen}
-        onOpenChange={setCaptureOpen}
-        buckets={api.buckets}
-        inbox={api.inbox}
-        defaultBucketId={api.inbox?.id ?? null}
-        onCreate={api.createTask}
-      />
 
       <Dialog open={deleteEvent !== null} onOpenChange={(open) => !open && setDeleteEventId(null)}>
         <DialogContent className="max-w-sm">

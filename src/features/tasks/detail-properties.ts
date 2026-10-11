@@ -4,7 +4,7 @@
 // ("+ Energy · Scheduled · Time · Repeat"); picking one shows its row, empty,
 // with its editor open. Pure.
 
-import type { Task } from "./model";
+import { estimateOf, type Task } from "./model";
 
 export type OptionalProperty = "energy" | "scheduled" | "time" | "repeat";
 
@@ -20,7 +20,12 @@ export const OPTIONAL_PROPERTY_LABELS: Record<OptionalProperty, string> = {
 
 type PropertyFields = Pick<
   Task,
-  "energyLevel" | "scheduledAt" | "durationMinutes" | "timeSpentSeconds" | "recurrence"
+  | "energyLevel"
+  | "scheduledAt"
+  | "durationMinutes"
+  | "estimateMinutes"
+  | "timeSpentSeconds"
+  | "recurrence"
 >;
 
 /** Whether the task has a value for this property. Time = an estimate or tracked time. */
@@ -31,7 +36,7 @@ export function isPropertySet(task: PropertyFields, property: OptionalProperty):
     case "scheduled":
       return task.scheduledAt != null;
     case "time":
-      return task.durationMinutes != null || task.timeSpentSeconds > 0;
+      return estimateOf(task) != null || task.timeSpentSeconds > 0;
     case "repeat":
       return task.recurrence != null;
   }

@@ -4,14 +4,10 @@ import type * as React from "react";
 
 import { cn } from "@/lib/utils";
 import { eyebrowVariants } from "./eyebrow";
+import { CONTEXT_MENU_SCROLL, FLOATING_SURFACE } from "./surface";
 
-const contentBase = cn(
-  "min-w-[8rem] overflow-hidden rounded-md border border-border bg-popover p-1 text-popover-foreground",
-  "data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2",
-  "data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
-  "data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95",
-  "data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",
-);
+// The one floating surface (surface.ts): grows from where it was opened.
+const contentBase = cn(FLOATING_SURFACE, CONTEXT_MENU_SCROLL, "min-w-[8rem] p-1");
 
 const itemBase = cn(
   "relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-popover-foreground",

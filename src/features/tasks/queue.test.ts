@@ -97,6 +97,12 @@ describe("queueTasks + openQueueCount", () => {
     // The rail counts open ones only.
     expect(openQueueCount(queued)).toBe(2);
   });
+
+  it("drops a kept row once its task is reopened (a teammate, live)", () => {
+    const tasks = [task("t1"), task("t2")];
+    const queued = queueTasks([entry(ME, "t1", "1")], [entry(ME, "t2", "2")], tasks);
+    expect(queued.map((t) => t.id)).toEqual(["t1"]);
+  });
 });
 
 describe("withOwnQueue / withoutTask", () => {

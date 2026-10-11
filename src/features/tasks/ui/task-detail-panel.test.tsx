@@ -96,6 +96,10 @@ function api(t: Task, over: Partial<TasksModuleApi> = {}): TasksModuleApi {
     tagsByTask: new Map(),
     subtasksByParent: new Map(),
     subtaskProgressByTask: new Map(),
+    statuses: [],
+    statusById: new Map(),
+    statusesForBucket: () => [],
+    setTaskStatus: rs.fn(),
     blockersByTask: new Map(),
     dependentsByTask: new Map(),
     taskRelations: [],
@@ -213,7 +217,7 @@ describe("the comp layout and property rule C (U3-1)", () => {
     // Checkbox beside a wrapping title, no chevrons on the values.
     expect(screen.getByRole("button", { name: "Mark as done" })).toBeTruthy();
     expect(screen.getByRole("textbox", { name: "Task title" }).tagName).toBe("TEXTAREA");
-    expect(screen.getByRole("button", { name: "Status: Todo" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Status: To do" })).toBeTruthy();
     // Values are PropertyValues even under a Radix trigger, and none has a chevron.
     expect(document.querySelectorAll("[data-slot=property-value]").length).toBeGreaterThanOrEqual(
       5,
@@ -259,7 +263,7 @@ describe("the comp layout and property rule C (U3-1)", () => {
     expect(screen.queryByRole("button", { name: "Add energy" })).toBeNull();
     expect(screen.queryByRole("button", { name: "More actions" })).toBeNull();
     expect(
-      (screen.getByRole("button", { name: "Status: Todo" }) as HTMLButtonElement).disabled,
+      (screen.getByRole("button", { name: "Status: To do" }) as HTMLButtonElement).disabled,
     ).toBe(true);
   });
 });
@@ -399,7 +403,8 @@ describe("validator round", () => {
     );
     fireEvent.change(estimate, { target: { value: "5h" } });
     fireEvent.keyDown(estimate, { key: "Enter" });
-    expect(a.patchTask).toHaveBeenCalledWith("t1", { durationMinutes: 300 });
+    // TV-D10: the estimate is its own field.
+    expect(a.patchTask).toHaveBeenCalledWith("t1", { estimateMinutes: 300 });
     expect(a.setTimeSpent).not.toHaveBeenCalled();
   });
 
@@ -433,7 +438,8 @@ describe("validator round", () => {
     fireEvent.change(estimate, { target: { value: "5h" } });
     fireEvent.keyDown(estimate, { key: "Enter" });
     expect(a.setTimeSpent).toHaveBeenCalledTimes(1);
-    expect(a.patchTask).toHaveBeenCalledWith("t1", { durationMinutes: 300 });
+    // TV-D10: the estimate is its own field.
+    expect(a.patchTask).toHaveBeenCalledWith("t1", { estimateMinutes: 300 });
   });
 
   it("reads a task's comments once when it opens", async () => {

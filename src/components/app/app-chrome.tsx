@@ -14,6 +14,7 @@ import {
 } from "../../features/dashboard/edit-mode-events";
 import { PageDots } from "../../features/dashboard/ui/page-dots";
 import { EmailDueWebSweep } from "../../features/email/hooks/use-email-due-web-sweep";
+import { useFocusTimeSaver } from "../../features/focus/use-focus-time-saver";
 import {
   dispatchLayoutPanelsApply,
   type FeatureLayoutKey,
@@ -26,8 +27,10 @@ import {
 import { PROFILE_UPDATED_EVENT } from "../../features/profile/profile-storage";
 import { dispatchOpenSettings } from "../../features/settings/settings-events";
 import { SettingsModal } from "../../features/settings/settings-modal";
+import { ReferencesProvider } from "../../features/spine/references/provider";
 import { UpdateOnLaunch } from "../../features/updater/update-on-launch";
 import { ENTITY_OPEN_EVENT, entityOpenTarget, markEntityOpenIntent } from "../../lib/entity-open";
+import { initialsOf } from "../../lib/initials";
 import {
   formatShortcut,
   SHORTCUTS,
@@ -47,15 +50,17 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { UserMenu } from "../user-menu";
 import { WorkspaceSwitcher } from "../workspace-switcher";
 import { AnalyticsConsentPrompt } from "./analytics-consent-prompt";
-import { baseModulesNavItems } from "./app-chrome-constants";
+import { visibleModuleNavItems } from "./app-chrome-constants";
 import type { ModuleNavItem } from "./app-chrome-types";
+import { CaptureShell } from "./capture-shell";
 import { dispatchCreateNew } from "./create-events";
 import { FocusSessionChip } from "./focus-session-chip";
 import { GlobalBottomBar } from "./global-bottom-bar";
-import { GlobalCaptureBar } from "./global-capture-bar";
 import { GlobalCommandPalette } from "./global-command-palette";
 import { GlobalShortcutsDialog } from "./global-shortcuts-dialog";
 import { HelpMenu } from "./help-menu";
+import { MinBuildBanner } from "./min-build-banner";
+import { TasksSyncStatus } from "./sync-status";
 import { useUnknownRouteRedirect } from "./use-unknown-route-redirect";
 
 type ModuleTabProps = {
@@ -103,6 +108,8 @@ function ModuleTab({ item, active, index, onClick, badgeCount = 0 }: ModuleTabPr
 }
 
 export function AppChrome({ profileInitial }: { profileInitial: string }) {
+  // Focus time saves from any page (TV-P0): the engine's sink lives here.
+  useFocusTimeSaver();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const navigate = useNavigate();
   useGlobalShortcuts();
@@ -253,23 +260,8 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   }, [navigate]);
 
   const modulesNavItems = useMemo(
-    () =>
-      baseModulesNavItems.filter((tab) => {
-        // PERM-1: each module tab follows its own View permission.
-        if (tab.module === "notes") return modulePermissions.notes !== "none";
-        if (tab.module === "tasks") return modulePermissions.tasks !== "none";
-        if (tab.module === "calendar") return modulePermissions.calendar !== "none";
-        if (tab.module === "contacts") return modulePermissions.contacts !== "none";
-        if (tab.module === "chat") return modulePermissions.chat !== "none";
-        return true;
-      }),
-    [
-      modulePermissions.notes,
-      modulePermissions.tasks,
-      modulePermissions.calendar,
-      modulePermissions.contacts,
-      modulePermissions.chat,
-    ],
+    () => visibleModuleNavItems(modulePermissions),
+    [modulePermissions],
   );
 
   const navHrefs = useMemo(() => modulesNavItems.map((tab) => tab.href), [modulesNavItems]);
@@ -469,10 +461,17 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
     );
   }
 
-  const derivedInitial =
-    displayName?.trim().slice(0, 1).toUpperCase() ||
-    userEmail?.trim().slice(0, 1).toUpperCase() ||
-    profileInitial;
+  // Two initials, like every avatar (Tasks v3 call 43).
+  const derivedInitial = displayName?.trim()
+    ? initialsOf(displayName)
+    : userEmail?.trim()
+      ? initialsOf(
+          userEmail
+            .trim()
+            .split("@")[0]
+            .replace(/[._-]+/g, " "),
+        )
+      : profileInitial;
 
   const toggleLeftPanel = () => {
     if (isSettingsRoute || isHomeRoute) return;
@@ -484,140 +483,155 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   };
 
   return (
-    <div className="flex h-screen min-h-screen flex-col overflow-hidden bg-background">
-      <TrialBanner />
-      <nav
-        aria-label="Workspace navigation"
-        className="relative grid w-full items-center bg-background px-5"
-        style={{
-          zIndex: "var(--z-header)",
-          height: "var(--bar-h)",
-          gridTemplateColumns: "1fr auto 1fr",
-        }}
-      >
-        <div className="flex flex-row items-center justify-start gap-1">
-          <ModuoMark className="h-8 w-8 shrink-0 text-foreground" />
-          <WorkspaceSwitcher
-            onOpenSettings={() => dispatchOpenSettings({ section: "workspace" })}
-          />
-        </div>
-
-        <div className="flex flex-row items-center justify-center gap-1">
-          {modulesNavItems.map((tab, index) => {
-            const active =
-              pathname === tab.href || (tab.href !== "/" && pathname.startsWith(tab.href));
-            return (
-              <ModuleTab
-                key={tab.href}
-                item={tab}
-                active={active}
-                index={index}
-                onClick={() => void navigate({ to: tab.href })}
-                badgeCount={
-                  tab.module === "email" ? emailUnread : tab.module === "chat" ? chatBadge.count : 0
-                }
-              />
-            );
-          })}
-        </div>
-
-        {/* A container, so the Focus timer can shorten itself when this side is narrow. */}
-        <div className="@container flex flex-row items-center justify-end gap-1">
-          {/* DF-21f — web-only email follow-up-due sweep (renders nothing). */}
-          <EmailDueWebSweep />
-          <UpdateOnLaunch />
-          {/* Global, so top bar (call 96): the running Focus timer, then Help. */}
-          <FocusSessionChip />
-          <HelpMenu />
-          <NotificationCenter />
-          <UserMenu
-            avatarDataUrl={avatarDataUrl}
-            profileInitial={derivedInitial}
-            onOpenSettings={() => dispatchOpenSettings()}
-          />
-        </div>
-      </nav>
-
-      <div className="min-h-0 flex-1 overflow-hidden">
-        <Outlet />
-      </div>
-
-      <div
-        className="relative flex flex-row items-center bg-background px-5"
-        style={{ height: "var(--bar-h)" }}
-      >
-        <div className="flex flex-1 flex-row items-center justify-start gap-2">
-          {isHomeRoute ? (
-            // Home has no left panel — this slot holds the dashboard page dots.
-            <PageDots
-              count={dashboardPager.count}
-              activeIndex={dashboardPager.activeIndex}
-              onSelect={(index) => dispatchDashboardPageAction({ type: "goto", index })}
-              editing={dashboardEditing}
-              onAddPage={() => dispatchDashboardPageAction({ type: "add" })}
-              onRemovePage={() => dispatchDashboardPageAction({ type: "remove" })}
+    // One reference store for the whole shell (RF-1): pages, the panel, the bell.
+    <ReferencesProvider>
+      <div className="flex h-screen min-h-screen flex-col overflow-hidden bg-background">
+        <TrialBanner />
+        <MinBuildBanner />
+        <nav
+          aria-label="Workspace navigation"
+          className="relative grid w-full items-center bg-background px-5"
+          style={{
+            zIndex: "var(--z-header)",
+            height: "var(--bar-h)",
+            gridTemplateColumns: "1fr auto 1fr",
+          }}
+        >
+          <div className="flex flex-row items-center justify-start gap-1">
+            <ModuoMark className="h-8 w-8 shrink-0 text-foreground" />
+            <WorkspaceSwitcher
+              onOpenSettings={() => dispatchOpenSettings({ section: "workspace" })}
             />
-          ) : (
-            <Tooltip>
-              <TooltipTrigger
-                className="flex h-8 w-8 items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-                onClick={toggleLeftPanel}
-                aria-label={currentPanels.left ? "Collapse left panel" : "Expand left panel"}
-              >
-                {currentPanels.left ? <ChevronsLeft size={16} /> : <ChevronsRight size={16} />}
-              </TooltipTrigger>
-              <TooltipContent>
-                {currentPanels.left ? "Collapse left panel" : "Expand left panel"}
-              </TooltipContent>
-            </Tooltip>
-          )}
-        </div>
-        <GlobalBottomBar />
-        <div className="flex flex-1 flex-row items-center justify-end">
-          {isHomeRoute ? (
-            // Home has no side panels — this slot (where the right panel toggle
-            // sits elsewhere) holds the dashboard's Edit/Done control instead.
-            dashboardEditing ? (
-              <div className="flex items-center gap-1.5">
-                <IconButton
-                  icon={Plus}
-                  label="Add widget"
-                  size="md"
-                  onClick={() => dispatchDashboardOpenGallery()}
+          </div>
+
+          <div className="flex flex-row items-center justify-center gap-1">
+            {modulesNavItems.map((tab, index) => {
+              const active =
+                pathname === tab.href || (tab.href !== "/" && pathname.startsWith(tab.href));
+              return (
+                <ModuleTab
+                  key={tab.href}
+                  item={tab}
+                  active={active}
+                  index={index}
+                  onClick={() => void navigate({ to: tab.href })}
+                  badgeCount={
+                    tab.module === "email"
+                      ? emailUnread
+                      : tab.module === "chat"
+                        ? chatBadge.count
+                        : 0
+                  }
                 />
-                <Button variant="secondary" size="sm" onClick={() => dispatchDashboardToggleEdit()}>
-                  Done
-                </Button>
-              </div>
-            ) : (
-              <IconButton
-                icon={Pencil}
-                label="Edit dashboard"
-                size="md"
-                onClick={() => dispatchDashboardToggleEdit()}
-              />
-            )
-          ) : !isSettingsRoute ? (
-            <Tooltip>
-              <TooltipTrigger
-                className="flex h-8 w-8 items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-                onClick={toggleRightPanel}
-                aria-label={currentPanels.right ? "Collapse right panel" : "Expand right panel"}
-              >
-                {currentPanels.right ? <ChevronsRight size={16} /> : <ChevronsLeft size={16} />}
-              </TooltipTrigger>
-              <TooltipContent>
-                {currentPanels.right ? "Collapse right panel" : "Expand right panel"}
-              </TooltipContent>
-            </Tooltip>
-          ) : null}
+              );
+            })}
+          </div>
+
+          {/* A container, so the Focus timer can shorten itself when this side is narrow. */}
+          <div className="@container flex flex-row items-center justify-end gap-1">
+            {/* DF-21f — web-only email follow-up-due sweep (renders nothing). */}
+            <EmailDueWebSweep />
+            <UpdateOnLaunch />
+            {/* The shared Tasks store for this workspace, held all session, and its
+                quiet sync state: Offline / "2 waiting to sync" (TV-D11a). */}
+            <TasksSyncStatus />
+            {/* Global, so top bar (call 96): the running Focus timer, then Help. */}
+            <FocusSessionChip />
+            <HelpMenu />
+            <NotificationCenter />
+            <UserMenu
+              avatarDataUrl={avatarDataUrl}
+              profileInitial={derivedInitial}
+              onOpenSettings={() => dispatchOpenSettings()}
+            />
+          </div>
+        </nav>
+
+        <div className="min-h-0 flex-1 overflow-hidden">
+          <Outlet />
         </div>
+
+        <div
+          className="relative flex flex-row items-center bg-background px-5"
+          style={{ height: "var(--bar-h)" }}
+        >
+          <div className="flex flex-1 flex-row items-center justify-start gap-2">
+            {isHomeRoute ? (
+              // Home has no left panel — this slot holds the dashboard page dots.
+              <PageDots
+                count={dashboardPager.count}
+                activeIndex={dashboardPager.activeIndex}
+                onSelect={(index) => dispatchDashboardPageAction({ type: "goto", index })}
+                editing={dashboardEditing}
+                onAddPage={() => dispatchDashboardPageAction({ type: "add" })}
+                onRemovePage={() => dispatchDashboardPageAction({ type: "remove" })}
+              />
+            ) : (
+              <Tooltip>
+                <TooltipTrigger
+                  className="flex h-8 w-8 items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                  onClick={toggleLeftPanel}
+                  aria-label={currentPanels.left ? "Collapse left panel" : "Expand left panel"}
+                >
+                  {currentPanels.left ? <ChevronsLeft size={16} /> : <ChevronsRight size={16} />}
+                </TooltipTrigger>
+                <TooltipContent>
+                  {currentPanels.left ? "Collapse left panel" : "Expand left panel"}
+                </TooltipContent>
+              </Tooltip>
+            )}
+          </div>
+          <GlobalBottomBar />
+          <div className="flex flex-1 flex-row items-center justify-end">
+            {isHomeRoute ? (
+              // Home has no side panels — this slot (where the right panel toggle
+              // sits elsewhere) holds the dashboard's Edit/Done control instead.
+              dashboardEditing ? (
+                <div className="flex items-center gap-1.5">
+                  <IconButton
+                    icon={Plus}
+                    label="Add widget"
+                    size="md"
+                    onClick={() => dispatchDashboardOpenGallery()}
+                  />
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => dispatchDashboardToggleEdit()}
+                  >
+                    Done
+                  </Button>
+                </div>
+              ) : (
+                <IconButton
+                  icon={Pencil}
+                  label="Edit dashboard"
+                  size="md"
+                  onClick={() => dispatchDashboardToggleEdit()}
+                />
+              )
+            ) : !isSettingsRoute ? (
+              <Tooltip>
+                <TooltipTrigger
+                  className="flex h-8 w-8 items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                  onClick={toggleRightPanel}
+                  aria-label={currentPanels.right ? "Collapse right panel" : "Expand right panel"}
+                >
+                  {currentPanels.right ? <ChevronsRight size={16} /> : <ChevronsLeft size={16} />}
+                </TooltipTrigger>
+                <TooltipContent>
+                  {currentPanels.right ? "Collapse right panel" : "Expand right panel"}
+                </TooltipContent>
+              </Tooltip>
+            ) : null}
+          </div>
+        </div>
+        <GlobalCommandPalette />
+        <CaptureShell />
+        <GlobalShortcutsDialog />
+        <SettingsModal />
+        <AnalyticsConsentPrompt />
       </div>
-      <GlobalCommandPalette />
-      <GlobalCaptureBar />
-      <GlobalShortcutsDialog />
-      <SettingsModal />
-      <AnalyticsConsentPrompt />
-    </div>
+    </ReferencesProvider>
   );
 }

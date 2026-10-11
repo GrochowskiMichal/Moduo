@@ -9,7 +9,6 @@
 import {
   activityRowSchema,
   attachmentRowSchema,
-  bucketRowSchema,
   calendarAccountRowSchema,
   calendarEventRowSchema,
   commentRowSchema,
@@ -31,11 +30,15 @@ import {
   parsedRelationKind,
   prefsRowSchema,
   requireRow,
-  tagLinkRowSchema,
-  tagRowSchema,
   taskRelationRowSchema,
 } from "@contracts/rows";
-import { normalizeAttachmentStatus, normalizeContentAuthorKind } from "@contracts/vocabularies";
+import {
+  isOpenTask,
+  normalizeAccessChangeResource,
+  normalizeAttachmentStatus,
+  normalizeContentAuthorKind,
+  normalizeTaskStatusCategory,
+} from "@contracts/vocabularies";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import * as Y from "yjs";
 import type { CalendarAccountModel, CalendarEventModel } from "../features/calendar/events";
@@ -62,23 +65,26 @@ import { decodeBase64ToUint8, encodeUint8ToBase64 } from "../features/notes/util
 import type { NotificationItem } from "../features/spine/notifications";
 import { type RecentLinkItem, shapeRecentLinks } from "../features/spine/recent";
 import type { RawLinkSuggestion } from "../features/spine/suggest";
+import { timestampMicros } from "../features/tasks/live";
 import {
   type ActivityEntry,
   type Bucket,
+  type ProjectStatus,
   sanitizeTimeBlocks,
-  type Tag,
-  type TagLink,
   type Task,
   type TaskQueueEntry,
   type TaskRelation,
   type TaskTimeResult,
+  type TimeBlockMap,
   type TrackTimeInput,
 } from "../features/tasks/model";
 import { toMemberPerm, toMemberRole } from "../features/workspaces/workspace-mappers";
 import { clearIgnoredAuthLink, SUPABASE_AUTH_OPTIONS } from "./auth-url";
 import type { EntityLink, EntityRecord } from "./entity-links";
+import { readOnlyFetch } from "./min-build";
 import {
   collectTruncations,
+  PGRST_MAX_ROWS,
   READ_CAPS,
   readPaged,
   TAG_LINKS_SCOPE,
@@ -107,20 +113,52 @@ import type {
   SpineComment,
   UserPreferences,
 } from "./runtime.types";
+import { createReferencePreviews } from "./runtime.web.previews";
+import { createTasksStructure } from "./runtime.web.structure";
+import { deltaCursor } from "./sync/delta-cursor";
+import type {
+  AccessChange,
+  SyncAccessResult,
+  SyncIdsResult,
+  SyncReadInput,
+  SyncReadResult,
+  SyncRows,
+  SyncTableName,
+  TaskSearchResult,
+} from "./sync/types";
+import { handleSearchPattern, handleWithCurrentKey } from "./task-handle";
 import {
+  areaRowToModel,
+  bucketRowToModel,
+  commentMarkRowToModel,
   editableTaskFields,
   isMissingColumnError,
   isMissingFunctionError,
   isMissingTableError,
+  isMissingTvD9FieldError,
+  projectStatusRowToModel,
+  sectionRowToModel,
   sortQueueEntries,
   type TaskFieldPatch,
+  tagLinkRowToModel,
+  tagRowToModel,
+  taskCompletionRowToModel,
+  taskCreateOpInput,
   taskCreateRow,
   taskCreateRowLegacy,
   taskPatchToColumns,
+  taskPatchToOpFields,
   taskQueueRowToModel,
+  taskReminderRowToModel,
   taskRowToModel,
+  taskSessionRowToModel,
   taskTimeAnswerToModel,
   taskTimeTotalsRowToModel,
+  taskWaitingRowToModel,
+  teamMemberRowToModel,
+  teamRowToModel,
+  withFieldFallback,
+  withoutTvD9Fields,
 } from "./task-rows";
 
 // ── Supabase client ────────────────────────────────────────────────────────────
@@ -134,8 +172,11 @@ const SUPABASE_PUBLISHABLE_KEY: string =
 
 // No session ever comes from the URL (login CSRF): see auth-url.ts. The boot
 // scrub of a leftover token fragment runs from main.tsx, before the router.
+// Below the minimum client build every write is refused here (TV-D8); reads and
+// sign-in pass. See lib/min-build.ts.
 export const supabaseClient: SupabaseClient = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: SUPABASE_AUTH_OPTIONS,
+  global: { fetch: readOnlyFetch((...args) => fetch(...args)) },
 });
 
 // ── Boot-time read coalescer (DF-12) ─────────────────────────────────────────────
@@ -347,6 +388,15 @@ export const webCapabilities: RuntimeCapabilities = {
 };
 
 // ── Runtime implementation ────────────────────────────────────────────────────
+
+/** TV-D10's structure reads and ops (runtime.web.structure.ts). */
+const tasksStructure = createTasksStructure(supabaseClient, {
+  userId: async () => (await getAuthedUser())?.id ?? null,
+  upsertBucketLegacy: (bucket) => upsertBucketRow(bucket),
+  deleteProjectLegacy: (workspaceId, projectId) => legacyDeleteBucket(workspaceId, projectId),
+  getTimeBlocksLegacy: (workspaceId) => getWorkspaceTimeBlocks(workspaceId),
+  setTimeBlocksLegacy: (workspaceId, blocks) => setWorkspaceTimeBlocks(workspaceId, blocks),
+});
 
 export const webRuntime: ModuoRuntime = {
   capabilities: webCapabilities,
@@ -652,6 +702,15 @@ export const webRuntime: ModuoRuntime = {
         .single();
       if (error) throw new Error(error.message);
       return data;
+    },
+    async setTaskKey(workspaceId, key) {
+      const { data, error } = await supabaseClient.rpc("workspace_op_set_task_key", {
+        p_workspace_id: workspaceId,
+        p_key: key,
+      });
+      if (error) throw new Error(error.message);
+      const row = (data ?? {}) as { task_key?: string; task_key_aliases?: string[] };
+      return { taskKey: row.task_key ?? key, taskKeyAliases: row.task_key_aliases ?? [] };
     },
     async leave(workspaceId) {
       const user = await getAuthedUser();
@@ -1441,6 +1500,24 @@ export const webRuntime: ModuoRuntime = {
       }
       return null;
     },
+    async setTimeZone(timeZone) {
+      const { error } = await supabaseClient.rpc("user_op_set_time_zone", {
+        p_time_zone: timeZone,
+      });
+      // Before TV-D8's migration there is nothing to save it in.
+      if (error && !isMissingFunctionError(error, "user_op_set_time_zone")) {
+        throw new Error(error.message);
+      }
+    },
+    async getMinBuild() {
+      const { data, error } = await supabaseClient
+        .from("app_settings")
+        .select("value")
+        .eq("key", "min_build")
+        .maybeSingle();
+      if (error) return null;
+      return typeof data?.value === "string" ? data.value : null;
+    },
   },
 
   dashboard: {
@@ -2049,6 +2126,8 @@ export const webRuntime: ModuoRuntime = {
   // model fields map to snake_case columns via the helpers at the bottom of this
   // file.
   tasks: {
+    // TV-D10: areas, projects, sections, teams, sessions, reminders, waiting.
+    ...tasksStructure,
     async list(workspaceId) {
       // Best effort: a Viewer can't create their own Inbox (no tasks.create),
       // and that must not stop them reading the shared buckets.
@@ -2061,54 +2140,134 @@ export const webRuntime: ModuoRuntime = {
           .is("deleted_at", null);
       const all = (table: string) => (opts?: SelectOpts) =>
         supabaseClient.from(table).select("*", opts).eq("workspace_id", workspaceId);
-      const [bucketsRes, tasksRes, tagsRes, linksRes, relationsRes] = await Promise.all([
-        selectCapped<any>({
-          scope: "buckets",
-          cap: READ_CAPS.buckets,
-          build: live("buckets"),
-          order: (q) => q.order("position").order("id"),
-        }),
-        selectCapped<any>({
-          scope: "tasks",
-          cap: READ_CAPS.tasks,
-          build: live("tasks"),
-          order: (q) => q.order("position").order("id"),
-        }),
-        selectCapped<any>({
-          scope: "tags",
-          cap: READ_CAPS.tags,
-          build: live("tags"),
-          order: (q) => q.order("created_at").order("id"),
-        }),
-        selectCapped<any>({
-          scope: TAG_LINKS_SCOPE,
-          cap: READ_CAPS.tagLinks,
-          build: all("tag_links"),
-          order: (q) => q.order("id"),
-        }),
-        selectCapped<any>({
-          scope: "task dependencies",
-          cap: READ_CAPS.taskRelations,
-          build: all("task_relations"),
-          order: (q) => q.order("id"),
-        }),
-      ]);
+      const [bucketsRes, tasksRes, tagsRes, linksRes, relationsRes, statusesRes, structure] =
+        await Promise.all([
+          selectCapped<any>({
+            scope: "buckets",
+            cap: READ_CAPS.buckets,
+            build: live("buckets"),
+            order: (q) => q.order("position").order("id"),
+          }),
+          selectCapped<any>({
+            scope: "tasks",
+            cap: READ_CAPS.tasks,
+            build: live("tasks"),
+            order: (q) => q.order("position").order("id"),
+          }),
+          selectCapped<any>({
+            scope: "tags",
+            cap: READ_CAPS.tags,
+            build: live("tags"),
+            order: (q) => q.order("created_at").order("id"),
+          }),
+          selectCapped<any>({
+            scope: TAG_LINKS_SCOPE,
+            cap: READ_CAPS.tagLinks,
+            build: all("tag_links"),
+            order: (q) => q.order("id"),
+          }),
+          selectCapped<any>({
+            scope: "task dependencies",
+            cap: READ_CAPS.taskRelations,
+            build: all("task_relations"),
+            order: (q) => q.order("id"),
+          }),
+          listWorkspaceStatuses(workspaceId),
+          // TV-D10: areas, sections, teams and their members.
+          tasksStructure.listStructure(workspaceId),
+        ]);
       const firstError =
         bucketsRes.error || tasksRes.error || tagsRes.error || linksRes.error || relationsRes.error;
       if (firstError) throw new Error(firstError.message);
       return {
+        // Archived projects come too: the shared store sets them apart (TV-U6).
         buckets: mapKnownRows(bucketsRes.rows, bucketRowToModel),
         tasks: mapKnownRows(tasksRes.rows, taskRowToModel),
         tags: mapKnownRows(tagsRes.rows, tagRowToModel),
         tagLinks: mapKnownRows(linksRes.rows, tagLinkRowToModel),
         taskRelations: mapKnownRows(relationsRes.rows, taskRelationRowToModel),
-        truncated: collectTruncations(
-          bucketsRes.truncation,
-          tasksRes.truncation,
-          tagsRes.truncation,
-          linksRes.truncation,
-          relationsRes.truncation,
-        ),
+        statuses: statusesRes.statuses,
+        areas: structure.areas,
+        sections: structure.sections,
+        teams: structure.teams,
+        teamMembers: structure.teamMembers,
+        truncated: [
+          ...collectTruncations(
+            bucketsRes.truncation,
+            tasksRes.truncation,
+            tagsRes.truncation,
+            linksRes.truncation,
+            relationsRes.truncation,
+            statusesRes.truncation,
+          ),
+          ...structure.truncated,
+        ],
+      };
+    },
+
+    async syncRead<T extends SyncTableName>(
+      input: SyncReadInput<T>,
+    ): Promise<SyncReadResult<SyncRows[T]>> {
+      return (await syncReadTable(input)) as SyncReadResult<SyncRows[T]>;
+    },
+
+    async syncIds({ workspaceId, table }) {
+      return syncIdsOf(workspaceId, table);
+    },
+
+    async syncAccessChanges({ workspaceId, since }) {
+      return readAccessChanges(workspaceId, since);
+    },
+
+    async searchTasks({ workspaceId, query, limit }) {
+      return searchTasksOnServer(workspaceId, query, limit);
+    },
+
+    async createTask(task) {
+      return createTaskRow(task);
+    },
+
+    async listStatuses(workspaceId) {
+      const res = await listWorkspaceStatuses(workspaceId);
+      return res.statuses;
+    },
+
+    async createStatus({ workspaceId, projectId, category, name }) {
+      const { data, error } = await supabaseClient.rpc("project_statuses_op_create", {
+        p_workspace_id: workspaceId,
+        p_project_id: projectId,
+        p_category: category,
+        p_name: name,
+      });
+      if (error) throw new Error(error.message);
+      return mapKnownRows(data, projectStatusRowToModel);
+    },
+
+    async updateStatus({ workspaceId, statusId, patch }) {
+      const { data, error } = await supabaseClient.rpc("project_statuses_op_update", {
+        p_workspace_id: workspaceId,
+        p_status_id: statusId,
+        p_patch: patch,
+      });
+      if (error) throw new Error(error.message);
+      return mapKnownRows(data, projectStatusRowToModel);
+    },
+
+    async deleteStatus({ workspaceId, statusId }) {
+      const { data, error } = await supabaseClient.rpc("project_statuses_op_delete", {
+        p_workspace_id: workspaceId,
+        p_status_id: statusId,
+      });
+      if (error) throw new Error(error.message);
+      const answer = (data ?? {}) as {
+        moved?: unknown;
+        moved_to?: unknown;
+        moved_to_name?: unknown;
+      };
+      return {
+        moved: typeof answer.moved === "number" ? answer.moved : 0,
+        movedTo: typeof answer.moved_to === "string" ? answer.moved_to : null,
+        movedToName: typeof answer.moved_to_name === "string" ? answer.moved_to_name : null,
       };
     },
 
@@ -2116,68 +2275,13 @@ export const webRuntime: ModuoRuntime = {
       return ensureWebInbox(workspaceId);
     },
 
+    // The pre-TV-D10 save, kept as the "bucket" alias: a raw insert or an
+    // update of the editable columns (createProject / updateProject are the ops).
     async upsertBucket(bucket) {
-      const id = bucket.id?.trim() || crypto.randomUUID();
-      const user = await getAuthedUser();
-      const now = new Date().toISOString();
-      const { data: prev } = await supabaseClient
-        .from("buckets")
-        .select("id")
-        .eq("id", id)
-        .maybeSingle();
-      // A saved project's owner, workspace and Inbox flag never change (the
-      // server refuses it), so a re-save writes its editable fields only.
-      const editable = {
-        name: bucket.name,
-        group_label: bucket.group ?? null,
-        position: bucket.position ?? "",
-        updated_at: now,
-        deleted_at: bucket.deletedAt ?? null,
-      };
-      const { data, error } = prev
-        ? await supabaseClient.from("buckets").update(editable).eq("id", id).select().single()
-        : await supabaseClient
-            .from("buckets")
-            .insert({
-              ...editable,
-              id,
-              workspace_id: bucket.workspaceId,
-              owner_id: bucket.ownerId || user?.id || null,
-              // is_system is owned by the seeding path (ensureWebInbox) only.
-              is_system: false,
-              created_at: bucket.createdAt || now,
-            })
-            .select()
-            .single();
-      if (error) throw new Error(error.message);
-      return bucketRowToModel(data);
-    },
-
-    async deleteBucket({ workspaceId, bucketId }) {
-      const { data: bucket } = await supabaseClient
-        .from("buckets")
-        .select("is_system")
-        .eq("id", bucketId)
-        .maybeSingle();
-      if (!bucket) return;
-      if (bucket.is_system) throw new Error("The Inbox bucket cannot be deleted");
-      // Reassign live tasks to Inbox so none are orphaned, then soft-delete.
-      const inbox = await ensureWebInbox(workspaceId);
-      const now = new Date().toISOString();
-      await supabaseClient
-        .from("tasks")
-        .update({ bucket_id: inbox.id, updated_at: now })
-        .eq("bucket_id", bucketId)
-        .is("deleted_at", null);
-      const { error } = await supabaseClient
-        .from("buckets")
-        .update({ deleted_at: now, updated_at: now })
-        .eq("id", bucketId);
-      if (error) throw new Error(error.message);
+      return upsertBucketRow(bucket);
     },
 
     async upsertTask(task) {
-      const user = await getAuthedUser();
       const now = new Date().toISOString();
       const bucketId = await liveBucketOrInbox(task.workspaceId, task.bucketId);
       // Re-saving a task that already exists writes its editable fields only,
@@ -2188,32 +2292,15 @@ export const webRuntime: ModuoRuntime = {
           .select("id")
           .eq("id", task.id)
           .maybeSingle();
-        if (prev) return updateTaskRow(task.id, { ...editableTaskFields(task), bucketId });
+        if (prev) {
+          const [saved] = await opUpdateTaskRows(task.workspaceId, task.id, {
+            ...editableTaskFields(task),
+            bucketId,
+          });
+          return saved;
+        }
       }
-      const created = {
-        ...task,
-        id: task.id?.trim() || crypto.randomUUID(),
-        bucketId,
-        createdAt: task.createdAt || now,
-        updatedAt: now,
-      };
-      const actorId = user?.id ?? null;
-      let { data, error } = await supabaseClient
-        .from("tasks")
-        .upsert(taskCreateRow(created, actorId), { onConflict: "id" })
-        .select()
-        .single();
-      // Until the TV-D1 migration reaches the database there is no
-      // assignee_id, and owner_id still holds the assignee. Remove in TV-D7.
-      if (isMissingColumnError(error, "assignee_id")) {
-        ({ data, error } = await supabaseClient
-          .from("tasks")
-          .upsert(taskCreateRowLegacy(created, actorId), { onConflict: "id" })
-          .select()
-          .single());
-      }
-      if (error) throw new Error(error.message);
-      return taskRowToModel(data);
+      return createTaskRow({ ...task, bucketId, createdAt: task.createdAt || now });
     },
 
     async updateTask({ workspaceId, taskId, patch }) {
@@ -2221,10 +2308,51 @@ export const webRuntime: ModuoRuntime = {
         patch.bucketId === undefined
           ? patch
           : { ...patch, bucketId: await liveBucketOrInbox(workspaceId, patch.bucketId) };
-      return updateTaskRow(taskId, fields);
+      const [saved] = await opUpdateTaskRows(workspaceId, taskId, fields);
+      return saved;
     },
 
-    async deleteTask({ taskId }) {
+    async opUpdateTask({ workspaceId, taskId, patch }) {
+      const fields: TaskFieldPatch =
+        patch.bucketId === undefined
+          ? patch
+          : { ...patch, bucketId: await liveBucketOrInbox(workspaceId, patch.bucketId) };
+      return opUpdateTaskRows(workspaceId, taskId, fields);
+    },
+
+    async listCompletions(workspaceId) {
+      const res = await selectCapped<any>({
+        scope: "completions",
+        cap: READ_CAPS.taskCompletions,
+        build: (opts?: SelectOpts) =>
+          supabaseClient
+            .from("task_completions")
+            .select("*", opts)
+            .eq("workspace_id", workspaceId)
+            .is("deleted_at", null),
+        order: (q) => q.order("completed_at").order("id"),
+      });
+      if (res.error) {
+        if (isMissingTableError(res.error, "task_completions"))
+          return { completions: [], truncated: [] };
+        throw new Error(res.error.message);
+      }
+      return {
+        completions: mapKnownRows(res.rows, taskCompletionRowToModel),
+        truncated: collectTruncations(res.truncation),
+      };
+    },
+
+    async deleteTask({ workspaceId, taskId }) {
+      // The edit op deletes and promotes the subtasks in one go (TV-D8).
+      const op = await supabaseClient.rpc("tasks_op_update", {
+        p_workspace_id: workspaceId,
+        p_task_id: taskId,
+        p_patch: { deleted_at: new Date().toISOString() },
+      });
+      if (!op.error) return taskRowToModel(Array.isArray(op.data) ? op.data[0] : op.data);
+      if (!isMissingFunctionError(op.error, "tasks_op_update")) throw new Error(op.error.message);
+      // Before TV-D8's migration. Remove in TV-D7.
       const now = new Date().toISOString();
       const { data, error } = await supabaseClient
         .from("tasks")
@@ -2430,28 +2558,14 @@ export const webRuntime: ModuoRuntime = {
       if (error) throw new Error(error.message);
     },
 
+    // Each person's own since TV-D10 (user_preferences.task_time_blocks); the
+    // workspace table before it.
     async getTimeBlocks(workspaceId) {
-      const { data, error } = await supabaseClient
-        .from("task_time_blocks")
-        .select("blocks")
-        .eq("workspace_id", workspaceId)
-        .maybeSingle();
-      if (error) throw new Error(error.message);
-      return sanitizeTimeBlocks(data?.blocks);
+      return tasksStructure.getTimeBlocks(workspaceId);
     },
 
     async setTimeBlocks({ workspaceId, blocks }) {
-      const clean = sanitizeTimeBlocks(blocks);
-      const { data, error } = await supabaseClient
-        .from("task_time_blocks")
-        .upsert(
-          { workspace_id: workspaceId, blocks: clean, updated_at: new Date().toISOString() },
-          { onConflict: "workspace_id" },
-        )
-        .select("blocks")
-        .single();
-      if (error) throw new Error(error.message);
-      return sanitizeTimeBlocks(data?.blocks);
+      return tasksStructure.setTimeBlocks(workspaceId, blocks);
     },
 
     // ── intent ops (docs/moduo-module-contract.md) ─────────────────────────
@@ -2724,15 +2838,33 @@ export const webRuntime: ModuoRuntime = {
     },
 
     async searchEntities({ workspaceId, query, types, limit }) {
-      let q = supabaseClient
-        .from("entities")
-        .select("*")
-        .eq("workspace_id", workspaceId)
-        .is("deleted_at", null);
       const trimmed = query?.trim();
-      if (trimmed) q = q.ilike("label", `%${trimmed}%`);
-      if (types && types.length) q = q.in("entity_type", types);
-      const { data, error } = await q.order("label").limit(limit ?? 20);
+      // A handle (MOD-142, or its start) also finds the task (TV-D8, AC3.1),
+      // and so does one typed with an earlier key of this workspace.
+      let handle = trimmed ? handleSearchPattern(trimmed) : null;
+      if (handle) {
+        const { data: ws } = await supabaseClient
+          .from("workspaces")
+          .select("task_key, task_key_aliases")
+          .eq("id", workspaceId)
+          .maybeSingle();
+        handle = handleWithCurrentKey(handle, ws?.task_key ?? null, ws?.task_key_aliases ?? []);
+      }
+      const run = (withHandle: boolean) => {
+        let q = supabaseClient
+          .from("entities")
+          .select("*")
+          .eq("workspace_id", workspaceId)
+          .is("deleted_at", null);
+        if (trimmed && handle && withHandle) {
+          q = q.or(`label.ilike.%${trimmed}%,handle.ilike.${handle}`);
+        } else if (trimmed) q = q.ilike("label", `%${trimmed}%`);
+        if (types && types.length) q = q.in("entity_type", types);
+        return q.order("label").limit(limit ?? 20);
+      };
+      let { data, error } = await run(true);
+      // Before TV-D8's migration the registry has no handles.
+      if (isMissingColumnError(error, "handle")) ({ data, error } = await run(false));
       if (error) throw new Error(error.message);
       return mapKnownRows(data, entityRecordRowToModel);
     },
@@ -2891,6 +3023,9 @@ export const webRuntime: ModuoRuntime = {
       const byKey = new Map(records.map((r) => [`${r.type}:${r.id}`, r]));
       return shapeRecentLinks(links, byKey);
     },
+
+    // References (RF-1): every read under the module table's RLS (can_access).
+    previews: createReferencePreviews(supabaseClient),
   },
 
   // ── Contacts module (specs/contacts.md block CO-1) ──────────────────────────
@@ -3237,22 +3372,34 @@ async function loadOverdueFollowups(workspaceId: string): Promise<OverdueFollowu
   const taskIds = [...taskToContact.keys()];
   if (taskIds.length === 0) return [];
 
+  // Whole rows (a handful): the date and category columns exist only from
+  // TV-D9 on, and naming one a database doesn't have fails the read.
   const { data: tasks, error: tErr } = await supabaseClient
     .from("tasks")
-    .select("id, due_date, status")
+    .select("*")
     .eq("workspace_id", workspaceId)
     .in("id", taskIds)
     .is("deleted_at", null);
   if (tErr) throw new Error(tErr.message);
 
-  // tasks.due_date is a timestamptz (stored from local midnight → UTC), so
-  // normalize it back to a local calendar date before comparing / surfacing —
-  // a raw lexical compare against "today" is off by a day for users east of UTC.
+  // The due date is a date since TV-D9 (due_on, the same for everyone). A row
+  // from before it has only the timestamptz (stored from local midnight →
+  // UTC), normalized back to a local calendar date before comparing. Backlog
+  // is never late (REPLAN 53), so only open tasks count.
   const today = localToday();
   const overdue: OverdueFollowup[] = [];
   for (const t of tasks ?? []) {
-    if (!t.due_date || t.status === "done" || t.status === "archived") continue;
-    const dueLocal = localDateOf(new Date(t.due_date));
+    const open = isOpenTask({
+      status: t.status,
+      statusCategory: t.status_category ? normalizeTaskStatusCategory(t.status_category) : null,
+    });
+    const dueLocal =
+      typeof t.due_on === "string"
+        ? t.due_on
+        : t.due_date
+          ? localDateOf(new Date(t.due_date))
+          : null;
+    if (!dueLocal || !open) continue;
     if (dueLocal < today) {
       const contactId = taskToContact.get(t.id);
       if (contactId) overdue.push({ contactId, dueDate: dueLocal });
@@ -3438,20 +3585,647 @@ async function ensureWebInbox(workspaceId: string): Promise<Bucket> {
   return bucketRowToModel(data);
 }
 
-function bucketRowToModel(raw: unknown): Bucket {
-  const r = requireRow(bucketRowSchema, raw, "bucket");
-  return {
-    id: r.id,
-    workspaceId: r.workspace_id,
-    ownerId: r.owner_id ?? "",
-    name: r.name,
-    isSystem: !!r.is_system,
-    group: r.group_label ?? null,
-    position: r.position ?? "",
-    createdAt: r.created_at,
-    updatedAt: r.updated_at,
-    deletedAt: r.deleted_at ?? null,
+/** The workspace's time blocks, the pre-TV-D10 way (one row per workspace). */
+async function getWorkspaceTimeBlocks(workspaceId: string): Promise<TimeBlockMap> {
+  const { data, error } = await supabaseClient
+    .from("task_time_blocks")
+    .select("blocks")
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return sanitizeTimeBlocks(data?.blocks);
+}
+
+async function setWorkspaceTimeBlocks(
+  workspaceId: string,
+  blocks: TimeBlockMap,
+): Promise<TimeBlockMap> {
+  const clean = sanitizeTimeBlocks(blocks);
+  const { data, error } = await supabaseClient
+    .from("task_time_blocks")
+    .upsert(
+      { workspace_id: workspaceId, blocks: clean, updated_at: new Date().toISOString() },
+      { onConflict: "workspace_id" },
+    )
+    .select("blocks")
+    .single();
+  if (error) throw new Error(error.message);
+  return sanitizeTimeBlocks(data?.blocks);
+}
+
+/** The pre-TV-D10 project save (also the "bucket" alias). */
+async function upsertBucketRow(bucket: Bucket): Promise<Bucket> {
+  const id = bucket.id?.trim() || crypto.randomUUID();
+  const user = await getAuthedUser();
+  const now = new Date().toISOString();
+  const { data: prev } = await supabaseClient
+    .from("buckets")
+    .select("id")
+    .eq("id", id)
+    .maybeSingle();
+  // A saved project's owner, workspace and Inbox flag never change (the
+  // server refuses it), so a re-save writes its editable fields only.
+  const editable = {
+    name: bucket.name,
+    group_label: bucket.group ?? null,
+    position: bucket.position ?? "",
+    updated_at: now,
+    deleted_at: bucket.deletedAt ?? null,
   };
+  const { data, error } = prev
+    ? await supabaseClient.from("buckets").update(editable).eq("id", id).select().single()
+    : await supabaseClient
+        .from("buckets")
+        .insert({
+          ...editable,
+          id,
+          workspace_id: bucket.workspaceId,
+          owner_id: bucket.ownerId || user?.id || null,
+          // is_system is owned by the seeding path (ensureWebInbox) only.
+          is_system: false,
+          created_at: bucket.createdAt || now,
+        })
+        .select()
+        .single();
+  if (error) throw new Error(error.message);
+  return bucketRowToModel(data);
+}
+
+/**
+ * Every status the reader can see in a workspace (TV-D9): the default set and
+ * each visible project's. Empty on a database before TV-D9.
+ */
+async function listWorkspaceStatuses(
+  workspaceId: string,
+): Promise<{ statuses: ProjectStatus[]; truncation: Truncation | null }> {
+  const res = await selectCapped<any>({
+    scope: "statuses",
+    cap: READ_CAPS.projectStatuses,
+    build: (opts?: SelectOpts) =>
+      supabaseClient
+        .from("project_statuses")
+        .select("*", opts)
+        .eq("workspace_id", workspaceId)
+        .is("deleted_at", null),
+    order: (q) => q.order("position").order("id"),
+  });
+  if (res.error) {
+    if (isMissingTableError(res.error, "project_statuses"))
+      return { statuses: [], truncation: null };
+    throw new Error(res.error.message);
+  }
+  return { statuses: mapKnownRows(res.rows, projectStatusRowToModel), truncation: res.truncation };
+}
+
+// ── The shared store's reads (TV-D11a) ─────────────────────────────────────────
+// One table at a time: its live rows on a first load, or every row changed
+// since a server stamp (soft-deleted ones included, so a delete reaches the
+// device copy). Paged by key, never by offset: an offset page shifts when a
+// row is saved mid-read, and the row that slid past the page edge would be
+// lost for good. The queue, tag links and relations delete for real: since
+// TV-D11b's migration they carry `updated_at` and each delete leaves a row in
+// `sync_tombstones`, so they delta too; a database without it answers whole.
+
+type SyncSource = {
+  table: string;
+  select: string;
+  map: (raw: unknown) => unknown;
+  cap: number;
+  /** Has `updated_at` (and soft deletes, or tombstones): read as a delta. */
+  delta: boolean;
+  /** Deletes are hard and leave a `sync_tombstones` row (TV-D11b), not `deleted_at`. */
+  tombstones?: boolean;
+  scope: string;
+  /** Extra filters every read of it carries. */
+  filter?: (q: any) => any;
+  /** Order for a whole-table read (must end in `id`). */
+  order?: (q: any) => any;
+};
+
+const SYNC_SOURCES: Record<SyncTableName, SyncSource> = {
+  tasks: {
+    table: "tasks",
+    select: "*",
+    map: taskRowToModel,
+    cap: READ_CAPS.tasks,
+    delta: true,
+    scope: "tasks",
+  },
+  buckets: {
+    table: "buckets",
+    select: "*",
+    map: bucketRowToModel,
+    cap: READ_CAPS.buckets,
+    delta: true,
+    scope: "buckets",
+  },
+  statuses: {
+    table: "project_statuses",
+    select: "*",
+    map: projectStatusRowToModel,
+    cap: READ_CAPS.projectStatuses,
+    delta: true,
+    scope: "statuses",
+  },
+  completions: {
+    table: "task_completions",
+    select: "*",
+    map: taskCompletionRowToModel,
+    cap: READ_CAPS.taskCompletions,
+    delta: true,
+    scope: "completions",
+  },
+  tags: {
+    table: "tags",
+    select: "*",
+    map: tagRowToModel,
+    cap: READ_CAPS.tags,
+    delta: true,
+    scope: "tags",
+  },
+  comments: {
+    table: "comments",
+    select: "id,entity_id,updated_at,deleted_at",
+    map: commentMarkRowToModel,
+    cap: READ_CAPS.taskComments,
+    delta: true,
+    scope: "comments",
+    filter: (q) => q.eq("entity_type", "task"),
+  },
+  queue: {
+    table: "task_queue",
+    select: "*",
+    map: taskQueueRowToModel,
+    cap: READ_CAPS.taskQueue,
+    delta: true,
+    tombstones: true,
+    scope: "queued tasks",
+  },
+  tagLinks: {
+    table: "tag_links",
+    select: "*",
+    map: tagLinkRowToModel,
+    cap: READ_CAPS.tagLinks,
+    delta: true,
+    tombstones: true,
+    scope: TAG_LINKS_SCOPE,
+  },
+  relations: {
+    table: "task_relations",
+    select: "*",
+    map: taskRelationRowToModel,
+    cap: READ_CAPS.taskRelations,
+    delta: true,
+    tombstones: true,
+    scope: "task dependencies",
+  },
+  // TV-D10. Plain selects under each table's RLS, which goes through the
+  // access helpers (`areas__visible`, `projects__visible`, `can_access`).
+  areas: {
+    table: "areas",
+    select: "*",
+    map: areaRowToModel,
+    cap: READ_CAPS.areas,
+    delta: true,
+    scope: "areas",
+  },
+  sections: {
+    table: "sections",
+    select: "*",
+    map: sectionRowToModel,
+    cap: READ_CAPS.sections,
+    delta: true,
+    scope: "sections",
+  },
+  teams: {
+    table: "teams",
+    select: "*",
+    map: teamRowToModel,
+    cap: READ_CAPS.teams,
+    delta: true,
+    scope: "teams",
+  },
+  teamMembers: {
+    table: "team_members",
+    select: "*",
+    map: teamMemberRowToModel,
+    cap: READ_CAPS.teamMembers,
+    delta: true,
+    scope: "team members",
+  },
+  sessions: {
+    table: "task_sessions",
+    select: "*",
+    map: taskSessionRowToModel,
+    cap: READ_CAPS.taskSessions,
+    delta: true,
+    scope: "work sessions",
+  },
+  reminders: {
+    table: "task_reminders",
+    select: "*",
+    map: taskReminderRowToModel,
+    cap: READ_CAPS.taskReminders,
+    delta: true,
+    scope: "reminders",
+  },
+  waiting: {
+    table: "task_waiting",
+    select: "*",
+    map: taskWaitingRowToModel,
+    cap: READ_CAPS.taskWaiting,
+    delta: true,
+    scope: "waiting entries",
+  },
+};
+
+/** How many ids one `id=in.(…)` read carries (a URL stays well under its limit). */
+const IDS_PER_READ = 150;
+
+/** A value PostgREST reads whole inside `or=(…)` (timestamps carry `:` and `+`). */
+const pgrstQuoted = (value: string) => `"${value.replace(/["\\]/g, "\\$&")}"`;
+
+/**
+ * Page a query by key up to `cap` rows: by `id` (a first load), or by
+ * (`updated_at`, `id`) (a delta). `build` makes the filtered query afresh each
+ * page (a builder is single-use).
+ */
+async function readByKey(args: {
+  build: () => any;
+  by: "id" | "updated_at";
+  cap: number;
+  scope: string;
+  /** The stamp and key columns (`sync_tombstones` pages by `deleted_at`, `row_id`). */
+  stampColumn?: string;
+  keyColumn?: string;
+}): Promise<{ rows: any[]; error: any; truncation: Truncation | null }> {
+  const stamp = args.stampColumn ?? "updated_at";
+  const key = args.keyColumn ?? "id";
+  const rows: any[] = [];
+  let last: { id: string; updatedAt: string } | null = null;
+  // One past the cap tells "there is more" without a count.
+  while (rows.length <= args.cap) {
+    const want = Math.min(PGRST_MAX_ROWS, args.cap + 1 - rows.length);
+    let q = args.build();
+    if (args.by === "id") {
+      if (last) q = q.gt(key, last.id);
+      q = q.order(key);
+    } else {
+      if (last) {
+        const at = pgrstQuoted(last.updatedAt);
+        q = q.or(`${stamp}.gt.${at},and(${stamp}.eq.${at},${key}.gt.${last.id})`);
+      }
+      q = q.order(stamp).order(key);
+    }
+    const { data, error } = await q.limit(want);
+    if (error) return { rows, error, truncation: null };
+    const batch = (data ?? []) as any[];
+    rows.push(...batch);
+    if (batch.length < want) break;
+    const tail = batch[batch.length - 1];
+    last = { id: String(tail?.[key]), updatedAt: String(tail?.[stamp] ?? "") };
+  }
+  if (rows.length <= args.cap) return { rows, error: null, truncation: null };
+  return {
+    rows: rows.slice(0, args.cap),
+    error: null,
+    truncation: { scope: args.scope, shown: args.cap, total: null },
+  };
+}
+
+/** The open categories (TV-D9): what the store reads first. */
+const OPEN_CATEGORIES = ["todo", "in_progress"] as const;
+
+async function syncReadTable(input: SyncReadInput): Promise<SyncReadResult<unknown>> {
+  const source = SYNC_SOURCES[input.table];
+  const empty: SyncReadResult<unknown> = {
+    rows: [],
+    deleted: [],
+    maxUpdatedAt: null,
+    truncated: null,
+  };
+  // No client retries: the store tries again itself, and a lost network must
+  // read as "Offline" at once rather than after seconds of backoff.
+  const base = () => {
+    let q = supabaseClient
+      .from(source.table)
+      .select(source.select)
+      .eq("workspace_id", input.workspaceId)
+      .retry(false);
+    if (source.filter) q = source.filter(q);
+    return q;
+  };
+
+  if (!source.delta) {
+    const res = await selectCapped<any>({
+      scope: source.scope,
+      cap: source.cap,
+      build: (opts?: SelectOpts) => {
+        let q = supabaseClient
+          .from(source.table)
+          .select(source.select, opts)
+          .eq("workspace_id", input.workspaceId)
+          .retry(false);
+        if (source.filter) q = source.filter(q);
+        return q;
+      },
+      order: source.order ?? ((q) => q.order("id")),
+    });
+    if (res.error) {
+      if (isMissingTableError(res.error, source.table)) return empty;
+      throw new Error(res.error.message);
+    }
+    return { ...empty, rows: mapKnownRows(res.rows, source.map), truncated: res.truncation };
+  }
+
+  /** Live rows only: soft-deleted ones are skipped; a tombstoned table has none. */
+  const live = (q: any) => (source.tombstones ? q : q.is("deleted_at", null));
+
+  // A hard-delete table's changes: rows stamped since, plus its tombstones.
+  // A database before TV-D11b's migration has neither: read it whole.
+  if (source.tombstones && input.since && !input.ids) {
+    const changed = await readTombstonedChanges(source, input.workspaceId, input.since);
+    if (changed) return changed;
+  }
+
+  // Rows the access check found you can see now (shared with you since):
+  // read by id, live ones only.
+  if (input.ids) {
+    const rows: any[] = [];
+    for (let i = 0; i < input.ids.length; i += IDS_PER_READ) {
+      const chunk = input.ids.slice(i, i + IDS_PER_READ);
+      const { data, error } = await live(base().in("id", chunk)).limit(PGRST_MAX_ROWS);
+      if (error) {
+        if (isMissingTableError(error, source.table)) return empty;
+        throw new Error(error.message);
+      }
+      rows.push(...((data ?? []) as any[]));
+    }
+    return { ...empty, rows: mapKnownRows(rows, source.map) };
+  }
+
+  // Tasks' first load comes in two parts (open first); a database before
+  // TV-D9 has no category, so its open part goes by the status word.
+  const partFilter = (q: any, byCategory: boolean) => {
+    if (input.table !== "tasks" || !input.part || input.since) return q;
+    const col = byCategory ? "status_category" : "status";
+    const open = `(${OPEN_CATEGORIES.join(",")})`;
+    return input.part === "open"
+      ? q.in(col, [...OPEN_CATEGORIES])
+      : q.or(`${col}.is.null,${col}.not.in.${open}`);
+  };
+  const run = (byCategory: boolean) =>
+    readByKey({
+      by: input.since && !source.tombstones ? "updated_at" : "id",
+      cap: input.since
+        ? Math.max(source.cap, READ_CAPS.syncDelta)
+        : input.table === "tasks" && input.part === "rest"
+          ? READ_CAPS.closedTasks
+          : source.cap,
+      scope: source.scope,
+      build: () => {
+        const q =
+          input.since && !source.tombstones ? base().gte("updated_at", input.since) : live(base());
+        return partFilter(q, byCategory);
+      },
+    });
+  let res = await run(true);
+  if (
+    res.error &&
+    input.table === "tasks" &&
+    input.part &&
+    isMissingColumnError(res.error, "status_category")
+  ) {
+    res = await run(false);
+  }
+  if (res.error) {
+    if (isMissingTableError(res.error, source.table)) return empty;
+    throw new Error(res.error.message);
+  }
+  const liveRows: unknown[] = [];
+  const deleted: string[] = [];
+  let maxUpdatedAt: string | null = null;
+  let maxMicros = Number.NEGATIVE_INFINITY;
+  for (const row of res.rows) {
+    const stamp = typeof row?.updated_at === "string" ? row.updated_at : null;
+    const micros = timestampMicros(stamp);
+    if (stamp && micros !== null && micros > maxMicros) {
+      maxMicros = micros;
+      maxUpdatedAt = stamp;
+    }
+    if (row?.deleted_at) {
+      if (typeof row.id === "string") deleted.push(row.id);
+    } else {
+      liveRows.push(row);
+    }
+  }
+  return {
+    rows: mapKnownRows(liveRows, source.map),
+    deleted,
+    maxUpdatedAt,
+    truncated: res.truncation,
+    // Changes were asked of a table this database can't read changes of.
+    ...(source.tombstones && input.since ? { whole: true } : {}),
+  };
+}
+
+async function syncIdsOf(workspaceId: string, table: SyncTableName): Promise<SyncIdsResult> {
+  const source = SYNC_SOURCES[table];
+  if (!source.delta) return { ids: [], complete: false };
+  const res = await readByKey({
+    by: "id",
+    cap: READ_CAPS.syncIds,
+    scope: source.scope,
+    build: () => {
+      let q = supabaseClient.from(source.table).select("id").eq("workspace_id", workspaceId);
+      if (!source.tombstones) q = q.is("deleted_at", null);
+      if (source.filter) q = source.filter(q);
+      return q;
+    },
+  });
+  if (res.error) {
+    if (isMissingTableError(res.error, source.table)) return { ids: [], complete: false };
+    throw new Error(res.error.message);
+  }
+  return { ids: res.rows.map((r) => String(r.id)), complete: res.truncation === null };
+}
+
+/**
+ * Changes of a hard-delete table (TV-D11b): rows stamped since `since`, keyset
+ * paged, plus the ids its deletes left in `sync_tombstones`. Null when this
+ * database has no stamps or tombstones for it yet (the caller reads it whole).
+ */
+async function readTombstonedChanges(
+  source: SyncSource,
+  workspaceId: string,
+  since: string,
+): Promise<SyncReadResult<unknown> | null> {
+  const rows = await readByKey({
+    by: "updated_at",
+    cap: Math.max(source.cap, READ_CAPS.syncDelta),
+    scope: source.scope,
+    build: () => {
+      let q = supabaseClient
+        .from(source.table)
+        .select(source.select)
+        .eq("workspace_id", workspaceId)
+        .gte("updated_at", since)
+        .retry(false);
+      if (source.filter) q = source.filter(q);
+      return q;
+    },
+  });
+  if (rows.error) {
+    if (isMissingColumnError(rows.error, "updated_at")) return null;
+    if (isMissingTableError(rows.error, source.table)) return null;
+    throw new Error(rows.error.message);
+  }
+  const graves = await readByKey({
+    by: "updated_at",
+    stampColumn: "deleted_at",
+    keyColumn: "row_id",
+    cap: READ_CAPS.syncDelta,
+    scope: source.scope,
+    build: () =>
+      supabaseClient
+        .from("sync_tombstones")
+        .select("row_id,deleted_at")
+        .eq("workspace_id", workspaceId)
+        .eq("table_name", source.table)
+        .gte("deleted_at", since)
+        .retry(false),
+  });
+  if (graves.error) {
+    if (isMissingTableError(graves.error, "sync_tombstones")) return null;
+    throw new Error(graves.error.message);
+  }
+  // Where the next read starts: a stream cut at its ceiling holds it back.
+  const maxUpdatedAt = deltaCursor(
+    { stamps: rows.rows.map((r) => r?.updated_at), cut: rows.truncation !== null },
+    { stamps: graves.rows.map((g) => g?.deleted_at), cut: graves.truncation !== null },
+  );
+  // A row deleted and made again under the same id (never: ids are random)
+  // would be both; the live row wins.
+  const liveIds = new Set(rows.rows.map((r) => String(r?.id)));
+  return {
+    rows: mapKnownRows(rows.rows, source.map),
+    deleted: graves.rows.map((g) => String(g?.row_id)).filter((id) => !liveIds.has(id)),
+    maxUpdatedAt,
+    truncated: rows.truncation ?? graves.truncation,
+  };
+}
+
+/**
+ * The grant feed (TV-D11b, `access_changes`): what changed in who sees which
+ * project or task since `since`. With `since` null, only the newest stamp
+ * (a session's starting point). RLS returns your rows and the workspace's.
+ */
+async function readAccessChanges(
+  workspaceId: string,
+  since: string | null,
+): Promise<SyncAccessResult> {
+  const none: SyncAccessResult = { changes: [], maxChangedAt: null, supported: false };
+  if (since === null) {
+    const { data, error } = await supabaseClient
+      .from("access_changes")
+      .select("changed_at")
+      .eq("workspace_id", workspaceId)
+      .order("changed_at", { ascending: false })
+      .limit(1)
+      .retry(false);
+    if (error) {
+      if (isMissingTableError(error, "access_changes")) return none;
+      throw new Error(error.message);
+    }
+    const stamp = (data as Array<{ changed_at?: unknown }> | null)?.[0]?.changed_at;
+    return {
+      changes: [],
+      maxChangedAt: typeof stamp === "string" ? stamp : null,
+      supported: true,
+    };
+  }
+  // Paged by (changed_at, id): a burst of changes (a bulk move) past one page
+  // never makes every read answer the same first page.
+  const res = await readByKey({
+    by: "updated_at",
+    stampColumn: "changed_at",
+    keyColumn: "id",
+    cap: READ_CAPS.syncDelta,
+    scope: "access changes",
+    build: () =>
+      supabaseClient
+        .from("access_changes")
+        .select("id,resource_type,resource_id,changed_at")
+        .eq("workspace_id", workspaceId)
+        .gte("changed_at", since)
+        .retry(false),
+  });
+  if (res.error) {
+    if (isMissingTableError(res.error, "access_changes")) return none;
+    throw new Error(res.error.message);
+  }
+  const changes: AccessChange[] = [];
+  let maxChangedAt: string | null = null;
+  for (const row of res.rows as Array<Record<string, unknown>>) {
+    if (typeof row.resource_type !== "string" || typeof row.resource_id !== "string") continue;
+    const changedAt = typeof row.changed_at === "string" ? row.changed_at : "";
+    changes.push({
+      id: String(row.id),
+      resourceType: normalizeAccessChangeResource(row.resource_type),
+      resourceId: row.resource_id,
+      changedAt,
+    });
+    if (changedAt) maxChangedAt = changedAt;
+  }
+  return { changes, maxChangedAt, supported: true };
+}
+
+/** `tasks_search` (TV-D11b): ids of the tasks you can see that match every word. */
+async function searchTasksOnServer(
+  workspaceId: string,
+  query: string,
+  limit = 200,
+): Promise<TaskSearchResult> {
+  const { data, error } = await supabaseClient
+    .rpc("tasks_search", { p_workspace_id: workspaceId, p_query: query, p_limit: limit })
+    .retry(false);
+  if (error) {
+    if (isMissingFunctionError(error, "tasks_search")) return { ids: [], supported: false };
+    throw new Error(error.message);
+  }
+  const ids = ((data ?? []) as Array<string | { id?: unknown }>)
+    .map((row) => (typeof row === "string" ? row : typeof row?.id === "string" ? row.id : null))
+    .filter((id): id is string => id !== null);
+  return { ids, supported: true };
+}
+
+/**
+ * A field-level task edit through `tasks_op_update` (TV-D8): only the changed
+ * fields go, the server checks, writes, registers a rename and logs it, and
+ * answers with the task, then any subtasks it carried along. Before the
+ * migration it falls back to the direct update (remove in TV-D7).
+ */
+async function opUpdateTaskRows(
+  workspaceId: string,
+  taskId: string,
+  patch: TaskFieldPatch,
+): Promise<Task[]> {
+  // A database before TV-D10 / TV-D9 (the merge-before-apply window) refuses
+  // the newer fields: retry without them. Remove in TV-D7.
+  const { data, error } = await withFieldFallback(taskPatchToOpFields(patch), (fields) =>
+    supabaseClient.rpc("tasks_op_update", {
+      p_workspace_id: workspaceId,
+      p_task_id: taskId,
+      p_patch: fields,
+    }),
+  );
+  if (!error) {
+    const rows = mapKnownRows(data, taskRowToModel);
+    if (!rows.length) throw new Error("The task edit returned nothing.");
+    return rows;
+  }
+  if (!isMissingFunctionError(error, "tasks_op_update")) throw new Error(error.message);
+  return [await updateTaskRow(taskId, patch)];
 }
 
 /** A field-level task edit: only the changed columns go to the server (TV-D1). */
@@ -3479,6 +4253,33 @@ async function updateTaskRowLegacyOwner(taskId: string, assigneeId: string | nul
 }
 
 /**
+ * The project delete from before TV-U6, for a database its migration hasn't
+ * reached: live tasks move to the caller's Inbox, then the project is
+ * soft-deleted. The only task write left outside the ops; remove in TV-D7.
+ */
+async function legacyDeleteBucket(workspaceId: string, bucketId: string): Promise<void> {
+  const { data: bucket } = await supabaseClient
+    .from("buckets")
+    .select("is_system")
+    .eq("id", bucketId)
+    .maybeSingle();
+  if (!bucket) return;
+  if (bucket.is_system) throw new Error("The Inbox can't be deleted.");
+  const inbox = await ensureWebInbox(workspaceId);
+  const now = new Date().toISOString();
+  await supabaseClient
+    .from("tasks")
+    .update({ bucket_id: inbox.id, updated_at: now })
+    .eq("bucket_id", bucketId)
+    .is("deleted_at", null);
+  const { error } = await supabaseClient
+    .from("buckets")
+    .update({ deleted_at: now, updated_at: now })
+    .eq("id", bucketId);
+  if (error) throw new Error(error.message);
+}
+
+/**
  * Every task lives in exactly one bucket; an empty, unknown, deleted or
  * cross-workspace bucket falls back to the Inbox (spec §6/§7).
  */
@@ -3497,30 +4298,50 @@ async function liveBucketOrInbox(
   return (await ensureWebInbox(workspaceId)).id;
 }
 
-function tagRowToModel(raw: unknown): Tag {
-  const r = requireRow(tagRowSchema, raw, "tag");
-  return {
-    id: r.id,
-    workspaceId: r.workspace_id,
-    ownerId: r.owner_id ?? "",
-    name: r.name,
-    color: r.color ?? null,
-    createdAt: r.created_at,
-    updatedAt: r.updated_at,
-    deletedAt: r.deleted_at ?? null,
+/**
+ * Create a task under its own id. Every create is the server op (TV-D8): it
+ * numbers the task, registers it for search and logs it; the client's id makes
+ * a resend idempotent (a capture flushed twice from the offline queue is one
+ * task, TV-D11a). No id: a new one.
+ */
+async function createTaskRow(task: Task): Promise<Task> {
+  const now = new Date().toISOString();
+  const created = {
+    ...task,
+    id: task.id?.trim() || crypto.randomUUID(),
+    createdAt: task.createdAt || now,
+    updatedAt: now,
   };
-}
-
-function tagLinkRowToModel(raw: unknown): TagLink {
-  const r = requireRow(tagLinkRowSchema, raw, "tag link");
-  return {
-    id: r.id,
-    workspaceId: r.workspace_id,
-    tagId: r.tag_id,
-    entityType: r.entity_type,
-    entityId: r.entity_id,
-    createdAt: r.created_at,
-  };
+  const input = taskCreateOpInput(created);
+  // A database before TV-D10 / TV-D9 (the merge-before-apply window)
+  // refuses the newer fields: retry without them. Remove in TV-D7.
+  const op = await withFieldFallback(input, (fields) =>
+    supabaseClient.rpc("tasks_op_create", {
+      p_workspace_id: task.workspaceId,
+      p_task: fields,
+    }),
+  );
+  if (!op.error) return taskRowToModel(Array.isArray(op.data) ? op.data[0] : op.data);
+  if (!isMissingFunctionError(op.error, "tasks_op_create")) throw new Error(op.error.message);
+  // Before TV-D8's migration: the direct insert. Remove in TV-D7.
+  const user = await getAuthedUser();
+  const actorId = user?.id ?? null;
+  let { data, error } = await supabaseClient
+    .from("tasks")
+    .upsert(taskCreateRow(created, actorId), { onConflict: "id" })
+    .select()
+    .single();
+  // Until the TV-D1 migration reaches the database there is no
+  // assignee_id, and owner_id still holds the assignee. Remove in TV-D7.
+  if (isMissingColumnError(error, "assignee_id")) {
+    ({ data, error } = await supabaseClient
+      .from("tasks")
+      .upsert(taskCreateRowLegacy(created, actorId), { onConflict: "id" })
+      .select()
+      .single());
+  }
+  if (error) throw new Error(error.message);
+  return taskRowToModel(data);
 }
 
 function taskRelationRowToModel(raw: unknown): TaskRelation {

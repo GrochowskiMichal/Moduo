@@ -1,28 +1,37 @@
-import { Avatar, AvatarFallback, AvatarImage } from "../../../components/ui/avatar";
-import { cn } from "../../../lib/utils";
-import { type Assignee, initialsOf } from "../assignees";
+import { PersonAvatar } from "../../../components/ui/avatar";
+import type { Assignee } from "../assignees";
 
 /**
- * Small round avatar for a task's assignee; empty slot when unassigned.
- * `size="icon"` sits on the icon rung (rows, cards, the queue mark) and shows
- * one initial, which is all that fits.
+ * A task's assignee as the kit's `PersonAvatar` (DS-6, call 43): two initials
+ * on a stable colour keyed on their id (from the person's own name, never the
+ * picker's "Me"; "?" when they haven't set one or have left), or the dashed
+ * "unassigned" ring when there is nobody. `size="icon"` sits on the icon rung
+ * (rows, cards, pickers, the queue mark). Decorative: the name always sits
+ * beside it or in its wrapper's label.
  */
 export function AssigneeAvatar({
   assignee,
+  assigneeId,
   size = "sm",
   className,
 }: {
   assignee: Assignee | null;
+  /** The task's assignee id: set but unknown (a former member) draws "?" on
+   *  gray, never the empty "unassigned" ring. */
+  assigneeId?: string | null;
   size?: "sm" | "icon";
   className?: string;
 }) {
-  const initials = assignee ? initialsOf(assignee.name) : "?";
+  // Initials come from the person's own name, never the picker's "Me" (TV-P0);
+  // someone without a name, or a former member, is "?" on gray.
+  const name = assignee ? assignee.fullName || "?" : assigneeId ? "?" : null;
   return (
-    <Avatar size={size} className={cn(size === "sm" && "size-5", className)}>
-      {assignee?.avatarUrl ? <AvatarImage src={assignee.avatarUrl} alt="" /> : null}
-      <AvatarFallback className={size === "sm" ? "text-2xs" : undefined}>
-        {size === "icon" ? initials.slice(0, 1) : initials}
-      </AvatarFallback>
-    </Avatar>
+    <PersonAvatar
+      name={name}
+      id={assignee?.userId}
+      src={assignee?.avatarUrl}
+      size={size}
+      className={className}
+    />
   );
 }

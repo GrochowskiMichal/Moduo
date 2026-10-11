@@ -9,6 +9,7 @@ import { Constants } from "@/types/supabase";
 import { ATTACHMENTS_BUCKET } from "./attachments.ts";
 import { TOOL_ARG_SCHEMAS } from "./mcp-tool-args.ts";
 import {
+  ACCESS_CHANGE_RESOURCES,
   ATTACHMENT_DELETED_REASONS,
   ATTACHMENT_PREVIEW_MIMES,
   ATTACHMENT_STATUSES,
@@ -29,10 +30,16 @@ import {
   MEMBER_DB_PERMISSIONS,
   MEMBER_DB_ROLES,
   PLAN_TIERS,
+  PROJECT_STATES,
+  SYNC_TOMBSTONE_TABLES,
+  TASK_CLOSED_CATEGORIES,
+  TASK_REMINDER_KINDS,
+  TASK_STATUS_CATEGORIES,
   TASK_STATUSES,
   TASK_TIME_ACTIONS,
   TASK_TIME_ENTRY_KINDS,
   TASK_TIME_STATUSES,
+  TASK_WAITING_KINDS,
   WAITLIST_ROW_SOURCES,
   WAITLIST_SOURCES,
   WAITLIST_STATUSES,
@@ -147,6 +154,49 @@ describe("cross-runtime drift guards", () => {
 
   it("task statuses stay the closed set used by MCP parsers", () => {
     expect(TASK_STATUSES).toEqual(["todo", "in_progress", "done", "archived"]);
+  });
+
+  it("task status categories match the project_statuses and tasks CHECKs (TV-D9)", () => {
+    const sql = readFileSync(resolve(MIGRATIONS_DIR, "20261010170000_project_statuses.sql"), "utf8");
+    const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(",");
+    expect(sql).toContain(`CHECK (category IN (${inList(TASK_STATUS_CATEGORIES)}))`);
+    expect(sql).toContain(`CHECK (status_category IN (${inList(TASK_STATUS_CATEGORIES)}))`);
+    // The server's word reader and legacy mirror know every category.
+    for (const c of TASK_STATUS_CATEGORIES) expect(sql).toContain(`THEN '${c}'`);
+  });
+
+  it("project states, reminder kinds and waiting kinds match the TV-D10 CHECKs and ops", () => {
+    const read = (file: string) => readFileSync(resolve(MIGRATIONS_DIR, file), "utf8");
+    const structure = read("20261010180000_areas_projects_sections.sql");
+    const sessions = read("20261010181000_task_sessions_reminders_waiting.sql");
+    const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(",");
+    const opList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(", ");
+    expect(structure).toContain(`CHECK (status IN (${inList(PROJECT_STATES)}))`);
+    expect(structure).toContain(`NOT IN (${opList(PROJECT_STATES)})`);
+    expect(sessions).toContain(`CHECK (kind IN (${inList(TASK_REMINDER_KINDS)}))`);
+    expect(sessions).toContain(`p_kind NOT IN (${opList(TASK_REMINDER_KINDS)})`);
+    expect(sessions).toContain(`CHECK (kind IN (${inList(TASK_WAITING_KINDS)}))`);
+    expect(sessions).toContain(`v_kind NOT IN (${opList(TASK_WAITING_KINDS)})`);
+  });
+
+  it("the grant feed's resources and the tombstoned tables match TV-D11b's CHECKs", () => {
+    const sql = readFileSync(
+      resolve(MIGRATIONS_DIR, "20261011120000_tasks_sync_feed_search.sql"),
+      "utf8",
+    );
+    const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(",");
+    expect(sql).toContain(`CHECK (resource_type IN (${inList(ACCESS_CHANGE_RESOURCES)}))`);
+    expect(sql).toContain(`CHECK (table_name IN (${inList(SYNC_TOMBSTONE_TABLES)}))`);
+    // Every tombstoned table has its trigger.
+    for (const t of SYNC_TOMBSTONE_TABLES) {
+      expect(sql).toContain(`CREATE TRIGGER sync_tombstone AFTER DELETE ON public.${t}`);
+    }
+  });
+
+  it("the booking busy read leaves out the closed categories (TV-D10-fix)", () => {
+    const sql = readFileSync(resolve(MIGRATIONS_DIR, "20261011110000_task_sessions_access.sql"), "utf8");
+    const opList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(", ");
+    expect(sql).toContain(`'todo') NOT IN (${opList(TASK_CLOSED_CATEGORIES)})`);
   });
 
   it("every MCP module tool name has a TOOL_ARG_SCHEMAS parser and vice versa", () => {

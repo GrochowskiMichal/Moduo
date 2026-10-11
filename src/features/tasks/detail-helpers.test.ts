@@ -142,6 +142,20 @@ describe("comments & activity feed", () => {
     expect(feed[0]).toMatchObject({ kind: "created", actorId: "u1" });
   });
 
+  it("leads with the create row when the server logged one, so an agent's create names its key (TV-D8)", () => {
+    const feed = buildTaskFeed({
+      task: task({ createdAt: "2026-10-06T10:00:00Z" }),
+      activity: [
+        entry("a1", "2026-10-06T10:00:00Z", "tasks.assigned"),
+        entry("cr", "2026-10-06T10:00:00Z", "tasks.create"),
+        entry("a2", "2026-10-07T10:00:00Z"),
+      ],
+      comments: [],
+    });
+    expect(feed.map((i) => i.id)).toEqual(["cr", "a1", "a2"]);
+    expect(feed.filter((i) => i.kind === "created")).toEqual([]);
+  });
+
   it("names nobody for creation when the creator isn't known", () => {
     const [created] = buildTaskFeed({
       task: task({ creatorUnknown: true }),

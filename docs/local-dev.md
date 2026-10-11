@@ -55,6 +55,19 @@ Billing runs on Supabase's **Stripe Sync Engine** ([decisions/billing.md](decisi
 
 `bun run local:stripe` (Stripe CLI in Docker; log in once with `docker run --rm -it -v "$HOME/.config/stripe:/root/.config/stripe" stripe/stripe-cli login`) is there for watching and triggering test events.
 
+## The 10,000-task perf gate (TV-D11b)
+
+Tasks must stay instant at 10,000 tasks: opening a task, searching and switching views under 200 ms (spec §Assumptions #8, AC12.3, AC12.4). The gate runs on the local stack only; CI has no stack and runs no e2e.
+
+```bash
+bun run perf:seed            # the fixture: perf@moduo.local's own workspace "Perf 10k", 10,000 tasks (idempotent; --force reseeds)
+MODUO_TARGET=web ./node_modules/.bin/rsbuild dev --host 127.0.0.1 --port 8131   # or bun run dev:web
+E2E_BASE_URL=http://127.0.0.1:8131 bun run perf   # seeds (or keeps) the fixture, then the Playwright `perf` project
+```
+
+- **The fixture** (`scripts/perf/seed-tasks-10k.ts`): 20 projects plus the Inbox, about 1,900 open tasks, 200 Backlog, 7,600 done and 300 Won't do; HTML descriptions, subtasks, dates, tags, blockers, a queue and comments. Every 500th task carries "quokka" (the spec searches it). Sign in as `perf@moduo.local` (the password is in the script) to look around.
+- **The spec** (`tests/perf/tasks-10k.spec.ts`) times real input inside the page, from the input's first event to the frame that shows the result (median of three), checks that long lists and Board columns draw only a screenful, drags a card out of a 1,200-card column, and checks that adding or renaming a project never blocks the page for 200 ms. It logs every number; compare runs on the same machine.
+
 ## Not local (on purpose)
 
 - **pg_cron jobs** (e.g. `purge-deleted` at 04:23 UTC) aren't in the snapshot; call the function by hand.

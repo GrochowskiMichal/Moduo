@@ -1,5 +1,5 @@
 // The row's context menu on the real TaskListView. Its "Rename", "Schedule…",
-// "Set due date…" and "Move to bucket…" used to open their editor or popover
+// "Set due date…" and "Move to project…" used to open their editor or popover
 // and lose it a tick later, when the closing menu handed focus back to the list.
 // Also covers the other ways in (s/d/b, a click on a chip), Esc handing focus
 // back to the list, and the title editor saving once on Enter and not on Esc.
@@ -79,6 +79,7 @@ const inbox: Bucket = {
 function renderList({ canEdit = true }: { canEdit?: boolean } = {}) {
   const tasks = [task("a", "Alpha"), task("b", "Beta", { dueDate: "2026-10-20T00:00:00.000Z" })];
   const api = {
+    loaded: true,
     tasks,
     queuedTaskIds: new Set(),
     queueClaims: new Map(),
@@ -104,7 +105,6 @@ function renderList({ canEdit = true }: { canEdit?: boolean } = {}) {
           view="list"
           onViewChange={() => {}}
           groupBy="none"
-          onGroupByChange={() => {}}
           buckets={[]}
           inbox={inbox}
           bucketNameById={() => "Work"}
@@ -130,7 +130,12 @@ function renderList({ canEdit = true }: { canEdit?: boolean } = {}) {
 const settle = () => act(() => new Promise((resolve) => setTimeout(resolve, 50)));
 const rowOf = (title: string) =>
   screen.getByRole("button", { name: title }).closest('[role="row"]') as HTMLElement;
-const popover = () => document.querySelector<HTMLElement>('[data-slot="popover-content"]');
+// The date editors are popovers; the bucket picker is a radio menu (DS-6).
+const popover = () =>
+  document.querySelector<HTMLElement>(
+    '[data-slot="popover-content"], [data-slot="dropdown-menu-content"]',
+  );
+const rowMenu = () => document.querySelector('[data-slot="context-menu-content"]');
 const pressEscape = () =>
   fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape", code: "Escape" });
 
@@ -145,7 +150,7 @@ async function chooseFromRowMenu(title: string, item: string) {
 const POPOVERS = [
   { item: "Schedule…", key: "s", text: "Scheduled time" },
   { item: "Set due date…", key: "d", text: "Due date" },
-  { item: "Move to bucket…", key: "b", text: "Inbox" },
+  { item: "Move to project…", key: "b", text: "Inbox" },
 ] as const;
 
 describe("TaskRow context menu", () => {
@@ -156,7 +161,7 @@ describe("TaskRow context menu", () => {
 
       await chooseFromRowMenu("Alpha", item);
 
-      expect(screen.queryByRole("menu")).toBeNull();
+      expect(rowMenu()).toBeNull();
       expect(popover()?.textContent).toContain(text);
       expect(popover()?.contains(document.activeElement)).toBe(true);
     });
@@ -221,6 +226,22 @@ describe("TaskRow context menu", () => {
     await chooseFromRowMenu("Beta", "Mark done");
 
     expect(api.toggleDone).toHaveBeenCalledWith(expect.objectContaining({ id: "b" }));
+    expect(popover()).toBeNull();
+    expect(document.activeElement).toBe(grid);
+  });
+});
+
+describe("TaskRow bucket menu (DS-6: a radio menu, not a hand-rolled list)", () => {
+  it("picking a project from the menu moves the task once and hands focus back", async () => {
+    const { api, grid } = renderList();
+    await settle();
+    grid.focus();
+    fireEvent.keyDown(grid, { key: "b", code: "KeyB" });
+    await settle();
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Inbox" }));
+    await settle();
+    expect(api.patchTask).toHaveBeenCalledTimes(1);
+    expect(api.patchTask).toHaveBeenCalledWith("a", { bucketId: "inbox" });
     expect(popover()).toBeNull();
     expect(document.activeElement).toBe(grid);
   });

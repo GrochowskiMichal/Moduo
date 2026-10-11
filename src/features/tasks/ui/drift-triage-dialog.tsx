@@ -151,7 +151,7 @@ function TriageRow({
       style={{ minHeight: "var(--row-h)" }}
     >
       <div className="min-w-0 flex-1">
-        <p className="truncate font-display text-sm text-foreground">{task.title || "Untitled"}</p>
+        <p className="truncate font-sans text-sm text-foreground">{task.title || "Untitled"}</p>
         {when ? (
           <p className="flex items-center gap-1 text-xs text-muted-foreground">
             <Clock className="size-3" aria-hidden />

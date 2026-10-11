@@ -43,7 +43,6 @@ const meta = {
     view: "list",
     onViewChange: () => {},
     groupBy: "none",
-    onGroupByChange: () => {},
     buckets: BUCKETS,
     inbox: INBOX,
     bucketNameById,
@@ -70,6 +69,17 @@ export const AllByBucket: Story = {
 /** All, flat: the bucket shows as dot + name text, never a pill. */
 export const AllFlat: Story = {
   args: { tasks: TASKS, scopeTitle: "All", selection: "all", groupBy: "status" },
+};
+
+/** Display → Group by → Date: Earlier · Today · Tomorrow · five day names · Later · No date. */
+export const ByDate: Story = {
+  args: { tasks: TASKS, scopeTitle: "All", selection: "all", groupBy: "date" },
+};
+
+/** Display → Rows → Detailed: the status name, the time, the assignee's name
+ *  and the project on every row (the rest of Detailed is TV-U10's). */
+export const DetailedRows: Story = {
+  args: { tasks: TASKS, rows: "detailed", completed: "all" },
 };
 
 /** Display → Completed: All — done rows dim as a whole except the checkbox. */

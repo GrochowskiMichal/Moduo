@@ -3,6 +3,7 @@ import { Hash, Inbox, Layers, ListChecks } from "lucide-react";
 import { useState } from "react";
 
 import type { LabelColor } from "../tag-colors";
+import { AtThreeDensities } from "./kit-densities";
 import { type MenuKit, NavRow, NavRowDot, NavSectionHeader } from "./nav-row";
 
 const meta: Meta<typeof NavRow> = {
@@ -111,6 +112,14 @@ export const States: Story = {
         menu={rowMenu}
       />
       <NavRow label="No count, menu only" icon={<NavRowDot />} menu={rowMenu} />
+      <NavRow
+        label="Hover + beside ⋯"
+        icon={<NavRowDot color="teal" />}
+        count={7}
+        menu={rowMenu}
+        onAdd={() => {}}
+        addLabel="New task in this bucket"
+      />
       <NavRow label="Count, no menu" icon={<Hash aria-hidden />} count={128} />
     </div>
   ),
@@ -143,4 +152,24 @@ export const SectionsAndLevels: Story = {
       </div>
     );
   },
+};
+
+/** Rail rows and a section header at the three density steps: rows 36 / 32 / 28 px. */
+export const Densities: Story = {
+  render: () => (
+    <AtThreeDensities direction="column">
+      <nav aria-label="Projects" className="flex flex-col gap-px">
+        <NavSectionHeader
+          label="Client work"
+          count={3}
+          onToggle={() => {}}
+          onAdd={() => {}}
+          menu={rowMenu}
+        />
+        <NavRow label="Inbox" icon={<Inbox aria-hidden />} count={4} current />
+        <NavRow label="Moduo App" icon={<NavRowDot color="blue" />} count={64} menu={rowMenu} />
+        <NavRow label="Marketing" icon={<NavRowDot color="amber" />} count={1} menu={rowMenu} />
+      </nav>
+    </AtThreeDensities>
+  ),
 };

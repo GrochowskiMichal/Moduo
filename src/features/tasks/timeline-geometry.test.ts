@@ -109,6 +109,10 @@ describe("bar span per date shape (AC2)", () => {
     const done = barForTask(doneTask, win, NOW)!;
     expect(done.pastEnd).toBe(false);
     expect(done.done).toBe(true);
+    expect(done.closed).toBe(true);
+    // A Won't do bar (Filter → Status lists them) reads closed but isn't Done.
+    const wontDo = barForTask({ ...doneTask, status: "archived" }, win, NOW)!;
+    expect([wontDo.closed, wontDo.done, wontDo.pastEnd]).toEqual([true, false, false]);
     const future = barForTask(task({ dueDate: localIso(2026, 6, 20) }), win, NOW)!;
     expect(future.pastEnd).toBe(false);
   });

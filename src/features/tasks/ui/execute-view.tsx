@@ -6,10 +6,11 @@ import { Button } from "../../../components/ui/button";
 import { CompleteToggle } from "../../../components/ui/complete-toggle";
 import { Eyebrow } from "../../../components/ui/eyebrow";
 import { IconButton } from "../../../components/ui/icon-button";
-import { Input } from "../../../components/ui/input";
+import { Input, NumberInput } from "../../../components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import { type FocusPrefs, useFocusPrefs } from "../../../lib/focus-prefs";
+import { formatDurationSeconds } from "../../../lib/time-format";
 import { cn } from "../../../lib/utils";
 import {
   bindFocusTask,
@@ -26,7 +27,7 @@ import { FocusAwayPrompt } from "../../focus/ui/away-prompt";
 import { dispatchOpenSettings } from "../../settings/settings-events";
 import { EntityRichText } from "../../spine/ui/entity-rich-text";
 import { formatDue, formatScheduled } from "../helpers";
-import type { Tag, Task } from "../model";
+import { estimateOf, type Tag, type Task } from "../model";
 
 type Props = {
   /** The workspace the tracked time is saved into (the engine flushes per workspace). */
@@ -303,22 +304,22 @@ function NowCard({
     [
       parentTitle ? `Part of ${parentTitle}` : null,
       scheduled ? `Scheduled ${scheduled}` : null,
-      task.durationMinutes ? `~${task.durationMinutes}m est` : null,
+      estimateOf(task) ? `~${estimateOf(task)}m est` : null,
     ]
       .filter(Boolean)
       .join("  ·  ");
 
   const trackedTotal = task.timeSpentSeconds + accrued;
-  const estimateSeconds = task.durationMinutes ? task.durationMinutes * 60 : null;
+  const estimateMinutes = estimateOf(task);
+  const estimateSeconds = estimateMinutes ? estimateMinutes * 60 : null;
 
   return (
     // elevated: --popover sits one step lighter than the --card panel (no shadow —
     // surface contrast carries elevation on dark). Left-aligned, task-first.
     <div className="rounded-lg border border-border bg-popover px-6 py-5">
       <div className="flex items-center justify-between gap-3">
-        <Eyebrow as="p" className="shrink-0" tone="muted">
-          {bucketName}
-        </Eyebrow>
+        {/* The bucket's name as its owner typed it: sentence case, no small caps (call 40). */}
+        <span className="shrink-0 font-sans text-xs text-muted-foreground">{bucketName}</span>
         <div className="flex min-w-0 items-center justify-end gap-2">
           {due ? (
             <span className="shrink-0 font-sans text-2xs text-muted-foreground">Due {due}</span>
@@ -433,14 +434,15 @@ function NowCard({
 
         {/* bottom-right — Skip / Done (reorder lives in the Queue now) */}
         <div className="flex shrink-0 items-center gap-3">
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={onSkip}
-            className="font-sans text-sm text-muted-foreground hover:text-foreground"
+            className="text-muted-foreground hover:text-foreground"
           >
             Skip
-          </button>
-          <Button size="md" onClick={onMarkDone}>
+          </Button>
+          <Button size="sm" onClick={onMarkDone}>
             <Check className="size-icon-sm" aria-hidden />
             Done
           </Button>
@@ -509,7 +511,7 @@ function TimerMenu({
   prefs: FocusPrefs;
   onPrefsChange: (patch: Partial<FocusPrefs>) => void;
 }) {
-  const [setMin, setSetMin] = useState("");
+  const [setMin, setSetMin] = useState<number | null>(null);
 
   return (
     <Popover>
@@ -537,22 +539,21 @@ function TimerMenu({
           <div>
             <Eyebrow as="p">Set total (min)</Eyebrow>
             <div className="mt-1.5 flex items-center gap-1.5">
-              <Input
+              <NumberInput
                 size="sm"
-                type="number"
                 min={0}
                 value={setMin}
+                onValueChange={setSetMin}
                 placeholder={String(Math.round(task.timeSpentSeconds / 60))}
-                onChange={(e) => setSetMin(e.target.value)}
+                aria-label="Total minutes"
                 className="w-20"
               />
               <Button
                 variant="secondary"
                 size="sm"
                 onClick={() => {
-                  const n = Number(setMin);
-                  if (Number.isFinite(n) && setMin !== "") onSetTime(task.id, Math.max(0, n) * 60);
-                  setSetMin("");
+                  if (setMin !== null) onSetTime(task.id, Math.max(0, setMin) * 60);
+                  setSetMin(null);
                 }}
               >
                 Set
@@ -566,27 +567,23 @@ function TimerMenu({
             <Eyebrow as="p">Pomodoro</Eyebrow>
             <div className="mt-1.5 flex items-center gap-2 font-sans text-sm text-muted-foreground">
               <span>Work</span>
-              <Input
+              <NumberInput
                 size="sm"
-                type="number"
                 min={1}
                 max={180}
-                value={String(prefs.workMinutes)}
-                onChange={(e) =>
-                  onPrefsChange({ workMinutes: Math.max(1, Number(e.target.value) || 1) })
-                }
+                value={prefs.workMinutes}
+                onValueChange={(n) => onPrefsChange({ workMinutes: n ?? 1 })}
+                aria-label="Work minutes"
                 className="w-14"
               />
               <span>Break</span>
-              <Input
+              <NumberInput
                 size="sm"
-                type="number"
                 min={1}
                 max={180}
-                value={String(prefs.breakMinutes)}
-                onChange={(e) =>
-                  onPrefsChange({ breakMinutes: Math.max(1, Number(e.target.value) || 1) })
-                }
+                value={prefs.breakMinutes}
+                onValueChange={(n) => onPrefsChange({ breakMinutes: n ?? 1 })}
+                aria-label="Break minutes"
                 className="w-14"
               />
             </div>
@@ -594,13 +591,14 @@ function TimerMenu({
               <input type="checkbox" checked={pomodoro} onChange={onTogglePomodoro} />
               Pomodoro rhythm
             </label>
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={() => dispatchOpenSettings({ section: "focus" })}
-              className="mt-2 font-sans text-2xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+              className="mt-1 -ms-2.5 font-sans text-2xs font-normal text-muted-foreground hover:text-foreground"
             >
               More in Settings → Focus
-            </button>
+            </Button>
           </div>
         </div>
       </PopoverContent>
@@ -641,7 +639,7 @@ function Queue({
           style={{ minHeight: "var(--row-h)" }}
         >
           <span className="size-1.5 rounded-full bg-muted-foreground/50" aria-hidden />
-          <span className="min-w-0 flex-1 truncate font-display text-foreground">
+          <span className="min-w-0 flex-1 truncate font-sans text-foreground">
             {task.title || "Untitled"}
           </span>
           {parentTitleFor(task) ? (
@@ -666,11 +664,8 @@ function formatClock(totalSeconds: number): string {
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
+/** A tracked total in the one grammar ("45m", "1h 30m"); under a minute, seconds. */
 function formatDuration(totalSeconds: number): string {
   const s = Math.max(0, Math.round(totalSeconds));
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  if (h > 0) return `${h}h ${m}m`;
-  if (m > 0) return `${m}m`;
-  return `${s}s`;
+  return s < 60 ? `${s}s` : formatDurationSeconds(s);
 }

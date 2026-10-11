@@ -2,7 +2,7 @@ import { describe, expect, it } from "@rstest/core";
 
 import { type GroupBy, showBucketPill } from "./helpers";
 
-const GROUPINGS: GroupBy[] = ["none", "status", "bucket", "energy", "priority"];
+const GROUPINGS: GroupBy[] = ["none", "status", "bucket", "assignee", "priority", "date"];
 
 describe("showBucketPill (tasks-v2 Q1-3)", () => {
   it("bucket pill implied: never in a single-bucket scope, whatever the grouping", () => {
@@ -18,7 +18,7 @@ describe("showBucketPill (tasks-v2 Q1-3)", () => {
   });
 
   it("shows across buckets when nothing else names the bucket", () => {
-    for (const groupBy of ["none", "status", "energy", "priority"] as const) {
+    for (const groupBy of ["none", "status", "assignee", "priority", "date"] as const) {
       expect(showBucketPill("all", groupBy)).toBe(true);
     }
     expect(showBucketPill("today", "none")).toBe(true);

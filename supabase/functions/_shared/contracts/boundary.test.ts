@@ -26,11 +26,10 @@ describe("runtime row boundary", () => {
     }
   });
 
-  it("rejects an unknown task status so it cannot reach the model", () => {
-    expect(parseOrError(taskRowSchema, { ...validTask, status: "nope" }).success).toBe(false);
-    expect(() => requireRow(taskRowSchema, { ...validTask, status: "nope" }, "task")).toThrow(
-      /Malformed task/,
-    );
+  it("keeps a row whose status this build doesn't know (TV-D8: never drop a row)", () => {
+    // The model reads it through normalizeTaskStatus (task-rows.ts).
+    expect(parseOrError(taskRowSchema, { ...validTask, status: "backlog" }).success).toBe(true);
+    expect(requireRow(taskRowSchema, { ...validTask, status: "nope" }, "task").status).toBe("nope");
   });
 
   it("drops malformed rows from list reads", () => {

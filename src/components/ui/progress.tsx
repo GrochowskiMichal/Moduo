@@ -12,6 +12,12 @@
  * Hand-rolled: a determinate bar is a div with a width, and `@radix-ui/react-progress`
  * would be a new dependency for that. It still carries the same ARIA contract
  * (`role="progressbar"` + the value/min/max trio) so assistive tech reads it.
+ *
+ * Neutral (DS-6, visual audit §C): the fill is the secondary text colour on a
+ * hairline track, never the accent. The accent stays for selection, focus,
+ * the done check and status marks (R5, the accent budget of call 46). Two
+ * sizes: `md` 6 px for a standalone bar, `sm` 2 px inline beside a number
+ * (the detail panel's "1h 20m of ~4h").
  */
 
 import { cn } from "@/lib/utils";
@@ -23,10 +29,11 @@ type Props = {
   max: number;
   /** Accessible name — required, since a bare bar tells a screen reader nothing. */
   label: string;
+  size?: "sm" | "md";
   className?: string;
 };
 
-export function Progress({ value, max, label, className }: Props) {
+export function Progress({ value, max, label, size = "md", className }: Props) {
   const safeMax = Number.isFinite(max) && max > 0 ? max : 0;
   const safeValue = safeMax === 0 ? 0 : Math.min(Math.max(value, 0), safeMax);
   const percent = safeMax === 0 ? 0 : (safeValue / safeMax) * 100;
@@ -38,10 +45,16 @@ export function Progress({ value, max, label, className }: Props) {
       aria-valuenow={safeMax === 0 ? undefined : safeValue}
       aria-valuemin={0}
       aria-valuemax={safeMax || undefined}
-      className={cn("h-1.5 w-full overflow-hidden rounded-full bg-muted", className)}
+      data-slot="progress"
+      data-size={size}
+      className={cn(
+        "w-full overflow-hidden rounded-full bg-hairline",
+        size === "sm" ? "h-0.5" : "h-1.5",
+        className,
+      )}
     >
       <div
-        className="h-full rounded-full bg-primary transition-[width] duration-(--motion-fast) ease-(--ease-out)"
+        className="h-full rounded-full bg-muted-foreground transition-[width] duration-(--motion-fast) ease-(--ease-out)"
         style={{ width: `${percent}%` }}
       />
     </div>

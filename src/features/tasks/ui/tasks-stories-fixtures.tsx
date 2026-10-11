@@ -156,6 +156,10 @@ export function stubApi(tasks: Task[] = TASKS): TasksModuleApi {
   const blocker = tasks.find((t) => t.id === "policy");
   return {
     loading: false,
+    loaded: true,
+    restLoaded: true,
+    offline: false,
+    pendingSync: 0,
     tasks,
     queuedTaskIds: new Set(["review", "notes"]),
     queueClaims: new Map([
@@ -163,6 +167,10 @@ export function stubApi(tasks: Task[] = TASKS): TasksModuleApi {
       ["notes", ["u2"]],
     ]),
     subtasksByParent: byParent,
+    statuses: [],
+    statusById: new Map(),
+    statusesForBucket: () => [],
+    setTaskStatus: () => {},
     subtaskProgressByTask: progress,
     tagsByTask: new Map(Object.entries(TAGS)),
     blockedTaskIds: new Set(["schedule"]),

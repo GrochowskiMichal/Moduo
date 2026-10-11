@@ -15,7 +15,13 @@ import { previewAssign, useAssignees } from "../assignees";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { Task } from "../model";
 
-export function AssignContextMenu({ task, api }: { task: Task; api: TasksModuleApi }) {
+export function AssignContextMenu({
+  task,
+  api,
+}: {
+  task: Task;
+  api: Pick<TasksModuleApi, "patchTask">;
+}) {
   const { assignees } = useAssignees();
   // Solo workspaces have nobody to hand a task to.
   if (assignees.length < 2) return null;

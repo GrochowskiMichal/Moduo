@@ -4,18 +4,21 @@
 // completed task comes back. Missed occurrences don't exist: no backfill, no
 // "7 overdue" — there is only the next occurrence (design principle 4).
 //
-// Three entry points, all returning a Partial<Task> patch (or null for no-op):
-//   - recurrenceOnStatusChange — advance-on-done (and pointer refresh on un-done)
-//   - catchUpPatch             — idempotent catch-up pass on app open / reload
+// Since TV-D8 the server owns the pointer and the roll-over
+// (supabase/migrations/20261010161000_tasks_recurrence_server.sql, which reads
+// rules the way rrule.js does): this engine is for previews ("Done — next: …")
+// and for rules outside the server's subset, whose pointer the server keeps
+// from the client. The client catch-up pass is gone.
+//   - recurrenceOnStatusChange — the pointer a status change gives (preview)
 //   - skipOccurrencePatch      — the skip-occurrence affordance
 //
-// No React, no IO — easy to unit-test. Callers apply patches via the normal
-// optimistic patch path.
+// No React, no IO — easy to unit-test.
 
+import { isOpenTaskStatus } from "@contracts/vocabularies";
 import { RRule } from "rrule";
 
 import { todayStr } from "./helpers";
-import type { RecurrenceRule, Task, TaskStatus, TasksCatchUpItem } from "./model";
+import type { RecurrenceRule, Task, TaskStatus } from "./model";
 
 /** Build an RRule from a stored rule. Defensive: invalid input → null. */
 function toRRule(rec: RecurrenceRule, fallbackDtstart?: string | null): RRule | null {
@@ -53,7 +56,7 @@ export function currentOccurrence(
 }
 
 function isOpenStatus(status: TaskStatus): boolean {
-  return status === "todo" || status === "in_progress";
+  return isOpenTaskStatus(status);
 }
 
 /** The instant a completion advances from: the pending occurrence if it's still
@@ -72,8 +75,10 @@ function advanceBase(task: Pick<Task, "scheduledAt">, now: Date): Date {
 /**
  * Advance-on-done (spec §5d): when a recurring task's status changes, keep the
  * stored `nextOccurrence` pointer fresh. On completion the pointer moves to the
- * first occurrence after `max(now, scheduledAt)`; un-completing recomputes it
- * the same way. Returns the updated rule, or null when the change is not a
+ * first occurrence after `max(now, scheduledAt)` that isn't on today's date (a
+ * repeat done today comes back on a later day, TV-D8 — the server's rule, in
+ * the device's zone here); un-completing recomputes it after `max(now,
+ * scheduledAt)`. Returns the updated rule, or null when the change is not a
  * done-transition on a recurring task (archived is terminal — no advance).
  */
 export function recurrenceOnStatusChange(
@@ -86,87 +91,14 @@ export function recurrenceOnStatusChange(
   const completing = nextStatus === "done" && task.status !== "done";
   const reopening = task.status === "done" && isOpenStatus(nextStatus);
   if (!completing && !reopening) return null;
-  const next = occurrenceAfter(rec, advanceBase(task, now), task.createdAt);
+  let next = occurrenceAfter(rec, advanceBase(task, now), task.createdAt);
+  if (completing) {
+    const today = todayStr(now);
+    for (let i = 0; next && todayStr(next) <= today && i < 400; i += 1) {
+      next = occurrenceAfter(rec, next, task.createdAt);
+    }
+  }
   return { ...rec, nextOccurrence: next ? next.toISOString() : null };
-}
-
-/**
- * Catch-up (spec §5d) — one idempotent pass per task on app open / reload.
- * Returns a patch or null when the task is already current.
- *
- * - done + pointer arrived → reopen at the latest occurrence ≤ now (status
- *   todo, stale commit cleared — reopening never auto-commits).
- * - open + missed ≥1 full occurrence → collapse `scheduledAt` forward to the
- *   latest occurrence ≤ now (one quiet drift, never a pile).
- * - open + no `scheduledAt` → adopt the live occurrence (self-healing for
- *   rows captured before the engine existed).
- * - drift within the current occurrence is NOT caught up — still actionable.
- */
-export function catchUpPatch(task: Task, now: Date): Partial<Task> | null {
-  const rec = task.recurrence;
-  if (!rec || task.deletedAt || task.status === "archived") return null;
-
-  if (task.status === "done") {
-    // The pointer stored at completion; fall back to recomputing from the last
-    // update for pre-engine rows that were completed without one.
-    const pointerIso = rec.nextOccurrence;
-    const pointer = pointerIso
-      ? new Date(pointerIso)
-      : occurrenceAfter(rec, new Date(task.updatedAt), task.createdAt);
-    if (!pointer || Number.isNaN(pointer.getTime()) || pointer.getTime() > now.getTime()) {
-      return null; // exhausted rule stays done; future pointer isn't due yet
-    }
-    const current = currentOccurrence(rec, now, task.createdAt) ?? pointer;
-    const next = occurrenceAfter(rec, now, task.createdAt);
-    return {
-      status: "todo",
-      scheduledAt: current.toISOString(),
-      recurrence: { ...rec, nextOccurrence: next ? next.toISOString() : null },
-      committedFor: null,
-      commitOrder: null,
-    };
-  }
-
-  // Open task: collapse missed occurrences forward / adopt a missing one.
-  const current = currentOccurrence(rec, now, task.createdAt);
-  const next = occurrenceAfter(rec, now, task.createdAt);
-  let scheduledAt: string | null = null;
-  if (!task.scheduledAt) {
-    const adopt = current ?? next;
-    if (!adopt) return null;
-    scheduledAt = adopt.toISOString();
-  } else if (current) {
-    const scheduled = new Date(task.scheduledAt);
-    if (Number.isNaN(scheduled.getTime()) || scheduled.getTime() >= current.getTime()) {
-      return null; // current (or deliberately pushed ahead) — leave it alone
-    }
-    scheduledAt = current.toISOString();
-  } else {
-    return null;
-  }
-  return {
-    scheduledAt,
-    recurrence: { ...rec, nextOccurrence: next ? next.toISOString() : null },
-  };
-}
-
-/**
- * Shape a {@link catchUpPatch} result for the batched `tasks.catch_up` intent
- * op (docs/moduo-module-contract.md): the engine computed the occurrence math;
- * the op enforces structure and writes the attributed activity row.
- */
-export function catchUpItem(
-  task: Pick<Task, "id" | "scheduledAt">,
-  patch: Partial<Task>,
-): TasksCatchUpItem {
-  return {
-    taskId: task.id,
-    kind: patch.status ? "reopen" : task.scheduledAt ? "collapse" : "adopt",
-    status: patch.status === "todo" ? "todo" : undefined,
-    scheduledAt: patch.scheduledAt ?? undefined,
-    recurrence: patch.recurrence as RecurrenceRule,
-    clearCommit: "committedFor" in patch ? true : undefined,
-  };
 }
 
 /**

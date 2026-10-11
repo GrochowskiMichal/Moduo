@@ -9,9 +9,11 @@
 // read), and its registry label is already the subject; a desktop follow-up can
 // register email meta the same way.
 
+import { isBacklogTask, isClosedTask } from "@contracts/vocabularies";
 import { allTimeCalendarWindow } from "@/features/calendar/window";
 import type { EntityRef } from "@/lib/entity-links";
 import type { ModuoRuntime } from "@/lib/runtime.types";
+import { findWorkspaceStore } from "@/lib/sync/store";
 import { entityRefKey } from "../../spine/rollup";
 import type { HubSnippetMeta } from "../../spine/snippet-projectors";
 
@@ -50,14 +52,29 @@ export async function enrichHubRows(
   await Promise.all([
     wantTask.size
       ? Promise.resolve()
-          .then(() => runtime.tasks.list(workspaceId))
-          .then((bundle) => {
-            for (const t of bundle.tasks) {
-              const open = t.status !== "done" && t.status !== "archived";
+          // The workspace's shared store (TV-D11a): no read of its own. A
+          // linked Done task arrives with the rest, after the open ones.
+          .then(async () => {
+            const store = findWorkspaceStore(runtime, workspaceId);
+            if (!store) return [];
+            await store.whenLoaded();
+            const held = () => new Set(store.getSnapshot().bundle.tasks.map((t) => t.id));
+            if ([...wantTask].some((id) => !held().has(id))) await store.whenRest();
+            return store.getSnapshot().bundle.tasks;
+          })
+          .then((tasks) => {
+            for (const t of tasks) {
+              // Unfinished counts as open here: a Backlog task linked to a
+              // contact is still work about them (TV-D9).
+              const open = !isClosedTask(t);
               const key = entityRefKey({ type: "task", id: t.id });
               if (open) openTaskKeys.add(key);
               if (!wantTask.has(t.id)) continue;
-              snippetMeta.set(key, { kind: "task", status: t.status, dueDate: t.dueDate });
+              snippetMeta.set(key, {
+                kind: "task",
+                status: isBacklogTask(t) ? "backlog" : t.status,
+                dueDate: t.dueDate,
+              });
             }
           })
           .catch(() => {})

@@ -7,6 +7,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { Button } from "@/components/ui/button";
+import { FeedItem as FeedLine } from "@/components/ui/feed";
 import type { ModuoRuntime } from "@/lib/runtime.types";
 import { commentAuthorName } from "../../spine/comments";
 import { useCommentPeople } from "../../spine/hooks/use-comment-people";
@@ -81,6 +83,27 @@ export function TaskFeed({ task, api, runtime, workspaceId }: Props) {
   const { lead, hidden, rest } = foldFeed(feed, expanded);
   const selfName = currentUserId ? people.nameOf(currentUserId) : null;
   const canComment = !!runtime && !!workspaceId && !task.id.startsWith("tmp-");
+  // `@` in a comment names things too (RF-1): the registry, under its RLS,
+  // never this task itself. Stored as references, never titles.
+  const taskId = task.id;
+  const referenceSearch = useMemo(
+    () =>
+      runtime && workspaceId
+        ? {
+            search: async (query: string) => {
+              const records = await runtime.spine.searchEntities({
+                workspaceId,
+                query,
+                limit: 7,
+              });
+              return records
+                .filter((r) => !(r.type === "task" && r.id === taskId))
+                .map((r) => ({ ref: { type: r.type, id: r.id }, label: r.label, icon: r.icon }));
+            },
+          }
+        : undefined,
+    [runtime, workspaceId, taskId],
+  );
 
   const render = (item: FeedItem) => {
     switch (item.kind) {
@@ -146,31 +169,35 @@ export function TaskFeed({ task, api, runtime, workspaceId }: Props) {
     <section aria-label="Comments and activity" className="flex flex-col gap-2.5">
       {lead.map(render)}
       {hidden > 0 ? (
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={() => setExpanded(true)}
-          className="self-start rounded-sm font-sans text-xs text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+          className="-ms-2 self-start font-sans text-xs font-normal text-muted-foreground"
         >
           Show {hidden} earlier
-        </button>
+        </Button>
       ) : null}
       {rest.map(render)}
       {thread.failed ? (
         <p className="font-sans text-xs text-muted-foreground">
           Comments didn’t load.{" "}
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={thread.reload}
-            className="underline-offset-2 hover:text-foreground hover:underline"
+            className="-my-1 px-1.5 font-sans text-xs font-normal text-muted-foreground"
           >
             Retry
-          </button>
+          </Button>
         </p>
       ) : null}
       {canComment ? (
         <CommentComposer
           people={people.mentionable}
           aria-label="Comment on this task"
+          placeholder="Leave a comment…  @ to mention · / for dates"
+          references={referenceSearch}
           onSubmit={(body, mentionedUserIds) => thread.post({ body, mentionedUserIds })}
         />
       ) : null}
@@ -179,32 +206,27 @@ export function TaskFeed({ task, api, runtime, workspaceId }: Props) {
   );
 }
 
-/** One quiet trail line: avatar, "**Name** did this", when. */
+/** One quiet trail line: avatar, "**Name** did this", when (the kit's FeedItem). */
 function FeedEvent({
   person,
   time,
   title,
   children,
 }: {
-  person: { name: string; avatarUrl: string | null } | null;
+  person: { id?: string; name: string; avatarUrl: string | null } | null;
   time: string;
   title: string;
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex min-w-0 items-start gap-2 font-sans text-xs text-muted-foreground">
-      <PersonAvatar person={person} className="mt-px" />
-      <p className="min-w-0 leading-relaxed">
-        {children}{" "}
-        <time className="whitespace-nowrap tabular-nums" title={title}>
-          · {time}
-        </time>
-      </p>
-    </div>
+    <FeedLine avatar={<PersonAvatar person={person} />} time={time} timeTitle={title}>
+      {children}
+    </FeedLine>
   );
 }
 
-/** "Created by Maciej · Oct 6, 12:07 PM · Updated 7:20 PM" (· Rescheduled 3×). */
+/** "Created by Maciej · Oct 6, 12:07 PM · Updated 7:20 PM". No "Rescheduled N×":
+ *  the counter stopped counting at TV-D2 (TV-P0, AC1.11). */
 function MetaLine({ task }: { task: Task }) {
   const { byId } = useAssignees();
   const by = createdByLabel(task, byId);
@@ -213,8 +235,7 @@ function MetaLine({ task }: { task: Task }) {
       ? `Created by ${by} · ${formatTimestamp(task.createdAt)}`
       : `Created ${formatTimestamp(task.createdAt)}`,
     `Updated ${feedTime(task.updatedAt)}`,
-    task.rescheduleCount > 0 ? `Rescheduled ${task.rescheduleCount}×` : null,
-  ].filter(Boolean);
+  ];
   return (
     <p className="font-sans text-2xs text-muted-foreground tabular-nums">{parts.join(" · ")}</p>
   );

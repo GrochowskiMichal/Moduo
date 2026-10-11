@@ -110,10 +110,10 @@ export function SettingsModal() {
   );
 
   // Appearance still leans on the visible app behind for the live preview, so
-  // its backdrop drops the blur — content stays legible while the modal sits
-  // in front. A medium scrim keeps focus on the controls without losing the
-  // preview surface. Other sections get a heavier scrim + blur to signal
-  // "you're in a panel."
+  // its backdrop is lighter — content stays legible while the modal sits in
+  // front. A medium scrim keeps focus on the controls without losing the
+  // preview surface. Other sections get a heavier scrim to signal "you're in a
+  // panel." No backdrop blur anywhere (tasks-v3 call 81).
   const isAppearance = section === "appearance";
 
   const handleOpenChange = (next: boolean) => {
@@ -131,7 +131,7 @@ export function SettingsModal() {
             "fixed inset-0 transition-opacity",
             "data-[state=closed]:animate-out data-[state=closed]:fade-out-0",
             "data-[state=open]:animate-in data-[state=open]:fade-in-0",
-            isAppearance ? "bg-background/65" : "bg-background/85 backdrop-blur-md",
+            isAppearance ? "bg-background/65" : "bg-background/85",
           )}
           style={{ zIndex: "var(--z-overlay)" }}
         />

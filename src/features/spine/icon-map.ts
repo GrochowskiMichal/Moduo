@@ -25,6 +25,7 @@ import {
 const ENTITY_TYPE_ICONS: Record<string, LucideIcon> = {
   task: CircleCheck,
   project: FolderKanban,
+  bucket: FolderKanban,
   note: FileText,
   email: Mail,
   email_thread: Mail,
