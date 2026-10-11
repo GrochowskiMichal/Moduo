@@ -27,6 +27,7 @@ import {
   MEMBER_DB_ROLES,
   PLAN_TIERS,
   PROJECT_STATES,
+  TASK_CLOSED_CATEGORIES,
   TASK_REMINDER_KINDS,
   TASK_STATUS_CATEGORIES,
   TASK_STATUSES,
@@ -161,6 +162,12 @@ describe("cross-runtime drift guards", () => {
     expect(sessions).toContain(`p_kind NOT IN (${opList(TASK_REMINDER_KINDS)})`);
     expect(sessions).toContain(`CHECK (kind IN (${inList(TASK_WAITING_KINDS)}))`);
     expect(sessions).toContain(`v_kind NOT IN (${opList(TASK_WAITING_KINDS)})`);
+  });
+
+  it("the booking busy read leaves out the closed categories (TV-D10-fix)", () => {
+    const sql = readFileSync(resolve(MIGRATIONS_DIR, "20261010190000_task_sessions_access.sql"), "utf8");
+    const opList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(", ");
+    expect(sql).toContain(`'todo') NOT IN (${opList(TASK_CLOSED_CATEGORIES)})`);
   });
 
   it("every MCP module tool name has a TOOL_ARG_SCHEMAS parser and vice versa", () => {

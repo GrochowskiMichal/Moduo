@@ -1,62 +1,49 @@
 /**
  * A booking link's host is busy during their work sessions from Tasks
  * (TV-D10, REPLAN default d), when the link's busy list has the pseudo-
- * calendar "tasks". Only the times come back: what the work is never reaches
- * the guest, and closed or deleted tasks don't block anything.
+ * calendar "tasks". The read goes through `tasks__busy_sessions` (TV-D10-fix,
+ * `20261010190000_task_sessions_access.sql`), the same task gate as every
+ * other path: only the host's live sessions on open tasks they can see, and
+ * only the times. What the work is never reaches the guest.
  *
- * A read that fails (say, a database before TV-D10's migration) blocks
- * nothing, like the calendar events read beside it.
+ * A read that fails (say, a database before that migration) blocks nothing,
+ * like the calendar events read beside it.
  */
 
 /** The busy list's id for work sessions (the app's TASKS_BUSY_ID, src/features/calendar/booking/model.ts; the test checks they match). */
 export const TASKS_BUSY_ID = "tasks";
 
+/** The server function that answers a host's busy times (service role only). */
+export const BUSY_SESSIONS_RPC = "tasks__busy_sessions";
+
 export type BusyInterval = { start: Date; end: Date };
 
 /** The part of a Supabase client this reads through (service role). */
-export type SessionsDb = { from(table: string): any };
-
-type SessionRow = {
-  starts_at?: unknown;
-  ends_at?: unknown;
-  tasks?: { status?: unknown; status_category?: unknown; deleted_at?: unknown } | null;
+export type SessionsDb = {
+  rpc(fn: string, args: Record<string, unknown>): PromiseLike<{ data: unknown; error: unknown }>;
 };
 
-/**
- * Finished tasks block nothing: @contracts TASK_CLOSED_CATEGORIES (kept here
- * so the function doesn't load zod; booking-sessions.test.ts checks they
- * match), plus the legacy status words for a row without a category.
- */
-export const CLOSED_TASK_CATEGORIES: readonly string[] = ["done", "wont_do"];
-const CLOSED_LEGACY = new Set(["done", "archived"]);
-
-function isClosed(task: NonNullable<SessionRow["tasks"]>): boolean {
-  if (typeof task.status_category === "string") {
-    return CLOSED_TASK_CATEGORIES.includes(task.status_category);
-  }
-  return typeof task.status === "string" && CLOSED_LEGACY.has(task.status);
-}
+type BusyRow = { starts_at?: unknown; ends_at?: unknown };
 
 export async function sessionBusyIntervals(
   db: SessionsDb,
   args: { workspaceId: string; userId: string; from: Date; to: Date },
 ): Promise<BusyInterval[]> {
-  const { data, error } = await db
-    .from("task_sessions")
-    .select("starts_at, ends_at, tasks!inner(status, status_category, deleted_at)")
-    .eq("workspace_id", args.workspaceId)
-    .eq("user_id", args.userId)
-    .is("deleted_at", null)
-    .lt("starts_at", args.to.toISOString())
-    .gt("ends_at", args.from.toISOString());
+  const { data, error } = await db.rpc(BUSY_SESSIONS_RPC, {
+    p_workspace_id: args.workspaceId,
+    p_user_id: args.userId,
+    p_from: args.from.toISOString(),
+    p_to: args.to.toISOString(),
+  });
   if (error || !Array.isArray(data)) {
-    if (error) console.error("[booking] work sessions unread:", error.code, error.message);
+    if (error) {
+      const e = error as { code?: unknown; message?: unknown };
+      console.error("[booking] work sessions unread:", e.code, e.message);
+    }
     return [];
   }
   const out: BusyInterval[] = [];
-  for (const row of data as SessionRow[]) {
-    const task = row.tasks;
-    if (!task || task.deleted_at != null || isClosed(task)) continue;
+  for (const row of data as BusyRow[]) {
     const start = new Date(String(row.starts_at));
     const end = new Date(String(row.ends_at));
     if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) continue;
