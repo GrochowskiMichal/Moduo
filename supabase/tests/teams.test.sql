@@ -180,11 +180,21 @@ BEGIN
   PERFORM test.ok(r = 'ok 1', 'once that task is deleted, the key is free', r);
 
   -- ── Erasure (§Assumptions #26) ───────────────────────────────────────────
+  -- E leads O's DR, and E's private contact is SB's client.
+  INSERT INTO public.contacts (id, workspace_id, owner_id, name) VALUES
+    (test.id('CE'), test.id('W'), test.id('E'), 'E''s client');
+  DELETE FROM public.resource_grants WHERE resource_type = 'contact' AND resource_id = test.id('CE');
+  UPDATE public.buckets SET client_contact_id = test.id('CE') WHERE id = test.id('SB');
+  UPDATE public.buckets SET lead_id = test.id('E') WHERE id = test.id('DR');
   PERFORM test.ok((public.account_erase_workspace_data(test.id('E'), true) ->> 'team_memberships_deleted')::integer = 1,
     'the erasure preview counts someone''s team memberships');
   r := test.run(NULL, format($q$SELECT public.account_erase_workspace_data(%L, false)$q$, test.id('E')), false);
   PERFORM test.ok(r = 'ok 1' AND test.members('DS') = 'A, M' AND (test.team('DS')).created_by IS NULL
               AND (test.team('DS')).deleted_at IS NULL,
     'erasure removes their memberships; the team they made stays, without their name', r);
+  PERFORM test.ok((SELECT lead_id FROM public.buckets WHERE id = test.id('DR')) IS NULL
+              AND (SELECT client_contact_id FROM public.buckets WHERE id = test.id('SB')) IS NULL
+              AND NOT EXISTS (SELECT 1 FROM public.contacts WHERE id = test.id('CE')),
+    'erasure clears them as a project''s lead, and their private contact as a project''s client');
 END;
 $$;

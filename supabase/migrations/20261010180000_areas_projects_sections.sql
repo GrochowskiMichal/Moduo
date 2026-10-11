@@ -469,11 +469,13 @@ BEGIN
     RETURN NEW;
   END IF;
   -- Filing a project under an area needs edit on the project (the single
-  -- gate; system work aside).
+  -- gate; system work aside, and so is a write another trigger makes, such
+  -- as a foreign key's SET NULL).
   IF TG_OP = 'UPDATE'
      AND (NEW.area_id IS DISTINCT FROM OLD.area_id OR NEW.group_label IS DISTINCT FROM OLD.group_label)
      AND public.perm_actor_id() IS NOT NULL
      AND coalesce(current_setting('share.bypass', true), '') <> '1'
+     AND pg_trigger_depth() <= 1
      AND NOT public.projects__editable(NEW.id) THEN
     RAISE EXCEPTION 'You don''t have edit access to this project.' USING ERRCODE = '42501';
   END IF;
@@ -573,8 +575,9 @@ BEGIN
     RETURN NEW;
   END IF;
   -- The same gate as the project ops: changing a project's fields needs edit
-  -- on it (PERM-W's write check says so too; this keeps one helper).
-  IF TG_OP = 'UPDATE' AND v_actor IS NOT NULL
+  -- on it (PERM-W's write check says so too; this keeps one helper). A write
+  -- another trigger makes (a foreign key's SET NULL) isn't the actor's.
+  IF TG_OP = 'UPDATE' AND v_actor IS NOT NULL AND pg_trigger_depth() <= 1
      AND row(NEW.status, NEW.starts_on, NEW.target_on, NEW.lead_id, NEW.client_contact_id)
          IS DISTINCT FROM row(OLD.status, OLD.starts_on, OLD.target_on, OLD.lead_id, OLD.client_contact_id)
      AND NOT public.projects__editable(NEW.id) THEN

@@ -1,7 +1,7 @@
 # Manual test checklist — TV-D10 areas, projects, sections, sessions, reminders, waiting, teams
 
 > Generated 2026-10-11 · branch `t/maciej/tv-d10-structure` → `t/maciej/tasks-v3-build` (local build mode) · **Live-verified:** yes, on the local stack (web, `rsbuild dev` on :8097, signed in as `dev@moduo.local`): the rail's project ⋯ → Section → New section… "Clients" (an area made, the project filed under it, `group_label` mirrored), Rename on that project (the area kept), the panel's Time → Estimate "2h" (saved as the estimate, the trail says "changed the estimate"), a task's trail after a session op ("scheduled a session for Tue"), Calendar → the booking link editor's Busy calendars ("Work sessions from Tasks" checked on an existing link). The booking busy query ran against the local PostgREST as the function runs it (a 10:00–11:30 session hid three 30-minute slots); the full `booking-public` preview can't offer slots locally (no Google or Zoom connected). Not live-verified: the rows marked below. Most of the block is data: the SQL tests cover it.
-> Migrations: `20261010180000_areas_projects_sections.sql`, `20261010181000_task_sessions_reminders_waiting.sql`, `20261010182000_teams.sql` (local only; apply all three, in order). SQL tests: `bun run db:test` (`structure.test.sql` 98, `sessions.test.sql` 52, `teams.test.sql` 38). The rail's Section menu was live-verified before it moved onto `projects_op_file`; the op itself was then run as the dev user on the local stack (filed under a new name and back).
+> Migrations: `20261010180000_areas_projects_sections.sql`, `20261010181000_task_sessions_reminders_waiting.sql`, `20261010182000_teams.sql` (local only; apply all three, in order). SQL tests: `bun run db:test` (`structure.test.sql` 156, `sessions.test.sql` 52, `teams.test.sql` 39); the same tests also pass on a rolled-back fresh replay of the three files (drop every TV-D10 object, replay from disk, test, roll back). The rail's Section menu was live-verified before it moved onto `projects_op_file`; the op itself was then run as the dev user on the local stack (filed under a new name and back).
 
 ## Areas (REPLAN 14–15)
 - [ ] **Do:** a project's ⋯ → Section → New section… → type "Clients" → Enter → **Expect:** a "Clients" header in the rail with the project under it _(both)_
@@ -10,6 +10,7 @@
 - [ ] **Do:** rename a project that sits in an area → **Expect:** the new name; it stays in its area _(both)_
 - [ ] **Do:** as a teammate who can't see any project in an area (all private to someone else) → **Expect:** that area's header isn't in their rail, also after those projects are deleted _(both; SQL-tested only)_
 - [ ] **Do:** file a project under a name that only exists on someone else's private projects → **Expect:** it works and makes your own area; nothing says the name was taken _(both; SQL-tested only)_
+- [ ] **Do:** (TV-U6's Undo) delete an area that holds your project and a teammate's private one, then restore it → **Expect:** both projects are back in it; you never see the private one _(both; SQL-tested only)_
 - [ ] **Do:** open the app with a build from before TV-D10 against this database, file a project under a section → **Expect:** the new app shows it under the area of that name _(desktop; verify before release)_
 
 ## Projects (AC4.1)
