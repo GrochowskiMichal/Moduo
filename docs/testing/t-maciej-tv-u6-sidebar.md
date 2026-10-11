@@ -1,7 +1,7 @@
 # Manual test checklist — TV-U6 Sidebar v3 (re-scopes #328)
 
 > Generated 2026-10-11 · branch `t/maciej/tv-u6-sidebar` → `t/maciej/tasks-v3-build` (local build mode) · **Live-verified:** yes, on the local stack (web, `rsbuild dev` on :8136, signed in as `dev@moduo.local` in the "My" workspace): the sidebar order and hairline, the hairline's ⋯ (Customize, New project, New area…, Archived projects, Recently deleted), New area "U6 Clients" and two projects in it through the area's +, Pin (stored in the synced preferences), Archive with "3 open tasks — Won't do · Move · Keep" → Move to another project (tasks moved, project archived), Archived projects → open read-only with the banner, All's search finding the archived project's task under "U6 Acme · Archived". The delete, Undo, Recently deleted → Restore, Archive → Keep → Unarchive and Customize flows ran end to end in `tests/tasks-sidebar.spec.ts` (headless Chrome against the same dev server; the shared Browser pane was hidden, which stalls Radix menus — gotchas/ui.md).
-> Migration: `20261011100000_projects_archive_trash.sql` (local only; after TV-D10's three; re-runnable). SQL tests: `bun run db:test departures` (50 checks); e2e: `E2E_BASE_URL=http://127.0.0.1:<port> bunx playwright test --project=e2e tests/tasks-sidebar.spec.ts` (needs Playwright's Chrome, or a config with `channel: "chrome"`); Storybook structure checks: `tests/visual/sidebar.spec.ts -g structure`.
+> Migration: `20261011100000_projects_archive_trash.sql` (local only; after TV-D10's three; re-runnable). SQL tests: `bun run db:test departures` (51 checks); e2e: `E2E_BASE_URL=http://127.0.0.1:<port> bunx playwright test --project=e2e tests/tasks-sidebar.spec.ts` (needs Playwright's Chrome, or a config with `channel: "chrome"`); Storybook structure checks: `tests/visual/sidebar.spec.ts -g structure`.
 
 ## The decided sidebar (AC11.1)
 - [ ] **Do:** open Tasks in a workspace with projects and areas → **Expect:** Inbox · Focus · Upcoming · My tasks, a thin line, All, then projects without an area, then each area (sentence case, a chevron, its open count) with its projects (colour dot · name · count); no "You" / "Workspace" / "Projects" labels, no icons on views _(both)_
@@ -29,6 +29,8 @@
 - [ ] **Do:** Move… → pick a project → Move and archive → **Expect:** the open tasks (with their subtasks) are in that project; the finished ones stay in the archived one _(both)_
 - [ ] **Do:** Archive… on a project with nothing open → **Expect:** no question, archived with Undo _(both)_
 - [ ] **Do:** the line's ⋯ → Archived projects → click one → **Expect:** its tasks, read-only, under "Archived Oct 11 · read-only until you unarchive it." with Unarchive _(both)_
+- [ ] **Do:** click one of its tasks → **Expect:** the detail panel opens it, read-only (no editing, no drops onto it) _(both; not live-verified)_
+- [ ] **Do:** archive a project with a dated task while Home is open in another tab → **Expect:** the task leaves Home's lists at once in this tab, and in the other after its next sync _(both; not live-verified)_
 - [ ] **Do:** All → search a word from an archived project's task → **Expect:** it's found, grouped under "<project> · Archived" _(both)_
 - [ ] **Do:** as a member who can only edit (not Full on) a shared project → Archive… → **Expect:** "Only people with full access to “…” can archive it." and no buttons to archive _(both; SQL-tested, dialog unit-tested)_
 
@@ -38,8 +40,11 @@
 - [ ] **Do:** click Undo on the toast → **Expect:** the project is back with all three tasks in place _(both)_
 - [ ] **Do:** delete it again, edit the teammate's task in their Inbox, then restore from Recently deleted → **Expect:** your task and the finished one come back; the edited one stays in the teammate's Inbox _(both; SQL-tested)_
 - [ ] **Do:** the toast's "Recently deleted" link → **Expect:** Recently deleted opens _(both)_
-- [ ] **Do:** a pinned project, deleted → **Expect:** it leaves Pinned too (a Restore doesn't re-pin) _(both; not live-verified)_
+- [ ] **Do:** a pinned project, deleted → **Expect:** it leaves Pinned too; Restore it from Recently deleted → it's back in Pinned _(both; not live-verified)_
 - [ ] **Do:** as someone without Full access → Delete project… → **Expect:** "Only people with full access to “…” can delete it." _(both; SQL-tested)_
+- [ ] **Do:** open a moved task's detail panel → Activity → **Expect:** "… deleted this task's project · it moved to an Inbox" _(both; SQL- and unit-tested)_
+- [ ] **Do:** as the teammate, click the delete notice in the bell → **Expect:** Tasks opens on your Inbox _(both; not live-verified)_
+- [ ] **Do:** go offline (DevTools → Offline) → rename, colour, archive or delete a project → **Expect:** "Offline" — this change needs a connection; nothing changes _(both; not live-verified)_
 
 ## Recently deleted (AC11.10)
 - [ ] **Do:** the line's ⋯ → Recently deleted → **Expect:** deleted projects ("Project · 2 tasks deleted with it · 3 tasks sent to Inboxes") and tasks, newest first, days left; never a permanent sidebar row _(both)_
@@ -63,3 +68,5 @@
 - The bell's wording for `tasks.project_deleted` (spine/activity.ts) wasn't seen live; there's no mute toggle for it until D12's table.
 - An old desktop build: deleting a project there still uses the old raw delete (every task to the deleter's Inbox, not restorable) until the minimum build is raised (TV-D7).
 - The moduo-mcp redeploy (archived reads) waits for the release train.
+- A delete's notices stay in teammates' bells after an Undo (decision U6-11).
+- Member removal orphaning nothing (AC5.6) is TV-U16's / TV-D13's to prove.

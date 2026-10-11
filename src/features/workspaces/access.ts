@@ -42,7 +42,7 @@ export const MANAGEMENT_POWERS: readonly PermissionKey[] = ["ws.manage_members",
 
 export const MODULE_LABELS: Record<PermissionModule, string> = {
   notes: "Notes",
-  tasks: "Tasks and buckets",
+  tasks: "Tasks and projects",
   calendar: "Calendars",
   contacts: "Contacts",
   chat: "Chat",

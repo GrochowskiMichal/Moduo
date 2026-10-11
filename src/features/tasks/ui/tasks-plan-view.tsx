@@ -806,11 +806,19 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   );
 
   // Resolve the selected task live from the bundle so the rail follows edits and
-  // empties when the task is deleted.
-  const selectedTask = useMemo(
-    () => (selectedTaskId ? (tasks.find((t) => t.id === selectedTaskId) ?? null) : null),
-    [selectedTaskId, tasks],
+  // empties when the task is deleted. A task of an archived project (opened
+  // from Archived projects, or found by search) opens too, read-only (TV-U6).
+  const selectedArchivedTask = useMemo(
+    () =>
+      selectedTaskId ? (api.archivedTasks.find((t) => t.id === selectedTaskId) ?? null) : null,
+    [selectedTaskId, api.archivedTasks],
   );
+  const selectedTask = useMemo(
+    () =>
+      selectedTaskId ? (tasks.find((t) => t.id === selectedTaskId) ?? selectedArchivedTask) : null,
+    [selectedTaskId, tasks, selectedArchivedTask],
+  );
+  const panelCanEdit = canEdit && !selectedArchivedTask;
 
   // Scope-level selection validity (the state lives here, so its backstop does
   // too): when the selected task leaves the scope (archived, moved, deleted,
@@ -850,6 +858,15 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     if (processedUrlIdRef.current === urlTaskId) return;
     if (selfWroteUrlIdRef.current === urlTaskId) {
       processedUrlIdRef.current = urlTaskId;
+      return;
+    }
+    // Done, Won't do and Backlog tasks arrive after the open ones (the shared
+    // store, TV-D11a): a link to one waits for them before it reads as gone.
+    if (
+      !api.restLoaded &&
+      !looksLikeHandle(urlTaskId) &&
+      resolveTasksDeepLink(urlTaskId, { tasks, buckets, inboxId }).kind === "none"
+    ) {
       return;
     }
     processedUrlIdRef.current = urlTaskId;
@@ -905,6 +922,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   }, [
     api.loading,
     api.error,
+    api.restLoaded,
     urlTaskId,
     tasks,
     buckets,
@@ -1284,9 +1302,9 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   const detailPanel = (
     <TaskDetailPanel
       task={selectedTask}
-      buckets={buckets}
+      buckets={selectedArchivedTask ? [...buckets, ...api.archivedBuckets] : buckets}
       inbox={inbox}
-      canEdit={canEdit}
+      canEdit={panelCanEdit}
       onRequestCapture={openCapture}
       onSelectTask={setSelectedTaskId}
       api={viewApi}
@@ -1300,7 +1318,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   const details = privateLinkId ? (
     <PrivateItemPanel onBack={() => setPrivateLinkId(null)} />
   ) : selectedTask ? (
-    <HubDropZone target={{ type: "task", id: selectedTask.id }} disabled={!canEdit}>
+    <HubDropZone target={{ type: "task", id: selectedTask.id }} disabled={!panelCanEdit}>
       {detailPanel}
     </HubDropZone>
   ) : (
@@ -1430,9 +1448,9 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
         }
         checkAccess={checkProjectAccess}
         onConfirm={(bucket) => {
+          // Pinned shows live projects only: a deleted one leaves it, a
+          // refused delete or a Restore keeps (or brings back) its pin.
           api.deleteBucket(bucket.id);
-          // A deleted project leaves your Pinned too (a Restore doesn't re-pin).
-          if (pinnedIds.includes(bucket.id)) togglePin(bucket.id);
           if (selection === bucket.id) setSelection("inbox");
         }}
         onClose={() => setProjectDialog((prev) => (prev ? { ...prev, open: false } : prev))}

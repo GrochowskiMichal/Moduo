@@ -1,6 +1,10 @@
 import { type PropsWithChildren, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { deriveNotificationFeeds, type NotificationItem } from "../features/spine/notifications";
 import type { Overrides, WorkspaceRoleDef } from "../features/workspaces/access";
+import {
+  rememberedWorkspaces,
+  rememberWorkspaces,
+} from "../features/workspaces/remembered-workspaces";
 import type {
   PermissionKey,
   WorkspaceInvite,
@@ -28,6 +32,8 @@ import {
   readLocalPreferences,
   usePreferencesValue,
 } from "../lib/preferences";
+import { browserOffline, isNetworkError } from "../lib/sync/network";
+import { keepWorkspaceCopies } from "../lib/sync/store";
 import { useAuth } from "./auth-provider";
 
 /** Map a legacy workspace notification into the source-agnostic feed item. */
@@ -162,10 +168,35 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
       return [];
     }
 
-    const rows = await runtime.workspace.list();
-    const next = rows
-      .map((row) => mapWorkspace(row, userId))
-      .filter((workspace) => !workspace.isDeleted);
+    // Offline at launch (TV-D11a): open the workspaces this person had, as this
+    // device remembers them, so the Tasks device copy can show. With no
+    // network at all, without waiting for the read's retries; it reads again
+    // when the network is back (the boot effect's `online` listener).
+    const remembered = rememberedWorkspaces(userId);
+    let next: WorkspaceSummary[];
+    if (remembered && browserOffline()) {
+      next = remembered;
+    } else {
+      try {
+        const rows = await runtime.workspace.list();
+        next = rows
+          .map((row) => mapWorkspace(row, userId))
+          .filter((workspace) => !workspace.isDeleted);
+        // An empty list proves nothing (a request that went out without the
+        // person's token reads as no workspaces): keep what the device has.
+        if (next.length > 0) {
+          rememberWorkspaces(userId, next);
+          // Tasks device copies of workspaces you left or that went away go too.
+          void keepWorkspaceCopies(
+            userId,
+            next.map((workspace) => workspace.id),
+          );
+        }
+      } catch (e) {
+        if (!remembered || !isNetworkError(e)) throw e;
+        next = remembered;
+      }
+    }
     setWorkspaces(next);
 
     const currentSelected = selectedWorkspaceIdRef.current;
@@ -572,8 +603,15 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
     };
 
     void run();
+    // Opened offline from the remembered list: read the real one once the
+    // network is back (TV-D11a).
+    const onOnline = () => {
+      void refreshWorkspaces().catch(() => {});
+    };
+    window.addEventListener("online", onOnline);
     return () => {
       active = false;
+      window.removeEventListener("online", onOnline);
     };
   }, [refreshWorkspaces, runtime, userId]);
 

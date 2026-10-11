@@ -1,8 +1,7 @@
 // The Tasks sidebar's project rules (TV-U6, specs/tasks-v3.md §3 + §15):
 // colour dots, areas and their projects, drag to reorder, archived projects,
-// what deleting a project will do, and where each task shows while a project
-// change is still on its way to every loaded bundle (hidden-buckets.ts).
-// Pure, no React or IO.
+// what deleting a project will do, and what it shows before the server
+// answers. Pure, no React or IO.
 
 import { isClosedTask } from "@contracts/vocabularies";
 import {
@@ -12,7 +11,6 @@ import {
   normalizeLabelColor,
 } from "../../components/tag-colors";
 import { betweenPositions, endPosition } from "./helpers";
-import type { BucketChange } from "./hidden-buckets";
 import type { Area, Bucket, Task } from "./model";
 
 // ── colours ──────────────────────────────────────────────────────────────────
@@ -188,65 +186,31 @@ export function projectOpenWork(
   return { open, tops };
 }
 
-// ── archive + pending changes ────────────────────────────────────────────────
+// ── delete, as shown before the server answers ──────────────────────────────
 
 /**
- * Split a bundle's projects into the sidebar's live ones and the archived
- * ones, applying the changes this bundle doesn't show yet. Deleted projects
- * (in the bundle or pending) are in neither.
+ * What a project's delete does to the tasks you see, shown the moment it's
+ * made (the store's overlay, TV-D11a): an open tree whose top task is yours
+ * or unassigned lands in your Inbox (out of any section); every other task
+ * leaves (a teammate's Inbox, or Recently deleted). The server applies the
+ * same rule (REPLAN 78) and its answer replaces this.
  */
-export function partitionBuckets(
-  buckets: ReadonlyArray<Bucket>,
-  changes: ReadonlyMap<string, BucketChange>,
-): { live: Bucket[]; archived: Bucket[] } {
-  const live: Bucket[] = [];
-  const archived: Bucket[] = [];
-  for (const b of buckets) {
-    if (b.deletedAt) continue;
-    const change = changes.get(b.id);
-    if (change === "deleted") continue;
-    if (!b.isSystem && (change === "archived" || b.archivedAt)) archived.push(b);
-    else live.push(b);
-  }
-  return { live, archived };
-}
-
-/**
- * Where each live task shows: in its project; in `archived` when its project
- * is archived (out of every list, count and queue; search still finds it);
- * and, while its project's delete is on its way, in your Inbox when the
- * delete will hand it to you (an open tree whose top task is yours or
- * unassigned), nowhere otherwise (a teammate's Inbox, or Recently deleted).
- */
-export function placeTasks(
+export function projectDeletePlan(
   tasks: ReadonlyArray<Task>,
-  opts: {
-    archivedBucketIds: ReadonlySet<string>;
-    changes: ReadonlyMap<string, BucketChange>;
-    inboxId: string | null;
-    userId: string | null;
-  },
-): { live: Task[]; archived: Task[] } {
-  const live: Task[] = [];
-  const archived: Task[] = [];
-  const deleting = [...opts.changes].filter(([, c]) => c === "deleted").map(([id]) => id);
-  const plans = new Map(deleting.map((id) => [id, trees(tasks, id)]));
-  for (const t of tasks) {
-    if (t.deletedAt) continue;
-    if (opts.archivedBucketIds.has(t.bucketId)) {
-      archived.push(t);
-      continue;
-    }
-    const plan = plans.get(t.bucketId);
-    if (!plan) {
-      live.push(t);
-      continue;
-    }
-    const root = plan.rootOf(t);
-    const owner = plan.byId.get(root)?.assigneeId ?? null;
-    if (plan.open.has(root) && opts.inboxId && (owner === null || owner === opts.userId)) {
-      live.push({ ...t, bucketId: opts.inboxId, sectionId: null });
+  projectId: string,
+  opts: { inboxId: string | null; userId: string | null },
+): { toInbox: string[]; gone: string[] } {
+  const { inProject, rootOf, open, byId } = trees(tasks, projectId);
+  const toInbox: string[] = [];
+  const gone: string[] = [];
+  for (const t of inProject) {
+    const root = rootOf(t);
+    const owner = byId.get(root)?.assigneeId ?? null;
+    if (open.has(root) && opts.inboxId && (owner === null || owner === opts.userId)) {
+      toInbox.push(t.id);
+    } else {
+      gone.push(t.id);
     }
   }
-  return { live, archived };
+  return { toInbox, gone };
 }

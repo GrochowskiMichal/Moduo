@@ -434,6 +434,7 @@ DECLARE
   v_deleted  integer := 0;
   v_notified integer := 0;
   v_name     text;
+  v_inbox    uuid;
   r          record;
 BEGIN
   SELECT * INTO b FROM public.buckets x
@@ -490,9 +491,27 @@ BEGIN
     WHERE x.open
     GROUP BY x.person
   LOOP
-    UPDATE public.tasks t SET bucket_id = public.tasks__inbox(p_workspace_id, r.person)
+    v_inbox := public.tasks__inbox(p_workspace_id, r.person);
+    UPDATE public.tasks t SET bucket_id = v_inbox
     WHERE t.id = ANY (r.ids);
     v_moved := v_moved || r.ids;
+    -- Each moved top task's trail says why it changed project, the way
+    -- TV-D8's ops log every change (a step moves with its top task).
+    BEGIN
+      PERFORM public.module_activity_log(
+        p_workspace_id, 'tasks', 'task', x.task_id, 'tasks.update',
+        jsonb_build_object(
+          'fields', jsonb_build_array('bucket_id'),
+          'bucket_id', jsonb_build_object('from', b.id, 'to', v_inbox),
+          'reason', 'project_deleted',
+          'subtasks_moved', (SELECT count(*) FROM jsonb_to_recordset(v_plan) AS y(task_id uuid, root_id uuid)
+                             WHERE y.root_id = x.task_id AND y.task_id <> x.task_id)))
+      FROM jsonb_to_recordset(v_plan) AS x(task_id uuid, root_id uuid)
+      WHERE x.task_id = ANY (r.ids) AND x.task_id = x.root_id;
+    EXCEPTION WHEN OTHERS THEN
+      -- A trail line must never fail the delete.
+      RAISE WARNING 'projects_op_delete: trail failed for %: %', r.person, SQLERRM;
+    END;
     -- One quiet notice per person (never the deleter), on their own Inbox so
     -- it reaches them even when the project was private to others; it names
     -- the project only to someone who could see it.
@@ -500,7 +519,7 @@ BEGIN
       v_name := CASE WHEN public.can_access('bucket', b.id, 'view', r.person) THEN b.name END;
       BEGIN
         PERFORM public.module_activity_log(
-          p_workspace_id, 'tasks', 'bucket', public.tasks__inbox(p_workspace_id, r.person),
+          p_workspace_id, 'tasks', 'bucket', v_inbox,
           'tasks.project_deleted',
           jsonb_strip_nulls(jsonb_build_object(
             'mentioned_user_ids', jsonb_build_array(r.person::text),

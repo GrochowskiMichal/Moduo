@@ -126,7 +126,8 @@ export function DeleteBucketDialog({
         </DialogHeader>
         {canManage === false ? null : (
           <p className="font-sans text-xs text-muted-foreground">
-            Each assignee gets one quiet notice. Restore it from Recently deleted within 30 days.
+            {summary.moving > summary.toYou ? "Each assignee gets one quiet notice. " : ""}
+            Restore it from Recently deleted within 30 days.
           </p>
         )}
         <DialogFooter>
@@ -206,7 +207,7 @@ export function ArchiveProjectDialog({
         </DialogHeader>
         {canManage === false ? null : (
           <p className="font-sans text-xs text-muted-foreground">
-            Archived projects leave the sidebar and never remind; search still finds their tasks.
+            Archived projects leave the sidebar and every list; search still finds their tasks.
           </p>
         )}
         {canManage !== false && moving ? (

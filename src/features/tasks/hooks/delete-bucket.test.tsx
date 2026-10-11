@@ -1,13 +1,13 @@
 // TV-U6 — deleting, archiving and editing projects in the real hook over an
-// in-memory runtime (REPLAN 78): a delete leaves every surface at once, sends
-// the op right away, puts only your own open work in your Inbox meanwhile, and
-// its Undo restores the batch; an archive asks the server for Full access
-// (through the op), takes the project out of lists and counts, and with "Won't
-// do" or "Move" acts on the open tasks first; colours, areas and moves go
-// through `projects_op_update` with only the changed fields.
+// in-memory runtime (REPLAN 78), through the shared store (TV-D11a): a delete
+// leaves every surface at once (a write overlay), sends the op right away,
+// puts only your own open work in your Inbox meanwhile, and its Undo restores
+// the batch; an archive asks the server for Full access (through the op),
+// takes the project out of lists and counts, and with "Won't do" or "Move"
+// acts on the open tasks first (Undo, or a refusal, puts them back); colours,
+// areas and moves go through `projects_op_update` with only the changed fields.
 //
-// The pending-change store is module-level (shared by every hook instance, by
-// design), so each test uses its own project ids.
+// One store per runtime: each test makes its own server, with its own ids.
 
 import { afterEach, describe, expect, it, rs } from "@rstest/core";
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
@@ -331,6 +331,23 @@ describe("archiving a project (REPLAN 16, 78)", () => {
     expect(String(lastToast()[1].description)).toMatch(/2 open tasks are marked Won’t do/);
   });
 
+  it("Undo after Won't do unarchives and puts each open task back", async () => {
+    const { ids, runtime } = makeServer("a4-");
+    const { result } = await mount(runtime);
+    act(() => result.current.archiveBucket(ids.x, { kind: "wont_do" }));
+    await settle();
+    const [, opts] = lastToast();
+    act(() => opts.action.onClick());
+    await waitFor(() => expect(bucketIds(result.current)).toEqual([ids.x, ids.y]));
+    const open = () =>
+      result.current.tasks
+        .filter((t) => t.bucketId === ids.x && t.id !== "a4-done")
+        .map((t) => t.status);
+    await waitFor(() => expect(open()).toEqual(["todo", "todo"]));
+    // Two marks, then two put back.
+    expect(runtime.tasks.opSetStatus).toHaveBeenCalledTimes(4);
+  });
+
   it("Move sends the open tasks to another project first", async () => {
     const { ids, runtime } = makeServer("a3-");
     const { result } = await mount(runtime);
@@ -339,6 +356,48 @@ describe("archiving a project (REPLAN 16, 78)", () => {
     const inY = result.current.tasks.filter((t) => t.bucketId === ids.y).map((t) => t.id);
     expect(inY.sort()).toEqual(["a3-annas", "a3-mine", "a3-other"].sort());
     expect(result.current.archivedTasks.map((t) => t.id)).toEqual(["a3-done"]);
+  });
+
+  it("Undo after Move brings the open tasks back with the move op (subtasks ride along)", async () => {
+    const { ids, runtime } = makeServer("a5-");
+    const { result } = await mount(runtime);
+    act(() => result.current.archiveBucket(ids.x, { kind: "move", projectId: ids.y }));
+    await settle();
+    const [, opts] = lastToast();
+    act(() => opts.action.onClick());
+    await waitFor(() =>
+      expect(
+        result.current.tasks
+          .filter((t) => t.bucketId === ids.x)
+          .map((t) => t.id)
+          .sort(),
+      ).toEqual(["a5-annas", "a5-done", "a5-mine"].sort()),
+    );
+    expect(runtime.tasks.opUpdateTask).toHaveBeenLastCalledWith(
+      expect.objectContaining({ patch: { bucketId: ids.x } }),
+    );
+  });
+
+  it("a refused archive keeps the project and puts the open tasks back", async () => {
+    const { ids, runtime } = makeServer("a6-");
+    runtime.tasks.updateProject = rs.fn(async () => {
+      throw new Error("Only people with full access to this project can archive it.");
+    });
+    const { result } = await mount(runtime);
+    act(() => result.current.archiveBucket(ids.x, { kind: "move", projectId: ids.y }));
+    await settle();
+    await waitFor(() => expect(bucketIds(result.current)).toEqual([ids.x, ids.y]));
+    await waitFor(() =>
+      expect(
+        result.current.tasks
+          .filter((t) => t.bucketId === ids.x)
+          .map((t) => t.id)
+          .sort(),
+      ).toEqual(["a6-annas", "a6-done", "a6-mine"].sort()),
+    );
+    expect(toastMock.error).toHaveBeenCalledWith(
+      "Only people with full access to this project can archive it.",
+    );
   });
 });
 

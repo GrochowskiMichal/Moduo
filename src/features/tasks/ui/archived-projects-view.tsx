@@ -43,7 +43,7 @@ export function ArchivedProjectsView({
           <h1 className="truncate font-display text-lg text-foreground">Archived projects</h1>
         </Toolbar>
         <p className="font-sans text-xs text-muted-foreground">
-          Archived projects leave the sidebar and never remind. Search still finds their tasks.
+          Archived projects leave the sidebar and every list. Search still finds their tasks.
         </p>
       </div>
       {projects.length === 0 ? (

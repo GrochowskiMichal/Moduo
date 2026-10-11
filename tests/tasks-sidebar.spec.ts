@@ -25,7 +25,8 @@ import {
  */
 
 test.use({ locale: "en-US" });
-test.describe.configure({ mode: "serial" });
+// A busy dev workspace re-renders slowly (see BACK): give each flow room.
+test.describe.configure({ mode: "serial", timeout: 60_000 });
 
 let dev: Session;
 let mate: Session;
@@ -112,6 +113,12 @@ async function openTasks(page: Page, taskId?: string) {
 }
 
 const sidebar = (page: Page) => page.getByRole("navigation", { name: "Tasks" });
+/**
+ * A project coming back (Undo, Restore) shows once the store has read it: on
+ * the dev server a busy workspace re-renders for seconds when its project list
+ * changes (React's dev-only render tracking), so these waits are longer.
+ */
+const BACK = { timeout: 15_000 };
 /** A sidebar row's name: its label, then ", n open" (Chromium spaces them). */
 const rowName = (label: string) => new RegExp(`^${label}(\\s*,|$)`);
 
@@ -166,7 +173,7 @@ test("AC5.5 — deleting a project hands open work to its assignees, one notice 
 
   const toast = page.locator("[data-sonner-toast]").filter({ hasText: `“${name}” deleted` });
   await toast.getByRole("button", { name: "Undo" }).click();
-  await expect(sidebar(page).getByRole("button", { name: rowName(name) })).toBeVisible();
+  await expect(sidebar(page).getByRole("button", { name: rowName(name) })).toBeVisible(BACK);
   await expect.poll(() => bucketOf(theirs)).toBe(p);
   expect(await bucketOf(mine)).toBe(p);
   expect(await bucketOf(done)).toBe(p);
@@ -188,7 +195,7 @@ test("AC11.10 — Recently deleted opens from the ⋯ and restores a project", a
   await expect(row).toContainText("Project · 1 task sent to Inboxes");
   await row.hover();
   await row.getByRole("button", { name: `Restore ${name}` }).click();
-  await expect(sidebar(page).getByRole("button", { name: rowName(name) })).toBeVisible();
+  await expect(sidebar(page).getByRole("button", { name: rowName(name) })).toBeVisible(BACK);
   await expect.poll(() => bucketOf(open)).toBe(p);
 });
 
@@ -214,7 +221,7 @@ test("archiving asks about open work; Archived projects opens from the ⋯; Unar
   await expect(row).toContainText("1 open task");
   await row.hover();
   await row.getByRole("button", { name: `Unarchive ${name}` }).click();
-  await expect(sidebar(page).getByRole("button", { name: rowName(name) })).toBeVisible();
+  await expect(sidebar(page).getByRole("button", { name: rowName(name) })).toBeVisible(BACK);
   await expect
     .poll(async () => {
       const [bucket] = await rest<Array<{ archived_at: string | null }>>(

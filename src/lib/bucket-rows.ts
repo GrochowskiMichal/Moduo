@@ -10,8 +10,9 @@ import { bucketRowToModel, taskRowToModel } from "./task-rows";
 /**
  * Keep archived projects and their tasks apart from the live ones (TV-U6), so
  * every other reader of a Tasks bundle (Home, the Calendar, contact hubs,
- * capture) hides them without knowing about archiving. The Tasks module joins
- * them back. An Inbox is never archived.
+ * capture) hides them without knowing about archiving. The shared store
+ * (`sync/store.ts`) splits its bundle with it; the Tasks module joins them
+ * back. An Inbox is never archived. No archived project: the same arrays.
  */
 export function splitArchived(
   buckets: Bucket[],

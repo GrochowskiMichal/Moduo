@@ -417,6 +417,26 @@ describe("notificationDeepLink", () => {
   });
 });
 
+describe("a project delete notice (TV-U6)", () => {
+  it("opens the Inbox its work landed in", () => {
+    const [g] = groupNotifications([
+      item({
+        id: "a",
+        createdAt: "x",
+        op: "tasks.project_deleted",
+        targetType: "bucket",
+        targetId: "inbox-1",
+      }),
+    ]);
+    expect(notificationDeepLink(g)).toEqual({
+      route: "/tasks",
+      entityType: "bucket",
+      entityId: "inbox-1",
+    });
+    expect(notificationDeepLinkNoun("bucket")).toBe("project");
+  });
+});
+
 describe("notificationDeepLinkNoun", () => {
   it("rewrites the ugly email_thread type to a friendly noun, passing others through", () => {
     expect(notificationDeepLinkNoun("email_thread")).toBe("email");

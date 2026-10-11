@@ -1,5 +1,5 @@
 // The row's context menu on the real TaskListView. Its "Rename", "Schedule…",
-// "Set due date…" and "Move to bucket…" used to open their editor or popover
+// "Set due date…" and "Move to project…" used to open their editor or popover
 // and lose it a tick later, when the closing menu handed focus back to the list.
 // Also covers the other ways in (s/d/b, a click on a chip), Esc handing focus
 // back to the list, and the title editor saving once on Enter and not on Esc.
@@ -150,7 +150,7 @@ async function chooseFromRowMenu(title: string, item: string) {
 const POPOVERS = [
   { item: "Schedule…", key: "s", text: "Scheduled time" },
   { item: "Set due date…", key: "d", text: "Due date" },
-  { item: "Move to bucket…", key: "b", text: "Inbox" },
+  { item: "Move to project…", key: "b", text: "Inbox" },
 ] as const;
 
 describe("TaskRow context menu", () => {

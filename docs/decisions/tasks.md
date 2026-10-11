@@ -28,12 +28,12 @@ Built in tasks-v3 block 13 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §3, §
   - Rejected: Edit access (anyone could hide a teammate's project), one server op that also edits tasks (the task ops already carry status, subtask and queue rules).
 - **U6-5 · Archived projects ride apart in the bundle; Tasks shows them in Archived projects and in All's search** → TV-U6 (`splitArchived`, `ArchivedProjectsView`, `searchExtra`), TV-D11a, TV-D16
   - Who: agent's choice, deferred to by Maciej, 2026-10-11.
-  - Decision: the list read keeps archived projects and their tasks in `archivedBuckets` / `archivedTasks`, so Home, the Calendar and contact hubs skip them without knowing; Tasks joins them back: Archived projects (from the ⋯) lists them, one opens read-only with an Unarchive banner, and search in All finds their tasks, grouped under "<name> · Archived". The connector leaves them out of lists and queues unless `include_archived`, and `tasks_search` finds them marked `project_archived`.
+  - Decision: the shared store's snapshot (`buildSnapshot`, TV-D11a) keeps archived projects and their tasks in `archivedBuckets` / `archivedTasks`, so Home, the Calendar and contact hubs skip them without knowing (an archive shows on every surface the moment it's made); Tasks joins them back: Archived projects (from the ⋯) lists them, one opens read-only with an Unarchive banner, and search in All finds their tasks, grouped under "<name> · Archived". The connector leaves them out of lists and queues unless `include_archived`, and `tasks_search` finds them marked `project_archived`.
   - Why: REPLAN 78: "Search still finds them, labelled 'Archived'"; #328 hid them from search and MCP entirely.
   - Rejected: hiding them everywhere (#328), keeping them in every surface's lists.
 - **U6-6 · Customize and Pin follow the person; collapse is remembered per person on the device** → TV-U6 (`preferences.tasksSidebar`, `updatePreferences`), TV-U8 (pinned views)
   - Who: agent's choice, deferred to by Maciej, 2026-10-11.
-  - Decision: hidden rows (Focus, Upcoming, My tasks, All) and pinned projects per workspace live in the synced `preferences` domain, written through `updatePreferences` and pushed by the one sync owner (`<PreferencesSync/>`), never a second reconcile loop; collapsed groups (Pinned, each area) are kept in localStorage per person and workspace. Deleting a project unpins it.
+  - Decision: hidden rows (Focus, Upcoming, My tasks, All) and pinned projects per workspace live in the synced `preferences` domain, written through `updatePreferences` and pushed by the one sync owner (`<PreferencesSync/>`), never a second reconcile loop; collapsed groups (Pinned, each area) are kept in localStorage per person and workspace. Pinned shows live projects only, so a deleted project leaves it and a Restore brings its pin back (no unpin on delete: a refused delete would lose it).
   - Why: pins and hidden rows are deliberate and should follow you to another device; a collapse is a frequent, light toggle and every synced write is the whole preferences object.
   - Rejected: everything in localStorage (pins wouldn't follow you), everything synced (a write per click on a chevron).
 - **U6-7 · Upcoming opens an interim scope; Focus is the Queue's sidebar name; Plan · Focus stays for TV-F7** → TV-U6, TV-U15, TV-F7
@@ -51,7 +51,91 @@ Built in tasks-v3 block 13 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §3, §
   - Decision: "New area…" (the hairline's ⋯, or a project's Area submenu, which then files the project there) makes a workspace area; an area's header has + (a new project in it) and ⋯: New project, Rename, Colour, Move up, Move down, Delete area (Undo restores it and re-files its projects). Projects reorder by drag (into another area by dropping on one of its projects) or move through Area. An area's colour is stored and shown in its menu only (the header stays plain, as in the prototype).
   - Why: areas have a name, colour and order (REPLAN 15); headers are dragged rarely and Move up/down is keyboard-reachable.
   - Rejected: drag-to-reorder areas (another drag type in the page's one DndContext), a colour dot on area headers.
+- **U6-10 · Project and area writes are writes on the shared store; `hidden-buckets.ts` is gone** → TV-U6 on TV-D11a (`use-tasks-module.ts`, `sync/store.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: TV-D11a landed while this block ran, so the sidebar's writes moved onto it: a rename, colour, area or place is a `store.begin` patch settled by `projects_op_update`'s row; an archive patches `archivedAt` (and takes the project's queue rows out); a delete removes the project and shows its own open work in your Inbox (`projectDeletePlan`), then reads what changed (`syncNow`) before its overlay goes; a Restore reads what came back the same way; area ops settle with the areas the op answers (a delete reads first, since it re-files projects). Writes to one project still go out in order (`chainProjectOp`). The cached copy's version is 3 (projects carry colour and archive stamp). An archive's Undo, or a refused archive, puts the open tasks back through the newest task ops (the ones from the archive's render saw the old rows).
+  - Why: D11a's rule: one copy, every write an overlay, a refusal puts back only its own fields; the old module-level pending-change store existed only because every surface read on its own.
+  - Rejected: keeping `hidden-buckets.ts` beside the store (two sources of "what's pending"), a whole reload after each project op.
+- **U6-11 · A delete's notices stay after an Undo; Delete forever is a person's own hard delete** → TV-U6, TV-D12 (notification table)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: the delete goes to the server at once (so a refused one says so at once), and its notices with it; an Undo restores the work but doesn't take a notice back (it opens the person's Inbox, `bucket` routes to /tasks). Delete forever (`tasks_op_trash_purge`, Full access, from Recently deleted only) hard-deletes what's in the trash, an exception to spec Assumption #27's "hard deletes only in the purge job" that the person asks for by name; store copies had already dropped those rows when they were soft-deleted. Each moved top task's trail says why it changed project (`tasks.update` with `reason: project_deleted`).
+  - Why: holding the delete until the toast closes (#328) loses a refusal and makes Undo a timer; Recently deleted without Delete forever leaves a person no way to clear something now.
+  - Rejected: retracting notices on Undo (a second notice is noisier than a stale one), no Delete forever.
 
+## 2026-10-11 · TV-D11a the shared store — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 11 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §Assumptions #7, #27; REPLAN §6.6, §6.11, call 37, default g) on the local stack; no migration. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **D11a-1 · A thin IndexedDB wrapper, not Dexie** → TV-D11a (`src/lib/sync/cache.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: one `moduo-sync` database, one record per person and workspace (`<user>:<workspace>`) holding each table's rows and cursor, the outbox and whether the Done tasks are in; written whole, 800 ms after the last change and on `pagehide`; no IndexedDB → no copy (the store reads the server).
+  - Why: the store reads and writes the copy whole, so none of Dexie's indexes or queries would be used, and the spec rejects one more runtime; the `SyncCache` seam is where per-row storage goes if TV-D11b's 10k fixture needs it.
+  - Rejected: Dexie (unused query layer, ~40 KB); localStorage (5 MB cap, synchronous).
+- **D11a-2 · The device copy is one person's, holds no secrets, and goes on sign-out** → TV-D11a (`attachSyncUser`, auth-provider, account deletion)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11 (hardened at the orchestrator's request the same day).
+  - Decision: keyed by person and workspace; a real sign-out (choosing Sign out, even when auth-js can't end the session offline, or the `SIGNED_OUT` event, including a forced one after a revoked refresh token, where waiting captures go too: accepted, the device may no longer be theirs) and account deletion wipe every copy and the remembered workspace list; another person signing in wipes every copy but theirs; a session that is merely missing (an expired token that couldn't refresh offline) stops the stores but keeps the copy and its waiting captures; a workspace no longer on your list (left, removed, deleted) loses its copy when the list comes back; rows only (no token, key or session), comments as id + task + stamps (no text), no time entries or agent sessions; rows you lost access to leave the copy at the access check (D11a-6).
+  - Why: a shared or handed-on laptop must never show one account's private projects to the next; but a capture made on a plane must survive a token that expired before Wi-Fi came back. The copy is a convenience, the server keeps the truth.
+  - Rejected: keeping copies across sign-out for a faster next sign-in; wiping whenever the session reads null (it lost offline captures, found by the validator).
+- **D11a-3 · Open tasks first, the rest straight after, not on demand** → TV-D11a (`readFirst`, `restLoaded`, `whenRest`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: a first load reads To do and In progress (and the small tables), shows them, then reads Done, Won't do and Backlog, completions and comment counts; from then on the copy has everything and later reads are deltas. A link to a closed task, and a hub's linked Done task, wait for the rest.
+  - Why: the Board's Done column, the completed fold, counts and Undo already read closed tasks; once they're on the device the cost is paid once.
+  - Rejected: closed tasks only when a view asks (every view would need a loading state for them; TV-D11b can add it with the server search).
+- **D11a-4 · Deltas by the server's stamp, read from a few minutes early, paged by key** → TV-D11a (`syncRead`, `readByKey`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: each table's cursor is the newest `updated_at` a read returned (never the device clock); the next read asks for `updated_at >= cursor − 5 min`, soft-deleted rows included, paged by (`updated_at`, `id`); the queue, tag links and relations (hard deletes, no stamp) are read whole every time; a read past its ceiling reads on from where it stopped.
+  - Why: a save that commits after a read with an earlier stamp would be lost by a strict `>`; offset pages shift when a row is saved mid-read; re-reading five minutes of changes costs little.
+  - Rejected: `updated_at > cursor` with offset paging; a server `sync_since` RPC (needs a migration: noted for TV-D11b).
+- **D11a-5 · Writes are ops laid over the copy; a refusal takes back only its own fields** → TV-D11a (`begin` / `settle` / `fail`, the hook)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: every edit shows at once as an op (op id) on top of the rows the server sent; its answer becomes the row unless the copy already holds a strictly newer one; a Realtime row lands only if strictly newer (an equal stamp is our echo); a refusal drops the op (toast, no reload); a lost connection drops it too and says "Offline"; a teammate's newer write wins once our op settles; a delete leaves a mark (the deleted row's stamp, and when) so no older version and no read already on its way brings the row back, while a restore (newer) does. TV-D5's hold-while-saving gate and the refetch-discard are no longer used by the hook.
+  - Why: AC12.8 (one field rolls back, nothing reloads) and "your own pending write is skipped on echo" fall out of one rule set.
+  - Rejected: reloading after any error (the old hook), a server op-id column for echo matching (a migration).
+- **D11a-6 · Rows you can no longer see are dropped by comparing ids** → TV-D11a (`checkAccess`, `syncIds`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: after the first delta of a session and then at most every 10 minutes, the live ids of tasks, projects, statuses, completions, comments and tags are compared with the copy; what the server no longer returns leaves the device (with a task, its comment marks and completions).
+  - Why: RLS hides a row you lost access to, so no delta and no Realtime event ever reports it.
+  - Rejected: never (stale private rows on the device); every read (a full id scan each time).
+- **D11a-7 · Offline: what waits, and what says "Offline"** → TV-D11a (the outbox, the hook)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: captures (the list's add, ⌘⇧K, Home's quick capture, Focus's New, which also queues it once sent) and any status-only change (the checkbox, `x`, Won't do, a status pick) wait on the device under their own ids and go in order when the network is back; a capture is created under the id it was given, so a resend is the same task; everything else says "Offline · This change needs a connection…"; the top bar shows "Offline" and "n waiting to sync" left of the Focus timer. A tag typed in an offline capture is not kept.
+  - Why: default g; the create op is idempotent on its id and a repeated status is a no-op on the server (both checked on the local stack).
+  - Rejected: queuing every edit (conflicts the queue can't resolve without the field-level merge TV-D11b+ may add).
+- **D11a-8 · The store lives in the app shell for the whole session** → TV-D11a (`TasksSyncStatus`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: the selected workspace's store starts when the shell does (with Tasks access) and keeps its Realtime link and outbox running whichever module is open; every surface holds it too while mounted.
+  - Why: every page opens warm, captures sync from anywhere, and Home, the bell and the hubs need no read of their own.
+  - Rejected: a store only while a Tasks surface is mounted (each page would start cold again).
+- **D11a-9 · The workspace list is remembered for an offline launch** → TV-D11a (`features/workspaces/remembered-workspaces.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: the person's workspace list (names, roles, module access) is kept in localStorage; with no network at launch it opens from it (at once when the browser says it's offline) and reads the real list when the network is back; forgotten on sign-out.
+  - Why: without a selected workspace nothing opens, not even the Tasks device copy.
+  - Rejected: the offline open only after the app had loaded online once in the session.
+- **D11a-10 · The store's reads skip the client's retries; the store retries itself** → TV-D11a (`syncReadTable` `.retry(false)`, `scheduleRetry`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: store reads fail at once on a lost connection; the store says "Offline" and tries again after 3 s, doubling to 20 s, and at once on the browser's `online` event or a Realtime rejoin.
+  - Why: postgrest-js retries a failed GET three times (1 + 2 + 4 s), so "Offline" would show 7 s late and the first offline open would wait that long.
+  - Rejected: keeping the client's retries (a long silent wait), a fixed 20 s retry (a short blip would read as offline for 20 s).
+- **D11a-12 · Everything is read whole again once a day** → TV-D11a (`fullReadMs`, `fullReadAt` in the copy)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: a session whose copy was last read whole more than 24 h ago reads everything again (open tasks first, the rest after, the copy shown meanwhile) instead of a delta; a new field a later build reads also needs `CACHE_VERSION` bumped, which drops every copy.
+  - Why: a delta never re-reads a row the server changed without a new stamp (TV-D9's backfills ran with the stamp trigger off) or fills a field a newer build reads.
+  - Rejected: a server "sync epoch" (a migration); never (the copy could drift for good).
+- **D11a-13 · What sharing shows or hides reaches the copy without a stamp** → TV-D11a (`SYNC_TABLES`, `checkAccess`, `syncRead({ ids })`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: projects, areas, teams and members are read whole every sync (small; an area shows while one of its projects does); every other table is a delta, and the access check compares each delta table's live ids both ways: what the server no longer returns leaves the device, what it returns that the copy lacks (shared with you since, an old stamp) is read by id. The check runs after a session's first delta, every 10 minutes, and at once when the projects you can see change. All reads are plain selects under RLS, so TV-D10's `projects__visible` / `areas__visible` and `can_access` decide every row.
+  - Why: a grant or a revoke touches no row of the shared tables, so no delta and no Realtime event reports it.
+  - Rejected: reading every table whole (2,400 statuses on every return to the window, measured on the dev workspace); a server sync RPC that knows grants (a migration: TV-D11b).
+- **D11a-14 · A copy that can't be refreshed says so** → TV-D11a (`syncError`, `TasksSyncStatus`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: when a read the server refuses (an ended trial, a revoked session) fails after the copy is on screen, the rows stay, the top bar says "Not up to date" (click to try again) and the store retries with backoff; a first load with nothing to show is still an error.
+  - Why: yesterday's copy must never pass for live; a wall over rows that are still useful would be worse.
+  - Rejected: silently keeping the copy (found in review); replacing the list with an error.
+- **D11a-11 · Smaller calls** → TV-D11a
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: Home's quick capture keeps its plain behaviour (no date parsing) through the store; the full data export (Settings → Advanced) keeps its own complete read (an action, not a screen); the repeat roll-over is asked after the first read of a session that reaches the server and on Retry, once per load across all surfaces (`claimCatchUp`); comment counts come from comment ids per task (`commentCounts` on the hook) for TV-U10/U13 to show.
+  - Why: no visible change where none was asked for; one roll-over per load as before.
+  - Rejected: routing the export through the store (an export must be the server's complete answer at that moment, never a device copy that may be mid-sync).
 ## 2026-10-11 · TV-D10 areas, projects, sections, sessions, reminders, waiting, teams — the agent's choices (deferred to by Maciej)
 
 Built in tasks-v3 block 10 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §Assumptions #4, #12, #20, #24, #26, #27; REPLAN 13–20a, 24, 25, 54, 94, 95, default d; migrations `20261010180000_areas_projects_sections`, `20261010181000_task_sessions_reminders_waiting`, `20261010182000_teams`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.

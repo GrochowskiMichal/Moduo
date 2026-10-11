@@ -61,6 +61,13 @@ import type {
 import type { EntityLink, EntityRecord, EntityRef, LinkOrigin, RelationKind } from "./entity-links";
 import type { Truncation } from "./paged-select";
 import type { TasksStructureApi } from "./runtime.web.structure";
+import type {
+  SyncIdsResult,
+  SyncReadInput,
+  SyncReadResult,
+  SyncRows,
+  SyncTableName,
+} from "./sync/types";
 import type { TaskFieldPatch } from "./task-rows";
 
 /**
@@ -875,6 +882,24 @@ export type ModuoRuntime = {
    */
   tasks: {
     list(workspaceId: string): Promise<TasksModuleBundle>;
+    /**
+     * The shared store's read (TV-D11a): one table's live rows, or every row
+     * changed since a server stamp (deleted ones as ids). Paged by key, so a
+     * row saved during the read is never skipped. Optional: a runtime without
+     * it (test doubles) is read whole through `list` + `listQueue`.
+     */
+    syncRead?<T extends SyncTableName>(
+      input: SyncReadInput<T>,
+    ): Promise<SyncReadResult<SyncRows[T]>>;
+    /** Every live id of a table you can see (tasks, buckets, statuses): what
+     *  the store keeps after access was taken away. */
+    syncIds?(input: { workspaceId: string; table: SyncTableName }): Promise<SyncIdsResult>;
+    /**
+     * Create a task under the id it carries (`tasks_op_create`, idempotent on
+     * a resent id), so a capture sent again after a lost answer, or from the
+     * offline queue, never makes two. Optional: `upsertTask` does the same.
+     */
+    createTask?(task: Task): Promise<Task>;
     seedInbox(workspaceId: string): Promise<Bucket>;
     /** The pre-TV-D10 project save (raw), kept as the "bucket" alias. New
      *  projects and edits go through `createProject` / `updateProject`;

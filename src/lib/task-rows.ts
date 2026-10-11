@@ -52,6 +52,7 @@ import type {
   Team,
   TeamMember,
 } from "../features/tasks/model";
+import type { CommentMark } from "./sync/types";
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
 
@@ -690,5 +691,24 @@ export function tagLinkRowToModel(raw: unknown): TagLink {
     entityType: r.entity_type,
     entityId: r.entity_id,
     createdAt: r.created_at,
+  };
+}
+
+/** A comment row → what the shared store's comment counts need (TV-D11a). */
+export function commentMarkRowToModel(raw: unknown): CommentMark {
+  const r = raw as {
+    id?: unknown;
+    entity_id?: unknown;
+    updated_at?: unknown;
+    deleted_at?: unknown;
+  };
+  if (typeof r?.id !== "string" || typeof r.entity_id !== "string") {
+    throw new Error("Malformed comment payload");
+  }
+  return {
+    id: r.id,
+    taskId: r.entity_id,
+    updatedAt: typeof r.updated_at === "string" ? r.updated_at : "",
+    deletedAt: typeof r.deleted_at === "string" ? r.deleted_at : null,
   };
 }

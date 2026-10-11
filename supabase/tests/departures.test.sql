@@ -128,6 +128,14 @@ BEGIN
     'deleted tasks leave every queue');
   PERFORM test.ok(cardinality((test.bucket('P')).trash_moved_task_ids) = 9,
     'the project remembers the 9 tasks it moved', cardinality((test.bucket('P')).trash_moved_task_ids)::text);
+  PERFORM test.ok((SELECT count(*) FROM public.module_activity a
+                   WHERE a.workspace_id = test.id('W') AND a.op = 'tasks.update'
+                     AND a.payload ->> 'reason' = 'project_deleted') = 7
+              AND (SELECT (a.payload ->> 'subtasks_moved')::int FROM public.module_activity a
+                   WHERE a.entity_id = test.id('T1') AND a.payload ->> 'reason' = 'project_deleted') = 1
+              AND (SELECT a.payload -> 'bucket_id' ->> 'to' FROM public.module_activity a
+                   WHERE a.entity_id = test.id('T2') AND a.payload ->> 'reason' = 'project_deleted') = test.inbox('E')::text,
+    'each moved top task''s trail says its project was deleted and where it went (its steps ride along)');
   PERFORM test.ok(test.notices('A') = 1 AND test.notices('E') = 1 AND test.notices('O') = 0 AND test.notices('D') = 0,
     'one quiet notice per person whose Inbox received work, never the deleter',
     format('A %s E %s O %s', test.notices('A'), test.notices('E'), test.notices('O')));

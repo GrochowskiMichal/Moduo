@@ -1,17 +1,16 @@
 // TV-U6 — the sidebar's project rules: colours, areas and their projects,
 // reorder positions, what a delete or an archive will do (REPLAN 78), archive
-// filtering, pending project changes, and remembered collapse.
+// filtering, and remembered collapse.
 
 import { describe, expect, it } from "@rstest/core";
 
-import { changesFor } from "./hidden-buckets";
+import { splitArchived } from "../../lib/bucket-rows";
 import type { Area, Bucket, Task } from "./model";
 import {
   areaMoveAfter,
   BUCKET_COLOR_OPTIONS,
   bucketDotColor,
-  partitionBuckets,
-  placeTasks,
+  projectDeletePlan,
   projectDeleteSummary,
   projectDropPatch,
   projectOpenWork,
@@ -209,63 +208,51 @@ describe("what deleting or archiving a project does (REPLAN 78)", () => {
 });
 
 describe("archive filtering (U6-4)", () => {
-  const inbox = bucket("inbox", "a0", { isSystem: true });
+  const inbox = bucket("inbox", "a0", { isSystem: true, archivedAt: NOW });
   const live = bucket("live", "1");
   const archived = bucket("arch", "2", { archivedAt: NOW });
-  const deleted = bucket("gone", "3", { deletedAt: NOW });
 
-  it("splits live from archived; deleted projects are in neither", () => {
-    const p = partitionBuckets([inbox, live, archived, deleted], new Map());
-    expect(p.live.map((b) => b.id)).toEqual(["inbox", "live"]);
-    expect(p.archived.map((b) => b.id)).toEqual(["arch"]);
+  it("sets archived projects and their tasks apart; never the Inbox", () => {
+    const tasks = [task("t-live", "live"), task("t-arch", "arch"), task("t-inbox", "inbox")];
+    const split = splitArchived([inbox, live, archived], tasks);
+    expect(split.buckets.map((b) => b.id)).toEqual(["inbox", "live"]);
+    expect(split.archivedBuckets?.map((b) => b.id)).toEqual(["arch"]);
+    expect(split.tasks.map((t) => t.id)).toEqual(["t-live", "t-inbox"]);
+    expect(split.archivedTasks?.map((t) => t.id)).toEqual(["t-arch"]);
   });
 
-  it("applies pending changes: archived, deleted, never the Inbox", () => {
-    const changes = new Map([
-      ["live", "archived" as const],
-      ["arch", "deleted" as const],
-      ["inbox", "archived" as const],
-    ]);
-    const p = partitionBuckets([inbox, live, archived], changes);
-    expect(p.live.map((b) => b.id)).toEqual(["inbox"]);
-    expect(p.archived.map((b) => b.id)).toEqual(["live"]);
-  });
-
-  it("while a delete is on its way, shows only the open work that lands in your Inbox", () => {
-    const tasks = [
-      task("t-live", "live"),
-      task("t-arch", "arch"),
-      task("mine", "d", { assigneeId: "me", sectionId: "s1" }),
-      task("free", "d", { assigneeId: null }),
-      task("annas", "d", { assigneeId: "anna" }),
-      task("finished", "d", { assigneeId: "me", status: "done" }),
-      task("t-deleted", "live", { deletedAt: NOW }),
-    ];
-    const placed = placeTasks(tasks, {
-      archivedBucketIds: new Set(["arch"]),
-      changes: new Map([["d", "deleted" as const]]),
-      inboxId: "inbox",
-      userId: "me",
-    });
-    expect(placed.live.map((t) => [t.id, t.bucketId, t.sectionId ?? null])).toEqual([
-      ["t-live", "live", null],
-      ["mine", "inbox", null],
-      ["free", "inbox", null],
-    ]);
-    expect(placed.archived.map((t) => t.id)).toEqual(["t-arch"]);
+  it("keeps the same arrays when nothing is archived (readers compare by identity)", () => {
+    const buckets = [inbox, live];
+    const tasks = [task("t-live", "live")];
+    const split = splitArchived(buckets, tasks);
+    expect(split.buckets).toBe(buckets);
+    expect(split.tasks).toBe(tasks);
   });
 });
 
-describe("pending changes per bundle (hidden-buckets)", () => {
-  it("applies in-flight changes everywhere, and confirmed ones only to bundles read before", () => {
-    const all = new Map([
-      ["pending", { change: "deleted" as const, confirmedAt: null }],
-      ["done", { change: "archived" as const, confirmedAt: 1000 }],
-    ]);
-    expect([...changesFor(all, 0).keys()]).toEqual(["pending", "done"]);
-    expect([...changesFor(all, 999).keys()]).toEqual(["pending", "done"]);
-    // A bundle read after the server confirmed already shows the server.
-    expect([...changesFor(all, 1001).keys()]).toEqual(["pending"]);
+describe("a delete, as shown before the server answers (REPLAN 78)", () => {
+  it("lands the open work you'll own in your Inbox; everything else leaves", () => {
+    const tasks = [
+      task("t-live", "live"),
+      task("mine", "d", { assigneeId: "me", sectionId: "s1" }),
+      task("free", "d", { assigneeId: null }),
+      task("annas", "d", { assigneeId: "anna" }),
+      task("annas-step", "d", { assigneeId: "me", parentId: "annas" }),
+      task("finished", "d", { assigneeId: "me", status: "done" }),
+      task("t-deleted", "d", { deletedAt: NOW }),
+    ];
+    const plan = projectDeletePlan(tasks, "d", { inboxId: "inbox", userId: "me" });
+    expect(plan.toInbox).toEqual(["mine", "free"]);
+    // A step goes with its top task (Anna's Inbox); finished work to Recently deleted.
+    expect(plan.gone).toEqual(["annas", "annas-step", "finished"]);
+  });
+
+  it("without an Inbox to show, nothing lands anywhere yet", () => {
+    const plan = projectDeletePlan([task("mine", "d", { assigneeId: "me" })], "d", {
+      inboxId: null,
+      userId: "me",
+    });
+    expect(plan).toEqual({ toInbox: [], gone: ["mine"] });
   });
 });
 

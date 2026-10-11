@@ -231,7 +231,7 @@ describe("useTasksModule live updates", () => {
     expect(list).toHaveBeenCalledTimes(2);
   }, 20_000);
 
-  it("D5-3: a refetch that raced my save is redone, never applied", async () => {
+  it("D5-3 (TV-D11a): a refetch that raced my save never flicks the edit back", async () => {
     const { runtime, server, saves, list } = fakeRuntime([task()]);
     const slow = deferred<TasksModuleBundle>();
     const { result } = mount(runtime);
@@ -251,13 +251,17 @@ describe("useTasksModule live updates", () => {
     });
     expect(result.current.tasks[0]!.title).toBe("Typed meanwhile");
 
+    // The edit sits on top of the copy until its answer comes back (the
+    // shared store's ops), so the stale read needs no redo: the answer, newer
+    // by the server's stamp, becomes the row.
     server.tasks[0] = task({ title: "Typed meanwhile", updatedAt: "2026-10-08T10:00:04Z" });
     await act(async () => {
       saves[0]!.resolve(server.tasks[0]!);
-      await sleep(5_000 + ECHO_GRACE_MS + 200);
+      await sleep(ECHO_GRACE_MS + 200);
     });
-    expect(list).toHaveBeenCalledTimes(3);
+    expect(list).toHaveBeenCalledTimes(2);
     expect(result.current.tasks[0]!.title).toBe("Typed meanwhile");
+    expect(result.current.tasks[0]!.updatedAt).toBe("2026-10-08T10:00:04Z");
   }, 20_000);
 });
 
