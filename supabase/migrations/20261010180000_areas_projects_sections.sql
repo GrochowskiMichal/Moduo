@@ -61,6 +61,8 @@ CREATE TABLE IF NOT EXISTS public.areas (
   -- Otherwise it was made from a label and follows its projects.
   shared boolean NOT NULL DEFAULT false,
   created_by uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
+  -- Who deleted it (they see it while it's deleted, to undo).
+  deleted_by uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   deleted_at timestamptz,
@@ -89,6 +91,18 @@ DROP TRIGGER IF EXISTS zz_stamp_updated_at ON public.areas;
 CREATE TRIGGER zz_stamp_updated_at
   BEFORE INSERT OR UPDATE ON public.areas
   FOR EACH ROW EXECUTE FUNCTION public.tasks_stamp_updated_at();
+
+-- The projects an area's delete took out of it, so a restore (Undo) puts
+-- back every one still area-less, private ones included, without the app
+-- ever holding their ids. Internal: no client reads it.
+CREATE TABLE IF NOT EXISTS public.areas_detached (
+  area_id uuid PRIMARY KEY REFERENCES public.areas(id) ON DELETE CASCADE,
+  project_ids uuid[] NOT NULL DEFAULT '{}',
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE public.areas_detached ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.areas_detached FROM PUBLIC, anon, authenticated;
+GRANT ALL ON public.areas_detached TO service_role;
 
 -- ── 2. Project fields on buckets ────────────────────────────────────────────
 
@@ -165,7 +179,7 @@ $$;
 -- when they can see one of its live projects (never the projects
 -- themselves: a project stays as private as its own sharing says). An area
 -- made from labels whose projects are all gone is seen by nobody but its
--- maker.
+-- maker. Whoever deleted an area sees it while it's deleted, to restore it.
 CREATE OR REPLACE FUNCTION public.areas__visible_to(p_area_id uuid, p_user uuid)
 RETURNS boolean
 LANGUAGE sql
@@ -175,7 +189,9 @@ SET search_path = public
 AS $$
   SELECT EXISTS (SELECT 1 FROM public.areas a
                  WHERE a.id = p_area_id
-                   AND (a.shared OR (p_user IS NOT NULL AND a.created_by = p_user)))
+                   AND (a.shared
+                        OR (p_user IS NOT NULL AND a.created_by = p_user)
+                        OR (p_user IS NOT NULL AND a.deleted_at IS NOT NULL AND a.deleted_by = p_user)))
       OR EXISTS (SELECT 1 FROM public.buckets b
                  WHERE b.area_id = p_area_id AND b.deleted_at IS NULL
                    AND public.projects__visible_to(b.id, p_user))
@@ -452,6 +468,15 @@ BEGIN
     NEW.area_id := NULL;
     RETURN NEW;
   END IF;
+  -- Filing a project under an area needs edit on the project (the single
+  -- gate; system work aside).
+  IF TG_OP = 'UPDATE'
+     AND (NEW.area_id IS DISTINCT FROM OLD.area_id OR NEW.group_label IS DISTINCT FROM OLD.group_label)
+     AND public.perm_actor_id() IS NOT NULL
+     AND coalesce(current_setting('share.bypass', true), '') <> '1'
+     AND NOT public.projects__editable(NEW.id) THEN
+    RAISE EXCEPTION 'You don''t have edit access to this project.' USING ERRCODE = '42501';
+  END IF;
   IF TG_OP = 'INSERT' THEN
     v_area_leads := NEW.area_id IS NOT NULL;
     v_label_leads := NOT v_area_leads AND nullif(btrim(coalesce(NEW.group_label, '')), '') IS NOT NULL;
@@ -546,6 +571,14 @@ BEGIN
   -- System hand-overs (member removal, account erasure) aren't checked.
   IF coalesce(current_setting('share.bypass', true), '') = '1' THEN
     RETURN NEW;
+  END IF;
+  -- The same gate as the project ops: changing a project's fields needs edit
+  -- on it (PERM-W's write check says so too; this keeps one helper).
+  IF TG_OP = 'UPDATE' AND v_actor IS NOT NULL
+     AND row(NEW.status, NEW.starts_on, NEW.target_on, NEW.lead_id, NEW.client_contact_id)
+         IS DISTINCT FROM row(OLD.status, OLD.starts_on, OLD.target_on, OLD.lead_id, OLD.client_contact_id)
+     AND NOT public.projects__editable(NEW.id) THEN
+    RAISE EXCEPTION 'You don''t have edit access to this project.' USING ERRCODE = '42501';
   END IF;
   IF NEW.lead_id IS NOT NULL AND (TG_OP = 'INSERT' OR NEW.lead_id IS DISTINCT FROM OLD.lead_id)
      AND NOT public.tasks__is_member(NEW.workspace_id, NEW.lead_id) THEN
@@ -832,7 +865,10 @@ $$;
 
 -- Rename ("name"), recolour ("color"), delete or restore ("deleted_at": any
 -- time deletes, null restores). Deleting an area leaves its projects
--- area-less; nothing else changes. Answers with every live area.
+-- area-less; nothing else changes. Restoring it (Undo) puts back the projects
+-- the delete took out that are still area-less, private ones included, and
+-- the restorer keeps seeing it. Answers with every live area the caller can
+-- see.
 CREATE OR REPLACE FUNCTION public.areas_op_update(p_workspace_id uuid, p_area_id uuid, p_patch jsonb)
 RETURNS SETOF public.areas
 LANGUAGE plpgsql
@@ -866,13 +902,25 @@ BEGIN
   IF p_patch ? 'deleted_at' AND jsonb_typeof(p_patch -> 'deleted_at') = 'null' AND a.deleted_at IS NOT NULL THEN
     PERFORM public.areas__check_name(p_workspace_id, a.name, a.id);
     BEGIN
-      UPDATE public.areas SET deleted_at = NULL WHERE id = a.id RETURNING * INTO a;
+      UPDATE public.areas
+      SET deleted_at = NULL, deleted_by = NULL,
+          created_by = coalesce(created_by, public.perm_actor_id())
+      WHERE id = a.id RETURNING * INTO a;
     EXCEPTION WHEN raise_exception THEN
       IF SQLERRM = 'trash_expired' THEN
         RAISE EXCEPTION 'This area was deleted more than 30 days ago, so it can''t be restored.';
       END IF;
       RAISE;
     END;
+    -- The restore's own consequence, so system work, as the delete was.
+    v_bypass := current_setting('share.bypass', true);
+    PERFORM set_config('share.bypass', '1', true);
+    UPDATE public.buckets b SET area_id = a.id
+    FROM public.areas_detached d
+    WHERE d.area_id = a.id AND b.id = ANY (d.project_ids)
+      AND b.workspace_id = p_workspace_id AND b.area_id IS NULL AND NOT b.is_system;
+    PERFORM set_config('share.bypass', coalesce(v_bypass, ''), true);
+    DELETE FROM public.areas_detached d WHERE d.area_id = a.id;
   END IF;
   IF p_patch ? 'name' THEN
     UPDATE public.areas SET name = public.areas__check_name(p_workspace_id, p_patch ->> 'name', a.id)
@@ -883,7 +931,10 @@ BEGIN
     WHERE id = a.id RETURNING * INTO a;
   END IF;
   IF p_patch ? 'deleted_at' AND jsonb_typeof(p_patch -> 'deleted_at') <> 'null' AND a.deleted_at IS NULL THEN
-    UPDATE public.areas SET deleted_at = now() WHERE id = a.id;
+    UPDATE public.areas SET deleted_at = now(), deleted_by = public.perm_actor_id() WHERE id = a.id;
+    INSERT INTO public.areas_detached (area_id, project_ids)
+    SELECT a.id, coalesce(array_agg(b.id), '{}') FROM public.buckets b WHERE b.area_id = a.id
+    ON CONFLICT (area_id) DO UPDATE SET project_ids = EXCLUDED.project_ids, created_at = now();
     -- Its projects become area-less: the delete's own consequence, so system
     -- work (a project the deleter can't edit follows too).
     v_bypass := current_setting('share.bypass', true);
@@ -1356,7 +1407,16 @@ BEGIN
       IF NOT EXISTS (SELECT 1 FROM public.areas a
                      WHERE a.workspace_id = v_ws AND a.name = v_label AND a.deleted_at IS NULL) THEN
         v_pos := v_pos + 1;
-        INSERT INTO public.areas (workspace_id, name, position) VALUES (v_ws, v_label, v_pos);
+        -- Its maker: the owner of the first project that carries the label
+        -- (who typed it, or got it with the project), so the area never
+        -- becomes nobody's.
+        INSERT INTO public.areas (workspace_id, name, position, created_by)
+        SELECT v_ws, v_label, v_pos,
+               (SELECT b.owner_id FROM public.buckets b
+                WHERE b.workspace_id = v_ws AND NOT b.is_system AND b.deleted_at IS NULL
+                  AND btrim(left(btrim(b.group_label), 80)) = v_label
+                  AND EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = b.owner_id)
+                ORDER BY b.position COLLATE "C", b.id LIMIT 1);
         v_made := v_made + 1;
       END IF;
     END LOOP;

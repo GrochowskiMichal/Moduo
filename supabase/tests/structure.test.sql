@@ -489,3 +489,158 @@ BEGIN
     'path: sessions and Waiting on — none of a task M can''t see');
 END;
 $$;
+
+-- ── Writes: each needs edit, through the same gate ─────────────────────────
+-- V is a viewer (sees the shared projects), M a member without access to
+-- O's private PB4. PB5 is a project M can only view.
+INSERT INTO public.buckets (id, workspace_id, owner_id, name, is_system, position) VALUES
+  (test.id('PB5'), test.id('W'), test.id('O'), 'O view-only', false, '0008');
+DELETE FROM public.resource_grants WHERE resource_type = 'bucket' AND resource_id = test.id('PB5');
+INSERT INTO public.resource_grants (workspace_id, resource_type, resource_id, subject_type, subject_id, level, created_by)
+VALUES (test.id('W'), 'bucket', test.id('PB5'), 'member', test.id('M'), 'view', test.id('O'));
+
+DO $$
+DECLARE
+  r text;
+  v_field text;
+  v_patch jsonb;
+  v_before public.buckets;
+  v_section uuid;
+  v_area uuid;
+BEGIN
+  PERFORM test.ok(test.value_as('M', format($q$SELECT count(*)::text FROM public.buckets WHERE id = %L$q$, test.id('PB5'))) = '1',
+    'M sees the view-only project');
+
+  -- Project fields: status, dates, lead, client, area.
+  FOREACH v_field IN ARRAY ARRAY['status', 'starts_on', 'target_on', 'lead_id', 'client_contact_id', 'area_id'] LOOP
+    v_patch := jsonb_build_object(v_field, CASE v_field
+      WHEN 'status' THEN to_jsonb('on_hold'::text)
+      WHEN 'starts_on' THEN to_jsonb('2026-01-01'::text)
+      WHEN 'target_on' THEN to_jsonb('2027-01-01'::text)
+      WHEN 'lead_id' THEN to_jsonb(test.id('O')::text)
+      WHEN 'client_contact_id' THEN to_jsonb(test.id('C1')::text)
+      ELSE to_jsonb((SELECT a.id FROM public.areas a WHERE a.workspace_id = test.id('W') AND a.shared AND a.deleted_at IS NULL LIMIT 1)::text)
+    END);
+    -- The viewer: through the op and raw.
+    v_before := test.bucket('P2');
+    r := test.try('V', format($q$SELECT public.projects_op_update(%L, %L, %L::jsonb)$q$, test.id('W'), test.id('P2'), v_patch));
+    PERFORM test.ok(r LIKE '%don''t have edit access%', format('write gate: a viewer can''t set a project''s %s (op)', v_field), r);
+    r := test.try('V', format($q$UPDATE public.buckets SET %I = %L WHERE id = %L$q$, v_field, v_patch ->> v_field, test.id('P2')));
+    PERFORM test.ok(r NOT LIKE 'ok 1%' AND to_jsonb(test.bucket('P2')) = to_jsonb(v_before),
+      format('write gate: a viewer can''t set a project''s %s (raw)', v_field), r);
+    -- A member without access: through the op and raw.
+    v_before := test.bucket('PB4');
+    r := test.try('M', format($q$SELECT public.projects_op_update(%L, %L, %L::jsonb)$q$, test.id('W'), test.id('PB4'), v_patch));
+    PERFORM test.ok(r LIKE '%project isn''t in this workspace%', format('write gate: a member without access can''t set %s (op)', v_field), r);
+    r := test.try('M', format($q$UPDATE public.buckets SET %I = %L WHERE id = %L$q$, v_field, v_patch ->> v_field, test.id('PB4')));
+    PERFORM test.ok(r = 'ok 0' AND to_jsonb(test.bucket('PB4')) = to_jsonb(v_before),
+      format('write gate: a member without access can''t set %s (raw: the row isn''t there for them)', v_field), r);
+    -- Seeing a project isn't enough to change it.
+    r := test.try('M', format($q$SELECT public.projects_op_update(%L, %L, %L::jsonb)$q$, test.id('W'), test.id('PB5'), v_patch));
+    PERFORM test.ok(r LIKE '%don''t have edit access to this project%', format('write gate: view access can''t set %s', v_field), r);
+  END LOOP;
+  r := test.try('M', format($q$UPDATE public.buckets SET status = 'done' WHERE id = %L$q$, test.id('PB5')));
+  PERFORM test.ok(r NOT LIKE 'ok 1%' AND (test.bucket('PB5')).status = 'active',
+    'write gate: view access can''t set a project''s fields raw either', r);
+
+  -- Filing a project under an area.
+  r := test.try('V', format($q$SELECT public.projects_op_file(%L, %L, 'Anything')$q$, test.id('W'), test.id('P2')));
+  PERFORM test.ok(r LIKE '%don''t have edit access%', 'write gate: a viewer can''t file a project (op)', r);
+  r := test.try('V', format($q$UPDATE public.buckets SET group_label = 'Anything' WHERE id = %L$q$, test.id('P2')));
+  PERFORM test.ok(r NOT LIKE 'ok 1%', 'write gate: a viewer can''t file a project (old build''s label)', r);
+  r := test.try('M', format($q$SELECT public.projects_op_file(%L, %L, 'Mine')$q$, test.id('W'), test.id('PB5')));
+  PERFORM test.ok(r LIKE '%don''t have edit access to this project%', 'write gate: view access can''t file a project', r);
+
+  -- Areas: create, rename, recolour, delete, move — a viewer can't.
+  SELECT a.id INTO v_area FROM public.areas a
+  WHERE a.workspace_id = test.id('W') AND a.shared AND a.deleted_at IS NULL LIMIT 1;
+  FOREACH v_field IN ARRAY ARRAY['{"name": "Renamed"}', '{"color": "teal"}', '{"deleted_at": "now"}'] LOOP
+    r := test.try('V', format($q$SELECT * FROM public.areas_op_update(%L, %L, %L::jsonb)$q$, test.id('W'), v_area, v_field));
+    PERFORM test.ok(r LIKE '%don''t have edit access to Tasks%', format('write gate: a viewer can''t change an area (%s)', v_field), r);
+  END LOOP;
+  r := test.try('V', format($q$SELECT * FROM public.areas_op_move(%L, %L, NULL)$q$, test.id('W'), v_area));
+  PERFORM test.ok(r LIKE '%don''t have edit access to Tasks%', 'write gate: a viewer can''t reorder areas', r);
+
+  -- Sections: create, rename, re-date, delete, move — a viewer can't; a
+  -- member without access or with view only can't either.
+  -- A section of the shared project P2, which the viewer can see.
+  PERFORM test.as_user('O', format($q$SELECT * FROM public.sections_op_create(%L, %L, '{"name": "Shared week"}'::jsonb)$q$,
+    test.id('W'), test.id('P2')));
+  SELECT s.id INTO v_section FROM public.sections s WHERE s.project_id = test.id('P2') AND s.name = 'Shared week';
+  PERFORM test.ok(test.value_as('V', format($q$SELECT count(*)::text FROM public.sections WHERE id = %L$q$, v_section)) = '1',
+    'the viewer reads that section');
+  FOREACH v_field IN ARRAY ARRAY['{"name": "x"}', '{"ends_on": "2026-12-31"}', '{"deleted_at": "now"}'] LOOP
+    r := test.try('V', format($q$SELECT * FROM public.sections_op_update(%L, %L, %L::jsonb)$q$, test.id('W'), v_section, v_field));
+    PERFORM test.ok(r LIKE '%don''t have edit access%', format('write gate: a viewer can''t change a section (%s)', v_field), r);
+  END LOOP;
+  r := test.try('V', format($q$SELECT * FROM public.sections_op_move(%L, %L, NULL)$q$, test.id('W'), v_section));
+  PERFORM test.ok(r LIKE '%don''t have edit access%', 'write gate: a viewer can''t move a section', r);
+  SELECT s.id INTO v_section FROM public.sections s WHERE s.project_id = test.id('PB4') LIMIT 1;
+  r := test.try('M', format($q$SELECT * FROM public.sections_op_update(%L, %L, '{"deleted_at": "now"}'::jsonb)$q$, test.id('W'), v_section));
+  PERFORM test.ok(r LIKE '%Section not found%', 'write gate: a member without access can''t delete a section', r);
+  PERFORM test.as_user('O', format($q$SELECT * FROM public.sections_op_create(%L, %L, '{"name": "Read only"}'::jsonb)$q$,
+    test.id('W'), test.id('PB5')));
+  SELECT s.id INTO v_section FROM public.sections s WHERE s.project_id = test.id('PB5') LIMIT 1;
+  r := test.try('M', format($q$SELECT * FROM public.sections_op_create(%L, %L, '{"name": "Mine"}'::jsonb)$q$, test.id('W'), test.id('PB5')));
+  PERFORM test.ok(r LIKE '%don''t have edit access to this project%', 'write gate: view access can''t add a section', r);
+  r := test.try('M', format($q$SELECT * FROM public.sections_op_update(%L, %L, '{"name": "Mine"}'::jsonb)$q$, test.id('W'), v_section));
+  PERFORM test.ok(r LIKE '%don''t have edit access to this project%', 'write gate: view access can''t rename a section', r);
+  r := test.try('M', format($q$SELECT * FROM public.sections_op_move(%L, %L, NULL)$q$, test.id('W'), v_section));
+  PERFORM test.ok(r LIKE '%don''t have edit access to this project%', 'write gate: view access can''t move a section', r);
+
+  -- A task's section, raw, by a viewer.
+  r := test.try('V', format($q$UPDATE public.tasks SET section_id = NULL WHERE id = %L$q$, test.id('HW2')));
+  PERFORM test.ok(r NOT LIKE 'ok 1%', 'write gate: a viewer can''t change a task''s section', r);
+
+  -- A team's default project needs edit on it.
+  r := test.try('M', format($q$SELECT public.teams_op_create(%L, %L::jsonb)$q$, test.id('W'),
+    jsonb_build_object('name', 'Viewers', 'default_project_id', test.id('PB5'))));
+  PERFORM test.ok(r LIKE '%project isn''t in this workspace%', 'write gate: a project you only view can''t be a team''s default', r);
+  r := test.try('V', format($q$SELECT public.teams_op_update(%L, %L, %L::jsonb)$q$, test.id('W'), test.id('OPS'),
+    jsonb_build_object('default_project_id', test.id('P2'))));
+  PERFORM test.ok(r LIKE '%don''t have edit access to Tasks%', 'write gate: a viewer can''t set a team''s default project', r);
+END;
+$$;
+
+-- ── Deleting an area can be undone, by whoever deleted it ───────────────────
+DO $$
+DECLARE
+  r text;
+  v_mixed uuid;
+  v_product uuid;
+BEGIN
+  -- A workspace area holding a private project and a shared one.
+  PERFORM test.as_user('O', format($q$SELECT * FROM public.areas_op_create(%L, 'Mixed')$q$, test.id('W')));
+  SELECT a.id INTO v_mixed FROM public.areas a WHERE a.workspace_id = test.id('W') AND a.name = 'Mixed';
+  PERFORM test.as_user('O', format($q$SELECT public.projects_op_move(%L, %L, %L)$q$, test.id('W'), test.id('PB3'), v_mixed));
+  PERFORM test.as_user('O', format($q$SELECT public.projects_op_move(%L, %L, %L)$q$, test.id('W'), test.id('P4'), v_mixed));
+  r := test.as_user('M', format($q$SELECT * FROM public.areas_op_update(%L, %L, '{"deleted_at": "now"}'::jsonb)$q$, test.id('W'), v_mixed));
+  PERFORM test.ok((test.bucket('PB3')).area_id IS NULL AND (test.bucket('P4')).area_id IS NULL,
+    'deleting an area takes every project out of it, private ones too', r);
+  r := test.as_user('M', format($q$SELECT * FROM public.areas_op_update(%L, %L, '{"deleted_at": null}'::jsonb)$q$, test.id('W'), v_mixed));
+  PERFORM test.ok((test.bucket('PB3')).area_id = v_mixed AND (test.bucket('P4')).area_id = v_mixed
+              AND (test.bucket('PB3')).group_label = 'Mixed',
+    'undoing it puts them all back (M never learns the private one)', r);
+  PERFORM test.ok(test.value_as('M', format($q$SELECT count(*)::text FROM public.buckets WHERE id = %L$q$, test.id('PB3'))) = '0',
+    'the private project stays private');
+
+  -- A backfilled area (made from labels; its maker is O) deleted by E earlier
+  -- in this file: E can still restore it, with what's still area-less.
+  SELECT a.id INTO v_product FROM public.areas a WHERE a.workspace_id = test.id('W') AND a.name = 'Product';
+  PERFORM test.ok((SELECT deleted_by FROM public.areas WHERE id = v_product) = test.id('E')
+              AND test.value_as('E', format($q$SELECT count(*)::text FROM public.areas WHERE id = %L$q$, v_product)) = '1'
+              AND test.value_as('N', format($q$SELECT count(*)::text FROM public.areas WHERE id = %L$q$, v_product)) = '0',
+    'a deleted label area is seen by whoever deleted it (to undo), not by others');
+  r := test.as_user('E', format($q$SELECT * FROM public.areas_op_update(%L, %L, '{"deleted_at": null}'::jsonb)$q$, test.id('W'), v_product));
+  PERFORM test.ok(r LIKE 'ok%' AND (SELECT deleted_at FROM public.areas WHERE id = v_product) IS NULL
+              AND (test.bucket('P3')).area_id = v_product
+              AND test.value_as('E', format($q$SELECT count(*)::text FROM public.areas WHERE id = %L$q$, v_product)) = '1',
+    'deleting a backfilled area and undoing it brings it back with its area-less projects, for the deleter', r);
+  r := test.try('N', format($q$SELECT * FROM public.areas_op_update(%L, %L, '{"name": "Mine"}'::jsonb)$q$, test.id('W'),
+    (SELECT a.id FROM public.areas a WHERE a.name = 'Side gig' AND NOT a.shared AND a.workspace_id = test.id('W'))));
+  PERFORM test.ok(r LIKE '%Area not found%', 'others can''t reach a label area they don''t see', r);
+  -- Two areas of one name: possible when one is hidden from the other's maker.
+  PERFORM test.ok(test.value_as('O', format($q$SELECT count(*)::text FROM public.areas WHERE workspace_id = %L AND name = 'Side gig' AND deleted_at IS NULL$q$, test.id('W'))) = '2',
+    'one person can see two areas of the same name when one was made where it was hidden (intended; old builds merge them)');
+END;
+$$;

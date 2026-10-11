@@ -291,7 +291,8 @@ BEGIN
 END;
 $$;
 
--- A default project: a live project of the workspace the caller can see.
+-- A default project: a live project of the workspace the caller can edit
+-- (one they can't edit reads as missing).
 CREATE OR REPLACE FUNCTION public.teams__check_project(p_workspace_id uuid, p_project jsonb)
 RETURNS uuid
 LANGUAGE plpgsql
@@ -309,7 +310,7 @@ BEGIN
   IF v IS NULL OR NOT EXISTS (
        SELECT 1 FROM public.buckets b
        WHERE b.id = v AND b.workspace_id = p_workspace_id AND b.deleted_at IS NULL AND NOT b.is_system)
-     OR NOT public.projects__visible(v) THEN
+     OR NOT public.projects__editable(v) THEN
     RAISE EXCEPTION 'That project isn''t in this workspace.' USING ERRCODE = '22023';
   END IF;
   RETURN v;
