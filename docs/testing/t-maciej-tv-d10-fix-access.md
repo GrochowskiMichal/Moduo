@@ -22,7 +22,7 @@
 - [ ] **Do:** finish the task (Done or Won't do) and reload the booking page → **Expect:** the slot is free again. _(web)_
 
 ## Migrations / data
-- [ ] **Do:** apply `supabase/migrations/20261010190000_task_sessions_access.sql` after TV-D10's three files, then `bun run db:test sessions_access` → **Expect:** "PASS: all (102 checks)"; `bun run db:test` → every file passes. _(local stack)_
+- [ ] **Do:** apply `supabase/migrations/20261010190000_task_sessions_access.sql` after TV-D10's three files, then `bun run db:test sessions_access` → **Expect:** "PASS: all (105 checks)"; `bun run db:test` → every file passes. _(local stack)_
 - [ ] **Do:** `select qual from pg_policies where tablename in ('task_sessions','task_reminders','task_waiting')` → **Expect:** each reads through `tasks__visible(task_id)` (reminders also `user_id = auth.uid()`). _(local stack)_
 
 ## Known gaps / not-yet-testable

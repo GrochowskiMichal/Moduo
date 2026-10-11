@@ -57,6 +57,7 @@ BEGIN
   FOREACH v_fn IN ARRAY ARRAY[
     'public.tasks__visible_to(uuid, uuid)', 'public.tasks__editable_to(uuid, uuid)',
     'public.tasks__guard_edit(uuid, uuid)', 'public.tasks__check_session_person(public.tasks, uuid)',
+    'public.tasks__can_hold_session(uuid, uuid, uuid)',
     'public.tasks__busy_sessions(uuid, uuid, timestamptz, timestamptz)',
     'public.tasks__fire_reminders(timestamptz, integer)', 'public.tasks__session_legacy()',
     'public.buckets__area_sync()', 'public.buckets__project_check()'] LOOP
@@ -391,7 +392,20 @@ BEGIN
       VALUES (%L, %L, %L, %L, NULL, 'Daily private', 'todo', %L::jsonb), (%L, %L, %L, %L, NULL, 'Daily shared', 'todo', %L::jsonb)$q$,
     test.id('CU1'), test.id('W'), test.id('PB'), test.id('O'), v_rule,
     test.id('CU2'), test.id('W'), test.id('SB'), test.id('O'), v_rule));
+  -- A third, made by A, who is then made a viewer: nobody may hold its session.
+  PERFORM test.as_op('A', format($q$INSERT INTO public.tasks (id, workspace_id, bucket_id, owner_id, assignee_id, title, status, recurrence)
+      VALUES (%L, %L, %L, %L, NULL, 'Daily of A', 'todo', %L::jsonb)$q$,
+    test.id('CU3'), test.id('W'), test.id('SB'), test.id('A'), v_rule));
+  UPDATE public.workspace_members SET role = 'viewer' WHERE workspace_id = test.id('W') AND user_id = test.id('A');
   r := test.as_user('E', format($q$SELECT * FROM public.tasks_op_catch_up(%L, '[]'::jsonb)$q$, test.id('W')));
+  UPDATE public.workspace_members SET role = 'member' WHERE workspace_id = test.id('W') AND user_id = test.id('A');
+  PERFORM test.ok((SELECT scheduled_at FROM public.tasks WHERE id = test.id('CU3')) IS NOT NULL
+              AND (SELECT count(*) FROM public.task_sessions WHERE task_id = test.id('CU3') AND deleted_at IS NULL AND user_id IS NULL) = 1
+              AND NOT EXISTS (SELECT 1 FROM public.task_sessions WHERE task_id = test.id('CU3') AND user_id IS NOT NULL),
+    'path: the repeat engine — with no one who may hold it, the session is nobody''s (never the caller''s)');
+  PERFORM test.ok(NOT EXISTS (SELECT 1 FROM public.tasks__busy_sessions(test.id('W'), test.id('E'), now() - interval '2 days', now() + interval '2 days') b
+                              JOIN public.task_sessions s ON s.starts_at = b.starts_at AND s.task_id = test.id('CU3')),
+    'and it blocks no one''s booking links');
   PERFORM test.ok(r LIKE 'ok%' AND (SELECT scheduled_at FROM public.tasks WHERE id = test.id('CU1')) IS NOT NULL
               AND (SELECT scheduled_at FROM public.tasks WHERE id = test.id('CU2')) IS NOT NULL,
     'the catch-up from E''s app gave both repeats today''s occurrence', r);
