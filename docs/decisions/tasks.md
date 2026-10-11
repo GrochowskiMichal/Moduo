@@ -2,6 +2,66 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index.
 
+## 2026-10-11 · TV-D11b virtualization, the 10k fixture, the grant feed — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 12 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §Assumptions #7, #8, AC12.3, AC12.4; REPLAN 37 and §6.11; the TV-D11a deferrals; migration `20261011120000_tasks_sync_feed_search`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **D11B-1 · Short lists draw whole; long ones draw what's on screen** → TV-D11b (`virtual-stack.tsx`), TV-U10, TV-U11
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: the List virtualizes from 120 drawn items (rows, group headers, group ends), each Board column from 40 cards, through one `VirtualStack` (TanStack Virtual, items measured once drawn, 8 items of overscan); below that every item is drawn in plain flow. Group headers stick while their group scrolls (TanStack's pattern: the active header stays drawn, in flow, `sticky`); a dragged row or card stays drawn wherever the list scrolls; a selection moved by keys or a deep link is scrolled into view once.
+  - Why: mounting about 120 rows costs well under the 200 ms budget, and short lists keep find-in-page, exact drag measuring and tests without layout; at 10,000 tasks a view switch went from 1.1–1.4 s to about 47 ms.
+  - Rejected: virtualizing every list (more moving parts where nothing is gained); a floating header that copies the group's label (two copies of its controls).
+- **D11B-2 · The Queue's line-up is drawn whole** → TV-D11b, TV-F7
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: the reorderable Queue (a sortable list) isn't virtualized.
+  - Why: it's one person's line-up (tens of tasks), and dnd-kit's sortable animates only items that are drawn.
+  - Rejected: virtualizing it now.
+- **D11B-3 · Rows and cards take their own facts and one actions object, never the module API or the project list** → TV-D11b (`row-facts.ts`, `project-choices.tsx`), every block that touches `TaskRow` / `TaskCard`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: a row or card is memoised and gets its task, its facts (queued, claims, blocked label, tags, subtask progress, status name; compared by value), id-taking callbacks that keep their identity, and `useRowActions(api)` (one object whose calls go to the newest API). The projects a row's "Move to project" menu offers come from a context only the open menu reads. Editing one task redraws one row; a project added or renamed redraws none (`task-list-view.redraw.test.tsx`).
+  - Why: the API object is new after every change anywhere, and the project list as a prop froze the page for about 5 s with 224 projects (found in TV-U6).
+  - Rejected: a stable proxy over the API (the React Compiler caches what a component reads from a stable object, so rows would go stale); a memo comparator that ignores the API (stale closures).
+- **D11B-4 · The server searches only while the device copy can't answer alone** → TV-D11b (`store.searchTasks`, `coversSearch`, `use-tasks-filters.tsx`), TV-U2
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: the views search the copy at once; while closed tasks are still loading, or a read was cut at its ceiling, the store also asks `tasks_search` (250 ms after typing stops) for ids, reads the rows it lacks into the copy, and those match by id. Once the copy holds every task, no request is made.
+  - Why: with everything on the device the copy's search is instant and finds the same tasks; the server is there for what the copy doesn't have.
+  - Rejected: asking the server on every search (a request per pause, the same answer); the RPC answering whole rows (a second shape for a task beside the store's).
+- **D11B-5 · `tasks_search` checks text first, then the task gate, as SECURITY DEFINER** → TV-D11b (migration 5), TV-D16 (MCP `tasks_search` can call it)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: every word (up to 8) must appear in the title or the description's text (HTML tags, entities and a reference's stored text treated as in the app), plain substring (`%` and `_` are characters), newest change first, `tasks__visible_to` on each match until 200 (at most 500) are found; nothing for someone who can't view Tasks in the workspace.
+  - Why: under RLS a non-leakproof `ILIKE` runs after `can_access` on every row: about 2 s for 10,000 tasks on the local stack.
+  - Rejected: an invoker function or a PostgREST `ilike` (2 s); a `pg_trgm` index (an extension for prod for one feature, while a 10,000-row text scan is tens of milliseconds).
+- **D11B-6 · Hard deletes leave tombstones; the three tables delta** → TV-D11b (`sync_tombstones`, `readTombstonedChanges`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: `task_queue`, `tag_links` and `task_relations` keep deleting for real; an AFTER DELETE trigger writes (table, row id, workspace, when) into `sync_tombstones` (kept 7 days, readable by the workspace's Tasks members), the three tables get a server-stamped `updated_at`, and the store reads their changes like any delta table. A database without the migration answers whole (`whole: true`) and the store applies it as a whole read.
+  - Why: they were read whole on every sync (tag links run to thousands at 10,000 tasks); soft deletes would change unique keys, every op and every old build's delete.
+  - Rejected: soft deletes on the three tables; a tombstone column per table.
+- **D11B-7 · The grant feed is its own append-only table, `access_changes`** → TV-D11b (migration 4, `store.noteAccessChanges`), TV-D13, TV-U16
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: triggers write one row per change in who sees what (a project or task share made, changed or removed: the member or the whole workspace; a task moved project: the workspace; a member's role or a role's permissions: that member or the workspace), naming the thing, never its contents; kept 2 days; RLS shows a member their rows and the workspace's. The store hears it live (its own Realtime channel) and reads it with every delta; a task row → that task is read by id (shown, or dropped with its own rows); anything wider → the whole access check. The session's first read only takes the cursor (the session's first access check covers what came before).
+  - Why: a share of one task used to wait up to 10 minutes; Realtime can't filter deletes (a `resource_grants` delete would reach every client of every workspace with only its id), while inserts into a feed are filtered per subscriber by RLS.
+  - Rejected: publishing `resource_grants` (REPLICA IDENTITY FULL still sends only the key under RLS); working out per member in the trigger who could see a moved task before.
+- **D11B-8 · New Realtime tables listen on channels of their own** → TV-D11b (`realtime.ts` `LIVE_SIDE_TABLES`), every block that publishes a table
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: `task_completions` and the grant feed each have a channel; the main one keeps TV-D5/D11a's tables.
+  - Why: a probe on the local stack: a channel that names a table outside the publication (or missing) says SUBSCRIBED and then delivers nothing for any of its tables, so a build ahead of its database would lose every live update.
+  - Rejected: adding them to the main channel.
+- **D11B-9 · The device copy stays one record, written whole; closed tasks still load straight after** → TV-D11b (measured), D11a's seams kept
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: no per-row IndexedDB and no on-demand closed tasks yet.
+  - Why: at 10,000 tasks the copy is about 10.8 MB, its clone and write take about 30 ms of main thread (throttled, not per change), and the first rows show in about 1.4 s with the rest following in the background.
+  - Rejected: per-row records and lazy closed tasks (cost without a measured need).
+- **D11B-10 · The perf gate is `bun run perf` on the local stack, not CI** → TV-D11b (`tests/perf/tasks-10k.spec.ts`, `docs/local-dev.md`), a CI block with a stack
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: `bun run perf` seeds the 10,000-task fixture (its own person and workspace, idempotent) and runs the `perf` Playwright project: open a task, search, switch List ↔ Board (median of three under 200 ms each), lists and columns draw only a screenful, a card drags out of a 1,200-card column, a project change never blocks the page for 200 ms. Too slow and stack-bound for `verify`.
+  - Why: CI has no Supabase stack and runs no e2e; the measurements need a real browser and the fixture.
+  - Rejected: a fake-runtime perf test in `verify` (it wouldn't measure what a person waits for).
+- **D11B-11 · The Timeline isn't virtualized here** → TV-TL1 (AC9.9, `tests/perf/tasks-timeline-2k.spec.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: the block row named Timeline rows too; TV-TL1 rebuilds the Timeline with endless virtualized scroll, so the switch to it (about 290 ms at 10,000 tasks) is logged by the perf spec, not budgeted.
+  - Why: virtualizing a view that is about to be rebuilt is throwaway work.
+  - Rejected: virtualizing today's Timeline.
+
 ## 2026-10-11 · TV-D10-fix sessions, reminders and Waiting on behind the task's gate — the agent's choices (deferred to by Maciej)
 
 A follow-up to TV-D10 ([specs/tasks-v3.md](../../specs/tasks-v3.md) block 10, §Assumptions #4, #24; REPLAN 24, 25, default d; migration `20261011110000_task_sessions_access`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
