@@ -64,6 +64,7 @@ import {
 } from "./dnd/task-dnd";
 import { listKeyActionFor } from "./list-keys";
 import { type PlanHeaderControls, type PlanView, PlanViewHeader } from "./plan-view-header";
+import { ProjectChoicesProvider } from "./project-choices";
 import { taskFactsOf, useRowActions } from "./row-facts";
 import { CompletedLine } from "./task-meta";
 import { type RowCommand, TaskRow } from "./task-row";
@@ -749,7 +750,6 @@ export function TaskListView({
   const buildRowProps = (t: Task) => ({
     task: t,
     bucketName: bucketNameById(t.bucketId),
-    buckets,
     inboxId: inboxIdForRows,
     showBucket: showBucketTag,
     showAssignee,
@@ -1209,112 +1209,115 @@ export function TaskListView({
       : null;
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <PlanViewHeader
-        title={scopeTitle}
-        view={view}
-        onViewChange={onViewChange}
-        canEdit={canEdit}
-        onRequestCapture={onRequestCapture}
-        controls={header}
-      />
+    // The projects a row's menu offers, read only by an open menu (TV-D11b).
+    <ProjectChoicesProvider projects={buckets} inboxId={inbox?.id ?? null}>
+      <div className="flex h-full min-h-0 flex-col">
+        <PlanViewHeader
+          title={scopeTitle}
+          view={view}
+          onViewChange={onViewChange}
+          canEdit={canEdit}
+          onRequestCapture={onRequestCapture}
+          controls={header}
+        />
 
-      {/* list */}
-      <div
-        ref={containerRef}
-        tabIndex={0}
-        onKeyDown={onKeyDown}
-        // Chromium focuses a clicked button; after a mouse click on a row's
-        // button, hand focus back to the list (as desktop WebKit does), so the
-        // next Space/Enter acts on the selected row instead of re-clicking it.
-        // Keyboard activation (detail 0), text fields and portaled popovers keep focus.
-        onClickCapture={(e) => {
-          if (e.detail === 0 || !e.currentTarget.contains(e.target as Node)) return;
-          if (!(e.target instanceof Element) || !e.target.closest("button")) return;
-          e.currentTarget.focus({ preventScroll: true });
-        }}
-        role="grid"
-        aria-label={`${scopeTitle} tasks`}
-        className="pane-scroll min-h-0 flex-1 overflow-auto rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        {!api.loaded ? (
-          <TaskListSkeleton />
-        ) : tasks.length === 0 ? (
-          filterActive ? (
-            <TasksNoMatch onClearFilters={onClearFilters} />
+        {/* list */}
+        <div
+          ref={containerRef}
+          tabIndex={0}
+          onKeyDown={onKeyDown}
+          // Chromium focuses a clicked button; after a mouse click on a row's
+          // button, hand focus back to the list (as desktop WebKit does), so the
+          // next Space/Enter acts on the selected row instead of re-clicking it.
+          // Keyboard activation (detail 0), text fields and portaled popovers keep focus.
+          onClickCapture={(e) => {
+            if (e.detail === 0 || !e.currentTarget.contains(e.target as Node)) return;
+            if (!(e.target instanceof Element) || !e.target.closest("button")) return;
+            e.currentTarget.focus({ preventScroll: true });
+          }}
+          role="grid"
+          aria-label={`${scopeTitle} tasks`}
+          className="pane-scroll min-h-0 flex-1 overflow-auto rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {!api.loaded ? (
+            <TaskListSkeleton />
+          ) : tasks.length === 0 ? (
+            filterActive ? (
+              <TasksNoMatch onClearFilters={onClearFilters} />
+            ) : (
+              <TasksEmptyScope
+                scopeTitle={scopeTitle}
+                canEdit={canEdit}
+                onRequestCapture={onRequestCapture}
+              />
+            )
+          ) : canReorder ? (
+            // Queue reorder. In external mode (DF-22) the tasks page owns the one
+            // DndContext (so a row can be dropped on the hub or the rail); we bind
+            // our reorder handlers through a monitor. The handlers stay spatially
+            // disjoint — onQueueDragEnd early-returns when `over` isn't a queue row.
+            <DndBoundary
+              dndMode={dndMode}
+              sensors={dndSensors}
+              collisionDetection={closestCenter}
+              onDragStart={(e) => {
+                setReordering(true);
+                setQueueDragId(String(e.active.id));
+              }}
+              onDragEnd={onQueueDragEnd}
+              onDragCancel={() => {
+                setReordering(false);
+                setQueueDragId(null);
+              }}
+              announcements={announcements}
+            >
+              <SortableContext items={queueIds} strategy={verticalListSortingStrategy}>
+                {queueTasks.map((task) => (
+                  <SortableTask
+                    key={task.id}
+                    id={task.id}
+                    from="queue"
+                    render={({ dragListeners, dragActivatorRef }) => (
+                      <TaskRow
+                        {...buildRowProps(task)}
+                        parentTitle={parentTitleFor(task)}
+                        dragListeners={dragListeners}
+                        dragActivatorRef={dragActivatorRef}
+                      />
+                    )}
+                  />
+                ))}
+              </SortableContext>
+              {dragOverlay}
+            </DndBoundary>
           ) : (
-            <TasksEmptyScope
-              scopeTitle={scopeTitle}
-              canEdit={canEdit}
-              onRequestCapture={onRequestCapture}
-            />
-          )
-        ) : canReorder ? (
-          // Queue reorder. In external mode (DF-22) the tasks page owns the one
-          // DndContext (so a row can be dropped on the hub or the rail); we bind
-          // our reorder handlers through a monitor. The handlers stay spatially
-          // disjoint — onQueueDragEnd early-returns when `over` isn't a queue row.
-          <DndBoundary
-            dndMode={dndMode}
-            sensors={dndSensors}
-            collisionDetection={closestCenter}
-            onDragStart={(e) => {
-              setReordering(true);
-              setQueueDragId(String(e.active.id));
-            }}
-            onDragEnd={onQueueDragEnd}
-            onDragCancel={() => {
-              setReordering(false);
-              setQueueDragId(null);
-            }}
-            announcements={announcements}
-          >
-            <SortableContext items={queueIds} strategy={verticalListSortingStrategy}>
-              {queueTasks.map((task) => (
-                <SortableTask
-                  key={task.id}
-                  id={task.id}
-                  from="queue"
-                  render={({ dragListeners, dragActivatorRef }) => (
-                    <TaskRow
-                      {...buildRowProps(task)}
-                      parentTitle={parentTitleFor(task)}
-                      dragListeners={dragListeners}
-                      dragActivatorRef={dragActivatorRef}
-                    />
-                  )}
-                />
-              ))}
-            </SortableContext>
-            {dragOverlay}
-          </DndBoundary>
-        ) : (
-          <MaybeDnd
-            enabled={canDrag}
-            dndMode={dndMode}
-            sensors={dragSensors}
-            onDragStart={onListDragStart}
-            onDragEnd={onListDragEnd}
-            onDragCancel={endListDrag}
-            announcements={announcements}
-          >
-            <VirtualStack
-              items={items}
-              itemKey={(item) => item.key}
-              estimateSize={(item) => ITEM_HEIGHT[item.kind]}
-              scrollRef={containerRef}
-              render={(item) => renderItem(item)}
-              stickyIndexes={stickyIndexes}
-              // The pane's own surface, above the rows that pass under it.
-              stickyClassName="z-(--z-sticky) bg-card"
-              pinned={pinned}
-              scrollTo={scrollTo}
-            />
-            {canDrag ? dragOverlay : null}
-          </MaybeDnd>
-        )}
+            <MaybeDnd
+              enabled={canDrag}
+              dndMode={dndMode}
+              sensors={dragSensors}
+              onDragStart={onListDragStart}
+              onDragEnd={onListDragEnd}
+              onDragCancel={endListDrag}
+              announcements={announcements}
+            >
+              <VirtualStack
+                items={items}
+                itemKey={(item) => item.key}
+                estimateSize={(item) => ITEM_HEIGHT[item.kind]}
+                scrollRef={containerRef}
+                render={(item) => renderItem(item)}
+                stickyIndexes={stickyIndexes}
+                // The pane's own surface, above the rows that pass under it.
+                stickyClassName="z-(--z-sticky) bg-card"
+                pinned={pinned}
+                scrollTo={scrollTo}
+              />
+              {canDrag ? dragOverlay : null}
+            </MaybeDnd>
+          )}
+        </div>
       </div>
-    </div>
+    </ProjectChoicesProvider>
   );
 }
 

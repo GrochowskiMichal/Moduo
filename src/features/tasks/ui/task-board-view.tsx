@@ -31,6 +31,7 @@ import { STATUS_KEY_LABELS, type StatusKey, statusKeyOf } from "../statuses";
 import { DndBoundary, taskDragAnnouncements, useTaskDndSensors } from "./dnd/task-dnd";
 import type { PlanHeaderControls, PlanView } from "./plan-view-header";
 import { PlanViewHeader } from "./plan-view-header";
+import { ProjectChoicesProvider } from "./project-choices";
 import { type TaskFacts, type TaskRowActions, taskFactsOf, useRowActions } from "./row-facts";
 import { CardBody, TaskCard } from "./task-card";
 import { CompletedLine } from "./task-meta";
@@ -332,97 +333,99 @@ export function TaskBoardView({
   const activeTask = activeId ? (tasks.find((t) => t.id === activeId) ?? null) : null;
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <PlanViewHeader
-        title={scopeTitle}
-        view={view}
-        onViewChange={onViewChange}
-        controls={header}
-        canEdit={canEdit}
-        onRequestCapture={onRequestCapture}
-      />
+    // The projects a card's menu offers, read only by an open menu (TV-D11b).
+    <ProjectChoicesProvider projects={buckets} inboxId={inbox?.id ?? null}>
+      <div className="flex h-full min-h-0 flex-col">
+        <PlanViewHeader
+          title={scopeTitle}
+          view={view}
+          onViewChange={onViewChange}
+          controls={header}
+          canEdit={canEdit}
+          onRequestCapture={onRequestCapture}
+        />
 
-      {/* One boundary: a self-owned context ("internal") or a monitor bound to
+        {/* One boundary: a self-owned context ("internal") or a monitor bound to
           the tasks page's app-level context ("external", DF-22 — so a card can
           be dropped on the right-pane hub). onDragEnd early-returns unless the
           drop resolves to a board column/card, so a hub drop falls through to
           the page's link handler. */}
-      <DndBoundary
-        dndMode={dndMode}
-        sensors={sensors}
-        collisionDetection={closestCorners}
-        onDragStart={onDragStart}
-        onDragEnd={onDragEnd}
-        onDragCancel={() => setActiveId(null)}
-        announcements={announcements}
-      >
-        <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto pb-1">
-          {!api.loaded ? (
-            <TaskBoardSkeleton />
-          ) : filterActive && tasks.length === 0 ? (
-            <TasksNoMatch onClearFilters={onClearFilters} />
-          ) : (
-            <>
-              {columns.map((col) => (
-                <BoardColumn
-                  key={col.id}
-                  column={col}
-                  canEdit={canEdit}
-                  showBucketTag={showBucketTag}
-                  showAssignee={showAssignee}
-                  properties={properties}
-                  buckets={buckets}
-                  inbox={inbox}
-                  bucketNameById={bucketNameById}
-                  selectedTaskId={selectedTaskId}
-                  onSelectTask={onSelectTask}
-                  revealed={revealed.has(col.id)}
-                  onToggleReveal={() => toggleReveal(col.id)}
-                  activeTask={activeTask}
-                  reorderable={dragOrder === "manual"}
-                  factsOf={factsOf}
-                  parentTitleOf={parentTitleOf}
-                  actions={actions}
-                />
-              ))}
-              {canEdit && onAddStatus && groupDim === "status" ? (
-                <div className="shrink-0 pt-0.5">
-                  <Button variant="ghost" size="sm" onClick={onAddStatus}>
-                    <Plus aria-hidden />
-                    Add status
-                  </Button>
-                </div>
-              ) : null}
-            </>
-          )}
-        </div>
-
-        {typeof document !== "undefined"
-          ? createPortal(
-              <DragOverlay>
-                {activeTask ? (
-                  // DS-4's overlay surface, card-shaped (U4-5: one drag look).
-                  <DragOverlaySurface className="w-full items-start rounded-lg px-3 py-2.5 text-sm">
-                    <CardBody
-                      task={activeTask}
-                      bucketName={bucketNameById(activeTask.bucketId)}
-                      inboxId={inbox?.id ?? null}
-                      showBucket={showBucketTag}
-                      showAssignee={showAssignee}
-                      properties={properties}
-                      canEdit={false}
-                      facts={factsOf(activeTask)}
-                      parentTitle={parentTitleOf(activeTask)}
-                      actions={actions}
-                    />
-                  </DragOverlaySurface>
+        <DndBoundary
+          dndMode={dndMode}
+          sensors={sensors}
+          collisionDetection={closestCorners}
+          onDragStart={onDragStart}
+          onDragEnd={onDragEnd}
+          onDragCancel={() => setActiveId(null)}
+          announcements={announcements}
+        >
+          <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto pb-1">
+            {!api.loaded ? (
+              <TaskBoardSkeleton />
+            ) : filterActive && tasks.length === 0 ? (
+              <TasksNoMatch onClearFilters={onClearFilters} />
+            ) : (
+              <>
+                {columns.map((col) => (
+                  <BoardColumn
+                    key={col.id}
+                    column={col}
+                    canEdit={canEdit}
+                    showBucketTag={showBucketTag}
+                    showAssignee={showAssignee}
+                    properties={properties}
+                    inbox={inbox}
+                    bucketNameById={bucketNameById}
+                    selectedTaskId={selectedTaskId}
+                    onSelectTask={onSelectTask}
+                    revealed={revealed.has(col.id)}
+                    onToggleReveal={() => toggleReveal(col.id)}
+                    activeTask={activeTask}
+                    reorderable={dragOrder === "manual"}
+                    factsOf={factsOf}
+                    parentTitleOf={parentTitleOf}
+                    actions={actions}
+                  />
+                ))}
+                {canEdit && onAddStatus && groupDim === "status" ? (
+                  <div className="shrink-0 pt-0.5">
+                    <Button variant="ghost" size="sm" onClick={onAddStatus}>
+                      <Plus aria-hidden />
+                      Add status
+                    </Button>
+                  </div>
                 ) : null}
-              </DragOverlay>,
-              document.body,
-            )
-          : null}
-      </DndBoundary>
-    </div>
+              </>
+            )}
+          </div>
+
+          {typeof document !== "undefined"
+            ? createPortal(
+                <DragOverlay>
+                  {activeTask ? (
+                    // DS-4's overlay surface, card-shaped (U4-5: one drag look).
+                    <DragOverlaySurface className="w-full items-start rounded-lg px-3 py-2.5 text-sm">
+                      <CardBody
+                        task={activeTask}
+                        bucketName={bucketNameById(activeTask.bucketId)}
+                        inboxId={inbox?.id ?? null}
+                        showBucket={showBucketTag}
+                        showAssignee={showAssignee}
+                        properties={properties}
+                        canEdit={false}
+                        facts={factsOf(activeTask)}
+                        parentTitle={parentTitleOf(activeTask)}
+                        actions={actions}
+                      />
+                    </DragOverlaySurface>
+                  ) : null}
+                </DragOverlay>,
+                document.body,
+              )
+            : null}
+        </DndBoundary>
+      </div>
+    </ProjectChoicesProvider>
   );
 }
 
@@ -432,7 +435,6 @@ function BoardColumn({
   showBucketTag,
   showAssignee,
   properties,
-  buckets,
   inbox,
   bucketNameById,
   selectedTaskId,
@@ -450,7 +452,6 @@ function BoardColumn({
   showBucketTag: boolean;
   showAssignee: boolean;
   properties: readonly string[];
-  buckets: Bucket[];
   inbox: Bucket | null;
   bucketNameById: (id: string) => string;
   selectedTaskId: string | null;
@@ -493,7 +494,6 @@ function BoardColumn({
     () => (selectedTaskId ? { key: selectedTaskId, seq: 0 } : null),
     [selectedTaskId],
   );
-  const bucketsForCards = buckets;
   const inboxId = inbox?.id ?? null;
 
   return (
@@ -533,7 +533,6 @@ function BoardColumn({
                 <TaskCard
                   task={task}
                   bucketName={bucketNameById(task.bucketId)}
-                  buckets={bucketsForCards}
                   inboxId={inboxId}
                   showBucket={showBucketTag}
                   showAssignee={showAssignee}

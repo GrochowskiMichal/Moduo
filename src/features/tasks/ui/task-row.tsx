@@ -1,6 +1,6 @@
 import { isClosedTask, taskCategoryOf } from "@contracts/vocabularies";
 import type { DraggableSyntheticListeners } from "@dnd-kit/core";
-import { ChevronDown, ChevronRight, CornerDownRight, Inbox } from "lucide-react";
+import { ChevronDown, ChevronRight, CornerDownRight } from "lucide-react";
 import { memo, useEffect, useRef, useState } from "react";
 import { SELECTED_ROW } from "@/components/ui/selection";
 import { CompleteToggle } from "../../../components/ui/complete-toggle";
@@ -22,7 +22,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "../../../components/ui/dropdown-menu";
 import { Input } from "../../../components/ui/input";
@@ -40,6 +39,7 @@ import { AssigneeAvatar } from "./assignee-avatar";
 import type { DragActivatorRef } from "./dnd/task-dnd";
 import { EnergyMark, PriorityMark } from "./level-icons";
 import { ROW_TITLE_ATTR } from "./list-keys";
+import { ProjectMenuItems } from "./project-choices";
 import { QueueToggle } from "./queue-toggle";
 import { sameTaskFacts, sameValues, type TaskFacts, type TaskRowActions } from "./row-facts";
 import { StatusIcon } from "./status-icon";
@@ -54,7 +54,6 @@ export type RowCommand = "bucket" | "schedule" | "due" | null;
 type Props = {
   task: Task;
   bucketName: string;
-  buckets: Array<{ id: string; name: string; isSystem: boolean }>;
   inboxId: string | null;
   showBucket: boolean;
   selected: boolean;
@@ -133,7 +132,6 @@ function sameRowProps(a: Props, b: Props): boolean {
 function TaskRowView({
   task,
   bucketName,
-  buckets,
   inboxId,
   showBucket,
   selected,
@@ -303,7 +301,6 @@ function TaskRowView({
           {showBucket || canEdit ? (
             <BucketPopover
               task={task}
-              buckets={buckets}
               inboxId={inboxId}
               bucketName={bucketName}
               showLabel={showBucket}
@@ -687,7 +684,6 @@ function DateTip({ date, children }: { date: RowDate; children: React.ReactNode 
 
 function BucketPopover({
   task,
-  buckets,
   inboxId,
   bucketName,
   showLabel,
@@ -697,7 +693,6 @@ function BucketPopover({
   api,
 }: {
   task: Task;
-  buckets: Array<{ id: string; name: string; isSystem: boolean }>;
   inboxId: string | null;
   bucketName: string;
   /** False where the bucket is implied (Q1-3). The popover stays mounted so the
@@ -708,9 +703,6 @@ function BucketPopover({
   onOpenChange: (open: boolean) => void;
   api: Pick<TasksModuleApi, "patchTask">;
 }) {
-  const options = inboxId
-    ? [{ id: inboxId, name: "Inbox", isSystem: true }, ...buckets.filter((b) => b.id !== inboxId)]
-    : buckets;
   // A menu, not a hand-rolled list (DS-6, visual audit B11): arrow keys and
   // typeahead come with it. Where the bucket is implied the trigger stays in
   // the row but takes no width and can't be seen or tabbed to, so opening the
@@ -749,12 +741,8 @@ function BucketPopover({
             if (id !== task.bucketId) api.patchTask(task.id, { bucketId: id });
           }}
         >
-          {options.map((b) => (
-            <DropdownMenuRadioItem key={b.id} value={b.id}>
-              {b.isSystem ? <Inbox aria-hidden /> : null}
-              <span className="truncate">{b.name}</span>
-            </DropdownMenuRadioItem>
-          ))}
+          {/* The view's projects, read only while the menu is open (TV-D11b). */}
+          <ProjectMenuItems />
         </DropdownMenuRadioGroup>
       </DropdownMenuContent>
     </DropdownMenu>

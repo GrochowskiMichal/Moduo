@@ -158,7 +158,6 @@ describe("TaskRow in My tasks (D4-4)", () => {
         <TaskRow
           task={t}
           bucketName="Work"
-          buckets={[]}
           inboxId={null}
           showBucket={false}
           selected={false}

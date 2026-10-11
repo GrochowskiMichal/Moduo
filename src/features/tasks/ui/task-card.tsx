@@ -29,6 +29,7 @@ import { AssignContextMenu } from "./assign-context-menu";
 import { AssigneeAvatar } from "./assignee-avatar";
 import { taskDrag } from "./dnd/task-dnd";
 import { EnergyMark, PriorityMark } from "./level-icons";
+import { ProjectContextMenuItems } from "./project-choices";
 import { QueueToggle } from "./queue-toggle";
 import { sameTaskFacts, type TaskFacts, type TaskRowActions } from "./row-facts";
 import { BucketLabel, DateMark, hasTaskCounts, TaskCounts } from "./task-meta";
@@ -36,7 +37,6 @@ import { BucketLabel, DateMark, hasTaskCounts, TaskCounts } from "./task-meta";
 type Props = {
   task: Task;
   bucketName: string;
-  buckets: Array<{ id: string; name: string; isSystem: boolean }>;
   inboxId: string | null;
   /** Show the bucket tag (when columns are grouped by status, not bucket). */
   showBucket: boolean;
@@ -70,7 +70,6 @@ export const TaskCard = memo(TaskCardView, (a: Props, b: Props) => {
 function TaskCardView({
   task,
   bucketName,
-  buckets,
   inboxId,
   showBucket,
   showAssignee = true,
@@ -179,14 +178,8 @@ function TaskCardView({
                 if (v !== task.bucketId) actions.patchTask(task.id, { bucketId: v });
               }}
             >
-              {inboxId ? <ContextMenuRadioItem value={inboxId}>Inbox</ContextMenuRadioItem> : null}
-              {buckets
-                .filter((b) => b.id !== inboxId)
-                .map((b) => (
-                  <ContextMenuRadioItem key={b.id} value={b.id}>
-                    {b.name}
-                  </ContextMenuRadioItem>
-                ))}
+              {/* The view's projects, read only while the menu is open (TV-D11b). */}
+              <ProjectContextMenuItems />
             </ContextMenuRadioGroup>
           </ContextMenuSubContent>
         </ContextMenuSub>

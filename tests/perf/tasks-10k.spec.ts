@@ -276,6 +276,54 @@ test("AC12.4 — a card drags out of a 1,200-card column", async ({ page }) => {
   });
 });
 
+test("a project added or renamed never blocks the page for 200 ms (rows don't carry the project list)", async ({
+  page,
+}) => {
+  await openAll(page);
+  // Every task made a little busy: the List, then the Board.
+  for (const view of ["List view", "Board view"]) {
+    await page.getByRole("radio", { name: view }).click();
+    await page.waitForTimeout(500);
+    // Long tasks (over 50 ms) on the main thread from here on.
+    await page.evaluate(() => {
+      const w = window as Window & { __longest?: number };
+      w.__longest = 0;
+      new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) {
+          w.__longest = Math.max(w.__longest ?? 0, entry.duration);
+        }
+      }).observe({ type: "longtask" });
+    });
+    const name = `Perf project ${Date.now()}`;
+    const [made] = await rest<Array<{ id: string }>>(perf, "buckets", {
+      method: "POST",
+      body: { workspace_id: workspaceId, owner_id: perf.user.id, name, position: "zz" },
+    });
+    try {
+      await expect(page.getByRole("button", { name, exact: true })).toBeVisible({
+        timeout: 15_000,
+      });
+      await rest(perf, `buckets?id=eq.${made?.id}`, {
+        method: "PATCH",
+        body: { name: `${name} renamed` },
+      });
+      await expect(page.getByRole("button", { name: `${name} renamed`, exact: true })).toBeVisible({
+        timeout: 15_000,
+      });
+      await page.waitForTimeout(300);
+      const longest = await page.evaluate(
+        () => (window as Window & { __longest?: number }).__longest ?? 0,
+      );
+      console.log(
+        `${view}: longest main-thread task around a project change: ${longest.toFixed(0)} ms`,
+      );
+      expect(longest).toBeLessThan(BUDGET_MS);
+    } finally {
+      await rest("service", `buckets?id=eq.${made?.id}`, { method: "DELETE" });
+    }
+  }
+});
+
 async function drag(page: Page, from: Locator, to: Locator) {
   const a = await from.boundingBox();
   const b = await to.boundingBox();

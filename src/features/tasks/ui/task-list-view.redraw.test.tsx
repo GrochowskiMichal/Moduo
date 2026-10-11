@@ -104,16 +104,24 @@ const LIST_DRAW = 1;
 /** A row reads them once, and so does its queue mark. */
 const ROW_DRAWS = 2;
 // The page's own props keep their identity (the hook memoises them).
-const NO_BUCKETS: Bucket[] = [];
 const bucketName = () => "Work";
 const noop = () => {};
 
+function project(id: string, name: string): Bucket {
+  return { ...inbox, id, name, isSystem: false, position: id };
+}
+/** A workspace with many projects (TV-U6 found 224 freezing the page). */
+const PROJECTS = Array.from({ length: 200 }, (_, i) => project(`p${i}`, `Project ${i}`));
+
 function renderList() {
   let setTasks: (next: Task[]) => void = () => {};
+  let setProjects: (next: Bucket[]) => void = () => {};
   const initial = Array.from({ length: ROWS }, (_, i) => task(String(i + 1), `Task ${i + 1}`));
   function Harness() {
     const [tasks, set] = useState(initial);
+    const [buckets, setBuckets] = useState(PROJECTS);
     setTasks = set;
+    setProjects = setBuckets;
     return (
       <TooltipProvider>
         <TaskListView
@@ -123,7 +131,7 @@ function renderList() {
           view="list"
           onViewChange={noop}
           groupBy="none"
-          buckets={NO_BUCKETS}
+          buckets={buckets}
           inbox={inbox}
           bucketNameById={bucketName}
           canEdit
@@ -136,7 +144,11 @@ function renderList() {
     );
   }
   render(<Harness />);
-  return { initial, setTasks: (next: Task[]) => act(() => setTasks(next)) };
+  return {
+    initial,
+    setTasks: (next: Task[]) => act(() => setTasks(next)),
+    setProjects: (next: Bucket[]) => act(() => setProjects(next)),
+  };
 }
 
 describe("one edit redraws one row (TV-D11b)", () => {
@@ -157,5 +169,14 @@ describe("one edit redraws one row (TV-D11b)", () => {
     // A change elsewhere (another list, the queue): new array, same tasks.
     setTasks([...initial]);
     expect(draws.n).toBe(LIST_DRAW);
+  });
+
+  it("a project added or renamed redraws no row (rows don't carry the project list)", () => {
+    const { setProjects } = renderList();
+    draws.n = 0;
+    setProjects([...PROJECTS.slice(1), project("p-new", "New project")]);
+    expect(draws.n).toBe(LIST_DRAW);
+    setProjects(PROJECTS.map((p) => (p.id === "p3" ? { ...p, name: "Renamed" } : p)));
+    expect(draws.n).toBe(LIST_DRAW * 2);
   });
 });
