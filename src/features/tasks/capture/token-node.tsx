@@ -30,7 +30,19 @@ export type SerializedCaptureTokenNode = Spread<{ token: CaptureToken }, Seriali
 
 function TokenChip({ token }: { token: CaptureToken }) {
   if (token.kind === "thing") {
-    return <Reference type={token.ref.type} id={token.ref.id} display="chip" />;
+    // In the capture a click never opens it (that would leave the capture);
+    // the hover card still shows what it is.
+    return (
+      <span
+        className="contents"
+        onClickCapture={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+        }}
+      >
+        <Reference type={token.ref.type} id={token.ref.id} display="chip" />
+      </span>
+    );
   }
   const icon: ReactNode | undefined =
     token.kind === "person" ? (

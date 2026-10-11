@@ -258,7 +258,9 @@ export function CaptureShell({ types = CAPTURE_TYPES }: Props) {
             </span>
           </div>
         )}
-        <div key={active.type} ref={bodyRef} className="motion-view">
+        {/* A fresh body per open and per type: what it shows comes from the
+            draft and the request, never from a body still closing. */}
+        <div key={`${active.type}:${context.openId}`} ref={bodyRef} className="motion-view">
           <Body
             draft={draft}
             onDraftChange={setDraft}

@@ -2,6 +2,61 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index.
 
+## 2026-10-11 · TV-U14 Capture v3 (tasks-v3 block 19) — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 19 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §10, AC10.1–10.5, AC10.8, AC5.1, AC5.4; REPLAN 33, 33a, 90, 90b, 91–94, 20a, default g; TV-U7 superseded). No migrations. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **U14-1 · One capture for every way in; ⌘N passes "here"** → TV-U14 (`dispatchOpenCapture(request)`), TV-U10 (the group "+" passes its section), TV-U11 (Board `c`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: ⌘⇧K, ⌘N, "+ New", `c` and Calendar's "New task" all open the app's capture as Task. ⌘⇧K passes nothing (your Inbox); the Tasks page passes its project, the section of the task selected in it, and "top of Up next" in Focus or the Queue. A capture already open keeps what it has. The Tasks page's own modal is gone.
+  - Why: two capture windows had drifted (one parsed tags, one didn't); one body keeps the grammar, the pills and the draft the same everywhere.
+  - Rejected: keeping a Tasks-only modal for ⌘N (TV-U7's shape).
+- **U14-2 · The title is a one-line Lexical editor with RF-1's three menus; date words are marked, not turned into tokens** → TV-U14 (`title-editor.tsx`, `MentionMenuPlugin` `candidatesFor` / `onPick` / `onMenuChange`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: `@ # /` picks become chips at text size (the kit Chip, active fill) and their pill fills at once; the capture adds people (you as "Name (you)"), teams, sections and its `/` commands (priority, estimate, remind, repeat, due, schedule) to the menus. Recognised date words get the active fill and a dotted underline through the CSS Custom Highlight API, so they stay plain words until saved.
+  - Why: one tokenizer and one menu for capture and prose (33); turning "tomorrow" into a chip mid-typing fights "tomorrow 3pm".
+  - Rejected: a plain input with an overlay (a second grammar implementation) and live date chips.
+- **U14-3 · What leaves the title, and the order of Esc** → TV-U14 (`parse/capture-tokens.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: a person, team, tag, date or `/` command leaves the title for its pill; a project leaves at once for the destination row ("@Acme rebrand moved into the destination"); a contact, note, email, event or task stays in the title as its name (titles are plain text) and becomes a `mentions` link. One value per field: a second token turns the first back into words, and so does setting the pill by hand. A token or a hand-set date beats date words, which then stay words. Esc closes a menu, then turns the token just made back into words, else keeps the last date phrase as words, then closes and keeps the draft.
+  - Why: research §2's rules made concrete; a title is read by rows, search, notices, MCP and exports, which all expect text.
+  - Rejected: storing chips inside titles (every title reader would have to parse markup).
+- **U14-4 · No project: `@person` stays unfiled with the slot showing; `@team` takes its default or waits** → TV-U14, TV-D13 (the server half of 20)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: with someone else assigned and no project, the destination reads "No project ▾" and the footer "Unfiled · Mike finds it in My tasks" (the server keeps it in your Inbox and grants it to Mike; moving it to Mike's Inbox, 20, isn't on the server yet). A team with a default project fills it in ("Design requests (team default)"); without one the row reads "Pick a project", Create is off and ⏎ opens the picker.
+  - Why: don't promise what the server doesn't do; 94 as decided.
+  - Rejected: "Goes to Mike's Inbox" while it doesn't.
+- **U14-5 · The "From:" item is linked as `spawned-from`, task → item** → TV-U14 (`src/lib/capture-source.ts`; Email, Notes, Calendar and Contacts publish their open item)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11 (93: linked by default).
+  - Decision: the chip shows "From: <its title>", × or ⌫ removes it, and on create it becomes a `spawned-from` link (origin `manual`), like Email's "Create task". An email thread joins the registry only when the link is kept. A pasted list links each top-level task; subtasks don't.
+  - Why: the email → task precedent; `spawned-from` is what the hub groups as "where this came from".
+  - Rejected: `references` (loses the direction) and a new link origin (a migration).
+- **U14-6 · New captures go on top; a pasted list keeps its order on top; subtasks take only the place and the person** → TV-U14
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11 (default h).
+  - Decision: a capture is placed before the first task of its destination (keys split evenly, so 500 pasted lines stay short keys). Typed subtasks and pasted subtasks get the parent's project, section and assignee, nothing else; pasted top-level lines get the pills, and a line's own `@ # /` and date words win.
+  - Why: the newest thing is usually the next thing (h); a subtask with the parent's due date would read late twice.
+  - Rejected: appending at the end (what the old quick capture did).
+- **U14-7 · Paste a list: an inline panel, a preview, 500 at most, one Undo** → TV-U14 (`parse/paste-list.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: two or more lines in the title show "Create n tasks? · Create n · Keep as one · Cancel" with each line as it will be made ("Book taxi · Due Oct 12"); bullets, numbers and `[ ]` go, `[x]` lines are skipped and counted, deeper indents flatten to subtasks, lines past 500 are counted and left out. Saves go six at a time, parents first; one Undo deletes the batch, subtasks first.
+  - Why: research §4 with the spec's cap (500 beats the research's 200).
+  - Rejected: a second modal, and pointing to an import past 200 lines.
+- **U14-8 · Offline: the id is minted on the device; a failed save keeps the draft and offers Try again** → TV-U14, TV-D11a (the queue)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11 (default g; TV-D11a hasn't landed).
+  - Decision: the capture closes at once; a save that fails puts the capture back as the draft and toasts "Couldn't reach Moduo… Try again", which sends the same ids, so a task that did land is found, never doubled. "n waiting to sync" and the device queue are TV-D11a's.
+  - Why: no second queue to reconcile with the shared store later.
+  - Rejected: a localStorage outbox here.
+- **U14-9 · One draft per person and workspace, ids only** → TV-U14 (`capture-draft.ts`), the sign-out path, account deletion
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11 (the orchestrator's privacy review).
+  - Decision: Esc, a click outside or another overlay keeps the draft on the device under the person and the workspace; any open restores it ("Draft restored · Clear"); creating clears it. It keeps typed words and ids, never a linked item's, person's, team's or tag's name (looked up again on restore: an item the person can no longer open reads "Private item" and leaves the title and the links), never the "From:" item or files. Every draft goes on sign-out; a deleted account's go with it.
+  - Why: a second person on the device, or a lost permission, must never see a title through a draft.
+  - Rejected: one draft per workspace (another person on the device saw it) and storing names.
+- **U14-10 · The pills and More** → TV-U14 (`capture-pills.tsx`), TV-D15 (templates), AT-2/AT-3 (files)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: Assign (people, Unassigned, teams), Due, Tags (existing; new ones by `#`), Priority (no Urgent), More (Scheduled, Reminder, Estimate presets, Repeat presets, Waiting on people). What More holds joins the row as chips with ×; the row wraps for now. "Template…" and `/template` show only once a template provider registers (TV-D15); pasted or dropped files go to a registered upload handler (AT-2/AT-3), else a toast says to add them on the task. The description is a plain text field that grows to about six lines (⌘⏎ creates more there): there's no task yet for its mentions to link from.
+  - Why: 91; seams instead of buttons that do nothing.
+  - Rejected: the rich description editor in capture, and the "+n" overflow before the kit has it.
+
 ## 2026-10-11 · TV-D10 areas, projects, sections, sessions, reminders, waiting, teams — the agent's choices (deferred to by Maciej)
 
 Built in tasks-v3 block 10 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §Assumptions #4, #12, #20, #24, #26, #27; REPLAN 13–20a, 24, 25, 54, 94, 95, default d; migrations `20261010180000_areas_projects_sections`, `20261010181000_task_sessions_reminders_waiting`, `20261010182000_teams`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
