@@ -55,6 +55,7 @@ function fakeStore(opts: { offline?: boolean; refuse?: string } = {}) {
   const outbox = new Set<string>();
   const sent: Array<{ task: Task; queue?: boolean }> = [];
   const shownRemoved: string[][] = [];
+  const shownInserted: string[][] = [];
   const settled: Task[][] = [];
   const store = {
     whenLoaded: async () => {},
@@ -72,6 +73,8 @@ function fakeStore(opts: { offline?: boolean; refuse?: string } = {}) {
       return () => listeners.delete(fn);
     },
     isQueuedCreate: (id: string) => outbox.has(id),
+    isOffline: () => Boolean(opts.offline),
+    wentOffline: rs.fn(),
     sendCreate: rs.fn(async (task: Task, o: { queue?: boolean } = {}) => {
       sent.push({ task, queue: o.queue });
       if (opts.refuse && task.title === opts.refuse) throw new Error("Refused");
@@ -82,8 +85,9 @@ function fakeStore(opts: { offline?: boolean; refuse?: string } = {}) {
       return { saved: task, queued: false };
     }),
     queueOp: rs.fn(async (_o: unknown, op: () => Promise<unknown>) => op()),
-    begin: (changes: Array<{ remove: string }>) => {
-      shownRemoved.push(changes.map((c) => c.remove));
+    begin: (changes: Array<{ remove?: string; insert?: Task }>) => {
+      if (changes.some((c) => c.remove)) shownRemoved.push(changes.map((c) => c.remove ?? ""));
+      else shownInserted.push(changes.map((c) => c.insert?.id ?? ""));
       return { settle: (a: { tasks: Task[] }) => settled.push(a.tasks), fail: () => {} };
     },
   };
@@ -98,6 +102,7 @@ function fakeStore(opts: { offline?: boolean; refuse?: string } = {}) {
     sent,
     flush,
     shownRemoved,
+    shownInserted,
     settled,
   };
 }
@@ -126,8 +131,22 @@ const plan = (tasks: CaptureTaskPlan[], over: Partial<CapturePlan> = {}): Captur
 });
 
 describe("runCapture through the shared store", () => {
-  it("files into the Inbox the store holds, on top of it, in order", async () => {
+  it("one capture: through the store's create, into the Inbox it holds, on top", async () => {
     const { store, sent } = fakeStore();
+    const runtime = fakeRuntime();
+    const result = await runCapture(plan([item({ title: "A" })]), {
+      runtime: runtime as never,
+      userId: ME,
+      store,
+    });
+    expect(result.error).toBeNull();
+    expect(sent.map((s) => s.task.bucketId)).toEqual(["inbox-me"]);
+    expect(sent[0].task.position < "m").toBe(true);
+    expect(runtime.tasks.seedInbox).not.toHaveBeenCalled();
+  });
+
+  it("many: shown under one write, saved, and settled in one step, in order on top", async () => {
+    const { store, sent, shownInserted, settled } = fakeStore();
     const runtime = fakeRuntime();
     const a = item({ title: "A" });
     const b = item({ title: "B" });
@@ -138,10 +157,13 @@ describe("runCapture through the shared store", () => {
     });
     expect(result.error).toBeNull();
     expect(result.created.map((t) => t.title)).toEqual(["A", "B"]);
-    expect(sent.map((s) => s.task.bucketId)).toEqual(["inbox-me", "inbox-me"]);
-    const [pa, pb] = sent.map((s) => s.task.position);
+    expect(sent).toEqual([]);
+    expect(shownInserted).toEqual([[a.id, b.id]]);
+    expect(settled.map((rows) => rows.length)).toEqual([2]);
+    const saved = runtime.tasks.upsertTask.mock.calls.map(([t]) => t);
+    expect(saved.map((t) => t.bucketId)).toEqual(["inbox-me", "inbox-me"]);
+    const [pa, pb] = [a, b].map((x) => saved.find((t) => t.id === x.id)?.position ?? "");
     expect(pa < pb && pb < "m").toBe(true);
-    expect(runtime.tasks.seedInbox).not.toHaveBeenCalled();
   });
 
   it("offline, tasks wait under their own ids; their links go once they're sent", async () => {

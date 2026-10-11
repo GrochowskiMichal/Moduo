@@ -9,6 +9,7 @@
 import type { CaptureSource } from "../../../lib/capture-source";
 import type { EntityRef } from "../../../lib/entity-links";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
+import { isNetworkError } from "../../../lib/sync/network";
 import type { WorkspaceStore } from "../../../lib/sync/store";
 import { dueOnToLocalInstant } from "../../../lib/task-rows";
 import { attachTag, createOrAttachByName, type TagContext } from "../../tags/store";
@@ -278,17 +279,61 @@ export async function runCapture(plan: CapturePlan, deps: CaptureDeps): Promise<
     await extrasFor(item, saved.id, saved.title);
   };
 
+  /**
+   * Many at once (a pasted list, a task's subtasks): shown together under one
+   * write, sent a few at a time, and the copy takes the saved rows in one
+   * step, so every screen redraws once, not once per task. If the connection
+   * goes on the way, what wasn't sent waits on the device like a single
+   * capture does.
+   */
+  const makeMany = async (items: CaptureTaskPlan[]): Promise<unknown> => {
+    if (!store || store.isDisposed() || items.length < 2 || store.isOffline()) {
+      return inBatches(items, make);
+    }
+    const create = (task: Task) =>
+      runtime.tasks.createTask ? runtime.tasks.createTask(task) : runtime.tasks.upsertTask(task);
+    const shown = store.begin(
+      items.map((item) => ({ table: "tasks" as const, insert: planToTask(workspaceId, item) })),
+    );
+    const saved: Task[] = [];
+    const unsent: CaptureTaskPlan[] = [];
+    let refused: unknown = null;
+    let lost = false;
+    await inBatches(items, async (item) => {
+      if (refused !== null || lost) {
+        if (lost) unsent.push(item);
+        return;
+      }
+      try {
+        const row = await create(planToTask(workspaceId, item));
+        saved.push(row);
+        made.set(item.id, row);
+      } catch (error) {
+        if (isNetworkError(error)) {
+          lost = true;
+          unsent.push(item);
+        } else refused ??= error;
+      }
+    });
+    shown.settle({ tasks: saved });
+    if (lost) store.wentOffline();
+    // Offline now: the store keeps these on the device under their ids.
+    for (const item of unsent) await make(item);
+    await inBatches(
+      items.filter((item) => made.has(item.id)),
+      async (item) => {
+        const row = made.get(item.id);
+        if (row) await extrasFor(item, row.id, row.title);
+      },
+    );
+    return refused;
+  };
+
   const tasks = await place(plan, deps);
-  let error = await inBatches(
-    tasks.filter((t) => !t.parentId),
-    make,
-  );
+  let error = await makeMany(tasks.filter((t) => !t.parentId));
   if (error === null) {
     const ready = new Set([...made.keys(), ...queued]);
-    error = await inBatches(
-      tasks.filter((t) => t.parentId && ready.has(t.parentId)),
-      make,
-    );
+    error = await makeMany(tasks.filter((t) => t.parentId && ready.has(t.parentId)));
   }
   // In the plan's order, parents first (what the caller names and undoes).
   const created = tasks.flatMap((t) => {
