@@ -37,15 +37,15 @@ import {
 } from "../../../lib/drag-payload";
 import type { EntityRef } from "../../../lib/entity-links";
 import {
-  type TasksSidebarHideable,
-  updatePreferences,
-  usePreferencesValue,
-} from "../../../lib/preferences";
-import {
   ENTITY_OPEN_EVENT,
   markEntityOpenIntent,
   takeEntityOpenIntent,
 } from "../../../lib/entity-open";
+import {
+  type TasksSidebarHideable,
+  updatePreferences,
+  usePreferencesValue,
+} from "../../../lib/preferences";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { undoToast } from "../../../lib/undo-toast";
 import { HubDropZone } from "../../contacts/ui/hub-drop-zone";
@@ -67,12 +67,7 @@ import {
 import { createLinkWithToast } from "../../spine/ui/drop-link-toast";
 import { WorkspaceContext } from "../../workspaces/workspace-context";
 import { useAssignees } from "../assignees";
-import {
-  myTasksScope,
-  openCount,
-  resolveDefaultSelection,
-  showsMyTasks,
-} from "../default-view";
+import { myTasksScope, openCount, resolveDefaultSelection, showsMyTasks } from "../default-view";
 import type { TaskLayout } from "../display";
 import {
   asRailDropTarget,
@@ -104,8 +99,8 @@ import {
   UPCOMING_SELECTION,
 } from "./bucket-rail";
 import { CaptureModal } from "./capture-modal";
-import { asTaskDrag, taskDragAnnouncements, useTaskDndSensors } from "./dnd/task-dnd";
 import { ArchiveProjectDialog, DeleteBucketDialog } from "./delete-bucket-dialog";
+import { asTaskDrag, taskDragAnnouncements, useTaskDndSensors } from "./dnd/task-dnd";
 import { DriftTriageDialog } from "./drift-triage-dialog";
 import { ExecuteView } from "./execute-view";
 import { FrontierOfferDialog } from "./frontier-offer-dialog";
@@ -328,13 +323,26 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   const inboxId = inbox?.id ?? null;
 
   // Where Tasks opens, run once per workspace after the bundle loads: where
-  // you left it, else the Inbox (REPLAN 30; "Open at" is retired).
+  // you left it, else the Inbox (REPLAN 30; "Open at" is retired). A place
+  // picked in the sidebar before the bundle answered wins.
   const resolvedForRef = useRef<string | null>(null);
+  const pickedForRef = useRef<string | null>(null);
+  const pickSelection = useCallback(
+    (next: string) => {
+      pickedForRef.current = workspaceId;
+      setSelection(next);
+    },
+    [workspaceId],
+  );
   useEffect(() => {
     if (api.loading) return;
     if (resolvedForRef.current === workspaceId) return;
-    // DF-1: an inbound deep link owns the entry scope — skip the time-block/
-    // last-bucket default rather than race the apply effect below for it
+    if (pickedForRef.current === workspaceId) {
+      resolvedForRef.current = workspaceId;
+      return;
+    }
+    // DF-1: an inbound deep link owns the entry scope — skip the
+    // last-place default rather than race the apply effect below for it
     // (both would queue setSelection in the same flush; the default must not
     // win over the deep link's bucket).
     if (inboundPending) {
@@ -750,7 +758,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       mode={mode}
       onModeChange={setMode}
       selection={selection}
-      onSelect={setSelection}
+      onSelect={pickSelection}
       buckets={buckets}
       areas={api.areas}
       inbox={inbox}

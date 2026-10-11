@@ -21,12 +21,13 @@ const wideLimit = z.coerce.number().int().min(1).max(500).optional();
 const listStatusSchema = z.union([z.literal("open"), taskStatusSchema]);
 
 export const TOOL_ARG_SCHEMAS: Record<string, z.ZodType<Record<string, unknown>>> = {
-  tasks_list_buckets: z.object({}),
+  tasks_list_buckets: z.object({ include_archived: z.boolean().optional() }),
   tasks_list: z.object({
     bucket_id: nonempty.optional(),
     status: listStatusSchema.optional(),
     assignee: z.enum(["me", "anyone"]).optional(),
     top_level: z.boolean().optional(),
+    include_archived: z.boolean().optional(),
     limit,
     offset: z.coerce.number().int().min(0).optional(),
   }),

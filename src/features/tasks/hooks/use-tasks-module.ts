@@ -49,7 +49,13 @@ import {
   subtaskProgress,
   wouldCreateCycle,
 } from "../helpers";
-import { changesFor, confirmBucket, hideBucket, unhideBucket, useBucketChanges } from "../hidden-buckets";
+import {
+  changesFor,
+  confirmBucket,
+  hideBucket,
+  unhideBucket,
+  useBucketChanges,
+} from "../hidden-buckets";
 import { LiveGate, mergeBundle, mergeQueue, swapTemp, trackTaskCalls } from "../live";
 import {
   type ActivityEntry,
@@ -2118,7 +2124,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
    * project go out in order. Resolves false when the server refused.
    */
   const projectChains = useRef(new Map<string, Promise<unknown>>());
-  const chainProjectOp = useCallback(<T,>(id: string, op: () => Promise<T>): Promise<T> => {
+  const chainProjectOp = useCallback(<T>(id: string, op: () => Promise<T>): Promise<T> => {
     const prev = projectChains.current.get(id) ?? Promise.resolve();
     const next = prev.catch(() => undefined).then(op);
     projectChains.current.set(id, next);
@@ -2556,7 +2562,12 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       const existing = areas.find((a) => a.id === areaId);
       if (!existing) return;
       void runAreaOp(
-        () => runtime!.tasks.updateArea({ workspaceId: workspaceId!, areaId, patch: { deleted: true } }),
+        () =>
+          runtime!.tasks.updateArea({
+            workspaceId: workspaceId!,
+            areaId,
+            patch: { deleted: true },
+          }),
         { reload: true },
       ).then((next) => {
         if (!next) return;

@@ -1,4 +1,4 @@
-// tasks-v2 U6-3 — Recently deleted: one row per bucket batch or lone task, with
+// TV-U6 — Recently deleted: one row per project batch or lone task, with
 // Restore and Delete forever (which asks first), and nothing to act on for
 // someone who can't edit.
 
@@ -50,16 +50,16 @@ function renderView(canEdit = true) {
 }
 
 describe("RecentlyDeletedView (U6-3)", () => {
-  it("lists a bucket with its batch as one row, and a task deleted on its own", () => {
+  it("lists a project with its batch as one row, and a task deleted on its own", () => {
     renderView();
     const rows = screen.getAllByRole("listitem");
     expect(rows).toHaveLength(2);
-    expect(screen.getByText("Bucket · 1 task deleted with it")).toBeTruthy();
+    expect(screen.getByText("Project · 1 task deleted with it")).toBeTruthy();
     expect(screen.getByText("Task · Inbox")).toBeTruthy();
     expect(screen.getAllByText("29 days left")).toHaveLength(2);
   });
 
-  it("restores the whole bucket from its row", () => {
+  it("restores the whole project from its row", () => {
     const { onRestore } = renderView();
     fireEvent.click(screen.getByRole("button", { name: "Restore Marketing" }));
     expect(onRestore).toHaveBeenCalledWith({ kind: "bucket", id: "mkt" }, "Marketing");
@@ -103,15 +103,18 @@ describe("RecentlyDeletedView (U6-3)", () => {
 });
 
 describe("row copy", () => {
-  it("describes buckets by what happened to their tasks", () => {
+  it("describes projects by what happened to their tasks (REPLAN 78)", () => {
     const base = { kind: "bucket", id: "b", name: "B", color: "gray", deletedAt: D } as const;
     expect(trashEntryMeta({ ...base, deletedTasks: 3, movedTasks: 0 })).toBe(
-      "Bucket · 3 tasks deleted with it",
+      "Project · 3 tasks deleted with it",
     );
     expect(trashEntryMeta({ ...base, deletedTasks: 0, movedTasks: 1 })).toBe(
-      "Bucket · 1 task moved to Inbox",
+      "Project · 1 task sent to Inboxes",
     );
-    expect(trashEntryMeta({ ...base, deletedTasks: 0, movedTasks: 0 })).toBe("Bucket");
+    expect(trashEntryMeta({ ...base, deletedTasks: 2, movedTasks: 4 })).toBe(
+      "Project · 2 tasks deleted with it · 4 tasks sent to Inboxes",
+    );
+    expect(trashEntryMeta({ ...base, deletedTasks: 0, movedTasks: 0 })).toBe("Project");
     expect(
       trashEntryMeta({ kind: "task", id: "t", title: "T", deletedAt: D, bucketName: null }),
     ).toBe("Task");

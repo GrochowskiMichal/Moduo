@@ -159,7 +159,13 @@ export const Densities: Story = {
   render: () => (
     <AtThreeDensities direction="column">
       <nav aria-label="Projects" className="flex flex-col gap-px">
-        <NavSectionHeader label="Client work" count={3} onToggle={() => {}} onAdd={() => {}} />
+        <NavSectionHeader
+          label="Client work"
+          count={3}
+          onToggle={() => {}}
+          onAdd={() => {}}
+          menu={rowMenu}
+        />
         <NavRow label="Inbox" icon={<Inbox aria-hidden />} count={4} current />
         <NavRow label="Moduo App" icon={<NavRowDot color="blue" />} count={64} menu={rowMenu} />
         <NavRow label="Marketing" icon={<NavRowDot color="amber" />} count={1} menu={rowMenu} />

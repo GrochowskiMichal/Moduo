@@ -324,7 +324,8 @@ describe("TV-U6: colours, archiving, deleting, Recently deleted", () => {
     });
     expect(projectFieldsToOp({ archived: false })).toEqual({ archived_at: null });
     const sent = projectFieldsToOp({ name: "Acme", color: "red", archived: true });
-    for (const key of ["owner_id", "is_system", "workspace_id"]) expect(sent).not.toHaveProperty(key);
+    for (const key of ["owner_id", "is_system", "workspace_id"])
+      expect(sent).not.toHaveProperty(key);
   });
 
   it("deletes through projects_op_delete and reads what it did", async () => {
@@ -338,7 +339,9 @@ describe("TV-U6: colours, archiving, deleting, Recently deleted", () => {
     });
     const done = await api.deleteProject({ workspaceId: "ws", projectId: "p1" });
     expect(done).toEqual({ moved: 4, deleted: 12, notified: 2, restorable: true });
-    expect(rpcCalls).toEqual([["projects_op_delete", { p_workspace_id: "ws", p_project_id: "p1" }]]);
+    expect(rpcCalls).toEqual([
+      ["projects_op_delete", { p_workspace_id: "ws", p_project_id: "p1" }],
+    ]);
   });
 
   it("before the migration, the old delete runs and says it can't be restored", async () => {
@@ -355,7 +358,10 @@ describe("TV-U6: colours, archiving, deleting, Recently deleted", () => {
       rpc: {
         projects_op_delete: {
           data: null,
-          error: { code: "42501", message: "Only people with full access to this project can delete or restore it." },
+          error: {
+            code: "42501",
+            message: "Only people with full access to this project can delete or restore it.",
+          },
         },
       },
     });
@@ -375,7 +381,10 @@ describe("TV-U6: colours, archiving, deleting, Recently deleted", () => {
     await api.restoreTrash({ workspaceId: "ws", entityType: "bucket", entityId: "p1" });
     await api.purgeTrash({ workspaceId: "ws", entityType: "task", entityId: "t1" });
     expect(rpcCalls).toEqual([
-      ["tasks_op_trash_restore", { p_workspace_id: "ws", p_entity_type: "bucket", p_entity_id: "p1" }],
+      [
+        "tasks_op_trash_restore",
+        { p_workspace_id: "ws", p_entity_type: "bucket", p_entity_id: "p1" },
+      ],
       ["tasks_op_trash_purge", { p_workspace_id: "ws", p_entity_type: "task", p_entity_id: "t1" }],
     ]);
   });

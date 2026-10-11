@@ -603,7 +603,9 @@ function NavSectionHeader({
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>{header}</ContextMenuTrigger>
-      <ContextMenuContent onCloseAutoFocus={runPending}>{menu(kit(CONTEXT_KIT))}</ContextMenuContent>
+      <ContextMenuContent onCloseAutoFocus={runPending}>
+        {menu(kit(CONTEXT_KIT))}
+      </ContextMenuContent>
     </ContextMenu>
   );
 }

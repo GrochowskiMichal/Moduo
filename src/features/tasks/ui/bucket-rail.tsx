@@ -479,9 +479,7 @@ export function BucketRail({
                     menuLabel={`${area.name} options`}
                     indicator={
                       isCollapsed && drift > 0 ? (
-                        <DriftMark
-                          label={`${drift} drifted in ${area.name} · expand to triage`}
-                        />
+                        <DriftMark label={`${drift} drifted in ${area.name} · expand to triage`} />
                       ) : undefined
                     }
                     menu={
@@ -600,6 +598,12 @@ function SidebarHairline({
   const rows: TasksSidebarHideable[] = showMine
     ? ["focus", "upcoming", "mine", "all"]
     : ["focus", "upcoming", "all"];
+  // An item that opens an inline input runs once the menu has closed, so the
+  // closing menu doesn't take focus back from the input (and close it).
+  const pending = useRef<(() => void) | null>(null);
+  const afterClose = (action: () => void) => () => {
+    pending.current = action;
+  };
   return (
     <div
       data-slot="sidebar-hairline"
@@ -621,7 +625,17 @@ function SidebarHairline({
           </TooltipTrigger>
           <TooltipContent>Sidebar options</TooltipContent>
         </Tooltip>
-        <DropdownMenuContent align="end" className="min-w-52">
+        <DropdownMenuContent
+          align="end"
+          className="min-w-52"
+          onCloseAutoFocus={(event) => {
+            const action = pending.current;
+            if (!action) return;
+            pending.current = null;
+            event.preventDefault();
+            action();
+          }}
+        >
           <DropdownMenuLabel>Customize sidebar</DropdownMenuLabel>
           {rows.map((row) => (
             <DropdownMenuCheckboxItem
@@ -637,14 +651,16 @@ function SidebarHairline({
           {canEdit ? (
             <>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={onNewProject}>New project</DropdownMenuItem>
-              <DropdownMenuItem onSelect={onNewArea}>New area…</DropdownMenuItem>
+              <DropdownMenuItem onSelect={afterClose(onNewProject)}>New project</DropdownMenuItem>
+              <DropdownMenuItem onSelect={afterClose(onNewArea)}>New area…</DropdownMenuItem>
             </>
           ) : null}
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={onOpenArchived} data-current={archivedCurrent || undefined}>
             Archived projects
-            {archivedCount > 0 ? <DropdownMenuShortcut>{archivedCount}</DropdownMenuShortcut> : null}
+            {archivedCount > 0 ? (
+              <DropdownMenuShortcut>{archivedCount}</DropdownMenuShortcut>
+            ) : null}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={onOpenTrash} data-current={trashCurrent || undefined}>
             Recently deleted
@@ -899,7 +915,9 @@ function ProjectRow({
           <m.SubTrigger>Area</m.SubTrigger>
           <m.SubContent>
             <m.RadioGroup
-              value={bucket.areaId && areas.some((a) => a.id === bucket.areaId) ? bucket.areaId : "none"}
+              value={
+                bucket.areaId && areas.some((a) => a.id === bucket.areaId) ? bucket.areaId : "none"
+              }
               onValueChange={(v) => onSetArea(v === "none" ? null : v)}
             >
               <m.RadioItem value="none">No area</m.RadioItem>

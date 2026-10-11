@@ -24,7 +24,7 @@ import type {
   TeamMember,
   TimeBlockMap,
 } from "../features/tasks/model";
-import { sanitizeTimeBlocks, TRASH_DAYS, type TasksTrash } from "../features/tasks/model";
+import { sanitizeTimeBlocks, type TasksTrash, TRASH_DAYS } from "../features/tasks/model";
 import { trashFromRows } from "./bucket-rows";
 import { collectTruncations, READ_CAPS, readPaged, type Truncation } from "./paged-select";
 import {

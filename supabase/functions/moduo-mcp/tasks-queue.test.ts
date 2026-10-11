@@ -166,7 +166,7 @@ function call(name: string, args: Row, ctx: ToolContext): Promise<any> {
 }
 const ids = (queue: Row[]) => queue.map((t) => t.id);
 
-describe("archived buckets stay out of every tool (TV-U6)", () => {
+describe("archived projects stay out of lists and queues; search finds them (TV-U6)", () => {
   const bucket = (id: string, extra: Row = {}): Row => ({
     id,
     workspace_id: WS,
@@ -188,6 +188,19 @@ describe("archived buckets stay out of every tool (TV-U6)", () => {
     // Every task in the fixture lives in b1.
     expect(await call("tasks_list", {}, ctx)).toEqual([]);
     expect((await call("tasks_queue", {}, ctx)).queue).toEqual([]);
+  });
+
+  it("lists them on request, and search finds them, labelled (REPLAN 78)", async () => {
+    const { ctx } = setup({
+      buckets: [bucket("b1", { archived_at: "2026-10-09T00:00:00Z" }), bucket("b2")],
+    });
+    expect(await call("tasks_list_buckets", { include_archived: true }, ctx)).toEqual([
+      { id: "b1", name: "b1", is_system: false, archived: true },
+      { id: "b2", name: "b2", is_system: false },
+    ]);
+    const listed = await call("tasks_list", { include_archived: true }, ctx);
+    expect(listed.length).toBeGreaterThan(0);
+    expect(listed.every((t: Row) => t.project_archived === true)).toBe(true);
   });
 
   it("reads a database from before the migration (no archived_at) as nothing archived", async () => {

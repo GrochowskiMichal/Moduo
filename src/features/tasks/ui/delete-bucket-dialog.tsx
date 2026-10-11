@@ -228,10 +228,7 @@ export function ArchiveProjectDialog({
             {canManage === false ? "Close" : "Cancel"}
           </Button>
           {canManage === false ? null : moving ? (
-            <Button
-              disabled={!target}
-              onClick={() => choose({ kind: "move", projectId: target })}
-            >
+            <Button disabled={!target} onClick={() => choose({ kind: "move", projectId: target })}>
               Move and archive
             </Button>
           ) : (

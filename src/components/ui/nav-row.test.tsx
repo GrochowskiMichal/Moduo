@@ -292,6 +292,34 @@ describe("NavSectionHeader", () => {
     expect(onAdd).toHaveBeenCalledTimes(1);
   });
 
+  it("gives a header a ⋯ and a right-click menu beside its + (an area, TV-U6)", async () => {
+    const onRename = rs.fn();
+    render(
+      <TooltipProvider>
+        <NavSectionHeader
+          label="Clients"
+          count={5}
+          onToggle={() => {}}
+          onAdd={() => {}}
+          addLabel="New project in Clients"
+          menu={(m) => <m.Item onSelect={onRename}>Rename</m.Item>}
+        />
+      </TooltipProvider>,
+    );
+    expect(screen.getByRole("button", { name: "Clients options" })).toBeTruthy();
+    const add = screen.getByRole("button", { name: "New project in Clients" });
+    // Two actions share the slot: it reserves room for both.
+    expect(add.closest('[data-slot="nav-row-trail"]')?.className).toContain("min-w-10");
+    fireEvent.contextMenu(
+      screen
+        .getByRole("button", { name: /^Clients,/ })
+        .closest('[data-slot="nav-section-header"]') as Element,
+    );
+    await act(() => new Promise((resolve) => setTimeout(resolve, 30)));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Rename" }));
+    expect(onRename).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps the count visible on an expanded section (aria-expanded alone doesn't swap)", () => {
     render(
       <TooltipProvider>

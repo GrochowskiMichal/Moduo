@@ -99,7 +99,10 @@ export function projectDropPatch(
   const at = rest.findIndex((b) => b.id === overId);
   const prev = after ? rest[at] : (rest[at - 1] ?? null);
   const next = after ? (rest[at + 1] ?? null) : rest[at];
-  return { position: betweenPositions(prev?.position ?? null, next?.position ?? null), areaId: area };
+  return {
+    position: betweenPositions(prev?.position ?? null, next?.position ?? null),
+    areaId: area,
+  };
 }
 
 /** A position after every project the reader holds (a move into an area

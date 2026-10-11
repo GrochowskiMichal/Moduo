@@ -72,7 +72,8 @@ type ResolveParams = {
  * back to the Inbox.
  */
 export function resolveDefaultSelection({ lastBucket, bucketIds, inboxId }: ResolveParams): string {
-  if (lastBucket && (REOPENABLE_SCOPES as readonly string[]).includes(lastBucket)) return lastBucket;
+  if (lastBucket && (REOPENABLE_SCOPES as readonly string[]).includes(lastBucket))
+    return lastBucket;
   if (lastBucket && new Set(bucketIds).has(lastBucket)) {
     return lastBucket === inboxId ? "inbox" : lastBucket;
   }

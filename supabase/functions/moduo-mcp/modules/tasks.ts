@@ -78,7 +78,9 @@ function clampLimit(args: Row, fallback: number, max: number): number {
   return Math.min(Math.floor(v), max);
 }
 
-/** Buckets archived in the app (TV-U6): they and their tasks stay out of every tool. */
+/** Projects archived in the app (TV-U6): they and their tasks stay out of every
+ *  tool unless one asks for them (`include_archived`), and search finds them,
+ *  labelled `project_archived` (REPLAN 78). */
 function archivedBucketIds(buckets: Row[]): Set<string> {
   return new Set(buckets.filter((b) => b.archived_at && !b.is_system).map((b) => b.id));
 }
@@ -111,9 +113,11 @@ async function loadWorkspace(ctx: ToolContext) {
     // select("*"): a database without TV-U6's archived_at still answers.
     rows(ctx.db.from("buckets").select("*").eq("workspace_id", ws).is("deleted_at", null)),
   ]);
-  // TV-U6: an archived bucket's tasks are hidden everywhere, agents included.
+  // TV-U6: an archived project's tasks are out of every list and queue; only
+  // search and `include_archived` reach them (labelled).
   const archived = archivedBucketIds(bucketRows);
   const tasks = allTasks.filter((t) => visible.has(t.id) && !archived.has(t.bucket_id));
+  const archivedTasks = allTasks.filter((t) => visible.has(t.id) && archived.has(t.bucket_id));
   // TV-D2: the key creator's own queue, in order (live, visible tasks only).
   const queue = queueTaskIds(queueRows as { id: string; task_id: string; position: string }[],
     new Set(tasks.map((t) => t.id)));
@@ -146,6 +150,7 @@ async function loadWorkspace(ctx: ToolContext) {
     queue,
     queuedByMe: new Set(queue),
     taskKey,
+    archivedTasks,
   };
 }
 
@@ -260,10 +265,18 @@ export const tasksConnectorModule: ConnectorModule = {
     {
       name: "tasks_list_buckets",
       description:
-        "The workspace's buckets (exclusive task categories; the reserved Inbox is is_system). Optional group labels form rail sections; color is the rail dot's label hue. Archived buckets (and their tasks) are left out of every tool.",
+        "The workspace's projects (\"buckets\"; exclusive task categories; the reserved Inbox is is_system). Optional group labels form sidebar areas; color is the sidebar dot's label hue. Archived projects (and their tasks) are left out unless include_archived is true; then they carry archived: true.",
       access: "view",
-      inputSchema: { type: "object", properties: {} },
-      handler: async (_args, ctx) => {
+      inputSchema: {
+        type: "object",
+        properties: {
+          include_archived: {
+            type: "boolean",
+            description: "Also list archived projects, marked archived: true. Default false.",
+          },
+        },
+      },
+      handler: async (args, ctx) => {
         // select("*"): a database without TV-U6's columns still answers.
         const buckets = await rows(
           ctx.db.from("buckets")
@@ -273,13 +286,17 @@ export const tasksConnectorModule: ConnectorModule = {
         );
         const visible = await visibleIds(ctx, "bucket");
         const archived = archivedBucketIds(buckets);
-        return buckets.filter((b) => visible.has(b.id) && !archived.has(b.id)).map((b) => ({
-          id: b.id,
-          name: b.name,
-          is_system: b.is_system,
-          ...(b.group_label ? { group: b.group_label } : {}),
-          ...(b.color ? { color: b.color } : {}),
-        }));
+        const withArchived = args?.include_archived === true;
+        return buckets
+          .filter((b) => visible.has(b.id) && (withArchived || !archived.has(b.id)))
+          .map((b) => ({
+            id: b.id,
+            name: b.name,
+            is_system: b.is_system,
+            ...(b.group_label ? { group: b.group_label } : {}),
+            ...(b.color ? { color: b.color } : {}),
+            ...(archived.has(b.id) ? { archived: true } : {}),
+          }));
       },
     },
     {
@@ -305,6 +322,10 @@ export const tasksConnectorModule: ConnectorModule = {
             type: "boolean",
             description: "Only top-level tasks (no parent in the result); subtasks are summarised in subtask_count. Default false.",
           },
+          include_archived: {
+            type: "boolean",
+            description: "Also tasks in archived projects, marked project_archived: true. Default false.",
+          },
           limit: { type: "number", description: `Max tasks per page (default 100, max ${MAX_PAGE}).` },
           offset: { type: "number", description: "Skip this many tasks (default 0). A page shorter than limit is the last." },
         },
@@ -314,7 +335,9 @@ export const tasksConnectorModule: ConnectorModule = {
         const now = new Date();
         const status = typeof args.status === "string" ? args.status : "open";
         const bucketId = str(args, "bucket_id", false);
-        let list = filterByAssignee(data.tasks, parseAssignee(args.assignee), ctx.key.createdBy);
+        const archivedIds = new Set(data.archivedTasks.map((t) => t.id));
+        const pool = args.include_archived === true ? [...data.tasks, ...data.archivedTasks] : data.tasks;
+        let list = filterByAssignee(pool, parseAssignee(args.assignee), ctx.key.createdBy);
         if (bucketId) list = list.filter((t) => t.bucket_id === bucketId);
         // Open = To do or In progress (TV-D9's one rule: Backlog is parked).
         if (status === "open") list = list.filter((t) => isOpenTask(rowTaskState(t)));
@@ -325,7 +348,10 @@ export const tasksConnectorModule: ConnectorModule = {
             .eq("workspace_id", ctx.key.workspaceId).is("deleted_at", null),
         );
         list = pageOf(orderByBucket(list, buckets), args.offset, clampLimit(args, 100, MAX_PAGE));
-        return list.map((t) => shapeTask(t, data, now));
+        return list.map((t) => ({
+          ...shapeTask(t, data, now),
+          ...(archivedIds.has(t.id) ? { project_archived: true } : {}),
+        }));
       },
     },
     {
@@ -396,7 +422,8 @@ export const tasksConnectorModule: ConnectorModule = {
     },
     {
       name: "tasks_search",
-      description: "Search tasks by title and description (case-insensitive substring).",
+      description:
+        "Search tasks by title and description (case-insensitive substring). Tasks in archived projects are found too, marked project_archived: true.",
       access: "view",
       inputSchema: {
         type: "object",
@@ -417,7 +444,12 @@ export const tasksConnectorModule: ConnectorModule = {
             .limit(clampLimit(args, 25, 100)),
         );
         const ids = new Set(matches.map((m) => m.id));
-        return data.tasks.filter((t) => ids.has(t.id)).map((t) => shapeTask(t, data, now));
+        return [
+          ...data.tasks.filter((t) => ids.has(t.id)).map((t) => shapeTask(t, data, now)),
+          ...data.archivedTasks
+            .filter((t) => ids.has(t.id))
+            .map((t) => ({ ...shapeTask(t, data, now), project_archived: true })),
+        ];
       },
     },
     {
