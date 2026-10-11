@@ -392,8 +392,8 @@ export class WorkspaceStore {
   private accessAgain = false;
   /** The grant feed's cursor (null: not read this session; "" read, empty). */
   private accessCursor: string | null = null;
-  /** Feed rows already handled (a delta re-reads its lag window), with when. */
-  private accessSeen = new Map<string, number>();
+  /** Feed rows already handled (a read re-reads its lookback), with their stamps. */
+  private accessSeen = new Map<string, string>();
   /** What the feed asked for, handled together (`accessDebounceMs`). */
   private accessQueue: { full: boolean; tasks: Set<string> } = { full: false, tasks: new Set() };
   private accessTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1132,14 +1132,19 @@ export class WorkspaceStore {
 
   /** Changes from the feed (a read, or Realtime): handled together, once each. */
   private noteAccessChanges(changes: readonly AccessChange[]): void {
-    const now = Date.now();
-    for (const [key, at] of this.accessSeen) {
-      if (at < now - this.timing.lagMs * 2) this.accessSeen.delete(key);
+    // A row is remembered while a read can still bring it back: while its
+    // stamp is inside the lookback before the cursor (a quiet feed keeps its
+    // cursor, so its last rows are read again on every sync).
+    const floor = this.accessCursor ? stampMinus(this.accessCursor, this.timing.lagMs) : null;
+    if (floor) {
+      for (const [key, stamp] of this.accessSeen) {
+        if (isNewer(floor, stamp)) this.accessSeen.delete(key);
+      }
     }
     for (const c of changes) {
       const key = c.id ?? `${c.resourceType}:${c.resourceId}:${c.changedAt}`;
       if (this.accessSeen.has(key)) continue;
-      this.accessSeen.set(key, now);
+      this.accessSeen.set(key, c.changedAt);
       if (c.resourceType === "task") this.accessQueue.tasks.add(c.resourceId);
       else this.accessQueue.full = true;
     }

@@ -1199,9 +1199,19 @@ describe("the grant feed (TV-D11b)", () => {
     const readsOfShared = () =>
       server.reads.filter((r) => r.table === "tasks" && r.ids?.includes("shared")).length;
     const once = readsOfShared();
-    // The next delta re-reads the feed's lookback window: "4" isn't handled again.
+    // The next delta re-reads the feed's lookback window: "4" isn't handled again,
+    // nor later, however long the feed stays quiet (its cursor doesn't move).
     await store.syncNow();
     await settled(store);
+    expect(readsOfShared()).toBe(once);
+    const realNow = Date.now;
+    try {
+      Date.now = () => realNow() + 60 * 60_000;
+      await store.syncNow();
+      await settled(store);
+    } finally {
+      Date.now = realNow;
+    }
     expect(readsOfShared()).toBe(once);
     expect(server.reads.some((r) => r.ids?.includes("old"))).toBe(false);
     release();
