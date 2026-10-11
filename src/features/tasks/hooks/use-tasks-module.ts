@@ -111,6 +111,8 @@ const isTempId = (id: string) => id.startsWith("tmp-");
 const NO_EDIT = "You don't have edit access to Tasks in this workspace.";
 /** One empty list for every absent collection (a stable identity for memos). */
 const NO_ROWS: never[] = [];
+/** A queued capture that wasn't created (refused, or waiting offline): no queue op, no toast. */
+const NOT_CREATED = new Error("not created");
 const STILL_SAVING = "Still saving that task — try again in a moment.";
 
 /** A change that can't wait for the network (default g): said once, never queued. */
@@ -151,11 +153,6 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
   /** My rows for tasks completed this session: the server has dropped them,
    *  but the Queue keeps showing them, done, where they were (§6). */
   const keptRows = snap.kept;
-  /** Queue ops go to the server one at a time, in the order they were made,
-   *  so each answer (my whole queue) includes every earlier op; the line-up
-   *  shown is the newest op's until it answers (the store's line-up). */
-  const queueSeq = useRef(0);
-  const queueChain = useRef<Promise<unknown>>(Promise.resolve());
 
   const [timeBlocks, setTimeBlocksState] = useState<TimeBlockMap>({});
   /** The first answer is in (the device copy or the server): before it, views
@@ -196,7 +193,14 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     () => bundle.buckets.filter((b) => !b.deletedAt && !hiddenBuckets.has(b.id)),
     [bundle.buckets, hiddenBuckets],
   );
-  const inbox = useMemo(() => liveBuckets.find((b) => b.isSystem) ?? null, [liveBuckets]);
+  // Your own Inbox (a teammate's may be visible too).
+  const inbox = useMemo(
+    () =>
+      liveBuckets.find((b) => b.isSystem && b.ownerId === userId) ??
+      liveBuckets.find((b) => b.isSystem) ??
+      null,
+    [liveBuckets, userId],
+  );
   const liveTasks = useMemo(() => {
     const live = bundle.tasks
       .filter((t) => !t.deletedAt)
@@ -611,23 +615,27 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     [runtime, workspaceId, canEdit, store, liveTasks, userId, sendNewTask],
   );
 
-  /** Send one queue op after the ones before it; its answer (my whole queue) becomes the copy. */
+  /**
+   * Send one queue op after every earlier one, from any surface (the store
+   * keeps the one chain); its answer (my whole queue) becomes the copy.
+   */
   const sendQueueOp = useCallback(
-    (seq: number, op: () => Promise<TaskQueueEntry[]>, onSaved?: () => void) => {
+    (
+      optimistic: ((mine: TaskQueueEntry[]) => TaskQueueEntry[]) | null,
+      op: () => Promise<TaskQueueEntry[]>,
+      onSaved?: () => void,
+    ) => {
       if (!store) return;
-      const run = queueChain.current.then(op);
-      queueChain.current = run.catch(() => {});
-      void run
-        .then((own) => {
-          store.lineupAnswered(seq, own);
+      void store.queueOp(optimistic, op).then(
+        () => {
           setActivityStamp((s) => s + 1);
           onSaved?.();
-        })
-        .catch((e) => {
-          // Only the shown line-up goes; the copy holds the server's.
-          store.lineupFailed(seq);
-          failed(e, "Couldn't update your queue.");
-        });
+        },
+        // Only the shown line-up goes; the copy holds the server's.
+        (e) => {
+          if (e !== NOT_CREATED) failed(e, "Couldn't update your queue.");
+        },
+      );
     },
     [store, failed],
   );
@@ -650,9 +658,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       if (!runtime || !workspaceId || !store) return false;
       const rt = runtime;
       const ws = workspaceId;
-      const seq = ++queueSeq.current;
-      store.setLineup(seq, optimistic(queueEntriesOf(queueRowsRef.current, userId)));
-      sendQueueOp(seq, () => op(rt, ws), onSaved);
+      sendQueueOp(optimistic, () => op(rt, ws), onSaved);
       return true;
     },
     [runtime, workspaceId, userId, store, editBlocked, sendQueueOp],
@@ -847,29 +853,23 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       const tempId = `tmp-${crypto.randomUUID()}`;
       optimistic.id = tempId;
       if (store.isOffline()) return sendNewTask(optimistic, { queue: true });
-      const placeholder = optimisticEntry(tempId, endOfQueue(myQueueEntries));
-      const seq = ++queueSeq.current;
-      store.setLineup(seq, [...queueEntriesOf(queueRowsRef.current, me), placeholder]);
-      return sendNewTask(optimistic, { queue: true }).then((saved): Task | null => {
-        const next = ++queueSeq.current;
-        const mine = queueEntriesOf(queueRowsRef.current, me);
-        if (!saved) {
-          // Not created (or waiting offline, queued once it's sent): the placeholder goes.
-          store.setLineup(
-            next,
-            mine.filter((e) => e.id !== placeholder.id),
-          );
-          store.lineupFailed(next);
-          return null;
-        }
-        store.setLineup(
-          next,
-          mine.map((e) => (e.taskId === tempId ? { ...e, taskId: saved.id } : e)),
-        );
-        // The task exists now; queuing it waits behind earlier queue ops.
-        sendQueueOp(next, () => rt.tasks.opQueueAdd({ workspaceId: ws, taskId: saved.id }));
+      const created = sendNewTask(optimistic, { queue: true }).then((saved) => {
+        // The placeholder follows the task to its server id.
+        if (saved) store.relinkLineup(tempId, saved.id);
         return saved;
       });
+      // Shown queued at once; queuing it waits behind earlier queue ops and
+      // for the task to exist. Not created (or waiting offline, queued once
+      // it's sent): the placeholder goes.
+      sendQueueOp(
+        (mine) => [...mine, optimisticEntry(tempId, endOfQueue(mine))],
+        async () => {
+          const saved = await created;
+          if (!saved) throw NOT_CREATED;
+          return rt.tasks.opQueueAdd({ workspaceId: ws, taskId: saved.id });
+        },
+      );
+      return created;
     },
     [
       runtime,
@@ -878,7 +878,6 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       userId,
       store,
       liveTasks,
-      myQueueEntries,
       optimisticEntry,
       sendNewTask,
       sendQueueOp,

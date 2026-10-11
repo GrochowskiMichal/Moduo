@@ -86,17 +86,23 @@ function fakeServer() {
   const created: Task[] = [];
   const statusCalls: { taskId: string; status: string }[] = [];
   let offline = false;
+  /** A read refused by the server (not the network), when set. */
+  let refuse: string | null = null;
   const offlineError = () => new TypeError("Failed to fetch");
   const isOpen = (t: Task) => t.statusCategory === "todo" || t.statusCategory === "in_progress";
 
   const syncRead = rs.fn(async (input: SyncReadInput): Promise<SyncReadResult<unknown>> => {
     if (offline) throw offlineError();
+    if (refuse) throw new Error(refuse);
     reads.push(input);
     const all = (tables[input.table] ?? []) as ServerRow[];
     const stamps = (rows: ServerRow[]) =>
       rows.map((r) => r.updatedAt).filter((s): s is string => !!s);
     let rows: ServerRow[];
-    if (input.since) {
+    if (input.ids) {
+      const wanted = new Set(input.ids);
+      rows = all.filter((r) => wanted.has(r.id) && !r.deletedAt);
+    } else if (input.since) {
       rows = all.filter((r) => (r.updatedAt ?? "") >= (input.since as string));
     } else {
       rows = all.filter((r) => !r.deletedAt);
@@ -147,6 +153,22 @@ function fakeServer() {
         return rows[index]!;
       }),
       opQueueAdd: rs.fn(async (): Promise<TaskQueueEntry[]> => []),
+      seedInbox: rs.fn(async (workspaceId: string) => {
+        const inbox = {
+          id: "inbox-mine",
+          workspaceId,
+          ownerId: ME,
+          name: "Inbox",
+          isSystem: true,
+          group: null,
+          position: "a0",
+          createdAt: at(40),
+          updatedAt: at(40),
+          deletedAt: null,
+        };
+        tables.buckets = [...(tables.buckets ?? []), inbox];
+        return inbox;
+      }),
     },
   } as unknown as ModuoRuntime;
 
@@ -162,6 +184,9 @@ function fakeServer() {
     },
     goOnline: () => {
       offline = false;
+    },
+    refuseReads: (message: string | null) => {
+      refuse = message;
     },
   };
 }
@@ -222,7 +247,7 @@ describe("delta sync (AC12.2)", () => {
     const first = makeStore(server);
     await settled(first.store);
     first.store.persistNow();
-    await tick();
+    await first.store.whenPersisted();
     first.release();
     first.store.dispose();
     expect(first.cache.records.has(cacheKey(ME, WS))).toBe(true);
@@ -270,7 +295,7 @@ describe("delta sync (AC12.2)", () => {
     const first = makeStore(server);
     await settled(first.store);
     first.store.persistNow();
-    await tick();
+    await first.store.whenPersisted();
     first.release();
     first.store.dispose();
     // Meanwhile the project went private: the row is gone from every read,
@@ -444,8 +469,11 @@ describe("a delete stays deleted", () => {
     const release = holdRead(server, "queue");
     const reading = store.syncNow();
     await tick();
-    // The queue op's answer: my queue is empty now.
-    store.lineupAnswered(1, []);
+    // A queue op answers: my queue is empty now.
+    await store.queueOp(
+      (mine) => mine.filter((e) => e.taskId !== "a"),
+      async () => [],
+    );
     release([entry]);
     await reading;
     await settled(store);
@@ -463,6 +491,7 @@ describe("offline: captures and check-offs (default g)", () => {
     first.store.wentOffline();
     first.store.enqueue({ kind: "create", id: "op-1", task: task("kept", { title: "Kept" }) });
     first.release();
+    await first.store.whenPersisted();
     first.store.dispose();
 
     // Reopened (the app reloaded), the network back.
@@ -501,6 +530,7 @@ describe("offline: captures and check-offs (default g)", () => {
     expect(titleOf(store, "new-1")).toBe("Call the bank");
     expect(snap.bundle.tasks.find((t) => t.id === "a")?.status).toBe("done");
     // Kept with the device copy, so a reload offline still has them.
+    await store.whenPersisted();
     expect(cache.records.get(cacheKey(ME, WS))?.outbox).toHaveLength(2);
 
     // A flush attempt while still offline sends nothing.
@@ -555,7 +585,7 @@ describe("the device copy is one person's", () => {
   async function persisted(store: WorkspaceStore) {
     await settled(store);
     store.persistNow();
-    await tick();
+    await store.whenPersisted();
   }
 
   it("sign-out wipes every copy and stops the stores", async () => {
@@ -574,7 +604,7 @@ describe("the device copy is one person's", () => {
       expect(cache.records.size).toBe(0);
       // Nothing is written back after sign-out.
       store.persistNow();
-      await tick();
+      await store.whenPersisted();
       expect(cache.records.size).toBe(0);
       release();
     } finally {
@@ -596,6 +626,7 @@ describe("the device copy is one person's", () => {
       release();
 
       await attachSyncUser(null);
+      await store.whenPersisted();
       const copy = cache.records.get(cacheKey(ME, WS));
       expect(copy?.outbox).toHaveLength(1);
       expect(((copy?.tables.tasks?.rows ?? []) as Task[]).map((t) => t.id)).toEqual(["a"]);
@@ -671,7 +702,7 @@ describe("the device copy is one person's", () => {
     const release = store.acquire();
     await settled(store);
     store.persistNow();
-    await tick();
+    await store.whenPersisted();
 
     // The project was made private: RLS hides its tasks. No delete reaches
     // the device, and a delta never returns them.
@@ -684,5 +715,141 @@ describe("the device copy is one person's", () => {
     const cachedIds = ((copy?.tables.tasks?.rows ?? []) as Task[]).map((t) => t.id);
     expect(cachedIds).toEqual(["mine"]);
     release();
+  });
+});
+
+describe("what changes without a stamp (sharing, TV-D10)", () => {
+  it("a task shared with you since arrives at the access check, read by id", async () => {
+    const server = fakeServer();
+    server.tables.tasks = [task("a", { updatedAt: at(5) })];
+    const store = new WorkspaceStore(server.runtime, ME, WS, {
+      cache: memoryCache(),
+      timing: { persistMs: 0, throttleMs: 0, accessCheckMs: 0 },
+    });
+    const release = store.acquire();
+    await settled(store);
+    // A project was shared with you: its old task (an old stamp) is visible now.
+    // (Its stamp is older than any delta's lookback.)
+    (server.tables.tasks as Task[]).push(
+      task("shared", { updatedAt: "2026-10-01T08:00:00.000000+00:00" }),
+    );
+    await store.syncNow();
+    await settled(store);
+    expect(
+      store
+        .getSnapshot()
+        .bundle.tasks.map((t) => t.id)
+        .sort(),
+    ).toEqual(["a", "shared"]);
+    expect(server.reads.some((r) => r.table === "tasks" && r.ids?.includes("shared"))).toBe(true);
+    release();
+  });
+
+  it("projects, areas and sections are read whole each time, so one shown or hidden by sharing follows", async () => {
+    const server = fakeServer();
+    const area = (id: string) => ({ id, workspaceId: WS, name: id, updatedAt: at(1) });
+    server.tables.areas = [area("work")];
+    const { store } = makeStore(server);
+    await settled(store);
+    expect(store.getSnapshot().bundle.areas?.map((a) => a.id)).toEqual(["work"]);
+    // A project in "home" was shared with you; "work"'s only project wasn't any more.
+    server.tables.areas = [area("home")];
+    await store.syncNow();
+    await settled(store);
+    expect(store.getSnapshot().bundle.areas?.map((a) => a.id)).toEqual(["home"]);
+    const areaReads = server.reads.filter((r) => r.table === "areas");
+    expect(areaReads.every((r) => r.since === null)).toBe(true);
+  });
+});
+
+describe("staying honest about the copy", () => {
+  it("a later read the server refuses says the copy isn't up to date, and keeps it", async () => {
+    const server = fakeServer();
+    server.tables.tasks = [task("a")];
+    const { store } = makeStore(server);
+    await settled(store);
+    server.refuseReads("JWT expired");
+    await store.syncNow();
+    await settled(store);
+    let snap = store.getSnapshot();
+    expect(snap.error).toBeNull();
+    expect(snap.syncError).toBe("JWT expired");
+    expect(snap.bundle.tasks.map((t) => t.id)).toEqual(["a"]);
+    server.refuseReads(null);
+    await store.syncNow();
+    await settled(store);
+    snap = store.getSnapshot();
+    expect(snap.syncError).toBeNull();
+  });
+
+  it("opening Tasks makes your Inbox when you have none", async () => {
+    const server = fakeServer();
+    const { store } = makeStore(server);
+    await settled(store);
+    const inbox = store.getSnapshot().bundle.buckets.find((b) => b.isSystem);
+    expect(inbox?.ownerId).toBe(ME);
+  });
+
+  it("two tabs never drop each other's waiting captures", async () => {
+    const server = fakeServer();
+    server.tables.tasks = [task("a")];
+    const cache = memoryCache();
+    const timing = { persistMs: 0, throttleMs: 0, retryMs: 60_000 };
+    const tabA = new WorkspaceStore(server.runtime, ME, WS, { cache, timing });
+    const tabB = new WorkspaceStore(server.runtime, ME, WS, { cache, timing });
+    const releaseA = tabA.acquire();
+    const releaseB = tabB.acquire();
+    await settled(tabA);
+    await settled(tabB);
+    server.goOffline();
+    tabA.wentOffline();
+    tabB.wentOffline();
+    tabA.enqueue({ kind: "create", id: "from-a", task: task("captured-in-a") });
+    await tabA.whenPersisted();
+    // Tab B writes its copy after A: A's capture stays, and B takes it on.
+    tabB.persistNow();
+    await tabB.whenPersisted();
+    const copy = cache.records.get(cacheKey(ME, WS));
+    expect((copy?.outbox as { id: string }[]).map((e) => e.id)).toEqual(["from-a"]);
+    expect(tabB.getSnapshot().pending).toBe(1);
+    releaseA();
+    releaseB();
+  });
+
+  it("every surface's queue ops share one chain: an earlier answer never clears a later line-up", async () => {
+    const server = fakeServer();
+    server.tables.tasks = [task("a"), task("b")];
+    const { store } = makeStore(server);
+    await settled(store);
+    const entry = (taskId: string): TaskQueueEntry => ({
+      id: `q-${taskId}`,
+      workspaceId: WS,
+      userId: ME,
+      taskId,
+      position: taskId,
+      queuedAt: at(1),
+      updatedAt: at(1),
+    });
+    let first: (rows: TaskQueueEntry[]) => void = () => {};
+    const one = store.queueOp(
+      (mine) => [...mine, entry("a")],
+      () =>
+        new Promise<TaskQueueEntry[]>((resolve) => {
+          first = resolve;
+        }),
+    );
+    // Another surface queues b meanwhile.
+    const two = store.queueOp(
+      (mine) => [...mine, entry("b")],
+      async () => [entry("a"), entry("b")],
+    );
+    expect(store.getSnapshot().queue.map((e) => e.taskId)).toEqual(["a", "b"]);
+    await tick();
+    first([entry("a")]);
+    await one;
+    // The first answer (only a) doesn't hide b, still on its way.
+    expect(store.getSnapshot().queue.map((e) => e.taskId)).toEqual(["a", "b"]);
+    await two;
+    expect(store.getSnapshot().queue.map((e) => e.taskId)).toEqual(["a", "b"]);
   });
 });

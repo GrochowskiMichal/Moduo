@@ -32,22 +32,29 @@ export function TasksSyncStatus() {
     selectedWorkspaceId,
     modulePermissions.tasks !== "none",
   );
-  const { offline, pending } = useStoreSnapshot(store);
-  if (!store || (!offline && pending === 0)) return null;
+  const { offline, pending, syncError } = useStoreSnapshot(store);
+  if (!store || (!offline && pending === 0 && !syncError)) return null;
 
+  // Offline first; then a copy that couldn't be refreshed (a refused session,
+  // an ended trial: never shown as if it were live); then what's being sent.
   const words = offline
     ? pending > 0
       ? `Offline · ${waitingLabel(pending)}`
       : "Offline"
-    : waitingLabel(pending);
+    : syncError
+      ? "Not up to date"
+      : waitingLabel(pending);
   const tip = offline
     ? "You're offline. Tasks show the copy on this device; captures and check-offs sync when you're back."
-    : "Sending what you did offline.";
-  const Glyph = offline ? CloudOff : RefreshCw;
+    : syncError
+      ? `Tasks couldn't refresh (${syncError}). Click to try again.`
+      : "Sending what you did offline.";
+  const Glyph = offline || syncError ? CloudOff : RefreshCw;
   return (
     <Tooltip>
       <TooltipTrigger
         data-slot="sync-status"
+        onClick={syncError && !offline ? () => void store.reload() : undefined}
         aria-label={`${words}. ${tip}`}
         className="flex h-8 min-w-8 shrink-0 items-center justify-center gap-1.5 rounded-md font-sans text-xs text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background @2xs:px-2"
       >

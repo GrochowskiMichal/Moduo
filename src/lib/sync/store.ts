@@ -114,6 +114,8 @@ export type StoreSnapshot = {
   loaded: boolean;
   /** A first load failed with nothing on the device to show. */
   error: string | null;
+  /** A later read failed (not the network): what's shown may be out of date. */
+  syncError: string | null;
   /** Showing the device copy; the server hasn't answered yet this session. */
   fromCache: boolean;
   /** Done, Won't do and Backlog tasks have been read too. */
@@ -156,6 +158,7 @@ export const EMPTY_SNAPSHOT: StoreSnapshot = {
   userId: null,
   loaded: false,
   error: null,
+  syncError: null,
   fromCache: false,
   restLoaded: false,
   offline: false,
@@ -321,6 +324,9 @@ export type StoreOptions = {
 
 let nextOp = 1;
 
+/** What a surface that wrote around the store dispatches (Home's widgets). */
+const DATA_REFRESH_EVENT = "moduo:data-refresh";
+
 type StoreLineup = { seq: number; rows: TaskQueueEntry[] } | null;
 
 export class WorkspaceStore {
@@ -342,6 +348,7 @@ export class WorkspaceStore {
 
   private loaded = false;
   private error: string | null = null;
+  private syncError: string | null = null;
   private fromCache = false;
   private restLoaded = false;
   /** When everything was last read whole (0: never). */
@@ -461,6 +468,7 @@ export class WorkspaceStore {
     if (typeof window !== "undefined") {
       window.addEventListener("offline", this.onBrowserOffline);
       window.addEventListener("pagehide", this.persistNow);
+      window.addEventListener(DATA_REFRESH_EVENT, this.onDataRefresh);
     }
     this.hydrated ??= this.hydrate();
     void this.hydrated.then(() => this.sync("open"));
@@ -474,6 +482,7 @@ export class WorkspaceStore {
     if (typeof window !== "undefined") {
       window.removeEventListener("offline", this.onBrowserOffline);
       window.removeEventListener("pagehide", this.persistNow);
+      window.removeEventListener(DATA_REFRESH_EVENT, this.onDataRefresh);
     }
     if (this.syncTimer) clearTimeout(this.syncTimer);
     if (this.retryTimer) clearTimeout(this.retryTimer);
@@ -489,6 +498,7 @@ export class WorkspaceStore {
   dispose(opts: { persist?: boolean } = {}): void {
     if (this.persistTimer) clearTimeout(this.persistTimer);
     this.persistTimer = null;
+    if (opts.persist === false) this.wiped = true;
     this.stop(opts);
     this.disposed = true;
     this.listeners.clear();
@@ -509,6 +519,9 @@ export class WorkspaceStore {
   }
 
   private onBrowserOffline = () => this.setOffline(true);
+
+  /** A surface wrote around the store (Home's roll-forward) and says so: read what changed. */
+  private onDataRefresh = () => this.requestSync("reconnect");
 
   // ── The device copy ───────────────────────────────────────────────────────
 
@@ -559,19 +572,73 @@ export class WorkspaceStore {
     this.persistTimer = null;
     // Nothing read yet: don't overwrite a copy with an empty one.
     if (!this.loaded && this.outbox.length === 0) return;
+    const key = cacheKey(this.userId, this.workspaceId);
+    // What to write is taken now (a dispose right after must not empty it).
     const tables: CachedWorkspace["tables"] = {};
     for (const [name, state] of this.tables) {
       tables[name] = { rows: [...state.rows.values()], cursor: state.cursor };
     }
-    void this.cache.write(cacheKey(this.userId, this.workspaceId), {
-      v: CACHE_VERSION,
-      savedAt: Date.now(),
-      tables,
-      restLoaded: this.restLoaded,
-      fullReadAt: this.fullReadAt,
-      outbox: this.outbox,
+    const outbox = [...this.outbox];
+    const restLoaded = this.restLoaded;
+    const fullReadAt = this.fullReadAt;
+    // Writes go one after another; each keeps the outbox another tab left in
+    // the copy (never overwrites a capture it hasn't seen) and takes it on.
+    this.persisting = this.persisting.then(async () => {
+      if (this.wiped) return;
+      const disk = await this.cache.read(key);
+      if (this.wiped) return;
+      const theirs = this.othersWaiting(disk?.outbox, outbox);
+      if (!this.disposed) this.adoptOutbox(theirs);
+      await this.cache.write(key, {
+        v: CACHE_VERSION,
+        savedAt: Date.now(),
+        tables,
+        restLoaded,
+        fullReadAt,
+        outbox: [...outbox, ...theirs],
+      });
     });
   };
+
+  /** Resolves once every write of the device copy asked for so far has landed. */
+  whenPersisted(): Promise<void> {
+    return this.persisting;
+  }
+
+  /** The device copy is being wiped (sign-out, another person): write nothing more. */
+  private wiped = false;
+
+  private persisting: Promise<void> = Promise.resolve();
+  /** Outbox entries this tab sent (or dropped): another tab's copy can't bring them back. */
+  private outboxDone = new Set<string>();
+
+  /** Entries another tab left waiting in the copy that this one hasn't got or done. */
+  private othersWaiting(
+    stored: unknown[] | undefined,
+    mine: readonly OutboxEntry[],
+  ): OutboxEntry[] {
+    if (!Array.isArray(stored)) return [];
+    const have = new Set(mine.map((e) => e.id));
+    return (stored as OutboxEntry[]).filter(
+      (e) => !!e && typeof e.id === "string" && !have.has(e.id) && !this.outboxDone.has(e.id),
+    );
+  }
+
+  /** Take on what another tab left waiting (sent again safely: same ids). */
+  private adoptOutbox(entries: readonly OutboxEntry[]): void {
+    const have = new Set(this.outbox.map((e) => e.id));
+    let adopted = false;
+    for (const entry of entries) {
+      if (have.has(entry.id)) continue;
+      this.outbox.push(entry);
+      this.showOutboxEntry(entry);
+      adopted = true;
+    }
+    if (adopted) {
+      this.changed();
+      if (!this.offline) void this.flush();
+    }
+  }
 
   // ── Reading the server ────────────────────────────────────────────────────
 
@@ -628,6 +695,11 @@ export class WorkspaceStore {
   }
 
   private async syncOnce(kind: "open" | "quiet" | "reload"): Promise<void> {
+    // The device copy goes in first: a read that lands before it would be
+    // overwritten by an older copy's flags.
+    this.hydrated ??= this.hydrate();
+    await this.hydrated;
+    if (this.disposed) return;
     const startedAt = Date.now();
     const delta =
       !!this.runtime.tasks.syncRead &&
@@ -649,7 +721,9 @@ export class WorkspaceStore {
     this.reachedServer = true;
     this.fromCache = false;
     this.error = null;
+    this.syncError = null;
     this.setOffline(false, { quiet: true });
+    if (first) void this.ensureInbox();
     if (first || kind === "reload") {
       this.loadStamp += 1;
       if (kind === "reload") this.kept = [];
@@ -677,14 +751,41 @@ export class WorkspaceStore {
       this.changed();
       return;
     }
-    // A failed first load with nothing to show is an error; later reads fail
-    // quietly, but what the other tables already read shows and is kept.
+    // A failed first load with nothing to show is an error. A later read that
+    // fails keeps what's shown (and what the other tables already read), but
+    // says the copy isn't up to date and tries again (a refused session, an
+    // ended trial: never yesterday's copy passed off as live).
+    const message = e instanceof Error ? e.message : String(e);
     if (!this.loaded) {
-      this.error = e instanceof Error ? e.message : String(e);
+      this.error = message;
       this.markLoaded();
+    } else {
+      this.syncError = message;
+      this.scheduleRetry();
     }
     this.changed();
     this.schedulePersist();
+  }
+
+  /**
+   * Your Inbox exists once Tasks has been opened (the old full read made it;
+   * a new member's or a new workspace's first open has none). Best effort: a
+   * view-only member can't make one.
+   */
+  private async ensureInbox(): Promise<void> {
+    if (!this.runtime.tasks.syncRead || typeof this.runtime.tasks.seedInbox !== "function") return;
+    const mine = [...this.table("buckets").rows.values()].some(
+      (b) =>
+        (b as { isSystem?: boolean; ownerId?: string }).isSystem &&
+        (b as { ownerId?: string }).ownerId === this.userId,
+    );
+    if (mine) return;
+    try {
+      const inbox = await this.runtime.tasks.seedInbox(this.workspaceId);
+      if (!this.disposed) this.answer({ buckets: [inbox] });
+    } catch {
+      // Read-only access, or offline: the next session tries again.
+    }
   }
 
   private markLoaded(): void {
@@ -766,9 +867,20 @@ export class WorkspaceStore {
     this.changed();
 
     const phase2 = SYNC_TABLES.filter((t) => t.phase === 2);
+    // Only the rest of the tasks has to arrive: a counts or history table that
+    // fails (not the network) is read again by the next delta, from scratch,
+    // and never holds the store in first-load mode.
     const [rest, ...later] = await Promise.all([
       this.read("tasks", null, "rest"),
-      ...phase2.map((t) => this.read(t.name, null).then((res) => [t.name, res] as const)),
+      ...phase2.map((t) =>
+        this.read(t.name, null).then(
+          (res) => [t.name, res] as const,
+          (e) => {
+            if (isNetworkError(e)) throw e;
+            return null;
+          },
+        ),
+      ),
     ]);
     const all = new Map<string, AnyRow>();
     for (const id of openTasks) {
@@ -784,7 +896,9 @@ export class WorkspaceStore {
     );
     // "" = read, but empty: later reads take its live rows until it has a stamp.
     this.table("tasks").cursor = newestOf(openStamp, rest.maxUpdatedAt) ?? "";
-    for (const [name, res] of later) {
+    for (const read of later) {
+      if (!read) continue;
+      const [name, res] = read;
       this.applyWhole(name, res.rows as AnyRow[], started, res.truncated);
       this.table(name).cursor = res.maxUpdatedAt ?? this.table(name).cursor;
     }
@@ -880,6 +994,7 @@ export class WorkspaceStore {
       }
       this.accessCheckedAt = started;
       if (dropped) {
+        this.seedTagStore(started);
         this.changed();
         // Leave no private row on the device a moment longer than needed.
         this.persistNow();
@@ -1121,8 +1236,52 @@ export class WorkspaceStore {
 
   // ── My queue's line-up while queue ops are out ────────────────────────────
 
+  private lineupSeq = 0;
+  private lineupChain: Promise<unknown> = Promise.resolve();
+
+  /** My line-up as shown now (queue ops on their way included). */
+  myLineup(): TaskQueueEntry[] {
+    return this.queueRows().filter((e) => e.userId === this.userId);
+  }
+
+  /**
+   * A queue op (TV-D2), for every surface in one chain: `optimistic` shows my
+   * line-up at once (null: nothing to show), and the op is sent after every
+   * earlier one, so each answer (my whole queue) includes them. The newest
+   * op's line-up shows until it answers; a failure leaves the server's.
+   */
+  queueOp(
+    optimistic: ((mine: TaskQueueEntry[]) => TaskQueueEntry[]) | null,
+    op: () => Promise<TaskQueueEntry[]>,
+  ): Promise<TaskQueueEntry[]> {
+    const seq = ++this.lineupSeq;
+    if (optimistic) this.setLineup(seq, optimistic(this.myLineup()));
+    const run = this.lineupChain.then(op);
+    this.lineupChain = run.catch(() => {});
+    return run.then(
+      (own) => {
+        this.lineupAnswered(seq, own);
+        return own;
+      },
+      (e) => {
+        this.lineupFailed(seq);
+        throw e;
+      },
+    );
+  }
+
+  /** A task in the shown line-up got its server id (a capture just saved). */
+  relinkLineup(fromTaskId: string, toTaskId: string): void {
+    if (!this.lineup) return;
+    this.lineup = {
+      seq: this.lineup.seq,
+      rows: this.lineup.rows.map((e) => (e.taskId === fromTaskId ? { ...e, taskId: toTaskId } : e)),
+    };
+    this.changed();
+  }
+
   /** Show my line-up as `rows` (op `seq`, the newest one). */
-  setLineup(seq: number, rows: TaskQueueEntry[]): void {
+  private setLineup(seq: number, rows: TaskQueueEntry[]): void {
     this.lineup = { seq, rows };
     this.renderedCache.delete("queue");
     this.changed();
@@ -1130,7 +1289,7 @@ export class WorkspaceStore {
 
   /** A queue op's answer (my whole line-up, the server's): it becomes the copy;
    *  the shown line-up goes once the newest op has answered. */
-  lineupAnswered(seq: number, mine: TaskQueueEntry[]): void {
+  private lineupAnswered(seq: number, mine: TaskQueueEntry[]): void {
     const state = this.table("queue");
     const now = Date.now();
     const kept = new Set(mine.map((e) => e.id));
@@ -1155,7 +1314,7 @@ export class WorkspaceStore {
   }
 
   /** A queue op failed: the shown line-up goes if it was the newest's. */
-  lineupFailed(seq: number): void {
+  private lineupFailed(seq: number): void {
     if (this.lineup && this.lineup.seq <= seq) this.lineup = null;
     this.renderedCache.delete("queue");
     this.changed();
@@ -1197,9 +1356,11 @@ export class WorkspaceStore {
     this.retries += 1;
     this.retryTimer = setTimeout(() => {
       this.retryTimer = null;
-      if (!this.offline || this.disposed || this.refs <= 0) return;
+      const behind = () => this.offline || this.syncError !== null;
+      if (!behind() || this.disposed || this.refs <= 0) return;
       void this.sync("quiet").then(() => {
-        if (this.offline) this.scheduleRetry();
+        if (behind()) this.scheduleRetry();
+        else this.retries = 0;
       });
     }, wait);
   }
@@ -1207,6 +1368,57 @@ export class WorkspaceStore {
   /** Whether writes other than captures and check-offs must wait ("Offline"). */
   isOffline(): boolean {
     return this.offline;
+  }
+
+  /**
+   * A status change (a check-off) from any surface: shown at once, sent
+   * through the status op, the server's row kept; offline, or when the
+   * connection goes on the way, it waits on the device. A refusal throws
+   * (only its fields go back).
+   */
+  async sendStatus(input: {
+    taskId: string;
+    /** A status id, or a category word (`taskStatusWord`). */
+    status: string;
+    /** What the row shows meanwhile. */
+    fields: Partial<Task>;
+    recurrence?: RecurrenceRule | null;
+  }): Promise<"saved" | "queued"> {
+    const queue = (): "queued" => {
+      this.enqueue({
+        kind: "status",
+        id: crypto.randomUUID(),
+        taskId: input.taskId,
+        status: input.status,
+        recurrence: input.recurrence,
+        fields: input.fields,
+      });
+      return "queued";
+    };
+    if (this.offline || this.isQueuedCreate(input.taskId)) return queue();
+    const write = this.begin([
+      {
+        table: "tasks",
+        patch: { id: input.taskId, fields: input.fields as Record<string, unknown> },
+      },
+    ]);
+    try {
+      const saved = await this.runtime.tasks.opSetStatus({
+        workspaceId: this.workspaceId,
+        taskId: input.taskId,
+        status: input.status,
+        recurrence: input.recurrence ?? undefined,
+      });
+      write.settle({ tasks: [saved] });
+      return "saved";
+    } catch (e) {
+      write.fail();
+      if (isNetworkError(e)) {
+        this.wentOffline();
+        return queue();
+      }
+      throw e;
+    }
   }
 
   /** A capture or a check-off for later: shown at once, kept with the device copy, sent in order. */
@@ -1285,6 +1497,7 @@ export class WorkspaceStore {
         try {
           const answers = await this.send(entry);
           this.outbox.shift();
+          this.outboxDone.add(entry.id);
           const op = this.outboxOps.get(entry.id);
           this.outboxOps.delete(entry.id);
           this.applyAnswers(answers);
@@ -1299,6 +1512,7 @@ export class WorkspaceStore {
           // Refused: it won't go through later either. Say so, drop it, and
           // show what the server holds.
           this.outbox.shift();
+          this.outboxDone.add(entry.id);
           const op = this.outboxOps.get(entry.id);
           this.outboxOps.delete(entry.id);
           if (op !== undefined) this.dropOverlays(op);
@@ -1325,13 +1539,12 @@ export class WorkspaceStore {
       if (entry.queue) {
         // A lost connection keeps the entry (sent again: the create is the same
         // task, the add a no-op); a refused add leaves the task unqueued.
-        queue = await tasks
-          .opQueueAdd({ workspaceId: this.workspaceId, taskId: saved.id })
-          .catch((e) => {
-            if (isNetworkError(e)) throw e;
-            return [];
-          });
-        if (queue.length > 0) this.lineupAnswered(0, queue);
+        queue = await this.queueOp(null, () =>
+          tasks.opQueueAdd({ workspaceId: this.workspaceId, taskId: saved.id }),
+        ).catch((e) => {
+          if (isNetworkError(e)) throw e;
+          return [];
+        });
       }
       return { tasks: [saved] };
     }
@@ -1362,8 +1575,13 @@ export class WorkspaceStore {
     } else {
       const map = new Map(state.rows);
       for (const o of own) {
-        if ("insert" in o) map.set(o.insert.id, o.insert);
-        else if ("remove" in o) map.delete(o.remove);
+        if ("insert" in o) {
+          // Shown under `tmp-<id>` until its answer: its own row may come first
+          // (a Realtime insert); then it shows once.
+          const real = o.insert.id.startsWith("tmp-") ? o.insert.id.slice(4) : null;
+          if (real && map.has(real)) continue;
+          map.set(o.insert.id, o.insert);
+        } else if ("remove" in o) map.delete(o.remove);
         else {
           const row = map.get(o.patch.id);
           if (row) map.set(o.patch.id, { ...row, ...o.patch.fields } as AnyRow);
@@ -1453,6 +1671,7 @@ export class WorkspaceStore {
       userId: this.userId,
       loaded: this.loaded,
       error: this.error,
+      syncError: this.syncError,
       fromCache: this.fromCache,
       restLoaded: this.restLoaded,
       offline: this.offline,
