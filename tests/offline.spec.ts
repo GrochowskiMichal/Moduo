@@ -76,16 +76,20 @@ async function openInbox(page: Page, taskId: string) {
 }
 
 /**
- * A capture lands at the end of the Inbox; a long list draws only what's on
- * screen (TV-D11b), so scroll to the end to see it, as a person would.
+ * Find a task's row by searching for it (the search reads the device copy, so
+ * it works offline too). The shared dev Inbox is long, and a long list draws
+ * only what's on screen (TV-D11b), so a row isn't looked for by scrolling.
+ * Leaves the search empty again.
  */
-async function expectAtEnd(page: Page, title: string, count?: number) {
+async function expectFound(page: Page, title: string, count?: number) {
+  const field = page.getByLabel("Search tasks");
+  if (!(await field.isVisible()))
+    await page.getByRole("button", { name: "Search", exact: true }).click();
+  await field.fill(title);
   const button = page.getByRole("button", { name: title });
-  await expect(async () => {
-    await page.getByRole("grid").evaluate((el) => el.scrollTo({ top: el.scrollHeight }));
-    if (count === undefined) await expect(button).toBeVisible({ timeout: 1_000 });
-    else await expect(button).toHaveCount(count, { timeout: 1_000 });
-  }).toPass({ timeout: 20_000 });
+  if (count === undefined) await expect(button).toBeVisible({ timeout: 20_000 });
+  else await expect(button).toHaveCount(count, { timeout: 20_000 });
+  await field.fill("");
 }
 
 /** The device copy is written a moment after the store settles. */
@@ -166,11 +170,10 @@ test("AC12.2 — a capture and a check-off made offline wait, then sync in order
   await line.fill(captured);
   await line.press("Enter");
   await expect(page.getByText("Waiting to sync · Inbox")).toBeVisible();
-  await expectAtEnd(page, captured);
+  await expectFound(page, captured);
 
-  // A check-off: shown done at once. (Found again through search, which reads
-  // the device copy: the list was scrolled to the capture at its end.)
-  await page.getByRole("button", { name: "Search", exact: true }).click();
+  // A check-off: shown done at once. (Found through search, which reads the
+  // device copy.)
   await page.getByLabel("Search tasks").fill(seeded.title);
   await row.click({ button: "right" });
   await page.getByRole("menuitem", { name: "Mark done" }).click();
@@ -192,6 +195,6 @@ test("AC12.2 — a capture and a check-off made offline wait, then sync in order
   // A reload (the store reads the server again) still has exactly one.
   await page.reload();
   await expect(page.getByRole("navigation", { name: "Location" })).toBeVisible({ timeout: 20_000 });
-  await expectAtEnd(page, captured, 1);
+  await expectFound(page, captured, 1);
   expect(await tasksTitled(captured)).toHaveLength(1);
 });
