@@ -45,7 +45,7 @@
 - [ ] **Do:** set Assign by hand while an `@person` chip is in the title → **Expect:** the chip turns back into words; the pill shows your pick. _(both)_
 
 ## Edge cases
-- [ ] **Do:** turn the network off, capture a task → **Expect:** a toast "Couldn't reach Moduo…" with Try again; the next ⌘⇧K has the draft; back online, Try again creates it once (no duplicate). _(both)_
+- [ ] **Do:** turn the network off, capture a task (and one with two subtasks) → **Expect:** it shows at once with "Waiting to sync · Inbox"; the top bar says "Offline · n waiting to sync"; back online they're sent once each, subtasks under their parent, and a "From:" link follows. _(both)_
 - [ ] **Do:** keep a draft with a linked task in it, have its owner make that task private, press ⌘⇧K → **Expect:** the chip reads "Private item"; on create it's not in the title and not linked. _(both)_
 - [ ] **Do:** sign out and sign in as someone else on the same device → **Expect:** no draft from the first person. _(both)_
 - [ ] **Do:** paste or drop a file onto the capture → **Expect:** a toast "Add files from the task once it's created." (AT-2/AT-3 plug in here). _(both)_
@@ -54,7 +54,7 @@
 - No migrations. The draft lives in localStorage under `moduo:capture-draft:task:<user>:<workspace>` (ids and the person's own words only).
 
 ## Known gaps / not-yet-testable
-- No "n waiting to sync" or durable offline queue (TV-D11a); no clock mark on a row while it saves (rows appear once saved).
+- A capture waiting offline gets its links, reminder and waiting entries only if the app is still open when it's sent.
 - Moving an unfiled task to the assignee's Inbox (call 20) isn't on the server; the capture says "finds it in My tasks".
 - Templates (`/template`, More → Template…) appear only once TV-D15 registers a provider; files only once AT-2/AT-3 register an upload handler.
 - The pill row wraps instead of "+n" overflow.

@@ -41,11 +41,12 @@ Built in tasks-v3 block 19 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §10, A
   - Decision: two or more lines in the title show "Create n tasks? · Create n · Keep as one · Cancel" with each line as it will be made ("Book taxi · Due Oct 12"); bullets, numbers and `[ ]` go, `[x]` lines are skipped and counted, deeper indents flatten to subtasks, lines past 500 are counted and left out. Saves go six at a time, parents first; one Undo deletes the batch, subtasks first.
   - Why: research §4 with the spec's cap (500 beats the research's 200).
   - Rejected: a second modal, and pointing to an import past 200 lines.
-- **U14-8 · Offline: the id is minted on the device; a failed save keeps the draft and offers Try again** → TV-U14, TV-D11a (the queue)
-  - Who: agent's choice, deferred to by Maciej, 2026-10-11 (default g; TV-D11a hasn't landed).
-  - Decision: the capture closes at once; a save that fails puts the capture back as the draft and toasts "Couldn't reach Moduo… Try again", which sends the same ids, so a task that did land is found, never doubled. "n waiting to sync" and the device queue are TV-D11a's.
-  - Why: no second queue to reconcile with the shared store later.
-  - Rejected: a localStorage outbox here.
+- **U14-8 · Captures go through the shared store; offline they wait under their own ids** → TV-U14, TV-D11a (the store and its outbox)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11 (default g).
+  - Decision: one task goes through `store.sendCreate`; many (a pasted list, a task's subtasks) are shown under one store write and settled in one step, so every screen redraws once. With the connection gone (before or on the way) they wait in the store's outbox under the ids minted here and are sent in order (parents first) once it's back: "Waiting to sync · Inbox", no duplicate. Their links, reminder and waiting entries follow once they're sent, while the app stays open. A refusal puts the capture back (only when nothing landed). ⌘N in Focus lines the task up at the top through the store's line-up (offline: at the end, when it's sent).
+  - Why: one write path and one queue for every Tasks surface (D11a); a task-by-task store write redrew the whole list twice per task (a 12-line paste took seconds per wave in dev and could exhaust a tab's memory).
+  - Rejected: the capture's own "Try again" with the same ids (it dropped subtasks whose parent had landed) and writing past the store.
+
 - **U14-9 · One draft per person and workspace, ids only** → TV-U14 (`capture-draft.ts`), the sign-out path, account deletion
   - Who: agent's choice, deferred to by Maciej, 2026-10-11 (the orchestrator's privacy review).
   - Decision: Esc, a click outside or another overlay keeps the draft on the device under the person and the workspace; any open restores it ("Draft restored · Clear"); creating clears it. It keeps typed words and ids, never a linked item's, person's, team's or tag's name (looked up again on restore: an item the person can no longer open reads "Private item" and leaves the title and the links), never the "From:" item or files. Every draft goes on sign-out; a deleted account's go with it.
