@@ -529,7 +529,13 @@ export class WorkspaceStore {
 
   private async hydrate(): Promise<void> {
     const copy = await this.cache.read(cacheKey(this.userId, this.workspaceId));
-    if (!copy || copy.v !== CACHE_VERSION || this.disposed) return;
+    if (!copy || this.disposed) return;
+    if (copy.v !== CACHE_VERSION) {
+      // An older build's copy: its rows may lack fields this build reads, so
+      // they're read again; what waited to sync still goes.
+      this.adoptOutbox(Array.isArray(copy.outbox) ? (copy.outbox as OutboxEntry[]) : []);
+      return;
+    }
     for (const t of SYNC_TABLES) {
       const cached = copy.tables[t.name];
       if (!cached) continue;
@@ -584,21 +590,23 @@ export class WorkspaceStore {
     const restLoaded = this.restLoaded;
     const fullReadAt = this.fullReadAt;
     // Writes go one after another; each keeps the outbox another tab left in
-    // the copy (never overwrites a capture it hasn't seen) and takes it on.
+    // the copy (read and written in one step, so neither tab drops the other's
+    // captures) and takes it on.
+    let theirs: OutboxEntry[] = [];
     this.persisting = this.persisting.then(async () => {
       if (this.wiped) return;
-      const disk = await this.cache.read(key);
-      if (this.wiped) return;
-      const theirs = this.othersWaiting(disk?.outbox, outbox);
-      if (!this.disposed) this.adoptOutbox(theirs);
-      await this.cache.write(key, {
-        v: CACHE_VERSION,
-        savedAt: Date.now(),
-        tables,
-        restLoaded,
-        fullReadAt,
-        outbox: [...outbox, ...theirs],
+      await this.cache.update(key, (stored) => {
+        theirs = this.othersWaiting(stored?.outbox, outbox);
+        return {
+          v: CACHE_VERSION,
+          savedAt: Date.now(),
+          tables,
+          restLoaded,
+          fullReadAt,
+          outbox: [...outbox, ...theirs],
+        };
       });
+      if (!this.disposed && theirs.length > 0) this.adoptOutbox(theirs);
     });
   };
 

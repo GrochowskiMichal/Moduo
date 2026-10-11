@@ -482,6 +482,33 @@ describe("a delete stays deleted", () => {
 });
 
 describe("offline: captures and check-offs (default g)", () => {
+  it("an older build's copy is read again, but what waited in it is still sent", async () => {
+    const server = fakeServer();
+    server.tables.tasks = [task("a", { updatedAt: at(5) })];
+    const cache = memoryCache();
+    cache.records.set(cacheKey(ME, WS), {
+      v: 1,
+      savedAt: 0,
+      tables: { tasks: { rows: [task("stale-from-old-build")], cursor: at(1) } },
+      restLoaded: true,
+      outbox: [{ kind: "create", id: "op-old", task: task("waited", { title: "Waited" }) }],
+    });
+    const store = new WorkspaceStore(server.runtime, ME, WS, {
+      cache,
+      timing: { persistMs: 0, throttleMs: 0 },
+    });
+    const release = store.acquire();
+    await settled(store);
+    expect(server.created.map((t) => t.id)).toEqual(["waited"]);
+    expect(
+      store
+        .getSnapshot()
+        .bundle.tasks.map((t) => t.id)
+        .sort(),
+    ).toEqual(["a", "waited"]);
+    release();
+  });
+
   it("what waited on the device is sent after a reload, once", async () => {
     const server = fakeServer();
     server.tables.tasks = [task("a", { updatedAt: at(5) })];

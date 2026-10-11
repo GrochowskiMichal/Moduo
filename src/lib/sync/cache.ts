@@ -16,7 +16,7 @@
 
 import type { SyncTableName } from "./types";
 
-/** Bumped when the persisted shape changes: an older copy is ignored. */
+/** Bumped when the persisted shape changes: an older copy's rows are dropped (its waiting captures are kept). */
 export const CACHE_VERSION = 2;
 
 /** One table's rows and its delta cursor. */
@@ -36,8 +36,18 @@ export type CachedWorkspace = {
 };
 
 export interface SyncCache {
+  /** The record as stored, any version (the store keeps an older copy's outbox only). */
   read(key: string): Promise<CachedWorkspace | null>;
   write(key: string, value: CachedWorkspace): Promise<void>;
+  /**
+   * Read and write one record in one step (one IndexedDB transaction): `next`
+   * gets what's stored and returns what to store. Two tabs writing at once
+   * can't drop each other's waiting captures. Resolves to what was stored.
+   */
+  update(
+    key: string,
+    next: (stored: CachedWorkspace | null) => CachedWorkspace,
+  ): Promise<CachedWorkspace | null>;
   /** Wipe every copy (sign-out). */
   clear(): Promise<void>;
   /** Wipe the copies whose key matches (another person's, a workspace you left). */
@@ -64,6 +74,12 @@ export function memoryCache(): SyncCache & { records: Map<string, CachedWorkspac
     },
     async write(key, value) {
       records.set(key, structuredCloneSafe(value));
+    },
+    async update(key, next) {
+      const stored = records.get(key) ?? null;
+      const before = stored ? structuredCloneSafe(stored) : null;
+      records.set(key, structuredCloneSafe(next(before)));
+      return before;
     },
     async clear() {
       records.clear();
@@ -141,7 +157,7 @@ export function idbCache(factory: IDBFactory): SyncCache {
         const value = (await requestToPromise((await tx("readonly")).get(key))) as
           | CachedWorkspace
           | undefined;
-        return value && value.v === CACHE_VERSION ? value : null;
+        return value && typeof value === "object" ? value : null;
       } catch {
         return null;
       }
@@ -151,6 +167,24 @@ export function idbCache(factory: IDBFactory): SyncCache {
         await requestToPromise((await tx("readwrite")).put(value, key));
       } catch {
         // A full or blocked disk: the copy is a convenience, the server keeps the truth.
+      }
+    },
+    async update(key, next) {
+      try {
+        const store = await tx("readwrite");
+        // The get and the put share one transaction: nothing lands between them.
+        return await new Promise<CachedWorkspace | null>((resolve, reject) => {
+          const get = store.get(key);
+          get.onerror = () => reject(get.error);
+          get.onsuccess = () => {
+            const stored = (get.result as CachedWorkspace | undefined) ?? null;
+            const put = store.put(next(stored), key);
+            put.onerror = () => reject(put.error);
+            put.onsuccess = () => resolve(stored);
+          };
+        });
+      } catch {
+        return null;
       }
     },
     async clear() {
@@ -180,6 +214,7 @@ export function idbCache(factory: IDBFactory): SyncCache {
 export const noCache: SyncCache = {
   read: async () => null,
   write: async () => {},
+  update: async () => null,
   clear: async () => {},
   deleteWhere: async () => {},
 };
