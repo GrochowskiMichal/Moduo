@@ -297,6 +297,8 @@ const ROUTE_BY_TYPE: Record<string, string> = {
   email_thread: "/email",
   // Chat mentions / thread replies (module_activity entity_type chat_channel).
   chat_channel: "/chat",
+  // A project's delete notice (TV-U6) targets your Inbox, where its work landed.
+  bucket: "/tasks",
 };
 
 /**
@@ -307,6 +309,7 @@ const ROUTE_BY_TYPE: Record<string, string> = {
 const DEEP_LINK_NOUN: Record<string, string> = {
   email_thread: "email",
   chat_channel: "conversation",
+  bucket: "project",
 };
 
 export function notificationDeepLinkNoun(entityType: string): string {

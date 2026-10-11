@@ -219,6 +219,43 @@ describe("NavRow", () => {
     expect(rowOf(main("Source")).className).toContain("opacity-40");
   });
 
+  it("puts a row's hover + beside ⋯ in the same slot, which reserves room for both (TV-U6)", () => {
+    const onAdd = rs.fn();
+    render(
+      <TooltipProvider>
+        <NavRow
+          label="Marketing"
+          icon={<NavRowDot color="teal" />}
+          count={5}
+          menu={(m) => <m.Item>Rename</m.Item>}
+          onAdd={onAdd}
+          addLabel="New task in Marketing"
+        />
+        <NavRow label="Solo" icon={<NavRowDot />} count={2} onAdd={rs.fn()} />
+      </TooltipProvider>,
+    );
+    const add = screen.getByRole("button", { name: "New task in Marketing" });
+    const more = screen.getByRole("button", { name: "Marketing options" });
+    const slot = add.closest('[data-slot="nav-row-trail"]') as HTMLElement;
+    expect(slot.contains(more)).toBe(true);
+    expect(slot.className).toContain("min-w-10");
+    // + sits one action-width left of ⋯; both only fade (R6).
+    expect(add.className).toMatch(/(?:^|\s)right-5(?:\s|$)/);
+    expect(add.className).toContain("group-hover/nav:opacity-100");
+    fireEvent.click(add);
+    expect(onAdd).toHaveBeenCalledOnce();
+    // Alone, + takes ⋯'s place and the slot stays one action wide.
+    const solo = screen.getByRole("button", { name: "Add to Solo" });
+    expect(solo.className).not.toMatch(/(?:^|\s)right-5(?:\s|$)/);
+    expect((solo.closest('[data-slot="nav-row-trail"]') as HTMLElement).className).toContain(
+      "min-w-5",
+    );
+    // The dot carries the hue for the label palette.
+    expect(rowOf(add).querySelector('[data-slot="nav-row-dot"]')?.getAttribute("data-label")).toBe(
+      "teal",
+    );
+  });
+
   it("activates on click anywhere on the row through its main button", () => {
     const onSelect = rs.fn();
     render(<NavRow label="Inbox" onSelect={onSelect} />);
@@ -253,6 +290,34 @@ describe("NavSectionHeader", () => {
     expect(slot.querySelector('[data-slot="nav-row-count"]')?.textContent).toBe("14");
     fireEvent.click(add);
     expect(onAdd).toHaveBeenCalledTimes(1);
+  });
+
+  it("gives a header a ⋯ and a right-click menu beside its + (an area, TV-U6)", async () => {
+    const onRename = rs.fn();
+    render(
+      <TooltipProvider>
+        <NavSectionHeader
+          label="Clients"
+          count={5}
+          onToggle={() => {}}
+          onAdd={() => {}}
+          addLabel="New project in Clients"
+          menu={(m) => <m.Item onSelect={onRename}>Rename</m.Item>}
+        />
+      </TooltipProvider>,
+    );
+    expect(screen.getByRole("button", { name: "Clients options" })).toBeTruthy();
+    const add = screen.getByRole("button", { name: "New project in Clients" });
+    // Two actions share the slot: it reserves room for both.
+    expect(add.closest('[data-slot="nav-row-trail"]')?.className).toContain("min-w-10");
+    fireEvent.contextMenu(
+      screen
+        .getByRole("button", { name: /^Clients,/ })
+        .closest('[data-slot="nav-section-header"]') as Element,
+    );
+    await act(() => new Promise((resolve) => setTimeout(resolve, 30)));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Rename" }));
+    expect(onRename).toHaveBeenCalledTimes(1);
   });
 
   it("keeps the count visible on an expanded section (aria-expanded alone doesn't swap)", () => {

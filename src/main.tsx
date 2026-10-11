@@ -32,7 +32,7 @@ window.addEventListener("unhandledrejection", (event) => {
 // hook no-ops until signed in, and the boot landing/motion still first-paint from
 // the localStorage mirror — this keeps the mirror in sync for the next launch.
 function PreferencesSync() {
-  usePreferences();
+  usePreferences({ syncOwner: true });
   return null;
 }
 

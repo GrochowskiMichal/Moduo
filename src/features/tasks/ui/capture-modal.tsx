@@ -155,7 +155,7 @@ export function CaptureModal({
   const effRecurrence = recurrence.manual ? recurrence.value : parsed.recurrence;
 
   const bucketName = (id: string | null): string => {
-    if (!id) return "Bucket";
+    if (!id) return "Project";
     if (inbox && id === inbox.id) return "Inbox";
     return buckets.find((b) => b.id === id)?.name ?? "Inbox";
   };
@@ -164,7 +164,7 @@ export function CaptureModal({
     const title = parsed.title.trim() || raw.trim();
     if (!title) return;
     if (!bucketId) {
-      toast.error("Couldn't load your buckets yet — try reloading Tasks.");
+      toast.error("Couldn't load your projects yet — try reloading Tasks.");
       return;
     }
     onCreate(

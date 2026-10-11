@@ -16,7 +16,7 @@
 // Only `motion` has a DOM surface (the `data-motion` attribute, layered over the OS
 // prefers-reduced-motion — see tokens.css); the rest are read by their consumers.
 
-import { useCallback, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { z } from "zod";
 import { useDomainSync } from "./prefs-sync";
 
@@ -98,6 +98,18 @@ export function isNotificationEnabled(op: string, prefs: NotificationPrefs): boo
   return type === null ? true : prefs[type];
 }
 
+/** The Tasks sidebar rows Customize sidebar can hide (REPLAN 29a; the Inbox
+ *  always shows). */
+export const TASKS_SIDEBAR_HIDEABLE = ["focus", "upcoming", "mine", "all"] as const;
+export type TasksSidebarHideable = (typeof TASKS_SIDEBAR_HIDEABLE)[number];
+
+/** A person's Tasks sidebar (TV-U6): the rows they hid, and what they pinned
+ *  in each workspace (project ids, in pin order; REPLAN 29b). */
+export interface TasksSidebarPrefs {
+  hidden: TasksSidebarHideable[];
+  pinned: Record<string, string[]>;
+}
+
 export interface Preferences {
   /** Which surface opens on launch. `last` = the last visited module route. */
   landingView: LandingView;
@@ -114,6 +126,8 @@ export interface Preferences {
    *  which reads this value from `AppState` — mirrored there by the `set_confirm_before_quit`
    *  command. See src/lib/confirm-before-quit.ts + src-tauri/src/lib.rs. */
   confirmBeforeQuit: boolean;
+  /** The Tasks sidebar's Customize and Pin choices (TV-U6), following the person. */
+  tasksSidebar: TasksSidebarPrefs;
 }
 
 export const DEFAULT_PREFERENCES: Preferences = {
@@ -123,6 +137,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   motion: "system",
   notifications: { ...DEFAULT_NOTIFICATION_PREFS },
   confirmBeforeQuit: false,
+  tasksSidebar: { hidden: [], pinned: {} },
 };
 
 const LOCAL_STORAGE_KEY = "moduo.preferences";
@@ -142,6 +157,35 @@ const notificationPrefsSchema = z
     storage: z.boolean().catch(true),
   })
   .catch({ ...DEFAULT_NOTIFICATION_PREFS });
+// A bad entry drops alone; a workspace keeps at most 50 pins.
+const tasksSidebarSchema = z
+  .object({
+    hidden: z
+      .array(z.unknown())
+      .catch([])
+      .transform((list) => [
+        ...new Set(
+          list.filter((v): v is TasksSidebarHideable =>
+            (TASKS_SIDEBAR_HIDEABLE as readonly unknown[]).includes(v),
+          ),
+        ),
+      ]),
+    pinned: z
+      .record(z.string(), z.unknown())
+      .catch({})
+      .transform((byWs) => {
+        const out: Record<string, string[]> = {};
+        for (const [ws, ids] of Object.entries(byWs)) {
+          if (!Array.isArray(ids)) continue;
+          const clean = [
+            ...new Set(ids.filter((id): id is string => typeof id === "string" && id !== "")),
+          ].slice(0, 50);
+          if (clean.length > 0) out[ws] = clean;
+        }
+        return out;
+      }),
+  })
+  .catch({ hidden: [], pinned: {} });
 const preferencesSchema = z.object({
   landingView: z.enum(LANDING_VIEWS).catch(DEFAULT_PREFERENCES.landingView),
   reopenLastWorkspace: z.boolean().catch(DEFAULT_PREFERENCES.reopenLastWorkspace),
@@ -149,6 +193,7 @@ const preferencesSchema = z.object({
   motion: z.enum(MOTION_PREFS).catch(DEFAULT_PREFERENCES.motion),
   notifications: notificationPrefsSchema,
   confirmBeforeQuit: z.boolean().catch(DEFAULT_PREFERENCES.confirmBeforeQuit),
+  tasksSidebar: tasksSidebarSchema,
 });
 
 export function sanitizeNotificationPrefs(raw: unknown): NotificationPrefs {
@@ -356,6 +401,22 @@ function subscribe(listener: () => void): () => void {
   };
 }
 
+// A change made outside Settings (the Tasks sidebar's Customize and Pin)
+// reaches the cloud through the one mounted sync owner (<PreferencesSync/>),
+// never a second reconcile loop (gotchas/supabase.md, Prefs sync).
+const localPushers = new Set<(next: Preferences) => void>();
+
+/** Change preferences from anywhere (not only Settings): the shared store,
+ *  the local mirror and, through the sync owner, the cloud. */
+export function updatePreferences(patch: Partial<Preferences>): void {
+  const next = sanitizePreferences({ ...store, ...patch });
+  setStore(next);
+  writeLocalMirror(next);
+  applyMotion(next.motion);
+  const [push] = localPushers;
+  push?.(next);
+}
+
 export interface UsePreferences {
   preferences: Preferences;
   setPreferences: (patch: Partial<Preferences>) => void;
@@ -371,7 +432,10 @@ export function usePreferencesValue(): Preferences {
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
 
-export function usePreferences(): UsePreferences {
+export function usePreferences(opts?: {
+  /** The one app-wide instance that also pushes `updatePreferences` changes. */
+  syncOwner?: boolean;
+}): UsePreferences {
   const preferences = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 
   // A value won from the cloud (another device) lands in the shared store, so every
@@ -391,6 +455,16 @@ export function usePreferences(): UsePreferences {
     sanitizeCloud: (raw) => sanitizePreferences(raw) as unknown as Record<string, unknown>,
     apply: applyFromCloud,
   });
+
+  const syncOwner = opts?.syncOwner ?? false;
+  useEffect(() => {
+    if (!syncOwner) return;
+    const push = (next: Preferences) => pushLocalChange(next as unknown as Record<string, unknown>);
+    localPushers.add(push);
+    return () => {
+      localPushers.delete(push);
+    };
+  }, [syncOwner, pushLocalChange]);
 
   const update = useCallback(
     (patch: Partial<Preferences>) => {
