@@ -32,6 +32,9 @@ import type { Area, Bucket, Task } from "../model";
 import { useTasksModule } from "./use-tasks-module";
 
 const WS = "ws-projects";
+let clock = 10;
+/** A server stamp later than every earlier one. */
+const stamp = () => `2026-10-01T00:01:${String(clock++).padStart(2, "0")}.000Z`;
 const NOW = "2026-10-01T00:00:00.000Z";
 
 function bucket(id: string, name: string, extra: Partial<Bucket> = {}): Bucket {
@@ -85,7 +88,7 @@ function task(id: string, bucketId: string, extra: Partial<Task> = {}): Task {
  * and project `<p>y`, an area `<p>a`; the server applies REPLAN 78 like
  * `projects_op_delete` (open work to its assignee's Inbox, the rest trashed).
  */
-function makeServer(p: string) {
+function makeServer(p: string, opts: { delta?: boolean } = {}) {
   const ids = { inbox: `${p}inbox`, x: `${p}x`, y: `${p}y`, area: `${p}a` };
   const server = {
     buckets: [
@@ -125,15 +128,20 @@ function makeServer(p: string) {
         tasks: [],
       })),
       deleteProject: rs.fn(async ({ projectId }: { projectId: string }) => {
+        const at = stamp();
         server.tasks = server.tasks.map((t) =>
           t.bucketId !== projectId
             ? t
             : t.status === "done"
-              ? { ...t, deletedAt: NOW }
-              : { ...t, bucketId: t.assigneeId === "u1" ? ids.inbox : "annas-inbox" },
+              ? { ...t, deletedAt: at, updatedAt: at }
+              : {
+                  ...t,
+                  bucketId: t.assigneeId === "u1" ? ids.inbox : "annas-inbox",
+                  updatedAt: at,
+                },
         );
         server.buckets = server.buckets.map((b) =>
-          b.id === projectId ? { ...b, deletedAt: NOW } : b,
+          b.id === projectId ? { ...b, deletedAt: at, updatedAt: at } : b,
         );
         return { moved: 2, deleted: 1, notified: 1, restorable: true };
       }),
@@ -207,6 +215,52 @@ function makeServer(p: string) {
       updateArea: rs.fn(async () => server.areas.map((a) => ({ ...a }))),
     },
   };
+  if (opts.delta) {
+    // The shared store's own reads (TV-D11a): whole for projects, by delta for
+    // tasks. Anna's Inbox is hers: its tasks never come back in a read. The
+    // access check hangs, as a slow one would.
+    const visible = (
+      table: string,
+    ): Array<{ id: string; updatedAt?: string; deletedAt?: string | null }> =>
+      table === "tasks"
+        ? server.tasks.filter((t) => t.bucketId !== "annas-inbox")
+        : table === "buckets"
+          ? server.buckets
+          : table === "areas"
+            ? server.areas
+            : [];
+    Object.assign(runtime.tasks, {
+      syncRead: rs.fn(
+        async (input: { table: string; since?: string | null; ids?: string[]; part?: string }) => {
+          const all = visible(input.table);
+          let rows = all.filter((r) => !r.deletedAt);
+          let deleted: string[] = [];
+          if (input.ids) {
+            rows = rows.filter((r) => input.ids?.includes(r.id));
+          } else if (input.since) {
+            const since = input.since;
+            const changed = all.filter((r) => (r.updatedAt ?? "") >= since);
+            rows = changed.filter((r) => !r.deletedAt);
+            deleted = changed.filter((r) => r.deletedAt).map((r) => r.id);
+          } else if (input.table === "tasks" && input.part) {
+            const open = (r: { status?: string }) =>
+              r.status === "todo" || r.status === "in_progress";
+            rows = rows.filter((r) => open(r as { status?: string }) === (input.part === "open"));
+          }
+          const stamps = [...rows.map((r) => r.updatedAt ?? ""), ...deleted.map(() => "")]
+            .filter(Boolean)
+            .sort();
+          return {
+            rows: rows.map((r) => ({ ...r })),
+            deleted,
+            maxUpdatedAt: stamps.at(-1) ?? null,
+            truncated: null,
+          };
+        },
+      ),
+      syncIds: rs.fn(() => new Promise(() => {})),
+    });
+  }
   return { ids, server, runtime };
 }
 
@@ -358,7 +412,7 @@ describe("archiving a project (REPLAN 16, 78)", () => {
     expect(result.current.archivedTasks.map((t) => t.id)).toEqual(["a3-done"]);
   });
 
-  it("Undo after Move brings the open tasks back with the move op (subtasks ride along)", async () => {
+  it("Undo after Move brings the open tasks back with the move op", async () => {
     const { ids, runtime } = makeServer("a5-");
     const { result } = await mount(runtime);
     act(() => result.current.archiveBucket(ids.x, { kind: "move", projectId: ids.y }));
@@ -398,6 +452,38 @@ describe("archiving a project (REPLAN 16, 78)", () => {
     expect(toastMock.error).toHaveBeenCalledWith(
       "Only people with full access to this project can archive it.",
     );
+  });
+});
+
+describe("a task of an archived project", () => {
+  it("is read-only until its project is unarchived", async () => {
+    const { ids, runtime } = makeServer("a7-");
+    const { result } = await mount(runtime);
+    act(() => result.current.archiveBucket(ids.x, { kind: "keep" }));
+    await settle();
+    act(() => result.current.patchTask("a7-mine", { status: "done" }));
+    act(() => result.current.deleteTask("a7-mine"));
+    expect(toastMock.error).toHaveBeenCalledWith("Unarchive “X” to change its tasks.");
+    expect(runtime.tasks.opSetStatus).not.toHaveBeenCalled();
+  });
+});
+
+describe("a delete on a store that reads by delta (TV-D11a)", () => {
+  it("doesn't show a teammate's moved task again once the delete settles", async () => {
+    const { ids, runtime } = makeServer("g1-", { delta: true });
+    const { result } = await mount(runtime);
+    await waitFor(() =>
+      expect(result.current.tasks.map((t) => t.id).sort()).toEqual(
+        ["g1-annas", "g1-done", "g1-mine", "g1-other"].sort(),
+      ),
+    );
+    act(() => result.current.deleteBucket(ids.x));
+    // Recently deleted is read again once the delete has settled.
+    await waitFor(() => expect(runtime.tasks.listTrash).toHaveBeenCalledTimes(2));
+    await settle();
+    expect(result.current.tasks.find((t) => t.id === "g1-annas")).toBeUndefined();
+    expect(result.current.tasks.find((t) => t.id === "g1-mine")?.bucketId).toBe(ids.inbox);
+    expect(bucketIds(result.current)).toEqual([ids.y]);
   });
 });
 

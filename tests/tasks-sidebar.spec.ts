@@ -26,7 +26,7 @@ import {
 
 test.use({ locale: "en-US" });
 // A busy dev workspace re-renders slowly (see BACK): give each flow room.
-test.describe.configure({ mode: "serial", timeout: 60_000 });
+test.describe.configure({ mode: "serial", timeout: 120_000 });
 
 let dev: Session;
 let mate: Session;
@@ -118,7 +118,7 @@ const sidebar = (page: Page) => page.getByRole("navigation", { name: "Tasks" });
  * the dev server a busy workspace re-renders for seconds when its project list
  * changes (React's dev-only render tracking), so these waits are longer.
  */
-const BACK = { timeout: 15_000 };
+const BACK = { timeout: 45_000 };
 /** A sidebar row's name: its label, then ", n open" (Chromium spaces them). */
 const rowName = (label: string) => new RegExp(`^${label}(\\s*,|$)`);
 

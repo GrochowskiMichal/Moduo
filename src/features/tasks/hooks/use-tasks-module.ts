@@ -86,6 +86,7 @@ import { recurrenceOnStatusChange, skipOccurrencePatch } from "../recurrence-eng
 import {
   areaMoveAfter,
   projectDeletePlan,
+  projectDeleteSummary,
   projectDropPatch,
   projectEndPosition,
   projectOpenWork,
@@ -137,6 +138,8 @@ const NO_ROWS: never[] = [];
 /** A queued capture that wasn't created (refused, or waiting offline): no queue op, no toast. */
 const NOT_CREATED = new Error("not created");
 const STILL_SAVING = "Still saving that task — try again in a moment.";
+/** An archive whose Move didn't go through (that said why already): no archive. */
+const NOT_MOVED = new Error("not moved");
 
 /** A change that can't wait for the network (default g): said once, never queued. */
 function sayOffline(): void {
@@ -516,6 +519,24 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
   }, [runtime, workspaceId, canEdit, store]);
 
   /**
+   * A task of an archived project is read-only until it's unarchived
+   * (TV-U6): said once, and the edit doesn't start. Read from the store now,
+   * not this render, so an archive's Undo (which unarchives first) and a
+   * refused archive can put its tasks back in the same tick.
+   */
+  const archivedBlocked = useCallback(
+    (taskId: string): boolean => {
+      const now = store?.getSnapshot().bundle;
+      const task = now?.archivedTasks?.find((t) => t.id === taskId);
+      if (!task) return false;
+      const name = now?.archivedBuckets?.find((b) => b.id === task.bucketId)?.name;
+      toast.error(`Unarchive “${name ?? "its project"}” to change its tasks.`);
+      return true;
+    },
+    [store],
+  );
+
+  /**
    * Say why a write didn't go through. A lost connection (the browser may not
    * know yet) is "Offline", and the store holds further edits until it's back.
    */
@@ -581,6 +602,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         toast.error(STILL_SAVING);
         return;
       }
+      if (archivedBlocked(id)) return;
       const current = tasksRef.current.find((t) => t.id === id);
       const toTodo =
         current && optimistic.scheduledAt && optimistic.statusCategory === undefined
@@ -632,7 +654,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
           refused(write, e);
         });
     },
-    [runtime, workspaceId, canEdit, store, backlogToTodo, refused],
+    [runtime, workspaceId, canEdit, store, backlogToTodo, refused, archivedBlocked],
   );
 
   /** Fetch a task's quiet activity trail (newest first). */
@@ -769,7 +791,10 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
   const addToQueue = useCallback(
     (id: string, at: QueuePlacement = "end", onSaved?: () => void) => {
       const task = liveTasks.find((t) => t.id === id);
-      if (!task) return;
+      if (!task) {
+        archivedBlocked(id);
+        return;
+      }
       if (isTempId(id)) {
         toast.error(STILL_SAVING);
         return;
@@ -823,6 +848,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       canEdit,
       store,
       backlogToTodo,
+      archivedBlocked,
     ],
   );
 
@@ -989,7 +1015,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
   const patchTask = useCallback(
     (id: string, patch: Partial<Task>) => {
       const existing = tasksRef.current.find((t) => t.id === id);
-      if (!existing) return;
+      if (!existing || archivedBlocked(id)) return;
       // A status by category (or a legacy value: the checkbox, Won't do)
       // shows the project's status for it at once (TV-D9); the server is told
       // the category, and picks the same one (or keeps one already in it).
@@ -1171,6 +1197,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       offerMoveToTodo,
       editBlocked,
       refused,
+      archivedBlocked,
     ],
   );
 
@@ -1614,7 +1641,10 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
   const deleteTask = useCallback(
     (id: string) => {
       const existing = bundle.tasks.find((t) => t.id === id);
-      if (!existing) return;
+      if (!existing) {
+        archivedBlocked(id);
+        return;
+      }
       if (editBlocked() || !store) return;
       // Snapshot the children BEFORE the optimistic promotion — Undo re-attaches
       // them (their snapshot rows still carry parentId = id).
@@ -1672,6 +1702,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       queueFollowStatus,
       refused,
       reloadTrash,
+      archivedBlocked,
     ],
   );
 
@@ -1687,7 +1718,10 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         return;
       }
       const parent = liveTasks.find((t) => t.id === parentId);
-      if (!parent) return;
+      if (!parent) {
+        archivedBlocked(parentId);
+        return;
+      }
       // One level: a task that is itself a subtask can't get children.
       if (parent.parentId && liveTasks.some((t) => t.id === parent.parentId)) {
         toast.error("Subtasks are one level — this task is already a subtask.");
@@ -1697,7 +1731,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       const bucketId = bundle.tasks.find((t) => t.id === parentId)?.bucketId ?? parent.bucketId;
       createTask({ bucketId, title: trimmed, parentId });
     },
-    [liveTasks, bundle.tasks, createTask],
+    [liveTasks, bundle.tasks, createTask, archivedBlocked],
   );
 
   /**
@@ -1708,7 +1742,10 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
   const setTaskParent = useCallback(
     (id: string, parentId: string | null) => {
       const existing = liveTasks.find((t) => t.id === id);
-      if (!existing) return;
+      if (!existing) {
+        archivedBlocked(id);
+        return;
+      }
       const next = parentId ?? null;
       if ((existing.parentId ?? null) === next) return;
       if (next) {
@@ -1730,7 +1767,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       }
       patchTask(id, { parentId: next });
     },
-    [liveTasks, subtasksByParent, patchTask],
+    [liveTasks, subtasksByParent, patchTask, archivedBlocked],
   );
 
   /**
@@ -1755,7 +1792,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         return null;
       }
       const existing = tasksRef.current.find((t) => t.id === taskId);
-      if (!existing) return null;
+      if (!existing || archivedBlocked(taskId)) return null;
       const rt = runtime;
       const ws = workspaceId;
       const fields = editableTaskFields({
@@ -1858,7 +1895,16 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         return null;
       }
     },
-    [editBlocked, runtime, workspaceId, store, queueFollowStatus, statusesForBucket, refused],
+    [
+      editBlocked,
+      runtime,
+      workspaceId,
+      store,
+      queueFollowStatus,
+      statusesForBucket,
+      refused,
+      archivedBlocked,
+    ],
   );
 
   /**
@@ -2035,6 +2081,11 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     const prev = projectChains.current.get(id) ?? Promise.resolve();
     const next = prev.catch(() => undefined).then(op);
     projectChains.current.set(id, next);
+    // A settled chain's entry goes, unless a newer op joined it.
+    const clear = () => {
+      if (projectChains.current.get(id) === next) projectChains.current.delete(id);
+    };
+    next.then(clear, clear);
     return next;
   }, []);
 
@@ -2240,10 +2291,37 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
           for (const t of work.tops) ops.patchTask(t.id, { bucketId: id });
         }
       };
+      // Move goes first and the archive waits for it: archiving takes what's
+      // still in the project out of every queue, so a task the archive beat
+      // would lose its place in queues.
+      let movesDone: Promise<boolean> = Promise.resolve(true);
       if (openTasks.kind === "wont_do") {
         for (const t of work.open) setTaskStatus(t.id, { category: "wont_do" });
       } else if (openTasks.kind === "move") {
-        for (const t of work.tops) patchTask(t.id, { bucketId: openTasks.projectId });
+        const target = openTasks.projectId;
+        const topIds = new Set(work.tops.map((t) => t.id));
+        const steps = liveTasks.filter(
+          (t) => t.bucketId === id && !!t.parentId && topIds.has(t.parentId),
+        );
+        const moveWrite = store.begin(
+          [...work.tops, ...steps].map((t) => patchOf(t.id, { bucketId: target, sectionId: null })),
+        );
+        movesDone = Promise.all(
+          work.tops.map((t) =>
+            runtime.tasks.opUpdateTask({ workspaceId, taskId: t.id, patch: { bucketId: target } }),
+          ),
+        ).then(
+          (rows) => {
+            moveWrite.settle({ tasks: rows.flat() });
+            return true;
+          },
+          (e) => {
+            refused(moveWrite, e, "Couldn't move the open tasks.");
+            // Some may have moved before one was refused: read where they are.
+            void store.syncNow();
+            return false;
+          },
+        );
       }
       // What stays in the project leaves every queue (the server does it).
       const movedTops = new Set(openTasks.kind === "move" ? work.tops.map((t) => t.id) : []);
@@ -2265,19 +2343,25 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         { table: "buckets", patch: { id, fields: { archivedAt } } },
         ...queueRowIds.map((rowId) => ({ table: "queue", remove: rowId }) as OverlayChange),
       ]);
-      void chainProjectOp(id, () =>
-        runtime.tasks.updateProject({
+      void chainProjectOp(id, async () => {
+        if (!(await movesDone)) throw NOT_MOVED;
+        return runtime.tasks.updateProject({
           workspaceId,
           projectId: id,
           patch: { archived: true },
           fallback: { ...existing, archivedAt },
-        }),
-      )
+        });
+      })
         .then((saved) => {
           write.settle({ buckets: [saved] });
           store.forget("queue", queueRowIds);
         })
         .catch((e) => {
+          if (e === NOT_MOVED) {
+            // The move said why; the project stays where it was.
+            write.fail();
+            return;
+          }
           refused(write, e, "Couldn't archive the project.");
           revertOpenTasks();
         });
@@ -2310,7 +2394,6 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       refused,
       unarchiveBucket,
       setTaskStatus,
-      patchTask,
     ],
   );
 
@@ -2393,6 +2476,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       if (!existing || existing.isSystem) return;
       const inboxId = inbox?.id ?? null;
       const plan = projectDeletePlan(allTasks, id, { inboxId, userId });
+      const summary = projectDeleteSummary(allTasks, id, userId);
       const write = store.begin([
         { table: "buckets", remove: id },
         ...(inboxId
@@ -2408,6 +2492,16 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
           // copy then shows it, and this write's overlay goes.
           await store.syncNow().catch(() => undefined);
           write.settle();
+          // What went to a teammate's Inbox is out of your sight now, so no
+          // read reports it: it would show again under the deleted project
+          // until the next access check. A moved task you can still see
+          // already carries its new place.
+          const left = new Set(plan.gone);
+          const ghosts = store
+            .getSnapshot()
+            .bundle.tasks.filter((t) => left.has(t.id) && t.bucketId === id)
+            .map((t) => t.id);
+          if (ghosts.length > 0) store.forget("tasks", ghosts);
           void reloadTrash();
           return result;
         },
@@ -2416,8 +2510,18 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
           return null;
         },
       );
+      const others = summary.moving - summary.toYou;
       undoToast(`“${existing.name}” deleted`, {
-        description: "Its open tasks went to their assignees’ Inboxes.",
+        description:
+          others > 0
+            ? "Its open tasks went to their assignees’ Inboxes."
+            : summary.toYou > 0
+              ? summary.toYou === 1
+                ? "Its open task is in your Inbox."
+                : `Its ${summary.toYou} open tasks are in your Inbox.`
+              : summary.finished > 0
+                ? "It’s in Recently deleted with its finished tasks."
+                : undefined,
         ...(openTrashRef.current
           ? { link: { label: "Recently deleted", onClick: () => openTrashRef.current?.() } }
           : {}),

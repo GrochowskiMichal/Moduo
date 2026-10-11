@@ -29,13 +29,15 @@
 - [ ] **Do:** Move… → pick a project → Move and archive → **Expect:** the open tasks (with their subtasks) are in that project; the finished ones stay in the archived one _(both)_
 - [ ] **Do:** Archive… on a project with nothing open → **Expect:** no question, archived with Undo _(both)_
 - [ ] **Do:** the line's ⋯ → Archived projects → click one → **Expect:** its tasks, read-only, under "Archived Oct 11 · read-only until you unarchive it." with Unarchive _(both)_
-- [ ] **Do:** click one of its tasks → **Expect:** the detail panel opens it, read-only (no editing, no drops onto it) _(both; not live-verified)_
+- [ ] **Do:** click one of its tasks → **Expect:** the detail panel opens it, read-only (no editing, no drops onto it) _(both; live-verified on the dev server)_
 - [ ] **Do:** archive a project with a dated task while Home is open in another tab → **Expect:** the task leaves Home's lists at once in this tab, and in the other after its next sync _(both; not live-verified)_
 - [ ] **Do:** All → search a word from an archived project's task → **Expect:** it's found, grouped under "<project> · Archived" _(both)_
+- [ ] **Do:** tick that search hit's checkbox → **Expect:** nothing changes; "Unarchive “…” to change its tasks." _(both; hook-tested)_
 - [ ] **Do:** as a member who can only edit (not Full on) a shared project → Archive… → **Expect:** "Only people with full access to “…” can archive it." and no buttons to archive _(both; SQL-tested, dialog unit-tested)_
 
 ## Delete (REPLAN 78, AC5.5)
 - [ ] **Do:** Delete project… on a project with your open task, a teammate's open task and a finished one → **Expect:** "Its 2 open tasks go to their assignees' Inboxes (1 task to yours)." and "Its finished task goes with it to Recently deleted."; no radio _(both)_
+- [ ] **Do:** delete an empty project, then one with only your own open task → **Expect:** the toast says nothing about Inboxes for the empty one, and "Its open task is in your Inbox." for the other _(both; not live-verified)_
 - [ ] **Do:** Delete project → **Expect:** gone from the sidebar at once; your task is in your Inbox; the teammate's is in theirs and they get one quiet notice ("… · 1 task", naming the project only if they could see it); the finished task is gone _(both; notice text in the bell not live-verified)_
 - [ ] **Do:** click Undo on the toast → **Expect:** the project is back with all three tasks in place _(both)_
 - [ ] **Do:** delete it again, edit the teammate's task in their Inbox, then restore from Recently deleted → **Expect:** your task and the finished one come back; the edited one stays in the teammate's Inbox _(both; SQL-tested)_

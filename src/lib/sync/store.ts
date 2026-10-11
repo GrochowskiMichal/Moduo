@@ -76,6 +76,14 @@ export type OverlayChange =
 
 type Overlay = { op: number } & OverlayChange;
 
+/** The bundle's projects and tasks, with archived ones set apart (TV-U6). */
+type ArchivedSplit = {
+  buckets: SyncRows["buckets"][];
+  tasks: SyncRows["tasks"][];
+  archivedBuckets: SyncRows["buckets"][];
+  archivedTasks: SyncRows["tasks"][];
+};
+
 /** A write on its way: settle it with the server's rows, or fail it. */
 export type PendingWrite = {
   readonly op: number;
@@ -1641,30 +1649,57 @@ export class WorkspaceStore {
   private archivedView: {
     tasks: SyncRows["tasks"][];
     buckets: SyncRows["buckets"][];
-    split: ReturnType<typeof splitArchived>;
+    split: ArchivedSplit;
   } | null = null;
 
   /**
    * Archived projects and their tasks ride apart in the bundle (TV-U6), so
    * every surface (Home, the Calendar, counts, capture) skips them without
-   * knowing about archiving; the Tasks module joins them back. The same
-   * arrays until the rows change (readers compare by identity).
+   * knowing about archiving; the Tasks module joins them back. Each output
+   * keeps its identity while its inputs do (readers and `sameBundle` compare
+   * by identity): a task edit keeps both project lists, a project rename
+   * keeps both task lists unless the archived set changed.
    */
   private splitArchivedRows(
     tasks: SyncRows["tasks"][],
     buckets: SyncRows["buckets"][],
-  ): ReturnType<typeof splitArchived> {
+  ): ArchivedSplit {
     const view = this.archivedView;
     if (view && view.tasks === tasks && view.buckets === buckets) return view.split;
-    const next = splitArchived(buckets, tasks);
-    const prev = view?.split;
-    const split =
-      prev && sameList(prev.archivedBuckets ?? [], next.archivedBuckets ?? [])
-        ? { ...next, archivedBuckets: prev.archivedBuckets }
-        : next;
-    if (prev && sameList(prev.archivedTasks ?? [], split.archivedTasks ?? [])) {
-      split.archivedTasks = prev.archivedTasks;
+    const prev = view?.split ?? null;
+    const reuse = <T>(old: T[] | undefined, next: T[]): T[] =>
+      old && sameList(old, next) ? old : next;
+
+    let liveBuckets: SyncRows["buckets"][];
+    let archivedBuckets: SyncRows["buckets"][];
+    if (prev && view?.buckets === buckets) {
+      liveBuckets = prev.buckets;
+      archivedBuckets = prev.archivedBuckets;
+    } else {
+      const next = splitArchived(buckets, []);
+      liveBuckets = reuse(prev?.buckets, next.buckets);
+      archivedBuckets = reuse(prev?.archivedBuckets, next.archivedBuckets ?? []);
     }
+
+    let liveTasks: SyncRows["tasks"][];
+    let archivedTasks: SyncRows["tasks"][];
+    if (prev && view?.tasks === tasks && prev.archivedBuckets === archivedBuckets) {
+      liveTasks = prev.tasks;
+      archivedTasks = prev.archivedTasks;
+    } else {
+      const ids = new Set(archivedBuckets.map((b) => b.id));
+      const live = ids.size === 0 ? tasks : tasks.filter((t) => !ids.has(t.bucketId));
+      const archived = ids.size === 0 ? [] : tasks.filter((t) => ids.has(t.bucketId));
+      liveTasks = live === tasks ? tasks : reuse(prev?.tasks, live);
+      archivedTasks = reuse(prev?.archivedTasks, archived);
+    }
+
+    const split: ArchivedSplit = {
+      buckets: liveBuckets,
+      tasks: liveTasks,
+      archivedBuckets,
+      archivedTasks,
+    };
     this.archivedView = { tasks, buckets, split };
     return split;
   }
@@ -1672,10 +1707,7 @@ export class WorkspaceStore {
   private buildSnapshot(): StoreSnapshot {
     const prev = this.lastSnapshot;
     const shown = this.splitArchivedRows(this.rendered("tasks"), this.rendered("buckets"));
-    const tasks = shown.tasks;
-    const buckets = shown.buckets;
-    const archivedBuckets = shown.archivedBuckets ?? [];
-    const archivedTasks = shown.archivedTasks ?? [];
+    const { tasks, buckets, archivedBuckets, archivedTasks } = shown;
     const tags = this.rendered("tags");
     const tagLinks = this.rendered("tagLinks");
     const relations = this.rendered("relations");
