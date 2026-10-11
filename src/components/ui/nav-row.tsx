@@ -145,11 +145,14 @@ const countClass = "font-sans text-xs tabular-nums text-muted-foreground";
 function TrailingSlot({
   count,
   swaps,
+  wide = false,
   children,
 }: {
   count: number | undefined;
   /** An action shares the slot, so the count fades out for it. */
   swaps: boolean;
+  /** Two actions share it (a row's + and ⋯): the slot reserves both. */
+  wide?: boolean;
   children?: React.ReactNode;
 }) {
   const showCount = typeof count === "number" && count > 0;
@@ -160,7 +163,7 @@ function TrailingSlot({
       className={cn(
         // Clicks fall through to the row's main button, except on the action.
         "pointer-events-none relative flex h-5 shrink-0 items-center justify-end",
-        swaps && "min-w-5",
+        swaps && (wide ? "min-w-10" : "min-w-5"),
       )}
     >
       {showCount ? (
@@ -198,6 +201,13 @@ type NavRowProps = Omit<React.ComponentProps<"div">, "children" | "onSelect"> & 
   menuLabel?: string;
   /** Enables inline rename: double-click, F2, or a `kit.rename` menu item. */
   onRename?: (name: string) => void;
+  /**
+   * A hover "+" just before ⋯ (a bucket's "capture into it"). It swaps with the
+   * count the same way, and the slot reserves room for both.
+   */
+  onAdd?: () => void;
+  /** Accessible name and tooltip of "+" (default "Add to <label>"). */
+  addLabel?: string;
   /** Indent for nested rows (the notes tree). */
   level?: 0 | 1 | 2;
   /** A drag is hovering this row and would drop here. */
@@ -221,6 +231,8 @@ function NavRow({
   menu,
   menuLabel,
   onRename,
+  onAdd,
+  addLabel,
   level = 0,
   dropTarget = false,
   dragging = false,
@@ -253,6 +265,7 @@ function NavRow({
 
   const showCount = typeof count === "number" && count > 0;
   const hasMenu = !!menu;
+  const addText = addLabel ?? `Add to ${label}`;
 
   const row = (
     <div
@@ -318,7 +331,23 @@ function NavRow({
           {indicator ? (
             <span className="relative flex shrink-0 items-center">{indicator}</span>
           ) : null}
-          <TrailingSlot count={count} swaps={hasMenu}>
+          <TrailingSlot count={count} swaps={hasMenu || !!onAdd} wide={hasMenu && !!onAdd}>
+            {onAdd ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    data-slot="nav-row-add"
+                    aria-label={addText}
+                    onClick={onAdd}
+                    className={cn(slotAction, hasMenu && "right-5")}
+                  >
+                    <Plus className="size-icon-sm" aria-hidden />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>{addText}</TooltipContent>
+              </Tooltip>
+            ) : null}
             {menu ? (
               <DropdownMenu>
                 <Tooltip>
@@ -450,14 +479,19 @@ type NavSectionHeaderProps = Omit<React.ComponentProps<"div">, "children"> & {
   /** Collapsible when `onToggle` is set. */
   collapsed?: boolean;
   onToggle?: () => void;
-  /** A hover "+" in the count's slot (e.g. New bucket). */
+  /** A hover "+" in the count's slot (e.g. an area's New project). */
   onAdd?: () => void;
   addLabel?: string;
+  /** The header's actions (an area's Rename, Colour…): the ⋯ menu and the
+   *  right-click menu, like a row's. */
+  menu?: (kit: MenuKit) => React.ReactNode;
+  /** Accessible name of ⋯ (default "<label> options"). */
+  menuLabel?: string;
   /** An always-visible mark before the slot, e.g. drift hidden by a collapse. */
   indicator?: React.ReactNode;
 };
 
-/** A rail section's header (the GroupHeader type, sentence case): optional collapse and a hover "+" that swaps with the count. */
+/** A rail section's header (the GroupHeader type, sentence case): optional collapse, a hover "+" and a ⋯ menu that swap with the count. */
 function NavSectionHeader({
   label,
   count,
@@ -466,10 +500,28 @@ function NavSectionHeader({
   onToggle,
   onAdd,
   addLabel,
+  menu,
+  menuLabel,
   indicator,
   className,
   ...props
 }: NavSectionHeaderProps) {
+  const pending = useRef<(() => void) | null>(null);
+  const afterClose = (action: () => void) => () => {
+    pending.current = action;
+  };
+  const runPending = (event: Event) => {
+    const action = pending.current;
+    if (!action) return;
+    pending.current = null;
+    event.preventDefault(); // the action places focus, not the closing menu
+    action();
+  };
+  const kit = (base: typeof DROPDOWN_KIT | typeof CONTEXT_KIT): MenuKit => ({
+    ...(base as Omit<MenuKit, "afterClose" | "rename">),
+    afterClose,
+    rename: () => {},
+  });
   const showCount = typeof count === "number" && count > 0;
   const Chevron = collapsed ? ChevronRight : ChevronDown;
   const text = (
@@ -480,7 +532,7 @@ function NavSectionHeader({
       {showCount ? <span className="sr-only">, {countLabel ?? String(count)}</span> : null}
     </>
   );
-  return (
+  const header = (
     <div
       data-slot="nav-section-header"
       className={cn(
@@ -505,16 +557,16 @@ function NavSectionHeader({
         <span className="flex min-w-0 flex-1 items-center gap-1">{text}</span>
       )}
       {indicator ? <span className="relative flex shrink-0 items-center">{indicator}</span> : null}
-      <TrailingSlot count={count} swaps={!!onAdd}>
+      <TrailingSlot count={count} swaps={!!onAdd || !!menu} wide={!!onAdd && !!menu}>
         {onAdd ? (
           <Tooltip>
             <TooltipTrigger asChild>
               <button
                 type="button"
-                data-slot="nav-row-action"
+                data-slot={menu ? "nav-row-add" : "nav-row-action"}
                 aria-label={addLabel ?? `Add to ${label}`}
                 onClick={onAdd}
-                className={slotAction}
+                className={cn(slotAction, menu && "right-5")}
               >
                 <Plus className="size-icon-sm" aria-hidden />
               </button>
@@ -522,8 +574,37 @@ function NavSectionHeader({
             <TooltipContent>{addLabel ?? `Add to ${label}`}</TooltipContent>
           </Tooltip>
         ) : null}
+        {menu ? (
+          <DropdownMenu>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    data-slot="nav-row-action"
+                    aria-label={menuLabel ?? `${label} options`}
+                    className={slotAction}
+                  >
+                    <MoreHorizontal className="size-icon-sm" aria-hidden />
+                  </button>
+                </DropdownMenuTrigger>
+              </TooltipTrigger>
+              <TooltipContent>Options</TooltipContent>
+            </Tooltip>
+            <DropdownMenuContent align="end" onCloseAutoFocus={runPending}>
+              {menu(kit(DROPDOWN_KIT))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : null}
       </TrailingSlot>
     </div>
+  );
+  if (!menu) return header;
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>{header}</ContextMenuTrigger>
+      <ContextMenuContent onCloseAutoFocus={runPending}>{menu(kit(CONTEXT_KIT))}</ContextMenuContent>
+    </ContextMenu>
   );
 }
 

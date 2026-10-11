@@ -552,6 +552,9 @@ export function bucketRowToModel(raw: unknown): Bucket {
     createdAt: r.created_at,
     updatedAt: r.updated_at,
     deletedAt: r.deleted_at ?? null,
+    // TV-U6: the sidebar colour and archiving (absent before its migration).
+    color: r.color ?? null,
+    archivedAt: r.archived_at ?? null,
   };
 }
 

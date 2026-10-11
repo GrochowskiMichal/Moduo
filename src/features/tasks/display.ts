@@ -61,6 +61,8 @@ export const TASKS_DISPLAY_DEFAULTS: TasksDisplay = {
  */
 export function tasksDisplayDefaults(scope: string): TasksDisplay {
   if (scope === "mine") return { ...TASKS_DISPLAY_DEFAULTS, group: "status" };
+  // Upcoming (TV-U6's interim until TV-U15): by date, Earlier · Today · …
+  if (scope === "upcoming") return { ...TASKS_DISPLAY_DEFAULTS, group: "date", order: "due" };
   if (groupsByBucket(scope)) return { ...TASKS_DISPLAY_DEFAULTS, group: "bucket" };
   return { ...TASKS_DISPLAY_DEFAULTS };
 }

@@ -37,6 +37,11 @@ import {
 } from "../../../lib/drag-payload";
 import type { EntityRef } from "../../../lib/entity-links";
 import {
+  type TasksSidebarHideable,
+  updatePreferences,
+  usePreferencesValue,
+} from "../../../lib/preferences";
+import {
   ENTITY_OPEN_EVENT,
   markEntityOpenIntent,
   takeEntityOpenIntent,
@@ -63,7 +68,6 @@ import { createLinkWithToast } from "../../spine/ui/drop-link-toast";
 import { WorkspaceContext } from "../../workspaces/workspace-context";
 import { useAssignees } from "../assignees";
 import {
-  timeBlockByBucket as invertTimeBlocks,
   myTasksScope,
   openCount,
   resolveDefaultSelection,
@@ -78,22 +82,35 @@ import {
   type RailDropTarget,
   railCollision,
   railDropAction,
+  railSortCollision,
 } from "../dnd/rail-drop";
 import { type CaptureSeed, showsArchived, showsBacklog, statusesLetThrough } from "../filters";
 import { groupsByBucket } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
-import { isDrifted, PRIVATE_PROJECT_LABEL, type Task } from "../model";
+import { type Bucket, isDrifted, PRIVATE_PROJECT_LABEL, type Task } from "../model";
 import { showsSortedNote, sortedByLabel } from "../order";
 import { resolveTasksDeepLink, taskIdForHandle } from "../search";
+import { projectDeleteSummary, projectOpenWork } from "../sidebar";
 import { STATUS_KEY_LABELS, type StatusKey } from "../statuses";
 import { sanitizeTimelineZoom, type TimelineZoom } from "../timeline-geometry";
-import { BucketRail, parseCollapsedSections, type TasksMode } from "./bucket-rail";
+import { ArchivedProjectBanner, ArchivedProjectsView } from "./archived-projects-view";
+import {
+  ARCHIVED_SELECTION,
+  asRailProject,
+  BucketRail,
+  parseCollapsedSections,
+  type TasksMode,
+  TRASH_SELECTION,
+  UPCOMING_SELECTION,
+} from "./bucket-rail";
 import { CaptureModal } from "./capture-modal";
 import { asTaskDrag, taskDragAnnouncements, useTaskDndSensors } from "./dnd/task-dnd";
+import { ArchiveProjectDialog, DeleteBucketDialog } from "./delete-bucket-dialog";
 import { DriftTriageDialog } from "./drift-triage-dialog";
 import { ExecuteView } from "./execute-view";
 import { FrontierOfferDialog } from "./frontier-offer-dialog";
 import { type PlanHeaderControls, type PlanView, SortedOrderLine } from "./plan-view-header";
+import { RecentlyDeletedView } from "./recently-deleted-view";
 import { StatusesDialog } from "./statuses-dialog";
 import { TaskBoardView } from "./task-board-view";
 import { PrivateItemPanel, TASK_DETAIL_REFRESH_EVENT, TaskDetailPanel } from "./task-detail-panel";
@@ -114,6 +131,8 @@ type Props = {
 
 // The selection→URL mirror writes only at rest (see the mirror effect).
 const URL_MIRROR_DEBOUNCE_MS = 250;
+
+const EMPTY_IDS: readonly string[] = [];
 
 // Per-workspace UI state (selection / mode / zoom) persisted locally — these
 // are view preferences, not synced data. Layout, grouping and filters are
@@ -160,18 +179,52 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   );
   // Which right-panel view is showing (views: features/tasks/panel-views.ts).
   const [panelView, setPanelView] = useState("details");
-  // Rail sections the user collapsed stay collapsed (tasks-v2 §11).
-  const [collapsedSections, setCollapsedSections] = useState<ReadonlySet<string>>(() =>
-    parseCollapsedSections(readLS(workspaceId, "collapsedSections")),
+  // Sidebar groups you collapsed (Pinned and each area) stay collapsed,
+  // remembered per person on this device (REPLAN 29e; Customize and Pin
+  // follow the person everywhere, in preferences).
+  const collapseKey = `collapsedGroups:${api.currentUserId ?? "anon"}`;
+  const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<string>>(() =>
+    parseCollapsedSections(readLS(workspaceId, collapseKey)),
   );
-  const toggleSection = useCallback((name: string) => {
-    setCollapsedSections((prev) => {
+  const toggleGroup = useCallback((key: string) => {
+    setCollapsedGroups((prev) => {
       const next = new Set(prev);
-      if (next.has(name)) next.delete(name);
-      else next.add(name);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
   }, []);
+  const sidebarPrefs = usePreferencesValue().tasksSidebar;
+  const hiddenRows = useMemo(() => new Set(sidebarPrefs.hidden), [sidebarPrefs.hidden]);
+  const pinnedIds = sidebarPrefs.pinned[workspaceId] ?? EMPTY_IDS;
+  const toggleHiddenRow = useCallback(
+    (row: TasksSidebarHideable) => {
+      const hidden = sidebarPrefs.hidden.includes(row)
+        ? sidebarPrefs.hidden.filter((r) => r !== row)
+        : [...sidebarPrefs.hidden, row];
+      updatePreferences({ tasksSidebar: { ...sidebarPrefs, hidden } });
+    },
+    [sidebarPrefs],
+  );
+  const togglePin = useCallback(
+    (projectId: string) => {
+      const mine = sidebarPrefs.pinned[workspaceId] ?? [];
+      const next = mine.includes(projectId)
+        ? mine.filter((id) => id !== projectId)
+        : [...mine, projectId];
+      updatePreferences({
+        tasksSidebar: { ...sidebarPrefs, pinned: { ...sidebarPrefs.pinned, [workspaceId]: next } },
+      });
+    },
+    [sidebarPrefs, workspaceId],
+  );
+  // A project's Delete… and Archive… confirms (REPLAN 78), from the sidebar or
+  // Archived projects. The project is kept while the dialog closes.
+  const [projectDialog, setProjectDialog] = useState<{
+    kind: "delete" | "archive";
+    bucket: Bucket;
+    open: boolean;
+  } | null>(null);
   const [captureOpen, setCaptureOpen] = useState(false);
   const [triageBucketId, setTriageBucketId] = useState<string | null>(null);
   // Statuses (TV-D9): a project's (its ⋯, or "+ Add status" on its board), or
@@ -260,24 +313,22 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   useEffect(() => writeLS(workspaceId, "mode", mode), [workspaceId, mode]);
   useEffect(() => writeLS(workspaceId, "timelineZoom", timelineZoom), [workspaceId, timelineZoom]);
   useEffect(
-    () => writeLS(workspaceId, "collapsedSections", JSON.stringify([...collapsedSections])),
-    [workspaceId, collapsedSections],
+    () => writeLS(workspaceId, collapseKey, JSON.stringify([...collapsedGroups])),
+    [workspaceId, collapseKey, collapsedGroups],
   );
 
-  // Remember the last concrete bucket scope (never "all" / "mine" / "today") so
-  // the next open can land back on it (spec §9.2).
+  // Remember where you were, so the next open lands back on it (REPLAN 30);
+  // Archived projects and Recently deleted aren't places to reopen.
   useEffect(() => {
-    if (selection === "all" || selection === "mine" || selection === "today") return;
+    if (selection === ARCHIVED_SELECTION || selection === TRASH_SELECTION) return;
+    if (api.archivedBuckets.some((b) => b.id === selection)) return;
     writeLS(workspaceId, "lastBucket", selection);
-  }, [workspaceId, selection]);
-
-  // Time-blocks are workspace data, loaded with the bundle (api.timeBlocks).
-  const timeBlocks = api.timeBlocks;
+  }, [workspaceId, selection, api.archivedBuckets]);
 
   const inboxId = inbox?.id ?? null;
 
-  // Default-view resolution (spec §9), run once per workspace after the bundle
-  // loads: time-block bucket → last-opened bucket → Inbox. Never the full list.
+  // Where Tasks opens, run once per workspace after the bundle loads: where
+  // you left it, else the Inbox (REPLAN 30; "Open at" is retired).
   const resolvedForRef = useRef<string | null>(null);
   useEffect(() => {
     if (api.loading) return;
@@ -294,13 +345,12 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     const bucketIds = [inboxId, ...buckets.map((b) => b.id)].filter(Boolean) as string[];
     setSelection(
       resolveDefaultSelection({
-        timeBlocks,
         lastBucket: readLS(workspaceId, "lastBucket"),
         bucketIds,
         inboxId,
       }),
     );
-  }, [api.loading, workspaceId, inboxId, buckets, timeBlocks, inboundPending]);
+  }, [api.loading, workspaceId, inboxId, buckets, inboundPending]);
 
   // "My tasks" is only in the rail of workspaces with two or more members
   // (tasks-v2 §1): with fewer, every task is yours, so All says the same.
@@ -312,26 +362,46 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
 
   // Keep selection valid; "inbox" resolves against the seeded Inbox bucket.
   useEffect(() => {
-    if (selection === "all" || selection === "inbox" || selection === "today") return;
+    if (
+      selection === "all" ||
+      selection === "inbox" ||
+      selection === "today" ||
+      selection === UPCOMING_SELECTION ||
+      selection === ARCHIVED_SELECTION ||
+      selection === TRASH_SELECTION
+    )
+      return;
     if (selection === "mine") {
       // Members load with the workspace; wait for them before ruling.
       if (!showMyTasks && assignees.length > 0) setSelection("inbox");
       return;
     }
     if (inboxId && selection === inboxId) return;
+    // An archived project opens read-only from Archived projects (TV-U6).
+    if (api.archivedBuckets.some((b) => b.id === selection)) return;
     if (!buckets.some((b) => b.id === selection)) setSelection("inbox");
-  }, [selection, buckets, inboxId, showMyTasks, assignees.length]);
+  }, [selection, buckets, inboxId, showMyTasks, assignees.length, api.archivedBuckets]);
+  /** The archived project open now (read-only), if any. */
+  const archivedProject = useMemo(
+    () => api.archivedBuckets.find((b) => b.id === selection) ?? null,
+    [api.archivedBuckets, selection],
+  );
 
   const isAll = groupsByBucket(selection);
 
   // A task can sit in a project you can't see (it was assigned to you): that
   // project reads "Private project", never "Inbox" (TV-P0, AC1.10).
+  // An archived project's tasks show only when you open it or search, and
+  // its name says so (REPLAN 78: search finds them, labelled "Archived").
   const bucketNameById = useCallback(
     (id: string) => {
       if (inbox && id === inbox.id) return "Inbox";
-      return buckets.find((b) => b.id === id)?.name ?? PRIVATE_PROJECT_LABEL;
+      const live = buckets.find((b) => b.id === id);
+      if (live) return live.name;
+      const archived = api.archivedBuckets.find((b) => b.id === id);
+      return archived ? `${archived.name} · Archived` : PRIVATE_PROJECT_LABEL;
     },
-    [buckets, inbox],
+    [buckets, inbox, api.archivedBuckets],
   );
 
   // Won't do (archived) tasks leave every scope, except the one you're looking
@@ -383,8 +453,23 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
 
   const scopeTasksAll = useMemo(() => {
     if (selection === "today") return api.queuedTasks;
+    if (selection === ARCHIVED_SELECTION || selection === TRASH_SELECTION) return [];
     const live = (t: Task) => t.status !== "archived" || withArchived || t.id === keptArchivedId;
     if (selection === "all") return tasks.filter(live);
+    if (selection === UPCOMING_SELECTION) {
+      // Until TV-U15's Upcoming: your dated tasks and unassigned ones, by date
+      // (spec §8). Backlog and finished ones sit out.
+      return tasks.filter(
+        (t) =>
+          (t.dueDate || t.scheduledAt) &&
+          (t.assigneeId === null || t.assigneeId === currentUserId) &&
+          !isClosedTask(t) &&
+          !isBacklogTask(t),
+      );
+    }
+    if (archivedProject) {
+      return api.archivedTasks.filter((t) => t.bucketId === archivedProject.id && live(t));
+    }
     if (selection === "mine") {
       if (!withArchived && !withBacklog && !keptArchivedId)
         return myTasksScope(tasks, currentUserId);
@@ -411,7 +496,14 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     withArchived,
     withBacklog,
     selectedTaskId,
+    archivedProject,
+    api.archivedTasks,
   ]);
+  // Search in All also finds archived projects' tasks, labelled (REPLAN 78).
+  const archivedSearchTasks = useMemo(
+    () => (selection === "all" ? api.archivedTasks.filter((t) => t.status !== "archived") : []),
+    [selection, api.archivedTasks],
+  );
 
   // Filters and search narrow the center list/board/timeline (rail counts
   // stay whole).
@@ -429,6 +521,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     // listed past this scope's filters and search while it's selected; a link
     // never clears saved filters (TV-U2).
     keepTaskId: linkedTaskId ?? keptArchivedId,
+    searchExtra: archivedSearchTasks,
   });
   const scopeTasks = filtering.tasks;
   // What New pre-fills: the filters you can see (none in Focus), and never
@@ -451,17 +544,32 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       : selection === "mine"
         ? "My tasks"
         : selection === "today"
-          ? "Queue"
-          : selection === "inbox"
-            ? "Inbox"
-            : bucketNameById(selection);
+          ? "Focus"
+          : selection === UPCOMING_SELECTION
+            ? "Upcoming"
+            : selection === "inbox"
+              ? "Inbox"
+              : archivedProject
+                ? archivedProject.name
+                : bucketNameById(selection);
 
   // The Queue is one ordered line-up, so its List view is never grouped.
   const effectiveGroupBy = selection === "today" ? "none" : tasksDisplay.display.group;
 
-  // Where a captured task lands: the selected bucket, else Inbox.
+  // Where a captured task lands: the selected project (or the one whose "+"
+  // was clicked), else the Inbox.
+  const [captureInto, setCaptureInto] = useState<string | null>(null);
   const captureBucketId =
-    isAll || selection === "today" ? inboxId : selection === "inbox" ? inboxId : selection;
+    captureInto ??
+    (isAll ||
+    selection === "today" ||
+    selection === "inbox" ||
+    selection === UPCOMING_SELECTION ||
+    selection === ARCHIVED_SELECTION ||
+    selection === TRASH_SELECTION ||
+    archivedProject
+      ? inboxId
+      : selection);
   // New in Focus or the Queue lands in Up next (TV-P0, AC1.9): created and
   // queued at the end of my line-up. The top of Up next is TV-U14's (call 90).
   const captureQueues = mode === "execute" || selection === "today";
@@ -472,8 +580,6 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     () => (showMyTasks ? openCount(myTasksScope(tasks, currentUserId)) : 0),
     [showMyTasks, tasks, currentUserId],
   );
-
-  const timeBlocksByBucket = useMemo(() => invertTimeBlocks(timeBlocks), [timeBlocks]);
 
   // Drifted tasks for the bucket currently being triaged (recomputed live so the
   // dialog empties as the user triages).
@@ -613,6 +719,32 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     [canEdit, taskById, railCtx, api, bucketNameById, guardedToggleQueue],
   );
 
+  // A project's Archive… asks first only when it still has open work
+  // (REPLAN 78); otherwise it archives at once, with Undo.
+  const requestArchive = useCallback(
+    (bucket: Bucket) => {
+      if (projectOpenWork(api.tasks, bucket.id).open.length === 0) {
+        api.archiveBucket(bucket.id, { kind: "keep" });
+        return;
+      }
+      setProjectDialog({ kind: "archive", bucket, open: true });
+    },
+    [api],
+  );
+  const checkProjectAccess = useCallback(
+    async (projectId: string) =>
+      runtime ? (await runtime.tasks.projectAccess({ projectId })).canManage : true,
+    [runtime],
+  );
+  // The delete toast's "Recently deleted" link (REPLAN 98).
+  useEffect(() => {
+    api.openTrashRef.current = () => setSelection(TRASH_SELECTION);
+    return () => {
+      api.openTrashRef.current = null;
+    };
+  }, [api.openTrashRef]);
+  const trashCount = (api.trash?.buckets.length ?? 0) + (api.trash?.tasks.length ?? 0);
+
   const left = (
     <BucketRail
       mode={mode}
@@ -620,17 +752,31 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       selection={selection}
       onSelect={setSelection}
       buckets={buckets}
+      areas={api.areas}
       inbox={inbox}
       openCountByBucket={api.openTaskCountByBucket}
-      taskCountByBucket={api.taskCountByBucket}
       driftCountByBucket={api.driftCountByBucket}
       totalOpenCount={totalOpenCount}
       queueCount={api.queueCount}
       myTasksCount={showMyTasks ? myOpenCount : null}
       canEdit={canEdit}
-      onCreateBucket={api.createBucket}
+      hidden={hiddenRows}
+      onToggleHidden={toggleHiddenRow}
+      pinned={pinnedIds}
+      onTogglePin={togglePin}
+      collapsed={collapsedGroups}
+      onToggleCollapsed={toggleGroup}
+      onCreateBucket={(name, areaId) => api.createBucket(name, { areaId })}
       onRenameBucket={api.renameBucket}
-      onDeleteBucket={api.deleteBucket}
+      onRequestDelete={(bucket) => setProjectDialog({ kind: "delete", bucket, open: true })}
+      onRequestArchive={requestArchive}
+      onSetBucketColor={api.setBucketColor}
+      onMoveBucket={api.moveBucket}
+      onMoveBucketToArea={api.moveBucketToArea}
+      onCaptureInto={(id) => {
+        setCaptureInto(id);
+        setCaptureOpen(true);
+      }}
       onTriageBucket={(id) => {
         triageFromRef.current = id;
         setTriageBucketId(id);
@@ -639,11 +785,13 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       onEditDefaultStatuses={
         canEdit && canManageWorkspace ? () => setStatusesEditor({ projectId: null }) : undefined
       }
-      timeBlockByBucket={timeBlocksByBucket}
-      onSetTimeBlock={api.setTimeBlock}
-      onSetBucketGroup={api.setBucketGroup}
-      collapsedSections={collapsedSections}
-      onToggleSection={toggleSection}
+      onCreateArea={api.createArea}
+      onRenameArea={api.renameArea}
+      onSetAreaColor={api.setAreaColor}
+      onMoveArea={api.moveArea}
+      onDeleteArea={api.deleteArea}
+      archivedCount={api.archivedBuckets.length}
+      trashCount={trashCount}
       navRef={railNavRef}
       dropAccepts={railAccepts}
     />
@@ -830,7 +978,8 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     buckets,
     inbox,
     bucketNameById,
-    canEdit,
+    // An archived project is read-only until it's unarchived (TV-U6).
+    canEdit: canEdit && !archivedProject,
     onRequestCapture: openCapture,
     selectedTaskId,
     onSelectTask: setSelectedTaskId,
@@ -843,8 +992,29 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   const displayProps = tasksDisplay.viewProps;
 
   // Execute mode is enclosed in the center panel (rails stay visible).
+  // Archived projects and Recently deleted open from the sidebar's ⋯ (98).
   const body =
-    mode === "execute" ? (
+    mode === "plan" && selection === TRASH_SELECTION ? (
+      <RecentlyDeletedView
+        trash={api.trash}
+        bucketName={(id) => {
+          const name = bucketNameById(id);
+          return name === PRIVATE_PROJECT_LABEL ? null : name;
+        }}
+        canEdit={canEdit}
+        onRestore={(target, label) => void api.restoreFromTrash(target, { label })}
+        onDeleteForever={api.deleteForever}
+      />
+    ) : mode === "plan" && selection === ARCHIVED_SELECTION ? (
+      <ArchivedProjectsView
+        projects={api.archivedBuckets}
+        openCountByProject={(id) => projectOpenWork(api.archivedTasks, id).open.length}
+        canEdit={canEdit}
+        onOpen={setSelection}
+        onUnarchive={(id) => void api.unarchiveBucket(id)}
+        onDelete={(bucket) => setProjectDialog({ kind: "delete", bucket, open: true })}
+      />
+    ) : mode === "execute" ? (
       <ExecuteView
         workspaceId={workspaceId}
         queuedTasks={api.queuedTasks}
@@ -915,6 +1085,13 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
           </Button>
         </div>
       ) : null}
+      {archivedProject && mode === "plan" ? (
+        <ArchivedProjectBanner
+          project={archivedProject}
+          canEdit={canEdit}
+          onUnarchive={() => void api.unarchiveBucket(archivedProject.id)}
+        />
+      ) : null}
       <div className="min-h-0 flex-1">{body}</div>
     </div>
   );
@@ -949,6 +1126,8 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   // List has no droppables: it resolves reorder/nest/group from the raw
   // pointer itself (dnd/drop-mode.ts), so it finds nothing here.
   const appCollision = useCallback<CollisionDetection>((args) => {
+    // A sidebar project being dragged sorts only among the project rows (TV-U6).
+    if (asRailProject(args.active.data.current)) return railSortCollision(args);
     const linkContainers = args.droppableContainers.filter((c) => String(c.id).startsWith("link:"));
     if (linkContainers.length > 0) {
       const hubHits = pointerWithin({ ...args, droppableContainers: linkContainers });
@@ -1197,7 +1376,10 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       </DndContext>
       <CaptureModal
         open={captureOpen}
-        onOpenChange={setCaptureOpen}
+        onOpenChange={(open) => {
+          setCaptureOpen(open);
+          if (!open) setCaptureInto(null);
+        }}
         buckets={buckets}
         inbox={inbox}
         defaultBucketId={captureBucketId}
@@ -1225,6 +1407,45 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
         onUpdate={api.updateStatus}
         onDelete={api.deleteStatus}
         onClose={() => setStatusesEditor(null)}
+      />
+      <DeleteBucketDialog
+        bucket={projectDialog?.kind === "delete" ? projectDialog.bucket : null}
+        open={projectDialog?.kind === "delete" && projectDialog.open}
+        summary={
+          projectDialog
+            ? projectDeleteSummary(
+                [...api.tasks, ...api.archivedTasks],
+                projectDialog.bucket.id,
+                api.currentUserId,
+              )
+            : { moving: 0, toYou: 0, finished: 0 }
+        }
+        checkAccess={checkProjectAccess}
+        onConfirm={(bucket) => {
+          api.deleteBucket(bucket.id);
+          if (selection === bucket.id) setSelection("inbox");
+        }}
+        onClose={() => setProjectDialog((prev) => (prev ? { ...prev, open: false } : prev))}
+        onCloseAutoFocus={(event) =>
+          restoreNavFocus(event, railNavRef.current, projectDialog?.bucket.id ?? null)
+        }
+      />
+      <ArchiveProjectDialog
+        bucket={projectDialog?.kind === "archive" ? projectDialog.bucket : null}
+        open={projectDialog?.kind === "archive" && projectDialog.open}
+        openCount={
+          projectDialog ? projectOpenWork(api.tasks, projectDialog.bucket.id).open.length : 0
+        }
+        projects={buckets}
+        checkAccess={checkProjectAccess}
+        onConfirm={(bucket, openTasks) => {
+          api.archiveBucket(bucket.id, openTasks);
+          if (selection === bucket.id) setSelection("inbox");
+        }}
+        onClose={() => setProjectDialog((prev) => (prev ? { ...prev, open: false } : prev))}
+        onCloseAutoFocus={(event) =>
+          restoreNavFocus(event, railNavRef.current, projectDialog?.bucket.id ?? null)
+        }
       />
       <DriftTriageDialog
         open={triageBucketId !== null}

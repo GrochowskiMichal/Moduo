@@ -78,6 +78,11 @@ function clampLimit(args: Row, fallback: number, max: number): number {
   return Math.min(Math.floor(v), max);
 }
 
+/** Buckets archived in the app (TV-U6): they and their tasks stay out of every tool. */
+function archivedBucketIds(buckets: Row[]): Set<string> {
+  return new Set(buckets.filter((b) => b.archived_at && !b.is_system).map((b) => b.id));
+}
+
 async function rows(query: PromiseLike<{ data: Row[] | null; error: { message: string } | null }>): Promise<Row[]> {
   const { data, error } = await query;
   if (error) throw new Error(error.message);
@@ -90,7 +95,7 @@ async function rows(query: PromiseLike<{ data: Row[] | null; error: { message: s
 async function loadWorkspace(ctx: ToolContext) {
   const ws = ctx.key.workspaceId;
   const visible = await visibleIds(ctx, "task");
-  const [allTasks, relations, tags, tagLinks, members, queueRows, taskKey] = await Promise.all([
+  const [allTasks, relations, tags, tagLinks, members, queueRows, taskKey, bucketRows] = await Promise.all([
     readAllPages<Row>((from, to) =>
       ctx.db.from("tasks").select("*").eq("workspace_id", ws).is("deleted_at", null)
         .order("id").range(from, to)),
@@ -103,8 +108,12 @@ async function loadWorkspace(ctx: ToolContext) {
     workspaceMembers(ctx),
     myQueueRows(ctx),
     workspaceTaskKey(ctx),
+    // select("*"): a database without TV-U6's archived_at still answers.
+    rows(ctx.db.from("buckets").select("*").eq("workspace_id", ws).is("deleted_at", null)),
   ]);
-  const tasks = allTasks.filter((t) => visible.has(t.id));
+  // TV-U6: an archived bucket's tasks are hidden everywhere, agents included.
+  const archived = archivedBucketIds(bucketRows);
+  const tasks = allTasks.filter((t) => visible.has(t.id) && !archived.has(t.bucket_id));
   // TV-D2: the key creator's own queue, in order (live, visible tasks only).
   const queue = queueTaskIds(queueRows as { id: string; task_id: string; position: string }[],
     new Set(tasks.map((t) => t.id)));
@@ -251,22 +260,25 @@ export const tasksConnectorModule: ConnectorModule = {
     {
       name: "tasks_list_buckets",
       description:
-        "The workspace's buckets (exclusive task categories; the reserved Inbox is is_system). Optional group labels form rail sections.",
+        "The workspace's buckets (exclusive task categories; the reserved Inbox is is_system). Optional group labels form rail sections; color is the rail dot's label hue. Archived buckets (and their tasks) are left out of every tool.",
       access: "view",
       inputSchema: { type: "object", properties: {} },
       handler: async (_args, ctx) => {
+        // select("*"): a database without TV-U6's columns still answers.
         const buckets = await rows(
           ctx.db.from("buckets")
-            .select("id, name, is_system, group_label, position")
+            .select("*")
             .eq("workspace_id", ctx.key.workspaceId).is("deleted_at", null)
             .order("position"),
         );
         const visible = await visibleIds(ctx, "bucket");
-        return buckets.filter((b) => visible.has(b.id)).map((b) => ({
+        const archived = archivedBucketIds(buckets);
+        return buckets.filter((b) => visible.has(b.id) && !archived.has(b.id)).map((b) => ({
           id: b.id,
           name: b.name,
           is_system: b.is_system,
           ...(b.group_label ? { group: b.group_label } : {}),
+          ...(b.color ? { color: b.color } : {}),
         }));
       },
     },

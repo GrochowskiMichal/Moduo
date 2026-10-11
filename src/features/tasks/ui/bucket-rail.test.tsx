@@ -2,14 +2,24 @@
 // rows only, drift as a mark outside the slot, remembered section collapse, and
 // focus handed back to the rail when the delete confirm closes (it used to
 // land on the page body: the dialog has no trigger to return to).
+// TV-U6 (U6-1–4) — colour dots and the Colour menu, the hover "+" that
+// captures into a bucket, Archive and the Archived section, the delete
+// choice, Recently deleted, and sortable rows inside the page's DndContext.
 
+import { DndContext } from "@dnd-kit/core";
 import { afterEach, beforeAll, describe, expect, it, rs } from "@rstest/core";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 
 import { TooltipProvider } from "../../../components/ui/tooltip";
 import type { Bucket } from "../model";
-import { BucketRail, parseCollapsedSections } from "./bucket-rail";
+import {
+  asRailBucket,
+  BucketRail,
+  parseCollapsedSections,
+  RAIL_BUCKET_PREFIX,
+  TRASH_SELECTION,
+} from "./bucket-rail";
 
 beforeAll(() => {
   globalThis.ResizeObserver ??= class {
@@ -42,7 +52,7 @@ function bucket(id: string, name: string, extra: Partial<Bucket> = {}): Bucket {
 
 const INBOX = bucket("inbox-id", "Inbox", { isSystem: true });
 const START = [
-  bucket("mkt", "Marketing"),
+  bucket("mkt", "Marketing", { color: "teal" }),
   bucket("op", "OP"),
   bucket("acme", "Acme", { group: "Clients" }),
   bucket("globex", "Globex", { group: "Clients" }),
@@ -58,67 +68,107 @@ function renderRail({
   drift = new Map<string, number>(),
   collapsed = new Set<string>(),
   myTasks = null,
+  archived = [] as Bucket[],
+  archivedOpen = false,
+  trashCount = 0,
+  dnd = false,
 }: {
   canEdit?: boolean;
   selection?: string;
   drift?: Map<string, number>;
   collapsed?: Set<string>;
   myTasks?: number | null;
+  archived?: Bucket[];
+  archivedOpen?: boolean;
+  trashCount?: number;
+  /** Inside a DndContext, with sortable rows. */
+  dnd?: boolean;
 } = {}) {
   const onDeleteBucket = rs.fn();
   const onTriageBucket = rs.fn();
   const onToggleSection = rs.fn();
+  const onArchiveBucket = rs.fn();
+  const onUnarchiveBucket = rs.fn();
+  const onSetBucketColor = rs.fn();
+  const onCaptureInto = rs.fn();
+  const onToggleArchived = rs.fn();
   function Harness() {
     const [buckets, setBuckets] = useState(START);
     const [selection, setSelection] = useState(initialSelection);
     const ids = new Set(buckets.map((b) => b.id));
     // The page's "keep selection valid" effect, inline.
     const current =
-      ["all", "today", "mine", "inbox"].includes(selection) || ids.has(selection)
+      ["all", "today", "mine", "inbox", TRASH_SELECTION].includes(selection) ||
+      ids.has(selection) ||
+      archived.some((b) => b.id === selection)
         ? selection
         : "inbox";
-    return (
-      <TooltipProvider>
-        <BucketRail
-          mode="plan"
-          onModeChange={() => {}}
-          selection={current}
-          onSelect={setSelection}
-          buckets={buckets}
-          inbox={INBOX}
-          openCountByBucket={
-            new Map([
-              ["mkt", 5],
-              ["op", 0],
-              ["acme", 2],
-              ["globex", 3],
-              ["inbox-id", 4],
-            ])
-          }
-          taskCountByBucket={new Map([["mkt", 5]])}
-          driftCountByBucket={drift}
-          totalOpenCount={14}
-          queueCount={2}
-          myTasksCount={myTasks}
-          canEdit={canEdit}
-          onCreateBucket={() => {}}
-          onRenameBucket={() => {}}
-          onDeleteBucket={(id) => {
-            onDeleteBucket(id);
-            setBuckets((prev) => prev.filter((b) => b.id !== id));
-          }}
-          onTriageBucket={onTriageBucket}
-          timeBlockByBucket={new Map()}
-          onSetTimeBlock={() => {}}
-          onSetBucketGroup={() => {}}
-          collapsedSections={collapsed}
-          onToggleSection={onToggleSection}
-        />
-      </TooltipProvider>
+    const rail = (
+      <BucketRail
+        mode="plan"
+        onModeChange={() => {}}
+        selection={current}
+        onSelect={setSelection}
+        buckets={buckets}
+        inbox={INBOX}
+        archivedBuckets={archived}
+        trashCount={trashCount}
+        openCountByBucket={
+          new Map([
+            ["mkt", 5],
+            ["op", 0],
+            ["acme", 2],
+            ["globex", 3],
+            ["inbox-id", 4],
+          ])
+        }
+        taskCountByBucket={new Map([["mkt", 5]])}
+        driftCountByBucket={drift}
+        totalOpenCount={14}
+        queueCount={2}
+        myTasksCount={myTasks}
+        canEdit={canEdit}
+        onCreateBucket={() => {}}
+        onRenameBucket={() => {}}
+        onDeleteBucket={(id, withTasks) => {
+          onDeleteBucket(id, withTasks);
+          setBuckets((prev) => prev.filter((b) => b.id !== id));
+        }}
+        onArchiveBucket={onArchiveBucket}
+        onUnarchiveBucket={onUnarchiveBucket}
+        onSetBucketColor={onSetBucketColor}
+        onMoveBucket={dnd ? () => {} : undefined}
+        onCaptureInto={onCaptureInto}
+        onTriageBucket={onTriageBucket}
+        timeBlockByBucket={new Map()}
+        onSetTimeBlock={() => {}}
+        onSetBucketGroup={() => {}}
+        collapsedSections={collapsed}
+        onToggleSection={onToggleSection}
+        archivedOpen={archivedOpen}
+        onToggleArchived={onToggleArchived}
+      />
     );
+    return <TooltipProvider>{dnd ? <DndContext>{rail}</DndContext> : rail}</TooltipProvider>;
   }
   render(<Harness />);
-  return { onDeleteBucket, onTriageBucket, onToggleSection };
+  return {
+    onDeleteBucket,
+    onTriageBucket,
+    onToggleSection,
+    onArchiveBucket,
+    onUnarchiveBucket,
+    onSetBucketColor,
+    onCaptureInto,
+    onToggleArchived,
+  };
+}
+
+async function openMenu(name: string) {
+  fireEvent.contextMenu(
+    main(new RegExp(`^${name}(,|$)`)).closest('[data-slot="nav-row"]') as Element,
+  );
+  await settle();
 }
 
 async function deleteFromMenu(name: string) {
@@ -163,7 +213,7 @@ describe("BucketRail on NavRow", () => {
     await deleteFromMenu("Marketing");
     fireEvent.click(screen.getByRole("button", { name: "Delete bucket" }));
     await settle();
-    expect(onDeleteBucket).toHaveBeenCalledWith("mkt");
+    expect(onDeleteBucket).toHaveBeenCalledWith("mkt", false);
     expect(screen.queryByRole("button", { name: /^Marketing,/ })).toBeNull();
     // The deleted bucket was current, so the scope fell back to Inbox.
     expect(document.activeElement).toBe(main(/^Inbox,/));
@@ -236,6 +286,119 @@ describe("BucketRail: Queue and My tasks (TV-D4)", () => {
     renderRail({ myTasks: 3 });
     fireEvent.click(main(/^My tasks, 3 open$/));
     expect(main(/^My tasks, 3 open$/).getAttribute("aria-current")).toBe("page");
+  });
+});
+
+describe("BucketRail: colours, archive, delete, Recently deleted (TV-U6)", () => {
+  it("shows each bucket's colour dot, neutral when it has none", () => {
+    renderRail();
+    const dot = (name: RegExp) =>
+      main(name).querySelector('[data-slot="nav-row-dot"]')?.getAttribute("data-label");
+    expect(dot(/^Marketing,/)).toBe("teal");
+    expect(dot(/^OP$/)).toBe("gray");
+  });
+
+  it("lists the spec's menu: Rename · Colour · Open at · Section · Share · Archive · Delete…", async () => {
+    renderRail();
+    await openMenu("Marketing");
+    expect(screen.getAllByRole("menuitem").map((el) => el.textContent?.trim())).toEqual([
+      "Rename",
+      "Colour",
+      "Open at",
+      "Section",
+      "Share",
+      "Archive",
+      "Delete bucket…",
+    ]);
+  });
+
+  it("picks a colour from the Colour menu", async () => {
+    const { onSetBucketColor } = renderRail();
+    await openMenu("Marketing");
+    fireEvent.pointerMove(screen.getByRole("menuitem", { name: "Colour" }));
+    fireEvent.keyDown(screen.getByRole("menuitem", { name: "Colour" }), { key: "ArrowRight" });
+    await settle();
+    const teal = screen.getByRole("menuitemradio", { name: "Teal" });
+    expect(teal.getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByRole("menuitemradio", { name: "Neutral" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Violet" }));
+    expect(onSetBucketColor).toHaveBeenCalledWith("mkt", "violet");
+  });
+
+  it("archives from the menu", async () => {
+    const { onArchiveBucket } = renderRail();
+    await openMenu("Marketing");
+    fireEvent.click(screen.getByRole("menuitem", { name: "Archive" }));
+    expect(onArchiveBucket).toHaveBeenCalledWith("mkt");
+  });
+
+  it("captures into a bucket from its hover +, for people who can edit", () => {
+    const { onCaptureInto } = renderRail();
+    fireEvent.click(screen.getByRole("button", { name: "New task in Marketing" }));
+    expect(onCaptureInto).toHaveBeenCalledWith("mkt");
+    cleanup();
+    renderRail({ canEdit: false });
+    expect(screen.queryByRole("button", { name: "New task in Marketing" })).toBeNull();
+  });
+
+  it("deletes the tasks too when that's chosen in the confirm", async () => {
+    const { onDeleteBucket } = renderRail();
+    await deleteFromMenu("Marketing");
+    fireEvent.click(screen.getByRole("radio", { name: "Delete the 5 tasks too" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete bucket" }));
+    await settle();
+    expect(onDeleteBucket).toHaveBeenCalledWith("mkt", true);
+  });
+
+  it("shows Archived only with archived buckets, collapsed until opened", () => {
+    renderRail();
+    expect(screen.queryByRole("button", { name: /^Archived/ })).toBeNull();
+    cleanup();
+    const old = bucket("old", "Old project", { archivedAt: NOW, color: "amber" });
+    const { onToggleArchived } = renderRail({ archived: [old] });
+    const header = screen.getByRole("button", { name: /^Archived/ });
+    expect(header.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByRole("button", { name: /^Old project/ })).toBeNull();
+    fireEvent.click(header);
+    expect(onToggleArchived).toHaveBeenCalledOnce();
+  });
+
+  it("opens an archived bucket, and its menu is Unarchive and Delete", async () => {
+    const old = bucket("old", "Old project", { archivedAt: NOW });
+    const { onUnarchiveBucket } = renderRail({ archived: [old], archivedOpen: true });
+    fireEvent.click(main(/^Old project$/));
+    expect(main(/^Old project$/).getAttribute("aria-current")).toBe("page");
+    await openMenu("Old project");
+    expect(screen.getAllByRole("menuitem").map((el) => el.textContent?.trim())).toEqual([
+      "Unarchive",
+      "Delete bucket…",
+    ]);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Unarchive" }));
+    expect(onUnarchiveBucket).toHaveBeenCalledWith("old");
+  });
+
+  it("shows Recently deleted at the bottom only while it holds anything, and selects it", () => {
+    renderRail();
+    expect(screen.queryByRole("button", { name: /^Recently deleted/ })).toBeNull();
+    cleanup();
+    renderRail({ trashCount: 3 });
+    const row = main(/^Recently deleted, 3 items$/);
+    const rows = screen.getAllByRole("button").filter((el) => el.dataset.slot === "nav-row-main");
+    expect(rows.at(-1)).toBe(row);
+    fireEvent.click(row);
+    expect(row.getAttribute("aria-current")).toBe("page");
+  });
+
+  it("makes bucket rows sortable inside the page's DndContext, and only bucket rows", () => {
+    renderRail({ dnd: true });
+    // The sortable wrapper is the drag activator around each bucket row.
+    const mkt = main(/^Marketing,/).closest('[data-slot="nav-row"]')?.parentElement?.parentElement;
+    expect(mkt?.getAttribute("aria-roledescription")).toBeNull(); // not a focus stop
+    expect(screen.getAllByRole("button", { name: /options$/ }).length).toBeGreaterThan(0);
+    expect(asRailBucket({ type: "rail-bucket", bucketId: "mkt" })).toBe("mkt");
+    expect(asRailBucket({ type: "task", taskId: "t" })).toBeNull();
+    expect(asRailBucket(undefined)).toBeNull();
+    expect(RAIL_BUCKET_PREFIX).toBe("rail:bucket:");
   });
 });
 

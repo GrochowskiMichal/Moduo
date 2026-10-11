@@ -26,7 +26,7 @@ function fakeClient(opts: {
       // A real promise with the builder's chain methods on it.
       const query = Promise.resolve({ ...answer, count: null }) as Promise<unknown> &
         Record<string, unknown>;
-      for (const m of ["select", "eq", "is", "order", "range", "maybeSingle"]) {
+      for (const m of ["select", "eq", "is", "not", "gte", "order", "range", "maybeSingle"]) {
         query[m] = () => query;
       }
       return query;
@@ -38,15 +38,23 @@ function fakeClient(opts: {
       return typeof a === "function" ? a(args) : a;
     },
   };
-  const legacy: { upserts: Bucket[]; blocks: Array<[string, unknown]> } = {
+  const legacy: {
+    upserts: Bucket[];
+    blocks: Array<[string, unknown]>;
+    deletes: Array<[string, string]>;
+  } = {
     upserts: [],
     blocks: [],
+    deletes: [],
   };
   const api = createTasksStructure(client as never, {
     userId: async () => "u1",
     upsertBucketLegacy: async (bucket) => {
       legacy.upserts.push(bucket);
       return bucket;
+    },
+    deleteProjectLegacy: async (ws, id) => {
+      legacy.deletes.push([ws, id]);
     },
     getTimeBlocksLegacy: async () => ({ morning: "legacy-project" }),
     setTimeBlocksLegacy: async (ws, blocks) => {
@@ -304,5 +312,98 @@ describe("time blocks are each person's own", () => {
     expect(await api.getTimeBlocks("ws")).toEqual({ morning: "legacy-project" });
     await api.setTimeBlocks("ws", { evening: "p1" });
     expect(legacy.blocks).toEqual([["ws", { evening: "p1" }]]);
+  });
+});
+
+describe("TV-U6: colours, archiving, deleting, Recently deleted", () => {
+  it("colour and archive go to the op; the server stamps the time, never an owner", () => {
+    expect(projectFieldsToOp({ color: "teal" })).toEqual({ color: "teal" });
+    expect(projectFieldsToOp({ color: null, archived: true })).toEqual({
+      color: null,
+      archived_at: "now",
+    });
+    expect(projectFieldsToOp({ archived: false })).toEqual({ archived_at: null });
+    const sent = projectFieldsToOp({ name: "Acme", color: "red", archived: true });
+    for (const key of ["owner_id", "is_system", "workspace_id"]) expect(sent).not.toHaveProperty(key);
+  });
+
+  it("deletes through projects_op_delete and reads what it did", async () => {
+    const { api, rpcCalls } = fakeClient({
+      rpc: {
+        projects_op_delete: {
+          data: { batch_id: "b", moved: 4, deleted: 12, notified: 2 },
+          error: null,
+        },
+      },
+    });
+    const done = await api.deleteProject({ workspaceId: "ws", projectId: "p1" });
+    expect(done).toEqual({ moved: 4, deleted: 12, notified: 2, restorable: true });
+    expect(rpcCalls).toEqual([["projects_op_delete", { p_workspace_id: "ws", p_project_id: "p1" }]]);
+  });
+
+  it("before the migration, the old delete runs and says it can't be restored", async () => {
+    const { api, legacy } = fakeClient({
+      rpc: { projects_op_delete: missingFn("projects_op_delete") },
+    });
+    const done = await api.deleteProject({ workspaceId: "ws", projectId: "p1" });
+    expect(done.restorable).toBe(false);
+    expect(legacy.deletes).toEqual([["ws", "p1"]]);
+  });
+
+  it("a refused delete fails with the server's words", async () => {
+    const { api, legacy } = fakeClient({
+      rpc: {
+        projects_op_delete: {
+          data: null,
+          error: { code: "42501", message: "Only people with full access to this project can delete or restore it." },
+        },
+      },
+    });
+    await expect(api.deleteProject({ workspaceId: "ws", projectId: "p1" })).rejects.toThrow(
+      /full access/,
+    );
+    expect(legacy.deletes).toEqual([]);
+  });
+
+  it("Restore and Delete forever name what they act on", async () => {
+    const { api, rpcCalls } = fakeClient({
+      rpc: {
+        tasks_op_trash_restore: { data: { projects: 1, tasks: 2, moved: 3 }, error: null },
+        tasks_op_trash_purge: { data: { projects: 1, tasks: 2 }, error: null },
+      },
+    });
+    await api.restoreTrash({ workspaceId: "ws", entityType: "bucket", entityId: "p1" });
+    await api.purgeTrash({ workspaceId: "ws", entityType: "task", entityId: "t1" });
+    expect(rpcCalls).toEqual([
+      ["tasks_op_trash_restore", { p_workspace_id: "ws", p_entity_type: "bucket", p_entity_id: "p1" }],
+      ["tasks_op_trash_purge", { p_workspace_id: "ws", p_entity_type: "task", p_entity_id: "t1" }],
+    ]);
+  });
+
+  it("Recently deleted reads deleted projects and tasks, never an Inbox", async () => {
+    const { api } = fakeClient({
+      tables: {
+        buckets: {
+          data: [
+            bucketRow({ deleted_at: NOW, deleted_batch_id: "batch", trash_moved_task_ids: ["t9"] }),
+            bucketRow({ id: "in", is_system: true, deleted_at: NOW }),
+          ],
+          error: null,
+        },
+        tasks: { data: [], error: null },
+      },
+    });
+    const trash = await api.listTrash("ws");
+    expect(trash.buckets.map((b) => [b.bucket.id, b.batchId, b.movedTaskIds])).toEqual([
+      ["p1", "batch", ["t9"]],
+    ]);
+  });
+
+  it("asks whether you have Full access to a project", async () => {
+    const { api, rpcCalls } = fakeClient({
+      rpc: { share_op_state: { data: { visible: true, canManage: false }, error: null } },
+    });
+    expect(await api.projectAccess({ projectId: "p1" })).toEqual({ canManage: false });
+    expect(rpcCalls[0]).toEqual(["share_op_state", { p_type: "bucket", p_id: "p1" }]);
   });
 });

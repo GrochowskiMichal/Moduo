@@ -112,6 +112,14 @@ export const States: Story = {
         menu={rowMenu}
       />
       <NavRow label="No count, menu only" icon={<NavRowDot />} menu={rowMenu} />
+      <NavRow
+        label="Hover + beside ⋯"
+        icon={<NavRowDot color="teal" />}
+        count={7}
+        menu={rowMenu}
+        onAdd={() => {}}
+        addLabel="New task in this bucket"
+      />
       <NavRow label="Count, no menu" icon={<Hash aria-hidden />} count={128} />
     </div>
   ),
