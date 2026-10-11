@@ -1134,13 +1134,25 @@ export function TaskListView({
     );
     const nestHere =
       item.blockEnd && hover?.kind === "nest" && hover.targetId === item.blockId && dragTask;
-    if (!nestHere) return row;
+    const preview = nestHere ? (
+      <NestPreview indent={NEST_INDENT_PX}>{dragTask.title || "Untitled"}</NestPreview>
+    ) : null;
+    // A top-level row starts its block (`data-list-block`: off a row but
+    // inside a block, a drag keeps its hover); the "Make subtask" preview
+    // under a block's last subtask is part of that block too.
+    if (depth === 0) {
+      return (
+        <div data-list-block>
+          {row}
+          {preview}
+        </div>
+      );
+    }
+    if (!preview) return row;
     return (
       <>
         {row}
-        <div data-list-block>
-          <NestPreview indent={NEST_INDENT_PX}>{dragTask.title || "Untitled"}</NestPreview>
-        </div>
+        <div data-list-block>{preview}</div>
       </>
     );
   };

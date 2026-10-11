@@ -8,6 +8,7 @@
 // a delta table RLS can hide rows of) and its Realtime mapping in
 // `features/tasks/live.ts` if it is published.
 
+import type { AccessChangeResource } from "@contracts/vocabularies";
 import type {
   Area,
   Bucket,
@@ -109,7 +110,7 @@ export type SyncIdsResult = { ids: string[]; complete: boolean };
 export type AccessChange = {
   /** The feed row's id: a read that overlaps an earlier one handles it once. */
   id?: string;
-  resourceType: "bucket" | "task" | "workspace" | (string & {});
+  resourceType: AccessChangeResource;
   resourceId: string;
   changedAt: string;
 };

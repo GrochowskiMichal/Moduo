@@ -21,6 +21,7 @@
 // on channels of their own: a channel naming a table that isn't published yet
 // (a build ahead of its database) silently delivers nothing for any table.
 
+import { normalizeAccessChangeResource } from "@contracts/vocabularies";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { supabaseClient } from "@/lib/runtime.web";
 import type { AccessChange } from "@/lib/sync/types";
@@ -42,7 +43,8 @@ export function parseAccessChange(payload: LivePayload): AccessChange | null {
   if (typeof raw?.resource_type !== "string" || typeof raw.resource_id !== "string") return null;
   return {
     id: raw.id === undefined || raw.id === null ? undefined : String(raw.id),
-    resourceType: raw.resource_type,
+    // One this build doesn't know reads as the whole workspace: check everything.
+    resourceType: normalizeAccessChangeResource(raw.resource_type),
     resourceId: raw.resource_id,
     changedAt: typeof raw.changed_at === "string" ? raw.changed_at : "",
   };

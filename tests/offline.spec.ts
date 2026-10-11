@@ -64,10 +64,28 @@ const tasksTitled = (title: string) =>
     `tasks?title=eq.${encodeURIComponent(title)}&deleted_at=is.null&select=id,title,status,created_at,completed_at`,
   );
 
-async function openInbox(page: Page) {
+/**
+ * Opens Tasks on `taskId` (a deep link: the shared dev Inbox holds hundreds of
+ * runs' tasks, and a long list draws only what's on screen since TV-D11b, so
+ * the task is selected and scrolled to rather than looked for at the end).
+ */
+async function openInbox(page: Page, taskId: string) {
   await signInPage(page, dev, ws.id);
-  await page.goto("/tasks");
+  await page.goto(`/tasks?id=${taskId}`);
   await expect(page.getByRole("navigation", { name: "Location" })).toBeVisible({ timeout: 20_000 });
+}
+
+/**
+ * A capture lands at the end of the Inbox; a long list draws only what's on
+ * screen (TV-D11b), so scroll to the end to see it, as a person would.
+ */
+async function expectAtEnd(page: Page, title: string, count?: number) {
+  const button = page.getByRole("button", { name: title });
+  await expect(async () => {
+    await page.getByRole("grid").evaluate((el) => el.scrollTo({ top: el.scrollHeight }));
+    if (count === undefined) await expect(button).toBeVisible({ timeout: 1_000 });
+    else await expect(button).toHaveCount(count, { timeout: 1_000 });
+  }).toPass({ timeout: 20_000 });
 }
 
 /** The device copy is written a moment after the store settles. */
@@ -108,7 +126,7 @@ test("AC12.2 — with the server out of reach, Tasks opens from the device copy,
   page,
 }) => {
   const seeded = await createTask(`On this device ${tag}`);
-  await openInbox(page);
+  await openInbox(page, seeded.id);
   await expect(page.getByRole("button", { name: seeded.title })).toBeVisible({ timeout: 20_000 });
   await waitForDeviceCopy(page, seeded.title);
 
@@ -134,7 +152,7 @@ test("AC12.2 — a capture and a check-off made offline wait, then sync in order
 }) => {
   const seeded = await createTask(`Check me off ${tag}`);
   const captured = `Captured offline ${tag}`;
-  await openInbox(page);
+  await openInbox(page, seeded.id);
   const row = page.getByRole("button", { name: seeded.title });
   await expect(row).toBeVisible({ timeout: 20_000 });
 
@@ -148,11 +166,15 @@ test("AC12.2 — a capture and a check-off made offline wait, then sync in order
   await line.fill(captured);
   await line.press("Enter");
   await expect(page.getByText("Waiting to sync · Inbox")).toBeVisible();
-  await expect(page.getByRole("button", { name: captured })).toBeVisible();
+  await expectAtEnd(page, captured);
 
-  // A check-off: shown done at once.
+  // A check-off: shown done at once. (Found again through search, which reads
+  // the device copy: the list was scrolled to the capture at its end.)
+  await page.getByRole("button", { name: "Search", exact: true }).click();
+  await page.getByLabel("Search tasks").fill(seeded.title);
   await row.click({ button: "right" });
   await page.getByRole("menuitem", { name: "Mark done" }).click();
+  await page.getByLabel("Search tasks").fill("");
   await expect(status).toContainText("Offline · 2 waiting to sync");
   expect(await tasksTitled(captured)).toHaveLength(0);
 
@@ -169,6 +191,7 @@ test("AC12.2 — a capture and a check-off made offline wait, then sync in order
 
   // A reload (the store reads the server again) still has exactly one.
   await page.reload();
-  await expect(page.getByRole("button", { name: captured })).toHaveCount(1, { timeout: 20_000 });
+  await expect(page.getByRole("navigation", { name: "Location" })).toBeVisible({ timeout: 20_000 });
+  await expectAtEnd(page, captured, 1);
   expect(await tasksTitled(captured)).toHaveLength(1);
 });

@@ -274,6 +274,41 @@ export function normalizeTaskWaitingKind(input: unknown): TaskWaitingKind {
   return isTaskWaitingKind(input) ? input : "text";
 }
 
+/**
+ * What a grant feed row names (`access_changes.resource_type`, TV-D11b): a
+ * project (`bucket`) or a task shared or unshared, a task moved project, or a
+ * member's role in the `workspace` changed.
+ */
+export const ACCESS_CHANGE_RESOURCES = ["bucket", "task", "workspace"] as const;
+export type AccessChangeResource = (typeof ACCESS_CHANGE_RESOURCES)[number];
+export const accessChangeResourceSchema = z.enum(ACCESS_CHANGE_RESOURCES);
+export function isAccessChangeResource(value: unknown): value is AccessChangeResource {
+  return (
+    typeof value === "string" && (ACCESS_CHANGE_RESOURCES as readonly string[]).includes(value)
+  );
+}
+export function parseAccessChangeResource(input: unknown): SafeParseResult<AccessChangeResource> {
+  return parseOrError(accessChangeResourceSchema, input);
+}
+/** Lax read: a resource this build doesn't know reads as the whole workspace (check everything). */
+export function normalizeAccessChangeResource(input: unknown): AccessChangeResource {
+  return isAccessChangeResource(input) ? input : "workspace";
+}
+
+/**
+ * The hard-delete tables whose deletes leave a `sync_tombstones` row
+ * (TV-D11b), so the shared store reads their changes instead of all of them.
+ */
+export const SYNC_TOMBSTONE_TABLES = ["task_queue", "tag_links", "task_relations"] as const;
+export type SyncTombstoneTable = (typeof SYNC_TOMBSTONE_TABLES)[number];
+export const syncTombstoneTableSchema = z.enum(SYNC_TOMBSTONE_TABLES);
+export function isSyncTombstoneTable(value: unknown): value is SyncTombstoneTable {
+  return typeof value === "string" && (SYNC_TOMBSTONE_TABLES as readonly string[]).includes(value);
+}
+export function parseSyncTombstoneTable(input: unknown): SafeParseResult<SyncTombstoneTable> {
+  return parseOrError(syncTombstoneTableSchema, input);
+}
+
 export const ENERGY_LEVELS = ["low", "medium", "high"] as const;
 export type EnergyLevel = (typeof ENERGY_LEVELS)[number];
 export const energyLevelSchema = z.enum(ENERGY_LEVELS);

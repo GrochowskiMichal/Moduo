@@ -34,6 +34,7 @@ import {
 } from "@contracts/rows";
 import {
   isOpenTask,
+  normalizeAccessChangeResource,
   normalizeAttachmentStatus,
   normalizeContentAuthorKind,
   normalizeTaskStatusCategory,
@@ -4187,7 +4188,7 @@ async function readAccessChanges(
     const changedAt = typeof row.changed_at === "string" ? row.changed_at : "";
     changes.push({
       id: String(row.id),
-      resourceType: row.resource_type,
+      resourceType: normalizeAccessChangeResource(row.resource_type),
       resourceId: row.resource_id,
       changedAt,
     });
