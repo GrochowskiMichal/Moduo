@@ -17,7 +17,9 @@ import {
 } from "@contracts/vocabularies";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import type { LabelColor } from "../../../components/tag-colors";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
+import type { ProjectFields } from "../../../lib/runtime.web.structure";
 import { isNetworkError } from "../../../lib/sync/network";
 import { useStoreSnapshot, useWorkspaceStore } from "../../../lib/sync/react";
 import type { OverlayChange, PendingWrite } from "../../../lib/sync/store";
@@ -50,9 +52,9 @@ import {
   subtaskProgress,
   wouldCreateCycle,
 } from "../helpers";
-import { hideBucket, unhideBucket, useHiddenBuckets } from "../hidden-buckets";
 import {
   type ActivityEntry,
+  type Area,
   type Bucket,
   INBOX_BUCKET_NAME,
   isDrifted,
@@ -64,6 +66,7 @@ import {
   type TaskQueueEntry,
   type TaskRelation,
   type TaskStatus,
+  type TasksTrash,
   type TaskTimeResult,
   type TimeBlockMap,
   type TimeBlockSlot,
@@ -80,6 +83,15 @@ import {
   queueTasks,
 } from "../queue";
 import { recurrenceOnStatusChange, skipOccurrencePatch } from "../recurrence-engine";
+import {
+  areaMoveAfter,
+  projectDeletePlan,
+  projectDeleteSummary,
+  projectDropPatch,
+  projectEndPosition,
+  projectOpenWork,
+  storedBucketColor,
+} from "../sidebar";
 import {
   CATEGORY_LABELS,
   optimisticStatus,
@@ -99,7 +111,19 @@ type Params = {
   userId: string | null;
   workspaceId: string | null;
   modulePermission?: "none" | "view" | "edit" | "admin";
+  /** Also read Recently deleted (TV-U6): the Tasks page only. */
+  includeTrash?: boolean;
 };
+
+/** Which deleted item a Restore or Delete forever acts on (TV-U6). */
+export type TrashTarget = { kind: "bucket" | "task"; id: string };
+
+/** What an archive does with the project's open tasks (REPLAN 78: "4 open
+ *  tasks — Won't do · Move · Keep"). */
+export type ArchiveOpenTasks =
+  | { kind: "keep" }
+  | { kind: "wont_do" }
+  | { kind: "move"; projectId: string };
 
 function byPosition<T extends { position: string }>(a: T, b: T): number {
   return a.position < b.position ? -1 : a.position > b.position ? 1 : 0;
@@ -114,6 +138,8 @@ const NO_ROWS: never[] = [];
 /** A queued capture that wasn't created (refused, or waiting offline): no queue op, no toast. */
 const NOT_CREATED = new Error("not created");
 const STILL_SAVING = "Still saving that task — try again in a moment.";
+/** An archive whose Move didn't go through (that said why already): no archive. */
+const NOT_MOVED = new Error("not moved");
 
 /** A change that can't wait for the network (default g): said once, never queued. */
 function sayOffline(): void {
@@ -130,7 +156,7 @@ const patchOf = (id: string, fields: Partial<Task>): OverlayChange => ({
 });
 
 export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params) {
-  const { userId, workspaceId, modulePermission = "none" } = params;
+  const { userId, workspaceId, modulePermission = "none", includeTrash = false } = params;
   const canRead = modulePermission !== "none";
   const canEdit = modulePermission === "edit" || modulePermission === "admin";
 
@@ -141,11 +167,24 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
   const snap = useStoreSnapshot(store);
   const runtime = baseRuntime;
   const bundle = snap.bundle;
+  // Archived projects and their tasks ride apart in the store's bundle, so
+  // every other surface skips them (TV-U6). Lookups here see both: an
+  // archive's Undo edits tasks that are still archived.
+  const archivedBucketRows = bundle.archivedBuckets ?? NO_ROWS;
+  const archivedTaskRows = bundle.archivedTasks ?? NO_ROWS;
+  const allBuckets = useMemo(
+    () => (archivedBucketRows.length ? [...bundle.buckets, ...archivedBucketRows] : bundle.buckets),
+    [bundle.buckets, archivedBucketRows],
+  );
+  const allTasks = useMemo(
+    () => (archivedTaskRows.length ? [...bundle.tasks, ...archivedTaskRows] : bundle.tasks),
+    [bundle.tasks, archivedTaskRows],
+  );
 
   // ── drops (TV-U4) ───────────────────────────────────────────────────────────
   /** The rows as they are now, for a save or an Undo that runs later. */
-  const tasksRef = useRef(bundle.tasks);
-  tasksRef.current = bundle.tasks;
+  const tasksRef = useRef(allTasks);
+  tasksRef.current = allTasks;
   /** Every queue row I can see here (TV-D2): my line-up and others' claims. */
   const queueRows = snap.queue;
   const queueRowsRef = useRef(queueRows);
@@ -196,14 +235,36 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     [store],
   );
 
+  // ── Recently deleted (TV-U6) ────────────────────────────────────────────────
+  // Read apart from the store, by the Tasks page only (`includeTrash`): on
+  // open, and after a delete, a Restore or a Delete forever made here.
+  const [trash, setTrash] = useState<TasksTrash | null>(null);
+  const trashReq = useRef(0);
+  const reloadTrash = useCallback(async () => {
+    if (!includeTrash || !runtime || !workspaceId || !canRead) return;
+    const req = ++trashReq.current;
+    try {
+      const next = await runtime.tasks.listTrash(workspaceId);
+      if (trashReq.current === req) setTrash(next);
+    } catch {
+      // Keep what's on screen; the next read tries again.
+    }
+  }, [includeTrash, runtime, workspaceId, canRead]);
+  useEffect(() => {
+    if (!includeTrash || !runtime || !workspaceId || !canRead) {
+      trashReq.current++;
+      setTrash(null);
+      return;
+    }
+    void reloadTrash();
+  }, [includeTrash, runtime, workspaceId, canRead, reloadTrash]);
+
   // ── derived ────────────────────────────────────────────────────────────────
-  // Buckets deleted this session drop out here, and their tasks show in Inbox,
-  // before the server delete lands (see `deleteBucket` and hidden-buckets.ts).
-  const hiddenBuckets = useHiddenBuckets();
-  const liveBuckets = useMemo(
-    () => bundle.buckets.filter((b) => !b.deletedAt && !hiddenBuckets.has(b.id)),
-    [bundle.buckets, hiddenBuckets],
-  );
+  // A project deleted or archived a moment ago is already out of the store's
+  // bundle (the write shows on every surface at once). Archived ones and
+  // their tasks ride apart (TV-U6): out of the sidebar, every list, count and
+  // queue, shown under Archived projects and found by search.
+  const liveBuckets = useMemo(() => bundle.buckets.filter((b) => !b.deletedAt), [bundle.buckets]);
   // Your own Inbox (a teammate's may be visible too).
   const inbox = useMemo(
     () =>
@@ -212,15 +273,32 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       null,
     [liveBuckets, userId],
   );
-  const liveTasks = useMemo(() => {
-    const live = bundle.tasks
-      .filter((t) => !t.deletedAt)
-      .slice()
-      .sort(byPosition);
-    const inboxId = inbox?.id;
-    if (hiddenBuckets.size === 0 || !inboxId) return live;
-    return live.map((t) => (hiddenBuckets.has(t.bucketId) ? { ...t, bucketId: inboxId } : t));
-  }, [bundle.tasks, hiddenBuckets, inbox]);
+  const liveTasks = useMemo(
+    () =>
+      bundle.tasks
+        .filter((t) => !t.deletedAt)
+        .slice()
+        .sort(byPosition),
+    [bundle.tasks],
+  );
+  /** Archived projects, position-sorted (Archived projects). */
+  const archivedBuckets = useMemo(
+    () =>
+      archivedBucketRows
+        .filter((b) => !b.deletedAt)
+        .slice()
+        .sort(byPosition),
+    [archivedBucketRows],
+  );
+  /** Tasks of archived projects: only an opened archived project and search show them. */
+  const archivedTasks = useMemo(
+    () =>
+      archivedTaskRows
+        .filter((t) => !t.deletedAt)
+        .slice()
+        .sort(byPosition),
+    [archivedTaskRows],
+  );
   /** User buckets (Inbox excluded — the rail pins it), position-sorted. */
   const buckets = useMemo(
     () =>
@@ -230,13 +308,18 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         .sort(byPosition),
     [liveBuckets],
   );
+  /** The workspace's areas you can see, in sidebar order (TV-D10). */
+  const areas = useMemo(
+    () => (bundle.areas ?? NO_ROWS).slice().sort((a, b) => a.position - b.position),
+    [bundle.areas],
+  );
 
   // ── statuses (TV-D9) ─────────────────────────────────────────────────────────
   /** Every status this reader can see: the workspace default set and each
    *  visible project's (REPLAN 53a). */
   const statuses = useMemo(() => bundle.statuses ?? [], [bundle.statuses]);
   const statusById = useMemo(() => new Map(statuses.map((s) => [s.id, s])), [statuses]);
-  const bucketById = useMemo(() => new Map(bundle.buckets.map((b) => [b.id, b])), [bundle.buckets]);
+  const bucketById = useMemo(() => new Map(allBuckets.map((b) => [b.id, b])), [allBuckets]);
   /** The statuses a project's tasks use (the Inbox: the workspace default). */
   const statusesForBucket = useCallback(
     (bucketId: string): ProjectStatus[] => statusSetFor(statuses, bucketById.get(bucketId)),
@@ -447,6 +530,24 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
   }, [runtime, workspaceId, canEdit, store]);
 
   /**
+   * A task of an archived project is read-only until it's unarchived
+   * (TV-U6): said once, and the edit doesn't start. Read from the store now,
+   * not this render, so an archive's Undo (which unarchives first) and a
+   * refused archive can put its tasks back in the same tick.
+   */
+  const archivedBlocked = useCallback(
+    (taskId: string): boolean => {
+      const now = store?.getSnapshot().bundle;
+      const task = now?.archivedTasks?.find((t) => t.id === taskId);
+      if (!task) return false;
+      const name = now?.archivedBuckets?.find((b) => b.id === task.bucketId)?.name;
+      toast.error(`Unarchive “${name ?? "its project"}” to change its tasks.`);
+      return true;
+    },
+    [store],
+  );
+
+  /**
    * Say why a write didn't go through. A lost connection (the browser may not
    * know yet) is "Offline", and the store holds further edits until it's back.
    */
@@ -512,6 +613,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         toast.error(STILL_SAVING);
         return;
       }
+      if (archivedBlocked(id)) return;
       const current = tasksRef.current.find((t) => t.id === id);
       const toTodo =
         current && optimistic.scheduledAt && optimistic.statusCategory === undefined
@@ -563,7 +665,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
           refused(write, e);
         });
     },
-    [runtime, workspaceId, canEdit, store, backlogToTodo, refused],
+    [runtime, workspaceId, canEdit, store, backlogToTodo, refused, archivedBlocked],
   );
 
   /** Fetch a task's quiet activity trail (newest first). */
@@ -700,7 +802,10 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
   const addToQueue = useCallback(
     (id: string, at: QueuePlacement = "end", onSaved?: () => void) => {
       const task = liveTasks.find((t) => t.id === id);
-      if (!task) return;
+      if (!task) {
+        archivedBlocked(id);
+        return;
+      }
       if (isTempId(id)) {
         toast.error(STILL_SAVING);
         return;
@@ -754,6 +859,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       canEdit,
       store,
       backlogToTodo,
+      archivedBlocked,
     ],
   );
 
@@ -919,8 +1025,8 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
 
   const patchTask = useCallback(
     (id: string, patch: Partial<Task>) => {
-      const existing = bundle.tasks.find((t) => t.id === id);
-      if (!existing) return;
+      const existing = tasksRef.current.find((t) => t.id === id);
+      if (!existing || archivedBlocked(id)) return;
       // A status by category (or a legacy value: the checkbox, Won't do)
       // shows the project's status for it at once (TV-D9); the server is told
       // the category, and picks the same one (or keeps one already in it).
@@ -1102,6 +1208,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       offerMoveToTodo,
       editBlocked,
       refused,
+      archivedBlocked,
     ],
   );
 
@@ -1113,7 +1220,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
    */
   const setTaskStatus = useCallback(
     (id: string, target: StatusTarget) => {
-      const existing = bundle.tasks.find((t) => t.id === id);
+      const existing = tasksRef.current.find((t) => t.id === id);
       if (!existing) return;
       if ("statusId" in target) {
         const s = statusesForBucket(existing.bucketId).find((x) => x.id === target.statusId);
@@ -1128,7 +1235,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       if (taskCategoryOf(existing) === target.category) return;
       patchTask(id, { statusCategory: target.category, status: legacyTaskStatus(target.category) });
     },
-    [bundle.tasks, statusesForBucket, patchTask],
+    [statusesForBucket, patchTask],
   );
 
   offerMoveToTodoRef.current = (task: Task) => {
@@ -1545,7 +1652,10 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
   const deleteTask = useCallback(
     (id: string) => {
       const existing = bundle.tasks.find((t) => t.id === id);
-      if (!existing) return;
+      if (!existing) {
+        archivedBlocked(id);
+        return;
+      }
       if (editBlocked() || !store) return;
       // Snapshot the children BEFORE the optimistic promotion — Undo re-attaches
       // them (their snapshot rows still carry parentId = id).
@@ -1565,6 +1675,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
           write.settle({ tasks: [deleted] });
           for (const c of children) store.patchCopy("tasks", c.id, { parentId: null });
           store.forget("queue", follow.rowIds);
+          void reloadTrash();
           // Same guarantee as deleting the task from a note (DF-5): soft delete =
           // a stamp; Undo clears it and re-attaches the subtasks. Only those two
           // fields are written back, so edits made meanwhile survive (TV-D1).
@@ -1586,13 +1697,24 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
                   ),
                 );
                 store.answer({ tasks: [restored, ...reattached] });
+                await reloadTrash();
               })().catch(() => toast.error("Couldn't restore the task."));
             },
           });
         })
         .catch((e) => refused(write, e));
     },
-    [bundle.tasks, editBlocked, store, runtime, workspaceId, queueFollowStatus, refused],
+    [
+      bundle.tasks,
+      editBlocked,
+      store,
+      runtime,
+      workspaceId,
+      queueFollowStatus,
+      refused,
+      reloadTrash,
+      archivedBlocked,
+    ],
   );
 
   // ── subtask mutations (one level — spec §11) ─────────────────────────────────
@@ -1607,18 +1729,20 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         return;
       }
       const parent = liveTasks.find((t) => t.id === parentId);
-      if (!parent) return;
+      if (!parent) {
+        archivedBlocked(parentId);
+        return;
+      }
       // One level: a task that is itself a subtask can't get children.
       if (parent.parentId && liveTasks.some((t) => t.id === parent.parentId)) {
         toast.error("Subtasks are one level — this task is already a subtask.");
         return;
       }
-      // The parent's real bucket: a bucket delete still pending only shows its
-      // tasks in Inbox (hidden-buckets.ts), and Undo must find both together.
+      // The parent's project, as the copy has it.
       const bucketId = bundle.tasks.find((t) => t.id === parentId)?.bucketId ?? parent.bucketId;
       createTask({ bucketId, title: trimmed, parentId });
     },
-    [liveTasks, bundle.tasks, createTask],
+    [liveTasks, bundle.tasks, createTask, archivedBlocked],
   );
 
   /**
@@ -1629,7 +1753,10 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
   const setTaskParent = useCallback(
     (id: string, parentId: string | null) => {
       const existing = liveTasks.find((t) => t.id === id);
-      if (!existing) return;
+      if (!existing) {
+        archivedBlocked(id);
+        return;
+      }
       const next = parentId ?? null;
       if ((existing.parentId ?? null) === next) return;
       if (next) {
@@ -1651,7 +1778,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       }
       patchTask(id, { parentId: next });
     },
-    [liveTasks, subtasksByParent, patchTask],
+    [liveTasks, subtasksByParent, patchTask, archivedBlocked],
   );
 
   /**
@@ -1676,7 +1803,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         return null;
       }
       const existing = tasksRef.current.find((t) => t.id === taskId);
-      if (!existing) return null;
+      if (!existing || archivedBlocked(taskId)) return null;
       const rt = runtime;
       const ws = workspaceId;
       const fields = editableTaskFields({
@@ -1779,7 +1906,16 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         return null;
       }
     },
-    [editBlocked, runtime, workspaceId, store, queueFollowStatus, statusesForBucket, refused],
+    [
+      editBlocked,
+      runtime,
+      workspaceId,
+      store,
+      queueFollowStatus,
+      statusesForBucket,
+      refused,
+      archivedBlocked,
+    ],
   );
 
   /**
@@ -1949,15 +2085,35 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     [bundle.taskRelations, editBlocked, store, runtime, workspaceId, refused],
   );
 
-  // ── bucket mutations ─────────────────────────────────────────────────────────
+  // ── project mutations ("buckets" in the schema until TV-D7) ─────────────────
+  /** Writes to one project go out in order (a drag, then a colour, then Undo). */
+  const projectChains = useRef(new Map<string, Promise<unknown>>());
+  const chainProjectOp = useCallback(<T>(id: string, op: () => Promise<T>): Promise<T> => {
+    const prev = projectChains.current.get(id) ?? Promise.resolve();
+    const next = prev.catch(() => undefined).then(op);
+    projectChains.current.set(id, next);
+    // A settled chain's entry goes, unless a newer op joined it.
+    const clear = () => {
+      if (projectChains.current.get(id) === next) projectChains.current.delete(id);
+    };
+    next.then(clear, clear);
+    return next;
+  }, []);
+
+  /** The newest task ops, for an Undo that runs renders later (an archive's). */
+  const taskOpsRef = useRef({ patchTask, setTaskStatus });
+  taskOpsRef.current = { patchTask, setTaskStatus };
+
+  /** A new project at the end of the sidebar, or of an area (TV-U6). */
   const createBucket = useCallback(
-    (name: string) => {
+    (name: string, opts?: { areaId?: string | null }) => {
       const trimmed = name.trim();
       if (!trimmed) return;
       if (editBlocked() || !runtime || !workspaceId || !store) return;
-      // Past every bucket the server still has, including one whose delete is
-      // pending (hidden-buckets.ts) — Undo would otherwise tie their positions.
-      const position = endPosition(bundle.buckets.filter((b) => !b.deletedAt));
+      // Past every project the server still has (an archived one too), so an
+      // Undo can't tie their places.
+      const position = endPosition(allBuckets.filter((b) => !b.deletedAt));
+      const areaId = opts?.areaId ?? null;
       const optimistic: Bucket = {
         id: `tmp-${crypto.randomUUID()}`,
         workspaceId,
@@ -1966,6 +2122,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         isSystem: false,
         group: null,
         position,
+        areaId,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         deletedAt: null,
@@ -1973,40 +2130,71 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       const write = store.begin([{ table: "buckets", insert: optimistic }]);
       // TV-D10: through the project op (the old save on a database before it).
       void runtime.tasks
-        .createProject({ workspaceId, fields: { name: trimmed, position } })
+        .createProject({
+          workspaceId,
+          fields: { name: trimmed, position, ...(areaId ? { areaId } : {}) },
+        })
         .then((saved) => write.settle({ buckets: [saved] }))
-        .catch((e) => refused(write, e, "Couldn't create bucket."));
+        .catch((e) => refused(write, e, "Couldn't create the project."));
     },
-    [editBlocked, runtime, workspaceId, store, bundle.buckets, userId, refused],
+    [editBlocked, runtime, workspaceId, store, allBuckets, userId, refused],
+  );
+
+  /**
+   * Edit a project's fields (TV-U6): shown at once, then only the changed
+   * fields go through `projects_op_update` (never its owner, workspace or
+   * Inbox flag), so nothing a teammate changed meanwhile is put back. A
+   * refusal puts back only these fields. Resolves false when it didn't save.
+   */
+  const editProject = useCallback(
+    (id: string, patch: ProjectFields, local: Partial<Bucket>): Promise<boolean> => {
+      if (editBlocked() || !runtime || !workspaceId || !store) return Promise.resolve(false);
+      if (isTempId(id)) {
+        toast.error("Still saving that project — try again in a moment.");
+        return Promise.resolve(false);
+      }
+      const existing = allBuckets.find((b) => b.id === id);
+      if (!existing || existing.isSystem) return Promise.resolve(false);
+      const write = store.begin([
+        { table: "buckets", patch: { id, fields: local as Record<string, unknown> } },
+      ]);
+      return chainProjectOp(id, () =>
+        runtime.tasks.updateProject({
+          workspaceId,
+          projectId: id,
+          patch,
+          fallback: { ...existing, ...local },
+        }),
+      ).then(
+        (saved) => {
+          write.settle({ buckets: [saved] });
+          return true;
+        },
+        (e) => {
+          refused(write, e, "Couldn't save the project.");
+          return false;
+        },
+      );
+    },
+    [editBlocked, runtime, workspaceId, store, allBuckets, chainProjectOp, refused],
   );
 
   const renameBucket = useCallback(
     (id: string, name: string) => {
       const trimmed = name.trim();
-      const existing = bundle.buckets.find((b) => b.id === id);
+      const existing = allBuckets.find((b) => b.id === id);
       if (!existing || !trimmed || trimmed === existing.name) return;
-      if (editBlocked() || !store) return;
-      const updated = { ...existing, name: trimmed, updatedAt: new Date().toISOString() };
-      const write = store.begin([{ table: "buckets", patch: { id, fields: { name: trimmed } } }]);
       // Only the name goes (TV-D10), so a rename can't put back a teammate's
       // newer area or place.
-      void runtime!.tasks
-        .updateProject({
-          workspaceId: existing.workspaceId,
-          projectId: id,
-          patch: { name: trimmed },
-          fallback: updated,
-        })
-        .then((saved) => write.settle({ buckets: [saved] }))
-        .catch((e) => refused(write, e));
+      void editProject(id, { name: trimmed }, { name: trimmed });
     },
-    [bundle.buckets, editBlocked, store, runtime, refused],
+    [allBuckets, editProject],
   );
 
   /**
-   * Assign a bucket to a presentational section (or clear it with `group = null`).
-   * Presentational only — capture and task→bucket assignment are untouched
-   * (Session 4). Optimistic; persisted on the bucket row.
+   * File a project under an area by name (or none with `group = null`). The
+   * area of that name is found or made on the server (TV-D10). Kept for the
+   * old rail's Section menu; the sidebar files by area (`moveBucketToArea`).
    */
   const setBucketGroup = useCallback(
     (id: string, group: string | null) => {
@@ -2017,9 +2205,6 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       if (editBlocked() || !store) return;
       const updated = { ...existing, group: next, updatedAt: new Date().toISOString() };
       const write = store.begin([{ table: "buckets", patch: { id, fields: { group: next } } }]);
-      // TV-D10: the rail's sections are areas. The area of that name is found
-      // or made, and the project moves into it (the old label write on a
-      // database before it).
       void runtime!.tasks
         .setProjectArea({
           workspaceId: existing.workspaceId,
@@ -2027,17 +2212,494 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
           areaName: next,
           areas: bundle.areas ?? [],
         })
-        .then(({ project, areas }) =>
-          write.settle({ buckets: [project], ...(areas ? { areas } : {}) }),
+        .then(({ project, areas: nextAreas }) =>
+          write.settle({ buckets: [project], ...(nextAreas ? { areas: nextAreas } : {}) }),
         )
         .catch((e) => refused(write, e));
     },
     [bundle.buckets, bundle.areas, editBlocked, store, runtime, refused],
   );
 
+  /** The sidebar dot's colour (TV-U6); neutral stores none. */
+  const setBucketColor = useCallback(
+    (id: string, color: LabelColor) => {
+      const existing = allBuckets.find((b) => b.id === id);
+      const next = storedBucketColor(color);
+      if (!existing || (existing.color ?? null) === next) return;
+      void editProject(id, { color: next }, { color: next });
+    },
+    [allBuckets, editProject],
+  );
+
+  /** Move a project into an area (null: none), last in it (TV-U6). */
+  const moveBucketToArea = useCallback(
+    (id: string, areaId: string | null) => {
+      const existing = allBuckets.find((b) => b.id === id);
+      if (!existing || (existing.areaId ?? null) === areaId) return;
+      const position = projectEndPosition(allBuckets);
+      void editProject(id, { areaId, position }, { areaId, position });
+    },
+    [allBuckets, editProject],
+  );
+
+  /** Drop a dragged project on another one (TV-U6): it takes that place, and
+   *  that project's area. */
+  const moveBucket = useCallback(
+    (activeId: string, overId: string) => {
+      const patch = projectDropPatch(buckets, areas, activeId, overId);
+      if (!patch) return;
+      void editProject(
+        activeId,
+        { areaId: patch.areaId, position: patch.position },
+        { areaId: patch.areaId, position: patch.position },
+      );
+    },
+    [buckets, areas, editProject],
+  );
+
+  /** Bring an archived project back (TV-U6). Its tasks aren't re-queued. */
+  const unarchiveBucket = useCallback(
+    (id: string) => editProject(id, { archived: false }, { archivedAt: null }),
+    [editProject],
+  );
+
+  /**
+   * Archive a project (TV-U6, REPLAN 16 + 78): it leaves the sidebar, every
+   * list, count and queue on every surface at once (the server takes its
+   * tasks out of everyone's queue), and opens from Archived projects; search
+   * still finds its tasks. With open tasks the sidebar asks first: Won't do
+   * (each open task), Move (the open tasks, with their subtasks, to another
+   * project) or Keep. Needs Full access (the server says so). Undo
+   * unarchives and puts the open tasks back as they were.
+   */
+  const archiveBucket = useCallback(
+    (id: string, openTasks: ArchiveOpenTasks = { kind: "keep" }) => {
+      if (editBlocked() || !runtime || !workspaceId || !store) return;
+      if (isTempId(id)) {
+        toast.error("Still saving that project — try again in a moment.");
+        return;
+      }
+      const existing = liveBuckets.find((b) => b.id === id);
+      if (!existing || existing.isSystem) return;
+      const work = projectOpenWork(liveTasks, id);
+      const before = work.open.map((t) => ({
+        id: t.id,
+        statusId: t.statusId ?? null,
+        category: taskCategoryOf(t),
+      }));
+      /** Put the open tasks back as they were (an Undo, or a refused archive).
+       *  Through the newest ops: this runs renders after the archive. */
+      const revertOpenTasks = () => {
+        const ops = taskOpsRef.current;
+        if (openTasks.kind === "wont_do") {
+          for (const t of before) {
+            ops.setTaskStatus(
+              t.id,
+              t.statusId ? { statusId: t.statusId } : { category: t.category },
+            );
+          }
+        } else if (openTasks.kind === "move") {
+          for (const t of work.tops) ops.patchTask(t.id, { bucketId: id });
+        }
+      };
+      // Move goes first and the archive waits for it: archiving takes what's
+      // still in the project out of every queue, so a task the archive beat
+      // would lose its place in queues.
+      let movesDone: Promise<boolean> = Promise.resolve(true);
+      if (openTasks.kind === "wont_do") {
+        for (const t of work.open) setTaskStatus(t.id, { category: "wont_do" });
+      } else if (openTasks.kind === "move") {
+        const target = openTasks.projectId;
+        const topIds = new Set(work.tops.map((t) => t.id));
+        const steps = liveTasks.filter(
+          (t) => t.bucketId === id && !!t.parentId && topIds.has(t.parentId),
+        );
+        const moveWrite = store.begin(
+          [...work.tops, ...steps].map((t) => patchOf(t.id, { bucketId: target, sectionId: null })),
+        );
+        movesDone = Promise.all(
+          work.tops.map((t) =>
+            runtime.tasks.opUpdateTask({ workspaceId, taskId: t.id, patch: { bucketId: target } }),
+          ),
+        ).then(
+          (rows) => {
+            moveWrite.settle({ tasks: rows.flat() });
+            return true;
+          },
+          (e) => {
+            refused(moveWrite, e, "Couldn't move the open tasks.");
+            // Some may have moved before one was refused: read where they are.
+            void store.syncNow();
+            return false;
+          },
+        );
+      }
+      // What stays in the project leaves every queue (the server does it).
+      const movedTops = new Set(openTasks.kind === "move" ? work.tops.map((t) => t.id) : []);
+      const staying = new Set(
+        liveTasks
+          .filter(
+            (t) =>
+              t.bucketId === id &&
+              !movedTops.has(t.id) &&
+              !(t.parentId && movedTops.has(t.parentId)),
+          )
+          .map((t) => t.id),
+      );
+      const queueRowIds = queueRowsRef.current
+        .filter((e) => staying.has(e.taskId))
+        .map((e) => e.id);
+      const archivedAt = new Date().toISOString();
+      const write = store.begin([
+        { table: "buckets", patch: { id, fields: { archivedAt } } },
+        ...queueRowIds.map((rowId) => ({ table: "queue", remove: rowId }) as OverlayChange),
+      ]);
+      void chainProjectOp(id, async () => {
+        if (!(await movesDone)) throw NOT_MOVED;
+        return runtime.tasks.updateProject({
+          workspaceId,
+          projectId: id,
+          patch: { archived: true },
+          fallback: { ...existing, archivedAt },
+        });
+      })
+        .then((saved) => {
+          write.settle({ buckets: [saved] });
+          store.forget("queue", queueRowIds);
+        })
+        .catch((e) => {
+          if (e === NOT_MOVED) {
+            // The move said why; the project stays where it was.
+            write.fail();
+            return;
+          }
+          refused(write, e, "Couldn't archive the project.");
+          revertOpenTasks();
+        });
+      const moved = openTasks.kind === "move" ? work.tops.length : 0;
+      const marked = openTasks.kind === "wont_do" ? work.open.length : 0;
+      const target =
+        openTasks.kind === "move" ? allBuckets.find((b) => b.id === openTasks.projectId) : null;
+      undoToast(`“${existing.name}” archived`, {
+        description:
+          marked > 0
+            ? `${marked === 1 ? "Its open task is" : `Its ${marked} open tasks are`} marked Won’t do.`
+            : moved > 0
+              ? `${moved === 1 ? "Its open task" : `Its ${moved} open tasks`} moved to ${target?.name ?? "another project"}.`
+              : "It’s in the sidebar’s ⋯ → Archived projects.",
+        onUndo: () => {
+          void unarchiveBucket(id);
+          revertOpenTasks();
+        },
+      });
+    },
+    [
+      editBlocked,
+      runtime,
+      workspaceId,
+      store,
+      liveBuckets,
+      liveTasks,
+      allBuckets,
+      chainProjectOp,
+      refused,
+      unarchiveBucket,
+      setTaskStatus,
+    ],
+  );
+
+  /**
+   * Bring something back from Recently deleted (TV-U6): a project with the
+   * finished tasks (and files) deleted with it and the open ones its delete
+   * handed out that nobody touched since, or one task (into your Inbox when
+   * its project is gone). `quiet` for an Undo.
+   */
+  const restoreFromTrash = useCallback(
+    (target: TrashTarget, opts?: { quiet?: boolean; label?: string }): Promise<boolean> => {
+      if (editBlocked() || !runtime || !workspaceId || !store) return Promise.resolve(false);
+      return chainProjectOp(target.id, () =>
+        runtime.tasks.restoreTrash({
+          workspaceId,
+          entityType: target.kind,
+          entityId: target.id,
+        }),
+      ).then(
+        async () => {
+          // What came back (and what moved back) is read like any change.
+          await store.syncNow().catch(() => undefined);
+          void reloadTrash();
+          if (!opts?.quiet) toast(opts?.label ? `“${opts.label}” restored` : "Restored");
+          return true;
+        },
+        (e) => {
+          failed(e, "Couldn't restore it.");
+          void reloadTrash();
+          return false;
+        },
+      );
+    },
+    [editBlocked, runtime, workspaceId, store, chainProjectOp, reloadTrash, failed],
+  );
+
+  /** Delete forever, from Recently deleted only (TV-U6): files included, no Undo. */
+  const deleteForever = useCallback(
+    (target: TrashTarget) => {
+      if (editBlocked() || !runtime || !workspaceId) return;
+      setTrash((prev) =>
+        prev
+          ? target.kind === "bucket"
+            ? { ...prev, buckets: prev.buckets.filter((b) => b.bucket.id !== target.id) }
+            : { ...prev, tasks: prev.tasks.filter((t) => t.task.id !== target.id) }
+          : prev,
+      );
+      void chainProjectOp(target.id, () =>
+        runtime.tasks.purgeTrash({ workspaceId, entityType: target.kind, entityId: target.id }),
+      )
+        .then(() => reloadTrash())
+        .catch((e) => {
+          failed(e, "Couldn't delete it forever.");
+          void reloadTrash();
+        });
+    },
+    [editBlocked, runtime, workspaceId, chainProjectOp, reloadTrash, failed],
+  );
+
+  /** Opens Recently deleted (the page sets it), for the delete toast's link. */
+  const openTrashRef = useRef<(() => void) | null>(null);
+
+  /**
+   * Delete a project (REPLAN 78). Its open work goes to each top task's
+   * assignee's Inbox (unassigned: yours), with one quiet notice per person;
+   * the finished work goes with it to Recently deleted. The sidebar confirms
+   * first. It leaves every surface at once (what lands in your Inbox shows
+   * there), the server delete goes out at once, and the Undo toast restores
+   * it, as Recently deleted does for 30 days.
+   */
+  const deleteBucket = useCallback(
+    (id: string) => {
+      if (editBlocked() || !runtime || !workspaceId || !store) return;
+      if (isTempId(id)) {
+        toast.error("Still saving that project — try again in a moment.");
+        return;
+      }
+      const existing =
+        liveBuckets.find((b) => b.id === id) ?? archivedBuckets.find((b) => b.id === id);
+      if (!existing || existing.isSystem) return;
+      const inboxId = inbox?.id ?? null;
+      const plan = projectDeletePlan(allTasks, id, { inboxId, userId });
+      const summary = projectDeleteSummary(allTasks, id, userId);
+      const write = store.begin([
+        { table: "buckets", remove: id },
+        ...(inboxId
+          ? plan.toInbox.map((taskId) => patchOf(taskId, { bucketId: inboxId, sectionId: null }))
+          : []),
+        ...plan.gone.map((taskId) => ({ table: "tasks", remove: taskId }) as OverlayChange),
+      ]);
+      const done = chainProjectOp(id, () =>
+        runtime.tasks.deleteProject({ workspaceId, projectId: id }),
+      ).then(
+        async (result) => {
+          // Its tasks moved and left on the server: read what changed; the
+          // copy then shows it, and this write's overlay goes.
+          await store.syncNow().catch(() => undefined);
+          write.settle();
+          // What went to a teammate's Inbox is out of your sight now, so no
+          // read reports it: it would show again under the deleted project
+          // until the next access check. A moved task you can still see
+          // already carries its new place.
+          const left = new Set(plan.gone);
+          const ghosts = store
+            .getSnapshot()
+            .bundle.tasks.filter((t) => left.has(t.id) && t.bucketId === id)
+            .map((t) => t.id);
+          if (ghosts.length > 0) store.forget("tasks", ghosts);
+          void reloadTrash();
+          return result;
+        },
+        (e) => {
+          refused(write, e, "Couldn't delete the project.");
+          return null;
+        },
+      );
+      const others = summary.moving - summary.toYou;
+      undoToast(`“${existing.name}” deleted`, {
+        description:
+          others > 0
+            ? "Its open tasks went to their assignees’ Inboxes."
+            : summary.toYou > 0
+              ? summary.toYou === 1
+                ? "Its open task is in your Inbox."
+                : `Its ${summary.toYou} open tasks are in your Inbox.`
+              : summary.finished > 0
+                ? "It’s in Recently deleted with its finished tasks."
+                : undefined,
+        ...(openTrashRef.current
+          ? { link: { label: "Recently deleted", onClick: () => openTrashRef.current?.() } }
+          : {}),
+        onUndo: () => {
+          void done.then((result) => {
+            if (result?.restorable) void restoreFromTrash({ kind: "bucket", id }, { quiet: true });
+            else if (result) toast.error("This delete can't be undone on this database.");
+          });
+        },
+      });
+    },
+    [
+      editBlocked,
+      runtime,
+      workspaceId,
+      store,
+      liveBuckets,
+      archivedBuckets,
+      inbox,
+      allTasks,
+      userId,
+      chainProjectOp,
+      reloadTrash,
+      refused,
+      restoreFromTrash,
+    ],
+  );
+
+  // ── areas (TV-D10's ops; the sidebar's area headers, TV-U6) ─────────────────
+  /**
+   * Run an area op: `changes` show at once, the areas it answers become the
+   * copy. `sync` reads what else changed first (a delete or restore re-files
+   * projects on the server). Errors show and put back only these changes.
+   */
+  const runAreaOp = useCallback(
+    (
+      op: () => Promise<Area[]>,
+      changes: OverlayChange[] = [],
+      opts?: { sync?: boolean },
+    ): Promise<Area[] | null> => {
+      if (editBlocked() || !store) return Promise.resolve(null);
+      const write = store.begin(changes);
+      return op().then(
+        async (next) => {
+          if (opts?.sync) await store.syncNow().catch(() => undefined);
+          write.settle({ areas: next });
+          return next;
+        },
+        (e) => {
+          refused(write, e, "Couldn't save the area.");
+          return null;
+        },
+      );
+    },
+    [editBlocked, store, refused],
+  );
+
+  /** A new workspace area at the end of the sidebar (everyone who reads Tasks
+   *  sees it); answers with the new area's id. */
+  const createArea = useCallback(
+    async (name: string): Promise<string | null> => {
+      const trimmed = name.trim();
+      if (!trimmed) return null;
+      const known = new Set(areas.map((a) => a.id));
+      const next = await runAreaOp(() =>
+        runtime!.tasks.createArea({ workspaceId: workspaceId!, name: trimmed }),
+      );
+      return next?.find((a) => !known.has(a.id))?.id ?? null;
+    },
+    [areas, runAreaOp, runtime, workspaceId],
+  );
+
+  const renameArea = useCallback(
+    (areaId: string, name: string) => {
+      const trimmed = name.trim();
+      const existing = areas.find((a) => a.id === areaId);
+      if (!existing || !trimmed || trimmed === existing.name) return;
+      void runAreaOp(
+        () =>
+          runtime!.tasks.updateArea({
+            workspaceId: workspaceId!,
+            areaId,
+            patch: { name: trimmed },
+          }),
+        [{ table: "areas", patch: { id: areaId, fields: { name: trimmed } } }],
+      );
+    },
+    [areas, runAreaOp, runtime, workspaceId],
+  );
+
+  const setAreaColor = useCallback(
+    (areaId: string, color: LabelColor) => {
+      const existing = areas.find((a) => a.id === areaId);
+      const next = storedBucketColor(color);
+      if (!existing || existing.color === next) return;
+      void runAreaOp(
+        () =>
+          runtime!.tasks.updateArea({ workspaceId: workspaceId!, areaId, patch: { color: next } }),
+        [{ table: "areas", patch: { id: areaId, fields: { color: next } } }],
+      );
+    },
+    [areas, runAreaOp, runtime, workspaceId],
+  );
+
+  /** Move an area one place up or down in the sidebar. */
+  const moveArea = useCallback(
+    (areaId: string, direction: "up" | "down") => {
+      const after = areaMoveAfter(areas, areaId, direction);
+      if (after === undefined) return;
+      void runAreaOp(() =>
+        runtime!.tasks.moveArea({ workspaceId: workspaceId!, areaId, afterAreaId: after }),
+      );
+    },
+    [areas, runAreaOp, runtime, workspaceId],
+  );
+
+  /** Delete an area: its projects become area-less, nothing else changes
+   *  (Edge cases "Structure moves"). Undo restores it and re-files them. */
+  const deleteArea = useCallback(
+    (areaId: string) => {
+      const existing = areas.find((a) => a.id === areaId);
+      if (!existing) return;
+      const filed = allBuckets.filter((b) => b.areaId === areaId);
+      void runAreaOp(
+        () =>
+          runtime!.tasks.updateArea({
+            workspaceId: workspaceId!,
+            areaId,
+            patch: { deleted: true },
+          }),
+        [
+          { table: "areas", remove: areaId },
+          ...filed.map(
+            (b) =>
+              ({
+                table: "buckets",
+                patch: { id: b.id, fields: { areaId: null } },
+              }) as OverlayChange,
+          ),
+        ],
+        { sync: true },
+      ).then((next) => {
+        if (!next) return;
+        undoToast(`“${existing.name}” deleted`, {
+          description: "Its projects stay, without an area.",
+          onUndo: () => {
+            void runAreaOp(
+              () =>
+                runtime!.tasks.updateArea({
+                  workspaceId: workspaceId!,
+                  areaId,
+                  patch: { deleted: false },
+                }),
+              [],
+              { sync: true },
+            );
+          },
+        });
+      });
+    },
+    [areas, allBuckets, runAreaOp, runtime, workspaceId],
+  );
+
   /**
    * Assign a bucket to a time-of-day slot (or clear it with `slot = null`).
-   * Optimistic; persisted per-workspace via the runtime (spec §9).
+   * Optimistic; persisted per person via the runtime (spec §9). The sidebar no
+   * longer offers it ("Open at" retired, REPLAN 30); TV-D7 drops the table.
    */
   const setTimeBlock = useCallback(
     (bucketId: string, slot: TimeBlockSlot | null) => {
@@ -2051,48 +2713,6 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       });
     },
     [timeBlocks, editBlocked, runtime, workspaceId, failed],
-  );
-
-  /**
-   * Delete a user bucket; its tasks move to Inbox. The rail confirms first
-   * (tasks-v2 Q1-4). Deferred commit, like `deleteTag`: the bucket is hidden at
-   * once (hidden-buckets.ts — every task surface agrees, and its tasks show in
-   * Inbox), the server delete waits until the Undo toast closes, and Undo
-   * un-hides it. The copy itself is never touched, so saves made meanwhile
-   * still write the task's real bucket, and Undo has nothing to restore.
-   */
-  const deleteBucket = useCallback(
-    (id: string) => {
-      if (editBlocked() || !runtime || !workspaceId) return;
-      if (isTempId(id)) {
-        toast.error("Still saving that bucket — try again in a moment.");
-        return;
-      }
-      const existing = liveBuckets.find((b) => b.id === id);
-      if (!existing || existing.isSystem) return;
-      const count = taskCountByBucket.get(id) ?? 0;
-      hideBucket(id);
-      undoToast(`“${existing.name}” deleted`, {
-        description:
-          count === 0
-            ? undefined
-            : count === 1
-              ? "Its task moved to Inbox."
-              : `Its ${count} tasks moved to Inbox.`,
-        onUndo: () => unhideBucket(id),
-        onCommit: () => {
-          void runtime.tasks
-            .deleteBucket({ workspaceId, bucketId: id })
-            // Its tasks moved on the server: read what changed.
-            .then(() => store?.syncNow())
-            .catch((e) => {
-              unhideBucket(id);
-              failed(e, "Couldn't delete the bucket.");
-            });
-        },
-      });
-    },
-    [editBlocked, runtime, workspaceId, liveBuckets, taskCountByBucket, store, failed],
   );
 
   // ── tag mutations (through the shared workspace tag store, TV-T1) ────────────
@@ -2172,8 +2792,9 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     restLoaded: !!store && snap.restLoaded,
     /** Live comments per task (TV-D11a; TV-D5's promised counts). */
     commentCounts: snap.commentCounts,
-    /** TV-D10's structure, live from the store: areas, sections, teams, members. */
-    areas: bundle.areas ?? NO_ROWS,
+    /** TV-D10's structure, live from the store: areas (in sidebar order),
+     *  sections, teams, members. */
+    areas,
     sections: bundle.sections ?? NO_ROWS,
     teams: bundle.teams ?? NO_ROWS,
     teamMembers: bundle.teamMembers ?? NO_ROWS,
@@ -2253,6 +2874,26 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     renameBucket,
     deleteBucket,
     setBucketGroup,
+    setBucketColor,
+    moveBucket,
+    moveBucketToArea,
+    /** Archived projects (TV-U6), position-sorted, and their tasks. */
+    archivedBuckets,
+    archivedTasks,
+    archiveBucket,
+    unarchiveBucket,
+    /** The areas' ops (TV-U6 on TV-D10's ops); `areas` is above. */
+    createArea,
+    renameArea,
+    setAreaColor,
+    moveArea,
+    deleteArea,
+    /** Recently deleted (TV-U6), when read (`includeTrash`); null otherwise. */
+    trash,
+    restoreFromTrash,
+    deleteForever,
+    /** Set by the page: opens Recently deleted (the delete toast links there). */
+    openTrashRef,
     toggleTaskTag,
     createTagForTask,
     setTagColor,

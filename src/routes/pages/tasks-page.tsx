@@ -42,6 +42,8 @@ export function TasksPage() {
     userId,
     workspaceId: selectedWorkspaceId,
     modulePermission: modulePermissions.tasks,
+    // Recently deleted opens from the Tasks sidebar's ⋯ only (TV-U6).
+    includeTrash: true,
   });
 
   const canRender = useMemo(

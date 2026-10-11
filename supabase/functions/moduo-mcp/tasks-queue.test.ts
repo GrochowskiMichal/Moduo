@@ -106,8 +106,9 @@ const queued = (userId: string, taskId: string, position: string): Row => ({
   position,
 });
 
-function setup(opts: { missingQueue?: boolean; hidden?: string[] } = {}) {
+function setup(opts: { missingQueue?: boolean; hidden?: string[]; buckets?: Row[] } = {}) {
   const tables: Record<string, Row[]> = {
+    buckets: opts.buckets ?? [],
     tasks: [task("t1"), task("t2"), task("t3"), task("secret"), task("old", { committed_for: "2026-10-08" })],
     task_relations: [],
     tags: [],
@@ -131,7 +132,7 @@ function setup(opts: { missingQueue?: boolean; hidden?: string[] } = {}) {
   const fake = fakeDb(
     tables,
     {
-      share_visible_ids: () => visible(),
+      share_visible_ids: () => [...visible(), ...tables.buckets!.map((b) => b.id as string)],
       // The ops act for the key's creator (perm_actor_id); here: append / drop.
       tasks_op_queue_add: (a) => {
         if (!mine().some((r) => r.task_id === a.p_task_id)) {
@@ -164,6 +165,49 @@ function call(name: string, args: Row, ctx: ToolContext): Promise<any> {
   return tool.handler(args, ctx) as Promise<any>;
 }
 const ids = (queue: Row[]) => queue.map((t) => t.id);
+
+describe("archived projects stay out of lists and queues; search finds them (TV-U6)", () => {
+  const bucket = (id: string, extra: Row = {}): Row => ({
+    id,
+    workspace_id: WS,
+    name: id,
+    is_system: false,
+    group_label: null,
+    position: id,
+    deleted_at: null,
+    ...extra,
+  });
+
+  it("leaves an archived bucket and its tasks out of lists, queues and search", async () => {
+    const { ctx } = setup({
+      buckets: [bucket("b1", { archived_at: "2026-10-09T00:00:00Z" }), bucket("b2", { color: "teal" })],
+    });
+    expect(await call("tasks_list_buckets", {}, ctx)).toEqual([
+      { id: "b2", name: "b2", is_system: false, color: "teal" },
+    ]);
+    // Every task in the fixture lives in b1.
+    expect(await call("tasks_list", {}, ctx)).toEqual([]);
+    expect((await call("tasks_queue", {}, ctx)).queue).toEqual([]);
+  });
+
+  it("lists them on request, and search finds them, labelled (REPLAN 78)", async () => {
+    const { ctx } = setup({
+      buckets: [bucket("b1", { archived_at: "2026-10-09T00:00:00Z" }), bucket("b2")],
+    });
+    expect(await call("tasks_list_buckets", { include_archived: true }, ctx)).toEqual([
+      { id: "b1", name: "b1", is_system: false, archived: true },
+      { id: "b2", name: "b2", is_system: false },
+    ]);
+    const listed = await call("tasks_list", { include_archived: true }, ctx);
+    expect(listed.length).toBeGreaterThan(0);
+    expect(listed.every((t: Row) => t.project_archived === true)).toBe(true);
+  });
+
+  it("reads a database from before the migration (no archived_at) as nothing archived", async () => {
+    const { ctx } = setup({ buckets: [bucket("b1")] });
+    expect(ids(await call("tasks_list", {}, ctx)).sort()).toEqual(["old", "t1", "t2", "t3"]);
+  });
+});
 
 describe("the queue tools act on the key creator's queue (TV-D2)", () => {
   it("tasks_queue: the creator's own queue in order, only tasks they can see", async () => {

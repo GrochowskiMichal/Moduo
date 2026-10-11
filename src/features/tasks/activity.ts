@@ -80,6 +80,12 @@ function updateLine(p: Record<string, unknown>): string {
       }
       case "bucket_id": {
         const n = typeof p.subtasks_moved === "number" ? p.subtasks_moved : 0;
+        // TV-U6: the project was deleted, and its open work went to an Inbox.
+        if (p.reason === "project_deleted") {
+          return n > 0
+            ? "deleted this task's project · it moved to an Inbox with its subtasks"
+            : "deleted this task's project · it moved to an Inbox";
+        }
         if (n === 1) return "moved this and its subtask to another project";
         return n > 1
           ? `moved this and its ${n} subtasks to another project`

@@ -95,6 +95,15 @@ export function spineActivityLine(
     // TV-D1: a teammate finished a task you created.
     case "tasks.completed":
       return "completed this";
+    // TV-U6 (REPLAN 78): a project was deleted and its open work assigned to
+    // you landed in your Inbox (the card's target). One notice per person; the
+    // project is named only when you could see it.
+    case "tasks.project_deleted": {
+      const project = str(p.title);
+      const n = num(p.count) ?? 0;
+      const what = n > 1 ? `${n} of your tasks are` : "your task is";
+      return `deleted ${project ? `“${project}”` : "a project"} · ${what} in your Inbox`;
+    }
     // ── Storage alerts (AT-1): the owner's pool passed 80% / 95%. The actor is
     // whoever uploaded the file that crossed it.
     case "attachments.storage_80":

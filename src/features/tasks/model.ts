@@ -217,6 +217,17 @@ export type Bucket = {
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
+  /**
+   * The sidebar dot's label hue (a `LABEL_COLORS` name); null or absent =
+   * neutral (TV-U6). Read through `normalizeLabelColor`, like a tag's colour.
+   */
+  color?: string | null;
+  /**
+   * Set while the project is archived (TV-U6, REPLAN 16 + 78): it leaves the
+   * sidebar, every list, count and queue, and opens from the sidebar's ⋯ →
+   * Archived projects; Tasks' search still finds its tasks, labelled.
+   */
+  archivedAt?: string | null;
 };
 
 /**
@@ -501,7 +512,42 @@ export type TasksModuleBundle = {
    * this field exists to kill.
    */
   truncated: Truncation[];
+  /**
+   * Archived projects and their tasks (TV-U6), kept out of `buckets` and
+   * `tasks` so every other reader of the bundle (Home, the Calendar, contact
+   * hubs) hides them without knowing about archiving. The Tasks module joins
+   * them back: Archived projects and search show them.
+   */
+  archivedBuckets?: Bucket[];
+  archivedTasks?: Task[];
 };
+
+/** A project in Recently deleted (TV-U6). */
+export type TrashedBucket = {
+  bucket: Bucket;
+  /** Shared with the finished tasks (and files) deleted with it; null for a delete from before TV-U6. */
+  batchId: string | null;
+  /** The open tasks its delete handed to their assignees' Inboxes (REPLAN 78);
+   *  a Restore takes back the ones nobody edited since. */
+  movedTaskIds: string[];
+};
+
+/** A task in Recently deleted (TV-U6). */
+export type TrashedTask = {
+  task: Task;
+  /** The batch it was deleted in (with a project), or null when deleted on its own. */
+  batchId: string | null;
+};
+
+/** What Recently deleted holds: everything deleted in the last 30 days. */
+export type TasksTrash = { buckets: TrashedBucket[]; tasks: TrashedTask[] };
+
+/** What deleting a project did (REPLAN 78): open tasks handed to Inboxes,
+ *  finished ones deleted with it, people told. */
+export type ProjectDeleteResult = { moved: number; deleted: number; notified: number };
+
+/** Days a deleted task, project or file stays restorable before the purge. */
+export const TRASH_DAYS = 30;
 
 /** Coarse time-of-day slots that a bucket can be mapped to (spec §9). */
 export type TimeBlockSlot = "morning" | "afternoon" | "evening";

@@ -171,7 +171,7 @@ function TaskCardView({
         ) : null}
         <ContextMenuSeparator />
         <ContextMenuSub>
-          <ContextMenuSubTrigger>Move to bucket</ContextMenuSubTrigger>
+          <ContextMenuSubTrigger>Move to project</ContextMenuSubTrigger>
           <ContextMenuSubContent>
             <ContextMenuRadioGroup
               value={task.bucketId}

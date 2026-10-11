@@ -1260,3 +1260,67 @@ describe("search (TV-D11b)", () => {
     ).toEqual(["beyond", "held"]);
   });
 });
+
+describe("archived projects ride apart (TV-U6)", () => {
+  const project = (id: string, over: Record<string, unknown> = {}) => ({
+    id,
+    workspaceId: WS,
+    ownerId: ME,
+    name: id,
+    isSystem: false,
+    group: null,
+    position: id,
+    createdAt: at(0),
+    updatedAt: at(1),
+    deletedAt: null,
+    ...over,
+  });
+
+  it("sets an archived project and its tasks apart, and keeps each list's identity while its rows do", async () => {
+    const server = fakeServer();
+    server.tables.buckets = [
+      project("inbox-mine", { isSystem: true }),
+      project("live"),
+      project("old", { archivedAt: at(2) }),
+    ];
+    server.tables.tasks = [
+      task("t-live", { bucketId: "live" }),
+      task("t-old", { bucketId: "old" }),
+    ];
+    const { store } = makeStore(server);
+    await settled(store);
+    const first = store.getSnapshot().bundle;
+    expect(first.buckets.map((b) => b.id)).toEqual(["inbox-mine", "live"]);
+    expect(first.archivedBuckets?.map((b) => b.id)).toEqual(["old"]);
+    expect(first.tasks.map((t) => t.id)).toEqual(["t-live"]);
+    expect(first.archivedTasks?.map((t) => t.id)).toEqual(["t-old"]);
+
+    // A task edit: both project lists, and the archived tasks, stay the same arrays.
+    store.answer({
+      tasks: [task("t-live", { bucketId: "live", title: "renamed", updatedAt: at(5) })],
+    });
+    const second = store.getSnapshot().bundle;
+    expect(second.tasks[0]?.title).toBe("renamed");
+    expect(second.buckets).toBe(first.buckets);
+    expect(second.archivedBuckets).toBe(first.archivedBuckets);
+    expect(second.archivedTasks).toBe(first.archivedTasks);
+
+    // A project rename (the archived set unchanged): both task lists stay.
+    store.answer({ buckets: [project("live", { name: "Live!", updatedAt: at(6) })] });
+    const third = store.getSnapshot().bundle;
+    expect(third.buckets.find((b) => b.id === "live")?.name).toBe("Live!");
+    expect(third.tasks).toBe(second.tasks);
+    expect(third.archivedTasks).toBe(second.archivedTasks);
+
+    // An archive shown at once (an overlay): the project and its task move apart.
+    const write = store.begin([
+      { table: "buckets", patch: { id: "live", fields: { archivedAt: at(7) } } },
+    ]);
+    const fourth = store.getSnapshot().bundle;
+    expect(fourth.buckets.map((b) => b.id)).toEqual(["inbox-mine"]);
+    expect(fourth.tasks).toEqual([]);
+    expect(fourth.archivedTasks?.map((t) => t.id).sort()).toEqual(["t-live", "t-old"]);
+    write.fail();
+    expect(store.getSnapshot().bundle.tasks.map((t) => t.id)).toEqual(["t-live"]);
+  });
+});

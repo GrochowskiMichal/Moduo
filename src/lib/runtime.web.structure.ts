@@ -15,6 +15,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
   Area,
   Bucket,
+  ProjectDeleteResult,
   Section,
   TaskReminder,
   TaskSession,
@@ -23,7 +24,8 @@ import type {
   TeamMember,
   TimeBlockMap,
 } from "../features/tasks/model";
-import { sanitizeTimeBlocks } from "../features/tasks/model";
+import { sanitizeTimeBlocks, type TasksTrash, TRASH_DAYS } from "../features/tasks/model";
+import { trashFromRows } from "./bucket-rows";
 import { collectTruncations, READ_CAPS, readPaged, type Truncation } from "./paged-select";
 import {
   areaRowToModel,
@@ -50,6 +52,10 @@ export type ProjectFields = {
   clientContactId?: string | null;
   areaId?: string | null;
   position?: string;
+  /** TV-U6: a label hue name; null = neutral. */
+  color?: string | null;
+  /** TV-U6: archive (true) or unarchive (false). Needs Full access. */
+  archived?: boolean;
 };
 
 export type SectionFields = {
@@ -101,7 +107,7 @@ function fail(error: { message?: string }): never {
   throw new Error(error.message ?? "That didn't save.");
 }
 
-const PROJECT_KEYS: Record<keyof ProjectFields, string> = {
+const PROJECT_KEYS: Record<Exclude<keyof ProjectFields, "archived">, string> = {
   name: "name",
   status: "status",
   startsOn: "starts_on",
@@ -110,16 +116,27 @@ const PROJECT_KEYS: Record<keyof ProjectFields, string> = {
   clientContactId: "client_contact_id",
   areaId: "area_id",
   position: "position",
+  color: "color",
 };
 
-/** Project fields as the ops take them (snake_case, only the keys given). */
+/** Project fields as the ops take them (snake_case, only the keys given).
+ *  Never an owner, workspace or Inbox flag: those can't change. */
 export function projectFieldsToOp(fields: ProjectFields): Row {
   const out: Row = {};
   for (const [key, column] of Object.entries(PROJECT_KEYS)) {
-    const value = fields[key as keyof ProjectFields];
+    const value = fields[key as keyof typeof PROJECT_KEYS];
     if (value !== undefined) out[column] = value;
   }
+  // The server stamps the time; any value archives, null unarchives.
+  if (fields.archived !== undefined) out.archived_at = fields.archived ? "now" : null;
   return out;
+}
+
+/** What `projects_op_delete` answered, read leniently. */
+export function projectDeleteResultOf(data: unknown): ProjectDeleteResult {
+  const r = (data && typeof data === "object" ? data : {}) as Record<string, unknown>;
+  const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+  return { moved: n(r.moved), deleted: n(r.deleted), notified: n(r.notified) };
 }
 
 /** A delete flag as the ops take it: any time deletes, null restores. */
@@ -195,6 +212,9 @@ export function createTasksStructure(
     userId: () => Promise<string | null>;
     /** The pre-TV-D10 project save (raw), for a database before it. */
     upsertBucketLegacy: (bucket: Bucket) => Promise<Bucket>;
+    /** The pre-TV-U6 project delete (raw: every task to the caller's Inbox),
+     *  for a database before its migration. Remove in TV-D7. */
+    deleteProjectLegacy: (workspaceId: string, projectId: string) => Promise<void>;
     /** The pre-TV-D10 workspace time blocks (raw), for a database before it. */
     getTimeBlocksLegacy: (workspaceId: string) => Promise<TimeBlockMap>;
     setTimeBlocksLegacy: (workspaceId: string, blocks: TimeBlockMap) => Promise<TimeBlockMap>;
@@ -468,6 +488,104 @@ export function createTasksStructure(
         project,
         areas: known ? null : (await listLive(READS.areas, input.workspaceId)).rows,
       };
+    },
+
+    // ── Deleting, Recently deleted, access (TV-U6) ───────────────────────────
+
+    /**
+     * Delete a project (REPLAN 78): its open work goes to each top task's
+     * assignee's Inbox (unassigned: yours), with one quiet notice per person;
+     * the finished work goes with it to Recently deleted. Needs Full access.
+     * Undo / Restore is `restoreTrash`. Before TV-U6's migration: the old
+     * delete (every task to your Inbox), which can't be restored.
+     */
+    async deleteProject(input: {
+      workspaceId: string;
+      projectId: string;
+    }): Promise<ProjectDeleteResult & { restorable: boolean }> {
+      const res = await rpc("projects_op_delete", {
+        p_workspace_id: input.workspaceId,
+        p_project_id: input.projectId,
+      });
+      if (!res.error) return { ...projectDeleteResultOf(res.data), restorable: true };
+      if (!isMissingFunctionError(res.error, "projects_op_delete")) fail(res.error);
+      await deps.deleteProjectLegacy(input.workspaceId, input.projectId);
+      return { moved: 0, deleted: 0, notified: 0, restorable: false };
+    },
+
+    /** Recently deleted: the projects and tasks deleted in the last 30 days
+     *  that you can see. */
+    async listTrash(workspaceId: string): Promise<TasksTrash> {
+      const since = new Date(Date.now() - TRASH_DAYS * 86_400_000).toISOString();
+      const read = async (table: "buckets" | "tasks", cap: number) => {
+        const build = (opts?: { count: "exact"; head: true }) =>
+          client
+            .from(table)
+            .select("*", opts)
+            .eq("workspace_id", workspaceId)
+            .not("deleted_at", "is", null)
+            .gte("deleted_at", since);
+        const res = await readPaged<Row, Answer["error"]>({
+          scope: table === "buckets" ? "deleted projects" : "deleted tasks",
+          cap,
+          page: async (offset, limit) => {
+            const { data, error } = await build()
+              .order("deleted_at", { ascending: false })
+              .order("id")
+              .range(offset, offset + limit - 1);
+            return { data: (data ?? null) as Row[] | null, error };
+          },
+          countTotal: async () => {
+            const { count, error } = await build({ count: "exact", head: true });
+            return error ? null : (count ?? null);
+          },
+          keyOf: (row) => String(row?.id),
+        });
+        if (res.error) fail(res.error);
+        return res.rows;
+      };
+      const [projects, tasks] = await Promise.all([
+        read("buckets", READ_CAPS.buckets),
+        read("tasks", READ_CAPS.tasks),
+      ]);
+      return trashFromRows(projects, tasks);
+    },
+
+    /** Bring a project (with its batch and the moved tasks nobody touched) or
+     *  a task back from Recently deleted. */
+    async restoreTrash(input: {
+      workspaceId: string;
+      entityType: "bucket" | "task";
+      entityId: string;
+    }): Promise<void> {
+      const res = await rpc("tasks_op_trash_restore", {
+        p_workspace_id: input.workspaceId,
+        p_entity_type: input.entityType,
+        p_entity_id: input.entityId,
+      });
+      if (res.error) fail(res.error);
+    },
+
+    /** Delete forever, from Recently deleted only. Files go at the next daily purge. */
+    async purgeTrash(input: {
+      workspaceId: string;
+      entityType: "bucket" | "task";
+      entityId: string;
+    }): Promise<void> {
+      const res = await rpc("tasks_op_trash_purge", {
+        p_workspace_id: input.workspaceId,
+        p_entity_type: input.entityType,
+        p_entity_id: input.entityId,
+      });
+      if (res.error) fail(res.error);
+    },
+
+    /** Whether you have Full access to a project (archive, delete, restore). */
+    async projectAccess(input: { projectId: string }): Promise<{ canManage: boolean }> {
+      const res = await rpc("share_op_state", { p_type: "bucket", p_id: input.projectId });
+      if (res.error) fail(res.error);
+      const data = (res.data ?? {}) as Record<string, unknown>;
+      return { canManage: data.visible !== false && data.canManage === true };
     },
 
     // ── Sections ─────────────────────────────────────────────────────────────

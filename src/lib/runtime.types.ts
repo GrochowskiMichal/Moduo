@@ -922,8 +922,11 @@ export type ModuoRuntime = {
      */
     createTask?(task: Task): Promise<Task>;
     seedInbox(workspaceId: string): Promise<Bucket>;
+    /** The pre-TV-D10 project save (raw), kept as the "bucket" alias. New
+     *  projects and edits go through `createProject` / `updateProject`;
+     *  deleting, Recently deleted and access are in the structure part
+     *  (`deleteProject`, `listTrash`, `restoreTrash`, `purgeTrash`, TV-U6). */
     upsertBucket(bucket: Bucket): Promise<Bucket>;
-    deleteBucket(input: { workspaceId: string; bucketId: string }): Promise<void>;
     /**
      * Create a task. The server records the creator; an assignee of "" means
      * the creator. Re-saving a task that exists writes its editable fields only.

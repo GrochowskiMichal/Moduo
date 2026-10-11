@@ -392,6 +392,7 @@ export const webCapabilities: RuntimeCapabilities = {
 const tasksStructure = createTasksStructure(supabaseClient, {
   userId: async () => (await getAuthedUser())?.id ?? null,
   upsertBucketLegacy: (bucket) => upsertBucketRow(bucket),
+  deleteProjectLegacy: (workspaceId, projectId) => legacyDeleteBucket(workspaceId, projectId),
   getTimeBlocksLegacy: (workspaceId) => getWorkspaceTimeBlocks(workspaceId),
   setTimeBlocksLegacy: (workspaceId, blocks) => setWorkspaceTimeBlocks(workspaceId, blocks),
 });
@@ -2176,6 +2177,7 @@ export const webRuntime: ModuoRuntime = {
         bucketsRes.error || tasksRes.error || tagsRes.error || linksRes.error || relationsRes.error;
       if (firstError) throw new Error(firstError.message);
       return {
+        // Archived projects come too: the shared store sets them apart (TV-U6).
         buckets: mapKnownRows(bucketsRes.rows, bucketRowToModel),
         tasks: mapKnownRows(tasksRes.rows, taskRowToModel),
         tags: mapKnownRows(tagsRes.rows, tagRowToModel),
@@ -2274,29 +2276,6 @@ export const webRuntime: ModuoRuntime = {
     // update of the editable columns (createProject / updateProject are the ops).
     async upsertBucket(bucket) {
       return upsertBucketRow(bucket);
-    },
-
-    async deleteBucket({ workspaceId, bucketId }) {
-      const { data: bucket } = await supabaseClient
-        .from("buckets")
-        .select("is_system")
-        .eq("id", bucketId)
-        .maybeSingle();
-      if (!bucket) return;
-      if (bucket.is_system) throw new Error("The Inbox bucket cannot be deleted");
-      // Reassign live tasks to Inbox so none are orphaned, then soft-delete.
-      const inbox = await ensureWebInbox(workspaceId);
-      const now = new Date().toISOString();
-      await supabaseClient
-        .from("tasks")
-        .update({ bucket_id: inbox.id, updated_at: now })
-        .eq("bucket_id", bucketId)
-        .is("deleted_at", null);
-      const { error } = await supabaseClient
-        .from("buckets")
-        .update({ deleted_at: now, updated_at: now })
-        .eq("id", bucketId);
-      if (error) throw new Error(error.message);
     },
 
     async upsertTask(task) {
@@ -4267,6 +4246,33 @@ async function updateTaskRowLegacyOwner(taskId: string, assigneeId: string | nul
     .single();
   if (error) throw new Error(error.message);
   return taskRowToModel(data);
+}
+
+/**
+ * The project delete from before TV-U6, for a database its migration hasn't
+ * reached: live tasks move to the caller's Inbox, then the project is
+ * soft-deleted. The only task write left outside the ops; remove in TV-D7.
+ */
+async function legacyDeleteBucket(workspaceId: string, bucketId: string): Promise<void> {
+  const { data: bucket } = await supabaseClient
+    .from("buckets")
+    .select("is_system")
+    .eq("id", bucketId)
+    .maybeSingle();
+  if (!bucket) return;
+  if (bucket.is_system) throw new Error("The Inbox can't be deleted.");
+  const inbox = await ensureWebInbox(workspaceId);
+  const now = new Date().toISOString();
+  await supabaseClient
+    .from("tasks")
+    .update({ bucket_id: inbox.id, updated_at: now })
+    .eq("bucket_id", bucketId)
+    .is("deleted_at", null);
+  const { error } = await supabaseClient
+    .from("buckets")
+    .update({ deleted_at: now, updated_at: now })
+    .eq("id", bucketId);
+  if (error) throw new Error(error.message);
 }
 
 /**

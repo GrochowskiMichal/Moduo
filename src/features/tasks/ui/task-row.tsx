@@ -460,7 +460,7 @@ function TaskRowView({
           Set due date…
         </ContextMenuItem>
         <ContextMenuItem onSelect={() => afterMenuClose(() => onRequestCommand(task.id, "bucket"))}>
-          Move to bucket…
+          Move to project…
         </ContextMenuItem>
         {task.parentId ? (
           <ContextMenuItem onSelect={() => actions.setTaskParent(task.id, null)}>
@@ -723,7 +723,7 @@ function BucketPopover({
         <button
           type="button"
           onClick={(e) => e.stopPropagation()}
-          aria-label={`Bucket: ${bucketName}`}
+          aria-label={`Project: ${bucketName}`}
           tabIndex={showLabel ? undefined : -1}
           aria-hidden={showLabel ? undefined : true}
           data-implied={showLabel ? undefined : ""}
