@@ -2,6 +2,35 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index.
 
+## 2026-10-11 · TV-D10-fix sessions, reminders and Waiting on behind the task's gate — the agent's choices (deferred to by Maciej)
+
+A follow-up to TV-D10 ([specs/tasks-v3.md](../../specs/tasks-v3.md) block 10, §Assumptions #4, #24; REPLAN 24, 25, default d; migration `20261011110000_task_sessions_access`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **D10F-1 · One gate for a task, on every path** → TV-D10-fix (`tasks__visible` / `tasks__editable` for the caller, `tasks__visible_to` / `tasks__editable_to` for a given person), TV-D12, TV-D16
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: like D10-15 for projects, the task gate wraps `can_access` on the task, and every path to sessions, reminders and Waiting on asks it: the three tables' RLS (and so Realtime), every op (an op answers "not found" about a row of a task you can't see), the `scheduled_at` / `duration_minutes` trigger, the reminder sender and the booking busy read. `sessions_access.test.sql` runs each path for a viewer, a member without access to a private project and a view-only member.
+  - Why: the service role (booking, the cron sender, MCP) bypasses RLS, so a gate that lives only in the policies doesn't hold there.
+  - Rejected: inline `can_access` calls per path (they drift, D10-15).
+- **D10F-2 · A work session goes in your own calendar or the task's assignee's; moving, resizing and removing keep its person** → TV-D10-fix (`tasks__check_session_person`, `tasks__session_legacy`), TV-U13 / TV-F6 / Calendar (the sessions UI offers you and the assignee only)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: adding a session or handing one over takes you, or the task's current assignee (scheduling their work), and only an assignee who sees the task and can work on tasks; a write of `scheduled_at` (an old build, the app's picker) makes a new session the assignee's when they may hold it (see the task, can work on tasks), else the writer's; system work (the repeat engine's catch-up, which runs from anyone's app) never uses the caller: the creator's when they may hold it, else nobody's; anyone who can edit the task moves, resizes or removes any of its sessions, and the session stays its person's.
+  - Why: a session blocks its person's booking links, so only they, or whoever plans the assignee's work, may put one there; an editor can already reschedule and unschedule the task, and a former assignee's leftover blocks need clearing.
+  - Rejected: anyone who can work on tasks (TV-D10's rule); only your own sessions for moves and removals (the picker and Unschedule act on the shown session, whoever's it is, and a backfilled block of a former assignee would be stuck).
+- **D10F-3 · Reminders stay settable by anyone who can see the task** → TV-D10-fix (`tasks_op_reminder_add`, `tasks__fire_reminders`), D10-10, TV-D12
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: D10-10 holds (view is enough, always for yourself); a reminder is read only by its person while they see the task; one whose person no longer sees the task is retired at its time without a notice (the sender's claim marks only the others for delivery).
+  - Why: a reminder is the caller's own row, read by nobody else, and changes nothing on the task; a notice names the task, so it waits on access at send time.
+  - Rejected: edit for reminders (would take "Remind me" away from viewers and protect nothing).
+- **D10F-4 · Booking reads a host's busy times through one server function** → TV-D10-fix (`tasks__busy_sessions`, `_shared/booking-sessions.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: `booking-public` calls `tasks__busy_sessions` (service role only), which answers start and end times of the host's live sessions on open tasks they can see; the closed categories live in that SQL (drift gate against `TASK_CLOSED_CATEGORIES`); a failed read blocks nothing.
+  - Why: the same gate as every other path, and nothing but times can leave.
+  - Rejected: keeping the table read with a second visibility check in TypeScript.
+- **D10F-5 · A write another trigger makes skips the project edit gate only when it is a foreign key's clear** → TV-D10-fix (`buckets__area_sync`, `buckets__project_check`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: at trigger depth > 1 the gate is skipped only for clearing a project's area (label untouched), lead or client; any other nested change asks `projects__editable`.
+  - Why: a foreign key's SET NULL by a signed-in person (a profile or contact deleted for good) must not fail, and that's all the exception was for; trigger depth alone says nothing about who started the write.
+  - Rejected: dropping the exception (those deletes would fail), and a session flag set by the system path (a foreign key action can't set one).
 ## 2026-10-11 · TV-U6 Sidebar v3 — the agent's choices (deferred to by Maciej)
 
 Built in tasks-v3 block 13 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §3, §15, Edge cases "Structure moves"; REPLAN 13–16, 20, 29, 29a–e, 30, 78, 98; migration `20261011100000_projects_archive_trash`, #328's unapplied `20261009140000` renumbered and re-scoped) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
