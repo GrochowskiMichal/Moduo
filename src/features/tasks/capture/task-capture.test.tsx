@@ -12,7 +12,7 @@ import type { ResolveContext } from "../../spine/references/resolvers";
 import type { ReferencePreviewApi } from "../../spine/references/rows";
 import { ReferenceStore } from "../../spine/references/store";
 import type { Bucket, Task, Team } from "../model";
-import { EMPTY_FIELDS, saveDraft } from "./capture-draft";
+import { EMPTY_FIELDS, loadDraft, saveDraft } from "./capture-draft";
 
 const ME = "u-me";
 const SAM = "u-sam";
@@ -256,6 +256,38 @@ describe("a restored draft", () => {
     expect(document.querySelector('[data-capture-token="person"]')).toBeTruthy();
   });
 
+  it("words changed under another type (⌘2, then back) come along as words", async () => {
+    saveDraft(ME, WS, {
+      segments: [{ text: "Old words" }],
+      keep: [],
+      description: "",
+      subtasks: [],
+      fields: EMPTY_FIELDS,
+    });
+    renderBody({}, referenceStore({}), "Pick up the keys");
+    const title = await screen.findByRole("textbox", { name: "Task title" });
+    await waitFor(() => expect(title.textContent).toBe("Pick up the keys"));
+  });
+
+  it("a capture the server refused comes back on the next open, kept apart from the draft", async () => {
+    saveDraft(
+      ME,
+      WS,
+      {
+        segments: [{ text: "Refused words" }],
+        keep: [],
+        description: "",
+        subtasks: [],
+        fields: EMPTY_FIELDS,
+      },
+      "refused",
+    );
+    renderBody();
+    const title = await screen.findByRole("textbox", { name: "Task title" });
+    await waitFor(() => expect(title.textContent).toBe("Refused words"));
+    expect(loadDraft(ME, WS, "refused")).toBeNull();
+  });
+
   it("a second person on this device never sees it", async () => {
     saveDraft(ME, WS, {
       segments: [{ text: "Book the dentist" }],
@@ -343,7 +375,7 @@ describe("a team task (54, 94)", () => {
       segments: [{ text: "Banner " }, { token: { kind: "team", teamId: "t-design", label: "" } }],
       keep: [],
       description: "",
-      subtasks: [],
+      subtasks: ["Mock it up", "Review it @sam"],
       fields: EMPTY_FIELDS,
     });
     renderBody();
@@ -351,10 +383,17 @@ describe("a team task (54, 94)", () => {
       expect(destination().getAttribute("aria-label")).toBe("Destination: Design requests"),
     );
     fireEvent.click(screen.getByRole("button", { name: /^Create\s*⏎$/ }));
-    await waitFor(() => expect(fake.saved.length).toBe(1));
-    expect(fake.saved[0].assigneeId).toBeNull();
-    expect(fake.saved[0].teamId).toBe("t-design");
-    expect(fake.saved[0].bucketId).toBe("p-requests");
+    await waitFor(() => expect(fake.saved.length).toBe(3));
+    const [parent, mock, review] = fake.saved;
+    expect(parent.assigneeId).toBeNull();
+    expect(parent.teamId).toBe("t-design");
+    expect(parent.bucketId).toBe("p-requests");
+    // Its breakdown goes with it: same project, nobody's (U14-6)...
+    expect(mock.parentId).toBe(parent.id);
+    expect(mock.assigneeId).toBeNull();
+    expect(mock.bucketId).toBe("p-requests");
+    // ...unless a line names its own person.
+    expect(review.assigneeId).toBe(SAM);
   });
 });
 

@@ -36,6 +36,8 @@ export type CaptureDraft = {
   description: string;
   subtasks: string[];
   fields: DraftFields;
+  /** A pasted list waiting for "Create n tasks?" (the person's own lines). */
+  pasted?: string | null;
 };
 
 export const EMPTY_FIELDS: DraftFields = { tags: [], waitingOn: [] };
@@ -49,12 +51,20 @@ export const EMPTY_DRAFT: CaptureDraft = {
 };
 
 const PREFIX = "moduo:capture-draft:task:";
-const key = (userId: string, workspaceId: string) => `${PREFIX}${userId}:${workspaceId}`;
+/** Which slot: the draft Esc keeps, or a capture the server refused. */
+export type DraftSlot = "draft" | "refused";
+const key = (userId: string, workspaceId: string, slot: DraftSlot = "draft") =>
+  `${PREFIX}${userId}:${workspaceId}${slot === "refused" ? ":refused" : ""}`;
 
 /** Does a draft hold anything worth restoring? */
 export function draftHasContent(draft: CaptureDraft): boolean {
   const titled = draft.segments.some((s) => ("text" in s ? s.text.trim() !== "" : true));
-  return titled || draft.description.trim() !== "" || draft.subtasks.some((s) => s.trim() !== "");
+  return (
+    titled ||
+    draft.description.trim() !== "" ||
+    draft.subtasks.some((s) => s.trim() !== "") ||
+    Boolean(draft.pasted?.trim())
+  );
 }
 
 /**
@@ -93,6 +103,7 @@ export function storableDraft(draft: CaptureDraft): CaptureDraft {
       ...draft.fields,
       tags: draft.fields.tags.map((t) => ({ id: t.id, name: "" })),
     },
+    ...(draft.pasted ? { pasted: draft.pasted } : {}),
   };
 }
 
@@ -104,10 +115,14 @@ function storage(): Storage | null {
   }
 }
 
-export function loadDraft(userId: string | null, workspaceId: string | null): CaptureDraft | null {
+export function loadDraft(
+  userId: string | null,
+  workspaceId: string | null,
+  slot: DraftSlot = "draft",
+): CaptureDraft | null {
   if (!userId || !workspaceId) return null;
   try {
-    const raw = storage()?.getItem(key(userId, workspaceId));
+    const raw = storage()?.getItem(key(userId, workspaceId, slot));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<CaptureDraft>;
     if (!Array.isArray(parsed.segments)) return null;
@@ -122,6 +137,7 @@ export function loadDraft(userId: string | null, workspaceId: string | null): Ca
         tags: Array.isArray(parsed.fields?.tags) ? parsed.fields.tags : [],
         waitingOn: Array.isArray(parsed.fields?.waitingOn) ? parsed.fields.waitingOn : [],
       },
+      pasted: typeof parsed.pasted === "string" ? parsed.pasted : null,
     });
   } catch {
     return null;
@@ -132,23 +148,28 @@ export function saveDraft(
   userId: string | null,
   workspaceId: string | null,
   draft: CaptureDraft,
+  slot: DraftSlot = "draft",
 ): void {
   if (!userId || !workspaceId) return;
   try {
     const store = storage();
     if (!store) return;
     if (draftHasContent(draft)) {
-      store.setItem(key(userId, workspaceId), JSON.stringify(storableDraft(draft)));
-    } else store.removeItem(key(userId, workspaceId));
+      store.setItem(key(userId, workspaceId, slot), JSON.stringify(storableDraft(draft)));
+    } else store.removeItem(key(userId, workspaceId, slot));
   } catch {
     // No storage (a private window): the draft lives as long as the capture.
   }
 }
 
-export function clearDraft(userId: string | null, workspaceId: string | null): void {
+export function clearDraft(
+  userId: string | null,
+  workspaceId: string | null,
+  slot: DraftSlot = "draft",
+): void {
   if (!userId || !workspaceId) return;
   try {
-    storage()?.removeItem(key(userId, workspaceId));
+    storage()?.removeItem(key(userId, workspaceId, slot));
   } catch {
     // Nothing to clear.
   }

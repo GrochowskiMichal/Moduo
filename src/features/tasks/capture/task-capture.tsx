@@ -33,6 +33,7 @@ import {
 import { Input } from "../../../components/ui/input";
 import { Kbd } from "../../../components/ui/kbd";
 import { Textarea } from "../../../components/ui/textarea";
+import { dispatchOpenCapture } from "../../../lib/capture-open";
 import type { CaptureBodyProps } from "../../../lib/capture-registry";
 import type { CaptureSourceKind } from "../../../lib/capture-source";
 import { isMacPlatform } from "../../../lib/shortcuts";
@@ -106,6 +107,9 @@ const SOURCE_ICON: Record<CaptureSourceKind, typeof Mail> = {
  */
 let lastTitleWords = "";
 
+/** The open Task capture's way to take a refused capture back ("Restore"). */
+let openBody: ((draft: CaptureDraft) => void) | null = null;
+
 /** The plain words of a title (tokens as their words): what the shell carries between types. */
 function plainText(segments: readonly TitleSegment[]): string {
   return segments
@@ -159,7 +163,15 @@ export function TaskCaptureBody({
   // ── the draft (restored on open, research §1.8) ──────────────────────────
   const [initial] = useState(() => {
     const stored = loadDraft(owner.userId, owner.workspaceId);
-    const restored = stored && draftHasContent(stored) ? stored : null;
+    // A capture the server refused comes back when nothing else is waiting.
+    const refused = loadDraft(owner.userId, owner.workspaceId, "refused");
+    const restored =
+      stored && draftHasContent(stored)
+        ? stored
+        : refused && draftHasContent(refused)
+          ? refused
+          : null;
+    if (restored === refused) clearDraft(owner.userId, owner.workspaceId, "refused");
     let start: CaptureDraft = restored ?? EMPTY_DRAFT;
     // Typed under another type (⌘2, then back): those words come along.
     if (shellDraft.trim() && shellDraft !== lastTitleWords) {
@@ -195,7 +207,11 @@ export function TaskCaptureBody({
   }));
   const [sourceOn, setSourceOn] = useState(true);
   const [restoredNotice, setRestoredNotice] = useState(initial.restored);
-  const [pasted, setPasted] = useState<string | null>(null);
+  const [pasted, setPasted] = useState<string | null>(initial.draft.pasted ?? null);
+  const pastedRef = useRef(pasted);
+  useEffect(() => {
+    pastedRef.current = pasted;
+  });
   const [hint, setHint] = useState<string | null>(null);
   const [openPill, setOpenPill] = useState<OpenPill>(null);
   const [destinationOpen, setDestinationOpen] = useState(false);
@@ -210,8 +226,15 @@ export function TaskCaptureBody({
 
   // Keep the draft on the device as it changes.
   useEffect(() => {
-    saveDraft(owner.userId, owner.workspaceId, { segments, keep, description, subtasks, fields });
-  }, [owner, segments, keep, description, subtasks, fields]);
+    saveDraft(owner.userId, owner.workspaceId, {
+      segments,
+      keep,
+      description,
+      subtasks,
+      fields,
+      pasted,
+    });
+  }, [owner, segments, keep, description, subtasks, fields, pasted]);
 
   // The title takes the caret once the dialog has settled.
   useEffect(() => {
@@ -648,38 +671,76 @@ export function TaskCaptureBody({
           ? null
           : undefined;
 
-  /** One typed line (a subtask, a pasted line) as a task, the pills under its own words. */
+  /** A team's default project, when this person can see it. */
+  const defaultProjectOf = (teamId: string | null): string | null => {
+    const team = teamId ? teams.find((t) => t.id === teamId) : null;
+    const id = team?.defaultProjectId ?? null;
+    return id && projects.some((p) => p.id === id) ? id : null;
+  };
+
+  /**
+   * One typed line (a subtask, a pasted line) as a task, under its own words.
+   * A top-level line takes the pills; a subtask takes its parent's project,
+   * section and person (U14-6), unless it names its own person.
+   */
   const lineTask = (
     line: string,
-    base: { bucketId: string; parentId: string | null; position: string },
+    base: { bucketId: string; parent: CaptureTaskPlan | null; position: string },
   ): CaptureTaskPlan | null => {
     const read = resolveTitle(segmentsFromLine(line, lineContext));
     const words = read.title.trim();
     if (!words) return null;
     const own = captureDates(read);
     const hasOwnDate = Boolean(own.dueDay || own.scheduledAt || own.recurrence);
-    const teamId = read.single.team?.teamId ?? (base.parentId ? null : values.teamId);
+    const parent = base.parent;
+    const ownPerson = read.single.person?.userId;
+    if (parent) {
+      // A parent routed to a team in a project this person can't see: the
+      // subtask goes with the team too, so the server files it beside it.
+      const routedUnseen = Boolean(parent.teamId) && !parent.projectId;
+      return {
+        id: newTaskId(),
+        title: words,
+        description: "",
+        projectId: parent.projectId,
+        sectionId: parent.sectionId,
+        teamId: routedUnseen ? parent.teamId : null,
+        assigneeId: ownPerson !== undefined ? ownPerson : parent.assigneeId,
+        parentId: parent.id,
+        position: base.position,
+        dueDay: hasOwnDate ? own.dueDay : null,
+        scheduledAt: hasOwnDate ? own.scheduledAt : null,
+        recurrence: hasOwnDate ? own.recurrence : null,
+        priority: null,
+        estimateMinutes: null,
+        tags: read.tags.map((t) => ({ id: t.tagId, name: t.label })),
+        links: [],
+        fromSource: false,
+        remindAt: null,
+        waitingOn: [],
+      };
+    }
+    const teamId = read.single.team?.teamId ?? values.teamId;
+    // A line routed to its own team, with no project picked: the team's default.
+    const projectId = base.bucketId || (read.single.team ? (defaultProjectOf(teamId) ?? "") : "");
     return {
       id: newTaskId(),
       title: words,
       description: "",
-      projectId: base.bucketId,
-      sectionId,
+      projectId,
+      sectionId: projectId === base.bucketId ? sectionId : null,
       teamId,
-      assigneeId: assigneeFor(read.single.person?.userId, teamId),
-      parentId: base.parentId,
+      assigneeId: assigneeFor(ownPerson, teamId),
+      parentId: null,
       position: base.position,
-      dueDay: hasOwnDate ? own.dueDay : base.parentId ? null : values.dueDay,
-      scheduledAt: hasOwnDate ? own.scheduledAt : base.parentId ? null : values.scheduledAt,
-      recurrence: hasOwnDate ? own.recurrence : base.parentId ? null : values.recurrence,
-      priority: base.parentId ? null : values.priority,
+      dueDay: hasOwnDate ? own.dueDay : values.dueDay,
+      scheduledAt: hasOwnDate ? own.scheduledAt : values.scheduledAt,
+      recurrence: hasOwnDate ? own.recurrence : values.recurrence,
+      priority: values.priority,
       estimateMinutes: null,
-      tags: [
-        ...(base.parentId ? [] : values.tags),
-        ...read.tags.map((t) => ({ id: t.tagId, name: t.label })),
-      ],
+      tags: [...values.tags, ...read.tags.map((t) => ({ id: t.tagId, name: t.label }))],
       links: [],
-      fromSource: !base.parentId && sourceOn && Boolean(context?.source),
+      fromSource: sourceOn && Boolean(context?.source),
       remindAt: null,
       waitingOn: [],
     };
@@ -700,30 +761,63 @@ export function TaskCaptureBody({
 
   const currentDraft = (): CaptureDraft => ({ segments, keep, description, subtasks, fields });
 
-  // Still open (Create more), with nothing typed since: a capture that didn't
-  // save comes back into it. Otherwise it's kept as the draft.
+  // A capture the server refused comes back: straight into this capture when
+  // it's open and empty; otherwise it's kept in its own slot on the device
+  // (never over what's being typed now) and the toast offers "Restore", which
+  // puts it into the open capture or opens one with it (U14-11).
   const mounted = useRef(true);
-  useEffect(
-    () => () => {
-      mounted.current = false;
-    },
-    [],
-  );
   const segmentsRef = useRef(segments);
   useEffect(() => {
     segmentsRef.current = segments;
   });
-  const putBack = (kept: CaptureDraft) => {
+  const fill = (kept: CaptureDraft) => {
+    titleApi.current?.setSegments(kept.segments);
+    setKeep(kept.keep);
+    setDescription(kept.description);
+    setSubtasks(kept.subtasks);
+    setFields(kept.fields);
+    setPasted(kept.pasted ?? null);
+    setRestoredNotice(false);
+    titleApi.current?.focus();
+  };
+  const fillRef = useRef(fill);
+  useEffect(() => {
+    fillRef.current = fill;
+  });
+  useEffect(() => {
+    const restore = (kept: CaptureDraft) => fillRef.current(kept);
+    openBody = restore;
+    return () => {
+      mounted.current = false;
+      if (openBody === restore) openBody = null;
+    };
+  }, []);
+  const putBack = (kept: CaptureDraft, message: string) => {
     const empty = segmentsRef.current.every((x) => "text" in x && !x.text.trim());
-    if (mounted.current && empty) {
-      titleApi.current?.setSegments(kept.segments);
-      setKeep(kept.keep);
-      setDescription(kept.description);
-      setSubtasks(kept.subtasks);
-      setFields(kept.fields);
+    if (mounted.current && empty && !pastedRef.current) {
+      fill(kept);
+      toast.error(message, { description: "Your capture is back: change it and try again." });
       return;
     }
-    saveDraft(owner.userId, owner.workspaceId, kept);
+    const { userId: who, workspaceId: where } = owner;
+    saveDraft(who, where, kept, "refused");
+    toast.error(message, {
+      description: "Your capture is kept on this device.",
+      action: {
+        label: "Restore",
+        onClick: () => {
+          const waiting = loadDraft(who, where, "refused");
+          if (!waiting) return;
+          clearDraft(who, where, "refused");
+          if (openBody) openBody(waiting);
+          else {
+            saveDraft(who, where, waiting);
+            lastTitleWords = "";
+            dispatchOpenCapture();
+          }
+        },
+      },
+    });
   };
 
   /** Clear for the next one; "Create more" keeps the pills and the destination. */
@@ -760,15 +854,24 @@ export function TaskCaptureBody({
       result = { created: [], queued: [], error, extrasFailed: 0 };
     }
     const landed = result.created.length + result.queued.length;
+    const undoSaved = () => {
+      void undoCapture(deps, plan.workspaceId, result.created).then(({ error }) => {
+        if (error) toast.error("Some weren't undone. Delete them from the list.");
+      });
+    };
     if (result.error) {
       // The network never fails a capture (it waits on the device); this is
       // the server saying no. With nothing saved, the capture comes back.
       const message =
         result.error instanceof Error ? result.error.message : "Couldn't create the task.";
       if (landed === 0) {
-        if (kept) putBack(kept);
-        toast.error(message, {
-          description: kept ? "Your capture is kept: open it again to change it." : undefined,
+        if (kept) putBack(kept, message);
+        else toast.error(message);
+      } else if (batch && result.created.length > 0) {
+        // Part of a list: what saved can go again with one Undo.
+        undoToast(`${landed} of ${plan.tasks.length} saved`, {
+          description: message,
+          onUndo: undoSaved,
         });
       } else {
         toast.error(`${landed} of ${plan.tasks.length} saved`, { description: message });
@@ -777,21 +880,18 @@ export function TaskCaptureBody({
     }
     if (result.queued.length > 0) {
       // Offline: they wait on this device and go once it's back (default g).
-      const n = plan.tasks.length;
-      toast(n > 1 ? `${n} tasks waiting to sync` : (plan.tasks[0]?.title ?? "Task"), {
-        description: n > 1 ? undefined : `Waiting to sync · ${placeLabel}`,
-      });
+      const n = result.queued.length;
+      toast(
+        plan.tasks.length > 1
+          ? `${n} ${n === 1 ? "task" : "tasks"} waiting to sync`
+          : (plan.tasks[0]?.title ?? "Task"),
+        { description: plan.tasks.length > 1 ? undefined : `Waiting to sync · ${placeLabel}` },
+      );
       return result.created;
     }
     if (batch) {
       const n = result.created.length;
-      undoToast(`${n} ${n === 1 ? "task" : "tasks"} created`, {
-        onUndo: () => {
-          void undoCapture(deps, plan.workspaceId, result.created).then(({ error }) => {
-            if (error) toast.error("Some weren't undone. Delete them from the list.");
-          });
-        },
-      });
+      undoToast(`${n} ${n === 1 ? "task" : "tasks"} created`, { onUndo: undoSaved });
       return result.created;
     }
     const first = result.created[0];
@@ -861,7 +961,7 @@ export function TaskCaptureBody({
     const lines = subtasks.map((s) => s.trim()).filter(Boolean);
     const childPositions = positionsAfter(lines.length, []);
     const children = lines.flatMap((line, i) => {
-      const task = lineTask(line, { bucketId, parentId: main.id, position: childPositions[i] });
+      const task = lineTask(line, { bucketId, parent: main, position: childPositions[i] });
       return task ? [task] : [];
     });
     const plan: CapturePlan = {
@@ -906,20 +1006,22 @@ export function TaskCaptureBody({
     const bucketId = projectId ?? "";
     const tasks: CaptureTaskPlan[] = [];
     pastedList.items.forEach((item) => {
-      const parent = lineTask(item.title, { bucketId, parentId: null, position: "" });
+      const parent = lineTask(item.title, { bucketId, parent: null, position: "" });
       if (!parent) return;
       tasks.push(parent);
       const childPositions = positionsAfter(item.children.length, []);
       item.children.forEach((child, j) => {
-        const sub = lineTask(child, { bucketId, parentId: parent.id, position: childPositions[j] });
+        const sub = lineTask(child, { bucketId, parent, position: childPositions[j] });
         if (sub) tasks.push(sub);
       });
     });
+    // Kept, the list comes back if the server refuses it.
+    const kept: CaptureDraft = { ...EMPTY_DRAFT, fields, pasted };
     setPasted(null);
     if (!more) onDone();
     void send(
       { workspaceId, tasks, source: context?.source ?? null, queueTop: Boolean(context?.queueTop) },
-      null,
+      kept,
       true,
     );
   };

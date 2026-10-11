@@ -15,7 +15,7 @@
 
 import { ChevronDown } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-
+import { CAPTURE_OPEN_EVENT } from "../../lib/capture-open";
 import {
   CAPTURE_TYPES,
   type CaptureContext,
@@ -43,18 +43,8 @@ import { visibleModuleNavItems } from "./app-chrome-constants";
 import { announceOverlayOpen, onOtherOverlayOpen } from "./global-overlay-events";
 
 const OVERLAY_ID = "capture";
-const CAPTURE_OPEN_EVENT = "moduo:capture:open";
 
-/**
- * Open the capture as Task: with no request, to your Inbox (⌘⇧K, the bottom
- * bar); with one, "here" (⌘N, "+ New", `c`: tasks-v3 call 90).
- */
-export function dispatchOpenCapture(request?: CaptureRequest): void {
-  if (typeof window === "undefined") return;
-  window.dispatchEvent(
-    new CustomEvent<CaptureRequest | undefined>(CAPTURE_OPEN_EVENT, { detail: request }),
-  );
-}
+export { dispatchOpenCapture } from "../../lib/capture-open";
 
 type Props = {
   /** The registered types; tests pass their own. Task (the first) opens by default. */

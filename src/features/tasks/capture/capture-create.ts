@@ -131,7 +131,11 @@ async function inBatches<T>(
   return failure;
 }
 
-/** Resolves once a waiting create has been sent (true), or the store stopped (false). */
+/**
+ * Resolves once a waiting create has left the outbox: true when the server
+ * took it (the copy holds the task), false when it refused it or the store
+ * stopped.
+ */
 function whenSent(store: WorkspaceStore, taskId: string): Promise<boolean> {
   return new Promise((resolve) => {
     let done = false;
@@ -141,7 +145,9 @@ function whenSent(store: WorkspaceStore, taskId: string): Promise<boolean> {
       if (store.isDisposed() || !store.isQueuedCreate(taskId)) {
         done = true;
         off();
-        resolve(!store.isDisposed());
+        resolve(
+          !store.isDisposed() && store.getSnapshot().bundle.tasks.some((t) => t.id === taskId),
+        );
       }
     };
     off = store.subscribe(check);
@@ -157,8 +163,10 @@ async function place(plan: CapturePlan, deps: CaptureDeps): Promise<CaptureTaskP
   const { runtime, userId, store } = deps;
   if (store) await store.whenLoaded();
   const bundle = store && !store.isDisposed() ? store.getSnapshot().bundle : null;
-  const systems = (bundle?.buckets ?? []).filter((b) => b.isSystem && !b.deletedAt);
-  let inboxId = (systems.find((b) => b.ownerId === userId) ?? systems[0])?.id ?? "";
+  // Your own Inbox, never someone else's: made when you have none yet.
+  let inboxId =
+    (bundle?.buckets ?? []).find((b) => b.isSystem && !b.deletedAt && b.ownerId === userId)?.id ??
+    "";
   if (!inboxId && plan.tasks.some((t) => !t.projectId)) {
     inboxId = (await runtime.tasks.seedInbox(plan.workspaceId)).id;
   }
@@ -256,18 +264,33 @@ export async function runCapture(plan: CapturePlan, deps: CaptureDeps): Promise<
     }
   };
 
+  /** A subtask whose parent is still waiting on the device waits behind it. */
+  const parentWaits = (item: CaptureTaskPlan) =>
+    Boolean(store && item.parentId && store.isQueuedCreate(item.parentId));
+
+  const waitFor = (item: CaptureTaskPlan) => {
+    queued.push(item.id);
+    // Its extras follow once it's sent and taken (while this app stays open).
+    if (!store) return;
+    void whenSent(store, item.id).then((sent) => {
+      if (sent) void extrasFor(item, item.id, item.title);
+    });
+  };
+
   const make = async (item: CaptureTaskPlan) => {
     const task = planToTask(workspaceId, item);
     if (store && !store.isDisposed()) {
+      if (parentWaits(item)) {
+        // The outbox sends in order, so the parent goes first.
+        store.enqueue({ kind: "create", id: crypto.randomUUID(), task });
+        waitFor(item);
+        return;
+      }
       const { saved, queued: waiting } = await store.sendCreate(task, {
         queue: plan.queueTop && !item.parentId,
       });
       if (waiting || !saved) {
-        queued.push(item.id);
-        // Its extras follow once it's sent (while this app stays open).
-        void whenSent(store, item.id).then((sent) => {
-          if (sent) void extrasFor(item, item.id, item.title);
-        });
+        waitFor(item);
         return;
       }
       made.set(item.id, saved);
@@ -286,10 +309,14 @@ export async function runCapture(plan: CapturePlan, deps: CaptureDeps): Promise<
    * goes on the way, what wasn't sent waits on the device like a single
    * capture does.
    */
-  const makeMany = async (items: CaptureTaskPlan[]): Promise<unknown> => {
-    if (!store || store.isDisposed() || items.length < 2 || store.isOffline()) {
-      return inBatches(items, make);
+  const makeMany = async (all: CaptureTaskPlan[]): Promise<unknown> => {
+    if (!store || store.isDisposed() || all.length < 2 || store.isOffline()) {
+      return inBatches(all, make);
     }
+    // Subtasks of a parent still waiting on the device wait behind it.
+    for (const item of all.filter(parentWaits)) await make(item);
+    const items = all.filter((item) => !parentWaits(item) && !queued.includes(item.id));
+    if (items.length === 0) return null;
     const create = (task: Task) =>
       runtime.tasks.createTask ? runtime.tasks.createTask(task) : runtime.tasks.upsertTask(task);
     const shown = store.begin(
@@ -315,10 +342,11 @@ export async function runCapture(plan: CapturePlan, deps: CaptureDeps): Promise<
         } else refused ??= error;
       }
     });
-    shown.settle({ tasks: saved });
     if (lost) store.wentOffline();
-    // Offline now: the store keeps these on the device under their ids.
+    // Offline now: the store keeps these on the device under their ids
+    // (shown by the outbox before this write lets go of them: no flicker).
     for (const item of unsent) await make(item);
+    shown.settle({ tasks: saved });
     await inBatches(
       items.filter((item) => made.has(item.id)),
       async (item) => {

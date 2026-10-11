@@ -71,6 +71,20 @@ describe("the capture draft", () => {
     expect(window.localStorage.getItem("unrelated")).toBe("stays");
   });
 
+  it("a refused capture is kept apart, ids only, and goes on sign-out like the draft", () => {
+    saveDraft("u1", "w1", draft({ pasted: "Line one\nLine two" }), "refused");
+    expect(loadDraft("u1", "w1")).toBeNull();
+    const kept = loadDraft("u1", "w1", "refused");
+    expect(kept?.pasted).toBe("Line one\nLine two");
+    const raw = Object.keys(window.localStorage)
+      .map((k) => window.localStorage.getItem(k) ?? "")
+      .join("");
+    expect(raw).not.toContain(SECRET);
+    expect(loadDraft("u2", "w1", "refused")).toBeNull();
+    forgetCaptureDrafts();
+    expect(loadDraft("u1", "w1", "refused")).toBeNull();
+  });
+
   it("a deleted account's drafts go, and only theirs", () => {
     saveDraft("u1", "w1", draft());
     saveDraft("u2", "w1", draft());

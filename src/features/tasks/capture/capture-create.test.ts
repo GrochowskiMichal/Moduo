@@ -50,13 +50,18 @@ const item = (over: Partial<CaptureTaskPlan>): CaptureTaskPlan => ({
 });
 
 /** A store as far as the capture uses it: a copy, creates, the line-up, Undo. */
-function fakeStore(opts: { offline?: boolean; refuse?: string } = {}) {
+function fakeStore(opts: { offline?: boolean; refuse?: string; dropAfter?: number } = {}) {
   const listeners = new Set<() => void>();
   const outbox = new Set<string>();
   const sent: Array<{ task: Task; queue?: boolean }> = [];
   const shownRemoved: string[][] = [];
   const shownInserted: string[][] = [];
   const settled: Task[][] = [];
+  /** Tasks the server has taken (the copy holds them). */
+  const taken = new Set<string>();
+  /** Creates that waited on the device, in order. */
+  const enqueued: string[] = [];
+  let offline = Boolean(opts.offline);
   const store = {
     whenLoaded: async () => {},
     isDisposed: () => false,
@@ -65,6 +70,7 @@ function fakeStore(opts: { offline?: boolean; refuse?: string } = {}) {
         buckets: [bucket("inbox-me", { isSystem: true }), bucket("p1")],
         tasks: [
           { id: "old", bucketId: "inbox-me", parentId: null, deletedAt: null, position: "m" },
+          ...[...taken].map((id) => ({ id })),
         ],
       },
     }),
@@ -73,15 +79,23 @@ function fakeStore(opts: { offline?: boolean; refuse?: string } = {}) {
       return () => listeners.delete(fn);
     },
     isQueuedCreate: (id: string) => outbox.has(id),
-    isOffline: () => Boolean(opts.offline),
-    wentOffline: rs.fn(),
+    isOffline: () => offline,
+    wentOffline: rs.fn(() => {
+      offline = true;
+    }),
+    enqueue: rs.fn((entry: { task: Task }) => {
+      outbox.add(entry.task.id);
+      enqueued.push(entry.task.id);
+    }),
     sendCreate: rs.fn(async (task: Task, o: { queue?: boolean } = {}) => {
       sent.push({ task, queue: o.queue });
       if (opts.refuse && task.title === opts.refuse) throw new Error("Refused");
-      if (opts.offline) {
+      if (offline) {
         outbox.add(task.id);
+        enqueued.push(task.id);
         return { saved: null, queued: true };
       }
+      taken.add(task.id);
       return { saved: task, queued: false };
     }),
     queueOp: rs.fn(async (_o: unknown, op: () => Promise<unknown>) => op()),
@@ -91,8 +105,9 @@ function fakeStore(opts: { offline?: boolean; refuse?: string } = {}) {
       return { settle: (a: { tasks: Task[] }) => settled.push(a.tasks), fail: () => {} };
     },
   };
-  /** The device sends what waited. */
-  const flush = () => {
+  /** The device sends what waited; `refused` ids the server says no to. */
+  const flush = (refused: string[] = []) => {
+    for (const id of outbox) if (!refused.includes(id)) taken.add(id);
     outbox.clear();
     for (const fn of listeners) fn();
   };
@@ -104,6 +119,7 @@ function fakeStore(opts: { offline?: boolean; refuse?: string } = {}) {
     shownRemoved,
     shownInserted,
     settled,
+    enqueued,
   };
 }
 
@@ -181,13 +197,68 @@ describe("runCapture through the shared store", () => {
     });
     expect(result.created).toEqual([]);
     expect(result.queued).toEqual([parent.id, child.id]);
-    // The waiting parent lines up when it's sent; its subtask doesn't.
-    expect(sent.map((s) => s.queue)).toEqual([true, false]);
+    // The waiting parent lines up when it's sent; its subtask waits behind it.
+    expect(sent.map((s) => s.queue)).toEqual([true]);
     expect(sent[0].task.id).toBe(parent.id);
     expect(runtime.spine.createLink).not.toHaveBeenCalled();
     flush();
     await new Promise((r) => setTimeout(r, 0));
     expect(runtime.spine.createLink).toHaveBeenCalledTimes(1);
+  });
+
+  it("a subtask whose parent waits on the device waits behind it, in the outbox", async () => {
+    const { store, enqueued, raw } = fakeStore({ offline: true });
+    const runtime = fakeRuntime();
+    const parent = item({ title: "Parent" });
+    const kids = [1, 2].map((n) =>
+      item({ title: `Kid ${n}`, parentId: parent.id, position: `000${n}` }),
+    );
+    await runCapture(plan([parent, ...kids]), { runtime: runtime as never, userId: ME, store });
+    expect(enqueued).toEqual([parent.id, kids[0].id, kids[1].id]);
+    // The subtasks never tried the network ahead of their parent.
+    expect(raw.enqueue).toHaveBeenCalledTimes(2);
+  });
+
+  it("a waiting task the server then refuses gets no links or reminders", async () => {
+    const { store, flush } = fakeStore({ offline: true });
+    const runtime = fakeRuntime();
+    const t = item({
+      title: "Refused later",
+      links: [{ ref: { type: "note", id: "n1" }, label: "N" }],
+      remindAt: new Date().toISOString(),
+    });
+    await runCapture(plan([t]), { runtime: runtime as never, userId: ME, store });
+    flush([t.id]);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(runtime.spine.createLink).not.toHaveBeenCalled();
+    expect(runtime.tasks.addReminder).not.toHaveBeenCalled();
+  });
+
+  it("the connection drops partway through a batch: the rest wait under their ids, the saved ones settle", async () => {
+    const { store, raw, enqueued, settled } = fakeStore();
+    const runtime = fakeRuntime();
+    let calls = 0;
+    runtime.tasks.upsertTask = rs.fn(async (t: Task) => {
+      calls += 1;
+      if (calls > 2) throw new Error("Failed to fetch");
+      return t;
+    });
+    const items = [1, 2, 3, 4, 5, 6, 7, 8].map((n) => item({ title: `T${n}` }));
+    const result = await runCapture(plan(items), { runtime: runtime as never, userId: ME, store });
+    expect(result.error).toBeNull();
+    expect(raw.wentOffline).toHaveBeenCalled();
+    expect(result.created.length + result.queued.length).toBe(8);
+    expect(result.queued.length).toBeGreaterThan(0);
+    // Every one that didn't save waits under its own id.
+    expect(new Set(enqueued)).toEqual(new Set(result.queued));
+    expect(result.queued.every((id) => items.some((i) => i.id === id))).toBe(true);
+    // The saved ones went into the copy in one step.
+    expect(
+      settled
+        .at(-1)
+        ?.map((t) => t.id)
+        .sort(),
+    ).toEqual(result.created.map((t) => t.id).sort());
   });
 
   it("⌘N in Focus puts the new tasks at the top of Up next through the store's line-up", async () => {
