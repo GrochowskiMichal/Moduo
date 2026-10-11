@@ -9,6 +9,7 @@ import { Constants } from "@/types/supabase";
 import { ATTACHMENTS_BUCKET } from "./attachments.ts";
 import { TOOL_ARG_SCHEMAS } from "./mcp-tool-args.ts";
 import {
+  ACCESS_CHANGE_RESOURCES,
   ATTACHMENT_DELETED_REASONS,
   ATTACHMENT_PREVIEW_MIMES,
   ATTACHMENT_STATUSES,
@@ -27,6 +28,7 @@ import {
   MEMBER_DB_ROLES,
   PLAN_TIERS,
   PROJECT_STATES,
+  SYNC_TOMBSTONE_TABLES,
   TASK_CLOSED_CATEGORIES,
   TASK_REMINDER_KINDS,
   TASK_STATUS_CATEGORIES,
@@ -162,6 +164,20 @@ describe("cross-runtime drift guards", () => {
     expect(sessions).toContain(`p_kind NOT IN (${opList(TASK_REMINDER_KINDS)})`);
     expect(sessions).toContain(`CHECK (kind IN (${inList(TASK_WAITING_KINDS)}))`);
     expect(sessions).toContain(`v_kind NOT IN (${opList(TASK_WAITING_KINDS)})`);
+  });
+
+  it("the grant feed's resources and the tombstoned tables match TV-D11b's CHECKs", () => {
+    const sql = readFileSync(
+      resolve(MIGRATIONS_DIR, "20261011120000_tasks_sync_feed_search.sql"),
+      "utf8",
+    );
+    const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(",");
+    expect(sql).toContain(`CHECK (resource_type IN (${inList(ACCESS_CHANGE_RESOURCES)}))`);
+    expect(sql).toContain(`CHECK (table_name IN (${inList(SYNC_TOMBSTONE_TABLES)}))`);
+    // Every tombstoned table has its trigger.
+    for (const t of SYNC_TOMBSTONE_TABLES) {
+      expect(sql).toContain(`CREATE TRIGGER sync_tombstone AFTER DELETE ON public.${t}`);
+    }
   });
 
   it("the booking busy read leaves out the closed categories (TV-D10-fix)", () => {
