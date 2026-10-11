@@ -1032,7 +1032,7 @@ export function TaskListView({
             nest && expandedParents.has(task.id) ? (api.subtasksByParent.get(task.id) ?? []) : [];
           out.push({
             kind: "row",
-            key: `r:${task.id}`,
+            key: `r:${group.key}:${task.id}`,
             task,
             depth: 0,
             groupKey: group.key,
@@ -1042,7 +1042,7 @@ export function TaskListView({
           children.forEach((child, i) => {
             out.push({
               kind: "row",
-              key: `r:${task.id}:${child.id}`,
+              key: `r:${group.key}:${task.id}:${child.id}`,
               task: child,
               depth: 1,
               groupKey: group.key,
