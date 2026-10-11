@@ -61,6 +61,16 @@ Built in tasks-v3 block 11 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §Assum
   - Decision: a session whose copy was last read whole more than 24 h ago reads everything again (open tasks first, the rest after, the copy shown meanwhile) instead of a delta; a new field a later build reads also needs `CACHE_VERSION` bumped, which drops every copy.
   - Why: a delta never re-reads a row the server changed without a new stamp (TV-D9's backfills ran with the stamp trigger off) or fills a field a newer build reads.
   - Rejected: a server "sync epoch" (a migration); never (the copy could drift for good).
+- **D11a-13 · What sharing shows or hides reaches the copy without a stamp** → TV-D11a (`SYNC_TABLES`, `checkAccess`, `syncRead({ ids })`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: projects, areas, teams and members are read whole every sync (small; an area shows while one of its projects does); every other table is a delta, and the access check compares each delta table's live ids both ways: what the server no longer returns leaves the device, what it returns that the copy lacks (shared with you since, an old stamp) is read by id. The check runs after a session's first delta, every 10 minutes, and at once when the projects you can see change. All reads are plain selects under RLS, so TV-D10's `projects__visible` / `areas__visible` and `can_access` decide every row.
+  - Why: a grant or a revoke touches no row of the shared tables, so no delta and no Realtime event reports it.
+  - Rejected: reading every table whole (2,400 statuses on every return to the window, measured on the dev workspace); a server sync RPC that knows grants (a migration: TV-D11b).
+- **D11a-14 · A copy that can't be refreshed says so** → TV-D11a (`syncError`, `TasksSyncStatus`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: when a read the server refuses (an ended trial, a revoked session) fails after the copy is on screen, the rows stay, the top bar says "Not up to date" (click to try again) and the store retries with backoff; a first load with nothing to show is still an error.
+  - Why: yesterday's copy must never pass for live; a wall over rows that are still useful would be worse.
+  - Rejected: silently keeping the copy (found in review); replacing the list with an error.
 - **D11a-11 · Smaller calls** → TV-D11a
   - Who: agent's choice, deferred to by Maciej, 2026-10-11.
   - Decision: Home's quick capture keeps its plain behaviour (no date parsing) through the store; the full data export (Settings → Advanced) keeps its own complete read (an action, not a screen); the repeat roll-over is asked after the first read of a session that reaches the server and on Retry, once per load across all surfaces (`claimCatchUp`); comment counts come from comment ids per task (`commentCounts` on the hook) for TV-U10/U13 to show.
