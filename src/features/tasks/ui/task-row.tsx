@@ -684,7 +684,7 @@ function BucketPopover({
         <button
           type="button"
           onClick={(e) => e.stopPropagation()}
-          aria-label={`Bucket: ${bucketName}`}
+          aria-label={`Project: ${bucketName}`}
           tabIndex={showLabel ? undefined : -1}
           aria-hidden={showLabel ? undefined : true}
           data-implied={showLabel ? undefined : ""}

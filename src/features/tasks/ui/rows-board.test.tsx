@@ -185,7 +185,7 @@ describe("Row anatomy (U1-1, U1-2)", () => {
 
   it("in a cross-bucket flat view the bucket is dot + name text, not a pill", () => {
     renderList([task("a")], { selection: "all" });
-    const bucket = screen.getByRole("button", { name: "Bucket: Work" });
+    const bucket = screen.getByRole("button", { name: "Project: Work" });
     expect(bucket.textContent).toBe("Work");
     expect(bucket.querySelector('[data-slot="badge"]')).toBeNull();
     expect(bucket.querySelector('[data-slot="nav-row-dot"]')).not.toBeNull();
@@ -238,7 +238,7 @@ describe("Display → Rows: Standard · Detailed", () => {
   // Where the project is implied the trigger stays, taking no width (DS-6).
   // (It is aria-hidden then, so look it up by its label, not its role.)
   const projectShown = (row: HTMLElement) =>
-    !row.querySelector('[aria-label="Bucket: Work"]')?.hasAttribute("data-implied");
+    !row.querySelector('[aria-label="Project: Work"]')?.hasAttribute("data-implied");
 
   it("Standard keeps TV-U1's columns", () => {
     renderList(rows);
