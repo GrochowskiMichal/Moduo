@@ -182,12 +182,16 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
         next = rows
           .map((row) => mapWorkspace(row, userId))
           .filter((workspace) => !workspace.isDeleted);
-        rememberWorkspaces(userId, next);
-        // Tasks device copies of workspaces you left or that went away go too.
-        void keepWorkspaceCopies(
-          userId,
-          next.map((workspace) => workspace.id),
-        );
+        // An empty list proves nothing (a request that went out without the
+        // person's token reads as no workspaces): keep what the device has.
+        if (next.length > 0) {
+          rememberWorkspaces(userId, next);
+          // Tasks device copies of workspaces you left or that went away go too.
+          void keepWorkspaceCopies(
+            userId,
+            next.map((workspace) => workspace.id),
+          );
+        }
       } catch (e) {
         if (!remembered || !isNetworkError(e)) throw e;
         next = remembered;

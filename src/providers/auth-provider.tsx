@@ -216,6 +216,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
     // Tracked first (if they opted in); the SIGNED_OUT that follows opts analytics out.
     void Analytics.app.signedOut();
     await rt.auth.signOut();
+    // The person chose to sign out: their Tasks device copy goes even when
+    // auth-js couldn't end the session (offline with an expired token, so no
+    // SIGNED_OUT event follows) (TV-D11a).
+    void wipeSyncCopies();
+    forgetRememberedWorkspaces();
     setSession(null);
   };
 
