@@ -72,6 +72,38 @@ export const tasksModuleManifest: ModuleManifest = {
       args: { p_workspace_id: "workspace uuid", p_task_id: "task uuid" },
     },
     {
+      op: "projects.delete",
+      rpc: "projects_op_delete",
+      summary:
+        "Delete a project (TV-U6, REPLAN 78): every task tree with open work goes to its top task's assignee's Inbox (unassigned: yours), with one quiet notice per person (tasks.project_deleted); the finished tasks go with it to Recently deleted in one batch. Needs Full access to the project.",
+      args: {
+        p_workspace_id: "workspace uuid",
+        p_project_id: "project (bucket) uuid",
+      },
+    },
+    {
+      op: "tasks.trash_restore",
+      rpc: "tasks_op_trash_restore",
+      summary:
+        "Restore from Recently deleted (TV-U6), within 30 days: a project with its batch and the open tasks its delete sent to Inboxes that nobody touched since (Full access), or one task (into your Inbox when its project is gone). Not logged.",
+      args: {
+        p_workspace_id: "workspace uuid",
+        p_entity_type: "'bucket' (or 'project') or 'task'",
+        p_entity_id: "uuid",
+      },
+    },
+    {
+      op: "tasks.trash_purge",
+      rpc: "tasks_op_trash_purge",
+      summary:
+        "Delete forever, from Recently deleted only (TV-U6): a project with its batch (Full access), or one task. Files go at the next daily purge. Not logged.",
+      args: {
+        p_workspace_id: "workspace uuid",
+        p_entity_type: "'bucket' (or 'project') or 'task'",
+        p_entity_id: "uuid",
+      },
+    },
+    {
       op: "tasks.commit",
       rpc: "tasks_op_commit",
       summary:

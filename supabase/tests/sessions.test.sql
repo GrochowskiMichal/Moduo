@@ -70,7 +70,8 @@ BEGIN
   PERFORM test.ok(r LIKE '%don''t have edit access%', 'a viewer can''t schedule', r);
   r := test.try('E', format($q$SELECT * FROM public.tasks_op_session_add(%L, %L, %L::jsonb)$q$, test.id('W'), test.id('T1'),
     jsonb_build_object('starts_at', '2030-03-02T10:00:00Z', 'ends_at', '2030-03-02T11:00:00Z', 'user_id', test.id('V'))));
-  PERFORM test.ok(r LIKE '%Viewers can''t be assigned%', 'a session is someone''s who can work on tasks', r);
+  PERFORM test.ok(r LIKE '%your own calendar or the assignee''s%',
+    'a session goes in your own calendar or the assignee''s (never a viewer''s; TV-D10-fix)', r);
   PERFORM test.ok(test.value_as('V', format($q$SELECT count(*)::text FROM public.task_sessions WHERE task_id = %L$q$, test.id('T1'))) = '3'
               AND test.value_as('X', format($q$SELECT count(*)::text FROM public.task_sessions WHERE task_id = %L$q$, test.id('T1'))) = '0',
     'whoever sees the task sees its sessions; nobody else does');

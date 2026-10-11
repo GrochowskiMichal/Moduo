@@ -154,6 +154,17 @@ describe("activityLine", () => {
         }),
       ),
     ).toBe("moved this and its 2 subtasks to another project");
+    // TV-U6: a project delete moved it to an Inbox.
+    expect(
+      activityLine(
+        entry("tasks.update", {
+          fields: ["bucket_id"],
+          bucket_id: { from: "b1", to: "inbox" },
+          reason: "project_deleted",
+          subtasks_moved: 0,
+        }),
+      ),
+    ).toBe("deleted this task's project · it moved to an Inbox");
     expect(
       activityLine(entry("tasks.update", { fields: ["priority"], priority: { to: "high" } })),
     ).toBe("set high priority");

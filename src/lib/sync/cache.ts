@@ -16,8 +16,9 @@
 
 import type { SyncTableName } from "./types";
 
-/** Bumped when the persisted shape changes: an older copy's rows are dropped (its waiting captures are kept). */
-export const CACHE_VERSION = 2;
+/** Bumped when the persisted shape changes: an older copy's rows are dropped (its waiting captures are kept).
+ *  3: projects carry their colour and archive stamp (TV-U6). */
+export const CACHE_VERSION = 3;
 
 /** One table's rows and its delta cursor. */
 export type CachedTable = { rows: unknown[]; cursor: string | null };

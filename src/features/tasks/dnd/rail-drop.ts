@@ -14,13 +14,16 @@
 // only take a drop the pointer is actually over: a card dragged near the rail
 // never snaps to it by distance.
 
-import { type CollisionDetection, pointerWithin } from "@dnd-kit/core";
+import { type CollisionDetection, closestCenter, pointerWithin } from "@dnd-kit/core";
 
 import { betweenPositions } from "../helpers";
 import type { Task } from "../model";
 import type { TaskDropWrite } from "./drop-write";
 
 export const RAIL_DROP_PREFIX = "rail:";
+/** The sidebar's sortable project rows (TV-U6): their own prefix, so a task
+ *  drop never lands on one and a project drag sorts only among them. */
+export const RAIL_SORT_PREFIX = "railsort:";
 
 /** The `data` a rail row's droppable carries. */
 export type RailDropTarget =
@@ -105,8 +108,18 @@ export const railCollision: CollisionDetection = (args) =>
 /** Whether a droppable belongs to the rail or the hub — never the centre view's. */
 export function isSideDroppable(id: string | number): boolean {
   const s = String(id);
-  return s.startsWith(RAIL_DROP_PREFIX) || s.startsWith("link:");
+  return s.startsWith(RAIL_DROP_PREFIX) || s.startsWith(RAIL_SORT_PREFIX) || s.startsWith("link:");
 }
+
+/** The page collision's branch for a sidebar project drag: the sortable
+ *  project rows only, closest centre (a list reorder). */
+export const railSortCollision: CollisionDetection = (args) =>
+  closestCenter({
+    ...args,
+    droppableContainers: args.droppableContainers.filter((c) =>
+      String(c.id).startsWith(RAIL_SORT_PREFIX),
+    ),
+  });
 
 /**
  * Where a task moved to another project goes when the drop didn't place it:

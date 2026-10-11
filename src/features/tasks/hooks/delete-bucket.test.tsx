@@ -1,9 +1,13 @@
-// tasks-v2 Q1-4 — deleting a bucket is a deferred commit: hidden at once in every
-// useTasksModule, sent to the server only when the Undo toast closes, and Undo
-// just un-hides it. Runs the real hook over an in-memory runtime.
+// TV-U6 — deleting, archiving and editing projects in the real hook over an
+// in-memory runtime (REPLAN 78), through the shared store (TV-D11a): a delete
+// leaves every surface at once (a write overlay), sends the op right away,
+// puts only your own open work in your Inbox meanwhile, and its Undo restores
+// the batch; an archive asks the server for Full access (through the op),
+// takes the project out of lists and counts, and with "Won't do" or "Move"
+// acts on the open tasks first (Undo, or a refusal, puts them back); colours,
+// areas and moves go through `projects_op_update` with only the changed fields.
 //
-// The hidden-bucket store is module-level (shared by every hook instance, by
-// design), so each test uses its own bucket ids.
+// One store per runtime: each test makes its own server, with its own ids.
 
 import { afterEach, describe, expect, it, rs } from "@rstest/core";
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
@@ -24,28 +28,32 @@ rs.mock("sonner", () => ({ toast: toastMock }));
 // Live updates (TV-D5) need a socket; these tests drive the hook without one.
 rs.mock("../realtime", () => ({ listenTasksLive: () => () => {} }));
 
-import type { Bucket, Task } from "../model";
+import type { Area, Bucket, Task } from "../model";
 import { useTasksModule } from "./use-tasks-module";
 
-const WS = "ws-delete-bucket";
+const WS = "ws-projects";
+let clock = 10;
+/** A server stamp later than every earlier one. */
+const stamp = () => `2026-10-01T00:01:${String(clock++).padStart(2, "0")}.000Z`;
 const NOW = "2026-10-01T00:00:00.000Z";
 
-function bucket(id: string, name: string, isSystem = false): Bucket {
+function bucket(id: string, name: string, extra: Partial<Bucket> = {}): Bucket {
   return {
     id,
     workspaceId: WS,
     ownerId: "u1",
     name,
-    isSystem,
+    isSystem: false,
     group: null,
-    position: isSystem ? "a" : `b-${id}`,
+    position: `b-${id}`,
     createdAt: NOW,
     updatedAt: NOW,
     deletedAt: null,
+    ...extra,
   };
 }
 
-function task(id: string, bucketId: string, status: Task["status"] = "todo"): Task {
+function task(id: string, bucketId: string, extra: Partial<Task> = {}): Task {
   return {
     id,
     workspaceId: WS,
@@ -63,7 +71,7 @@ function task(id: string, bucketId: string, status: Task["status"] = "todo"): Ta
     recurrence: null,
     energyLevel: null,
     priority: null,
-    status,
+    status: "todo",
     committedFor: null,
     commitOrder: null,
     rescheduleCount: 0,
@@ -71,60 +79,200 @@ function task(id: string, bucketId: string, status: Task["status"] = "todo"): Ta
     createdAt: NOW,
     updatedAt: NOW,
     deletedAt: null,
+    ...extra,
   };
 }
 
-/** A workspace with Inbox and buckets `<p>x` (two tasks, one done) and `<p>y` (one task). */
-function makeServer(p: string) {
-  const ids = { inbox: `${p}inbox`, x: `${p}x`, y: `${p}y` };
+/**
+ * A workspace with the Inbox, project `<p>x` (mine, Anna's and a done task)
+ * and project `<p>y`, an area `<p>a`; the server applies REPLAN 78 like
+ * `projects_op_delete` (open work to its assignee's Inbox, the rest trashed).
+ */
+function makeServer(p: string, opts: { delta?: boolean } = {}) {
+  const ids = { inbox: `${p}inbox`, x: `${p}x`, y: `${p}y`, area: `${p}a` };
   const server = {
-    buckets: [bucket(ids.inbox, "Inbox", true), bucket(ids.x, "X"), bucket(ids.y, "Y")],
-    tasks: [task(`${p}t1`, ids.x), task(`${p}t2`, ids.x, "done"), task(`${p}t3`, ids.y)],
+    buckets: [
+      bucket(ids.inbox, "Inbox", { isSystem: true, position: "a" }),
+      bucket(ids.x, "X"),
+      bucket(ids.y, "Y"),
+    ],
+    tasks: [
+      task(`${p}mine`, ids.x),
+      task(`${p}annas`, ids.x, { assigneeId: "anna" }),
+      task(`${p}done`, ids.x, { status: "done" }),
+      task(`${p}other`, ids.y),
+    ],
+    areas: [] as Area[],
   };
+  const list = () => ({
+    buckets: server.buckets.filter((b) => !b.deletedAt).map((b) => ({ ...b })),
+    // Anna's Inbox is hers: its tasks aren't readable here.
+    tasks: server.tasks
+      .filter((t) => !t.deletedAt && t.bucketId !== "annas-inbox")
+      .map((t) => ({ ...t })),
+    tags: [],
+    tagLinks: [],
+    taskRelations: [],
+    areas: server.areas.map((a) => ({ ...a })),
+    truncated: [],
+  });
   const runtime = {
     tasks: {
-      list: rs.fn(async () => ({
-        buckets: server.buckets.filter((b) => !b.deletedAt).map((b) => ({ ...b })),
-        tasks: server.tasks.map((t) => ({ ...t })),
-        tags: [],
-        tagLinks: [],
-        taskRelations: [],
-        truncated: [],
-      })),
+      list: rs.fn(async () => list()),
       getTimeBlocks: rs.fn(async () => ({})),
       listQueue: rs.fn(async () => []),
-      deleteBucket: rs.fn(async ({ bucketId }: { bucketId: string }) => {
+      listTrash: rs.fn(async () => ({
+        buckets: server.buckets
+          .filter((b) => b.deletedAt)
+          .map((b) => ({ bucket: { ...b }, batchId: "batch", movedTaskIds: [] })),
+        tasks: [],
+      })),
+      deleteProject: rs.fn(async ({ projectId }: { projectId: string }) => {
+        const at = stamp();
         server.tasks = server.tasks.map((t) =>
-          t.bucketId === bucketId ? { ...t, bucketId: ids.inbox } : t,
+          t.bucketId !== projectId
+            ? t
+            : t.status === "done"
+              ? { ...t, deletedAt: at, updatedAt: at }
+              : {
+                  ...t,
+                  bucketId: t.assigneeId === "u1" ? ids.inbox : "annas-inbox",
+                  updatedAt: at,
+                },
         );
         server.buckets = server.buckets.map((b) =>
-          b.id === bucketId ? { ...b, deletedAt: NOW } : b,
+          b.id === projectId ? { ...b, deletedAt: at, updatedAt: at } : b,
+        );
+        return { moved: 2, deleted: 1, notified: 1, restorable: true };
+      }),
+      restoreTrash: rs.fn(async ({ entityId }: { entityId: string }) => {
+        server.buckets = server.buckets.map((b) =>
+          b.id === entityId ? { ...b, deletedAt: null } : b,
         );
       }),
-      // TV-D1: an edit sends only the fields it changed.
+      updateProject: rs.fn(
+        async ({
+          projectId,
+          patch,
+        }: {
+          projectId: string;
+          patch: {
+            color?: string | null;
+            archived?: boolean;
+            areaId?: string | null;
+            position?: string;
+          };
+        }) => {
+          const prev = server.buckets.find((b) => b.id === projectId) as Bucket;
+          const saved: Bucket = {
+            ...prev,
+            ...(patch.color !== undefined ? { color: patch.color } : {}),
+            ...(patch.areaId !== undefined ? { areaId: patch.areaId } : {}),
+            ...(patch.position !== undefined ? { position: patch.position } : {}),
+            ...(patch.archived !== undefined ? { archivedAt: patch.archived ? NOW : null } : {}),
+            updatedAt: "2026-10-01T00:00:01.000Z",
+          };
+          server.buckets = server.buckets.map((b) => (b.id === projectId ? saved : b));
+          return { ...saved };
+        },
+      ),
       updateTask: rs.fn(async ({ taskId, patch }: { taskId: string; patch: Partial<Task> }) => {
         const saved = { ...(server.tasks.find((s) => s.id === taskId) as Task), ...patch };
         server.tasks = server.tasks.map((s) => (s.id === taskId ? saved : s));
         return { ...saved };
       }),
-      upsertTask: rs.fn(async (t: Task) => {
-        const saved = { ...t, id: t.id || `${p}new-${server.tasks.length}` };
-        server.tasks = server.tasks.some((s) => s.id === saved.id)
-          ? server.tasks.map((s) => (s.id === saved.id ? saved : s))
-          : [...server.tasks, saved];
+      opSetStatus: rs.fn(async ({ taskId, status }: { taskId: string; status: string }) => {
+        const legacy = status === "wont_do" ? "archived" : status;
+        const saved = {
+          ...(server.tasks.find((s) => s.id === taskId) as Task),
+          status: legacy as Task["status"],
+        };
+        server.tasks = server.tasks.map((s) => (s.id === taskId ? saved : s));
         return { ...saved };
       }),
+      opUpdateTask: rs.fn(async ({ taskId, patch }: { taskId: string; patch: Partial<Task> }) => {
+        const saved = { ...(server.tasks.find((s) => s.id === taskId) as Task), ...patch };
+        server.tasks = server.tasks.map((s) => (s.id === taskId ? saved : s));
+        return [{ ...saved }];
+      }),
+      createArea: rs.fn(async ({ name }: { name: string }) => {
+        server.areas = [
+          ...server.areas,
+          {
+            id: ids.area,
+            workspaceId: WS,
+            name,
+            color: null,
+            position: 1,
+            shared: true,
+            createdBy: "u1",
+            createdAt: NOW,
+            updatedAt: NOW,
+          },
+        ];
+        return server.areas.map((a) => ({ ...a }));
+      }),
+      updateArea: rs.fn(async () => server.areas.map((a) => ({ ...a }))),
     },
   };
+  if (opts.delta) {
+    // The shared store's own reads (TV-D11a): whole for projects, by delta for
+    // tasks. Anna's Inbox is hers: its tasks never come back in a read. The
+    // access check hangs, as a slow one would.
+    const visible = (
+      table: string,
+    ): Array<{ id: string; updatedAt?: string; deletedAt?: string | null }> =>
+      table === "tasks"
+        ? server.tasks.filter((t) => t.bucketId !== "annas-inbox")
+        : table === "buckets"
+          ? server.buckets
+          : table === "areas"
+            ? server.areas
+            : [];
+    Object.assign(runtime.tasks, {
+      syncRead: rs.fn(
+        async (input: { table: string; since?: string | null; ids?: string[]; part?: string }) => {
+          const all = visible(input.table);
+          let rows = all.filter((r) => !r.deletedAt);
+          let deleted: string[] = [];
+          if (input.ids) {
+            rows = rows.filter((r) => input.ids?.includes(r.id));
+          } else if (input.since) {
+            const since = input.since;
+            const changed = all.filter((r) => (r.updatedAt ?? "") >= since);
+            rows = changed.filter((r) => !r.deletedAt);
+            deleted = changed.filter((r) => r.deletedAt).map((r) => r.id);
+          } else if (input.table === "tasks" && input.part) {
+            const open = (r: { status?: string }) =>
+              r.status === "todo" || r.status === "in_progress";
+            rows = rows.filter((r) => open(r as { status?: string }) === (input.part === "open"));
+          }
+          const stamps = [...rows.map((r) => r.updatedAt ?? ""), ...deleted.map(() => "")]
+            .filter(Boolean)
+            .sort();
+          return {
+            rows: rows.map((r) => ({ ...r })),
+            deleted,
+            maxUpdatedAt: stamps.at(-1) ?? null,
+            truncated: null,
+          };
+        },
+      ),
+      syncIds: rs.fn(() => new Promise(() => {})),
+    });
+  }
   return { ids, server, runtime };
 }
 
-const params = { userId: "u1", workspaceId: WS, modulePermission: "edit" as const };
+const params = {
+  userId: "u1",
+  workspaceId: WS,
+  modulePermission: "edit" as const,
+  includeTrash: true,
+};
 const lastToast = () => toastMock.mock.calls.at(-1) as unknown as [string, ToastOpts];
 const settle = () => act(() => new Promise((resolve) => setTimeout(resolve, 0)));
 const bucketIds = (api: { buckets: Bucket[] }) => api.buckets.map((b) => b.id);
-const bucketOf = (api: { tasks: Task[] }, id: string) =>
-  api.tasks.find((t) => t.id === id)?.bucketId;
 
 async function mount(runtime: unknown) {
   const hook = renderHook(() => useTasksModule(runtime as never, params));
@@ -137,161 +285,240 @@ afterEach(() => {
   toastMock.mockClear();
 });
 
-describe("deleteBucket (tasks-v2 Q1-4)", () => {
-  it("hides the bucket and shows its tasks in Inbox at once, with an Undo toast, and no server call yet", async () => {
-    const { ids, runtime } = makeServer("a-");
+describe("deleting a project (REPLAN 78, AC5.5)", () => {
+  it("leaves at once, shows only your own open work in your Inbox meanwhile, and sends the op", async () => {
+    const { ids, runtime } = makeServer("d1-");
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const real = runtime.tasks.deleteProject;
+    runtime.tasks.deleteProject = rs.fn(async (input: { projectId: string }) => {
+      await gate;
+      return real(input);
+    });
     const { result } = await mount(runtime);
-    expect(bucketIds(result.current)).toEqual([ids.x, ids.y]);
-
     act(() => result.current.deleteBucket(ids.x));
-
     expect(bucketIds(result.current)).toEqual([ids.y]);
-    expect(bucketOf(result.current, "a-t1")).toBe(ids.inbox);
-    expect(bucketOf(result.current, "a-t2")).toBe(ids.inbox);
+    const placed = (id: string) => result.current.tasks.find((t) => t.id === id)?.bucketId;
+    expect(placed("d1-mine")).toBe(ids.inbox);
+    expect(placed("d1-annas")).toBeUndefined();
+    expect(placed("d1-done")).toBeUndefined();
+    await waitFor(() =>
+      expect(runtime.tasks.deleteProject).toHaveBeenCalledWith({
+        workspaceId: WS,
+        projectId: ids.x,
+      }),
+    );
     const [label, opts] = lastToast();
     expect(label).toBe("“X” deleted");
-    expect(opts.description).toBe("Its 2 tasks moved to Inbox.");
-    expect(runtime.tasks.deleteBucket).not.toHaveBeenCalled();
+    expect(String(opts.description ?? "")).not.toMatch(/bucket/i);
+    release();
+    await settle();
+    await waitFor(() => expect(placed("d1-mine")).toBe(ids.inbox));
+    expect(placed("d1-annas")).toBeUndefined();
   });
 
-  it("commits exactly once when the toast closes", async () => {
-    const { ids, server, runtime } = makeServer("b-");
+  it("Undo restores the project through Recently deleted's op", async () => {
+    const { ids, runtime } = makeServer("d2-");
     const { result } = await mount(runtime);
     act(() => result.current.deleteBucket(ids.x));
-    const [, opts] = lastToast();
-
-    opts.onAutoClose?.();
-    opts.onDismiss?.();
     await settle();
+    const [, opts] = lastToast();
+    act(() => opts.action.onClick());
+    await waitFor(() =>
+      expect(runtime.tasks.restoreTrash).toHaveBeenCalledWith({
+        workspaceId: WS,
+        entityType: "bucket",
+        entityId: ids.x,
+      }),
+    );
+    await waitFor(() => expect(bucketIds(result.current)).toEqual([ids.x, ids.y]));
+  });
 
-    expect(runtime.tasks.deleteBucket).toHaveBeenCalledOnce();
-    expect(server.tasks.find((t) => t.id === "b-t1")?.bucketId).toBe(ids.inbox);
-    await waitFor(() => expect(runtime.tasks.list).toHaveBeenCalledTimes(2));
+  it("a refused delete brings the project back with the server's words", async () => {
+    const { ids, runtime } = makeServer("d3-");
+    runtime.tasks.deleteProject = rs.fn(async () => {
+      throw new Error("Only people with full access to this project can delete or restore it.");
+    });
+    const { result } = await mount(runtime);
+    act(() => result.current.deleteBucket(ids.x));
+    await settle();
+    await waitFor(() => expect(bucketIds(result.current)).toEqual([ids.x, ids.y]));
+    expect(toastMock.error).toHaveBeenCalledWith(
+      "Only people with full access to this project can delete or restore it.",
+    );
+  });
+});
+
+describe("archiving a project (REPLAN 16, 78)", () => {
+  it("Keep: out of the sidebar, lists and counts, into Archived projects; Undo unarchives", async () => {
+    const { ids, runtime } = makeServer("a1-");
+    const { result } = await mount(runtime);
+    act(() => result.current.archiveBucket(ids.x, { kind: "keep" }));
+    expect(bucketIds(result.current)).toEqual([ids.y]);
+    expect(result.current.archivedBuckets.map((b) => b.id)).toEqual([ids.x]);
+    expect(result.current.tasks.some((t) => t.bucketId === ids.x)).toBe(false);
+    expect(result.current.archivedTasks.map((t) => t.id).sort()).toEqual(
+      ["a1-annas", "a1-done", "a1-mine"].sort(),
+    );
+    expect(result.current.openTaskCountByBucket.get(ids.x)).toBeUndefined();
+    await settle();
+    expect(runtime.tasks.updateProject).toHaveBeenCalledWith(
+      expect.objectContaining({ projectId: ids.x, patch: { archived: true } }),
+    );
+    const [label, opts] = lastToast();
+    expect(label).toBe("“X” archived");
+    act(() => opts.action.onClick());
+    await waitFor(() => expect(bucketIds(result.current)).toEqual([ids.x, ids.y]));
+  });
+
+  it("Won't do marks each open task before archiving", async () => {
+    const { ids, runtime } = makeServer("a2-");
+    const { result } = await mount(runtime);
+    act(() => result.current.archiveBucket(ids.x, { kind: "wont_do" }));
+    await settle();
+    const statuses = result.current.archivedTasks
+      .filter((t) => t.id !== "a2-done")
+      .map((t) => t.status);
+    expect(statuses).toEqual(["archived", "archived"]);
+    expect(String(lastToast()[1].description)).toMatch(/2 open tasks are marked Won’t do/);
+  });
+
+  it("Undo after Won't do unarchives and puts each open task back", async () => {
+    const { ids, runtime } = makeServer("a4-");
+    const { result } = await mount(runtime);
+    act(() => result.current.archiveBucket(ids.x, { kind: "wont_do" }));
+    await settle();
+    const [, opts] = lastToast();
+    act(() => opts.action.onClick());
+    await waitFor(() => expect(bucketIds(result.current)).toEqual([ids.x, ids.y]));
+    const open = () =>
+      result.current.tasks
+        .filter((t) => t.bucketId === ids.x && t.id !== "a4-done")
+        .map((t) => t.status);
+    await waitFor(() => expect(open()).toEqual(["todo", "todo"]));
+    // Two marks, then two put back.
+    expect(runtime.tasks.opSetStatus).toHaveBeenCalledTimes(4);
+  });
+
+  it("Move sends the open tasks to another project first", async () => {
+    const { ids, runtime } = makeServer("a3-");
+    const { result } = await mount(runtime);
+    act(() => result.current.archiveBucket(ids.x, { kind: "move", projectId: ids.y }));
+    await settle();
+    const inY = result.current.tasks.filter((t) => t.bucketId === ids.y).map((t) => t.id);
+    expect(inY.sort()).toEqual(["a3-annas", "a3-mine", "a3-other"].sort());
+    expect(result.current.archivedTasks.map((t) => t.id)).toEqual(["a3-done"]);
+  });
+
+  it("Undo after Move brings the open tasks back with the move op", async () => {
+    const { ids, runtime } = makeServer("a5-");
+    const { result } = await mount(runtime);
+    act(() => result.current.archiveBucket(ids.x, { kind: "move", projectId: ids.y }));
+    await settle();
+    const [, opts] = lastToast();
+    act(() => opts.action.onClick());
+    await waitFor(() =>
+      expect(
+        result.current.tasks
+          .filter((t) => t.bucketId === ids.x)
+          .map((t) => t.id)
+          .sort(),
+      ).toEqual(["a5-annas", "a5-done", "a5-mine"].sort()),
+    );
+    expect(runtime.tasks.opUpdateTask).toHaveBeenLastCalledWith(
+      expect.objectContaining({ patch: { bucketId: ids.x } }),
+    );
+  });
+
+  it("a refused archive keeps the project and puts the open tasks back", async () => {
+    const { ids, runtime } = makeServer("a6-");
+    runtime.tasks.updateProject = rs.fn(async () => {
+      throw new Error("Only people with full access to this project can archive it.");
+    });
+    const { result } = await mount(runtime);
+    act(() => result.current.archiveBucket(ids.x, { kind: "move", projectId: ids.y }));
+    await settle();
+    await waitFor(() => expect(bucketIds(result.current)).toEqual([ids.x, ids.y]));
+    await waitFor(() =>
+      expect(
+        result.current.tasks
+          .filter((t) => t.bucketId === ids.x)
+          .map((t) => t.id)
+          .sort(),
+      ).toEqual(["a6-annas", "a6-done", "a6-mine"].sort()),
+    );
+    expect(toastMock.error).toHaveBeenCalledWith(
+      "Only people with full access to this project can archive it.",
+    );
+  });
+});
+
+describe("a task of an archived project", () => {
+  it("is read-only until its project is unarchived", async () => {
+    const { ids, runtime } = makeServer("a7-");
+    const { result } = await mount(runtime);
+    act(() => result.current.archiveBucket(ids.x, { kind: "keep" }));
+    await settle();
+    act(() => result.current.patchTask("a7-mine", { status: "done" }));
+    act(() => result.current.deleteTask("a7-mine"));
+    expect(toastMock.error).toHaveBeenCalledWith("Unarchive “X” to change its tasks.");
+    expect(runtime.tasks.opSetStatus).not.toHaveBeenCalled();
+  });
+});
+
+describe("a delete on a store that reads by delta (TV-D11a)", () => {
+  it("doesn't show a teammate's moved task again once the delete settles", async () => {
+    const { ids, runtime } = makeServer("g1-", { delta: true });
+    const { result } = await mount(runtime);
+    await waitFor(() =>
+      expect(result.current.tasks.map((t) => t.id).sort()).toEqual(
+        ["g1-annas", "g1-done", "g1-mine", "g1-other"].sort(),
+      ),
+    );
+    act(() => result.current.deleteBucket(ids.x));
+    // Recently deleted is read again once the delete has settled.
+    await waitFor(() => expect(runtime.tasks.listTrash).toHaveBeenCalledTimes(2));
+    await settle();
+    expect(result.current.tasks.find((t) => t.id === "g1-annas")).toBeUndefined();
+    expect(result.current.tasks.find((t) => t.id === "g1-mine")?.bucketId).toBe(ids.inbox);
     expect(bucketIds(result.current)).toEqual([ids.y]);
   });
+});
 
-  it("Undo puts the bucket and its tasks back, never touches the server, and a later close doesn't commit", async () => {
-    const { ids, runtime } = makeServer("c-");
+describe("colours and areas (TV-D10's ops)", () => {
+  it("colours a project with only that field, neutral stored as none", async () => {
+    const { ids, runtime } = makeServer("c1-");
     const { result } = await mount(runtime);
-    act(() => result.current.deleteBucket(ids.x));
-    const [, opts] = lastToast();
-
-    act(() => opts.action.onClick());
-    opts.onAutoClose?.();
+    act(() => result.current.setBucketColor(ids.y, "teal"));
+    expect(result.current.buckets.find((b) => b.id === ids.y)?.color).toBe("teal");
     await settle();
-
-    expect(bucketIds(result.current)).toEqual([ids.x, ids.y]);
-    expect(bucketOf(result.current, "c-t1")).toBe(ids.x);
-    expect(runtime.tasks.deleteBucket).not.toHaveBeenCalled();
-    expect(runtime.tasks.upsertTask).not.toHaveBeenCalled();
-  });
-
-  it("a second pending delete stays hidden when the first one commits and reloads", async () => {
-    const { ids, runtime } = makeServer("d-");
-    const { result } = await mount(runtime);
-    act(() => result.current.deleteBucket(ids.x));
-    const [, xOpts] = lastToast();
-    act(() => result.current.deleteBucket(ids.y));
-
-    xOpts.onAutoClose?.();
-    await waitFor(() => expect(runtime.tasks.list).toHaveBeenCalledTimes(2));
-    await settle();
-
-    expect(bucketIds(result.current)).toEqual([]);
-    expect(bucketOf(result.current, "d-t3")).toBe(ids.inbox);
-  });
-
-  it("a page that remounts inside the window keeps the bucket gone, before and after the commit", async () => {
-    const { ids, runtime } = makeServer("e-");
-    const first = await mount(runtime);
-    act(() => first.result.current.deleteBucket(ids.x));
-    const [, opts] = lastToast();
-    first.unmount();
-
-    const second = await mount(runtime);
-    expect(bucketIds(second.result.current)).toEqual([ids.y]);
-    opts.onAutoClose?.();
-    await settle();
-    expect(runtime.tasks.deleteBucket).toHaveBeenCalledOnce();
-    expect(bucketIds(second.result.current)).toEqual([ids.y]);
-  });
-
-  it("an edit to a moved task inside the window still saves its real bucket, so Undo stays exact", async () => {
-    const { ids, server, runtime } = makeServer("f-");
-    const { result } = await mount(runtime);
-    act(() => result.current.deleteBucket(ids.x));
-    const [, opts] = lastToast();
-
-    act(() => result.current.patchTask("f-t1", { title: "renamed" }));
-    await settle();
-    expect(server.tasks.find((t) => t.id === "f-t1")).toMatchObject({
-      title: "renamed",
-      bucketId: ids.x,
-    });
-
-    act(() => opts.action.onClick());
-    expect(bucketOf(result.current, "f-t1")).toBe(ids.x);
-  });
-
-  it("a subtask added to a moved task inside the window lands in the parent's real bucket", async () => {
-    const { ids, runtime } = makeServer("h-");
-    const { result } = await mount(runtime);
-    act(() => result.current.deleteBucket(ids.x));
-    const [, opts] = lastToast();
-
-    act(() => result.current.addSubtask("h-t1", "Child"));
-    await settle();
-    expect(runtime.tasks.upsertTask).toHaveBeenCalledWith(
-      expect.objectContaining({ title: "Child", parentId: "h-t1", bucketId: ids.x }),
+    expect(runtime.tasks.updateProject).toHaveBeenLastCalledWith(
+      expect.objectContaining({ projectId: ids.y, patch: { color: "teal" } }),
     );
-
-    act(() => opts.action.onClick());
-    const child = result.current.tasks.find((t) => t.title === "Child");
-    expect(child?.bucketId).toBe(ids.x);
-  });
-
-  it("a bucket created while another's delete is pending sorts after it", async () => {
-    const { ids, runtime } = makeServer("i-");
-    // TV-D10: a new project goes through the project op.
-    const createProject = rs.fn(
-      async (input: { workspaceId: string; fields: { name: string; position?: string } }) =>
-        ({
-          id: "i-new",
-          workspaceId: input.workspaceId,
-          ownerId: "",
-          name: input.fields.name,
-          isSystem: false,
-          group: null,
-          position: input.fields.position ?? "",
-          createdAt: "",
-          updatedAt: "",
-          deletedAt: null,
-        }) satisfies Bucket,
-    );
-    const { result } = await mount({ tasks: { ...runtime.tasks, createProject } });
-    act(() => result.current.deleteBucket(ids.y)); // Y is the last bucket
-    const [, opts] = lastToast();
-
-    act(() => result.current.createBucket("Fresh"));
+    act(() => result.current.setBucketColor(ids.y, "gray"));
     await settle();
-    act(() => opts.action.onClick());
-
-    const [x, y, fresh] = result.current.buckets;
-    expect([x?.id, y?.id, fresh?.name]).toEqual([ids.x, ids.y, "Fresh"]);
-    expect(fresh!.position > y!.position).toBe(true);
+    expect(runtime.tasks.updateProject).toHaveBeenLastCalledWith(
+      expect.objectContaining({ patch: { color: null } }),
+    );
   });
 
-  it("a failed server delete brings the bucket back with an error toast", async () => {
-    const { ids, runtime } = makeServer("g-");
-    runtime.tasks.deleteBucket.mockImplementationOnce(async () => {
-      throw new Error("Network down");
-    });
+  it("makes an area and moves a project into it, last", async () => {
+    const { ids, runtime } = makeServer("c2-");
     const { result } = await mount(runtime);
-    act(() => result.current.deleteBucket(ids.x));
-    const [, opts] = lastToast();
-
-    opts.onAutoClose?.();
-    await waitFor(() => expect(toastMock.error).toHaveBeenCalledWith("Network down"));
-    await waitFor(() => expect(bucketIds(result.current)).toEqual([ids.x, ids.y]));
+    let made: string | null = null;
+    await act(async () => {
+      made = await result.current.createArea("Clients");
+    });
+    expect(made).toBe(ids.area);
+    expect(result.current.areas.map((a) => a.name)).toEqual(["Clients"]);
+    act(() => result.current.moveBucketToArea(ids.x, ids.area));
+    await settle();
+    const call = runtime.tasks.updateProject.mock.calls.at(-1)?.[0] as {
+      patch: { areaId: string; position: string };
+    };
+    expect(call.patch.areaId).toBe(ids.area);
+    expect(call.patch.position > `b-${ids.y}`).toBe(true);
   });
 });

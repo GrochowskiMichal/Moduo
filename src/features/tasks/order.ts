@@ -25,11 +25,11 @@ export type DragOrder =
 
 /**
  * Whether a scope lists one project's tasks, so it has a manual order: a
- * project (its id) or the Inbox. All, My tasks and the Queue ("today", whose
- * own line-up is the queue's, not `position`) are across projects.
+ * project (its id) or the Inbox. All, My tasks, Upcoming and Focus ("today",
+ * whose own line-up is the queue's, not `position`) are across projects.
  */
 export function hasManualOrder(scope: string): boolean {
-  return scope !== "all" && scope !== "mine" && scope !== "today";
+  return scope !== "all" && scope !== "mine" && scope !== "today" && scope !== "upcoming";
 }
 
 /** How a drag in `scope` under Display → Order by `order` treats the order. */

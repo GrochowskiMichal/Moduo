@@ -222,7 +222,7 @@ test("AC1.8 — moving a parent moves its subtasks", async ({ page }) => {
     parentId: parent.id,
   });
   await openTasks(page, parent.id);
-  await page.getByRole("button", { name: /^Bucket: .*Move to another bucket$/ }).click();
+  await page.getByRole("button", { name: /^Project: .*Move to another project$/ }).click();
   // Pick by typing: the dev workspace's project list outgrows the window,
   // and the menu doesn't scroll (a primitive gap, noted for DS-6).
   const item = page.getByRole("menuitemradio", { name: `Move here ${tag}` });
@@ -283,7 +283,7 @@ test("AC1.10 + AC1.7 — a task in a project you can't see: “Private project�
     timeout: 20_000,
   });
   await expect(
-    page.getByRole("button", { name: "Bucket: Private project. Move to another bucket" }),
+    page.getByRole("button", { name: "Project: Private project. Move to another project" }),
   ).toBeVisible();
   await expect(page.getByText(`Owner only ${tag}`)).toHaveCount(0);
 

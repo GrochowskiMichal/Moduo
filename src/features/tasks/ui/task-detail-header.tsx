@@ -114,7 +114,7 @@ export function TaskDetailHeader({
           <DropdownMenuTrigger asChild disabled={!canEdit}>
             <button
               type="button"
-              aria-label={`Bucket: ${bucketLabel}. Move to another bucket`}
+              aria-label={`Project: ${bucketLabel}. Move to another project`}
               className="-ml-1.5 flex min-h-(--ctrl-h-sm) min-w-0 shrink items-center gap-1.5 rounded-md px-1.5 py-0.5 font-sans text-xs text-muted-foreground outline-none transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 aria-expanded:bg-state-active aria-expanded:text-foreground disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
             >
               {bucket?.isSystem ? (

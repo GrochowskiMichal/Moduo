@@ -1,30 +1,17 @@
 import { describe, expect, it, rs } from "@rstest/core";
 
 import { TASKS_BUSY_ID as APP_TASKS_BUSY_ID } from "../../../src/features/calendar/booking/model.ts";
-import {
-  CLOSED_TASK_CATEGORIES,
-  sessionBusyIntervals,
-  TASKS_BUSY_ID,
-} from "./booking-sessions.ts";
-import { TASK_CLOSED_CATEGORIES } from "./contracts/vocabularies.ts";
+import { BUSY_SESSIONS_RPC, sessionBusyIntervals, TASKS_BUSY_ID } from "./booking-sessions.ts";
 
-/** A Supabase query stand-in: records the calls, answers with `answer`. */
+/** A Supabase client stand-in: records the rpc calls, answers with `answer`. */
 function fakeDb(answer: { data: unknown; error: unknown }) {
-  const calls: Array<[string, unknown[]]> = [];
-  // A real promise with the builder's chain methods on it.
-  const query = Promise.resolve(answer) as Promise<unknown> & Record<string, unknown>;
-  for (const method of ["select", "eq", "is", "lt", "gt"]) {
-    query[method] = (...args: unknown[]) => {
-      calls.push([method, args]);
-      return query;
-    };
-  }
+  const calls: Array<[string, Record<string, unknown>]> = [];
   return {
     calls,
     db: {
-      from(table: string) {
-        calls.push(["from", [table]]);
-        return query;
+      rpc(fn: string, args: Record<string, unknown>) {
+        calls.push([fn, args]);
+        return Promise.resolve(answer);
       },
     },
   };
@@ -37,45 +24,31 @@ const range = {
   to: new Date("2030-03-18T00:00:00Z"),
 };
 
-describe("sessionBusyIntervals (TV-D10, default d)", () => {
-  it("reads only the host's live sessions in the window, and only their times", async () => {
+describe("sessionBusyIntervals (TV-D10 default d, TV-D10-fix)", () => {
+  it("asks the server's task gate for the host's busy times in the window, nothing else", async () => {
     const { db, calls } = fakeDb({ data: [], error: null });
     await sessionBusyIntervals(db, range);
     expect(calls).toEqual([
-      ["from", ["task_sessions"]],
-      ["select", ["starts_at, ends_at, tasks!inner(status, status_category, deleted_at)"]],
-      ["eq", ["workspace_id", "ws-1"]],
-      ["eq", ["user_id", "host-1"]],
-      ["is", ["deleted_at", null]],
-      ["lt", ["starts_at", "2030-03-18T00:00:00.000Z"]],
-      ["gt", ["ends_at", "2030-03-04T00:00:00.000Z"]],
+      [
+        "tasks__busy_sessions",
+        {
+          p_workspace_id: "ws-1",
+          p_user_id: "host-1",
+          p_from: "2030-03-04T00:00:00.000Z",
+          p_to: "2030-03-18T00:00:00.000Z",
+        },
+      ],
     ]);
+    expect(BUSY_SESSIONS_RPC).toBe("tasks__busy_sessions");
   });
 
-  it("turns open tasks' sessions into busy times; finished or deleted tasks block nothing", async () => {
+  it("turns the answer into busy times, and only times", async () => {
     const { db } = fakeDb({
       error: null,
       data: [
-        {
-          starts_at: "2030-03-05T09:00:00Z",
-          ends_at: "2030-03-05T10:30:00Z",
-          tasks: { status_category: "in_progress", deleted_at: null },
-        },
-        {
-          starts_at: "2030-03-06T09:00:00Z",
-          ends_at: "2030-03-06T10:00:00Z",
-          tasks: { status_category: "done", deleted_at: null },
-        },
-        {
-          starts_at: "2030-03-07T09:00:00Z",
-          ends_at: "2030-03-07T10:00:00Z",
-          tasks: { status_category: "todo", deleted_at: "2030-03-01T00:00:00Z" },
-        },
-        {
-          starts_at: "2030-03-08T09:00:00Z",
-          ends_at: "2030-03-08T10:00:00Z",
-          tasks: { status_category: "wont_do", deleted_at: null },
-        },
+        { starts_at: "2030-03-05T09:00:00Z", ends_at: "2030-03-05T10:30:00Z" },
+        { starts_at: "2030-03-06T09:00:00Z", ends_at: "2030-03-06T09:00:00Z" },
+        { starts_at: "not a time", ends_at: "2030-03-07T10:00:00Z" },
       ],
     });
     const busy = await sessionBusyIntervals(db, range);
@@ -86,36 +59,15 @@ describe("sessionBusyIntervals (TV-D10, default d)", () => {
     expect(Object.keys(busy[0]!).sort()).toEqual(["end", "start"]);
   });
 
-  it("reads a row without a category by its legacy status", async () => {
-    const { db } = fakeDb({
-      error: null,
-      data: [
-        {
-          starts_at: "2030-03-05T09:00:00Z",
-          ends_at: "2030-03-05T10:00:00Z",
-          tasks: { status: "archived", status_category: null, deleted_at: null },
-        },
-        {
-          starts_at: "2030-03-06T09:00:00Z",
-          ends_at: "2030-03-06T10:00:00Z",
-          tasks: { status: "todo", status_category: null, deleted_at: null },
-        },
-      ],
-    });
-    const busy = await sessionBusyIntervals(db, range);
-    expect(busy.map((b) => b.start.toISOString())).toEqual(["2030-03-06T09:00:00.000Z"]);
-  });
-
-  it("keeps its copies in step with the contracts and the app", () => {
-    expect([...CLOSED_TASK_CATEGORIES]).toEqual([...TASK_CLOSED_CATEGORIES]);
+  it("keeps its busy-list id in step with the app", () => {
     expect(TASKS_BUSY_ID).toBe(APP_TASKS_BUSY_ID);
   });
 
-  it("blocks nothing when the read fails (a database before TV-D10)", async () => {
+  it("blocks nothing when the read fails (a database before the busy function)", async () => {
     const quiet = rs.spyOn(console, "error").mockImplementation(() => {});
     const { db } = fakeDb({
       data: null,
-      error: { code: "PGRST205", message: "relation task_sessions does not exist" },
+      error: { code: "PGRST202", message: "Could not find the function public.tasks__busy_sessions" },
     });
     expect(await sessionBusyIntervals(db, range)).toEqual([]);
     quiet.mockRestore();

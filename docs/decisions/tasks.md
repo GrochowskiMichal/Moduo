@@ -63,6 +63,94 @@ Built in tasks-v3 block 19 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §10, A
   - Decision: Assign (people, Unassigned, teams), Due, Tags (existing; new ones by `#`), Priority (no Urgent), More (Scheduled, Reminder, Estimate presets, Repeat presets, Waiting on people). What More holds joins the row as chips with ×; the row wraps for now. "Template…" and `/template` show only once a template provider registers (TV-D15); pasted or dropped files go to a registered upload handler (AT-2/AT-3), else a toast says to add them on the task. The description is a plain text field that grows to about six lines (⌘⏎ creates more there): there's no task yet for its mentions to link from.
   - Why: 91; seams instead of buttons that do nothing.
   - Rejected: the rich description editor in capture, and the "+n" overflow before the kit has it.
+## 2026-10-11 · TV-D10-fix sessions, reminders and Waiting on behind the task's gate — the agent's choices (deferred to by Maciej)
+
+A follow-up to TV-D10 ([specs/tasks-v3.md](../../specs/tasks-v3.md) block 10, §Assumptions #4, #24; REPLAN 24, 25, default d; migration `20261011110000_task_sessions_access`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **D10F-1 · One gate for a task, on every path** → TV-D10-fix (`tasks__visible` / `tasks__editable` for the caller, `tasks__visible_to` / `tasks__editable_to` for a given person), TV-D12, TV-D16
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: like D10-15 for projects, the task gate wraps `can_access` on the task, and every path to sessions, reminders and Waiting on asks it: the three tables' RLS (and so Realtime), every op (an op answers "not found" about a row of a task you can't see), the `scheduled_at` / `duration_minutes` trigger, the reminder sender and the booking busy read. `sessions_access.test.sql` runs each path for a viewer, a member without access to a private project and a view-only member.
+  - Why: the service role (booking, the cron sender, MCP) bypasses RLS, so a gate that lives only in the policies doesn't hold there.
+  - Rejected: inline `can_access` calls per path (they drift, D10-15).
+- **D10F-2 · A work session goes in your own calendar or the task's assignee's; moving, resizing and removing keep its person** → TV-D10-fix (`tasks__check_session_person`, `tasks__session_legacy`), TV-U13 / TV-F6 / Calendar (the sessions UI offers you and the assignee only)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: adding a session or handing one over takes you, or the task's current assignee (scheduling their work), and only an assignee who sees the task and can work on tasks; a write of `scheduled_at` (an old build, the app's picker) makes a new session the assignee's when they may hold it (see the task, can work on tasks), else the writer's; system work (the repeat engine's catch-up, which runs from anyone's app) never uses the caller: the creator's when they may hold it, else nobody's; anyone who can edit the task moves, resizes or removes any of its sessions, and the session stays its person's.
+  - Why: a session blocks its person's booking links, so only they, or whoever plans the assignee's work, may put one there; an editor can already reschedule and unschedule the task, and a former assignee's leftover blocks need clearing.
+  - Rejected: anyone who can work on tasks (TV-D10's rule); only your own sessions for moves and removals (the picker and Unschedule act on the shown session, whoever's it is, and a backfilled block of a former assignee would be stuck).
+- **D10F-3 · Reminders stay settable by anyone who can see the task** → TV-D10-fix (`tasks_op_reminder_add`, `tasks__fire_reminders`), D10-10, TV-D12
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: D10-10 holds (view is enough, always for yourself); a reminder is read only by its person while they see the task; one whose person no longer sees the task is retired at its time without a notice (the sender's claim marks only the others for delivery).
+  - Why: a reminder is the caller's own row, read by nobody else, and changes nothing on the task; a notice names the task, so it waits on access at send time.
+  - Rejected: edit for reminders (would take "Remind me" away from viewers and protect nothing).
+- **D10F-4 · Booking reads a host's busy times through one server function** → TV-D10-fix (`tasks__busy_sessions`, `_shared/booking-sessions.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: `booking-public` calls `tasks__busy_sessions` (service role only), which answers start and end times of the host's live sessions on open tasks they can see; the closed categories live in that SQL (drift gate against `TASK_CLOSED_CATEGORIES`); a failed read blocks nothing.
+  - Why: the same gate as every other path, and nothing but times can leave.
+  - Rejected: keeping the table read with a second visibility check in TypeScript.
+- **D10F-5 · A write another trigger makes skips the project edit gate only when it is a foreign key's clear** → TV-D10-fix (`buckets__area_sync`, `buckets__project_check`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: at trigger depth > 1 the gate is skipped only for clearing a project's area (label untouched), lead or client; any other nested change asks `projects__editable`.
+  - Why: a foreign key's SET NULL by a signed-in person (a profile or contact deleted for good) must not fail, and that's all the exception was for; trigger depth alone says nothing about who started the write.
+  - Rejected: dropping the exception (those deletes would fail), and a session flag set by the system path (a foreign key action can't set one).
+## 2026-10-11 · TV-U6 Sidebar v3 — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 13 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §3, §15, Edge cases "Structure moves"; REPLAN 13–16, 20, 29, 29a–e, 30, 78, 98; migration `20261011100000_projects_archive_trash`, #328's unapplied `20261009140000` renumbered and re-scoped) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **U6-1 · A project delete routes whole task trees: a tree with any open work goes to its top task's assignee's Inbox** → TV-U6 (`projects_op_delete`), TV-U16 (member removal)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: "open" is anything not finished, so Backlog counts; a task and its subtasks travel together (a finished step of an open task goes with it, an open step of a finished task keeps the whole tree open); the top task's assignee gets it, or the deleter when it's unassigned or the assignee can no longer work on tasks there; everything else goes with the project to Recently deleted in one batch.
+  - Why: REPLAN 78 moves "only open tasks"; trashing parked (Backlog) work silently, or splitting a step from its parent across two Inboxes, are both trust failures.
+  - Rejected: To do / In progress only (Backlog would vanish), routing each subtask to its own assignee (splits trees), #328's "all tasks to the deleter's Inbox or all to the trash" radio.
+- **U6-2 · One quiet notice per person, hung on their own Inbox, naming the project only to someone who could see it** → TV-U6 (`tasks.project_deleted`), TV-D12 (the notification table's mute)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: each person (never the deleter) whose Inbox received work gets one notice with how many tasks; it points at their Inbox, so they can read it even when the project was private to others; the title is the project's name only when they could view the project, else none ("a project").
+  - Why: REPLAN 80's batching (one notice, not one per task); a notice on the deleted project would be unreadable for an assignee who only saw their task, and naming it would leak a private project's name (P0 #10's rule).
+  - Rejected: a notice per task, the project as the notice's entity.
+- **U6-3 · Restore takes back moved tasks only when nobody touched them since, into the section and status they had** → TV-U6 (`tasks_op_trash_restore`, `buckets.trash_moved*`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: a moved task comes back when it still sits in an Inbox and its `updated_at` is no later than the moment the delete's moves ended (`trash_moved_at`, `clock_timestamp()`); it returns to its section and status when they still exist. A team task's team isn't put back (moving into an Inbox drops it, TV-D10). Only the server writes the trash columns (`tasks__trash_columns_guard`): a Restore runs as system work over what they name.
+  - Why: the Edge case says "returns moved tasks only if they haven't been edited since"; #328's "still in an Inbox" would yank back a task someone already re-planned.
+  - Rejected: restoring every moved task, recording a copy of each task.
+- **U6-4 · Archiving needs Full access, like deleting; Won't do and Move run as task edits first, and Undo reverts them** → TV-U6 (`projects_op_update` `archived_at`, `buckets__archive_check`), TV-U16 (the Done prompt)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: archive and unarchive need Full on the project (the op and a trigger for raw writes); a project with open work asks "n open tasks — Won't do · Move · Keep" (Move asks for a project and moves the open tops, their subtasks follow); one with none archives at once with Undo. Undo unarchives and puts each task back (its own status by id, or the project it came from). The dialogs ask `share_op_state` first and say "Only people with full access to … can …" instead of offering a button that fails.
+  - Why: archiving hides a shared project from everyone, which is a delete in all but name (research round 3's call).
+  - Rejected: Edit access (anyone could hide a teammate's project), one server op that also edits tasks (the task ops already carry status, subtask and queue rules).
+- **U6-5 · Archived projects ride apart in the bundle; Tasks shows them in Archived projects and in All's search** → TV-U6 (`splitArchived`, `ArchivedProjectsView`, `searchExtra`), TV-D11a, TV-D16
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: the shared store's snapshot (`buildSnapshot`, TV-D11a) keeps archived projects and their tasks in `archivedBuckets` / `archivedTasks`, so Home, the Calendar and contact hubs skip them without knowing (an archive shows on every surface the moment it's made); Tasks joins them back: Archived projects (from the ⋯) lists them, one opens read-only with an Unarchive banner, and search in All finds their tasks, grouped under "<name> · Archived". The connector leaves them out of lists and queues unless `include_archived`, and `tasks_search` finds them marked `project_archived`.
+  - Why: REPLAN 78: "Search still finds them, labelled 'Archived'"; #328 hid them from search and MCP entirely.
+  - Rejected: hiding them everywhere (#328), keeping them in every surface's lists.
+- **U6-6 · Customize and Pin follow the person; collapse is remembered per person on the device** → TV-U6 (`preferences.tasksSidebar`, `updatePreferences`), TV-U8 (pinned views)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: hidden rows (Focus, Upcoming, My tasks, All) and pinned projects per workspace live in the synced `preferences` domain, written through `updatePreferences` and pushed by the one sync owner (`<PreferencesSync/>`), never a second reconcile loop; collapsed groups (Pinned, each area) are kept in localStorage per person and workspace. Pinned shows live projects only, so a deleted project leaves it and a Restore brings its pin back (no unpin on delete: a refused delete would lose it).
+  - Why: pins and hidden rows are deliberate and should follow you to another device; a collapse is a frequent, light toggle and every synced write is the whole preferences object.
+  - Rejected: everything in localStorage (pins wouldn't follow you), everything synced (a write per click on a chevron).
+- **U6-7 · Upcoming opens an interim scope; Focus is the Queue's sidebar name; Plan · Focus stays for TV-F7** → TV-U6, TV-U15, TV-F7
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: Upcoming is a scope of your dated tasks and unassigned ones (open, not Backlog), grouped by Date and ordered by due (spec §8's coverage rule) until TV-U15 builds the screen; the sidebar's Focus row is the Queue scope renamed (the title reads "Focus"); the Plan · Focus switch above the sidebar stays until TV-F7 rebuilds the screen.
+  - Why: the row exists now (REPLAN 29) and must open something honest; removing the switch is F7's.
+  - Rejected: linking Upcoming to the Calendar, hiding the row until U15.
+- **U6-8 · Tasks reopens where you left it; "Open at" is gone from the sidebar** → TV-U6 (`resolveDefaultSelection`), TV-D7 (drops the time blocks)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11 (REPLAN 30).
+  - Decision: the last place (a project, the Inbox, Focus, Upcoming, My tasks or All; never Archived projects or Recently deleted) reopens, else the Inbox; a place picked in the sidebar before the first load answered wins. The time-of-day step and the "Open at" submenu are gone; the per-person time blocks stay in the data until TV-D7.
+  - Why: REPLAN 30 retires "Open at"; the old rule never reopened All, My tasks or the Queue.
+  - Rejected: keeping the time-of-day landing with no way to set it.
+- **U6-9 · Areas from the sidebar: the hairline's ⋯ makes them, their header's ⋯ edits them, Move up/down reorders them** → TV-U6 (`areas_op_*` via the runtime)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: "New area…" (the hairline's ⋯, or a project's Area submenu, which then files the project there) makes a workspace area; an area's header has + (a new project in it) and ⋯: New project, Rename, Colour, Move up, Move down, Delete area (Undo restores it and re-files its projects). Projects reorder by drag (into another area by dropping on one of its projects) or move through Area. An area's colour is stored and shown in its menu only (the header stays plain, as in the prototype).
+  - Why: areas have a name, colour and order (REPLAN 15); headers are dragged rarely and Move up/down is keyboard-reachable.
+  - Rejected: drag-to-reorder areas (another drag type in the page's one DndContext), a colour dot on area headers.
+- **U6-10 · Project and area writes are writes on the shared store; `hidden-buckets.ts` is gone** → TV-U6 on TV-D11a (`use-tasks-module.ts`, `sync/store.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: TV-D11a landed while this block ran, so the sidebar's writes moved onto it: a rename, colour, area or place is a `store.begin` patch settled by `projects_op_update`'s row; an archive patches `archivedAt` (and takes the project's queue rows out); a delete removes the project and shows its own open work in your Inbox (`projectDeletePlan`), then reads what changed (`syncNow`) before its overlay goes; a Restore reads what came back the same way; area ops settle with the areas the op answers (a delete reads first, since it re-files projects). Writes to one project still go out in order (`chainProjectOp`). The cached copy's version is 3 (projects carry colour and archive stamp). An archive's Undo, or a refused archive, puts the open tasks back through the newest task ops (the ones from the archive's render saw the old rows). Archive with Move sends the moves first and archives only once they've landed (archiving takes what's still in the project out of queues). After a delete settles, the tasks that went out of your sight (a teammate's Inbox) are dropped from the copy at once, not at the next access check. A task of an archived project is read-only everywhere (a row in All's search too): an edit says "Unarchive “X” to change its tasks."
+  - Why: D11a's rule: one copy, every write an overlay, a refusal puts back only its own fields; the old module-level pending-change store existed only because every surface read on its own.
+  - Rejected: keeping `hidden-buckets.ts` beside the store (two sources of "what's pending"), a whole reload after each project op.
+- **U6-11 · A delete's notices stay after an Undo; Delete forever is a person's own hard delete** → TV-U6, TV-D12 (notification table)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: the delete goes to the server at once (so a refused one says so at once), and its notices with it; an Undo restores the work but doesn't take a notice back (it opens the person's Inbox, `bucket` routes to /tasks). Delete forever (`tasks_op_trash_purge`, Full access, from Recently deleted only) hard-deletes what's in the trash, an exception to spec Assumption #27's "hard deletes only in the purge job" that the person asks for by name; store copies had already dropped those rows when they were soft-deleted. Each moved top task's trail says why it changed project (`tasks.update` with `reason: project_deleted`).
+  - Why: holding the delete until the toast closes (#328) loses a refusal and makes Undo a timer; Recently deleted without Delete forever leaves a person no way to clear something now.
+  - Rejected: retracting notices on Undo (a second notice is noisier than a stale one), no Delete forever.
 
 ## 2026-10-11 · TV-D11a the shared store — the agent's choices (deferred to by Maciej)
 
