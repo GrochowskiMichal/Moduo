@@ -157,6 +157,9 @@ export function stubApi(tasks: Task[] = TASKS): TasksModuleApi {
   return {
     loading: false,
     loaded: true,
+    restLoaded: true,
+    offline: false,
+    pendingSync: 0,
     tasks,
     queuedTaskIds: new Set(["review", "notes"]),
     queueClaims: new Map([

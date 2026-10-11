@@ -14,6 +14,7 @@ import { stripItems } from "@/features/calendar/strip";
 import { shapeToday, type TodayChip } from "@/features/calendar/today";
 import { formatTimeOfDay } from "@/features/calendar/ui/time-format";
 import { getRuntime } from "@/lib/runtime";
+import { findWorkspaceStore } from "@/lib/sync/store";
 import { cn } from "@/lib/utils";
 
 import {
@@ -83,8 +84,11 @@ export function CalendarTodayWidget({ size, canWrite }: WidgetComponentProps) {
         }),
       ),
     )
-      .then(() => {
+      .then((saved) => {
         toast(rollForwardMessage(plan));
+        // The shared store (TV-D11a) takes the server's rows at once, so the
+        // strip can't plan the same move twice from an older copy.
+        findWorkspaceStore(runtime, workspaceId)?.answer({ tasks: saved });
         requestDashboardDataRefresh();
       })
       .catch(() => toast.error("Couldn't move those to today — try the calendar."))

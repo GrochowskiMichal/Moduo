@@ -9,6 +9,8 @@
 // the UI so it stays unit-testable with a mock runtime.
 
 import type { ModuoRuntime } from "../../lib/runtime.types";
+import { captureTaskToStore } from "../../lib/sync/capture";
+import { findWorkspaceStore } from "../../lib/sync/store";
 import { endPosition, makeTask } from "../tasks/helpers";
 import { parseCapture } from "../tasks/parse/capture-parser";
 
@@ -178,29 +180,34 @@ export async function createCapturedEntity(input: {
     default: {
       const parsed = parseCapture(trimmed, now);
       const title = parsed.title.trim() || trimmed;
-      const inbox = await runtime.tasks.seedInbox(workspaceId);
-      // Append to the end of the Inbox — a fresh read for the position is cheap
-      // (capture is infrequent) and keeps ordering sane (quick-capture parity).
-      const bundle = await runtime.tasks.list(workspaceId);
-      const inboxTasks = bundle.tasks.filter((t) => t.bucketId === inbox.id && !t.deletedAt);
-      const task = makeTask({
-        workspaceId,
-        bucketId: inbox.id,
-        title,
-        position: endPosition(inboxTasks),
-        // parseCapture already sets scheduledAt to a recurrence's first
-        // occurrence (single-row model, CaptureModal parity).
+      // parseCapture already sets scheduledAt to a recurrence's first
+      // occurrence (single-row model, CaptureModal parity).
+      const dates = {
         scheduledAt: parsed.scheduledAt,
         dueDate: parsed.dueDate,
         recurrence: parsed.recurrence,
-      });
-      await runtime.tasks.upsertTask(task);
-      return {
-        target: "task",
-        title,
-        description: parsed.summary ? `${parsed.summary} · Inbox` : "Added to Inbox",
-        openTo: "/tasks",
       };
+      const where = parsed.summary ? `${parsed.summary} · Inbox` : "Added to Inbox";
+      // Through the workspace's shared store (TV-D11a): it shows at once on
+      // every surface, lands at the end of the Inbox it already holds, and
+      // offline it waits on this device under its own id (default g).
+      const store = findWorkspaceStore(runtime, workspaceId);
+      if (store) {
+        const { queued } = await captureTaskToStore(store, { title, ...dates });
+        return {
+          target: "task",
+          title,
+          description: queued ? "Waiting to sync · Inbox" : where,
+          openTo: "/tasks",
+        };
+      }
+      // No store (no Tasks access to read, or a runtime outside the app
+      // shell): straight to the server.
+      const inbox = await runtime.tasks.seedInbox(workspaceId);
+      await runtime.tasks.upsertTask(
+        makeTask({ workspaceId, bucketId: inbox.id, title, position: endPosition([]), ...dates }),
+      );
+      return { target: "task", title, description: where, openTo: "/tasks" };
     }
   }
 }

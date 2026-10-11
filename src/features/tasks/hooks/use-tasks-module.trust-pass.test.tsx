@@ -34,6 +34,9 @@ function task(id: string, over: Partial<Task> = {}): Task {
     id,
     creatorId: "u1",
     assigneeId: "u1",
+    // Read before the edit: the op's answer (12:00) is the newer row (TV-D11a
+    // keeps whichever the server stamped later).
+    updatedAt: "2026-10-10T09:00:00.000Z",
     ...over,
   };
 }

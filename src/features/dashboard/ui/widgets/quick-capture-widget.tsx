@@ -9,6 +9,8 @@ import { toast } from "sonner";
 import { onCreateNew } from "@/components/app/create-events";
 import { endPosition, makeTask } from "@/features/tasks/helpers";
 import { getRuntime } from "@/lib/runtime";
+import { captureTaskToStore } from "@/lib/sync/capture";
+import { findWorkspaceStore } from "@/lib/sync/store";
 import { cn } from "@/lib/utils";
 
 import {
@@ -38,21 +40,21 @@ export function QuickCaptureWidget({ canWrite }: WidgetComponentProps) {
     busyRef.current = true;
     setBusy(true);
     try {
-      const inbox = await runtime.tasks.seedInbox(workspaceId);
-      // Append to the end of the Inbox — fetch its current tasks for the position
-      // (capture is infrequent, so a fresh read is cheap and keeps ordering sane).
-      const bundle = await runtime.tasks.list(workspaceId);
-      const inboxTasks = bundle.tasks.filter((t) => t.bucketId === inbox.id && !t.deletedAt);
-      const task = makeTask({
-        workspaceId,
-        bucketId: inbox.id,
-        title,
-        position: endPosition(inboxTasks),
-      });
-      await runtime.tasks.upsertTask(task);
+      // Through the shared store (TV-D11a): the end of the Inbox it holds, shown
+      // on every widget at once, and kept on the device while offline.
+      const store = findWorkspaceStore(runtime, workspaceId);
+      let queued = false;
+      if (store) {
+        ({ queued } = await captureTaskToStore(store, { title }));
+      } else {
+        const inbox = await runtime.tasks.seedInbox(workspaceId);
+        await runtime.tasks.upsertTask(
+          makeTask({ workspaceId, bucketId: inbox.id, title, position: endPosition([]) }),
+        );
+      }
       setText("");
       requestDashboardDataRefresh();
-      toast("Added to Inbox");
+      toast(queued ? "Waiting to sync · Inbox" : "Added to Inbox");
     } catch {
       toast.error("Couldn't capture that.");
     } finally {

@@ -154,6 +154,22 @@ export function clearDraft(userId: string | null, workspaceId: string | null): v
   }
 }
 
+/** Keep only this person's drafts on the device (someone else signed in). */
+export function keepCaptureDraftsOf(userId: string): void {
+  const store = storage();
+  if (!store) return;
+  try {
+    const doomed: string[] = [];
+    for (let i = 0; i < store.length; i++) {
+      const k = store.key(i);
+      if (k?.startsWith(PREFIX) && !k.startsWith(`${PREFIX}${userId}:`)) doomed.push(k);
+    }
+    for (const k of doomed) store.removeItem(k);
+  } catch {
+    // Nothing kept.
+  }
+}
+
 /**
  * Forget kept capture drafts on this device: one person's (their account was
  * deleted), or everyone's (someone signed out).
