@@ -27,6 +27,7 @@ import {
 } from "../../lib/capture-registry";
 import { getCaptureSource } from "../../lib/capture-source";
 import { isMacPlatform, onShortcut } from "../../lib/shortcuts";
+import { useAuth } from "../../providers/auth-provider";
 import { useWorkspace } from "../../providers/workspace-provider";
 import { Button } from "../ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../ui/dialog";
@@ -61,7 +62,8 @@ type Props = {
 };
 
 export function CaptureShell({ types = CAPTURE_TYPES }: Props) {
-  const { modulePermissions } = useWorkspace();
+  const { modulePermissions, selectedWorkspaceId } = useWorkspace();
+  const { userId } = useAuth();
   const [open, setOpen] = useState(false);
   const [typeId, setTypeId] = useState(types[0]?.type ?? "");
   const [draft, setDraft] = useState("");
@@ -71,6 +73,13 @@ export function CaptureShell({ types = CAPTURE_TYPES }: Props) {
   const registerEscape = useCallback((handler: (() => boolean) | null) => {
     escapeRef.current = handler;
   }, []);
+  // What was typed belongs to one person in one workspace: another person
+  // signing in, or a switch of workspace, starts the line over (TV-U14).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the person and workspace are the trigger
+  useEffect(() => {
+    setDraft("");
+    setOpen(false);
+  }, [userId, selectedWorkspaceId]);
   // Where focus was when the capture opened. Opened by a key or an event, the
   // dialog has no trigger, so Radix alone would drop focus on <body> (ui.md).
   const returnFocusRef = useRef<HTMLElement | null>(null);

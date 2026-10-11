@@ -9,6 +9,7 @@ import {
 } from "react";
 import { attachFocusUser } from "../features/focus/engine";
 import { attachTagUser } from "../features/tags/store";
+import { forgetCaptureDrafts } from "../features/tasks/capture/capture-draft";
 import { Analytics, setAnalyticsUser } from "../lib/analytics";
 import { sendDeviceTimeZone } from "../lib/device-time-zone";
 import {
@@ -171,6 +172,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
       if (event === "SIGNED_OUT") {
         setPlanTier("free");
+        // Kept capture drafts never outlive a sign-out on this device (TV-U14).
+        forgetCaptureDrafts();
         // Analytics opts out and forgets them. `app_signed_out` is tracked in signOut(),
         // only when the person signs out: one auth-js does on its own, like a refused
         // refresh after the account was deleted elsewhere, must not send an event that

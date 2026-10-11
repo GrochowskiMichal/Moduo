@@ -47,6 +47,8 @@ export type TitleEditorApi = {
   setSegments: (segments: readonly TitleSegment[]) => void;
   /** Turn matching tokens back into words (a pill set by hand wins, research §2). */
   tokensToText: (match: (token: CaptureToken) => boolean) => void;
+  /** Swap each token for what `fn` makes of it; null takes it out. */
+  mapTokens: (fn: (token: CaptureToken) => CaptureToken | null) => void;
   /** Turn one token back into words (Esc right after it was recognised). */
   tokenToText: (key: NodeKey) => boolean;
   /** Close an open `@ # /` menu; false when none is open. */
@@ -177,6 +179,19 @@ function Behaviour({
       focus: () => editor.focus(undefined, { defaultSelection: "rootEnd" }),
       setSegments: (segments) => editor.update(() => $writeSegments(segments)),
       tokensToText: (match) => editor.update(() => $tokensToText(match)),
+      mapTokens: (fn) =>
+        editor.update(() => {
+          for (const block of $getRoot().getChildren()) {
+            if (!$isElementNode(block)) continue;
+            for (const child of block.getChildren()) {
+              if (!$isCaptureTokenNode(child)) continue;
+              const token = child.getToken();
+              const next = fn(token);
+              if (next === null) child.remove();
+              else if (next !== token) child.replace($createCaptureTokenNode(next));
+            }
+          }
+        }),
       tokenToText: (key) => {
         let done = false;
         editor.update(() => {

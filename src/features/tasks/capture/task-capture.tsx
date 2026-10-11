@@ -44,6 +44,7 @@ import { useWorkspace } from "../../../providers/workspace-provider";
 import { dateCommandDay } from "../../spine/grammar";
 import { resolveEntityIcon } from "../../spine/icon-map";
 import type { MentionCandidate } from "../../spine/mention";
+import { useReferences } from "../../spine/references/context";
 import { openReferenceFull } from "../../spine/references/open";
 import { useAssignees } from "../assignees";
 import { positionsAfter, positionsBefore } from "../helpers";
@@ -141,7 +142,7 @@ export function TaskCaptureBody({
 
   // ── the draft (restored on open, research §1.8) ──────────────────────────
   const [initial] = useState(() => {
-    const stored = loadDraft(workspaceId);
+    const stored = loadDraft(userId, workspaceId);
     const restored = stored && draftHasContent(stored) ? stored : null;
     let start: CaptureDraft = restored ?? EMPTY_DRAFT;
     // Typed under another type (⌘2, then back): those words come along.
@@ -193,8 +194,8 @@ export function TaskCaptureBody({
 
   // Keep the draft on the device as it changes.
   useEffect(() => {
-    saveDraft(workspaceId, { segments, keep, description, subtasks, fields });
-  }, [workspaceId, segments, keep, description, subtasks, fields]);
+    saveDraft(userId, workspaceId, { segments, keep, description, subtasks, fields });
+  }, [userId, workspaceId, segments, keep, description, subtasks, fields]);
 
   // The title takes the caret once the dialog has settled.
   useEffect(() => {
@@ -242,6 +243,52 @@ export function TaskCaptureBody({
   );
   const menuPeople = useMemo<CapturePerson[]>(() => people.filter((p) => p.canTakeTasks), [people]);
 
+  // ── a restored draft's names, looked up again (it keeps ids only) ─────────
+  // A linked thing's title comes from References, per reader: one the person
+  // can no longer open reads "Private item" on its chip, and leaves the title
+  // and the links.
+  const restoredThings = useMemo(
+    () =>
+      segments.flatMap((s) =>
+        "token" in s && s.token.kind === "thing" && !s.token.label ? [s.token.ref] : [],
+      ),
+    [segments],
+  );
+  const referenceState = useReferences(restoredThings);
+  const titleSegments = useMemo<TitleSegment[]>(
+    () =>
+      segments.map((s) => {
+        if (!("token" in s) || s.token.kind !== "thing" || s.token.label) return s;
+        const state = referenceState(s.token.ref);
+        if (state?.status === "ready") return { token: { ...s.token, label: state.facts.title } };
+        if (state && state.status !== "loading") return { text: "" };
+        return s;
+      }),
+    [segments, referenceState],
+  );
+  // People, teams and tags get their names back once the lists are here; one
+  // that's gone (a member who left, a deleted tag) leaves the title.
+  const hydrated = useRef(false);
+  useEffect(() => {
+    if (hydrated.current || !bundle || people.length === 0) return;
+    hydrated.current = true;
+    titleApi.current?.mapTokens((token) => {
+      if (token.kind === "person" && !token.label) {
+        const p = people.find((x) => x.userId === token.userId);
+        return p ? { ...token, label: p.name } : null;
+      }
+      if (token.kind === "team" && !token.label) {
+        const t = teams.find((x) => x.id === token.teamId);
+        return t ? { ...token, label: t.name, letters: t.mark || null } : null;
+      }
+      if (token.kind === "tag" && token.tagId && !token.label) {
+        const t = tags.find((x) => x.id === token.tagId);
+        return t ? { ...token, label: t.name, color: t.color } : null;
+      }
+      return token;
+    });
+  }, [bundle, people, teams, tags]);
+
   // ── what the title says ───────────────────────────────────────────────────
   const manualDates = useMemo(
     () => ({
@@ -252,13 +299,13 @@ export function TaskCaptureBody({
     [fields.dueDay, fields.scheduledAt, fields.recurrence],
   );
   const resolved = useMemo(
-    () => resolveTitle(segments, { keep, manualDates }),
-    [segments, keep, manualDates],
+    () => resolveTitle(titleSegments, { keep, manualDates }),
+    [titleSegments, keep, manualDates],
   );
   const dates = captureDates(resolved, manualDates);
   const highlights = useMemo(
-    () => highlightsBySegment(segments, resolved.segmentStarts, resolved.highlights),
-    [segments, resolved],
+    () => highlightsBySegment(titleSegments, resolved.segmentStarts, resolved.highlights),
+    [titleSegments, resolved],
   );
 
   const tagValues = useMemo(() => {
@@ -649,7 +696,7 @@ export function TaskCaptureBody({
     if (result.error) {
       // What didn't land is kept: the draft comes back on the next open,
       // and a resend lands the same tasks (same ids), never doubles.
-      if (kept) saveDraft(plan.workspaceId, kept);
+      if (kept) saveDraft(userId, plan.workspaceId, kept);
       const remaining: CapturePlan = {
         ...plan,
         tasks: plan.tasks.filter((t) => !result.created.some((c) => c.id === t.id)),
@@ -666,7 +713,7 @@ export function TaskCaptureBody({
           action: {
             label: "Try again",
             onClick: () => {
-              if (kept) clearDraft(plan.workspaceId);
+              if (kept) clearDraft(userId, plan.workspaceId);
               void send(remaining, kept, batch);
             },
           },
@@ -767,7 +814,7 @@ export function TaskCaptureBody({
     // The capture closes (or clears) at once; the task saves behind it.
     if (more) resetForMore();
     else {
-      clearDraft(workspaceId);
+      clearDraft(userId, workspaceId);
       onDraftChange("");
       onDone();
     }
@@ -864,7 +911,7 @@ export function TaskCaptureBody({
   }, [pasted]);
 
   const discardDraft = () => {
-    clearDraft(workspaceId);
+    clearDraft(userId, workspaceId);
     titleApi.current?.setSegments([]);
     setKeep([]);
     setDescription("");

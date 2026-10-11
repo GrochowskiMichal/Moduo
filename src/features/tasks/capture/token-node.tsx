@@ -19,6 +19,13 @@ import { Chip } from "../../../components/ui/chip";
 import { Reference } from "../../spine/references/ui/reference";
 import { type CaptureToken, tokenText } from "../parse/capture-tokens";
 
+/** What a token reads as before its name is looked up again (a restored draft). */
+const FALLBACK: Partial<Record<CaptureToken["kind"], string>> = {
+  person: "Someone",
+  team: "Team",
+  tag: "Tag",
+};
+
 export type SerializedCaptureTokenNode = Spread<{ token: CaptureToken }, SerializedLexicalNode>;
 
 function TokenChip({ token }: { token: CaptureToken }) {
@@ -59,7 +66,7 @@ function TokenChip({ token }: { token: CaptureToken }) {
       data-capture-token={token.kind}
       className="mx-0.5 align-baseline"
     >
-      {token.label}
+      {token.label || FALLBACK[token.kind] || ""}
     </Chip>
   );
 }

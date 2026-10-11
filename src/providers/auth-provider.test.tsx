@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, rs } from "@rstest/core";
 import { act, render, waitFor } from "@testing-library/react";
 
+import { EMPTY_FIELDS, loadDraft, saveDraft } from "../features/tasks/capture/capture-draft";
 import { type AuthContextValue, AuthProvider, useAuth } from "./auth-provider";
 
 // A runtime whose auth events the test fires by hand, as auth-js would. `profile` is what
@@ -84,6 +85,25 @@ beforeEach(() => {
   fake.state.profile = EXISTS;
   fake.state.profileGate = null;
   rs.clearAllMocks();
+});
+
+describe("AuthProvider — signing out forgets kept capture drafts (TV-U14)", () => {
+  it("a sign-out on this device clears every kept capture draft", async () => {
+    const auth = await renderAuth();
+    await settle();
+    saveDraft("u1", "w1", {
+      segments: [{ text: "Call the bank" }],
+      keep: [],
+      description: "",
+      subtasks: [],
+      fields: EMPTY_FIELDS,
+    });
+    expect(loadDraft("u1", "w1")).not.toBeNull();
+
+    await act(() => auth().signOut());
+
+    expect(loadDraft("u1", "w1")).toBeNull();
+  });
 });
 
 describe("AuthProvider — signing out and analytics (PRIV-3)", () => {
