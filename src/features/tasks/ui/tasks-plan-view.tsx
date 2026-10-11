@@ -1431,6 +1431,8 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
         checkAccess={checkProjectAccess}
         onConfirm={(bucket) => {
           api.deleteBucket(bucket.id);
+          // A deleted project leaves your Pinned too (a Restore doesn't re-pin).
+          if (pinnedIds.includes(bucket.id)) togglePin(bucket.id);
           if (selection === bucket.id) setSelection("inbox");
         }}
         onClose={() => setProjectDialog((prev) => (prev ? { ...prev, open: false } : prev))}

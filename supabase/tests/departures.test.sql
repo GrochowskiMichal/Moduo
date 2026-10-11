@@ -183,6 +183,20 @@ BEGIN
   r := test.try('O', format($q$SELECT public.tasks_op_trash_restore(%L, 'bucket', %L)$q$, test.id('W'), test.id('P2')));
   PERFORM test.ok(r LIKE '%more than 30 days ago%', 'a project deleted more than 30 days ago can''t be restored', r);
 
+  -- ── The trash bookkeeping is the server's ──────────────────────────────────
+  -- A Restore runs as system work over what these columns name; a client
+  -- that could write them could pull other people's tasks out of their Inbox.
+  r := test.try('O', format($q$UPDATE public.buckets SET trash_moved_task_ids = ARRAY[%L]::uuid[], trash_moved_at = '2100-01-01' WHERE id = %L$q$,
+    test.id('T4'), test.id('P2')));
+  PERFORM test.ok(r LIKE '42501%Recently deleted is kept by Moduo%', 'a client can''t rewrite what a deleted project''s Restore takes back', r);
+  r := test.try('O', format($q$INSERT INTO public.buckets (workspace_id, owner_id, name, deleted_at, trash_moved_task_ids, trash_moved_at) VALUES (%L, %L, 'Bait', now(), ARRAY[%L]::uuid[], '2100-01-01')$q$,
+    test.id('W'), test.id('O'), test.id('T4')));
+  PERFORM test.ok(r LIKE '42501%Recently deleted is kept by Moduo%', '…nor plant a deleted project that would take tasks on Restore', r);
+  r := test.try('E', format($q$UPDATE public.tasks SET deleted_batch_id = gen_random_uuid() WHERE id = %L$q$, test.id('T2')));
+  PERFORM test.ok(r LIKE '42501%', '…nor put a task into a batch', r);
+  r := test.try('E', format($q$UPDATE public.tasks SET deleted_at = now() WHERE id = %L$q$, test.id('T2')));
+  PERFORM test.ok(r LIKE 'ok%', 'deleting and restoring a task the plain way still works', r);
+
   -- ── Delete forever ─────────────────────────────────────────────────────────
   r := test.try('O', format($q$SELECT public.tasks_op_trash_purge(%L, 'bucket', %L)$q$, test.id('W'), test.id('P')));
   PERFORM test.ok(r LIKE '%Only something in Recently deleted%', 'a live project can''t be deleted forever', r);

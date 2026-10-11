@@ -16,7 +16,8 @@
 --      attachments__task_trash their files go with them), buckets.
 --      trash_moved_task_ids / trash_moved / trash_moved_at (the open tasks the
 --      delete moved to Inboxes, where each one was, and when the move ended).
---   2. Restoring a row (deleted_at back to NULL, by any path) clears its batch.
+--   2. Restoring a row (deleted_at back to NULL, by any path) clears its batch;
+--      only the server writes the trash columns (tasks__trash_columns_guard).
 --   3. Archiving a project takes its tasks out of every queue, as deleting
 --      one does (tasks_queue_leave). Unarchiving never puts them back.
 --      Archiving or unarchiving needs Full access to the project, like
@@ -120,6 +121,50 @@ DROP TRIGGER IF EXISTS trash_restored ON public.buckets;
 CREATE TRIGGER trash_restored
   BEFORE UPDATE OF deleted_at ON public.buckets
   FOR EACH ROW EXECUTE FUNCTION public.tasks__trash_restored();
+
+-- The trash bookkeeping is the server's. A Restore runs as system work and
+-- takes back what these columns name, so a client (or an old build) that
+-- could write them could make a Restore pull other people's tasks out of
+-- their Inboxes. Only the ops (system work, share.bypass) and other triggers
+-- write them; a client can't set them on insert or change them on update.
+-- Fires before trash_restored (name order), which clears them on a restore.
+CREATE OR REPLACE FUNCTION public.tasks__trash_columns_guard()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_new jsonb := to_jsonb(NEW);
+  v_old jsonb := CASE WHEN TG_OP = 'UPDATE' THEN to_jsonb(OLD) ELSE '{}'::jsonb END;
+  v_col text;
+BEGIN
+  IF public.perm_actor_id() IS NULL
+     OR coalesce(current_setting('share.bypass', true), '') = '1'
+     OR pg_trigger_depth() > 1 THEN
+    RETURN NEW;
+  END IF;
+  FOREACH v_col IN ARRAY TG_ARGV LOOP
+    IF (TG_OP = 'INSERT' AND jsonb_typeof(v_new -> v_col) IS DISTINCT FROM 'null')
+       OR (TG_OP = 'UPDATE' AND v_new -> v_col IS DISTINCT FROM v_old -> v_col) THEN
+      RAISE EXCEPTION 'Recently deleted is kept by Moduo; restore through Recently deleted.'
+        USING ERRCODE = '42501';
+    END IF;
+  END LOOP;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS tasks_trash_columns_guard ON public.tasks;
+CREATE TRIGGER tasks_trash_columns_guard
+  BEFORE INSERT OR UPDATE OF deleted_batch_id ON public.tasks
+  FOR EACH ROW EXECUTE FUNCTION public.tasks__trash_columns_guard('deleted_batch_id');
+DROP TRIGGER IF EXISTS buckets_trash_columns_guard ON public.buckets;
+CREATE TRIGGER buckets_trash_columns_guard
+  BEFORE INSERT OR UPDATE OF deleted_batch_id, trash_moved_task_ids, trash_moved, trash_moved_at
+  ON public.buckets
+  FOR EACH ROW EXECUTE FUNCTION public.tasks__trash_columns_guard(
+    'deleted_batch_id', 'trash_moved_task_ids', 'trash_moved', 'trash_moved_at');
 
 -- ── 3. Archiving: Full access on every path; archived projects leave queues ──
 
@@ -719,6 +764,7 @@ BEGIN
     'public.projects__apply_fields(public.buckets, jsonb)',
     'public.projects__guard_full(uuid, public.buckets)',
     'public.tasks__trash_restored()',
+    'public.tasks__trash_columns_guard()',
     'public.buckets__archive_check()',
     'public.tasks_queue_leave()'
   ] LOOP
