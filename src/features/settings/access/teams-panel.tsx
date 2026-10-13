@@ -38,6 +38,7 @@ import { memberLabel } from "./person-editor";
 
 const NO_TEAMS: Team[] = [];
 const NO_MEMBERS: TeamMember[] = [];
+const NO_PROJECTS: Bucket[] = [];
 const NONE = "none";
 
 export type TeamFieldsPatch = {
@@ -56,8 +57,8 @@ export type WorkspaceTeams = {
   members: TeamMember[];
   /** Live projects a team can name as its default (no Inbox, nothing deleted). */
   projects: Bucket[];
-  /** Projects known to be deleted: a team's default there counts as none. */
-  goneProjectIds: ReadonlySet<string>;
+  /** Archived projects this person can open: only to name a default that sits there. */
+  archivedProjects: Bucket[];
   /**
    * The team's creator, the workspace owner or an admin: change its name,
    * letters, colour and default project, take someone else out, delete it.
@@ -96,10 +97,7 @@ export function useWorkspaceTeams(): WorkspaceTeams {
         .sort((a, b) => a.name.localeCompare(b.name)),
     [bundle.buckets],
   );
-  const goneProjectIds = useMemo(
-    () => new Set(bundle.buckets.filter((b) => b.deletedAt).map((b) => b.id)),
-    [bundle.buckets],
-  );
+  const archivedProjects = bundle.archivedBuckets ?? NO_PROJECTS;
   const isOwner = selectedWorkspace?.role === "owner";
   const canManage = useCallback(
     (team: Team) =>
@@ -243,7 +241,7 @@ export function useWorkspaceTeams(): WorkspaceTeams {
     teams,
     members,
     projects,
-    goneProjectIds,
+    archivedProjects,
     canManage,
     create,
     update,
@@ -358,10 +356,13 @@ export function TeamEditor({ team, teams }: { team: Team; teams: WorkspaceTeams 
         .sort((a, b) => a.name.localeCompare(b.name)),
     [workspaceMembers, people],
   );
-  const defaultProject = teams.projects.find((p) => p.id === team.defaultProjectId) ?? null;
-  // A default set on a project this person can't open is still set (only a
-  // deleted one counts as none).
-  const hasDefault = !!team.defaultProjectId && !teams.goneProjectIds.has(team.defaultProjectId);
+  const defaultProject =
+    [...teams.projects, ...teams.archivedProjects].find((p) => p.id === team.defaultProjectId) ??
+    null;
+  // The store can't tell a project this person can't open from a deleted one,
+  // so any default counts as set here (the server lets anyone replace one
+  // whose project is gone: stricter here, never looser).
+  const hasDefault = !!team.defaultProjectId;
   // Anyone may name a default while there's none; replacing one is for those
   // who manage the team (or, on the server, can edit the project it names).
   const projectEditable = editable && (manages || !hasDefault);
@@ -500,7 +501,7 @@ export function TeamEditor({ team, teams }: { team: Team; teams: WorkspaceTeams 
         >
           <SelectTrigger id={`team-project-${team.id}`}>
             <SelectValue placeholder="None">
-              {defaultProject?.name ?? (hasDefault ? "A project you can't open" : "None")}
+              {defaultProject?.name ?? (hasDefault ? "Not available" : "None")}
             </SelectValue>
           </SelectTrigger>
           <SelectContent>
