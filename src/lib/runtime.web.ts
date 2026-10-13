@@ -75,7 +75,13 @@ import { toMemberPerm, toMemberRole } from "../features/workspaces/workspace-map
 import { clearIgnoredAuthLink, SUPABASE_AUTH_OPTIONS } from "./auth-url";
 import { isMissingTableError, selectFirstDeployedTier } from "./deploy-tiers";
 import type { EntityLink, EntityRecord } from "./entity-links";
-import { collectTruncations, READ_CAPS, readPaged, type Truncation } from "./paged-select";
+import {
+  collectTruncations,
+  READ_CAPS,
+  readAfterCursor,
+  readPaged,
+  type Truncation,
+} from "./paged-select";
 import {
   missingOptionalPrefsDomain,
   optionalPrefsAvailable,
@@ -952,13 +958,23 @@ export const webRuntime: ModuoRuntime = {
       // reads then only ever makes the snapshot NEWER than the log we hold —
       // applying both stays lossless (Yjs is idempotent). The reverse order
       // could pair a stale snapshot with a log missing its folded tail.
-      const updRes = await supabaseClient
-        .from("note_updates")
-        .select("id, client_id, client_seq, update_b64")
-        .eq("note_id", noteId)
-        .gt("id", sinceUpdateId ?? 0)
-        .order("id", { ascending: true });
-      const updates = updRes.error ? [] : mapKnownRows(updRes.data ?? [], mapNoteUpdateRow);
+      // Paged to the end (NR-3): one select stops at PostgREST's 1,000-row
+      // ceiling, so a long log silently lost its tail. A failed page fails
+      // the pull rather than returning a partial log the cursor would skip.
+      const updRes = await readAfterCursor({
+        after: sinceUpdateId ?? 0,
+        idOf: (row: { id: number | string }) => Number(row.id),
+        page: async (after, limit) =>
+          supabaseClient
+            .from("note_updates")
+            .select("id, client_id, client_seq, update_b64")
+            .eq("note_id", noteId)
+            .gt("id", after)
+            .order("id", { ascending: true })
+            .limit(limit),
+      });
+      if (updRes.error) throw new Error(updRes.error.message);
+      const updates = mapKnownRows(updRes.rows, mapNoteUpdateRow);
 
       const noteRes = await supabaseClient
         .from("notes")

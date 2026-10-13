@@ -329,13 +329,22 @@ export function NoteEditor({
 }: Props) {
   const { userId, runtime } = useAuth();
   const session = useMemo(() => engine.getOrCreateSession(noteId), [engine, noteId]);
+  // Mount as soon as the local copy has loaded (NR-3 honest provider): the
+  // cached doc paints and edits at once while the pull runs underneath.
   const [ready, setReady] = useState(false);
+  // The first pull has settled: only then may the welcome seed look at an
+  // "empty" doc (before it, empty may just mean "not pulled yet").
+  const [booted, setBooted] = useState(false);
 
   useEffect(() => {
     let active = true;
     setReady(false);
-    void session.booted.then(() => {
+    setBooted(false);
+    void session.cacheReady.then(() => {
       if (active) setReady(true);
+    });
+    void session.booted.then(() => {
+      if (active) setBooted(true);
     });
     return () => {
       active = false;
@@ -470,7 +479,7 @@ export function NoteEditor({
             />
             <SyncFromYjsPlugin doc={session.doc} />
             <TitleDerivationPlugin doc={session.doc} onTitleDerived={onTitleDerived} />
-            <WelcomeSeedPlugin enabled={seedWelcome && editable} />
+            <WelcomeSeedPlugin enabled={seedWelcome && editable && booted} />
             {autoFocus && editable ? <AutoFocusPlugin /> : null}
           </LexicalComposer>
         </LexicalCollaboration>
