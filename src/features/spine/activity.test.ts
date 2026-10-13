@@ -10,6 +10,42 @@ function entry(op: string, payload: Record<string, unknown> = {}) {
   return { op, payload };
 }
 
+describe("team notices (TV-D13)", () => {
+  it("names the team, and how many were routed", () => {
+    expect(spineActivityLine(entry("tasks.routed", { team_name: "Design", count: 1 }))).toBe(
+      "routed this to Design",
+    );
+    expect(spineActivityLine(entry("tasks.routed", { team_name: "Design", count: 4 }))).toBe(
+      "routed 4 tasks to Design",
+    );
+    expect(
+      spineActivityLine(entry("tasks.routed", { team_name: "Design", count: 1, returned: true })),
+    ).toBe("gave this back to Design");
+  });
+
+  it("checks back on a team task nobody took", () => {
+    expect(
+      spineActivityLine(
+        entry("tasks.team_check_back", { team_name: "Design", reason: "unclaimed" }),
+      ),
+    ).toBe("checked: nobody in Design has taken this in 3 days");
+    expect(
+      spineActivityLine(entry("tasks.team_check_back", { team_name: "Design", reason: "due" })),
+    ).toBe("checked: nobody in Design has taken this, and it's due tomorrow");
+  });
+
+  it("an @Team in a comment, and tasks back from someone who left", () => {
+    expect(
+      spineActivityLine(
+        entry("comments.team_mention", { team_names: ["Design"], excerpt: "Ideas?" }),
+      ),
+    ).toBe("mentioned Design on this: “Ideas?”");
+    expect(spineActivityLine(entry("tasks.handed_back", { name: "Sam", count: 2 }))).toBe(
+      "removed Sam · 2 of your tasks are back in your Inbox",
+    );
+  });
+});
+
 describe("spineActorName", () => {
   const base = { actorType: "user" as const, actorId: "u1", actorLabel: "Maciej" };
 

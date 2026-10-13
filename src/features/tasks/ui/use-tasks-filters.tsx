@@ -20,10 +20,12 @@ import {
   Repeat,
   User,
   UserPen,
+  Users,
   Zap,
 } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { normalizeLabelColor } from "../../../components/tag-colors";
+import { TeamMark } from "../../../components/ui/avatar";
 import { FilterBar, FilterButton } from "../../../components/ui/filter-bar";
 import type {
   FilterCondition,
@@ -43,7 +45,7 @@ import {
   taskFilterShape,
 } from "../filters";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
-import type { Tag, Task } from "../model";
+import type { Tag, Task, Team } from "../model";
 import { takeSearchTokens, taskMatchesQuery } from "../search";
 import { STATUS_KEY_LABELS } from "../statuses";
 import { nowOn, useToday } from "../use-today";
@@ -53,6 +55,7 @@ import { TaskSearchField } from "./task-search-field";
 
 const DIMENSION_ICONS: Record<TaskFilterDimension, FilterDimension["icon"]> = {
   assignee: User,
+  team: Users,
   creator: UserPen,
   tag: Hash,
   status: CircleDot,
@@ -153,14 +156,23 @@ function personOptions(assignees: readonly Assignee[]): FilterOption[] {
   }));
 }
 
-/** The dimension registry: every §7 dimension with this workspace's options. */
+/** The dimension registry: every §7 dimension with this workspace's options
+ *  (Team only once the workspace has teams, or a saved filter names one). */
 export function taskFilterDimensions(input: {
   assignees: readonly Assignee[];
   tags: readonly Tag[];
   countByTag: ReadonlyMap<string, number>;
   conditions: readonly FilterCondition[];
+  teams?: readonly Team[];
 }): FilterDimension[] {
-  const { assignees, tags, countByTag, conditions } = input;
+  const { assignees, tags, countByTag, conditions, teams = [] } = input;
+  const teamOptions: FilterOption[] = [...teams]
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((team) => ({
+      value: team.id,
+      label: team.name,
+      leading: <TeamMark name={team.name} id={team.id} letters={team.mark} color={team.color} />,
+    }));
   const tagOptions: FilterOption[] = [...tags]
     .sort((a, b) => a.name.localeCompare(b.name))
     .map((tag) => ({
@@ -184,6 +196,13 @@ export function taskFilterDimensions(input: {
           id,
           "Former member",
         );
+      case "team":
+        return withUnknown(
+          [...teamOptions, { value: NONE_VALUE, label: "No team", icon: Users }],
+          conditions,
+          id,
+          "Former team",
+        );
       case "creator":
         return withUnknown(personOptions(assignees), conditions, id, "Former member");
       case "tag":
@@ -197,11 +216,14 @@ export function taskFilterDimensions(input: {
         return OPTIONS[id] ?? [];
     }
   };
-  return (Object.keys(DIMENSION_ICONS) as TaskFilterDimension[]).map((id) => ({
-    ...taskFilterShape(id),
-    icon: DIMENSION_ICONS[id],
-    options: optionsFor(id),
-  }));
+  const usesTeam = teams.length > 0 || conditions.some((c) => c.dimension === "team");
+  return (Object.keys(DIMENSION_ICONS) as TaskFilterDimension[])
+    .filter((id) => id !== "team" || usesTeam)
+    .map((id) => ({
+      ...taskFilterShape(id),
+      icon: DIMENSION_ICONS[id],
+      options: optionsFor(id),
+    }));
 }
 
 /**
@@ -359,8 +381,9 @@ export function useTasksFilters({
         tags: api.tags,
         countByTag: api.openTaskCountByTag,
         conditions,
+        teams: api.teams,
       }),
-    [assignees, api.tags, api.openTaskCountByTag, conditions],
+    [assignees, api.tags, api.openTaskCountByTag, conditions, api.teams],
   );
 
   const attachmentsOn = conditions.some((c) => c.dimension === "attachments");

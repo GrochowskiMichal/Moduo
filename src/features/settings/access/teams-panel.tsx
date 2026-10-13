@@ -1,0 +1,577 @@
+// Settings → Members and access → Teams (tasks-v3 §17, REPLAN 54, 94, 95,
+// default t; TV-D13). Teams route work: give a task to Design when you don't
+// know who'll do it, and everyone in Design sees it under My tasks; one of
+// them takes it. Any member who works on tasks makes a team and edits its
+// people; only its creator, the owner or an admin deletes it. A team opens no
+// project: its people see its tasks only where they could anyway.
+//
+// Teams are read from the workspace's shared store (TV-D11a) and written
+// through the team ops as store writes, so every surface (capture's `@`, the
+// panel's Team picker, the Filter) sees a change at once.
+
+import { Plus, Trash2, X } from "lucide-react";
+import { type ReactNode, useCallback, useMemo, useState } from "react";
+import { toast } from "sonner";
+
+import { PersonAvatar, TeamMark, teamLettersOf } from "../../../components/ui/avatar";
+import { Button } from "../../../components/ui/button";
+import { IconButton } from "../../../components/ui/icon-button";
+import { Input } from "../../../components/ui/input";
+import { Label } from "../../../components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../../components/ui/select";
+import { useStoreSnapshot, useWorkspaceStore } from "../../../lib/sync/react";
+import { undoToast } from "../../../lib/undo-toast";
+import { cn } from "../../../lib/utils";
+import { useAuth } from "../../../providers/auth-provider";
+import { useWorkspace } from "../../../providers/workspace-provider";
+import { canBeAssignee } from "../../sharing/rules";
+import type { Bucket, Team, TeamMember } from "../../tasks/model";
+import { TEAM_COLOR_OPTIONS, teamHue } from "../../tasks/teams";
+import { ExplainStrip, friendlyError, PaneHeader } from "./access-ui";
+
+const NO_TEAMS: Team[] = [];
+const NO_MEMBERS: TeamMember[] = [];
+const NONE = "none";
+
+export type TeamFieldsPatch = {
+  name?: string;
+  mark?: string;
+  color?: string | null;
+  defaultProjectId?: string | null;
+};
+
+export type WorkspaceTeams = {
+  /** The workspace's Tasks can be read here (teams live with Tasks). */
+  available: boolean;
+  /** Tasks at Edit: make teams and change their people (default t). */
+  canEdit: boolean;
+  teams: Team[];
+  members: TeamMember[];
+  /** Live projects a team can name as its default (no Inbox, nothing archived). */
+  projects: Bucket[];
+  canDelete: (team: Team) => boolean;
+  create: (name: string) => Promise<Team | null>;
+  update: (team: Team, patch: TeamFieldsPatch) => Promise<boolean>;
+  remove: (team: Team) => void;
+  addMember: (team: Team, userId: string) => void;
+  removeMember: (team: Team, userId: string) => void;
+};
+
+/** The selected workspace's teams, read from and written through its shared store. */
+export function useWorkspaceTeams(): WorkspaceTeams {
+  const { runtime, userId } = useAuth();
+  const {
+    selectedWorkspaceId: workspaceId,
+    selectedWorkspace,
+    modulePermissions,
+    myPerms,
+  } = useWorkspace();
+  const tasksLevel = modulePermissions?.tasks ?? "none";
+  const available = tasksLevel !== "none";
+  const canEdit = tasksLevel === "edit" || tasksLevel === "admin";
+  const store = useWorkspaceStore(runtime, userId, workspaceId, available);
+  const { bundle } = useStoreSnapshot(store);
+  const teams = useMemo(
+    () => [...(bundle.teams ?? NO_TEAMS)].sort((a, b) => a.name.localeCompare(b.name)),
+    [bundle.teams],
+  );
+  const members = bundle.teamMembers ?? NO_MEMBERS;
+  const projects = useMemo(
+    () =>
+      bundle.buckets
+        .filter((b) => !b.isSystem && !b.deletedAt)
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [bundle.buckets],
+  );
+  const isOwner = selectedWorkspace?.role === "owner";
+  const canDelete = useCallback(
+    (team: Team) =>
+      canEdit && (team.createdBy === userId || isOwner || myPerms.includes("ws.manage_roles")),
+    [canEdit, userId, isOwner, myPerms],
+  );
+
+  const ready = !!(store && runtime && workspaceId && canEdit);
+
+  const create = useCallback(
+    async (name: string): Promise<Team | null> => {
+      if (!ready || !store || !runtime || !workspaceId) return null;
+      const trimmed = name.trim();
+      if (!trimmed) return null;
+      const now = new Date().toISOString();
+      const shown: Team = {
+        id: crypto.randomUUID(),
+        workspaceId,
+        name: trimmed,
+        mark: teamLettersOf(trimmed),
+        color: null,
+        defaultProjectId: null,
+        createdBy: userId,
+        createdAt: now,
+        updatedAt: now,
+      };
+      const write = store.begin([{ table: "teams", insert: shown }]);
+      try {
+        const saved = await runtime.tasks.createTeam({
+          workspaceId,
+          id: shown.id,
+          fields: { name: trimmed },
+        });
+        write.settle({ teams: [saved] });
+        return saved;
+      } catch (e) {
+        write.fail();
+        toast.error(friendlyError(e));
+        return null;
+      }
+    },
+    [ready, store, runtime, workspaceId, userId],
+  );
+
+  const update = useCallback(
+    async (team: Team, patch: TeamFieldsPatch): Promise<boolean> => {
+      if (!ready || !store || !runtime || !workspaceId) return false;
+      const local: Record<string, unknown> = { ...patch };
+      if (patch.mark !== undefined) {
+        local.mark = patch.mark.trim().toUpperCase() || teamLettersOf(patch.name ?? team.name);
+      }
+      const write = store.begin([{ table: "teams", patch: { id: team.id, fields: local } }]);
+      try {
+        const saved = await runtime.tasks.updateTeam({ workspaceId, teamId: team.id, patch });
+        write.settle({ teams: [saved] });
+        return true;
+      } catch (e) {
+        write.fail();
+        toast.error(friendlyError(e));
+        return false;
+      }
+    },
+    [ready, store, runtime, workspaceId],
+  );
+
+  const remove = useCallback(
+    (team: Team) => {
+      if (!ready || !store || !runtime || !workspaceId) return;
+      const write = store.begin([{ table: "teams", remove: team.id }]);
+      runtime.tasks
+        .updateTeam({ workspaceId, teamId: team.id, patch: { deleted: true } })
+        .then(() => {
+          write.settle();
+          store.forget("teams", [team.id]);
+          undoToast(`Deleted ${team.name}`, {
+            description: "Its tasks keep their people; they're just not for the team any more.",
+            onUndo: () => {
+              runtime.tasks
+                .updateTeam({ workspaceId, teamId: team.id, patch: { deleted: false } })
+                .then((saved) => store.answer({ teams: [saved] }))
+                .catch((e) => toast.error(friendlyError(e)));
+            },
+          });
+        })
+        .catch((e) => {
+          write.fail();
+          toast.error(friendlyError(e));
+        });
+    },
+    [ready, store, runtime, workspaceId],
+  );
+
+  const addMember = useCallback(
+    (team: Team, person: string) => {
+      if (!ready || !store || !runtime || !workspaceId) return;
+      const shown: TeamMember = {
+        id: `tmp-${crypto.randomUUID()}`,
+        workspaceId,
+        teamId: team.id,
+        userId: person,
+        createdAt: new Date().toISOString(),
+      };
+      const write = store.begin([{ table: "teamMembers", insert: shown }]);
+      runtime.tasks
+        .addTeamMember({ workspaceId, teamId: team.id, userId: person })
+        .then((rows) => write.settle({ teamMembers: rows }))
+        .catch((e) => {
+          write.fail();
+          toast.error(friendlyError(e));
+        });
+    },
+    [ready, store, runtime, workspaceId],
+  );
+
+  const removeMember = useCallback(
+    (team: Team, person: string) => {
+      if (!ready || !store || !runtime || !workspaceId) return;
+      const rows = members.filter((m) => m.teamId === team.id && m.userId === person);
+      if (rows.length === 0) return;
+      const write = store.begin(rows.map((m) => ({ table: "teamMembers" as const, remove: m.id })));
+      runtime.tasks
+        .removeTeamMember({ workspaceId, teamId: team.id, userId: person })
+        .then((left) => {
+          write.settle({ teamMembers: left });
+          store.forget(
+            "teamMembers",
+            rows.map((m) => m.id),
+          );
+        })
+        .catch((e) => {
+          write.fail();
+          toast.error(friendlyError(e));
+        });
+    },
+    [ready, store, runtime, workspaceId, members],
+  );
+
+  return {
+    available,
+    canEdit,
+    teams,
+    members,
+    projects,
+    canDelete,
+    create,
+    update,
+    remove,
+    addMember,
+    removeMember,
+  };
+}
+
+/** What a team is for, in one line, for anyone new to Moduo. */
+const WHAT_TEAMS_DO =
+  "Give a task to a team when you don't know who'll do it. Everyone in the team sees it on top of My tasks, and one of them takes it. A team opens no projects: its people see its tasks in projects shared with them.";
+
+/** "New team": a name, and the letters it'll show. */
+export function NewTeamPane({
+  teams,
+  onCreated,
+}: {
+  teams: WorkspaceTeams;
+  onCreated: (team: Team) => void;
+}) {
+  const [name, setName] = useState("");
+  const [saving, setSaving] = useState(false);
+  const trimmed = name.trim();
+  const taken = teams.teams.some((t) => t.name.toLowerCase() === trimmed.toLowerCase());
+  const submit = async () => {
+    if (!trimmed || taken || saving) return;
+    setSaving(true);
+    const made = await teams.create(trimmed);
+    setSaving(false);
+    if (made) onCreated(made);
+  };
+  return (
+    <div className="flex flex-col gap-5">
+      <PaneHeader
+        leading={trimmed ? <TeamMark name={trimmed} size="lg" /> : null}
+        title="New team"
+        subtitle="For example Design, Development or Marketing."
+      />
+      <ExplainStrip>{WHAT_TEAMS_DO}</ExplainStrip>
+      <form
+        className="flex flex-col gap-1.5"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void submit();
+        }}
+      >
+        <Label htmlFor="team-new-name">Name</Label>
+        <div className="flex items-center gap-2">
+          <Input
+            id="team-new-name"
+            value={name}
+            maxLength={60}
+            autoFocus
+            placeholder="Design"
+            onChange={(e) => setName(e.target.value)}
+            aria-invalid={taken || undefined}
+          />
+          <Button type="submit" disabled={!trimmed || taken || saving}>
+            {saving ? "Creating…" : "Create team"}
+          </Button>
+        </div>
+        {taken ? (
+          <span className="text-xs text-destructive">There's already a team called that.</span>
+        ) : trimmed ? (
+          <span className="text-xs text-muted-foreground">
+            It shows as {teamLettersOf(trimmed)}. Add its people next.
+          </span>
+        ) : null}
+      </form>
+    </div>
+  );
+}
+
+/** One team: its name, letters, colour, default project and people. */
+export function TeamEditor({ team, teams }: { team: Team; teams: WorkspaceTeams }) {
+  const { userId } = useAuth();
+  const { members: workspaceMembers } = useWorkspace();
+  const editable = teams.canEdit;
+  const [name, setName] = useState(team.name);
+  const [letters, setLetters] = useState(team.mark);
+  const people = useMemo(
+    () =>
+      teams.members
+        .filter((m) => m.teamId === team.id)
+        .map((m) => {
+          const member = workspaceMembers.find((w) => w.userId === m.userId);
+          return { userId: m.userId, name: member?.displayName?.trim() || "Former member" };
+        })
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [teams.members, team.id, workspaceMembers],
+  );
+  const addable = useMemo(
+    () =>
+      workspaceMembers
+        .filter(
+          (m) =>
+            m.isActive &&
+            !m.removedAt &&
+            (m.role === "owner" || canBeAssignee(m.perms)) &&
+            !people.some((p) => p.userId === m.userId),
+        )
+        .map((m) => ({ userId: m.userId, name: m.displayName?.trim() || "Member" }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [workspaceMembers, people],
+  );
+  const defaultProject = teams.projects.find((p) => p.id === team.defaultProjectId) ?? null;
+  const autoHue = teamHue({ ...team, color: null });
+  const autoColor = (
+    TEAM_COLOR_OPTIONS.find((o) => o.value === autoHue)?.label ?? autoHue
+  ).toLowerCase();
+
+  const saveName = () => {
+    const next = name.trim();
+    if (!next || next === team.name) {
+      setName(team.name);
+      return;
+    }
+    void teams.update(team, { name: next }).then((ok) => {
+      if (!ok) setName(team.name);
+    });
+  };
+  const saveLetters = () => {
+    const next = letters.trim().toUpperCase();
+    if (next === team.mark) return;
+    void teams.update(team, { mark: next }).then((ok) => {
+      if (!ok) setLetters(team.mark);
+      else if (!next) setLetters(teamLettersOf(team.name));
+    });
+  };
+
+  return (
+    <div className="flex flex-col gap-5">
+      <PaneHeader
+        leading={
+          <TeamMark
+            name={team.name}
+            id={team.id}
+            letters={team.mark}
+            color={team.color}
+            size="lg"
+          />
+        }
+        title={<span className="truncate">{team.name}</span>}
+        subtitle={`${people.length} ${people.length === 1 ? "person" : "people"}`}
+        actions={
+          teams.canDelete(team) ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => teams.remove(team)}
+              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+            >
+              <Trash2 aria-hidden />
+              Delete
+            </Button>
+          ) : null
+        }
+      />
+      <ExplainStrip>{WHAT_TEAMS_DO}</ExplainStrip>
+
+      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_8rem]">
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor={`team-name-${team.id}`}>Name</Label>
+          <Input
+            id={`team-name-${team.id}`}
+            value={name}
+            maxLength={60}
+            disabled={!editable}
+            onChange={(e) => setName(e.target.value)}
+            onBlur={saveName}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") e.currentTarget.blur();
+              if (e.key === "Escape") setName(team.name);
+            }}
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor={`team-mark-${team.id}`}>Letters</Label>
+          <Input
+            id={`team-mark-${team.id}`}
+            value={letters}
+            maxLength={2}
+            disabled={!editable}
+            placeholder={teamLettersOf(team.name)}
+            onChange={(e) => setLetters(e.target.value.toUpperCase())}
+            onBlur={saveLetters}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") e.currentTarget.blur();
+              if (e.key === "Escape") setLetters(team.mark);
+            }}
+          />
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <Label id={`team-color-${team.id}`}>Colour</Label>
+        <div
+          role="radiogroup"
+          aria-labelledby={`team-color-${team.id}`}
+          className="flex flex-wrap items-center gap-1.5"
+        >
+          <ColorChoice
+            label="Automatic"
+            selected={!team.color}
+            disabled={!editable}
+            onPick={() => void teams.update(team, { color: null })}
+          >
+            <TeamMark name={team.name} id={team.id} letters={team.mark} color={autoHue} />
+          </ColorChoice>
+          {TEAM_COLOR_OPTIONS.map((option) => (
+            <ColorChoice
+              key={option.value}
+              label={option.label}
+              selected={team.color === option.value}
+              disabled={!editable}
+              onPick={() => void teams.update(team, { color: option.value })}
+            >
+              <span
+                aria-hidden
+                data-label={option.value}
+                className="tag-dot size-3 shrink-0 rounded-full"
+              />
+            </ColorChoice>
+          ))}
+        </div>
+        <span className="text-xs text-muted-foreground">
+          Automatic picks one from the team and keeps it everywhere ({autoColor}).
+        </span>
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor={`team-project-${team.id}`}>Default project</Label>
+        <Select
+          value={team.defaultProjectId ?? NONE}
+          disabled={!editable}
+          onValueChange={(v) =>
+            void teams.update(team, { defaultProjectId: v === NONE ? null : v })
+          }
+        >
+          <SelectTrigger id={`team-project-${team.id}`}>
+            <SelectValue placeholder="None">{defaultProject?.name ?? "None"}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={NONE}>None</SelectItem>
+            {teams.projects.map((p) => (
+              <SelectItem key={p.id} value={p.id}>
+                {p.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <span className="text-xs text-muted-foreground">
+          A task for {team.name} with no project goes here. Without one, whoever routes it picks a
+          project. Pick one the team can open.
+        </span>
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <Label id={`team-people-${team.id}`}>People</Label>
+        {people.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            Nobody yet. Add the people who'll take {team.name}'s tasks.
+          </p>
+        ) : (
+          <ul aria-labelledby={`team-people-${team.id}`} className="flex flex-col">
+            {people.map((p) => (
+              <li
+                key={p.userId}
+                className="flex min-h-(--row-h) items-center gap-2 rounded-md px-1 text-sm"
+              >
+                <PersonAvatar name={p.name} id={p.userId} size="sm" />
+                <span className="min-w-0 flex-1 truncate">
+                  {p.name}
+                  {p.userId === userId ? (
+                    <span className="text-muted-foreground"> · You</span>
+                  ) : null}
+                </span>
+                {editable ? (
+                  <IconButton
+                    icon={X}
+                    label={`Take ${p.name} out of ${team.name}`}
+                    onClick={() => teams.removeMember(team, p.userId)}
+                  />
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        )}
+        {editable && addable.length > 0 ? (
+          <Select value="" onValueChange={(v) => teams.addMember(team, v)}>
+            <SelectTrigger aria-label={`Add someone to ${team.name}`} className="w-fit">
+              <Plus aria-hidden className="size-icon" />
+              <SelectValue placeholder="Add someone" />
+            </SelectTrigger>
+            <SelectContent>
+              {addable.map((m) => (
+                <SelectItem key={m.userId} value={m.userId}>
+                  {m.name}
+                  {m.userId === userId ? " (you)" : ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function ColorChoice({
+  label,
+  selected,
+  disabled,
+  onPick,
+  children,
+}: {
+  label: string;
+  selected: boolean;
+  disabled: boolean;
+  onPick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={selected}
+      aria-label={label}
+      title={label}
+      disabled={disabled}
+      onClick={onPick}
+      className={cn(
+        "flex size-8 items-center justify-center rounded-md border transition-colors duration-(--motion-fade)",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50",
+        selected ? "border-foreground bg-state-active" : "border-transparent hover:bg-state-hover",
+      )}
+    >
+      {children}
+    </button>
+  );
+}

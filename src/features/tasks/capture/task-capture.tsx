@@ -315,7 +315,7 @@ export function TaskCaptureBody({
       }
       if (token.kind === "team" && !token.label) {
         const t = teams.find((x) => x.id === token.teamId);
-        return t ? { ...token, label: t.name, letters: t.mark || null } : null;
+        return t ? { ...token, label: t.name, letters: t.mark || null, color: t.color } : null;
       }
       if (token.kind === "tag" && token.tagId && !token.label) {
         const t = tags.find((x) => x.id === token.tagId);
@@ -505,6 +505,7 @@ export function TaskCaptureBody({
             teamId: candidate.teamId,
             label: candidate.label,
             letters: candidate.letters,
+            color: candidate.color ?? null,
           };
         case "entity":
           return candidate.ref.type === "bucket"
@@ -652,7 +653,12 @@ export function TaskCaptureBody({
   const lineContext = useMemo(
     () => ({
       people: menuPeople.map((p) => ({ userId: p.userId, name: p.name })),
-      teams: teams.map((t) => ({ id: t.id, name: t.name, letters: t.mark || null })),
+      teams: teams.map((t) => ({
+        id: t.id,
+        name: t.name,
+        letters: t.mark || null,
+        color: t.color,
+      })),
       tags: tags.map((t) => ({ id: t.id, name: t.name, color: t.color })),
     }),
     [menuPeople, teams, tags],

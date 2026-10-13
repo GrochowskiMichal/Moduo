@@ -2832,6 +2832,17 @@ export const webRuntime: ModuoRuntime = {
       return taskRowToModel(row);
     },
 
+    async opClaim({ workspaceId, taskId }) {
+      const { data, error } = await supabaseClient.rpc("tasks_op_claim", {
+        p_workspace_id: workspaceId,
+        p_task_id: taskId,
+      });
+      if (error) throw new Error(error.message);
+      const row = Array.isArray(data) ? data[0] : data;
+      if (!row) throw new Error("The operation returned nothing.");
+      return taskRowToModel(row);
+    },
+
     async opReschedule({ workspaceId, taskId, scheduledAt, days }) {
       return taskOpRpc("tasks_op_reschedule", {
         p_workspace_id: workspaceId,
@@ -3121,6 +3132,15 @@ export const webRuntime: ModuoRuntime = {
       const row = Array.isArray(data) ? data[0] : data;
       if (!row) throw new Error("The comment operation returned nothing.");
       return commentRowToModel(row);
+    },
+
+    async mentionTeams({ commentId, teamIds }) {
+      if (teamIds.length === 0) return;
+      const { error } = await supabaseClient.rpc("comments_op_mention_teams", {
+        p_comment_id: commentId,
+        p_team_ids: teamIds,
+      });
+      if (error) throw new Error(error.message);
     },
 
     async restoreComment({ commentId }) {

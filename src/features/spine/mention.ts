@@ -72,6 +72,8 @@ export type MentionTeamCandidate = {
   label: string;
   /** The team's own two letters, when edited. */
   letters: string | null;
+  /** The colour picked for the team (TV-D13), else its stable one. */
+  color?: string | null;
 };
 
 /**

@@ -678,6 +678,21 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     [runtime, workspaceId, canEdit, store, backlogToTodo, refused, archivedBlocked],
   );
 
+  /**
+   * Take a team's unclaimed task (TV-D13, "Take it" on My tasks' team block):
+   * shown as yours at once; the server checks you're in its team and can edit
+   * it, and refuses one somebody took first (the copy goes back and says so).
+   */
+  const claimTask = useCallback(
+    (id: string) => {
+      if (!userId) return;
+      applyOp(id, { assigneeId: userId }, () =>
+        runtime!.tasks.opClaim({ workspaceId: workspaceId!, taskId: id }),
+      );
+    },
+    [applyOp, runtime, workspaceId, userId],
+  );
+
   /** Fetch a task's quiet activity trail (newest first). */
   const loadActivity = useCallback(
     async (taskId: string): Promise<ActivityEntry[]> => {
@@ -3223,6 +3238,8 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     createQueuedTask,
     captureToQueue,
     patchTask,
+    /** Take a team's unclaimed task (TV-D13); `unclaimedForMe` in teams.ts lists them. */
+    claimTask,
     toggleDone,
     markDone,
     archiveTask,
