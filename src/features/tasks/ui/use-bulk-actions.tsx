@@ -461,7 +461,8 @@ export function useBulkActions({
                   .map((s) => ({
                     key: s.id,
                     label: s.name,
-                    group: CATEGORY_LABELS[category],
+                    // In category order, each with its category's icon (no
+                    // small-caps headings: these are the project's own words).
                     icon: <StatusIcon category={category} />,
                     onPick: () => {
                       close();

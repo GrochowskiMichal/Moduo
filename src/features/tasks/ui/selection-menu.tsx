@@ -7,7 +7,6 @@
 import { useSyncExternalStore } from "react";
 import {
   ContextMenuItem,
-  ContextMenuLabel,
   ContextMenuSeparator,
   ContextMenuShortcut,
 } from "../../../components/ui/context-menu";
@@ -67,9 +66,8 @@ export function SelectionMenuItems({
   const pick = (kind: BulkPickerKind) => () => afterClose(() => menu.open(kind));
   return (
     <>
-      <ContextMenuLabel>{tasksWord(menu.ids.size)}</ContextMenuLabel>
       <ContextMenuItem onSelect={menu.complete}>
-        {menu.allClosed ? "Reopen" : "Complete"}
+        {menu.allClosed ? "Reopen" : "Complete"} {tasksWord(menu.ids.size)}
         <ContextMenuShortcut>Space</ContextMenuShortcut>
       </ContextMenuItem>
       <ContextMenuItem onSelect={menu.focus}>
@@ -110,7 +108,7 @@ export function SelectionMenuItems({
       </ContextMenuItem>
       <ContextMenuSeparator />
       <ContextMenuItem variant="destructive" onSelect={menu.remove}>
-        Delete
+        Delete {tasksWord(menu.ids.size)}
         <ContextMenuShortcut>⌫</ContextMenuShortcut>
       </ContextMenuItem>
     </>

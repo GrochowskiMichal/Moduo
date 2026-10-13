@@ -27,8 +27,6 @@ export type BulkPickerItem = {
   checked?: boolean;
   /** Its key in the picker ("1"), or a quiet word ("each own date"). */
   hint?: string;
-  /** A group heading the item sits under ("To do"). */
-  group?: string;
   onPick: () => void;
 };
 
@@ -67,13 +65,6 @@ export function BulkPickerDialog({
     setQuery("");
     run();
   };
-  // Items in their groups, in the order the groups first appear.
-  const groups: Array<{ heading: string | undefined; items: BulkPickerItem[] }> = [];
-  for (const item of shown) {
-    const last = groups[groups.length - 1];
-    if (last && last.heading === item.group) last.items.push(item);
-    else groups.push({ heading: item.group, items: [item] });
-  }
   return (
     <CommandDialog
       open={open}
@@ -87,9 +78,9 @@ export function BulkPickerDialog({
       <CommandInput placeholder={placeholder} value={query} onValueChange={setQuery} />
       <CommandList>
         {made ? null : <CommandEmpty>{empty}</CommandEmpty>}
-        {groups.map((g, i) => (
-          <CommandGroup key={g.heading ?? `group-${i}`} heading={g.heading}>
-            {g.items.map((item) => (
+        {shown.length > 0 ? (
+          <CommandGroup>
+            {shown.map((item) => (
               <CommandItem key={item.key} value={item.key} onSelect={() => pick(item.onPick)}>
                 {item.icon !== undefined ? (
                   <span
@@ -107,7 +98,7 @@ export function BulkPickerDialog({
               </CommandItem>
             ))}
           </CommandGroup>
-        ))}
+        ) : null}
         {made ? (
           <CommandGroup>
             <CommandItem value="__create__" onSelect={() => pick(made.onPick)}>
