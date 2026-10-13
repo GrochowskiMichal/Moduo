@@ -32,7 +32,7 @@
 - [ ] **Do:** Skip → **Expect:** the task goes to the end of Up next; the session moves on (alone, it stays). _(both)_
 - [ ] **Do:** Done or Skip without starting → **Expect:** nothing starts; the next task becomes the Now card. _(both)_
 - [ ] **Do:** click empty space on the screen, press ⏎, then S, then C → **Expect:** Done, Skip, new task at the top of Up next. _(both)_
-- [ ] **Do:** Tab to Start and press ⏎, then ⏎ again → **Expect:** the first starts the session; the second finishes the Now task (the screen took focus back from the vanished Start button). _(both)_
+- [ ] **Do:** Tab to Start and press ⏎, then ⏎ again → **Expect:** the first starts the session; focus is on the timer pill, so the second pauses it (it never finishes the task). Under Off (no pill) focus goes to the screen. _(both)_
 - [ ] **Do:** click in the sidebar or the panel, then press ⏎ or S → **Expect:** nothing happens to the Now card; typing in the panel or capture never triggers them either. _(both)_
 
 ## Subtasks open in the panel (65a)

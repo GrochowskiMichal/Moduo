@@ -231,12 +231,12 @@ describe("Focus: the Now card and the session (AC8.2, AC8.3)", () => {
     expect(api.moveQueuedToEnd).not.toHaveBeenCalled();
   });
 
-  it("Start hands focus back to the screen once its button is gone", () => {
+  it("Start hands focus to the pill once its button is gone (a second ⏎ pauses)", () => {
     renderView(fakeApi([task("t1"), task("t2")]));
     const startButton = screen.getByRole("button", { name: /^Start/ });
     startButton.focus();
     fireEvent.click(startButton);
-    expect(document.activeElement).toBe(document.querySelector('[data-slot="focus-view"]'));
+    expect(document.activeElement).toBe(document.querySelector('[data-slot="focus-task-pill"]'));
   });
 });
 

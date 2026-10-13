@@ -232,13 +232,18 @@ export function FocusView({
   }, []);
 
   // The screen takes focus when nothing else holds it: on opening (from the
-  // top bar, a reload), and when the button you used goes away (Start becomes
-  // the pill; Done on the last task). A click on its empty parts focuses it
-  // too (tabIndex -1), so the keys work after any click on the screen.
+  // top bar, a reload), and when the button you used goes away (Done on the
+  // last task). Start becoming the pill hands focus to the pill, so a second
+  // ⏎ pauses (undoable) rather than finishing the task. A click on the
+  // screen's empty parts focuses it too (tabIndex -1).
   // biome-ignore lint/correctness/useExhaustiveDependencies: Now and the session are the cues
   useEffect(() => {
     if (typeof document === "undefined" || document.activeElement !== document.body) return;
-    rootRef.current?.focus({ preventScroll: true });
+    const root = rootRef.current;
+    const pill = root?.querySelector<HTMLElement>(
+      '[data-slot="focus-task-pill"],[data-slot="focus-pomodoro-pill"]',
+    );
+    (pill ?? root)?.focus({ preventScroll: true });
   }, [now?.id, onNow]);
 
   // ── what this session finished ("2 done · Show") ───────────────────────────
@@ -251,6 +256,9 @@ export function FocusView({
     return api.queuedTasks.filter((t) => t.status === "done").map((t) => t.id);
   }, [sessionRun, endedRun, api.queuedTasks]);
   const timed = (sessionRun?.mode ?? endedRun?.mode ?? prefs.timer) !== "off";
+  // The run's notice is about this workspace's session only.
+  const noticeOwner = run ?? ended;
+  const noticeHere = !noticeOwner || noticeOwner.workspaceId === workspaceId;
 
   if (!api.loaded) return <FocusSkeleton />;
 
@@ -297,7 +305,9 @@ export function FocusView({
       {header}
       <div className="pane-scroll min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto flex w-full max-w-2xl flex-col gap-5 pb-6">
-          {notice ? <NoticeLine text={notice} onDismiss={() => setRunNotice(null)} /> : null}
+          {notice && noticeHere ? (
+            <NoticeLine text={notice} onDismiss={() => setRunNotice(null)} />
+          ) : null}
           {now ? (
             <>
               <NowCard

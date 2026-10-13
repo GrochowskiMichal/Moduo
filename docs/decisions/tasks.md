@@ -38,7 +38,7 @@ Built in tasks-v3 block 23 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §7, AC
   - Rejected: an empty panel until something is clicked.
 - **F7-7 · Keys on the screen: ⏎ Done · S Skip · C new at the top · ⇧F on a focused subtask or row** → TV-F7
   - Who: agent's choice, deferred to by Maciej, 2026-10-13 (keymap's Focus table; Hand off W is F8's).
-  - Decision: they act only while the screen holds focus (it is focusable: a click on its empty parts focuses it; it takes focus when it opens with nothing else focused and when Start or the last Done removes the button you used), never from the sidebar, the panel, a text field, a menu or a dialog; a focused button keeps its own ⏎. ⌥⇧↑/↓ on a focused Up next row moves it.
+  - Decision: they act only while the screen holds focus (it is focusable: a click on its empty parts focuses it; it takes focus when it opens with nothing else focused and when the last Done removes the button you used; Start hands focus to the timer pill, so a second ⏎ pauses, which is undoable, instead of finishing the task), never from the sidebar, the panel, a text field, a menu or a dialog; a focused button keeps its own ⏎. ⌥⇧↑/↓ on a focused Up next row moves it.
   - Why: ⏎ is Done for the focused task (65a) and Done has no Undo without subtasks, so a stray ⏎ must never finish a task (the validator's case: focus fell to the page after Start).
   - Rejected: window-wide keys, or keys "from nowhere" (⏎ in the panel or after a click elsewhere would finish the task).
 - **F7-8 · ⇧F from any task says where the session went** → TV-F7 (`focusOnTask` in the module, the page's wrapper)
