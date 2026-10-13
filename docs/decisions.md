@@ -50,6 +50,11 @@ One line per locked product or architecture decision, grouped by area, newest fi
 - 2026-10-01 · Landing waitlist goes only through the `waitlist-join` Edge Function; `public.waitlist` is closed to anon/authenticated.
 - 2026-07-10 · DF-3 (trial/billing fix pack) landed — the paid-conversion path works end-to-end
 
+## Chat → [decisions/chat.md](decisions/chat.md)
+
+- 2026-10-14 · Chat v2 is re-planned on Tasks v3's pieces: v1's engine stays, every screen is rebuilt; what's addressed to you reaches you outside the app and waits in Catch up; replies in the stream with Wrap up by hand instead of threads; a channel links to one project, client or team; the hackathon cut is CV-0…CV-12 (calls CH1–CH75, `specs/chat-v2.md`)
+- 2026-10-14 · Chat v2's platform: a chat store on the shared pattern with a device copy and an outbox, messages stored as a Markdown subset with `moduo://` references, TanStack Virtual, full-text search with unaccent, typing scoped to a conversation's members, notifications through TV-D12's one pipeline with push at once and one device ringing
+
 ## Moduo Meet (video calls) → [decisions/meet.md](decisions/meet.md)
 
 - 2026-10-06 · Moduo Meet: our own video calls on self-hosted LiveKit in Azure Poland Central (/s1 planned, DoR-ready).

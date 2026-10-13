@@ -1,11 +1,10 @@
 # Chat v2 — the re-plan
 
-> **Status (2026-10-14): every call is decided (CH1–CH75). Writing the spec, `specs/chat-v2.md`, on Fable 5.1 (§9 step 5).**
+> **Status (2026-10-14): the spec is written ([`specs/chat-v2.md`](../../specs/chat-v2.md), 29 block rows CV-0…CV-23 with a/b/c splits, on Fable 5.1); BUILD_ORDER has the Chat v2 section; decision entries in `docs/decisions/chat.md`; `specs/chat.md` carries the supersession banner. The validator's findings (1 blocker, 7 major, 26 minor) were applied on 2026-10-14; a confirmation pass closes it.**
 >
 > - **Decided:** CH1–CH75. CH24 stays parked; CH20/CH21 are facts.
-> - **Round 3 for Mike:** [research/round-3-database.md](./research/round-3-database.md).
+> - **Round 3 for Mike:** [research/round-3-database.md](./research/round-3-database.md) (its CV- names were re-cut by the spec; the mapping is in the spec's §Execution blocks).
 > - **Cross-module, sent:** Tasks v3 via BUILD_ORDER's 🟠 box (CH72); Notes, Calendar and the hackathon plan via [proposals.md](./proposals.md); Notes answered (N19).
-> - **Next:** the spec, then decision entries, the supersession banner on `specs/chat.md`, the validator, "Ready to execute".
 > - **Mike's ask:** the tech-stack decision blueprint landed → [research/tech-blueprint.md](./research/tech-blueprint.md), folded into §6 (#2, #3, #6, #7, #18, #19–#22). Open from it: **CH31** (the Supabase plan before the hackathon).
 > - **Research lanes** ([`research/`](./research/)): six landed and folded in (early-decisions audit, role journeys, competitor structure, hackathon, visual audit → §5, current state → §1.3 B and §6 #15–18). **Threads** (→ CH30) and **visual competitors** (→ CH29) landed.
 > - **Research data in the shared local database** (kept for round 2's live checks; remove when the plan is done): workspace **"Chat replan research"** `669be464-0b9a-4d84-8537-544ac04dba5f` (10 channels, 3,032 messages, one task) and a third local user `third@moduo.local`. Full ledger and a cleanup sketch: [current state](./research/current-state.md), last section. `dev@moduo.local`'s plan is back to `free` (checked).
@@ -199,7 +198,7 @@ From [research/role-journeys.md](./research/role-journeys.md) (a normal week per
 
 ## 4. The views — today and their target
 
-*Rounds 2a/2b.*
+Written as the spec: [`specs/chat-v2.md`](../../specs/chat-v2.md) §Product behavior (one subsection per surface, each citing its round-5 frame) and §Edge cases (every state). Today's views are in [research/current-state.md](./research/current-state.md); the targets are round 5's nine frames.
 
 ## 5. The visual north star, applied to Chat
 
