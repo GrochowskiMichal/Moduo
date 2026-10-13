@@ -45,6 +45,7 @@ function DialogContent({
   children,
   showCloseButton = true,
   style,
+  onInteractOutside,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean;
@@ -63,6 +64,14 @@ function DialogContent({
           zIndex: "var(--z-dialog)",
           boxShadow: "var(--shadow-overlay)",
           ...style,
+        }}
+        onInteractOutside={(e) => {
+          onInteractOutside?.(e);
+          // A toast (an Undo raised from inside the dialog) can be pressed
+          // without closing the dialog under it.
+          if (e.target instanceof Element && e.target.closest("[data-sonner-toaster]")) {
+            e.preventDefault();
+          }
         }}
         {...props}
       >
