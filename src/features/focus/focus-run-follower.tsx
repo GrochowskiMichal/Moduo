@@ -71,6 +71,8 @@ export function FocusRunFollower() {
       // A cut read can't tell a missing task from one it didn't bring.
       complete: snap.restLoaded && snap.bundle.truncated.length === 0,
       wasQueued: wasQueued.current.has(nowId),
+      // Lined-up tasks that wait on something are In flight, not next (TV-F8).
+      inFlight: new Set(snap.waiting.map((w) => w.taskId)),
     });
     if (step.kind === "stay") return;
     wasQueued.current.delete(nowId);

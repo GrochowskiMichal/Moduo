@@ -79,6 +79,7 @@ import {
   sameTaskRef,
   setTimer,
   settleFlush,
+  skipBreak,
   snapshotOf,
   startSession,
   stopSession,
@@ -185,6 +186,8 @@ export interface FocusEngine {
   undoStop(): boolean;
   canUndoStop(): boolean;
   togglePomodoro(): void;
+  /** Skip Pomodoro's break: a work block starts now (TV-F8). */
+  skipBreak(): void;
   /** The timer (62a), mid-session too. */
   setTimer(timer: FocusTimerMode): void;
   /** Take over a run another device was running, as its record says (#323). */
@@ -652,6 +655,7 @@ export function createFocusEngine(deps: FocusEngineDeps): FocusEngine {
     undoStop,
     canUndoStop,
     togglePomodoro: () => act((r, now, prefs) => togglePomodoro(r, now, prefs)),
+    skipBreak: () => act((r, now, prefs) => skipBreak(r, now, prefs)),
     setTimer: (timer) =>
       act((r, now, prefs) => setTimer(r, timer, now, prefs), {
         // Turning the clock off banks what it counted so far.
@@ -860,6 +864,11 @@ export function canUndoFocusStop(): boolean {
 /** Switch stopwatch ↔ pomodoro (the rhythm starts over with a work block). */
 export function toggleFocusPomodoro(): void {
   engine.togglePomodoro();
+}
+
+/** Skip Pomodoro's break: a work block starts now. No-op outside a break (TV-F8). */
+export function skipFocusBreak(): void {
+  engine.skipBreak();
 }
 
 /** While paused, show an edited interval right away. No-op while running. */

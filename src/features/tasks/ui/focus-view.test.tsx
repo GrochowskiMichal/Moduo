@@ -7,7 +7,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, rs } from "@rst
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 
 import { TooltipProvider } from "../../../components/ui/tooltip";
-import { DEFAULT_FOCUS_PREFS, type FocusPrefs } from "../../../lib/focus-prefs";
+import { DEFAULT_FOCUS_PREFS, type FocusPrefs, useFocusPrefs } from "../../../lib/focus-prefs";
 import {
   __resetFocusEngineForTest,
   attachFocusUser,
@@ -22,7 +22,7 @@ import {
 import { setRunNotice } from "../../focus/run";
 import { makeTask } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
-import type { Task, TaskSession } from "../model";
+import type { Task, TaskSession, TaskWaitingEntry } from "../model";
 import { FocusView } from "./focus-view";
 
 const USER = "u1";
@@ -38,7 +38,12 @@ function task(id: string, over: Partial<Task> = {}): Task {
 
 function fakeApi(
   queued: Task[],
-  over: { all?: Task[]; sessions?: TaskSession[]; subtasks?: Map<string, Task[]> } = {},
+  over: {
+    all?: Task[];
+    sessions?: TaskSession[];
+    subtasks?: Map<string, Task[]>;
+    waiting?: TaskWaitingEntry[];
+  } = {},
 ) {
   const all = over.all ?? queued;
   const api = {
@@ -49,6 +54,15 @@ function fakeApi(
     buckets: [],
     sections: [],
     sessions: over.sessions ?? [],
+    waiting: over.waiting ?? [],
+    reminders: [],
+    agentSessions: [],
+    addWaiting: rs.fn(() => "w-new"),
+    removeWaiting: rs.fn(),
+    addReminder: rs.fn(),
+    removeReminder: rs.fn(),
+    arrangeQueue: rs.fn(() => true),
+    setTaskStatus: rs.fn(),
     currentUserId: USER,
     blockedTaskIds: new Set<string>(),
     blockersByTask: new Map(),
@@ -71,7 +85,11 @@ function fakeApi(
 
 function renderView(
   api: TasksModuleApi,
-  handlers: { onOpenTask?: (id: string) => void; onSelectTask?: (id: string | null) => void } = {},
+  handlers: {
+    onOpenTask?: (id: string) => void;
+    onSelectTask?: (id: string | null) => void;
+    onShowInFlight?: () => void;
+  } = {},
 ) {
   return render(
     <TooltipProvider>
@@ -87,6 +105,7 @@ function renderView(
         panelTaskId={null}
         onRequestCapture={() => {}}
         dndMode="internal"
+        onShowInFlight={handlers.onShowInFlight}
       />
     </TooltipProvider>,
   );
@@ -378,5 +397,127 @@ describe("Focus: the empty state teaches three ways in (AC8.9, call 66)", () => 
     renderView(fakeApi([]));
     expect(screen.getByText(/tasks you schedule for today show up here/)).toBeTruthy();
     expect(screen.queryByRole("list", { name: "Scheduled today" })).toBeNull();
+  });
+});
+
+// TV-F8: between tasks, Arrange, Hand off and In flight (AC8.6–8.8, call 5).
+describe("Focus: along the way, Arrange, Hand off (TV-F8)", () => {
+  const acme = (id: string, over: Partial<Task> = {}) => task(id, { bucketId: "acme", ...over });
+  const web = (id: string, over: Partial<Task> = {}) => task(id, { bucketId: "web", ...over });
+
+  it("Done before a project change offers one quick task from the project you're leaving", () => {
+    const invoice = acme("invoice", { title: "Send invoice", estimateMinutes: 5 });
+    const api = fakeApi([acme("logo"), web("site")], {
+      all: [acme("logo"), web("site"), invoice],
+    });
+    renderView(api);
+    fireEvent.click(screen.getByRole("button", { name: /^Done/ }));
+    const offer = screen.getByRole("region", { name: "Along the way" });
+    expect(within(offer).getByText(/Send invoice/)).toBeTruthy();
+    // It holds Now's place; Take it lines it up at the top.
+    expect(screen.queryByRole("region", { name: "Now" })).toBeNull();
+    fireEvent.click(within(offer).getByRole("button", { name: /^Take it/ }));
+    expect(api.addToQueue).toHaveBeenCalledWith("invoice", "top");
+    expect(screen.getByRole("region", { name: "Now" })).toBeTruthy();
+  });
+
+  it("Esc is Not now; three Not-nows turn the next offer into Shrink · Move · Let go", () => {
+    const invoice = acme("invoice", { title: "Send invoice", estimateMinutes: 5 });
+    for (let i = 0; i < 4; i++) {
+      const api = fakeApi([acme("logo"), web("site")], {
+        all: [acme("logo"), web("site"), invoice],
+      });
+      const view = renderView(api);
+      fireEvent.click(screen.getByRole("button", { name: /^Done/ }));
+      const offer = screen.getByRole("region", { name: "Along the way" });
+      if (i < 3) {
+        expect(within(offer).queryByRole("button", { name: "Let go" })).toBeNull();
+        fireEvent.keyDown(document.activeElement ?? offer, { key: "Escape" });
+        expect(screen.queryByRole("region", { name: "Along the way" })).toBeNull();
+      } else {
+        fireEvent.click(within(offer).getByRole("button", { name: "Let go" }));
+        expect(api.setTaskStatus).toHaveBeenCalledWith("invoice", { category: "wont_do" });
+      }
+      view.unmount();
+    }
+  });
+
+  it("the switch turns the offer off", () => {
+    const invoice = acme("invoice", { estimateMinutes: 5 });
+    const api = fakeApi([acme("logo"), web("site")], {
+      all: [acme("logo"), web("site"), invoice],
+    });
+    // Settings (or ⋯) turned it off: the shared prefs store, as they write it.
+    let set: ((patch: Partial<FocusPrefs>) => void) | null = null;
+    function Prefs() {
+      set = useFocusPrefs().setPrefs;
+      return null;
+    }
+    render(<Prefs />);
+    renderView(api);
+    act(() => set?.({ alongTheWay: false }));
+    fireEvent.click(screen.getByRole("button", { name: /^Done/ }));
+    expect(screen.queryByRole("region", { name: "Along the way" })).toBeNull();
+    act(() => set?.({ alongTheWay: true }));
+  });
+
+  it("Arrange by project shows when it saves two switches or more, and arranges the line-up", () => {
+    // Now a (Acme); Up next b c d e alternate: 4 switches, 1 once arranged.
+    const api = fakeApi([acme("a"), web("b"), acme("c"), web("d"), acme("e")]);
+    renderView(api);
+    const arrange = screen.getByRole("button", { name: /Arrange by project\s*· 3 fewer switches/ });
+    fireEvent.click(arrange);
+    // Now's project first, your order kept inside each.
+    expect(api.arrangeQueue).toHaveBeenCalledWith(["a", "c", "e", "b", "d"], expect.any(Function));
+  });
+
+  it("no Arrange when it would save fewer than two", () => {
+    renderView(fakeApi([acme("a"), web("b"), acme("c")]));
+    expect(screen.queryByRole("button", { name: /Arrange by project/ })).toBeNull();
+  });
+
+  it("W hands off: it waits on what you typed, and the session moves on", () => {
+    const api = fakeApi([acme("t1"), acme("t2")]);
+    renderView(api);
+    start();
+    const root = document.querySelector('[data-slot="focus-view"]') as HTMLElement;
+    root.focus();
+    fireEvent.keyDown(root, { key: "w" });
+    // The popover opens on "Waiting on…", focused.
+    const input = screen.getByPlaceholderText("Waiting on…");
+    expect(document.activeElement).toBe(input);
+    fireEvent.change(input, { target: { value: "the client’s logo files" } });
+    fireEvent.click(screen.getByRole("option", { name: /the client’s logo files/ }));
+    const form = document.querySelector('[data-slot="focus-hand-off"]') as HTMLElement;
+    fireEvent.click(within(form).getByRole("button", { name: /^Hand off/ }));
+    expect(api.addWaiting).toHaveBeenCalledWith("t1", {
+      kind: "text",
+      label: "the client’s logo files",
+    });
+    expect(api.addReminder).not.toHaveBeenCalled();
+    expect(getFocusSession().taskId).toBe("t2");
+  });
+
+  it("a lined-up task that waits is In flight, not Up next; the line opens the panel", () => {
+    const onShowInFlight = rs.fn();
+    const waiting: TaskWaitingEntry = {
+      id: "w1",
+      workspaceId: WS,
+      taskId: "t2",
+      kind: "text",
+      ref: null,
+      label: "Sam",
+      since: new Date().toISOString(),
+      createdBy: USER,
+      updatedAt: "",
+    };
+    renderView(fakeApi([task("t1"), task("t2"), task("t3")], { waiting: [waiting] }), {
+      onShowInFlight,
+    });
+    const upNext = screen.getByRole("region", { name: "Up next" });
+    expect(within(upNext).queryByText("Task t2")).toBeNull();
+    expect(within(upNext).getByText("Task t3")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /1 in flight/ }));
+    expect(onShowInFlight).toHaveBeenCalled();
   });
 });

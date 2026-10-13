@@ -515,6 +515,24 @@ export function sameTaskRef(a: FocusTaskRef, b: FocusTaskRef): boolean {
 }
 
 /** Switch Per task ↔ Pomodoro; the rhythm starts over with a work block. */
+/**
+ * Skip Pomodoro's break (Focus's between-tasks "Take a break · Skip", TV-F8,
+ * 62a): a fresh work block starts now, running. The break's time was never
+ * work, so nothing is credited. No-op outside a Pomodoro break.
+ */
+export function skipBreak(r: FocusRecord, now: number, p: FocusRhythm): FocusRecord {
+  if (!r.tracking || !r.pomodoro || r.phase !== "break") return r;
+  return {
+    ...r,
+    phase: "work",
+    longBreak: false,
+    phaseMs: workLength(p),
+    phaseDoneMs: 0,
+    since: now,
+    seenAt: now,
+  };
+}
+
 export function togglePomodoro(r: FocusRecord, now: number, p: FocusRhythm): FocusRecord {
   return setTimer(r, r.pomodoro ? "per_task" : "pomodoro", now, p);
 }

@@ -82,12 +82,14 @@ import {
 } from "../model";
 import {
   alsoInLabel,
+  applyQueueMoves,
   claimsByTask,
   endOfQueue,
   movedPosition,
   openQueueCount,
   queueEntriesOf,
   queueMove,
+  queueMoves,
   queueTasks,
 } from "../queue";
 import { engineZone, recurrenceOnStatusChange, skipOccurrencePatch } from "../recurrence-engine";
@@ -1035,6 +1037,42 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
             taskId: move.taskId,
             afterTaskId: move.afterTaskId,
           }),
+        onSaved,
+      );
+    },
+    [canEdit, runQueueOp],
+  );
+
+  /**
+   * Put my whole line-up in `orderedIds`' order (Focus's "Arrange by project"
+   * and its Undo, TV-F8): shown at once, then sent as single moves, one after
+   * another, behind any queue op already on its way. False when nothing moves.
+   */
+  const arrangeQueue = useCallback(
+    (orderedIds: readonly string[], onSaved?: () => void): boolean => {
+      if (!canEdit) return false;
+      const moves = queueMoves(
+        myQueueRef.current.map((e) => e.taskId),
+        orderedIds,
+      );
+      if (moves.length === 0) return false;
+      if (moves.some((m) => isTempId(m.taskId) || (m.afterTaskId && isTempId(m.afterTaskId)))) {
+        toast.error(STILL_SAVING);
+        return false;
+      }
+      return runQueueOp(
+        (mine) => applyQueueMoves(mine, moves),
+        async (rt, ws) => {
+          let answer: TaskQueueEntry[] = [];
+          for (const m of moves) {
+            answer = await rt.tasks.opQueueReorder({
+              workspaceId: ws,
+              taskId: m.taskId,
+              afterTaskId: m.afterTaskId,
+            });
+          }
+          return answer;
+        },
         onSaved,
       );
     },
@@ -2643,16 +2681,17 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     [store, runtime, workspaceId, refused],
   );
 
-  /** Waiting on… someone or something (a person, or a typed note). */
+  /** Waiting on… someone or something (a person, or a typed note). Answers the
+   *  new entry's id (Focus's Hand off undoes it by id, TV-F8), or null. */
   const addWaiting = useCallback(
     (
       taskId: string,
       entry: { kind: TaskWaitingEntry["kind"]; ref?: string | null; label?: string | null },
-    ) => {
-      if (editBlocked() || !store || !runtime || !workspaceId) return;
+    ): string | null => {
+      if (editBlocked() || !store || !runtime || !workspaceId) return null;
       if (isTempId(taskId)) {
         toast.error(STILL_SAVING);
-        return;
+        return null;
       }
       const now = new Date().toISOString();
       const shown: TaskWaitingEntry = {
@@ -2681,6 +2720,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
           setActivityStamp((n) => n + 1);
         })
         .catch((e) => refused(write, e, "Couldn’t add it to Waiting on."));
+      return shown.id;
     },
     [editBlocked, store, runtime, workspaceId, userId, refused],
   );
@@ -3839,6 +3879,8 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     moveOccurrence,
     taskHistory,
     reorderQueue,
+    /** The whole line-up in a new order (Focus's Arrange by project, TV-F8). */
+    arrangeQueue,
     deleteTask,
     loadActivity,
     activityStamp,

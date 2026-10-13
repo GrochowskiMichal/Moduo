@@ -20,8 +20,8 @@ const noIcon = (() => null) as unknown as PanelViewDef["icon"];
 describe("the registered views", () => {
   it("covers the five modules that have a right panel, with their old tabs' ids", () => {
     const ids = (m: PanelModule) => PANEL_VIEWS[m].map((v) => v.id).sort();
-    // TV-TL2: the Timeline's No date (alongside).
-    expect(ids("tasks")).toEqual(["details", "nodate", "project"]);
+    // TV-F8: In flight; TV-TL2: the Timeline's No date (both alongside).
+    expect(ids("tasks")).toEqual(["details", "inflight", "nodate", "project"]);
     expect(ids("calendar")).toEqual(["detail", "notes", "tasks"]);
     expect(ids("email")).toEqual(["contact", "detail", "reader", "task"]);
     expect(ids("notes")).toEqual(["comments", "detail", "outline"]);
@@ -42,6 +42,16 @@ describe("the registered views", () => {
 
   it("calls Tasks' first view Details", () => {
     expect(panelViewsFor("tasks")[0]).toMatchObject({ id: "details", label: "Details" });
+  });
+
+  it("keeps the keymap's ⌥3 In flight · ⌥4 No date in Tasks (TV-F8)", () => {
+    const views = panelViewsFor("tasks");
+    expect(views.map((v) => v.label)).toEqual(["Details", "Project", "In flight", "No date"]);
+    // Away from the Timeline, No date isn't listed and In flight keeps ⌥3.
+    expect(panelViewsFor("tasks", (id) => id !== "nodate")[2]).toMatchObject({
+      id: "inflight",
+      group: "alongside",
+    });
   });
 });
 
