@@ -24,7 +24,7 @@
 - [ ] **Do:** with an API key, ask the agent to list your tasks and change one → **Expect:** the agent sees exactly what you see, and the change lands _(Claude Desktop / MCP)_
 
 ## Migrations / data
-- [ ] **Do:** `bun run db:test` → **Expect:** all files pass, including `access_check.test.sql` (55 checks) _(local stack)_
+- [ ] **Do:** `bun run db:test` → **Expect:** all files pass, including `access_check.test.sql` (59 checks) _(local stack)_
 - [ ] **Do:** in SQL, `select oid::regprocedure, prosecdef, pronargdefaults from pg_proc where proname = 'can_access'` → **Expect:** two rows, both `t`, both `0` defaults: `can_access(text,uuid,text)` and `can_access(text,uuid,text,uuid)` _(local stack)_
 
 ## Known gaps / not-yet-testable (verify before release)
