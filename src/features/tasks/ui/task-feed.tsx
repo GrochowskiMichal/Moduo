@@ -43,6 +43,7 @@ import {
   CommentBody,
   CommentCard,
   CommentComposer,
+  type ComposerTeam,
   PersonAvatar,
 } from "../../spine/ui/comments-panel";
 import { activityActorName, activityLine } from "../activity";
@@ -100,6 +101,11 @@ export function TaskFeed({ task, api, runtime, workspaceId, canRemoveAny = false
   const [filter, setFilterState] = useState<FeedFilter>(() => readFilter(currentUserId));
   const [opened, setOpened] = useState<ReadonlySet<string>>(() => new Set());
   const people = useCommentPeople();
+  // TV-D13: `@Design` in a comment tells Design's members once.
+  const teams = useMemo<ComposerTeam[]>(
+    () => api.teams.map((t) => ({ id: t.id, name: t.name, mark: t.mark, color: t.color })),
+    [api.teams],
+  );
   const thread = useCommentThread({
     runtime,
     workspaceId,
@@ -212,6 +218,7 @@ export function TaskFeed({ task, api, runtime, workspaceId, canRemoveAny = false
             canRemoveAny={canRemoveAny}
             selfName={selfName}
             referenceSearch={referenceSearch}
+            teams={teams}
           />
         );
     }
@@ -255,7 +262,10 @@ export function TaskFeed({ task, api, runtime, workspaceId, canRemoveAny = false
           aria-label="Comment on this task"
           placeholder="Leave a comment…  @ to mention · / for dates"
           references={referenceSearch}
-          onSubmit={(body, mentionedUserIds) => thread.post({ body, mentionedUserIds })}
+          teams={teams}
+          onSubmit={(body, mentionedUserIds, mentionedTeamIds) =>
+            thread.post({ body, mentionedUserIds, mentionedTeamIds })
+          }
         />
       ) : null}
       <MetaLine task={task} />
@@ -380,6 +390,7 @@ function CommentItem({
   canRemoveAny,
   selfName,
   referenceSearch,
+  teams,
 }: {
   comment: SpineComment;
   thread: CommentThread;
@@ -387,8 +398,14 @@ function CommentItem({
   canRemoveAny: boolean;
   selfName: string | null;
   referenceSearch: React.ComponentProps<typeof CommentComposer>["references"];
+  teams: ComposerTeam[];
 }) {
   const people = useCommentPeople();
+  // `@Design` reads as a mention too (TV-D13).
+  const mentionNames = useMemo(
+    () => [...people.names, ...teams.map((t) => t.name)],
+    [people.names, teams],
+  );
   const [editing, setEditing] = useState(false);
   const mine =
     comment.authorKind === "user" && !!currentUserId && comment.createdBy === currentUserId;
@@ -447,8 +464,9 @@ function CommentItem({
         submitLabel="Save"
         autoFocus
         onCancel={() => setEditing(false)}
-        onSubmit={async (body, mentionedUserIds) => {
-          await thread.edit({ commentId: comment.id, body, mentionedUserIds });
+        teams={teams}
+        onSubmit={async (body, mentionedUserIds, mentionedTeamIds) => {
+          await thread.edit({ commentId: comment.id, body, mentionedUserIds, mentionedTeamIds });
           setEditing(false);
         }}
       />
@@ -520,7 +538,7 @@ function CommentItem({
         ) : null
       }
     >
-      <CommentBody text={comment.body} mentionNames={people.names} selfName={selfName} />
+      <CommentBody text={comment.body} mentionNames={mentionNames} selfName={selfName} />
     </CommentCard>
   );
 }

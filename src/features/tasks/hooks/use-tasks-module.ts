@@ -187,6 +187,9 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
   /** The rows as they are now, for a save or an Undo that runs later. */
   const tasksRef = useRef(allTasks);
   tasksRef.current = allTasks;
+  /** The projects (and my Inbox) I can see now, for an answer that arrives later. */
+  const bucketsRef = useRef(allBuckets);
+  bucketsRef.current = allBuckets;
   /** Your own reminders, for the "Restore the reminder?" offer (TV-D12). */
   const remindersRef = useRef(snap.reminders);
   remindersRef.current = snap.reminders;
@@ -610,6 +613,9 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         extra?: OverlayChange[];
         /** Rows the server drops with this op (queue rows of a closed task). */
         forget?: string[];
+        /** Tasks the answer took out of my sight (TV-D13: an unfiled task
+         *  handed into someone else's Inbox): dropped from the copy at once. */
+        leaves?: (saved: Task) => string[];
         offline?: { status: string; recurrence?: RecurrenceRule | null };
       } = {},
     ) => {
@@ -652,6 +658,8 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         .then((saved) => {
           write.settle({ tasks: [saved] });
           if (opts.forget?.length) store.forget("queue", opts.forget);
+          const gone = opts.leaves?.(saved);
+          if (gone?.length) store.forget("tasks", gone);
           setActivityStamp((s) => s + 1);
         })
         .catch((e) => {
@@ -674,6 +682,21 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         });
     },
     [runtime, workspaceId, canEdit, store, backlogToTodo, refused, archivedBlocked],
+  );
+
+  /**
+   * Take a team's unclaimed task (TV-D13, "Take it" on My tasks' team block):
+   * shown as yours at once; the server checks you're in its team and can edit
+   * it, and refuses one somebody took first (the copy goes back and says so).
+   */
+  const claimTask = useCallback(
+    (id: string) => {
+      if (!userId) return;
+      applyOp(id, { assigneeId: userId }, () =>
+        runtime!.tasks.opClaim({ workspaceId: workspaceId!, taskId: id }),
+      );
+    },
+    [applyOp, runtime, workspaceId, userId],
   );
 
   /** Fetch a task's quiet activity trail (newest first). */
@@ -1131,10 +1154,50 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       // any, saves as usual below.
       if (patch.assigneeId !== undefined) {
         const assigneeId = patch.assigneeId;
-        applyOp(id, { assigneeId }, () =>
-          runtime!.tasks.opAssign({ workspaceId: workspaceId!, taskId: id, assigneeId }),
-        );
         const { assigneeId: _assigned, ...rest } = patch;
+        // Someone else's unfiled task handed on into another Inbox (TV-D13,
+        // call 20) is out of my sight now: drop it and the steps that went
+        // with it, rather than keep them until the next access check.
+        const leaves = (saved: Task) =>
+          saved.bucketId !== existing.bucketId &&
+          !bucketsRef.current.some((b) => b.id === saved.bucketId) &&
+          saved.creatorId !== userId &&
+          saved.assigneeId !== userId
+            ? [
+                saved.id,
+                ...tasksRef.current
+                  .filter((t) => t.parentId === saved.id && t.bucketId === existing.bucketId)
+                  .map((t) => t.id),
+              ]
+            : [];
+        // An Inbox task assigned and edited in one gesture ("Assign to Mike ·
+        // in Bugs", 20a): the edit lands first, then the assignment, so a
+        // hand-over can't take the task away before the edit does.
+        const restFields = editableTaskFields(rest);
+        const inInbox =
+          bucketsRef.current.find((b) => b.id === existing.bucketId)?.isSystem === true;
+        if (inInbox && Object.keys(restFields).length > 0) {
+          applyOp(
+            id,
+            { ...restFields, assigneeId } as Partial<Task>,
+            async () => {
+              await runtime!.tasks.opUpdateTask({
+                workspaceId: workspaceId!,
+                taskId: id,
+                patch: restFields,
+              });
+              return runtime!.tasks.opAssign({ workspaceId: workspaceId!, taskId: id, assigneeId });
+            },
+            { leaves },
+          );
+          return;
+        }
+        applyOp(
+          id,
+          { assigneeId },
+          () => runtime!.tasks.opAssign({ workspaceId: workspaceId!, taskId: id, assigneeId }),
+          { leaves },
+        );
         // Without edit access applyOp has already said so; don't say it twice.
         if (Object.keys(rest).length === 0 || !canEdit || store?.isOffline()) return;
         patch = rest;
@@ -1270,6 +1333,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       editBlocked,
       refused,
       archivedBlocked,
+      userId,
     ],
   );
 
@@ -3301,6 +3365,8 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     createQueuedTask,
     captureToQueue,
     patchTask,
+    /** Take a team's unclaimed task (TV-D13); `unclaimedForMe` in teams.ts lists them. */
+    claimTask,
     toggleDone,
     markDone,
     archiveTask,

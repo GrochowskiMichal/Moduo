@@ -268,7 +268,10 @@ test("AC1.10 + AC1.7 — a task in a project you can't see: “Private project�
   page,
 }) => {
   // The owner files a task in their own project and gives it to a teammate,
-  // who can see the task but not the project.
+  // who can see the task but not the project. Assignments from one person
+  // within an hour gather on one unread notice (TV-D12, AC5.7), so the
+  // teammate reads what's there first: this one starts its own.
+  await rpc(mate, "notifications_op_mark_all_read", { p_workspace_id: ws.id });
   const secret = await createPrivateProject(dev, `Owner only ${tag}`);
   const t = await createTask(dev, { title: `Assigned to teammate ${tag}`, bucketId: secret.id });
   await rpc(dev, "tasks_op_assign", {
@@ -293,6 +296,22 @@ test("AC1.10 + AC1.7 — a task in a project you can't see: “Private project�
     .first()
     .click();
   await expect(page.getByText(`assigned “${t.title}” to you`)).toBeVisible({ timeout: 15_000 });
+
+  // A second one within the hour joins it: one card, counted, still naming the first.
+  const t2 = await createTask(dev, { title: `Assigned too ${tag}`, bucketId: secret.id });
+  await rpc(dev, "tasks_op_assign", {
+    p_workspace_id: ws.id,
+    p_task_id: t2.id,
+    p_assignee_id: mate.user.id,
+  });
+  await page.reload();
+  await page
+    .getByRole("button", { name: /notifications/i })
+    .first()
+    .click();
+  await expect(page.getByText(`assigned you 2 tasks · “${t.title}”`)).toBeVisible({
+    timeout: 15_000,
+  });
 });
 
 test("AC1.7 — a comment's notice names its task", async ({ page }) => {
