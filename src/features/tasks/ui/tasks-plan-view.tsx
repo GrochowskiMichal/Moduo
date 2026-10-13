@@ -131,6 +131,7 @@ import { TASK_DETAIL_REFRESH_EVENT, TaskDetailPanel, TaskGonePanel } from "./tas
 import { TaskFullPage } from "./task-full-page";
 import { TaskListView } from "./task-list-view";
 import { TaskTimelineView } from "./task-timeline-view";
+import { TaskListSkeleton } from "./task-view-states";
 import { useUpcomingView } from "./upcoming-view";
 import { useTasksDisplay } from "./use-tasks-display";
 import { useTasksFilters } from "./use-tasks-filters";
@@ -696,11 +697,11 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
               ? "Upcoming"
               : selection === WONTDO_SELECTION
                 ? "Won’t do"
-              : selection === "inbox"
-                ? "Inbox"
-                : archivedProject
-                  ? archivedProject.name
-                  : bucketNameById(selection);
+                : selection === "inbox"
+                  ? "Inbox"
+                  : archivedProject
+                    ? archivedProject.name
+                    : bucketNameById(selection);
 
   // The Queue is one ordered line-up, so its List view is never grouped.
   const effectiveGroupBy = selection === "today" ? "none" : tasksDisplay.display.group;
@@ -721,7 +722,11 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     };
   }, [buckets, selection, mode, archivedProject]);
 
-  const totalOpenCount = useMemo(() => tasks.filter((t) => isOpenTask(t)).length, [tasks]);
+  // All's count is what All lists: never your Inbox (TV-U15).
+  const totalOpenCount = useMemo(
+    () => tasks.filter((t) => isOpenTask(t) && t.bucketId !== inboxId).length,
+    [tasks, inboxId],
+  );
   const myOpenCount = useMemo(
     () => openCount(myTasksScope(tasks, currentUserId)),
     [tasks, currentUserId],
@@ -1288,7 +1293,12 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
                 emptyState: <AllEmpty hasProjects={buckets.length > 0} />,
               }
             : selection === WONTDO_SELECTION
-              ? { countEvery: true, emptyState: <WontDoEmpty /> }
+              ? {
+                  countEvery: true,
+                  // Won't do tasks arrive after the open ones (TV-D11a): not
+                  // "nothing" until they're in.
+                  emptyState: api.restLoaded ? <WontDoEmpty /> : <TaskListSkeleton />,
+                }
               : {};
 
   // Execute mode is enclosed in the center panel (rails stay visible).
