@@ -257,19 +257,20 @@ export const DETAILED_DROP_ORDER = [
   "handle",
 ] as const satisfies ReadonlyArray<keyof RowColumns>;
 
-/** About one `ch` of the cells' face in px, for the room sums below. */
-const CH_PX = 7;
+/** About one `ch` of the cells' face in px, when the list hasn't measured it. */
+export const DEFAULT_CH_PX = 7;
 const GAP_PX = 12;
 const ICON_PX = 16;
 /** The title's least room: Standard 160 px, Detailed 200 px (research §1). */
 const TITLE_MIN_PX = { standard: 160, detailed: 200 } as const;
-/** Lead control, padding and the quiet counts' usual room. */
-const ROW_FIXED_PX = 24 + GAP_PX + 18 + 48;
+/** The status icon and its gap, and the row's padding and edges. */
+const ROW_FIXED_PX = 16 + GAP_PX + 20;
 
 function columnPx(
   col: keyof RowColumns,
   cols: RowColumns,
   widths: Record<SizedColumn, number>,
+  chPx: number,
 ): number {
   if (!cols[col] || col === "hidden" || col === "queueWide") return 0;
   switch (col) {
@@ -281,9 +282,9 @@ function columnPx(
     case "assignee":
       return cols.assigneeName ? 0 : ICON_PX + 4 + GAP_PX;
     case "assigneeName":
-      return widths.assignee * CH_PX + GAP_PX;
+      return widths.assignee * chPx + GAP_PX;
     default:
-      return widths[col as SizedColumn] * CH_PX + GAP_PX;
+      return widths[col as SizedColumn] * chPx + GAP_PX;
   }
 }
 
@@ -299,11 +300,15 @@ export function fitColumns(
   widths: Record<SizedColumn, number>,
   width: number,
   preset: RowPreset,
+  /** One `ch` of the cells' face in px, as the list measured it. */
+  chPx: number = DEFAULT_CH_PX,
 ): RowColumns {
   if (preset !== "detailed" || !Number.isFinite(width) || width <= 0) return cols;
   const keys = Object.keys(cols) as Array<keyof RowColumns>;
   const used = (c: RowColumns) =>
-    ROW_FIXED_PX + TITLE_MIN_PX.detailed + keys.reduce((sum, k) => sum + columnPx(k, c, widths), 0);
+    ROW_FIXED_PX +
+    TITLE_MIN_PX.detailed +
+    keys.reduce((sum, k) => sum + columnPx(k, c, widths, chPx), 0);
   let next = cols;
   let hidden = 0;
   for (const col of DETAILED_DROP_ORDER) {

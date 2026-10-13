@@ -32,14 +32,31 @@ export function TaskListHeader({
   /** Null: the view can't sort (the Queue). */
   onSort: ((column: SortColumn) => void) | null;
 }) {
-  const sortCell = (column: SortColumn, label: string, className?: string, body?: ReactNode) => {
+  /**
+   * A header cell as wide as its column (`cell`), its label where the row's
+   * words sit: at the cell's edge, or `inset` by the row's own padding (the
+   * date cells and the project menu are padded buttons).
+   */
+  const sortCell = (
+    column: SortColumn,
+    label: string,
+    cell: string,
+    opts: { inset?: boolean; body?: ReactNode } = {},
+  ) => {
     const active = order === column;
-    if (!onSort) {
-      return (
-        <span className={cn(LABEL, "flex shrink-0 items-center", className)}>{body ?? label}</span>
-      );
-    }
-    return (
+    const content = (
+      <>
+        {opts.body ?? label}
+        {active ? (
+          orderDir === "asc" ? (
+            <ArrowUp aria-hidden className="size-icon-xs shrink-0" />
+          ) : (
+            <ArrowDown aria-hidden className="size-icon-xs shrink-0" />
+          )
+        ) : null}
+      </>
+    );
+    const button = onSort ? (
       <button
         type="button"
         data-sort={active ? orderDir : undefined}
@@ -51,22 +68,21 @@ export function TaskListHeader({
         onClick={() => onSort(column)}
         className={cn(
           LABEL,
-          "-mx-1 flex shrink-0 items-center gap-1 rounded-sm px-1",
+          "flex shrink-0 items-center gap-1 rounded-sm px-1",
+          !opts.inset && "-mx-1",
           "transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
           active && "text-muted-foreground",
-          className,
         )}
       >
-        {body ?? label}
-        {active ? (
-          orderDir === "asc" ? (
-            <ArrowUp aria-hidden className="size-icon-xs shrink-0" />
-          ) : (
-            <ArrowDown aria-hidden className="size-icon-xs shrink-0" />
-          )
-        ) : null}
+        {content}
       </button>
+    ) : (
+      <span className={cn(LABEL, "flex items-center gap-1", opts.inset && "px-1")}>{content}</span>
+    );
+    // The cell is in the cells' face, so its `ch` widths match the rows'.
+    return (
+      <span className={cn("flex shrink-0 items-center font-sans text-xs", cell)}>{button}</span>
     );
   };
   const plain = (label: string, className: string) => (
@@ -81,8 +97,10 @@ export function TaskListHeader({
       {expandSlot ? <span aria-hidden className="size-4 shrink-0" /> : null}
       {/* The status icon's place. */}
       <span aria-hidden className="size-icon shrink-0" />
-      {columns.handle ? <span aria-hidden className="shrink-0 min-w-(--tl-col-handle)" /> : null}
-      <span className="flex min-w-0 flex-1 items-center">{sortCell("title", "Title")}</span>
+      {columns.handle ? (
+        <span aria-hidden className="shrink-0 font-sans text-xs min-w-(--tl-col-handle)" />
+      ) : null}
+      <span className="flex min-w-0 flex-1 items-center">{sortCell("title", "Title", "")}</span>
       <span className="ms-auto flex shrink-0 items-center gap-3">
         {columns.hidden > 0 ? (
           <Tooltip>
@@ -98,26 +116,29 @@ export function TaskListHeader({
             <TooltipContent>{hiddenLabel(columns.hidden)}</TooltipContent>
           </Tooltip>
         ) : null}
-        {columns.project ? plain(COLUMN_LABELS.project, "min-w-(--tl-col-project)") : null}
+        {columns.project
+          ? plain(COLUMN_LABELS.project, "min-w-(--tl-col-project) max-w-(--tl-col-project) px-1")
+          : null}
         {columns.status
           ? sortCell("status", COLUMN_LABELS.status, "justify-start min-w-(--tl-col-status)")
           : null}
         {columns.priority
-          ? sortCell(
-              "priority",
-              "Priority",
-              "w-icon-sm justify-center",
-              <span className="flex items-center" aria-hidden>
-                <PriorityMark level="high" />
-              </span>,
-            )
+          ? sortCell("priority", "Priority", "w-icon-sm justify-center", {
+              body: (
+                <span className="flex items-center" aria-hidden>
+                  <PriorityMark level="high" />
+                </span>
+              ),
+            })
           : null}
         {columns.energy ? <span aria-hidden className="w-icon-sm shrink-0" /> : null}
         {columns.due
-          ? sortCell("due", COLUMN_LABELS.due, "justify-end min-w-(--tl-col-due)")
+          ? sortCell("due", COLUMN_LABELS.due, "justify-end min-w-(--tl-col-due)", { inset: true })
           : null}
         {columns.session
-          ? sortCell("scheduled", COLUMN_LABELS.session, "justify-end min-w-(--tl-col-session)")
+          ? sortCell("scheduled", COLUMN_LABELS.session, "justify-end min-w-(--tl-col-session)", {
+              inset: true,
+            })
           : null}
         {columns.time ? plain(COLUMN_LABELS.time, "justify-end min-w-(--tl-col-time)") : null}
         {columns.waiting

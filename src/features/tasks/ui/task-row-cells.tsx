@@ -155,7 +155,12 @@ function glyphTone(category: TaskStatusCategory): string {
 /** `MOD-142` before the title (Detailed): click copies it. */
 export function HandleCell({ handle }: { handle: string | null }) {
   return (
-    <span data-col="handle" className="flex shrink-0 items-center min-w-(--tl-col-handle)">
+    // Every sized cell is in the cells' face (text-xs), so its `ch` width is
+    // the list's (the header's cells are too).
+    <span
+      data-col="handle"
+      className="flex shrink-0 items-center font-sans text-xs min-w-(--tl-col-handle)"
+    >
       {handle ? (
         <button
           type="button"
@@ -238,7 +243,7 @@ export function ProjectMenu({
             canEdit && "hover:bg-state-hover",
             variant === "inline" && "shrink-0",
             variant === "column" &&
-              "shrink-0 items-center min-w-(--tl-col-project) max-w-(--tl-col-project)",
+              "shrink-0 items-center font-sans text-xs min-w-(--tl-col-project) max-w-(--tl-col-project)",
             // Takes no width and gives back the row's gap, so nothing shifts.
             implied && "pointer-events-none -ms-2.5 w-0 overflow-hidden px-0 opacity-0",
           )}
@@ -309,7 +314,7 @@ export function DateCell({
       : kind === "due"
         ? "min-w-(--tl-col-due)"
         : "min-w-(--tl-col-session)";
-  const cell = cn("flex shrink-0 items-center justify-end", width);
+  const cell = cn("flex shrink-0 items-center justify-end font-sans text-xs", width);
   // Which editor a click opens: the asked one, else the shown date's.
   const editing: "schedule" | "due" =
     command ?? (kind === "session" ? "schedule" : kind === "due" ? "due" : (shown?.edit ?? "due"));

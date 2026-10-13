@@ -240,11 +240,6 @@ function TaskRowView({
                 requestBreakDown(task.id);
               }
         }
-        className={cn(
-          "col-start-1 row-start-1 transition-[opacity,visibility] duration-(--motion-fade) ease-(--ease-out)",
-          "invisible opacity-0 group-hover/row:visible group-hover/row:opacity-100",
-          "group-data-[selected]/row:visible group-data-[selected]/row:opacity-100",
-        )}
       />
     ) : null;
 
@@ -332,7 +327,7 @@ function TaskRowView({
           data-slot="row-title"
           // The title is the one flexible track: it takes the free width (the
           // checkpoint-1 fix) and gives way first (call 42).
-          className="flex min-w-0 flex-1 items-center gap-2.5 group-data-[done]/row:opacity-50"
+          className="relative flex min-w-0 flex-1 items-center gap-2.5 group-data-[done]/row:opacity-50"
         >
           <button
             type="button"
@@ -361,22 +356,12 @@ function TaskRowView({
           >
             {task.title || "Untitled"}
           </button>
-          {/* The counts, and on a late row its fixes in the same place (R6:
-              a reserved slot that fades, never `hidden → flex`). */}
-          <span className="grid shrink-0 items-center">
-            <TaskCounts
-              task={task}
-              facts={facts}
-              tagNames={detailed}
-              waitingColumn={columns.waiting}
-              className={cn(
-                "col-start-1 row-start-1",
-                fixes &&
-                  "transition-opacity duration-(--motion-fade) ease-(--ease-out) group-hover/row:opacity-0 group-data-[selected]/row:opacity-0",
-              )}
-            />
-            {fixes}
-          </span>
+          <TaskCounts
+            task={task}
+            facts={facts}
+            tagNames={detailed}
+            waitingColumn={columns.waiting}
+          />
           {parentTitle ? (
             <span className="flex min-w-0 shrink-3 items-center gap-1 truncate font-sans text-xs text-muted-foreground">
               <CornerDownRight className="size-icon-xs shrink-0 opacity-70" aria-hidden />
@@ -384,6 +369,24 @@ function TaskRowView({
             </span>
           ) : null}
           {projectVariant && (showBucket || canEdit) ? projectMenu(projectVariant) : null}
+          {/* A late row's fixes, over the cell's end on hover or selection:
+              they fade in and take no room from the title (R6: nothing
+              reflows), on the row's own surface so the title doesn't show
+              through. */}
+          {fixes ? (
+            <span
+              className={cn(
+                "absolute inset-y-0 end-0 flex items-center bg-card",
+                "invisible opacity-0 transition-[opacity,visibility] duration-(--motion-fade) ease-(--ease-out)",
+                "group-hover/row:visible group-hover/row:opacity-100",
+                "group-data-[selected]/row:visible group-data-[selected]/row:opacity-100",
+              )}
+            >
+              <span className="flex h-full items-center ps-2 group-hover/row:bg-state-hover group-data-[selected]/row:bg-state-selected">
+                {fixes}
+              </span>
+            </span>
+          ) : null}
         </div>
       )}
 

@@ -71,6 +71,7 @@ import { BACK_TO_MANUAL_ORDER, dragOrderFor, sortedByLabel } from "../order";
 import {
   columnVar,
   columnWidths,
+  DEFAULT_CH_PX,
   DEFAULT_ROW_PROPERTIES,
   dueLabel,
   fitColumns,
@@ -243,7 +244,7 @@ export function TaskListView({
   selection,
   view,
   onViewChange,
-  groupBy,
+  groupBy: chosenGroupBy,
   buckets,
   inbox,
   bucketNameById,
@@ -293,7 +294,7 @@ export function TaskListView({
 
   // Standard names the project after the counts where it isn't implied;
   // Detailed has a column for it (tasks-v3 §4).
-  const showBucketTag = !detailed && showBucketPill(selection, groupBy);
+  const showBucketTag = !detailed && showBucketPill(selection, chosenGroupBy);
   // In My tasks every row is mine, so rows leave the avatar out (D4-4).
   const showAssignee = selection !== "mine";
   const { assignees, byId } = useAssignees();
@@ -304,6 +305,11 @@ export function TaskListView({
       isProjectScope(selection) ? sections.filter((s) => s.projectId === selection) : NO_SECTIONS,
     [sections, selection],
   );
+  // A project with no sections yet, grouped by section, is the plain list:
+  // ungrouped for every rule below (headers, drops, keys), so a drop never
+  // writes a section that doesn't exist. Its "+ Add section" line stays.
+  const groupBy: GroupBy =
+    chosenGroupBy === "section" && projectSections.length === 0 ? "none" : chosenGroupBy;
 
   // Subtasks nest under their parent (hidden from the top level) unless
   // Display says Flat, and never in the Queue — an ordered flat line-up whose
@@ -576,9 +582,18 @@ export function TaskListView({
   // to the same value still costs the list a draw on its next update.
   const [frameWidth, setFrameWidth] = useState(0);
   const measuredRef = useRef(0);
+  // One `ch` of the cells' face, measured once (the columns' widths are in it).
+  const [chPx, setChPx] = useState(DEFAULT_CH_PX);
   useLayoutEffect(() => {
     const el = frameRef.current;
     if (!detailed || !el || typeof ResizeObserver === "undefined") return;
+    const probe = document.createElement("span");
+    probe.className = "invisible absolute font-sans text-xs";
+    probe.style.width = "100ch";
+    el.appendChild(probe);
+    const ch = probe.getBoundingClientRect().width / 100;
+    probe.remove();
+    if (ch > 0 && Math.abs(ch - DEFAULT_CH_PX) > 0.05) setChPx(ch);
     const measure = () => {
       const next = Math.floor(el.clientWidth / 16) * 16;
       if (next === measuredRef.current) return;
@@ -591,8 +606,8 @@ export function TaskListView({
     return () => observer.disconnect();
   }, [detailed]);
   const fitted = useMemo(
-    () => fitColumns(columns, widths, frameWidth, rowPreset),
-    [columns, widths, frameWidth, rowPreset],
+    () => fitColumns(columns, widths, frameWidth, rowPreset, chPx),
+    [columns, widths, frameWidth, rowPreset, chPx],
   );
   const frameStyle = useMemo(() => {
     const style: Record<string, string> = {};
@@ -1274,7 +1289,7 @@ export function TaskListView({
 
   // A project grouped by section ends with "+ Add section".
   const addsSections =
-    canEdit && groupBy === "section" && isProjectScope(selection) && !!onAddSection;
+    canEdit && chosenGroupBy === "section" && isProjectScope(selection) && !!onAddSection;
 
   // The List flattened (TV-D11b): a header per group, each top-level task
   // with its expanded subtasks, the group's end (its "N completed" line and
@@ -1309,8 +1324,8 @@ export function TaskListView({
       }
     };
     for (const group of groups) {
-      const headed = groupBy !== "none" && !(groupBy === "section" && group.key === "all");
-      if (headed) out.push({ kind: "header", key: `h:${group.key}`, groupKey: group.key });
+      if (groupBy !== "none")
+        out.push({ kind: "header", key: `h:${group.key}`, groupKey: group.key });
       if (!collapsed.has(group.key)) {
         pushRows(group, group.tasks);
         out.push({ kind: "end", key: `e:${group.key}`, groupKey: group.key });
