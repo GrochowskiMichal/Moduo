@@ -241,7 +241,7 @@ Chat's own blocks can start on what's landed (structure, editor, References, pan
 
 ## 8. The calls
 
-**Round 1 (2026-10-13): the shape.** All 26 calls are open. ★ = load-bearing (CH1, CH2, CH6, CH8, CH20, CH22). Prototype: [`prototypes/round-1.html`](./prototypes/round-1.html) (keys 1–7 switch frames, V cycles variants).
+**Round 1 (2026-10-13): the shape.** All 28 calls are open (CH27–CH28 added after the visual audit). ★ = load-bearing (CH1, CH2, CH6, CH8, CH20, CH22). Prototype: [`prototypes/round-1.html`](./prototypes/round-1.html) (keys 1–7 switch frames, V cycles variants).
 
 **What each call does to v1** (so Mike can follow): **keeps** v1 · **changes** v1 · **new**. The decisions audit's item is named where it applies ("audit D9").
 
