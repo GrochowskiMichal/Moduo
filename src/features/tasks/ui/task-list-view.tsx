@@ -53,6 +53,7 @@ import {
   resolveListHover,
 } from "../dnd/drop-mode";
 import { type DropNames, dropLabel, type TaskDropWrite, writeFromPlan } from "../dnd/drop-write";
+import { multiDropLabel, multiDropWrites } from "../dnd/multi-drop";
 import { isSideDroppable } from "../dnd/rail-drop";
 import {
   canNestUnder,
@@ -85,7 +86,7 @@ import {
   sessionLabel,
   updatedLabel,
 } from "../row-layout";
-import { PLAIN_SELECT, type SelectMods } from "../selection";
+import { inViewOrder, PLAIN_SELECT, type SelectMods } from "../selection";
 import { statusNameOf } from "../statuses";
 import { nowOn, useMinuteTick, useToday } from "../use-today";
 import {
@@ -1483,9 +1484,22 @@ export function TaskListView({
     (plan: ListDropPlan, active: Task) => {
       const parentId = plan.parentId;
       if (parentId && nest) setExpandedParents((prev) => new Set(prev).add(parentId));
-      drop(writeFromPlan(plan), active);
+      const write = writeFromPlan(plan);
+      // A row of a selection carries the selection (TV-U12): the same change
+      // for each, behind the held row, as one write with one Undo.
+      const { multiSelect: multi, visibleOrder: order } = selectionRef.current;
+      if (multi && multi.ids.size >= 2 && multi.ids.has(active.id)) {
+        const writes = multiDropWrites(write, active, inViewOrder(multi.ids, order), api.tasks);
+        if (writes.length === 0) return;
+        void api.bulkWrite(writes, {
+          label: (n) =>
+            n === 1 ? dropLabel(write, dropNames, active) : multiDropLabel(write, n, dropNames),
+        });
+        return;
+      }
+      drop(write, active);
     },
-    [nest, drop],
+    [nest, drop, api, dropNames],
   );
 
   const onListDragEnd = useCallback(
@@ -1889,6 +1903,11 @@ export function TaskListView({
             {overlayTask ? (
               <DragOverlaySurface className={dragTask ? "w-64" : undefined}>
                 <span className="min-w-0 flex-1 truncate">{overlayTask.title || "Untitled"}</span>
+                {dragTask && multiIds.size >= 2 && multiIds.has(dragTask.id) ? (
+                  <span className="shrink-0 font-sans text-xs text-muted-foreground">
+                    +{multiIds.size - 1}
+                  </span>
+                ) : null}
               </DragOverlaySurface>
             ) : null}
           </DragOverlay>,

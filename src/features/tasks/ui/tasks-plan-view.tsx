@@ -71,8 +71,11 @@ import {
 import { createLinkWithToast } from "../../spine/ui/drop-link-toast";
 import { WorkspaceContext } from "../../workspaces/workspace-context";
 import { useAssignees } from "../assignees";
+import { tasksWord } from "../bulk";
 import { myTasksScope, openCount, resolveDefaultSelection } from "../default-view";
 import { nextHeaderSort, orderTasks, type TaskLayout, tasksDisplayDefaults } from "../display";
+import type { TaskDropWrite } from "../dnd/drop-write";
+import { multiDropWrites } from "../dnd/multi-drop";
 import {
   asRailDropTarget,
   isSideDroppable,
@@ -953,6 +956,26 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       if (!task) return;
       const action = railDropAction(target, task, railCtx);
       if (!action) return;
+      // A row of a selection carries the selection (TV-U12): one write, one Undo.
+      if (multiSelect.ids.size >= 2 && multiSelect.ids.has(task.id)) {
+        if (action.kind === "queue") {
+          api.bulkQueue(bulkIds);
+          return;
+        }
+        const write: TaskDropWrite =
+          action.kind === "move"
+            ? { taskId: task.id, bucketId: action.bucketId }
+            : { taskId: task.id, assigneeId: action.userId };
+        const writes = multiDropWrites(write, task, bulkIds, api.tasks);
+        if (writes.length === 0) return;
+        void api.bulkWrite(writes, {
+          label: (n) =>
+            action.kind === "move"
+              ? `Moved ${tasksWord(n)} to ${bucketNameById(action.bucketId)}`
+              : `Assigned ${tasksWord(n)} to you`,
+        });
+        return;
+      }
       switch (action.kind) {
         case "move": {
           const parent = task.parentId ? (taskById.get(task.parentId) ?? null) : null;
@@ -985,7 +1008,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
           return;
       }
     },
-    [canEdit, taskById, railCtx, api, bucketNameById, guardedToggleQueue],
+    [canEdit, taskById, railCtx, api, bucketNameById, guardedToggleQueue, multiSelect.ids, bulkIds],
   );
 
   // A project's Archive… asks first only when it still has open work

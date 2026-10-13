@@ -45,13 +45,14 @@ import {
 } from "../display";
 import { type BoardCellRef, planBoardDrop, targetAccepts } from "../dnd/board-drop";
 import { positionNextTo } from "../dnd/drop-mode";
+import { manyLabel, multiDropWrites } from "../dnd/multi-drop";
 import { isUnfinished, nestedSubtaskIds, showBucketPill } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { GroupAdd } from "../list-group-add";
 import type { Bucket, Task } from "../model";
 import { BACK_TO_MANUAL_ORDER, dragOrderFor, sortedByLabel } from "../order";
 import { DEFAULT_ROW_PROPERTIES, type RowPreset } from "../row-layout";
-import { PLAIN_SELECT, type SelectMods } from "../selection";
+import { inViewOrder, PLAIN_SELECT, type SelectMods } from "../selection";
 import type { StatusKey } from "../statuses";
 import { useToday } from "../use-today";
 import { boardKeyActionFor, moveInGrid } from "./board-keys";
@@ -669,7 +670,19 @@ export function TaskBoardView({
       ctx: dropContext(task),
     });
     if (decision.kind === "ask-manual") askManualOrder();
-    else if (decision.kind === "write") void api.dropTask(decision.write, decision.label);
+    else if (decision.kind === "write") {
+      // A card of a selection carries the selection (TV-U12): one write, one Undo.
+      const multi = selectionRef.current.multiSelect;
+      if (multi && multi.ids.size >= 2 && multi.ids.has(task.id)) {
+        const ids = inViewOrder(multi.ids, selectionRef.current.order);
+        const writes = multiDropWrites(decision.write, task, ids, api.tasks);
+        if (writes.length > 0) {
+          void api.bulkWrite(writes, { label: (n) => manyLabel(decision.label, n) });
+        }
+        return;
+      }
+      void api.dropTask(decision.write, decision.label);
+    }
   };
 
   const activeTask = activeId ? (taskById.get(activeId) ?? null) : null;
