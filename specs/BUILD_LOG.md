@@ -223,3 +223,4 @@ History moved out of [BUILD_ORDER.md](./BUILD_ORDER.md) so sessions don't re-rea
 
 - [x] **NR-1 — Organizing data: stored Inbox, per-user Favorites, full width** · deps: — · lane notes-data · Tier 2 (migration) · ✅ done 2026-10-13 (#354); migration applied to prod 2026-10-13 (version 20261013120000)
 - [x] **NR-2 — New Notes shell + sidebar, behind the switch** · deps: NR-1 · lane notes-ui · ✅ built 2026-10-13 (`t/mike/nr-2-notes-shell`, #356); merged into `mike`; signed-in live check pending (docs/testing/2026-W42/NR-2.md)
+- [x] **NR-3 — Editor core: schema/view split, one markdown converter, honest provider, meta line + Linked-from footer** · deps: NR-2 · lane notes-editor · ✅ built 2026-10-13 (`t/mike/nr-3-editor-core`, #358); signed-in live check pending (docs/testing/2026-W42/NR-3.md)
