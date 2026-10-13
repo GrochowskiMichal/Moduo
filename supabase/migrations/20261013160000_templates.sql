@@ -25,13 +25,20 @@
 -- activity, the creator's checks); the project through `projects_op_create`.
 -- Both are called by name, so later redefinitions of them hold here too.
 --
+-- A body holds only what its maker could see when it was saved: tasks they
+-- can see (never a hidden task's title or description), people who can take
+-- tasks in the workspace (by id; an apply keeps them only where they can take
+-- tasks too), and links only to notes and contacts the whole workspace can
+-- see. No files.
+--
 -- Templates are yours until shared with the workspace (`shared`). Saving one
 -- needs only to see what it copies; sharing it is sharing what it copies, so
--- only someone with Full access to every task and project it was saved from
--- can share it (`shareable`, read when it's saved). One saved from a project
--- the workspace can't see (`private_source`) is never shared by itself, the
--- app asks before sharing it, and a project made from it while it's private
--- is private. Only the owner edits a template; the workspace's owner or an
+-- sharing it, and changing a shared one, ask again that you have Full access
+-- to every project and task it was saved from (`source_ids`, never shown to
+-- readers; `shareable` is only the app's hint). One saved from a project the
+-- workspace can't see (`private_source`) is never shared by itself, the app
+-- asks before sharing it, and a project made from it while it's private is
+-- private. Only the owner edits a template; the workspace's owner or an
 -- admin can also unshare or delete a shared one. An API key can save and use
 -- templates but never shares, edits or deletes them.
 --
@@ -52,6 +59,7 @@ CREATE TABLE IF NOT EXISTS public.task_templates (
   shared boolean NOT NULL DEFAULT false,
   private_source boolean NOT NULL DEFAULT false,
   shareable boolean NOT NULL DEFAULT false,
+  source_ids uuid[] NOT NULL DEFAULT '{}',
   body jsonb NOT NULL,
   summary jsonb NOT NULL DEFAULT '{}'::jsonb,
   created_at timestamptz NOT NULL DEFAULT now(),
@@ -69,6 +77,7 @@ CREATE TABLE IF NOT EXISTS public.project_templates (
   shared boolean NOT NULL DEFAULT false,
   private_source boolean NOT NULL DEFAULT false,
   shareable boolean NOT NULL DEFAULT false,
+  source_ids uuid[] NOT NULL DEFAULT '{}',
   body jsonb NOT NULL,
   summary jsonb NOT NULL DEFAULT '{}'::jsonb,
   created_at timestamptz NOT NULL DEFAULT now(),
@@ -77,6 +86,10 @@ CREATE TABLE IF NOT EXISTS public.project_templates (
   CONSTRAINT project_templates_name_check CHECK (char_length(name) BETWEEN 1 AND 120 AND name = btrim(name)),
   CONSTRAINT project_templates_body_check CHECK (jsonb_typeof(body) = 'object' AND octet_length(body::text) <= 2097152)
 );
+
+-- Re-runs over a first cut of this file.
+ALTER TABLE public.task_templates ADD COLUMN IF NOT EXISTS source_ids uuid[] NOT NULL DEFAULT '{}';
+ALTER TABLE public.project_templates ADD COLUMN IF NOT EXISTS source_ids uuid[] NOT NULL DEFAULT '{}';
 
 CREATE INDEX IF NOT EXISTS task_templates_workspace_updated ON public.task_templates (workspace_id, updated_at, id);
 CREATE INDEX IF NOT EXISTS task_templates_owner ON public.task_templates (owner_id);
@@ -105,8 +118,11 @@ CREATE POLICY project_templates_read ON public.project_templates FOR SELECT TO a
 
 REVOKE ALL ON public.task_templates FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON public.project_templates FROM PUBLIC, anon, authenticated;
-GRANT SELECT ON public.task_templates TO authenticated;
-GRANT SELECT ON public.project_templates TO authenticated;
+-- Every column but where it came from.
+GRANT SELECT (id, workspace_id, owner_id, name, shared, private_source, shareable, body, summary,
+              created_at, updated_at, deleted_at) ON public.task_templates TO authenticated;
+GRANT SELECT (id, workspace_id, owner_id, name, shared, private_source, shareable, body, summary,
+              created_at, updated_at, deleted_at) ON public.project_templates TO authenticated;
 GRANT ALL ON public.task_templates TO service_role;
 GRANT ALL ON public.project_templates TO service_role;
 
@@ -126,6 +142,31 @@ RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS
      AND EXISTS (SELECT 1 FROM public.resource_grants g
                  WHERE g.resource_type = 'bucket' AND g.resource_id = p_project_id
                    AND g.subject_type = 'workspace')
+$$;
+
+-- A note or a contact the whole workspace can see (a workspace grant).
+CREATE OR REPLACE FUNCTION public.templates__item_shared(p_type text, p_id uuid)
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT EXISTS (SELECT 1 FROM public.resource_grants g
+                 WHERE g.resource_type = p_type AND g.resource_id = p_id
+                   AND g.subject_type = 'workspace')
+$$;
+
+-- `p_actor` has Full access to every project (project templates) or task
+-- (task templates) a template was saved from, and each is still there.
+CREATE OR REPLACE FUNCTION public.templates__sources_full(p_kind text, p_sources uuid[], p_actor uuid)
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT p_actor IS NOT NULL AND coalesce(cardinality(p_sources), 0) > 0
+     AND NOT EXISTS (
+       SELECT 1 FROM unnest(p_sources) AS src(id)
+       WHERE NOT CASE
+         WHEN p_kind = 'project' THEN
+           EXISTS (SELECT 1 FROM public.buckets b WHERE b.id = src.id AND b.deleted_at IS NULL)
+           AND public.can_access('bucket', src.id, 'full', p_actor)
+         ELSE
+           EXISTS (SELECT 1 FROM public.tasks t WHERE t.id = src.id AND t.deleted_at IS NULL)
+           AND public.can_access('task', src.id, 'full', p_actor)
+       END)
 $$;
 
 -- Someone who can take tasks in a workspace (tasks__check_assignee, as a test).
@@ -155,7 +196,8 @@ BEGIN
   JOIN public.tags g ON g.id = l.tag_id AND g.deleted_at IS NULL
   WHERE l.workspace_id = t.workspace_id AND l.entity_type = 'task' AND l.entity_id = t.id;
 
-  -- Links to lasting things the saver can open: notes and contacts.
+  -- Links to lasting things: notes and contacts the whole workspace can see
+  -- (and the saver can open), so a shared template never names a private one.
   SELECT coalesce(jsonb_agg(jsonb_build_object('type', x.kind, 'id', x.ref) ORDER BY x.kind, x.ref),
                   '[]'::jsonb)
     INTO v_links
@@ -168,7 +210,8 @@ BEGIN
       AND ((e.source_type = 'task' AND e.source_id = t.id)
            OR (e.target_type = 'task' AND e.target_id = t.id))
   ) x
-  WHERE x.kind IN ('note', 'contact') AND public.can_access(x.kind, x.ref, 'view', p_actor);
+  WHERE x.kind IN ('note', 'contact') AND public.can_access(x.kind, x.ref, 'view', p_actor)
+    AND public.templates__item_shared(x.kind, x.ref);
 
   RETURN jsonb_build_object(
     'title', t.title,
@@ -183,7 +226,7 @@ BEGIN
     'due', public.templates__offset(t.due_on, p_anchor),
     'due_time', CASE WHEN t.due_on IS NOT NULL AND p_anchor IS NOT NULL
                      THEN to_char(t.due_time, 'HH24:MI') END,
-    'assignee', t.assignee_id,
+    'assignee', CASE WHEN public.templates__can_take(t.workspace_id, t.assignee_id) THEN t.assignee_id END,
     'team', t.team_id,
     'tags', v_tags,
     'links', v_links);
@@ -497,13 +540,16 @@ BEGIN
   -- comes along as a task of its own.
   IF (SELECT count(*) FROM public.tasks x
       WHERE x.bucket_id = b.id AND x.deleted_at IS NULL
-        AND x.status_category IN ('backlog', 'todo', 'in_progress')) > 2000 THEN
+        AND x.status_category IN ('backlog', 'todo', 'in_progress')
+        AND public.tasks__visible_to(x.id, p_actor)) > 2000 THEN
     RAISE EXCEPTION 'A project with more than 2,000 open tasks can''t be copied.' USING ERRCODE = '22023';
   END IF;
+  -- Only tasks the reader can see: a hidden one never reaches a body.
   WITH k AS (
     SELECT x.id, x.parent_id, x.position, x.created_at FROM public.tasks x
     WHERE x.bucket_id = b.id AND x.deleted_at IS NULL
-      AND x.status_category IN ('backlog', 'todo', 'in_progress'))
+      AND x.status_category IN ('backlog', 'todo', 'in_progress')
+      AND public.tasks__visible_to(x.id, p_actor))
   SELECT coalesce(array_agg(k.id ORDER BY k.position COLLATE "C", k.created_at, k.id), '{}') INTO v_top
   FROM k
   WHERE k.parent_id IS NULL OR NOT EXISTS (SELECT 1 FROM k p WHERE p.id = k.parent_id);
@@ -511,7 +557,8 @@ BEGIN
     INTO v_sub
   FROM public.tasks x
   WHERE x.parent_id = ANY (v_top) AND x.bucket_id = b.id AND x.deleted_at IS NULL
-    AND x.status_category IN ('backlog', 'todo', 'in_progress');
+    AND x.status_category IN ('backlog', 'todo', 'in_progress')
+    AND public.tasks__visible_to(x.id, p_actor);
   v_ids := v_top || v_sub;
 
   -- The sections, and the date everything counts from.
@@ -807,9 +854,21 @@ DECLARE
   v_pos integer;
   v_last_cat text := NULL;
 BEGIN
+  -- Whoever calls (an op, or the server for another workspace) writes as a
+  -- person who can add projects there.
+  IF v_actor IS NULL THEN
+    RAISE EXCEPTION 'A project needs an owner.' USING ERRCODE = '42501';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.workspaces w WHERE w.id = p_workspace_id) THEN
+    RAISE EXCEPTION 'You don''t have edit access to Tasks in this workspace.' USING ERRCODE = '42501';
+  END IF;
   PERFORM public.tasks__guard_structure(p_workspace_id);
   PERFORM public.templates__check_body('project', p_body);
   PERFORM public.tasks__check_keys(p_fields, ARRAY['id', 'name', 'starts_on', 'area_id', 'keep_people']);
+  -- Always a new project: never into one that's there.
+  IF EXISTS (SELECT 1 FROM public.buckets x WHERE x.id = public.tasks__try_uuid(p_fields ->> 'id')) THEN
+    RAISE EXCEPTION 'That project isn''t in this workspace.' USING ERRCODE = '22023';
+  END IF;
 
   v_project := jsonb_build_object(
     'name', coalesce(nullif(btrim(coalesce(p_fields ->> 'name', '')), ''), p_body ->> 'name'),
@@ -895,12 +954,20 @@ $$;
 CREATE OR REPLACE FUNCTION public.templates__bundle(p_project_id uuid, p_task_ids uuid[])
 RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $$
 DECLARE
+  v_actor uuid := public.perm_actor_id();
   v_ids uuid[] := coalesce(p_task_ids, '{}');
 BEGIN
-  IF p_project_id IS NOT NULL THEN
+  -- Only what the caller can see (a copy is all theirs; a resend's answer
+  -- is checked again).
+  IF p_project_id IS NOT NULL AND NOT public.projects__visible_to(p_project_id, v_actor) THEN
+    p_project_id := NULL;
+    v_ids := '{}';
+  ELSIF p_project_id IS NOT NULL THEN
     SELECT coalesce(array_agg(x.id), '{}') INTO v_ids
     FROM public.tasks x WHERE x.bucket_id = p_project_id AND x.deleted_at IS NULL;
   END IF;
+  SELECT coalesce(array_agg(x.id), '{}') INTO v_ids
+  FROM public.tasks x WHERE x.id = ANY (v_ids) AND public.tasks__visible_to(x.id, v_actor);
   RETURN jsonb_build_object(
     'buckets', coalesce((SELECT jsonb_agg(to_jsonb(b)) FROM public.buckets b WHERE b.id = p_project_id), '[]'),
     'statuses', coalesce((SELECT jsonb_agg(to_jsonb(s)) FROM public.project_statuses s
@@ -911,7 +978,7 @@ BEGIN
     'tagLinks', coalesce((SELECT jsonb_agg(to_jsonb(l)) FROM public.tag_links l
                           WHERE l.entity_type = 'task' AND l.entity_id = ANY (v_ids)), '[]'),
     'relations', coalesce((SELECT jsonb_agg(to_jsonb(r)) FROM public.task_relations r
-                           WHERE r.blocked_task_id = ANY (v_ids) OR r.blocker_task_id = ANY (v_ids)), '[]'));
+                           WHERE r.blocked_task_id = ANY (v_ids) AND r.blocker_task_id = ANY (v_ids)), '[]'));
 END;
 $$;
 
@@ -923,11 +990,11 @@ DECLARE
   v jsonb;
 BEGIN
   IF p_kind = 'task' THEN
-    SELECT to_jsonb(x) INTO v FROM public.task_templates x
+    SELECT to_jsonb(x) - 'source_ids' INTO v FROM public.task_templates x
     WHERE x.id = p_template_id AND x.workspace_id = p_workspace_id AND x.deleted_at IS NULL
       AND (x.owner_id = v_actor OR x.shared);
   ELSE
-    SELECT to_jsonb(x) INTO v FROM public.project_templates x
+    SELECT to_jsonb(x) - 'source_ids' INTO v FROM public.project_templates x
     WHERE x.id = p_template_id AND x.workspace_id = p_workspace_id AND x.deleted_at IS NULL
       AND (x.owner_id = v_actor OR x.shared);
   END IF;
@@ -966,9 +1033,10 @@ BEGIN
   END IF;
   v_id := public.tasks__try_uuid(v_fields ->> 'id');
   IF v_id IS NOT NULL AND EXISTS (SELECT 1 FROM public.buckets x WHERE x.id = v_id) THEN
-    -- A resend of a duplicate that landed.
-    IF NOT EXISTS (SELECT 1 FROM public.buckets x WHERE x.id = v_id AND x.workspace_id = p_workspace_id)
-       OR NOT public.projects__visible_to(v_id, v_actor) THEN
+    -- A resend of a duplicate that landed: only a project this person made.
+    IF NOT EXISTS (SELECT 1 FROM public.buckets x
+                   WHERE x.id = v_id AND x.workspace_id = p_workspace_id AND x.owner_id = v_actor
+                     AND NOT x.is_system AND x.deleted_at IS NULL) THEN
       RAISE EXCEPTION 'That project isn''t in this workspace.' USING ERRCODE = '22023';
     END IF;
     RETURN public.templates__bundle(v_id, NULL);
@@ -1021,11 +1089,11 @@ BEGIN
   DELETE FROM public.project_templates y
   WHERE y.owner_id = v_actor AND y.deleted_at < now() - interval '30 days';
   INSERT INTO public.project_templates (id, workspace_id, owner_id, name, shared, private_source,
-                                       shareable, body, summary)
+                                       shareable, source_ids, body, summary)
   VALUES (v_id, p_workspace_id, v_actor,
           public.tasks__clean_name(coalesce(nullif(btrim(coalesce(p_fields ->> 'name', '')), ''), b.name), 'A template', 120),
           false, NOT public.templates__workspace_sees(b.id),
-          public.can_access('bucket', b.id, 'full', v_actor),
+          public.templates__sources_full('project', ARRAY[b.id], v_actor), ARRAY[b.id],
           v_body, public.templates__summary(v_body))
   RETURNING * INTO x;
   RETURN x;
@@ -1040,6 +1108,7 @@ DECLARE
   r public.tasks;
   v_id uuid;
   v_body jsonb;
+  v_sources uuid[];
   x public.task_templates;
 BEGIN
   PERFORM public.tasks__guard_structure(p_workspace_id);
@@ -1064,17 +1133,17 @@ BEGIN
   PERFORM public.templates__check_body('task', v_body);
   DELETE FROM public.task_templates y
   WHERE y.owner_id = v_actor AND y.deleted_at < now() - interval '30 days';
+  -- What it copied: the task and the subtasks this person can see.
+  v_sources := ARRAY[r.id] || coalesce((
+    SELECT array_agg(y.id ORDER BY y.id) FROM public.tasks y
+    WHERE y.parent_id = r.id AND y.deleted_at IS NULL AND public.tasks__visible_to(y.id, v_actor)), '{}');
   INSERT INTO public.task_templates (id, workspace_id, owner_id, name, shared, private_source,
-                                    shareable, body, summary)
+                                    shareable, source_ids, body, summary)
   VALUES (v_id, p_workspace_id, v_actor,
           public.tasks__clean_name(coalesce(nullif(btrim(coalesce(p_fields ->> 'name', '')), ''),
                                             left(btrim(r.title), 120)), 'A template', 120),
           false, NOT public.templates__workspace_sees(r.bucket_id),
-          -- Full access to the task and every subtask it copied.
-          NOT EXISTS (SELECT 1 FROM public.tasks y
-                      WHERE (y.id = r.id OR (y.parent_id = r.id AND y.deleted_at IS NULL
-                                             AND public.tasks__visible_to(y.id, v_actor)))
-                        AND NOT public.can_access('task', y.id, 'full', v_actor)),
+          public.templates__sources_full('task', v_sources, v_actor), v_sources,
           v_body, public.templates__summary(v_body))
   RETURNING * INTO x;
   RETURN x;
@@ -1097,6 +1166,7 @@ DECLARE
   v_shared boolean;
   v_body jsonb;
   v_deleted timestamptz;
+  v_sources uuid[];
 BEGIN
   IF p_kind NOT IN ('task', 'project') THEN
     RAISE EXCEPTION 'A template is a task or a project template.' USING ERRCODE = '22023';
@@ -1110,10 +1180,10 @@ BEGIN
     RAISE EXCEPTION 'That template isn''t here any more.' USING ERRCODE = '22023';
   END IF;
   IF p_kind = 'task' THEN
-    SELECT to_jsonb(x) INTO v FROM public.task_templates x
+    SELECT to_jsonb(x) - 'source_ids', x.source_ids INTO v, v_sources FROM public.task_templates x
     WHERE x.id = p_template_id AND x.workspace_id = p_workspace_id FOR UPDATE;
   ELSE
-    SELECT to_jsonb(x) INTO v FROM public.project_templates x
+    SELECT to_jsonb(x) - 'source_ids', x.source_ids INTO v, v_sources FROM public.project_templates x
     WHERE x.id = p_template_id AND x.workspace_id = p_workspace_id FOR UPDATE;
   END IF;
   v_owner := v IS NOT NULL AND (v ->> 'owner_id')::uuid IS NOT DISTINCT FROM v_actor;
@@ -1140,8 +1210,10 @@ BEGIN
     RAISE EXCEPTION 'Shared is true or false.' USING ERRCODE = '22023';
   END IF;
   v_shared := CASE WHEN p_patch ? 'shared' THEN (p_patch ->> 'shared')::boolean ELSE (v ->> 'shared')::boolean END;
-  -- Sharing a template shares what it copied: only with Full access to it.
-  IF v_shared AND NOT (v ->> 'shared')::boolean AND NOT coalesce((v ->> 'shareable')::boolean, false) THEN
+  -- Sharing a template shares what it copied, and so does changing a shared
+  -- one: both ask again for Full access to every source (still there).
+  IF v_shared AND (NOT (v ->> 'shared')::boolean OR p_patch ? 'body')
+     AND NOT public.templates__sources_full(p_kind, v_sources, v_actor) THEN
     RAISE EXCEPTION 'Only someone with full access to what this template was saved from can share it.'
       USING ERRCODE = '42501';
   END IF;
@@ -1161,13 +1233,13 @@ BEGIN
     SET name = v_name, shared = v_shared, body = v_body, deleted_at = v_deleted,
         summary = CASE WHEN p_patch ? 'body' THEN public.templates__summary(v_body) ELSE x.summary END
     WHERE x.id = p_template_id
-    RETURNING to_jsonb(x) INTO v;
+    RETURNING to_jsonb(x) - 'source_ids' INTO v;
   ELSE
     UPDATE public.project_templates x
     SET name = v_name, shared = v_shared, body = v_body, deleted_at = v_deleted,
         summary = CASE WHEN p_patch ? 'body' THEN public.templates__summary(v_body) ELSE x.summary END
     WHERE x.id = p_template_id
-    RETURNING to_jsonb(x) INTO v;
+    RETURNING to_jsonb(x) - 'source_ids' INTO v;
   END IF;
   RETURN v || jsonb_build_object('kind', p_kind);
 END;
@@ -1191,8 +1263,9 @@ BEGIN
   v := public.templates__usable(p_workspace_id, 'project', p_template_id);
   v_id := public.tasks__try_uuid(v_fields ->> 'id');
   IF v_id IS NOT NULL AND EXISTS (SELECT 1 FROM public.buckets x WHERE x.id = v_id) THEN
-    IF NOT EXISTS (SELECT 1 FROM public.buckets x WHERE x.id = v_id AND x.workspace_id = p_workspace_id)
-       OR NOT public.projects__visible_to(v_id, v_actor) THEN
+    IF NOT EXISTS (SELECT 1 FROM public.buckets x
+                   WHERE x.id = v_id AND x.workspace_id = p_workspace_id AND x.owner_id = v_actor
+                     AND NOT x.is_system AND x.deleted_at IS NULL) THEN
       RAISE EXCEPTION 'That project isn''t in this workspace.' USING ERRCODE = '22023';
     END IF;
     RETURN public.templates__bundle(v_id, NULL);
@@ -1237,7 +1310,10 @@ BEGIN
   v_body := v -> 'body';
   v_id := public.tasks__try_uuid(v_fields ->> 'id');
   IF v_id IS NOT NULL AND EXISTS (SELECT 1 FROM public.tasks x WHERE x.id = v_id) THEN
-    IF NOT EXISTS (SELECT 1 FROM public.tasks x WHERE x.id = v_id AND x.workspace_id = p_workspace_id)
+    -- A resend of an apply that landed: only a task this person made.
+    IF NOT EXISTS (SELECT 1 FROM public.tasks x
+                   WHERE x.id = v_id AND x.workspace_id = p_workspace_id AND x.owner_id = v_actor
+                     AND x.deleted_at IS NULL)
        OR NOT public.tasks__visible_to(v_id, v_actor) THEN
       RAISE EXCEPTION 'Task not found in this workspace.' USING ERRCODE = '22023';
     END IF;
@@ -1336,6 +1412,10 @@ DECLARE
 BEGIN
   FOREACH fn IN ARRAY ARRAY[
     'templates__workspace_sees(uuid)', 'templates__can_take(uuid, uuid)',
+    'templates__item_shared(text, uuid)', 'templates__sources_full(text, uuid[], uuid)',
+    'templates__offset(date, date)', 'templates__int(jsonb, text, integer, integer)',
+    'templates__text(jsonb, text, integer)', 'templates__uuid(jsonb, text)',
+    'templates__check_body(text, jsonb)', 'templates__summary(jsonb)',
     'templates__task_entry(public.tasks, date, integer, integer, integer, uuid)',
     'project_templates__body_of(uuid, uuid)', 'task_templates__body_of(uuid, uuid)',
     'templates__create_tasks(uuid, jsonb, uuid, uuid[], uuid[], date, boolean, jsonb)',
@@ -1345,14 +1425,6 @@ BEGIN
     EXECUTE format('REVOKE ALL ON FUNCTION public.%s FROM anon', fn);
     EXECUTE format('REVOKE ALL ON FUNCTION public.%s FROM authenticated', fn);
     EXECUTE format('GRANT EXECUTE ON FUNCTION public.%s TO service_role', fn);
-  END LOOP;
-  FOREACH fn IN ARRAY ARRAY[
-    'templates__offset(date, date)', 'templates__int(jsonb, text, integer, integer)',
-    'templates__text(jsonb, text, integer)', 'templates__uuid(jsonb, text)',
-    'templates__check_body(text, jsonb)', 'templates__summary(jsonb)'] LOOP
-    EXECUTE format('REVOKE ALL ON FUNCTION public.%s FROM PUBLIC', fn);
-    EXECUTE format('REVOKE ALL ON FUNCTION public.%s FROM anon', fn);
-    EXECUTE format('GRANT EXECUTE ON FUNCTION public.%s TO authenticated, service_role', fn);
   END LOOP;
   FOREACH fn IN ARRAY ARRAY[
     'projects_op_duplicate(uuid, uuid, jsonb)',

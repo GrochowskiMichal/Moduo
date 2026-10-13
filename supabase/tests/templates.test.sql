@@ -20,7 +20,12 @@ INSERT INTO public.workspace_members (workspace_id, user_id, role) VALUES
   (test.id('W'), test.id('A'), 'admin'),
   (test.id('W'), test.id('V'), 'viewer');
 INSERT INTO public.contacts (id, workspace_id, owner_id, name) VALUES
-  (test.id('C1'), test.id('W'), test.id('E'), 'Acme Corp');
+  (test.id('C1'), test.id('W'), test.id('E'), 'Acme Corp'),
+  (test.id('C2'), test.id('W'), test.id('E'), 'E''s private lead');
+-- Acme is the workspace's; the lead is E's alone.
+DELETE FROM public.resource_grants WHERE resource_type = 'contact' AND resource_id IN (test.id('C1'), test.id('C2'));
+INSERT INTO public.resource_grants (workspace_id, resource_type, resource_id, subject_type, level, created_by)
+VALUES (test.id('W'), 'contact', test.id('C1'), 'workspace', 'view', test.id('E'));
 INSERT INTO public.workspace_api_keys (id, workspace_id, name, key_prefix, key_hash, scopes, created_by)
 VALUES (test.id('K'), test.id('W'), 'Claude Desktop', 'mdo_test', md5('db-test-key'),
         '{"tasks": "edit"}'::jsonb, test.id('E'));
@@ -136,6 +141,9 @@ BEGIN
   r := test.as_user('E', format($q$SELECT public.links_op_create(%L, 'task', %L, 'contact', %L)$q$,
     test.id('W'), test.id('T1'), test.id('C1')));
   PERFORM test.ok(r = 'ok 1', 'Brief links to the client', r);
+  r := test.as_user('E', format($q$SELECT public.links_op_create(%L, 'task', %L, 'contact', %L)$q$,
+    test.id('W'), test.id('T1'), test.id('C2')));
+  PERFORM test.ok(r = 'ok 1', 'and to E''s private lead', r);
   INSERT INTO public.comments (workspace_id, entity_type, entity_id, body, created_by)
   VALUES (test.id('W'), 'task', test.id('T1'), 'First thoughts', test.id('E'));
   -- The run: a work session, a reminder, a queue place; a share with M.
@@ -208,7 +216,10 @@ BEGIN
   PERFORM test.ok(EXISTS (SELECT 1 FROM public.entity_links WHERE deleted_at IS NULL
                            AND ((source_id = c.id AND target_id = test.id('C1'))
                              OR (target_id = c.id AND source_id = test.id('C1')))),
-    'a link to a contact (a lasting thing) comes along');
+    'a link to a contact the workspace can see (a lasting thing) comes along');
+  PERFORM test.ok(NOT EXISTS (SELECT 1 FROM public.entity_links WHERE deleted_at IS NULL
+                               AND test.id('C2') IN (source_id, target_id) AND c.id IN (source_id, target_id)),
+    'a link to a contact only its owner sees never comes along');
   PERFORM test.ok(NOT EXISTS (SELECT 1 FROM public.comments WHERE entity_id IN (c.id, ca.id, c2.id)),
     'comments don''t come along');
   PERFORM test.ok(c.number IS NOT NULL AND c.number <> (test.task('T1')).number
@@ -352,10 +363,8 @@ BEGIN
               AND test.statuses(v_np) = test.statuses(test.id('P'))
               AND (SELECT owner_id FROM public.buckets WHERE id = v_np) = test.id('M'),
     '"New project → From template…" makes the project with its dates from the start picked');
-  PERFORM test.ok(NOT EXISTS (SELECT 1 FROM public.entity_links WHERE deleted_at IS NULL
-                               AND (source_id = (test.ptask(v_np, 'Brief')).id OR target_id = (test.ptask(v_np, 'Brief')).id)
-                               AND test.id('C1') IN (source_id, target_id)),
-    'a linked contact the applier can''t open isn''t linked');
+  PERFORM test.ok(NOT ((SELECT body FROM public.project_templates WHERE id = v_tp)::text LIKE '%' || test.id('C2') || '%'),
+    'a template never names a contact only its owner sees');
   -- Editing the template never changes projects made from it.
   r := test.as_user('O', format($q$SELECT public.templates_op_update(%L, 'project', %L, %L::jsonb)$q$, test.id('W'), v_tp,
     jsonb_build_object('name', 'Season kit v2', 'body',
@@ -412,6 +421,97 @@ BEGIN
     'a template''s body applies in another workspace (the "copy into N workspaces" seam)', r);
   r := test.try('E', format($q$SELECT public.project_templates__apply_body(%L, '{}'::jsonb, '{}'::jsonb, false)$q$, test.id('W')));
   PERFORM test.ok(r LIKE '42501%', 'the raw apply is the server''s alone', r);
+END;
+$$;
+
+-- ── Outsiders: what a template or a copy must never carry or show ─────────
+DO $$
+DECLARE
+  r text;
+  v jsonb;
+  v_statuses text;
+BEGIN
+  -- A subtask of Brief that only O can see (filed in O's private project).
+  r := test.as_user('O', format($q$SELECT public.tasks_op_create(%L, %L::jsonb)$q$, test.id('W'), jsonb_build_object(
+    'id', test.id('TH'), 'title', 'Secret subtask', 'description', 'top secret', 'bucket_id', test.id('PB'),
+    'parent_id', test.id('T1'))));
+  PERFORM test.ok(r = 'ok 1' AND test.value_as('E', format($q$SELECT count(*) FROM public.tasks WHERE id = %L$q$, test.id('TH'))) = '0',
+    'Brief has a subtask E can''t see', r);
+  r := test.as_user('E', format($q$SELECT public.task_templates_op_save(%L, %L, %L::jsonb)$q$, test.id('W'), test.id('T1'),
+    jsonb_build_object('id', test.id('TTH'))));
+  PERFORM test.ok(r = 'ok 1'
+              AND jsonb_array_length((SELECT body -> 'tasks' FROM public.task_templates WHERE id = test.id('TTH'))) = 3
+              AND (SELECT body::text NOT LIKE '%Secret subtask%' AND body::text NOT LIKE '%top secret%'
+                   FROM public.task_templates WHERE id = test.id('TTH'))
+              AND NOT EXISTS (SELECT 1 FROM public.task_templates
+                              WHERE id = test.id('TTH') AND test.id('TH') = ANY (source_ids)),
+    'saving a task never copies a subtask the saver can''t see (title, description or id)', r);
+  v := test.op('E', format($q$SELECT public.projects_op_duplicate(%L, %L, %L::jsonb)$q$, test.id('W'), test.id('P'),
+    jsonb_build_object('id', test.id('NPH'), 'name', 'Season 2b')));
+  PERFORM test.ok(NOT EXISTS (SELECT 1 FROM public.tasks WHERE workspace_id = test.id('W')
+                              AND title = 'Secret subtask' AND id <> test.id('TH'))
+              AND v::text NOT LIKE '%Secret subtask%',
+    'a duplicate never copies or answers with a task the copier can''t see');
+
+  -- A resend can't point at someone else's project.
+  v_statuses := test.statuses(test.id('P'));
+  r := test.try('E', format($q$SELECT public.projects_op_duplicate(%L, %L, %L::jsonb)$q$, test.id('W'), test.id('P'),
+    jsonb_build_object('id', test.id('P'), 'name', 'Overwrite')));
+  PERFORM test.ok(r LIKE '%isn''t in this workspace%' AND test.statuses(test.id('P')) = v_statuses
+              AND (SELECT name FROM public.buckets WHERE id = test.id('P')) = 'Season 1',
+    'a duplicate''s id can''t name a project that''s there (nothing changes, nothing is answered)', r);
+  r := test.try('E', format($q$SELECT public.project_templates_op_apply(%L, %L, %L::jsonb)$q$, test.id('W'), test.id('TP'),
+    jsonb_build_object('id', test.id('P'))));
+  PERFORM test.ok(r LIKE '%isn''t in this workspace%', 'nor an apply''s', r);
+  r := test.try('E', format($q$SELECT public.task_templates_op_apply(%L, %L, %L::jsonb)$q$, test.id('W'), test.id('TTH'),
+    jsonb_build_object('id', test.id('TH'))));
+  PERFORM test.ok(r LIKE '%Task not found%', 'nor a task apply''s (only a task you made)', r);
+
+  -- Full taken away: sharing, and changing a shared template, ask again.
+  r := test.as_user('M', format($q$SELECT public.project_templates_op_save(%L, %L, %L::jsonb)$q$, test.id('W'), test.id('P'),
+    jsonb_build_object('id', test.id('TPM'))));
+  r := test.as_user('M', format($q$SELECT public.project_templates_op_save(%L, %L, %L::jsonb)$q$, test.id('W'), test.id('P'),
+    jsonb_build_object('id', test.id('TPM2'))));
+  r := test.as_user('M', format($q$SELECT public.templates_op_update(%L, 'project', %L, '{"shared": true}'::jsonb)$q$,
+    test.id('W'), test.id('TPM2')));
+  PERFORM test.ok(r = 'ok 1', 'with Full access a member shares a template of the project', r);
+  UPDATE public.resource_grants SET level = 'edit'
+  WHERE resource_type = 'bucket' AND resource_id = test.id('P') AND subject_id = test.id('M');
+  r := test.try('M', format($q$SELECT public.templates_op_update(%L, 'project', %L, '{"shared": true}'::jsonb)$q$,
+    test.id('W'), test.id('TPM')));
+  PERFORM test.ok(r LIKE '%Only someone with full access%', 'Full taken away: sharing asks again and says no', r);
+  r := test.try('M', format($q$SELECT public.templates_op_update(%L, 'project', %L, %L::jsonb)$q$, test.id('W'), test.id('TPM2'),
+    jsonb_build_object('body', (SELECT body FROM public.project_templates WHERE id = test.id('TPM2')))));
+  PERFORM test.ok(r LIKE '%Only someone with full access%', 'and so does changing a shared template', r);
+  r := test.try('M', format($q$SELECT public.templates_op_update(%L, 'project', %L, '{"shared": false}'::jsonb)$q$,
+    test.id('W'), test.id('TPM2')));
+  PERFORM test.ok(r LIKE 'ok%', 'stopping sharing always works', r);
+  UPDATE public.resource_grants SET level = 'full'
+  WHERE resource_type = 'bucket' AND resource_id = test.id('P') AND subject_id = test.id('M');
+
+  -- Another workspace sees nothing and changes nothing.
+  PERFORM test.ok(test.value_as('X', format($q$SELECT count(*) FROM public.project_templates WHERE workspace_id = %L$q$, test.id('W'))) = '0'
+              AND test.value_as('X', format($q$SELECT count(*) FROM public.task_templates WHERE workspace_id = %L$q$, test.id('W'))) = '0',
+    'nobody outside the workspace reads its templates');
+  r := test.try('X', format($q$SELECT public.templates_op_update(%L, 'project', %L, '{"name": "x"}'::jsonb)$q$,
+    test.id('W2'), test.id('TP')));
+  PERFORM test.ok(r LIKE '%isn''t here any more%', 'nor changes them from their own workspace', r);
+  r := test.try('X', format($q$SELECT public.project_templates_op_apply(%L, %L, '{}'::jsonb)$q$, test.id('W'), test.id('TP')));
+  PERFORM test.ok(r LIKE '%edit access%', 'nor makes projects in it', r);
+  r := test.as_op('X', format($q$SELECT public.project_templates__apply_body(%L, %L::jsonb, '{"name": "In"}'::jsonb, false)$q$,
+    test.id('W'), (SELECT body FROM public.project_templates WHERE id = test.id('TP'))));
+  PERFORM test.ok(r LIKE '%edit access%', 'even the server''s apply checks the person may write there', r);
+  r := test.as_op(NULL, format($q$SELECT public.project_templates__apply_body(%L, %L::jsonb, '{"name": "In"}'::jsonb, false)$q$,
+    test.id('W'), (SELECT body FROM public.project_templates WHERE id = test.id('TP'))));
+  PERFORM test.ok(r LIKE '42501%', 'and needs a person', r);
+
+  -- Where a template came from is never readable; the helpers are the server's.
+  PERFORM test.ok(test.value_as('O', 'SELECT count(source_ids) FROM public.project_templates') LIKE 'ERROR%',
+    'a template''s sources aren''t readable');
+  r := test.try('E', $q$SELECT public.templates__summary('{}'::jsonb)$q$);
+  PERFORM test.ok(r LIKE '42501%', 'the helpers answer only the server', r);
+  r := test.try('E', format($q$SELECT public.templates__workspace_sees(%L)$q$, test.id('PB')));
+  PERFORM test.ok(r LIKE '42501%', 'not even about whether a project is shared', r);
 END;
 $$;
 
@@ -539,7 +639,7 @@ BEGIN
 
   -- Erasure takes a person's templates (their own workspace's go with it).
   v := public.account_erase_workspace_data(test.id('E'), true);
-  PERFORM test.ok((v ->> 'templates_deleted')::int = 3, 'erasure counts E''s templates', v ->> 'templates_deleted');
+  PERFORM test.ok((v ->> 'templates_deleted')::int = 4, 'erasure counts E''s templates', v ->> 'templates_deleted');
   PERFORM test.run(NULL, format($q$SELECT public.account_erase_workspace_data(%L, false)$q$, test.id('E')), false);
   PERFORM test.ok(NOT EXISTS (SELECT 1 FROM public.task_templates WHERE owner_id = test.id('E'))
               AND NOT EXISTS (SELECT 1 FROM public.project_templates WHERE owner_id = test.id('E'))

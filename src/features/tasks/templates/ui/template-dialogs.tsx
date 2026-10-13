@@ -152,21 +152,28 @@ export function CopyProjectDialog({
   const [start, setStart] = useState<string | null>(null);
   const [keepPeople, setKeepPeople] = useState(true);
   // Fresh each time it opens (or another template is picked).
+  // Fresh each time it opens; typing is never reset by a re-render or a
+  // list read (keyed on what was picked, not on objects).
   useEffect(() => {
     if (!open) return;
-    setTemplateId(initialTemplateId ?? (mode === "template" ? (templates[0]?.id ?? null) : null));
+    setTemplateId(initialTemplateId);
     setKeepPeople(true);
-  }, [open, initialTemplateId, mode, templates]);
+  }, [open, initialTemplateId]);
+  const firstTemplateId = templates[0]?.id ?? null;
+  useEffect(() => {
+    if (open && mode === "template" && templateId === null && firstTemplateId) {
+      setTemplateId(firstTemplateId);
+    }
+  }, [open, mode, templateId, firstTemplateId]);
+  const sourceName = source?.name ?? "";
+  const pickedId = picked?.id ?? null;
+  const pickedName = picked?.name ?? "";
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the start resets with what it starts from (`dated` follows it)
   useEffect(() => {
     if (!open) return;
-    if (mode === "duplicate") {
-      setName(source ? copyName(source.name) : "");
-      setStart(source?.dated ? todayDay() : null);
-    } else {
-      setName(picked?.name ?? "");
-      setStart(picked?.facts.dated ? todayDay() : null);
-    }
-  }, [open, mode, source, picked]);
+    setName(mode === "duplicate" ? (sourceName ? copyName(sourceName) : "") : pickedName);
+    setStart(dated ? todayDay() : null);
+  }, [open, mode, sourceName, pickedId]);
   const trimmed = name.trim();
   const ready = trimmed.length > 0 && (mode === "duplicate" || picked !== null) && !busy;
   const create = () => {
