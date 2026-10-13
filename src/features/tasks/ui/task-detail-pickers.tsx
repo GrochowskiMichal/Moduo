@@ -14,8 +14,14 @@ import { Bell, CalendarClock, Clock, Plus, Repeat, SkipForward, Timer, X } from 
 import { type ReactNode, useRef, useState } from "react";
 
 import { Button } from "../../../components/ui/button";
+import { Calendar } from "../../../components/ui/calendar";
 import { Checkbox } from "../../../components/ui/checkbox";
-import { DateField, formatTimeText, TimeInput } from "../../../components/ui/date-field";
+import {
+  DatePickerPanel,
+  formatTimeText,
+  TimeInput,
+  useDateDraft,
+} from "../../../components/ui/date-field";
 import { IconButton } from "../../../components/ui/icon-button";
 import { Input } from "../../../components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
@@ -120,6 +126,26 @@ export function shownSession(
   return sorted.find((s) => Date.parse(s.endsAt) > now) ?? sorted[sorted.length - 1] ?? null;
 }
 
+/**
+ * A day and a time picked in place (presets, the calendar, a time field): the
+ * date picker's body without a popover of its own, so it lives inside another
+ * picker (a popover inside a popover loses its clicks). The action button
+ * reads `shown`: what's picked so far, Enter or not.
+ */
+function useMoment(initial: Date | null) {
+  const [value, setValue] = useState<Date | null>(initial);
+  const draft = useDateDraft({
+    value,
+    onChange: setValue,
+    withTime: true,
+    open: true,
+    done: () => {},
+  });
+  return { draft, shown: draft.shown };
+}
+
+type SessionsView = { kind: "list" } | { kind: "add" } | { kind: "move"; sessionId: string };
+
 export function SessionsValue({
   task,
   sessions,
@@ -138,11 +164,22 @@ export function SessionsValue({
   defaultOpen?: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen && canEdit);
+  const [view, setView] = useState<SessionsView>(() =>
+    defaultOpen && sessions.length === 0 ? { kind: "add" } : { kind: "list" },
+  );
   const shown = shownSession(sessions);
   const more = sessions.length - 1;
   const sorted = [...sessions].sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt));
+  const moving = view.kind === "move" ? sorted.find((s) => s.id === view.sessionId) : undefined;
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        // With no session yet, the picker opens on adding one.
+        setView(next && sessions.length === 0 && canEdit ? { kind: "add" } : { kind: "list" });
+      }}
+    >
       <PopoverTrigger asChild disabled={!canEdit && sessions.length === 0}>
         <PropertyValue
           empty={!shown}
@@ -160,29 +197,58 @@ export function SessionsValue({
         </PropertyValue>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-72 p-0">
-        {sorted.length > 0 ? (
-          <ul className="flex flex-col p-1" aria-label="Sessions">
-            {sorted.map((s) => (
-              <SessionRow
-                key={s.id}
-                session={s}
-                canEdit={canEdit}
-                me={me}
-                onMove={(patch) => api.updateSession(s.id, patch)}
-                onRemove={() => api.removeSession(s.id)}
-              />
-            ))}
-          </ul>
-        ) : null}
-        {canEdit ? (
+        {view.kind === "add" && canEdit ? (
           <AddSession
             task={task}
             me={me}
             assignee={assignee}
-            divided={sorted.length > 0}
-            onAdd={(input) => api.addSession(task.id, input)}
+            onCancel={sorted.length > 0 ? () => setView({ kind: "list" }) : undefined}
+            onAdd={(input) => {
+              api.addSession(task.id, input);
+              setView({ kind: "list" });
+            }}
           />
-        ) : null}
+        ) : moving && canEdit ? (
+          <MoveSession
+            session={moving}
+            onCancel={() => setView({ kind: "list" })}
+            onMove={(patch) => {
+              api.updateSession(moving.id, patch);
+              setView({ kind: "list" });
+            }}
+          />
+        ) : (
+          <>
+            {sorted.length > 0 ? (
+              <ul className="flex flex-col p-1" aria-label="Sessions">
+                {sorted.map((s) => (
+                  <SessionRow
+                    key={s.id}
+                    session={s}
+                    canEdit={canEdit}
+                    me={me}
+                    onMove={() => setView({ kind: "move", sessionId: s.id })}
+                    onResize={(endsAt) => api.updateSession(s.id, { endsAt })}
+                    onRemove={() => api.removeSession(s.id)}
+                  />
+                ))}
+              </ul>
+            ) : null}
+            {canEdit ? (
+              <div className={cn("p-1", sorted.length > 0 && "border-t border-hairline")}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-start"
+                  onClick={() => setView({ kind: "add" })}
+                >
+                  <Plus aria-hidden />
+                  Add session
+                </Button>
+              </div>
+            ) : null}
+          </>
+        )}
       </PopoverContent>
     </Popover>
   );
@@ -193,40 +259,35 @@ function SessionRow({
   canEdit,
   me,
   onMove,
+  onResize,
   onRemove,
 }: {
   session: TaskSession;
   canEdit: boolean;
   me: Assignee | null;
-  onMove: (patch: { startsAt?: string; endsAt?: string }) => void;
+  onMove: () => void;
+  onResize: (endsAt: string) => void;
   onRemove: () => void;
 }) {
   const minutes = sessionMinutes(session);
   const someoneElse = session.userId && session.userId !== me?.userId;
   return (
     <li className="group flex min-h-(--ctrl-h-sm) items-center gap-1.5 rounded-md px-1.5 font-sans text-sm hover:bg-state-hover">
-      <DateField
-        withTime
-        value={new Date(session.startsAt)}
+      <button
+        type="button"
         disabled={!canEdit}
-        aria-label="Session start"
-        className="-ml-1 px-1"
-        onChange={(start) => {
-          if (!start) return;
-          // Moving keeps its length and its person.
-          onMove({
-            startsAt: start.toISOString(),
-            endsAt: new Date(start.getTime() + minutes * 60000).toISOString(),
-          });
-        }}
-      />
+        onClick={onMove}
+        aria-label={`Move the session at ${formatDayTime(session.startsAt)}`}
+        className="min-w-0 rounded-sm text-left break-words focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+      >
+        {formatDayTime(session.startsAt)}
+      </button>
       <Select
         value={String(minutes)}
         disabled={!canEdit}
+        // Resizing keeps the start and the person (TV-D10-fix).
         onValueChange={(v) =>
-          onMove({
-            endsAt: new Date(Date.parse(session.startsAt) + Number(v) * 60000).toISOString(),
-          })
+          onResize(new Date(Date.parse(session.startsAt) + Number(v) * 60000).toISOString())
         }
       >
         <SelectTrigger size="sm" aria-label="Session length" className="w-auto">
@@ -256,21 +317,58 @@ function SessionRow({
   );
 }
 
+/** Move a session: a new start, the same length and the same person. */
+function MoveSession({
+  session,
+  onMove,
+  onCancel,
+}: {
+  session: TaskSession;
+  onMove: (patch: { startsAt: string; endsAt: string }) => void;
+  onCancel: () => void;
+}) {
+  const minutes = sessionMinutes(session);
+  const { draft, shown: start } = useMoment(new Date(session.startsAt));
+  return (
+    <div className="flex flex-col">
+      <DatePickerPanel draft={draft} />
+      <div className="flex justify-end gap-1 border-t border-hairline p-2">
+        <Button size="sm" variant="ghost" onClick={onCancel}>
+          Back
+        </Button>
+        <Button
+          size="sm"
+          disabled={!start}
+          onClick={() => {
+            if (!start) return;
+            onMove({
+              startsAt: start.toISOString(),
+              endsAt: new Date(start.getTime() + minutes * 60000).toISOString(),
+            });
+          }}
+        >
+          Move
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 /** A new session: when, how long, and whose (you or the assignee; nobody else). */
 function AddSession({
   task,
   me,
   assignee,
-  divided,
   onAdd,
+  onCancel,
 }: {
   task: Task;
   me: Assignee | null;
   assignee: Assignee | null;
-  divided: boolean;
   onAdd: (input: { startsAt: string; endsAt: string; userId: string | null }) => void;
+  onCancel?: () => void;
 }) {
-  const [start, setStart] = useState<Date | null>(null);
+  const { draft, shown: start } = useMoment(null);
   const [minutes, setMinutes] = useState(() => estimateOf(task) ?? 60);
   const otherAssignee = assignee && me && assignee.userId !== me.userId ? assignee : null;
   const [whose, setWhose] = useState<"me" | "assignee">("me");
@@ -281,50 +379,52 @@ function AddSession({
       endsAt: new Date(start.getTime() + minutes * 60000).toISOString(),
       userId: whose === "assignee" && otherAssignee ? otherAssignee.userId : (me?.userId ?? null),
     });
-    setStart(null);
   };
   return (
-    <div className={cn("flex flex-col gap-2 p-2", divided && "border-t border-hairline")}>
-      <div className="flex flex-wrap items-center gap-1.5">
-        <DateField
-          withTime
-          variant="outline"
-          value={start}
-          onChange={setStart}
-          placeholder="Pick a time"
-          aria-label="New session start"
-        />
-        <Select value={String(minutes)} onValueChange={(v) => setMinutes(Number(v))}>
-          <SelectTrigger size="sm" aria-label="New session length" className="w-auto">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {[...new Set([...SESSION_LENGTHS, minutes])]
-              .sort((a, b) => a - b)
-              .map((m) => (
-                <SelectItem key={m} value={String(m)}>
-                  {formatDuration(m)}
-                </SelectItem>
-              ))}
-          </SelectContent>
-        </Select>
+    <div className="flex flex-col">
+      <DatePickerPanel draft={draft} />
+      <div className="flex flex-col gap-2 border-t border-hairline p-2">
+        <div className="flex items-center gap-2 font-sans text-sm">
+          <span className="text-muted-foreground">For</span>
+          <Select value={String(minutes)} onValueChange={(v) => setMinutes(Number(v))}>
+            <SelectTrigger size="sm" aria-label="New session length" className="w-auto">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {[...new Set([...SESSION_LENGTHS, minutes])]
+                .sort((a, b) => a - b)
+                .map((m) => (
+                  <SelectItem key={m} value={String(m)}>
+                    {formatDuration(m)}
+                  </SelectItem>
+                ))}
+            </SelectContent>
+          </Select>
+        </div>
+        {otherAssignee ? (
+          <SegmentedControl
+            size="sm"
+            aria-label="Whose calendar"
+            value={whose}
+            onValueChange={(v) => setWhose(v === "assignee" ? "assignee" : "me")}
+            items={[
+              { value: "me", label: "Mine" },
+              { value: "assignee", label: `${otherAssignee.fullName || otherAssignee.name}’s` },
+            ]}
+          />
+        ) : null}
+        <div className="flex justify-end gap-1">
+          {onCancel ? (
+            <Button size="sm" variant="ghost" onClick={onCancel}>
+              Back
+            </Button>
+          ) : null}
+          <Button size="sm" disabled={!start} onClick={add}>
+            <Plus aria-hidden />
+            Add session
+          </Button>
+        </div>
       </div>
-      {otherAssignee ? (
-        <SegmentedControl
-          size="sm"
-          aria-label="Whose calendar"
-          value={whose}
-          onValueChange={(v) => setWhose(v === "assignee" ? "assignee" : "me")}
-          items={[
-            { value: "me", label: "Mine" },
-            { value: "assignee", label: `${otherAssignee.fullName || otherAssignee.name}’s` },
-          ]}
-        />
-      ) : null}
-      <Button size="sm" variant="secondary" disabled={!start} onClick={add} className="self-start">
-        <Plus aria-hidden />
-        Add session
-      </Button>
     </div>
   );
 }
@@ -350,14 +450,20 @@ export function ReminderValue({
   defaultOpen?: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen);
-  const [at, setAt] = useState<Date | null>(null);
+  const [picking, setPicking] = useState(false);
   const first = reminders[0] ?? null;
   const has = (kind: TaskReminderKind) => reminders.some((r) => r.kind === kind);
   const add = (kind: TaskReminderKind, when: string | null = null) => {
     api.addReminder(task.id, kind, when);
   };
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) setPicking(false);
+      }}
+    >
       <PopoverTrigger asChild>
         <PropertyValue
           empty={!first}
@@ -374,69 +480,85 @@ export function ReminderValue({
           {first ? reminderLabel(first) : "Remind me"}
         </PropertyValue>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-64 p-1">
-        {reminders.length > 0 ? (
-          <ul aria-label="Your reminders" className="border-b border-hairline pb-1">
-            {reminders.map((r) => (
-              <li
-                key={r.id}
-                className="group flex min-h-(--ctrl-h-sm) items-center gap-2 rounded-md px-2 font-sans text-sm hover:bg-state-hover"
+      <PopoverContent align="start" className={cn("p-1", picking ? "w-72 p-0" : "w-64")}>
+        {picking ? (
+          <RemindAt
+            onCancel={() => setPicking(false)}
+            onPick={(when) => {
+              add("at", when.toISOString());
+              setPicking(false);
+            }}
+          />
+        ) : (
+          <>
+            {reminders.length > 0 ? (
+              <ul aria-label="Your reminders" className="border-b border-hairline pb-1">
+                {reminders.map((r) => (
+                  <li
+                    key={r.id}
+                    className="group flex min-h-(--ctrl-h-sm) items-center gap-2 rounded-md px-2 font-sans text-sm hover:bg-state-hover"
+                  >
+                    <Bell className="size-icon-sm shrink-0 text-muted-foreground" aria-hidden />
+                    <span className="min-w-0 flex-1 break-words">{reminderLabel(r)}</span>
+                    <IconButton
+                      icon={X}
+                      label="Remove reminder"
+                      onClick={() => api.removeReminder(r.id)}
+                      className="opacity-0 focus-visible:opacity-100 group-hover:opacity-100"
+                    />
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            <div className="flex flex-col gap-0.5 pt-1">
+              {(["hour_before", "day_before"] as const).map((kind) => (
+                <Button
+                  key={kind}
+                  variant="ghost"
+                  size="sm"
+                  className="justify-start"
+                  disabled={!task.dueDate || has(kind)}
+                  onClick={() => add(kind)}
+                >
+                  {reminderLabel({ kind, at: null })}
+                </Button>
+              ))}
+              {!task.dueDate ? (
+                <p className="px-2 py-1 font-sans text-xs text-muted-foreground">
+                  Set a due date to remind before it.
+                </p>
+              ) : null}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="justify-start"
+                onClick={() => setPicking(true)}
               >
-                <Bell className="size-icon-sm shrink-0 text-muted-foreground" aria-hidden />
-                <span className="min-w-0 flex-1 break-words">{reminderLabel(r)}</span>
-                <IconButton
-                  icon={X}
-                  label="Remove reminder"
-                  onClick={() => api.removeReminder(r.id)}
-                  className="opacity-0 focus-visible:opacity-100 group-hover:opacity-100"
-                />
-              </li>
-            ))}
-          </ul>
-        ) : null}
-        <div className="flex flex-col gap-0.5 pt-1">
-          {(["hour_before", "day_before"] as const).map((kind) => (
-            <Button
-              key={kind}
-              variant="ghost"
-              size="sm"
-              className="justify-start"
-              disabled={!task.dueDate || has(kind)}
-              onClick={() => add(kind)}
-            >
-              {reminderLabel({ kind, at: null })}
-            </Button>
-          ))}
-          {!task.dueDate ? (
-            <p className="px-2 py-1 font-sans text-xs text-muted-foreground">
-              Set a due date to remind before it.
-            </p>
-          ) : null}
-          <div className="flex items-center gap-1.5 px-1 pt-1">
-            <DateField
-              withTime
-              variant="outline"
-              value={at}
-              onChange={setAt}
-              placeholder="At a time…"
-              aria-label="Remind me at"
-            />
-            <Button
-              size="sm"
-              variant="secondary"
-              disabled={!at}
-              onClick={() => {
-                if (!at) return;
-                add("at", at.toISOString());
-                setAt(null);
-              }}
-            >
-              Add
-            </Button>
-          </div>
-        </div>
+                At a time…
+              </Button>
+            </div>
+          </>
+        )}
       </PopoverContent>
     </Popover>
+  );
+}
+
+/** "At a time…": a moment picked in place. */
+function RemindAt({ onPick, onCancel }: { onPick: (when: Date) => void; onCancel: () => void }) {
+  const { draft, shown } = useMoment(null);
+  return (
+    <div className="flex flex-col">
+      <DatePickerPanel draft={draft} />
+      <div className="flex justify-end gap-1 border-t border-hairline p-2">
+        <Button size="sm" variant="ghost" onClick={onCancel}>
+          Back
+        </Button>
+        <Button size="sm" disabled={!shown} onClick={() => shown && onPick(shown)}>
+          Remind me then
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -978,19 +1100,17 @@ function CustomRepeat({
           </SelectContent>
         </Select>
         {spec.end.kind === "until" ? (
-          <DateField
-            variant="outline"
-            value={new Date(`${spec.end.day}T12:00:00`)}
-            onChange={(d) =>
-              d &&
-              set({
-                end: {
-                  kind: "until",
-                  day: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
-                },
-              })
-            }
+          // In place, not a popover inside this one (it would lose its clicks).
+          <Calendar
+            mode="single"
             aria-label="Last day"
+            selected={new Date(`${spec.end.day}T12:00:00`)}
+            defaultMonth={new Date(`${spec.end.day}T12:00:00`)}
+            onSelect={(d) => {
+              if (!d) return;
+              const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+              set({ end: { kind: "until", day } });
+            }}
           />
         ) : spec.end.kind === "count" ? (
           <Input

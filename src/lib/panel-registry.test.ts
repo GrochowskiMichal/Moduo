@@ -20,7 +20,7 @@ const noIcon = (() => null) as unknown as PanelViewDef["icon"];
 describe("the registered views", () => {
   it("covers the five modules that have a right panel, with their old tabs' ids", () => {
     const ids = (m: PanelModule) => PANEL_VIEWS[m].map((v) => v.id).sort();
-    expect(ids("tasks")).toEqual(["details"]);
+    expect(ids("tasks")).toEqual(["details", "project"]);
     expect(ids("calendar")).toEqual(["detail", "notes", "tasks"]);
     expect(ids("email")).toEqual(["contact", "detail", "reader", "task"]);
     expect(ids("notes")).toEqual(["comments", "detail", "outline"]);

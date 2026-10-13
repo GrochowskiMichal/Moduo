@@ -344,7 +344,7 @@ function MergedLine({
         type="button"
         onClick={onExpand}
         aria-label={`${mergedLine(entries)}. Show each change`}
-        className="rounded-sm text-left underline-offset-2 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+        className="inline rounded-sm text-left underline-offset-2 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
       >
         {mergedLine(entries)}
       </button>
