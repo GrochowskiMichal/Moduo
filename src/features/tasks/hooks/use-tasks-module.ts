@@ -2189,6 +2189,31 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     [bundle.taskRelations, editBlocked, store, runtime, workspaceId, refused],
   );
 
+  /**
+   * Bring back a deleted task (the panel's "Deleted task" Restore, TV-U13):
+   * the same op the delete's Undo uses. Resolves whether it came back.
+   */
+  const restoreTask = useCallback(
+    async (id: string): Promise<boolean> => {
+      if (editBlocked() || !runtime || !workspaceId || !store) return false;
+      try {
+        const restored = await runtime.tasks.updateTask({
+          workspaceId,
+          taskId: id,
+          patch: { deletedAt: null },
+        });
+        store.answer({ tasks: [restored] });
+        setActivityStamp((n) => n + 1);
+        toast("Task restored");
+        return true;
+      } catch (e) {
+        failed(e, "Couldn’t restore the task.");
+        return false;
+      }
+    },
+    [editBlocked, runtime, workspaceId, store, failed],
+  );
+
   // ── sessions, reminders, Waiting on… (TV-U13, on TV-D10's ops) ──────────────
   // Each op answers with the task's rows of that table (sessions: everyone's;
   // reminders: mine), which become the copy; a refused write puts back only
@@ -3088,6 +3113,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     sessions: snap.sessions,
     reminders: snap.reminders,
     waiting: snap.waiting,
+    restoreTask,
     addSession,
     updateSession,
     removeSession,

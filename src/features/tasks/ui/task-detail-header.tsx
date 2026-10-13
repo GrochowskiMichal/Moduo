@@ -1,40 +1,55 @@
-// The detail panel's header (tasks-v2 §9, comp §1): the bucket breadcrumb (a
-// picker that moves the task), the queue toggle (it replaced the full-width
-// "Commit to Queue" button, U3-3), copy link, and ⋯ (Duplicate, Won't do /
-// Reopen, Delete). A subtask's breadcrumb goes on to its parent.
+// The detail panel's header (Tasks v3 §9, research views-board-detail §7):
+// the breadcrumb "● Project › Section" (each part a picker that moves the
+// task; a subtask goes on to "↳ parent"), the handle (click to copy), a slot
+// for who "is on this" (claims, TV-F7), the queue toggle, ⤢ full page, and
+// ⋯ (Copy branch name, Copy link, Duplicate, Make it a task, Won't do /
+// Reopen, Delete).
 
 import {
   Ban,
   ChevronRight,
   Copy,
+  CornerDownRight,
   Ellipsis,
+  GitBranch,
   Inbox,
   Link2,
   ListChecks,
   Lock,
+  Maximize2,
+  Minimize2,
   RotateCcw,
   Trash2,
   Unlink,
 } from "lucide-react";
-import { useContext } from "react";
+import { type ReactNode, useContext, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "../../../components/ui/button";
 import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "../../../components/ui/command";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "../../../components/ui/dropdown-menu";
 import { IconButton } from "../../../components/ui/icon-button";
 import { Kbd } from "../../../components/ui/kbd";
+import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import { taskHandle } from "../../../lib/task-handle";
+import { cn } from "../../../lib/utils";
 import { taskUrl } from "../../../lib/web-origin";
 import { WorkspaceContext } from "../../workspaces/workspace-context";
+import { branchName } from "../detail-properties";
 import { duplicateFields } from "../duplicate";
 import { isUnfinished } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
@@ -49,8 +64,20 @@ type Props = {
   inbox: Bucket | null;
   canEdit: boolean;
   api: TasksModuleApi;
+  /** Open another task in the panel ("← item"): the parent from a subtask. */
+  onOpenTask: (id: string) => void;
+  /** Select a task in the page (a duplicate opens there). */
   onSelectTask: (id: string) => void;
+  /** ⤢: the task fills the centre (call 32). Absent where there is no centre to fill. */
+  onOpenFullPage?: () => void;
+  /** ⤡: back to the panel (on the full page). */
+  onCloseFullPage?: () => void;
+  /** Who "is on this" (claims): TV-F7 puts its mark here. */
+  claimSlot?: ReactNode;
 };
+
+const crumb =
+  "flex min-h-(--ctrl-h-sm) min-w-0 shrink items-center gap-1.5 rounded-md px-1.5 py-0.5 font-sans text-xs text-muted-foreground outline-none transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 aria-expanded:bg-state-active aria-expanded:text-foreground disabled:hover:bg-transparent disabled:hover:text-muted-foreground";
 
 export function TaskDetailHeader({
   task,
@@ -59,99 +86,75 @@ export function TaskDetailHeader({
   inbox,
   canEdit,
   api,
+  onOpenTask,
   onSelectTask,
+  onOpenFullPage,
+  onCloseFullPage,
+  claimSlot,
 }: Props) {
   const bucketOptions = inbox ? [inbox, ...buckets.filter((b) => b.id !== inbox.id)] : buckets;
   const bucket = bucketOptions.find((b) => b.id === task.bucketId) ?? null;
   // A project you can't see is never shown as Inbox (TV-P0, AC1.10).
   const bucketLabel = bucket?.name ?? PRIVATE_PROJECT_LABEL;
+  const sections = api.sections
+    .filter((s) => s.projectId === task.bucketId)
+    .sort((a, b) => a.position - b.position);
+  const section = sections.find((s) => s.id === task.sectionId) ?? null;
   const open = isUnfinished(task);
   // The handle, MOD-142 (TV-D8). Read without requiring the provider, so the
   // panel renders in isolation (stories, tests) without one.
   const taskKey = useContext(WorkspaceContext)?.selectedWorkspace?.taskKey ?? null;
   const handle = taskHandle(taskKey, task.number);
 
-  const copyHandle = () => {
-    if (!handle) return;
+  const copy = (text: string, done: string) => {
     if (!navigator.clipboard) {
-      toast(`Couldn't copy ${handle}.`);
+      toast(`Couldn’t copy ${text}.`);
       return;
     }
     void navigator.clipboard
-      .writeText(handle)
-      .then(() => toast(`Copied ${handle}`))
-      .catch(() => toast(`Couldn't copy ${handle}.`));
-  };
-
-  const copyLink = () => {
-    if (!navigator.clipboard) {
-      toast("Couldn't copy the link.");
-      return;
-    }
-    void navigator.clipboard
-      .writeText(taskUrl(task.id))
-      .then(() => toast("Link copied"))
-      .catch(() => toast("Couldn't copy the link."));
+      .writeText(text)
+      .then(() => toast(done))
+      .catch(() => toast(`Couldn’t copy ${text}.`));
   };
 
   const duplicate = () => {
     const created = api.createTask(duplicateFields(task));
     for (const tag of api.tagsByTask.get(task.id) ?? []) api.createTagForTask(tag.name, created);
-    void created.then((copy) => {
-      if (!copy) return;
-      onSelectTask(copy.id);
+    void created.then((copyOf) => {
+      if (!copyOf) return;
+      onSelectTask(copyOf.id);
       toast("Task duplicated");
     });
   };
 
   return (
     <div className="flex min-h-(--ctrl-h) shrink-0 items-center gap-1">
-      {/* Names wrap, never truncate (TV-P0, AC1.16). The breadcrumbs stay their
-          own buttons on the state layer: a Button is one fixed-height line
-          (DS-6 kept them for that reason). */}
+      {/* Names wrap, never truncate (AC1.16). */}
       <nav aria-label="Location" className="flex min-w-0 flex-1 flex-wrap items-center gap-0.5">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild disabled={!canEdit}>
-            <button
-              type="button"
-              aria-label={`Project: ${bucketLabel}. Move to another project`}
-              className="-ml-1.5 flex min-h-(--ctrl-h-sm) min-w-0 shrink items-center gap-1.5 rounded-md px-1.5 py-0.5 font-sans text-xs text-muted-foreground outline-none transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 aria-expanded:bg-state-active aria-expanded:text-foreground disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
-            >
-              {bucket?.isSystem ? (
-                <Inbox className="size-icon-xs shrink-0" aria-hidden />
-              ) : bucket ? (
-                <span aria-hidden className="size-2 shrink-0 rounded-full bg-muted-foreground/60" />
-              ) : (
-                <Lock className="size-icon-xs shrink-0" aria-hidden />
-              )}
-              <span className="min-w-0 break-words text-left">{bucketLabel}</span>
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-56">
-            <DropdownMenuRadioGroup
-              value={task.bucketId}
-              onValueChange={(v) => {
-                if (v !== task.bucketId) api.patchTask(task.id, { bucketId: v });
-              }}
-            >
-              {bucketOptions.map((b) => (
-                <DropdownMenuRadioItem key={b.id} value={b.id}>
-                  {b.isSystem ? <Inbox className="text-muted-foreground" aria-hidden /> : null}
-                  {b.name}
-                </DropdownMenuRadioItem>
-              ))}
-            </DropdownMenuRadioGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <ProjectCrumb
+          task={task}
+          bucket={bucket}
+          label={bucketLabel}
+          options={bucketOptions}
+          canEdit={canEdit}
+          api={api}
+        />
+        {sections.length > 0 && !parent ? (
+          <>
+            <ChevronRight className="size-icon-xs shrink-0 text-muted-foreground/60" aria-hidden />
+            <SectionCrumb task={task} section={section} sections={sections} canEdit={canEdit} api={api} />
+          </>
+        ) : null}
         {parent ? (
           <>
             <ChevronRight className="size-icon-xs shrink-0 text-muted-foreground/60" aria-hidden />
             <button
               type="button"
-              onClick={() => onSelectTask(parent.id)}
+              onClick={() => onOpenTask(parent.id)}
               aria-label={`Parent task: ${parent.title || "Untitled"}`}
-              className="flex min-h-(--ctrl-h-sm) min-w-0 shrink items-center rounded-md px-1.5 py-0.5 font-sans text-xs text-muted-foreground outline-none transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
+              className={crumb}
             >
+              <CornerDownRight className="size-icon-xs shrink-0" aria-hidden />
               <span className="min-w-0 break-words text-left">{parent.title || "Untitled"}</span>
             </button>
           </>
@@ -163,9 +166,9 @@ export function TaskDetailHeader({
               <TooltipTrigger asChild>
                 <button
                   type="button"
-                  onClick={copyHandle}
+                  onClick={() => copy(handle, `Copied ${handle}`)}
                   aria-label={`Copy ${handle}`}
-                  className="flex min-h-(--ctrl-h-sm) shrink-0 items-center whitespace-nowrap rounded-md px-1.5 py-0.5 font-sans text-xs tabular-nums text-muted-foreground outline-none transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
+                  className={cn(crumb, "shrink-0 whitespace-nowrap tabular-nums")}
                 >
                   {handle}
                 </button>
@@ -176,44 +179,203 @@ export function TaskDetailHeader({
         ) : null}
       </nav>
 
+      {claimSlot}
       {open ? <QueueButton task={task} api={api} canEdit={canEdit} /> : null}
-      <IconButton icon={Link2} label="Copy link" onClick={copyLink} />
-      {canEdit ? (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <IconButton icon={Ellipsis} label="More actions" tooltip={null} />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-52">
-            <DropdownMenuItem onSelect={duplicate}>
-              <Copy aria-hidden />
-              Duplicate
-            </DropdownMenuItem>
-            {parent ? (
-              <DropdownMenuItem onSelect={() => api.setTaskParent(task.id, null)}>
-                <Unlink aria-hidden />
-                Detach from parent
-              </DropdownMenuItem>
-            ) : null}
-            {task.status === "archived" ? (
-              <DropdownMenuItem onSelect={() => api.patchTask(task.id, { status: "todo" })}>
-                <RotateCcw aria-hidden />
-                Reopen
-              </DropdownMenuItem>
-            ) : (
-              <DropdownMenuItem onSelect={() => api.archiveTask(task.id)}>
-                <Ban aria-hidden />
-                Won’t do
-              </DropdownMenuItem>
-            )}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem variant="destructive" onSelect={() => api.deleteTask(task.id)}>
-              <Trash2 aria-hidden />
-              Delete
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+      {onOpenFullPage ? (
+        <IconButton icon={Maximize2} label="Open full page" onClick={onOpenFullPage} />
       ) : null}
+      {onCloseFullPage ? (
+        <IconButton icon={Minimize2} label="Back to the panel" onClick={onCloseFullPage} />
+      ) : null}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <IconButton icon={Ellipsis} label="More actions" tooltip={null} />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-56">
+          <DropdownMenuItem
+            onSelect={() => {
+              const name = branchName(handle, task.title);
+              copy(name, `Copied ${name}`);
+            }}
+          >
+            <GitBranch aria-hidden />
+            Copy branch name
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => copy(taskUrl(task.id), "Link copied")}>
+            <Link2 aria-hidden />
+            Copy link
+          </DropdownMenuItem>
+          {onOpenFullPage ? (
+            <DropdownMenuItem onSelect={onOpenFullPage}>
+              <Maximize2 aria-hidden />
+              Open full page
+            </DropdownMenuItem>
+          ) : null}
+          {canEdit ? (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={duplicate}>
+                <Copy aria-hidden />
+                Duplicate
+              </DropdownMenuItem>
+              {parent ? (
+                <DropdownMenuItem onSelect={() => api.setTaskParent(task.id, null)}>
+                  <Unlink aria-hidden />
+                  Make it a task
+                </DropdownMenuItem>
+              ) : null}
+              {task.status === "archived" ? (
+                <DropdownMenuItem onSelect={() => api.patchTask(task.id, { status: "todo" })}>
+                  <RotateCcw aria-hidden />
+                  Reopen
+                </DropdownMenuItem>
+              ) : (
+                <DropdownMenuItem onSelect={() => api.archiveTask(task.id)}>
+                  <Ban aria-hidden />
+                  Won’t do
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem variant="destructive" onSelect={() => api.deleteTask(task.id)}>
+                <Trash2 aria-hidden />
+                Delete
+              </DropdownMenuItem>
+            </>
+          ) : null}
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
+  );
+}
+
+/** "● Acme rebrand": moves the task to another project (by area, Inbox first). */
+function ProjectCrumb({
+  task,
+  bucket,
+  label,
+  options,
+  canEdit,
+  api,
+}: {
+  task: Task;
+  bucket: Bucket | null;
+  label: string;
+  options: Bucket[];
+  canEdit: boolean;
+  api: TasksModuleApi;
+}) {
+  const [open, setOpen] = useState(false);
+  const areaName = (b: Bucket) => api.areas.find((a) => a.id === b.areaId)?.name ?? null;
+  const groups = new Map<string, Bucket[]>();
+  for (const b of options) {
+    const key = b.isSystem ? "" : (areaName(b) ?? "");
+    groups.set(key, [...(groups.get(key) ?? []), b]);
+  }
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild disabled={!canEdit}>
+        <button
+          type="button"
+          aria-label={`Project: ${label}. Move to another project`}
+          className={cn(crumb, "-ml-1.5")}
+        >
+          {bucket?.isSystem ? (
+            <Inbox className="size-icon-xs shrink-0" aria-hidden />
+          ) : bucket ? (
+            <span aria-hidden className="size-2 shrink-0 rounded-full bg-muted-foreground/60" />
+          ) : (
+            <Lock className="size-icon-xs shrink-0" aria-hidden />
+          )}
+          <span className="min-w-0 break-words text-left">{label}</span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-64 p-0">
+        <Command>
+          <CommandInput placeholder="Move to…" />
+          <CommandList>
+            <CommandEmpty>No matching project.</CommandEmpty>
+            {[...groups].map(([area, list]) => (
+              <CommandGroup key={area || "none"} heading={area || undefined}>
+                {list.map((b) => (
+                  <CommandItem
+                    key={b.id}
+                    value={`${b.name} ${b.id}`}
+                    onSelect={() => {
+                      setOpen(false);
+                      if (b.id !== task.bucketId) api.patchTask(task.id, { bucketId: b.id });
+                    }}
+                  >
+                    {b.isSystem ? <Inbox className="text-muted-foreground" aria-hidden /> : null}
+                    <span className="min-w-0 flex-1 break-words">{b.name}</span>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            ))}
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/** "› Design": the section inside the project, or No section. */
+function SectionCrumb({
+  task,
+  section,
+  sections,
+  canEdit,
+  api,
+}: {
+  task: Task;
+  section: { id: string; name: string } | null;
+  sections: { id: string; name: string }[];
+  canEdit: boolean;
+  api: TasksModuleApi;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild disabled={!canEdit}>
+        <button
+          type="button"
+          aria-label={`Section: ${section?.name ?? "No section"}. Move to another section`}
+          className={crumb}
+        >
+          <span className="min-w-0 break-words text-left">{section?.name ?? "No section"}</span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-56 p-0">
+        <Command>
+          <CommandInput placeholder="Section…" />
+          <CommandList>
+            <CommandEmpty>No matching section.</CommandEmpty>
+            <CommandGroup>
+              {sections.map((s) => (
+                <CommandItem
+                  key={s.id}
+                  value={`${s.name} ${s.id}`}
+                  onSelect={() => {
+                    setOpen(false);
+                    if (s.id !== task.sectionId) api.patchTask(task.id, { sectionId: s.id });
+                  }}
+                >
+                  <span className="min-w-0 flex-1 break-words">{s.name}</span>
+                </CommandItem>
+              ))}
+              <CommandItem
+                value="no section"
+                onSelect={() => {
+                  setOpen(false);
+                  if (task.sectionId) api.patchTask(task.id, { sectionId: null });
+                }}
+              >
+                No section
+              </CommandItem>
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -273,8 +435,6 @@ function QueueButton({
             type="button"
             variant={queued ? "secondary" : "ghost"}
             size="sm"
-            // Named by its visible text ("Queue" / "In queue") with the pressed
-            // state; the action and any claim are in the tooltip and the avatar.
             aria-pressed={queued}
             onClick={() => api.toggleQueue(task.id)}
             className="shrink-0 px-2"

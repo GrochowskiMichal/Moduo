@@ -97,6 +97,8 @@ export class ReferenceNode extends DecoratorNode<ReactNode> {
     const span = document.createElement("span");
     // A card is alone on its line; a link and a chip run with the text.
     span.className = this.__display === "card" ? "lexical-entity-ref block" : "lexical-entity-ref";
+    // What a fold counts below itself ("Show more · 2 tasks · 1 email", TV-U13).
+    span.dataset.entityType = this.__entityType;
     // The caret skips over it (like EmbedNode).
     span.contentEditable = "false";
     return span;
