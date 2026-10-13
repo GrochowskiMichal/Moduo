@@ -106,7 +106,10 @@ function trackWrites(page: Page) {
   return writes;
 }
 
-const panel = (page: Page) => page.locator("aside, [data-panel]").last();
+// The detail panel's Reopen (TV-P0). A listed Won't do row's status icon is
+// named "Reopen" too since TV-U10, so look in the right pane.
+const reopen = (page: Page) =>
+  page.getByTestId("tasks-right").getByRole("button", { name: "Reopen" });
 
 test("AC1.4 — a Won't do task stays reachable and reopens", async ({ page }) => {
   const t = await createTask(dev, { title: `Won't do me ${tag}`, bucketId: ws.inboxId });
@@ -117,7 +120,7 @@ test("AC1.4 — a Won't do task stays reachable and reopens", async ({ page }) =
   await page.getByRole("button", { name: "More actions" }).click();
   await page.getByRole("menuitem", { name: "Won’t do" }).click();
   await expect(page.getByRole("button", { name: WONT_DO_STATUS })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Reopen" })).toBeVisible();
+  await expect(reopen(page)).toBeVisible();
   await expect.poll(async () => (await taskById(t.id)).status).toBe("archived");
 
   // A deep link straight to the Won't do task opens it, with Reopen.
@@ -125,7 +128,7 @@ test("AC1.4 — a Won't do task stays reachable and reopens", async ({ page }) =
   await expect(page.getByRole("button", { name: WONT_DO_STATUS })).toBeVisible({
     timeout: 20_000,
   });
-  await page.getByRole("button", { name: "Reopen" }).click();
+  await reopen(page).click();
   await expect(page.getByRole("button", { name: "Status: To do" })).toBeVisible();
   await expect.poll(async () => (await taskById(t.id)).status).toBe("todo");
 });
@@ -152,7 +155,7 @@ test("AC1.4 — Won't do tasks are listed by Filter → Status (TV-U2)", async (
   // Listed once, it opens with TV-P0's Reopen.
   await page.getByRole("button", { name: gone.title }).click();
   await expect(page.getByRole("button", { name: WONT_DO_STATUS })).toBeVisible();
-  await page.getByRole("button", { name: "Reopen" }).click();
+  await reopen(page).click();
   await expect.poll(async () => (await taskById(gone.id)).status).toBe("todo");
   // Leave the shared dev workspace as it was.
   const at = new Date().toISOString();

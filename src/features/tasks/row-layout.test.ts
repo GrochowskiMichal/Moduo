@@ -2,15 +2,21 @@
 // shows, collapsing the empty ones) and the one date a row's column carries.
 
 import { describe, expect, it } from "@rstest/core";
+import { formatAge } from "../../lib/time-format";
 import { makeTask } from "./helpers";
-import type { Task } from "./model";
+import { isLate, type Task } from "./model";
 import {
+  columnWidths,
   DEFAULT_ROW_PROPERTIES,
+  fitColumns,
   formatShortDate,
+  handleLabel,
+  projectLabel,
   type RowColumnsContext,
   rowColumns,
   rowDate,
 } from "./row-layout";
+import { waitingLabelsOf } from "./ui/row-facts";
 
 function task(id: string, over: Partial<Task> = {}): Task {
   return {
@@ -174,5 +180,112 @@ describe("rowDate (U1-1: one date column)", () => {
     expect(scheduledShown?.description).toMatch(/^Scheduled .+ · Due .+$/);
     const dueShown = rowDate(task("a", { scheduledAt: at(14, 10), dueDate: at(12) }), now);
     expect(dueShown?.description).toMatch(/^Due .+ · Scheduled .+$/);
+  });
+});
+
+// TV-U10 — Detailed's columns, their widths, and which drop for room.
+describe("Detailed rows (TV-U10)", () => {
+  const detailed = (over: Partial<RowColumnsContext> = {}) =>
+    ctx({ rows: "detailed", taskKey: "MOD", isWaiting: (id) => id === "w", ...over });
+
+  it("adds handle, Project › Section, status, Due, Next session, waiting and updated", () => {
+    const cols = rowColumns(
+      [
+        task("a", { number: 7, dueDate: "2026-10-20T00:00:00.000Z" }),
+        task("w", { scheduledAt: "2026-10-21T09:00:00.000Z" }),
+      ],
+      detailed(),
+    );
+    expect(cols).toMatchObject({
+      handle: true,
+      project: true,
+      status: true,
+      due: true,
+      session: true,
+      waiting: true,
+      updated: true,
+      // Detailed's two date columns replace Standard's one.
+      date: false,
+    });
+  });
+
+  it("needs the workspace key and a numbered task for handles", () => {
+    expect(rowColumns([task("a", { number: 7 })], detailed({ taskKey: null })).handle).toBe(false);
+    expect(rowColumns([task("a")], detailed()).handle).toBe(false);
+    expect(handleLabel("MOD", 142)).toBe("MOD-142");
+    expect(handleLabel(null, 142)).toBeNull();
+    expect(projectLabel("Acme", "Design")).toBe("Acme › Design");
+    expect(projectLabel("Acme", null)).toBe("Acme");
+  });
+
+  it("sizes each column to its widest value, never narrower than its header", () => {
+    const widths = columnWidths([{ due: "Tomorrow", status: "In review" }, { due: "Oct 16" }], {
+      headers: true,
+    });
+    // "Tomorrow" (8) + its room (1); "In review" (9) + the icon's room (3).
+    expect(widths.due).toBe(9);
+    expect(widths.status).toBe(12);
+    // Nothing in view: the header label's width ("Updated").
+    expect(widths.updated).toBe(7);
+    // A long project name stops growing the column (it wraps in its cell).
+    expect(columnWidths([{ project: "x".repeat(80) }]).project).toBe(32);
+  });
+
+  it("drops whole columns, in order, as the centre narrows (research §1)", () => {
+    const cols = rowColumns(
+      [task("a", { number: 7, dueDate: "2026-10-20T00:00:00.000Z", scheduledAt: null })],
+      detailed(),
+    );
+    const widths = columnWidths([{ project: "Acme rebrand › Design", status: "In review" }], {
+      headers: true,
+    });
+    const wide = fitColumns(cols, widths, 1600, "detailed");
+    expect(wide.hidden).toBe(0);
+    const narrow = fitColumns(cols, widths, 460, "detailed");
+    expect(narrow.hidden).toBeGreaterThan(0);
+    // Updated goes first; Due never goes.
+    expect(narrow.updated).toBe(false);
+    expect(narrow.due).toBe(true);
+    // Standard drops nothing.
+    expect(fitColumns(cols, widths, 300, "standard")).toBe(cols);
+  });
+});
+
+describe("the List's facts (TV-U10)", () => {
+  const now = new Date(2026, 9, 13, 12, 0);
+
+  it("ages read short: now, minutes, hours, days, weeks, then the date", () => {
+    const ago = (ms: number) => new Date(now.getTime() - ms).toISOString();
+    expect(formatAge(ago(10_000), now)).toBe("now");
+    expect(formatAge(ago(5 * 60_000), now)).toBe("5m");
+    expect(formatAge(ago(3 * 3_600_000), now)).toBe("3h");
+    expect(formatAge(ago(2 * 86_400_000), now)).toBe("2d");
+    expect(formatAge(ago(15 * 86_400_000), now)).toBe("2w");
+    expect(formatAge(ago(60 * 86_400_000), now)).toMatch(/Aug|14/);
+  });
+
+  it("late is an open task past its due day, never Backlog or closed", () => {
+    const due = (over: Partial<Task>) => task("t", { dueOn: "2026-10-12", ...over });
+    expect(isLate(due({}), "2026-10-13")).toBe(true);
+    expect(isLate(due({}), "2026-10-12")).toBe(false);
+    expect(isLate(due({ status: "done" }), "2026-10-13")).toBe(false);
+    expect(isLate(due({ statusCategory: "backlog" }), "2026-10-13")).toBe(false);
+    expect(isLate(task("t"), "2026-10-13")).toBe(false);
+  });
+
+  it("waiting reads 'on Anna · 2d', the earliest first, with '+n' for more", () => {
+    const since = new Date(now.getTime() - 2 * 86_400_000).toISOString();
+    const later = new Date(now.getTime() - 3_600_000).toISOString();
+    const labels = waitingLabelsOf(
+      [
+        { taskId: "t1", kind: "person", ref: "u2", label: null, since },
+        { taskId: "t1", kind: "text", ref: null, label: "the printer", since: later },
+        { taskId: "t2", kind: "email", ref: null, label: null, since: later },
+      ],
+      (id) => (id === "u2" ? "Anna" : null),
+      now,
+    );
+    expect(labels.get("t1")).toBe("on Anna +1 · 2d");
+    expect(labels.get("t2")).toBe("on a reply · 1h");
   });
 });

@@ -1,7 +1,17 @@
 // The quiet marks rows and cards share (tasks-v2 §6, TV-U1): the counts after
 // a title, the bucket as dot + name, the one date, and the "N completed" line.
 
-import { CircleDashed, Clock, Hash, Inbox, ListChecks, ListTree, Repeat } from "lucide-react";
+import {
+  CircleDashed,
+  Clock,
+  Hash,
+  Hourglass,
+  Inbox,
+  ListChecks,
+  ListTree,
+  MessageSquare,
+  Repeat,
+} from "lucide-react";
 import type { ReactNode } from "react";
 import { MetaCount, MetaCounts } from "../../../components/ui/meta-count";
 import { NavRowDot } from "../../../components/ui/nav-row";
@@ -46,39 +56,70 @@ function Tip({ label, children }: { label: string; children: ReactNode }) {
 }
 
 /**
- * The counts right after a title, in their fixed order: `# tags` · subtasks
- * done/total · blocked · repeats. Muted, each hidden at zero. Tags are a count
- * here, never chips (U1-2); their names are in the tooltip. Attachments (📎)
- * and comments (💬) join between tags and subtasks when their data lands
- * (AT-3, TV-U3). The facts are the row's own (row-facts.ts, TV-D11b).
+ * The counts right after a title, in their fixed order (tasks-v3 §4): tags ·
+ * comments · subtasks done/total · blocked · waiting · repeats · waiting to
+ * sync. Muted, each hidden at zero. Tags are a count, never chips (U1-2), with
+ * their names in the tooltip; Detailed rows name up to two (`tagNames`).
+ * Attachments (📎) join after the tags with AT-3. The facts are the row's own
+ * (row-facts.ts, TV-D11b).
  */
-type CountsFacts = Pick<TaskFacts, "tags" | "progress" | "blockedLabel">;
+type CountsFacts = Pick<TaskFacts, "tags" | "progress" | "blockedLabel"> &
+  Partial<Pick<TaskFacts, "comments" | "waiting" | "pending">>;
 
 /** Whether `TaskCounts` has anything to show for this task. */
-export function hasTaskCounts(task: Task, facts: CountsFacts): boolean {
+export function hasTaskCounts(task: Task, facts: CountsFacts, opts: CountsOptions = {}): boolean {
   return (
     facts.tags.length > 0 ||
+    (facts.comments ?? 0) > 0 ||
     (facts.progress?.total ?? 0) > 0 ||
     facts.blockedLabel !== null ||
-    !!task.recurrence
+    (!!facts.waiting && !opts.waitingColumn) ||
+    !!task.recurrence ||
+    !!facts.pending
   );
 }
+
+type CountsOptions = {
+  /** Name up to two tags, then "+n" (Detailed rows). */
+  tagNames?: boolean;
+  /** The waiting line has a column of its own (Detailed): no mark here. */
+  waitingColumn?: boolean;
+};
+
+/** How many tag names a Detailed row spells out before "+n". */
+const TAG_NAMES_SHOWN = 2;
 
 export function TaskCounts({
   task,
   facts,
   className,
+  ...opts
 }: {
   task: Task;
   facts: CountsFacts;
   className?: string;
-}) {
-  if (!hasTaskCounts(task, facts)) return null;
-  const { tags, progress, blockedLabel } = facts;
+} & CountsOptions) {
+  if (!hasTaskCounts(task, facts, opts)) return null;
+  const { tags, progress, blockedLabel, comments = 0, waiting, pending } = facts;
+  const tagList = tags.map((t) => `#${t.name}`).join(" ");
   return (
     <MetaCounts className={className}>
-      {tags.length > 0 ? (
-        <Tip label={tags.map((t) => `#${t.name}`).join(" ")}>
+      {tags.length > 0 && opts.tagNames ? (
+        <Tip label={tagList}>
+          <span
+            data-slot="row-tag-names"
+            className="inline-flex shrink-0 items-center gap-1.5 font-sans text-xs whitespace-nowrap text-muted-foreground"
+          >
+            {tags.slice(0, TAG_NAMES_SHOWN).map((t) => (
+              <span key={t.id}>#{t.name}</span>
+            ))}
+            {tags.length > TAG_NAMES_SHOWN ? (
+              <span className="tabular-nums">+{tags.length - TAG_NAMES_SHOWN}</span>
+            ) : null}
+          </span>
+        </Tip>
+      ) : tags.length > 0 ? (
+        <Tip label={tagList}>
           <MetaCount
             icon={Hash}
             count={tags.length}
@@ -86,6 +127,11 @@ export function TaskCounts({
           />
         </Tip>
       ) : null}
+      <MetaCount
+        icon={MessageSquare}
+        count={comments}
+        label={(n) => (n === 1 ? "1 comment" : `${n} comments`)}
+      />
       {progress && progress.total > 0 ? (
         <MetaCount
           icon={ListTree}
@@ -97,10 +143,34 @@ export function TaskCounts({
       {blockedLabel !== null ? (
         <BlockedMarker label={blockedLabel} iconClassName="size-icon-xs" />
       ) : null}
+      {waiting && !opts.waitingColumn ? (
+        <Tip label={`Waiting ${waiting}`}>
+          <span
+            className="flex items-center text-muted-foreground"
+            role="img"
+            aria-label={`Waiting ${waiting}`}
+          >
+            <Hourglass className="size-icon-xs" aria-hidden />
+          </span>
+        </Tip>
+      ) : null}
       {task.recurrence ? (
         <Tip label={recurrenceLabel(task.recurrence)}>
           <span className="flex items-center text-muted-foreground" role="img" aria-label="Repeats">
             <Repeat className="size-icon-xs" aria-hidden />
+          </span>
+        </Tip>
+      ) : null}
+      {pending ? (
+        // Offline (default g): this capture or check-off waits on the device.
+        <Tip label="Waiting to sync">
+          <span
+            data-slot="row-pending"
+            className="flex items-center text-muted-foreground"
+            role="img"
+            aria-label="Waiting to sync"
+          >
+            <Clock className="size-icon-xs" aria-hidden />
           </span>
         </Tip>
       ) : null}

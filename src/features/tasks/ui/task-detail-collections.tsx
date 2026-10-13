@@ -3,15 +3,19 @@
 // - Subtasks "2/5": a row is toggle · title · its due · its assignee when
 //   it's someone else; clicking one opens its own details in the panel
 //   ("← parent", call 65a); "+" or ⏎ at the end of the last one adds; done
-//   ones stay in place, struck through.
+//   ones stay in place, struck through; a drag or ⌥⇧↑/↓ reorders them
+//   (TV-U10: a parent's subtasks keep their own order in every view).
 // - Waiting on: people or a typed note, each with "since" (a list, not a
 //   property: default q).
 // - Blocked by / Blocks: tasks, one dependency store (TV-D8).
 // - Linked: reference cards (RF-1), folded after five.
 
 import { isClosedTask } from "@contracts/vocabularies";
+import { closestCenter, DndContext, type DragEndEvent, type Modifier } from "@dnd-kit/core";
+import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { CircleDashed, Hourglass, Plus, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import type { EntityRef } from "@/lib/entity-links";
@@ -28,6 +32,7 @@ import {
   CommandSeparator,
 } from "../../../components/ui/command";
 import { CompleteToggle } from "../../../components/ui/complete-toggle";
+import { DRAG_SOURCE } from "../../../components/ui/drag-visuals";
 import { IconButton } from "../../../components/ui/icon-button";
 import { Input } from "../../../components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
@@ -37,10 +42,13 @@ import { EntityLinkPicker } from "../../contacts/ui/entity-link-picker";
 import { Reference } from "../../spine/references/ui/reference";
 import type { HubRow } from "../../spine/rollup";
 import { useAssignees } from "../assignees";
+import { onBreakDown, takeBreakDown } from "../break-down";
 import { wouldCreateCycle } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { Task, TaskWaitingEntry } from "../model";
+import { subtaskPositionAt } from "../subtask-order";
 import { AssigneeAvatar } from "./assignee-avatar";
+import { useTaskDndSensors } from "./dnd/task-dnd";
 
 // ── Subtasks ──────────────────────────────────────────────────────────────────
 
@@ -59,6 +67,21 @@ export function SubtasksSection({
   const [draft, setDraft] = useState("");
   const subtasks = api.subtasksByParent.get(task.id) ?? [];
   const progress = api.subtaskProgressByTask.get(task.id);
+  // A late row's "Break down" (TV-U10) opens the subtask line here, whether
+  // this panel shows the task already or is about to.
+  const taskId = task.id;
+  useEffect(() => {
+    if (!canEdit) return;
+    const take = () => {
+      if (takeBreakDown(taskId)) setAdding(true);
+    };
+    take();
+    return onBreakDown(take);
+  }, [taskId, canEdit]);
+
+  // A drag or ⌥⇧↑/↓ moves a subtask among its siblings (TV-U10), with the
+  // drop's Undo. The pointer only: the keys are the keyboard's way.
+  const sensors = useTaskDndSensors({ keyboard: false });
 
   if (subtasks.length === 0 && !canEdit) return null;
 
@@ -66,6 +89,19 @@ export function SubtasksSection({
     const next = draft.trim();
     if (next) api.addSubtask(task.id, next);
     setDraft("");
+  };
+  const moveTo = (subtaskId: string, toIndex: number) => {
+    const from = subtasks.findIndex((s) => s.id === subtaskId);
+    const position = subtaskPositionAt(api.tasks, subtasks, subtaskId, toIndex);
+    if (position === null) return;
+    void api.dropTask({ taskId: subtaskId, position }, toIndex < from ? "Moved up" : "Moved down");
+  };
+  const onDragEnd = ({ active, over }: DragEndEvent) => {
+    if (!over || active.id === over.id) return;
+    moveTo(
+      String(active.id),
+      subtasks.findIndex((s) => s.id === over.id),
+    );
   };
 
   return (
@@ -80,20 +116,34 @@ export function SubtasksSection({
         }
       />
       {subtasks.length > 0 ? (
-        <div className="flex flex-col">
-          {subtasks.map((subtask, i) => (
-            <SubtaskRow
-              key={subtask.id}
-              subtask={subtask}
-              parent={task}
-              canEdit={canEdit}
-              last={i === subtasks.length - 1}
-              onOpen={() => onOpenTask(subtask.id)}
-              onAddAfter={() => setAdding(true)}
-              api={api}
-            />
-          ))}
-        </div>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          modifiers={VERTICAL_ONLY}
+          onDragEnd={onDragEnd}
+        >
+          <SortableContext
+            items={subtasks.map((s) => s.id)}
+            strategy={verticalListSortingStrategy}
+            disabled={!canEdit}
+          >
+            <div className="flex flex-col">
+              {subtasks.map((subtask, i) => (
+                <SubtaskRow
+                  key={subtask.id}
+                  subtask={subtask}
+                  parent={task}
+                  canEdit={canEdit}
+                  last={i === subtasks.length - 1}
+                  onOpen={() => onOpenTask(subtask.id)}
+                  onAddAfter={() => setAdding(true)}
+                  onMove={(delta) => moveTo(subtask.id, i + delta)}
+                  api={api}
+                />
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
       ) : null}
       {canEdit && adding ? (
         <Input
@@ -124,6 +174,9 @@ export function SubtasksSection({
   );
 }
 
+/** A dragged subtask moves up and down only. */
+const VERTICAL_ONLY: Modifier[] = [({ transform }) => ({ ...transform, x: 0 })];
+
 function SubtaskRow({
   subtask,
   parent,
@@ -131,6 +184,7 @@ function SubtaskRow({
   last,
   onOpen,
   onAddAfter,
+  onMove,
   api,
 }: {
   subtask: Task;
@@ -139,9 +193,17 @@ function SubtaskRow({
   last: boolean;
   onOpen: () => void;
   onAddAfter: () => void;
+  /** ⌥⇧↑/↓: one place up (-1) or down (1) among its siblings. */
+  onMove: (delta: 1 | -1) => void;
   api: TasksModuleApi;
 }) {
   const { byId } = useAssignees();
+  const openRef = useRef<HTMLButtonElement>(null);
+  // The whole row drags (past a few pixels, so a click still opens or checks).
+  const { setNodeRef, listeners, transform, transition, isDragging } = useSortable({
+    id: subtask.id,
+    disabled: !canEdit,
+  });
   const done = subtask.status === "done";
   const closed = isClosedTask(subtask);
   // The avatar only when it isn't the parent's assignee (research §11).
@@ -150,9 +212,19 @@ function SubtaskRow({
       ? byId(subtask.assigneeId)
       : null;
   return (
-    <div className="group flex min-h-(--row-h) items-center gap-2 rounded-md px-1 transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover">
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      {...(canEdit ? listeners : {})}
+      data-subtask-row={subtask.id}
+      className={cn(
+        "group flex min-h-(--row-h) items-center gap-2 rounded-md px-1 transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover",
+        isDragging && ["relative z-10", DRAG_SOURCE],
+      )}
+    >
       <CompleteToggle done={done} disabled={!canEdit} onToggle={() => api.toggleDone(subtask)} />
       <button
+        ref={openRef}
         type="button"
         onClick={onOpen}
         onKeyDown={(e) => {
@@ -160,8 +232,17 @@ function SubtaskRow({
           if (e.key === "Enter" && e.shiftKey && last && canEdit) {
             e.preventDefault();
             onAddAfter();
+            return;
+          }
+          // ⌥⇧↑/↓ moves it, and the focus stays on it in its new place.
+          if (canEdit && e.altKey && e.shiftKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+            e.preventDefault();
+            e.stopPropagation();
+            onMove(e.key === "ArrowUp" ? -1 : 1);
+            requestAnimationFrame(() => openRef.current?.focus());
           }
         }}
+        aria-keyshortcuts={canEdit ? "Alt+Shift+ArrowUp Alt+Shift+ArrowDown" : undefined}
         aria-label={`Open subtask: ${subtask.title || "Untitled"}`}
         className={cn(
           // Titles wrap in the panel, never truncate (AC1.16).

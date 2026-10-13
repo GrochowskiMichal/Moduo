@@ -8,8 +8,10 @@ import {
   useState,
 } from "react";
 import { attachFocusUser } from "../features/focus/engine";
+import { attachRunUser } from "../features/focus/run";
 import { attachTagUser } from "../features/tags/store";
 import { forgetCaptureDrafts, keepCaptureDraftsOf } from "../features/tasks/capture/capture-draft";
+import { clearTemplates } from "../features/tasks/templates/templates-store";
 import { forgetRememberedWorkspaces } from "../features/workspaces/remembered-workspaces";
 import { Analytics, setAnalyticsUser } from "../lib/analytics";
 import { sendDeviceTimeZone } from "../lib/device-time-zone";
@@ -177,6 +179,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
         setPlanTier("free");
         // Kept capture drafts never outlive a sign-out on this device (TV-U14).
         forgetCaptureDrafts();
+        // Nor does the template list read this session (TV-D15).
+        clearTemplates();
         // Analytics opts out and forgets them. `app_signed_out` is tracked in signOut(),
         // only when the person signs out: one auth-js does on its own, like a refused
         // refresh after the account was deleted elsewhere, must not send an event that
@@ -220,6 +224,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
     // The push worker shows a notice's words only to who's signed in (TV-D12).
     void postPushUser(sessionUserId);
   }, [loading, sessionUserId]);
+  // The session's shared record follows the engine, after it (TV-F6, run.ts).
+  useEffect(() => {
+    if (loading) return;
+    attachRunUser(sessionUserId, rt);
+  }, [loading, sessionUserId, rt]);
 
   const signOut = async () => {
     if (!rt) return;
@@ -235,6 +244,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     void wipeSyncCopies();
     forgetRememberedWorkspaces();
     forgetCaptureDrafts();
+    clearTemplates();
     setSession(null);
   };
 

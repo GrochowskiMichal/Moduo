@@ -6,7 +6,12 @@
 import { CheckSquare } from "lucide-react";
 import type { CaptureTypeDef } from "../../lib/capture-registry";
 import { CAPTURE_ROUTES, canWriteRoute } from "../spine/capture-command";
+import { registerCaptureTemplates } from "./capture/capture-hooks";
 import { TaskCaptureBody } from "./capture/task-capture";
+import { taskTemplatesForCapture } from "./templates/capture-provider";
+
+// TV-D15: `/template` and More → Template… (shown once the runtime has templates).
+registerCaptureTemplates(taskTemplatesForCapture);
 
 const TASK_ROUTE = CAPTURE_ROUTES.find((r) => r.target === "task");
 

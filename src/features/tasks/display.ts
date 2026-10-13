@@ -11,16 +11,34 @@ import type { FilterCondition } from "../../components/ui/filter-model";
 import { viewPrefsKey } from "../../lib/view-prefs";
 import type { CompletedMode } from "./completed";
 import { sanitizeTaskFilters } from "./filters";
-import { GROUP_BYS, type GroupBy, groupsByBucket, LEVEL_ORDER } from "./helpers";
+import {
+  GROUP_BYS,
+  type GroupBy,
+  groupsByBucket,
+  isProjectScope,
+  LEVEL_ORDER,
+  STATUS_ORDER,
+} from "./helpers";
 import type { Task } from "./model";
 import { DEFAULT_ROW_PROPERTIES, type RowPreset, type RowProperty } from "./row-layout";
+import { statusKeyOf } from "./statuses";
 
 export type TaskLayout = "list" | "board" | "timeline";
 /** The Board's Group by: a drop on a group sets its field. Assignee,
  *  priority and the rest join with the Board rebuild (TV-U11), on the drop
  *  writes TV-U4 built; "bucket" is Project. */
 export type BoardGroupBy = "status" | "bucket";
-export type TaskOrder = "manual" | "due" | "scheduled" | "priority" | "created" | "updated";
+export type TaskOrder =
+  | "manual"
+  | "due"
+  | "scheduled"
+  | "priority"
+  | "created"
+  | "updated"
+  | "title"
+  | "status";
+/** Which way a sort runs (a Detailed header clicked twice, TV-U10). */
+export type OrderDirection = "asc" | "desc";
 export type SubtaskMode = "nested" | "flat";
 /** Display → Rows (tasks-v3 §4): which facts a row carries. Height is Density's. */
 export type { RowPreset };
@@ -32,6 +50,9 @@ export type TasksDisplay = {
   /** The Board's Group by (it always opens by status, call 86). */
   boardGroup: BoardGroupBy;
   order: TaskOrder;
+  /** The sort's direction; "asc" is each order's natural one (dates
+   *  earliest first, Created/Updated newest first). Manual ignores it. */
+  orderDir: OrderDirection;
   completed: CompletedMode;
   subtasks: SubtaskMode;
   rows: RowPreset;
@@ -46,6 +67,7 @@ export const TASKS_DISPLAY_DEFAULTS: TasksDisplay = {
   group: "none",
   boardGroup: "status",
   order: "manual",
+  orderDir: "asc",
   completed: "hidden",
   subtasks: "nested",
   rows: "standard",
@@ -56,14 +78,16 @@ export const TASKS_DISPLAY_DEFAULTS: TasksDisplay = {
  * A scope's defaults:
  * - My tasks groups by status, In progress first (call 84);
  * - All groups by project (its tasks come from every project);
- * - a project, the Inbox and the Queue don't group (a project's default
- *   becomes Section once sections exist, TV-D10).
+ * - a project groups by Section (TV-U10): a plain list until it has
+ *   sections, then a group per section;
+ * - the Inbox and the Queue don't group.
  */
 export function tasksDisplayDefaults(scope: string): TasksDisplay {
   if (scope === "mine") return { ...TASKS_DISPLAY_DEFAULTS, group: "status" };
   // Upcoming (TV-U6's interim until TV-U15): by date, Earlier · Today · …
   if (scope === "upcoming") return { ...TASKS_DISPLAY_DEFAULTS, group: "date", order: "due" };
   if (groupsByBucket(scope)) return { ...TASKS_DISPLAY_DEFAULTS, group: "bucket" };
+  if (isProjectScope(scope)) return { ...TASKS_DISPLAY_DEFAULTS, group: "section" };
   return { ...TASKS_DISPLAY_DEFAULTS };
 }
 
@@ -86,17 +110,37 @@ const LAYOUT_CONTROL: DisplayControl<TasksDisplay> = {
 
 /** Group by's choices, in the menu's order (default l; never Tag or Energy). */
 export const GROUP_LABELS: Record<GroupBy, string> = {
+  section: "Section",
   status: "Status",
   priority: "Priority",
   assignee: "Assignee",
+  team: "Team",
   date: "Date",
   bucket: "Project",
   none: "None",
 };
 
-function groupControl(scope: string): DisplayControl<TasksDisplay> {
-  // Grouping by project only means something across projects (All, My tasks).
-  const groups = GROUP_BYS.filter((g) => g !== "bucket" || groupsByBucket(scope));
+/** What a scope's Group by can offer beyond the scope itself. */
+export type GroupChoices = {
+  /** The workspace has teams: Team is offered. */
+  teams: boolean;
+};
+
+/** The sanitiser keeps every grouping a scope could offer (teams may load late). */
+const ALL_CHOICES: GroupChoices = { teams: true };
+
+function groupControl(
+  scope: string,
+  choices: GroupChoices = ALL_CHOICES,
+): DisplayControl<TasksDisplay> {
+  // Grouping by project only means something across projects (All, My
+  // tasks); by section only inside one project; by team once teams exist.
+  const groups = GROUP_BYS.filter(
+    (g) =>
+      (g !== "bucket" || groupsByBucket(scope)) &&
+      (g !== "section" || isProjectScope(scope)) &&
+      (g !== "team" || choices.teams),
+  );
   return {
     type: "select",
     id: "group",
@@ -133,6 +177,8 @@ const ORDER_CONTROL: DisplayControl<TasksDisplay> = {
     { value: "priority", label: "Priority" },
     { value: "created", label: "Created" },
     { value: "updated", label: "Updated" },
+    { value: "title", label: "Title" },
+    { value: "status", label: "Status" },
   ],
 };
 
@@ -181,6 +227,7 @@ const PROPERTIES_CONTROL: DisplayControl<TasksDisplay> = {
 export function tasksDisplayControls(
   scope: string,
   layout: TaskLayout = "list",
+  choices: GroupChoices = ALL_CHOICES,
 ): DisplayControl<TasksDisplay>[] {
   if (layout === "timeline") return [LAYOUT_CONTROL];
   if (scope === "today") {
@@ -201,7 +248,7 @@ export function tasksDisplayControls(
   }
   return [
     LAYOUT_CONTROL,
-    groupControl(scope),
+    groupControl(scope, choices),
     ORDER_CONTROL,
     COMPLETED_CONTROL,
     SUBTASKS_CONTROL,
@@ -233,6 +280,8 @@ export function sanitizeTasksView(
   scope: string,
 ): TasksViewPrefs {
   const display = sanitizeDisplayValue(raw, scopeControls(scope), displayOf(defaults));
+  // The direction has no control of its own (the Detailed headers set it).
+  if (display.orderDir !== "asc" && display.orderDir !== "desc") display.orderDir = "asc";
   const stored = raw && typeof raw === "object" ? (raw as Record<string, unknown>).filters : null;
   return { ...display, filters: sanitizeTaskFilters(stored) };
 }
@@ -260,40 +309,84 @@ function time(iso: string | null): number | null {
   return Number.isNaN(t) ? null : t;
 }
 
-/** Earliest first, no date last. */
-function byDate(a: string | null, b: string | null): number {
-  const x = time(a);
-  const y = time(b);
-  if (x === null || y === null) return x === y ? 0 : x === null ? 1 : -1;
-  return x - y;
-}
+const STATUS_RANK: Record<string, number> = Object.fromEntries(
+  STATUS_ORDER.map((key, i) => [key, i]),
+);
 
-/** Newest first. */
-function byNewest(a: string, b: string): number {
-  return (time(b) ?? 0) - (time(a) ?? 0);
-}
+const TITLE_COLLATOR = new Intl.Collator(undefined, { sensitivity: "base", numeric: true });
 
-const COMPARATORS: Record<Exclude<TaskOrder, "manual">, (a: Task, b: Task) => number> = {
-  due: (a, b) => byDate(a.dueDate, b.dueDate),
-  scheduled: (a, b) => byDate(a.scheduledAt, b.scheduledAt),
-  priority: (a, b) =>
-    (a.priority ? PRIORITY_RANK[a.priority] : LEVEL_ORDER.length) -
-    (b.priority ? PRIORITY_RANK[b.priority] : LEVEL_ORDER.length),
-  created: (a, b) => byNewest(a.createdAt, b.createdAt),
-  updated: (a, b) => byNewest(a.updatedAt, b.updatedAt),
+/**
+ * Each order's sort key in its natural direction (smaller first); null = no
+ * value, which sorts last whichever way the sort runs.
+ */
+const SORT_KEYS: Record<Exclude<TaskOrder, "manual" | "title">, (t: Task) => number | null> = {
+  due: (t) => time(t.dueDate),
+  scheduled: (t) => time(t.scheduledAt),
+  priority: (t) => (t.priority ? (PRIORITY_RANK[t.priority] ?? null) : null),
+  // Newest first.
+  created: (t) => {
+    const x = time(t.createdAt);
+    return x === null ? null : -x;
+  },
+  updated: (t) => {
+    const x = time(t.updatedAt);
+    return x === null ? null : -x;
+  },
+  status: (t) => STATUS_RANK[statusKeyOf(t)] ?? null,
 };
+
+function compareBy(order: Exclude<TaskOrder, "manual">, dir: OrderDirection) {
+  const sign = dir === "desc" ? -1 : 1;
+  if (order === "title") {
+    return (a: Task, b: Task) => {
+      const x = a.title.trim();
+      const y = b.title.trim();
+      // Untitled ones last.
+      if (!x || !y) return x === y ? 0 : x ? -1 : 1;
+      return sign * TITLE_COLLATOR.compare(x, y);
+    };
+  }
+  const key = SORT_KEYS[order];
+  return (a: Task, b: Task) => {
+    const x = key(a);
+    const y = key(b);
+    if (x === null || y === null) return x === y ? 0 : x === null ? 1 : -1;
+    return sign * (x - y);
+  };
+}
 
 /**
  * Orders tasks for Display → Order by. Manual keeps the incoming (position)
  * order; every other order is stable, so ties keep the manual order. Dates
- * run earliest first with no date last, priority high to none, and Created /
- * Updated newest first.
+ * run earliest first, priority high to none, Created / Updated newest first,
+ * titles A to Z, statuses in the List's order (In progress first); `desc`
+ * turns each around, and a task without the value sorts last either way.
  */
-export function orderTasks<T extends Task>(tasks: readonly T[], order: TaskOrder): T[] {
+export function orderTasks<T extends Task>(
+  tasks: readonly T[],
+  order: TaskOrder,
+  dir: OrderDirection = "asc",
+): T[] {
   if (order === "manual") return [...tasks];
-  const compare = COMPARATORS[order];
+  const compare = compareBy(order, dir);
   return tasks
     .map((task, index) => ({ task, index }))
     .sort((a, b) => compare(a.task, b.task) || a.index - b.index)
     .map(({ task }) => task);
+}
+
+/**
+ * A Detailed column header clicked (research §3): sorted by another column →
+ * this one, ascending; ascending → descending; descending → back to the
+ * view's own order (its default, Manual in a project).
+ */
+export function nextHeaderSort(
+  current: { order: TaskOrder; orderDir: OrderDirection },
+  column: Exclude<TaskOrder, "manual">,
+  viewDefault: TaskOrder,
+): { order: TaskOrder; orderDir: OrderDirection } {
+  if (current.order !== column) return { order: column, orderDir: "asc" };
+  if (current.orderDir === "asc") return { order: column, orderDir: "desc" };
+  // A view that sorts by this column anyway (Upcoming by due) just turns back.
+  return { order: viewDefault, orderDir: "asc" };
 }

@@ -221,6 +221,59 @@ export type TaskTimeStatus = (typeof TASK_TIME_STATUSES)[number];
 export const taskTimeStatusSchema = z.enum(TASK_TIME_STATUSES);
 
 // ---------------------------------------------------------------------------
+// Focus runs (TV-F6, salvaged from #323) — mirrors focus_runs' CHECKs: status
+// and phase in 20261008235243_focus_runs, the timer (`mode`) in the TV-F6
+// re-cut (*_focus_runs_v3), which also checks focus_op_run_start's p_mode.
+// ---------------------------------------------------------------------------
+
+/** A run is going, paused, or over (one open run per person). */
+export const FOCUS_RUN_STATUSES = ["running", "paused", "ended"] as const;
+export type FocusRunStatus = (typeof FOCUS_RUN_STATUSES)[number];
+export const focusRunStatusSchema = z.enum(FOCUS_RUN_STATUSES);
+export function isFocusRunStatus(value: unknown): value is FocusRunStatus {
+  return typeof value === "string" && (FOCUS_RUN_STATUSES as readonly string[]).includes(value);
+}
+/** Lax read: an unknown status reads as ended (a run nobody can act on). */
+export function normalizeFocusRunStatus(input: unknown): FocusRunStatus {
+  return isFocusRunStatus(input) ? input : "ended";
+}
+export function parseFocusRunStatus(input: unknown): SafeParseResult<FocusRunStatus> {
+  return parseOrError(focusRunStatusSchema, input);
+}
+
+/** Focus's Timer (REPLAN 62a): the pill on the task (Per task, the default),
+ *  one rhythm for the session (Pomodoro; time still goes to each task), or no
+ *  clock and nothing recorded (Off). Changeable mid-run. */
+export const FOCUS_TIMER_MODES = ["per_task", "pomodoro", "off"] as const;
+export type FocusTimerMode = (typeof FOCUS_TIMER_MODES)[number];
+export const focusTimerModeSchema = z.enum(FOCUS_TIMER_MODES);
+export function isFocusTimerMode(value: unknown): value is FocusTimerMode {
+  return typeof value === "string" && (FOCUS_TIMER_MODES as readonly string[]).includes(value);
+}
+/** Lax read: an unknown timer reads as the default, Per task. */
+export function normalizeFocusTimerMode(input: unknown): FocusTimerMode {
+  return isFocusTimerMode(input) ? input : "per_task";
+}
+export function parseFocusTimerMode(input: unknown): SafeParseResult<FocusTimerMode> {
+  return parseOrError(focusTimerModeSchema, input);
+}
+
+/** The pomodoro phase a run is in (Per task and Off are always `work`). */
+export const FOCUS_RUN_PHASES = ["work", "break", "long_break"] as const;
+export type FocusRunPhase = (typeof FOCUS_RUN_PHASES)[number];
+export const focusRunPhaseSchema = z.enum(FOCUS_RUN_PHASES);
+export function isFocusRunPhase(value: unknown): value is FocusRunPhase {
+  return typeof value === "string" && (FOCUS_RUN_PHASES as readonly string[]).includes(value);
+}
+/** Lax read: an unknown phase reads as work. */
+export function normalizeFocusRunPhase(input: unknown): FocusRunPhase {
+  return isFocusRunPhase(input) ? input : "work";
+}
+export function parseFocusRunPhase(input: unknown): SafeParseResult<FocusRunPhase> {
+  return parseOrError(focusRunPhaseSchema, input);
+}
+
+// ---------------------------------------------------------------------------
 // Tasks v3 structure (TV-D10) — mirrors buckets.status in
 // 20261010180000_areas_projects_sections, and task_reminders.kind and
 // task_waiting.kind in 20261010181000_task_sessions_reminders_waiting.
@@ -924,6 +977,42 @@ export function parseCommentReaction(input: unknown): SafeParseResult<CommentRea
 /** Lax read: a reaction this build doesn't know is left out (null), never shown wrong. */
 export function normalizeCommentReaction(input: unknown): CommentReaction | null {
   return isCommentReaction(input) ? input : null;
+}
+
+// ---------------------------------------------------------------------------
+// Templates (TV-D15, REPLAN 9 and 79) — mirrors the op guards in
+// 20261013160000_templates.sql. A template is a task template or a project
+// template (two tables, one `templates_op_update(…, p_kind, …)`); what a
+// template's task keeps a link to is a lasting thing only: a note or a
+// contact (emails and events belong to one run of the work).
+// ---------------------------------------------------------------------------
+
+export const TEMPLATE_KINDS = ["task", "project"] as const;
+export type TemplateKind = (typeof TEMPLATE_KINDS)[number];
+export const templateKindSchema = z.enum(TEMPLATE_KINDS);
+export function isTemplateKind(value: unknown): value is TemplateKind {
+  return typeof value === "string" && (TEMPLATE_KINDS as readonly string[]).includes(value);
+}
+export function parseTemplateKind(input: unknown): SafeParseResult<TemplateKind> {
+  return parseOrError(templateKindSchema, input);
+}
+/** Lax read: a kind this build doesn't know is left out (null). */
+export function normalizeTemplateKind(input: unknown): TemplateKind | null {
+  return isTemplateKind(input) ? input : null;
+}
+
+export const TEMPLATE_LINK_TYPES = ["note", "contact"] as const;
+export type TemplateLinkType = (typeof TEMPLATE_LINK_TYPES)[number];
+export const templateLinkTypeSchema = z.enum(TEMPLATE_LINK_TYPES);
+export function isTemplateLinkType(value: unknown): value is TemplateLinkType {
+  return typeof value === "string" && (TEMPLATE_LINK_TYPES as readonly string[]).includes(value);
+}
+export function parseTemplateLinkType(input: unknown): SafeParseResult<TemplateLinkType> {
+  return parseOrError(templateLinkTypeSchema, input);
+}
+/** Lax read: a link to anything else is dropped (null). */
+export function normalizeTemplateLinkType(input: unknown): TemplateLinkType | null {
+  return isTemplateLinkType(input) ? input : null;
 }
 
 // ---------------------------------------------------------------------------

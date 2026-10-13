@@ -49,6 +49,7 @@ import {
   usePreferencesValue,
 } from "../../../lib/preferences";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
+import { useWorkspaceStore } from "../../../lib/sync/react";
 import { undoToast } from "../../../lib/undo-toast";
 import { HubDropZone } from "../../contacts/ui/hub-drop-zone";
 import { consumeFocusViewRequest, FOCUS_VIEW_REQUEST_EVENT } from "../../focus/view-request";
@@ -70,7 +71,7 @@ import { createLinkWithToast } from "../../spine/ui/drop-link-toast";
 import { WorkspaceContext } from "../../workspaces/workspace-context";
 import { useAssignees } from "../assignees";
 import { myTasksScope, openCount, resolveDefaultSelection, showsMyTasks } from "../default-view";
-import type { TaskLayout } from "../display";
+import { nextHeaderSort, type TaskLayout, tasksDisplayDefaults } from "../display";
 import {
   asRailDropTarget,
   isSideDroppable,
@@ -83,11 +84,13 @@ import {
 } from "../dnd/rail-drop";
 import { type CaptureSeed, showsArchived, showsBacklog, statusesLetThrough } from "../filters";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
+import type { GroupAdd } from "../list-group-add";
 import { type Bucket, isDrifted, PRIVATE_PROJECT_LABEL, type Task } from "../model";
 import { showsSortedNote, sortedByLabel } from "../order";
 import { resolveTasksDeepLink, taskIdForHandle } from "../search";
 import { projectDeleteSummary, projectOpenWork } from "../sidebar";
 import { STATUS_KEY_LABELS, type StatusKey } from "../statuses";
+import { useTemplateActions } from "../templates/ui/use-template-actions";
 import { sanitizeTimelineZoom, type TimelineZoom } from "../timeline-geometry";
 import { ArchivedProjectBanner, ArchivedProjectsView } from "./archived-projects-view";
 import {
@@ -96,6 +99,7 @@ import {
   BucketRail,
   parseCollapsedSections,
   type TasksMode,
+  TEMPLATES_SELECTION,
   TRASH_SELECTION,
   UPCOMING_SELECTION,
 } from "./bucket-rail";
@@ -318,7 +322,12 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   // Remember where you were, so the next open lands back on it (REPLAN 30);
   // Archived projects and Recently deleted aren't places to reopen.
   useEffect(() => {
-    if (selection === ARCHIVED_SELECTION || selection === TRASH_SELECTION) return;
+    if (
+      selection === ARCHIVED_SELECTION ||
+      selection === TRASH_SELECTION ||
+      selection === TEMPLATES_SELECTION
+    )
+      return;
     if (api.archivedBuckets.some((b) => b.id === selection)) return;
     writeLS(workspaceId, "lastBucket", selection);
   }, [workspaceId, selection, api.archivedBuckets]);
@@ -379,7 +388,8 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       selection === "today" ||
       selection === UPCOMING_SELECTION ||
       selection === ARCHIVED_SELECTION ||
-      selection === TRASH_SELECTION
+      selection === TRASH_SELECTION ||
+      selection === TEMPLATES_SELECTION
     )
       return;
     if (selection === "mine") {
@@ -443,7 +453,18 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   // the one selected.
   const linkedTaskId =
     revealRequest && revealRequest.id === selectedTaskId ? revealRequest.id : null;
-  const tasksDisplay = useTasksDisplay(workspaceId, selection, tasks, linkedTaskId, legacyLayout);
+  const groupChoices = useMemo(() => ({ teams: api.teams.length > 0 }), [api.teams.length]);
+  // The Inbox opened by its id is still the Inbox: its Display (no Section
+  // grouping, its own saved choices) is the Inbox's.
+  const displayScope = inboxId && selection === inboxId ? "inbox" : selection;
+  const tasksDisplay = useTasksDisplay(
+    workspaceId,
+    displayScope,
+    tasks,
+    linkedTaskId,
+    legacyLayout,
+    groupChoices,
+  );
   const isHiddenByDisplay = tasksDisplay.isHidden;
   const view: PlanView = tasksDisplay.display.layout;
   const setView = useCallback(
@@ -462,7 +483,12 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
 
   const scopeTasksAll = useMemo(() => {
     if (selection === "today") return api.queuedTasks;
-    if (selection === ARCHIVED_SELECTION || selection === TRASH_SELECTION) return [];
+    if (
+      selection === ARCHIVED_SELECTION ||
+      selection === TRASH_SELECTION ||
+      selection === TEMPLATES_SELECTION
+    )
+      return [];
     const live = (t: Task) => t.status !== "archived" || withArchived || t.id === keptArchivedId;
     if (selection === "all") return tasks.filter(live);
     if (selection === UPCOMING_SELECTION) {
@@ -548,19 +574,21 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   }, [mode, filtering.seed, assignees]);
 
   const scopeTitle =
-    selection === "all"
-      ? "All"
-      : selection === "mine"
-        ? "My tasks"
-        : selection === "today"
-          ? "Focus"
-          : selection === UPCOMING_SELECTION
-            ? "Upcoming"
-            : selection === "inbox"
-              ? "Inbox"
-              : archivedProject
-                ? archivedProject.name
-                : bucketNameById(selection);
+    selection === TEMPLATES_SELECTION
+      ? "Templates"
+      : selection === "all"
+        ? "All"
+        : selection === "mine"
+          ? "My tasks"
+          : selection === "today"
+            ? "Focus"
+            : selection === UPCOMING_SELECTION
+              ? "Upcoming"
+              : selection === "inbox"
+                ? "Inbox"
+                : archivedProject
+                  ? archivedProject.name
+                  : bucketNameById(selection);
 
   // The Queue is one ordered line-up, so its List view is never grouped.
   const effectiveGroupBy = selection === "today" ? "none" : tasksDisplay.display.group;
@@ -596,17 +624,22 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   }, [triageBucketId, tasks]);
 
   const openCapture = useCallback(
-    (at?: { sectionId?: string | null }) => {
+    (at?: GroupAdd) => {
       if (!canEdit) return;
-      const { projectId, queueTop } = captureHere;
+      const { queueTop } = captureHere;
+      // A List group's "+" (TV-U10) names its own project, section and value.
+      const projectId = at?.projectId ?? captureHere.projectId;
       const open = selectedTaskId ? tasks.find((t) => t.id === selectedTaskId) : null;
       const sectionId =
-        at?.sectionId ??
-        (projectId && open?.bucketId === projectId ? (open.sectionId ?? null) : null);
+        at?.sectionId !== undefined
+          ? at.sectionId
+          : projectId && open?.bucketId === projectId
+            ? (open.sectionId ?? null)
+            : null;
       dispatchOpenCapture({
         destination: projectId ? { projectId, sectionId } : undefined,
         queueTop,
-        seed: captureSeed,
+        seed: { ...captureSeed, ...at?.seed },
       });
     },
     [canEdit, captureHere, selectedTaskId, tasks, captureSeed],
@@ -764,6 +797,26 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   }, [api.openTrashRef]);
   const trashCount = (api.trash?.buckets.length ?? 0) + (api.trash?.tasks.length ?? 0);
 
+  // Templates and "Duplicate project…" (TV-D15): the dialogs, the Templates
+  // page, and what a copy settles into the shared store in one step.
+  const templateStore = useWorkspaceStore(runtime, currentUserId, workspaceId);
+  const templateActions = useTemplateActions({
+    runtime,
+    store: templateStore,
+    workspaceId,
+    userId: currentUserId,
+    canEdit,
+    isAdmin: canManageWorkspace,
+    active: selection === TEMPLATES_SELECTION,
+    buckets,
+    areas: api.areas,
+    sections: api.sections,
+    tasks: api.tasks,
+    onOpenProject: pickSelection,
+    onOpenTask: (id) => onUrlTaskIdChange(id),
+  });
+  const offersTemplates = templateActions.supported && canEdit;
+
   const left = (
     <BucketRail
       mode={mode}
@@ -811,6 +864,15 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       onDeleteArea={api.deleteArea}
       archivedCount={api.archivedBuckets.length}
       trashCount={trashCount}
+      templates={
+        offersTemplates
+          ? {
+              onDuplicate: templateActions.requestDuplicate,
+              onSaveAsTemplate: templateActions.requestSaveProject,
+              onNewFromTemplate: templateActions.requestNewFromTemplate,
+            }
+          : undefined
+      }
       navRef={railNavRef}
       dropAccepts={railAccepts}
     />
@@ -1027,11 +1089,45 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   };
   // List and Board follow Display; the Timeline keeps its own rules.
   const displayProps = tasksDisplay.viewProps;
+  // The List's own wiring (TV-U10), kept in one place: handles, sections
+  // and teams, the Detailed headers' sort, section edits, remembered folds.
+  const projectScope = buckets.some((b) => b.id === selection);
+  const listExtras = {
+    taskKey,
+    sections: api.sections,
+    teams: api.teams,
+    filteredOut: filtering.active
+      ? {
+          hidden: scopeTasksAll.length - scopeTasks.length,
+          filters: tasksDisplay.filters.length + (filtering.searching ? 1 : 0),
+        }
+      : undefined,
+    onSort: (column: Parameters<typeof nextHeaderSort>[1]) =>
+      setDisplay({
+        ...display,
+        ...nextHeaderSort(display, column, tasksDisplayDefaults(displayScope).order),
+      }),
+    onAddSection:
+      projectScope && canEdit
+        ? (name: string) => void api.createSection(selection, name)
+        : undefined,
+    // ⏎ opens the selected task's full page (decision 22; the panel's
+    // "↑↓ to move · ⏎ to open").
+    onOpenTask: setFullPageId,
+    onRenameSection: canEdit ? api.renameSection : undefined,
+    onDeleteSection: canEdit ? api.deleteSection : undefined,
+    collapseKey: lsKey(
+      workspaceId,
+      `folds:${api.currentUserId ?? "anon"}:${selection}:${effectiveGroupBy}`,
+    ),
+  };
 
   // Execute mode is enclosed in the center panel (rails stay visible).
   // Archived projects and Recently deleted open from the sidebar's ⋯ (98).
   const body =
-    mode === "plan" && selection === TRASH_SELECTION ? (
+    mode === "plan" && selection === TEMPLATES_SELECTION ? (
+      templateActions.page
+    ) : mode === "plan" && selection === TRASH_SELECTION ? (
       <RecentlyDeletedView
         trash={api.trash}
         bucketName={(id) => {
@@ -1098,6 +1194,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
         onReorder={api.reorderQueue}
         onManualOrder={backToManualOrder}
         revealRequest={revealRequest}
+        {...listExtras}
       />
     );
 
@@ -1333,6 +1430,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       runtime={runtime}
       workspaceId={workspaceId}
       onOpenEntity={handleOpenEntity}
+      onSaveAsTemplate={offersTemplates ? templateActions.requestSaveTask : undefined}
     />
   );
   // The hub is a drop target within the ONE page-level DndContext (below); no
@@ -1484,6 +1582,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
         runtime={runtime}
         workspaceId={workspaceId}
         onOpenEntity={handleOpenEntity}
+        onSaveAsTemplate={offersTemplates ? templateActions.requestSaveTask : undefined}
       />
     </TaskFullPage>
   ) : (
@@ -1577,6 +1676,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
           restoreNavFocus(event, railNavRef.current, triageFromRef.current)
         }
       />
+      {templateActions.dialogs}
       <FrontierOfferDialog
         open={frontierOfferTaskId !== null}
         onOpenChange={(o) => !o && setFrontierOfferTaskId(null)}

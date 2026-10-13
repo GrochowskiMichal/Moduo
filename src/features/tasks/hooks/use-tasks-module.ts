@@ -26,9 +26,6 @@ import { useStoreSnapshot, useWorkspaceStore } from "../../../lib/sync/react";
 import type { OverlayChange, PendingWrite } from "../../../lib/sync/store";
 import { editableTaskFields } from "../../../lib/task-rows";
 import { undoToast } from "../../../lib/undo-toast";
-import { formatAwaySpan } from "../../focus/away-copy";
-import type { FocusSaveContext } from "../../focus/engine";
-import { FOCUS_TIME_SAVED_EVENT, type FocusTimeSaved } from "../../focus/time-sink";
 import {
   createOrAttachByName,
   deleteTag as deleteWorkspaceTag,
@@ -62,6 +59,7 @@ import {
   type ProjectStatus,
   type QueuePlacement,
   type RecurrenceRule,
+  type Section,
   type Tag,
   type Task,
   type TaskQueueEntry,
@@ -1632,18 +1630,8 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     [runtime, store],
   );
 
-  // Focus time is saved by the app shell's sink, from any page (TV-P0): show
-  // each saved total here as it lands.
-  useEffect(() => {
-    if (!workspaceId || !store) return;
-    const onSaved = (event: Event) => {
-      const saved = (event as CustomEvent<FocusTimeSaved>).detail;
-      if (!saved || saved.workspaceId !== workspaceId) return;
-      store.patchCopy("tasks", saved.taskId, { timeSpentSeconds: saved.totalSeconds });
-    };
-    window.addEventListener(FOCUS_TIME_SAVED_EVENT, onSaved);
-    return () => window.removeEventListener(FOCUS_TIME_SAVED_EVENT, onSaved);
-  }, [workspaceId, store]);
+  // Focus time is saved by the one time engine's app-shell sink, from any
+  // page (TV-P0, TV-F6): it puts each saved total straight into the store copy.
 
   /** Why a time write can't be sent right now, or null. */
   const timeWriteBlocked = useCallback(
@@ -1717,54 +1705,6 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       }).catch((e) => failed(e, "Couldn't undo that."));
     },
     [timeWriteBlocked, workspaceId, writeTime, failed],
-  );
-
-  /**
-   * The module's own Focus sink (TV-F1, saving through time entries since
-   * TV-D3). Since TV-P0 the engine saves through the app shell's sink
-   * (features/focus/time-sink.ts) so time saves from any page; this one is no
-   * longer registered and stays, with its tests, until TV-F6's one time engine
-   * replaces both. It records `seconds` of focus that ended at `earnedAt` as one stretch,
-   * under the save's key, so a resend after a reload or a lost answer counts
-   * once. Only the task's time changes.
-   *  - `false` right away: not now (no workspace yet, a task still being
-   *    created, or another workspace's time handed over mid-switch).
-   *  - a promise: `true` saved (or already saved), `false` failed or no edit
-   *    access (kept, "not saved yet", retried with the same key), `"gone"` the
-   *    task was deleted for good or isn't shared any more: the seconds are
-   *    dropped and the person is told.
-   */
-  const persistFocusTime = useCallback(
-    (
-      id: string,
-      seconds: number,
-      context: FocusSaveContext,
-    ): boolean | "gone" | Promise<boolean | "gone"> => {
-      if (!Number.isFinite(seconds) || seconds < 1) return true;
-      if (!runtime || !workspaceId || isTempId(id) || context.workspaceId !== workspaceId) {
-        return false;
-      }
-      if (!canEdit) return Promise.resolve(false);
-      return writeTime(id, seconds, {
-        workspaceId,
-        taskId: id,
-        action: "focus",
-        seconds: Math.round(seconds),
-        endedAt: context.earnedAt > 0 ? new Date(context.earnedAt).toISOString() : null,
-        key: context.key,
-      }).then(
-        (result) => {
-          if (result.status !== "gone") return true;
-          toast(`${formatAwaySpan(seconds)} of focus time couldn't be saved`, {
-            description:
-              "The task it was tracked on was deleted or isn't shared with you any more.",
-          });
-          return "gone" as const;
-        },
-        () => false,
-      );
-    },
-    [runtime, workspaceId, canEdit, writeTime],
   );
 
   /** Set the tracked total to a typed value: one adjustment makes it exactly that. */
@@ -2031,6 +1971,8 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         parentId: write.parentId,
         bucketId: write.bucketId,
         priority: write.priority,
+        sectionId: write.sectionId,
+        teamId: write.teamId,
         // The place rides with the status op when there is one.
         position: status === undefined ? write.position : undefined,
       });
@@ -2081,20 +2023,20 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       const saved: Task[] = [];
       try {
         if (Object.keys(fields).length > 0) {
-          const row = await rt.tasks.updateTask({ workspaceId: ws, taskId, patch: fields });
-          saved.push(row);
-          // Subtasks follow the project the parent really landed in.
-          saved.push(
-            ...(await Promise.all(
-              followers.map((child) =>
-                rt.tasks.updateTask({
-                  workspaceId: ws,
-                  taskId: child.id,
-                  patch: { bucketId: row.bucketId },
-                }),
-              ),
-            )),
-          );
+          if (
+            followers.length > 0 ||
+            (write.bucketId !== undefined && write.bucketId !== existing.bucketId)
+          ) {
+            // A move is one op (TV-D8, as `patchTask`): the server carries the
+            // subtasks it lets you edit in the same transaction and answers
+            // with every row it changed; one you can only view stays where the
+            // server has it, and the drop still lands (TV-U10).
+            saved.push(
+              ...(await rt.tasks.opUpdateTask({ workspaceId: ws, taskId, patch: fields })),
+            );
+          } else {
+            saved.push(await rt.tasks.updateTask({ workspaceId: ws, taskId, patch: fields }));
+          }
         }
         if (category !== undefined) {
           saved.push(
@@ -2349,13 +2291,19 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
   // its own change. A session's person is me or the task's assignee (the
   // server refuses anyone else, TV-D10-fix), and moving or resizing keeps it.
 
+  // Each answers whether the write started (false: it was refused up front
+  // and said why), so a caller's own toast and Undo show only for a real one.
+
   /** Schedule a work session (the panel's Scheduled picker). */
   const addSession = useCallback(
-    (taskId: string, input: { startsAt: string; endsAt: string; userId: string | null }) => {
-      if (editBlocked() || !store || !runtime || !workspaceId) return;
+    (
+      taskId: string,
+      input: { startsAt: string; endsAt: string; userId: string | null },
+    ): boolean => {
+      if (editBlocked() || !store || !runtime || !workspaceId) return false;
       if (isTempId(taskId)) {
         toast.error(STILL_SAVING);
-        return;
+        return false;
       }
       const shown: TaskSession = {
         id: crypto.randomUUID(),
@@ -2381,14 +2329,15 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
           setActivityStamp((n) => n + 1);
         })
         .catch((e) => refused(write, e, "Couldn’t schedule the session."));
+      return true;
     },
     [editBlocked, store, runtime, workspaceId, refused],
   );
 
   /** Move or resize a session; its person stays. */
   const updateSession = useCallback(
-    (sessionId: string, patch: { startsAt?: string; endsAt?: string }) => {
-      if (editBlocked() || !store || !runtime || !workspaceId) return;
+    (sessionId: string, patch: { startsAt?: string; endsAt?: string }): boolean => {
+      if (editBlocked() || !store || !runtime || !workspaceId) return false;
       const write = store.begin([{ table: "sessions", patch: { id: sessionId, fields: patch } }]);
       void runtime.tasks
         .updateSession({ workspaceId, sessionId, patch })
@@ -2397,13 +2346,14 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
           setActivityStamp((n) => n + 1);
         })
         .catch((e) => refused(write, e, "Couldn’t move the session."));
+      return true;
     },
     [editBlocked, store, runtime, workspaceId, refused],
   );
 
   const removeSession = useCallback(
-    (sessionId: string) => {
-      if (editBlocked() || !store || !runtime || !workspaceId) return;
+    (sessionId: string): boolean => {
+      if (editBlocked() || !store || !runtime || !workspaceId) return false;
       const write = store.begin([{ table: "sessions", remove: sessionId }]);
       void runtime.tasks
         .removeSession({ workspaceId, sessionId })
@@ -2413,6 +2363,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
           setActivityStamp((n) => n + 1);
         })
         .catch((e) => refused(write, e, "Couldn’t remove the session."));
+      return true;
     },
     [editBlocked, store, runtime, workspaceId, refused],
   );
@@ -3138,6 +3089,131 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     [areas, allBuckets, runAreaOp, runtime, workspaceId],
   );
 
+  // ── sections (TV-D10's ops; the List's "+ Add section", TV-U10) ──────────
+  /** Run a section op and take the project's sections it answers. */
+  const runSectionOp = useCallback(
+    (
+      op: () => Promise<Section[]>,
+      changes: OverlayChange[] = [],
+      opts?: { sync?: boolean },
+    ): Promise<Section[] | null> => {
+      if (editBlocked() || !store) return Promise.resolve(null);
+      const write = store.begin(changes);
+      return op().then(
+        async (next) => {
+          if (opts?.sync) await store.syncNow().catch(() => undefined);
+          write.settle({ sections: next });
+          return next;
+        },
+        (e) => {
+          refused(write, e, "Couldn't save the section.");
+          return null;
+        },
+      );
+    },
+    [editBlocked, store, refused],
+  );
+
+  /** A new section at the end of a project; answers with its id. */
+  const createSection = useCallback(
+    async (projectId: string, name: string): Promise<string | null> => {
+      const trimmed = name.trim();
+      if (!trimmed || !runtime || !workspaceId) return null;
+      const id = crypto.randomUUID();
+      const next = await runSectionOp(() =>
+        runtime.tasks.createSection({
+          workspaceId,
+          projectId,
+          id,
+          fields: { name: trimmed },
+        }),
+      );
+      return next ? id : null;
+    },
+    [runSectionOp, runtime, workspaceId],
+  );
+
+  const renameSection = useCallback(
+    (sectionId: string, name: string) => {
+      const trimmed = name.trim();
+      const existing = (bundle.sections ?? []).find((s) => s.id === sectionId);
+      if (!existing || !trimmed || trimmed === existing.name || !runtime || !workspaceId) return;
+      void runSectionOp(
+        () => runtime.tasks.updateSection({ workspaceId, sectionId, patch: { name: trimmed } }),
+        [{ table: "sections", patch: { id: sectionId, fields: { name: trimmed } } }],
+      );
+    },
+    [bundle.sections, runSectionOp, runtime, workspaceId],
+  );
+
+  /**
+   * Delete a section: its tasks stay in the project, under No section (the
+   * op clears their section). Undo restores the section and puts back the
+   * tasks that are still under No section in the same project (one changed
+   * since keeps its newer place).
+   */
+  const deleteSection = useCallback(
+    (sectionId: string) => {
+      const existing = (bundle.sections ?? []).find((s) => s.id === sectionId);
+      if (!existing || !runtime || !workspaceId || !store) return;
+      const members = tasksRef.current
+        .filter((t) => t.sectionId === sectionId && !t.deletedAt)
+        .map((t) => ({ id: t.id, bucketId: t.bucketId }));
+      void runSectionOp(
+        () => runtime.tasks.updateSection({ workspaceId, sectionId, patch: { deleted: true } }),
+        [
+          { table: "sections", remove: sectionId },
+          ...members.map((m) => patchOf(m.id, { sectionId: null })),
+        ],
+        { sync: true },
+      ).then((next) => {
+        if (!next) return;
+        const count = members.length;
+        undoToast(`“${existing.name}” deleted`, {
+          description:
+            count === 0
+              ? undefined
+              : `${count === 1 ? "Its task stays" : `Its ${count} tasks stay`} in the project, under No section.`,
+          onUndo: () => {
+            void runSectionOp(
+              () =>
+                runtime.tasks.updateSection({ workspaceId, sectionId, patch: { deleted: false } }),
+              [],
+              { sync: true },
+            ).then(async (restored) => {
+              if (!restored) return;
+              // Only the ones still where the delete left them.
+              const back = members.filter((m) => {
+                const now = tasksRef.current.find((t) => t.id === m.id);
+                return !!now && !now.deletedAt && !now.sectionId && now.bucketId === m.bucketId;
+              });
+              if (back.length === 0) return;
+              const write = store.begin(back.map((m) => patchOf(m.id, { sectionId })));
+              // Each task goes back on its own: one refused never undoes the others.
+              const results = await Promise.allSettled(
+                back.map((m) =>
+                  runtime.tasks.updateTask({ workspaceId, taskId: m.id, patch: { sectionId } }),
+                ),
+              );
+              const rows = results.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
+              // The saved rows become the copy; a refused one's overlay goes with the op.
+              write.settle({ tasks: rows });
+              const refusal = results.find((r) => r.status === "rejected");
+              if (refusal) {
+                const left = results.length - rows.length;
+                failed(
+                  refusal.reason,
+                  `Couldn't put ${left === 1 ? "a task" : `${left} tasks`} back in the section.`,
+                );
+              }
+            });
+          },
+        });
+      });
+    },
+    [bundle.sections, runSectionOp, runtime, workspaceId, store, failed],
+  );
+
   /**
    * Assign a bucket to a time-of-day slot (or clear it with `slot = null`).
    * Optimistic; persisted per person via the runtime (spec §9). The sidebar no
@@ -3234,6 +3310,8 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     restLoaded: !!store && snap.restLoaded,
     /** Live comments per task (TV-D11a; TV-D5's promised counts). */
     commentCounts: snap.commentCounts,
+    /** Tasks with a capture or check-off waiting on this device (a row's clock). */
+    pendingTaskIds: snap.pendingTaskIds,
     /** Per task, moves on any comment change (TV-U13): the open feed re-reads on it. */
     commentStamps: snap.commentStamps,
     /** TV-D10's structure, live from the store: areas (in sidebar order),
@@ -3295,7 +3373,6 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     addTimeSpent,
     logTimeAdjustment,
     undoTimeAdjustment,
-    persistFocusTime,
     setTimeSpent,
     rescheduleScheduledAt,
     unscheduleTask,
@@ -3342,6 +3419,10 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     setAreaColor,
     moveArea,
     deleteArea,
+    /** Sections' ops (TV-D10's; the List's "+ Add section", TV-U10). */
+    createSection,
+    renameSection,
+    deleteSection,
     /** Recently deleted (TV-U6), when read (`includeTrash`); null otherwise. */
     trash,
     restoreFromTrash,

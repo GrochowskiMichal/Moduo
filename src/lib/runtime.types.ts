@@ -32,6 +32,7 @@ import type {
 import type { NeedsAttentionItem } from "../features/contacts/needs-attention";
 import type { ReconnectItem } from "../features/contacts/reconnect";
 import type { DashboardLayout } from "../features/dashboard/engine/types";
+import type { FocusRunRuntime } from "../features/focus/run-model";
 import type {
   NoteDocPull,
   NotesImportRow,
@@ -67,6 +68,7 @@ import type {
 import type { EntityLink, EntityRecord, EntityRef, LinkOrigin, RelationKind } from "./entity-links";
 import type { Truncation } from "./paged-select";
 import type { TasksStructureApi } from "./runtime.web.structure";
+import type { TasksTemplatesApi } from "./runtime.web.templates";
 import type {
   SyncAccessResult,
   SyncIdsResult,
@@ -85,6 +87,13 @@ import type { TaskFieldPatch } from "./task-rows";
  * own signatures above.
  */
 export type TasksStructureRuntime = Omit<TasksStructureApi, "getTimeBlocks" | "setTimeBlocks">;
+
+/**
+ * TV-D15's templates and "Duplicate project…" (runtime.web.templates.ts):
+ * reads under RLS, writes as ops; an apply or a duplicate answers with every
+ * row it made. Optional: a runtime without them offers neither.
+ */
+export type TasksTemplatesRuntime = Partial<TasksTemplatesApi>;
 
 /** A comment on any registered entity (spine block CT-5). */
 export type SpineComment = {
@@ -1236,7 +1245,8 @@ export type ModuoRuntime = {
        * under module='contacts', not 'tasks'. */
       module?: string;
     }): Promise<ActivityEntry[]>;
-  } & TasksStructureRuntime;
+  } & TasksStructureRuntime &
+    TasksTemplatesRuntime;
 
   /**
    * Connective-tissue spine — the link substrate (specs/connective-tissue.md
@@ -1249,6 +1259,9 @@ export type ModuoRuntime = {
    */
   /** Chat (specs/chat.md) — Supabase-direct on both surfaces; Duo/Team/Founder workspaces. */
   chat: ChatRuntime;
+
+  /** Focus runs and claims (TV-F6) — Supabase-direct on both surfaces. */
+  focus: FocusRunRuntime;
 
   spine: {
     /**

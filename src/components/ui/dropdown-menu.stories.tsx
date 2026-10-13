@@ -69,6 +69,32 @@ export const Default: Story = {
   ),
 };
 
+/**
+ * A menu longer than its room scrolls inside, and while more items wait below
+ * its foot fades out, so the cut-off last item reads as "there's more"
+ * (TV-U10, the DS-6 follow-up). Scrolled to the end, the fade goes.
+ */
+export const LongMenuScrolls: Story = {
+  render: () => (
+    <div className="flex h-72 items-start">
+      <DropdownMenu defaultOpen>
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline">Move to project</Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-48">
+          <DropdownMenuRadioGroup value="p3">
+            {Array.from({ length: 40 }, (_, i) => (
+              <DropdownMenuRadioItem key={i} value={`p${i}`}>
+                Project {i + 1}
+              </DropdownMenuRadioItem>
+            ))}
+          </DropdownMenuRadioGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  ),
+};
+
 export const WithSubmenu: Story = {
   render: () => (
     <DropdownMenu>

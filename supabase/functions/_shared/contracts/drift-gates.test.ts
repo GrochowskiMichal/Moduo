@@ -26,6 +26,9 @@ import {
   CALENDAR_PROVIDERS,
   EMAIL_ACCOUNT_STATUSES,
   EMAIL_PROVIDERS,
+  FOCUS_RUN_PHASES,
+  FOCUS_RUN_STATUSES,
+  FOCUS_TIMER_MODES,
   GRANT_LEVELS,
   GRANT_ORIGINS,
   MEMBER_DB_PERMISSIONS,
@@ -43,6 +46,8 @@ import {
   TASK_TIME_ENTRY_KINDS,
   TASK_TIME_STATUSES,
   TASK_WAITING_KINDS,
+  TEMPLATE_KINDS,
+  TEMPLATE_LINK_TYPES,
   WAITLIST_ROW_SOURCES,
   WAITLIST_SOURCES,
   WAITLIST_STATUSES,
@@ -130,6 +135,19 @@ describe("cross-runtime drift guards", () => {
     for (const status of TASK_TIME_STATUSES) expect(sql).toContain(`'${status}'`);
   });
 
+  it("Focus run vocabularies match the focus_runs CHECKs (#323 + the TV-F6 re-cut)", () => {
+    const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(",");
+    const base = readFileSync(resolve(MIGRATIONS_DIR, "20261008235243_focus_runs.sql"), "utf8");
+    expect(base).toContain(`status IN (${inList(FOCUS_RUN_STATUSES)})`);
+    expect(base).toContain(`phase IN (${inList(FOCUS_RUN_PHASES)})`);
+    const recutFile = readdirSync(MIGRATIONS_DIR).find((f) => f.endsWith("_focus_runs_v3.sql"));
+    expect(recutFile).toBeDefined();
+    const recut = readFileSync(resolve(MIGRATIONS_DIR, recutFile ?? ""), "utf8");
+    expect(recut).toContain(`mode IN (${inList(FOCUS_TIMER_MODES)})`);
+    expect(recut).toContain(`p_mode NOT IN (${inList(FOCUS_TIMER_MODES)})`);
+    expect(recut).toContain(`s->>'mode' NOT IN (${inList(FOCUS_TIMER_MODES)})`);
+  });
+
   it("attachment vocabularies match the attachments CHECKs and the ops (AT-1)", () => {
     const sql = readFileSync(
       resolve(MIGRATIONS_DIR, "20261008210500_attachments_storage.sql"),
@@ -205,6 +223,14 @@ describe("cross-runtime drift guards", () => {
     const opList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(", ");
     expect(sql).toContain(`CHECK (reaction IN (${inList(COMMENT_REACTIONS)}))`);
     expect(sql).toContain(`p_reaction NOT IN (${opList(COMMENT_REACTIONS)})`);
+  });
+
+  it("template kinds and link types match TV-D15's op guards", () => {
+    const sql = readFileSync(resolve(MIGRATIONS_DIR, "20261013160000_templates.sql"), "utf8");
+    const opList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(", ");
+    expect(sql).toContain(`p_kind NOT IN (${opList(TEMPLATE_KINDS)})`);
+    expect(sql).toContain(`coalesce(l ->> 'type', '') NOT IN (${opList(TEMPLATE_LINK_TYPES)})`);
+    expect(sql).toContain(`WHERE x.kind IN (${opList(TEMPLATE_LINK_TYPES)})`);
   });
 
   it("the booking busy read leaves out the closed categories (TV-D10-fix)", () => {

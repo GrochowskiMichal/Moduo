@@ -83,6 +83,8 @@ type Props = {
   layout?: "panel" | "page";
   /** Who "is on this" (claims): TV-F7 fills it. */
   claimSlot?: ReactNode;
+  /** ⋯ → Save as template… (TV-D15). Absent: not offered. */
+  onSaveAsTemplate?: (task: Task) => void;
 };
 
 /**
@@ -114,6 +116,7 @@ function DetailBody({
   onCloseFullPage,
   layout = "panel",
   claimSlot,
+  onSaveAsTemplate,
 }: Props & { task: Task }) {
   // Subtasks are one level (spec §1): a live parent makes this a subtask, and
   // only top-level tasks have a Subtasks collection.
@@ -301,6 +304,7 @@ function DetailBody({
       onOpenFullPage={onOpenFullPage}
       onCloseFullPage={onCloseFullPage}
       claimSlot={claimSlot}
+      onSaveAsTemplate={onSaveAsTemplate ? () => onSaveAsTemplate(task) : undefined}
     />
   );
 
@@ -591,7 +595,7 @@ function DetailEmptyState({
             Press <Kbd>c</Kbd> to {/* A link inside the sentence: a Button would break the line. */}
             <button
               type="button"
-              onClick={onRequestCapture}
+              onClick={() => onRequestCapture()}
               className="rounded-sm underline-offset-2 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
             >
               capture

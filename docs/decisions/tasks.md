@@ -59,6 +59,259 @@ Built in tasks-v3 block 28 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §1, §
   - Decision: their team memberships end, projects they led lose their lead, and their Inbox is handed on: tasks others created go back to those creators' Inboxes (if they still work on tasks here), the rest to whoever removed them (else the owner), subtasks with their task, one quiet notice per person who received something (never the remover). What they had taken from a team goes back to the team (PRIV-2 unassigns). Private projects still go to the owner as PRIV-2 does; asking to hand them on first is TV-U16's.
   - Why: "nothing is orphaned" (§15); an Inbox nobody can open orphans its tasks.
   - Rejected: sending private projects to Recently deleted here (TV-U16's prompt decides).
+## 2026-10-13 · TV-U10 List v3 — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 14 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §4, AC11.2–11.5, AC3.5, AC1.5; research views-list-upcoming.md §1–3, §9; defaults i–n). Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **U10-1 · The status icon is the row's lead: a click finishes, on a closed task it reopens** → TV-U10 (`task-row-cells.tsx` `StatusGlyph`, `task-row.tsx` `activateGlyph`), TV-U11 (cards)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the category's icon replaces the checkbox. A click finishes from any open category (In progress and Backlog too); on Done or Won't do it reopens to To do; Space and `x` do the same; right-click, ⇧S and the row menu's "Status…" open the status menu (the project's names by category) at the icon. Done's check is the accent's colour; Backlog and Won't do the quietest.
+  - Why: default k; the server keeps no earlier status to go back to, and To do is where a reopened task usually belongs. It also fixes U2-7 (Space on a Won't do task marked it Done).
+  - Rejected: reopening to "the previous status" (nothing records it); a status menu on click.
+- **U10-2 · Each column is as wide as its widest value in view, shared by rows and headers** → TV-U10 (`row-layout.ts` `columnWidths`, `--tl-col-*`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the list works out each sized column's width in `ch` from the words every listed row will show (never narrower than its header label) and sets it as a CSS variable on the frame; rows and the Detailed header read it, so nothing in a column truncates and a row never redraws for a width. The title is the only flexible track (the checkpoint-1 fix). Project › Section stops growing at 32ch (waiting at 24, a first name at 18): longer words wrap inside the cell.
+  - Why: call 41 (dates, times and counts never truncate) and checkpoint 1 (titles truncating in a mostly empty row came from fixed minimum widths on cells empty in that row).
+  - Rejected: fixed widths per column (truncation or waste); measuring text with a canvas (the `ch` estimate is close and costs nothing).
+- **U10-3 · Detailed drops whole columns to keep the title 200 px; "+n" explains, it doesn't open Display** → TV-U10 (`fitColumns`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: in research §1's order (Updated → time → Next session → waiting → status name → Project › Section → assignee name → handle), measured against the frame in 16 px steps with the face's real `ch`. The header's "+n" tooltip says how many and how to get them back (widen the window, close a panel).
+  - Why: the Display menu can't be opened from outside it; a tooltip says the same thing without a second control.
+  - Rejected: a horizontal scroll (the 3×3 layout has no room for one); opening Display from "+n" (a new seam on the menu for one link).
+- **U10-4 · Sortable headers: ascending → descending → the view's own order** → TV-U10 (`display.ts` `nextHeaderSort`, `orderDir`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: Title, Status, Priority, Due, Next session and Updated sort; the direction is stored in Display beside Order by (and resets when Order by changes in the menu); Order by gains Title and Status. A sort in a project still says "Sorted by … · Back to manual order".
+  - Why: research §3; one sort state for the menu and the headers.
+  - Rejected: sorting by project, assignee, time or waiting (not in Order by; each would need its own rule).
+- **U10-5 · A project groups by section; with no sections it is the plain list ending in "+ Add section"** → TV-U10 (`display.ts`, `helpers.ts`, `task-list-parts.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: Section is every project's default (offered only inside one project); a project without sections shows no headers and takes drops like an ungrouped list; "No section" comes first (Todoist's top of the project); a section's header reads "1 of 4" (done of all) and "· ends Oct 24"; its ⋯ has Rename… and Delete section (its tasks stay, under No section; Undo brings the section back with its tasks in it). Team is offered once the workspace has teams.
+  - Why: stored Display prefs would freeze a "None" default for a project that later gains sections; the "+ Add section" line is the List's way to make the first one.
+  - Rejected: defaulting to Section only once sections exist (the default is read once per scope).
+- **U10-6 · A group's "+" stays visible and opens the one capture with the group's value** → TV-U10 (`list-group-add.ts`), TV-U14's capture seed
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the spec's "stays visible" over research's fade. It fills in the section, status category, priority, person, team or due day (Later and No date: no date; Earlier, Done and Won't do: no "+", a new task is neither late nor finished); the capture seed gained `teamId`, `dueDay` and `status`. A seeded status shows in the capture as a removable chip and is never kept in the draft (a restored draft never files into a status unasked). In All, groups other than projects show the "+" disabled with "Pick a project first" (the task would land in your Inbox, which All doesn't list); My tasks adds to your Inbox, assigned to you; Upcoming adds only in its days.
+  - Why: default n and U14-1 (one capture for every way in); a "+" whose task vanishes from view reads as broken.
+  - Rejected: an inline add row (a second capture); filing All's "+" into a guessed project.
+- **U10-7 · Backlog folds behind a line at each group's end; grouped by status it's its own folded group** → TV-U10
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: "Backlog · n" with a chevron ends each group (or the list); a selected Backlog task opens its line and stays in it, so j/k walk the opened line in order (only a task checked off here, or a parent with open subtasks, comes out of it). Everything else starts open; what you fold is remembered per person, workspace, view and grouping on this device.
+  - Why: 53b and research §2 (everything starts open, which fixes "only the first group opens").
+  - Rejected: synced folds now (research says synced; preferences sync is TV-U8's lane), one Backlog line per list only.
+- **U10-8 · A late row's fixes lie over the end of its title on hover or selection** → TV-U10 (`LateFixes`, `break-down.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: Move (the due picker), Won't do, Break down (selects the task and opens the panel's subtask line; a subtask has no Break down). They fade in over the title cell's end on the row's own surface, so nothing reflows and nothing is reserved.
+  - Why: a reserved invisible slot (R6's usual answer) cut late titles short all the time, checkpoint 1's complaint again.
+  - Rejected: a reserved slot; replacing the date column.
+- **U10-9 · Offline: a clock on waiting rows; other edits keep saying "Offline"** → TV-U10 (`store.ts` `pendingTaskIds`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: a 12 px clock in the counts while a capture or check-off of that task waits on the device; edits that can't wait keep TV-D11a's "Offline" toast instead of disabling every control; the top bar already says "Offline · n waiting to sync".
+  - Why: default g; a disabled control hides why, the toast says it.
+  - Rejected: disabling the row's controls with a tooltip each.
+- **U10-10 · States: a still skeleton after 300 ms; "No tasks match · 214 hidden by 2 filters"; read-only "View only"** → TV-U10 (`task-view-states.tsx`, `plan-view-header.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: research §9: nothing for 300 ms, then eight still rows; filtered to nothing names how many are hidden, with Clear filters (no "Edit filters": Filter can't be opened from outside); read-only says "View only" after the title, has no New, and right-click offers Open · Copy link · Copy as text.
+  - Why: AC1.5 and research §9.
+  - Rejected: a shimmer (research: no shimmer).
+- **U10-11 · A long menu fades at its foot while more waits below** → DS-6's kit (`menu-scroll.ts`, `[data-more-below]`, `--menu-fade`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: every dropdown and context menu (and their sub-menus) marks itself while it can scroll further; a mask fades the last 28 px, so the cut-off item reads as "there's more".
+  - Why: checkpoint 1's menu note; a mask needs no colour, so every surface and theme fades the same.
+  - Rejected: a gradient overlay (needs the surface's colour per theme).
+- **U10-13 · A parent's subtasks keep their own order; a drag or ⌥⇧↑/↓ moves one among them anywhere** → TV-U10 (`subtask-order.ts`, `drop-mode.ts`, the panel's `SubtasksSection`), handed over by TV-U13
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: subtasks list in their own order under the parent in every view, so moving one among its siblings always writes a place, sorted view or across projects (the List's nested rows and the panel's list: the whole row drags, ⌥⇧↑/↓ on a focused subtask moves it and keeps the focus; one Undo each). Joining another parent in a sorted view still only nests. A place next to a task whose key another project's task shares now lands on the asked side (the nearest different key bounds it).
+  - Why: default m is about the view's own order; a subtask list doesn't follow it, so "Sorted by … · Back to manual order" refused a move that would visibly work. The shared-key case put a dragged subtask one place off on the local stack.
+  - Rejected: a grip on each subtask (the whole row is how the List drags too); the keyboard sensor's Space-to-lift (⌥⇧↑/↓ is the List's way).
+- **U10-14 · ⏎ opens the selected task full; `e` edits its title** → TV-U10 (`list-keys.ts`, `tasks-plan-view.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: ⏎ on the List opens the selected task's full page (TV-U13's; Esc brings the List back); `e` edits the title in place; a host without a full page keeps ⏎ as edit.
+  - Why: decision 22 ("⏎ opens and `e` edits") and the panel's "↑↓ to move · ⏎ to open": with the panel already showing the selected task, opening it means the full page.
+  - Rejected: ⏎ focusing the panel (a second way to Tab there).
+- **U10-12 · Left to their blocks** → TV-U13, TV-U11, TV-U15
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: call 87 (finishing a parent finishes its subtasks) stays TV-U13's per the 🟠 box (it built it); the Board keeps ascending sorts (it ignores the List's direction) for TV-U11; My tasks' folded Backlog line needs its scope to include your Backlog tasks (TV-U15); files in the counts wait for AT-3; "Claude · working" for TV-D16.
+  - Why: one block per session; each sits with the block that owns its surface.
+  - Rejected: —
+
+## 2026-10-13 · TV-F6 Focus salvage + one time engine — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 22 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §7, §Assumptions #11, #26; REPLAN 62a, 63, 66, §6.10, round 3 §L; migrations `20261008235243_focus_runs` (#323's, history) and `20261013130000_focus_runs_v3`) on the local stack. Salvaged from #323 (`origin/t/maciej/tv-f2-queue-run`): the run's server record, cross-device takeover, claims, the run rules. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to change.
+
+- **F6-1 · #323's migration is history under prod's version; the re-cut is a new file** → TV-F6 (`20261008235243_focus_runs.sql`, `20261013130000_focus_runs_v3.sql`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (the orchestrator's correction to round 3: the file was applied to prod on 2026-10-09).
+  - Decision: #323's file goes in byte-for-byte as `20261008235243_focus_runs.sql` (every function matches the local catalog); the Timer re-cut, the task gate on claims, the publication and grants, and erasure are a new migration. AC13.4's "its migration never applied as written" can't hold any more; the salvage list stands.
+  - Why: applied migrations are history (AGENTS.md rule 5); prod's version keeps local replays and prod in one order.
+  - Rejected: editing the old file, a fresh `focus_runs` table.
+- **F6-2 · Timer: Per task · Pomodoro · Off on the run, changeable mid-run** → TV-F6 (`focus_runs.mode`, `FOCUS_TIMER_MODES`, `focus_runs__apply`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: `mode` is `per_task | pomodoro | off` (default Per task), a save can change it, a new timer starts its rhythm over (only Pomodoro has phases); a Stopwatch run reads as Per task. Off records nothing and shows no clock, but the session is on: Done, Skip and "is on this" still work.
+  - Why: 62a and 63 ("off means off"); one schema reversal, made before anything reads the column.
+  - Rejected: Elapsed · Countdown · Off (63's first wording; Countdown is the client option "Count down the estimate" under Per task).
+- **F6-3 · The run follows the one engine; Stop waits out its Undo** → TV-F6 (`features/focus/run.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: whatever starts a session (Focus, ⇧F, Calendar's ▶, Home's pomodoro) starts or continues the run in that task's workspace; the timer, pauses, phases and Now are saved as they change and every minute; Stop ends the run everywhere only after the 10 s "Focus stopped · Undo", and Undo inside it keeps the same run. A run this device holds that no clock here runs (Stop, then a reload inside the window) ends instead of coming back. Only the tab that runs the clock speaks for a browser.
+  - Why: one clock for every surface (§6.10); 62a's Undo; a run that resurrects after a reload would count time nobody tracked.
+  - Rejected: #323's explicit "Start run" (the only entry point), ending at once on Stop.
+- **F6-4 · Per task's clock is the Now task's time this session** → TV-F6 (`FocusSession.taskSeconds`, `bigClock`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the top-bar timer, the Calendar block and Focus show one number per job (62): Pomodoro's countdown, the Now task's own clock (from 0 when another task becomes Now; carried to another device through `phase_started_at`), or "Focus" with no clock under Off. The task's saved total stays the task's `timeSpentSeconds`; TV-F7 composes "18:02 of ~45m" and the countdown option.
+  - Why: the pill is "this task" and the bottom line "the whole session" (62).
+  - Rejected: the session's time in the pill (it repeats the bottom line).
+- **F6-5 · Claims behind the task gate, polled by the shell** → TV-F6 (`focus_claims`, `features/focus/claims.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: `focus_claims` answers only for a task the caller sees and the runner still sees (`tasks__visible` / `tasks__visible_to`), only for a running run seen in the last 3 minutes, never the caller's own; Off still claims, paused doesn't. The app shell polls the selected workspace once a minute while visible; the detail panel's header shows them (`TaskClaimMark`, small avatars and a quiet dot, the words in the tooltip, in U13's claim slot); `useTaskClaim` + `onThisLabel` are there for TV-F7's rows and screen.
+  - Why: "is on this" is about doing, not timing; a runner who lost a task mustn't advertise it.
+  - Rejected: Realtime for claims (each person reads only their own runs), polling only while Tasks is open.
+- **F6-6 · The run rules run app-wide** → TV-F6 (`FocusRunFollower`, `followStep`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: when Now is finished (by anyone), Won't do, deleted, unshared or taken out of Up next, the session moves to the next open task with its rhythm, or ends when Up next runs out; someone else finishing it, or it going away, says so in a quiet toast (and the run's notice for TV-F7); finishing it yourself counts in "n done". A task that was never in Up next isn't moved for being absent from it, and a missing task waits while closed tasks may still be loading.
+  - Why: #323's rules ran only while Tasks was open; 62 "a session also ends by itself when Up next runs out".
+  - Rejected: moving on only while the Focus view is open.
+- **F6-7 · Calendar's ▶ is "Focus on this"** → TV-F6 (`calendar-page-view.tsx`, `use-block-focus.ts` deleted)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: ▶ puts the task on top of Up next and gives it the one clock (a running session moves to it with its rhythm; none starts with your default timer); its Pause and Stop are the engine's, Stop with Undo instead of "47m logged to …"; the clock shows on the task's block that holds now, else its nearest.
+  - Why: call 66 ("the same one clock"); three clocks lost time (P0 #6).
+  - Rejected: keeping the Calendar's own stopwatch.
+- **F6-8 · The Calendar lens: my work sessions are blocks; due-only tasks are all-day chips** → TV-F6 (`lens.ts` `taskBlocks`, `dueChipsByDay`; AC2.3, AC7.3)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: each of my sessions is its own block and dragging it moves that session (`tasks_op_session_update`, the person kept); a teammate's session stays in their calendar; a scheduled task with no session known shows from its row as before. Later and Remove on a session's block act on that session (Remove's Undo puts one back at the same times). Your own due-only tasks (assigned to you, or yours as creator while unassigned; spec §18) with nothing in your calendar are chips in the all-day lane on their due day (Won't do hidden, done shown done; a teammate's session on it is in their calendar, not yours); clicking one opens the task.
+  - Why: REPLAN 25 (several blocks per task, each someone's) and 1.3 ("due-only tasks never reach the calendar grid"); the Month view stays Calendar's.
+  - Rejected: one block per task from the mirrored schedule, every visible task's due chip (teammates' would crowd your lane).
+- **F6-9 · Home's pomodoro runs the same session** → TV-F6 (`pomodoro-widget.tsx`, `config-forms.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the widget shows and controls the running session (Pause, Stop with Undo); idle, Start runs a Pomodoro on the top of Up next and is off with nothing lined up; its lengths are your Focus lengths (the widget's settings edit them).
+  - Why: one clock; a pomodoro with no task records nothing anywhere.
+  - Rejected: a task-less pomodoro, per-widget lengths.
+- **F6-10 · The Timer setting lives in the synced Focus prefs** → TV-F6 (`FocusPrefs.timer`, `countdownEstimate`; the execute view's ⋯)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: `timer` (default Per task) and `countdownEstimate` join the synced Focus prefs; a new session starts with `timer`; changing it changes your default and the running session (63). Until TV-F7's ⋯ menu and Settings → Tasks → Focus, today's Focus card ⋯ has the three-way Timer.
+  - Why: "the menu changes them everywhere" (63).
+  - Rejected: a per-run choice only (#323).
+- **F6-11 · The run records the task, not the calendar block** → TV-F6
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: no `now_session_id` on `focus_runs`; the Calendar marks the task's nearest block.
+  - Why: nothing reads it yet; ▶ needs the task.
+  - Rejected: a session column now.
+- **F6-12 · Capture's default (P0 #9) is already built** → TV-P0 (P0-7), TV-U14 (`queueTop`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: New in Focus lands in Up next (P0-7, U14's `queueTop`); #323's "during a run, a capture anywhere queues" (F2-5) is dropped for call 90 (⌘N files where you are).
+  - Why: call 90 decides it; two rules would disagree in a project.
+  - Rejected: queueing every capture while a session runs.
+- **F6-13 · One sink; saved totals go into the store copy** → TV-F6 (`time-sink.ts`, `use-focus-time-saver.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the Tasks module's unregistered sink (kept since P0-13) is deleted; the app shell's sink puts each saved total straight into the workspace's store copy (`patchCopy`) instead of a window event a mounted list listens for.
+  - Why: the D11a note ("time totals land through `store.patchCopy`"); every surface reads the store.
+  - Rejected: keeping two sinks.
+- **F6-14 · Focus runs are erased and exported** → TV-F6 (`account_erase_workspace_data`, `readTasksExport`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: erasure deletes a person's runs in workspaces they don't own (counted in the preview as `focus_runs_deleted`); leaving a workspace already takes them; the export carries your own runs as `focusRuns`.
+  - Why: §Assumptions #26.
+  - Rejected: relying on the profile cascade alone (the preview wouldn't say so).
+- **F6-15 · A run read through stops counting three minutes past its device's last save** → TV-F6 (`readRunClock`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: on another device the clock and the session's time run on from the record only for the claims window (3 minutes) after the controlling device's last save, then stand still.
+  - Why: a laptop that slept or died keeps no clock; never an inflated number.
+  - Rejected: counting on forever (#323 capped only the focused time).
+- **F6-16 · Time saved before a takeover was heard is given back** → TV-F6 (`overlapAfter`, `relinquishFocus`, `giveBackTime`; AC8.11)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (from the validator).
+  - Decision: when another device took the run at T, the device that lost it takes back its unsaved time after T (#323) and gives back what it had already saved after T with one negative adjustment through `tasks_op_track_time`, keyed by run and T so a resend counts once; at most 5 minutes (T is the server's clock, the overlap this device's). The overlap never reaches back past the moment this device took the sitting up (start, takeover, Undo), so time it adopted from another device is never given back. A failed give-back is resent with the same key on the next look. A takeover of this device's that hasn't reached the server yet (offline) isn't undone by a copy naming a device that had the run before it: the take is sent again (a refused one isn't). Known limit: if you then keep working on the other device without acting on its session (no pause, no Done), the offline device's resend still wins when it comes back, and the time both ran meanwhile isn't given back.
+  - Why: the engine saves every minute whether or not it has heard of the takeover; those seconds were counted on both devices.
+  - Rejected: holding saves until control is re-confirmed (a save per minute would wait on a run read), accepting the gap.
+- **F6-17 · A new session inside Stop's Undo window ends the stopped run first** → TV-F6 (`run.ts` `reconcile`, `undoStopKeepingRun`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (from the review).
+  - Decision: only Undo carries the stopped run on; any other start inside the 10 s ends it at once with its own numbers, then starts a new run.
+  - Why: a fresh session reusing the stopped run would overwrite its 25 minutes with zeros; a start in another workspace would end it on the server before its final numbers got there.
+  - Rejected: continuing the same run for any start inside the window.
+- **Known limits (TV-F6, revisitable):** signing out inside Stop's Undo window leaves the run open until this device next signs in (it's ended then; teammates stop seeing it after 3 minutes); if Calendar's ▶ can't put the task on Up next, the run rules may move the session to the next lined-up task.
+
+## 2026-10-13 · TV-D15 Templates and Duplicate project (tasks-v3 block 30) — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 30 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §15, AC4.4, AC7.2; REPLAN 9 and 79; §Assumptions #19 and #26). Migration `20261013160000_templates` (local stack only). Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **D15-1 · A template is a saved body, and the template is edited as itself in the centre** → TV-D15 (`task_templates`, `project_templates`, `templates/ui/template-editor.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: per §Assumptions #19, two tables holding the keep-set as a jsonb body. "Edit template" opens it in the centre the way a task's full page opens (call 32), marked *Template*, with dates as days from the start. A task template shows its task (title, project, due, priority, estimate, tags, description) and its subtasks. A project template shows its statuses (rename), sections (name, start and end in days) and tasks (title, section, due in days, subtasks). Changes are kept until Save. Editing never changes what was made from it.
+  - Why: hidden template rows in `tasks`/`buckets` would get handles, show up in search, `@` and counts, send notices and fire reminders, and every reader would need an exclusion. A body has none of that and can be applied in any workspace.
+  - Rejected: template projects and tasks as hidden live rows, and feeding the live task panel a fake task.
+- **D15-2 · One copy engine, with the target workspace as its seam** → TV-D15 (`project_templates__body_of` → `project_templates__apply_body`; app `templates/ops.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (the hackathon ask: dependable, fast copies, and a later "copy into N workspaces").
+  - Decision:
+    - "Duplicate project…" reads the live project the way a project template would, then applies the result.
+    - The body uses positions, not row ids, for its own statuses, sections, tasks and parents. People, teams, tags and links are resolved again on every apply: a tag by name when its id isn't in the target workspace; anyone or anything that isn't there is left out.
+    - `apply_body` takes the target workspace and is the server's own: an op, or later a provisioning job, calls it once per workspace, as a person who may add projects there.
+    - Every task goes through `tasks_op_create`, so handles, the registry and activity all hold. One op makes the whole copy, and the app settles it in one `store.begin` → `settle`. Locally, 200 tasks take about 240 ms.
+  - Why: one tested path for both features, and the next step (N workspaces) is a loop, not a rewrite.
+  - Rejected: building a multi-workspace copy now (it has its own planning session); a client-side copy task by task (slow, not atomic).
+- **D15-3 · What a copy keeps and what stays with the original** → TV-D15
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13, within REPLAN 9 and 79.
+  - Decision: these come along:
+    - from a project (Duplicate or a project template): its statuses (names, categories, hidden), sections with their dates, and the open tasks (Backlog, To do, In progress) with their open subtasks. An In progress task starts again at the first To do status.
+    - from a task template: the task and every subtask, all open.
+    - on every copied task: description, priority, energy, estimate, due date and time as offsets, tags, dependencies among the copied tasks, and links to notes and contacts the whole workspace can see.
+    These never come along: comments, activity, files (AT-2's attachments, per REPLAN 9 "files in v1"), tracked time, work sessions, reminders, Waiting on, queue places, completions, claims, grants and person shares, and repeats. A repeat's pointer and history belong to its run, and a copied repeat would start firing for whoever it's assigned to.
+  - Why: the template keeps the work and drops the run (REPLAN 9); a copy must not notify or remind anyone on the original's behalf (TV-D12's rule).
+  - Rejected: copying repeats with a reset pointer; copying files.
+- **D15-4 · People on a copy** → TV-D15
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: "Keep who's assigned" (on by default, shown only when someone is assigned) keeps a person only where they can take tasks; otherwise the copy is unassigned, never yours by default. A task routed to a team keeps its team and starts unclaimed with a fresh routing (TV-D13's columns reset by its trigger). A task template's subtasks keep their people; the task itself takes capture's Assign when one is picked.
+  - Why: a hackathon's organizer must not end up assigned in every team's copy; a "next season" copy wants the same people.
+  - Rejected: always keeping people, and assigning everything to the copier.
+- **D15-5 · Who sees templates and copies** → TV-D15 (`templates_op_update`, `templates__sources_full`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (after a security review of the first cut).
+  - Decision:
+    - A template is its maker's until shared with the workspace. Saving one needs Tasks edit in the workspace and only takes what the saver can see; a hidden task's title or description never reaches a body.
+    - Sharing a template, and changing a shared one, check again that the person has Full access to every project or task it was saved from and that each is still there (`source_ids`, which readers can't see).
+    - A template saved from a project the workspace can't see asks before it's shared ("This includes n tasks from a private project. Share?"). While it stays private, a project made from it is private.
+    - A copy of a project the workspace can't see is private.
+    - Only the maker edits a template; the workspace's owner or an admin can also stop sharing or delete a shared one. An API key can save and use templates but never shares, edits or deletes them.
+    - A hidden template and a missing one get the same answer, and so do a hidden project and a missing one.
+  - Why: a shared template shows its contents to every Tasks reader, so sharing one is sharing what it copied (§15's edge case and REPLAN 79's "never shares its contents by itself").
+  - Rejected: trusting a flag set at save time; copying the source's sharing onto the copy.
+- **D15-6 · One date** → TV-D15
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision:
+    - A project's dates count from its start, or from its first date when it has no start. Duplicate and New project from template ask one "Starts on", today by default, and only when there are dates.
+    - A task template counts from its task's due date, or from the day it was saved when it had none. The one date asked is Due; in capture that's the Due pill.
+    - With no date, nothing is dated.
+  - Why: REPLAN 9 ("asks for one date") and 79 ("shifts every date from a new start date you pick").
+  - Rejected: a date per section.
+- **D15-7 · Where it all lives** → TV-D15, Settings rebuild
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision:
+    - A project's ⋯: Duplicate… and Save as template…, before Archive.
+    - The task panel's ⋯: Save as template…, under Duplicate.
+    - The sidebar's hairline ⋯: New project from template… beside New project, and Templates beside Archived projects. Templates is a centre page listing project and task templates, with Use… and a ⋯ for share, stop sharing and delete (Undo).
+    - Capture: `/template` and More → Template… pick a task template. It shows as a "Template: …" chip, fills the title and the template's project, and keeps a typed description and subtasks aside until the chip is removed.
+      - Only Assign stays, plus Due when the template counts from its due date. A template that counts from its start starts today.
+      - Words that set anything else (tags, priority, dates, a team, links) make Create say so, rather than drop them.
+      - Create makes the task on the server; the capture waits for it and stays open, chip and all, if the server refuses.
+    - The page moves to Settings → Tasks → Templates when that section exists.
+  - Why: no Settings → Tasks yet (D9's precedent: the default statuses open from the Inbox's ⋯); no gallery (REPLAN 9).
+  - Rejected: a template gallery, and capture filling only the title, description and subtask lines (that would lose the keep-set).
+- **D15-8 · Templates aren't in the shared store** → TV-D15 (`templates/templates-store.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: one small list per workspace, shared by every surface, read when a picker or the page opens and after each template op, wiped on sign-out; a body is read only when a template is opened. The `updated_at`/`deleted_at` columns make a synced table cheap later.
+  - Why: templates aren't work items, bodies can be large, and nobody needs another person's template edits live.
+  - Rejected: a `SyncRows` table for templates.
+- **D15-9 · Small rules** → TV-D15
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision:
+    - Deleting a template is soft, with Undo; templates deleted more than 30 days ago go for good on their owner's next save.
+    - A template or a copy holds up to 2,000 open tasks, with a body up to 2 MB. Over the limit, it says so, counting only what you can see.
+    - Projects have no description column yet, so a project template's body carries its own description (empty from a project) for TV-U16 to show.
+    - A resend (same client-minted id) answers only with something the caller made.
+    - Erasure deletes a person's templates, shared ones too. The data export carries yours and the shared ones with their bodies.
+  - Why: the same shapes as the rest of v3 (Recently deleted, idempotent ops, §Assumptions #26).
+  - Rejected: a hard delete without Undo.
+- **D15-10 · Known limits, kept on purpose** → TV-D15, a later migration if they matter
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (from the validator's review).
+  - Decision:
+    - The workspace's owner or an admin can undo the delete of a shared template within its 30 days, even when its owner deleted it. It was shared, so nothing new is shown; recording who deleted it would need another migration.
+    - A copy's dependencies and its replacement statuses are written inside the apply op (with the cycle trigger and `perm_enforce_write`), not through the status and dependency ops, so they add no activity rows of their own; each task's `tasks.create` row is there.
+    - A hand-edited body that interleaves status categories gets per-run positions (the editor never reorders statuses).
+  - Why: none of these shows anything to anyone who couldn't see it, and each costs a migration that would hold up the block.
+  - Rejected: a follow-up migration before the release.
 
 ## 2026-10-13 · TV-U13 Detail panel v3 + full page (tasks-v3 block 17) — the agent's choices (deferred to by Maciej)
 
@@ -117,7 +370,7 @@ Built in tasks-v3 block 17 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §9, AC
 
 ## 2026-10-13 · TV-D12 recurrence a–h, reminders, the notification table — the agent's choices (deferred to by Maciej)
 
-Built in tasks-v3 block 27 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §2 "Reminders" and "Repeats", §13, §Assumptions #5, #16, #26; REPLAN 24, 27 a–i, 73, 80; migrations `20261013110000_notifications_v3`, `20261013111000_recurrence_moves_dst` and `20261013140000_reminders_repeats_fixes`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+Built in tasks-v3 block 27 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §2 "Reminders" and "Repeats", §13, §Assumptions #5, #16, #26; REPLAN 24, 27 a–i, 73, 80; migrations `20261013110000_notifications_v3`, `20261013111000_recurrence_moves_dst` `20261013140000_reminders_repeats_fixes` and `20261013145000_recurrence_edit_checks`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
 
 - **D12-1 · Reminders are delivered by one minute job, and only while they make sense** → TV-D12 (`tasks__fire_reminders`, `tasks__notice`)
   - Who: agent's choice, deferred to by Maciej, 2026-10-13.
@@ -186,7 +439,7 @@ Built in tasks-v3 block 27 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §2 "Re
   - Rejected: Done only.
 - **D12-14 · Move just this one, change the pattern, skip** → TV-D12 (`tasks_op_move_occurrence`, `changePatternRule`, `tasks__rule_changed`, `tasks_op_skip_occurrence`)
   - Who: agent's choice, deferred to by Maciej, 2026-10-13.
-  - Decision: "just this one" moves the due date or the session (the other by the same days) and remembers the pattern's slot (`movedFrom`, `movedDays`), so completing counts from the pattern and the next cycle is back on it; "change the pattern" is the app's rule rewrite (DTSTART, a weekly rule's one weekday, a monthly rule's day) saved through `tasks_op_update`, and any rule change works the pointer out again on the server; skip is worked out on the server (the app's datetimes only for a rule it alone reads). The prompts belong to the drag surfaces (TL2, U15, the Calendar).
+  - Decision: "just this one" moves the due date or the session (the other by the same days) and remembers the pattern's slot (`movedFrom`, `movedDays`), so completing counts from the pattern and the next cycle is back on it; "change the pattern" is the app's rule rewrite (DTSTART, a weekly rule's one weekday, a monthly rule's day) saved through `tasks_op_update`, and any rule change works the pointer out again on the server; skip is worked out on the server (the app's datetimes only for a rule it alone reads); both skip and "just this one" go through `tasks__guard_edit` (edit access on the task, like every other change to one task). The prompts belong to the drag surfaces (TL2, U15, the Calendar).
   - Why: 27 g; the server owns the pointer (D8).
   - Rejected: a second task for a moved occurrence.
 - **D12-15 · A repeat's history is a read** → TV-D12 (`tasks_op_history`), TV-U13 (the panel)
@@ -204,6 +457,7 @@ Built in tasks-v3 block 27 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §2 "Re
   - Decision: `occurrencesBetween` gives the Calendar its faint future occurrences (none for a repeat after completion); the picker and its summary line are TV-U13's (row 17).
   - Why: the Calendar is rebuilt later; Tasks provides.
   - Rejected: drawing ghosts on today's calendar grid.
+
 ## 2026-10-13 · AT-2 on v3: the attachments section, toasts over dialogs, uploads in a read-only build — the agent's choices (deferred to by Maciej)
 
 Finished in tasks-v3 block 2 ([specs/attachments.md](../../specs/attachments.md) AT2-1–AT2-6, decisions 3, 7–11; REPLAN §8 L, #327) on the local stack. The pipeline's own decision is in [decisions/data.md](data.md) (2026-10-10 · AT-2). Each below is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.

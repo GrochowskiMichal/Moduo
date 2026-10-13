@@ -100,6 +100,7 @@ import {
 } from "./prefs-columns";
 import { createRequestCache } from "./request-cache";
 import { webChatRuntime } from "./runtime.chat.web";
+import { webFocusRuntime } from "./runtime.focus.web";
 import type {
   AttachmentRecord,
   AuthChangeEvent,
@@ -119,6 +120,7 @@ import type {
 } from "./runtime.types";
 import { createReferencePreviews } from "./runtime.web.previews";
 import { createTasksStructure } from "./runtime.web.structure";
+import { createTasksTemplates, type TemplateApplyResult } from "./runtime.web.templates";
 import { deltaCursor } from "./sync/delta-cursor";
 import type {
   AccessChange,
@@ -432,12 +434,21 @@ const tasksStructure = createTasksStructure(supabaseClient, {
   setTimeBlocksLegacy: (workspaceId, blocks) => setWorkspaceTimeBlocks(workspaceId, blocks),
 });
 
+/** TV-D15's templates and "Duplicate project…" (runtime.web.templates.ts). */
+const tasksTemplates = createTasksTemplates(supabaseClient, {
+  mapAnswer: (raw) => templateAnswerToModels(raw),
+});
+
 export const webRuntime: ModuoRuntime = {
   capabilities: webCapabilities,
 
   // Chat (specs/chat.md): ops + RLS reads live in runtime.chat.web.ts. Only this
   // file imports it — importing it first elsewhere would hit the module cycle.
   chat: webChatRuntime,
+
+  // Focus runs and claims (TV-F6): ops + own-row reads live in
+  // runtime.focus.web.ts, which only this file imports (the same module cycle).
+  focus: webFocusRuntime,
 
   auth: {
     async getLocalAuthState() {
@@ -2259,6 +2270,8 @@ export const webRuntime: ModuoRuntime = {
   tasks: {
     // TV-D10: areas, projects, sections, teams, sessions, reminders, waiting.
     ...tasksStructure,
+    // TV-D15: templates and "Duplicate project…".
+    ...tasksTemplates,
     async list(workspaceId) {
       // Best effort: a Viewer can't create their own Inbox (no tasks.create),
       // and that must not stop them reading the shared buckets.
@@ -4578,6 +4591,37 @@ async function createTaskRow(task: Task): Promise<Task> {
   }
   if (error) throw new Error(error.message);
   return taskRowToModel(data);
+}
+
+/**
+ * What a template apply or a duplicate answered (raw rows per store table,
+ * `templates__bundle`) as the store's rows, through each table's own mapper.
+ * A row this build can't read is left out; the next sync brings it.
+ */
+function templateAnswerToModels(raw: unknown): TemplateApplyResult {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const rows = <T extends "buckets" | "statuses" | "sections" | "tasks" | "tagLinks" | "relations">(
+    name: T,
+  ): SyncRows[T][] => {
+    const list = r[name];
+    if (!Array.isArray(list)) return [];
+    const map = SYNC_SOURCES[name].map as (row: unknown) => SyncRows[T];
+    return list.flatMap((row) => {
+      try {
+        return [map(row)];
+      } catch {
+        return [];
+      }
+    });
+  };
+  return {
+    buckets: rows("buckets"),
+    statuses: rows("statuses"),
+    sections: rows("sections"),
+    tasks: rows("tasks"),
+    tagLinks: rows("tagLinks"),
+    relations: rows("relations"),
+  };
 }
 
 function taskRelationRowToModel(raw: unknown): TaskRelation {

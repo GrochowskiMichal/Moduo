@@ -320,6 +320,8 @@ export type TasksFilterControls = {
   activeFilters: ReactNode | undefined;
   /** A filter or a search is narrowing the scope ("No tasks match" when empty). */
   active: boolean;
+  /** A search is on (counted with the filters in "hidden by 2 filters"). */
+  searching: boolean;
   /** Clears every filter and the search. */
   clear: () => void;
   /** What New pre-fills (U2-5). */
@@ -525,6 +527,7 @@ export function useTasksFilters({
   return {
     tasks,
     active: conditions.length > 0 || query.trim() !== "",
+    searching: query.trim() !== "",
     clear,
     seed: useMemo(() => captureSeed(conditions), [conditions]),
     search: (
