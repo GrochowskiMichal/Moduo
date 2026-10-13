@@ -48,7 +48,12 @@ test.beforeAll(async () => {
   tag = runTag();
   [project] = await rest<Array<{ id: string }>>(dev, "buckets", {
     method: "POST",
-    body: { workspace_id: ws.id, owner_id: dev.user.id, name: `Triage ${tag}`, position: `z${tag}` },
+    body: {
+      workspace_id: ws.id,
+      owner_id: dev.user.id,
+      name: `Triage ${tag}`,
+      position: `z${tag}`,
+    },
   });
 });
 
@@ -95,12 +100,7 @@ async function inboxTask(title: string, from: Session = dev): Promise<string> {
 }
 
 const rowOf = async (id: string) =>
-  (
-    await rest<TaskRow[]>(
-      "service",
-      `tasks?id=eq.${id}&select=id,bucket_id,assignee_id,status`,
-    )
-  )[0];
+  (await rest<TaskRow[]>("service", `tasks?id=eq.${id}&select=id,bucket_id,assignee_id,status`))[0];
 
 /** Open the Inbox on one task (selected), with the list focused for its keys. */
 async function openOn(page: Page, id: string, title: string) {
@@ -172,7 +172,9 @@ test("3 marks a duplicate: its comments copied to the original, then Won't do", 
     "service",
     `comments?entity_type=eq.task&entity_id=eq.${originalId}&select=body`,
   );
-  const merged = onOriginal.map((c) => c.body).find((b) => b.includes(`Merged “Same thing ${tag}”`));
+  const merged = onOriginal
+    .map((c) => c.body)
+    .find((b) => b.includes(`Merged “Same thing ${tag}”`));
   expect(merged).toContain(`seen on Safari ${tag}`);
 });
 

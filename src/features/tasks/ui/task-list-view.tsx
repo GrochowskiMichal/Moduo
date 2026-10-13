@@ -738,8 +738,7 @@ export function TaskListView({
         : // Standard sizes only its date column (most tasks have none).
           {
             date:
-              whenOf?.(t) ??
-              (t.scheduledAt || t.dueDate ? (rowDate(t, now)?.label ?? null) : null),
+              whenOf?.(t) ?? (t.scheduledAt || t.dueDate ? (rowDate(t, now)?.label ?? null) : null),
           };
       cache.set(t, texts);
       return texts;

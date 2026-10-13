@@ -71,7 +71,14 @@ import type { ListExtraGroup } from "./list-extensions";
 
 type InboxApi = Pick<
   TasksModuleApi,
-  "tasks" | "buckets" | "inbox" | "commentStamps" | "currentUserId" | "patchTask" | "dropTask"
+  | "loaded"
+  | "tasks"
+  | "buckets"
+  | "inbox"
+  | "commentStamps"
+  | "currentUserId"
+  | "patchTask"
+  | "dropTask"
 >;
 
 /** The dialog a triage action opened, for one task. */
@@ -162,6 +169,9 @@ export function useInboxView({
   const wokenKey = `${split.woken.join(",")}|${split.stale.join(",")}`;
   // biome-ignore lint/correctness/useExhaustiveDependencies: the key names what changed.
   useEffect(() => {
+    // Not before the tasks are in: every snooze would read as stale.
+    // Nor while the module still holds another workspace's tasks (a switch).
+    if (!api.loaded || !inboxId || api.inbox?.workspaceId !== workspaceId) return;
     if (split.woken.length === 0 && split.stale.length === 0) return;
     if (canEdit && split.woken.length > 0) {
       const tops = api.tasks.filter((t) => t.bucketId === inboxId && !t.parentId && !t.deletedAt);
@@ -178,7 +188,7 @@ export function useInboxView({
       for (const id of gone) delete mine[id];
       return mine;
     });
-  }, [wokenKey]);
+  }, [wokenKey, api.loaded, inboxId]);
 
   const [showSnoozed, setShowSnoozed] = useState(false);
   const scope = useCallback(
