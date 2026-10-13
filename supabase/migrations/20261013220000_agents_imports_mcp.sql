@@ -309,6 +309,9 @@ BEGIN
     RAISE EXCEPTION 'An agent''s name is at most 60 characters.' USING ERRCODE = '22023';
   END IF;
 
+  -- One report at a time per task and key, so two first reports can't both
+  -- start a session.
+  PERFORM pg_advisory_xact_lock(hashtextextended('agent_sessions:' || t.id::text || ':' || v_key::text, 0));
   SELECT * INTO s FROM public.agent_sessions x
   WHERE x.task_id = t.id AND x.key_id = v_key AND x.deleted_at IS NULL
   FOR UPDATE;
@@ -394,7 +397,7 @@ BEGIN
               'session_id', s.id)));
     -- "That key's notifications": the person's Agents switch mutes the OS /
     -- browser notice too (the bell filters its own rows).
-    SELECT coalesce((up.preferences -> 'notifications' ->> 'agents')::boolean, true) = false
+    SELECT (up.preferences -> 'notifications' -> 'agents') = 'false'::jsonb
       INTO v_muted
     FROM public.user_preferences up WHERE up.user_id = v_actor;
     IF NOT coalesce(v_muted, false) THEN
@@ -478,7 +481,7 @@ BEGIN
 END;
 $$;
 
--- Its person clears a session's line from the task.
+-- Its person clears a session's line from the task (in the app; never a key).
 CREATE OR REPLACE FUNCTION public.tasks_op_agent_session_dismiss(p_workspace_id uuid, p_session_id uuid)
 RETURNS public.agent_sessions
 LANGUAGE plpgsql
@@ -486,11 +489,11 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
-  v_actor uuid := public.perm_actor_id();
+  v_actor uuid := auth.uid();
   s public.agent_sessions;
 BEGIN
-  IF v_actor IS NULL THEN
-    RAISE EXCEPTION 'Sign in first.' USING ERRCODE = '42501';
+  IF v_actor IS NULL OR public.module_api_key_id() IS NOT NULL THEN
+    RAISE EXCEPTION 'Only its person clears a session''s line.' USING ERRCODE = '42501';
   END IF;
   SELECT * INTO s FROM public.agent_sessions x
   WHERE x.id = p_session_id AND x.workspace_id = p_workspace_id AND x.user_id = v_actor
@@ -678,6 +681,32 @@ CREATE UNIQUE INDEX IF NOT EXISTS tasks_imported_from_key
   ON public.tasks (workspace_id, owner_id, (imported_from ->> 'source'), (imported_from ->> 'key'))
   WHERE imported_from IS NOT NULL AND deleted_at IS NULL;
 
+-- A task restored from Recently deleted after a newer import took its key
+-- (Undo, then the import run again) comes back unlinked: the newer task keeps
+-- the key, and the restore never fails on it.
+CREATE OR REPLACE FUNCTION public.tasks__imported_from_restore()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = public
+AS $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM public.tasks x
+             WHERE x.workspace_id = NEW.workspace_id AND x.owner_id = NEW.owner_id
+               AND x.deleted_at IS NULL AND x.id <> NEW.id AND x.imported_from IS NOT NULL
+               AND x.imported_from ->> 'source' = NEW.imported_from ->> 'source'
+               AND x.imported_from ->> 'key' = NEW.imported_from ->> 'key') THEN
+    NEW.imported_from := NULL;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+DROP TRIGGER IF EXISTS tasks_imported_from_restore ON public.tasks;
+CREATE TRIGGER tasks_imported_from_restore
+  BEFORE UPDATE OF deleted_at ON public.tasks
+  FOR EACH ROW
+  WHEN (OLD.deleted_at IS NOT NULL AND NEW.deleted_at IS NULL AND NEW.imported_from IS NOT NULL)
+  EXECUTE FUNCTION public.tasks__imported_from_restore();
+
 -- tasks_op_create's own check follows (anchored replace on the live body).
 DO $create$
 DECLARE
@@ -727,10 +756,13 @@ CREATE TABLE IF NOT EXISTS public.import_rows (
   entity_type text NOT NULL CHECK (entity_type IN ('task', 'bucket', 'section')),
   entity_id uuid NOT NULL,
   action text NOT NULL CHECK (action IN ('created', 'updated')),
-  logged_at timestamptz NOT NULL DEFAULT now(),
+  logged_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   UNIQUE (import_id, entity_type, entity_id)
 );
 CREATE INDEX IF NOT EXISTS import_rows_entity ON public.import_rows (entity_type, entity_id);
+-- Stamped when written, after what the row records (whose updated_at is the
+-- clock too): the run's own writes never read as "touched since".
+ALTER TABLE public.import_rows ALTER COLUMN logged_at SET DEFAULT clock_timestamp();
 
 ALTER TABLE public.imports ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS imports_own_read ON public.imports;
@@ -919,7 +951,9 @@ BEGIN
   IF i.id IS NOT NULL THEN
     INSERT INTO public.import_rows (import_id, workspace_id, entity_type, entity_id, action)
     VALUES (i.id, p_workspace_id, 'task', t.id, v_action)
-    ON CONFLICT (import_id, entity_type, entity_id) DO NOTHING;
+    -- The same row sent twice in one run (a retry) stays the run's: its
+    -- stamp moves past the run's own second write.
+    ON CONFLICT (import_id, entity_type, entity_id) DO UPDATE SET logged_at = EXCLUDED.logged_at;
   END IF;
   SELECT * INTO t FROM public.tasks x WHERE x.id = t.id;
   RETURN jsonb_build_object(
@@ -1049,6 +1083,7 @@ AS $$
 DECLARE
   i public.imports;
 BEGIN
+  PERFORM public.tasks__guard_structure(p_workspace_id);
   i := public.imports__own(p_workspace_id, p_import_id);
   IF i.finished_at IS NULL THEN
     UPDATE public.imports x SET finished_at = now() WHERE x.id = i.id RETURNING * INTO i;
@@ -1060,7 +1095,10 @@ $$;
 -- "Undo this import": what the run made and nobody touched since goes to
 -- Recently deleted (tasks first, newest first; then its sections and projects
 -- left empty). What was edited since, or that the caller can no longer edit,
--- stays. Rows the run only updated stay as they are.
+-- stays. Rows the run only updated stay as they are. A task is touched when
+-- anything was logged on it after the run wrote it; a section or project
+-- (they keep no trail) when it changed after the run's last write; a project
+-- also stays while it has a section left.
 CREATE OR REPLACE FUNCTION public.imports_op_undo(p_workspace_id uuid, p_import_id uuid)
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -1079,12 +1117,15 @@ DECLARE
   v_sections_removed integer := 0;
   v_sections_kept integer := 0;
   v_project uuid;
+  v_changed timestamptz;
+  v_run_end timestamptz;
 BEGIN
   PERFORM public.tasks__guard_structure(p_workspace_id);
   i := public.imports__own(p_workspace_id, p_import_id);
   IF i.undone_at IS NOT NULL THEN
     RAISE EXCEPTION 'This import was already undone.' USING ERRCODE = '22023';
   END IF;
+  SELECT max(y.logged_at) INTO v_run_end FROM public.import_rows y WHERE y.import_id = i.id;
 
   FOR r IN
     SELECT * FROM public.import_rows y
@@ -1111,10 +1152,12 @@ BEGIN
     WHERE y.import_id = i.id AND y.entity_type = 'section'
     ORDER BY y.logged_at DESC, y.id DESC
   LOOP
-    SELECT s.project_id INTO v_project FROM public.sections s
+    v_project := NULL;
+    SELECT s.project_id, s.updated_at INTO v_project, v_changed FROM public.sections s
     WHERE s.id = r.entity_id AND s.deleted_at IS NULL;
     CONTINUE WHEN v_project IS NULL OR NOT public.projects__visible_to(v_project, v_actor);
-    IF EXISTS (SELECT 1 FROM public.tasks t WHERE t.section_id = r.entity_id AND t.deleted_at IS NULL)
+    IF v_changed > v_run_end
+       OR EXISTS (SELECT 1 FROM public.tasks t WHERE t.section_id = r.entity_id AND t.deleted_at IS NULL)
        OR NOT public.projects__editable_to(v_project, v_actor) THEN
       v_sections_kept := v_sections_kept + 1;
       CONTINUE;
@@ -1128,9 +1171,12 @@ BEGIN
     WHERE y.import_id = i.id AND y.entity_type = 'bucket'
     ORDER BY y.logged_at DESC, y.id DESC
   LOOP
-    CONTINUE WHEN NOT EXISTS (SELECT 1 FROM public.buckets b WHERE b.id = r.entity_id AND b.deleted_at IS NULL)
-               OR NOT public.projects__visible_to(r.entity_id, v_actor);
-    IF EXISTS (SELECT 1 FROM public.tasks t WHERE t.bucket_id = r.entity_id AND t.deleted_at IS NULL)
+    v_changed := NULL;
+    SELECT b.updated_at INTO v_changed FROM public.buckets b WHERE b.id = r.entity_id AND b.deleted_at IS NULL;
+    CONTINUE WHEN v_changed IS NULL OR NOT public.projects__visible_to(r.entity_id, v_actor);
+    IF v_changed > v_run_end
+       OR EXISTS (SELECT 1 FROM public.tasks t WHERE t.bucket_id = r.entity_id AND t.deleted_at IS NULL)
+       OR EXISTS (SELECT 1 FROM public.sections sx WHERE sx.project_id = r.entity_id AND sx.deleted_at IS NULL)
        OR NOT public.can_access('bucket', r.entity_id, 'full', v_actor) THEN
       v_projects_kept := v_projects_kept + 1;
       CONTINUE;
@@ -1231,7 +1277,9 @@ GRANT EXECUTE ON FUNCTION public.notice_deliveries__claim(integer) TO service_ro
 -- tasks_search (TV-D11b) asked perm_can_view, which reads auth.uid() only, so
 -- a key (MCP tasks_search) found nothing. It now asks the module permission,
 -- which reads a key's scope capped by its person, and a member's role as
--- before; the task gate per match is unchanged. Re-cut from the live body.
+-- before; the task gate per match is unchanged. A task's "imported from" key
+-- is searchable too ("ENG-123" finds the task it became, AC3.6), in the app
+-- and through the connector alike. Re-cut from the live body.
 CREATE OR REPLACE FUNCTION public.tasks_search(p_workspace_id uuid, p_query text, p_limit integer DEFAULT 200)
 RETURNS SETOF uuid
 LANGUAGE plpgsql
@@ -1258,9 +1306,9 @@ BEGIN
     RETURN;
   END IF;
   -- The text first (cheap), then the access check on the matches only.
-  -- A task reads as its title and its description's text, lower-cased: the
-  -- editor stores HTML, so tags go, the common entities are decoded, and a
-  -- reference's stored text is never searchable (the app's
+  -- A task reads as its title, its description's text and its import key,
+  -- lower-cased: the editor stores HTML, so tags go, the common entities are
+  -- decoded, and a reference's stored text is never searchable (the app's
   -- `descriptionText`, which searches the device copy, follows the same rules).
   FOR v_id IN
     SELECT t.id
@@ -1277,7 +1325,7 @@ BEGIN
                 '<[^>]*>', ' ', 'g'),
               '&nbsp;', ' '), '&quot;', '"'), '&#39;', ''''), '&lt;', '<'), '&gt;', '>'), '&amp;', '&')
           ELSE t.description
-        END
+        END || E'\n' || coalesce(t.imported_from ->> 'key', '')
       ) AS hay
     ) AS h
     WHERE t.workspace_id = p_workspace_id
@@ -1333,6 +1381,32 @@ BEGIN
 END;
 $erase$;
 
+-- A key's trail rows name its person ("Alex · via Claude Desktop", §1), so
+-- erasure clears a key's trail label with the key, where it clears their own
+-- (workspaces they don't own; the trail then reads "An API client").
+DO $erase_keys$
+DECLARE
+  v_def text := pg_get_functiondef('public.account_erase_workspace_data(uuid, boolean)'::regprocedure);
+  v_anchor text := 'DELETE FROM public.workspace_api_keys k'
+                   || E'\n  WHERE k.created_by = p_user AND k.workspace_id <> ALL (v_owned);';
+BEGIN
+  IF position('-- TV-D16: their keys'' trail labels' IN v_def) > 0 THEN
+    RETURN; -- re-run
+  END IF;
+  IF position(v_anchor IN v_def) = 0 THEN
+    RAISE EXCEPTION 'account_erase_workspace_data isn''t the body this migration expects; redefine it by hand.';
+  END IF;
+  EXECUTE replace(v_def, v_anchor,
+    '-- TV-D16: their keys'' trail labels name them; cleared like their own.'
+    || E'\n  UPDATE public.module_activity a SET actor_label = NULL'
+    || E'\n  FROM public.workspace_api_keys k'
+    || E'\n  WHERE a.actor_type = ''api_key'' AND a.actor_id = k.id AND a.actor_label IS NOT NULL'
+    || E'\n    AND a.workspace_id <> ALL (v_owned)'
+    || E'\n    AND k.created_by = p_user AND k.workspace_id <> ALL (v_owned);'
+    || E'\n  ' || v_anchor);
+END;
+$erase_keys$;
+
 -- ── 7. Grants ────────────────────────────────────────────────────────────────
 
 DO $$
@@ -1343,7 +1417,8 @@ BEGIN
   FOREACH fn IN ARRAY ARRAY[
     'agent_sessions__shown_to(uuid, uuid, uuid)', 'agent_sessions__links(jsonb)',
     'agent_sessions__key_revoked()', 'imports__own(uuid, uuid)', 'imports__summary(public.imports)',
-    'imports__open(uuid, uuid)', 'user_preferences__agent_work_changed()'
+    'imports__open(uuid, uuid)', 'user_preferences__agent_work_changed()',
+    'tasks__imported_from_restore()'
   ] LOOP
     EXECUTE format('REVOKE ALL ON FUNCTION public.%s FROM PUBLIC, anon, authenticated', fn);
     EXECUTE format('GRANT EXECUTE ON FUNCTION public.%s TO service_role', fn);

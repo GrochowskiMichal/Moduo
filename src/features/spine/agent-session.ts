@@ -70,6 +70,22 @@ export function silenceWords(
   return `No update for ${formatAge(s.updatedAt, now)}`;
 }
 
+/**
+ * Who a session's line names: the agent alone on your own ("Claude"), and
+ * whose agent it is on a teammate's ("Anna's Claude"), so an agent's chosen
+ * name never reads as a person. A person the reader can't name reads
+ * "A teammate's".
+ */
+export function agentWho(
+  s: Pick<AgentSession, "agent" | "userId">,
+  viewerId: string | null,
+  ownerName: (userId: string) => string | null | undefined,
+): string {
+  if (viewerId && s.userId === viewerId) return s.agent;
+  const owner = ownerName(s.userId)?.trim();
+  return `${owner || "A teammate"}'s ${s.agent}`;
+}
+
 /** A link's words: its label, else its host. */
 export function linkWords(link: AgentSessionLink): string {
   if (link.label?.trim()) return link.label.trim();
@@ -82,13 +98,14 @@ export function linkWords(link: AgentSessionLink): string {
 
 /**
  * The line under the title, as parts (the panel joins them with " · " and
- * renders the links): "Claude", what it's doing ("Writing tests", or its
- * state when it needs you / is ready / failed), "step 3 of 5", when ("2m
- * ago", or "No update for 40m"). A revoked key reads "Stopped (key revoked)".
+ * renders the links): "Claude" (or `who`, see agentWho), what it's doing
+ * ("Writing tests", or its state when it needs you / is ready / failed),
+ * "step 3 of 5", when ("2m ago", or "No update for 40m"). A revoked key reads
+ * "Stopped (key revoked)".
  */
-export function agentLineParts(s: AgentSession, now: Date): string[] {
-  if (s.stoppedAt) return [s.agent, "Stopped (key revoked)"];
-  const parts = [s.agent];
+export function agentLineParts(s: AgentSession, now: Date, who: string = s.agent): string[] {
+  if (s.stoppedAt) return [who, "Stopped (key revoked)"];
+  const parts = [who];
   const note = s.note?.trim() || null;
   if (s.state === "working") parts.push(note ?? "Working");
   else {
@@ -107,18 +124,20 @@ export function agentLineParts(s: AgentSession, now: Date): string[] {
 }
 
 /** The line as text (screen readers, tests). */
-export function agentLineText(s: AgentSession, now: Date): string {
-  return agentLineParts(s, now).join(" · ");
+export function agentLineText(s: AgentSession, now: Date, who: string = s.agent): string {
+  return agentLineParts(s, now, who).join(" · ");
 }
 
 /**
  * The row's quiet mark: "Claude · working" or "Claude · needs you", for an
  * open task with a session in one of those states (ready and failed show on
- * the task's line, not its row). The newest session wins.
+ * the task's line, not its row). The newest session wins; `who` names it
+ * (agentWho: a teammate's reads "Anna's Claude").
  */
 export function agentRowMark(
   sessions: readonly AgentSession[],
   task: { status?: unknown; statusCategory?: unknown } | null,
+  who: (s: AgentSession) => string = (s) => s.agent,
 ): string | null {
   if (task && isClosedTask(task as Parameters<typeof isClosedTask>[0])) return null;
   let best: AgentSession | null = null;
@@ -127,7 +146,7 @@ export function agentRowMark(
     if (s.state !== "working" && s.state !== "needs_you") continue;
     if (!best || s.updatedAt > best.updatedAt) best = s;
   }
-  return best ? `${best.agent} · ${STATE_WORDS[best.state]}` : null;
+  return best ? `${who(best)} · ${STATE_WORDS[best.state]}` : null;
 }
 
 /** Live sessions per task, newest first. */
@@ -149,12 +168,13 @@ export function agentSessionsByTask(
 export function agentRowMarks(
   sessions: readonly AgentSession[],
   taskById: (id: string) => { status?: unknown; statusCategory?: unknown } | null | undefined,
+  who?: (s: AgentSession) => string,
 ): Map<string, string> {
   const out = new Map<string, string>();
   for (const [taskId, list] of agentSessionsByTask(sessions)) {
     const task = taskById(taskId);
     if (!task) continue;
-    const mark = agentRowMark(list, task);
+    const mark = agentRowMark(list, task, who);
     if (mark) out.set(taskId, mark);
   }
   return out;

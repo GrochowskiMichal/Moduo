@@ -64,8 +64,12 @@ export async function readTasksExport(
       workspaceId: string,
     ): Promise<{ entries: unknown[]; truncated: readonly unknown[] }>;
     /** Your own agent sessions and import runs (TV-D16). */
-    listMyAgentSessions?(workspaceId: string): Promise<unknown[]>;
-    listImports?(workspaceId: string): Promise<unknown[]>;
+    listMyAgentSessions?(
+      workspaceId: string,
+    ): Promise<{ sessions: unknown[]; truncated: readonly unknown[] }>;
+    listImports?(
+      workspaceId: string,
+    ): Promise<{ imports: unknown[]; truncated: readonly unknown[] }>;
   },
   workspaceId: string,
   /** TV-F6: your own Focus runs in the workspace (nobody reads anyone else's). */
@@ -97,8 +101,12 @@ export async function readTasksExport(
     tasks.exportTimeEntries
       ? tasks.exportTimeEntries(workspaceId)
       : Promise.resolve({ entries: [], truncated: [] }),
-    tasks.listMyAgentSessions ? tasks.listMyAgentSessions(workspaceId) : Promise.resolve([]),
-    tasks.listImports ? tasks.listImports(workspaceId) : Promise.resolve([]),
+    tasks.listMyAgentSessions
+      ? tasks.listMyAgentSessions(workspaceId)
+      : Promise.resolve({ sessions: [], truncated: [] }),
+    tasks.listImports
+      ? tasks.listImports(workspaceId)
+      : Promise.resolve({ imports: [], truncated: [] }),
   ]);
   const cut = (bundle as { truncated?: unknown }).truncated;
   return {
@@ -110,8 +118,8 @@ export async function readTasksExport(
     focusRuns: runs.runs,
     templates: templates.templates,
     timeEntries: time.entries,
-    agentSessions,
-    imports,
+    agentSessions: agentSessions.sessions,
+    imports: imports.imports,
     truncated: [
       ...(Array.isArray(cut) ? cut : []),
       ...read.truncated,
@@ -121,6 +129,8 @@ export async function readTasksExport(
       ...runs.truncated,
       ...templates.truncated,
       ...time.truncated,
+      ...agentSessions.truncated,
+      ...imports.truncated,
     ],
   };
 }

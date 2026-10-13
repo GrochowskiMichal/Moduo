@@ -168,6 +168,14 @@ BEGIN
   r := test.report('K', 'T1', '{"state": "failed", "note": "CI is down"}');
   PERFORM test.ok((SELECT count(*) FROM public.notice_deliveries WHERE user_id = test.id('E') AND kind = 'agent') = 2,
     'with Agents muted, no OS / browser notice (the bell hides its own row)', r);
+  -- Only a plain "false" mutes; anything else stored there never breaks a report.
+  UPDATE public.user_preferences SET preferences = jsonb_set(preferences, '{notifications,agents}', '"off"'::jsonb)
+  WHERE user_id = test.id('E');
+  r := test.report('K', 'T1', '{"state": "ready", "note": "CI is back; ready"}');
+  PERFORM test.ok(r = 'ok 1' AND (SELECT count(*) FROM public.notice_deliveries WHERE user_id = test.id('E') AND kind = 'agent') = 3,
+    'a stored value that isn''t a switch neither breaks the report nor mutes', r);
+  UPDATE public.user_preferences SET preferences = jsonb_set(preferences, '{notifications,agents}', 'false'::jsonb)
+  WHERE user_id = test.id('E');
 
   -- The summary stays its person's, even while the session is shown.
   PERFORM test.ok(test.value_as('E', format($q$SELECT count(*)::text FROM public.agent_session_summaries WHERE session_id = %L$q$,
@@ -252,6 +260,9 @@ BEGIN
   v_id := (test.session('T3', 'K')).id;
   r := test.as_user('F', format($q$SELECT public.tasks_op_agent_session_dismiss(%L, %L)$q$, test.id('W'), v_id));
   PERFORM test.ok(r LIKE '22023%Session not found%', 'a teammate can''t clear someone''s session', r);
+  r := test.as_key('KV', format($q$SELECT public.tasks_op_agent_session_dismiss(%L, %L)$q$, test.id('W'), v_id));
+  PERFORM test.ok(r LIKE '42501%' AND (SELECT deleted_at FROM public.agent_sessions WHERE id = v_id) IS NULL,
+    'nor can a key, even its person''s', r);
   r := test.as_user('E', format($q$SELECT public.tasks_op_agent_session_dismiss(%L, %L)$q$, test.id('W'), v_id));
   PERFORM test.ok(r = 'ok 1' AND (SELECT deleted_at FROM public.agent_sessions WHERE id = v_id) IS NOT NULL,
     'its person clears the line', r);
@@ -264,5 +275,8 @@ BEGIN
               AND NOT EXISTS (SELECT 1 FROM public.agent_session_summaries WHERE user_id = test.id('E'))
               AND EXISTS (SELECT 1 FROM public.agent_sessions WHERE user_id = test.id('O')),
     'and removes them (and their summaries), nobody else''s');
+  PERFORM test.ok(NOT EXISTS (SELECT 1 FROM public.module_activity WHERE actor_type = 'api_key'
+                              AND actor_id IN (test.id('K'), test.id('KV')) AND actor_label IS NOT NULL),
+    'their keys'' trail rows no longer name them');
 END;
 $$;

@@ -16,10 +16,12 @@ import {
   type AgentSession,
   agentLineParts,
   agentLineText,
+  agentWho,
   isOwnSession,
   linkWords,
   stepWords,
 } from "../../spine/agent-session";
+import { useAssignees } from "../assignees";
 import { useMinuteTick } from "../use-today";
 
 const NO_SESSIONS: readonly AgentSession[] = [];
@@ -46,6 +48,8 @@ export function AgentSessionLines({
   );
   // The "2m ago" and "No update for 40m" words move on by the minute.
   const tick = useMinuteTick(mine.length > 0);
+  // A teammate's line says whose agent it is ("Anna's Claude").
+  const { byId } = useAssignees();
   if (mine.length === 0) return null;
   return (
     <div data-slot="agent-sessions" className="flex flex-col gap-1 pl-6" data-tick={tick}>
@@ -53,6 +57,7 @@ export function AgentSessionLines({
         <AgentSessionLine
           key={s.id}
           session={s}
+          who={agentWho(s, userId, (id) => byId(id)?.fullName)}
           workspaceId={workspaceId}
           own={isOwnSession(s, userId)}
           runtime={runtime}
@@ -64,17 +69,20 @@ export function AgentSessionLines({
 
 function AgentSessionLine({
   session,
+  who,
   workspaceId,
   own,
   runtime,
 }: {
   session: AgentSession;
+  /** The line's first words: "Claude", or "Anna's Claude" on a teammate's. */
+  who: string;
   workspaceId: string;
   own: boolean;
   runtime: ModuoRuntime | null;
 }) {
   const now = new Date();
-  const parts = agentLineParts(session, now);
+  const parts = agentLineParts(session, now, who);
   const [open, setOpen] = useState(false);
   // The summary read, tagged with the summary it belongs to: a newer one (a
   // re-report, a new run) reads again, so the fold never shows text other
@@ -142,7 +150,7 @@ function AgentSessionLine({
   return (
     <div data-slot="agent-session" data-state={session.stoppedAt ? "stopped" : session.state}>
       <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 font-sans text-xs text-muted-foreground">
-        <span className="sr-only">{agentLineText(session, now)}</span>
+        <span className="sr-only">{agentLineText(session, now, who)}</span>
         {parts.map((part, i) => (
           <span
             // biome-ignore lint/suspicious/noArrayIndexKey: the line's parts are fixed in order.

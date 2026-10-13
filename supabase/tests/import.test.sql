@@ -50,11 +50,25 @@ $$;
 CREATE FUNCTION test.live(p_task text) RETURNS boolean LANGUAGE sql STABLE AS $$
   SELECT EXISTS (SELECT 1 FROM public.tasks WHERE id = test.id(p_task) AND deleted_at IS NULL)
 $$;
--- Move a run's stamps (and its tasks' trail) back an hour: "later" afterwards.
-CREATE FUNCTION test.age_run(p_import uuid) RETURNS void LANGUAGE sql AS $$
+-- Move a run's stamps (its tasks' trail, its projects' and sections' last
+-- change) back an hour: "later" afterwards. updated_at is stamped by a
+-- trigger, so those move with triggers off.
+CREATE FUNCTION test.age_run(p_import uuid) RETURNS void LANGUAGE plpgsql AS $$
+BEGIN
   UPDATE public.module_activity a SET created_at = a.created_at - interval '1 hour'
   WHERE a.entity_id IN (SELECT entity_id FROM public.import_rows WHERE import_id = p_import);
   UPDATE public.import_rows SET logged_at = logged_at - interval '1 hour' WHERE import_id = p_import;
+  SET LOCAL session_replication_role = replica;
+  UPDATE public.sections SET updated_at = updated_at - interval '1 hour'
+  WHERE id IN (SELECT entity_id FROM public.import_rows WHERE import_id = p_import AND entity_type = 'section');
+  UPDATE public.buckets SET updated_at = updated_at - interval '1 hour'
+  WHERE id IN (SELECT entity_id FROM public.import_rows WHERE import_id = p_import AND entity_type = 'bucket');
+  SET LOCAL session_replication_role = origin;
+END;
+$$;
+CREATE FUNCTION test.search_as(p_who text, p_query text, p_key boolean DEFAULT false) RETURNS text LANGUAGE sql AS $$
+  SELECT CASE WHEN p_key THEN test.as_key(p_who, format($q$SELECT * FROM public.tasks_search(%L, %L, 50)$q$, test.id('W'), p_query))
+              ELSE test.as_user(p_who, format($q$SELECT * FROM public.tasks_search(%L, %L, 50)$q$, test.id('W'), p_query)) END
 $$;
 
 DO $$
@@ -65,6 +79,8 @@ DECLARE
   i2 uuid;
   i3 uuid;
   i4 uuid;
+  i5 uuid;
+  i6 uuid;
 BEGIN
   PERFORM test.as_user('O', format($q$SELECT public.tasks_op_create(%L, %L::jsonb)$q$, test.id('W'),
     jsonb_build_object('id', test.id('TP'), 'title', 'O private', 'bucket_id', test.id('PB'))));
@@ -142,6 +158,14 @@ BEGIN
               AND (SELECT title FROM public.tasks WHERE id = test.id('A')) = 'Read ch. 1',
     'someone else''s import with the same key makes their own task and never learns of E''s', r);
 
+  -- ── "ENG-123" is findable after import (AC3.6) ──────────────────────────
+  PERFORM test.as_user('O', format($q$SELECT public.tasks_op_create(%L, %L::jsonb)$q$, test.id('W'),
+    jsonb_build_object('id', test.id('TK'), 'title', 'Board prep', 'bucket_id', test.id('PB'),
+      'imported_from', jsonb_build_object('source', 'linear', 'key', 'PRIV-9'))));
+  PERFORM test.ok(test.search_as('K', '101', true) = 'ok 1' AND test.search_as('E', 'PRIV-9') = 'ok 0'
+              AND test.search_as('K', 'priv-9', true) = 'ok 0' AND test.search_as('O', 'PRIV-9') = 'ok 1',
+    'search finds a task by its import key, only for whoever can see it (E''s 101, not F''s; O''s private PRIV-9 for O alone)');
+
   -- ── Finish; a re-run updates ────────────────────────────────────────────
   r := test.as_key('K', format($q$SELECT public.imports_op_finish(%L, %L)$q$, test.id('W'), i1));
   v := public.imports__summary((SELECT x FROM public.imports x WHERE x.id = i1));
@@ -194,6 +218,45 @@ BEGIN
   r := test.as_user('E', format($q$SELECT public.imports_op_undo(%L, %L)$q$, test.id('W'), i4));
   PERFORM test.ok(r = 'ok 1' AND test.live('G'), 'a task someone commented on since stays (Undo from the app works too)', r);
 
+  -- Sections and projects keep no trail: one changed since the run stays, one
+  -- left as the run made it goes, and a project with a section left stays.
+  i5 := test.begin_import('Run 5');
+  PERFORM test.as_key('K', format($q$SELECT public.imports_op_project_create(%L, %L, %L::jsonb)$q$, test.id('W'), i5,
+    jsonb_build_object('id', test.id('P5'), 'name', 'Physics')));
+  PERFORM test.as_key('K', format($q$SELECT * FROM public.imports_op_section_create(%L, %L, %L, %L::jsonb)$q$, test.id('W'), i5,
+    test.id('P5'), jsonb_build_object('id', test.id('S5a'), 'name', 'Optics')));
+  PERFORM test.as_key('K', format($q$SELECT * FROM public.imports_op_section_create(%L, %L, %L, %L::jsonb)$q$, test.id('W'), i5,
+    test.id('P5'), jsonb_build_object('id', test.id('S5b'), 'name', 'Waves')));
+  PERFORM test.age_run(i5);
+  PERFORM test.as_user('E', format($q$SELECT * FROM public.sections_op_update(%L, %L, '{"name": "Optics, part 1"}'::jsonb)$q$,
+    test.id('W'), test.id('S5a')));
+  r := test.as_key('K', format($q$SELECT public.imports_op_undo(%L, %L)$q$, test.id('W'), i5));
+  PERFORM test.ok(r = 'ok 1'
+              AND (SELECT deleted_at IS NULL FROM public.sections WHERE id = test.id('S5a'))
+              AND (SELECT deleted_at IS NOT NULL FROM public.sections WHERE id = test.id('S5b'))
+              AND (SELECT deleted_at IS NULL FROM public.buckets WHERE id = test.id('P5')),
+    'Undo keeps a section renamed since (and its project), and removes the one left as it was', r);
+  i6 := test.begin_import('Run 6');
+  PERFORM test.as_key('K', format($q$SELECT public.imports_op_project_create(%L, %L, %L::jsonb)$q$, test.id('W'), i6,
+    jsonb_build_object('id', test.id('P6'), 'name', 'Maths')));
+  PERFORM test.age_run(i6);
+  PERFORM test.as_user('E', format($q$SELECT * FROM public.projects_op_update(%L, %L, '{"name": "Maths 2"}'::jsonb)$q$,
+    test.id('W'), test.id('P6')));
+  r := test.as_key('K', format($q$SELECT public.imports_op_undo(%L, %L)$q$, test.id('W'), i6));
+  PERFORM test.ok(r = 'ok 1' AND (SELECT deleted_at IS NULL FROM public.buckets WHERE id = test.id('P6')),
+    'and a project renamed since, empty or not', r);
+
+  -- A task Undo removed comes back from Recently deleted even after the run
+  -- made its key again; the newer task keeps the key.
+  r := test.create_with('K', jsonb_build_object('id', test.id('B2'), 'title', 'Lab report', 'bucket_id', test.id('P1'),
+      'imported_from', jsonb_build_object('source', 'todoist', 'key', '102')), '{}'::jsonb);
+  PERFORM test.ok(r = 'ok 1' AND NOT test.live('B'), 'importing B''s key again makes a new task', r);
+  r := test.as_user('E', format($q$SELECT * FROM public.tasks_op_update(%L, %L, '{"deleted_at": null}'::jsonb)$q$,
+    test.id('W'), test.id('B')));
+  PERFORM test.ok(r LIKE 'ok%' AND test.live('B') AND (SELECT imported_from FROM public.tasks WHERE id = test.id('B')) IS NULL
+              AND (SELECT imported_from ->> 'key' FROM public.tasks WHERE id = test.id('B2')) = '102',
+    'restoring the old one works; it comes back unlinked from the source', r);
+
   -- ── Imports are their person's ──────────────────────────────────────────
   r := test.as_user('F', format($q$SELECT public.imports_op_undo(%L, %L)$q$, test.id('W'), i2));
   v := to_jsonb(r);
@@ -228,7 +291,7 @@ BEGIN
   PERFORM test.ok(test.value_as('F', 'SELECT count(*)::text FROM public.imports') = '0'
               AND test.value_as('F', 'SELECT count(*)::text FROM public.import_rows') = '0'
               AND test.value_as('O', 'SELECT count(*)::text FROM public.imports') = '0'
-              AND test.value_as('E', 'SELECT count(*)::text FROM public.imports') = '4'
+              AND test.value_as('E', 'SELECT count(*)::text FROM public.imports') = '6'
               AND test.value_as('E', format($q$SELECT count(*)::text FROM public.import_rows WHERE import_id = %L$q$, i1)) = '5',
     'imports and their rows are readable by their person only (the workspace owner included)');
 
@@ -278,10 +341,14 @@ BEGIN
 
   -- ── Erasure (§Assumptions #26) ──────────────────────────────────────────
   v := public.account_erase_workspace_data(test.id('E'), true);
-  PERFORM test.ok((v ->> 'imports_deleted')::integer = 4, 'erasure counts E''s import runs', v::text);
+  PERFORM test.ok((v ->> 'imports_deleted')::integer = 6, 'erasure counts E''s import runs', v::text);
   PERFORM public.account_erase_workspace_data(test.id('E'), false);
   PERFORM test.ok(NOT EXISTS (SELECT 1 FROM public.imports WHERE user_id = test.id('E'))
-              AND NOT EXISTS (SELECT 1 FROM public.import_rows WHERE import_id IN (i1, i2, i3, i4)),
+              AND NOT EXISTS (SELECT 1 FROM public.import_rows WHERE import_id IN (i1, i2, i3, i4, i5, i6)),
     'and removes them with their rows');
+  PERFORM test.ok(NOT EXISTS (SELECT 1 FROM public.module_activity WHERE actor_type = 'api_key'
+                              AND actor_id IN (test.id('K'), test.id('KV')) AND actor_label IS NOT NULL)
+              AND (SELECT actor_label FROM public.module_activity WHERE entity_id = test.id('A') AND op = 'tasks.create') IS NULL,
+    'and their key''s trail rows no longer name them');
 END;
 $$;

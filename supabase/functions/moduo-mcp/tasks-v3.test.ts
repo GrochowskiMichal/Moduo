@@ -268,8 +268,12 @@ describe("tasks_set_status: by category or name; finishing cascades (call 87)", 
 });
 
 describe("reads never show or count what the key's person can't see", () => {
-  it("tasks_search: words through the gated RPC, plus handles and imported keys; nothing hidden", async () => {
-    const { ctx, rpcCalls } = setup({ rpcs: { tasks_search: () => ["t-secret", "t-open"] } });
+  it("tasks_search: words and imported keys through the gated RPC, plus handles; nothing hidden", async () => {
+    // The server reads the import key too ("ENG-123", AC3.6); the connector
+    // asks nothing else about it.
+    const { ctx, rpcCalls } = setup({
+      rpcs: { tasks_search: (args) => (args.p_query === "ENG-123" ? ["t-imported"] : ["t-secret", "t-open"]) },
+    });
     const byWords = await call("tasks_search", { q: "board" }, ctx);
     expect(byWords.map((t: Row) => t.id)).toEqual(["t-open"]);
     expect(rpcCalls.find((c) => c.fn === "tasks_search")?.args).toEqual({ p_workspace_id: WS, p_query: "board", p_limit: 25 });

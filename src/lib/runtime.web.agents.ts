@@ -16,6 +16,7 @@ import {
 } from "@contracts/vocabularies";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AgentSession } from "../features/spine/agent-session";
+import { collectTruncations, READ_CAPS, readPaged, type Truncation } from "./paged-select";
 import { agentSessionRowToModel, isMissingFunctionError, isMissingTableError } from "./task-rows";
 
 /** A session as `tasks_agent_sessions` answers it: with its summary when it's yours. */
@@ -50,7 +51,58 @@ export type ImportUndoResult = {
 
 const NOT_READY = "Agent work isn't available on this server yet.";
 
+/** The export reads every run (a person makes few) and every row they made. */
+const IMPORT_RUNS_CAP = 2000;
+const IMPORT_ROWS_CAP = 100000;
+
 const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+
+type Row = Record<string, unknown>;
+
+/**
+ * One of your own tables read in full, in pages past the server's 1,000-row
+ * answers, ordered by a unique column so pages never skip or repeat; a read
+ * cut at `cap` says so. A table the database doesn't have yet reads as
+ * `missing`.
+ */
+async function pagedRows(
+  client: SupabaseClient,
+  table: string,
+  opts: {
+    scope: string;
+    cap: number;
+    select: string;
+    filter: Record<string, string>;
+    /** Unique column to page by (default `id`). */
+    orderBy?: string;
+  },
+): Promise<{ rows: Row[]; truncation: Truncation | null; missing: boolean }> {
+  const build = (head?: { count: "exact"; head: true }) => {
+    let q = client.from(table).select(opts.select, head);
+    for (const [col, value] of Object.entries(opts.filter)) q = q.eq(col, value);
+    return q;
+  };
+  const res = await readPaged<Row, { message: string; code?: string }>({
+    scope: opts.scope,
+    cap: opts.cap,
+    page: async (offset, limit) => {
+      const { data, error } = await build()
+        .order(opts.orderBy ?? "id")
+        .range(offset, offset + limit - 1);
+      return { data: (data ?? null) as Row[] | null, error };
+    },
+    countTotal: async () => {
+      const { count, error } = await build({ count: "exact", head: true });
+      return error ? null : (count ?? null);
+    },
+    keyOf: (row) => String(row[opts.orderBy ?? "id"]),
+  });
+  if (res.error) {
+    if (isMissingTableError(res.error, table)) return { rows: [], truncation: null, missing: true };
+    throw new Error(res.error.message);
+  }
+  return { rows: res.rows, truncation: res.truncation, missing: false };
+}
 
 export function createTasksAgents(
   client: SupabaseClient,
@@ -136,66 +188,76 @@ export function createTasksAgents(
       return data === true;
     },
 
-    /** Your agent sessions in a workspace (the data export). */
-    async listMyAgentSessions(
-      workspaceId: string,
-    ): Promise<Array<AgentSession & { summary: string | null }>> {
+    /**
+     * Your agent sessions in a workspace, with your hand-back summaries (the
+     * data export). Paged past the server's 1,000-row answers; a cut read
+     * says so in `truncated`.
+     */
+    async listMyAgentSessions(workspaceId: string): Promise<{
+      sessions: Array<AgentSession & { summary: string | null }>;
+      truncated: Truncation[];
+    }> {
       const userId = await deps.userId();
-      if (!userId) return [];
-      const { data, error } = await client
-        .from("agent_sessions")
-        .select("*")
-        .eq("workspace_id", workspaceId)
-        .eq("user_id", userId)
-        .order("started_at", { ascending: false })
-        .limit(5000);
-      if (error) {
-        if (isMissingTableError(error, "agent_sessions")) return [];
-        throw new Error(error.message);
-      }
-      const sessions = (data ?? []).map(agentSessionRowToModel);
+      if (!userId) return { sessions: [], truncated: [] };
+      const read = await pagedRows(client, "agent_sessions", {
+        scope: "agent sessions",
+        cap: READ_CAPS.agentSessions,
+        select: "*",
+        filter: { workspace_id: workspaceId, user_id: userId },
+      });
+      if (read.missing) return { sessions: [], truncated: [] };
+      const sessions = read.rows
+        .map(agentSessionRowToModel)
+        .sort((a, b) => (a.startedAt < b.startedAt ? 1 : -1));
       // Your hand-back summaries ride along (RLS: only yours).
       const summaries = new Map<string, string>();
+      let summaryCut: Truncation | null = null;
       if (sessions.length) {
-        const res = await client
-          .from("agent_session_summaries")
-          .select("session_id, summary")
-          .eq("workspace_id", workspaceId)
-          .eq("user_id", userId)
-          .limit(5000);
-        if (res.error && !isMissingTableError(res.error, "agent_session_summaries")) {
-          throw new Error(res.error.message);
-        }
-        for (const r of res.data ?? []) summaries.set(r.session_id as string, r.summary as string);
+        const res = await pagedRows(client, "agent_session_summaries", {
+          scope: "agent session summaries",
+          cap: READ_CAPS.agentSessions,
+          select: "session_id, summary",
+          filter: { workspace_id: workspaceId, user_id: userId },
+          orderBy: "session_id",
+        });
+        for (const r of res.rows) summaries.set(r.session_id as string, r.summary as string);
+        summaryCut = res.truncation;
       }
-      return sessions.map((s) => ({ ...s, summary: summaries.get(s.id) ?? null }));
+      return {
+        sessions: sessions.map((s) => ({ ...s, summary: summaries.get(s.id) ?? null })),
+        truncated: collectTruncations(read.truncation, summaryCut),
+      };
     },
 
-    /** Your import runs in a workspace, newest first (the export; TV-U18's list). */
-    async listImports(workspaceId: string): Promise<ImportRun[]> {
-      const { data, error } = await client
-        .from("imports")
-        .select("id, source, label, started_at, finished_at, undone_at, key_id")
-        .eq("workspace_id", workspaceId)
-        .order("started_at", { ascending: false })
-        .limit(1000);
-      if (error) {
-        if (isMissingTableError(error, "imports")) return [];
-        throw new Error(error.message);
-      }
-      const runs = data ?? [];
+    /**
+     * Your import runs in a workspace, newest first, with what each made or
+     * updated (the export; TV-U18's list). Paged like the sessions.
+     */
+    async listImports(
+      workspaceId: string,
+    ): Promise<{ imports: ImportRun[]; truncated: Truncation[] }> {
+      const read = await pagedRows(client, "imports", {
+        scope: "import runs",
+        cap: IMPORT_RUNS_CAP,
+        select: "id, source, label, started_at, finished_at, undone_at, key_id",
+        filter: { workspace_id: workspaceId },
+      });
+      if (read.missing) return { imports: [], truncated: [] };
+      const runs = [...read.rows].sort((a, b) =>
+        String(a.started_at) < String(b.started_at) ? 1 : -1,
+      );
       // What each run made or updated (RLS: only your runs' rows).
       const rowsByRun = new Map<string, ImportRun["rows"]>();
+      let rowsCut: Truncation | null = null;
       if (runs.length) {
-        const res = await client
-          .from("import_rows")
-          .select("import_id, entity_type, entity_id, action, logged_at")
-          .eq("workspace_id", workspaceId)
-          .limit(20000);
-        if (res.error && !isMissingTableError(res.error, "import_rows")) {
-          throw new Error(res.error.message);
-        }
-        for (const r of res.data ?? []) {
+        const res = await pagedRows(client, "import_rows", {
+          scope: "imported rows",
+          cap: IMPORT_ROWS_CAP,
+          select: "id, import_id, entity_type, entity_id, action, logged_at",
+          filter: { workspace_id: workspaceId },
+        });
+        rowsCut = res.truncation;
+        for (const r of res.rows) {
           const type = normalizeImportEntityType(r.entity_type);
           if (!type) continue;
           const list = rowsByRun.get(r.import_id as string) ?? [];
@@ -208,16 +270,19 @@ export function createTasksAgents(
           rowsByRun.set(r.import_id as string, list);
         }
       }
-      return runs.map((r) => ({
-        id: r.id as string,
-        source: r.source as string,
-        label: (r.label as string | null) ?? null,
-        startedAt: r.started_at as string,
-        finishedAt: (r.finished_at as string | null) ?? null,
-        undoneAt: (r.undone_at as string | null) ?? null,
-        keyId: (r.key_id as string | null) ?? null,
-        rows: rowsByRun.get(r.id as string) ?? [],
-      }));
+      return {
+        imports: runs.map((r) => ({
+          id: r.id as string,
+          source: r.source as string,
+          label: (r.label as string | null) ?? null,
+          startedAt: r.started_at as string,
+          finishedAt: (r.finished_at as string | null) ?? null,
+          undoneAt: (r.undone_at as string | null) ?? null,
+          keyId: (r.key_id as string | null) ?? null,
+          rows: rowsByRun.get(r.id as string) ?? [],
+        })),
+        truncated: collectTruncations(read.truncation, rowsCut),
+      };
     },
 
     /** "Undo this import" (TV-U18 puts it in the app). */

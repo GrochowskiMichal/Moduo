@@ -11,6 +11,7 @@ import {
   agentLineText,
   agentRowMark,
   agentRowMarks,
+  agentWho,
   isOwnSession,
   linkWords,
   silenceWords,
@@ -116,5 +117,19 @@ describe("whose it is", () => {
     expect(isOwnSession(session(), "alex")).toBe(true);
     expect(isOwnSession(session(), "sam")).toBe(false);
     expect(isOwnSession(session(), null)).toBe(false);
+  });
+
+  it("a teammate's line and row say whose agent it is, whatever it calls itself", () => {
+    const names = (id: string) => (id === "alex" ? "Alex" : null);
+    const posing = session({ agent: "Sam" });
+    expect(agentWho(posing, "alex", names)).toBe("Sam");
+    expect(agentWho(posing, "sam", names)).toBe("Alex's Sam");
+    expect(agentWho(session({ userId: "gone" }), "sam", names)).toBe("A teammate's Claude");
+    expect(agentLineText(posing, NOW, agentWho(posing, "sam", names))).toMatch(
+      /^Alex's Sam · Writing tests/,
+    );
+    expect(agentRowMark([posing], { status: "todo" }, (s) => agentWho(s, "sam", names))).toBe(
+      "Alex's Sam · working",
+    );
   });
 });

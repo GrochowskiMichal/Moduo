@@ -353,12 +353,19 @@ describe("the tasks export carries every new tasks table (TV-D8, §Assumptions #
       listCompletions: async () => ({ completions: [], truncated: [] }),
       ...noD10Reads,
     };
+    const rowsCut = { scope: "imported rows", shown: 100000, total: 100400 };
     const data = await readTasksExport(
-      { ...base, listMyAgentSessions: async () => [session], listImports: async () => [run] },
+      {
+        ...base,
+        listMyAgentSessions: async () => ({ sessions: [session], truncated: [] }),
+        listImports: async () => ({ imports: [run], truncated: [rowsCut] }),
+      },
       "ws-1",
     );
     expect(data.agentSessions).toEqual([session]);
     expect(data.imports).toEqual([run]);
+    // A cut read is named, never silent.
+    expect(data.truncated).toEqual([rowsCut]);
     const none = await readTasksExport(base, "ws-1");
     expect(none.agentSessions).toEqual([]);
     expect(none.imports).toEqual([]);

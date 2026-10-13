@@ -106,6 +106,18 @@ BEGIN
     jsonb_build_object('id', test.id('T3'), 'title', 'Three')));
   PERFORM test.ok(r LIKE '%edit access to Tasks%' AND NOT EXISTS (SELECT 1 FROM public.tasks WHERE id = test.id('T3')),
     'a view-only key writes nothing', r);
+  PERFORM test.as_key('K', format($q$SELECT public.imports_op_begin(%L, 'todoist', 'Scoped run')$q$, test.id('W')));
+  r := test.as_key('KV', format($q$SELECT public.imports_op_finish(%L, %L)$q$, test.id('W'),
+    (SELECT id FROM public.imports WHERE label = 'Scoped run')));
+  PERFORM test.ok(r LIKE '%edit access to Tasks%' AND (SELECT finished_at FROM public.imports WHERE label = 'Scoped run') IS NULL,
+    'nor finishes its person''s import run', r);
+  r := test.as_key('KV', format($q$SELECT public.imports_op_undo(%L, %L)$q$, test.id('W'),
+    (SELECT id FROM public.imports WHERE label = 'Scoped run')));
+  PERFORM test.ok(r LIKE '%edit access to Tasks%' AND (SELECT undone_at FROM public.imports WHERE label = 'Scoped run') IS NULL,
+    'nor undoes one', r);
+  r := test.as_key('KV', format($q$SELECT public.tasks_op_agent_session_dismiss(%L, %L)$q$, test.id('W'),
+    (SELECT id FROM public.agent_sessions WHERE task_id = test.id('T1') LIMIT 1)));
+  PERFORM test.ok(r LIKE '42501%', 'nor clears a session''s line', r);
   r := test.as_key('KV', format($q$SELECT public.tasks_agent_sessions(%L, %L)$q$, test.id('W'), test.id('T1')));
   PERFORM test.ok(r = 'ok 1', 'but reads its person''s sessions', r);
   r := test.as_key('K', format($q$SELECT * FROM public.tasks_op_update(%L, %L, '{"deleted_at": "2030-01-01T00:00:00Z"}'::jsonb)$q$,

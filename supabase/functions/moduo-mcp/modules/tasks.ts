@@ -125,7 +125,9 @@ async function finishOpenSubtasks(
   }
   const data = await loadWorkspace(ctx);
   let finished = 0;
-  for (const sub of data.tasks.filter((t) => t.parent_id === before.id && !isRowClosed(t))) {
+  // Subtasks in an archived project finish too, as in the app.
+  const all = [...data.tasks, ...data.archivedTasks];
+  for (const sub of all.filter((t) => t.parent_id === before.id && !isRowClosed(t))) {
     const res = await finish(sub.id as string);
     if (!res.error) finished += 1;
   }
@@ -555,16 +557,15 @@ export const tasksConnectorModule: ConnectorModule = {
       handler: async (args, ctx) => {
         const q = str(args, "q");
         const limit = clampLimit(args, 25, 100);
-        const [data, words, imported] = await Promise.all([
+        // The server's search reads the title, the description and the
+        // import key ("ENG-123"), and gates every match on its person.
+        const [data, words] = await Promise.all([
           loadWorkspace(ctx),
           unwrap<string[] | null>(ctx.db.rpc("tasks_search", {
             p_workspace_id: ctx.key.workspaceId,
             p_query: q,
             p_limit: limit,
           })),
-          rows(ctx.db.from("tasks").select("id")
-            .eq("workspace_id", ctx.key.workspaceId).is("deleted_at", null)
-            .eq("imported_from->>key", q).limit(limit)),
         ]);
         const ids: string[] = [];
         if (HANDLE.test(q)) {
@@ -574,7 +575,7 @@ export const tasksConnectorModule: ConnectorModule = {
             // Not a handle here: the words still search.
           }
         }
-        ids.push(...imported.map((r) => r.id as string), ...(words ?? []));
+        ids.push(...(words ?? []));
         const now = new Date();
         const archived = new Map(data.archivedTasks.map((t) => [t.id, t]));
         const out: Row[] = [];

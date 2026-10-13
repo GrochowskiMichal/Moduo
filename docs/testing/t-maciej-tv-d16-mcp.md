@@ -18,15 +18,18 @@
 
 ## Private by default
 - [ ] **Do:** as a teammate who can see the task, open it while an agent of yours works on it → **Expect:** no row mark, no line. _(web, second account)_
-- [ ] **Do:** Settings → Preferences → Agents → turn on "Show my agent work to teammates" → **Expect:** the teammate sees the mark and the line within a few seconds, without the summary or Post / ×; turn it off → it disappears for them. _(web, two accounts)_
+- [ ] **Do:** Settings → Preferences → Agents → turn on "Show my agent work to teammates" → **Expect:** the teammate sees the mark and the line within a few seconds, reading "<your first name>'s Claude Desktop · …" (never the agent's name alone), without the summary or Post / ×; turn it off → it disappears for them. _(web, two accounts)_
 - [ ] **Do:** Settings → API keys → revoke the key while its session says "working" → **Expect:** the line reads "Claude Desktop · Stopped (key revoked)"; the trail still says "via Claude Desktop". _(web)_
 - [ ] **Do:** Settings → Preferences → Notifications → turn off "Your agents", then have the agent report "failed" → **Expect:** no bell card and no OS notice. _(web)_
 
 ## Import through your AI (AC2.6, AC3.6)
 - [ ] **Do:** ask Claude (with Todoist's connector too) to bring a Todoist project into Moduo → **Expect:** it begins an import, makes the project and its sections, the tasks with dates, labels as tags, repeats, subtasks and reminders; each task carries "imported from todoist <id>". _(Claude + web)_
 - [ ] **Do:** search Moduo (MCP `tasks_search`) for a Todoist id, and for a Linear key like `ENG-123` after a Linear import → **Expect:** the task. _(Claude)_
+- [ ] **Do:** type `ENG-123` into the Tasks search box and into ⌘K → **Expect:** the imported task. _(web)_
 - [ ] **Do:** run the same import again → **Expect:** nothing new; the tasks update (renamed ones take the new names). _(Claude + web)_
 - [ ] **Do:** edit one imported task in the app, then ask Claude to undo the first import → **Expect:** what nobody touched goes to Recently deleted, the edited one stays (with its section and project); Claude reports the counts. _(Claude + web)_
+- [ ] **Do:** rename a section the import made, then undo the import → **Expect:** that section (and its project) stays; an untouched empty one goes. _(Claude + web)_
+- [ ] **Do:** after an Undo, run the import again, then restore an undone task from Recently deleted → **Expect:** it comes back (no error); the new task keeps the "imported from" link. _(Claude + web)_
 - [ ] **Do:** a teammate tries to undo your import (their own key) → **Expect:** "No import with that id." _(Claude)_
 
 ## Other tools
@@ -44,3 +47,4 @@
 - [ ] A long-running connector call (a 200-task import) under the Edge Function time limit; split runs if it isn't.
 
 ## Polish later
+_Nothing open: the validator's one screen finding (a teammate's line naming whose agent it is) was fixed in the block._

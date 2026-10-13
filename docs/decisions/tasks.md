@@ -43,9 +43,9 @@ Built in tasks-v3 block 31 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §12, �
   - Rejected: per workspace (D10-14's first cut).
 - **D16-8 · Re-run by key, Undo what nobody touched** → TV-D16 (`tasks_op_create_with`, `imports_op_*`)
   - Who: agent's choice, deferred to by Maciej, 2026-10-13 (74).
-  - Decision: creating with a key you already used on a live task of yours updates that task (fields, added tags; reminders and work sessions only on create), in or out of a run; a run records what it made or updated. "Undo this import" sends the run's created tasks that have no activity after the run wrote them to Recently deleted (subtasks first), then the sections and projects it made that are left empty; rows it only updated stay as they are; anything the person can no longer see isn't counted. Runs are their person's alone (keys or the app). The whole create (task, tags, reminders, sessions, the run's row) is one transaction.
+  - Decision: creating with a key you already used on a live task of yours updates that task (fields, added tags; reminders and work sessions only on create), in or out of a run; a run records what it made or updated. "Undo this import" sends the run's created tasks that have no activity after the run wrote them to Recently deleted (subtasks first), then the sections and projects it made that are left empty and unchanged since the run's last write (they keep no trail, so their own last change decides); a project with a section left stays. Rows it only updated stay as they are; anything the person can no longer see isn't counted. Runs are their person's alone (keys or the app), and finishing or undoing one needs Tasks edit like beginning it. The whole create (task, tags, reminders, sessions, the run's row) is one transaction, and a run's projects and sections are made through it. A task Undo removed that comes back from Recently deleted after the import made its key again returns unlinked from the source (the newer task keeps the key).
   - Why: "a second run updates, creates nothing new; Undo removes exactly the first run's rows that weren't edited since" (spec edge case); soft deletes keep 30 days to change your mind.
-  - Rejected: restoring the old values of updated rows; deciding "edited since" from `updated_at` (triggers move it).
+  - Rejected: restoring the old values of updated rows; deciding a task's "edited since" from `updated_at` (triggers move it; tasks have a trail); refusing the restore.
 - **D16-9 · Tags by name through one op** → TV-D16 (`tasks_op_tag`)
   - Who: agent's choice, deferred to by Maciej, 2026-10-13.
   - Decision: add and take off by name in any case; a missing name becomes a workspace tag when the person may make tags; needs edit access to the task; one trail line ("tagged this “exam” and untagged “week1”").
@@ -58,14 +58,29 @@ Built in tasks-v3 block 31 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §12, �
   - Rejected: a separate "projects" key scope.
 - **D16-11 · Search answers keys** → TV-D16 (`tasks_search` re-cut)
   - Who: agent's choice, deferred to by Maciej, 2026-10-13.
-  - Decision: the search RPC checks the module permission (a key's scope capped by its person) instead of a person-only check; the task gate per match is unchanged; MCP search also finds a handle and an import key.
+  - Decision: the search RPC checks the module permission (a key's scope capped by its person) instead of a person-only check; the task gate per match is unchanged. A task's import key is searched with its title and description, on the server and in the app's own copy, so "ENG-123" finds it in the search box, ⌘K and MCP alike; MCP also finds a handle.
   - Why: under a key it returned nothing; AC3.6 ("ENG-123 is findable after import").
-  - Rejected: keeping MCP on its old substring query (it filled its limit before the gate).
+  - Rejected: keeping MCP on its old substring query (it filled its limit before the gate); a connector-only key lookup (the app wouldn't find it).
 - **D16-12 · The import end-to-end test runs locally; the real connector run is a release step** → TV-D16 (`scripts/mcp-import-roundtrip.ts`)
   - Who: agent's choice, deferred to by Maciej, 2026-10-13 (74's "tested end to end with Claude + Todoist's connector before it's announced").
   - Decision: a script imports a Todoist-shaped project through the local connector with a real key (dates, labels, a repeat, a subtask, a reminder), re-runs it, undoes, posts a session and finishes a parent, in a disposable workspace it removes; Claude with Todoist's own connector is on the release checklist.
   - Why: no Claude or Todoist account belongs in a local build; the script exercises the same HTTP surface.
   - Rejected: skipping the end-to-end check until release.
+- **D16-13 · Erasure clears a key's trail label with the key** → TV-D16 (`account_erase_workspace_data`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (§Assumptions #26).
+  - Decision: when a person's data is erased, the trail rows their keys wrote in workspaces they don't own lose their label, as their own rows do; the trail then reads "An API client".
+  - Why: D16-1 puts the person's name in a key's label.
+  - Rejected: keeping the key's name (it's the person's own text too).
+- **D16-14 · A teammate's agent line says whose agent it is** → TV-D16 (`agentWho`, the panel line, the row mark)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: your own sessions read "Claude · …"; a teammate's shared one reads "Anna's Claude · …" on the line and "Anna's Claude · working" on the row (first name on rows), "A teammate's …" when the reader can't name them. Clearing a line is its person's, in the app; a key can't.
+  - Why: an agent names itself, so a shared line shouldn't read as a person.
+  - Rejected: the agent's name alone everywhere.
+- **D16-15 · Runs, run rows and summaries keep no soft delete** → TV-D16 (`imports`, `import_rows`, `agent_session_summaries`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (§Assumptions #27).
+  - Decision: these three are read on demand by their person (never delta-synced), so they carry `workspace_id` but no `deleted_at` (and `import_rows` no `updated_at`); a run is never deleted by hand, its rows go with it, and a new run replaces a session's summary.
+  - Why: #27's columns exist so the delta sync sees every change; nothing syncs these.
+  - Rejected: columns nothing reads or writes.
 
 ## 2026-10-13 · TV-D14 Time entries, the time report, Time & region — the agent's choices (deferred to by Maciej)
 

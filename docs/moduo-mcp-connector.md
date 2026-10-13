@@ -179,9 +179,11 @@ already has every write.
 **Imports** (#20): `imports_begin` → `projects_create` / `sections_create`
 / `tasks_create` with `import_id` and `imported_from` → `imports_finish`.
 A re-run is a new run whose tasks update by key. `imports_undo` sends what
-the run made and nobody touched since (any activity on it after the run
-wrote it) to Recently deleted — tasks, then its empty sections and
-projects; rows it only updated stay. Runs are their person's only.
+the run made and nobody touched since (a task: any activity on it after the
+run wrote it; a section or project: any change after the run's last write)
+to Recently deleted — tasks, then its empty sections and projects (a project
+with a section left stays); rows it only updated stay. Runs are their
+person's only; finishing or undoing one needs Tasks edit.
 `imported_from` is unique per (workspace, person) among live tasks.
 
 Deliberately **not** exposed: `tasks.catch_up` (app-lifecycle batch pass),
