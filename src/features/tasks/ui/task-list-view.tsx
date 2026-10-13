@@ -1566,7 +1566,10 @@ export function TaskListView({
           {/* The rows and Detailed's headers share the columns' widths. */}
           <div ref={frameRef} style={frameStyle} className="flex min-h-0 flex-1 flex-col">
             {showHeader ? (
-              <div className="pane-scroll shrink-0 overflow-hidden">
+              // It doesn't scroll, but keeps the same scrollbar gutter as the
+              // list below (a stable gutter), so a column's label stays over
+              // its column where scrollbars take room.
+              <div className="shrink-0 overflow-hidden [scrollbar-gutter:stable]">
                 <TaskListHeader
                   columns={fitted}
                   expandSlot={expandSlot}
