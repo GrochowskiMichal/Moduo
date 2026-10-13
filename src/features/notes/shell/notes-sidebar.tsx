@@ -146,7 +146,11 @@ export function NotesSidebar(props: NotesSidebarProps) {
         break;
       case "trash": {
         const note = notes.find((n) => n.id === action.id);
-        if (note && action.id !== props.draftId) props.onAction("trash", note);
+        if (!note || action.id === props.draftId) break;
+        // In the personal Favorites list ⌫ only un-favorites; it never trashes
+        // the shared note.
+        const inFavorites = current?.startsWith("favorites:") ?? false;
+        props.onAction(inFavorites ? "unfavorite" : "trash", note);
         break;
       }
       case "reorder": {

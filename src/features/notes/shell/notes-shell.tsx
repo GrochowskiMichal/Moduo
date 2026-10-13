@@ -84,7 +84,16 @@ export function NotesShell() {
     module,
     deleteTask: tasks.tasksApi.deleteTask,
   });
-  const actions = useShellActions(shell, { trash: trashWithDetach });
+  const actions = useShellActions(shell, trashWithDetach);
+  const search = useCallback(
+    (q: string) =>
+      runtime && workspaceId
+        ? runtime.notesV2
+            .search({ workspaceId, query: q })
+            .then((rows) => shapeNoteSearchResults(rows, q))
+        : Promise.resolve([]),
+    [runtime, workspaceId],
+  );
 
   // The editor ↔ module bridge (NO-4): page rows read live titles, a click
   // opens the note, `/page` creates a child of the open note.
@@ -136,8 +145,19 @@ export function NotesShell() {
     (section: CrumbSection) => {
       if (!panels.left)
         dispatchLayoutPanelsSet({ feature: "notes", left: true, right: panels.right });
-      if (section === "archive" || section === "trash") setFooterView(section);
-      else setFooterView(null);
+      if (section === "archive" || section === "trash") {
+        setFooterView(section);
+        return;
+      }
+      setFooterView(null);
+      // Reveal and focus that section's first row once the tree is drawn.
+      requestAnimationFrame(() => {
+        const header = document.querySelector<HTMLElement>(`[data-drop-header="${section}"]`);
+        header?.scrollIntoView({ block: "nearest" });
+        header?.parentElement
+          ?.querySelector<HTMLElement>('[role="treeitem"]')
+          ?.focus({ preventScroll: true });
+      });
     },
     [panels.left, panels.right],
   );
@@ -248,14 +268,7 @@ export function NotesShell() {
                 void module.purgeNote(id);
                 if (selectedId === id) shell.select(null, true);
               }}
-              onSearch={
-                runtime && !degraded
-                  ? (q) =>
-                      runtime.notesV2
-                        .search({ workspaceId, query: q })
-                        .then((rows) => shapeNoteSearchResults(rows, q))
-                  : undefined
-              }
+              onSearch={runtime && !degraded ? search : undefined}
               onImport={canEdit && !degraded ? () => setImportOpen(true) : undefined}
             />
           }

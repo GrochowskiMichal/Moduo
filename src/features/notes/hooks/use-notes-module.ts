@@ -547,13 +547,20 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
             : null,
         )
         .then(() => engine.promoteDraft(id))
-        .catch((e) => {
-          // The typed text stays in the local draft document; say so.
-          toast.error(e instanceof Error ? e.message : "Couldn't save the new note.");
-          setNotes((prev) => prev.filter((n) => n.id !== id));
-        })
+        .then(
+          () => {
+            pendingCreatesRef.current.delete(id);
+          },
+          (e) => {
+            // The server refused the create. Keep the note on screen (it stays
+            // a local draft: nothing pushes) so the typed text isn't yanked
+            // away, and say plainly that it isn't saved.
+            toast.error("Couldn't save this new note.", {
+              description: `${e instanceof Error ? e.message : "The server said no."} Copy what you typed before leaving it.`,
+            });
+          },
+        )
         .finally(() => {
-          pendingCreatesRef.current.delete(id);
           createPromisesRef.current.delete(id);
         });
       createPromisesRef.current.set(id, created);

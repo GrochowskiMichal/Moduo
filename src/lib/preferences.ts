@@ -357,17 +357,21 @@ function subscribe(listener: () => void): () => void {
   };
 }
 
-// The app-wide syncer's push, registered while <PreferencesSync/> is mounted, so
-// a consumer outside Settings can change a synced field without mounting a
+// The syncers' pushes, registered while a usePreferences() is mounted, so a
+// consumer outside Settings can change a synced field without mounting a
 // second reconcile loop (gotchas/supabase.md, "exactly ONE usePreferences()").
-let syncPush: ((syncable: Record<string, unknown>) => void) | null = null;
+// A stack, not a slot: the Settings pane mounts a second instance, and closing
+// it must leave the app-wide <PreferencesSync/>'s push registered.
+type SyncPush = (syncable: Record<string, unknown>) => void;
+const syncPushes: SyncPush[] = [];
+const currentSyncPush = (): SyncPush | undefined => syncPushes[syncPushes.length - 1];
 
 function commit(patch: Partial<Preferences>): Preferences {
   const next = sanitizePreferences({ ...store, ...patch });
   setStore(next);
   writeLocalMirror(next);
   applyMotion(next.motion);
-  syncPush?.(next as unknown as Record<string, unknown>);
+  currentSyncPush()?.(next as unknown as Record<string, unknown>);
   return next;
 }
 
@@ -415,9 +419,10 @@ export function usePreferences(): UsePreferences {
   });
 
   useEffect(() => {
-    syncPush = pushLocalChange;
+    syncPushes.push(pushLocalChange);
     return () => {
-      if (syncPush === pushLocalChange) syncPush = null;
+      const i = syncPushes.lastIndexOf(pushLocalChange);
+      if (i !== -1) syncPushes.splice(i, 1);
     };
   }, [pushLocalChange]);
 
@@ -426,7 +431,9 @@ export function usePreferences(): UsePreferences {
       // `commit` pushes through the registered syncer; push here too in case
       // this instance isn't the registered one (it is idempotent).
       const next = commit(patch);
-      if (syncPush !== pushLocalChange) pushLocalChange(next as unknown as Record<string, unknown>);
+      if (currentSyncPush() !== pushLocalChange) {
+        pushLocalChange(next as unknown as Record<string, unknown>);
+      }
     },
     [pushLocalChange],
   );

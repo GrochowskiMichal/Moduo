@@ -24,7 +24,7 @@ export type SharingQuestion = { noteId: string; parentId: string; position: stri
 
 export function useShellActions(
   shell: NotesShellState,
-  deps: { trash: (id: string) => Promise<void> },
+  trashWithDetach: (id: string) => Promise<void>,
 ) {
   const { module, select, selectedId, runtime, workspaceId, sections, openDraft } = shell;
   const { notes, favorites, engine } = module;
@@ -65,10 +65,10 @@ export function useShellActions(
     (id: string) => {
       const leaving =
         selectedId && (selectedId === id || descendantIds(notes, id).includes(selectedId));
-      void deps.trash(id);
+      void trashWithDetach(id);
       if (leaving) select(null, true);
     },
-    [deps, notes, selectedId, select],
+    [trashWithDetach, notes, selectedId, select],
   );
 
   const applyIntent = useCallback(

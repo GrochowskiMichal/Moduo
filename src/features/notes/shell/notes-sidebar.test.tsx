@@ -145,6 +145,20 @@ describe("tree roles — the New Notes sidebar (NR-2, AC2/AC4)", () => {
     expect(props.onAction).toHaveBeenCalledWith("trash", expect.objectContaining({ id: "Idea" }));
   });
 
+  it("⌫ on a Favorites row only un-favorites, never trashes the shared note", () => {
+    const props = renderSidebar();
+    const fav = screen
+      .getByRole("group", { name: "Favorites" })
+      .querySelector<HTMLElement>('[role="treeitem"]') as HTMLElement;
+    fav.focus();
+    fireEvent.keyDown(fav, { key: "Backspace" });
+    expect(props.onAction).toHaveBeenCalledWith(
+      "unfavorite",
+      expect.objectContaining({ id: "Roadmap" }),
+    );
+    expect(props.onAction).not.toHaveBeenCalledWith("trash", expect.anything());
+  });
+
   it("keeps one roving tab stop, on the open note", () => {
     renderSidebar({ selectedId: "Roadmap" });
     const stops = screen.getAllByRole("treeitem").filter((el) => el.tabIndex === 0);
