@@ -200,6 +200,7 @@ export const taskReminderRowSchema = z.object({
   kind: z.string(),
   at: optStr,
   fired_at: optStr,
+  suspended_at: optStr,
   created_at: z.string(),
   updated_at: z.string(),
   deleted_at: optStr,

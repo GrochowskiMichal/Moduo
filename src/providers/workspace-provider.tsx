@@ -84,7 +84,8 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
       // pref-gated; the legacy feed becomes the cross-workspace Invitations area.
       const feeds = deriveNotificationFeeds(rawNotifications, {
         workspaceId: selectedWorkspaceId,
-        isEnabled: (op) => isNotificationEnabled(op, notificationPrefs),
+        isEnabled: (item) =>
+          isNotificationEnabled(item.op, notificationPrefs, item.payload, userId),
       });
       return {
         notifications: feeds.active,
@@ -92,7 +93,7 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
         workspaceInvitations: feeds.invitations,
         unreadCountWorkspace: feeds.unreadCount,
       };
-    }, [rawNotifications, notificationPrefs, selectedWorkspaceId]);
+    }, [rawNotifications, notificationPrefs, selectedWorkspaceId, userId]);
 
   // Mirror the selected id into a ref so `refreshWorkspaces` can read the current
   // selection without listing `selectedWorkspaceId` in its deps. Without this the

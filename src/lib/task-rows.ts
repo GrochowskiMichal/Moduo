@@ -43,6 +43,7 @@ import type {
   TagLink,
   Task,
   TaskCompletion,
+  TaskCycle,
   TaskQueueEntry,
   TaskReminder,
   TaskSession,
@@ -637,6 +638,28 @@ export function taskSessionRowToModel(raw: unknown): TaskSession {
   };
 }
 
+/**
+ * `tasks_op_history`'s answer as cycles, newest first. Entries that don't read
+ * are dropped (a history is a view, never a reason to fail).
+ */
+export function taskCyclesFromJson(raw: unknown): TaskCycle[] {
+  if (!Array.isArray(raw)) return [];
+  const out: TaskCycle[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue;
+    const e = entry as Record<string, unknown>;
+    if ((e.kind !== "done" && e.kind !== "skipped") || typeof e.at !== "string") continue;
+    out.push({
+      kind: e.kind,
+      at: e.at,
+      cycle: typeof e.cycle === "string" ? e.cycle : null,
+      by: typeof e.by === "string" ? e.by : null,
+      mySeconds: typeof e.my_seconds === "number" && e.my_seconds > 0 ? e.my_seconds : 0,
+    });
+  }
+  return out.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
+}
+
 /** A reminder of a kind this build doesn't know reads as one at its time. */
 export function taskReminderRowToModel(raw: unknown): TaskReminder {
   const r = requireRow(taskReminderRowSchema, raw, "reminder");
@@ -648,6 +671,7 @@ export function taskReminderRowToModel(raw: unknown): TaskReminder {
     kind: normalizeTaskReminderKind(r.kind),
     at: r.at ?? null,
     firedAt: r.fired_at ?? null,
+    suspendedAt: r.suspended_at ?? null,
     updatedAt: r.updated_at,
   };
 }

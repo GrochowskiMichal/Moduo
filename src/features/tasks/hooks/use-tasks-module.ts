@@ -79,7 +79,7 @@ import {
   queueMove,
   queueTasks,
 } from "../queue";
-import { recurrenceOnStatusChange, skipOccurrencePatch } from "../recurrence-engine";
+import { engineZone, recurrenceOnStatusChange, skipOccurrencePatch } from "../recurrence-engine";
 import {
   areaMoveAfter,
   projectDeletePlan,
@@ -182,6 +182,12 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
   /** The rows as they are now, for a save or an Undo that runs later. */
   const tasksRef = useRef(allTasks);
   tasksRef.current = allTasks;
+  /** Your own reminders, for the "Restore the reminder?" offer (TV-D12). */
+  const remindersRef = useRef(snap.reminders);
+  remindersRef.current = snap.reminders;
+  /** Offline, a status change only queues: no offer to restore until it's sent. */
+  const offlineRef = useRef(!!store && snap.offline);
+  offlineRef.current = !!store && snap.offline;
   /** Every queue row I can see here (TV-D2): my line-up and others' claims. */
   const queueRows = snap.queue;
   const queueRowsRef = useRef(queueRows);
@@ -1015,6 +1021,52 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     [inbox, userId, canEdit, createQueuedTask],
   );
 
+  /**
+   * "Restore the reminder?" (TV-D12, spec edge cases): moving a task to
+   * Backlog or Won't do suspended its reminders; bringing it back to To do or
+   * In progress asks, once, whether to restore them (everyone's when you can
+   * edit it; only those still ahead).
+   */
+  const offerReminderRestore = useCallback(
+    (task: Task, to: TaskStatusCategory | undefined) => {
+      if (!runtime || !workspaceId || !canEdit || offlineRef.current) return;
+      if (to !== "todo" && to !== "in_progress") return;
+      const from = taskCategoryOf(task);
+      if (from !== "backlog" && from !== "wont_do") return;
+      const parked = remindersRef.current.filter(
+        (r) => r.taskId === task.id && r.suspendedAt && !r.firedAt,
+      );
+      if (parked.length === 0) return;
+      const rt = runtime;
+      const ws = workspaceId;
+      toast(parked.length === 1 ? "Restore the reminder?" : `Restore ${parked.length} reminders?`, {
+        description: `Moving it to ${from === "backlog" ? "Backlog" : "Won’t do"} paused ${
+          parked.length === 1 ? "it" : "them"
+        }.`,
+        action: {
+          label: "Restore",
+          onClick: () => {
+            const parkedIds = new Set(parked.map((r) => r.id));
+            void rt.tasks
+              .restoreReminders({ workspaceId: ws, taskId: task.id })
+              .then((mine) => {
+                const back = mine.filter((r) => parkedIds.has(r.id) && !r.suspendedAt).length;
+                if (back === 0) {
+                  toast(
+                    parked.length === 1
+                      ? "Its time has already passed."
+                      : "Their times have already passed.",
+                  );
+                }
+              })
+              .catch(() => toast.error("Couldn’t restore the reminder. Try again."));
+          },
+        },
+      });
+    },
+    [runtime, workspaceId, canEdit],
+  );
+
   /** "Still in Backlog · Move to To do": the offer after assigning a backlog
    *  task or giving it a due date. */
   const offerMoveToTodoRef = useRef<(task: Task) => void>(() => {});
@@ -1038,6 +1090,12 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
           ),
         };
       }
+      if (patch.status || patch.statusCategory) {
+        offerReminderRestore(
+          existing,
+          patch.statusCategory ?? normalizeTaskStatusCategory(patch.status),
+        );
+      }
       // Assigning a backlog task or giving it a due date offers to plan it
       // (REPLAN 53): it stays in Backlog unless you say so.
       if (
@@ -1053,7 +1111,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       // the stored nextOccurrence pointer fresh — unless the caller already
       // patched the rule itself (catch-up / skip pass it explicitly).
       if (patch.status && patch.recurrence === undefined) {
-        const advanced = recurrenceOnStatusChange(existing, patch.status, new Date());
+        const advanced = recurrenceOnStatusChange(existing, patch.status, new Date(), engineZone());
         if (advanced) {
           patch = { ...patch, recurrence: advanced };
           if (patch.status === "done" && advanced.nextOccurrence) {
@@ -1203,6 +1261,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       queueFollowStatus,
       statusesForBucket,
       offerMoveToTodo,
+      offerReminderRestore,
       editBlocked,
       refused,
       archivedBlocked,
@@ -1590,7 +1649,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     (id: string) => {
       const existing = bundle.tasks.find((t) => t.id === id);
       if (!existing) return;
-      const patch = skipOccurrencePatch(existing, new Date());
+      const patch = skipOccurrencePatch(existing, new Date(), engineZone());
       if (!patch?.scheduledAt || !patch.recurrence) return;
       const scheduledAt = patch.scheduledAt;
       const recurrence = patch.recurrence as RecurrenceRule;
@@ -1784,7 +1843,8 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
           ? undefined
           : opts.recurrence !== undefined
             ? opts.recurrence
-            : (recurrenceOnStatusChange(existing, legacyTaskStatus(category), now) ?? undefined);
+            : (recurrenceOnStatusChange(existing, legacyTaskStatus(category), now, engineZone()) ??
+              undefined);
       const followers =
         write.bucketId !== undefined && write.bucketId !== existing.bucketId
           ? tasksRef.current.filter(
@@ -1797,6 +1857,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
           : [];
 
       const stamp = now.toISOString();
+      if (category !== undefined) offerReminderRestore(existing, category);
       const follow =
         category !== undefined ? queueFollowStatus(taskId, category) : { changes: [], rowIds: [] };
       const shown = store.begin([
@@ -1876,6 +1937,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       store,
       queueFollowStatus,
       statusesForBucket,
+      offerReminderRestore,
       refused,
       archivedBlocked,
     ],
