@@ -4,6 +4,8 @@
 // No I/O — the cloud state (email_op_snooze) + the IMAP move (email_snooze_thread)
 // are driven by the hook; this module only computes WHEN.
 
+import { formatTime } from "../../lib/time-format";
+
 /** A resolved snooze choice: a stable id, a human label, and the target instant. */
 export type SnoozePreset = {
   id: "later_today" | "tomorrow" | "this_weekend" | "next_week";
@@ -73,7 +75,7 @@ export function normalizeSnoozeAt(at: Date, now: Date): Date | null {
 export function formatSnoozeUntil(atIso: string, now: Date): string {
   const at = new Date(atIso);
   if (!Number.isFinite(at.getTime())) return "";
-  const time = at.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  const time = formatTime(at);
   const sameDay =
     at.getFullYear() === now.getFullYear() &&
     at.getMonth() === now.getMonth() &&

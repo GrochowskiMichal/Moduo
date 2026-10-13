@@ -3,6 +3,7 @@ import { CalendarDays, Clock, X } from "lucide-react";
 import * as React from "react";
 
 import { formatDay, formatDayTime } from "@/lib/time-format";
+import { getResolvedTimeRegion } from "@/lib/time-region";
 import { cn } from "@/lib/utils";
 import { Button } from "./button";
 import { Calendar } from "./calendar";
@@ -287,7 +288,11 @@ function DatePickerPanel({ draft, heading }: { draft: DateDraft; heading?: strin
     return [
       { label: "Today", date: today },
       { label: "Tomorrow", date: addDays(today, 1) },
-      { label: "Next week", date: addDays(startOfWeek(today, { weekStartsOn: 1 }), 7) },
+      {
+        label: "Next week",
+        // The coming week's first day, where Time & region starts it (TV-D14).
+        date: addDays(startOfWeek(today, { weekStartsOn: getResolvedTimeRegion().weekStartsOn }), 7),
+      },
     ];
   })();
   return (

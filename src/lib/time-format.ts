@@ -103,10 +103,39 @@ export function formatDate(value: DateInput, now: Date = new Date()): string {
   return monthDayText(d, d.getFullYear() !== now.getFullYear());
 }
 
-/** A clock time with its minutes: "3:00 PM" (or "15:00" on a 24-hour device). */
+/** A clock time with its minutes: "3:00 PM" (or "15:00" on a 24-hour clock). */
 export function formatTime(value: DateInput): string {
   const d = toDate(value);
   return d ? formats().time.format(d) : "";
+}
+
+/** The Intl options for a clock time on the person's clock (another zone's
+ *  clock, say: pass `timeZone` alongside). */
+export function clockOptions(): Intl.DateTimeFormatOptions {
+  const { hour12 } = getResolvedTimeRegion();
+  return { hour: "numeric", minute: "2-digit", hourCycle: hour12 ? "h12" : "h23" };
+}
+
+/** An hour on its own, for a grid's gutter: "9 AM" or "09". */
+export function formatHour(hour: number): string {
+  const { hour12 } = getResolvedTimeRegion();
+  const d = new Date(2000, 0, 1, hour);
+  return hour12
+    ? new Intl.DateTimeFormat(undefined, { hour: "numeric", hourCycle: "h12" }).format(d)
+    : String(hour).padStart(2, "0");
+}
+
+/** A date with its year always: "Oct 16, 2026" / "16 Oct 2026". */
+export function formatFullDate(value: DateInput): string {
+  const d = toDate(value);
+  return d ? monthDayText(d, true) : "";
+}
+
+/** A weekday and a date: "Thu, Jul 2" / "Thu, 2 Jul" (the year when it isn't this one). */
+export function formatWeekdayDate(value: DateInput, now: Date = new Date()): string {
+  const d = toDate(value);
+  if (!d) return "";
+  return `${formats().weekday.format(d)}, ${monthDayText(d, d.getFullYear() !== now.getFullYear())}`;
 }
 
 /** A day and a time: "Today, 3:00 PM", "Mon, 9:30 AM", "Oct 16, 2027, 3:00 PM". */

@@ -2,13 +2,15 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import type * as React from "react";
 import { DayPicker } from "react-day-picker";
 
+import { useTimeRegion } from "@/lib/time-region";
 import { cn } from "@/lib/utils";
 
 /**
  * Token-routed calendar (react-day-picker v10). Selected day = bg-primary;
  * today = a quiet ring (NOT a chromatic fill, so it doesn't compete with the
  * selection); hover = bg-state-hover; outside-month days are muted. Used inside
- * DateField's popover. No raw color — all surfaces/accents via tokens.
+ * DateField's popover. No raw color — all surfaces/accents via tokens. Weeks
+ * start where Settings → Time & region says (TV-D14) unless a caller says.
  */
 function Calendar({
   className,
@@ -16,9 +18,11 @@ function Calendar({
   showOutsideDays = true,
   ...props
 }: React.ComponentProps<typeof DayPicker>) {
+  const { weekStartsOn } = useTimeRegion();
   return (
     <DayPicker
       showOutsideDays={showOutsideDays}
+      weekStartsOn={weekStartsOn}
       className={cn("p-3", className)}
       classNames={{
         // The nav renders as a sibling of each month (react-day-picker v9+), so

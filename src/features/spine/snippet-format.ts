@@ -7,6 +7,8 @@
 // relative phrase. snippet-projectors.builtin.ts wires these to the registry.
 
 import { isOpenTaskStatus } from "@contracts/vocabularies";
+
+import { formatTime } from "../../lib/time-format";
 import type {
   EmailSnippetMeta,
   EventSnippetMeta,
@@ -79,7 +81,7 @@ export function relativeTimeAgo(iso: string, now: Date): string {
 
 /** "2:00 PM" from a timestamptz (local clock). */
 function clockLabel(d: Date): string {
-  return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  return formatTime(d);
 }
 
 /**
