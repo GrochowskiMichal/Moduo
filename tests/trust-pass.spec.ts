@@ -112,9 +112,11 @@ const reopen = (page: Page) =>
   page.getByTestId("tasks-right").getByRole("button", { name: "Reopen" });
 
 test("AC1.4 — a Won't do task stays reachable and reopens", async ({ page }) => {
-  const t = await createTask(dev, { title: `Won't do me ${tag}`, bucketId: ws.inboxId });
+  // In a project: All never lists your Inbox (TV-U15).
+  const project = await createProject(dev, `Won't do ${tag}`);
+  const t = await createTask(dev, { title: `Won't do me ${tag}`, bucketId: project.id });
   await openTasks(page, t.id);
-  // Chosen in Inbox, marked Won't do in All: it stays in view with Reopen.
+  // Chosen in its project, marked Won't do in All: it stays in view with Reopen.
   await page.getByRole("button", { name: /^All ,/ }).click();
   await expect(page.getByRole("textbox", { name: "Task title" })).toHaveValue(t.title);
   await page.getByRole("button", { name: "More actions" }).click();
@@ -122,6 +124,11 @@ test("AC1.4 — a Won't do task stays reachable and reopens", async ({ page }) =
   await expect(page.getByRole("button", { name: WONT_DO_STATUS })).toBeVisible();
   await expect(reopen(page)).toBeVisible();
   await expect.poll(async () => (await taskById(t.id)).status).toBe("archived");
+
+  // It's on the Won't do list from the sidebar's ⋯ (TV-U15).
+  await page.getByRole("button", { name: "Sidebar options" }).click();
+  await page.getByRole("menuitem", { name: /^Won’t do/ }).click();
+  await expect(page.locator(`[data-task-id="${t.id}"]`)).toBeVisible();
 
   // A deep link straight to the Won't do task opens it, with Reopen.
   await page.goto(`/tasks?id=${t.id}`);

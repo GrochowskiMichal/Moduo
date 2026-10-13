@@ -156,8 +156,10 @@ test("AC11.3 / call 84 — My tasks groups by status, In progress first", async 
   await createTask({ title: `To start ${tag}`, bucketId: project.id });
   await openTasks(page, doing.id);
   await page.getByRole("button", { name: /^My tasks/ }).click();
+  // A team block ("For Design", TV-U15) leads when the shared workspace has
+  // one of the dev's teams with unclaimed work; the status groups follow it.
   await expect
-    .poll(async () => (await groupHeaders(page)).slice(0, 2))
+    .poll(async () => (await groupHeaders(page)).filter((h) => !h.startsWith("For ")).slice(0, 2))
     .toEqual(["In progress", "To do"]);
 });
 
