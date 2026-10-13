@@ -386,6 +386,24 @@ BEGIN
   PERFORM test.ok(r LIKE 'ERROR%12- or 24-hour%', 'an unknown clock is refused', r);
   r := test.value_as('E', $q$SELECT public.user_op_set_time_region('{"user_id": "x"}'::jsonb)::text$q$);
   PERFORM test.ok(r LIKE 'ERROR%Unknown setting%', 'an unknown key is refused (nobody writes another person''s row)', r);
+  -- Only the ops write these columns: a direct write keeps what was there.
+  r := test.as_user('E', format($q$UPDATE public.user_preferences
+    SET share_time_with_owner = false, time_zone = 'Mars/Olympus', week_start = 5, hour_cycle = 'h12'
+    WHERE user_id = %L$q$, test.id('E')));
+  PERFORM test.ok((SELECT p.share_time_with_owner AND p.time_zone = 'Asia/Tokyo' AND p.week_start IS NULL
+                          AND p.hour_cycle IS NULL
+                   FROM public.user_preferences p WHERE p.user_id = test.id('E')),
+    'a direct write to the Time & region columns changes nothing (only the ops write them)', r);
+  r := test.as_user('V', format($q$INSERT INTO public.user_preferences (user_id, share_time_with_owner, time_zone)
+    VALUES (%L, true, 'PST') ON CONFLICT (user_id) DO NOTHING$q$, test.id('V')));
+  PERFORM test.ok(coalesce((SELECT NOT p.share_time_with_owner AND p.time_zone IS NULL
+                            FROM public.user_preferences p WHERE p.user_id = test.id('V')), true),
+    'a new row written directly starts from the defaults (no sharing, no zone)', r);
+  r := test.as_user('E', format($q$UPDATE public.user_preferences SET preferences = '{"x": 1}'::jsonb WHERE user_id = %L$q$,
+    test.id('E')));
+  PERFORM test.ok((SELECT p.preferences = '{"x": 1}'::jsonb AND p.time_zone = 'Asia/Tokyo'
+                   FROM public.user_preferences p WHERE p.user_id = test.id('E')),
+    'the synced domains still write as before', r);
   r := test.value_as('A', $q$SELECT public.user_time_region() ->> 'time_zone'$q$);
   PERFORM test.ok(r = 'Europe/Warsaw', 'user_time_region reads the caller''s own setting', r);
   r := test.try(NULL, $q$SELECT public.user_op_set_time_region('{"week_start": 1}'::jsonb)$q$);

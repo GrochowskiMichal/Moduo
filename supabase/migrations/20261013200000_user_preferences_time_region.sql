@@ -234,6 +234,46 @@ BEGIN
 END;
 $$;
 
+-- ── 5b. Only the ops write these columns ─────────────────────────────────────
+-- The own-row policy lets a person write their whole user_preferences row (the
+-- synced domains). Time & region and the share switch go through the ops
+-- above, which check every value; a direct write from the app's roles keeps
+-- what was there (a new row starts from the defaults). The ops run as their
+-- owner, so they pass.
+
+CREATE OR REPLACE FUNCTION public.user_preferences__time_region_guard()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = public
+AS $$
+BEGIN
+  IF current_user NOT IN ('authenticated', 'anon') THEN
+    RETURN NEW;
+  END IF;
+  IF TG_OP = 'INSERT' THEN
+    NEW.time_zone := NULL;
+    NEW.time_zone_manual := false;
+    NEW.week_start := NULL;
+    NEW.hour_cycle := NULL;
+    NEW.date_order := NULL;
+    NEW.share_time_with_owner := false;
+  ELSE
+    NEW.time_zone := OLD.time_zone;
+    NEW.time_zone_manual := OLD.time_zone_manual;
+    NEW.week_start := OLD.week_start;
+    NEW.hour_cycle := OLD.hour_cycle;
+    NEW.date_order := OLD.date_order;
+    NEW.share_time_with_owner := OLD.share_time_with_owner;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS user_preferences__time_region_guard ON public.user_preferences;
+CREATE TRIGGER user_preferences__time_region_guard
+  BEFORE INSERT OR UPDATE ON public.user_preferences
+  FOR EACH ROW EXECUTE FUNCTION public.user_preferences__time_region_guard();
+
 -- ── 6. Grants ────────────────────────────────────────────────────────────────
 -- Supabase grants EXECUTE on new functions to anon and authenticated directly,
 -- so they are revoked by name (REVOKE … FROM PUBLIC alone leaves anon).
@@ -256,5 +296,8 @@ BEGIN
   EXECUTE 'REVOKE ALL ON FUNCTION public.time_region__zone_ok(text) FROM anon';
   EXECUTE 'REVOKE ALL ON FUNCTION public.time_region__zone_ok(text) FROM authenticated';
   EXECUTE 'GRANT EXECUTE ON FUNCTION public.time_region__zone_ok(text) TO service_role';
+  EXECUTE 'REVOKE ALL ON FUNCTION public.user_preferences__time_region_guard() FROM PUBLIC';
+  EXECUTE 'REVOKE ALL ON FUNCTION public.user_preferences__time_region_guard() FROM anon';
+  EXECUTE 'REVOKE ALL ON FUNCTION public.user_preferences__time_region_guard() FROM authenticated';
 END;
 $$;
