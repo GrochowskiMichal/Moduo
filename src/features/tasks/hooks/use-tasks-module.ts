@@ -3007,13 +3007,33 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         void editProject(id, { status }, { status });
         return;
       }
+      if (isTempId(id)) {
+        toast.error("Still saving that project — try again in a moment.");
+        return;
+      }
+      // Shown at once, and queued on the project's chain right now (the moves
+      // go first, like Archive's), so an Undo queues after it, never before.
       const { movesDone, revert, note } = closeOpenWork(id, openTasks);
-      void movesDone.then((ok) => {
-        if (!ok) return;
-        void editProject(id, { status }, { status }).then((saved) => {
-          if (!saved) revert();
+      const write = store.begin([{ table: "buckets", patch: { id, fields: { status } } }]);
+      void chainProjectOp(id, async () => {
+        if (!(await movesDone)) throw NOT_MOVED;
+        return runtime.tasks.updateProject({
+          workspaceId,
+          projectId: id,
+          patch: { status },
+          fallback: { ...existing, status },
         });
-      });
+      })
+        .then((saved) => write.settle({ buckets: [saved] }))
+        .catch((e) => {
+          if (e === NOT_MOVED) {
+            // The move said why; the project keeps its state.
+            write.fail();
+            return;
+          }
+          refused(write, e, "Couldn't save the project.");
+          revert();
+        });
       undoToast(`“${existing.name}” is done`, {
         ...(note ? { description: note } : {}),
         onUndo: () => {
@@ -3022,7 +3042,17 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         },
       });
     },
-    [editBlocked, runtime, workspaceId, store, liveBuckets, editProject, closeOpenWork],
+    [
+      editBlocked,
+      runtime,
+      workspaceId,
+      store,
+      liveBuckets,
+      editProject,
+      closeOpenWork,
+      chainProjectOp,
+      refused,
+    ],
   );
 
   /** Edit a project's own fields from its overview (TV-U16): dates, lead,

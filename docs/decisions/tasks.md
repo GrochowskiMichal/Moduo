@@ -2,6 +2,52 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index.
 
+## 2026-10-13 · TV-U16 Project overview, the Done prompt, departures — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 33 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §3, AC5.5–5.6's UI half, AC6.4, AC6.6; REPLAN 16, 17, 78; the carry-forwards from TV-U6, TV-U13, TV-D13, TV-D14 and TV-D15; migration `20261013240000_project_description_team_defaults`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **U16-1 · The overview reads top-down for someone opening a prepared project cold** → TV-U16 (`ui/project-panel.tsx`, `project-overview.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (the hackathon angle).
+  - Decision: name · Status, Start, Target, Lead, Client (the optional three hidden until set, "+ Start · Lead · Client") · the description · progress and "Done this month · n · Xh" · Next up (started work first, then by due date, then the project's own order; five, "and n more open") · Sections ("2 of 5", end date) · People (the lead, then whoever has open work) · Waiting (longest first) · Files · Lately · Time report, Copy as text, Duplicate…, Archive…. Everything is read from the reader's own copy, so a reader sees only what they can. Clicking a task in any list opens it in Details.
+  - Why: REPLAN 16's computed fields, ordered for orientation ("what is this, how far, what's next, who's on it").
+  - Rejected: a project page (AGENTS.md rule 7; the panel is the overview), separate tabs for the computed parts.
+- **U16-2 · "Done this month" counts completions; the hours are the time report's** → TV-U16 (`doneInRange`, `useProjectTime`), AC6.6
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: every completion of the project's tasks this month (each cycle of a repeat, a reopened one taken back; a done task from before completions were kept counts by its `completedAt`), dated in the saved zone; the hours are the sum of `timeReport` rows for this month on this project (signed, never below zero, only time the reader may see), over the same month as the report sheet. The hours re-read when the project's tracked totals move.
+  - Why: spec §2.1 ties "Done this month" to the completion record; one source for hours keeps the overview and the report from ever disagreeing.
+  - Rejected: counting done tasks by status alone (misses repeats), server totals.
+- **U16-3 · A project has a description, plain text, written only through the project ops** → TV-U16 (`buckets.description`, `buckets__description_guard`), TV-D15 (templates carry it)
+  - Who: agent's choice, deferred to by Maciej (agreed with the orchestrator), 2026-10-13.
+  - Decision: a column (up to 20,000 characters, '' for none) set by `projects_op_create` / `projects_op_update`, which need Edit; a direct write to the row keeps the old value (the Time & region pattern). Plain text shown as written, edited in place (⌘⏎ or leaving saves, Esc drops). "Save as template" and "Duplicate project…" now keep it, and a template's description lands on the project made from it.
+  - Why: TV-D15 left the choice ("show the template body's, or add the column"); only a column gives every prepared project its words.
+  - Rejected: showing a template body's description (only template-born projects would have one), rich text (no mentions or embeds asked for; plain text keeps MCP and copy simple).
+- **U16-4 · Marking a project Done with open work asks once, like Archive** → TV-U16 (`setProjectState`, `closeOpenWork`, `ArchiveProjectDialog intent="done"`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (REPLAN 78; TV-U6's U6-4 left it here).
+  - Decision: the overview's Status is the only place to change a project's state. Done with open work (Backlog too) asks "n open tasks — Won't do · Move · Keep"; Won't do and Move run as task edits first (Move sends the open tops, subtasks follow), then the state saves on the project's chain, so an Undo always lands after it and puts the state and the tasks back. Keep only changes the state: REPLAN 16, Done never hides or closes tasks. Done needs Edit (Archive needs Full). On hold and Done sidebar rows read one step quieter.
+  - Why: one rule for closing a project, whichever way it's closed.
+  - Rejected: asking also for On hold (nothing to decide), a server op that also edits tasks (U6-4's reason).
+- **U16-5 · Someone leaving: the confirm says where things go, in numbers where the reader can see them** → TV-U16 (`departureSummary`, `departureLines`, Settings → Members, Leave workspace), AC5.6
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: Remove and Leave list: Inbox tasks go back to their makers, the rest to the remover (to the owner when you leave); their open tasks become unassigned, and a team's go back to the team (counted from the reader's copy, archived projects included); the projects they lead lose their lead; the teams they leave; projects only they can see go to the owner, named "From Name (archived) …". The server does all of it (TV-D13, PRIV-2); nothing new is asked.
+  - Why: REPLAN 78 "shows what they leave behind"; the remover can't see another person's Inbox or private projects, so those are rules in words, never counts.
+  - Rejected (deferred): offering "hand on to someone / Recently deleted" for their private projects. It needs a server path that hands over projects the remover can't see; PRIV-2's hand-on to the owner stays. A follow-up if wanted.
+- **U16-6 · Archived stays findable: ⌘K tags it, and its links open** → TV-U16 (palette, `linkable` in `tasks-plan-view.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (REPLAN 78).
+  - Decision: a ⌘K result whose task or project is archived carries an "Archived" tag; a link to an archived task (⌘K, a notice, a chip) opens its project read-only with the task selected, and the panel's Project view shows that project, marked Archived, with nothing to edit.
+  - Why: All's search already did (U6-5); ⌘K and links silently dropped them.
+  - Rejected: hiding archived results from ⌘K.
+- **U16-7 · An archived project is never a team's default** → TV-U16 (`teams__check_project`, `teams__route_project`, teams panel), TV-D13's follow-up
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: naming an archived project as a default is refused; a default archived later counts as none when a task is routed (it asks for a project, as the capture already did), and works again once unarchived. Settings shows "<name> (archived)" and says what that means.
+  - Why: routing into a read-only project would hide the task.
+  - Rejected: clearing the default when a project is archived (an Unarchive couldn't bring it back).
+- **U16-8 · A client's hub rolls up their work** → TV-U16 (`clientRollup`, the hub's Work section), AC6.4
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: for a contact who is the client of live projects the reader can see: those projects with their open counts, the next three tasks by date, what waits (longest first), "n open tasks", and the time report over all of them. Waiting is "tasks in their projects that wait on anything": Waiting on has no contact kind yet.
+  - Why: REPLAN 75/AC6.4 "rolls up tasks, waiting and time".
+  - Rejected: a contact kind for Waiting on (a data change, not this block's).
+- **Known limits (TV-U16, revisitable):** Files re-read only when the project's task list changes; the hours re-read when tracked totals move, not on every entry edit; the project's description isn't in MCP yet (TV-D16).
+
 ## 2026-10-13 · TV-D14 Time entries, the time report, Time & region — the agent's choices (deferred to by Maciej)
 
 Built in tasks-v3 block 29 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §14, §Assumptions #17, #18, #26; REPLAN 75, 76, default f; migrations `20261013200000_user_preferences_time_region` and `20261013201000_time_entries_add`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to change.

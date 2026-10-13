@@ -178,9 +178,12 @@ function ProjectOverview({
   );
   // "Done this month · 14 · 22h" (AC6.6): the same month and zone as the
   // time report, so the two always agree.
+  // Re-read on a new day, so a panel left open into a new month moves with it.
+  const today = new Date().toDateString();
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `today` is the re-read cue
   const month = useMemo(
     () => reportRange("this_month", new Date(), region.weekStartsOn),
-    [region.weekStartsOn],
+    [region.weekStartsOn, today],
   );
   const doneThisMonth = useMemo(
     () => doneInRange(tasks, completions, project.id, month, region.timeZone),

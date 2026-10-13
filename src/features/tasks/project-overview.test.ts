@@ -260,7 +260,7 @@ describe("departures (AC5.6)", () => {
       "Bob’s 2 open tasks here become unassigned; 1 of them goes back to its team.",
       "“site” loses its lead.",
       "Bob leaves “Design”.",
-      "Projects only Bob can see go to the workspace owner, marked “From Bob Ray”.",
+      "Projects only Bob can see go to the workspace owner, named “From Bob Ray (archived) …”.",
     ]);
   });
 
@@ -270,7 +270,7 @@ describe("departures (AC5.6)", () => {
       { first: "Bob", self: false, receiver: "you", owner: "you", fromName: "Bob" },
     );
     expect(lines).toContain("Bob’s 1 open task here becomes unassigned; it goes back to its team.");
-    expect(lines).toContain("Projects only Bob can see go to you, marked “From Bob”.");
+    expect(lines).toContain("Projects only Bob can see go to you, named “From Bob (archived) …”.");
   });
 
   it("words it for someone leaving, and without numbers when Tasks can't be read", () => {
@@ -285,7 +285,7 @@ describe("departures (AC5.6)", () => {
     ).toEqual([
       "Tasks in your Inbox go back to the people who made them; the rest go to the workspace owner.",
       "Your open tasks here become unassigned; a team’s go back to the team.",
-      "Projects only you can see go to the workspace owner, marked “From Ann”.",
+      "Projects only you can see go to the workspace owner, named “From Ann (archived) …”.",
     ]);
   });
 });

@@ -376,7 +376,7 @@ export function departureLines(
     lines.push(`${opts.self ? "You leave" : `${opts.first} leaves`} ${listNames(summary.teams)}.`);
   }
   lines.push(
-    `Projects only ${opts.self ? "you" : opts.first} can see go to ${opts.owner}, marked “From ${opts.fromName}”.`,
+    `Projects only ${opts.self ? "you" : opts.first} can see go to ${opts.owner}, named “From ${opts.fromName} (archived) …”.`,
   );
   return lines;
 }

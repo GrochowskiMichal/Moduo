@@ -23,9 +23,11 @@ export function useDepartureSummary(departingId: string | null): DepartureSummar
   const snap = useStoreSnapshot(store);
   return useMemo(() => {
     if (!store || !snap.loaded || !departingId) return null;
+    // Archived projects count too: the server unassigns and clears leads there as well.
+    const { tasks, buckets, archivedTasks, archivedBuckets } = snap.bundle;
     return departureSummary(departingId, {
-      tasks: snap.bundle.tasks,
-      buckets: snap.bundle.buckets,
+      tasks: archivedTasks?.length ? [...tasks, ...archivedTasks] : tasks,
+      buckets: archivedBuckets?.length ? [...buckets, ...archivedBuckets] : buckets,
       teams: snap.bundle.teams ?? NO_ROWS,
       teamMembers: snap.bundle.teamMembers ?? NO_ROWS,
     });
