@@ -61,6 +61,14 @@ export type NotificationGroup = {
 };
 
 function groupKey(item: NotificationItem): string {
+  // Reminders all hang on your Inbox (TV-D12): one card per task they name.
+  if (item.op === "tasks.reminder") {
+    const taskId = item.payload.task_id;
+    return `reminder:${typeof taskId === "string" && taskId ? taskId : item.id}`;
+  }
+  // A team notice is yours alone, on your Inbox, already gathered by the hour
+  // (TV-D13): one card each.
+  if (item.op === "tasks.routed") return `routed:${item.id}`;
   return `${item.targetType ?? "?"}:${item.targetId ?? "?"}#${item.op}`;
 }
 
@@ -157,11 +165,11 @@ export type NotificationFeeds = {
  */
 export function deriveNotificationFeeds(
   items: NotificationItem[],
-  opts: { workspaceId: string | null; isEnabled: (op: string) => boolean },
+  opts: { workspaceId: string | null; isEnabled: (item: NotificationItem) => boolean },
 ): NotificationFeeds {
   const { spine, workspace } = partitionBySource(items);
   const wsEvents = spine.filter(
-    (item) => item.workspaceId === opts.workspaceId && opts.isEnabled(item.op),
+    (item) => item.workspaceId === opts.workspaceId && opts.isEnabled(item),
   );
   const active = activeNotifications(wsEvents);
   return {
@@ -198,8 +206,16 @@ export function notificationSubject(
   group: NotificationGroup,
   labels?: ReadonlyMap<string, string>,
 ): string | null {
-  if (group.targetType !== "task") return null;
-  const title = newestItem(group).payload.title;
+  // A reminder hangs on your Inbox but is about the task it names (TV-D12);
+  // so does a team notice about one task (TV-D13; several are counted).
+  const latest = newestItem(group);
+  if (group.op === "tasks.routed") {
+    const count = typeof latest.payload.count === "number" ? latest.payload.count : 1;
+    if (count > 1) return null;
+  } else if (group.targetType !== "task" && group.op !== "tasks.reminder") {
+    return null;
+  }
+  const title = latest.payload.title;
   if (typeof title === "string" && title.trim()) return title.trim();
   const label = group.targetId ? labels?.get(group.targetId)?.trim() : "";
   return label || null;
@@ -318,6 +334,14 @@ export function notificationDeepLinkNoun(entityType: string): string {
 
 /** Resolve where clicking a card should navigate (best-effort by entity type). */
 export function notificationDeepLink(group: NotificationGroup): NotificationDeepLink | null {
+  // A reminder or a team notice opens its task, not the Inbox it hangs on
+  // (TV-D12, TV-D13; several routed tasks open the first).
+  if (group.op === "tasks.reminder" || group.op === "tasks.routed") {
+    const taskId = newestItem(group).payload.task_id;
+    if (typeof taskId === "string" && taskId) {
+      return { route: "/tasks", entityType: "task", entityId: taskId };
+    }
+  }
   if (!group.targetType || !group.targetId) return null;
   const route = ROUTE_BY_TYPE[group.targetType];
   if (!route) return null;

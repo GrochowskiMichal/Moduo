@@ -46,7 +46,6 @@ import {
   NavSectionHeader,
   restoreNavFocus,
 } from "../../../components/ui/nav-row";
-import { SegmentedControl } from "../../../components/ui/segmented-control";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import type { TasksSidebarHideable } from "../../../lib/preferences";
 import { useAuth } from "../../../providers/auth-provider";
@@ -57,13 +56,15 @@ import type { Area, Bucket } from "../model";
 import { BUCKET_COLOR_OPTIONS, bucketDotColor, sidebarGroups } from "../sidebar";
 import { type RailDropAccepts, RailDropRow } from "./dnd/rail-drop-row";
 
-export type TasksMode = "plan" | "execute";
-
 /** The sidebar's selections besides projects: the centre views its ⋯ opens. */
 export const ARCHIVED_SELECTION = "archived";
 export const TRASH_SELECTION = "trash";
-/** Upcoming (REPLAN 29): its own screen is TV-U15's; until then a dated scope. */
+/** Templates (TV-D15): opened from the hairline's ⋯ until Settings → Tasks → Templates exists. */
+export const TEMPLATES_SELECTION = "templates";
+/** Upcoming (REPLAN 29, TV-U15's screen). */
 export const UPCOMING_SELECTION = "upcoming";
+/** Won't do: the reachable list with Reopen (tasks-v3 §2), from the ⋯ (TV-U15). */
+export const WONTDO_SELECTION = "wontdo";
 
 /** The keys collapse is remembered by: Pinned, Views, and each area. */
 export const PINNED_GROUP = "pinned";
@@ -86,8 +87,6 @@ export function asRailProject(data: unknown): string | null {
 }
 
 type Props = {
-  mode: TasksMode;
-  onModeChange: (mode: TasksMode) => void;
   /** "inbox" | "today" (Focus) | "upcoming" | "mine" | "all" | "archived" | "trash" | project id */
   selection: string;
   onSelect: (selection: string) => void;
@@ -144,6 +143,20 @@ type Props = {
   /** Archived projects and Recently deleted: from the ⋯, never rows (98). */
   archivedCount: number;
   trashCount: number;
+  /** Won't do tasks (TV-U15): from the ⋯ too. */
+  wontDoCount?: number;
+  /**
+   * Templates (TV-D15): a project's ⋯ → Duplicate… and Save as template…, the
+   * hairline's ⋯ → New project from template… and Templates. Absent: none of
+   * them (a build ahead of its server, stories).
+   */
+  templates?: {
+    onDuplicate: (bucket: Bucket) => void;
+    onSaveAsTemplate: (bucket: Bucket) => void;
+    onNewFromTemplate: () => void;
+  };
+  /** The hairline's ⋯ → "What's in Tasks" reopens Tasks' welcome (TV-U17). */
+  onOpenWelcome?: () => void;
 
   /** The sidebar's <nav>, for the page to hand focus back to it (`focusNavRow`). */
   navRef?: RefObject<HTMLElement | null>;
@@ -182,8 +195,6 @@ export function parseCollapsedSections(raw: string | null): Set<string> {
 type Adding = { kind: "project"; areaId: string | null } | { kind: "area" } | null;
 
 export function BucketRail({
-  mode,
-  onModeChange,
   selection,
   onSelect,
   buckets,
@@ -219,6 +230,9 @@ export function BucketRail({
   onDeleteArea,
   archivedCount,
   trashCount,
+  wontDoCount = 0,
+  templates,
+  onOpenWelcome,
   navRef,
   dropAccepts,
 }: Props) {
@@ -270,6 +284,8 @@ export function BucketRail({
         onCapture={canEdit && onCaptureInto ? () => onCaptureInto(bucket.id) : undefined}
         onTriage={() => onTriageBucket(bucket.id)}
         onEditStatuses={onEditStatuses ? () => onEditStatuses(bucket.id) : undefined}
+        onDuplicate={templates ? () => templates.onDuplicate(bucket) : undefined}
+        onSaveAsTemplate={templates ? () => templates.onSaveAsTemplate(bucket) : undefined}
         onShareCloseAutoFocus={returnFocus(bucket.id)}
         onInputExit={() => focusRowSoon(bucket.id)}
         dropAccepts={dropAccepts}
@@ -310,8 +326,6 @@ export function BucketRail({
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
-      <ModeToggle mode={mode} onModeChange={onModeChange} />
-
       <div className="pane-scroll min-h-0 flex-1 overflow-auto">
         <nav ref={nav} className="flex flex-col gap-px" aria-label="Tasks">
           {/* ── Yours ───────────────────────────────────────────────────── */}
@@ -366,7 +380,7 @@ export function BucketRail({
               label="Focus"
               icon={<ListChecks aria-hidden />}
               count={queueCount}
-              countLabel={`${queueCount} queued`}
+              countLabel={`${queueCount} lined up`}
               current={selection === "today"}
               onSelect={() => onSelect("today")}
             />
@@ -405,8 +419,15 @@ export function BucketRail({
             trashCount={trashCount}
             onOpenArchived={() => onSelect(ARCHIVED_SELECTION)}
             onOpenTrash={() => onSelect(TRASH_SELECTION)}
+            wontDoCount={wontDoCount}
+            onOpenWontDo={() => onSelect(WONTDO_SELECTION)}
+            wontDoCurrent={selection === WONTDO_SELECTION}
             archivedCurrent={selection === ARCHIVED_SELECTION}
             trashCurrent={selection === TRASH_SELECTION}
+            onNewFromTemplate={templates?.onNewFromTemplate}
+            onOpenTemplates={templates ? () => onSelect(TEMPLATES_SELECTION) : undefined}
+            templatesCurrent={selection === TEMPLATES_SELECTION}
+            onOpenWelcome={onOpenWelcome}
           />
 
           {/* ── Shared ──────────────────────────────────────────────────── */}
@@ -534,31 +555,6 @@ export function BucketRail({
   );
 }
 
-// ── mode toggle ───────────────────────────────────────────────────────────────
-
-function ModeToggle({
-  mode,
-  onModeChange,
-}: {
-  mode: TasksMode;
-  onModeChange: (mode: TasksMode) => void;
-}) {
-  // Shared SegmentedControl primitive. The internal mode value stays "execute"
-  // (model-level); the label reads "Focus". TV-F7 removes the switch.
-  return (
-    <SegmentedControl
-      aria-label="Tasks mode"
-      fullWidth
-      value={mode}
-      onValueChange={(value) => onModeChange(value as TasksMode)}
-      items={[
-        { value: "plan", label: "Plan" },
-        { value: "execute", label: "Focus" },
-      ]}
-    />
-  );
-}
-
 // ── the hairline and its ⋯ (REPLAN 20 A, 29a, 98) ────────────────────────────
 
 const HIDEABLE_LABELS: Record<TasksSidebarHideable, string> = {
@@ -581,6 +577,13 @@ function SidebarHairline({
   onOpenTrash,
   archivedCurrent,
   trashCurrent,
+  wontDoCount,
+  onOpenWontDo,
+  wontDoCurrent,
+  onNewFromTemplate,
+  onOpenTemplates,
+  templatesCurrent,
+  onOpenWelcome,
 }: {
   canEdit: boolean;
   hidden: ReadonlySet<TasksSidebarHideable>;
@@ -594,6 +597,13 @@ function SidebarHairline({
   onOpenTrash: () => void;
   archivedCurrent: boolean;
   trashCurrent: boolean;
+  wontDoCount: number;
+  onOpenWontDo: () => void;
+  wontDoCurrent: boolean;
+  onNewFromTemplate?: () => void;
+  onOpenTemplates?: () => void;
+  templatesCurrent: boolean;
+  onOpenWelcome?: () => void;
 }) {
   const rows: TasksSidebarHideable[] = showMine
     ? ["focus", "upcoming", "mine", "all"]
@@ -652,6 +662,11 @@ function SidebarHairline({
             <>
               <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={afterClose(onNewProject)}>New project</DropdownMenuItem>
+              {onNewFromTemplate ? (
+                <DropdownMenuItem onSelect={afterClose(onNewFromTemplate)}>
+                  New project from template…
+                </DropdownMenuItem>
+              ) : null}
               <DropdownMenuItem onSelect={afterClose(onNewArea)}>New area…</DropdownMenuItem>
             </>
           ) : null}
@@ -662,10 +677,31 @@ function SidebarHairline({
               <DropdownMenuShortcut>{archivedCount}</DropdownMenuShortcut>
             ) : null}
           </DropdownMenuItem>
+          <DropdownMenuItem onSelect={onOpenWontDo} data-current={wontDoCurrent || undefined}>
+            Won’t do
+            {wontDoCount > 0 ? <DropdownMenuShortcut>{wontDoCount}</DropdownMenuShortcut> : null}
+          </DropdownMenuItem>
           <DropdownMenuItem onSelect={onOpenTrash} data-current={trashCurrent || undefined}>
             Recently deleted
             {trashCount > 0 ? <DropdownMenuShortcut>{trashCount}</DropdownMenuShortcut> : null}
           </DropdownMenuItem>
+          {onOpenTemplates ? (
+            <DropdownMenuItem
+              onSelect={onOpenTemplates}
+              data-current={templatesCurrent || undefined}
+            >
+              Templates
+            </DropdownMenuItem>
+          ) : null}
+          {onOpenWelcome ? (
+            <>
+              <DropdownMenuSeparator />
+              {/* Opens a dialog: wait for the menu to close (gotchas/ui.md). */}
+              <DropdownMenuItem onSelect={afterClose(onOpenWelcome)}>
+                What’s in Tasks
+              </DropdownMenuItem>
+            </>
+          ) : null}
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
@@ -857,6 +893,8 @@ function ProjectRow({
   onCapture,
   onTriage,
   onEditStatuses,
+  onDuplicate,
+  onSaveAsTemplate,
   onShareCloseAutoFocus,
   onInputExit,
   dropAccepts,
@@ -882,6 +920,9 @@ function ProjectRow({
   onCapture?: () => void;
   onTriage: () => void;
   onEditStatuses?: () => void;
+  /** Duplicate… and Save as template… (TV-D15). */
+  onDuplicate?: () => void;
+  onSaveAsTemplate?: () => void;
   onShareCloseAutoFocus: (event: Event) => void;
   /** The New area input closed by Enter/Esc: focus goes back to the row. */
   onInputExit: () => void;
@@ -905,7 +946,18 @@ function ProjectRow({
   const pinItem = (m: MenuKit) => (
     <m.Item onSelect={onTogglePin}>{pinned ? "Unpin from sidebar" : "Pin to sidebar"}</m.Item>
   );
-  // Rename · Colour · Area · Pin · Share · Statuses · Triage · Archive · Delete
+  // Rename · Colour · Area · Pin · Share · Statuses · Triage · Duplicate ·
+  // Save as template · Archive · Delete
+  const templateItems = (m: MenuKit) =>
+    onDuplicate || onSaveAsTemplate ? (
+      <>
+        <m.Separator />
+        {onDuplicate ? <m.Item onSelect={m.afterClose(onDuplicate)}>Duplicate…</m.Item> : null}
+        {onSaveAsTemplate ? (
+          <m.Item onSelect={m.afterClose(onSaveAsTemplate)}>Save as template…</m.Item>
+        ) : null}
+      </>
+    ) : null;
   const menu = (m: MenuKit) =>
     canEdit ? (
       <>
@@ -937,6 +989,7 @@ function ProjectRow({
         {drift > 0 ? (
           <m.Item onSelect={m.afterClose(onTriage)}>Triage {drift} drifted…</m.Item>
         ) : null}
+        {templateItems(m)}
         <m.Separator />
         <m.Item onSelect={m.afterClose(onArchive)}>Archive…</m.Item>
         <m.Item variant="destructive" onSelect={m.afterClose(onDelete)}>

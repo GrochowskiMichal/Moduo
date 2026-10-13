@@ -11,6 +11,7 @@
 // and never the "From:" item, files, or anything else. A private window
 // without storage just doesn't keep drafts.
 
+import type { TaskStatusCategory } from "@contracts/vocabularies";
 import type { PriorityLevel, RecurrenceRule } from "../model";
 import type { CaptureToken, TitleSegment } from "../parse/capture-tokens";
 
@@ -25,6 +26,11 @@ export type DraftFields = {
   priority?: PriorityLevel | null;
   estimateMinutes?: number | null;
   remindAt?: string | null;
+  /** The status category a List group's "+" opened it with (TV-U10). */
+  status?: TaskStatusCategory | null;
+  /** A Board column's own status, and its name for the chip (TV-U11). */
+  statusId?: string | null;
+  statusName?: string | null;
   tags: Array<{ id: string; name: string; color?: string | null }>;
   waitingOn: string[];
 };
@@ -102,6 +108,11 @@ export function storableDraft(draft: CaptureDraft): CaptureDraft {
     fields: {
       ...draft.fields,
       tags: draft.fields.tags.map((t) => ({ id: t.id, name: "" })),
+      // A group's status belongs to where the capture was opened, not to the
+      // draft: a restored draft never files a task into a status unasked.
+      status: null,
+      statusId: null,
+      statusName: null,
     },
     ...(draft.pasted ? { pasted: draft.pasted } : {}),
   };

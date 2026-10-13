@@ -1,9 +1,10 @@
 // Calendar-day arithmetic for Tasks' Filter → Due date / Scheduled (tasks-v2
 // §7). The Date grouping lives in helpers.ts (`dateGroupOf`, tasks-v3 call
 // 83); "This week" is only a filter. Days are local calendar days; the week
-// ends on Sunday until Settings → Time & region (TV-D14) says otherwise.
+// starts where Settings → Time & region says (TV-D14; the device's by default).
 
 import { dayOffset } from "../../lib/time-format";
+import { getResolvedTimeRegion } from "../../lib/time-region";
 import { isDrifted, type Task } from "./model";
 
 function validDate(iso: string | null | undefined): Date | null {
@@ -12,10 +13,14 @@ function validDate(iso: string | null | undefined): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
-/** Days from today to this week's Sunday: 6 on a Monday, 0 on a Sunday. */
-export function daysLeftInWeek(now: Date): number {
-  const weekday = now.getDay(); // 0 = Sunday
-  return weekday === 0 ? 0 : 7 - weekday;
+/** Days from today to the week's last day: with a Monday start, 6 on a
+ *  Monday and 0 on a Sunday; with a Sunday start, 0 on a Saturday. */
+export function daysLeftInWeek(
+  now: Date,
+  weekStartsOn: number = getResolvedTimeRegion().weekStartsOn,
+): number {
+  const last = (weekStartsOn + 6) % 7; // 0 = Sunday
+  return (last - now.getDay() + 7) % 7;
 }
 
 /** The Due filter's choices. "This week" is today until Sunday; a date

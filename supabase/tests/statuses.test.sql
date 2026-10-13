@@ -300,8 +300,8 @@ BEGIN
   PERFORM test.ok((SELECT scheduled_at FROM public.tasks WHERE id = test.id('BR')) IS NULL
               AND test.task_status('BR') = 'backlog/todo/Backlog',
     'the roll-over leaves a backlog repeat alone');
-  PERFORM test.ok((SELECT scheduled_at FROM public.tasks WHERE id = test.id('OR')) IS NOT NULL,
-    'and still rolls an open one');
+  PERFORM test.ok((SELECT due_on FROM public.tasks WHERE id = test.id('OR')) IS NOT NULL,
+    'and still rolls an open one (a dateless one gets a due date)');
 
   -- A repeat finished comes back in the project's first To do status.
   PERFORM test.as_user('E', format($q$SELECT (public.tasks_op_set_status(%L, %L, 'done')).status$q$, test.id('W'), test.id('OR')));

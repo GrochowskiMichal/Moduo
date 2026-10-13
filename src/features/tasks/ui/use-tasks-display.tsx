@@ -10,6 +10,7 @@ import { useViewPrefs } from "../../../lib/view-prefs";
 import { isCompletedHidden, useJustCompleted, useOpenedHere } from "../completed";
 import {
   displayOf,
+  type GroupChoices,
   sanitizeTasksView,
   type TaskLayout,
   type TasksDisplay,
@@ -21,6 +22,7 @@ import {
 } from "../display";
 import { showsDone } from "../filters";
 import type { Task } from "../model";
+import type { RowPreset } from "../row-layout";
 
 /** What List and Board take from Display. */
 export type TasksDisplayProps = {
@@ -28,6 +30,7 @@ export type TasksDisplayProps = {
   properties: TasksDisplay["properties"];
   rows: TasksDisplay["rows"];
   order: TasksDisplay["order"];
+  orderDir: TasksDisplay["orderDir"];
   subtasks: TasksDisplay["subtasks"];
   stayingIds: ReadonlySet<string>;
 };
@@ -50,6 +53,10 @@ export function useTasksDisplay(
   tasks: readonly Task[],
   linkedTaskId: string | null = null,
   fallbackLayout?: TaskLayout,
+  /** What Group by offers beyond the scope (Team once teams exist). */
+  groupChoices?: GroupChoices,
+  /** The row preset a view starts with (the person's role's, TV-U17). */
+  rowsDefault: RowPreset = "standard",
 ): {
   display: TasksDisplay;
   setDisplay: (next: TasksDisplay) => void;
@@ -61,8 +68,9 @@ export function useTasksDisplay(
 } {
   const [prefs, setPrefs] = useViewPrefs<TasksViewPrefs>(
     tasksDisplayKey(workspaceId, scope),
-    () => tasksViewDefaults(scope, fallbackLayout),
+    () => tasksViewDefaults(scope, fallbackLayout, rowsDefault),
     (raw, defaults) => sanitizeTasksView(raw, defaults, scope),
+    rowsDefault,
   );
   const display = useMemo(() => displayOf(prefs), [prefs]);
   const filters = prefs.filters;
@@ -108,11 +116,15 @@ export function useTasksDisplay(
     isHidden,
     displayControl: (
       <DisplayMenu
-        controls={tasksDisplayControls(scope, display.layout)}
+        controls={tasksDisplayControls(scope, display.layout, groupChoices)}
         value={display}
-        onValueChange={setDisplay}
+        // A new Order by starts in its own direction (a header may have
+        // turned the last one around).
+        onValueChange={(next) =>
+          setDisplay(next.order !== display.order ? { ...next, orderDir: "asc" } : next)
+        }
         // Reset puts the choices back, not the layout you're looking at.
-        defaultValue={{ ...tasksDisplayDefaults(scope), layout: display.layout }}
+        defaultValue={{ ...tasksDisplayDefaults(scope, rowsDefault), layout: display.layout }}
       />
     ),
     viewProps: {
@@ -120,6 +132,7 @@ export function useTasksDisplay(
       properties: display.properties,
       rows: display.rows,
       order: display.order,
+      orderDir: display.orderDir,
       subtasks: display.subtasks,
       stayingIds,
     },

@@ -19,10 +19,12 @@ import {
   taskRowSchema,
   taskSessionRowSchema,
   taskTimeAnswerSchema,
+  taskTimeEntryRowSchema,
   taskTimeTotalsRowSchema,
   taskWaitingRowSchema,
   teamMemberRowSchema,
   teamRowSchema,
+  timeReportRowSchema,
 } from "@contracts/rows";
 import {
   legacyTaskStatus,
@@ -43,14 +45,18 @@ import type {
   TagLink,
   Task,
   TaskCompletion,
+  TaskCycle,
   TaskQueueEntry,
   TaskReminder,
   TaskSession,
+  TaskTimeEntry,
   TaskTimeResult,
   TaskTimeTotals,
   TaskWaitingEntry,
   Team,
   TeamMember,
+  TimeReportRow,
+  TrackTimeInput,
 } from "../features/tasks/model";
 import type { CommentMark } from "./sync/types";
 
@@ -435,6 +441,63 @@ export function taskTimeTotalsRowToModel(raw: unknown): TaskTimeTotals {
 }
 
 /**
+ * TV-D14's arguments to `tasks_op_track_time`, only those a save uses, so a
+ * database before TV-D14 still takes every older save (PostgREST matches a
+ * function by the names sent).
+ */
+export function trackTimeExtras(input: TrackTimeInput): Record<string, string | null> {
+  const out: Record<string, string | null> = {};
+  if (input.on !== undefined && input.on !== null) out.p_on = input.on;
+  if (input.note !== undefined && input.note !== null) out.p_note = input.note;
+  if (input.runId) out.p_run_id = input.runId;
+  if (input.reason) out.p_reason = input.reason;
+  return out;
+}
+
+/** A date column's day (YYYY-MM-DD), or null. */
+function dayOf(value: string | null | undefined): string | null {
+  return value && /^\d{4}-\d{2}-\d{2}/.test(value) ? value.slice(0, 10) : null;
+}
+
+/** Map one of your own `task_time_entries` rows (TV-D3; TV-D14's columns). */
+export function taskTimeEntryRowToModel(raw: unknown): TaskTimeEntry {
+  const r = requireRow(taskTimeEntryRowSchema, raw, "time entry");
+  return {
+    id: r.id,
+    taskId: r.task_id,
+    kind: r.kind,
+    seconds: r.seconds,
+    startedAt: r.started_at ?? null,
+    endedAt: r.ended_at ?? null,
+    entryOn: dayOf(r.entry_on),
+    note: r.note ?? null,
+    reason: r.reason ?? null,
+    runId: r.run_id ?? null,
+    createdAt: r.created_at,
+  };
+}
+
+/** Map one row of `tasks_time_report` (TV-D14). */
+export function timeReportRowToModel(raw: unknown): TimeReportRow {
+  const r = requireRow(timeReportRowSchema, raw, "time report row");
+  return {
+    entryId: r.entry_id,
+    taskId: r.task_id,
+    taskTitle: r.task_title,
+    projectId: r.project_id ?? null,
+    projectName: r.project_name ?? null,
+    projectIsInbox: r.project_is_inbox === true,
+    userId: r.user_id,
+    isMine: r.is_mine,
+    day: dayOf(r.entry_day) ?? r.entry_day,
+    seconds: r.seconds,
+    kind: r.kind,
+    reason: r.reason ?? null,
+    note: r.note ?? null,
+  };
+}
+
+/**
  * Queue rows in line-up order: by person, then by position compared bytewise
  * (the database column is `COLLATE "C"`), then by id.
  */
@@ -637,6 +700,28 @@ export function taskSessionRowToModel(raw: unknown): TaskSession {
   };
 }
 
+/**
+ * `tasks_op_history`'s answer as cycles, newest first. Entries that don't read
+ * are dropped (a history is a view, never a reason to fail).
+ */
+export function taskCyclesFromJson(raw: unknown): TaskCycle[] {
+  if (!Array.isArray(raw)) return [];
+  const out: TaskCycle[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue;
+    const e = entry as Record<string, unknown>;
+    if ((e.kind !== "done" && e.kind !== "skipped") || typeof e.at !== "string") continue;
+    out.push({
+      kind: e.kind,
+      at: e.at,
+      cycle: typeof e.cycle === "string" ? e.cycle : null,
+      by: typeof e.by === "string" ? e.by : null,
+      mySeconds: typeof e.my_seconds === "number" && e.my_seconds > 0 ? e.my_seconds : 0,
+    });
+  }
+  return out.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
+}
+
 /** A reminder of a kind this build doesn't know reads as one at its time. */
 export function taskReminderRowToModel(raw: unknown): TaskReminder {
   const r = requireRow(taskReminderRowSchema, raw, "reminder");
@@ -648,6 +733,7 @@ export function taskReminderRowToModel(raw: unknown): TaskReminder {
     kind: normalizeTaskReminderKind(r.kind),
     at: r.at ?? null,
     firedAt: r.fired_at ?? null,
+    suspendedAt: r.suspended_at ?? null,
     updatedAt: r.updated_at,
   };
 }

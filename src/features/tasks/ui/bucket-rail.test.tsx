@@ -19,6 +19,7 @@ import {
   asRailProject,
   BucketRail,
   parseCollapsedSections,
+  TEMPLATES_SELECTION,
   TRASH_SELECTION,
   UPCOMING_SELECTION,
 } from "./bucket-rail";
@@ -87,6 +88,7 @@ function renderRail({
   hidden: initialHidden = new Set<TasksSidebarHideable>(),
   pinned: initialPinned = [] as string[],
   dnd = false,
+  templates = false,
 }: {
   canEdit?: boolean;
   selection?: string;
@@ -97,6 +99,8 @@ function renderRail({
   pinned?: string[];
   /** Inside a DndContext, with sortable rows and drop targets. */
   dnd?: boolean;
+  /** Offer Duplicate…, Save as template… and Templates (TV-D15). */
+  templates?: boolean;
 } = {}) {
   const calls = {
     onSelect: rs.fn(),
@@ -113,6 +117,10 @@ function renderRail({
     onCreateBucket: rs.fn(),
     onCreateArea: rs.fn(async () => "new-area"),
     onTriageBucket: rs.fn(),
+    onDuplicate: rs.fn(),
+    onSaveAsTemplate: rs.fn(),
+    onNewFromTemplate: rs.fn(),
+    onOpenWelcome: rs.fn(),
   };
   function Harness() {
     const [selection, setSelection] = useState(initialSelection);
@@ -121,8 +129,6 @@ function renderRail({
     const [pinned, setPinned] = useState(initialPinned);
     const rail = (
       <BucketRail
-        mode="plan"
-        onModeChange={() => {}}
         selection={selection}
         onSelect={(next) => {
           calls.onSelect(next);
@@ -185,6 +191,16 @@ function renderRail({
         onDeleteArea={calls.onDeleteArea}
         archivedCount={2}
         trashCount={5}
+        templates={
+          templates
+            ? {
+                onDuplicate: calls.onDuplicate,
+                onSaveAsTemplate: calls.onSaveAsTemplate,
+                onNewFromTemplate: calls.onNewFromTemplate,
+              }
+            : undefined
+        }
+        onOpenWelcome={calls.onOpenWelcome}
         dropAccepts={dnd ? () => false : undefined}
       />
     );
@@ -247,7 +263,7 @@ describe("the decided sidebar (AC11.1)", () => {
     const nav = screen.getByRole("navigation", { name: "Tasks" });
     expect(nav.textContent ?? "").not.toMatch(/bucket/i);
     expect(within(nav).queryByText("Queue")).toBeNull();
-    expect(main(/^Focus, 4 queued$/)).toBeTruthy();
+    expect(main(/^Focus, 4 lined up$/)).toBeTruthy();
     expect(main(/^New project$/)).toBeTruthy();
   });
 
@@ -304,7 +320,7 @@ describe("Customize sidebar, Archived projects and Recently deleted in the ⋯ (
     // The menu stays open while ticking several; Esc closes it.
     fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
     await settle();
-    expect(main(/^Focus, 4 queued$/)).toBeTruthy();
+    expect(main(/^Focus, 4 lined up$/)).toBeTruthy();
   });
 
   it("opens Archived projects and Recently deleted from the ⋯, never as rows", async () => {
@@ -365,6 +381,50 @@ describe("the project menu (REPLAN 13–16, 30, 78)", () => {
       "Delete project…",
     ]);
     expect(screen.queryByText(/Open at/)).toBeNull();
+  });
+
+  it("with templates: Duplicate… and Save as template… before Archive (TV-D15)", async () => {
+    const calls = renderRail({ templates: true });
+    await rowMenu(/^Website,/);
+    const items = screen.getAllByRole("menuitem").map((el) => el.textContent);
+    expect(items).toEqual([
+      "Rename",
+      "Colour",
+      "Area",
+      "Pin to sidebar",
+      "Share",
+      "Duplicate…",
+      "Save as template…",
+      "Archive…",
+      "Delete project…",
+    ]);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Duplicate…" }));
+    await settle();
+    expect(calls.onDuplicate).toHaveBeenCalledWith(expect.objectContaining({ id: "b-site" }));
+    await rowMenu(/^Website,/);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Save as template…" }));
+    await settle();
+    expect(calls.onSaveAsTemplate).toHaveBeenCalledWith(expect.objectContaining({ id: "b-site" }));
+  });
+
+  it("with templates: the ⋯ offers New project from template… and Templates (TV-D15)", async () => {
+    const calls = renderRail({ templates: true });
+    await openSidebarMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "New project from template…" }));
+    await settle();
+    expect(calls.onNewFromTemplate).toHaveBeenCalled();
+    await openSidebarMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Templates" }));
+    await settle();
+    expect(calls.onSelect).toHaveBeenCalledWith(TEMPLATES_SELECTION);
+  });
+
+  it("the ⋯ reopens Tasks' welcome: What's in Tasks, once the menu closes (TV-U17)", async () => {
+    const calls = renderRail();
+    await openSidebarMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "What’s in Tasks" }));
+    await settle();
+    expect(calls.onOpenWelcome).toHaveBeenCalledTimes(1);
   });
 
   it("Archive… and Delete project… ask the page first", async () => {

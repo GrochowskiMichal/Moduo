@@ -26,10 +26,15 @@ export type TaskDropWrite = {
   /** A status key: the legacy value, or "backlog" (TV-D9). Saved as its
    *  category, so Backlog stays Backlog through a drop and its Undo. */
   status?: StatusKey;
-  /** Undo only: the exact status to put back (its project's own name, say
-   *  In review), with `status` as its key. */
+  /** The exact status (its project's own, say In review), with `status` as
+   *  its key: a Board column of one project's statuses (TV-U11), and Undo
+   *  putting a named status back. */
   statusId?: string;
   assigneeId?: string | null;
+  /** Into another section of the project (a List grouped by section, TV-U10). */
+  sectionId?: string | null;
+  /** To another team (a List grouped by team). */
+  teamId?: string | null;
 };
 
 /** The fields a drop can change, in the order Undo checks them. */
@@ -38,6 +43,8 @@ export const DROP_FIELDS = [
   "bucketId",
   "position",
   "priority",
+  "sectionId",
+  "teamId",
   "status",
   "assigneeId",
 ] as const satisfies ReadonlyArray<keyof TaskDropWrite & keyof Task>;
@@ -53,6 +60,8 @@ export function writeFromPlan(plan: ListDropPlan): TaskDropWrite {
   if (plan.fields?.status !== undefined) write.status = plan.fields.status;
   if (plan.fields?.priority !== undefined) write.priority = plan.fields.priority;
   if (plan.fields?.assigneeId !== undefined) write.assigneeId = plan.fields.assigneeId;
+  if (plan.fields?.sectionId !== undefined) write.sectionId = plan.fields.sectionId;
+  if (plan.fields?.teamId !== undefined) write.teamId = plan.fields.teamId;
   return write;
 }
 
@@ -89,7 +98,9 @@ export function undoWrite(input: {
       kept.push(field);
       continue;
     }
-    if (same(value(before, field), value(current, field))) continue;
+    // A status compares exactly here too: In progress → In review keeps the
+    // key (in_progress) but still has a status to put back (TV-U11).
+    if (same(exact(before, field), exact(current, field))) continue;
     revert[field] = value(before, field) ?? null;
     // The status goes back by id, so its project's own name comes back too.
     if (field === "status" && before.statusId) revert.statusId = before.statusId;
@@ -103,6 +114,10 @@ export type DropNames = {
   bucketName: (id: string) => string;
   assigneeName: (id: string) => string;
   taskTitle: (id: string) => string;
+  /** A section's name; null: "No section". */
+  sectionName?: (id: string | null) => string;
+  /** A team's name; null: "No team". */
+  teamName?: (id: string | null) => string;
 };
 
 /**
@@ -124,6 +139,14 @@ export function dropLabel(
   }
   if (write.priority !== undefined) {
     return write.priority ? `Set to ${PRIORITY_LABELS[write.priority]}` : "Priority cleared";
+  }
+  if (write.sectionId !== undefined) {
+    return `Moved to ${names.sectionName?.(write.sectionId) ?? (write.sectionId ? "a section" : "No section")}`;
+  }
+  if (write.teamId !== undefined) {
+    return write.teamId
+      ? `Routed to ${names.teamName?.(write.teamId) ?? "a team"}`
+      : "Team cleared";
   }
   if (write.parentId === null && before?.parentId) {
     return `Moved out of “${names.taskTitle(before.parentId)}”`;

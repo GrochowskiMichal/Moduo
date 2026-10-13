@@ -3,8 +3,9 @@
 // symbols only count at a word start, literal symbols stay text, and the date
 // commands name a day.
 
-import { describe, expect, it } from "@rstest/core";
+import { beforeAll, describe, expect, it } from "@rstest/core";
 
+import { applyTimeRegion, EMPTY_TIME_REGION } from "../../lib/time-region";
 import {
   dateCommandDay,
   findHandles,
@@ -18,6 +19,9 @@ import {
 import { handleFinishedAt } from "./references/handle-autolink-plugin";
 
 const WED = new Date(2026, 9, 14, 10, 0, 0); // Wed Oct 14 2026
+
+// Written for a Monday week start (Time & region, TV-D14).
+beforeAll(() => applyTimeRegion({ ...EMPTY_TIME_REGION, weekStart: 1 }, null));
 
 describe("triggerAt — what the caret sits after", () => {
   it("opens on a symbol at the start or after a space, with the word typed since", () => {
@@ -70,12 +74,21 @@ describe("findSigilWords — finished words (shared with search)", () => {
 });
 
 describe("the date commands (33a)", () => {
-  it("name a day: today, tomorrow, the coming Monday; /date asks", () => {
+  it("name a day: today, tomorrow, the coming week's first day; /date asks", () => {
     expect(dateCommandDay("today", WED)).toBe("2026-10-14");
     expect(dateCommandDay("tomorrow", WED)).toBe("2026-10-15");
-    expect(dateCommandDay("next-week", WED)).toBe("2026-10-19");
-    expect(dateCommandDay("next-week", new Date(2026, 9, 19))).toBe("2026-10-26");
+    expect(dateCommandDay("next-week", WED, 1)).toBe("2026-10-19");
+    expect(dateCommandDay("next-week", new Date(2026, 9, 19), 1)).toBe("2026-10-26");
     expect(dateCommandDay("date", WED)).toBeNull();
+  });
+
+  it("next week starts where Time & region starts the week (TV-D14)", () => {
+    expect(dateCommandDay("next-week", WED, 0)).toBe("2026-10-18"); // Sunday
+    expect(dateCommandDay("next-week", new Date(2026, 9, 18), 0)).toBe("2026-10-25");
+    expect(dateCommandDay("next-week", WED, 6)).toBe("2026-10-17"); // Saturday
+    applyTimeRegion({ ...EMPTY_TIME_REGION, weekStart: 0 }, null);
+    expect(dateCommandDay("next-week", WED)).toBe("2026-10-18");
+    applyTimeRegion({ ...EMPTY_TIME_REGION, weekStart: 1 }, null);
   });
 
   it("list first in the `/` menu, filtered by what's typed", () => {

@@ -183,7 +183,7 @@ describe("deriveNotificationFeeds", () => {
   });
 
   it("drops muted event types from active AND history (AC10)", () => {
-    const isEnabled = (op: string) => op !== "tasks.assigned";
+    const isEnabled = (row: { op: string }) => row.op !== "tasks.assigned";
     const feeds = deriveNotificationFeeds(
       [
         item({ id: "keep", createdAt: "x", workspaceId: "w1", op: "comments.add" }),
@@ -413,6 +413,55 @@ describe("notificationDeepLink", () => {
       route: "/email",
       entityType: "email_thread",
       entityId: "th1",
+    });
+  });
+});
+
+describe("a team notice (TV-D13)", () => {
+  it("is one card per notice, names its one task and opens it, not the Inbox it hangs on", () => {
+    const groups = groupNotifications([
+      item({
+        id: "a",
+        createdAt: "2",
+        op: "tasks.routed",
+        targetType: "bucket",
+        targetId: "inbox-me",
+        payload: {
+          task_id: "t9",
+          task_ids: ["t9"],
+          count: 1,
+          title: "Hero image",
+          team_name: "Design",
+        },
+      }),
+      item({
+        id: "b",
+        createdAt: "1",
+        op: "tasks.routed",
+        targetType: "bucket",
+        targetId: "inbox-me",
+        payload: {
+          task_id: "t7",
+          task_ids: ["t7", "t8"],
+          count: 2,
+          title: "Icons",
+          team_name: "Development",
+        },
+      }),
+    ]);
+    expect(groups).toHaveLength(2);
+    expect(notificationSubject(groups[0])).toBe("Hero image");
+    expect(notificationDeepLink(groups[0])).toEqual({
+      route: "/tasks",
+      entityType: "task",
+      entityId: "t9",
+    });
+    // Several routed tasks are counted, not named after the first.
+    expect(notificationSubject(groups[1])).toBeNull();
+    expect(notificationDeepLink(groups[1])).toEqual({
+      route: "/tasks",
+      entityType: "task",
+      entityId: "t7",
     });
   });
 });

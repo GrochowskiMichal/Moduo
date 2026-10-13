@@ -18,14 +18,18 @@ import {
   calendarAccountStatusSchema,
   calendarProviderSchema,
   contactFieldTypeSchema,
+  dateOrderSchema,
   emailAccountStatusSchema,
   energyLevelSchema,
+  hourCycleSchema,
   linkOriginSchema,
   mailboxProviderSchema,
   normalizeEmailProvider,
   normalizeRelationKind,
   priorityLevelSchema,
   relationKindSchema,
+  taskTimeAdjustmentReasonSchema,
+  taskTimeEntryKindSchema,
   taskTimeStatusSchema,
 } from "./vocabularies.ts";
 
@@ -200,6 +204,7 @@ export const taskReminderRowSchema = z.object({
   kind: z.string(),
   at: optStr,
   fired_at: optStr,
+  suspended_at: optStr,
   created_at: z.string(),
   updated_at: z.string(),
   deleted_at: optStr,
@@ -340,6 +345,50 @@ export const taskTimeTotalsRowSchema = z.object({
   my_seconds_since: optNum,
 });
 
+/** One of your own `task_time_entries` rows (TV-D3, TV-D14's columns). */
+export const taskTimeEntryRowSchema = z.object({
+  id,
+  task_id: id,
+  kind: taskTimeEntryKindSchema,
+  seconds: z.number(),
+  started_at: optStr,
+  ended_at: optStr,
+  /** The day a logged entry is for; absent before TV-D14. */
+  entry_on: optStr,
+  note: optStr,
+  reason: z.union([taskTimeAdjustmentReasonSchema, z.null()]).optional(),
+  run_id: optStr,
+  created_at: z.string(),
+});
+
+/** One row of `tasks_time_report` (TV-D14). */
+export const timeReportRowSchema = z.object({
+  entry_id: id,
+  task_id: id,
+  task_title: z.string(),
+  project_id: optStr,
+  /** NULL when the reader can't see the project. */
+  project_name: optStr,
+  project_is_inbox: z.union([z.boolean(), z.null()]).optional(),
+  user_id: id,
+  is_mine: z.boolean(),
+  entry_day: z.string(),
+  seconds: z.number(),
+  kind: taskTimeEntryKindSchema,
+  reason: z.union([taskTimeAdjustmentReasonSchema, z.null()]).optional(),
+  note: optStr,
+});
+
+/** What `user_time_region` answers (TV-D14). NULL = the device's. */
+export const timeRegionRowSchema = z.object({
+  time_zone: optStr,
+  time_zone_manual: z.boolean().optional(),
+  week_start: z.union([z.number().int().min(0).max(6), z.null()]).optional(),
+  hour_cycle: z.union([hourCycleSchema, z.null()]).optional(),
+  date_order: z.union([dateOrderSchema, z.null()]).optional(),
+  share_time_with_owner: z.boolean().optional(),
+});
+
 export const activityRowSchema = z.object({
   id,
   workspace_id: id,
@@ -400,6 +449,12 @@ export const commentRowSchema = z.object({
   created_at: z.string(),
   updated_at: z.string(),
   deleted_at: optStr,
+  // TV-U13: absent before 20261013100000.
+  edited_at: optStr,
+  comment_reactions: z
+    .array(z.object({ user_id: z.string(), reaction: z.string() }))
+    .nullable()
+    .optional(),
 });
 
 export const notificationRowSchema = z.object({
@@ -479,6 +534,9 @@ export const attachmentRowSchema = z.object({
   status: z.unknown(),
   deleted_at: z.string().nullable().optional(),
   created_at: z.string(),
+  object_path: z.string().nullable().optional(),
+  preview_path: z.string().nullable().optional(),
+  preview_mime: z.string().nullable().optional(),
 });
 
 export const contactChannelSchema = z.object({

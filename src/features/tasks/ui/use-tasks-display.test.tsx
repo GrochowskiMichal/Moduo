@@ -109,7 +109,8 @@ describe("useTasksDisplay", () => {
 
     rerender({ scope: "b2" });
     expect(result.current.filters).toEqual([]);
-    expect(result.current.display.group).toBe("none");
+    // A project's own default: by section (TV-U10).
+    expect(result.current.display.group).toBe("section");
     rerender({ scope: "b1" });
     expect(result.current.filters).toEqual([high]);
   });

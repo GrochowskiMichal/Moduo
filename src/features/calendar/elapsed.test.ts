@@ -6,6 +6,8 @@ import type { TaskBlock } from "./lens";
 function block(over: Partial<TaskBlock>): TaskBlock {
   const startMs = over.startMs ?? new Date(2026, 6, 2, 9, 0).getTime();
   return {
+    blockId: over.blockId ?? over.taskId ?? "t1",
+    sessionId: over.sessionId ?? null,
     taskId: over.taskId ?? "t1",
     title: over.title ?? "task",
     startMs,

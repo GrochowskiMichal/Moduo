@@ -153,16 +153,19 @@ function possessives(names: string[]): string {
   return `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
 }
 
-/** The claim marker's words: "In Mike's queue" / "In Mike's and Ola's queues". */
+/**
+ * The claim marker's words: "In Mike's Focus" / "In Mike's and Ola's Focus"
+ * (call 61: the Queue is called Focus; the data keeps "queue").
+ */
 export function claimLabel(names: string[]): string {
   if (names.length === 0) return "";
-  return `In ${possessives(names)} ${names.length === 1 ? "queue" : "queues"}`;
+  return `In ${possessives(names)} Focus`;
 }
 
-/** The note after queuing a task someone else has too (D4-2). */
+/** The note after adding a task to Focus that someone else has too (D4-2). */
 export function alsoInLabel(names: string[]): string {
   if (names.length === 0) return "";
-  return `Also in ${possessives(names)} ${names.length === 1 ? "queue" : "queues"}`;
+  return `Also in ${possessives(names)} Focus`;
 }
 
 /**

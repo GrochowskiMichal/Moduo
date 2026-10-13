@@ -169,4 +169,21 @@ describe("useViewPrefs", () => {
     // The other scope kept its own value.
     expect(readViewPrefs(viewPrefsKey("tasks", "ws1", "all"), DEFAULTS).layout).toBe("board");
   });
+
+  it("re-reads when what the defaults depend on changes (TV-U17's role)", () => {
+    const key = viewPrefsKey("tasks", "ws1", "inbox");
+    const { result, rerender } = renderHook(
+      ({ layout }: { layout: string }) =>
+        useViewPrefs(key, () => ({ ...DEFAULTS, layout }), undefined, layout),
+      { initialProps: { layout: "list" } },
+    );
+    expect(result.current[0].layout).toBe("list");
+    // Nothing remembered: the new defaults show.
+    rerender({ layout: "board" });
+    expect(result.current[0].layout).toBe("board");
+    // Something remembered: it stays.
+    act(() => result.current[1]({ ...DEFAULTS, layout: "timeline" }));
+    rerender({ layout: "list" });
+    expect(result.current[0].layout).toBe("timeline");
+  });
 });

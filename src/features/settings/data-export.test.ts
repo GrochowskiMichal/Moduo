@@ -284,4 +284,64 @@ describe("the tasks export carries every new tasks table (TV-D8, §Assumptions #
     expect(data.waiting).toEqual([{ id: "w1", kind: "text", label: "Feedback" }]);
     expect(data.truncated).toEqual([sessionsCut]);
   });
+
+  it("carries your templates and the shared ones, with their bodies (TV-D15)", async () => {
+    const template = { id: "tp1", kind: "project", name: "Season kit", body: { v: 1 } };
+    const cut = { scope: "task templates", shown: 500, total: null };
+    const data = await readTasksExport(
+      {
+        list: async () => ({ tasks: [], buckets: [], truncated: [] }),
+        listCompletions: async () => ({ completions: [], truncated: [] }),
+        ...noD10Reads,
+        exportTemplates: async () => ({ templates: [template], truncated: [cut] }),
+      },
+      "ws-1",
+    );
+    expect(data.templates).toEqual([template]);
+    expect(data.truncated).toEqual([cut]);
+  });
+
+  it("carries your own time entries with their days and notes (TV-D14)", async () => {
+    const entry = { id: "e1", kind: "manual", seconds: 7200, entryOn: "2026-10-12", note: "Call" };
+    const cut = { scope: "time entries", shown: 20000, total: 20001 };
+    const data = await readTasksExport(
+      {
+        list: async () => ({ tasks: [], buckets: [], truncated: [] }),
+        listCompletions: async () => ({ completions: [], truncated: [] }),
+        ...noD10Reads,
+        exportTimeEntries: async () => ({ entries: [entry], truncated: [cut] }),
+      },
+      "ws-1",
+    );
+    expect(data.timeEntries).toEqual([entry]);
+    expect(data.truncated).toEqual([cut]);
+  });
+
+  it("reads as no templates on a runtime without them", async () => {
+    const data = await readTasksExport(
+      {
+        list: async () => ({ tasks: [], buckets: [], truncated: [] }),
+        listCompletions: async () => ({ completions: [], truncated: [] }),
+        ...noD10Reads,
+      },
+      "ws-1",
+    );
+    expect(data.templates).toEqual([]);
+  });
+
+  it("carries your own Focus runs (TV-F6), and says when they were cut", async () => {
+    const run = { id: "run-1", mode: "per_task", focusedSeconds: 1200 };
+    const runsCut = { scope: "Focus runs", shown: 10000, total: 10002 };
+    const data = await readTasksExport(
+      {
+        list: async () => ({ tasks: [], buckets: [], truncated: [] }),
+        listCompletions: async () => ({ completions: [], truncated: [] }),
+        ...noD10Reads,
+      },
+      "ws-1",
+      { listMyRuns: async () => ({ runs: [run], truncated: [runsCut] }) },
+    );
+    expect(data.focusRuns).toEqual([run]);
+    expect(data.truncated).toEqual([runsCut]);
+  });
 });

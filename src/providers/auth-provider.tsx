@@ -8,11 +8,13 @@ import {
   useState,
 } from "react";
 import { attachFocusUser } from "../features/focus/engine";
+import { attachRunUser } from "../features/focus/run";
 import { attachTagUser } from "../features/tags/store";
 import { forgetCaptureDrafts, keepCaptureDraftsOf } from "../features/tasks/capture/capture-draft";
+import { clearTemplates } from "../features/tasks/templates/templates-store";
 import { forgetRememberedWorkspaces } from "../features/workspaces/remembered-workspaces";
 import { Analytics, setAnalyticsUser } from "../lib/analytics";
-import { sendDeviceTimeZone } from "../lib/device-time-zone";
+import { forgetBrowserPush, postPushUser } from "../lib/notices/browser-push";
 import {
   initRuntime,
   type ModuoRuntime,
@@ -20,6 +22,7 @@ import {
   runtimeConfigError,
 } from "../lib/runtime";
 import { attachSyncUser, wipeSyncCopies } from "../lib/sync/store";
+import { forgetTimeRegion, syncTimeRegion } from "../lib/time-region";
 
 export type { PlanTier } from "@contracts/vocabularies";
 
@@ -149,6 +152,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       setSession(nextSession ?? null);
       setLoading(false);
       const uid = event === "SIGNED_OUT" ? null : (nextSession?.user?.id ?? null);
+      const previousUser = sessionUser.current;
       sessionUser.current = uid;
 
       if (event === "TOKEN_REFRESHED") {
@@ -160,8 +164,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
       // Refresh plan tier on sign-in events, and start analytics once the account is confirmed.
       if ((event === "SIGNED_IN" || event === "INITIAL_SESSION") && uid) {
-        // Repeats come back at their assignee's midnight (TV-D8).
-        sendDeviceTimeZone(rt, uid);
+        // Time & region (TV-D14): the person's zone, week start, clock and
+        // date order; a zone nobody picked becomes this device's (repeats
+        // come back at their assignee's midnight, TV-D8), a saved zone that
+        // isn't the device's asks once.
+        void syncTimeRegion(rt.preferences, uid);
         rt.workspace
           .getProfile(uid)
           .then((result) => {
@@ -176,6 +183,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
         setPlanTier("free");
         // Kept capture drafts never outlive a sign-out on this device (TV-U14).
         forgetCaptureDrafts();
+        // Nor does the template list read this session (TV-D15).
+        clearTemplates();
+        // Dates read the device's way again; the person's copy goes (TV-D14).
+        forgetTimeRegion(previousUser);
         // Analytics opts out and forgets them. `app_signed_out` is tracked in signOut(),
         // only when the person signs out: one auth-js does on its own, like a refused
         // refresh after the account was deleted elsewhere, must not send an event that
@@ -186,6 +197,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
         // and the remembered workspace list go (TV-D11a).
         void wipeSyncCopies();
         forgetRememberedWorkspaces();
+        // This browser's notices stop showing the person's words (TV-D12).
+        void forgetBrowserPush(null);
       } else if (!uid) {
         void setAnalyticsUser(null);
       }
@@ -214,12 +227,22 @@ export function AuthProvider({ children }: PropsWithChildren) {
     void attachSyncUser(sessionUserId);
     // Another person's kept capture drafts go too (TV-U14).
     if (sessionUserId) keepCaptureDraftsOf(sessionUserId);
+    // The push worker shows a notice's words only to who's signed in (TV-D12).
+    void postPushUser(sessionUserId);
   }, [loading, sessionUserId]);
+  // The session's shared record follows the engine, after it (TV-F6, run.ts).
+  useEffect(() => {
+    if (loading) return;
+    attachRunUser(sessionUserId, rt);
+  }, [loading, sessionUserId, rt]);
 
   const signOut = async () => {
     if (!rt) return;
     // Tracked first (if they opted in); the SIGNED_OUT that follows opts analytics out.
     void Analytics.app.signedOut();
+    // While the session still works: this browser stops getting the person's
+    // notices (TV-D12).
+    await forgetBrowserPush(rt);
     await rt.auth.signOut();
     // The person chose to sign out: their Tasks device copy goes even when
     // auth-js couldn't end the session (offline with an expired token, so no
@@ -227,6 +250,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     void wipeSyncCopies();
     forgetRememberedWorkspaces();
     forgetCaptureDrafts();
+    clearTemplates();
     setSession(null);
   };
 

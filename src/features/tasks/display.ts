@@ -11,16 +11,47 @@ import type { FilterCondition } from "../../components/ui/filter-model";
 import { viewPrefsKey } from "../../lib/view-prefs";
 import type { CompletedMode } from "./completed";
 import { sanitizeTaskFilters } from "./filters";
-import { GROUP_BYS, type GroupBy, groupsByBucket, LEVEL_ORDER } from "./helpers";
+import {
+  GROUP_BYS,
+  type GroupBy,
+  groupsByBucket,
+  isProjectScope,
+  LEVEL_ORDER,
+  STATUS_ORDER,
+} from "./helpers";
 import type { Task } from "./model";
 import { DEFAULT_ROW_PROPERTIES, type RowPreset, type RowProperty } from "./row-layout";
+import { statusKeyOf } from "./statuses";
 
 export type TaskLayout = "list" | "board" | "timeline";
-/** The Board's Group by: a drop on a group sets its field. Assignee,
- *  priority and the rest join with the Board rebuild (TV-U11), on the drop
- *  writes TV-U4 built; "bucket" is Project. */
-export type BoardGroupBy = "status" | "bucket";
-export type TaskOrder = "manual" | "due" | "scheduled" | "priority" | "created" | "updated";
+/** The Board's Group by (TV-U11, call 22): a drop on a column sets its
+ *  field. Section only inside one project; Project and Area only across
+ *  projects; Team once the workspace has teams. "bucket" is Project. */
+export type BoardGroupBy =
+  | "status"
+  | "section"
+  | "assignee"
+  | "team"
+  | "priority"
+  | "bucket"
+  | "area"
+  /** Who or what each task waits on (TV-U12; a drop adds a Waiting on). */
+  | "waiting";
+/** The Board's lanes (call 85): one level, off by default. */
+export type BoardLanes = "none" | "assignee" | "priority" | "bucket" | "team";
+/** Display → Description on cards (AC7.4): hidden, or a two-line preview. */
+export type CardDescription = "hidden" | "preview";
+export type TaskOrder =
+  | "manual"
+  | "due"
+  | "scheduled"
+  | "priority"
+  | "created"
+  | "updated"
+  | "title"
+  | "status";
+/** Which way a sort runs (a Detailed header clicked twice, TV-U10). */
+export type OrderDirection = "asc" | "desc";
 export type SubtaskMode = "nested" | "flat";
 /** Display → Rows (tasks-v3 §4): which facts a row carries. Height is Density's. */
 export type { RowPreset };
@@ -31,7 +62,14 @@ export type TasksDisplay = {
   group: GroupBy;
   /** The Board's Group by (it always opens by status, call 86). */
   boardGroup: BoardGroupBy;
+  /** The Board's lanes (call 85). */
+  boardLanes: BoardLanes;
+  /** The Board's description preview (AC7.4). */
+  cardDescription: CardDescription;
   order: TaskOrder;
+  /** The sort's direction; "asc" is each order's natural one (dates
+   *  earliest first, Created/Updated newest first). Manual ignores it. */
+  orderDir: OrderDirection;
   completed: CompletedMode;
   subtasks: SubtaskMode;
   rows: RowPreset;
@@ -45,7 +83,10 @@ export const TASKS_DISPLAY_DEFAULTS: TasksDisplay = {
   layout: "list",
   group: "none",
   boardGroup: "status",
+  boardLanes: "none",
+  cardDescription: "hidden",
   order: "manual",
+  orderDir: "asc",
   completed: "hidden",
   subtasks: "nested",
   rows: "standard",
@@ -56,19 +97,32 @@ export const TASKS_DISPLAY_DEFAULTS: TasksDisplay = {
  * A scope's defaults:
  * - My tasks groups by status, In progress first (call 84);
  * - All groups by project (its tasks come from every project);
- * - a project, the Inbox and the Queue don't group (a project's default
- *   becomes Section once sections exist, TV-D10).
+ * - a project groups by Section (TV-U10): a plain list until it has
+ *   sections, then a group per section;
+ * - the Inbox and the Queue don't group.
+ *
+ * `rows` is the row preset a view starts with: the person's role's (TV-U17;
+ * developers start on Detailed), Standard otherwise.
  */
-export function tasksDisplayDefaults(scope: string): TasksDisplay {
-  if (scope === "mine") return { ...TASKS_DISPLAY_DEFAULTS, group: "status" };
-  // Upcoming (TV-U6's interim until TV-U15): by date, Earlier · Today · …
-  if (scope === "upcoming") return { ...TASKS_DISPLAY_DEFAULTS, group: "date", order: "due" };
-  if (groupsByBucket(scope)) return { ...TASKS_DISPLAY_DEFAULTS, group: "bucket" };
-  return { ...TASKS_DISPLAY_DEFAULTS };
+export function tasksDisplayDefaults(scope: string, rows: RowPreset = "standard"): TasksDisplay {
+  const base = { ...TASKS_DISPLAY_DEFAULTS, rows };
+  if (scope === "mine") return { ...base, group: "status" };
+  // Upcoming (TV-U15) groups by its days and orders its own rows; dated
+  // subtasks show flat, with "↳ Parent" (research §6).
+  if (scope === "upcoming") {
+    return { ...base, group: "date", order: "manual", subtasks: "flat" };
+  }
+  if (groupsByBucket(scope)) return { ...base, group: "bucket" };
+  if (isProjectScope(scope)) return { ...base, group: "section" };
+  return base;
 }
 
-export function tasksViewDefaults(scope: string, layout?: TaskLayout): TasksViewPrefs {
-  const display = tasksDisplayDefaults(scope);
+export function tasksViewDefaults(
+  scope: string,
+  layout?: TaskLayout,
+  rows?: RowPreset,
+): TasksViewPrefs {
+  const display = tasksDisplayDefaults(scope, rows);
   return { ...display, layout: layout ?? display.layout, filters: [] };
 }
 
@@ -86,17 +140,39 @@ const LAYOUT_CONTROL: DisplayControl<TasksDisplay> = {
 
 /** Group by's choices, in the menu's order (default l; never Tag or Energy). */
 export const GROUP_LABELS: Record<GroupBy, string> = {
+  section: "Section",
   status: "Status",
   priority: "Priority",
   assignee: "Assignee",
+  team: "Team",
   date: "Date",
   bucket: "Project",
   none: "None",
 };
 
-function groupControl(scope: string): DisplayControl<TasksDisplay> {
-  // Grouping by project only means something across projects (All, My tasks).
-  const groups = GROUP_BYS.filter((g) => g !== "bucket" || groupsByBucket(scope));
+/** What a scope's Group by can offer beyond the scope itself. */
+export type GroupChoices = {
+  /** The workspace has teams: Team is offered. */
+  teams: boolean;
+  /** The workspace has areas: the Board across projects offers Area. */
+  areas?: boolean;
+};
+
+/** The sanitiser keeps every grouping a scope could offer (teams may load late). */
+const ALL_CHOICES: GroupChoices = { teams: true, areas: true };
+
+function groupControl(
+  scope: string,
+  choices: GroupChoices = ALL_CHOICES,
+): DisplayControl<TasksDisplay> {
+  // Grouping by project only means something across projects (All, My
+  // tasks); by section only inside one project; by team once teams exist.
+  const groups = GROUP_BYS.filter(
+    (g) =>
+      (g !== "bucket" || groupsByBucket(scope)) &&
+      (g !== "section" || isProjectScope(scope)) &&
+      (g !== "team" || choices.teams),
+  );
   return {
     type: "select",
     id: "group",
@@ -105,12 +181,81 @@ function groupControl(scope: string): DisplayControl<TasksDisplay> {
   };
 }
 
-/** The Board's Group by: "Group by" too, never "Columns" (call 22a). */
-function boardGroupControl(scope: string): DisplayControl<TasksDisplay> {
-  const options = [{ value: "status", label: "Status" }];
-  if (groupsByBucket(scope)) options.push({ value: "bucket", label: "Project" });
-  return { type: "select", id: "boardGroup", label: "Group by", options };
+/** The Board's Group by choices, in the menu's order. */
+export const BOARD_GROUP_LABELS: Record<BoardGroupBy, string> = {
+  status: "Status",
+  section: "Section",
+  assignee: "Assignee",
+  team: "Team",
+  priority: "Priority",
+  bucket: "Project",
+  area: "Area",
+  waiting: "Waiting on",
+};
+
+/** What the Board can be grouped by in a scope (TV-U11, call 22). */
+export function boardGroupsFor(scope: string, choices: GroupChoices = ALL_CHOICES): BoardGroupBy[] {
+  const across = groupsByBucket(scope);
+  return (Object.keys(BOARD_GROUP_LABELS) as BoardGroupBy[]).filter(
+    (g) =>
+      (g !== "section" || isProjectScope(scope)) &&
+      (g !== "team" || choices.teams) &&
+      (g !== "bucket" || across) &&
+      (g !== "area" || (across && choices.areas !== false)),
+  );
 }
+
+/** The Board's Group by: "Group by" too, never "Columns" (call 22a). */
+function boardGroupControl(
+  scope: string,
+  choices: GroupChoices = ALL_CHOICES,
+): DisplayControl<TasksDisplay> {
+  return {
+    type: "select",
+    id: "boardGroup",
+    label: "Group by",
+    options: boardGroupsFor(scope, choices).map((g) => ({
+      value: g,
+      label: BOARD_GROUP_LABELS[g],
+    })),
+  };
+}
+
+/** The lanes' choices, in the menu's order (call 85). */
+export const BOARD_LANE_LABELS: Record<BoardLanes, string> = {
+  none: "None",
+  assignee: "Assignee",
+  priority: "Priority",
+  bucket: "Project",
+  team: "Team",
+};
+
+/** Display → Lanes: one level, off by default; Project only across projects. */
+function boardLanesControl(
+  scope: string,
+  choices: GroupChoices = ALL_CHOICES,
+): DisplayControl<TasksDisplay> {
+  const lanes = (Object.keys(BOARD_LANE_LABELS) as BoardLanes[]).filter(
+    (l) => (l !== "bucket" || groupsByBucket(scope)) && (l !== "team" || choices.teams),
+  );
+  return {
+    type: "select",
+    id: "boardLanes",
+    label: "Lanes",
+    options: lanes.map((l) => ({ value: l, label: BOARD_LANE_LABELS[l] })),
+  };
+}
+
+/** Display → Description: the card's two-line preview (AC7.4), off by default. */
+const DESCRIPTION_CONTROL: DisplayControl<TasksDisplay> = {
+  type: "segmented",
+  id: "cardDescription",
+  label: "Description",
+  options: [
+    { value: "hidden", label: "Hidden" },
+    { value: "preview", label: "Preview" },
+  ],
+};
 
 const ROWS_CONTROL: DisplayControl<TasksDisplay> = {
   type: "segmented",
@@ -133,6 +278,8 @@ const ORDER_CONTROL: DisplayControl<TasksDisplay> = {
     { value: "priority", label: "Priority" },
     { value: "created", label: "Created" },
     { value: "updated", label: "Updated" },
+    { value: "title", label: "Title" },
+    { value: "status", label: "Status" },
   ],
 };
 
@@ -169,39 +316,53 @@ const PROPERTIES_CONTROL: DisplayControl<TasksDisplay> = {
   ],
 };
 
+/** The same choices on the Board, named for what it shows. */
+const CARD_PROPERTIES_CONTROL: DisplayControl<TasksDisplay> = {
+  ...PROPERTIES_CONTROL,
+  label: "Show on cards",
+};
+
 /**
  * The controls a scope offers for a layout.
  * - The Queue is one ordered line-up: no grouping, order, Completed choice
  *   (done tasks leave every queue; one you check off there stays until the
  *   next load, TV-D4) or subtask nesting.
  * - The Timeline keeps its own rules: only the layout switch.
- * - The Board has its own Group by (Project only across projects) and no
- *   Rows preset: cards get theirs with the Board rebuild (TV-U11).
+ * - The Board has its own Group by (call 22), Lanes (85), Rows (Standard or
+ *   Detailed cards) and the Description preview (AC7.4) (TV-U11).
  */
 export function tasksDisplayControls(
   scope: string,
   layout: TaskLayout = "list",
+  choices: GroupChoices = ALL_CHOICES,
 ): DisplayControl<TasksDisplay>[] {
   if (layout === "timeline") return [LAYOUT_CONTROL];
+  // Upcoming's List groups by its days in its own order (TV-U15): no Group
+  // by, Order by or nesting to choose.
+  if (scope === "upcoming" && layout === "list") {
+    return [LAYOUT_CONTROL, COMPLETED_CONTROL, ROWS_CONTROL, PROPERTIES_CONTROL];
+  }
   if (scope === "today") {
     return layout === "board"
-      ? [LAYOUT_CONTROL, PROPERTIES_CONTROL]
+      ? [LAYOUT_CONTROL, ROWS_CONTROL, CARD_PROPERTIES_CONTROL, DESCRIPTION_CONTROL]
       : [LAYOUT_CONTROL, ROWS_CONTROL, PROPERTIES_CONTROL];
   }
   if (layout === "board") {
-    const grouping = groupsByBucket(scope) ? [boardGroupControl(scope)] : [];
     return [
       LAYOUT_CONTROL,
-      ...grouping,
+      boardGroupControl(scope, choices),
+      boardLanesControl(scope, choices),
       ORDER_CONTROL,
       COMPLETED_CONTROL,
       SUBTASKS_CONTROL,
-      PROPERTIES_CONTROL,
+      ROWS_CONTROL,
+      CARD_PROPERTIES_CONTROL,
+      DESCRIPTION_CONTROL,
     ];
   }
   return [
     LAYOUT_CONTROL,
-    groupControl(scope),
+    groupControl(scope, choices),
     ORDER_CONTROL,
     COMPLETED_CONTROL,
     SUBTASKS_CONTROL,
@@ -216,6 +377,8 @@ function scopeControls(scope: string): DisplayControl<TasksDisplay>[] {
     LAYOUT_CONTROL,
     groupControl(scope),
     boardGroupControl(scope),
+    boardLanesControl(scope),
+    DESCRIPTION_CONTROL,
     ORDER_CONTROL,
     COMPLETED_CONTROL,
     SUBTASKS_CONTROL,
@@ -233,6 +396,8 @@ export function sanitizeTasksView(
   scope: string,
 ): TasksViewPrefs {
   const display = sanitizeDisplayValue(raw, scopeControls(scope), displayOf(defaults));
+  // The direction has no control of its own (the Detailed headers set it).
+  if (display.orderDir !== "asc" && display.orderDir !== "desc") display.orderDir = "asc";
   const stored = raw && typeof raw === "object" ? (raw as Record<string, unknown>).filters : null;
   return { ...display, filters: sanitizeTaskFilters(stored) };
 }
@@ -260,40 +425,84 @@ function time(iso: string | null): number | null {
   return Number.isNaN(t) ? null : t;
 }
 
-/** Earliest first, no date last. */
-function byDate(a: string | null, b: string | null): number {
-  const x = time(a);
-  const y = time(b);
-  if (x === null || y === null) return x === y ? 0 : x === null ? 1 : -1;
-  return x - y;
-}
+const STATUS_RANK: Record<string, number> = Object.fromEntries(
+  STATUS_ORDER.map((key, i) => [key, i]),
+);
 
-/** Newest first. */
-function byNewest(a: string, b: string): number {
-  return (time(b) ?? 0) - (time(a) ?? 0);
-}
+const TITLE_COLLATOR = new Intl.Collator(undefined, { sensitivity: "base", numeric: true });
 
-const COMPARATORS: Record<Exclude<TaskOrder, "manual">, (a: Task, b: Task) => number> = {
-  due: (a, b) => byDate(a.dueDate, b.dueDate),
-  scheduled: (a, b) => byDate(a.scheduledAt, b.scheduledAt),
-  priority: (a, b) =>
-    (a.priority ? PRIORITY_RANK[a.priority] : LEVEL_ORDER.length) -
-    (b.priority ? PRIORITY_RANK[b.priority] : LEVEL_ORDER.length),
-  created: (a, b) => byNewest(a.createdAt, b.createdAt),
-  updated: (a, b) => byNewest(a.updatedAt, b.updatedAt),
+/**
+ * Each order's sort key in its natural direction (smaller first); null = no
+ * value, which sorts last whichever way the sort runs.
+ */
+const SORT_KEYS: Record<Exclude<TaskOrder, "manual" | "title">, (t: Task) => number | null> = {
+  due: (t) => time(t.dueDate),
+  scheduled: (t) => time(t.scheduledAt),
+  priority: (t) => (t.priority ? (PRIORITY_RANK[t.priority] ?? null) : null),
+  // Newest first.
+  created: (t) => {
+    const x = time(t.createdAt);
+    return x === null ? null : -x;
+  },
+  updated: (t) => {
+    const x = time(t.updatedAt);
+    return x === null ? null : -x;
+  },
+  status: (t) => STATUS_RANK[statusKeyOf(t)] ?? null,
 };
+
+function compareBy(order: Exclude<TaskOrder, "manual">, dir: OrderDirection) {
+  const sign = dir === "desc" ? -1 : 1;
+  if (order === "title") {
+    return (a: Task, b: Task) => {
+      const x = a.title.trim();
+      const y = b.title.trim();
+      // Untitled ones last.
+      if (!x || !y) return x === y ? 0 : x ? -1 : 1;
+      return sign * TITLE_COLLATOR.compare(x, y);
+    };
+  }
+  const key = SORT_KEYS[order];
+  return (a: Task, b: Task) => {
+    const x = key(a);
+    const y = key(b);
+    if (x === null || y === null) return x === y ? 0 : x === null ? 1 : -1;
+    return sign * (x - y);
+  };
+}
 
 /**
  * Orders tasks for Display → Order by. Manual keeps the incoming (position)
  * order; every other order is stable, so ties keep the manual order. Dates
- * run earliest first with no date last, priority high to none, and Created /
- * Updated newest first.
+ * run earliest first, priority high to none, Created / Updated newest first,
+ * titles A to Z, statuses in the List's order (In progress first); `desc`
+ * turns each around, and a task without the value sorts last either way.
  */
-export function orderTasks<T extends Task>(tasks: readonly T[], order: TaskOrder): T[] {
+export function orderTasks<T extends Task>(
+  tasks: readonly T[],
+  order: TaskOrder,
+  dir: OrderDirection = "asc",
+): T[] {
   if (order === "manual") return [...tasks];
-  const compare = COMPARATORS[order];
+  const compare = compareBy(order, dir);
   return tasks
     .map((task, index) => ({ task, index }))
     .sort((a, b) => compare(a.task, b.task) || a.index - b.index)
     .map(({ task }) => task);
+}
+
+/**
+ * A Detailed column header clicked (research §3): sorted by another column →
+ * this one, ascending; ascending → descending; descending → back to the
+ * view's own order (its default, Manual in a project).
+ */
+export function nextHeaderSort(
+  current: { order: TaskOrder; orderDir: OrderDirection },
+  column: Exclude<TaskOrder, "manual">,
+  viewDefault: TaskOrder,
+): { order: TaskOrder; orderDir: OrderDirection } {
+  if (current.order !== column) return { order: column, orderDir: "asc" };
+  if (current.orderDir === "asc") return { order: column, orderDir: "desc" };
+  // A view that sorts by this column anyway (Upcoming by due) just turns back.
+  return { order: viewDefault, orderDir: "asc" };
 }

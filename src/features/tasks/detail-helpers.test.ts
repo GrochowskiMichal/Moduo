@@ -5,7 +5,12 @@
 import { describe, expect, it } from "@rstest/core";
 
 import type { SpineComment } from "@/lib/runtime.types";
-import { isPropertySet, quietLineProperties, shownOptionalProperties } from "./detail-properties";
+import {
+  branchName,
+  isPropertySet,
+  quietLineProperties,
+  shownOptionalProperties,
+} from "./detail-properties";
 import { duplicateFields } from "./duplicate";
 import { buildTaskFeed, feedTime, foldFeed } from "./feed";
 import { makeTask } from "./helpers";
@@ -21,37 +26,68 @@ function task(over: Partial<Task> = {}): Task {
   };
 }
 
-describe("rule C: core always, the rest once set (U3-1)", () => {
-  it("hides Energy, Scheduled, Time and Repeat until they have a value", () => {
+describe("v3 properties: core always, the rest once set (TV-U13)", () => {
+  it("hides Energy, Scheduled, Reminder, Estimate, Repeat and Waiting on until set", () => {
     const empty = task();
     expect([...shownOptionalProperties(empty, new Set())]).toEqual([]);
     expect(quietLineProperties(empty, new Set())).toEqual([
       "energy",
       "scheduled",
-      "time",
+      "reminder",
+      "estimate",
       "repeat",
+      "waiting",
     ]);
   });
 
   it("shows a set property and drops it from the quiet line", () => {
     const set = task({ energyLevel: "high", scheduledAt: "2026-10-09T09:00:00Z" });
     expect([...shownOptionalProperties(set, new Set())]).toEqual(["energy", "scheduled"]);
-    expect(quietLineProperties(set, new Set())).toEqual(["time", "repeat"]);
+    expect(quietLineProperties(set, new Set())).toEqual([
+      "reminder",
+      "estimate",
+      "repeat",
+      "waiting",
+    ]);
   });
 
-  it("counts an estimate or tracked time as a Time value", () => {
-    expect(isPropertySet(task({ durationMinutes: 30 }), "time")).toBe(true);
-    expect(isPropertySet(task({ timeSpentSeconds: 60 }), "time")).toBe(true);
-    expect(isPropertySet(task(), "time")).toBe(false);
+  it("counts an estimate or tracked time as an Estimate value", () => {
+    expect(isPropertySet(task({ estimateMinutes: 30 }), "estimate")).toBe(true);
+    expect(isPropertySet(task({ timeSpentSeconds: 60 }), "estimate")).toBe(true);
+    expect(isPropertySet(task(), "estimate")).toBe(false);
+  });
+
+  it("reads sessions, my reminders and Waiting on from the task's rows", () => {
+    const extras = { sessions: 2, reminders: 1, waiting: 1 };
+    expect(isPropertySet(task(), "scheduled", extras)).toBe(true);
+    expect(isPropertySet(task(), "reminder", extras)).toBe(true);
+    expect(isPropertySet(task(), "waiting", extras)).toBe(true);
   });
 
   it("shows a row picked from the quiet line even while it's empty", () => {
     expect([...shownOptionalProperties(task(), new Set(["repeat"]))]).toEqual(["repeat"]);
-    expect(quietLineProperties(task(), new Set(["repeat"]))).toEqual([
-      "energy",
-      "scheduled",
-      "time",
-    ]);
+    expect(quietLineProperties(task(), new Set(["repeat"]))).not.toContain("repeat");
+  });
+});
+
+describe("Copy branch name (AC3.7)", () => {
+  it("is the handle and the title, lower case, joined by dashes", () => {
+    expect(branchName("MOD-142", "Logo concepts")).toBe("mod-142-logo-concepts");
+    expect(branchName("MOD-7", "Fix: the “login” page (again)!")).toBe(
+      "mod-7-fix-the-login-page-again",
+    );
+    expect(branchName(null, "Café menu")).toBe("cafe-menu");
+    expect(branchName(null, "!!!")).toBe("task");
+  });
+
+  it("stops at 60 characters, at a word", () => {
+    const name = branchName(
+      "MOD-1",
+      "a very long title that keeps going and going past sixty characters",
+    );
+    expect(name.length).toBeLessThanOrEqual(60);
+    expect(name.startsWith("mod-1-a-very-long")).toBe(true);
+    expect(name.endsWith("-")).toBe(false);
   });
 });
 
@@ -124,6 +160,8 @@ function comment(id: string, at: string): SpineComment {
     createdAt: at,
     updatedAt: at,
     deletedAt: null,
+    editedAt: null,
+    reactions: [],
   };
 }
 

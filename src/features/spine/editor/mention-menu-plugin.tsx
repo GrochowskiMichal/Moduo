@@ -696,7 +696,14 @@ export function MentionMenuPlugin({
 
 function CandidateIcon({ candidate }: { candidate: MentionCandidate }) {
   if (candidate.kind === "team") {
-    return <TeamMark name={candidate.label} id={candidate.teamId} letters={candidate.letters} />;
+    return (
+      <TeamMark
+        name={candidate.label}
+        id={candidate.teamId}
+        letters={candidate.letters}
+        color={candidate.color}
+      />
+    );
   }
   if (candidate.kind === "action") {
     const Own = candidate.icon ?? Plus;

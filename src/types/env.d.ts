@@ -21,6 +21,8 @@ interface ImportMetaEnv {
   /** PostHog analytics — optional, no-op when unset */
   readonly PUBLIC_POSTHOG_KEY?: string;
   readonly PUBLIC_POSTHOG_HOST?: string;
+  /** Web Push (TV-D12): the VAPID public key; unset = browser notifications unavailable */
+  readonly PUBLIC_VAPID_PUBLIC_KEY?: string;
 }
 
 interface ImportMeta {

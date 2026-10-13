@@ -5,10 +5,22 @@
 // open "Move to project" menu reads it, so a change to the list redraws that
 // menu and no row.
 
+import {
+  TASK_STATUS_CATEGORIES,
+  type TaskStatusCategory,
+  taskCategoryOf,
+} from "@contracts/vocabularies";
 import { Inbox } from "lucide-react";
-import { createContext, type ReactNode, useContext, useMemo } from "react";
+import { createContext, Fragment, type ReactNode, useContext, useMemo } from "react";
 import { ContextMenuRadioItem } from "../../../components/ui/context-menu";
-import { DropdownMenuRadioItem } from "../../../components/ui/dropdown-menu";
+import {
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+} from "../../../components/ui/dropdown-menu";
+import type { ProjectStatus, Task } from "../model";
+import { CATEGORY_LABELS, type StatusTarget, statusesByCategory } from "../statuses";
+import { StatusIcon } from "./status-icon";
 
 type ProjectChoice = { id: string; name: string; isSystem: boolean };
 
@@ -58,4 +70,75 @@ export function ProjectContextMenuItems() {
       {p.isSystem ? "Inbox" : p.name}
     </ContextMenuRadioItem>
   ));
+}
+
+// ── Statuses (TV-U10's ⇧S menu) ─────────────────────────────────────────────
+
+type StatusChoices = {
+  /** A project's statuses (the workspace default for the Inbox). */
+  statusesFor: (bucketId: string) => readonly ProjectStatus[];
+  /** Any statuses at all (a database before TV-D9 has none, and no Backlog). */
+  any: boolean;
+};
+
+const StatusChoicesContext = createContext<StatusChoices>({ statusesFor: () => [], any: false });
+
+/** The statuses a row's status menu offers, read only by an open menu (like projects). */
+export function StatusChoicesProvider({
+  statusesFor,
+  any,
+  children,
+}: StatusChoices & { children: ReactNode }) {
+  const value = useMemo(() => ({ statusesFor, any }), [statusesFor, any]);
+  return <StatusChoicesContext.Provider value={value}>{children}</StatusChoicesContext.Provider>;
+}
+
+/**
+ * The status menu's items for one task (REPLAN 53a): its project's own
+ * statuses grouped by category, hidden ones only while in use; the five
+ * categories when the project's statuses can't be read here.
+ */
+export function StatusMenuItems({
+  task,
+  onPick,
+}: {
+  task: Pick<Task, "bucketId" | "statusId" | "status" | "statusCategory">;
+  onPick: (target: StatusTarget) => void;
+}) {
+  const { statusesFor, any } = useContext(StatusChoicesContext);
+  const category = taskCategoryOf(task);
+  const groups = statusesByCategory(statusesFor(task.bucketId))
+    .map((g) => ({
+      ...g,
+      statuses: g.statuses.filter((s) => !s.hidden || s.id === task.statusId),
+    }))
+    .filter((g) => g.statuses.length > 0);
+  const byName = groups.length > 0;
+  return (
+    <DropdownMenuRadioGroup
+      value={byName ? (task.statusId ?? "") : category}
+      onValueChange={(v) =>
+        onPick(byName ? { statusId: v } : { category: v as TaskStatusCategory })
+      }
+    >
+      {byName
+        ? groups.map((g, i) => (
+            <Fragment key={g.category}>
+              {i > 0 ? <DropdownMenuSeparator /> : null}
+              {g.statuses.map((s) => (
+                <DropdownMenuRadioItem key={s.id} value={s.id}>
+                  <StatusIcon category={s.category} className="text-muted-foreground" />
+                  {s.name}
+                </DropdownMenuRadioItem>
+              ))}
+            </Fragment>
+          ))
+        : TASK_STATUS_CATEGORIES.filter((c) => c !== "backlog" || any).map((c) => (
+            <DropdownMenuRadioItem key={c} value={c}>
+              <StatusIcon category={c} className="text-muted-foreground" />
+              {CATEGORY_LABELS[c]}
+            </DropdownMenuRadioItem>
+          ))}
+    </DropdownMenuRadioGroup>
+  );
 }

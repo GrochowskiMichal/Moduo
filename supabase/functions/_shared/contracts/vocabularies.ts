@@ -197,12 +197,15 @@ export function isBacklogTask(task: {
 
 // ---------------------------------------------------------------------------
 // Task time entries (TV-D3) — mirrors task_time_entries' kind CHECK and
-// tasks_op_track_time's actions and answers in 20261008225500_tasks_time_entries.
+// tasks_op_track_time's actions and answers; TV-D14's re-cut
+// (*_time_entries_add) added `manual`, `add`/`edit`/`remove` and the
+// adjustment reason.
 // ---------------------------------------------------------------------------
 
 /** focus/waiting: a tracked stretch; adjustment: a signed correction; legacy:
- *  the total a task had before entries existed. */
-export const TASK_TIME_ENTRY_KINDS = ["focus", "waiting", "adjustment", "legacy"] as const;
+ *  the total a task had before entries existed; manual: time logged by hand
+ *  on a day ("Add time…", TV-D14). */
+export const TASK_TIME_ENTRY_KINDS = ["focus", "waiting", "adjustment", "legacy", "manual"] as const;
 export type TaskTimeEntryKind = (typeof TASK_TIME_ENTRY_KINDS)[number];
 export const taskTimeEntryKindSchema = z.enum(TASK_TIME_ENTRY_KINDS);
 export function isTaskTimeEntryKind(value: unknown): value is TaskTimeEntryKind {
@@ -210,7 +213,16 @@ export function isTaskTimeEntryKind(value: unknown): value is TaskTimeEntryKind 
 }
 
 /** What `tasks_op_track_time` can do. */
-export const TASK_TIME_ACTIONS = ["focus", "waiting", "adjust", "set_total", "undo"] as const;
+export const TASK_TIME_ACTIONS = [
+  "focus",
+  "waiting",
+  "adjust",
+  "set_total",
+  "undo",
+  "add",
+  "edit",
+  "remove",
+] as const;
 export type TaskTimeAction = (typeof TASK_TIME_ACTIONS)[number];
 export const taskTimeActionSchema = z.enum(TASK_TIME_ACTIONS);
 
@@ -219,6 +231,86 @@ export const taskTimeActionSchema = z.enum(TASK_TIME_ACTIONS);
 export const TASK_TIME_STATUSES = ["saved", "duplicate", "noop", "gone"] as const;
 export type TaskTimeStatus = (typeof TASK_TIME_STATUSES)[number];
 export const taskTimeStatusSchema = z.enum(TASK_TIME_STATUSES);
+
+/** Why an adjustment exists (TV-D14): `give_back` = time counted on two
+ *  devices, given back after a Focus takeover (TV-F6, F6-16). */
+export const TASK_TIME_ADJUSTMENT_REASONS = ["give_back"] as const;
+export type TaskTimeAdjustmentReason = (typeof TASK_TIME_ADJUSTMENT_REASONS)[number];
+export const taskTimeAdjustmentReasonSchema = z.enum(TASK_TIME_ADJUSTMENT_REASONS);
+
+// ---------------------------------------------------------------------------
+// Time & region (TV-D14) — mirrors user_preferences' hour_cycle and
+// date_order CHECKs in *_user_preferences_time_region. NULL = the device's.
+// ---------------------------------------------------------------------------
+
+/** The clock: 12-hour ("3:00 PM") or 24-hour ("15:00"). */
+export const HOUR_CYCLES = ["h12", "h23"] as const;
+export type HourCycle = (typeof HOUR_CYCLES)[number];
+export const hourCycleSchema = z.enum(HOUR_CYCLES);
+export function isHourCycle(value: unknown): value is HourCycle {
+  return typeof value === "string" && (HOUR_CYCLES as readonly string[]).includes(value);
+}
+
+/** Which comes first in a date: "Oct 16" or "16 Oct". */
+export const DATE_ORDERS = ["month_day", "day_month"] as const;
+export type DateOrder = (typeof DATE_ORDERS)[number];
+export const dateOrderSchema = z.enum(DATE_ORDERS);
+export function isDateOrder(value: unknown): value is DateOrder {
+  return typeof value === "string" && (DATE_ORDERS as readonly string[]).includes(value);
+}
+
+// ---------------------------------------------------------------------------
+// Focus runs (TV-F6, salvaged from #323) — mirrors focus_runs' CHECKs: status
+// and phase in 20261008235243_focus_runs, the timer (`mode`) in the TV-F6
+// re-cut (*_focus_runs_v3), which also checks focus_op_run_start's p_mode.
+// ---------------------------------------------------------------------------
+
+/** A run is going, paused, or over (one open run per person). */
+export const FOCUS_RUN_STATUSES = ["running", "paused", "ended"] as const;
+export type FocusRunStatus = (typeof FOCUS_RUN_STATUSES)[number];
+export const focusRunStatusSchema = z.enum(FOCUS_RUN_STATUSES);
+export function isFocusRunStatus(value: unknown): value is FocusRunStatus {
+  return typeof value === "string" && (FOCUS_RUN_STATUSES as readonly string[]).includes(value);
+}
+/** Lax read: an unknown status reads as ended (a run nobody can act on). */
+export function normalizeFocusRunStatus(input: unknown): FocusRunStatus {
+  return isFocusRunStatus(input) ? input : "ended";
+}
+export function parseFocusRunStatus(input: unknown): SafeParseResult<FocusRunStatus> {
+  return parseOrError(focusRunStatusSchema, input);
+}
+
+/** Focus's Timer (REPLAN 62a): the pill on the task (Per task, the default),
+ *  one rhythm for the session (Pomodoro; time still goes to each task), or no
+ *  clock and nothing recorded (Off). Changeable mid-run. */
+export const FOCUS_TIMER_MODES = ["per_task", "pomodoro", "off"] as const;
+export type FocusTimerMode = (typeof FOCUS_TIMER_MODES)[number];
+export const focusTimerModeSchema = z.enum(FOCUS_TIMER_MODES);
+export function isFocusTimerMode(value: unknown): value is FocusTimerMode {
+  return typeof value === "string" && (FOCUS_TIMER_MODES as readonly string[]).includes(value);
+}
+/** Lax read: an unknown timer reads as the default, Per task. */
+export function normalizeFocusTimerMode(input: unknown): FocusTimerMode {
+  return isFocusTimerMode(input) ? input : "per_task";
+}
+export function parseFocusTimerMode(input: unknown): SafeParseResult<FocusTimerMode> {
+  return parseOrError(focusTimerModeSchema, input);
+}
+
+/** The pomodoro phase a run is in (Per task and Off are always `work`). */
+export const FOCUS_RUN_PHASES = ["work", "break", "long_break"] as const;
+export type FocusRunPhase = (typeof FOCUS_RUN_PHASES)[number];
+export const focusRunPhaseSchema = z.enum(FOCUS_RUN_PHASES);
+export function isFocusRunPhase(value: unknown): value is FocusRunPhase {
+  return typeof value === "string" && (FOCUS_RUN_PHASES as readonly string[]).includes(value);
+}
+/** Lax read: an unknown phase reads as work. */
+export function normalizeFocusRunPhase(input: unknown): FocusRunPhase {
+  return isFocusRunPhase(input) ? input : "work";
+}
+export function parseFocusRunPhase(input: unknown): SafeParseResult<FocusRunPhase> {
+  return parseOrError(focusRunPhaseSchema, input);
+}
 
 // ---------------------------------------------------------------------------
 // Tasks v3 structure (TV-D10) — mirrors buckets.status in
@@ -256,6 +348,38 @@ export function parseTaskReminderKind(input: unknown): SafeParseResult<TaskRemin
 /** Lax read: a kind this build doesn't know reads as a reminder at its time. */
 export function normalizeTaskReminderKind(input: unknown): TaskReminderKind {
   return isTaskReminderKind(input) ? input : "at";
+}
+
+/** How a repeat counts its next occurrence (REPLAN 27 b): by its rule, or
+ *  from the day it was done ("after_completion"; no value = by the rule).
+ *  Postgres: tasks__recurrence_problem accepts only these. */
+export const RECURRENCE_MODES = ["after_completion"] as const;
+export type RecurrenceMode = (typeof RECURRENCE_MODES)[number];
+export const recurrenceModeSchema = z.enum(RECURRENCE_MODES);
+export function isRecurrenceMode(value: unknown): value is RecurrenceMode {
+  return typeof value === "string" && (RECURRENCE_MODES as readonly string[]).includes(value);
+}
+export function parseRecurrenceMode(input: unknown): SafeParseResult<RecurrenceMode> {
+  return parseOrError(recurrenceModeSchema, input);
+}
+/** Lax read: an unknown mode reads as "by the rule" (undefined). */
+export function normalizeRecurrenceMode(input: unknown): RecurrenceMode | undefined {
+  return isRecurrenceMode(input) ? input : undefined;
+}
+
+/** What a notice to a person's devices is about (TV-D12, `notice_deliveries.kind`). */
+export const NOTICE_DELIVERY_KINDS = ["reminder"] as const;
+export type NoticeDeliveryKind = (typeof NOTICE_DELIVERY_KINDS)[number];
+export const noticeDeliveryKindSchema = z.enum(NOTICE_DELIVERY_KINDS);
+export function isNoticeDeliveryKind(value: unknown): value is NoticeDeliveryKind {
+  return typeof value === "string" && (NOTICE_DELIVERY_KINDS as readonly string[]).includes(value);
+}
+export function parseNoticeDeliveryKind(input: unknown): SafeParseResult<NoticeDeliveryKind> {
+  return parseOrError(noticeDeliveryKindSchema, input);
+}
+/** Lax read: an unknown kind reads as a reminder (the only kind so far). */
+export function normalizeNoticeDeliveryKind(input: unknown): NoticeDeliveryKind {
+  return isNoticeDeliveryKind(input) ? input : "reminder";
 }
 
 /** What a Waiting on… entry waits on (default q): a person, an email thread,
@@ -871,6 +995,84 @@ export function isContentAuthorKind(value: unknown): value is ContentAuthorKind 
 /** Read-side normalization: rows written before the column existed are a person's. */
 export function normalizeContentAuthorKind(input: unknown): ContentAuthorKind {
   return isContentAuthorKind(input) ? input : "user";
+}
+
+// ---------------------------------------------------------------------------
+// Comment reactions (TV-U13, REPLAN 88) — mirrors comment_reactions.reaction's
+// CHECK and comments_op_react in 20261013100000_comment_reactions_edits. Six,
+// fixed, in this order: 👍 ✅ 👀 🙏 ❤️ 😄. Nobody adds their own, and a
+// reaction never notifies anyone.
+// ---------------------------------------------------------------------------
+
+export const COMMENT_REACTIONS = ["thumbs_up", "check", "eyes", "pray", "heart", "smile"] as const;
+export type CommentReaction = (typeof COMMENT_REACTIONS)[number];
+export const commentReactionSchema = z.enum(COMMENT_REACTIONS);
+export function isCommentReaction(value: unknown): value is CommentReaction {
+  return typeof value === "string" && (COMMENT_REACTIONS as readonly string[]).includes(value);
+}
+export function parseCommentReaction(input: unknown): SafeParseResult<CommentReaction> {
+  return parseOrError(commentReactionSchema, input);
+}
+/** Lax read: a reaction this build doesn't know is left out (null), never shown wrong. */
+export function normalizeCommentReaction(input: unknown): CommentReaction | null {
+  return isCommentReaction(input) ? input : null;
+}
+
+// ---------------------------------------------------------------------------
+// Templates (TV-D15, REPLAN 9 and 79) — mirrors the op guards in
+// 20261013160000_templates.sql. A template is a task template or a project
+// template (two tables, one `templates_op_update(…, p_kind, …)`); what a
+// template's task keeps a link to is a lasting thing only: a note or a
+// contact (emails and events belong to one run of the work).
+// ---------------------------------------------------------------------------
+
+export const TEMPLATE_KINDS = ["task", "project"] as const;
+export type TemplateKind = (typeof TEMPLATE_KINDS)[number];
+export const templateKindSchema = z.enum(TEMPLATE_KINDS);
+export function isTemplateKind(value: unknown): value is TemplateKind {
+  return typeof value === "string" && (TEMPLATE_KINDS as readonly string[]).includes(value);
+}
+export function parseTemplateKind(input: unknown): SafeParseResult<TemplateKind> {
+  return parseOrError(templateKindSchema, input);
+}
+/** Lax read: a kind this build doesn't know is left out (null). */
+export function normalizeTemplateKind(input: unknown): TemplateKind | null {
+  return isTemplateKind(input) ? input : null;
+}
+
+export const TEMPLATE_LINK_TYPES = ["note", "contact"] as const;
+export type TemplateLinkType = (typeof TEMPLATE_LINK_TYPES)[number];
+export const templateLinkTypeSchema = z.enum(TEMPLATE_LINK_TYPES);
+export function isTemplateLinkType(value: unknown): value is TemplateLinkType {
+  return typeof value === "string" && (TEMPLATE_LINK_TYPES as readonly string[]).includes(value);
+}
+export function parseTemplateLinkType(input: unknown): SafeParseResult<TemplateLinkType> {
+  return parseOrError(templateLinkTypeSchema, input);
+}
+/** Lax read: a link to anything else is dropped (null). */
+export function normalizeTemplateLinkType(input: unknown): TemplateLinkType | null {
+  return isTemplateLinkType(input) ? input : null;
+}
+
+// ---------------------------------------------------------------------------
+// Starter templates (TV-U17, REPLAN 34) — mirrors the key guard of
+// project_templates_op_starter in 20261013230000_templates_starter. The role
+// question offers one of these; the server builds its body from the key, so
+// the app never sends one.
+// ---------------------------------------------------------------------------
+
+export const STARTER_TEMPLATES = ["kickoff", "monthly_close", "client_onboarding", "episode"] as const;
+export type StarterTemplate = (typeof STARTER_TEMPLATES)[number];
+export const starterTemplateSchema = z.enum(STARTER_TEMPLATES);
+export function isStarterTemplate(value: unknown): value is StarterTemplate {
+  return typeof value === "string" && (STARTER_TEMPLATES as readonly string[]).includes(value);
+}
+export function parseStarterTemplate(input: unknown): SafeParseResult<StarterTemplate> {
+  return parseOrError(starterTemplateSchema, input);
+}
+/** Lax read: a starter this build doesn't know is left out (null). */
+export function normalizeStarterTemplate(input: unknown): StarterTemplate | null {
+  return isStarterTemplate(input) ? input : null;
 }
 
 // ---------------------------------------------------------------------------

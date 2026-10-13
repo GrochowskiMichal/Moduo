@@ -13,6 +13,7 @@ import type { ReferencePreviewApi } from "../../spine/references/rows";
 import { ReferenceStore } from "../../spine/references/store";
 import type { Bucket, Task, Team } from "../model";
 import { EMPTY_FIELDS, loadDraft, saveDraft } from "./capture-draft";
+import { type CaptureTemplateProvider, registerCaptureTemplates } from "./capture-hooks";
 
 const ME = "u-me";
 const SAM = "u-sam";
@@ -23,12 +24,13 @@ const h = rs.hoisted(() => ({
   userId: "u-me",
   runtime: null as unknown,
   bundle: null as unknown,
+  store: null as unknown,
 }));
 
 // The workspace's shared store, as a loaded snapshot (no store: saves go
 // straight to the runtime, the store's own behaviour is its tests').
 rs.mock("../../../lib/sync/react", () => ({
-  useWorkspaceStore: () => null,
+  useWorkspaceStore: () => h.store ?? null,
   useStoreSnapshot: () => ({ loaded: true, bundle: h.bundle }),
 }));
 
@@ -212,6 +214,8 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   window.localStorage.clear();
+  h.store = null;
+  registerCaptureTemplates(null);
 });
 
 describe("a restored draft", () => {
@@ -397,6 +401,18 @@ describe("a team task (54, 94)", () => {
   });
 });
 
+describe("a group's + (TV-U10)", () => {
+  it("shows the status it opened with as a chip, and files the task in it", async () => {
+    renderBody({ seed: { status: "in_progress" } }, referenceStore({}), "Sketch the banner");
+    expect(await screen.findByRole("button", { name: "Clear In progress" })).toBeTruthy();
+    const title = await screen.findByRole("textbox", { name: "Task title" });
+    await waitFor(() => expect(title.textContent).toBe("Sketch the banner"));
+    fireEvent.click(screen.getByRole("button", { name: /^Create\s*⏎$/ }));
+    await waitFor(() => expect(fake.saved.length).toBe(1));
+    expect(fake.saved[0]?.statusCategory).toBe("in_progress");
+  });
+});
+
 describe("Create (AC10.3, AC5.4)", () => {
   async function createWith(context: Partial<CaptureContext>, removeSource = false) {
     saveDraft(ME, WS, {
@@ -450,5 +466,106 @@ describe("Create (AC10.3, AC5.4)", () => {
       await new Promise((r) => setTimeout(r, 0));
     });
     expect(fake.links).toEqual([]);
+  });
+});
+
+describe("From template (`/template`, More → Template…, TV-D15)", () => {
+  function withTemplates() {
+    const apply = rs.fn(async (_deps: unknown, _input: unknown) => "t-new" as string | null);
+    const provider: CaptureTemplateProvider = {
+      useChoices: () => ({
+        loaded: true,
+        choices: [
+          {
+            id: "tt-1",
+            name: "Episode",
+            title: "Record episode",
+            subtasks: 3,
+            dated: true,
+            anchor: "due",
+            project: "p-acme",
+          },
+          {
+            id: "tt-2",
+            name: "Onboarding",
+            title: "Onboard a client",
+            subtasks: 2,
+            dated: true,
+            anchor: "start",
+            project: null,
+          },
+        ],
+      }),
+      apply,
+    };
+    registerCaptureTemplates(provider);
+    h.store = { isOffline: () => false };
+    (fake.runtime as { tasks: Record<string, unknown> }).tasks.applyTaskTemplate = rs.fn();
+    return apply;
+  }
+
+  it("a picked template fills the title and its project, and Create makes it on the server", async () => {
+    const apply = withTemplates();
+    const { onDone } = renderBody();
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Template…" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Episode/ }));
+    expect(await screen.findByText("Template: Episode")).toBeTruthy();
+    expect(destination().textContent).toContain("Acme rebrand");
+    // Its description, subtasks, tags and priority come from the template.
+    expect(screen.queryByRole("textbox", { name: "Description" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Tags/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /^Create\s*⏎$/ }));
+    await waitFor(() => expect(apply).toHaveBeenCalledTimes(1));
+    expect(onDone).toHaveBeenCalled();
+    expect(apply.mock.calls[0]?.[1]).toMatchObject({
+      templateId: "tt-1",
+      title: "Record episode",
+      projectId: "p-acme",
+      date: null,
+    });
+    // Nothing went through the capture's own create.
+    expect(fake.saved).toEqual([]);
+  });
+
+  it("a template that counts from its start hides Due and starts today", async () => {
+    const apply = withTemplates();
+    renderBody();
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Template…" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Onboarding/ }));
+    expect(await screen.findByText(/Its dates count from today/)).toBeTruthy();
+    await screen.findByText("Template: Onboarding");
+    expect(screen.queryByRole("button", { name: /^Due/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /^Create\s*⏎$/ }));
+    await waitFor(() => expect(apply).toHaveBeenCalledTimes(1));
+    const sent = apply.mock.calls[0]?.[1] as { date: string | null; projectId: string | null };
+    expect(sent.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(sent.projectId).toBeNull();
+  });
+
+  it("a refused apply keeps the capture open with its template", async () => {
+    const apply = withTemplates();
+    apply.mockImplementation(async () => null);
+    const { onDone } = renderBody();
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Template…" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Episode/ }));
+    expect(await screen.findByText("Template: Episode")).toBeTruthy();
+    expect(destination().textContent).toContain("Acme rebrand");
+    fireEvent.click(screen.getByRole("button", { name: /^Create\s*⏎$/ }));
+    await waitFor(() => expect(apply).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(onDone).not.toHaveBeenCalled();
+    expect(screen.getByText("Template: Episode")).toBeTruthy();
+  });
+
+  it("without a registered provider there's no Template… in More", async () => {
+    renderBody();
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
+    await screen.findByText("Waiting on");
+    expect(screen.queryByRole("button", { name: "Template…" })).toBeNull();
   });
 });

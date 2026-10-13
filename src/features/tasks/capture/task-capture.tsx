@@ -17,7 +17,17 @@
 //   one Undo).
 
 import { $createTextNode, type NodeKey } from "lexical";
-import { CalendarDays, ChevronDown, Circle, FileText, Inbox, Mail, Plus, User } from "lucide-react";
+import {
+  CalendarDays,
+  ChevronDown,
+  Circle,
+  FileText,
+  Inbox,
+  LayoutTemplate,
+  Mail,
+  Plus,
+  User,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -38,6 +48,7 @@ import type { CaptureBodyProps } from "../../../lib/capture-registry";
 import type { CaptureSourceKind } from "../../../lib/capture-source";
 import { isMacPlatform } from "../../../lib/shortcuts";
 import { useStoreSnapshot, useWorkspaceStore } from "../../../lib/sync/react";
+import { localDayOf } from "../../../lib/task-rows";
 import { formatDay, formatDayTime } from "../../../lib/time-format";
 import { undoToast } from "../../../lib/undo-toast";
 import { cn } from "../../../lib/utils";
@@ -80,7 +91,12 @@ import {
   loadDraft,
   saveDraft,
 } from "./capture-draft";
-import { captureAttachments, captureTemplates } from "./capture-hooks";
+import {
+  type CaptureTemplateChoice,
+  type CaptureTemplateProvider,
+  captureAttachments,
+  captureTemplates,
+} from "./capture-hooks";
 import {
   type CapturePerson,
   commandEntries,
@@ -177,7 +193,8 @@ export function TaskCaptureBody({
     if (shellDraft.trim() && shellDraft !== lastTitleWords) {
       start = { ...start, segments: [{ text: shellDraft }] };
     }
-    // A filtered scope pre-fills its tags, assignee and priority (U2-5).
+    // A filtered scope pre-fills its tags, assignee and priority (U2-5); a
+    // List group's "+" its team, due day or status (TV-U10).
     const seed = context?.seed;
     if (!restored && seed) {
       start = {
@@ -186,6 +203,13 @@ export function TaskCaptureBody({
           ...EMPTY_FIELDS,
           ...(seed.assigneeId !== undefined ? { assigneeId: seed.assigneeId } : {}),
           ...(seed.priority ? { priority: seed.priority } : {}),
+          ...(seed.teamId ? { teamId: seed.teamId } : {}),
+          ...(seed.dueDay ? { dueDay: seed.dueDay } : {}),
+          ...(seed.status ? { status: seed.status } : {}),
+          // A Board column's own status (TV-U11) rides with its category.
+          ...(seed.status && seed.statusId
+            ? { statusId: seed.statusId, statusName: seed.statusName ?? null }
+            : {}),
           tags: (seed.tagIds ?? []).map((id) => ({ id, name: "" })),
         },
       };
@@ -216,6 +240,16 @@ export function TaskCaptureBody({
   const [openPill, setOpenPill] = useState<OpenPill>(null);
   const [destinationOpen, setDestinationOpen] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
+  // A task template picked (`/template`, More → Template…, TV-D15).
+  const templateProvider = runtime?.tasks.applyTaskTemplate ? captureTemplates() : null;
+  const [template, setTemplate] = useState<CaptureTemplateChoice | null>(null);
+  const [pickingTemplate, setPickingTemplate] = useState(false);
+  /** A template's tasks are being made: the capture waits (it's online only). */
+  const [applyingTemplate, setApplyingTemplate] = useState(false);
+  // What `/` offers is read inside a stable callback: through a ref.
+  const templateDue = Boolean(template?.dated && template.anchor === "due");
+  const templateOn = useRef(false);
+  templateOn.current = Boolean(templateProvider) && !template;
   const titleApi = useRef<TitleEditorApi | null>(null);
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
   const subtaskRefs = useRef<Array<HTMLInputElement | null>>([]);
@@ -315,7 +349,7 @@ export function TaskCaptureBody({
       }
       if (token.kind === "team" && !token.label) {
         const t = teams.find((x) => x.id === token.teamId);
-        return t ? { ...token, label: t.name, letters: t.mark || null } : null;
+        return t ? { ...token, label: t.name, letters: t.mark || null, color: t.color } : null;
       }
       if (token.kind === "tag" && token.tagId && !token.label) {
         const t = tags.find((x) => x.id === token.tagId);
@@ -370,6 +404,8 @@ export function TaskCaptureBody({
     remindAt: resolved.single.remind?.at ?? fields.remindAt ?? null,
     tags: tagValues,
     waitingOn: fields.waitingOn,
+    status: fields.status ?? null,
+    statusName: fields.statusId ? (fields.statusName ?? null) : null,
   };
 
   // ── where it goes ─────────────────────────────────────────────────────────
@@ -428,7 +464,7 @@ export function TaskCaptureBody({
     [tags, projects],
   );
   const commandCandidates = useCallback((query: string, base: MentionCandidate[]) => {
-    const entries = commandEntries(query, base, { templates: captureTemplates() !== null });
+    const entries = commandEntries(query, base, { templates: templateOn.current });
     effects.current["/"] = entries.effects;
     return entries.candidates;
   }, []);
@@ -505,6 +541,7 @@ export function TaskCaptureBody({
             teamId: candidate.teamId,
             label: candidate.label,
             letters: candidate.letters,
+            color: candidate.color ?? null,
           };
         case "entity":
           return candidate.ref.type === "bucket"
@@ -604,6 +641,11 @@ export function TaskCaptureBody({
         words("remind");
         setFields((f) => ({ ...f, remindAt: change.value }));
         return;
+      case "status":
+        // A List group's "+" set it (TV-U10); its chip's × clears it, with
+        // a Board column's own status (TV-U11).
+        setFields((f) => ({ ...f, status: change.value, statusId: null, statusName: null }));
+        return;
       case "tag": {
         const { tag, on } = change;
         if (on) {
@@ -629,13 +671,23 @@ export function TaskCaptureBody({
 
   // ── templates and files (seams for TV-D15 and AT-2/AT-3) ──────────────────
   const openTemplate = () => {
-    const provider = captureTemplates();
-    if (!provider) return;
-    provider.open((template) => {
-      if (template.title) titleApi.current?.setSegments([{ text: template.title }]);
-      if (template.description) setDescription(template.description);
-      if (template.subtasks?.length) setSubtasks(template.subtasks);
-    });
+    if (!templateProvider) return;
+    setOpenPill(null);
+    setPickingTemplate(true);
+  };
+  /** A template picked: its title when none is typed, its project when none is picked. */
+  const pickTemplate = (choice: CaptureTemplateChoice) => {
+    setTemplate(choice);
+    setPickingTemplate(false);
+    if (!title.trim()) titleApi.current?.setSegments([{ text: choice.title ?? choice.name }]);
+    if (!destination.projectId && choice.project && projects.some((p) => p.id === choice.project)) {
+      setDestination({ projectId: choice.project, sectionId: null });
+    }
+    // What was typed below the title waits until the template is removed.
+    if (description.trim() || subtasks.some((line) => line.trim())) {
+      setHint("Your description and subtasks are set aside while the template is on.");
+    }
+    titleApi.current?.focus();
   };
 
   const takeFiles = (incoming: File[]) => {
@@ -652,7 +704,12 @@ export function TaskCaptureBody({
   const lineContext = useMemo(
     () => ({
       people: menuPeople.map((p) => ({ userId: p.userId, name: p.name })),
-      teams: teams.map((t) => ({ id: t.id, name: t.name, letters: t.mark || null })),
+      teams: teams.map((t) => ({
+        id: t.id,
+        name: t.name,
+        letters: t.mark || null,
+        color: t.color,
+      })),
       tags: tags.map((t) => ({ id: t.id, name: t.name, color: t.color })),
     }),
     [menuPeople, teams, tags],
@@ -930,6 +987,10 @@ export function TaskCaptureBody({
       toast.error("You have view-only access to tasks.");
       return;
     }
+    if (template) {
+      createFromTemplate(template, more);
+      return;
+    }
     if (needsProject) {
       setHint("A task for a team needs a project its members can see. Pick one above.");
       setDestinationOpen(true);
@@ -957,6 +1018,17 @@ export function TaskCaptureBody({
       fromSource: sourceOn && Boolean(context?.source),
       remindAt: values.remindAt,
       waitingOn: values.waitingOn,
+      status: values.status,
+      // A Board column's own status belongs to the project it was opened
+      // in: filed elsewhere, the task takes that project's first of the
+      // category (TV-U11).
+      // (Your Inbox is "no project" on both sides: the default set's.)
+      statusId:
+        values.status &&
+        fields.statusId &&
+        (projectId ?? null) === (context?.destination?.projectId ?? null)
+          ? fields.statusId
+          : null,
     };
     const lines = subtasks.map((s) => s.trim()).filter(Boolean);
     const childPositions = positionsAfter(lines.length, []);
@@ -988,6 +1060,83 @@ export function TaskCaptureBody({
       taskId: sending.then((created) => (created.some((t) => t.id === main.id) ? main.id : null)),
       files: filesNow,
     });
+  };
+
+  /**
+   * Create from the picked template (TV-D15): the task and its subtasks are
+   * made on the server from the template, with the title typed, the
+   * destination, Due as the date its dates count from, and Assign.
+   */
+  const createFromTemplate = (choice: CaptureTemplateChoice, more: boolean) => {
+    if (!templateProvider || !runtime || !workspaceId || !store || !userId || applyingTemplate) {
+      return;
+    }
+    // A template brings its own tags, priority, dates and the rest: what the
+    // title or More set beyond the person and Due would be lost, so it says so.
+    const extra =
+      values.tags.length > 0 ||
+      values.priority !== null ||
+      values.scheduledAt !== null ||
+      values.recurrence !== null ||
+      values.remindAt !== null ||
+      values.estimateMinutes !== null ||
+      values.waitingOn.length > 0 ||
+      values.teamId !== null ||
+      resolved.things.length > 0 ||
+      (!templateDue && values.dueDay !== null);
+    if (extra) {
+      setHint(
+        "With a template, only the person" +
+          (templateDue ? " and Due" : "") +
+          " apply. Remove the other words, or the template.",
+      );
+      return;
+    }
+    // The one date: Due when the template counts from its due date; today
+    // when it counts from the day it's made; none when it has no dates.
+    const date = !choice.dated
+      ? null
+      : choice.anchor === "due"
+        ? (values.dueDay ?? null)
+        : localDayOf(new Date().toISOString());
+    const where = placeLabel;
+    const madeTitle = title;
+    setApplyingTemplate(true);
+    void templateProvider
+      .apply(
+        { runtime, store, workspaceId, userId },
+        {
+          templateId: choice.id,
+          id: newTaskId(),
+          title: madeTitle,
+          projectId: projectId ?? null,
+          sectionId,
+          date,
+          ...(values.assigneeId !== undefined ? { assigneeId: values.assigneeId } : {}),
+        },
+      )
+      .then((created) => {
+        if (!mounted.current) return;
+        setApplyingTemplate(false);
+        // Refused or offline (the provider said why): the capture stays as it was.
+        if (!created) return;
+        if (more) {
+          setTemplate(null);
+          resetForMore();
+        } else {
+          clearDraft(owner.userId, owner.workspaceId);
+          lastTitleWords = "";
+          onDraftChange("");
+          onDone();
+        }
+        toast(madeTitle, {
+          description: `From “${choice.name}” · ${where}`,
+          action: {
+            label: "Open",
+            onClick: () => openReferenceFull({ type: "task", id: created }),
+          },
+        });
+      });
   };
 
   const pastedList = useMemo(() => (pasted ? parsePastedList(pasted) : null), [pasted]);
@@ -1168,6 +1317,17 @@ export function TaskCaptureBody({
           </DropdownMenuContent>
         </DropdownMenu>
         <span className="grow" />
+        {template ? (
+          <Chip
+            size="sm"
+            icon={LayoutTemplate}
+            onRemove={() => setTemplate(null)}
+            removeLabel="Don't use the template"
+            className="max-w-64"
+          >
+            Template: {template.name}
+          </Chip>
+        ) : null}
         {context?.source && sourceOn && SourceIcon ? (
           <Chip
             size="sm"
@@ -1215,6 +1375,32 @@ export function TaskCaptureBody({
           segmentKeys={segmentKeys}
         />
 
+        {pickingTemplate && templateProvider ? (
+          <TemplatePickPanel
+            provider={templateProvider}
+            onPick={pickTemplate}
+            onCancel={() => {
+              setPickingTemplate(false);
+              titleApi.current?.focus();
+            }}
+          />
+        ) : null}
+
+        {template ? (
+          <p className="py-1 font-sans text-sm text-muted-foreground">
+            {template.subtasks > 0
+              ? `With its ${template.subtasks} ${template.subtasks === 1 ? "subtask" : "subtasks"}, description, tags and priority.`
+              : "With its description, tags and priority."}
+            {!template.dated
+              ? ""
+              : template.anchor === "due"
+                ? values.dueDay
+                  ? " Due is the date its dates count from."
+                  : " Pick Due, or it's made without dates."
+                : " Its dates count from today."}
+          </p>
+        ) : null}
+
         {pastedList ? (
           <PastePanel
             list={pastedList}
@@ -1229,30 +1415,34 @@ export function TaskCaptureBody({
           />
         ) : null}
 
-        <Textarea
-          ref={descriptionRef}
-          value={description}
-          placeholder="Add a description…"
-          aria-label="Description"
-          onChange={(e) => setDescription(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-              e.preventDefault();
-              submit(true);
-            }
-          }}
-          rows={1}
-          // Grows with its words to about six lines, then scrolls (56).
-          className="field-sizing-content max-h-36 min-h-0 resize-none border-0 bg-transparent px-0 py-1 font-sans text-base shadow-none focus-visible:ring-0"
-        />
+        {template ? null : (
+          <>
+            <Textarea
+              ref={descriptionRef}
+              value={description}
+              placeholder="Add a description…"
+              aria-label="Description"
+              onChange={(e) => setDescription(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                  e.preventDefault();
+                  submit(true);
+                }
+              }}
+              rows={1}
+              // Grows with its words to about six lines, then scrolls (56).
+              className="field-sizing-content max-h-36 min-h-0 resize-none border-0 bg-transparent px-0 py-1 font-sans text-base shadow-none focus-visible:ring-0"
+            />
 
-        <Subtasks
-          lines={subtasks}
-          refs={subtaskRefs}
-          onChange={setSubtasks}
-          onSubmit={submit}
-          onDone={() => titleApi.current?.focus()}
-        />
+            <Subtasks
+              lines={subtasks}
+              refs={subtaskRefs}
+              onChange={setSubtasks}
+              onSubmit={submit}
+              onDone={() => titleApi.current?.focus()}
+            />
+          </>
+        )}
 
         {files.length > 0 ? (
           <div className="flex flex-wrap gap-1.5 py-1">
@@ -1279,7 +1469,9 @@ export function TaskCaptureBody({
             onChange={onPillChange}
             open={openPill}
             onOpenChange={setOpenPill}
-            onTemplate={captureTemplates() ? openTemplate : undefined}
+            onTemplate={templateProvider && !template ? openTemplate : undefined}
+            templateMode={Boolean(template)}
+            templateDue={templateDue}
           />
         </div>
       </div>
@@ -1343,6 +1535,87 @@ function ProjectItems({
         </DropdownMenuItem>
       ))}
     </>
+  );
+}
+
+/**
+ * The task templates to pick from (TV-D15): yours and the shared ones, by
+ * name, with a filter. Its own component so the provider's list hook always
+ * runs while it's open.
+ */
+function TemplatePickPanel({
+  provider,
+  onPick,
+  onCancel,
+}: {
+  provider: CaptureTemplateProvider;
+  onPick: (choice: CaptureTemplateChoice) => void;
+  onCancel: () => void;
+}) {
+  const { runtime } = useAuth();
+  const { selectedWorkspaceId } = useWorkspace();
+  const { loaded, choices } = provider.useChoices(runtime, selectedWorkspaceId);
+  const [query, setQuery] = useState("");
+  const shown = choices.filter((c) => c.name.toLowerCase().includes(query.trim().toLowerCase()));
+  return (
+    <section
+      aria-label="Templates"
+      className="motion-pop flex flex-col gap-2 rounded-lg border border-hairline p-2"
+      onKeyDown={(e) => {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          e.stopPropagation();
+          onCancel();
+        }
+      }}
+    >
+      <Input
+        autoFocus
+        aria-label="Find a template"
+        placeholder="Find a template…"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && shown[0]) {
+            e.preventDefault();
+            onPick(shown[0]);
+          }
+        }}
+      />
+      {loaded && choices.length === 0 ? (
+        <p className="px-1 font-sans text-sm text-muted-foreground">
+          No task templates yet. Save one from a task's ⋯ → Save as template.
+        </p>
+      ) : (
+        <ul className="flex max-h-48 flex-col overflow-y-auto">
+          {shown.map((c) => (
+            <li key={c.id}>
+              <button
+                type="button"
+                onClick={() => onPick(c)}
+                className="flex h-(--row-h) w-full min-w-0 items-center gap-2 rounded-md px-2 text-left font-sans text-base text-foreground outline-none hover:bg-state-hover focus-visible:ring-2 focus-visible:ring-ring/50"
+              >
+                <LayoutTemplate
+                  className="size-icon-sm shrink-0 text-muted-foreground"
+                  aria-hidden
+                />
+                <span className="truncate">{c.name}</span>
+                <span className="shrink-0 font-sans text-xs text-muted-foreground">
+                  {c.subtasks > 0
+                    ? `${c.subtasks} ${c.subtasks === 1 ? "subtask" : "subtasks"}`
+                    : ""}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="flex justify-end">
+        <Button size="sm" variant="ghost" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </section>
   );
 }
 

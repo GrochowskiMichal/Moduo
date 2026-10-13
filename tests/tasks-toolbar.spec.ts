@@ -128,8 +128,10 @@ test("AC11.3 — one Date grouping: Earlier · Today · Tomorrow · five day nam
   await createTask({ title: `Far ${tag}`, bucketId: project.id, dueDate: dayAt(10) });
   await createTask({ title: `Someday ${tag}`, bucketId: project.id });
   await openTasks(page, first.id);
-  // Group by never offers Tag or Energy; Project only across projects.
-  expect(await setGroupBy(page, "Date")).toEqual([
+  // Group by never offers Tag or Energy; Project only across projects;
+  // Section inside one (TV-U10); Team once the workspace has teams.
+  expect((await setGroupBy(page, "Date")).filter((o) => o !== "Team")).toEqual([
+    "Section",
     "Status",
     "Priority",
     "Assignee",
@@ -154,8 +156,10 @@ test("AC11.3 / call 84 — My tasks groups by status, In progress first", async 
   await createTask({ title: `To start ${tag}`, bucketId: project.id });
   await openTasks(page, doing.id);
   await page.getByRole("button", { name: /^My tasks/ }).click();
+  // A team block ("For Design", TV-U15) leads when the shared workspace has
+  // one of the dev's teams with unclaimed work; the status groups follow it.
   await expect
-    .poll(async () => (await groupHeaders(page)).slice(0, 2))
+    .poll(async () => (await groupHeaders(page)).filter((h) => !h.startsWith("For ")).slice(0, 2))
     .toEqual(["In progress", "To do"]);
 });
 

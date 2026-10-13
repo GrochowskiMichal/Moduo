@@ -64,28 +64,38 @@ type ResolveParams = {
   /** Every live project id (the Inbox's too). */
   bucketIds: string[];
   inboxId: string | null;
+  /** Where a first open goes (the role's first view, TV-U17); else the Inbox. */
+  firstOpen?: string | null;
 };
 
+function reopenable(place: string | null | undefined, bucketIds: string[]): place is string {
+  if (!place) return false;
+  return (REOPENABLE_SCOPES as readonly string[]).includes(place) || bucketIds.includes(place);
+}
+
 /**
- * Where Tasks opens: where you left it, when that's still there, else the
- * Inbox (REPLAN 30). A project that's gone, archived or out of reach falls
- * back to the Inbox.
+ * Where Tasks opens: where you left it, when that's still there (REPLAN 30);
+ * a first open follows onboarding (the role's first view, TV-U17); else the
+ * Inbox. A project that's gone, archived or out of reach falls back.
  */
-export function resolveDefaultSelection({ lastBucket, bucketIds, inboxId }: ResolveParams): string {
-  if (lastBucket && (REOPENABLE_SCOPES as readonly string[]).includes(lastBucket))
-    return lastBucket;
-  if (lastBucket && new Set(bucketIds).has(lastBucket)) {
-    return lastBucket === inboxId ? "inbox" : lastBucket;
-  }
-  return "inbox";
+export function resolveDefaultSelection({
+  lastBucket,
+  bucketIds,
+  inboxId,
+  firstOpen,
+}: ResolveParams): string {
+  // A first open has nothing remembered; a remembered place that's gone is
+  // still not a first open.
+  const place = reopenable(lastBucket, bucketIds)
+    ? lastBucket
+    : !lastBucket && reopenable(firstOpen, bucketIds)
+      ? firstOpen
+      : null;
+  if (!place) return "inbox";
+  return place === inboxId ? "inbox" : place;
 }
 
-// ── My tasks (tasks-v2 §1, TV-D4) ────────────────────────────────────────────
-
-/** The "My tasks" rail row exists only where there's someone else to tell apart. */
-export function showsMyTasks(activeMemberCount: number): boolean {
-  return activeMemberCount >= 2;
-}
+// ── My tasks (tasks-v2 §1, TV-D4; in every workspace since TV-U15) ──────────
 
 /**
  * The "My tasks" scope: tasks assigned to me, across buckets. Like All it

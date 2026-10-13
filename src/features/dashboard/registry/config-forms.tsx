@@ -6,6 +6,7 @@
 import type { ComponentType } from "react";
 
 import { Eyebrow } from "@/components/ui/eyebrow";
+import { useFocusPrefs } from "@/lib/focus-prefs";
 import { cn } from "@/lib/utils";
 
 import { useDashboardData } from "../context/dashboard-data-context";
@@ -67,11 +68,6 @@ function ClockConfig({ widget, updateConfig }: ConfigFormProps) {
 }
 
 // ── Pomodoro ─────────────────────────────────────────────────────────────────
-function numConfig(config: Record<string, unknown>, key: string, fallback: number): number {
-  const v = config[key];
-  return typeof v === "number" && v > 0 ? v : fallback;
-}
-
 function DurationField({
   label,
   value,
@@ -103,25 +99,26 @@ function DurationField({
   );
 }
 
-function PomodoroConfig({ widget, updateConfig }: ConfigFormProps) {
-  const work = numConfig(widget.config, "pomodoroWorkMinutes", 25);
-  const brk = numConfig(widget.config, "pomodoroBreakMinutes", 5);
+/** The widget runs Focus's one clock (TV-F6): its lengths are your Focus
+ *  lengths, the same ones Settings → Focus edits. */
+function PomodoroConfig(_props: ConfigFormProps) {
+  const { prefs, setPrefs } = useFocusPrefs();
   return (
     <div className="flex flex-col gap-2">
       <Eyebrow as="p">Durations (minutes)</Eyebrow>
       <DurationField
         label="Focus"
-        value={work}
+        value={prefs.workMinutes}
         min={5}
         max={90}
-        onChange={(n) => updateConfig({ pomodoroWorkMinutes: n })}
+        onChange={(n) => setPrefs({ workMinutes: n })}
       />
       <DurationField
         label="Break"
-        value={brk}
+        value={prefs.breakMinutes}
         min={1}
         max={30}
-        onChange={(n) => updateConfig({ pomodoroBreakMinutes: n })}
+        onChange={(n) => setPrefs({ breakMinutes: n })}
       />
     </div>
   );

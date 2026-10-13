@@ -58,6 +58,7 @@ function renderList(opts: {
   selected: string;
   tasks?: Task[];
   subtasks?: "nested" | "flat";
+  children?: Task[];
 }) {
   const tasks = opts.tasks ?? [A, S, B];
   const dropTask = rs.fn(async () => true);
@@ -67,7 +68,7 @@ function renderList(opts: {
     tasks,
     queuedTaskIds: new Set<string>(),
     queueClaims: new Map(),
-    subtasksByParent: new Map([["a", [S]]]),
+    subtasksByParent: new Map([["a", opts.children ?? [S]]]),
     subtaskProgressByTask: new Map(),
     tagsByTask: new Map(),
     blockedTaskIds: new Set(),
@@ -168,6 +169,32 @@ describe("the move keys (TV-U4)", () => {
     expect(opts.action.label).toBe("Back to manual order");
     opts.action.onClick();
     expect(onManualOrder).toHaveBeenCalled();
+  });
+
+  it("a nested subtask moves among its siblings in any view order (TV-U10)", async () => {
+    const S2 = task("s2", "Sub two", "0000000017", { parentId: "a" });
+    for (const view of [
+      { order: "due" as const },
+      { selection: "mine", order: "manual" as const },
+    ]) {
+      const { dropTask, grid } = renderList({
+        ...view,
+        selected: "s2",
+        tasks: [A, S, S2, B],
+        children: [S, S2],
+        subtasks: "nested",
+      });
+      await wait();
+      fireEvent.keyDown(grid, { key: "ArrowUp", altKey: true, shiftKey: true });
+      const [write, label] = dropTask.mock.calls[0] as unknown as [
+        { taskId: string; position: string },
+        string,
+      ];
+      expect(label).toBe("Moved up");
+      expect(write.taskId).toBe("s2");
+      expect(write.position > A.position && write.position < S.position).toBe(true);
+      cleanup();
+    }
   });
 
   it("a view across projects has no manual order to move in", async () => {

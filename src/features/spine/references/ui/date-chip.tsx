@@ -6,7 +6,7 @@
 import { CalendarDays } from "lucide-react";
 
 import { chipClasses } from "../../../../components/ui/chip";
-import { dayOffset, formatDate } from "../../../../lib/time-format";
+import { dayOffset, formatDate, formatWeekdayDate } from "../../../../lib/time-format";
 import { cn } from "../../../../lib/utils";
 
 /** The words a date chip reads today: "Today", "Tomorrow", else the date. */
@@ -19,16 +19,12 @@ export function dateChipLabel(day: string, now: Date = new Date()): string {
   return formatDate(date, now);
 }
 
-/** The full date for the hover: "Saturday, October 17, 2026". */
+/** The full date for the hover: "Sat, Oct 17, 2026" / "Sat, 17 Oct 2026"
+ *  (Time & region's date order, TV-D14). */
 export function dateChipTitle(day: string): string {
   const date = new Date(`${day}T00:00:00`);
   if (Number.isNaN(date.getTime())) return day;
-  return date.toLocaleDateString(undefined, {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  });
+  return formatWeekdayDate(date, undefined, { year: true });
 }
 
 export function DateChip({ day, className }: { day: string; className?: string }) {

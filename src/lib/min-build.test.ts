@@ -64,6 +64,7 @@ describe("which requests are writes", () => {
     expect(isWriteRequest("POST", `${BASE}/rest/v1/rpc/tasks_time_totals`)).toBe(false);
     expect(isWriteRequest("POST", `${BASE}/rest/v1/rpc/share_op_state`)).toBe(false);
     expect(isWriteRequest("POST", `${BASE}/rest/v1/rpc/notifications_list`)).toBe(false);
+    expect(isWriteRequest("POST", `${BASE}/rest/v1/rpc/storage_status`)).toBe(false);
     expect(isWriteRequest("POST", `${BASE}/storage/v1/object/sign/attachments/a.png`)).toBe(false);
   });
 
@@ -75,6 +76,8 @@ describe("which requests are writes", () => {
     expect(isWriteRequest("POST", `${BASE}/rest/v1/rpc/links_op_create`)).toBe(true);
     expect(isWriteRequest("POST", `${BASE}/rest/v1/rpc/workspace_api_keys_create`)).toBe(true);
     expect(isWriteRequest("POST", `${BASE}/storage/v1/object/attachments/w/a.png`)).toBe(true);
+    expect(isWriteRequest("POST", `${BASE}/storage/v1/upload/resumable`)).toBe(true);
+    expect(isWriteRequest("PATCH", `${BASE}/storage/v1/upload/resumable/abc`)).toBe(true);
   });
 
   it("an RPC is a write unless it's listed as a read, whatever its name", () => {

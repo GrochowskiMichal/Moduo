@@ -28,7 +28,9 @@ import { onCreateNew } from "../../../components/app/create-events";
 import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell";
 import { type PanelItem, RightPanel, usePanelStack } from "../../../components/app/right-panel";
 import { truncationNotice } from "../../../components/app/truncation-notice";
+import { TeamMark } from "../../../components/ui/avatar";
 import { Button } from "../../../components/ui/button";
+import { EmptyState } from "../../../components/ui/empty-state";
 import { restoreNavFocus } from "../../../components/ui/nav-row";
 import {
   asDragPayload,
@@ -43,12 +45,15 @@ import {
   takeEntityOpenIntent,
 } from "../../../lib/entity-open";
 import {
+  currentPreferences,
   type TasksSidebarHideable,
   updatePreferences,
   usePreferencesValue,
 } from "../../../lib/preferences";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
-import { undoToast } from "../../../lib/undo-toast";
+import { useWorkspaceStore } from "../../../lib/sync/react";
+import { UNDO_TOAST_MS, undoToast } from "../../../lib/undo-toast";
+import { readViewPrefs, writeViewPrefs } from "../../../lib/view-prefs";
 import { HubDropZone } from "../../contacts/ui/hub-drop-zone";
 import { consumeFocusViewRequest, FOCUS_VIEW_REQUEST_EVENT } from "../../focus/view-request";
 import { looksLikeHandle } from "../../spine/grammar";
@@ -68,8 +73,19 @@ import {
 import { createLinkWithToast } from "../../spine/ui/drop-link-toast";
 import { WorkspaceContext } from "../../workspaces/workspace-context";
 import { useAssignees } from "../assignees";
-import { myTasksScope, openCount, resolveDefaultSelection, showsMyTasks } from "../default-view";
-import type { TaskLayout } from "../display";
+import { tasksWord } from "../bulk";
+import { myTasksScope, openCount, resolveDefaultSelection } from "../default-view";
+import {
+  nextHeaderSort,
+  orderTasks,
+  sanitizeTasksView,
+  type TaskLayout,
+  tasksDisplayDefaults,
+  tasksDisplayKey,
+  tasksViewDefaults,
+} from "../display";
+import type { TaskDropWrite } from "../dnd/drop-write";
+import { multiDropWrites } from "../dnd/multi-drop";
 import {
   asRailDropTarget,
   isSideDroppable,
@@ -80,13 +96,28 @@ import {
   railDropAction,
   railSortCollision,
 } from "../dnd/rail-drop";
-import { type CaptureSeed, showsArchived, showsBacklog, statusesLetThrough } from "../filters";
+import { type CaptureSeed, showsArchived, statusesLetThrough } from "../filters";
+import { todayStr } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
+import type { ListExportContext } from "../list-export";
+import type { GroupAdd } from "../list-group-add";
 import { type Bucket, isDrifted, PRIVATE_PROJECT_LABEL, type Task } from "../model";
+import {
+  allProjectOrder,
+  allView,
+  myTasksView,
+  orderMyTasks,
+  startsFolded,
+  TEAM_BLOCK_ROWS,
+  teamBlocks,
+} from "../my-tasks";
+import { defaultRowsFor, firstViewFor } from "../onboarding";
 import { showsSortedNote, sortedByLabel } from "../order";
+import { handleLabel } from "../row-layout";
 import { resolveTasksDeepLink, taskIdForHandle } from "../search";
+import { inViewOrder } from "../selection";
 import { projectDeleteSummary, projectOpenWork } from "../sidebar";
-import { STATUS_KEY_LABELS, type StatusKey } from "../statuses";
+import { useTemplateActions } from "../templates/ui/use-template-actions";
 import { sanitizeTimelineZoom, type TimelineZoom } from "../timeline-geometry";
 import { ArchivedProjectBanner, ArchivedProjectsView } from "./archived-projects-view";
 import {
@@ -94,24 +125,39 @@ import {
   asRailProject,
   BucketRail,
   parseCollapsedSections,
-  type TasksMode,
+  TEMPLATES_SELECTION,
   TRASH_SELECTION,
   UPCOMING_SELECTION,
+  WONTDO_SELECTION,
 } from "./bucket-rail";
+import { BulkPanel } from "./bulk-panel";
 import { ArchiveProjectDialog, DeleteBucketDialog } from "./delete-bucket-dialog";
 import { asTaskDrag, taskDragAnnouncements, useTaskDndSensors } from "./dnd/task-dnd";
 import { DriftTriageDialog } from "./drift-triage-dialog";
-import { ExecuteView } from "./execute-view";
+import { FocusView } from "./focus-view";
 import { FrontierOfferDialog } from "./frontier-offer-dialog";
+import { useInboxView } from "./inbox-view";
+import type { ListExtraGroup } from "./list-extensions";
 import { type PlanHeaderControls, type PlanView, SortedOrderLine } from "./plan-view-header";
+import { ProjectPanel } from "./project-panel";
 import { RecentlyDeletedView } from "./recently-deleted-view";
 import { StatusesDialog } from "./statuses-dialog";
 import { TaskBoardView } from "./task-board-view";
-import { PrivateItemPanel, TASK_DETAIL_REFRESH_EVENT, TaskDetailPanel } from "./task-detail-panel";
+import { TASK_DETAIL_REFRESH_EVENT, TaskDetailPanel, TaskGonePanel } from "./task-detail-panel";
+import { TaskFullPage } from "./task-full-page";
 import { TaskListView } from "./task-list-view";
 import { TaskTimelineView } from "./task-timeline-view";
+import { TaskListSkeleton } from "./task-view-states";
+import { TasksWelcomeDialog } from "./tasks-welcome-dialog";
+import { useUpcomingView } from "./upcoming-view";
+import { boardDropName } from "./use-board-folds";
+import { useBulkActions } from "./use-bulk-actions";
+import { useTaskSelection } from "./use-task-selection";
 import { useTasksDisplay } from "./use-tasks-display";
 import { useTasksFilters } from "./use-tasks-filters";
+import { useTasksWelcome } from "./use-tasks-welcome";
+import { AllEmpty, MyTasksEmpty, UpcomingEmpty, WontDoEmpty } from "./view-empty-states";
+import { ViewExportMenu } from "./view-export-menu";
 
 type Props = {
   api: TasksModuleApi;
@@ -127,6 +173,7 @@ type Props = {
 const URL_MIRROR_DEBOUNCE_MS = 250;
 
 const EMPTY_IDS: readonly string[] = [];
+const NO_EXTRAS: readonly ListExtraGroup[] = [];
 
 // Per-workspace UI state (selection / mode / zoom) persisted locally — these
 // are view preferences, not synced data. Layout, grouping and filters are
@@ -150,29 +197,42 @@ function writeLS(workspaceId: string, part: string, value: string): void {
     /* ignore */
   }
 }
+function removeLS(workspaceId: string, part: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(lsKey(workspaceId, part));
+  } catch {
+    /* ignore */
+  }
+}
 
 export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskIdChange }: Props) {
   const { canEdit, buckets, inbox, tasks } = api;
 
-  const [mode, setMode] = useState<TasksMode>(() =>
-    readLS(workspaceId, "mode") === "execute" ? "execute" : "plan",
-  );
   // The workspace-wide view from before layouts were per scope: a scope
   // that doesn't remember a layout yet starts with it.
   const [legacyLayout] = useState<TaskLayout>(() => {
     const stored = readLS(workspaceId, "view");
     return stored === "board" || stored === "timeline" ? stored : "list";
   });
-  // Provisional selection (last-opened bucket, never "all"); the time-block-aware
-  // default is resolved once the bucket bundle has loaded (see effect below).
-  const [selection, setSelection] = useState<string>(
-    () => readLS(workspaceId, "lastBucket") ?? "inbox",
+  // Provisional selection (last-opened place); the default is resolved once the
+  // bundle has loaded (see effect below). A device left in the retired "Plan ·
+  // Focus" switch's Focus mode opens Focus, which is now the sidebar's (TV-F7).
+  const [selection, setSelection] = useState<string>(() =>
+    readLS(workspaceId, "mode") === "execute"
+      ? "today"
+      : (readLS(workspaceId, "lastBucket") ?? "inbox"),
   );
+  useEffect(() => {
+    removeLS(workspaceId, "mode");
+  }, [workspaceId]);
   const [timelineZoom, setTimelineZoom] = useState<TimelineZoom>(() =>
     sanitizeTimelineZoom(readLS(workspaceId, "timelineZoom")),
   );
   // Which right-panel view is showing (views: features/tasks/panel-views.ts).
   const [panelView, setPanelView] = useState("details");
+  // The task that fills the centre (call 32), or null for the view.
+  const [fullPageId, setFullPageId] = useState<string | null>(null);
   // Sidebar groups you collapsed (Pinned and each area) stay collapsed,
   // remembered per person on this device (REPLAN 29e; Customize and Pin
   // follow the person everywhere, in preferences).
@@ -188,7 +248,10 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       return next;
     });
   }, []);
-  const sidebarPrefs = usePreferencesValue().tasksSidebar;
+  const preferences = usePreferencesValue();
+  const sidebarPrefs = preferences.tasksSidebar;
+  // The role question's answer (TV-U17): where Tasks first opens, the rows.
+  const onboardingRole = preferences.tasksOnboarding.role;
   const hiddenRows = useMemo(() => new Set(sidebarPrefs.hidden), [sidebarPrefs.hidden]);
   const pinnedIds = sidebarPrefs.pinned[workspaceId] ?? EMPTY_IDS;
   const toggleHiddenRow = useCallback(
@@ -234,6 +297,12 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   // Task-level selection (distinct from `selection`, which is the bucket scope).
   // Lifted here so the right-rail detail panel can bind to it across List/Board.
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  // Several selected (TV-U12): a set beside the cursor (selection.ts); the
+  // views pass their order with each gesture.
+  const multiSelect = useTaskSelection(selectedTaskId, setSelectedTaskId);
+  // The order the List or the Board shows now (they write it as they draw):
+  // the Inbox's cursor after a triage, and a selection's order.
+  const viewOrderRef = useRef<readonly string[]>([]);
   // DF-1 — URL sync bookkeeping. Selection is STATE mirrored into the URL —
   // not URL-derived like notes NO-3 — because this selection is a j/k
   // key-repeat cursor: it must not ride the router on every press, and WebKit
@@ -284,26 +353,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   // Focus time is saved by the app shell's sink (TV-P0, use-focus-time-saver.ts),
   // from any page; the module shows each saved total (FOCUS_TIME_SAVED_EVENT).
 
-  // The chrome chip's "open Focus" request → enter Execute mode. The one-shot
-  // flag covers the fresh-mount case (chip clicked from another route, event
-  // fired before this listener existed); the event covers the already-mounted
-  // case (chip clicked while /tasks is open in Plan mode).
-  useEffect(() => {
-    if (consumeFocusViewRequest()) setMode("execute");
-    // Consume the flag here too: the event fires synchronously inside
-    // requestFocusView (before navigation), so an already-mounted /tasks clears
-    // it now — otherwise a stale flag would force Execute on the next unrelated
-    // /tasks visit that reaches the mount branch above.
-    const onRequest = () => {
-      consumeFocusViewRequest();
-      setMode("execute");
-    };
-    window.addEventListener(FOCUS_VIEW_REQUEST_EVENT, onRequest);
-    return () => window.removeEventListener(FOCUS_VIEW_REQUEST_EVENT, onRequest);
-  }, []);
-
   // Persist preferences.
-  useEffect(() => writeLS(workspaceId, "mode", mode), [workspaceId, mode]);
   useEffect(() => writeLS(workspaceId, "timelineZoom", timelineZoom), [workspaceId, timelineZoom]);
   useEffect(
     () => writeLS(workspaceId, collapseKey, JSON.stringify([...collapsedGroups])),
@@ -313,7 +363,13 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   // Remember where you were, so the next open lands back on it (REPLAN 30);
   // Archived projects and Recently deleted aren't places to reopen.
   useEffect(() => {
-    if (selection === ARCHIVED_SELECTION || selection === TRASH_SELECTION) return;
+    if (
+      selection === ARCHIVED_SELECTION ||
+      selection === TRASH_SELECTION ||
+      selection === WONTDO_SELECTION ||
+      selection === TEMPLATES_SELECTION
+    )
+      return;
     if (api.archivedBuckets.some((b) => b.id === selection)) return;
     writeLS(workspaceId, "lastBucket", selection);
   }, [workspaceId, selection, api.archivedBuckets]);
@@ -332,6 +388,55 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     },
     [workspaceId],
   );
+
+  // The top-bar timer's "open Focus" (and a "Focus on this" toast's Open)
+  // opens the sidebar's Focus (TV-F7; it was the Plan · Focus switch). The
+  // one-shot flag covers a fresh mount (clicked from another route, the event
+  // fired before this listener existed); the event covers a /tasks already
+  // open. Both consume the flag, so a stale one can't force Focus on a later,
+  // unrelated visit.
+  const openFocus = useCallback(() => {
+    setFullPageId(null);
+    pickSelection("today");
+  }, [pickSelection]);
+  useEffect(() => {
+    if (consumeFocusViewRequest()) openFocus();
+    const onRequest = () => {
+      consumeFocusViewRequest();
+      openFocus();
+    };
+    window.addEventListener(FOCUS_VIEW_REQUEST_EVENT, onRequest);
+    return () => window.removeEventListener(FOCUS_VIEW_REQUEST_EVENT, onRequest);
+  }, [openFocus]);
+
+  // Tasks' welcome and the role question (TV-U17). A role's first view can
+  // be a project's Board: that project's Display remembers Board, then it
+  // opens.
+  const isWorkspaceOwner = useContext(WorkspaceContext)?.selectedWorkspace?.role === "owner";
+  const openFirstView = useCallback(
+    ({ selection: place, board }: { selection: string; board: boolean }) => {
+      if (board) {
+        const key = tasksDisplayKey(workspaceId, place);
+        const defaults = tasksViewDefaults(
+          place,
+          legacyLayout,
+          defaultRowsFor(currentPreferences().tasksOnboarding.role),
+        );
+        const prefs = readViewPrefs(key, defaults, (raw, d) => sanitizeTasksView(raw, d, place));
+        writeViewPrefs(key, { ...prefs, layout: "board" });
+      }
+      setFullPageId(null);
+      pickSelection(place);
+    },
+    [workspaceId, legacyLayout, pickSelection],
+  );
+  const welcome = useTasksWelcome({
+    api,
+    runtime,
+    workspaceId,
+    isOwner: isWorkspaceOwner,
+    onFirstView: openFirstView,
+  });
   useEffect(() => {
     if (api.loading) return;
     if (resolvedForRef.current === workspaceId) return;
@@ -354,17 +459,24 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
         lastBucket: readLS(workspaceId, "lastBucket"),
         bucketIds,
         inboxId,
+        // A first open follows onboarding (TV-U17): the role's first view.
+        firstOpen: onboardingRole
+          ? firstViewFor(
+              onboardingRole,
+              buckets.map((b) => b.id),
+            ).selection
+          : null,
       }),
     );
-  }, [api.loading, workspaceId, inboxId, buckets, inboundPending]);
+  }, [api.loading, workspaceId, inboxId, buckets, inboundPending, onboardingRole]);
 
-  // "My tasks" is only in the rail of workspaces with two or more members
-  // (tasks-v2 §1): with fewer, every task is yours, so All says the same.
+  // My tasks is always in the sidebar (tasks-v3 §3; TV-U15 retires
+  // tasks-v2's "two or more members" rule): its status groups answer "what am
+  // I on" even alone.
   const { assignees, currentUserId } = useAssignees();
   // Owners and admins edit the workspace's default statuses (TV-D9). Read
   // without useWorkspace so the page renders where no provider is mounted.
   const canManageWorkspace = useContext(WorkspaceContext)?.canManageWorkspace ?? false;
-  const showMyTasks = showsMyTasks(assignees.length);
 
   // Keep selection valid; "inbox" resolves against the seeded Inbox bucket.
   useEffect(() => {
@@ -373,20 +485,18 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       selection === "inbox" ||
       selection === "today" ||
       selection === UPCOMING_SELECTION ||
+      selection === WONTDO_SELECTION ||
+      selection === "mine" ||
       selection === ARCHIVED_SELECTION ||
-      selection === TRASH_SELECTION
+      selection === TRASH_SELECTION ||
+      selection === TEMPLATES_SELECTION
     )
       return;
-    if (selection === "mine") {
-      // Members load with the workspace; wait for them before ruling.
-      if (!showMyTasks && assignees.length > 0) setSelection("inbox");
-      return;
-    }
     if (inboxId && selection === inboxId) return;
     // An archived project opens read-only from Archived projects (TV-U6).
     if (api.archivedBuckets.some((b) => b.id === selection)) return;
     if (!buckets.some((b) => b.id === selection)) setSelection("inbox");
-  }, [selection, buckets, inboxId, showMyTasks, assignees.length, api.archivedBuckets]);
+  }, [selection, buckets, inboxId, api.archivedBuckets]);
   /** The archived project open now (read-only), if any. */
   const archivedProject = useMemo(
     () => api.archivedBuckets.find((b) => b.id === selection) ?? null,
@@ -397,15 +507,37 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   // project reads "Private project", never "Inbox" (TV-P0, AC1.10).
   // An archived project's tasks show only when you open it or search, and
   // its name says so (REPLAN 78: search finds them, labelled "Archived").
+  // A task you made that sits in someone else's Inbox (TV-D13, 20a: you keep
+  // it while it's there, the Inbox itself stays theirs) reads "Mike's Inbox":
+  // a task you can see in a project you can't, made by you and assigned to
+  // someone else, can only be that.
+  const handedInboxes = useMemo(() => {
+    const known = new Set([
+      ...(inbox ? [inbox.id] : []),
+      ...buckets.map((b) => b.id),
+      ...api.archivedBuckets.map((b) => b.id),
+    ]);
+    const out = new Map<string, string>();
+    for (const t of tasks) {
+      if (known.has(t.bucketId) || out.has(t.bucketId)) continue;
+      if (!currentUserId || t.creatorId !== currentUserId) continue;
+      if (!t.assigneeId || t.assigneeId === currentUserId) continue;
+      const person = assignees.find((a) => a.userId === t.assigneeId);
+      const name = (person?.fullName || person?.name || "").trim().split(/\s+/)[0];
+      if (name) out.set(t.bucketId, `${name}’s Inbox`);
+    }
+    return out;
+  }, [tasks, buckets, inbox, api.archivedBuckets, currentUserId, assignees]);
   const bucketNameById = useCallback(
     (id: string) => {
       if (inbox && id === inbox.id) return "Inbox";
       const live = buckets.find((b) => b.id === id);
       if (live) return live.name;
       const archived = api.archivedBuckets.find((b) => b.id === id);
-      return archived ? `${archived.name} · Archived` : PRIVATE_PROJECT_LABEL;
+      if (archived) return `${archived.name} · Archived`;
+      return handedInboxes.get(id) ?? PRIVATE_PROJECT_LABEL;
     },
-    [buckets, inbox, api.archivedBuckets],
+    [buckets, inbox, api.archivedBuckets, handedInboxes],
   );
 
   // Won't do (archived) tasks leave every scope, except the one you're looking
@@ -438,7 +570,23 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   // the one selected.
   const linkedTaskId =
     revealRequest && revealRequest.id === selectedTaskId ? revealRequest.id : null;
-  const tasksDisplay = useTasksDisplay(workspaceId, selection, tasks, linkedTaskId, legacyLayout);
+  const groupChoices = useMemo(
+    () => ({ teams: api.teams.length > 0, areas: api.areas.length > 0 }),
+    [api.teams.length, api.areas.length],
+  );
+  // The Inbox opened by its id is still the Inbox: its Display (no Section
+  // grouping, its own saved choices) is the Inbox's.
+  const displayScope = inboxId && selection === inboxId ? "inbox" : selection;
+  const tasksDisplay = useTasksDisplay(
+    workspaceId,
+    displayScope,
+    tasks,
+    linkedTaskId,
+    legacyLayout,
+    groupChoices,
+    // A view that remembers no Display starts on the role's rows (TV-U17).
+    defaultRowsFor(onboardingRole),
+  );
   const isHiddenByDisplay = tasksDisplay.isHidden;
   const view: PlanView = tasksDisplay.display.layout;
   const setView = useCallback(
@@ -448,60 +596,178 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   // Won't do tasks join a scope when Filter → Status asks for them (TV-U2,
   // AC1.4), besides the one kept above.
   const withArchived = showsArchived(tasksDisplay.filters);
-  // Backlog sits out of My tasks unless a Status filter asks for it (TV-D9).
-  const withBacklog = showsBacklog(tasksDisplay.filters);
   const statusFilter = useMemo(
     () => statusesLetThrough(tasksDisplay.filters),
     [tasksDisplay.filters],
   );
 
+  // The views built on the List (TV-U15): Upcoming's days, the Inbox's
+  // triage, My tasks' team block. Each hands the List what differs.
+  const isInboxScope = selection === "inbox" || (inboxId !== null && selection === inboxId);
+  const projectIds = useMemo(() => buckets.map((b) => b.id), [buckets]);
+  const upcoming = useUpcomingView({ api, canEdit, inboxId, projectIds });
+  // The Inbox's rows as the List shows them (set below, once filtered): the
+  // cursor after a triage moves to the next of these.
+  const inboxRowsRef = useRef<readonly Task[]>([]);
+  const inboxView = useInboxView({
+    api,
+    runtime,
+    workspaceId,
+    // A selection owns the bar and the keys while it lasts (TV-U12).
+    enabled: isInboxScope && !multiSelect.multi,
+    canEdit,
+    selectedTaskId,
+    onSelectTask: setSelectedTaskId,
+    visibleRows: inboxRowsRef,
+  });
+  // My tasks' team block (54): your teams' tasks nobody has taken yet.
+  const blocks = useMemo(
+    () => teamBlocks(tasks, api.teams, api.teamMembers, currentUserId),
+    [tasks, api.teams, api.teamMembers, currentUserId],
+  );
+  const waitingIds = useMemo(
+    () => new Set((api.waiting ?? []).map((w) => w.taskId)),
+    [api.waiting],
+  );
+  const myOrder = tasksDisplay.display.order;
+  // The block's groups change only when what they show does: an edit to any
+  // other task makes `blocks` anew, and a new group array re-measures the
+  // whole List.
+  const blocksKey = blocks
+    .map(
+      (b) =>
+        `${b.team.id}:${b.team.name}:${b.team.mark}:${b.team.color}:${b.tasks.map((t) => t.id).join(",")}`,
+    )
+    .join("|");
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the key names what the ids depend on.
+  const takeableIds = useMemo(
+    () => new Set(blocks.flatMap((b) => b.tasks.map((t) => t.id))),
+    [blocksKey],
+  );
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the key names what the groups show.
+  const mineExtraGroups = useMemo<readonly ListExtraGroup[]>(
+    () =>
+      blocks.map((b) => ({
+        key: `team:${b.team.id}`,
+        place: "lead" as const,
+        label: `For ${b.team.name}`,
+        leading: (
+          <TeamMark name={b.team.name} id={b.team.id} letters={b.team.mark} color={b.team.color} />
+        ),
+        sub: `· ${b.tasks.length} unclaimed`,
+        count: null,
+        taskIds: b.tasks.map((t) => t.id),
+        limit: TEAM_BLOCK_ROWS,
+        add: canEdit
+          ? { kind: "add" as const, add: { seed: { teamId: b.team.id } } }
+          : { kind: "none" as const },
+      })),
+    [blocksKey, canEdit],
+  );
+  // Take it (54): TV-D13's claim op makes the task yours and keeps its team
+  // (it refuses one somebody took first), with Undo while it's still yours.
+  const takeRef = useRef({ api, currentUserId });
+  useLayoutEffect(() => {
+    takeRef.current = { api, currentUserId };
+  });
+  const takeTask = useCallback((id: string) => {
+    const { api: moduleApi, currentUserId: me } = takeRef.current;
+    if (!me) return;
+    // The toast once the server took it (a refused claim says so instead).
+    moduleApi.claimTask(id, () =>
+      undoToast("Taken · it’s yours", {
+        onUndo: () => {
+          // Never over a newer change: only while it's still yours.
+          const now = takeRef.current.api.tasks.find((t) => t.id === id);
+          if (now?.assigneeId === me) takeRef.current.api.patchTask(id, { assigneeId: null });
+        },
+      }),
+    );
+  }, []);
+  // All (research §8): projects in the sidebar's order, area by area; a
+  // project's header names its area and an On hold or Done state, and those
+  // start folded (never hidden, 16).
+  const allBuckets = useMemo(() => {
+    const order = allProjectOrder(
+      buckets,
+      api.areas.map((a) => a.id),
+    );
+    const byId = new Map(buckets.map((b) => [b.id, b]));
+    return order.flatMap((id) => {
+      const b = byId.get(id);
+      return b ? [b] : [];
+    });
+  }, [buckets, api.areas]);
+  const allFolded = useCallback(
+    (key: string) => startsFolded(buckets.find((b) => b.id === key)),
+    [buckets],
+  );
+  const allGroupSub = useCallback(
+    (key: string) => {
+      const bucket = buckets.find((b) => b.id === key);
+      if (!bucket) return undefined;
+      const area = bucket.areaId ? api.areas.find((a) => a.id === bucket.areaId)?.name : null;
+      const state =
+        bucket.status === "on_hold" ? "On hold" : bucket.status === "done" ? "Done" : null;
+      const parts = [area, state].filter((p): p is string => !!p);
+      return parts.length > 0 ? `· ${parts.join(" · ")}` : undefined;
+    },
+    [buckets, api.areas],
+  );
+
   const scopeTasksAll = useMemo(() => {
     if (selection === "today") return api.queuedTasks;
-    if (selection === ARCHIVED_SELECTION || selection === TRASH_SELECTION) return [];
+    if (
+      selection === ARCHIVED_SELECTION ||
+      selection === TRASH_SELECTION ||
+      selection === TEMPLATES_SELECTION
+    )
+      return [];
     const live = (t: Task) => t.status !== "archived" || withArchived || t.id === keptArchivedId;
-    if (selection === "all") return tasks.filter(live);
+    // All: every task in projects you can see, never your Inbox (20).
+    if (selection === "all") return allView(tasks, inboxId, live);
+    // Won't do, reachable, each with Reopen (§2).
+    if (selection === WONTDO_SELECTION) return tasks.filter((t) => t.status === "archived");
     if (selection === UPCOMING_SELECTION) {
-      // Until TV-U15's Upcoming: your dated tasks and unassigned ones, by date
-      // (spec §8). Backlog and finished ones sit out.
-      return tasks.filter(
-        (t) =>
-          (t.dueDate || t.scheduledAt) &&
-          (t.assigneeId === null || t.assigneeId === currentUserId) &&
-          !isClosedTask(t) &&
-          !isBacklogTask(t),
-      );
+      // One just marked Won't do here stays until the scope changes (TV-U1).
+      const kept = keptArchivedId ? tasks.find((t) => t.id === keptArchivedId) : undefined;
+      return kept && !upcoming.scope.includes(kept) ? [...upcoming.scope, kept] : upcoming.scope;
     }
     if (archivedProject) {
       return api.archivedTasks.filter((t) => t.bucketId === archivedProject.id && live(t));
     }
     if (selection === "mine") {
-      if (!withArchived && !withBacklog && !keptArchivedId)
-        return myTasksScope(tasks, currentUserId);
-      if (!currentUserId) return myTasksScope(tasks, currentUserId);
-      // My tasks' rule (assigned to me, not Won't do, not Backlog), plus the
-      // Won't do and Backlog ones a Status filter asks for, plus the kept one.
-      return tasks.filter(
-        (t) =>
-          t.assigneeId === currentUserId &&
-          live(t) &&
-          (!isBacklogTask(t) || withBacklog || t.id === selectedTaskId),
+      // Yours, Backlog in (the List folds it behind its line), in its own
+      // order: date, then priority, waiting at the end (call 84). The team
+      // block's tasks lead (they're in no status group).
+      const mine = myTasksView(
+        tasks,
+        currentUserId,
+        (t) => withArchived || t.id === keptArchivedId,
       );
+      const ordered = myOrder === "manual" ? orderMyTasks(mine, waitingIds) : mine;
+      return [...blocks.flatMap((b) => b.tasks), ...ordered];
     }
-    const bucketId = selection === "inbox" ? inboxId : selection;
+    const bucketId = isInboxScope ? inboxId : selection;
     if (!bucketId) return [];
-    return tasks.filter((t) => t.bucketId === bucketId && live(t));
+    const inProject = tasks.filter((t) => t.bucketId === bucketId && live(t));
+    return isInboxScope ? inboxView.scope(inProject) : inProject;
   }, [
     selection,
     tasks,
     inboxId,
+    isInboxScope,
     api.queuedTasks,
     currentUserId,
     keptArchivedId,
     withArchived,
-    withBacklog,
-    selectedTaskId,
     archivedProject,
     api.archivedTasks,
+    upcoming.scope,
+    inboxView.scope,
+    blocks,
+    waitingIds,
+    myOrder,
   ]);
   // Search in All also finds archived projects' tasks, labelled (REPLAN 78).
   const archivedSearchTasks = useMemo(
@@ -520,7 +786,8 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     api,
     runtime,
     assignees,
-    enabled: mode === "plan",
+    // Focus has no toolbar: no Filter, no search (TV-F7).
+    enabled: selection !== "today",
     // A deep-linked task, or the selected one just marked Won't do, stays
     // listed past this scope's filters and search while it's selected; a link
     // never clears saved filters (TV-U2).
@@ -528,11 +795,57 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     searchExtra: archivedSearchTasks,
   });
   const scopeTasks = filtering.tasks;
+  useLayoutEffect(() => {
+    if (!isInboxScope) {
+      inboxRowsRef.current = [];
+      return;
+    }
+    // The rows as the List shows them (grouped or not, TV-U12); before it has
+    // drawn, the flat order.
+    const byId = new Map(scopeTasks.map((t) => [t.id, t]));
+    const shown = view === "list" ? viewOrderRef.current.flatMap((id) => byId.get(id) ?? []) : [];
+    inboxRowsRef.current =
+      shown.length > 0
+        ? shown
+        : orderTasks(scopeTasks, tasksDisplay.display.order, tasksDisplay.display.orderDir);
+  });
+  // A selection lasts within one place and one layout; tasks that leave the
+  // scope leave it (a set of ids: rows scrolled away stay in it).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new place or layout is the cue
+  useEffect(() => {
+    multiSelect.clear();
+  }, [selection, view, workspaceId]);
+  useEffect(() => {
+    if (multiSelect.multi && selectedTaskId && !multiSelect.ids.has(selectedTaskId)) {
+      multiSelect.clear();
+    }
+  }, [selectedTaskId, multiSelect]);
+  const scopeIdSet = useMemo(() => new Set(scopeTasks.map((t) => t.id)), [scopeTasks]);
+  useEffect(() => {
+    multiSelect.prune((id) => scopeIdSet.has(id), viewOrderRef.current);
+  }, [scopeIdSet, multiSelect.prune]);
+  const bulkIds = useMemo(
+    () =>
+      multiSelect.multi
+        ? inViewOrder(
+            multiSelect.ids,
+            viewOrderRef.current.length > 0 ? viewOrderRef.current : scopeTasks.map((t) => t.id),
+          )
+        : EMPTY_IDS,
+    [multiSelect.multi, multiSelect.ids, scopeTasks],
+  );
+  // The bottom bar's row, its keys and pickers while several are selected.
+  const bulk = useBulkActions({
+    api,
+    ids: bulkIds,
+    canEdit: canEdit && !archivedProject,
+    bucketNameById,
+  });
   // What New pre-fills: the filters you can see (none in Focus), and never
   // someone who can't take the task (a former member a stored filter still
   // names: the server would refuse the save).
   const captureSeed = useMemo<CaptureSeed>(() => {
-    if (mode === "execute") return { tagIds: [] };
+    if (selection === "today") return { tagIds: [] };
     const seed = filtering.seed;
     const id = seed.assigneeId;
     if (id && !assignees.some((a) => a.userId === id && a.canTakeTasks)) {
@@ -540,25 +853,26 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       return rest;
     }
     return seed;
-  }, [mode, filtering.seed, assignees]);
+  }, [selection, filtering.seed, assignees]);
 
   const scopeTitle =
-    selection === "all"
-      ? "All"
-      : selection === "mine"
-        ? "My tasks"
-        : selection === "today"
-          ? "Focus"
-          : selection === UPCOMING_SELECTION
-            ? "Upcoming"
-            : selection === "inbox"
-              ? "Inbox"
-              : archivedProject
-                ? archivedProject.name
-                : bucketNameById(selection);
-
-  // The Queue is one ordered line-up, so its List view is never grouped.
-  const effectiveGroupBy = selection === "today" ? "none" : tasksDisplay.display.group;
+    selection === TEMPLATES_SELECTION
+      ? "Templates"
+      : selection === "all"
+        ? "All"
+        : selection === "mine"
+          ? "My tasks"
+          : selection === "today"
+            ? "Focus"
+            : selection === UPCOMING_SELECTION
+              ? "Upcoming"
+              : selection === WONTDO_SELECTION
+                ? "Won’t do"
+                : selection === "inbox"
+                  ? "Inbox"
+                  : archivedProject
+                    ? archivedProject.name
+                    : bucketNameById(selection);
 
   // ⌘N, "+ New" and `c` capture "here" (tasks-v3 call 90, TV-U14): in a
   // project, that project; with a task of a section selected there, that
@@ -572,15 +886,20 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       : (buckets.find((b) => b.id === selection && !b.isSystem) ?? null);
     return {
       projectId: project?.id ?? null,
-      queueTop: mode === "execute" || selection === "today",
+      queueTop: selection === "today",
     };
-  }, [buckets, selection, mode, archivedProject]);
+  }, [buckets, selection, archivedProject]);
 
-  const totalOpenCount = useMemo(() => tasks.filter((t) => isOpenTask(t)).length, [tasks]);
-  const myOpenCount = useMemo(
-    () => (showMyTasks ? openCount(myTasksScope(tasks, currentUserId)) : 0),
-    [showMyTasks, tasks, currentUserId],
+  // All's count is what All lists: never your Inbox (TV-U15).
+  const totalOpenCount = useMemo(
+    () => tasks.filter((t) => isOpenTask(t) && t.bucketId !== inboxId).length,
+    [tasks, inboxId],
   );
+  const myOpenCount = useMemo(
+    () => openCount(myTasksScope(tasks, currentUserId)),
+    [tasks, currentUserId],
+  );
+  const wontDoCount = useMemo(() => tasks.filter((t) => t.status === "archived").length, [tasks]);
 
   // Drifted tasks for the bucket currently being triaged (recomputed live so the
   // dialog empties as the user triages).
@@ -591,26 +910,35 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   }, [triageBucketId, tasks]);
 
   const openCapture = useCallback(
-    (at?: { sectionId?: string | null }) => {
+    (at?: GroupAdd) => {
       if (!canEdit) return;
-      const { projectId, queueTop } = captureHere;
+      const { queueTop } = captureHere;
+      // A List group's "+" (TV-U10) names its own project, section and value.
+      const projectId = at?.projectId ?? captureHere.projectId;
       const open = selectedTaskId ? tasks.find((t) => t.id === selectedTaskId) : null;
       const sectionId =
-        at?.sectionId ??
-        (projectId && open?.bucketId === projectId ? (open.sectionId ?? null) : null);
+        at?.sectionId !== undefined
+          ? at.sectionId
+          : projectId && open?.bucketId === projectId
+            ? (open.sectionId ?? null)
+            : null;
       dispatchOpenCapture({
         destination: projectId ? { projectId, sectionId } : undefined,
         queueTop,
-        seed: captureSeed,
+        seed: {
+          ...captureSeed,
+          // Upcoming's New dates the task today, so it lands where you are
+          // looking (TV-U15); a day's "+" names its own day.
+          ...(selection === UPCOMING_SELECTION && !at ? { dueDay: todayStr() } : {}),
+          ...at?.seed,
+        },
       });
     },
-    [canEdit, captureHere, selectedTaskId, tasks, captureSeed],
+    [canEdit, captureHere, selectedTaskId, tasks, captureSeed, selection],
   );
 
   // cmd+n / global "+" → capture (this listener is only mounted on /tasks).
   useEffect(() => onCreateNew(() => openCapture()), [openCapture]);
-
-  const exitExecute = useCallback(() => setMode("plan"), []);
 
   // ── blocked-by: frontier offer on queuing (spec §5c) ────────────────────────
   // One interception point for every queue affordance (row/card toggles and
@@ -631,10 +959,26 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     },
     [api],
   );
+  // "Focus on this" (⇧F, the menus, the panel's ▶; call 31) away from Focus
+  // says where the session went, with a way there. In Focus the card shows it.
+  const focusOnTask = useCallback(
+    (id: string) => {
+      const started = api.focusOnTask(id);
+      if (started && selection !== "today") {
+        const title = tasks.find((t) => t.id === id)?.title || "Untitled";
+        toast(`Focusing on “${title}”`, {
+          duration: UNDO_TOAST_MS,
+          action: { label: "Open Focus", onClick: openFocus },
+        });
+      }
+      return started;
+    },
+    [api, selection, tasks, openFocus],
+  );
   // The views see the guarded toggle through an otherwise-unchanged api facade.
   const viewApi = useMemo<TasksModuleApi>(
-    () => ({ ...api, toggleQueue: guardedToggleQueue }),
-    [api, guardedToggleQueue],
+    () => ({ ...api, toggleQueue: guardedToggleQueue, focusOnTask }),
+    [api, guardedToggleQueue, focusOnTask],
   );
 
   const frontierOfferTask = useMemo(
@@ -644,30 +988,6 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   const frontierOffer = useMemo(
     () => (frontierOfferTaskId ? api.frontierFor(frontierOfferTaskId) : []),
     [frontierOfferTaskId, api],
-  );
-
-  // Quiet "waiting on …" note for blocked tasks in Execute (mirror, not a wall —
-  // a committed-anyway task stays fully actionable).
-  const blockedNoteFor = useCallback(
-    (task: Task) => {
-      if (!api.blockedTaskIds.has(task.id)) return null;
-      const open = (api.blockersByTask.get(task.id) ?? []).filter((b) => !isClosedTask(b));
-      if (open.length === 0) return null;
-      return open.length === 1
-        ? `Waiting on “${open[0].title || "Untitled"}”`
-        : `Waiting on ${open.length} tasks`;
-    },
-    [api],
-  );
-
-  // Quiet "↳ parent" context for committed subtasks in the Execute queue.
-  const parentTitleFor = useCallback(
-    (task: { parentId: string | null }) => {
-      if (!task.parentId) return null;
-      const parent = tasks.find((t) => t.id === task.parentId);
-      return parent ? parent.title || "Untitled" : null;
-    },
-    [tasks],
   );
 
   // ── TV-U4: rail drop targets ──────────────────────────────────────────────
@@ -698,6 +1018,26 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       if (!task) return;
       const action = railDropAction(target, task, railCtx);
       if (!action) return;
+      // A row of a selection carries the selection (TV-U12): one write, one Undo.
+      if (multiSelect.ids.size >= 2 && multiSelect.ids.has(task.id)) {
+        if (action.kind === "queue") {
+          api.bulkQueue(bulkIds);
+          return;
+        }
+        const write: TaskDropWrite =
+          action.kind === "move"
+            ? { taskId: task.id, bucketId: action.bucketId }
+            : { taskId: task.id, assigneeId: action.userId };
+        const writes = multiDropWrites(write, task, bulkIds, api.tasks);
+        if (writes.length === 0) return;
+        void api.bulkWrite(writes, {
+          label: (n) =>
+            action.kind === "move"
+              ? `Moved ${tasksWord(n)} to ${bucketNameById(action.bucketId)}`
+              : `Assigned ${tasksWord(n)} to you`,
+        });
+        return;
+      }
       switch (action.kind) {
         case "move": {
           const parent = task.parentId ? (taskById.get(task.parentId) ?? null) : null;
@@ -716,7 +1056,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
             return;
           }
           api.addToQueue(action.taskId, "end", () =>
-            undoToast("Added to your queue", {
+            undoToast("Added to Focus", {
               onUndo: () => api.removeFromQueue(action.taskId),
             }),
           );
@@ -730,7 +1070,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
           return;
       }
     },
-    [canEdit, taskById, railCtx, api, bucketNameById, guardedToggleQueue],
+    [canEdit, taskById, railCtx, api, bucketNameById, guardedToggleQueue, multiSelect.ids, bulkIds],
   );
 
   // A project's Archive… asks first only when it still has open work
@@ -759,10 +1099,28 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   }, [api.openTrashRef]);
   const trashCount = (api.trash?.buckets.length ?? 0) + (api.trash?.tasks.length ?? 0);
 
+  // Templates and "Duplicate project…" (TV-D15): the dialogs, the Templates
+  // page, and what a copy settles into the shared store in one step.
+  const templateStore = useWorkspaceStore(runtime, currentUserId, workspaceId);
+  const templateActions = useTemplateActions({
+    runtime,
+    store: templateStore,
+    workspaceId,
+    userId: currentUserId,
+    canEdit,
+    isAdmin: canManageWorkspace,
+    active: selection === TEMPLATES_SELECTION,
+    buckets,
+    areas: api.areas,
+    sections: api.sections,
+    tasks: api.tasks,
+    onOpenProject: pickSelection,
+    onOpenTask: (id) => onUrlTaskIdChange(id),
+  });
+  const offersTemplates = templateActions.supported && canEdit;
+
   const left = (
     <BucketRail
-      mode={mode}
-      onModeChange={setMode}
       selection={selection}
       onSelect={pickSelection}
       buckets={buckets}
@@ -772,7 +1130,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       driftCountByBucket={api.driftCountByBucket}
       totalOpenCount={totalOpenCount}
       queueCount={api.queueCount}
-      myTasksCount={showMyTasks ? myOpenCount : null}
+      myTasksCount={myOpenCount}
       canEdit={canEdit}
       hidden={hiddenRows}
       onToggleHidden={toggleHiddenRow}
@@ -806,6 +1164,17 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       onDeleteArea={api.deleteArea}
       archivedCount={api.archivedBuckets.length}
       trashCount={trashCount}
+      wontDoCount={wontDoCount}
+      templates={
+        offersTemplates
+          ? {
+              onDuplicate: templateActions.requestDuplicate,
+              onSaveAsTemplate: templateActions.requestSaveProject,
+              onNewFromTemplate: templateActions.requestNewFromTemplate,
+            }
+          : undefined
+      }
+      onOpenWelcome={welcome.reopen}
       navRef={railNavRef}
       dropAccepts={railAccepts}
     />
@@ -835,12 +1204,27 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   // list rows, the detail panel's subtask list) even from another bucket.
   useEffect(() => {
     if (api.loading || inboundPending) return;
+    // Focus shows more than its line-up (the Now task's subtasks, today's
+    // scheduled tasks), and its screen picks Now itself: a task stays selected
+    // while it exists (TV-F7).
+    if (selection === "today") {
+      if (selectedTaskId && !selectedTask) setSelectedTaskId(null);
+      return;
+    }
     if (selectedTaskId && scopeTasks.some((t) => t.id === selectedTaskId)) return;
     if (selectedTask?.parentId && scopeTasks.some((t) => t.id === selectedTask.parentId)) return;
     // Never a completed task Display hides (TV-U1): the Board has no
     // fallback of its own, so it would open the panel on a card it doesn't show.
     setSelectedTaskId(scopeTasks.find((t) => !isHiddenByDisplay(t))?.id ?? null);
-  }, [api.loading, inboundPending, selectedTaskId, selectedTask, scopeTasks, isHiddenByDisplay]);
+  }, [
+    api.loading,
+    inboundPending,
+    selection,
+    selectedTaskId,
+    selectedTask,
+    scopeTasks,
+    isHiddenByDisplay,
+  ]);
 
   // ── DF-1: URL-held selection ─────────────────────────────────────────────────
   // Inbound apply — honor a deep-link target once the bundle is CLEANLY loaded
@@ -913,7 +1297,6 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       return;
     }
     setPrivateLinkId(null);
-    if (external) setMode("plan");
     if (target.kind === "bucket") {
       setSelection(target.scope);
       // Hand the URL to the backstop's fresh pick — the mirror must not
@@ -989,11 +1372,41 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     () => setDisplay({ ...display, order: "manual" }),
     [setDisplay, display],
   );
+  // Getting the list out (TV-D14, default f): what the view shows, in its order.
+  const exportContext: ListExportContext = {
+    projectName: bucketNameById,
+    assigneeName: (id) => {
+      if (!id) return null;
+      const person = assignees.find((a) => a.userId === id);
+      return person ? person.fullName || person.name : null;
+    },
+    handleOf: (task) => handleLabel(taskKey, task.number),
+  };
+  const shownTasks = () =>
+    orderTasks(
+      scopeTasks.filter((t) => !isHiddenByDisplay(t)),
+      display.order,
+      display.orderDir,
+    );
+  // The view's extra groups (My tasks' team block, the Inbox's snoozed) are
+  // around the view, not in its count (TV-U15).
+  const viewExtraGroups: readonly ListExtraGroup[] =
+    selection === "mine" ? mineExtraGroups : isInboxScope ? inboxView.extraGroups : NO_EXTRAS;
+  const extraTaskIds = new Set(viewExtraGroups.flatMap((g) => g.taskIds));
   const header: PlanHeaderControls = {
-    count: openCount(scopeTasksAll),
+    // Won't do counts what it lists (none of it is open).
+    count:
+      selection === WONTDO_SELECTION
+        ? scopeTasksAll.length
+        : openCount(
+            extraTaskIds.size === 0
+              ? scopeTasksAll
+              : scopeTasksAll.filter((t) => !extraTaskIds.has(t.id)),
+          ),
     search: filtering.search,
     filter: filtering.filter,
     display: tasksDisplay.displayControl,
+    more: <ViewExportMenu tasks={shownTasks} title={scopeTitle} context={exportContext} />,
     activeFilters: filtering.activeFilters,
     sortedNote:
       view !== "timeline" && order !== "manual" && showsSortedNote(selection, order) ? (
@@ -1003,11 +1416,13 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
 
   const sharedViewProps = {
     tasks: scopeTasks,
+    multiSelect,
+    orderRef: viewOrderRef,
     scopeTitle,
     selection,
     view,
     onViewChange: setView,
-    buckets,
+    buckets: selection === "all" ? allBuckets : buckets,
     inbox,
     bucketNameById,
     // An archived project is read-only until it's unarchived (TV-U6).
@@ -1022,11 +1437,109 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   };
   // List and Board follow Display; the Timeline keeps its own rules.
   const displayProps = tasksDisplay.viewProps;
+  // The List's own wiring (TV-U10), kept in one place: handles, sections
+  // and teams, the Detailed headers' sort, section edits, remembered folds.
+  const projectScope = buckets.some((b) => b.id === selection);
+  const listExtras = {
+    taskKey,
+    sections: api.sections,
+    teams: api.teams,
+    filteredOut: filtering.active
+      ? {
+          hidden: scopeTasksAll.length - scopeTasks.length,
+          filters: tasksDisplay.filters.length + (filtering.searching ? 1 : 0),
+        }
+      : undefined,
+    onSort: (column: Parameters<typeof nextHeaderSort>[1]) =>
+      setDisplay({
+        ...display,
+        ...nextHeaderSort(display, column, tasksDisplayDefaults(displayScope).order),
+      }),
+    onAddSection:
+      projectScope && canEdit
+        ? (name: string) => void api.createSection(selection, name)
+        : undefined,
+    // ⏎ opens the selected task's full page (decision 22; the panel's
+    // "↑↓ to move · ⏎ to open").
+    onOpenTask: setFullPageId,
+    onRenameSection: canEdit ? api.renameSection : undefined,
+    onDeleteSection: canEdit ? api.deleteSection : undefined,
+    collapseKey: lsKey(
+      workspaceId,
+      `folds:${api.currentUserId ?? "anon"}:${selection}:${tasksDisplay.display.group}`,
+    ),
+  };
 
-  // Execute mode is enclosed in the center panel (rails stay visible).
+  // What each view built on the List hands it (TV-U15): Upcoming its days and
+  // keys, the Inbox its triage and snoozed, My tasks its team block, All its
+  // area words and folds; each its own teaching empty state.
+  const viewExtras =
+    selection === UPCOMING_SELECTION
+      ? {
+          grouping: upcoming.grouping,
+          onViewKey: upcoming.onViewKey,
+          subtasks: "flat" as const,
+          emptyState: <UpcomingEmpty canEdit={canEdit} onAddToday={() => openCapture()} />,
+        }
+      : isInboxScope
+        ? {
+            extraGroups: inboxView.extraGroups,
+            onViewKey: inboxView.onViewKey,
+            sourceOf: inboxView.sourceOf,
+            note: inboxView.note,
+            emptyState: inboxView.emptyState,
+          }
+        : selection === "mine"
+          ? {
+              extraGroups: mineExtraGroups,
+              onTake: takeTask,
+              takeableIds,
+              emptyState: <MyTasksEmpty canEdit={canEdit} onAdd={() => openCapture()} />,
+            }
+          : selection === "all"
+            ? {
+                defaultFolded: allFolded,
+                groupSub: allGroupSub,
+                emptyState: <AllEmpty hasProjects={buckets.length > 0} />,
+              }
+            : selection === WONTDO_SELECTION
+              ? {
+                  countEvery: true,
+                  // Won't do tasks arrive after the open ones (TV-D11a): not
+                  // "nothing" until they're in.
+                  emptyState: api.restLoaded ? <WontDoEmpty /> : <TaskListSkeleton />,
+                }
+              : {};
+
+  // A selection's keys come first (TV-U12), then the view's own.
+  const ownViewKey = "onViewKey" in viewExtras ? viewExtras.onViewKey : undefined;
+  const onViewKey = (event: React.KeyboardEvent<HTMLDivElement>, selected: Task | null) =>
+    bulk.onKey(event) || (ownViewKey?.(event, selected) ?? false);
+
+  // The "← item" stack (SH-1) for references opened from the panel (RF-1). A
+  // new selection is a new context, so the stack starts over.
+  const panelStack = usePanelStack<{ key: string; type: string; id: string }>();
+  const { push: pushPanel, clear: clearPanel } = panelStack;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new selection is the cue
+  useEffect(() => {
+    clearPanel();
+  }, [selectedTaskId, clearPanel]);
+  // A task opened from the panel (a subtask, a blocker, the parent) or from
+  // Focus's subtask list stacks on top as "← item" (call 65a), never moving
+  // the page's selection.
+  const openTaskInPanel = useCallback(
+    (id: string) => pushPanel({ key: `task:${id}`, type: "task", id }),
+    [pushPanel],
+  );
+  const panelTop = panelStack.stack[panelStack.stack.length - 1];
+  const panelTopTaskId = panelTop && referenceKind(panelTop.type) === "task" ? panelTop.id : null;
+
+  // Focus is its own screen in the centre (TV-F7); the rails stay.
   // Archived projects and Recently deleted open from the sidebar's ⋯ (98).
   const body =
-    mode === "plan" && selection === TRASH_SELECTION ? (
+    selection === TEMPLATES_SELECTION ? (
+      templateActions.page
+    ) : selection === TRASH_SELECTION ? (
       <RecentlyDeletedView
         trash={api.trash}
         bucketName={(id) => {
@@ -1037,7 +1550,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
         onRestore={(target, label) => void api.restoreFromTrash(target, { label })}
         onDeleteForever={api.deleteForever}
       />
-    ) : mode === "plan" && selection === ARCHIVED_SELECTION ? (
+    ) : selection === ARCHIVED_SELECTION ? (
       <ArchivedProjectsView
         projects={api.archivedBuckets}
         openCountByProject={(id) => projectOpenWork(api.archivedTasks, id).open.length}
@@ -1046,24 +1559,18 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
         onUnarchive={(id) => void api.unarchiveBucket(id)}
         onDelete={(bucket) => setProjectDialog({ kind: "delete", bucket, open: true })}
       />
-    ) : mode === "execute" ? (
-      <ExecuteView
+    ) : selection === "today" ? (
+      <FocusView
+        api={viewApi}
         workspaceId={workspaceId}
-        queuedTasks={api.queuedTasks}
-        bucketNameById={bucketNameById}
-        parentTitleFor={parentTitleFor}
-        blockedNoteFor={blockedNoteFor}
-        onMarkDone={api.markDone}
-        onSkip={api.moveQueuedToEnd}
-        onAddTime={(taskId, seconds) => void api.logTimeAdjustment(taskId, seconds)}
-        onSetTime={api.setTimeSpent}
-        tagsFor={(id) => api.tagsByTask.get(id) ?? []}
-        subtasksFor={(id) => api.subtasksByParent.get(id) ?? []}
-        onToggleSubtask={api.toggleDone}
-        onExit={exitExecute}
-        loading={api.loading}
+        runtime={runtime}
         canEdit={canEdit}
-        onCaptureToQueue={api.captureToQueue}
+        bucketNameById={bucketNameById}
+        selectedTaskId={selectedTaskId}
+        onSelectTask={setSelectedTaskId}
+        onOpenTask={openTaskInPanel}
+        panelTaskId={panelTopTaskId}
+        onRequestCapture={openCapture}
       />
     ) : view === "board" ? (
       <TaskBoardView
@@ -1071,6 +1578,8 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
         {...displayProps}
         dndMode="external"
         boardGroupBy={tasksDisplay.display.boardGroup}
+        lanes={tasksDisplay.display.boardLanes}
+        description={tasksDisplay.display.cardDescription === "preview"}
         statusFilter={statusFilter}
         onManualOrder={backToManualOrder}
         onAddStatus={
@@ -1080,6 +1589,19 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
             ? () => setStatusesEditor({ projectId: selection, addingTo: "in_progress" })
             : undefined
         }
+        onEditStatuses={
+          canEdit && buckets.some((b) => b.id === selection)
+            ? () => setStatusesEditor({ projectId: selection, addingTo: null })
+            : undefined
+        }
+        // The Board's own wiring (TV-U11): handles, ⏎ to the full page, folds.
+        taskKey={taskKey}
+        onOpenTask={setFullPageId}
+        onViewKey={bulk.onKey}
+        foldKey={lsKey(
+          workspaceId,
+          `folds:${api.currentUserId ?? "anon"}:${selection}:board:${tasksDisplay.display.boardGroup}`,
+        )}
       />
     ) : view === "timeline" ? (
       <TaskTimelineView {...sharedViewProps} zoom={timelineZoom} onZoomChange={setTimelineZoom} />
@@ -1088,11 +1610,12 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
         {...sharedViewProps}
         {...displayProps}
         dndMode="external"
-        groupBy={effectiveGroupBy}
-        reorderable={selection === "today"}
-        onReorder={api.reorderQueue}
+        groupBy={tasksDisplay.display.group}
         onManualOrder={backToManualOrder}
         revealRequest={revealRequest}
+        {...listExtras}
+        {...viewExtras}
+        onViewKey={onViewKey}
       />
     );
 
@@ -1117,7 +1640,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
           </Button>
         </div>
       ) : null}
-      {archivedProject && mode === "plan" ? (
+      {archivedProject ? (
         <ArchivedProjectBanner
           project={archivedProject}
           canEdit={canEdit}
@@ -1188,13 +1711,11 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       if (id.startsWith(`${RAIL_DROP_PREFIX}bucket:`)) {
         return bucketNameById(id.slice(`${RAIL_DROP_PREFIX}bucket:`.length));
       }
-      if (id === `${RAIL_DROP_PREFIX}queue`) return "the Queue";
+      if (id === `${RAIL_DROP_PREFIX}queue`) return "Focus";
       if (id === `${RAIL_DROP_PREFIX}mine`) return "My tasks";
       if (id.startsWith("link:")) return "the open task, to link them";
-      if (id.startsWith("col:status:")) {
-        return STATUS_KEY_LABELS[id.slice("col:status:".length) as StatusKey] ?? null;
-      }
-      if (id.startsWith("col:bucket:")) return bucketNameById(id.slice("col:bucket:".length));
+      // A Board column or lane cell: the name the board registered (TV-U11).
+      if (id.startsWith("col:")) return boardDropName(id);
       return taskName(id);
     };
     return taskDragAnnouncements({ taskName: (id) => taskName(id) ?? "the task", targetName });
@@ -1262,15 +1783,6 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     },
     [runtime, workspaceId, canEdit],
   );
-
-  // The "← item" stack (SH-1) for references opened from the panel (RF-1). A
-  // new selection is a new context, so the stack starts over.
-  const panelStack = usePanelStack<{ key: string; type: string; id: string }>();
-  const { push: pushPanel, clear: clearPanel } = panelStack;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a new selection is the cue
-  useEffect(() => {
-    clearPanel();
-  }, [selectedTaskId, clearPanel]);
   const latestForHost = useRef({ taskById, selectedTask, inbox, api });
   useLayoutEffect(() => {
     latestForHost.current = { taskById, selectedTask, inbox, api };
@@ -1285,7 +1797,10 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       setTaskDone: (taskId: string, done: boolean) => {
         const { taskById: byId, api: moduleApi } = latestForHost.current;
         if (byId.has(taskId)) {
-          moduleApi.patchTask(taskId, { status: done ? "done" : "todo" });
+          // Done through the module's check-off, so its open subtasks finish
+          // too (call 87).
+          if (done) moduleApi.markDone(taskId);
+          else moduleApi.patchTask(taskId, { status: "todo" });
           return;
         }
         referenceStore?.completeTask(taskId, done).catch((error: unknown) => {
@@ -1304,7 +1819,6 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     }),
     [pushPanel, referenceStore, canEdit],
   );
-
   const detailPanel = (
     <TaskDetailPanel
       task={selectedTask}
@@ -1313,16 +1827,39 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       canEdit={panelCanEdit}
       onRequestCapture={openCapture}
       onSelectTask={setSelectedTaskId}
+      onOpenTask={openTaskInPanel}
+      onOpenFullPage={selectedTask ? () => setFullPageId(selectedTask.id) : undefined}
       api={viewApi}
       runtime={runtime}
       workspaceId={workspaceId}
       onOpenEntity={handleOpenEntity}
+      onSaveAsTemplate={offersTemplates ? templateActions.requestSaveTask : undefined}
     />
   );
   // The hub is a drop target within the ONE page-level DndContext (below); no
   // own context — that's exactly what let center rows reach it (DF-22).
-  const details = privateLinkId ? (
-    <PrivateItemPanel onBack={() => setPrivateLinkId(null)} />
+  const bulkTasks = useMemo(
+    () => bulkIds.flatMap((id) => taskById.get(id) ?? []),
+    [bulkIds, taskById],
+  );
+  const details = multiSelect.multi ? (
+    <BulkPanel
+      tasks={bulkTasks}
+      statusById={api.statusById}
+      bucketNameById={bucketNameById}
+      sections={api.sections}
+      teams={api.teams}
+      tagsByTask={api.tagsByTask}
+      canEdit={canEdit && !archivedProject}
+      onPick={bulk.openPicker}
+    />
+  ) : privateLinkId ? (
+    <TaskGonePanel
+      taskId={privateLinkId}
+      api={api}
+      canEdit={canEdit}
+      onBack={() => setPrivateLinkId(null)}
+    />
   ) : selectedTask ? (
     <HubDropZone target={{ type: "task", id: selectedTask.id }} disabled={!panelCanEdit}>
       {detailPanel}
@@ -1354,7 +1891,8 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
             inbox={inbox}
             canEdit={canEdit}
             onRequestCapture={openCapture}
-            onSelectTask={(id) => pushPanel({ key: `task:${id}`, type: "task", id })}
+            onSelectTask={openTaskInPanel}
+            onOpenTask={openTaskInPanel}
             api={viewApi}
             runtime={runtime}
             workspaceId={workspaceId}
@@ -1372,18 +1910,102 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     };
   });
 
+  // ── the full page (call 32) ───────────────────────────────────────────────
+  const fullPageTask = fullPageId ? (taskById.get(fullPageId) ?? null) : null;
+  // A task that left (deleted, moved out of reach) or a new scope closes it.
+  useEffect(() => {
+    if (fullPageId && !api.loading && !taskById.has(fullPageId)) setFullPageId(null);
+  }, [fullPageId, api.loading, taskById]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new scope is the cue
+  useEffect(() => {
+    setFullPageId(null);
+  }, [selection]);
+  const pageOrder = scopeTasks.filter((t) => !t.parentId && !isHiddenByDisplay(t));
+  const pageIndex = fullPageTask ? pageOrder.findIndex((t) => t.id === fullPageTask.id) : -1;
+  const goToPage = (index: number) => {
+    const next = pageOrder[index];
+    if (!next) return;
+    setFullPageId(next.id);
+    setSelectedTaskId(next.id);
+  };
+  const viewName = view === "board" ? "Board" : view === "timeline" ? "Timeline" : "List";
+
+  // ── the Project view (default p) ────────────────────────────────────────────
+  // Its project: the open task's, else the project open in the sidebar.
+  const scopeProject =
+    buckets.find((b) => b.id === selection && !b.isSystem) ?? archivedProject ?? null;
+  const panelProject = selectedTask
+    ? (buckets.find((b) => b.id === selectedTask.bucketId && !b.isSystem) ?? null)
+    : scopeProject;
+  const projectView = panelProject ? (
+    <ProjectPanel project={panelProject} tasks={api.tasks} sections={api.sections} />
+  ) : null;
+  // Nothing selected inside a project, or a task in the centre: the panel
+  // shows Project (the one exception to "the panel remembers its view").
+  const panelActive = multiSelect.multi
+    ? "details"
+    : projectView && (fullPageTask || (!selectedTask && !privateLinkId && scopeProject))
+      ? "project"
+      : panelView;
+
   // The right panel's title row names and switches its views (SH-1): Details
-  // today; Project, In flight and No date register in panel-views.ts later.
+  // and Project (TV-U13); In flight and No date register later.
   const right = (
     <RightPanel
       module="tasks"
-      views={{ details: () => details }}
-      activeId={panelView}
+      views={{
+        details: () =>
+          fullPageTask ? (
+            <EmptyState
+              title="Shown in the centre"
+              description="This task fills the centre. Esc goes back."
+            />
+          ) : (
+            details
+          ),
+        // Always listed, so the menu keeps its shape; with no project (an
+        // Inbox task) it says so.
+        project: () =>
+          projectView ?? <ProjectPanel project={null} tasks={api.tasks} sections={api.sections} />,
+      }}
+      activeId={panelActive}
       onChange={setPanelView}
       items={panelItems}
       onBack={panelStack.back}
       onClearItems={panelStack.clear}
     />
+  );
+  const centre = fullPageTask ? (
+    <TaskFullPage
+      backLabel={`${viewName} · ${scopeTitle}`}
+      position={pageIndex >= 0 ? { index: pageIndex, total: pageOrder.length } : null}
+      onPrev={pageIndex > 0 ? () => goToPage(pageIndex - 1) : null}
+      onNext={
+        pageIndex >= 0 && pageIndex < pageOrder.length - 1 ? () => goToPage(pageIndex + 1) : null
+      }
+      onClose={() => setFullPageId(null)}
+    >
+      <TaskDetailPanel
+        key={fullPageTask.id}
+        task={fullPageTask}
+        buckets={buckets}
+        inbox={inbox}
+        // A task of an archived project stays read-only here too (TV-U6).
+        canEdit={canEdit && !api.archivedTasks.some((t) => t.id === fullPageTask.id)}
+        onRequestCapture={openCapture}
+        onSelectTask={setSelectedTaskId}
+        onOpenTask={openTaskInPanel}
+        onCloseFullPage={() => setFullPageId(null)}
+        layout="page"
+        api={viewApi}
+        runtime={runtime}
+        workspaceId={workspaceId}
+        onOpenEntity={handleOpenEntity}
+        onSaveAsTemplate={offersTemplates ? templateActions.requestSaveTask : undefined}
+      />
+    </TaskFullPage>
+  ) : (
+    center
   );
 
   return (
@@ -1402,10 +2024,13 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
           feature="tasks"
           notice={truncationNotice(api.truncated)}
           left={left}
-          center={center}
+          center={centre}
           right={right}
         />
       </DndContext>
+      {upcoming.dialogs}
+      {inboxView.dialogs}
+      {bulk.dialogs}
       <StatusesDialog
         open={statusesEditor !== null}
         projectName={statusesEditor?.projectId ? bucketNameById(statusesEditor.projectId) : null}
@@ -1473,6 +2098,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
           restoreNavFocus(event, railNavRef.current, triageFromRef.current)
         }
       />
+      {templateActions.dialogs}
       <FrontierOfferDialog
         open={frontierOfferTaskId !== null}
         onOpenChange={(o) => !o && setFrontierOfferTaskId(null)}
@@ -1484,6 +2110,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
           if (frontierOfferTaskId) api.addToQueue(frontierOfferTaskId);
         }}
       />
+      <TasksWelcomeDialog welcome={welcome} />
     </ReferenceHostProvider>
   );
 }

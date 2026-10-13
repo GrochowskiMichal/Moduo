@@ -4,6 +4,7 @@ import {
   addDays,
   blocksByDay,
   DEFAULT_BLOCK_MINUTES,
+  dueChipsByDay,
   type LensTask,
   localDayKey,
   parseDayKey,
@@ -168,5 +169,119 @@ describe("addDays", () => {
   it("crosses month boundaries on local calendar days", () => {
     expect(localDayKey(addDays(new Date(2026, 5, 30), 2))).toBe("2026-07-02");
     expect(localDayKey(addDays(new Date(2026, 0, 1), -1))).toBe("2025-12-31");
+  });
+});
+
+// TV-F6 (AC2.3, AC7.3): the Calendar lens reads work sessions as blocks and
+// due dates as all-day chips.
+describe("taskBlocks — work sessions are the blocks (AC2.3, AC7.3)", () => {
+  const range = visibleRange("week", TUE, PREFS);
+  /** A one-hour session at a local day/hour (month is 0-based, like Date). */
+  const session = (
+    id: string,
+    taskId: string,
+    month: number,
+    day: number,
+    hour: number,
+    userId: string | null,
+  ) => ({
+    id,
+    taskId,
+    userId,
+    startsAt: new Date(2026, month, day, hour).toISOString(),
+    endsAt: new Date(2026, month, day, hour + 1).toISOString(),
+  });
+  const at = (day: number, hour: number) => new Date(2026, 5, day, hour, 0).toISOString();
+
+  it("each of my sessions is its own block; a teammate's stays in their calendar", () => {
+    const task = makeLensTask({ id: "a", scheduledAt: at(30, 9), durationMinutes: 60 });
+    const blocks = taskBlocks([task], range, {
+      list: [
+        session("s1", "a", 5, 30, 9, "me"),
+        session("s2", "a", 6, 1, 14, "me"),
+        session("s3", "a", 5, 30, 11, "mike"),
+      ],
+      me: "me",
+    });
+    expect(
+      blocks.map((b) => [b.blockId, b.sessionId, b.taskId, b.dayKey, b.durationMinutes]),
+    ).toEqual([
+      ["s1", "s1", "a", "2026-06-30", 60],
+      ["s2", "s2", "a", "2026-07-01", 60],
+    ]);
+  });
+
+  it("a scheduled task with no session known shows from its row, once", () => {
+    const task = makeLensTask({ id: "b", scheduledAt: at(30, 9), durationMinutes: 30 });
+    const [block] = taskBlocks([task], range, { list: [], me: "me" });
+    expect(block).toMatchObject({ blockId: "b", sessionId: null, taskId: "b" });
+  });
+
+  it("a deleted or Won't do task's sessions don't show", () => {
+    const tasks = [
+      makeLensTask({ id: "d", deletedAt: "2026-06-30T00:00:00Z" }),
+      makeLensTask({ id: "w", status: "archived" }),
+    ];
+    expect(
+      taskBlocks(tasks, range, {
+        list: [session("s1", "d", 5, 30, 9, "me"), session("s2", "w", 5, 30, 10, "me")],
+        me: "me",
+      }),
+    ).toEqual([]);
+  });
+});
+
+describe("dueChipsByDay — your own due-only tasks as all-day chips (AC2.3, AC7.3)", () => {
+  const range = visibleRange("week", TUE, PREFS);
+  const mine = (id: string, patch: Partial<LensTask> = {}, dueOn = "2026-07-02") => ({
+    ...makeLensTask({ id, title: id, ...patch }),
+    dueOn,
+    assigneeId: "me",
+    creatorId: "me",
+  });
+  const none = { list: [], me: "me" };
+
+  it("a task of mine due Thursday with nothing in my calendar shows on Thursday", () => {
+    expect(dueChipsByDay([mine("essay")], range, none).get("2026-07-02")).toEqual([
+      { taskId: "essay", title: "essay", dayKey: "2026-07-02", done: false },
+    ]);
+  });
+
+  it("an unassigned task I made is mine; a teammate's (or one assigned to them) isn't", () => {
+    const tasks = [
+      { ...mine("made"), assigneeId: null },
+      { ...mine("theirs"), assigneeId: "mike", creatorId: "me" },
+      { ...mine("their-own"), assigneeId: null, creatorId: "mike" },
+    ];
+    const ids = [...dueChipsByDay(tasks, range, none).values()].flat().map((c) => c.taskId);
+    expect(ids).toEqual(["made"]);
+  });
+
+  it("one in my calendar, a Won't do one and one out of range don't show", () => {
+    const tasks = [
+      mine("sess"),
+      mine("sched", { scheduledAt: new Date(2026, 6, 2, 9).toISOString() }),
+      mine("wont", { status: "archived" }),
+      mine("later", {}, "2026-07-20"),
+    ];
+    const map = dueChipsByDay(tasks, range, {
+      list: [{ taskId: "sess", userId: "me" }],
+      me: "me",
+    });
+    expect([...map.values()].flat()).toEqual([]);
+  });
+
+  it("a teammate's session on my task is in their calendar: mine still shows due", () => {
+    const task = mine("shared", { scheduledAt: new Date(2026, 6, 2, 9).toISOString() });
+    const map = dueChipsByDay([task], range, {
+      list: [{ taskId: "shared", userId: "mike" }],
+      me: "me",
+    });
+    expect(map.get("2026-07-02")?.map((c) => c.taskId)).toEqual(["shared"]);
+  });
+
+  it("a done one shows done", () => {
+    const map = dueChipsByDay([mine("pub", { status: "done" }, "2026-06-30")], range, none);
+    expect(map.get("2026-06-30")?.[0].done).toBe(true);
   });
 });
