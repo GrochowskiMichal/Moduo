@@ -11,7 +11,7 @@
 import type { TaskReminderKind } from "@contracts/vocabularies";
 import { isOpenTask } from "@contracts/vocabularies";
 import { Bell, CalendarClock, Clock, Plus, Repeat, SkipForward, Timer, X } from "lucide-react";
-import { type ReactNode, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import { Button } from "../../../components/ui/button";
 import { Calendar } from "../../../components/ui/calendar";
@@ -683,6 +683,18 @@ function EstimateEditor({
   });
   const [estimate, setEstimate] = useState(baseline.current.estimate);
   const [tracked, setTracked] = useState(baseline.current.tracked);
+  // A total that moves while the editor is open ("Add time…", Focus) shows in
+  // the field as long as nobody is typing there; the new baseline means a
+  // field left alone still writes nothing (TV-D14).
+  const shownTotal = formatTracked(task.timeSpentSeconds);
+  useEffect(() => {
+    if (shownTotal === baseline.current.tracked) return;
+    setTracked((typed) => {
+      if (typed !== baseline.current.tracked) return typed;
+      baseline.current.tracked = shownTotal;
+      return shownTotal;
+    });
+  }, [shownTotal]);
 
   const saveEstimate = (minutes: number | null) => {
     const next = minutes && minutes > 0 ? minutes : null;

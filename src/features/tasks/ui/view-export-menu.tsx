@@ -55,16 +55,17 @@ export function ViewExportMenu({
       setPrinting(null);
     };
     window.addEventListener("afterprint", finish);
-    const frame = requestAnimationFrame(() => {
+    // The layout is in the DOM once this effect runs; print on the next turn.
+    const start = window.setTimeout(() => {
       printPage().catch(() => {
         toast.error("Couldn't open printing.");
         finish();
       });
-    });
+    }, 0);
     // A desktop print dialog doesn't always say when it closes.
     const fallback = window.setTimeout(finish, 120_000);
     return () => {
-      cancelAnimationFrame(frame);
+      window.clearTimeout(start);
       window.clearTimeout(fallback);
       window.removeEventListener("afterprint", finish);
     };
