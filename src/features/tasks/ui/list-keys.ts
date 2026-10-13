@@ -22,6 +22,7 @@ export type ListKeyAction =
   | "next"
   | "prev"
   | "toggle-done"
+  | "open"
   | "edit"
   | "capture"
   | "bucket"
@@ -43,7 +44,7 @@ type ListKey = Pick<KeyboardEvent, "key" | "metaKey" | "ctrlKey" | "altKey"> &
 /**
  * The attribute a row puts on its title button. Clicking the title is how a
  * row gets selected (and Chromium focuses a clicked button), so on the
- * SELECTED row's title Space/Enter stay the List's keys — complete and edit.
+ * SELECTED row's title Space/Enter stay the List's keys — complete and open.
  */
 export const ROW_TITLE_ATTR = "data-row-title";
 
@@ -101,7 +102,8 @@ export function listKeyAction(
     case " ":
       return "toggle-done";
     case "Enter":
-      return "edit";
+      // ⏎ opens, `e` edits (decision 22, TV-U10).
+      return "open";
     case ">":
       return "nest";
     case "<":

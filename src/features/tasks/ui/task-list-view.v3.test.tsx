@@ -155,6 +155,17 @@ describe("the status icon (default k)", () => {
     expect(api.toggleDone).not.toHaveBeenCalled();
   });
 
+  it("⏎ opens the selected task full; `e` edits its title", () => {
+    const onOpenTask = rs.fn();
+    renderList([task("a")], { selectedTaskId: "a", onOpenTask });
+    const grid = screen.getByRole("grid");
+    grid.focus();
+    fireEvent.keyDown(grid, { key: "Enter" });
+    expect(onOpenTask).toHaveBeenCalledWith("a");
+    fireEvent.keyDown(grid, { key: "e" });
+    expect(screen.getByRole("textbox")).toBeTruthy();
+  });
+
   it("⇧S opens the status menu on the selected row", async () => {
     renderList([task("a")], { selectedTaskId: "a" });
     const grid = screen.getByRole("grid");

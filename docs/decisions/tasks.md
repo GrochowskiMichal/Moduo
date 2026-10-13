@@ -28,17 +28,17 @@ Built in tasks-v3 block 14 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §4, AC
   - Rejected: sorting by project, assignee, time or waiting (not in Order by; each would need its own rule).
 - **U10-5 · A project groups by section; with no sections it is the plain list ending in "+ Add section"** → TV-U10 (`display.ts`, `helpers.ts`, `task-list-parts.tsx`)
   - Who: agent's choice, deferred to by Maciej, 2026-10-13.
-  - Decision: Section is every project's default (offered only inside one project); a project without sections shows no headers and takes drops like an ungrouped list; "No section" comes first (Todoist's top of the project); a section's header reads "1 of 4" (done of all) and "· ends Oct 24"; its ⋯ has Rename… and Delete section (its tasks stay, under No section; Undo restores it). Team is offered once the workspace has teams.
+  - Decision: Section is every project's default (offered only inside one project); a project without sections shows no headers and takes drops like an ungrouped list; "No section" comes first (Todoist's top of the project); a section's header reads "1 of 4" (done of all) and "· ends Oct 24"; its ⋯ has Rename… and Delete section (its tasks stay, under No section; Undo brings the section back with its tasks in it). Team is offered once the workspace has teams.
   - Why: stored Display prefs would freeze a "None" default for a project that later gains sections; the "+ Add section" line is the List's way to make the first one.
   - Rejected: defaulting to Section only once sections exist (the default is read once per scope).
 - **U10-6 · A group's "+" stays visible and opens the one capture with the group's value** → TV-U10 (`list-group-add.ts`), TV-U14's capture seed
   - Who: agent's choice, deferred to by Maciej, 2026-10-13.
-  - Decision: the spec's "stays visible" over research's fade. It fills in the section, status category, priority, person, team or due day (Later and No date: no date; Earlier: no "+"); the capture seed gained `teamId`, `dueDay` and `status`. In All, groups other than projects show the "+" disabled with "Pick a project first" (the task would land in your Inbox, which All doesn't list); My tasks adds to your Inbox, assigned to you; Upcoming adds only in its days.
+  - Decision: the spec's "stays visible" over research's fade. It fills in the section, status category, priority, person, team or due day (Later and No date: no date; Earlier, Done and Won't do: no "+", a new task is neither late nor finished); the capture seed gained `teamId`, `dueDay` and `status`. A seeded status shows in the capture as a removable chip and is never kept in the draft (a restored draft never files into a status unasked). In All, groups other than projects show the "+" disabled with "Pick a project first" (the task would land in your Inbox, which All doesn't list); My tasks adds to your Inbox, assigned to you; Upcoming adds only in its days.
   - Why: default n and U14-1 (one capture for every way in); a "+" whose task vanishes from view reads as broken.
   - Rejected: an inline add row (a second capture); filing All's "+" into a guessed project.
 - **U10-7 · Backlog folds behind a line at each group's end; grouped by status it's its own folded group** → TV-U10
   - Who: agent's choice, deferred to by Maciej, 2026-10-13.
-  - Decision: "Backlog · n" with a chevron ends each group (or the list); a selected Backlog task opens its line. Everything else starts open; what you fold is remembered per person, workspace, view and grouping on this device.
+  - Decision: "Backlog · n" with a chevron ends each group (or the list); a selected Backlog task opens its line and stays in it, so j/k walk the opened line in order (only a task checked off here, or a parent with open subtasks, comes out of it). Everything else starts open; what you fold is remembered per person, workspace, view and grouping on this device.
   - Why: 53b and research §2 (everything starts open, which fixes "only the first group opens").
   - Rejected: synced folds now (research says synced; preferences sync is TV-U8's lane), one Backlog line per list only.
 - **U10-8 · A late row's fixes lie over the end of its title on hover or selection** → TV-U10 (`LateFixes`, `break-down.ts`)
@@ -61,9 +61,19 @@ Built in tasks-v3 block 14 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §4, AC
   - Decision: every dropdown and context menu (and their sub-menus) marks itself while it can scroll further; a mask fades the last 28 px, so the cut-off item reads as "there's more".
   - Why: checkpoint 1's menu note; a mask needs no colour, so every surface and theme fades the same.
   - Rejected: a gradient overlay (needs the surface's colour per theme).
+- **U10-13 · A parent's subtasks keep their own order; a drag or ⌥⇧↑/↓ moves one among them anywhere** → TV-U10 (`subtask-order.ts`, `drop-mode.ts`, the panel's `SubtasksSection`), handed over by TV-U13
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: subtasks list in their own order under the parent in every view, so moving one among its siblings always writes a place, sorted view or across projects (the List's nested rows and the panel's list: the whole row drags, ⌥⇧↑/↓ on a focused subtask moves it and keeps the focus; one Undo each). Joining another parent in a sorted view still only nests. A place next to a task whose key another project's task shares now lands on the asked side (the nearest different key bounds it).
+  - Why: default m is about the view's own order; a subtask list doesn't follow it, so "Sorted by … · Back to manual order" refused a move that would visibly work. The shared-key case put a dragged subtask one place off on the local stack.
+  - Rejected: a grip on each subtask (the whole row is how the List drags too); the keyboard sensor's Space-to-lift (⌥⇧↑/↓ is the List's way).
+- **U10-14 · ⏎ opens the selected task full; `e` edits its title** → TV-U10 (`list-keys.ts`, `tasks-plan-view.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: ⏎ on the List opens the selected task's full page (TV-U13's; Esc brings the List back); `e` edits the title in place; a host without a full page keeps ⏎ as edit.
+  - Why: decision 22 ("⏎ opens and `e` edits") and the panel's "↑↓ to move · ⏎ to open": with the panel already showing the selected task, opening it means the full page.
+  - Rejected: ⏎ focusing the panel (a second way to Tab there).
 - **U10-12 · Left to their blocks** → TV-U13, TV-U11, TV-U15
   - Who: agent's choice, deferred to by Maciej, 2026-10-13.
-  - Decision: call 87 (finishing a parent finishes its subtasks) stays TV-U13's per the 🟠 box; the Board keeps ascending sorts (it ignores the List's direction) for TV-U11; My tasks' folded Backlog line needs its scope to include your Backlog tasks (TV-U15); files in the counts wait for AT-3; "Claude · working" for TV-D16.
+  - Decision: call 87 (finishing a parent finishes its subtasks) stays TV-U13's per the 🟠 box (it built it); the Board keeps ascending sorts (it ignores the List's direction) for TV-U11; My tasks' folded Backlog line needs its scope to include your Backlog tasks (TV-U15); files in the counts wait for AT-3; "Claude · working" for TV-D16.
   - Why: one block per session; each sits with the block that owns its surface.
   - Rejected: —
 

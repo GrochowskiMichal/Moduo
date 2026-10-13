@@ -1060,12 +1060,15 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     onSort: (column: Parameters<typeof nextHeaderSort>[1]) =>
       setDisplay({
         ...display,
-        ...nextHeaderSort(display, column, tasksDisplayDefaults(selection).order),
+        ...nextHeaderSort(display, column, tasksDisplayDefaults(displayScope).order),
       }),
     onAddSection:
       projectScope && canEdit
         ? (name: string) => void api.createSection(selection, name)
         : undefined,
+    // ⏎ opens the selected task's full page (decision 22; the panel's
+    // "↑↓ to move · ⏎ to open").
+    onOpenTask: setFullPageId,
     onRenameSection: canEdit ? api.renameSection : undefined,
     onDeleteSection: canEdit ? api.deleteSection : undefined,
     collapseKey: lsKey(

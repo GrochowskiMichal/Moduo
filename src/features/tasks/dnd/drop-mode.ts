@@ -180,7 +180,9 @@ export function resolveListHover(input: {
     const parentId = target.parentId ?? null;
     if (!parentId || parentId === active.id || hasChildren(active.id)) return null;
     const line = { id: target.id, edge: lower ? "bottom" : "top" } as const;
-    if (order === "manual") {
+    // A parent's subtasks keep their own order in every view (they list in
+    // it whatever the view sorts by), so moving among them always places.
+    if (order === "manual" || currentParent === parentId) {
       return {
         kind: "reorder",
         ref: { id: target.id, edge: lower ? "after" : "before" },
@@ -190,7 +192,6 @@ export function resolveListHover(input: {
         groupKey: null,
       };
     }
-    if (currentParent === parentId) return order === "sorted" ? { kind: "sorted", line } : null;
     // Joining another parent with no place to keep: a nest under it.
     return { kind: "nest", targetId: parentId };
   }
@@ -279,9 +280,18 @@ export function positionNextTo(
   const rest = allByPosition.filter((t) => t.id !== movingId);
   const i = rest.findIndex((t) => t.id === ref.id);
   if (i < 0) return null;
-  return ref.edge === "before"
-    ? betweenPositions(rest[i - 1]?.position ?? null, rest[i].position)
-    : betweenPositions(rest[i].position, rest[i + 1]?.position ?? null);
+  const at = rest[i].position;
+  // Keys can repeat across projects (a legacy collision): a neighbour with
+  // the ref's own key can't be split from it, so the nearest different key
+  // is the other bound (TV-U10; a tie used to land the task past the ref).
+  if (ref.edge === "before") {
+    let j = i - 1;
+    while (j >= 0 && rest[j].position >= at) j--;
+    return betweenPositions(rest[j]?.position ?? null, at);
+  }
+  let j = i + 1;
+  while (j < rest.length && rest[j].position <= at) j++;
+  return betweenPositions(at, rest[j]?.position ?? null);
 }
 
 /** Whether the task already sits at that spot in the one order. */

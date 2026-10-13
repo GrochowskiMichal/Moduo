@@ -183,6 +183,8 @@ type Props = {
   onAddSection?: (name: string) => void;
   onRenameSection?: (sectionId: string, name: string) => void;
   onDeleteSection?: (sectionId: string) => void;
+  /** ⏎ on the selected row: open it full (absent: ⏎ edits its title). */
+  onOpenTask?: (taskId: string) => void;
   /**
    * Where the groups you fold are remembered (per person, view and grouping,
    * on this device; research §2). Null: not remembered.
@@ -276,6 +278,7 @@ export function TaskListView({
   onAddSection,
   onRenameSection,
   onDeleteSection,
+  onOpenTask,
   collapseKey = null,
   api,
 }: Props) {
@@ -862,10 +865,11 @@ export function TaskListView({
     [dragOrder, api.tasks, drop],
   );
 
-  /** ⌥⇧↑/↓: one place up or down among its siblings, in the manual order. */
+  /** ⌥⇧↑/↓: one place up or down among its siblings, in the manual order
+   *  (a nested subtask in any order: its parent's subtasks keep their own). */
   const moveInOrder = useCallback(
     (task: Task, delta: 1 | -1) => {
-      if (dragOrder !== "manual") {
+      if (dragOrder !== "manual" && !nestedIds.has(task.id)) {
         refuseReorder();
         return;
       }
@@ -880,7 +884,7 @@ export function TaskListView({
       if (position === null) return;
       drop({ taskId: task.id, position }, task, delta < 0 ? "Moved up" : "Moved down");
     },
-    [dragOrder, refuseReorder, siblingsOf, api.tasks, drop],
+    [dragOrder, refuseReorder, siblingsOf, api.tasks, drop, nestedIds],
   );
 
   // The Queue's line-up is the queue's own (`task_queue`): a drag or a move
@@ -937,6 +941,18 @@ export function TaskListView({
           if (!selectedTask || !canEdit) return;
           e.preventDefault();
           activateGlyph(selectedTask, actions);
+          return;
+        case "open":
+          if (!selectedTask) return;
+          // A host with no full page (a story) keeps ⏎ as edit.
+          if (onOpenTask) {
+            e.preventDefault();
+            onOpenTask(selectedTask.id);
+            return;
+          }
+          if (!canEdit) return;
+          e.preventDefault();
+          setEditingId(selectedTask.id);
           return;
         case "edit":
           if (!selectedTask || !canEdit) return;
@@ -1025,6 +1041,7 @@ export function TaskListView({
       unnest,
       moveInOrder,
       moveInQueue,
+      onOpenTask,
     ],
   );
 

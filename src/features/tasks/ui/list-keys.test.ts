@@ -73,7 +73,7 @@ describe("listKeyAction (tasks-v2 Q1-1)", () => {
     expect(listKeyAction(press("x"))).toBe("toggle-done");
     expect(listKeyAction(press(" "))).toBe("toggle-done");
     expect(listKeyAction(press("e"))).toBe("edit");
-    expect(listKeyAction(press("Enter"))).toBe("edit");
+    expect(listKeyAction(press("Enter"))).toBe("open");
     expect(listKeyAction(press("c"))).toBe("capture");
     expect(listKeyAction(press("b"))).toBe("bucket");
     expect(listKeyAction(press("s"))).toBe("schedule");
@@ -137,7 +137,7 @@ describe("a row's own controls (tasks-v2 Q1-2)", () => {
       listKeyActionFor({ ...press(key, mods), target }, list);
 
     expect(on(list, " ")).toBe("toggle-done");
-    expect(on(list, "Enter")).toBe("edit");
+    expect(on(list, "Enter")).toBe("open");
     expect(on(list, "k", { meta: true })).toBeNull();
     // A row's toggle keeps Space/Enter; letters still drive the list.
     expect(on(a.toggle, " ")).toBeNull();
@@ -145,7 +145,7 @@ describe("a row's own controls (tasks-v2 Q1-2)", () => {
     expect(on(a.toggle, "x")).toBe("toggle-done");
     // The selected row's title speaks for the row; another row's doesn't.
     expect(on(a.title, " ")).toBe("toggle-done");
-    expect(on(a.title, "Enter")).toBe("edit");
+    expect(on(a.title, "Enter")).toBe("open");
     expect(on(b.title, " ")).toBeNull();
     // Keys typed in a portaled popover (React bubbles them to the list) are ignored —
     // Space, arrows and ⌘⌫ in its date field used to complete/move/delete the task.

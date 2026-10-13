@@ -1,6 +1,6 @@
 # Manual test checklist — TV-U10 List v3
 
-> Generated 2026-10-13 · branch `t/maciej/tv-u10-list` (landed on `t/maciej/tasks-v3-build`) · **Live-verified:** partial — on the local stack at 1440 × 900: section grouping by default with "1 of 4 · ends Oct 24", the "+" opening the capture into "Project › Design" and the new task landing at the top of Design, "Backlog · 1" and "+ Add section", late fixes on hover, ⇧S's status menu at the icon, Detailed's columns and headers lined up (measured to the pixel) with "+3" when the right panel is open; the rest is covered by unit and e2e tests (dnd 6/6, toolbar, trust-pass, offline, capture, sidebar, references, the 10k perf gate 5/5).
+> Generated 2026-10-13 · branch `t/maciej/tv-u10-list` (landed on `t/maciej/tasks-v3-build`) · **Live-verified:** partial — on the local stack at 1440 × 900: section grouping by default with "1 of 4 · ends Oct 24", the "+" opening the capture into "Project › Design" and the new task landing at the top of Design, "Backlog · 1" and "+ Add section", late fixes on hover, ⇧S's status menu at the icon, Detailed's columns and headers lined up (measured to the pixel) with "+3" when the right panel is open; the panel's subtasks reordered by drag and ⌥⇧↓ and ⏎ opening the full page (e2e on the local stack); the rest is covered by unit and e2e tests (detail, dnd 6/6, toolbar, trust-pass, offline, capture, sidebar, references, the 10k perf gate 5/5).
 > Run top-to-bottom; check off as you go. Each item is a step → what you should see → where.
 
 Set up: `bun run local:up`, `bun run env:local`, `bun run dev:web`, sign in as the local seed account. Make a project with a few tasks: one with a due date last week, one In progress, one done, one in Backlog.
@@ -11,6 +11,7 @@ Set up: `bun run local:up`, `bun run env:local`, `bun run dev:web`, sign in as t
 - [ ] **Do:** with Display → Completed: All, click a Won't do task's icon (crossed circle) → **Expect:** it reopens to To do (not Done) _(both)_
 - [ ] **Do:** select a row, press ⇧S → **Expect:** the status menu opens at its icon, the project's statuses grouped by category; pick one and it changes _(both)_
 - [ ] **Do:** right-click a row's icon → **Expect:** the status menu (not the row menu) _(both)_
+- [ ] **Do:** select a row, press ⏎ → **Expect:** the task opens full in the centre; Esc brings the List back; `e` instead edits the title in place _(both)_
 - [ ] **Do:** hover a row whose date cell is empty → **Expect:** a faint calendar glyph appears in the date column; clicking it opens the due date picker _(web)_
 - [ ] **Do:** hover the late task (due last week) → **Expect:** "Move · Won't do · Break down" appear over the end of its title; the title isn't cut shorter when you're not hovering; Break down selects the task and opens the panel's "Add a subtask…" line _(web)_
 - [ ] **Do:** hover any row → **Expect:** only the Focus mark, an empty date's glyph and a late row's fixes appear — no ⋯, grip or delete _(web)_
@@ -25,17 +26,23 @@ Set up: `bun run local:up`, `bun run env:local`, `bun run dev:web`, sign in as t
 - [ ] **Do:** in a project with no sections → **Expect:** a plain list ending with "+ Add section"; add "Design" → **Expect:** "No section" and "Design" headers appear _(both)_
 - [ ] **Do:** look at a section header → **Expect:** its name as typed, "1 of 4" (done of all) and "· ends <date>" when it has an end date; the "+" is always visible, ⋯ appears on hover with Rename… and Delete section _(both)_
 - [ ] **Do:** click a section's "+" → **Expect:** the capture opens filed into "Project › Section"; the new task lands at the top of that section _(both)_
-- [ ] **Do:** Group by Status, click "+" on In progress → **Expect:** the new task is created In progress _(both)_
+- [ ] **Do:** Group by Status, click "+" on In progress → **Expect:** the capture shows an "In progress" chip (× drops it) and the new task is created In progress; Done and Won't do have no "+" _(both)_
 - [ ] **Do:** in All, Group by Status → **Expect:** each "+" is dimmed with "Pick a project first"; Group by Project → "+" files into that project _(both)_
 - [ ] **Do:** drag a task from one section into another → **Expect:** it moves there, "Moved to <section>" with Undo _(web)_
 - [ ] **Do:** fold a group, reload → **Expect:** it stays folded (this device) _(both)_
 - [ ] **Do:** look at the end of a group with a Backlog task → **Expect:** "Backlog · 1 ›"; click → the Backlog task shows; Group by Status → Backlog is the last group, folded _(both)_
-- [ ] **Do:** delete a section from its ⋯ → **Expect:** its tasks move to No section; Undo brings the section back _(both)_
+- [ ] **Do:** with three Backlog tasks, open the line and press j through it → **Expect:** each Backlog task in turn, none jumping above the line _(both)_
+- [ ] **Do:** delete a section from its ⋯ → **Expect:** its tasks move to No section; Undo brings the section back with its tasks in it _(both)_
+
+## Subtasks
+- [ ] **Do:** open a task with three subtasks, drag the last subtask in the panel above the first → **Expect:** it moves there, "Moved up" with Undo _(web)_
+- [ ] **Do:** focus a subtask in the panel, press ⌥⇧↓ → **Expect:** it moves down one place and keeps the focus _(both)_
+- [ ] **Do:** in a project sorted by due date (or My tasks), with subtasks shown nested, select a subtask and press ⌥⇧↑ → **Expect:** it moves up among its siblings (no "Sorted by …" refusal) _(both)_
 
 ## States
 - [ ] **Do:** sign in fresh (or throttle the network) → **Expect:** nothing for a moment, then eight still placeholder rows (no shimmer), never "No tasks" _(web)_
 - [ ] **Do:** filter a project to nothing → **Expect:** "No tasks match", "N hidden by the filter / 2 filters" and Clear filters _(both)_
-- [ ] **Do:** open an archived project (sidebar ⋯ → Archived) → **Expect:** "View only" after the title, no New, icons don't respond, right-click offers Open · Copy link · Copy as text _(both)_
+- [ ] **Do:** open an archived project (sidebar ⋯ → Archived) → **Expect:** "View only" after the title, no New, icons don't respond (hovering one names the status), right-click offers Open · Copy link · Copy as text _(both)_
 - [ ] **Do:** go offline (devtools → Offline), check off a task → **Expect:** a small clock on that row until you're back online; other edits say "Offline" _(web)_
 
 ## Menus
