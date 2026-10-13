@@ -8,9 +8,21 @@
 // - Repeat: presets, Custom, and always one plain summary line.
 // Each value is the kit's PropertyValue opening one popover.
 
-import type { TaskReminderKind } from "@contracts/vocabularies";
-import { isOpenTask } from "@contracts/vocabularies";
-import { Bell, CalendarClock, Clock, Plus, Repeat, SkipForward, Timer, X } from "lucide-react";
+import type { TaskReminderKind, TaskStatusCategory } from "@contracts/vocabularies";
+import { isOpenTask, taskCategoryOf } from "@contracts/vocabularies";
+import {
+  Bell,
+  BellOff,
+  CalendarClock,
+  Clock,
+  History,
+  Plus,
+  Repeat,
+  RotateCcw,
+  SkipForward,
+  Timer,
+  X,
+} from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import { Button } from "../../../components/ui/button";
@@ -37,8 +49,15 @@ import {
 import { formatDayTime, formatDuration } from "../../../lib/time-format";
 import { cn } from "../../../lib/utils";
 import type { Assignee } from "../assignee-options";
+import { useAssignees } from "../assignees";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
-import { estimateOf, type Task, type TaskReminder, type TaskSession } from "../model";
+import {
+  estimateOf,
+  type Task,
+  type TaskCycle,
+  type TaskReminder,
+  type TaskSession,
+} from "../model";
 import {
   RECURRENCE_PRESETS,
   type RecurrencePreset,
@@ -53,6 +72,7 @@ import {
   WEEKDAYS,
   type WeekdayCode,
 } from "../repeat";
+import { cycleLine, historySummary } from "../repeat-history";
 import { formatMinutes, formatTracked, parseMinutes, timeRow } from "../time-format";
 import { AssigneeAvatar } from "./assignee-avatar";
 import { TaskTimeEntries } from "./task-time-entries";
@@ -432,6 +452,27 @@ function AddSession({
 
 // ── Reminder (your own) ───────────────────────────────────────────────────────
 
+/** Paused by Backlog or Won't do (TV-D12) and not sent yet. */
+export function isPausedReminder(r: Pick<TaskReminder, "suspendedAt" | "firedAt">): boolean {
+  return !!r.suspendedAt && !r.firedAt;
+}
+
+/** Why the paused reminders wait, and how they come back. */
+export function pausedNote(
+  category: TaskStatusCategory,
+  canRestore: boolean,
+  count: number,
+): string {
+  const them = count === 1 ? "it" : "them";
+  if (canRestore)
+    return "Paused while it sat in Backlog or Won’t do. Only times still ahead come back.";
+  if (category === "backlog")
+    return `Paused while it’s in Backlog. Move it to To do to restore ${them}.`;
+  if (category === "wont_do")
+    return `Paused while it’s in Won’t do. Move it to To do to restore ${them}.`;
+  return `Paused. Reopen it to restore ${them}.`;
+}
+
 /** "1 day before due" · "Oct 14, 3:00 PM". */
 export function reminderLabel(r: Pick<TaskReminder, "kind" | "at">, now = new Date()): string {
   if (r.kind === "day_before") return "1 day before due";
@@ -457,6 +498,14 @@ export function ReminderValue({
   const add = (kind: TaskReminderKind, when: string | null = null) => {
     api.addReminder(task.id, kind, when);
   };
+  // Backlog and Won't do pause reminders (TV-D12); they come back by asking,
+  // once the task is To do or In progress again.
+  const paused = reminders.filter(isPausedReminder);
+  const category = taskCategoryOf(task);
+  const canRestore = paused.length > 0 && (category === "todo" || category === "in_progress");
+  const firstLabel = first
+    ? `${reminderLabel(first)}${isPausedReminder(first) ? " · paused" : ""}`
+    : null;
   return (
     <Popover
       open={open}
@@ -468,8 +517,9 @@ export function ReminderValue({
       <PopoverTrigger asChild>
         <PropertyValue
           empty={!first}
-          icon={<Bell />}
-          aria-label={first ? `Reminder: ${reminderLabel(first)}` : "Reminder: add one"}
+          icon={first && isPausedReminder(first) ? <BellOff /> : <Bell />}
+          aria-label={firstLabel ? `Reminder: ${firstLabel}` : "Reminder: add one"}
+          className={first && isPausedReminder(first) ? "text-muted-foreground" : undefined}
           trailing={
             reminders.length > 1 ? (
               <span className="shrink-0 font-sans text-xs text-muted-foreground tabular-nums">
@@ -478,7 +528,7 @@ export function ReminderValue({
             ) : null
           }
         >
-          {first ? reminderLabel(first) : "Remind me"}
+          {firstLabel ?? "Remind me"}
         </PropertyValue>
       </PopoverTrigger>
       <PopoverContent align="start" className={cn("p-1", picking ? "w-72 p-0" : "w-64")}>
@@ -494,22 +544,57 @@ export function ReminderValue({
           <>
             {reminders.length > 0 ? (
               <ul aria-label="Your reminders" className="border-b border-hairline pb-1">
-                {reminders.map((r) => (
-                  <li
-                    key={r.id}
-                    className="group flex min-h-(--ctrl-h-sm) items-center gap-2 rounded-md px-2 font-sans text-sm hover:bg-state-hover"
-                  >
-                    <Bell className="size-icon-sm shrink-0 text-muted-foreground" aria-hidden />
-                    <span className="min-w-0 flex-1 break-words">{reminderLabel(r)}</span>
-                    <IconButton
-                      icon={X}
-                      label="Remove reminder"
-                      onClick={() => api.removeReminder(r.id)}
-                      className="opacity-0 focus-visible:opacity-100 group-hover:opacity-100"
-                    />
-                  </li>
-                ))}
+                {reminders.map((r) => {
+                  const isPaused = isPausedReminder(r);
+                  const Icon = isPaused ? BellOff : Bell;
+                  return (
+                    <li
+                      key={r.id}
+                      className="group flex min-h-(--ctrl-h-sm) items-center gap-2 rounded-md px-2 font-sans text-sm hover:bg-state-hover"
+                    >
+                      <Icon className="size-icon-sm shrink-0 text-muted-foreground" aria-hidden />
+                      <span
+                        className={cn(
+                          "min-w-0 flex-1 break-words",
+                          isPaused && "text-muted-foreground",
+                        )}
+                      >
+                        {reminderLabel(r)}
+                        {isPaused ? " · Paused" : ""}
+                      </span>
+                      <IconButton
+                        icon={X}
+                        label="Remove reminder"
+                        onClick={() => api.removeReminder(r.id)}
+                        className="opacity-0 focus-visible:opacity-100 group-hover:opacity-100"
+                      />
+                    </li>
+                  );
+                })}
               </ul>
+            ) : null}
+            {paused.length > 0 ? (
+              <div className="flex flex-col gap-0.5 border-b border-hairline py-1">
+                {canRestore ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="justify-start"
+                    onClick={() => {
+                      api.restoreReminders(task.id);
+                      setOpen(false);
+                    }}
+                  >
+                    <RotateCcw aria-hidden />
+                    {paused.length === 1
+                      ? "Restore the reminder"
+                      : `Restore ${paused.length} reminders`}
+                  </Button>
+                ) : null}
+                <p className="px-2 py-1 font-sans text-xs text-muted-foreground">
+                  {pausedNote(category, canRestore, paused.length)}
+                </p>
+              </div>
             ) : null}
             <div className="flex flex-col gap-0.5 pt-1">
               {(["hour_before", "day_before"] as const).map((kind) => (
@@ -891,6 +976,99 @@ export function RepeatValue({
               </>
             ) : null}
           </div>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/**
+ * A repeat's cycles (TV-D12's history; TV-U13b): a quiet "4 done · last Oct 10"
+ * beside the rule, opening each cycle, newest first — who closed it, and your
+ * own time in it (nobody sees anyone else's). Read when opened; viewers too.
+ */
+export function RepeatHistory({ task, api }: { task: Task; api: TasksModuleApi }) {
+  const [open, setOpen] = useState(false);
+  const [cycles, setCycles] = useState<TaskCycle[] | null>(null);
+  const [failed, setFailed] = useState(false);
+  const { byId, currentUserId } = useAssignees();
+  const summary = historySummary(api.completions, task.id);
+  // Read on open, and again when a cycle closes while it's open.
+  const doneCount = api.completions.filter((c) => c.taskId === task.id && !c.deletedAt).length;
+  const { taskHistory } = api;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a cycle closing (doneCount) re-reads it.
+  useEffect(() => {
+    if (!open) return;
+    let live = true;
+    setFailed(false);
+    taskHistory(task.id)
+      .then((rows) => {
+        if (live) setCycles(rows);
+      })
+      .catch(() => {
+        if (live) setFailed(true);
+      });
+    return () => {
+      live = false;
+    };
+  }, [open, task.id, taskHistory, doneCount]);
+  const nameOf = (id: string) => {
+    const person = byId(id);
+    const name = person?.fullName || person?.name || "";
+    return name ? (name.trim().split(/\s+/)[0] ?? name) : null;
+  };
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label={`Repeat history: ${summary}`}
+          className={cn(
+            "inline-flex min-h-(--ctrl-h-sm) items-center gap-1.5 rounded-md px-1.5 font-sans text-sm text-muted-foreground",
+            "transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 aria-expanded:bg-state-active",
+          )}
+        >
+          <History className="size-icon-sm shrink-0" aria-hidden />
+          {summary}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-72 p-1">
+        <p className="px-2 pt-1 pb-0.5 font-sans text-xs text-muted-foreground">
+          Each cycle, newest first. Only your own time shows.
+        </p>
+        {failed ? (
+          <p className="px-2 py-1.5 font-sans text-sm text-muted-foreground">
+            Couldn’t load the history.
+          </p>
+        ) : cycles === null ? (
+          <p className="px-2 py-1.5 font-sans text-sm text-muted-foreground">Loading…</p>
+        ) : cycles.length === 0 ? (
+          <p className="px-2 py-1.5 font-sans text-sm text-muted-foreground">
+            No cycle done or skipped yet.
+          </p>
+        ) : (
+          <ul aria-label="Cycles" className="flex max-h-64 flex-col overflow-y-auto">
+            {cycles.map((c) => {
+              const line = cycleLine(c, currentUserId, nameOf);
+              return (
+                <li
+                  key={`${c.kind}-${c.at}`}
+                  className="flex min-h-(--ctrl-h-sm) items-baseline gap-2 rounded-md px-2 py-0.5 font-sans text-sm"
+                >
+                  <span className="w-14 shrink-0 text-muted-foreground tabular-nums">
+                    {line.day}
+                  </span>
+                  <span className="min-w-0 flex-1 break-words">
+                    {line.what}
+                    {line.mine ? (
+                      <span className="text-muted-foreground"> · {line.mine}</span>
+                    ) : null}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
         )}
       </PopoverContent>
     </Popover>
