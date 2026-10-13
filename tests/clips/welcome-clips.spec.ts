@@ -26,7 +26,7 @@ import {
  * shrinks the frames with `sips`) against the local stack:
  *   bun run local:up && bun run env:local
  *   MODUO_TARGET=web ./node_modules/.bin/rsbuild dev --host 127.0.0.1 --port 8139
- *   E2E_BASE_URL=http://127.0.0.1:8139 bunx playwright test --project=clips
+ *   MODUO_CLIPS=1 E2E_BASE_URL=http://127.0.0.1:8139 bunx playwright test --project=clips
  * It uses its own person (studio@moduo.local) and a fresh workspace each run.
  */
 

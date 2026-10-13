@@ -44,3 +44,17 @@ Set up: `bun run local:up`, `bun run env:local`, `bun run dev:web`. You need a p
 - [ ] The frames are dark-themed; check they read well in the light theme, or record a light set.
 - [ ] Two real devices: answer on one, open Tasks on the other (signed desktop + web): no second welcome; the role's rows on the other device.
 - [ ] Re-record the frames (`tests/clips/welcome-clips.spec.ts`) once the module's visuals settle before release.
+
+## Polish later
+From the validator's one round (no BLOCKER or MAJOR; fixed now: `bun run e2e` no longer records the clips, the clips project needs `MODUO_CLIPS=1`; the starter line's double full stop).
+- [ ] **A later first open on a new device can miss the role's first view.** The page picks its opening place once the tasks load; if that happens before the preferences arrive, it opens the Inbox and remembers it (`tasks-plan-view.tsx`, the default-selection effect). Wait for `usePreferencesReady` there, or re-pick once when the role arrives and nothing was chosen. A new-device e2e with School or study (Upcoming) would show it.
+- [ ] **A later first open shows a PM's or creator's first project as a List,** not its Board (the default-selection effect uses only the place; apply the Board the way `openFirstView` does).
+- [ ] **The forward-only merge stays on the device.** When the cloud's copy lacks "seen", the device keeps it but doesn't push it back, so a third device or a cleared browser in that window can see the welcome again. Push the merged copy when it differs from the cloud's.
+- [ ] **A failed preferences read counts as "read".** On a new device whose read fails, the welcome can open. Mark the domain ready only after a real answer (the older seed-from-local path that runs after a failed read is worth a look at the same time).
+- [ ] **The e2e doesn't check the developer's Detailed rows** (assert a handle in a row after Software).
+- [ ] **No test for the shared-browser guard:** `applyFromCloud` with another person's sync meta must not carry their onboarding over.
+- [ ] Resending a starter with the id of one since deleted answers with the deleted row (the app mints a new id each time, so it never happens).
+- [ ] A workspace with only archived projects counts as empty for the teaching tasks; switching workspace in the middle of seeding sends the rest to the new workspace's module with the old Inbox id.
+- [ ] `TASKS_ROLES` lives in `features/tasks/onboarding.ts` (preferences JSON only), not `@contracts`; `lib/preferences.ts` imports it from features.
+- [ ] **Designer call:** closing the role question counts as Skip for good, and there's no place to change the role yet (the Settings rebuild, per the 🟠 box).
+- [ ] Visual baselines for the welcome dialog (role, basics, a step) once the look settles.

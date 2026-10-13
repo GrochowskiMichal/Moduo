@@ -179,7 +179,7 @@ function BasicsStep({
       </ul>
       {starterName ? (
         <p className="font-sans text-xs text-muted-foreground" data-slot="welcome-starter">
-          {starterName} is in your templates: the sidebar’s ⋯, then New project from template….
+          {starterName} is in your templates: the sidebar’s ⋯, then New project from template…
         </p>
       ) : null}
       <DialogFooter>

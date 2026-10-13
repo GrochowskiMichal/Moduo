@@ -304,13 +304,15 @@ _Built and landed locally on `t/maciej/tasks-v3-build` (🟠 LOCAL BUILD MODE in
 
 **Tasks' welcome** (`ui/tasks-welcome-dialog.tsx`, `ui/use-tasks-welcome.ts`): the basics (three lines; Explore on my own · Learn more), then three steps with clips, Back · Next · Done, dots, Close, Esc. It opens by itself once per person: decided only after this session read the person's synced preferences (`usePreferencesReady`, a "read" signal from `reconcileDomain`) and the task store reached the server; seen the moment it shows; never for someone who already made tasks in the workspace; `tasksOnboarding` in the synced preferences, moving only forward on a cloud read (`mergeOnboardingForward`). The owner of an empty workspace gets three teaching tasks in their Inbox, once per workspace, once its Inbox exists. Reopens at the basics from the sidebar's ⋯ and Help → What's in Tasks (`welcome-request.ts`, any page). The Focus step uses the Focus empty state's own words (`FOCUS_WHAT_IT_IS`, `FocusKeyHints`).
 
-**Clips:** `tests/clips/welcome-clips.spec.ts` (Playwright project `clips`, by hand) drives the real app in a sample workspace and writes 10 frames of the whole window, bottom bar included (`public/welcome/tasks-<step>-<frame>.jpg`, 960 px, ~55 KB each); the dialog cross-fades them, still under reduced motion.
+**Clips:** `tests/clips/welcome-clips.spec.ts` (Playwright project `clips`, only with `MODUO_CLIPS=1`, by hand) drives the real app in a sample workspace and writes 10 frames of the whole window, bottom bar included (`public/welcome/tasks-<step>-<frame>.jpg`, 960 px, ~55 KB each); the dialog cross-fades them, still under reduced motion.
 
 **Starter templates:** `project_templates_op_starter(workspace, {id, starter})` builds Project kickoff, Monthly close, Client onboarding or Episode on the server from a key (`STARTER_TEMPLATES` in `@contracts/vocabularies`, drift gate), the caller's, private, never shareable; Tasks edit needed; API keys refused; a resend makes nothing twice.
 
 **Tests:** `supabase/tests/templates_starter.test.sql` (20), `onboarding.test.ts` (13), `tasks-welcome-dialog.test.tsx` (13: the dialog's pages, the once-per-person rules, seeding, a role's answer, Help), `preferences.test.ts` (sanitising and the forward-only merge), `default-view.test.ts`, `view-prefs.test.ts`, `help-menu.test.tsx`, `bucket-rail.test.tsx`, the drift gate; `tests/onboarding.spec.ts` (2 e2e: the whole first run, once per person across a reload and a second browser, reopen from the ⋯ and Help; a PM's starter) on the local stack. `signInPage` now marks the welcome seen unless `{ welcome: true }`.
 
 **Live-verified** on the local stack (checklist).
+
+**Reviews:** one validator round (the lighter gate): no BLOCKER or MAJOR; the clips project now needs `MODUO_CLIPS=1` so `bun run e2e` never rewrites the frames; the MINOR/NIT findings are under "Polish later" in the checklist.
 
 **Records:** choices U17-1…9 in decisions/tasks.md; gotchas in supabase.md (Prefs sync, 1) and ui.md "Onboarding (TV-U17)" (2); checklist [docs/testing/t-maciej-tv-u17-onboarding.md](../docs/testing/t-maciej-tv-u17-onboarding.md).
 
