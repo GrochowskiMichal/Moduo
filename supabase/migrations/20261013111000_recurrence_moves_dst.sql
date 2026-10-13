@@ -371,7 +371,10 @@ BEGIN
       AND ((x.status = 'done'
             AND jsonb_typeof(x.recurrence -> 'nextOccurrence') IS DISTINCT FROM 'null'
             AND coalesce(public.tasks__try_ts(x.recurrence ->> 'nextOccurrence'), '-infinity'::timestamptz)
-                < p_now + interval '26 hours')
+                < p_now + interval '26 hours'
+                  -- …and the days a session comes before the due date.
+                  + make_interval(days => greatest(0, least(366,
+                      coalesce(x.due_on - (x.scheduled_at AT TIME ZONE 'UTC')::date, 0)))))
            OR (x.status IN ('todo', 'in_progress')
                AND x.status_category IS DISTINCT FROM 'backlog'
                AND coalesce(x.recurrence ->> 'mode', '') <> 'after_completion'
