@@ -448,12 +448,12 @@ describe("Board (U1-4)", () => {
   }
   const card = (title: string) => screen.getByText(title).closest("[data-task-id]") as HTMLElement;
 
-  it("columns flex between 280 and 400 px", () => {
+  it("cards keep one fixed width per density, and so do their columns (default o, TV-U11)", () => {
     renderBoard([task("a")]);
     const column = card("Task a").closest("section") as HTMLElement;
-    expect(column.className).toContain("min-w-70");
-    expect(column.className).toContain("max-w-100");
-    expect(column.className).toContain("flex-1");
+    expect(column.className).toContain("w-(--board-col-w)");
+    expect(column.className).toContain("shrink-0");
+    expect(card("Task a").className).toContain("w-(--board-card-w)");
   });
 
   it("a card has one quiet meta line, and selection is the tint", () => {
@@ -477,7 +477,10 @@ describe("Board (U1-4)", () => {
     renderBoard([task("a"), task("d", { status: "done" })]);
     expect(screen.queryByText("Task d")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "1 completed, show" }));
-    expect(card("Task d").className).toContain("opacity-50");
+    // The kit card fades its title and meta, never its status icon (it reopens).
+    expect(card("Task d").hasAttribute("data-done")).toBe(true);
+    const title = card("Task d").querySelector('[data-slot="item-card-title"] > span:last-child');
+    expect(title?.className).toContain("group-data-[done]/card:opacity-50");
     act(() => {});
   });
 

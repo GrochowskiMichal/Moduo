@@ -34,8 +34,8 @@ export type ModuleReadResult =
  * `sections`, `teams` and `teamMembers`) plus every completion (TV-D8),
  * work session, your own reminders and every Waiting on… entry (TV-D10),
  * your own Focus runs (TV-F6), your templates and the shared ones,
- * with their bodies (TV-D15), and your own agent sessions and import runs
- * (TV-D16),
+ * with their bodies (TV-D15), your own time entries (TV-D14), and your own
+ * agent sessions and import runs (TV-D16),
  * specs/tasks-v3.md §Assumptions #26. Every new tasks table joins here in
  * the block that creates it. A cut read joins the bundle's `truncated` list,
  * never silently.
@@ -59,6 +59,10 @@ export async function readTasksExport(
     exportTemplates?(
       workspaceId: string,
     ): Promise<{ templates: unknown[]; truncated: readonly unknown[] }>;
+    /** Your own time entries, with their days and notes (TV-D14). */
+    exportTimeEntries?(
+      workspaceId: string,
+    ): Promise<{ entries: unknown[]; truncated: readonly unknown[] }>;
     /** Your own agent sessions and import runs (TV-D16). */
     listMyAgentSessions?(workspaceId: string): Promise<unknown[]>;
     listImports?(workspaceId: string): Promise<unknown[]>;
@@ -69,20 +73,33 @@ export async function readTasksExport(
     listMyRuns(workspaceId: string): Promise<{ runs: unknown[]; truncated: readonly unknown[] }>;
   },
 ): Promise<Record<string, unknown>> {
-  const [bundle, read, sessions, reminders, waiting, runs, templates, agentSessions, imports] =
-    await Promise.all([
-      tasks.list(workspaceId),
-      tasks.listCompletions(workspaceId),
-      tasks.listSessions(workspaceId),
-      tasks.listReminders(workspaceId),
-      tasks.listWaiting(workspaceId),
-      focus ? focus.listMyRuns(workspaceId) : Promise.resolve({ runs: [], truncated: [] }),
-      tasks.exportTemplates
-        ? tasks.exportTemplates(workspaceId)
-        : Promise.resolve({ templates: [], truncated: [] }),
-      tasks.listMyAgentSessions ? tasks.listMyAgentSessions(workspaceId) : Promise.resolve([]),
-      tasks.listImports ? tasks.listImports(workspaceId) : Promise.resolve([]),
-    ]);
+  const [
+    bundle,
+    read,
+    sessions,
+    reminders,
+    waiting,
+    runs,
+    templates,
+    time,
+    agentSessions,
+    imports,
+  ] = await Promise.all([
+    tasks.list(workspaceId),
+    tasks.listCompletions(workspaceId),
+    tasks.listSessions(workspaceId),
+    tasks.listReminders(workspaceId),
+    tasks.listWaiting(workspaceId),
+    focus ? focus.listMyRuns(workspaceId) : Promise.resolve({ runs: [], truncated: [] }),
+    tasks.exportTemplates
+      ? tasks.exportTemplates(workspaceId)
+      : Promise.resolve({ templates: [], truncated: [] }),
+    tasks.exportTimeEntries
+      ? tasks.exportTimeEntries(workspaceId)
+      : Promise.resolve({ entries: [], truncated: [] }),
+    tasks.listMyAgentSessions ? tasks.listMyAgentSessions(workspaceId) : Promise.resolve([]),
+    tasks.listImports ? tasks.listImports(workspaceId) : Promise.resolve([]),
+  ]);
   const cut = (bundle as { truncated?: unknown }).truncated;
   return {
     ...bundle,
@@ -92,6 +109,7 @@ export async function readTasksExport(
     waiting: waiting.waiting,
     focusRuns: runs.runs,
     templates: templates.templates,
+    timeEntries: time.entries,
     agentSessions,
     imports,
     truncated: [
@@ -102,6 +120,7 @@ export async function readTasksExport(
       ...waiting.truncated,
       ...runs.truncated,
       ...templates.truncated,
+      ...time.truncated,
     ],
   };
 }

@@ -19,6 +19,14 @@ pub async fn open_external_url(url: String) -> Result<(), String> {
         .map_err(|e| format!("open_external_url_failed: {e}"))
 }
 
+/// Open the system print dialog for the calling window (TV-D14): the time report's
+/// "Export PDF" and the view's print layout. WKWebView ignores `window.print()`, so
+/// the webview asks Rust; the dialog's "Save as PDF" makes the file. No input.
+#[tauri::command]
+pub fn print_page(window: tauri::WebviewWindow) -> Result<(), String> {
+    window.print().map_err(|e| format!("print_failed: {e}"))
+}
+
 /// Mirror the webview's `keepInMenuBar` preference (TV-D12, on by default): when on,
 /// closing the main window hides it and Moduo keeps running in the menu bar, so
 /// reminders still arrive. Pushed on boot and on every toggle.

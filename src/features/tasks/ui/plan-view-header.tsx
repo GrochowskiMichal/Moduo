@@ -20,6 +20,8 @@ export type PlanHeaderControls = {
   filter?: ReactNode;
   /** The Display menu. */
   display?: ReactNode;
+  /** The view's ⋯: Copy as text · Export view as CSV · Print (TV-D14). */
+  more?: ReactNode;
   /** The active-filter row under the toolbar, when a filter is on. */
   activeFilters?: ReactNode;
   /** "Sorted by due date · Back to manual order", when a project view is
@@ -52,7 +54,7 @@ export function PlanViewHeader({
   canEdit: boolean;
   onRequestCapture: () => void;
 }) {
-  const { count, search, filter, display, activeFilters, sortedNote } = controls;
+  const { count, search, filter, display, more, activeFilters, sortedNote } = controls;
   return (
     <div className="mb-3 shrink-0 space-y-1.5">
       <Toolbar gap="snug">
@@ -74,6 +76,7 @@ export function PlanViewHeader({
           {search}
           {filter}
           {display}
+          {more}
         </Toolbar.Group>
         <ToolbarSeparator />
         <ViewSwitcher view={view} onViewChange={onViewChange} />

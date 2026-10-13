@@ -20,10 +20,12 @@ import {
   taskRowSchema,
   taskSessionRowSchema,
   taskTimeAnswerSchema,
+  taskTimeEntryRowSchema,
   taskTimeTotalsRowSchema,
   taskWaitingRowSchema,
   teamMemberRowSchema,
   teamRowSchema,
+  timeReportRowSchema,
 } from "@contracts/rows";
 import {
   legacyTaskStatus,
@@ -54,11 +56,14 @@ import type {
   TaskQueueEntry,
   TaskReminder,
   TaskSession,
+  TaskTimeEntry,
   TaskTimeResult,
   TaskTimeTotals,
   TaskWaitingEntry,
   Team,
   TeamMember,
+  TimeReportRow,
+  TrackTimeInput,
 } from "../features/tasks/model";
 import type { CommentMark } from "./sync/types";
 
@@ -439,6 +444,63 @@ export function taskTimeTotalsRowToModel(raw: unknown): TaskTimeTotals {
     mySeconds: r.my_seconds,
     myWaitingSeconds: r.my_waiting_seconds,
     mySecondsSince: r.my_seconds_since ?? null,
+  };
+}
+
+/**
+ * TV-D14's arguments to `tasks_op_track_time`, only those a save uses, so a
+ * database before TV-D14 still takes every older save (PostgREST matches a
+ * function by the names sent).
+ */
+export function trackTimeExtras(input: TrackTimeInput): Record<string, string | null> {
+  const out: Record<string, string | null> = {};
+  if (input.on !== undefined && input.on !== null) out.p_on = input.on;
+  if (input.note !== undefined && input.note !== null) out.p_note = input.note;
+  if (input.runId) out.p_run_id = input.runId;
+  if (input.reason) out.p_reason = input.reason;
+  return out;
+}
+
+/** A date column's day (YYYY-MM-DD), or null. */
+function dayOf(value: string | null | undefined): string | null {
+  return value && /^\d{4}-\d{2}-\d{2}/.test(value) ? value.slice(0, 10) : null;
+}
+
+/** Map one of your own `task_time_entries` rows (TV-D3; TV-D14's columns). */
+export function taskTimeEntryRowToModel(raw: unknown): TaskTimeEntry {
+  const r = requireRow(taskTimeEntryRowSchema, raw, "time entry");
+  return {
+    id: r.id,
+    taskId: r.task_id,
+    kind: r.kind,
+    seconds: r.seconds,
+    startedAt: r.started_at ?? null,
+    endedAt: r.ended_at ?? null,
+    entryOn: dayOf(r.entry_on),
+    note: r.note ?? null,
+    reason: r.reason ?? null,
+    runId: r.run_id ?? null,
+    createdAt: r.created_at,
+  };
+}
+
+/** Map one row of `tasks_time_report` (TV-D14). */
+export function timeReportRowToModel(raw: unknown): TimeReportRow {
+  const r = requireRow(timeReportRowSchema, raw, "time report row");
+  return {
+    entryId: r.entry_id,
+    taskId: r.task_id,
+    taskTitle: r.task_title,
+    projectId: r.project_id ?? null,
+    projectName: r.project_name ?? null,
+    projectIsInbox: r.project_is_inbox === true,
+    userId: r.user_id,
+    isMine: r.is_mine,
+    day: dayOf(r.entry_day) ?? r.entry_day,
+    seconds: r.seconds,
+    kind: r.kind,
+    reason: r.reason ?? null,
+    note: r.note ?? null,
   };
 }
 

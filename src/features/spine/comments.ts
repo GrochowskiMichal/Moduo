@@ -5,6 +5,7 @@
 // DOM or a runtime.
 
 import type { SpineComment } from "@/lib/runtime.types";
+import { formatDate } from "@/lib/time-format";
 import { replaceSlashDates } from "./grammar";
 import { dateUri, referenceUri, splitReferenceText } from "./references/text";
 import type { ReferenceRef } from "./references/types";
@@ -275,5 +276,5 @@ export function relativeTime(iso: string, now: number = Date.now()): string {
   if (h < 24) return `${h}h ago`;
   const d = Math.round(h / 24);
   if (d < 7) return `${d}d ago`;
-  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return formatDate(iso, new Date(now));
 }

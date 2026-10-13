@@ -2,7 +2,8 @@
 // into RF-1): `@` mentions people and things, `#` is tags, `/` runs commands.
 // One tokenizer, shared by capture (the task title line, the search box) and
 // prose (descriptions, comments, notes), so a symbol means the same thing
-// wherever it is typed. Pure: no React, no runtime, no Lexical.
+// wherever it is typed. Pure: no runtime, no Lexical; "next week" reads the
+// week start from Time & region (TV-D14).
 //
 // The rules every surface follows:
 // - A symbol only counts at the start of the text or after whitespace, so
@@ -13,6 +14,8 @@
 //   date chip that reads "Tomorrow" while that's true (33a).
 // - A task handle (`MOD-142`) is recognised only for the workspace's own keys,
 //   so `UTF-8` or `COVID-19` never turn into links.
+
+import { getResolvedTimeRegion } from "../../lib/time-region";
 
 export type Sigil = "@" | "#" | "/";
 
@@ -131,10 +134,14 @@ export function isoDay(d: Date): string {
 
 /**
  * The day a command names, as `YYYY-MM-DD` in the device's zone; null for
- * `/date`, which asks. "Next week" is the coming Monday (the week starts on
- * Monday until Settings → Time & region lands, TV-D14).
+ * `/date`, which asks. "Next week" is the first day of the coming week, where
+ * Settings → Time & region starts it (TV-D14; Monday on most devices).
  */
-export function dateCommandDay(id: DateCommandId, now: Date = new Date()): string | null {
+export function dateCommandDay(
+  id: DateCommandId,
+  now: Date = new Date(),
+  weekStartsOn: number = getResolvedTimeRegion().weekStartsOn,
+): string | null {
   const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   if (id === "today") return isoDay(d);
   if (id === "tomorrow") {
@@ -142,8 +149,8 @@ export function dateCommandDay(id: DateCommandId, now: Date = new Date()): strin
     return isoDay(d);
   }
   if (id === "next-week") {
-    const toMonday = (8 - d.getDay()) % 7 || 7;
-    d.setDate(d.getDate() + toMonday);
+    const toWeekStart = (7 + weekStartsOn - d.getDay()) % 7 || 7;
+    d.setDate(d.getDate() + toWeekStart);
     return isoDay(d);
   }
   return null;

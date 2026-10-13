@@ -35,6 +35,7 @@ import { EmptyState } from "../../../components/ui/empty-state";
 import { Kbd } from "../../../components/ui/kbd";
 import { Separator } from "../../../components/ui/separator";
 import { formatDate } from "../../../lib/time-format";
+import { useTimeRegion } from "../../../lib/time-region";
 import { cn } from "../../../lib/utils";
 import { useReference } from "../../spine/references/context";
 import { activityActorName } from "../activity";
@@ -97,6 +98,8 @@ export const TASK_DETAIL_REFRESH_EVENT = "moduo:task:detail:refresh";
 
 export function TaskDetailPanel(props: Props) {
   const { task, canEdit, onRequestCapture } = props;
+  // Every date and time in the panel redraws when Time & region changes (TV-D14).
+  useTimeRegion();
   if (!task) return <DetailEmptyState canEdit={canEdit} onRequestCapture={onRequestCapture} />;
   // Key on id so every local draft (title, revealed rows, feed fold) resets
   // when the selection changes.

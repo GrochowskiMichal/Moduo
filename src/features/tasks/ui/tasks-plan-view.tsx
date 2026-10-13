@@ -45,6 +45,7 @@ import {
   takeEntityOpenIntent,
 } from "../../../lib/entity-open";
 import {
+  currentPreferences,
   type TasksSidebarHideable,
   updatePreferences,
   usePreferencesValue,
@@ -52,6 +53,7 @@ import {
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { useWorkspaceStore } from "../../../lib/sync/react";
 import { UNDO_TOAST_MS, undoToast } from "../../../lib/undo-toast";
+import { readViewPrefs, writeViewPrefs } from "../../../lib/view-prefs";
 import { HubDropZone } from "../../contacts/ui/hub-drop-zone";
 import { consumeFocusViewRequest, FOCUS_VIEW_REQUEST_EVENT } from "../../focus/view-request";
 import { looksLikeHandle } from "../../spine/grammar";
@@ -72,7 +74,15 @@ import { createLinkWithToast } from "../../spine/ui/drop-link-toast";
 import { WorkspaceContext } from "../../workspaces/workspace-context";
 import { useAssignees } from "../assignees";
 import { myTasksScope, openCount, resolveDefaultSelection } from "../default-view";
-import { nextHeaderSort, orderTasks, type TaskLayout, tasksDisplayDefaults } from "../display";
+import {
+  nextHeaderSort,
+  orderTasks,
+  sanitizeTasksView,
+  type TaskLayout,
+  tasksDisplayDefaults,
+  tasksDisplayKey,
+  tasksViewDefaults,
+} from "../display";
 import {
   asRailDropTarget,
   isSideDroppable,
@@ -86,6 +96,7 @@ import {
 import { type CaptureSeed, showsArchived, statusesLetThrough } from "../filters";
 import { todayStr } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
+import type { ListExportContext } from "../list-export";
 import type { GroupAdd } from "../list-group-add";
 import { type Bucket, isDrifted, PRIVATE_PROJECT_LABEL, type Task } from "../model";
 import {
@@ -97,10 +108,11 @@ import {
   TEAM_BLOCK_ROWS,
   teamBlocks,
 } from "../my-tasks";
+import { defaultRowsFor, firstViewFor } from "../onboarding";
 import { showsSortedNote, sortedByLabel } from "../order";
+import { handleLabel } from "../row-layout";
 import { resolveTasksDeepLink, taskIdForHandle } from "../search";
 import { projectDeleteSummary, projectOpenWork } from "../sidebar";
-import { STATUS_KEY_LABELS, type StatusKey } from "../statuses";
 import { useTemplateActions } from "../templates/ui/use-template-actions";
 import { sanitizeTimelineZoom, type TimelineZoom } from "../timeline-geometry";
 import { ArchivedProjectBanner, ArchivedProjectsView } from "./archived-projects-view";
@@ -131,10 +143,14 @@ import { TaskFullPage } from "./task-full-page";
 import { TaskListView } from "./task-list-view";
 import { TaskTimelineView } from "./task-timeline-view";
 import { TaskListSkeleton } from "./task-view-states";
+import { TasksWelcomeDialog } from "./tasks-welcome-dialog";
 import { useUpcomingView } from "./upcoming-view";
+import { boardDropName } from "./use-board-folds";
 import { useTasksDisplay } from "./use-tasks-display";
 import { useTasksFilters } from "./use-tasks-filters";
+import { useTasksWelcome } from "./use-tasks-welcome";
 import { AllEmpty, MyTasksEmpty, UpcomingEmpty, WontDoEmpty } from "./view-empty-states";
+import { ViewExportMenu } from "./view-export-menu";
 
 type Props = {
   api: TasksModuleApi;
@@ -225,7 +241,10 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       return next;
     });
   }, []);
-  const sidebarPrefs = usePreferencesValue().tasksSidebar;
+  const preferences = usePreferencesValue();
+  const sidebarPrefs = preferences.tasksSidebar;
+  // The role question's answer (TV-U17): where Tasks first opens, the rows.
+  const onboardingRole = preferences.tasksOnboarding.role;
   const hiddenRows = useMemo(() => new Set(sidebarPrefs.hidden), [sidebarPrefs.hidden]);
   const pinnedIds = sidebarPrefs.pinned[workspaceId] ?? EMPTY_IDS;
   const toggleHiddenRow = useCallback(
@@ -376,6 +395,35 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     window.addEventListener(FOCUS_VIEW_REQUEST_EVENT, onRequest);
     return () => window.removeEventListener(FOCUS_VIEW_REQUEST_EVENT, onRequest);
   }, [openFocus]);
+
+  // Tasks' welcome and the role question (TV-U17). A role's first view can
+  // be a project's Board: that project's Display remembers Board, then it
+  // opens.
+  const isWorkspaceOwner = useContext(WorkspaceContext)?.selectedWorkspace?.role === "owner";
+  const openFirstView = useCallback(
+    ({ selection: place, board }: { selection: string; board: boolean }) => {
+      if (board) {
+        const key = tasksDisplayKey(workspaceId, place);
+        const defaults = tasksViewDefaults(
+          place,
+          legacyLayout,
+          defaultRowsFor(currentPreferences().tasksOnboarding.role),
+        );
+        const prefs = readViewPrefs(key, defaults, (raw, d) => sanitizeTasksView(raw, d, place));
+        writeViewPrefs(key, { ...prefs, layout: "board" });
+      }
+      setFullPageId(null);
+      pickSelection(place);
+    },
+    [workspaceId, legacyLayout, pickSelection],
+  );
+  const welcome = useTasksWelcome({
+    api,
+    runtime,
+    workspaceId,
+    isOwner: isWorkspaceOwner,
+    onFirstView: openFirstView,
+  });
   useEffect(() => {
     if (api.loading) return;
     if (resolvedForRef.current === workspaceId) return;
@@ -398,9 +446,16 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
         lastBucket: readLS(workspaceId, "lastBucket"),
         bucketIds,
         inboxId,
+        // A first open follows onboarding (TV-U17): the role's first view.
+        firstOpen: onboardingRole
+          ? firstViewFor(
+              onboardingRole,
+              buckets.map((b) => b.id),
+            ).selection
+          : null,
       }),
     );
-  }, [api.loading, workspaceId, inboxId, buckets, inboundPending]);
+  }, [api.loading, workspaceId, inboxId, buckets, inboundPending, onboardingRole]);
 
   // My tasks is always in the sidebar (tasks-v3 §3; TV-U15 retires
   // tasks-v2's "two or more members" rule): its status groups answer "what am
@@ -502,7 +557,10 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   // the one selected.
   const linkedTaskId =
     revealRequest && revealRequest.id === selectedTaskId ? revealRequest.id : null;
-  const groupChoices = useMemo(() => ({ teams: api.teams.length > 0 }), [api.teams.length]);
+  const groupChoices = useMemo(
+    () => ({ teams: api.teams.length > 0, areas: api.areas.length > 0 }),
+    [api.teams.length, api.areas.length],
+  );
   // The Inbox opened by its id is still the Inbox: its Display (no Section
   // grouping, its own saved choices) is the Inbox's.
   const displayScope = inboxId && selection === inboxId ? "inbox" : selection;
@@ -513,6 +571,8 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     linkedTaskId,
     legacyLayout,
     groupChoices,
+    // A view that remembers no Display starts on the role's rows (TV-U17).
+    defaultRowsFor(onboardingRole),
   );
   const isHiddenByDisplay = tasksDisplay.isHidden;
   const view: PlanView = tasksDisplay.display.layout;
@@ -1039,6 +1099,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
             }
           : undefined
       }
+      onOpenWelcome={welcome.reopen}
       navRef={railNavRef}
       dropAccepts={railAccepts}
     />
@@ -1236,6 +1297,22 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     () => setDisplay({ ...display, order: "manual" }),
     [setDisplay, display],
   );
+  // Getting the list out (TV-D14, default f): what the view shows, in its order.
+  const exportContext: ListExportContext = {
+    projectName: bucketNameById,
+    assigneeName: (id) => {
+      if (!id) return null;
+      const person = assignees.find((a) => a.userId === id);
+      return person ? person.fullName || person.name : null;
+    },
+    handleOf: (task) => handleLabel(taskKey, task.number),
+  };
+  const shownTasks = () =>
+    orderTasks(
+      scopeTasks.filter((t) => !isHiddenByDisplay(t)),
+      display.order,
+      display.orderDir,
+    );
   // The view's extra groups (My tasks' team block, the Inbox's snoozed) are
   // around the view, not in its count (TV-U15).
   const viewExtraGroups: readonly ListExtraGroup[] =
@@ -1254,6 +1331,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     search: filtering.search,
     filter: filtering.filter,
     display: tasksDisplay.displayControl,
+    more: <ViewExportMenu tasks={shownTasks} title={scopeTitle} context={exportContext} />,
     activeFilters: filtering.activeFilters,
     sortedNote:
       view !== "timeline" && order !== "manual" && showsSortedNote(selection, order) ? (
@@ -1418,6 +1496,8 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
         {...displayProps}
         dndMode="external"
         boardGroupBy={tasksDisplay.display.boardGroup}
+        lanes={tasksDisplay.display.boardLanes}
+        description={tasksDisplay.display.cardDescription === "preview"}
         statusFilter={statusFilter}
         onManualOrder={backToManualOrder}
         onAddStatus={
@@ -1427,6 +1507,18 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
             ? () => setStatusesEditor({ projectId: selection, addingTo: "in_progress" })
             : undefined
         }
+        onEditStatuses={
+          canEdit && buckets.some((b) => b.id === selection)
+            ? () => setStatusesEditor({ projectId: selection, addingTo: null })
+            : undefined
+        }
+        // The Board's own wiring (TV-U11): handles, ⏎ to the full page, folds.
+        taskKey={taskKey}
+        onOpenTask={setFullPageId}
+        foldKey={lsKey(
+          workspaceId,
+          `folds:${api.currentUserId ?? "anon"}:${selection}:board:${tasksDisplay.display.boardGroup}`,
+        )}
       />
     ) : view === "timeline" ? (
       <TaskTimelineView {...sharedViewProps} zoom={timelineZoom} onZoomChange={setTimelineZoom} />
@@ -1538,10 +1630,8 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       if (id === `${RAIL_DROP_PREFIX}queue`) return "Focus";
       if (id === `${RAIL_DROP_PREFIX}mine`) return "My tasks";
       if (id.startsWith("link:")) return "the open task, to link them";
-      if (id.startsWith("col:status:")) {
-        return STATUS_KEY_LABELS[id.slice("col:status:".length) as StatusKey] ?? null;
-      }
-      if (id.startsWith("col:bucket:")) return bucketNameById(id.slice("col:bucket:".length));
+      // A Board column or lane cell: the name the board registered (TV-U11).
+      if (id.startsWith("col:")) return boardDropName(id);
       return taskName(id);
     };
     return taskDragAnnouncements({ taskName: (id) => taskName(id) ?? "the task", targetName });
@@ -1919,6 +2009,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
           if (frontierOfferTaskId) api.addToQueue(frontierOfferTaskId);
         }}
       />
+      <TasksWelcomeDialog welcome={welcome} />
     </ReferenceHostProvider>
   );
 }

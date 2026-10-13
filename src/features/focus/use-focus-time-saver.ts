@@ -10,6 +10,7 @@ import { useAuth } from "../../providers/auth-provider";
 import { useWorkspace } from "../../providers/workspace-provider";
 import { formatAwaySpan } from "./away-copy";
 import { registerFocusFlushSink } from "./engine";
+import { getFocusRunState } from "./run";
 import { createFocusTimeSink } from "./time-sink";
 
 export function useFocusTimeSaver(): void {
@@ -30,6 +31,13 @@ export function useFocusTimeSaver(): void {
         workspaceId: selectedWorkspaceId,
         canEdit: () => canEditRef.current,
         trackTime: (input) => rt.tasks.trackTime(input),
+        // The entry remembers its run (TV-D14): the open one, else the one
+        // that just ended (a save can land inside Stop's Undo window).
+        runId: () => {
+          const { run, ended } = getFocusRunState();
+          const source = run ?? ended;
+          return source && source.workspaceId === selectedWorkspaceId ? source.id : null;
+        },
         onGone: (seconds) =>
           toast(`${formatAwaySpan(seconds)} of focus time couldn't be saved`, {
             description:

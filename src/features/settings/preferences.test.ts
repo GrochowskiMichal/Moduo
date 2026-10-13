@@ -6,6 +6,7 @@ import {
   DEFAULT_NOTIFICATION_PREFS,
   DEFAULT_PREFERENCES,
   isNotificationEnabled,
+  mergeOnboardingForward,
   notificationTypeForOp,
   readLastRoute,
   resetLandingRedirectForTest,
@@ -43,6 +44,7 @@ describe("DEFAULT_PREFERENCES", () => {
       keepInMenuBar: true,
       tasksSidebar: { hidden: [], pinned: {} },
       tasksInbox: { snoozed: {} },
+      tasksOnboarding: { role: null, roleAt: null, welcomeSeenAt: null, seeded: {} },
     });
   });
 });
@@ -88,6 +90,7 @@ describe("sanitizePreferences", () => {
       keepInMenuBar: true,
       tasksSidebar: { hidden: [], pinned: {} },
       tasksInbox: { snoozed: {} },
+      tasksOnboarding: { role: null, roleAt: null, welcomeSeenAt: null, seeded: {} },
     });
   });
 
@@ -178,10 +181,70 @@ describe("sanitizePreferences", () => {
     expect(sanitizePreferences({ tasksInbox: "nope" }).tasksInbox).toEqual({ snoozed: {} });
   });
 
+  it("keeps the role and the welcome's stamps, dropping bad ones (TV-U17)", () => {
+    expect(
+      sanitizePreferences({
+        tasksOnboarding: {
+          role: "developer",
+          roleAt: "2026-10-13T09:00:00.000Z",
+          welcomeSeenAt: "2026-10-13T09:00:01.000Z",
+          seeded: { ws1: "2026-10-13T09:00:02.000Z", ws2: "soon", ws3: 4 },
+        },
+      }).tasksOnboarding,
+    ).toEqual({
+      role: "developer",
+      roleAt: "2026-10-13T09:00:00.000Z",
+      welcomeSeenAt: "2026-10-13T09:00:01.000Z",
+      seeded: { ws1: "2026-10-13T09:00:02.000Z" },
+    });
+    expect(
+      sanitizePreferences({
+        tasksOnboarding: { role: "astronaut", roleAt: "yesterday", welcomeSeenAt: 1 },
+      }).tasksOnboarding,
+    ).toEqual({ role: null, roleAt: null, welcomeSeenAt: null, seeded: {} });
+    expect(sanitizePreferences({ tasksOnboarding: "nope" }).tasksOnboarding).toEqual(
+      DEFAULT_PREFERENCES.tasksOnboarding,
+    );
+  });
+
   it("defaults confirmBeforeQuit false and coerces to boolean", () => {
     expect(sanitizePreferences({}).confirmBeforeQuit).toBe(false);
     expect(sanitizePreferences({ confirmBeforeQuit: true }).confirmBeforeQuit).toBe(true);
     expect(sanitizePreferences({ confirmBeforeQuit: "yes" }).confirmBeforeQuit).toBe(false);
+  });
+});
+
+describe("mergeOnboardingForward (TV-U17: onboarding only moves forward)", () => {
+  const none = { role: null, roleAt: null, welcomeSeenAt: null, seeded: {} };
+  const seenHere = {
+    role: "pm" as const,
+    roleAt: "2026-10-13T09:00:00.000Z",
+    welcomeSeenAt: "2026-10-13T09:00:00.000Z",
+    seeded: { ws1: "2026-10-13T09:00:00.000Z" },
+  };
+
+  it("keeps what this device already knows when a stale copy comes back", () => {
+    expect(mergeOnboardingForward(seenHere, none)).toEqual(seenHere);
+  });
+
+  it("takes the cloud's answer and seen stamp when it has them, adding up seeded workspaces", () => {
+    const cloud = {
+      role: "creator" as const,
+      roleAt: "2026-10-14T09:00:00.000Z",
+      welcomeSeenAt: "2026-10-14T09:00:00.000Z",
+      seeded: { ws2: "2026-10-14T09:00:00.000Z" },
+    };
+    expect(mergeOnboardingForward(seenHere, cloud)).toEqual({
+      role: "creator",
+      roleAt: "2026-10-14T09:00:00.000Z",
+      welcomeSeenAt: "2026-10-14T09:00:00.000Z",
+      seeded: { ws1: "2026-10-13T09:00:00.000Z", ws2: "2026-10-14T09:00:00.000Z" },
+    });
+  });
+
+  it("a skipped role (answered, no role) stays skipped", () => {
+    const skipped = { ...none, roleAt: "2026-10-13T09:00:00.000Z" };
+    expect(mergeOnboardingForward(skipped, none)).toEqual(skipped);
   });
 });
 

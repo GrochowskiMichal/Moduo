@@ -40,6 +40,7 @@ import { IconButton } from "@/components/ui/icon-button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { SELECTED_OPTION } from "@/components/ui/selection";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { formatTime, formatWeekdayDate } from "@/lib/time-format";
 import { cn } from "@/lib/utils";
 import { QUICK_REACTIONS } from "../emoji";
 import type { ComposerPick } from "../markup";
@@ -48,9 +49,6 @@ import { Composer, type ComposerProps } from "./composer";
 import { EmojiPicker } from "./emoji-picker";
 import { MessageBody } from "./message-body";
 import { PersonAvatar } from "./person-avatar";
-
-const TIME = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
-const FULL = new Intl.DateTimeFormat(undefined, { dateStyle: "full", timeStyle: "short" });
 
 export type MessageActions = {
   onReact: (m: ChatMessage, emoji: string) => void;
@@ -237,10 +235,10 @@ function MessageItemImpl({
         {grouped ? (
           <time
             dateTime={m.createdAt}
-            title={FULL.format(created)}
+            title={`${formatWeekdayDate(created, undefined, { year: true })}, ${formatTime(created)}`}
             className="pt-0.5 text-2xs text-muted-foreground tabular-nums opacity-0 transition-opacity duration-(--motion-fade) group-hover/message:opacity-100"
           >
-            {TIME.format(created)}
+            {formatTime(created)}
           </time>
         ) : isApp ? (
           <span
@@ -274,10 +272,10 @@ function MessageItemImpl({
             ) : null}
             <time
               dateTime={m.createdAt}
-              title={FULL.format(created)}
+              title={`${formatWeekdayDate(created, undefined, { year: true })}, ${formatTime(created)}`}
               className="shrink-0 text-2xs text-muted-foreground tabular-nums"
             >
-              {TIME.format(created)}
+              {formatTime(created)}
             </time>
             {m.pinnedAt ? (
               <span className="inline-flex items-center gap-1 text-2xs text-muted-foreground">

@@ -197,12 +197,15 @@ export function isBacklogTask(task: {
 
 // ---------------------------------------------------------------------------
 // Task time entries (TV-D3) — mirrors task_time_entries' kind CHECK and
-// tasks_op_track_time's actions and answers in 20261008225500_tasks_time_entries.
+// tasks_op_track_time's actions and answers; TV-D14's re-cut
+// (*_time_entries_add) added `manual`, `add`/`edit`/`remove` and the
+// adjustment reason.
 // ---------------------------------------------------------------------------
 
 /** focus/waiting: a tracked stretch; adjustment: a signed correction; legacy:
- *  the total a task had before entries existed. */
-export const TASK_TIME_ENTRY_KINDS = ["focus", "waiting", "adjustment", "legacy"] as const;
+ *  the total a task had before entries existed; manual: time logged by hand
+ *  on a day ("Add time…", TV-D14). */
+export const TASK_TIME_ENTRY_KINDS = ["focus", "waiting", "adjustment", "legacy", "manual"] as const;
 export type TaskTimeEntryKind = (typeof TASK_TIME_ENTRY_KINDS)[number];
 export const taskTimeEntryKindSchema = z.enum(TASK_TIME_ENTRY_KINDS);
 export function isTaskTimeEntryKind(value: unknown): value is TaskTimeEntryKind {
@@ -210,7 +213,16 @@ export function isTaskTimeEntryKind(value: unknown): value is TaskTimeEntryKind 
 }
 
 /** What `tasks_op_track_time` can do. */
-export const TASK_TIME_ACTIONS = ["focus", "waiting", "adjust", "set_total", "undo"] as const;
+export const TASK_TIME_ACTIONS = [
+  "focus",
+  "waiting",
+  "adjust",
+  "set_total",
+  "undo",
+  "add",
+  "edit",
+  "remove",
+] as const;
 export type TaskTimeAction = (typeof TASK_TIME_ACTIONS)[number];
 export const taskTimeActionSchema = z.enum(TASK_TIME_ACTIONS);
 
@@ -219,6 +231,33 @@ export const taskTimeActionSchema = z.enum(TASK_TIME_ACTIONS);
 export const TASK_TIME_STATUSES = ["saved", "duplicate", "noop", "gone"] as const;
 export type TaskTimeStatus = (typeof TASK_TIME_STATUSES)[number];
 export const taskTimeStatusSchema = z.enum(TASK_TIME_STATUSES);
+
+/** Why an adjustment exists (TV-D14): `give_back` = time counted on two
+ *  devices, given back after a Focus takeover (TV-F6, F6-16). */
+export const TASK_TIME_ADJUSTMENT_REASONS = ["give_back"] as const;
+export type TaskTimeAdjustmentReason = (typeof TASK_TIME_ADJUSTMENT_REASONS)[number];
+export const taskTimeAdjustmentReasonSchema = z.enum(TASK_TIME_ADJUSTMENT_REASONS);
+
+// ---------------------------------------------------------------------------
+// Time & region (TV-D14) — mirrors user_preferences' hour_cycle and
+// date_order CHECKs in *_user_preferences_time_region. NULL = the device's.
+// ---------------------------------------------------------------------------
+
+/** The clock: 12-hour ("3:00 PM") or 24-hour ("15:00"). */
+export const HOUR_CYCLES = ["h12", "h23"] as const;
+export type HourCycle = (typeof HOUR_CYCLES)[number];
+export const hourCycleSchema = z.enum(HOUR_CYCLES);
+export function isHourCycle(value: unknown): value is HourCycle {
+  return typeof value === "string" && (HOUR_CYCLES as readonly string[]).includes(value);
+}
+
+/** Which comes first in a date: "Oct 16" or "16 Oct". */
+export const DATE_ORDERS = ["month_day", "day_month"] as const;
+export type DateOrder = (typeof DATE_ORDERS)[number];
+export const dateOrderSchema = z.enum(DATE_ORDERS);
+export function isDateOrder(value: unknown): value is DateOrder {
+  return typeof value === "string" && (DATE_ORDERS as readonly string[]).includes(value);
+}
 
 // ---------------------------------------------------------------------------
 // Focus runs (TV-F6, salvaged from #323) — mirrors focus_runs' CHECKs: status
@@ -1048,6 +1087,27 @@ export function parseTemplateLinkType(input: unknown): SafeParseResult<TemplateL
 /** Lax read: a link to anything else is dropped (null). */
 export function normalizeTemplateLinkType(input: unknown): TemplateLinkType | null {
   return isTemplateLinkType(input) ? input : null;
+}
+
+// ---------------------------------------------------------------------------
+// Starter templates (TV-U17, REPLAN 34) — mirrors the key guard of
+// project_templates_op_starter in 20261013230000_templates_starter. The role
+// question offers one of these; the server builds its body from the key, so
+// the app never sends one.
+// ---------------------------------------------------------------------------
+
+export const STARTER_TEMPLATES = ["kickoff", "monthly_close", "client_onboarding", "episode"] as const;
+export type StarterTemplate = (typeof STARTER_TEMPLATES)[number];
+export const starterTemplateSchema = z.enum(STARTER_TEMPLATES);
+export function isStarterTemplate(value: unknown): value is StarterTemplate {
+  return typeof value === "string" && (STARTER_TEMPLATES as readonly string[]).includes(value);
+}
+export function parseStarterTemplate(input: unknown): SafeParseResult<StarterTemplate> {
+  return parseOrError(starterTemplateSchema, input);
+}
+/** Lax read: a starter this build doesn't know is left out (null). */
+export function normalizeStarterTemplate(input: unknown): StarterTemplate | null {
+  return isStarterTemplate(input) ? input : null;
 }
 
 // ---------------------------------------------------------------------------

@@ -106,8 +106,10 @@ export const READ_RPCS: ReadonlySet<string> = new Set([
   "tasks_op_history",
   "templates_can_copy",
   "tasks_search",
+  "tasks_time_report",
   "tasks_time_totals",
   "user_agent_work",
+  "user_time_region",
 ]);
 
 /**

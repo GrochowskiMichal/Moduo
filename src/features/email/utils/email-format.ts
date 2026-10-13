@@ -1,3 +1,5 @@
+import { formatFullDate, formatTime } from "../../../lib/time-format";
+
 export function formatEmailDate(raw: string) {
   const parsed = new Date(raw);
   if (Number.isNaN(parsed.getTime())) return raw;
@@ -12,15 +14,10 @@ export function formatEmailDate(raw: string) {
   return `${day}${month}${year2}`;
 }
 
+/** "Oct 13, 2026, 3:04 PM": the date order and the clock follow Settings →
+ *  Time & region (TV-D14; it was always 24-hour, day first). */
 export function formatEmailDetailDate(raw: string) {
   const parsed = new Date(raw);
   if (Number.isNaN(parsed.getTime())) return raw;
-  return new Intl.DateTimeFormat("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(parsed);
+  return `${formatFullDate(parsed)}, ${formatTime(parsed)}`;
 }

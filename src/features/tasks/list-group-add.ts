@@ -20,6 +20,10 @@ export type GroupAdd = {
     /** YYYY-MM-DD. */
     dueDay?: string | null;
     status?: TaskStatusCategory | null;
+    /** One project's own status (a Board column, TV-U11): it rides with
+     *  `status` and applies only while the task files into that project. */
+    statusId?: string | null;
+    statusName?: string | null;
   };
 };
 

@@ -1,17 +1,27 @@
 import { expect, test } from "@playwright/test";
 
 /**
- * Tasks Board — visual regression (TV-U1: U1-4, U1-5). Column widths (280–400
- * px), one meta line per card, tint selection, faded done cards and each
- * column's "N completed" line, under every density × radius, every dark shade
- * and every accent.
+ * Tasks Board — visual regression (TV-U1, TV-U11). One card width per density
+ * (296 / 280 / 264 px), the kit card with its status icon, tint selection,
+ * faded done cards and each column's "N completed" line, the folded Backlog
+ * button (53b), a project's own statuses (53a), sections, lanes (85) and the
+ * Detailed card with its description preview (AC4.2, AC7.4, AC11.6), under
+ * every density × radius, every dark shade and every accent.
  *
  * Baselines are captured by a human, never by an agent (DESIGN_SYSTEM §5):
  *   bun run storybook
  *   bunx playwright test --project=visual tests/visual/tasks-board.spec.ts --update-snapshots
  */
 
-const STORIES = ["by-status", "recent-completed", "by-bucket"];
+const STORIES = [
+  "by-status",
+  "recent-completed",
+  "by-bucket",
+  "project-statuses",
+  "by-section",
+  "lanes-by-assignee",
+  "detailed-with-description",
+];
 const DENSITIES = ["comfortable", "compact", "dense"] as const;
 const RADII = ["sharp", "soft", "round"] as const;
 const SHADES = ["black", "warm", "cool", "slate", "plum", "forest"] as const;

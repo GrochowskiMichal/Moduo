@@ -26,8 +26,9 @@ export type TaskDropWrite = {
   /** A status key: the legacy value, or "backlog" (TV-D9). Saved as its
    *  category, so Backlog stays Backlog through a drop and its Undo. */
   status?: StatusKey;
-  /** Undo only: the exact status to put back (its project's own name, say
-   *  In review), with `status` as its key. */
+  /** The exact status (its project's own, say In review), with `status` as
+   *  its key: a Board column of one project's statuses (TV-U11), and Undo
+   *  putting a named status back. */
   statusId?: string;
   assigneeId?: string | null;
   /** Into another section of the project (a List grouped by section, TV-U10). */
@@ -97,7 +98,9 @@ export function undoWrite(input: {
       kept.push(field);
       continue;
     }
-    if (same(value(before, field), value(current, field))) continue;
+    // A status compares exactly here too: In progress → In review keeps the
+    // key (in_progress) but still has a status to put back (TV-U11).
+    if (same(exact(before, field), exact(current, field))) continue;
     revert[field] = value(before, field) ?? null;
     // The status goes back by id, so its project's own name comes back too.
     if (field === "status" && before.statusId) revert.statusId = before.statusId;

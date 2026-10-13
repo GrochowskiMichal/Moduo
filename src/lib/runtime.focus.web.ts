@@ -128,15 +128,25 @@ export const webFocusRuntime: FocusRunRuntime = {
     };
   },
 
-  async giveBackTime({ workspaceId, taskId, seconds, key }) {
+  async giveBackTime({ workspaceId, taskId, seconds, key, runId }) {
     if (!Number.isFinite(seconds) || seconds < 1) return;
-    const { error } = await supabaseClient.rpc("tasks_op_track_time", {
+    const base = {
       p_workspace_id: workspaceId,
       p_task_id: taskId,
       p_action: "adjust",
       p_seconds: -Math.round(seconds),
       p_client_key: key,
+    };
+    // TV-D14: the entry says it's a give-back, from which run.
+    let { error } = await supabaseClient.rpc("tasks_op_track_time", {
+      ...base,
+      p_reason: "give_back",
+      ...(runId ? { p_run_id: runId } : {}),
     });
+    // A database before TV-D14 has no such arguments: give the time back anyway.
+    if (isMissingFunctionError(error, "tasks_op_track_time")) {
+      ({ error } = await supabaseClient.rpc("tasks_op_track_time", base));
+    }
     if (error) throw runError(error);
   },
 

@@ -110,7 +110,8 @@ export function splitSnoozed<T extends Pick<Task, "id">>(
   return { active, snoozed, woken, stale };
 }
 
-/** Snooze's choices: Tomorrow, and Next week (next Monday, as the date panel's). */
+/** Snooze's choices: Tomorrow, and Next week (the coming week's first day, where
+ *  Time & region starts it, as the date panel's). */
 export function snoozeChoices(now: Date): Array<{ label: string; until: string }> {
   const today = todayStr(now);
   const at = (days: number) => {

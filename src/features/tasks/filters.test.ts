@@ -2,8 +2,9 @@
 // is any of, AND across dimensions, Archived and Done reachable through
 // Status, the stored filters read back safely, and the capture seed.
 
-import { describe, expect, it } from "@rstest/core";
+import { afterEach, beforeEach, describe, expect, it } from "@rstest/core";
 import type { FilterCondition } from "../../components/ui/filter-model";
+import { applyTimeRegion, EMPTY_TIME_REGION } from "../../lib/time-region";
 import {
   addFilterValue,
   captureSeed,
@@ -70,6 +71,17 @@ const isNot = (dimension: string, ...values: string[]): FilterCondition => ({
 });
 
 describe("Filter dimensions", () => {
+  // These cases were written for a Monday week start (Time & region, TV-D14).
+  beforeEach(() => applyTimeRegion({ ...EMPTY_TIME_REGION, weekStart: 1 }, null));
+  afterEach(() => applyTimeRegion(EMPTY_TIME_REGION, null));
+
+  it("This week ends where Time & region's week ends (TV-D14)", () => {
+    // Thursday Oct 8: with a Sunday start the week ends on Saturday the 10th.
+    applyTimeRegion({ ...EMPTY_TIME_REGION, weekStart: 0 }, null);
+    expect(taskFilterValues(task("x", { dueDate: day(2) }), "due", ctx)).toEqual(["week"]);
+    expect(taskFilterValues(task("x", { dueDate: day(3) }), "due", ctx)).toEqual([]);
+  });
+
   it("offers every §7 dimension; yes/no ones take one value under 'is'", () => {
     expect(TASK_FILTER_DIMENSIONS).toEqual([
       "assignee",

@@ -301,6 +301,22 @@ describe("the tasks export carries every new tasks table (TV-D8, §Assumptions #
     expect(data.truncated).toEqual([cut]);
   });
 
+  it("carries your own time entries with their days and notes (TV-D14)", async () => {
+    const entry = { id: "e1", kind: "manual", seconds: 7200, entryOn: "2026-10-12", note: "Call" };
+    const cut = { scope: "time entries", shown: 20000, total: 20001 };
+    const data = await readTasksExport(
+      {
+        list: async () => ({ tasks: [], buckets: [], truncated: [] }),
+        listCompletions: async () => ({ completions: [], truncated: [] }),
+        ...noD10Reads,
+        exportTimeEntries: async () => ({ entries: [entry], truncated: [cut] }),
+      },
+      "ws-1",
+    );
+    expect(data.timeEntries).toEqual([entry]);
+    expect(data.truncated).toEqual([cut]);
+  });
+
   it("reads as no templates on a runtime without them", async () => {
     const data = await readTasksExport(
       {

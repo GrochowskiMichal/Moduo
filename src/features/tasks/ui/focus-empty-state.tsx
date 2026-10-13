@@ -17,6 +17,25 @@ import { nowOn, useToday } from "../use-today";
 
 // ── the empty state: three ways in (66) ─────────────────────────────────────
 
+/** What Focus is, in one line: the empty state's and Tasks' welcome's (TV-U17). */
+export const FOCUS_WHAT_IT_IS =
+  "Focus shows one task at a time, with the rest waiting in Up next. The timer is yours to use or turn off.";
+
+/** The two keys that put a task in Focus: the empty state's and the welcome's
+ *  (which says "to Focus" where the empty state says "here"). */
+export function FocusKeyHints({ where = "here" }: { where?: string }) {
+  return (
+    <>
+      <li>
+        Press <Kbd>Q</Kbd> on any task to add it {where}.
+      </li>
+      <li>
+        Press <Kbd>⇧F</Kbd> on a task to focus on it alone.
+      </li>
+    </>
+  );
+}
+
 /**
  * Nothing lined up: Focus teaches its three ways in (call 66), with today's
  * scheduled tasks as real rows (click one for its details, "+" adds that one,
@@ -69,18 +88,10 @@ export function FocusEmptyState({
           Line up what you’ll do next, then press Start.
         </p>
         {/* First use (call 66, TV-U17 builds on this): what Focus is, in one line. */}
-        <p className="font-sans text-sm text-muted-foreground">
-          Focus shows one task at a time, with the rest waiting in Up next. The timer is yours to
-          use or turn off.
-        </p>
+        <p className="font-sans text-sm text-muted-foreground">{FOCUS_WHAT_IT_IS}</p>
       </div>
       <ul className="flex flex-col gap-1.5 font-sans text-sm text-muted-foreground">
-        <li>
-          Press <Kbd>Q</Kbd> on any task to add it here.
-        </li>
-        <li>
-          Press <Kbd>⇧F</Kbd> on a task to focus on it alone.
-        </li>
+        <FocusKeyHints />
         <li>
           {rows.length > 0
             ? "Or start from what’s scheduled today:"
