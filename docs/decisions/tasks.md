@@ -2,6 +2,36 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index.
 
+## 2026-10-13 · TV-U13b Follow-ups from landed blocks — the agent's choices (deferred to by Maciej)
+
+The orchestrator's follow-up block after TV-U12, TV-U13, TV-D12, TV-U15, TV-D16 and TV-U16 ([BUILD_ORDER.md](../../specs/BUILD_ORDER.md) "From TV-U13b"), built on the local stack with no migration. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **U13b-1 · A selection dropped on Focus only adds; blocked ones go in and are named** → TV-U13b (`bulkQueue(ids, { mode: "add" })`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (a review of TV-U12's code).
+  - Decision: a drop on the sidebar's Focus row adds the selected open tasks not in Focus yet and never takes any out (the bar's Q stays the toggle). A selection never opens the one-task "Blocked by" offer; a blocked task is added as "Queue anyway" would, and the toast says so ("“Ship it” is blocked by an open task.", or "2 of them are blocked by open tasks.").
+  - Why: a drop is an "add" gesture; the frontier offer is about one task and would stack dialogs for a selection.
+  - Rejected: the toggle (a drop could empty Focus), one frontier dialog per blocked task, leaving blocked ones out silently.
+- **U13b-2 · A partly saved bulk edit is named and undone, never rolled back on its own** → TV-U13b (`bulkWrite`'s `partial`, `BulkRefusal.partial`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: when a task's first op saves (a move, a field) and a later one is refused (status, assignee), it counts as not changed ("3 of 4 changed"), the toast names it ("“X” changed only in part: …"), and the one Undo puts back the part that saved, with the rest of the batch.
+  - Why: each op is the task's own permission check, so a half-change is real; hiding it (the old behaviour) left it un-undoable.
+  - Rejected: an automatic rollback of the saved part (a second write that can fail too, and a surprise), counting it as changed.
+- **U13b-3 · The Inbox's agent chip reads the task's own trail, with no new column** → TV-U13b (`runtime.tasks.listAgentCaptures`, `use-agent-captures.ts`)
+  - Who: agent's choice, deferred to by Maciej (offered by the orchestrator), 2026-10-13.
+  - Decision: "via Claude Desktop" comes from the task's `tasks.create` row in `module_activity` when a key made it (D16 already writes "Alex · via Claude Desktop" there): one batched read of the Inbox's tasks (100 ids a request), once per task while the Inbox is open, kept in memory. Someone else's agent reads "from Mike via Cursor". The trail's read policy answers only tasks the reader can see, so a key's name reaches exactly the people who already see it in the trail (`supabase/tests/agent_followups.test.sql`).
+  - Why: no migration while Maciej tests, one source of truth for "via", no change to `tasks` (every sync path, column grants, templates and Duplicate copying it).
+  - Rejected: a `tasks.created_via` column written by `tasks_op_create_with` and the key path (a migration on the hottest table for one chip; it also freezes the key name on the row a second time).
+- **U13b-4 · The panel's repeat follow-ups sit where the value is** → TV-U13b (`RepeatHistory`, `ReminderValue`, `TaskDetailProperties`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (TV-D12's asks).
+  - Decision: the cycle history is a quiet "n done · last Oct 6" beside the Repeat value, opening the cycles (newest first; who closed each; only your own time), read when opened, so viewers see it too. A paused reminder reads "· Paused" in the Reminder value and list; once the task is To do or In progress the list offers "Restore the reminder", else it says how it comes back. Moving a repeat's Due in the panel asks "Just this one · Change the pattern" through Upcoming's dialog; clearing the date or a one-off saves at once, and like every property edit it has no Undo toast.
+  - Why: each answer belongs to the value it explains; one dialog for every "move a repeat" gesture.
+  - Rejected: the history inside the Repeat picker (editors only), a History row of its own, an Undo toast on the panel's move.
+- **U13b-5 · MCP reads and writes a project's description** → TV-U13b (`moduo-mcp` `shapeProject`, `projects_create`, `projects_update`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (TV-U16's connector follow-up).
+  - Decision: `projects_list` carries `description` (plain text, when set); `projects_create` and `projects_update` take it (null clears); the project ops check Edit, as for the app.
+  - Why: the project read is the list; descriptions are a project's brief and usually short.
+  - Rejected: a separate `projects_get` tool, a shortened description in the list.
+
 ## 2026-10-13 · TV-U16 Project overview, the Done prompt, departures — the agent's choices (deferred to by Maciej)
 
 Built in tasks-v3 block 33 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §3, AC5.5–5.6's UI half, AC6.4, AC6.6; REPLAN 16, 17, 78; the carry-forwards from TV-U6, TV-U13, TV-D13, TV-D14 and TV-D15; migration `20261013240000_project_description_team_defaults`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
