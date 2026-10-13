@@ -26,7 +26,7 @@ Migration `20261013240000_project_description_team_defaults` is on the local sta
 - [ ] **Do:** Settings → Members and access → Teams → a team whose default project is archived → **Expect:** "<name> (archived)" and the line "… is archived, so a task for <team> needs a project picked". Routing a task to that team without a project asks for one. _(web)_
 
 ## A client's hub (AC6.4)
-- [ ] **Do:** make a contact the Client of a project, open their hub → **Expect:** a **Work** section: the projects with "n open", Next up, "Waiting · n" with how long, "n open tasks", Time report. Clicking a project or task opens it in Tasks. _(web)_
+- [ ] **Do:** make a contact the Client of a project, open their hub → **Expect:** a **Work** section: the projects with "n open", Next up, "Waiting · n" with since when (Today · Yesterday · Oct 9), "n open tasks", Time report. Clicking a project or task opens it in Tasks. _(web)_
 
 ## Someone leaving (AC5.6)
 - [ ] **Do:** Settings → Members and access → a member → Remove from workspace → **Expect:** the confirm lists: Inbox tasks go back to their makers, the rest to you; "Name's n open tasks here become unassigned" (with how many go back to a team); projects they lead lose their lead; the teams they leave; projects only they can see go to you (or the owner), named "From Name (archived) …". Cancel. _(web)_

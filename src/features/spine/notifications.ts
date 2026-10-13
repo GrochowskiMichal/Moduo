@@ -62,6 +62,8 @@ export type NotificationGroup = {
 
 function groupKey(item: NotificationItem): string {
   // Reminders all hang on your Inbox (TV-D12): one card per task they name.
+  // An agent's state (TV-D16) hangs on your Inbox too: one card per notice.
+  if (item.op === "tasks.agent_status") return `agent:${item.id}`;
   if (item.op === "tasks.reminder") {
     const taskId = item.payload.task_id;
     return `reminder:${typeof taskId === "string" && taskId ? taskId : item.id}`;
@@ -212,7 +214,11 @@ export function notificationSubject(
   if (group.op === "tasks.routed") {
     const count = typeof latest.payload.count === "number" ? latest.payload.count : 1;
     if (count > 1) return null;
-  } else if (group.targetType !== "task" && group.op !== "tasks.reminder") {
+  } else if (
+    group.targetType !== "task" &&
+    group.op !== "tasks.reminder" &&
+    group.op !== "tasks.agent_status"
+  ) {
     return null;
   }
   const title = latest.payload.title;
@@ -336,7 +342,11 @@ export function notificationDeepLinkNoun(entityType: string): string {
 export function notificationDeepLink(group: NotificationGroup): NotificationDeepLink | null {
   // A reminder or a team notice opens its task, not the Inbox it hangs on
   // (TV-D12, TV-D13; several routed tasks open the first).
-  if (group.op === "tasks.reminder" || group.op === "tasks.routed") {
+  if (
+    group.op === "tasks.reminder" ||
+    group.op === "tasks.routed" ||
+    group.op === "tasks.agent_status"
+  ) {
     const taskId = newestItem(group).payload.task_id;
     if (typeof taskId === "string" && taskId) {
       return { route: "/tasks", entityType: "task", entityId: taskId };

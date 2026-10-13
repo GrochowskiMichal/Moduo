@@ -3623,6 +3623,8 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     waiting: snap.waiting,
     /** Every completion (each cycle of a repeat): the overview's "Done this month" (TV-U16). */
     completions: snap.completions,
+    /** TV-D16: agent sessions you can see (yours; teammates' while they share). */
+    agentSessions: snap.agentSessions,
     restoreTask,
     addSession,
     updateSession,

@@ -5,14 +5,14 @@
 // waits, and the time report over all of them.
 
 import { Clock, FolderKanban } from "lucide-react";
-import { useMemo, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 
 import { Button } from "../../../components/ui/button";
 import { Eyebrow } from "../../../components/ui/eyebrow";
 import { NavRowDot } from "../../../components/ui/nav-row";
 import type { EntityRef } from "../../../lib/entity-links";
 import { useStoreSnapshot, useWorkspaceStore } from "../../../lib/sync/react";
-import { formatAge, formatDay } from "../../../lib/time-format";
+import { formatDay } from "../../../lib/time-format";
 import { useTimeRegion } from "../../../lib/time-region";
 import { useAuth } from "../../../providers/auth-provider";
 import { clientRollup } from "../project-overview";
@@ -27,12 +27,16 @@ export function ClientTimeReport({
   contactId,
   contactName,
   onOpen,
+  chat,
 }: {
   workspaceId: string;
   contactId: string;
   contactName: string;
   /** Opens a project or a task in Tasks. */
   onOpen?: (ref: EntityRef) => void;
+  /** Chat's slots for the client's conversation and decisions (CH11, CH13);
+   *  empty until Chat fills them. */
+  chat?: { conversation?: ReactNode; decisions?: ReactNode };
 }) {
   const { runtime, userId } = useAuth();
   const store = useWorkspaceStore(runtime, userId, workspaceId);
@@ -92,6 +96,9 @@ export function ClientTimeReport({
             </ul>
           </div>
         ) : null}
+        {/* Chat's slots: the client's conversation, then their decisions. */}
+        {chat?.conversation ?? null}
+        {chat?.decisions ?? null}
         {rollup.waiting.length > 0 ? (
           <div className="flex flex-col">
             <p className="px-2 font-sans text-xs text-muted-foreground">
@@ -108,7 +115,7 @@ export function ClientTimeReport({
                   >
                     <span className="min-w-0 flex-1 break-words">{w.task.title || "Untitled"}</span>
                     <span className="shrink-0 whitespace-nowrap text-xs text-muted-foreground tabular-nums">
-                      since {formatAge(w.since)}
+                      since {formatDay(w.since)}
                     </span>
                   </button>
                 </li>

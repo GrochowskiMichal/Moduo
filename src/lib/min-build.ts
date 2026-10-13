@@ -101,11 +101,14 @@ export const READ_RPCS: ReadonlySet<string> = new Set([
   "share_defaults_get",
   "share_op_state",
   "storage_status",
+  // TV-D16: a task's agent sessions (with your summary), and your share switch.
+  "tasks_agent_sessions",
   "tasks_op_history",
   "templates_can_copy",
   "tasks_search",
   "tasks_time_report",
   "tasks_time_totals",
+  "user_agent_work",
   "user_time_region",
 ]);
 

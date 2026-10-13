@@ -125,7 +125,18 @@ export function spineActivityLine(
     case "tasks.waiting_resolved":
       return str(p.reason) === "email"
         ? "got a reply on this · no longer waiting"
-        : "commented on this · no longer waiting";
+        : str(p.reason) === "agent"
+          ? "reported back on this · no longer waiting"
+          : "commented on this · no longer waiting";
+    // TV-D16: an agent you started (the actor is the agent's name) changed
+    // state; the card names the task.
+    case "tasks.agent_status": {
+      const state = str(p.state);
+      if (state === "needs_you") return "needs you on this";
+      if (state === "ready") return "is ready for review: this";
+      if (state === "failed") return "failed on this";
+      return "reported on this";
+    }
     // TV-D1: a teammate finished a task you created.
     case "tasks.completed":
       return "completed this";

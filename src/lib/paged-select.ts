@@ -45,6 +45,8 @@ export const READ_CAPS = {
   taskSessions: 20000,
   taskReminders: 10000,
   taskWaiting: 10000,
+  // TV-D16: agent sessions you can see (yours, and teammates' they share).
+  agentSessions: 10000,
   taskQueue: 5000,
   notes: 5000,
   contacts: 10000,

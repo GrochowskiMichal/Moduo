@@ -338,6 +338,15 @@ function TaskRowView({
             tagNames={detailed}
             waitingColumn={columns.waiting}
           />
+          {facts.agent ? (
+            // An agent working on it (TV-D16, call 52): status, not conversation.
+            <span
+              data-slot="row-agent"
+              className="shrink-0 font-sans text-xs whitespace-nowrap text-muted-foreground"
+            >
+              {facts.agent}
+            </span>
+          ) : null}
           {facts.source ? (
             // Where an Inbox task came from (research §7): quiet, after the counts.
             <span

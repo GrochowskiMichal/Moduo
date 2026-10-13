@@ -100,6 +100,13 @@ describe("taskMatchesQuery", () => {
     expect(taskMatchesQuery(task, "modal small")).toBe(false);
   });
 
+  it("finds a task by the key it was imported under (TV-D16, AC3.6)", () => {
+    const imported = { ...task, importedFrom: { source: "linear", key: "ENG-123" } };
+    expect(taskMatchesQuery(imported, "eng-123")).toBe(true);
+    expect(taskMatchesQuery(imported, "ENG-123 capture")).toBe(true);
+    expect(taskMatchesQuery(task, "ENG-123")).toBe(false);
+  });
+
   it("an empty query matches everything", () => {
     expect(taskMatchesQuery(task, "")).toBe(true);
     expect(taskMatchesQuery(task, "   ")).toBe(true);

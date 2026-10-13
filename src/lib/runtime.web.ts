@@ -118,6 +118,7 @@ import type {
   SpineComment,
   UserPreferences,
 } from "./runtime.types";
+import { createTasksAgents } from "./runtime.web.agents";
 import { createReferencePreviews } from "./runtime.web.previews";
 import { createTasksStructure } from "./runtime.web.structure";
 import { createTasksTemplates, type TemplateApplyResult } from "./runtime.web.templates";
@@ -134,6 +135,7 @@ import type {
 } from "./sync/types";
 import { handleSearchPattern, handleWithCurrentKey } from "./task-handle";
 import {
+  agentSessionRowToModel,
   areaRowToModel,
   bucketRowToModel,
   commentMarkRowToModel,
@@ -436,6 +438,11 @@ const tasksStructure = createTasksStructure(supabaseClient, {
   deleteProjectLegacy: (workspaceId, projectId) => legacyDeleteBucket(workspaceId, projectId),
   getTimeBlocksLegacy: (workspaceId) => getWorkspaceTimeBlocks(workspaceId),
   setTimeBlocksLegacy: (workspaceId, blocks) => setWorkspaceTimeBlocks(workspaceId, blocks),
+});
+
+/** TV-D16's agent work and import runs (runtime.web.agents.ts). */
+const tasksAgents = createTasksAgents(supabaseClient, {
+  userId: async () => (await getAuthedUser())?.id ?? null,
 });
 
 /** TV-D15's templates and "Duplicate project…" (runtime.web.templates.ts). */
@@ -2291,6 +2298,7 @@ export const webRuntime: ModuoRuntime = {
     ...tasksStructure,
     // TV-D15: templates and "Duplicate project…".
     ...tasksTemplates,
+    ...tasksAgents,
     async list(workspaceId) {
       // Best effort: a Viewer can't create their own Inbox (no tasks.create),
       // and that must not stop them reading the shared buckets.
@@ -4207,6 +4215,15 @@ const SYNC_SOURCES: Record<SyncTableName, SyncSource> = {
     cap: READ_CAPS.taskWaiting,
     delta: true,
     scope: "waiting entries",
+  },
+  // TV-D16: agent sessions, under RLS (yours, and teammates' they share).
+  agentSessions: {
+    table: "agent_sessions",
+    select: "*",
+    map: agentSessionRowToModel,
+    cap: READ_CAPS.agentSessions,
+    delta: true,
+    scope: "agent sessions",
   },
 };
 

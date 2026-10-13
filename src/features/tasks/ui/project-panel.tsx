@@ -21,7 +21,7 @@ import { EmptyState } from "../../../components/ui/empty-state";
 import { NavRowDot } from "../../../components/ui/nav-row";
 import { Progress } from "../../../components/ui/progress";
 import { PropertyRow } from "../../../components/ui/property-row";
-import { formatAge, formatDate, formatDay, formatDurationSeconds } from "../../../lib/time-format";
+import { formatDate, formatDay, formatDurationSeconds } from "../../../lib/time-format";
 import { useTimeRegion } from "../../../lib/time-region";
 import { cn } from "../../../lib/utils";
 import { useAssignees } from "../assignees";
@@ -62,6 +62,18 @@ export type ProjectOverviewPatch = {
   description?: string | null;
 };
 
+/**
+ * Chat's two places on the overview (the Chat re-plan, CH11 / CH13 / CH52):
+ * the "Conversation: Acme · 3 new" line when a channel is linked to the
+ * project, and the project's decisions ("Decided in Acme · Oct 12: …"), shown
+ * only to people who can read that conversation. Chat's blocks pass them;
+ * until then nothing renders there.
+ */
+export type ProjectChatSlots = {
+  conversation?: ReactNode;
+  decisions?: ReactNode;
+};
+
 const NO_COMPLETIONS: readonly TaskCompletion[] = [];
 const NO_WAITING: readonly TaskWaitingEntry[] = [];
 
@@ -81,6 +93,7 @@ export function ProjectPanel({
   onOpenTask,
   onArchive,
   onDuplicate,
+  chat,
 }: {
   project: Bucket | null;
   /** The reader's tasks (an archived project's when it's archived). */
@@ -96,6 +109,8 @@ export function ProjectPanel({
   onOpenTask?: (taskId: string) => void;
   onArchive?: (project: Bucket) => void;
   onDuplicate?: (project: Bucket) => void;
+  /** Chat's slots (empty until Chat fills them). */
+  chat?: ProjectChatSlots;
 }) {
   if (!project || project.isSystem) {
     return (
@@ -121,6 +136,7 @@ export function ProjectPanel({
       onOpenTask={onOpenTask}
       onArchive={onArchive}
       onDuplicate={onDuplicate}
+      chat={chat}
     />
   );
 }
@@ -137,6 +153,7 @@ function ProjectOverview({
   onOpenTask,
   onArchive,
   onDuplicate,
+  chat,
 }: {
   project: Bucket;
   tasks: readonly Task[];
@@ -149,6 +166,7 @@ function ProjectOverview({
   onOpenTask?: (taskId: string) => void;
   onArchive?: (project: Bucket) => void;
   onDuplicate?: (project: Bucket) => void;
+  chat?: ProjectChatSlots;
 }) {
   const { byId } = useAssignees();
   const region = useTimeRegion();
@@ -343,6 +361,9 @@ function ProjectOverview({
           canEdit={editable}
           onSave={(text) => edit({ description: text })}
         />
+        {/* Chat's slots: the linked conversation, then the project's decisions. */}
+        {chat?.conversation ?? null}
+        {chat?.decisions ?? null}
       </div>
 
       <div className="flex flex-col gap-1.5">
@@ -451,7 +472,7 @@ function ProjectOverview({
                 <OverviewTaskButton task={w.task} onOpen={onOpenTask}>
                   <span className="shrink-0 whitespace-nowrap text-xs text-muted-foreground">
                     {waitingWho(w.entries[0], nameOf)}
-                    {w.entries.length > 1 ? ` +${w.entries.length - 1}` : ""} · {formatAge(w.since)}
+                    {w.entries.length > 1 ? ` +${w.entries.length - 1}` : ""} · {formatDay(w.since)}
                   </span>
                 </OverviewTaskButton>
               </li>
@@ -520,7 +541,7 @@ function ProjectOverview({
                     {a.task.title || "Untitled"}
                   </span>
                   <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
-                    {formatAge(a.at)}
+                    {formatDay(a.at)}
                   </span>
                 </button>
               </li>
