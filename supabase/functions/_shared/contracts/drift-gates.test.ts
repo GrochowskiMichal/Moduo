@@ -10,6 +10,10 @@ import { ATTACHMENTS_BUCKET } from "./attachments.ts";
 import { TOOL_ARG_SCHEMAS } from "./mcp-tool-args.ts";
 import {
   ACCESS_CHANGE_RESOURCES,
+  AGENT_LOUD_STATES,
+  AGENT_SESSION_STATES,
+  IMPORT_ENTITY_TYPES,
+  IMPORT_ROW_ACTIONS,
   ATTACHMENT_DELETED_REASONS,
   ATTACHMENT_PREVIEW_MIMES,
   ATTACHMENT_STATUSES,
@@ -244,9 +248,22 @@ describe("cross-runtime drift guards", () => {
     const ops = read("20261010160000_tasks_ops_registry_handles.sql");
     expect(RECURRENCE_MODES).toEqual(["after_completion"]);
     expect(ops).toContain(`p_rec ->> 'mode' <> '${RECURRENCE_MODES[0]}'`);
-    const notices = read("20261013110000_notifications_v3.sql");
     const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(", ");
-    expect(notices).toContain(`kind text NOT NULL CHECK (kind IN (${inList(NOTICE_DELIVERY_KINDS)}))`);
+    // TV-D16 re-states the CHECK with the agent's kind.
+    const agents = read("20261013220000_agents_imports_mcp.sql");
+    expect(agents).toContain(
+      `ADD CONSTRAINT notice_deliveries_kind_check CHECK (kind IN (${inList(NOTICE_DELIVERY_KINDS)}))`,
+    );
+  });
+
+  it("agent session states and import rows match the server's checks (TV-D16)", () => {
+    const sql = readFileSync(resolve(MIGRATIONS_DIR, "20261013220000_agents_imports_mcp.sql"), "utf8");
+    const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(", ");
+    expect(sql).toContain(`state text NOT NULL CHECK (state IN (${inList(AGENT_SESSION_STATES)}))`);
+    expect(sql).toContain(`v_state NOT IN (${inList(AGENT_SESSION_STATES)})`);
+    expect(sql).toContain(`v_state IN (${inList(AGENT_LOUD_STATES)})`);
+    expect(sql).toContain(`entity_type text NOT NULL CHECK (entity_type IN (${inList(IMPORT_ENTITY_TYPES)}))`);
+    expect(sql).toContain(`action text NOT NULL CHECK (action IN (${inList(IMPORT_ROW_ACTIONS)}))`);
   });
 
   it("every MCP module tool name has a TOOL_ARG_SCHEMAS parser and vice versa", () => {

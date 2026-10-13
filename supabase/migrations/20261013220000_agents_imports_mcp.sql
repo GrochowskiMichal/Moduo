@@ -149,11 +149,25 @@ AS $$
                             WHERE up.user_id = p_owner), false)))
 $$;
 
+-- The read policy's question, for the signed-in caller. It answers true only
+-- for a session that exists, so calling it directly tells nobody more than
+-- the rows they can read.
+CREATE OR REPLACE FUNCTION public.agent_sessions__shown(p_task_id uuid, p_owner uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (SELECT 1 FROM public.agent_sessions s WHERE s.task_id = p_task_id AND s.user_id = p_owner)
+     AND public.agent_sessions__shown_to(p_task_id, p_owner, auth.uid())
+$$;
+
 ALTER TABLE public.agent_sessions ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS agent_sessions_read ON public.agent_sessions;
 CREATE POLICY agent_sessions_read ON public.agent_sessions
   FOR SELECT TO authenticated
-  USING (public.agent_sessions__shown_to(task_id, user_id, (SELECT auth.uid())));
+  USING (public.agent_sessions__shown(task_id, user_id));
 REVOKE ALL ON public.agent_sessions FROM PUBLIC, anon, authenticated;
 GRANT SELECT ON public.agent_sessions TO authenticated;
 GRANT ALL ON public.agent_sessions TO service_role;
@@ -1084,6 +1098,44 @@ BEGIN
 END;
 $$;
 
+-- ── 5b. The notice gate takes the agent's notice ─────────────────────────────
+
+-- The gate narrows a notice's recipients to people who can see what it hangs
+-- on. A notice that hangs on someone's Inbox but names a task in its payload
+-- (an agent's state, a team notice) now also needs its reader to see that
+-- task. Both re-cut by anchored replace on the live definitions (TV-D13's
+-- note: extend the list, never paste an older copy).
+DO $gate$
+DECLARE
+  v_def text := pg_get_functiondef('public.module_activity__gate_recipients()'::regprocedure);
+  v_old text := 'AND public.spine__visible_to(NEW.workspace_id, NEW.entity_type, NEW.entity_id, public.tasks__try_uuid(u));';
+  v_new text := 'AND public.spine__visible_to(NEW.workspace_id, NEW.entity_type, NEW.entity_id, public.tasks__try_uuid(u))'
+    || E'\n      -- TV-D16: and the task it names, when it names one.'
+    || E'\n      AND (public.tasks__try_uuid(NEW.payload ->> ''task_id'') IS NULL'
+    || E'\n           OR public.tasks__visible_to(public.tasks__try_uuid(NEW.payload ->> ''task_id''), public.tasks__try_uuid(u)));';
+  v_trigger text;
+BEGIN
+  IF position('TV-D16: and the task it names' IN v_def) = 0 THEN
+    IF position(v_old IN v_def) = 0 THEN
+      RAISE EXCEPTION 'module_activity__gate_recipients isn''t the body this migration expects; redefine it by hand.';
+    END IF;
+    EXECUTE replace(v_def, v_old, v_new);
+  END IF;
+
+  SELECT pg_get_triggerdef(t.oid) INTO v_trigger FROM pg_trigger t
+  WHERE t.tgrelid = 'public.module_activity'::regclass AND t.tgname = 'module_activity_gate_recipients';
+  IF v_trigger IS NULL OR (position('''comments.team_mention''::text]' IN v_trigger) = 0
+                           AND position('''tasks.agent_status''' IN v_trigger) = 0) THEN
+    RAISE EXCEPTION 'module_activity_gate_recipients isn''t the trigger this migration expects; recreate it by hand.';
+  END IF;
+  IF position('''tasks.agent_status''' IN v_trigger) = 0 THEN
+    DROP TRIGGER module_activity_gate_recipients ON public.module_activity;
+    EXECUTE replace(v_trigger, '''comments.team_mention''::text]',
+                    '''comments.team_mention''::text, ''tasks.agent_status''::text]');
+  END IF;
+END;
+$gate$;
+
 -- ── 6. Account erasure covers the new tables (§Assumptions #26) ─────────────
 
 DO $erase$
@@ -1139,6 +1191,7 @@ BEGIN
   END LOOP;
   -- The ops and reads: people (the app) and keys (the connector).
   FOREACH fn IN ARRAY ARRAY[
+    'agent_sessions__shown(uuid, uuid)',
     'tasks_op_agent_report(uuid, uuid, jsonb)', 'tasks_agent_sessions(uuid, uuid)',
     'tasks_op_agent_session_post(uuid, uuid)', 'tasks_op_agent_session_dismiss(uuid, uuid)',
     'user_agent_work()', 'user_op_set_agent_work(boolean)',
