@@ -163,7 +163,7 @@ _Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
 - [ ] **NR-7 — Secure live channel + named presence** · deps: — · lane notes-data · Tier 2 (`realtime.messages` policy)
 - [ ] **NR-4 — Writing UX: quiet block handles, unified menus, `[[` links, ⌘K link dialog, mindmap drop** · deps: NR-3 · lane notes-editor
 - [ ] **NR-5 — Task lines in the document (no overlay), inline due/schedule/assignee** · deps: NR-3 · lane notes-editor
-- [~] **NR-6 — Agent writes land live (MCP CRDT path, attribution, Undo)** · deps: NR-3 · lane notes-data · Tier 2 (migration, `moduo-mcp`, contracts) · closes MCP-1's notes half
+- [x] **NR-6 — Agent writes land live (MCP CRDT path, attribution, Undo)** · deps: NR-3 · lane notes-data · Tier 2 (migration, `moduo-mcp`, contracts) · closes MCP-1's notes half · ✅ built 2026-10-14 (`t/mike/nr-6-agent-writes`, #360); migration + `moduo-mcp` deploy pending (migration first)
 - [ ] **NR-8 — Comments anchored to text** · deps: NR-4 · lane notes-editor · Tier 2 (migration on `comments`)
 - [ ] **NR-10 — ⌘K searches everything** · deps: NR-2 · lane notes-ui
 - [ ] **NR-11 — Import hardening (trashed re-import, size cap, honest progress, >1000 notes)** · deps: NR-3 · lane notes-data
