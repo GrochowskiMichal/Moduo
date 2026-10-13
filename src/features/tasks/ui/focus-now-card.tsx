@@ -5,7 +5,7 @@
 // unordered checklist with small marks, and Done ⏎ · Skip S. A subtask opens
 // its own details in the panel; ⇧F on it makes it the Now card.
 
-import type { FocusTimerMode } from "@contracts/vocabularies";
+import { type FocusTimerMode, isClosedTask } from "@contracts/vocabularies";
 import { Pause, Play } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
@@ -141,7 +141,7 @@ export function NowCard({
     : null;
   const due = task.dueDate ? formatDay(task.dueDate, nowOn(today)) : null;
   const blocked = api.blockedTaskIds.has(task.id)
-    ? (api.blockersByTask.get(task.id) ?? []).filter((b) => b.status !== "done").length
+    ? (api.blockersByTask.get(task.id) ?? []).filter((b) => !isClosedTask(b)).length
     : 0;
   const subtasks = api.subtasksByParent.get(task.id) ?? [];
   const saving = task.id.startsWith("tmp-");
