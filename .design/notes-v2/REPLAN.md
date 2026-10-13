@@ -3,9 +3,9 @@
 > **Status (2026-10-13): round 1 sent. Waiting on Maciej's answers to N1–N23.**
 >
 > - **Open calls:** N1–N23, all ❓. Load-bearing: ★ N1 (the ceiling), ★ N2 (the hackathon cut, ranked until the date is known, and the guide published once; facts already answered in Chat CH20–CH22), ★ N3 (where notes live), ★ N4 (a way in), ★ N5 (the grammar), ★ N6 (task lines). N20–N23 are opening calls.
-> - **Research lanes:** five landed and folded in (decisions audit, competitor structure, role journeys, connectivity, current state with a live two-person walkthrough). The visual audit is still running; it folds into §5 when it lands. The walkthrough added a trust pass to N2's cut (§1.3 B).
+> - **Research lanes:** all six landed and folded in (decisions audit, competitor structure, role journeys, connectivity, current state with a live two-person walkthrough, visual audit). The walkthrough added a trust pass to N2's cut (§1.3 B); the visual audit added §5 and its defaults a–e.
 > - **Received:** seven proposals from the Chat re-plan (§1.6), answered in N19.
-> - **Research data in the shared local database:** workspace "Notes replan research" (`3e15da47-dec0-4a1b-9b6d-82c26b1936e1`, 354 notes, 6 tasks, 1 contact); every row is listed in [`research/current-state.md`](./research/current-state.md) §8. The e2e teammate user was reused.
+> - **Research data in the shared local database:** two workspaces, "Notes replan research" (`3e15da47-dec0-4a1b-9b6d-82c26b1936e1`, 354 notes, 6 tasks, 1 contact; rows in [`research/current-state.md`](./research/current-state.md) §8) and "Notes replan visual audit" (`d2cb2621-cd4d-4cd8-83ad-78bef9237f0d`, 2 notes, 2 tasks, one published note; rows in [`research/visual-audit.md`](./research/visual-audit.md) §F). The e2e teammate user was reused.
 > - **Prototype:** [`prototypes/structure.html`](./prototypes/structure.html), keys 1–9 switch frames, V cycles variants.
 > - **Waiting on Maciej, outside the calls:** one technical item, told in chat.
 > - **Uncommitted:** nothing.
@@ -104,6 +104,8 @@ Tasks' root cause was "a solo planner's assumption stored as a column"; Calendar
 7. **"Saved locally — will sync" can show for an edit the server refused**, and it never retries.
 8. **Tasks written in a shared note read "Private item" for teammates** (they're filed into the writer's Inbox).
 9. **Nobody can tell who changed what.** No "edited by", no history, no "changed since you read".
+10. **Notes written while you're alone in a workspace stay private when people join.** A teammate, or every hackathon participant, opens an empty Notes until each note is shared by hand ([visual audit C2 Q6](./research/visual-audit.md)). The welcome note also loses its title when opened in a later session (the same cause as #1).
+11. **Small editor traps:** `/note` offers the note you're in (and fails); Tab at the end of a paragraph jumps into the panel's tag field; Backspace after a table jumps into its last cell.
 
 **C · Capability gaps** ([role journeys §2](./research/role-journeys.md), 24 gaps):
 - no images or files in a note;
@@ -114,7 +116,7 @@ Tasks' root cause was "a solo planner's assumption stored as a column"; Calendar
 - a meeting note from an event isn't titled, dated or given its people;
 - a project doesn't show its notes.
 
-**D · Visual seams** (from the [visual audit](./research/visual-audit.md), §5).
+**D · Visual seams** ([visual audit](./research/visual-audit.md), §5): Notes passes every lint check and still uses almost none of the north-star kit: its own hovers, focus rings and five hand-made floating menus; nothing it owns changes with density; the title and a heading are the same size; the divider is the brightest line in the app while every other edge is invisible; the note's actions float over the text.
 
 **E · No way in.**
 - No start page: Notes opens on "Select a note on the left".
@@ -245,7 +247,34 @@ Round 2's work, view by view and state by state (empty, loading, error, read-onl
 
 ## 5. The visual north star, applied to Notes
 
-*(From the visual-audit lane.)*
+From the [visual audit](./research/visual-audit.md): measured computed styles from Storybook and the live local app at three densities.
+
+**Headline.** Notes has zero lint hits (July's editor exemption was removed), so it looks finished in code review, yet it is the least north-star module in the app: almost nothing it owns is built from the DS-6 kit.
+
+**What would spread to other modules if copied** (ranked; each breaks a ratified rule):
+
+| # | Issue | Rule |
+| --- | --- | --- |
+| 1 | **Five hand-made floating menus** in one editor (slash, its picker, `@`, the format toolbar, the task-line menu), none on the shared floating surface or its pop motion. Email compose, Chat and task descriptions will hit the same wall: there's no caret-anchored menu primitive | R13, 81 |
+| 2 | **A second type scale for prose:** the title and an H1 are both 30/600; body text is 14 px against Tasks' 15; tables and code 13; a different copy again on the public page | 38, R4 |
+| 3 | **Edges:** the divider is the text colour at 20:1, the brightest line in the app; quote bars, code and tables sit at about 1.1:1, invisible | hairline |
+| 4 | **Old interaction recipes:** 18 accent hovers against 3 state-layer hovers; 26 full-strength focus rings against none of the kit's | 39 |
+| 5 | **Nothing Notes owns follows density** (tree rows 26.6 px at every density, against NavRow's 36/32/28) | 44 |
+| 6 | **Six date formats** ("3w ago", "5d ago", "10 minutes ago", 24-hour times next to 12-hour ones) and truncation inside menus | 41, 42, Chat-6 |
+| 7 | **The note's actions float over the text** in the centre, and the panel toggle is duplicated there | 48b |
+| 8 | Four row recipes in one sidebar, none `NavRow`; four drop looks; six hand-rolled empty states; presence avatars without a person's colour; quote bars in the accent colour | 10, 39, 43, 46 |
+
+**The fix list** (rule-backed, no call needed) is the visual audit's §C1: a caret-anchored menu primitive in `ui/` that every editor menu moves onto; prose tokens; hairline edges; the checklist box on `CompleteToggle`'s geometry; the sidebar on `NavRow` and the kit's drag visuals; state-layer hovers and the kit's focus ring; one date formatter; `EmptyState`; `Input` for native inputs; motion tokens; stories for every editor surface. It becomes part of the visual blocks in the spec.
+
+**Defaults I'll write into the spec unless you object** (from the audit's §C2):
+
+| | Where | The default |
+| --- | --- | --- |
+| a | Density in the editor | The editor's chrome (task-line meta, page rows, table padding, chips, menus) follows density; the **reading size of prose is its own setting**, as in Notion and Linear's docs, so a dense app can still read comfortably. |
+| b | The note's actions | A quiet header row at the top of the centre pane: where the note is · who's here · Share · ⋯ (frame 1). The panel toggle lives only in the bottom bar (48b). |
+| c | Box in a box | The editor uses the centre panel's own surface, like every other centre pane. |
+| d | Tables | A header row by default, no header column. |
+| e | The title | One step larger than a top heading, so the two never look the same. |
 
 ## 6. Technical decisions I'm taking
 
@@ -355,6 +384,7 @@ Prototype: [`prototypes/structure.html`](./prototypes/structure.html), keys 1–
   - **Archive, Recently deleted and Published** open from the sidebar's ⋯ (Tasks 98); a published note carries a quiet mark in the tree.
   - **No per-note icons** in the tree (no user-picked icons, as in Tasks). An emoji typed at the start of a title stays as typed; the importer's job becomes putting a Notion page's icon at the start of its title, so nothing is lost.
   - **Nesting stays unlimited** (a real Notion import is 9 deep), and every row shows its count of notes inside.
+  - **A note made under Workspace is the workspace's, including for people who join later.** Today a note written while you're alone stays private when teammates arrive, so a prepared workspace looks empty to them.
 - *Recommend: yes.* Rejected: **Tasks' projects hold notes** (frame 1, variant 2): one place per piece of work, but module permissions are per person, so a member without Tasks access would see no project notes, and Notes would carry two sharing rules. Rejected: today's derived Inbox.
 - *Outside the target roles?* Yes: a calmer sidebar, and privacy you can see, help anyone who shares a workspace.
 - (c) reverses NO-1's derived Inbox and DESIGN_BRIEF's workspace pins and fixed sections. Prototype frame 1 (variants: recommended · projects hold notes · today).
