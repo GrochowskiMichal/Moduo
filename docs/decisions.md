@@ -139,6 +139,8 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Notes, Lexical, Yjs, Notion import → [decisions/notes.md](decisions/notes.md)
 
+- 2026-10-13 · NR-1 built — the Inbox is stored, favorites are per user, and filing a sub-note never hides it.
+- 2026-10-13 · Notes refresh planned: keep Lexical and the CRDT model, rebuild the surface and editor core behind a per-user switch.
 - 2026-07-29 · 🔎 Notion ships a ZIP INSIDE A ZIP — the shipped notes importer silently imports nothing from a real export.
 - 2026-07-29 · NOTE-FIX-1 — imported notes materialize their CRDT at IMPORT time; the headless Yjs builder is no longer deferred.
 - 2026-07-11 · DF-23 (@mention + /ref beyond Notes) landed — the LAST spine-lane block

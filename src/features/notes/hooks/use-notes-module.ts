@@ -292,6 +292,8 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
         deletedAt: null,
         shareMode: "custom",
         workspaceShared: false,
+        inInbox: parentId === null,
+        fullWidth: false,
       };
       setNotes((prev) => [...prev, optimistic]);
       pendingCreatesRef.current.set(id, optimistic);
@@ -573,5 +575,7 @@ function welcomeOptimisticNote(id: string, workspaceId: string, userId: string |
     deletedAt: null,
     shareMode: "custom",
     workspaceShared: false,
+    inInbox: true,
+    fullWidth: false,
   };
 }

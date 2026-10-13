@@ -82,11 +82,22 @@ export const noteRowSchema = z.object({
   // PERM-3: a sub-note follows its parent ("inherit") or has its own sharing.
   share_mode: z.enum(["inherit", "custom"]).optional(),
   workspace_shared: z.boolean().optional(),
+  // NR-1: stored Inbox + per-note reading width (optional until deployed).
+  in_inbox: z.boolean().optional(),
+  full_width: z.boolean().optional(),
   created_at: z.string(),
   updated_at: z.string(),
   deleted_at: optStr,
 });
 export type NoteRow = z.infer<typeof noteRowSchema>;
+
+/** NR-1: one per-user favorite (`note_favorites`, the viewer's own rows). */
+export const noteFavoriteRowSchema = z.object({
+  note_id: id,
+  position: z.string(),
+  created_at: z.string(),
+});
+export type NoteFavoriteRow = z.infer<typeof noteFavoriteRowSchema>;
 
 export const noteUpdateRowSchema = z.object({
   id: z.union([z.number(), z.string()]),

@@ -15,7 +15,7 @@ import {
   useSensors,
 } from "@dnd-kit/core";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { CloudOff, PanelRight } from "lucide-react";
+import { CloudOff } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { onCreateNew } from "../../components/app/create-events";
@@ -25,10 +25,8 @@ import {
   type RightPanelVariant,
 } from "../../components/app/right-panel-switcher";
 import { truncationNotice } from "../../components/app/truncation-notice";
-import { IconButton } from "../../components/ui/icon-button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../components/ui/tooltip";
 import { HubDropZone } from "../../features/contacts/ui/hub-drop-zone";
-import { dispatchLayoutPanelsSet, useFeaturePanelState } from "../../features/layout/panel-events";
 import { findQuoteOffset } from "../../features/notes/comments/quote";
 import {
   INSERT_ENTITY_CHIP_EVENT,
@@ -112,19 +110,6 @@ export function NotesPage() {
   } = module;
 
   const sections = useMemo(() => buildNoteSections(notes), [notes]);
-  // The summon affordance (DF-13) mirrors + toggles the shell's right-panel
-  // state over the shared panel-event contract — the shell owns the state.
-  const notesPanels = useFeaturePanelState("notes");
-  const rightPanelOpen = notesPanels.right;
-  const toggleRightPanel = useCallback(
-    () =>
-      dispatchLayoutPanelsSet({
-        feature: "notes",
-        left: notesPanels.left,
-        right: !notesPanels.right,
-      }),
-    [notesPanels.left, notesPanels.right],
-  );
   const selectedId = search.id ?? null;
   const selectedNote = useMemo(
     () => (selectedId ? (notes.find((n) => n.id === selectedId) ?? null) : null),
@@ -341,19 +326,8 @@ export function NotesPage() {
         betweenPositions,
       });
       if (!drop) return; // self/cycle/unknown — quiet no-op
-      // A sub-note that follows its parent's sharing has nothing to follow at
-      // the top level: it becomes private. Say so before teammates lose it.
-      const dragged = notes.find((n) => n.id === dragId);
-      if (
-        dragged?.shareMode === "inherit" &&
-        !drop.parentId &&
-        !noteIsPrivate(dragId, notes) &&
-        !window.confirm(
-          "This note follows its parent's sharing. At the top level it becomes private to you. Move it anyway?",
-        )
-      ) {
-        return;
-      }
+      // A sub-note moved to the top level keeps everyone's access: the server
+      // freezes what its parent gave it (NR-1, notes__keep_access_on_reroot).
       const parentPrivate = drop.parentId ? noteIsPrivate(drop.parentId, notes) : false;
       const keepSharing =
         parentPrivate &&
@@ -672,17 +646,6 @@ export function NotesPage() {
             onUnpublish={() => module.unpublishNote(selectedNote.id)}
           />
         ) : null}
-        {/* Persistent right-panel summon (DF-13): the spine payoff — Detail ·
-            Comments · Outline — must be reachable without knowing the bottom-
-            bar toggle exists. Always present, never conditional. */}
-        <IconButton
-          icon={PanelRight}
-          label={rightPanelOpen ? "Hide side panel" : "Show links, comments & outline"}
-          aria-pressed={rightPanelOpen}
-          className={rightPanelOpen ? "text-foreground" : "text-muted-foreground"}
-          tooltipSide="left"
-          onClick={toggleRightPanel}
-        />
       </div>
       <div className="min-h-0 flex-1">
         {selectedNote && !selectedNote.deletedAt && engine && selectedWorkspaceId ? (

@@ -37,7 +37,7 @@ import {
   readNoteState,
   writeNoteState,
 } from "./idb";
-import { isNetworkError, replayDecision, replayOrder } from "./meta-outbox";
+import { callMetaOp, isNetworkError, replayDecision, replayOrder } from "./meta-outbox";
 import {
   ackedKeys,
   advanceCursor,
@@ -523,27 +523,7 @@ export class NotesSyncEngineV2 {
   }
 
   private callMetaOp(kind: MetaOutboxEntry["kind"], args: any): Promise<unknown> {
-    const rt = this.runtime!;
-    switch (kind) {
-      case "create":
-        return rt.notesV2.create(args);
-      case "rename":
-        return rt.notesV2.rename(args);
-      case "move":
-        return rt.notesV2.move(args);
-      case "setMeta":
-        return rt.notesV2.setMeta(args);
-      case "duplicate":
-        return rt.notesV2.duplicate(args);
-      case "archive":
-        return rt.notesV2.archive(args);
-      case "unarchive":
-        return rt.notesV2.unarchive(args);
-      case "trash":
-        return rt.notesV2.trash(args);
-      case "restore":
-        return rt.notesV2.restore(args);
-    }
+    return callMetaOp(this.runtime!, kind, args);
   }
 
   /** Reconnect/refocus pass: replay queued meta ops FIFO, flush every queued
