@@ -162,7 +162,7 @@ _Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
 
 - [x] **NR-1 — Organizing data: stored Inbox, per-user Favorites, full width** · deps: — · lane notes-data · Tier 2 (migration) · ✅ done 2026-10-13 (#354); migration applied to prod 2026-10-13 (version 20261013120000)
 - [ ] **NR-7 — Secure live channel + named presence** · deps: — · lane notes-data · Tier 2 (`realtime.messages` policy)
-- [ ] **NR-2 — New Notes shell + sidebar, behind the switch** · deps: NR-1 · lane notes-ui
+- [~] **NR-2 — New Notes shell + sidebar, behind the switch** · deps: NR-1 · lane notes-ui
 - [ ] **NR-3 — Editor core: schema/view split, one markdown converter, honest provider, meta line + Linked-from footer** · deps: NR-2 · lane notes-editor
 - [ ] **NR-4 — Writing UX: quiet block handles, unified menus, `[[` links, ⌘K link dialog, mindmap drop** · deps: NR-3 · lane notes-editor
 - [ ] **NR-5 — Task lines in the document (no overlay), inline due/schedule/assignee** · deps: NR-3 · lane notes-editor
