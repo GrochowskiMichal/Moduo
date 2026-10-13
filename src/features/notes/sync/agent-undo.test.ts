@@ -153,4 +153,16 @@ describe("agent write from the log", () => {
     });
     expect(res.bodyMd).toBe("First words");
   });
+
+  it("never removes a lone non-text block when appending", () => {
+    const base = buildDocStateFromMarkdown(NOTE_ID, "[Mindmap](moduo://mindmap/m1)")!;
+    const res = agentWriteFromLog({
+      noteId: NOTE_ID,
+      snapshotB64: base.docStateB64,
+      updatesB64: [],
+      bodyMd: "",
+      edit: { kind: "append", markdown: "Agent line" },
+    });
+    expect(res.bodyMd).toBe(`${base.bodyMd}\n\nAgent line`);
+  });
 });

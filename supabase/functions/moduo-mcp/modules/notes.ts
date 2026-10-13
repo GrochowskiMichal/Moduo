@@ -25,10 +25,13 @@
 import type { ConnectorModule, ToolContext } from "../registry.ts";
 import { assertReach, visibleIds } from "../share.ts";
 import {
-  type AgentEdit,
   agentCreateDoc,
   agentWriteFromLog,
 } from "../../_shared/notes-doc/notes-doc.bundle.js";
+
+/** Mirrors `AgentEdit` in src/features/notes/editor/agent-write.ts (the
+ * bundle ships no types). */
+type AgentEdit = { kind: "append" | "replace"; markdown: string };
 
 type Row = Record<string, any>;
 

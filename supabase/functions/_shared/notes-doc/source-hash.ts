@@ -9,7 +9,20 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-const PACKAGES = ["lexical", "@lexical/yjs", "@lexical/markdown", "yjs", "y-protocols"];
+const PACKAGES = [
+  "lexical",
+  "@lexical/yjs",
+  "@lexical/markdown",
+  "@lexical/headless",
+  "@lexical/list",
+  "@lexical/table",
+  "@lexical/rich-text",
+  "@lexical/link",
+  "@lexical/code",
+  "yjs",
+  "y-protocols",
+  "lib0",
+];
 
 export function notesDocSourceHash(root: string, inputs: string[]): string {
   const h = createHash("sha256");

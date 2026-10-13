@@ -193,17 +193,15 @@ describe("agent writes reach an open note (NR-6)", () => {
     const session = engine.getOrCreateSession("n9");
     await session.booted;
 
+    // A view-only session (no local edits) never re-saves a body.
     setRows([agentRow]);
     await engine.pullNote("n9");
+    await tick();
+    await engine.flushNote("n9");
+    expect(pushUpdates).not.toHaveBeenCalled();
     expect(deriveNoteBody(session.doc).md).toBe("# Plan\n\nHello\n\nFrom the agent");
     const undo = engine.agentUndo("n9")!;
     expect(undo.canUndo()).toBe(true);
-
-    // The agent's update itself is never echoed; only an update-free body save.
-    await engine.flushNote("n9");
-    await tick();
-    for (const [call] of pushUpdates.mock.calls) expect(call.updates).toEqual([]);
-    expect(pushUpdates.mock.calls.at(-1)?.[0].bodyMd).toBe("# Plan\n\nHello\n\nFrom the agent");
 
     undo.undo();
     await tick();
@@ -223,5 +221,58 @@ describe("agent writes reach an open note (NR-6)", () => {
     await session.booted;
     expect(deriveNoteBody(session.doc).md).toBe("# Plan\n\nHello\n\nFrom the agent");
     expect(engine.agentUndo("n9")!.canUndo()).toBe(false);
+  });
+});
+
+describe("agent body re-save (NR-6)", () => {
+  it("an editing session re-saves the merged body after an agent write, without echoing it", async () => {
+    const base = buildDocStateFromMarkdown("n8", "# Plan\n\nHello")!;
+    const server = new Y.Doc();
+    server.get(NOTES_DOC_ROOT, Y.XmlElement);
+    Y.applyUpdate(server, Uint8Array.from(Buffer.from(base.docStateB64, "base64")));
+    const before = Y.encodeStateVector(server);
+    applyAgentEdit(server, { kind: "append", markdown: "From the agent" });
+    const agentB64 = encodeUint8ToBase64(Y.encodeStateAsUpdate(server, before));
+    let rows: unknown[] = [];
+    const pullDoc = rs.fn(async () => ({
+      snapshotB64: base.docStateB64,
+      docVersion: 1,
+      updates: rows,
+    }));
+    const pushUpdates = rs.fn(async (_i: { updates: unknown[]; bodyMd?: string | null }) => ({
+      inserted: 1,
+      duplicates: 0,
+      maxUpdateId: 9,
+    }));
+    engine = new NotesSyncEngineV2(
+      { notesV2: { pullDoc, pushUpdates } } as unknown as ModuoRuntime,
+      "ws1",
+    );
+    const session = engine.getOrCreateSession("n8");
+    await session.booted;
+    applyAgentEdit(session.doc, { kind: "append", markdown: "Mine" });
+    await tick();
+    await engine.flushNote("n8");
+    const localPushes = pushUpdates.mock.calls.length;
+    expect(localPushes).toBeGreaterThan(0);
+
+    rows = [
+      {
+        id: 8,
+        clientId: "agent:y",
+        clientSeq: 1,
+        updateB64: agentB64,
+        origin: "agent",
+        actorKeyId: "k",
+      },
+    ];
+    await engine.pullNote("n8");
+    await new Promise((r) => setTimeout(r, 1700));
+    await engine.flushNote("n8");
+    const later = pushUpdates.mock.calls.slice(localPushes).map(([c]) => c);
+    expect(later.length).toBeGreaterThan(0);
+    for (const c of later) expect(c.updates).toEqual([]);
+    expect(later.at(-1)?.bodyMd).toContain("From the agent");
+    expect(later.at(-1)?.bodyMd).toContain("Mine");
   });
 });

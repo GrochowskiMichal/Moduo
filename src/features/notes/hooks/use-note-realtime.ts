@@ -144,7 +144,9 @@ export function useNoteRealtime({ engine, noteId, enabled, selfUserId, selfName 
             payload?.origin === "agent"
               ? new AgentOrigin(
                   typeof payload.keyId === "string" ? payload.keyId : null,
-                  typeof payload.label === "string" ? payload.label : null,
+                  // The channel is public until NR-7: never trust a sent
+                  // name; the meta line reads it from the activity row.
+                  null,
                 )
               : "remote";
           try {

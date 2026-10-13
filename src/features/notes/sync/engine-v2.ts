@@ -131,6 +131,9 @@ type NoteSession = {
   destroyed: boolean;
   /** NR-6: Undo for agent writes that reached this session's doc. */
   agentUndo: AgentUndo;
+  /** This session pushed a local edit (only editors do), so it may hold
+   * text an agent write's body missed. View-only sessions never re-save. */
+  editedLocally: boolean;
 };
 
 /** Keep at most this many idle note sessions alive (fast note switching)
@@ -285,6 +288,7 @@ export class NotesSyncEngineV2 {
       lastUsedAt: Date.now(),
       destroyed: false,
       agentUndo: createAgentUndo(doc),
+      editedLocally: false,
     };
     this.sessions.set(noteId, s);
     this.evictIdleSessions(noteId);
@@ -299,7 +303,7 @@ export class NotesSyncEngineV2 {
       // An agent's write carries the body as the connector saw the doc; if
       // this session pushed an edit the connector hadn't seen yet, that body
       // lacks it. Re-derive once from the merged doc (an update-free save).
-      if (isAgentOrigin(origin) && s!.synced && !this.drafts.has(noteId)) {
+      if (isAgentOrigin(origin) && s!.synced && s!.editedLocally && !this.drafts.has(noteId)) {
         s!.bodyOwed = true;
         this.scheduleFlush(s!, AGENT_BODY_RESAVE_MS);
         return;
@@ -400,6 +404,7 @@ export class NotesSyncEngineV2 {
   }
 
   private async enqueueLocalUpdate(s: NoteSession, update: Uint8Array): Promise<void> {
+    s.editedLocally = true;
     const { seq, next } = assignSeq(s.state);
     s.state = next;
     s.lastUsedAt = Date.now();

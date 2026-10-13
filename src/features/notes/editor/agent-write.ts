@@ -22,7 +22,7 @@ import {
   syncLexicalUpdateToYjsV2__EXPERIMENTAL,
   syncYjsStateToLexicalV2__EXPERIMENTAL,
 } from "@lexical/yjs";
-import { $getRoot } from "lexical";
+import { $getRoot, $isParagraphNode } from "lexical";
 import { Awareness } from "y-protocols/awareness";
 import * as Y from "yjs";
 import { decodeBase64ToUint8, encodeUint8ToBase64 } from "../utils/base64";
@@ -106,7 +106,7 @@ export function applyAgentEdit(
         // An empty doc still holds one blank paragraph after load; appending
         // below it would leave a stray empty first line.
         const only = root.getFirstChild();
-        if (root.getChildrenSize() === 1 && only && only.getTextContent() === "") only.remove();
+        if (root.getChildrenSize() === 1 && $isParagraphNode(only) && only.isEmpty()) only.remove();
         root.append(...$generateNodesFromMarkdownString(edit.markdown, NOTES_TRANSFORMERS));
       },
       { discrete: true },
