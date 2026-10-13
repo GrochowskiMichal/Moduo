@@ -51,6 +51,7 @@ import {
 } from "@/components/ui/select";
 import type { EntityLink, EntityRef, RelationKind } from "@/lib/entity-links";
 import type { ContactDetailsPatch, ModuoRuntime } from "@/lib/runtime.types";
+import { formatFullDate } from "@/lib/time-format";
 import { cn } from "@/lib/utils";
 import type { HubStatus } from "../../spine/hooks/use-entity-hub";
 import type { MentionCandidate } from "../../spine/mention";
@@ -268,12 +269,11 @@ function channelRows(
   });
 }
 
-/** "1988-04-17" → "April 17, 1988" (falls back to the raw value). */
+/** "1988-04-17" → "Apr 17, 1988" / "17 Apr 1988", Time & region's date order
+ *  (TV-D14; falls back to the raw value). */
 function formatDateValue(value: string): string {
   const d = new Date(`${value}T00:00:00`);
-  return Number.isNaN(d.getTime())
-    ? value
-    : d.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+  return Number.isNaN(d.getTime()) ? value : formatFullDate(d);
 }
 
 /** One field group inside the card: a type icon on the first row, then rows.

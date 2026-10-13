@@ -41,7 +41,7 @@
 - [ ] **Do:** Settings → Advanced → Export data → **Expect:** `tasks` carries `timeEntries` (yours, with days and notes). _(web)_
 
 ## Migrations / data
-- [ ] **Do:** `bun run db:test time_report` → **Expect:** 88 checks pass (logging, edits, give-backs, the read gate, the report's people and scopes, outsiders, zones, Time & region, erasure). `20261013200000` and `20261013201000` are on the local stack. _(local)_
+- [ ] **Do:** `bun run db:test time_report` → **Expect:** 90 checks pass (logging, edits, give-backs, the read gate, the report's people and scopes, outsiders, zones, Time & region, erasure). `20261013200000` and `20261013201000` are on the local stack. _(local)_
 
 ## Known gaps / not-yet-testable
 - Times on screen are this device's clock; the saved zone is the clock your day runs on (repeats, reminders, due times, report days). When they differ, the travel prompt offers to line them up.

@@ -132,11 +132,17 @@ export function formatFullDate(value: DateInput): string {
   return d ? monthDayText(d, true) : "";
 }
 
-/** A weekday and a date: "Thu, Jul 2" / "Thu, 2 Jul" (the year when it isn't this one). */
-export function formatWeekdayDate(value: DateInput, now: Date = new Date()): string {
+/** A weekday and a date: "Thu, Jul 2" / "Thu, 2 Jul" (the year when it isn't
+ *  this one, or always with `{ year: true }`). */
+export function formatWeekdayDate(
+  value: DateInput,
+  now: Date = new Date(),
+  opts: { year?: boolean } = {},
+): string {
   const d = toDate(value);
   if (!d) return "";
-  return `${formats().weekday.format(d)}, ${monthDayText(d, d.getFullYear() !== now.getFullYear())}`;
+  const withYear = opts.year ?? d.getFullYear() !== now.getFullYear();
+  return `${formats().weekday.format(d)}, ${monthDayText(d, withYear)}`;
 }
 
 /** A day and a time: "Today, 3:00 PM", "Mon, 9:30 AM", "Oct 16, 2027, 3:00 PM". */

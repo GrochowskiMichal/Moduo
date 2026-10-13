@@ -151,7 +151,11 @@ BEGIN
 
   IF p_patch ? 'time_zone' THEN
     v_zone := btrim(coalesce(p_patch ->> 'time_zone', ''));
-    IF jsonb_typeof(p_patch -> 'time_zone') <> 'string' OR NOT public.time_region__zone_ok(v_zone) THEN
+    -- A zone name from the catalog (as TV-D8's op kept): `AT TIME ZONE` alone
+    -- also takes abbreviations and POSIX strings ("PST", "UTC+3") the app
+    -- can't read.
+    IF jsonb_typeof(p_patch -> 'time_zone') <> 'string' OR NOT public.time_region__zone_ok(v_zone)
+       OR NOT EXISTS (SELECT 1 FROM pg_catalog.pg_timezone_names z WHERE z.name = v_zone) THEN
       RAISE EXCEPTION 'Unknown time zone.' USING ERRCODE = '22023';
     END IF;
   END IF;

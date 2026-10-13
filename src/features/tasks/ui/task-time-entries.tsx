@@ -11,10 +11,18 @@ import { Button } from "../../../components/ui/button";
 import { CollectionHeader } from "../../../components/ui/collection-header";
 import { IconButton } from "../../../components/ui/icon-button";
 import { Input } from "../../../components/ui/input";
+import { Label } from "../../../components/ui/label";
 import { formatDay } from "../../../lib/time-format";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { Task, TaskTimeEntry } from "../model";
-import { dayToDate, entryDay, entryLine, parseTimeEntry } from "../time-entries";
+import {
+  dayToDate,
+  entryDay,
+  entryEditChange,
+  entryEditLine,
+  entryLine,
+  parseTimeEntry,
+} from "../time-entries";
 import { formatTracked } from "../time-format";
 
 type TimeApi = Pick<
@@ -38,6 +46,7 @@ export function TaskTimeEntries({ task, api }: { task: Task; api: TimeApi }) {
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState("");
+  const [editError, setEditError] = useState<string | null>(null);
   const now = new Date();
 
   const reload = useCallback(() => {
@@ -66,31 +75,33 @@ export function TaskTimeEntries({ task, api }: { task: Task; api: TimeApi }) {
   };
 
   const startEdit = (entry: TaskTimeEntry) => {
-    const line = [
-      formatTracked(entry.seconds),
-      entry.kind === "manual" ? entryDay(entry) : null,
-      entry.note,
-    ]
-      .filter(Boolean)
-      .join(" ");
     setEditing(entry.id);
-    setEditDraft(line);
+    setEditDraft(entryEditLine(entry));
+    setEditError(null);
   };
   const saveEdit = (entry: TaskTimeEntry) => {
-    const parsed = parseTimeEntry(editDraft);
-    if (!parsed) return;
-    const seconds = parsed.minutes * 60;
+    // Only what changed goes: a note-only edit leaves a Focus stretch's
+    // seconds as they were.
+    const change = entryEditChange(entry, editDraft);
+    if (!change) {
+      setEditError(
+        entry.kind === "focus"
+          ? "Start with a length: 25m or 1h 30m."
+          : "Start with a length: 2h, 45m or 1h 30m, up to 24h.",
+      );
+      return;
+    }
+    if (Object.keys(change).length === 0) {
+      setEditing(null);
+      return;
+    }
     setBusy(true);
     void api
       .editTimeEntry(
         task.id,
         entry.id,
-        {
-          seconds,
-          ...(entry.kind === "manual" ? { on: parsed.day } : {}),
-          note: parsed.note ?? "",
-        },
-        seconds - entry.seconds,
+        change,
+        change.seconds === undefined ? 0 : change.seconds - entry.seconds,
       )
       .then((ok) => {
         if (ok) {
@@ -132,9 +143,9 @@ export function TaskTimeEntries({ task, api }: { task: Task; api: TimeApi }) {
 
   return (
     <div className="flex flex-col gap-2 border-t border-hairline pt-2.5">
-      <label htmlFor="task-time-add" className="text-muted-foreground">
+      <Label htmlFor="task-time-add" className="font-normal text-muted-foreground">
         Add time
-      </label>
+      </Label>
       <div className="flex items-center gap-1.5">
         <Input
           id="task-time-add"
@@ -170,13 +181,17 @@ export function TaskTimeEntries({ task, api }: { task: Task; api: TimeApi }) {
               const line = entryLine(entry, now);
               if (editing === entry.id) {
                 return (
-                  <li key={entry.id} className="flex items-center gap-1.5 py-1">
+                  <li key={entry.id} className="flex flex-wrap items-center gap-1.5 py-1">
                     <Input
                       size="sm"
                       autoFocus
                       value={editDraft}
                       aria-label="Edit the entry"
-                      onChange={(e) => setEditDraft(e.target.value)}
+                      aria-invalid={editError ? true : undefined}
+                      onChange={(e) => {
+                        setEditDraft(e.target.value);
+                        setEditError(null);
+                      }}
                       onKeyDown={(e) => {
                         if (e.key === "Enter") {
                           e.preventDefault();
@@ -196,6 +211,11 @@ export function TaskTimeEntries({ task, api }: { task: Task; api: TimeApi }) {
                     >
                       Save
                     </Button>
+                    {editError ? (
+                      <p className="w-full text-xs text-muted-foreground" role="alert">
+                        {editError}
+                      </p>
+                    ) : null}
                   </li>
                 );
               }

@@ -97,7 +97,10 @@ test("Add time logs an entry, and the report exports CSV and its print layout", 
     page.waitForEvent("download"),
     sheet.getByRole("button", { name: "Export CSV" }).click(),
   ]);
-  const csv = readFileSync((await download.path()) as string, "utf8").split("\r\n");
+  const file = readFileSync((await download.path()) as string, "utf8");
+  // A byte-order mark first, so spreadsheets read it as UTF-8.
+  expect(file.startsWith("﻿")).toBe(true);
+  const csv = file.slice(1).split("\r\n");
   expect(csv[0]).toBe("Project,Task,Hours,Duration,Notes");
   expect(csv[1]).toBe(`Billable ${tag},Homepage ${tag},2.75,2h 45m,First pass; kickoff call`);
   expect(csv[2]).toBe("Total,,2.75,2h 45m,");
@@ -113,4 +116,14 @@ test("Add time logs an entry, and the report exports CSV and its print layout", 
   expect(printed).toContain(`Homepage ${tag}`);
   expect(printed).toContain("2h 45m");
   expect(printed).toContain("Made with Moduo");
+
+  // On paper the layout is the only thing there, light whatever the app's theme.
+  await page.emulateMedia({ media: "print" });
+  const paper = page.locator("[data-print-root]");
+  await expect(paper).toBeVisible();
+  await expect(page.locator("#root")).toBeHidden();
+  await expect(paper).toHaveAttribute("data-theme", "light");
+  await expect(paper.getByText("Time report", { exact: true })).toBeVisible();
+  await page.emulateMedia({ media: "screen" });
+  await expect(paper).toBeHidden();
 });

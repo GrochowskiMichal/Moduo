@@ -18,6 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../../../components/ui/select";
+import { formatFullDate } from "../../../lib/time-format";
 import { useWorkspace } from "../../../providers/workspace-provider";
 import {
   canManageMember,
@@ -189,11 +190,7 @@ export function PersonEditor({
             ) : null}
           </>
         }
-        subtitle={
-          member.joinedAt
-            ? `Joined ${new Date(member.joinedAt).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}`
-            : undefined
-        }
+        subtitle={member.joinedAt ? `Joined ${formatFullDate(member.joinedAt)}` : undefined}
         actions={
           isWorkspaceOwner ? null : (
             <Select

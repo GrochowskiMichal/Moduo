@@ -4,7 +4,7 @@
 // No I/O — the cloud state (email_op_snooze) + the IMAP move (email_snooze_thread)
 // are driven by the hook; this module only computes WHEN.
 
-import { formatTime } from "../../lib/time-format";
+import { formatDate, formatTime } from "../../lib/time-format";
 
 /** A resolved snooze choice: a stable id, a human label, and the target instant. */
 export type SnoozePreset = {
@@ -86,7 +86,7 @@ export function formatSnoozeUntil(atIso: string, now: Date): string {
   if (days > 1 && days < 7) {
     return `${at.toLocaleDateString(undefined, { weekday: "long" })} ${time}`;
   }
-  return `${at.toLocaleDateString(undefined, { month: "short", day: "numeric" })} ${time}`;
+  return `${formatDate(at, now)} ${time}`;
 }
 
 function atLocalMidnight(d: Date): number {

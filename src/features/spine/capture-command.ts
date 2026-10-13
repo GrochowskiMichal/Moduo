@@ -11,6 +11,7 @@
 import type { ModuoRuntime } from "../../lib/runtime.types";
 import { captureTaskToStore } from "../../lib/sync/capture";
 import { findWorkspaceStore } from "../../lib/sync/store";
+import { formatTime, formatWeekdayDate } from "../../lib/time-format";
 import { endPosition, makeTask } from "../tasks/helpers";
 import { parseCapture } from "../tasks/parse/capture-parser";
 
@@ -108,22 +109,11 @@ function eventTimes(
   return { startsAt: start.toISOString(), endsAt: end.toISOString(), allDay: false };
 }
 
-const EVENT_WHEN_FMT = new Intl.DateTimeFormat(undefined, {
-  weekday: "short",
-  month: "short",
-  day: "numeric",
-  hour: "numeric",
-  minute: "2-digit",
-});
-const EVENT_DAY_FMT = new Intl.DateTimeFormat(undefined, {
-  weekday: "short",
-  month: "short",
-  day: "numeric",
-});
-
+/** "Thu, Oct 16, 3:00 PM" / "All day · Thu, Oct 16": Time & region's clock and
+ *  date order (TV-D14). */
 function eventDescription(startsAt: string, allDay: boolean): string {
   const d = new Date(startsAt);
-  return allDay ? `All day · ${EVENT_DAY_FMT.format(d)}` : EVENT_WHEN_FMT.format(d);
+  return allDay ? `All day · ${formatWeekdayDate(d)}` : `${formatWeekdayDate(d)}, ${formatTime(d)}`;
 }
 
 /**

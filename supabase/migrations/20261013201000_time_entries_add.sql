@@ -6,7 +6,7 @@
 --   * "Add time…": a logged entry (kind `manual`) is a length on a day you
 --     pick, with an optional note ("2h · yesterday · call with Anna"). Your
 --     own logged and Focus entries can be edited (length, note; a logged
---     entry's day) and removed; a Focus stretch keeps its start.
+--     entry's day) and removed; a Focus stretch keeps its end.
 --   * Focus saves carry their run (run_id, only a run of yours in that
 --     workspace); a give-back after a takeover (TV-F6, F6-16) is labelled
 --     (reason `give_back`) and can't be removed by hand.
@@ -184,7 +184,7 @@ $$;
 --             months back, never after tomorrow), with p_note; p_client_key
 --             makes a resend count once;
 --   'edit'    your own logged or Focus entry p_entry_id: p_seconds (a Focus
---             stretch keeps its start), p_on (logged entries), p_note ('' clears
+--             stretch keeps its end), p_on (logged entries), p_note ('' clears
 --             it, NULL leaves it);
 --   'remove'  your own logged or Focus entry p_entry_id;
 --   p_run_id  on 'focus' and 'adjust': the Focus run it came from (kept only
@@ -195,7 +195,7 @@ $$;
 
 DROP FUNCTION IF EXISTS public.tasks_op_track_time(uuid, uuid, text, integer, timestamptz, text, uuid);
 
-CREATE FUNCTION public.tasks_op_track_time(
+CREATE OR REPLACE FUNCTION public.tasks_op_track_time(
   p_workspace_id uuid,
   p_task_id uuid,
   p_action text,
@@ -343,8 +343,10 @@ BEGIN
       END IF;
       UPDATE public.task_time_entries x SET
         seconds = coalesce(p_seconds, x.seconds),
-        ended_at = CASE WHEN x.kind = 'focus' AND p_seconds IS NOT NULL
-                        THEN x.started_at + make_interval(secs => p_seconds) ELSE x.ended_at END,
+        -- A Focus stretch keeps its end (it never ends after now); a new
+        -- length moves its start.
+        started_at = CASE WHEN x.kind = 'focus' AND p_seconds IS NOT NULL
+                          THEN x.ended_at - make_interval(secs => p_seconds) ELSE x.started_at END,
         entry_on = CASE WHEN x.kind = 'manual' THEN coalesce(p_on, x.entry_on) ELSE x.entry_on END,
         note = CASE WHEN p_note IS NULL THEN x.note ELSE v_note END
       WHERE x.id = e.id;
@@ -391,8 +393,9 @@ $$;
 -- client it is), or the whole workspace; a scoped report reads only projects
 -- the reader can see. Rows: the reader's own entries, and when the reader
 -- owns the workspace, the entries of people who share their time. Signed
--- (a give-back is negative): sum them. At most p_limit rows (the app asks for
--- one more than it shows, to know it was cut).
+-- (a give-back is negative): sum them. At most p_limit rows, in a total order
+-- (the app pages with PostgREST's range and asks for rows up to its page's
+-- end, one past its cap to know a report was cut).
 
 CREATE OR REPLACE FUNCTION public.tasks_time_report(
   p_workspace_id uuid,

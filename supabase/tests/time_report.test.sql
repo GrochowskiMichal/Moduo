@@ -194,7 +194,7 @@ BEGIN
   PERFORM test.ok(r = 'saved' AND (SELECT x.seconds = 300 AND x.note = 'Review notes'
                                           AND x.ended_at = x.started_at + interval '5 minutes'
                                    FROM public.task_time_entries x WHERE x.id = v_entry),
-    'but its length and note can change (it keeps its start)', r);
+    'but its length and note can change (it keeps its end, never after now)', r);
 
   -- Give-backs (TV-F6): labelled, and never undone by hand.
   v_before := (SELECT time_spent_seconds FROM public.tasks WHERE id = test.id('TS'));
@@ -376,6 +376,10 @@ BEGIN
     'null goes back to the device''s; what wasn''t sent stays', r);
   r := test.value_as('E', $q$SELECT public.user_op_set_time_region('{"time_zone": "Mars/Olympus"}'::jsonb)::text$q$);
   PERFORM test.ok(r LIKE 'ERROR%Unknown time zone%', 'an unknown zone is refused', r);
+  r := test.value_as('E', $q$SELECT public.user_op_set_time_region('{"time_zone": "UTC+3"}'::jsonb)::text$q$);
+  PERFORM test.ok(r LIKE 'ERROR%Unknown time zone%', 'a POSIX zone string is refused (the app can''t read it)', r);
+  r := test.value_as('E', $q$SELECT public.user_op_set_time_region('{"time_zone": "PST"}'::jsonb)::text$q$);
+  PERFORM test.ok(r LIKE 'ERROR%Unknown time zone%', 'so is an abbreviation', r);
   r := test.value_as('E', $q$SELECT public.user_op_set_time_region('{"week_start": 7}'::jsonb)::text$q$);
   PERFORM test.ok(r LIKE 'ERROR%0 (Sunday) to 6%', 'a week start out of range is refused', r);
   r := test.value_as('E', $q$SELECT public.user_op_set_time_region('{"hour_cycle": "h24"}'::jsonb)::text$q$);

@@ -9,9 +9,10 @@ import { applyTimeRegion, EMPTY_TIME_REGION } from "../../lib/time-region";
 import { makeTask } from "./helpers";
 import { projectOverviewText, tasksAsCsv, tasksAsText } from "./list-export";
 import type { Task, TaskTimeEntry, TimeReportRow } from "./model";
-import { entryLine, parseTimeEntry } from "./time-entries";
+import { entryEditChange, entryEditLine, entryLine, parseTimeEntry } from "./time-entries";
 import {
   csvCell,
+  customRangeProblem,
   rangeLabel,
   reportCsv,
   reportFileName,
@@ -58,6 +59,53 @@ describe('"Add time…" reads one quick line (AC6.1)', () => {
     expect(parseTimeEntry("25h", THU)).toBeNull();
     expect(parseTimeEntry("0m", THU)).toBeNull();
     expect(parseTimeEntry("1h 2026-10-09", THU)).toBeNull();
+  });
+});
+
+describe("editing an entry sends only what changed", () => {
+  const focus: TaskTimeEntry = {
+    id: "f1",
+    taskId: "t1",
+    kind: "focus",
+    seconds: 90,
+    startedAt: "2026-10-08T08:00:00Z",
+    endedAt: "2026-10-08T08:01:30Z",
+    entryOn: null,
+    note: null,
+    reason: null,
+    runId: null,
+    createdAt: "2026-10-08T08:01:30Z",
+  };
+  const logged: TaskTimeEntry = {
+    ...focus,
+    id: "m1",
+    kind: "manual",
+    seconds: 7200,
+    startedAt: null,
+    endedAt: null,
+    entryOn: "2026-10-07",
+    note: "Call",
+  };
+
+  it("a note on a Focus stretch keeps its seconds, and its weekday words", () => {
+    expect(entryEditLine(focus)).toBe("2m");
+    expect(entryEditChange(focus, "2m monday standup", THU)).toEqual({ note: "monday standup" });
+    expect(entryEditChange(focus, "2m", THU)).toEqual({});
+    expect(entryEditChange(focus, "25m", THU)).toEqual({ seconds: 1500 });
+  });
+
+  it("a Focus stretch under a minute can still take a note", () => {
+    const short = { ...focus, seconds: 20 };
+    expect(entryEditLine(short)).toBe("0m");
+    expect(entryEditChange(short, "0m quick check", THU)).toEqual({ note: "quick check" });
+  });
+
+  it("a logged entry changes its length, day and note one by one", () => {
+    expect(entryEditLine(logged)).toBe("2h 2026-10-07 Call");
+    expect(entryEditChange(logged, "2h 2026-10-07 Call", THU)).toEqual({});
+    expect(entryEditChange(logged, "2h mon Call", THU)).toEqual({ on: "2026-10-05" });
+    expect(entryEditChange(logged, "1h 2026-10-07", THU)).toEqual({ seconds: 3600, note: "" });
+    expect(entryEditChange(logged, "call", THU)).toBeNull();
   });
 });
 
@@ -207,6 +255,12 @@ describe("the report (AC6.2, AC6.3)", () => {
     expect(reportFileName("Acme Inc.", { from: "2026-10-01", to: "2026-10-31" }, "csv")).toBe(
       "time-report-acme-inc-2026-10-01-2026-10-31.csv",
     );
+  });
+
+  it("picked dates the report can't take say why", () => {
+    expect(customRangeProblem({ from: "2026-10-01", to: "2026-10-31" })).toBeNull();
+    expect(customRangeProblem({ from: "2026-10-31", to: "2026-10-01" })).toMatch(/comes after/);
+    expect(customRangeProblem({ from: "2025-01-01", to: "2026-10-01" })).toMatch(/up to a year/);
   });
 
   it("periods follow the week start", () => {

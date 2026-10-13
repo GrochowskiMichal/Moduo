@@ -86,7 +86,8 @@ export function ViewExportMenu({
     const list = tasks();
     saveBlob(
       `${fileStem(title)}.csv`,
-      new Blob([tasksAsCsv(list, context)], { type: "text/csv;charset=utf-8" }),
+      // The byte-order mark tells a spreadsheet the file is UTF-8.
+      new Blob(["﻿", tasksAsCsv(list, context)], { type: "text/csv;charset=utf-8" }),
     );
   };
 

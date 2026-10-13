@@ -2916,7 +2916,8 @@ export const webRuntime: ModuoRuntime = {
               p_project_ids: query.projectIds ? [...query.projectIds] : null,
               p_client_contact_id: query.clientContactId ?? null,
               p_zone: query.zone ?? null,
-              p_limit: TIME_REPORT_CAP + 1,
+              // The function stops at the end of this page (PostgREST slices after it).
+              p_limit: offset + limit,
             })
             .range(offset, offset + limit - 1);
           return { data: (data ?? null) as Record<string, unknown>[] | null, error };

@@ -7,8 +7,13 @@ import { afterEach, beforeEach, describe, expect, it } from "@rstest/core";
 import { renderHook } from "@testing-library/react";
 
 import { useCalendarPrefs } from "../features/calendar/hooks/use-calendar-prefs";
-import { visibleRange } from "../features/calendar/lens";
+import { rangeLabel, visibleRange } from "../features/calendar/lens";
+import { parseRecurrenceNL } from "../features/calendar/recurrence-nl";
+import { formatSnoozeUntil } from "../features/email/snooze";
+import { describePhaseEnd } from "../features/focus/away-copy";
+import { relativeTime } from "../features/spine/comments";
 import { dateCommandDay } from "../features/spine/grammar";
+import { relativeDayLabel } from "../features/spine/snippet-format";
 import { daysLeftInWeek } from "../features/tasks/day-buckets";
 import { engineZone } from "../features/tasks/recurrence-engine";
 import { formatDate, formatFullDate, formatTime, formatWeekdayDate } from "./time-format";
@@ -76,6 +81,25 @@ describe("one setting for every module (AC12.7)", () => {
     expect(formatDate(new Date(2026, 9, 16), THU)).toBe("16 Oct");
     expect(formatFullDate(new Date(2027, 9, 16))).toBe("16 Oct 2027");
     expect(formatWeekdayDate(new Date(2026, 9, 16), THU)).toBe("Fri, 16 Oct");
+  });
+
+  it("the other modules' clocks and dates follow too (Focus, comments, snippets, email, Calendar)", () => {
+    applyTimeRegion(region({ hourCycle: "h23", dateOrder: "day_month" }), "u1");
+    const at = new Date(2026, 9, 8, 15, 5).getTime();
+    expect(
+      describePhaseEnd({ at, lengthMs: 25 * 60_000, phase: "work", longBreak: false } as never),
+    ).toBe("Your 25-min focus ended at 15:05.");
+    expect(relativeTime(new Date(2026, 8, 20).toISOString(), THU.getTime())).toBe("20 Sep");
+    expect(relativeDayLabel(new Date(2026, 9, 20).toISOString(), THU)).toBe("20 Oct");
+    expect(formatSnoozeUntil(new Date(2026, 9, 20, 9, 0).toISOString(), THU)).toBe("20 Oct 09:00");
+    expect(parseRecurrenceNL("every tuesday at 9")?.echo).toContain("09:00");
+    expect(
+      rangeLabel(
+        visibleRange("week", THU, { weekStartsOn: 1, showWeekends: true }),
+        undefined,
+        THU,
+      ),
+    ).toBe("5 Oct – 11 Oct");
   });
 
   it("left unset, everything follows the device", () => {

@@ -17,6 +17,7 @@ import { ENTITY_OPEN_EVENT } from "../lib/entity-open";
 import { usePreferencesValue } from "../lib/preferences";
 import { useShortcut } from "../lib/shortcuts";
 import { useStoreSnapshot, useWorkspaceStore } from "../lib/sync/react";
+import { formatDate } from "../lib/time-format";
 import { undoToast } from "../lib/undo-toast";
 import { useAuth } from "../providers/auth-provider";
 import { useWorkspace } from "../providers/workspace-provider";
@@ -42,7 +43,7 @@ function relativeTime(iso: string): string {
   if (hrs < 24) return `${hrs}h ago`;
   const days = Math.floor(hrs / 24);
   if (days < 7) return `${days}d ago`;
-  return new Date(iso).toLocaleDateString();
+  return formatDate(iso);
 }
 
 /**

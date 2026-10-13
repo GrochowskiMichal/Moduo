@@ -68,6 +68,20 @@ export function reportRange(
   }
 }
 
+/** Why picked dates can't make a report (the server takes up to a year,
+ *  first day first), or null. */
+export function customRangeProblem(range: ReportRange): string | null {
+  const from = dayToDate(range.from);
+  const to = dayToDate(range.to);
+  if (!from || !to) return "Pick both dates.";
+  if (range.from > range.to)
+    return "The first day comes after the last. Pick them the other way round.";
+  if (Math.round((to.getTime() - from.getTime()) / 86_400_000) > 366) {
+    return "A report covers up to a year. Pick a shorter period.";
+  }
+  return null;
+}
+
 /** "Oct 5 – Oct 11", "Oct 5, 2025 – Jan 4, 2026". */
 export function rangeLabel(range: ReportRange, now: Date = new Date()): string {
   const from = dayToDate(range.from);

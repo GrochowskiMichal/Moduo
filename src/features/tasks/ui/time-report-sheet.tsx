@@ -12,6 +12,7 @@ import { PrintRoot } from "../../../components/app/print-root";
 import { Button } from "../../../components/ui/button";
 import { DateField } from "../../../components/ui/date-field";
 import { EmptyState } from "../../../components/ui/empty-state";
+import { Label } from "../../../components/ui/label";
 import { SegmentedControl } from "../../../components/ui/segmented-control";
 import {
   Select,
@@ -37,6 +38,7 @@ import { useAssignees } from "../assignees";
 import type { TimeReportResult } from "../model";
 import { dayToDate, isoDay } from "../time-entries";
 import {
+  customRangeProblem,
   REPORT_PERIOD_LABELS,
   REPORT_PERIODS,
   type ReportGroupBy,
@@ -77,11 +79,13 @@ export function TimeReportSheet({ open, onOpenChange, workspaceId, scope }: Prop
     () => reportRange(period, new Date(), region.weekStartsOn, custom),
     [period, custom, region.weekStartsOn],
   );
+  // Picked dates the report can't take say why, instead of failing.
+  const rangeProblem = period === "custom" && custom ? customRangeProblem(custom) : null;
   const projectId = scope.kind === "project" ? scope.projectId : null;
   const clientId = scope.kind === "client" ? scope.clientContactId : null;
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || rangeProblem) return;
     const runtime = getRuntime();
     if (!runtime) return;
     let live = true;
@@ -107,7 +111,7 @@ export function TimeReportSheet({ open, onOpenChange, workspaceId, scope }: Prop
     return () => {
       live = false;
     };
-  }, [open, workspaceId, projectId, clientId, range.from, range.to, region.timeZone]);
+  }, [open, rangeProblem, workspaceId, projectId, clientId, range.from, range.to, region.timeZone]);
 
   const nameOf = (userId: string) => {
     const person = byId(userId);
@@ -115,10 +119,12 @@ export function TimeReportSheet({ open, onOpenChange, workspaceId, scope }: Prop
   };
   const report = useMemo(
     () =>
-      result ? shapeTimeReport(result.rows, { groupBy, roundToQuarter: round, nameOf }) : null,
+      result && !rangeProblem
+        ? shapeTimeReport(result.rows, { groupBy, roundToQuarter: round, nameOf })
+        : null,
     // nameOf reads the members list, which byId follows.
     // biome-ignore lint/correctness/useExhaustiveDependencies: byId is nameOf's input
-    [result, groupBy, round, byId],
+    [result, rangeProblem, groupBy, round, byId],
   );
   const label = rangeLabel(range);
 
@@ -126,7 +132,8 @@ export function TimeReportSheet({ open, onOpenChange, workspaceId, scope }: Prop
     if (!report) return;
     saveBlob(
       reportFileName(scope.name, range, "csv"),
-      new Blob([reportCsv(report, groupBy)], { type: "text/csv;charset=utf-8" }),
+      // The byte-order mark tells a spreadsheet the file is UTF-8.
+      new Blob(["﻿", reportCsv(report, groupBy)], { type: "text/csv;charset=utf-8" }),
     );
   };
   const exportPdf = () => {
@@ -160,14 +167,14 @@ export function TimeReportSheet({ open, onOpenChange, workspaceId, scope }: Prop
               <DateField
                 variant="outline"
                 aria-label="From"
-                value={dayToDate(range.from)}
+                value={dayToDate(custom?.from ?? range.from)}
                 formatValue={formatFullDate}
                 onChange={(d) => d && setCustom({ from: isoDay(d), to: custom?.to ?? range.to })}
               />
               <DateField
                 variant="outline"
                 aria-label="To"
-                value={dayToDate(range.to)}
+                value={dayToDate(custom?.to ?? range.to)}
                 formatValue={formatFullDate}
                 onChange={(d) =>
                   d && setCustom({ from: custom?.from ?? range.from, to: isoDay(d) })
@@ -185,13 +192,17 @@ export function TimeReportSheet({ open, onOpenChange, workspaceId, scope }: Prop
               { value: "day", label: "By day" },
             ]}
           />
-          <label className="flex items-center gap-2 font-sans text-sm text-muted-foreground">
+          <Label className="font-normal text-muted-foreground">
             <Switch checked={round} onCheckedChange={setRound} aria-label="Round to 15 minutes" />
             Round to 15 min
-          </label>
+          </Label>
         </div>
         <div className="pane-scroll min-h-0 flex-1 overflow-y-auto px-4 py-3">
-          {failed ? (
+          {rangeProblem ? (
+            <p className="font-sans text-sm text-muted-foreground" role="alert">
+              {rangeProblem}
+            </p>
+          ) : failed ? (
             <EmptyState
               size="inline"
               title="Couldn't load the report"

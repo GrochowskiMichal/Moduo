@@ -8,7 +8,7 @@
 
 import { isOpenTaskStatus } from "@contracts/vocabularies";
 
-import { formatTime } from "../../lib/time-format";
+import { formatDate, formatTime } from "../../lib/time-format";
 import type {
   EmailSnippetMeta,
   EventSnippetMeta,
@@ -50,7 +50,7 @@ export function relativeDayLabel(iso: string, now: Date): string {
   if (delta === -1) return "yesterday";
   // Within the next 6 days, a weekday name reads fastest ("Fri").
   if (delta > 1 && delta < 7) return WEEKDAY[then.getDay()];
-  return then.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return formatDate(then, now);
 }
 
 /** A quiet "…ago"/"in…" clock label for recency ("just now" · "3 days ago"). */

@@ -74,9 +74,16 @@ function takeDay(words: string[], now: Date): { day: string; used: number } | nu
  * "2h yesterday call with Anna" → 120 minutes, yesterday, "call with Anna".
  * The length comes first ("2h", "1h 30m", "45m", "1:30"), then an optional
  * day (today when there's none), then the note. Null without a length, or for
- * one over 24 hours or a day after today.
+ * one over 24 hours or a day after today. A Focus stretch's edit reads no day
+ * (`withDay: false`: "monday standup" stays the note) and takes up to a week.
  */
-export function parseTimeEntry(input: string, now: Date = new Date()): ParsedTimeEntry | null {
+export function parseTimeEntry(
+  input: string,
+  now: Date = new Date(),
+  opts: { withDay?: boolean; maxMinutes?: number } = {},
+): ParsedTimeEntry | null {
+  const withDay = opts.withDay ?? true;
+  const maxMinutes = opts.maxMinutes ?? MAX_ENTRY_MINUTES;
   const words = input
     .trim()
     .replace(/\s*·\s*/g, " ")
@@ -94,9 +101,9 @@ export function parseTimeEntry(input: string, now: Date = new Date()): ParsedTim
       break;
     }
   }
-  if (minutes === null || minutes < 1 || minutes > MAX_ENTRY_MINUTES) return null;
+  if (minutes === null || minutes < 1 || minutes > maxMinutes) return null;
   const rest = words.slice(used);
-  const day = takeDay(rest, now);
+  const day = withDay ? takeDay(rest, now) : null;
   const today = isoDay(now);
   const on = day?.day ?? today;
   if (on > today) return null;
@@ -106,6 +113,53 @@ export function parseTimeEntry(input: string, now: Date = new Date()): ParsedTim
     .replace(/^[-–—:]\s*/, "")
     .trim();
   return { minutes, day: on, note: note || null };
+}
+
+/** What an edit sends: only what changed ("" clears the note). */
+export type EntryEdit = { seconds?: number; on?: string; note?: string };
+
+/** The line an edit starts from: "2h 2026-10-07 call" (a Focus stretch: no day). */
+export function entryEditLine(entry: TaskTimeEntry): string {
+  return [
+    formatTracked(entry.seconds),
+    entry.kind === "manual" ? entryDay(entry) : null,
+    entry.note,
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+/**
+ * What an edited line changes, field by field: the length only when its
+ * words changed (so a note-only edit never rounds a Focus stretch to the
+ * minute), a logged entry's day, the note. Null when the line doesn't read;
+ * `{}` when nothing changed.
+ */
+export function entryEditChange(
+  entry: TaskTimeEntry,
+  text: string,
+  now: Date = new Date(),
+): EntryEdit | null {
+  const focus = entry.kind === "focus";
+  const parsed = parseTimeEntry(text, now, {
+    withDay: !focus,
+    maxMinutes: focus ? 7 * 24 * 60 : MAX_ENTRY_MINUTES,
+  });
+  if (!parsed) {
+    // An unchanged length that only the parser's bounds refuse (a Focus
+    // stretch under a minute) still lets the note change.
+    const original = formatTracked(entry.seconds);
+    const words = text.trim();
+    if (!words.startsWith(original)) return null;
+    const note = words.slice(original.length).trim();
+    return note === (entry.note ?? "") ? {} : { note };
+  }
+  const change: EntryEdit = {};
+  const original = formatTracked(entry.seconds);
+  if (formatTracked(parsed.minutes * 60) !== original) change.seconds = parsed.minutes * 60;
+  if (!focus && parsed.day !== entryDay(entry)) change.on = parsed.day;
+  if ((parsed.note ?? "") !== (entry.note ?? "")) change.note = parsed.note ?? "";
+  return change;
 }
 
 /** How one of your entries reads: what it is, and whether it can change. */
