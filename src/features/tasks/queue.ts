@@ -167,30 +167,3 @@ export function alsoInLabel(names: string[]): string {
   if (names.length === 0) return "";
   return `Also in ${possessives(names)} Focus`;
 }
-
-/**
- * The Home Tasks widget's rows (tasks-v2 decision 17): my queue's open tasks
- * in order, headed "Queue"; when that's empty, the open tasks in list order,
- * headed "Open". `bucketIds` narrows both to the widget's chosen buckets
- * (empty = all).
- */
-export function queueOrOpen(
-  tasks: Task[],
-  entries: TaskQueueEntry[],
-  userId: string | null,
-  bucketIds: string[] = [],
-): { rows: Task[]; heading: "Queue" | "Open" } {
-  const open = tasks.filter(
-    (t) =>
-      !t.deletedAt && isOpenTask(t) && (bucketIds.length === 0 || bucketIds.includes(t.bucketId)),
-  );
-  const byId = new Map(open.map((t) => [t.id, t]));
-  const queued = queueEntriesOf(entries, userId)
-    .map((e) => byId.get(e.taskId))
-    .filter((t): t is Task => t !== undefined);
-  if (queued.length > 0) return { rows: queued, heading: "Queue" };
-  return {
-    rows: open.slice().sort((a, b) => bytewise(a.position, b.position)),
-    heading: "Open",
-  };
-}

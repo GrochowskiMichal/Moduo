@@ -54,6 +54,7 @@ import {
   subtaskProgress,
   wouldCreateCycle,
 } from "../helpers";
+import { subtasksToFinish } from "../home";
 import {
   type ActivityEntry,
   type Area,
@@ -1602,10 +1603,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
    */
   const finishOpenSubtasks = useCallback(
     (before: Task): { count: number; undo: () => void } | null => {
-      if (before.parentId || before.recurrence || isClosedTask(before)) return null;
-      const open = tasksRef.current.filter(
-        (t) => t.parentId === before.id && !t.deletedAt && !isTempId(t.id) && !isClosedTask(t),
-      );
+      const open = subtasksToFinish(before, tasksRef.current);
       if (open.length === 0) return null;
       for (const subtask of open) patchTask(subtask.id, { status: "done" });
       return {

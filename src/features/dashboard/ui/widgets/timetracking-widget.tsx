@@ -1,81 +1,91 @@
-// DB-5 — "Time tracking" widget. Desktop-only (capability-gated; on web the frame
-// shows an "Available on desktop" placeholder). The time-tracking runtime is
-// `any`-typed, so we read entry durations defensively and sum today's total —
-// worst case it degrades to the calm empty state, never a crash. A richer,
-// schema-exact summary is a follow-up once verifiable on the desktop build.
+// TV-H1 — the time widget (type id `timetracking`, kept so placed widgets carry
+// over): your tracked task time this week, on web and desktop (tasks-v2 §17).
+// It reads TV-D14's report for this week (Time & region's week and zone) and
+// keeps only your own entries, even for the workspace owner: per-person time
+// stays off Home (decision 12). The desktop window tracker it used to read
+// stays dormant. Rows open the task.
 
-import { Timer } from "lucide-react";
 import { useMemo } from "react";
 
 import { todayStr } from "@/features/tasks/helpers";
+import { weekTime } from "@/features/tasks/home";
+import { dayIn } from "@/features/tasks/project-overview";
+import { formatDurationSeconds } from "@/lib/time-format";
+import { useTimeRegion } from "@/lib/time-region";
 
 import { useDashboardData } from "../../context/dashboard-data-context";
+import { useDensity } from "../../hooks/use-density";
 import type { WidgetComponentProps } from "../../registry/types";
-import { WidgetEmpty, WidgetLoading } from "./widget-primitives";
+import { widgetRowBudget } from "../../widget-density";
+import { openEntity, openModuleRoute } from "../../widget-nav";
+import {
+  WidgetBodyRoot,
+  WidgetEmpty,
+  WidgetList,
+  WidgetLoading,
+  WidgetMore,
+  WidgetRow,
+} from "./widget-primitives";
 
-function toMs(value: unknown): number | null {
-  if (typeof value === "number") return value;
-  if (typeof value === "string") {
-    const parsed = Date.parse(value);
-    return Number.isNaN(parsed) ? null : parsed;
+export function TimetrackingWidget({ size }: WidgetComponentProps) {
+  const { timeReport } = useDashboardData();
+  const density = useDensity();
+  const { timeZone } = useTimeRegion();
+
+  // The report dates entries in Time & region's zone; today is that zone's day.
+  const week = useMemo(
+    () => weekTime(timeReport.data, dayIn(new Date().toISOString(), timeZone) ?? todayStr()),
+    [timeReport.data, timeZone],
+  );
+
+  if (timeReport.loading && timeReport.data.length === 0) return <WidgetLoading />;
+  if (week.weekSeconds === 0) return <WidgetEmpty>No time tracked this week.</WidgetEmpty>;
+
+  const summary =
+    week.todaySeconds > 0
+      ? `this week · ${formatDurationSeconds(week.todaySeconds)} today`
+      : "this week";
+
+  if (size === "S") {
+    return (
+      <div className="grid h-full place-items-center px-3 text-center">
+        <div className="flex flex-col items-center gap-1">
+          <p className="font-display text-2xl font-semibold tabular-nums text-foreground">
+            {formatDurationSeconds(week.weekSeconds)}
+          </p>
+          <p className="text-xs text-muted-foreground">{summary}</p>
+        </div>
+      </div>
+    );
   }
-  return null;
-}
 
-function entrySeconds(entry: Record<string, unknown>): number {
-  const explicit = entry.durationSeconds ?? entry.seconds ?? entry.duration;
-  if (typeof explicit === "number" && explicit > 0) return explicit;
-  const start = toMs(entry.startedAt ?? entry.startAt ?? entry.start);
-  const end = toMs(entry.endedAt ?? entry.endAt ?? entry.end);
-  if (start != null && end != null && end > start) return Math.round((end - start) / 1000);
-  return 0;
-}
-
-function isToday(entry: Record<string, unknown>, today: string): boolean {
-  const start = toMs(entry.startedAt ?? entry.startAt ?? entry.start ?? entry.date);
-  if (start == null) return true; // no timestamp → count it (defensive)
-  const d = new Date(start);
-  const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  return key === today;
-}
-
-function formatDuration(totalSeconds: number): string {
-  const minutes = Math.round(totalSeconds / 60);
-  const hours = Math.floor(minutes / 60);
-  const mins = minutes % 60;
-  if (hours > 0) return `${hours}h ${mins}m`;
-  return `${mins}m`;
-}
-
-export function TimetrackingWidget(_props: WidgetComponentProps) {
-  const { timetracking } = useDashboardData();
-
-  const { totalSeconds, sessions } = useMemo(() => {
-    const today = todayStr();
-    const todays = timetracking.data.entries.filter((e) => isToday(e, today));
-    return {
-      totalSeconds: todays.reduce((sum, e) => sum + entrySeconds(e), 0),
-      sessions: todays.length,
-    };
-  }, [timetracking.data.entries]);
-
-  if (timetracking.loading && timetracking.data.entries.length === 0) return <WidgetLoading />;
-
-  if (sessions === 0 || totalSeconds === 0) {
-    return <WidgetEmpty>No time tracked today.</WidgetEmpty>;
-  }
+  // One row goes to the total line.
+  const budget = Math.max(1, widgetRowBudget(size, density) - 1);
+  const shown = week.lines.slice(0, budget);
+  const overflow = week.lines.length - shown.length;
 
   return (
-    <div className="grid h-full place-items-center px-3 text-center">
-      <div className="flex flex-col items-center gap-1">
-        <Timer className="size-icon-lg text-muted-foreground" aria-hidden />
-        <p className="text-2xl font-display font-semibold tabular-nums text-foreground">
-          {formatDuration(totalSeconds)}
-        </p>
-        <p className="text-xs text-muted-foreground">
-          today · {sessions} {sessions === 1 ? "session" : "sessions"}
-        </p>
+    <WidgetBodyRoot>
+      <div className="flex items-baseline gap-2 px-3.5 pt-2">
+        <span className="font-display text-xl font-semibold tabular-nums text-foreground">
+          {formatDurationSeconds(week.weekSeconds)}
+        </span>
+        <span className="text-xs text-muted-foreground">{summary}</span>
       </div>
-    </div>
+      <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">
+        <WidgetList>
+          {shown.map((line) => (
+            <WidgetRow
+              key={line.taskId}
+              title={line.title}
+              secondary={size === "L" ? (line.project ?? "Private project") : undefined}
+              trailing={formatDurationSeconds(line.seconds)}
+              onClick={() => openEntity("task", line.taskId)}
+            />
+          ))}
+        </WidgetList>
+      </div>
+      <WidgetMore count={overflow} onClick={() => openModuleRoute("/tasks")} />
+    </WidgetBodyRoot>
   );
 }

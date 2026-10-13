@@ -1,6 +1,7 @@
 // DB-8 (AC10) — per-widget config forms, shown in the `⋯` popover anchored to the
 // widget. Only the types that lack an inline editor get one here: Clock
-// (timezones), Pomodoro (durations), Tasks (project filter). Weather / Countdown /
+// (timezones), Pomodoro (durations), Tasks (project filter), Team (one team or
+// everyone, TV-H1). Weather / Countdown /
 // Pinned edit their settings via their own widget-anchored affordances (DB-6).
 
 import type { ComponentType } from "react";
@@ -177,10 +178,56 @@ function TasksConfig({ widget, updateConfig }: ConfigFormProps) {
   );
 }
 
+// ── Team (one team, or everyone; TV-H1) ──────────────────────────────────────
+function TeamConfig({ widget, updateConfig }: ConfigFormProps) {
+  const { tasks } = useDashboardData();
+  const teams = tasks.data.teams ?? [];
+  const selected = typeof widget.config.teamId === "string" ? widget.config.teamId : null;
+  const choices = [
+    { id: null, name: "Everyone" },
+    ...teams.map((t) => ({ id: t.id as string | null, name: t.name })),
+  ];
+
+  return (
+    <div className="flex flex-col gap-2">
+      <Eyebrow as="p">Show</Eyebrow>
+      <ul className="flex max-h-48 flex-col gap-0.5 overflow-y-auto scrollbar-thin">
+        {choices.map((choice) => {
+          const on =
+            choice.id === selected || (choice.id === null && !teams.some((t) => t.id === selected));
+          return (
+            <li key={choice.id ?? "everyone"}>
+              <button
+                type="button"
+                aria-pressed={on}
+                onClick={() => updateConfig({ teamId: choice.id })}
+                className={cn(
+                  "flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-sm hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  on ? "text-foreground" : "text-muted-foreground",
+                )}
+              >
+                <span
+                  className={cn(
+                    "size-2 shrink-0 rounded-full border",
+                    on ? "border-primary bg-primary" : "border-border",
+                  )}
+                  aria-hidden
+                />
+                <span className="min-w-0 truncate">{choice.name}</span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
 export const WIDGET_CONFIG_FORMS: Partial<Record<WidgetType, ConfigFormComponent>> = {
   clock: ClockConfig,
   pomodoro: PomodoroConfig,
   tasks: TasksConfig,
+  team: TeamConfig,
 };
 
 export function getConfigForm(type: WidgetType): ConfigFormComponent | null {
