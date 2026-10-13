@@ -15,7 +15,6 @@
 
 import type { ModuoRuntime } from "../../lib/runtime.types";
 import type { CommentMark } from "../../lib/sync/types";
-import type { AgentSession } from "../spine/agent-session";
 import {
   agentSessionRowToModel,
   areaRowToModel,
@@ -35,6 +34,7 @@ import {
   teamMemberRowToModel,
   teamRowToModel,
 } from "../../lib/task-rows";
+import type { AgentSession } from "../spine/agent-session";
 import type {
   Area,
   Bucket,

@@ -37,6 +37,11 @@ import {
   taskStatusWord,
 } from "@contracts/vocabularies";
 import type {
+  AgentSession,
+  AgentSessionLine,
+  AgentSessionLink,
+} from "../features/spine/agent-session";
+import type {
   Area,
   Bucket,
   ProjectStatus,
@@ -55,11 +60,6 @@ import type {
   Team,
   TeamMember,
 } from "../features/tasks/model";
-import type {
-  AgentSession,
-  AgentSessionLine,
-  AgentSessionLink,
-} from "../features/spine/agent-session";
 import type { CommentMark } from "./sync/types";
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
@@ -706,7 +706,9 @@ export function agentSessionRowToModel(raw: unknown): AgentSession {
     ? (r.links as unknown[]).flatMap((l) => {
         const v = l as { url?: unknown; label?: unknown } | null;
         if (!v || typeof v.url !== "string" || !/^https?:\/\//i.test(v.url)) return [];
-        return [typeof v.label === "string" && v.label ? { url: v.url, label: v.label } : { url: v.url }];
+        return [
+          typeof v.label === "string" && v.label ? { url: v.url, label: v.label } : { url: v.url },
+        ];
       })
     : [];
   const earlier: AgentSessionLine[] = Array.isArray(r.earlier)

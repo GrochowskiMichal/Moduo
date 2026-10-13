@@ -32,6 +32,7 @@ import {
 import { formatDate } from "../../../lib/time-format";
 import { undoToast } from "../../../lib/undo-toast";
 import { cn } from "../../../lib/utils";
+import { type AgentSession, agentRowMarks } from "../../spine/agent-session";
 import { useAssignees } from "../assignees";
 import { type CompletedMode, partitionCompleted } from "../completed";
 import {
@@ -101,7 +102,6 @@ import type { ListExtraGroup, ListGrouping } from "./list-extensions";
 import { listKeyActionFor } from "./list-keys";
 import { type PlanHeaderControls, type PlanView, PlanViewHeader } from "./plan-view-header";
 import { ProjectChoicesProvider, StatusChoicesProvider } from "./project-choices";
-import { type AgentSession, agentRowMarks } from "../../spine/agent-session";
 import { type FactsSource, taskFactsOf, useRowActions, waitingLabelsOf } from "./row-facts";
 import { type SortColumn, TaskListHeader } from "./task-list-header";
 import {

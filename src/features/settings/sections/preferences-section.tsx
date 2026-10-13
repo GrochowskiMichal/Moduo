@@ -85,6 +85,12 @@ const NOTIFICATION_ROWS: ReadonlyArray<{
       "When a task is routed to a team you're in, or someone @mentions your team. Also the check-back when nobody took a team task you created.",
   },
   {
+    type: "agents",
+    title: "Your agents",
+    description:
+      "When an agent working through one of your API keys needs you, is ready for review, or failed. Also on your devices.",
+  },
+  {
     type: "completed",
     title: "Completed by someone else",
     description: "When a teammate completes a task you created.",
@@ -146,6 +152,8 @@ export function PreferencesSection() {
       </PrefGroup>
 
       <RemindersGroup />
+
+      <AgentWorkGroup />
 
       <PrefGroup label="Default landing view">
         <PrefRow
@@ -329,6 +337,69 @@ function RemindersGroup() {
           ) : null}
         </PrefRow>
       )}
+    </PrefGroup>
+  );
+}
+
+/**
+ * "Show my agent work to teammates" (TV-D16, spec §12): an agent's session
+ * line on a task is yours until you turn this on; then anyone who can see the
+ * task sees it (never its hand-back summary). Off by default; it follows you
+ * across workspaces and devices.
+ */
+function AgentWorkGroup() {
+  const { runtime } = useAuth();
+  const [on, setOn] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  const read = runtime?.tasks.getAgentWork;
+  const write = runtime?.tasks.setAgentWork;
+
+  useEffect(() => {
+    if (!read) return;
+    let cancelled = false;
+    read()
+      .then((value) => {
+        if (!cancelled) setOn(value);
+      })
+      .catch(() => {
+        if (!cancelled) setOn(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [read]);
+
+  if (!read || !write) return null;
+  const toggle = async (value: boolean) => {
+    setBusy(true);
+    const before = on;
+    setOn(value);
+    try {
+      setOn(await write(value));
+    } catch {
+      setOn(before);
+      toast("Couldn't change who sees your agent work — try again.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <PrefGroup
+      label="Agents"
+      description="What your AI agents (connected through your API keys) are doing shows as one line on the task."
+    >
+      <PrefRow
+        title="Show my agent work to teammates"
+        description="Off: only you see your agents' session lines. On: anyone who can see the task sees them too. Hand-back summaries stay yours until you post them."
+      >
+        <Switch
+          checked={on === true}
+          disabled={on === null || busy}
+          onCheckedChange={(v) => void toggle(v)}
+          aria-label="Show my agent work to teammates"
+        />
+      </PrefRow>
     </PrefGroup>
   );
 }

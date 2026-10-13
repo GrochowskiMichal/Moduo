@@ -45,11 +45,18 @@ describe("the one line under the title", () => {
   });
 
   it("names the loud states, with the note", () => {
-    expect(agentLineText(session({ state: "needs_you", note: "Which branch?", step: null, steps: null }), NOW)).toBe(
-      "Claude · Needs you: Which branch? · 2m ago",
+    expect(
+      agentLineText(
+        session({ state: "needs_you", note: "Which branch?", step: null, steps: null }),
+        NOW,
+      ),
+    ).toBe("Claude · Needs you: Which branch? · 2m ago");
+    expect(agentLineParts(session({ state: "ready", note: null }), NOW)[1]).toBe(
+      "Ready for review",
     );
-    expect(agentLineParts(session({ state: "ready", note: null }), NOW)[1]).toBe("Ready for review");
-    expect(agentLineParts(session({ state: "failed", note: "CI is down" }), NOW)[1]).toBe("Failed: CI is down");
+    expect(agentLineParts(session({ state: "failed", note: "CI is down" }), NOW)[1]).toBe(
+      "Failed: CI is down",
+    );
   });
 
   it("says 'No update for 40m' after 30 quiet minutes, and no earlier", () => {
@@ -63,7 +70,9 @@ describe("the one line under the title", () => {
   });
 
   it("reads 'Stopped (key revoked)' once the key is gone", () => {
-    expect(agentLineText(session({ stoppedAt: ago(1) }), NOW)).toBe("Claude · Stopped (key revoked)");
+    expect(agentLineText(session({ stoppedAt: ago(1) }), NOW)).toBe(
+      "Claude · Stopped (key revoked)",
+    );
   });
 
   it("shows a link by its label, else its host", () => {
@@ -74,8 +83,12 @@ describe("the one line under the title", () => {
 
 describe("the row's quiet mark", () => {
   it("is 'Claude · working' or 'Claude · needs you' on an open task", () => {
-    expect(agentRowMark([session()], { status: "todo", statusCategory: "todo" })).toBe("Claude · working");
-    expect(agentRowMark([session({ state: "needs_you" })], { status: "todo" })).toBe("Claude · needs you");
+    expect(agentRowMark([session()], { status: "todo", statusCategory: "todo" })).toBe(
+      "Claude · working",
+    );
+    expect(agentRowMark([session({ state: "needs_you" })], { status: "todo" })).toBe(
+      "Claude · needs you",
+    );
   });
 
   it("isn't there for ready, failed, stopped or a closed task", () => {

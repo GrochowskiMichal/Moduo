@@ -55,7 +55,7 @@ const STATE_WORDS: Record<AgentSessionState, string> = {
 };
 
 /** "step 3 of 5", or null. */
-export function stepWords(s: Pick<AgentSession, "step" | "steps">): string | null {
+export function stepWords(s: { step?: number | null; steps?: number | null }): string | null {
   return s.step != null && s.steps != null ? `step ${s.step} of ${s.steps}` : null;
 }
 
