@@ -38,6 +38,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/
 import { cn } from "../../../lib/utils";
 import { EntityLinkPicker } from "../../contacts/ui/entity-link-picker";
 import { EntityTextEditor } from "../../spine/editor/entity-text-editor";
+import { onBreakDown, takeBreakDown } from "../break-down";
 import { wouldCreateCycle } from "../helpers";
 import { useTaskTimeShare } from "../hooks/use-task-time-share";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
@@ -394,6 +395,17 @@ function SubtasksSection({
   const [draft, setDraft] = useState("");
   const subtasks = api.subtasksByParent.get(task.id) ?? [];
   const progress = api.subtaskProgressByTask.get(task.id);
+  // A late row's "Break down" (TV-U10) opens the subtask line here, whether
+  // this panel shows the task already or is about to.
+  const taskId = task.id;
+  useEffect(() => {
+    if (!canEdit) return;
+    const take = () => {
+      if (takeBreakDown(taskId)) setAdding(true);
+    };
+    take();
+    return onBreakDown(take);
+  }, [taskId, canEdit]);
 
   if (subtasks.length === 0 && !canEdit) return null;
 

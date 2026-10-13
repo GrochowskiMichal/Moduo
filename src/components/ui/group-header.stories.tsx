@@ -63,6 +63,32 @@ export const Default: Story = {
   },
 };
 
+/**
+ * A List group (tasks-v3 default n): the "+" stays visible (the end of a long
+ * group can be far away), the ⋯ waits for hover. A section reads "2 of 5"
+ * with its end date.
+ */
+export const PersistentAdd: Story = {
+  render: () => (
+    <div className="flex flex-col gap-1">
+      <GroupHeader
+        label="Design"
+        count="2 of 5"
+        sub="· ends Oct 24"
+        onToggle={() => {}}
+        actions={<IconButton icon={MoreHorizontal} label="Section options" />}
+        persistentActions={<IconButton icon={Plus} label="Add a task to Design" />}
+      />
+      <GroupHeader
+        label="In progress"
+        count={3}
+        onToggle={() => {}}
+        persistentActions={<IconButton icon={Plus} label="Add a task to In progress" />}
+      />
+    </div>
+  ),
+};
+
 /** Sticky inside a scroller: the header stays while its rows pass under it. */
 export const Sticky: Story = {
   render: () => (

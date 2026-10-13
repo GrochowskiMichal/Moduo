@@ -139,6 +139,8 @@ export type StoreSnapshot = {
   offline: boolean;
   /** Captures and check-offs waiting to be sent. */
   pending: number;
+  /** The tasks those are for (a List row shows a clock on them). */
+  pendingTaskIds: ReadonlySet<string>;
   /** Bumped by the first read of the session that reached the server, and by `reload`: the repeat roll-over cue. */
   loadStamp: number;
   bundle: TasksModuleBundle;
@@ -179,6 +181,7 @@ export const EMPTY_SNAPSHOT: StoreSnapshot = {
   restLoaded: false,
   offline: false,
   pending: 0,
+  pendingTaskIds: new Set<string>(),
   loadStamp: 0,
   bundle: EMPTY_BUNDLE,
   queue: [],
@@ -1976,6 +1979,16 @@ export class WorkspaceStore {
         ? prev.snapshot.commentCounts
         : countComments(comments);
     const queue = this.queueRows();
+    // The tasks waiting in the outbox (a List row's clock, TV-U10), the same
+    // set object until it changes so rows don't redraw for nothing.
+    const pendingIds = this.outbox.map((e) => (e.kind === "create" ? e.task.id : e.taskId));
+    const prevPending = prev?.snapshot.pendingTaskIds;
+    const pendingTaskIds =
+      prevPending &&
+      prevPending.size === new Set(pendingIds).size &&
+      pendingIds.every((id) => prevPending.has(id))
+        ? prevPending
+        : new Set(pendingIds);
     const snapshot: StoreSnapshot = {
       workspaceId: this.workspaceId,
       userId: this.userId,
@@ -1986,6 +1999,7 @@ export class WorkspaceStore {
       restLoaded: this.restLoaded,
       offline: this.offline,
       pending: this.outbox.length,
+      pendingTaskIds,
       loadStamp: this.loadStamp,
       bundle,
       queue: prev && sameList(prev.snapshot.queue, queue) ? prev.snapshot.queue : queue,

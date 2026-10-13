@@ -177,7 +177,8 @@ export function TaskCaptureBody({
     if (shellDraft.trim() && shellDraft !== lastTitleWords) {
       start = { ...start, segments: [{ text: shellDraft }] };
     }
-    // A filtered scope pre-fills its tags, assignee and priority (U2-5).
+    // A filtered scope pre-fills its tags, assignee and priority (U2-5); a
+    // List group's "+" its team, due day or status (TV-U10).
     const seed = context?.seed;
     if (!restored && seed) {
       start = {
@@ -186,6 +187,9 @@ export function TaskCaptureBody({
           ...EMPTY_FIELDS,
           ...(seed.assigneeId !== undefined ? { assigneeId: seed.assigneeId } : {}),
           ...(seed.priority ? { priority: seed.priority } : {}),
+          ...(seed.teamId ? { teamId: seed.teamId } : {}),
+          ...(seed.dueDay ? { dueDay: seed.dueDay } : {}),
+          ...(seed.status ? { status: seed.status } : {}),
           tags: (seed.tagIds ?? []).map((id) => ({ id, name: "" })),
         },
       };
@@ -957,6 +961,7 @@ export function TaskCaptureBody({
       fromSource: sourceOn && Boolean(context?.source),
       remindAt: values.remindAt,
       waitingOn: values.waitingOn,
+      status: fields.status ?? null,
     };
     const lines = subtasks.map((s) => s.trim()).filter(Boolean);
     const childPositions = positionsAfter(lines.length, []);

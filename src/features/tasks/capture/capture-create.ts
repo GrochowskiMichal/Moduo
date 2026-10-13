@@ -6,6 +6,7 @@
 // its title and the "From:" item), its reminder, what it's waiting on, and a
 // place at the top of Up next when asked.
 
+import { legacyTaskStatus, type TaskStatusCategory } from "@contracts/vocabularies";
 import type { CaptureSource } from "../../../lib/capture-source";
 import type { EntityRef } from "../../../lib/entity-links";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
@@ -46,6 +47,8 @@ export type CaptureTaskPlan = {
   remindAt: string | null;
   /** Waiting on these people. */
   waitingOn: string[];
+  /** A status category to start in (a List group's "+", TV-U10); absent: To do. */
+  status?: TaskStatusCategory | null;
 };
 
 export type CapturePlan = {
@@ -83,6 +86,12 @@ export function planToTask(workspaceId: string, plan: CaptureTaskPlan): Task {
   if (plan.dueDay) task.dueOn = plan.dueDay;
   if (plan.sectionId) task.sectionId = plan.sectionId;
   if (plan.teamId) task.teamId = plan.teamId;
+  if (plan.status) {
+    // Sent as the category (the create op takes its word); the project's
+    // first status of it is the server's to pick.
+    task.statusCategory = plan.status;
+    task.status = legacyTaskStatus(plan.status);
+  }
   return task;
 }
 

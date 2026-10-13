@@ -61,6 +61,7 @@ import {
   type ProjectStatus,
   type QueuePlacement,
   type RecurrenceRule,
+  type Section,
   type Tag,
   type Task,
   type TaskQueueEntry,
@@ -2696,6 +2697,90 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     [areas, allBuckets, runAreaOp, runtime, workspaceId],
   );
 
+  // ── sections (TV-D10's ops; the List's "+ Add section", TV-U10) ──────────
+  /** Run a section op and take the project's sections it answers. */
+  const runSectionOp = useCallback(
+    (
+      op: () => Promise<Section[]>,
+      changes: OverlayChange[] = [],
+      opts?: { sync?: boolean },
+    ): Promise<Section[] | null> => {
+      if (editBlocked() || !store) return Promise.resolve(null);
+      const write = store.begin(changes);
+      return op().then(
+        async (next) => {
+          if (opts?.sync) await store.syncNow().catch(() => undefined);
+          write.settle({ sections: next });
+          return next;
+        },
+        (e) => {
+          refused(write, e, "Couldn't save the section.");
+          return null;
+        },
+      );
+    },
+    [editBlocked, store, refused],
+  );
+
+  /** A new section at the end of a project; answers with its id. */
+  const createSection = useCallback(
+    async (projectId: string, name: string): Promise<string | null> => {
+      const trimmed = name.trim();
+      if (!trimmed || !runtime || !workspaceId) return null;
+      const id = crypto.randomUUID();
+      const next = await runSectionOp(() =>
+        runtime.tasks.createSection({
+          workspaceId,
+          projectId,
+          id,
+          fields: { name: trimmed },
+        }),
+      );
+      return next ? id : null;
+    },
+    [runSectionOp, runtime, workspaceId],
+  );
+
+  const renameSection = useCallback(
+    (sectionId: string, name: string) => {
+      const trimmed = name.trim();
+      const existing = (bundle.sections ?? []).find((s) => s.id === sectionId);
+      if (!existing || !trimmed || trimmed === existing.name || !runtime || !workspaceId) return;
+      void runSectionOp(
+        () => runtime.tasks.updateSection({ workspaceId, sectionId, patch: { name: trimmed } }),
+        [{ table: "sections", patch: { id: sectionId, fields: { name: trimmed } } }],
+      );
+    },
+    [bundle.sections, runSectionOp, runtime, workspaceId],
+  );
+
+  /** Delete a section: its tasks stay in the project, under No section; Undo restores it. */
+  const deleteSection = useCallback(
+    (sectionId: string) => {
+      const existing = (bundle.sections ?? []).find((s) => s.id === sectionId);
+      if (!existing || !runtime || !workspaceId) return;
+      void runSectionOp(
+        () => runtime.tasks.updateSection({ workspaceId, sectionId, patch: { deleted: true } }),
+        [{ table: "sections", remove: sectionId }],
+        { sync: true },
+      ).then((next) => {
+        if (!next) return;
+        undoToast(`“${existing.name}” deleted`, {
+          description: "Its tasks stay in the project, under No section.",
+          onUndo: () => {
+            void runSectionOp(
+              () =>
+                runtime.tasks.updateSection({ workspaceId, sectionId, patch: { deleted: false } }),
+              [],
+              { sync: true },
+            );
+          },
+        });
+      });
+    },
+    [bundle.sections, runSectionOp, runtime, workspaceId],
+  );
+
   /**
    * Assign a bucket to a time-of-day slot (or clear it with `slot = null`).
    * Optimistic; persisted per person via the runtime (spec §9). The sidebar no
@@ -2792,6 +2877,8 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     restLoaded: !!store && snap.restLoaded,
     /** Live comments per task (TV-D11a; TV-D5's promised counts). */
     commentCounts: snap.commentCounts,
+    /** Tasks with a capture or check-off waiting on this device (a row's clock). */
+    pendingTaskIds: snap.pendingTaskIds,
     /** TV-D10's structure, live from the store: areas (in sidebar order),
      *  sections, teams, members. */
     areas,
@@ -2888,6 +2975,10 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     setAreaColor,
     moveArea,
     deleteArea,
+    /** Sections' ops (TV-D10's; the List's "+ Add section", TV-U10). */
+    createSection,
+    renameSection,
+    deleteSection,
     /** Recently deleted (TV-U6), when read (`includeTrash`); null otherwise. */
     trash,
     restoreFromTrash,
