@@ -41,11 +41,11 @@
 - [ ] **Do:** a teammate who shared views leaves the workspace → **Expect:** their shared views disappear for everyone _(web, two accounts)_
 
 ## Migrations / data
-- [ ] **Do:** `bun run db:test task_views` → **Expect:** 84 checks pass (outsiders, hidden-equals-missing, a view of a hidden project, foreign ids, no oracle on hidden tasks' assignees, keys refused, raw writes refused, seeds once, erasure) _(local stack)_
+- [ ] **Do:** `bun run db:test task_views` → **Expect:** 87 checks pass (outsiders, a view of a project you can't see, ids from elsewhere, keys refused, raw writes refused, seeds once, erasure) _(local stack)_
 - [ ] **Do:** after the release apply, check `account_erase_workspace_data` on prod has the `task_views` count, `'views_deleted'` and the DELETE line → **Expect:** present (the migration patches it by anchored replace and refuses to run if the anchors are missing)
 
 ## Verify before release
-- Apply `20261013250000_task_views` with the other v3 migrations, after TV-D15's and TV-D16's erasure patches (its anchors are TV-D15's template lines in `account_erase_workspace_data`; check them on prod's body first).
+- Apply `20261013250000_task_views` once, its final file, with the other v3 migrations (it was re-applied on the local stack while it was revised; it's re-runnable), after TV-D15's and TV-D16's erasure patches (its anchors are TV-D15's template lines in `account_erase_workspace_data`; check them on prod's body first).
 - Views read through prod's PostgREST (the read policy calls `task_views__readable` per row; small table).
 - Two real devices: a view saved on one shows on the other after a window return; folds follow; seeds don't double.
 - The signed desktop build: Copy link writes `/tasks?view=…` with the web origin (check what the desktop app's origin gives).

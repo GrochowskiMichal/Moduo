@@ -2,6 +2,71 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index.
 
+## 2026-10-13 · TV-U8 Saved views — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 21 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §3, AC11.1, AC4.8; REPLAN 29b–29e, 29d, §3's role table). Migration `20261013250000_task_views`. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **U8-1 · A view can be shared with the workspace** → TV-U8 (`task_views.shared`, `task_views__sees`)
+  - Who: the orchestrator's brief for this block (2026-10-13), built as the agent's choice; it supersedes the 2026-10-08 call "saved views are personal; sharing later, on top of PERM sharing".
+  - Decision: a view is yours until you share it with the workspace (⋯ → Share with the workspace; needs Tasks edit). A shared view reaches everyone with Tasks there, a project view only people who can see that project, and it reads as gone once its maker leaves the workspace. It keeps a filter, never results: each reader sees only what their own access shows through it, and My tasks and Upcoming are each reader's own.
+  - Why: a team's "Waiting on client" or "Sprint board" is shared work; a boolean share is the templates' proven shape (TV-D15) and leaks nothing a reader couldn't see.
+  - Rejected: sharing with chosen people through PERM grants (more machinery than a lens needs; later if asked); copying a shared view's results.
+- **U8-2 · Only the maker changes a view; the owner or an admin can take a shared one down** → TV-U8 (`task_views_op_update`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (the orchestrator kept the exception).
+  - Decision: the maker renames, saves, re-shares, moves and deletes; anyone else who sees a shared view can pin it, copy its link and "Save as new view…"; the workspace's owner or an admin can also Stop sharing or Delete (and Undo) a shared view they can see.
+  - Why: templates' precedent; a workspace needs a way to tidy shared views.
+  - Rejected: anyone editing a shared view (one person's change rewrites everyone's lens).
+- **U8-3 · A view keeps one place: All, My tasks, Upcoming or a project** → TV-U8 (`TASK_VIEW_SCOPES`, `viewScopeOf`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: "Save as view…" (the toolbar's ⋯) saves the place's Filter and Display (layout, Group by, Board grouping and lanes, order, Completed, subtasks, rows, Show on rows); a view saved in a project keeps that project (29d). The Inbox, Focus, Won't do, Archived and Recently deleted don't save. The selection (multi-select) and the search are never saved.
+  - Why: 29d ("a view saved inside a project simply keeps that project as a filter"); the Inbox is each person's private place.
+  - Rejected: project tabs (29d is no); views of the Inbox.
+- **U8-4 · Changes to an open view wait for Save** → TV-U8 (`use-tasks-display.tsx`, `ViewChangesLine`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: changing an open view's Filter or Display shows "Unsaved changes · Save · Save as new view… · Revert" under the toolbar (someone else's view: no Save). The changes stay while you move around this session, never on the device: a reload, or the view saved on another device, opens as saved. A place (All, a project) still remembers its own Filter and Display on the device.
+  - Why: v2's "Save changes"; a device copy of a view's changes would drift from the view saved elsewhere.
+  - Rejected: saving every change at once (a shared view would change under everyone); keeping drafts on the device.
+- **U8-5 · No counts on view rows** → TV-U8 (`bucket-rail.tsx` `ViewRow`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: a view's row carries its name only; the open view's title counts what it shows ("Done last week" counts its done tasks).
+  - Why: a count per view runs that view's filter over every task on each change (the 10,000-task budget); §3 gives counts to projects and areas.
+  - Rejected: counts on every view row (later as a deferred count if wanted).
+- **U8-6 · The Views group: yours in your order, then the shared ones** → TV-U8 (`sidebarViews`, `task_views_op_move`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: between Pinned and the projects, under a "Views" header only when there's one, collapsible (29e); your views in your order (⋯ → Move up / Move down), then views shared with you by name; no glyphs, an empty icon slot keeps the names in line with the projects' (29c B). Pin puts a view in Pinned beside pinned projects (`preferences.tasksSidebar.pinned[ws]` holds `view:<id>`).
+  - Why: 29b, 29c, 29e as decided.
+  - Rejected: drag to reorder views (Move up/down first); a "Shared" mark (no glyphs).
+- **U8-7 · Seeded views per role, and "Done last week" for everyone** → TV-U8 (`views.ts` `ROLE_SEED_VIEWS`, `seedViewsFor`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: once per person and workspace, after onboarding decided (the role answered or skipped, or the welcome stepped aside), each person gets their role's views: student Today (mine, due today or earlier); developer This week (mine, due this week); PM Waiting (All, waiting on anything) and Due this week (All, by due date); founder Waiting on people; client work Waiting on client (waiting on an email reply or something else); creator Pipeline (All as a Board by status) and Publish dates (All with a due date, by Date); and everyone "Done last week" (All: Status is Done, Completed is Last week). The student's "Upcoming" and the developer's "Mine" aren't seeded: they're sidebar rows now. A seeded view deleted never comes back (the server keeps one per person, workspace and seed key; `preferences.tasksOnboarding.viewsSeeded` stamps it first and only moves forward).
+  - Why: REPLAN §3's column and AC4.8; §3's table predates Upcoming and My tasks as sidebar rows.
+  - Rejected: seeding per workspace for its creator (❓34 seeds views per person); re-seeding when the role changes (a role changes defaults only).
+- **U8-8 · Filter gains Completed and Waiting on** → TV-U8 (`filters.ts`, `day-buckets.ts` `completedFilterValues`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: Completed: Today · This week · Last week · This month · Not completed (the week from Time & region; a Completed day shows done tasks whatever Display → Completed says); Waiting on: Anything · A teammate · An email reply · An agent · Something else · Not waiting.
+  - Why: "Done last week" and the "Waiting on …" seeds need them; spec §2 names Filter → Completed.
+  - Rejected: a date range for Completed (later); Group by Completed (later).
+- **U8-9 · Folds follow the person** → TV-U8 (`folds.ts`, `preferences.tasksFolds`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (TV-U10 handed it over).
+  - Decision: the List's folded groups and the Board's folded columns and lanes live in the synced preferences per workspace, place (or view) and grouping; a burst of folds is one write a moment later; the newest 300 Lists and Boards keep theirs. A saved view keeps its own folds apart from its place. Old per-device folds aren't carried over.
+  - Why: TV-U10's note ("sync them with the views"); TV-U15's snoozes are the precedent (synced, no table).
+  - Rejected: folds in the view row (one person's fold would fold everyone's shared view); a table.
+- **U8-10 · Views sync on the store's reads, not live** → TV-U8 (`SYNC_TABLES` views, read whole)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the store reads `task_views` whole on every sync (opening Tasks, coming back to the window, a reconnect); the table isn't published to Realtime.
+  - Why: who sees a shared view moves with project sharing and membership, which bump no stamp; views change rarely; the local stack has no publication.
+  - Rejected: a Realtime channel for views (a channel naming an unpublished table silences the others).
+- **U8-11 · A view's link** → TV-U8 (`?view=<id>`, `useSavedViews`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: ⋯ → Copy link gives `/tasks?view=<id>`; it opens the view once, then leaves the URL (a reload reopens where you are); a view you can't open says "That view isn't available · It was deleted, or it isn't shared with you", the same words either way.
+  - Why: v2's U8-3; the same answer for hidden and missing.
+  - Rejected: mirroring the open view in the URL all the time (the `?id=` mirror already owns the URL).
+- **U8-12 · A filter keeps only this workspace's ids** → TV-U8 (`task_views__check_filters`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: a saved filter keeps the app's words and only people, teams and tags of the same workspace (a person: a member, or the assignee of a task the saver can see); Display keeps only words. Anything else is refused with one answer.
+  - Why: a shared view must carry nothing a reader couldn't see.
+  - Rejected: storing any string (a view could carry ids from elsewhere).
+
 ## 2026-10-13 · TV-TL1 Timeline rebuild I — the agent's choices (deferred to by Maciej)
 
 Built in tasks-v3 block 25 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §6; REPLAN 67–71, 68a, 46a, 48b; research `.design/tasks-v3/research/timeline-competitors.md`; prototype round-2a frames 4–5) on the local stack, no migration. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to change.
