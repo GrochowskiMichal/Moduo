@@ -2,8 +2,8 @@
 // the breadcrumb "● Project › Section" (each part a picker that moves the
 // task; a subtask goes on to "↳ parent"), the handle (click to copy), a slot
 // for who "is on this" (claims, TV-F7), the queue toggle, ⤢ full page, and
-// ⋯ (Copy branch name, Copy link, Duplicate, Make it a task, Won't do /
-// Reopen, Delete).
+// ⋯ (Copy branch name, Copy link, Duplicate, Save as template…, Make it a
+// task, Won't do / Reopen, Delete).
 
 import {
   Ban,
@@ -13,6 +13,7 @@ import {
   Ellipsis,
   GitBranch,
   Inbox,
+  LayoutTemplate,
   Link2,
   ListChecks,
   Lock,
@@ -74,6 +75,8 @@ type Props = {
   onCloseFullPage?: () => void;
   /** Who "is on this" (claims): TV-F7 puts its mark here. */
   claimSlot?: ReactNode;
+  /** ⋯ → Save as template… (TV-D15). Absent: not offered. */
+  onSaveAsTemplate?: () => void;
 };
 
 const crumb =
@@ -91,6 +94,7 @@ export function TaskDetailHeader({
   onOpenFullPage,
   onCloseFullPage,
   claimSlot,
+  onSaveAsTemplate,
 }: Props) {
   const bucketOptions = inbox ? [inbox, ...buckets.filter((b) => b.id !== inbox.id)] : buckets;
   const bucket = bucketOptions.find((b) => b.id === task.bucketId) ?? null;
@@ -224,6 +228,12 @@ export function TaskDetailHeader({
                 <Copy aria-hidden />
                 Duplicate
               </DropdownMenuItem>
+              {onSaveAsTemplate ? (
+                <DropdownMenuItem onSelect={onSaveAsTemplate}>
+                  <LayoutTemplate aria-hidden />
+                  Save as template…
+                </DropdownMenuItem>
+              ) : null}
               {parent ? (
                 <DropdownMenuItem onSelect={() => api.setTaskParent(task.id, null)}>
                   <Unlink aria-hidden />

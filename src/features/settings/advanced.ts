@@ -33,6 +33,7 @@ export type ModuleReadResult =
  * since TV-D10 projects carry their fields, and the bundle has `areas`,
  * `sections`, `teams` and `teamMembers`) plus every completion (TV-D8),
  * work session, your own reminders and every Waiting on… entry (TV-D10),
+ * and your templates and the shared ones, with their bodies (TV-D15),
  * specs/tasks-v3.md §Assumptions #26. Every new tasks table joins here in
  * the block that creates it. A cut read joins the bundle's `truncated` list,
  * never silently.
@@ -52,15 +53,22 @@ export async function readTasksExport(
     listWaiting(
       workspaceId: string,
     ): Promise<{ waiting: unknown[]; truncated: readonly unknown[] }>;
+    /** Your templates and the shared ones, with their bodies (TV-D15). */
+    exportTemplates?(
+      workspaceId: string,
+    ): Promise<{ templates: unknown[]; truncated: readonly unknown[] }>;
   },
   workspaceId: string,
 ): Promise<Record<string, unknown>> {
-  const [bundle, read, sessions, reminders, waiting] = await Promise.all([
+  const [bundle, read, sessions, reminders, waiting, templates] = await Promise.all([
     tasks.list(workspaceId),
     tasks.listCompletions(workspaceId),
     tasks.listSessions(workspaceId),
     tasks.listReminders(workspaceId),
     tasks.listWaiting(workspaceId),
+    tasks.exportTemplates
+      ? tasks.exportTemplates(workspaceId)
+      : Promise.resolve({ templates: [], truncated: [] }),
   ]);
   const cut = (bundle as { truncated?: unknown }).truncated;
   return {
@@ -69,12 +77,14 @@ export async function readTasksExport(
     sessions: sessions.sessions,
     reminders: reminders.reminders,
     waiting: waiting.waiting,
+    templates: templates.templates,
     truncated: [
       ...(Array.isArray(cut) ? cut : []),
       ...read.truncated,
       ...sessions.truncated,
       ...reminders.truncated,
       ...waiting.truncated,
+      ...templates.truncated,
     ],
   };
 }

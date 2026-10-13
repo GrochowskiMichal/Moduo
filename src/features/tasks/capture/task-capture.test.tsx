@@ -13,6 +13,7 @@ import type { ReferencePreviewApi } from "../../spine/references/rows";
 import { ReferenceStore } from "../../spine/references/store";
 import type { Bucket, Task, Team } from "../model";
 import { EMPTY_FIELDS, loadDraft, saveDraft } from "./capture-draft";
+import { type CaptureTemplateProvider, registerCaptureTemplates } from "./capture-hooks";
 
 const ME = "u-me";
 const SAM = "u-sam";
@@ -23,12 +24,13 @@ const h = rs.hoisted(() => ({
   userId: "u-me",
   runtime: null as unknown,
   bundle: null as unknown,
+  store: null as unknown,
 }));
 
 // The workspace's shared store, as a loaded snapshot (no store: saves go
 // straight to the runtime, the store's own behaviour is its tests').
 rs.mock("../../../lib/sync/react", () => ({
-  useWorkspaceStore: () => null,
+  useWorkspaceStore: () => h.store ?? null,
   useStoreSnapshot: () => ({ loaded: true, bundle: h.bundle }),
 }));
 
@@ -212,6 +214,8 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   window.localStorage.clear();
+  h.store = null;
+  registerCaptureTemplates(null);
 });
 
 describe("a restored draft", () => {
@@ -450,5 +454,62 @@ describe("Create (AC10.3, AC5.4)", () => {
       await new Promise((r) => setTimeout(r, 0));
     });
     expect(fake.links).toEqual([]);
+  });
+});
+
+describe("From template (`/template`, More → Template…, TV-D15)", () => {
+  function withTemplates() {
+    const apply = rs.fn(async (_deps: unknown, _input: unknown) => "t-new" as string | null);
+    const provider: CaptureTemplateProvider = {
+      useChoices: () => ({
+        loaded: true,
+        choices: [
+          {
+            id: "tt-1",
+            name: "Episode",
+            title: "Record episode",
+            subtasks: 3,
+            dated: true,
+            project: "p-acme",
+          },
+        ],
+      }),
+      apply,
+    };
+    registerCaptureTemplates(provider);
+    h.store = { isOffline: () => false };
+    (fake.runtime as { tasks: Record<string, unknown> }).tasks.applyTaskTemplate = rs.fn();
+    return apply;
+  }
+
+  it("a picked template fills the title and its project, and Create makes it on the server", async () => {
+    const apply = withTemplates();
+    const { onDone } = renderBody();
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Template…" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Episode/ }));
+    expect(await screen.findByText("Template: Episode")).toBeTruthy();
+    expect(destination().textContent).toContain("Acme rebrand");
+    // Its description, subtasks, tags and priority come from the template.
+    expect(screen.queryByRole("textbox", { name: "Description" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Tags/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /^Create\s*⏎$/ }));
+    await waitFor(() => expect(apply).toHaveBeenCalledTimes(1));
+    expect(onDone).toHaveBeenCalled();
+    expect(apply.mock.calls[0]?.[1]).toMatchObject({
+      templateId: "tt-1",
+      title: "Record episode",
+      projectId: "p-acme",
+      date: null,
+    });
+    // Nothing went through the capture's own create.
+    expect(fake.saved).toEqual([]);
+  });
+
+  it("without a registered provider there's no Template… in More", async () => {
+    renderBody();
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
+    await screen.findByText("Waiting on");
+    expect(screen.queryByRole("button", { name: "Template…" })).toBeNull();
   });
 });

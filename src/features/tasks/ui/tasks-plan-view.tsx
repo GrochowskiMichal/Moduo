@@ -49,6 +49,7 @@ import {
   usePreferencesValue,
 } from "../../../lib/preferences";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
+import { useWorkspaceStore } from "../../../lib/sync/react";
 import { undoToast } from "../../../lib/undo-toast";
 import { HubDropZone } from "../../contacts/ui/hub-drop-zone";
 import { consumeFocusViewRequest, FOCUS_VIEW_REQUEST_EVENT } from "../../focus/view-request";
@@ -88,6 +89,7 @@ import { showsSortedNote, sortedByLabel } from "../order";
 import { resolveTasksDeepLink, taskIdForHandle } from "../search";
 import { projectDeleteSummary, projectOpenWork } from "../sidebar";
 import { STATUS_KEY_LABELS, type StatusKey } from "../statuses";
+import { useTemplateActions } from "../templates/ui/use-template-actions";
 import { sanitizeTimelineZoom, type TimelineZoom } from "../timeline-geometry";
 import { ArchivedProjectBanner, ArchivedProjectsView } from "./archived-projects-view";
 import {
@@ -96,6 +98,7 @@ import {
   BucketRail,
   parseCollapsedSections,
   type TasksMode,
+  TEMPLATES_SELECTION,
   TRASH_SELECTION,
   UPCOMING_SELECTION,
 } from "./bucket-rail";
@@ -318,7 +321,12 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   // Remember where you were, so the next open lands back on it (REPLAN 30);
   // Archived projects and Recently deleted aren't places to reopen.
   useEffect(() => {
-    if (selection === ARCHIVED_SELECTION || selection === TRASH_SELECTION) return;
+    if (
+      selection === ARCHIVED_SELECTION ||
+      selection === TRASH_SELECTION ||
+      selection === TEMPLATES_SELECTION
+    )
+      return;
     if (api.archivedBuckets.some((b) => b.id === selection)) return;
     writeLS(workspaceId, "lastBucket", selection);
   }, [workspaceId, selection, api.archivedBuckets]);
@@ -379,7 +387,8 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       selection === "today" ||
       selection === UPCOMING_SELECTION ||
       selection === ARCHIVED_SELECTION ||
-      selection === TRASH_SELECTION
+      selection === TRASH_SELECTION ||
+      selection === TEMPLATES_SELECTION
     )
       return;
     if (selection === "mine") {
@@ -462,7 +471,12 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
 
   const scopeTasksAll = useMemo(() => {
     if (selection === "today") return api.queuedTasks;
-    if (selection === ARCHIVED_SELECTION || selection === TRASH_SELECTION) return [];
+    if (
+      selection === ARCHIVED_SELECTION ||
+      selection === TRASH_SELECTION ||
+      selection === TEMPLATES_SELECTION
+    )
+      return [];
     const live = (t: Task) => t.status !== "archived" || withArchived || t.id === keptArchivedId;
     if (selection === "all") return tasks.filter(live);
     if (selection === UPCOMING_SELECTION) {
@@ -548,19 +562,21 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   }, [mode, filtering.seed, assignees]);
 
   const scopeTitle =
-    selection === "all"
-      ? "All"
-      : selection === "mine"
-        ? "My tasks"
-        : selection === "today"
-          ? "Focus"
-          : selection === UPCOMING_SELECTION
-            ? "Upcoming"
-            : selection === "inbox"
-              ? "Inbox"
-              : archivedProject
-                ? archivedProject.name
-                : bucketNameById(selection);
+    selection === TEMPLATES_SELECTION
+      ? "Templates"
+      : selection === "all"
+        ? "All"
+        : selection === "mine"
+          ? "My tasks"
+          : selection === "today"
+            ? "Focus"
+            : selection === UPCOMING_SELECTION
+              ? "Upcoming"
+              : selection === "inbox"
+                ? "Inbox"
+                : archivedProject
+                  ? archivedProject.name
+                  : bucketNameById(selection);
 
   // The Queue is one ordered line-up, so its List view is never grouped.
   const effectiveGroupBy = selection === "today" ? "none" : tasksDisplay.display.group;
@@ -764,6 +780,26 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   }, [api.openTrashRef]);
   const trashCount = (api.trash?.buckets.length ?? 0) + (api.trash?.tasks.length ?? 0);
 
+  // Templates and "Duplicate project…" (TV-D15): the dialogs, the Templates
+  // page, and what a copy settles into the shared store in one step.
+  const templateStore = useWorkspaceStore(runtime, currentUserId, workspaceId);
+  const templateActions = useTemplateActions({
+    runtime,
+    store: templateStore,
+    workspaceId,
+    userId: currentUserId,
+    canEdit,
+    isAdmin: canManageWorkspace,
+    active: selection === TEMPLATES_SELECTION,
+    buckets,
+    areas: api.areas,
+    sections: api.sections,
+    tasks: api.tasks,
+    onOpenProject: pickSelection,
+    onOpenTask: (id) => onUrlTaskIdChange(id),
+  });
+  const offersTemplates = templateActions.supported && canEdit;
+
   const left = (
     <BucketRail
       mode={mode}
@@ -811,6 +847,15 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       onDeleteArea={api.deleteArea}
       archivedCount={api.archivedBuckets.length}
       trashCount={trashCount}
+      templates={
+        offersTemplates
+          ? {
+              onDuplicate: templateActions.requestDuplicate,
+              onSaveAsTemplate: templateActions.requestSaveProject,
+              onNewFromTemplate: templateActions.requestNewFromTemplate,
+            }
+          : undefined
+      }
       navRef={railNavRef}
       dropAccepts={railAccepts}
     />
@@ -1031,7 +1076,9 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   // Execute mode is enclosed in the center panel (rails stay visible).
   // Archived projects and Recently deleted open from the sidebar's ⋯ (98).
   const body =
-    mode === "plan" && selection === TRASH_SELECTION ? (
+    mode === "plan" && selection === TEMPLATES_SELECTION ? (
+      templateActions.page
+    ) : mode === "plan" && selection === TRASH_SELECTION ? (
       <RecentlyDeletedView
         trash={api.trash}
         bucketName={(id) => {
@@ -1333,6 +1380,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       runtime={runtime}
       workspaceId={workspaceId}
       onOpenEntity={handleOpenEntity}
+      onSaveAsTemplate={offersTemplates ? templateActions.requestSaveTask : undefined}
     />
   );
   // The hub is a drop target within the ONE page-level DndContext (below); no
@@ -1484,6 +1532,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
         runtime={runtime}
         workspaceId={workspaceId}
         onOpenEntity={handleOpenEntity}
+        onSaveAsTemplate={offersTemplates ? templateActions.requestSaveTask : undefined}
       />
     </TaskFullPage>
   ) : (
@@ -1577,6 +1626,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
           restoreNavFocus(event, railNavRef.current, triageFromRef.current)
         }
       />
+      {templateActions.dialogs}
       <FrontierOfferDialog
         open={frontierOfferTaskId !== null}
         onOpenChange={(o) => !o && setFrontierOfferTaskId(null)}
