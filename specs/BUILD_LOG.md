@@ -270,6 +270,12 @@ _Built and landed locally on `t/maciej/tasks-v3-build` (🟠 LOCAL BUILD MODE in
 **Reviews:** a background security review of the first cut (copies of hidden tasks, people and links in bodies, a save-time share flag, helpers callable by clients, resend ids) was fixed in place before landing. The validator found no BLOCKER. Its one MAJOR is fixed: capture had silently dropped a Due the template couldn't take, other typed tokens and a refused apply. It now refuses with a hint, sends the right date per anchor, waits for the server and keeps the template on a refusal. Its MINORs are fixed (sign-out read race, the Use… toast's destination, the token icon, the notes label) or recorded as D15-10. The re-check found no BLOCKER or MAJOR. Live-verified on the local stack (checklist).
 
 **Records:** choices D15-1…10 in decisions/tasks.md; gotchas in spine.md (resend ids, seeded statuses); checklist [docs/testing/t-maciej-tv-d15-templates.md](../docs/testing/t-maciej-tv-d15-templates.md).
+- [x] **TV-D15 follow-up — Copying needs Edit on the source** · after tasks-v3 block 30 · _done 2026-10-13 · `t/maciej/tv-d15-fix` → `t/maciej/tasks-v3-build` (local). Migration `20261013190000_templates_edit_to_copy` (applied to the local stack only; re-cut from the live bodies of 160000's ops)._
+  - Duplicate project… and Save as template (a project's or a task's, even one kept for yourself) need Edit on the source. A task template takes only the subtasks its maker can edit.
+  - `templates_can_copy(kind, id)` answers the caller before a dialog offers the copy. Without Edit, the dialog says "You need edit access to this project to copy it." (or "…to this task to save it as a template.") and offers only Close.
+  - Applying a shared template is unchanged.
+  - Tests: `supabase/tests/templates_edit.test.sql` (13), `template-dialogs.test.tsx`; `bun run db:test` 19/19; verify green.
+  - Records: decision D15-11; checklist lines in [docs/testing/t-maciej-tv-d15-templates.md](../docs/testing/t-maciej-tv-d15-templates.md).
 
 ## Transactional email — every email Moduo sends · [`specs/transactional-email.md`](./transactional-email.md)
 

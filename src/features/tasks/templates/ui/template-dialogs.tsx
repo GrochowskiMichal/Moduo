@@ -38,6 +38,13 @@ const dayToDate = (day: string | null) => (day ? new Date(`${day}T12:00:00`) : n
 const dateToDay = (d: Date | null) => (d ? localDayOf(d.toISOString()) : null);
 
 const FIELD = "flex flex-col gap-1.5";
+
+/** Why a copy isn't offered (D15-11). */
+export function noCopyReason(kind: TemplateKind): string {
+  return kind === "task"
+    ? "You need edit access to this task to save it as a template."
+    : "You need edit access to this project to copy it.";
+}
 const LABEL = "font-sans text-sm text-muted-foreground";
 
 // ── Save as template ─────────────────────────────────────────────────────────
@@ -46,12 +53,15 @@ export function SaveTemplateDialog({
   open,
   kind,
   defaultName,
+  access = true,
   onSave,
   onClose,
 }: {
   open: boolean;
   kind: TemplateKind;
   defaultName: string;
+  /** May you copy it (Edit on it, D15-11)? null while asking. */
+  access?: boolean | null;
   onSave: (name: string) => void;
   onClose: () => void;
 }) {
@@ -62,7 +72,7 @@ export function SaveTemplateDialog({
   }, [open, defaultName]);
   const trimmed = name.trim();
   const save = () => {
-    if (!trimmed) return;
+    if (!trimmed || access !== true) return;
     onSave(trimmed);
     onClose();
   };
@@ -94,16 +104,22 @@ export function SaveTemplateDialog({
             }}
           />
         </div>
-        <p className="font-sans text-xs text-muted-foreground">
-          Only you can use it until you share it with the workspace.
-        </p>
+        {access === false ? (
+          <p className="font-sans text-sm text-foreground">{noCopyReason(kind)}</p>
+        ) : (
+          <p className="font-sans text-xs text-muted-foreground">
+            Only you can use it until you share it with the workspace.
+          </p>
+        )}
         <DialogFooter>
           <Button variant="ghost" onClick={onClose}>
-            Cancel
+            {access === false ? "Close" : "Cancel"}
           </Button>
-          <Button disabled={!trimmed} onClick={save}>
-            Save template
-          </Button>
+          {access === false ? null : (
+            <Button disabled={!trimmed || access !== true} onClick={save}>
+              Save template
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -128,12 +144,15 @@ export function CopyProjectDialog({
   templates = [],
   initialTemplateId = null,
   busy = false,
+  access = true,
   onCreate,
   onClose,
 }: {
   open: boolean;
   /** Duplicate a live project, or make one from a project template. */
   mode: "duplicate" | "template";
+  /** Duplicate: may you copy it (Edit on it, D15-11)? null while asking. */
+  access?: boolean | null;
   /** Duplicate: the project copied (its name, whether it has dates and people). */
   source?: { name: string; dated: boolean; people: boolean; startsOn: string | null } | null;
   /** From template: the project templates to pick from. */
@@ -175,7 +194,9 @@ export function CopyProjectDialog({
     setStart(dated ? todayDay() : null);
   }, [open, mode, sourceName, pickedId]);
   const trimmed = name.trim();
-  const ready = trimmed.length > 0 && (mode === "duplicate" || picked !== null) && !busy;
+  const blocked = mode === "duplicate" && access === false;
+  const ready =
+    trimmed.length > 0 && (mode === "template" ? picked !== null : access === true) && !busy;
   const create = () => {
     if (!ready) return;
     onCreate({
@@ -200,7 +221,10 @@ export function CopyProjectDialog({
               : "Makes a project with the template's statuses, sections and tasks."}
           </DialogDescription>
         </DialogHeader>
-        <div className="flex flex-col gap-3">
+        {blocked ? (
+          <p className="font-sans text-sm text-foreground">{noCopyReason("project")}</p>
+        ) : null}
+        <div className={blocked ? "hidden" : "flex flex-col gap-3"}>
           {mode === "template" ? (
             templates.length === 0 ? (
               <p className="font-sans text-sm text-muted-foreground">
@@ -269,11 +293,13 @@ export function CopyProjectDialog({
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={onClose}>
-            Cancel
+            {blocked ? "Close" : "Cancel"}
           </Button>
-          <Button disabled={!ready} onClick={create}>
-            {busy ? "Creating…" : mode === "duplicate" ? "Duplicate" : "Create project"}
-          </Button>
+          {blocked ? null : (
+            <Button disabled={!ready} onClick={create}>
+              {busy ? "Creating…" : mode === "duplicate" ? "Duplicate" : "Create project"}
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

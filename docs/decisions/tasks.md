@@ -203,7 +203,7 @@ Built in tasks-v3 block 30 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §15, A
 - **D15-5 · Who sees templates and copies** → TV-D15 (`templates_op_update`, `templates__sources_full`)
   - Who: agent's choice, deferred to by Maciej, 2026-10-13 (after a security review of the first cut).
   - Decision:
-    - A template is its maker's until shared with the workspace. Saving one needs Tasks edit in the workspace and only takes what the saver can see; a hidden task's title or description never reaches a body.
+    - A template is its maker's until shared with the workspace. Saving one needs Tasks edit in the workspace and only takes what the saver can see; a hidden task's title or description never reaches a body. (Since D15-11, saving and duplicating need Edit on the source.)
     - Sharing a template, and changing a shared one, check again that the person has Full access to every project or task it was saved from and that each is still there (`source_ids`, which readers can't see).
     - A template saved from a project the workspace can't see asks before it's shared ("This includes n tasks from a private project. Share?"). While it stays private, a project made from it is private.
     - A copy of a project the workspace can't see is private.
@@ -247,6 +247,15 @@ Built in tasks-v3 block 30 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §15, A
     - Erasure deletes a person's templates, shared ones too. The data export carries yours and the shared ones with their bodies.
   - Why: the same shapes as the rest of v3 (Recently deleted, idempotent ops, §Assumptions #26).
   - Rejected: a hard delete without Undo.
+- **D15-11 · Copying needs Edit on the source** → TV-D15 follow-up (`20261013190000_templates_edit_to_copy`, `templates_can_copy`)
+  - Who: agent's choice (the Tasks v3 orchestrator's call on TV-D15's residual), deferred to by Maciej, 2026-10-13.
+  - Decision:
+    - "Duplicate project…" and "Save as template" (a project's or a task's, even one kept for yourself) need Edit on what they copy.
+    - A task template takes only the subtasks you can edit.
+    - Without Edit, the dialog says so ("You need edit access to this project to copy it." / "…to this task to save it as a template.") instead of offering the action. The app asks `templates_can_copy` when the dialog opens, and the server checks again on the copy.
+    - Using a template that's shared with you is unchanged: it needs Tasks edit in the workspace, as any new task does.
+  - Why: a copy is its maker's, and a copy made from view-only access could later be shared to people the source never reached.
+  - Rejected: keeping view-level duplication as "equivalent to copy-paste" (D15-5's first cut); hiding the menu items per project (the client doesn't know per-project edit access without asking).
 - **D15-10 · Known limits, kept on purpose** → TV-D15, a later migration if they matter
   - Who: agent's choice, deferred to by Maciej, 2026-10-13 (from the validator's review).
   - Decision:

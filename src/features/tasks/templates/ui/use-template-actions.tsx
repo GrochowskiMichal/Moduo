@@ -71,6 +71,9 @@ export function useTemplateActions({
   const supported = Boolean(runtime?.tasks.duplicateProject && runtime.tasks.listTemplates);
   const [dialog, setDialog] = useState<Dialogs>(null);
   const [busy, setBusy] = useState(false);
+  // May you copy what the open dialog copies (Edit on it, D15-11)? Asked
+  // when it opens; null while asking. The server decides again on the copy.
+  const [copyAccess, setCopyAccess] = useState<boolean | null>(null);
   const [editing, setEditing] = useState<{ template: Template } | null>(null);
   const [editorTemplate, setEditorTemplate] = useState<TemplateWithBody | null>(null);
   const [editorLoading, setEditorLoading] = useState(false);
@@ -92,6 +95,32 @@ export function useTemplateActions({
     setDialog(null);
     attemptId.current = null;
   }, []);
+
+  const copySource: { kind: "task" | "project"; id: string } | null =
+    dialog?.kind === "save-task"
+      ? { kind: "task", id: dialog.task.id }
+      : dialog?.kind === "save-project" || dialog?.kind === "duplicate"
+        ? { kind: "project", id: dialog.bucket.id }
+        : null;
+  const copyKind = copySource?.kind ?? null;
+  const copyId = copySource?.id ?? null;
+  useEffect(() => {
+    if (!copyKind || !copyId) return;
+    const ask = runtime?.tasks.canCopyTemplateSource;
+    if (!ask) {
+      setCopyAccess(true);
+      return;
+    }
+    let live = true;
+    setCopyAccess(null);
+    ask({ kind: copyKind, id: copyId })
+      .then((ok) => live && setCopyAccess(ok))
+      // Unknown: let the server decide (it refuses with a clear message).
+      .catch(() => live && setCopyAccess(true));
+    return () => {
+      live = false;
+    };
+  }, [runtime, copyKind, copyId]);
 
   // ── saving ──────────────────────────────────────────────────────────────
   const saveAs = async (
@@ -246,6 +275,7 @@ export function useTemplateActions({
               ? dialog.bucket.name
               : ""
         }
+        access={copyAccess}
         onSave={(name) => {
           if (dialog?.kind === "save-task") void saveAs({ kind: "task", id: dialog.task.id }, name);
           if (dialog?.kind === "save-project")
@@ -258,6 +288,7 @@ export function useTemplateActions({
         mode="duplicate"
         source={duplicateSource}
         busy={busy}
+        access={copyAccess}
         onCreate={(form) => {
           if (dialog?.kind !== "duplicate" || !deps) return;
           const bucket = dialog.bucket;
