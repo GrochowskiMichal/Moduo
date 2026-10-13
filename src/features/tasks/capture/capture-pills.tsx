@@ -89,6 +89,8 @@ type Props = {
    * rest come from the template.
    */
   templateMode?: boolean;
+  /** With a template: Due shows only when the template counts from its due date. */
+  templateDue?: boolean;
 };
 
 const PRIORITIES: Array<{ level: PriorityLevel; label: string }> = [
@@ -116,6 +118,7 @@ export function CapturePills({
   onOpenChange,
   onTemplate,
   templateMode = false,
+  templateDue = false,
 }: Props) {
   const team = teams.find((t) => t.id === values.teamId) ?? null;
   const assigneeId = values.assigneeId === undefined ? me : values.assigneeId;
@@ -201,30 +204,32 @@ export function CapturePills({
           </>
         }
       />
-      <Popover
-        open={open === "due"}
-        onOpenChange={(next) => (next ? onOpenChange("due") : dueDraft.close())}
-      >
-        <PopoverTrigger asChild>
-          <ChipButton
-            icon={CalendarDays}
-            active={Boolean(values.dueDay)}
-            className={values.dueDay ? undefined : "text-muted-foreground"}
-          >
-            {values.dueDay ? (
-              <>
-                <span className="sr-only">Due: </span>
-                {formatDay(dayDate(values.dueDay))}
-              </>
-            ) : (
-              "Due"
-            )}
-          </ChipButton>
-        </PopoverTrigger>
-        <PopoverContent className="w-auto p-0" align="start" onEscapeKeyDown={dueDraft.cancel}>
-          <DatePickerPanel draft={dueDraft} />
-        </PopoverContent>
-      </Popover>
+      {templateMode && !templateDue ? null : (
+        <Popover
+          open={open === "due"}
+          onOpenChange={(next) => (next ? onOpenChange("due") : dueDraft.close())}
+        >
+          <PopoverTrigger asChild>
+            <ChipButton
+              icon={CalendarDays}
+              active={Boolean(values.dueDay)}
+              className={values.dueDay ? undefined : "text-muted-foreground"}
+            >
+              {values.dueDay ? (
+                <>
+                  <span className="sr-only">Due: </span>
+                  {formatDay(dayDate(values.dueDay))}
+                </>
+              ) : (
+                "Due"
+              )}
+            </ChipButton>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start" onEscapeKeyDown={dueDraft.cancel}>
+            <DatePickerPanel draft={dueDraft} />
+          </PopoverContent>
+        </Popover>
+      )}
       {templateMode ? null : (
         <>
           <PickerPill

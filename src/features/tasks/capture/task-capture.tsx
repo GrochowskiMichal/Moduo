@@ -48,6 +48,7 @@ import type { CaptureBodyProps } from "../../../lib/capture-registry";
 import type { CaptureSourceKind } from "../../../lib/capture-source";
 import { isMacPlatform } from "../../../lib/shortcuts";
 import { useStoreSnapshot, useWorkspaceStore } from "../../../lib/sync/react";
+import { localDayOf } from "../../../lib/task-rows";
 import { formatDay, formatDayTime } from "../../../lib/time-format";
 import { undoToast } from "../../../lib/undo-toast";
 import { cn } from "../../../lib/utils";
@@ -239,7 +240,10 @@ export function TaskCaptureBody({
   const templateProvider = runtime?.tasks.applyTaskTemplate ? captureTemplates() : null;
   const [template, setTemplate] = useState<CaptureTemplateChoice | null>(null);
   const [pickingTemplate, setPickingTemplate] = useState(false);
+  /** A template's tasks are being made: the capture waits (it's online only). */
+  const [applyingTemplate, setApplyingTemplate] = useState(false);
   // What `/` offers is read inside a stable callback: through a ref.
+  const templateDue = Boolean(template?.dated && template.anchor === "due");
   const templateOn = useRef(false);
   templateOn.current = Boolean(templateProvider) && !template;
   const titleApi = useRef<TitleEditorApi | null>(null);
@@ -672,6 +676,10 @@ export function TaskCaptureBody({
     if (!destination.projectId && choice.project && projects.some((p) => p.id === choice.project)) {
       setDestination({ projectId: choice.project, sectionId: null });
     }
+    // What was typed below the title waits until the template is removed.
+    if (description.trim() || subtasks.some((line) => line.trim())) {
+      setHint("Your description and subtasks are set aside while the template is on.");
+    }
     titleApi.current?.focus();
   };
 
@@ -1038,37 +1046,68 @@ export function TaskCaptureBody({
    * destination, Due as the date its dates count from, and Assign.
    */
   const createFromTemplate = (choice: CaptureTemplateChoice, more: boolean) => {
-    if (!templateProvider || !runtime || !workspaceId || !store || !userId) return;
-    const kept = currentDraft();
-    const id = newTaskId();
-    const where = placeLabel;
-    if (more) {
-      resetForMore();
-    } else {
-      clearDraft(owner.userId, owner.workspaceId);
-      lastTitleWords = "";
-      onDraftChange("");
-      onDone();
+    if (!templateProvider || !runtime || !workspaceId || !store || !userId || applyingTemplate) {
+      return;
     }
+    // A template brings its own tags, priority, dates and the rest: what the
+    // title or More set beyond the person and Due would be lost, so it says so.
+    const extra =
+      values.tags.length > 0 ||
+      values.priority !== null ||
+      values.scheduledAt !== null ||
+      values.recurrence !== null ||
+      values.remindAt !== null ||
+      values.estimateMinutes !== null ||
+      values.waitingOn.length > 0 ||
+      values.teamId !== null ||
+      resolved.things.length > 0 ||
+      (!templateDue && values.dueDay !== null);
+    if (extra) {
+      setHint(
+        "With a template, only the person" +
+          (templateDue ? " and Due" : "") +
+          " apply. Remove the other words, or the template.",
+      );
+      return;
+    }
+    // The one date: Due when the template counts from its due date; today
+    // when it counts from the day it's made; none when it has no dates.
+    const date = !choice.dated
+      ? null
+      : choice.anchor === "due"
+        ? (values.dueDay ?? null)
+        : localDayOf(new Date().toISOString());
+    const where = placeLabel;
+    const madeTitle = title;
+    setApplyingTemplate(true);
     void templateProvider
       .apply(
         { runtime, store, workspaceId, userId },
         {
           templateId: choice.id,
-          id,
-          title,
+          id: newTaskId(),
+          title: madeTitle,
           projectId: projectId ?? null,
           sectionId,
-          date: values.dueDay ?? null,
+          date,
           ...(values.assigneeId !== undefined ? { assigneeId: values.assigneeId } : {}),
         },
       )
       .then((created) => {
-        if (!created) {
-          saveDraft(owner.userId, owner.workspaceId, kept, "refused");
-          return;
+        if (!mounted.current) return;
+        setApplyingTemplate(false);
+        // Refused or offline (the provider said why): the capture stays as it was.
+        if (!created) return;
+        if (more) {
+          setTemplate(null);
+          resetForMore();
+        } else {
+          clearDraft(owner.userId, owner.workspaceId);
+          lastTitleWords = "";
+          onDraftChange("");
+          onDone();
         }
-        toast(title, {
+        toast(madeTitle, {
           description: `From “${choice.name}” · ${where}`,
           action: {
             label: "Open",
@@ -1330,7 +1369,11 @@ export function TaskCaptureBody({
             {template.subtasks > 0
               ? `With its ${template.subtasks} ${template.subtasks === 1 ? "subtask" : "subtasks"}, description, tags and priority.`
               : "With its description, tags and priority."}
-            {template.dated ? " Due is the date its dates count from." : ""}
+            {!template.dated
+              ? ""
+              : template.anchor === "due"
+                ? " Due is the date its dates count from."
+                : " Its dates count from today."}
           </p>
         ) : null}
 
@@ -1404,6 +1447,7 @@ export function TaskCaptureBody({
             onOpenChange={setOpenPill}
             onTemplate={templateProvider && !template ? openTemplate : undefined}
             templateMode={Boolean(template)}
+            templateDue={templateDue}
           />
         </div>
       </div>

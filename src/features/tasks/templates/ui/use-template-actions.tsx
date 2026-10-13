@@ -321,8 +321,12 @@ export function useTemplateActions({
             }
             close();
             const rootId = outcome.taskIds[0] ?? id;
+            // Where it landed (the template's project falls back to your Inbox
+            // when you can't add tasks there).
+            const landed = outcome.result.tasks.find((t) => t.id === rootId)?.bucketId;
+            const place = buckets.find((b) => b.id === landed && !b.isSystem)?.name ?? "Inbox";
             toast(form.title, {
-              description: `From “${template.name}”`,
+              description: `From “${template.name}” · ${place}`,
               action: { label: "Open", onClick: () => onOpenTask(rootId) },
             });
           });

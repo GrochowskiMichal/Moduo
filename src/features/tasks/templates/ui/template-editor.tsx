@@ -314,7 +314,7 @@ function TaskTemplateFields({
                         patchRoot({ tags: root.tags.filter((t) => t.name !== tag.name) })
                       }
                     >
-                      <X className="size-3" aria-hidden />
+                      <X className="size-icon-xs" aria-hidden />
                     </button>
                   ) : null}
                 </Badge>
@@ -382,7 +382,8 @@ function ProjectTemplateFields({
         aria-label="Description"
         value={body.description}
         disabled={disabled}
-        placeholder="What this project is for…"
+        // Projects have no description yet (TV-U16): these notes stay with the template.
+        placeholder="Notes about this template (they stay with it)…"
         className="min-h-20 font-sans text-base"
         onChange={(e) => onChange({ ...body, description: e.target.value })}
       />

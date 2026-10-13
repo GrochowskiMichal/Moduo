@@ -482,7 +482,17 @@ describe("From template (`/template`, More → Template…, TV-D15)", () => {
             title: "Record episode",
             subtasks: 3,
             dated: true,
+            anchor: "due",
             project: "p-acme",
+          },
+          {
+            id: "tt-2",
+            name: "Onboarding",
+            title: "Onboard a client",
+            subtasks: 2,
+            dated: true,
+            anchor: "start",
+            project: null,
           },
         ],
       }),
@@ -516,6 +526,40 @@ describe("From template (`/template`, More → Template…, TV-D15)", () => {
     });
     // Nothing went through the capture's own create.
     expect(fake.saved).toEqual([]);
+  });
+
+  it("a template that counts from its start hides Due and starts today", async () => {
+    const apply = withTemplates();
+    renderBody();
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Template…" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Onboarding/ }));
+    expect(await screen.findByText(/Its dates count from today/)).toBeTruthy();
+    await screen.findByText("Template: Onboarding");
+    expect(screen.queryByRole("button", { name: /^Due/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /^Create\s*⏎$/ }));
+    await waitFor(() => expect(apply).toHaveBeenCalledTimes(1));
+    const sent = apply.mock.calls[0]?.[1] as { date: string | null; projectId: string | null };
+    expect(sent.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(sent.projectId).toBeNull();
+  });
+
+  it("a refused apply keeps the capture open with its template", async () => {
+    const apply = withTemplates();
+    apply.mockImplementation(async () => null);
+    const { onDone } = renderBody();
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Template…" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Episode/ }));
+    expect(await screen.findByText("Template: Episode")).toBeTruthy();
+    expect(destination().textContent).toContain("Acme rebrand");
+    fireEvent.click(screen.getByRole("button", { name: /^Create\s*⏎$/ }));
+    await waitFor(() => expect(apply).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(onDone).not.toHaveBeenCalled();
+    expect(screen.getByText("Template: Episode")).toBeTruthy();
   });
 
   it("without a registered provider there's no Template… in More", async () => {

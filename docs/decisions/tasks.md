@@ -225,7 +225,10 @@ Built in tasks-v3 block 30 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §15, A
     - A project's ⋯: Duplicate… and Save as template…, before Archive.
     - The task panel's ⋯: Save as template…, under Duplicate.
     - The sidebar's hairline ⋯: New project from template… beside New project, and Templates beside Archived projects. Templates is a centre page listing project and task templates, with Use… and a ⋯ for share, stop sharing and delete (Undo).
-    - Capture: `/template` and More → Template… pick a task template. It shows as a "Template: …" chip, fills the title and the template's project, and leaves only Assign and Due. Create makes it on the server.
+    - Capture: `/template` and More → Template… pick a task template. It shows as a "Template: …" chip, fills the title and the template's project, and keeps a typed description and subtasks aside until the chip is removed.
+      - Only Assign stays, plus Due when the template counts from its due date. A template that counts from its start starts today.
+      - Words that set anything else (tags, priority, dates, a team, links) make Create say so, rather than drop them.
+      - Create makes the task on the server; the capture waits for it and stays open, chip and all, if the server refuses.
     - The page moves to Settings → Tasks → Templates when that section exists.
   - Why: no Settings → Tasks yet (D9's precedent: the default statuses open from the Inbox's ⋯); no gallery (REPLAN 9).
   - Rejected: a template gallery, and capture filling only the title, description and subtask lines (that would lose the keep-set).
@@ -244,6 +247,14 @@ Built in tasks-v3 block 30 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §15, A
     - Erasure deletes a person's templates, shared ones too. The data export carries yours and the shared ones with their bodies.
   - Why: the same shapes as the rest of v3 (Recently deleted, idempotent ops, §Assumptions #26).
   - Rejected: a hard delete without Undo.
+- **D15-10 · Known limits, kept on purpose** → TV-D15, a later migration if they matter
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (from the validator's review).
+  - Decision:
+    - The workspace's owner or an admin can undo the delete of a shared template within its 30 days, even when its owner deleted it. It was shared, so nothing new is shown; recording who deleted it would need another migration.
+    - A copy's dependencies and its replacement statuses are written inside the apply op (with the cycle trigger and `perm_enforce_write`), not through the status and dependency ops, so they add no activity rows of their own; each task's `tasks.create` row is there.
+    - A hand-edited body that interleaves status categories gets per-run positions (the editor never reorders statuses).
+  - Why: none of these shows anything to anyone who couldn't see it, and each costs a migration that would hold up the block.
+  - Rejected: a follow-up migration before the release.
 
 ## 2026-10-13 · TV-U13 Detail panel v3 + full page (tasks-v3 block 17) — the agent's choices (deferred to by Maciej)
 

@@ -17,6 +17,7 @@ export function captureChoiceOf(t: Template): CaptureTemplateChoice {
     title: t.facts.title,
     subtasks: Math.max(0, t.facts.tasks - 1),
     dated: t.facts.dated,
+    anchor: t.facts.anchor,
     project: t.facts.project,
   };
 }

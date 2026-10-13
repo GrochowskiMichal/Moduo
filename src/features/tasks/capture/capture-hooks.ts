@@ -17,8 +17,10 @@ export type CaptureTemplateChoice = {
   /** Its task's title (the capture's title when nothing is typed yet). */
   title: string | null;
   subtasks: number;
-  /** It has dates: Due is the date they count from. */
+  /** It has dates. */
   dated: boolean;
+  /** What they count from: its task's due date (Due sets it) or the day it's made. */
+  anchor: "due" | "start" | null;
   /** Its own project (the destination it suggests). */
   project: string | null;
 };

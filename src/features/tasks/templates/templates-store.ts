@@ -20,6 +20,8 @@ type Entry = {
 
 const entries = new Map<string, Entry>();
 const listeners = new Set<() => void>();
+/** Bumped by `clearTemplates`: a read that began before a sign-out is dropped. */
+let generation = 0;
 
 const EMPTY: Entry = { templates: [], loaded: false, loading: null, version: 0 };
 
@@ -52,9 +54,11 @@ export function refreshTemplates(
   const entry = entryOf(workspaceId);
   if (entry.loading) return entry.loading;
   const startedAt = entry.version;
+  const startedIn = generation;
   const read = runtime.tasks
     .listTemplates(workspaceId)
     .then((templates) => {
+      if (startedIn !== generation) return;
       const now = entryOf(workspaceId);
       // A change made while this read was out wins until the next read.
       if (now.version !== startedAt) {
@@ -70,6 +74,7 @@ export function refreshTemplates(
       emit();
     })
     .catch(() => {
+      if (startedIn !== generation) return;
       const now = entryOf(workspaceId);
       entries.set(workspaceId, { ...now, loading: null });
       emit();
@@ -103,6 +108,7 @@ export function forgetTemplate(workspaceId: string, id: string): void {
 
 /** Every workspace's list, wiped (sign-out). */
 export function clearTemplates(): void {
+  generation += 1;
   entries.clear();
   emit();
 }
