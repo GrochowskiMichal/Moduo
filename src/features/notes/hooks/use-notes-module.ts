@@ -53,6 +53,8 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
   /** In-flight creates of materialized drafts (NR-2): any later op on the same
    * note waits for its create, so a rename can never reach the server first. */
   const createPromisesRef = useRef(new Map<string, Promise<unknown>>());
+  /** Drafts whose create the server refused: never send ops for them. */
+  const failedCreatesRef = useRef(new Set<string>());
   const favoritesRef = useRef<NoteFavorite[]>([]);
   useEffect(() => {
     favoritesRef.current = favorites;
@@ -293,7 +295,9 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
   /** Run `fn` once the note's own create (if still in flight) has settled. */
   const afterCreate = useCallback(
     (noteId: string, fn: () => Promise<unknown>) => () =>
-      (createPromisesRef.current.get(noteId) ?? Promise.resolve()).then(fn),
+      (createPromisesRef.current.get(noteId) ?? Promise.resolve()).then(() =>
+        failedCreatesRef.current.has(noteId) ? undefined : fn(),
+      ),
     [],
   );
 
@@ -538,23 +542,30 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
       };
       setNotes((prev) => [...prev, optimistic]);
       pendingCreatesRef.current.set(id, optimistic);
+      // Queue what was typed durably now; the push waits for the create.
+      void engine.promoteDraft(id);
       const created = engine
         .runMetaOp("create", { workspaceId, id, parentId, title: "", position })
-        // A root lands in the Inbox server-side; "+ New page" files it at once.
-        .then(() =>
-          toPages
-            ? engine.runMetaOp("file", { workspaceId, noteId: id, inInbox: false, position })
-            : null,
-        )
-        .then(() => engine.promoteDraft(id))
         .then(
           () => {
             pendingCreatesRef.current.delete(id);
+            engine.releasePush(id);
+            // "+ New page": a root lands in the Inbox server-side; file it.
+            // Its own failure leaves a saved note in the Inbox, nothing lost.
+            if (toPages) {
+              void engine
+                .runMetaOp("file", { workspaceId, noteId: id, inInbox: false, position })
+                .catch(() => {
+                  toast.error("Saved, but it landed in the Inbox. Move it to Pages from its menu.");
+                  void load();
+                });
+            }
           },
           (e) => {
-            // The server refused the create. Keep the note on screen (it stays
-            // a local draft: nothing pushes) so the typed text isn't yanked
-            // away, and say plainly that it isn't saved.
+            // The server refused the create. Keep the note on screen with its
+            // edits held (nothing pushes) so the typed text isn't yanked away,
+            // skip every later op on it, and say plainly it isn't saved.
+            failedCreatesRef.current.add(id);
             toast.error("Couldn't save this new note.", {
               description: `${e instanceof Error ? e.message : "The server said no."} Copy what you typed before leaving it.`,
             });
@@ -565,7 +576,7 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
         });
       createPromisesRef.current.set(id, created);
     },
-    [engine, canEdit, workspaceId, userId],
+    [engine, canEdit, workspaceId, userId, load],
   );
 
   /** Inbox ↔ Pages (NR-1 `notes_op_file`). Filing into the Inbox re-roots a

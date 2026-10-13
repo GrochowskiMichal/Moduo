@@ -150,6 +150,15 @@ export function NotesSidebar(props: NotesSidebarProps) {
         // In the personal Favorites list ⌫ only un-favorites; it never trashes
         // the shared note.
         const inFavorites = current?.startsWith("favorites:") ?? false;
+        // Keep keyboard focus in the tree: move to a neighbour first.
+        const idx = rows.findIndex((r) => r.key === current);
+        const next =
+          rows.slice(idx + 1).find((r) => r.id !== note.id) ??
+          rows
+            .slice(0, idx)
+            .reverse()
+            .find((r) => r.id !== note.id);
+        if (next) focusRow(next.key);
         props.onAction(inFavorites ? "unfavorite" : "trash", note);
         break;
       }

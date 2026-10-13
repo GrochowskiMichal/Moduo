@@ -1,6 +1,6 @@
 /**
  * The editor pane as a drop target (NO-7b), lifted from the classic page for
- * the refreshed shell (classic keeps its frozen copy until NR-12): dropping an entity here fires the chip-insert event (a
+ * the refreshed shell (classic imports it too): dropping an entity here fires the chip-insert event (a
  * reference chip, no `entity_links` write). The chip lands at the release
  * coordinates, tracked via a raw pointer listener (the TL-2 lesson: dnd-kit's
  * `delta` folds auto-scroll, unreliable for a point).

@@ -150,7 +150,10 @@ export function TreeRow({
       style={{ "--tree-depth": depth } as React.CSSProperties}
     >
       {hover && hover.zone !== "into" ? (
-        <InsertionLine edge={hover.zone === "before" ? "top" : "bottom"} />
+        // Starts at the row's depth, so the line shows the level it lands at.
+        <span className="pointer-events-none absolute inset-y-0 end-0 start-[calc(var(--spacing)+var(--tree-depth)*var(--tree-indent))]">
+          <InsertionLine edge={hover.zone === "before" ? "top" : "bottom"} />
+        </span>
       ) : null}
       <button
         type="button"

@@ -28,7 +28,7 @@ export function buildBreadcrumb(
   notes: Note[],
   noteId: string,
   /** A local draft not yet in `notes` (lazy create): shown as an Untitled leaf. */
-  draft?: { id: string; parentId: string | null } | null,
+  draft?: { id: string; parentId: string | null; toPages?: boolean } | null,
 ): Crumb[] {
   const byId = new Map(notes.map((n) => [n.id, n]));
   const self = byId.get(noteId);
@@ -57,7 +57,9 @@ export function buildBreadcrumb(
         ? root.inInbox
           ? "inbox"
           : "pages"
-        : "inbox"; // a root draft is a capture
+        : draft?.toPages
+          ? "pages" // "+ New page"
+          : "inbox"; // a root draft is a capture
 
   const crumbs: Crumb[] = [{ kind: "section", section, label: SECTION_LABEL[section] }];
   for (const n of chain) {

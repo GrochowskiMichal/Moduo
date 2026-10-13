@@ -1,7 +1,6 @@
 /**
  * Trash a note whose subtree holds task lines (NO-5, AC4), lifted from the
- * classic page for the refreshed shell (classic keeps its frozen copy until
- * NR-12): the tasks soft-detach and survive,
+ * classic page for the refreshed shell (classic imports it too): the tasks soft-detach and survive,
  * folded into the ONE trash toast. The note↔task links are dropped (a real
  * detach, not a copy) and the toast's Undo restores the note AND the links.
  * The docs are read via the sync engine so unopened notes work too (the

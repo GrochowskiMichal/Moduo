@@ -132,6 +132,10 @@ export class NotesSyncEngineV2 {
    * draft leaves no queued update behind and a typed one never pushes ahead
    * of its create. */
   private readonly drafts = new Set<string>();
+  /** Promoted drafts whose create hasn't landed yet: their edits are queued
+   * durably (so nothing typed is lost if the page closes) but not pushed until
+   * `releasePush`, so a push can never reach the server before its create. */
+  private readonly held = new Set<string>();
 
   constructor(
     private readonly runtime: ModuoRuntime | null,
@@ -349,7 +353,7 @@ export class NotesSyncEngineV2 {
 
   private async flush(s: NoteSession): Promise<void> {
     if (!this.runtime || s.destroyed) return;
-    if (this.drafts.has(s.noteId)) return;
+    if (this.drafts.has(s.noteId) || this.held.has(s.noteId)) return;
     if (s.flushing) {
       s.dirty = true;
       return;
@@ -469,6 +473,7 @@ export class NotesSyncEngineV2 {
         (s) =>
           s.noteId !== currentNoteId &&
           !this.drafts.has(s.noteId) &&
+          !this.held.has(s.noteId) &&
           !s.flushing &&
           s.memOutbox.length === 0 &&
           s.flushTimer === null &&
@@ -504,14 +509,24 @@ export class NotesSyncEngineV2 {
     return this.drafts.has(noteId);
   }
 
-  /** The draft's create has been sent (or queued behind it in the FIFO
-   * meta-outbox): queue everything typed so far as one update and push. */
+  /** The draft got its first character: it stops being a draft (every edit
+   * from here on is queued durably, starting with the whole doc so far) but
+   * stays HELD — nothing pushes until `releasePush`, after its create. */
   async promoteDraft(noteId: string): Promise<void> {
     if (!this.drafts.delete(noteId)) return;
+    this.held.add(noteId);
     const s = this.sessions.get(noteId);
     if (!s || s.destroyed) return;
     await s.booted.catch(() => {});
     await this.enqueueLocalUpdate(s, Y.encodeStateAsUpdate(s.doc));
+  }
+
+  /** The note's create landed (or is queued ahead in the FIFO meta-outbox):
+   * push what the held note queued. */
+  releasePush(noteId: string): void {
+    if (!this.held.delete(noteId)) return;
+    const s = this.sessions.get(noteId);
+    if (s && !s.destroyed) this.scheduleFlush(s, 0);
   }
 
   /** Drop an untouched draft without a trace: no push, no server call, and

@@ -91,6 +91,20 @@ export function useNotesShell() {
     dispatchDraft({ type: "navigate", toId: selectedId });
   }, [selectedId, dispatchDraft]);
 
+  // A new engine (workspace switch, re-sign-in) discarded the old one's
+  // drafts: drop ours too, and close it, or its editor would mount on the new
+  // engine as an ordinary note and queue a push for a note that never existed.
+  const engineRef = useRef(engine);
+  useEffect(() => {
+    if (engineRef.current === engine) return;
+    engineRef.current = engine;
+    const stale = draftRef.current;
+    if (!stale) return;
+    draftRef.current = null;
+    setDraft(null);
+    if (selectedId === stale.id) select(null, true);
+  }, [engine, selectedId, select]);
+
   // The first real character materializes the draft — exactly once.
   const draftId = draft?.id ?? null;
   useEffect(() => {
@@ -117,9 +131,10 @@ export function useNotesShell() {
 
   // Stale deep link: loaded and the id is neither a note nor the draft.
   useEffect(() => {
-    if (loading || !selectedId || selectedId === draftId) return;
+    if (loading || !selectedId) return;
+    if (selectedId === draftId && engine?.isDraft(draftId)) return;
     if (!notes.some((n) => n.id === selectedId)) select(null, true);
-  }, [loading, selectedId, draftId, notes, select]);
+  }, [loading, selectedId, draftId, notes, select, engine]);
 
   // Opening a note jumps it to the front of the blank-note repair queue.
   useEffect(() => {

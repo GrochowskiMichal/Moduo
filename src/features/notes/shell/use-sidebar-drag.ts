@@ -110,13 +110,23 @@ export function useSidebarDrag(input: {
       const [section] = String(e.active.id).split(":");
       if (!payload || payload.entityType !== "note") return;
       if (section !== "favorites" && section !== "inbox" && section !== "pages") return;
+      // Start from where this drag began, never the previous drag's release.
+      const start = e.activatorEvent as PointerEvent | null;
+      if (start && "clientX" in start) pointer.current = { x: start.clientX, y: start.clientY };
       setDrag({ noteId: payload.entityId, section });
     },
-    onDragEnd: (_e: DragEndEvent) => {
+    onDragEnd: (e: DragEndEvent) => {
       const state = drag;
       reset();
       if (!state) return;
-      const res = resolve(state, pointer.current.x, pointer.current.y);
+      // Activator + delta is exact here (auto-scroll is off); the tracked
+      // pointer covers a release before the first move reached our listener.
+      const start = e.activatorEvent as PointerEvent | null;
+      const at =
+        start && "clientX" in start
+          ? { x: start.clientX + e.delta.x, y: start.clientY + e.delta.y }
+          : pointer.current;
+      const res = resolve(state, at.x, at.y);
       if (res) inputRef.current.onDrop(res.intent);
     },
     onDragCancel: reset,

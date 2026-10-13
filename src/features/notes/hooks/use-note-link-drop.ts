@@ -1,6 +1,6 @@
 /**
  * Drag-onto-hub = link (NO-7b), lifted from the classic page for the
- * refreshed shell (classic keeps its frozen copy until NR-12). The page owns one DndContext so a sidebar note can land in the
+ * refreshed shell (classic imports it too). The page owns one DndContext so a sidebar note can land in the
  * editor (a chip, handled by NotesEditorDropZone), on a sidebar row (reorder,
  * handled by the sidebar's monitor) or on a link target such as the Detail
  * hub; this handles the last: it creates a spine link.
