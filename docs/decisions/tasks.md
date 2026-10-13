@@ -2,6 +2,66 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index.
 
+## 2026-10-13 · TV-TL1 Timeline rebuild I — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 25 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §6; REPLAN 67–71, 68a, 46a, 48b; research `.design/tasks-v3/research/timeline-competitors.md`; prototype round-2a frames 4–5) on the local stack, no migration. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to change.
+
+- **TL1-1 · The bottom tray is gone now; "No date · n" shows the undated tasks as rows until TV-TL2** → `task-timeline-view.tsx`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the tray (a bottom strip) is removed with the old view. "No date · n" sits on the Timeline's own bar and toggles Display → Show → No date: undated open tasks get rows (no mark) in their groups. TV-TL2 rewires the button to the panel's No date view and adds click-a-day to set a date.
+  - Why: 48b (no edge strips) and 70 (the tray goes); the old tray's drag-to-schedule belonged to the old bar model.
+  - Rejected: keeping the tray until TL2; a button that does nothing until then.
+- **TL1-2 · Zoom: Week 120, Month 24, Quarter 10, Year 3 px a day, remembered per scope** → `timeline-scale.ts` `DAY_WIDTH`, Display `timelineZoom`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: about 900 px of canvas shows a week and a bit, five weeks, a quarter, most of a year. All opens at Quarter, a project at Month, everything else at Month (67). The zoom lives in the scope's Display (it was one value per workspace); ⌘/Ctrl-scroll (or a pinch) and bare −/= step it, keeping the day under the pointer (or the middle) in place.
+  - Why: the old Month (40 px) showed under four weeks and Quarter (14 px) didn't fit a quarter; whole pixels keep day lines crisp.
+  - Rejected: continuous zoom (the header's units change per level); one zoom for every scope.
+- **TL1-3 · A project bar is solid only when both its start and target are set** → `timeline-rows.ts` `projectBarOf`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: otherwise it's an outline (over the faintest fill, so a bar wider than the screen still reads as one) from the earliest to the latest of its dated sections, its open tasks' points and the one date it has; no dated work, no bar. Done tasks never widen it. The bar and its 2 px progress line (done of all its top-level tasks, Won't do aside) are the project's own, whatever Filter or search shows below it.
+  - Why: 68 ("solid when you set the dates; an outline when worked out from its tasks"), research §2 ("done items never widen the range").
+  - Rejected: a half-solid bar for a project with only one date (research's "solid from the date you set") — two looks for one rule.
+- **TL1-4 · Rows keep the project's manual order; elsewhere tasks sort by date** → `timeline-rows.ts` `taskRows`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: inside a project (and in a project expanded at All) tasks follow the List's manual order within their sections, No section first; My tasks, Upcoming, the Inbox and the other task scopes group by project (the Inbox first) or by assignee, earliest date first, undated last.
+  - Why: a row never jumps when TV-TL2 drags its date; the prototype keeps the project's order.
+  - Rejected: a chronological staircase inside projects.
+- **TL1-5 · A mark off to one side shows a hint at that edge; the canvas never jumps sideways under the cursor** → `timeline-marks.tsx` `OffscreenHint`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: "‹ Oct 2" or "Nov 30 ›" (quiet, at the row's edge, for points, bars, bands and diamonds); a click scrolls there. ↑↓ and a selection from the panel only scroll up and down; a deep link still centres its point (the page's reveal).
+  - Why: research §3 ("off-screen arrows with dates", Linear and Notion); scattered dates made ↑↓ swing the canvas left and right.
+  - Rejected: scrolling to each row's mark as the cursor moves.
+- **TL1-6 · Quarter's weeks are labelled by their first day, by your week start** → `timeline-scale.ts` `bottomTier`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: "5 · 12 · 19" under the month, weeks starting where Time & region starts them (TV-D14); the Due per week counts use the same weeks.
+  - Why: ISO week numbers ("W42", the prototype) read a day off for anyone whose week starts on Sunday.
+  - Rejected: ISO week numbers.
+- **TL1-7 · The cursor stops on projects, sections and tasks; nothing selected is allowed** → `task-timeline-view.tsx`, `tasks-plan-view.tsx` (the selection backstop)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: ↑↓/jk move over project, section and task rows; on a project or section the task selection clears (the page no longer picks a task for you in the Timeline); ←/→ fold, ⏎ opens a task's full page or a project's own Timeline from All, Space completes a task or folds a header, t scrolls to today, Esc clears, ⇧[ hides the name column. ⌥←/→, D and ⇧T are TV-TL2's.
+  - Why: at All the rows are projects; the keymap's Timeline table.
+  - Rejected: a cursor on task rows only (nothing to move at All).
+- **TL1-8 · The Timeline's Display** → `display.ts` `timelineControls`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: Group by (All: Area · None; a project: Section · Assignee · None; elsewhere: Project · Assignee · None) · Show done (the List's Completed: Hidden · 7 days · All) · Colour by (None by default; Project across projects; Status) · Show (No date · Sessions · Repeats · Due per week) · Subtasks (Hidden by default · Nested). Dependencies' "Show all" comes with TV-TL2's lines. The student role turns Due per week on (`ROLE_DEFAULTS.duePerWeek`).
+  - Why: 71's list; one grammar with the List and Board.
+  - Rejected: a Display entry that does nothing until TL2.
+- **TL1-9 · Sections say their counts and dates; a filter lists only what matches** → `timeline-rows.ts`, `timeline-words.ts`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: "Design · 2 of 5 · Oct 13–24", "Build · by Nov 7" (counts only when the section has tasks; a shared month or year said once). With a filter or search, All lists only the projects with a match and a project only the sections with one.
+  - Why: 68a's "one word per kind"; a search listing seven empty phases read as noise.
+  - Rejected: listing every section under a search.
+- **TL1-10 · Titles take an ellipsis in the name column; counts and dates never do** → `timeline-row.tsx`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the column is 280 px, resizable 200–480 (per device), ⇧[ hides it and the titles then sit beside their marks.
+  - Why: rows have fixed heights (36/32/28) for the canvas to line up; the resize is the fix for a long title.
+  - Rejected: wrapping titles (rows of uneven height break the timeline's rhythm).
+- **TL1-11 · Points are neutral by default** → `timeline-marks.tsx`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: grey points; the selected one the brightest mark with a ring; late in the muted late tone; done as the accent's check; a repeat with its mark and, with Show repeats, ghost points for the coming ones; a project's hue only on its dot, its bar's 3 px cap, and points when Colour by Project is on.
+  - Why: 69 ("accent only for the selection, today's 1 px line and the done check"), the prototype.
+  - Rejected: colouring points by project by default.
+
 ## 2026-10-13 · TV-D14 Time entries, the time report, Time & region — the agent's choices (deferred to by Maciej)
 
 Built in tasks-v3 block 29 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §14, §Assumptions #17, #18, #26; REPLAN 75, 76, default f; migrations `20261013200000_user_preferences_time_region` and `20261013201000_time_entries_add`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to change.
