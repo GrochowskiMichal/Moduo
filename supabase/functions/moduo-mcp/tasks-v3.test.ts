@@ -472,21 +472,44 @@ describe("writes go through the ops, checked before anything is written", () => 
     expect(rpcCalls.filter((c) => c.fn === "templates_can_copy")).toHaveLength(1);
   });
 
-  it("projects_create inside an import run records the project", async () => {
+  it("projects_create inside an import run makes and records the project in one op", async () => {
     const { ctx, rpcCalls } = setup({
       rpcs: {
-        projects_op_create: (a) => ({ id: "p-new", name: (a.p_project as Row).name, is_system: false }),
-        imports_op_note: () => ({}),
+        projects_op_create: (a) => ({ id: "p-plain", name: (a.p_project as Row).name, is_system: false }),
+        imports_op_project_create: (a) => ({ id: "p-new", name: (a.p_project as Row).name, is_system: false }),
       },
     });
-    await call("projects_create", { name: "Biology", import_id: "imp-1" }, ctx);
-    expect(rpcCalls.map((c) => c.fn)).toEqual(["projects_op_create", "imports_op_note"]);
-    expect(rpcCalls[1]?.args).toEqual({
+    const made = await call("projects_create", { name: "Biology", import_id: "imp-1" }, ctx);
+    expect(rpcCalls.filter((c) => c.fn.includes("project")).map((c) => c.fn)).toEqual(["imports_op_project_create"]);
+    expect(rpcCalls.find((c) => c.fn === "imports_op_project_create")?.args).toEqual({
       p_workspace_id: WS,
       p_import_id: "imp-1",
-      p_entity_type: "bucket",
-      p_entity_id: "p-new",
+      p_project: { name: "Biology" },
     });
+    expect(made.id).toBe("p-new");
+  });
+
+  it("tasks_update to done finishes the open subtasks too (call 87)", async () => {
+    const statusCalls: string[] = [];
+    const { ctx } = setup({
+      rpcs: {
+        tasks_op_update_with: (a) => [task(a.p_task_id as string, 4, { status: "done", status_category: "done" })],
+        tasks_op_set_status: (a) => {
+          statusCalls.push(a.p_task_id as string);
+          return task(a.p_task_id as string, 5, { status: "done", status_category: "done" });
+        },
+      },
+    });
+    const out = await call("tasks_update", { task_id: "t-parent", status: "done" }, ctx);
+    expect(statusCalls).toEqual(["t-sub1", "t-sub2"]);
+    expect(out.also_finished).toBe(2);
+  });
+
+  it("the deprecated tasks_list_buckets keeps its group label", async () => {
+    const { ctx, tables } = setup();
+    (tables.buckets![1] as Row).group_label = "Clients";
+    const listed = await call("tasks_list_buckets", {}, ctx);
+    expect(listed.find((b: Row) => b.id === P_SHARED)).toMatchObject({ group: "Clients", area_id: A_SHARED });
   });
 
   it("areas_create answers with the new area only, never the rest of the list", async () => {

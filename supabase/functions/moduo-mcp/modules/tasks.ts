@@ -28,9 +28,11 @@ import {
   AGENT_SESSION_STATES,
   ENERGY_LEVELS,
   PRIORITY_LEVELS,
+  PROJECT_STATES,
   TASK_REMINDER_KINDS,
   TASK_STATUS_CATEGORIES,
   TASK_STATUSES,
+  TEMPLATE_KINDS,
   isTaskStatus,
   normalizeTaskStatusCategory,
 } from "../../_shared/contracts/vocabularies.ts";
@@ -104,6 +106,30 @@ function taskFieldsFromArgs(args: Row): Row {
   if ("team_id" in args) fields.team_id = args.team_id ?? null;
   if ("repeat" in args) fields.recurrence = recurrenceFromArg(args.repeat);
   return fields;
+}
+
+/**
+ * Call 87, as the app does: finishing a top-level task that isn't a repeat
+ * finishes its open subtasks, the ones the key's person can edit (a refused
+ * one stays open and isn't counted). `finish` sends one subtask's status
+ * (the tool names its RPC, so the key-lane check sees it).
+ */
+async function finishOpenSubtasks(
+  ctx: ToolContext,
+  before: Row,
+  after: Row,
+  finish: (subtaskId: string) => PromiseLike<{ error: unknown }>,
+): Promise<number> {
+  if (after?.status_category !== "done" || isRowClosed(before) || before.parent_id || before.recurrence) {
+    return 0;
+  }
+  const data = await loadWorkspace(ctx);
+  let finished = 0;
+  for (const sub of data.tasks.filter((t) => t.parent_id === before.id && !isRowClosed(t))) {
+    const res = await finish(sub.id as string);
+    if (!res.error) finished += 1;
+  }
+  return finished;
 }
 
 /** The project an agent names: `project_id`, or the older `bucket_id`. */
@@ -242,6 +268,8 @@ export const tasksConnectorModule: ConnectorModule = {
             id: b.id,
             name: b.name,
             is_system: b.is_system,
+            // The old answer stays the same until TV-D7 (its group label), plus the area.
+            ...(b.group_label ? { group: b.group_label } : {}),
             ...(b.area_id ? { area_id: b.area_id } : {}),
             ...(b.color ? { color: b.color } : {}),
             ...(archived.has(b.id) ? { archived: true } : {}),
@@ -343,7 +371,7 @@ export const tasksConnectorModule: ConnectorModule = {
       access: "view",
       inputSchema: {
         type: "object",
-        properties: { kind: { type: "string", enum: ["task", "project"], description: "Only this kind. Default: both." } },
+        properties: { kind: { type: "string", enum: [...TEMPLATE_KINDS], description: "Only this kind. Default: both." } },
       },
       handler: async (args, ctx) => {
         const ws = ctx.key.workspaceId;
@@ -1005,7 +1033,29 @@ export const tasksConnectorModule: ConnectorModule = {
         if (Array.isArray(args.tags_add) && args.tags_add.length) extras.tags_add = args.tags_add;
         if (Array.isArray(args.tags_remove) && args.tags_remove.length) extras.tags_remove = args.tags_remove;
         if (Object.keys(patch).length === 0 && Object.keys(extras).length === 0) throw new Error("Nothing to change.");
-        return callOp(ctx, "tasks_op_update_with", { p_task_id: task.id, p_patch: patch, p_with: extras });
+        const ws = ctx.key.workspaceId;
+        const answered = await unwrap<Row[] | Row | null>(ctx.db.rpc("tasks_op_update_with", {
+          p_workspace_id: ws,
+          p_task_id: task.id,
+          p_patch: patch,
+          p_with: extras,
+        }));
+        const row = Array.isArray(answered) ? answered[0] : answered;
+        if (!row) throw new Error("The operation returned nothing.");
+        // Finishing through an edit finishes its open subtasks too (call 87).
+        const also =
+          typeof patch.status === "string"
+            ? await finishOpenSubtasks(ctx, task, row, (subId) =>
+                ctx.db.rpc("tasks_op_set_status", {
+                  p_workspace_id: ws,
+                  p_task_id: subId,
+                  p_status: "done",
+                  p_recurrence: null,
+                  p_position: null,
+                }),
+              )
+            : 0;
+        return { ...(await shapeOne(ctx, row)), ...(also ? { also_finished: also } : {}) };
       },
     },
     {
@@ -1037,23 +1087,15 @@ export const tasksConnectorModule: ConnectorModule = {
           p_recurrence: recurrence,
           p_position: null,
         }));
-        // Call 87, as the app does: finishing a top-level task that isn't a
-        // repeat finishes its open subtasks, the ones the key's person can
-        // edit (a refused one stays open and isn't counted).
-        let also = 0;
-        if (row?.status_category === "done" && !isRowClosed(before) && !before.parent_id && !before.recurrence) {
-          const data = await loadWorkspace(ctx);
-          for (const sub of data.tasks.filter((t) => t.parent_id === before.id && !isRowClosed(t))) {
-            const done = await ctx.db.rpc("tasks_op_set_status", {
-              p_workspace_id: ws,
-              p_task_id: sub.id,
-              p_status: "done",
-              p_recurrence: null,
-              p_position: null,
-            });
-            if (!done.error) also += 1;
-          }
-        }
+        const also = await finishOpenSubtasks(ctx, before, row, (subId) =>
+          ctx.db.rpc("tasks_op_set_status", {
+            p_workspace_id: ws,
+            p_task_id: subId,
+            p_status: "done",
+            p_recurrence: null,
+            p_position: null,
+          }),
+        );
         return { ...(await shapeOne(ctx, row)), ...(also ? { also_finished: also } : {}) };
       },
     },
@@ -1430,7 +1472,7 @@ export const tasksConnectorModule: ConnectorModule = {
         properties: {
           name: { type: "string", description: "The project's name." },
           area_id: { type: "string", description: "File it under this area (see areas_list)." },
-          status: { type: "string", enum: ["active", "on_hold", "done"], description: "Default active." },
+          status: { type: "string", enum: [...PROJECT_STATES], description: "Default active." },
           starts_on: { type: "string", description: "Start date, YYYY-MM-DD." },
           target_on: { type: "string", description: "Target date, YYYY-MM-DD." },
           color: { type: "string", description: "Colour name, as the app's picker has them." },
@@ -1445,15 +1487,15 @@ export const tasksConnectorModule: ConnectorModule = {
           if (typeof args[k] === "string") fields[k] = args[k];
         }
         const ws = ctx.key.workspaceId;
-        const project = await unwrap<Row>(ctx.db.rpc("projects_op_create", { p_workspace_id: ws, p_project: fields }));
-        if (typeof args.import_id === "string") {
-          await unwrap(ctx.db.rpc("imports_op_note", {
-            p_workspace_id: ws,
-            p_import_id: args.import_id,
-            p_entity_type: "bucket",
-            p_entity_id: project.id,
-          }));
-        }
+        // Inside a run, made and recorded in one transaction (a refused run makes nothing).
+        const project =
+          typeof args.import_id === "string"
+            ? await unwrap<Row>(ctx.db.rpc("imports_op_project_create", {
+                p_workspace_id: ws,
+                p_import_id: args.import_id,
+                p_project: fields,
+              }))
+            : await unwrap<Row>(ctx.db.rpc("projects_op_create", { p_workspace_id: ws, p_project: fields }));
         const members = await workspaceMembers(ctx);
         return shapeProject(project, new Map(members.map((m) => [m.user_id, m.name])));
       },
@@ -1468,7 +1510,7 @@ export const tasksConnectorModule: ConnectorModule = {
         properties: {
           project_id: { type: "string", description: "Project uuid." },
           name: { type: "string", description: "New name." },
-          status: { type: "string", enum: ["active", "on_hold", "done"], description: "The project's status." },
+          status: { type: "string", enum: [...PROJECT_STATES], description: "The project's status." },
           area_id: { type: ["string", "null"], description: "Area uuid, or null." },
           starts_on: { type: ["string", "null"], description: "YYYY-MM-DD, or null." },
           target_on: { type: ["string", "null"], description: "YYYY-MM-DD, or null." },
@@ -1558,19 +1600,20 @@ export const tasksConnectorModule: ConnectorModule = {
         for (const k of ["starts_on", "ends_on"]) if (typeof args[k] === "string") section[k] = args[k];
         if ("after" in args) section.after = args.after ?? null;
         const ws = ctx.key.workspaceId;
-        const list = await unwrap<Row[] | null>(ctx.db.rpc("sections_op_create", {
-          p_workspace_id: ws,
-          p_project_id: project.id,
-          p_section: section,
-        }));
-        if (typeof args.import_id === "string") {
-          await unwrap(ctx.db.rpc("imports_op_note", {
-            p_workspace_id: ws,
-            p_import_id: args.import_id,
-            p_entity_type: "section",
-            p_entity_id: id,
-          }));
-        }
+        // Inside a run, made and recorded in one transaction (a refused run makes nothing).
+        const list =
+          typeof args.import_id === "string"
+            ? await unwrap<Row[] | null>(ctx.db.rpc("imports_op_section_create", {
+                p_workspace_id: ws,
+                p_import_id: args.import_id,
+                p_project_id: project.id,
+                p_section: section,
+              }))
+            : await unwrap<Row[] | null>(ctx.db.rpc("sections_op_create", {
+                p_workspace_id: ws,
+                p_project_id: project.id,
+                p_section: section,
+              }));
         return {
           section_id: id,
           sections: (list ?? []).map((s) => ({ id: s.id, name: s.name, starts_on: s.starts_on ?? null, ends_on: s.ends_on ?? null })),
@@ -1611,7 +1654,7 @@ export const tasksConnectorModule: ConnectorModule = {
         type: "object",
         properties: {
           template_id: { type: "string", description: "The template's id." },
-          kind: { type: "string", enum: ["task", "project"], description: "The template's kind." },
+          kind: { type: "string", enum: [...TEMPLATE_KINDS], description: "The template's kind." },
           title: { type: "string", description: "Task template: the new task's title." },
           project_id: { type: "string", description: "Task template: where it goes." },
           section_id: { type: "string", description: "Task template: the section there." },

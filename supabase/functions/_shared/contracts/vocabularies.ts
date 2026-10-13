@@ -409,12 +409,26 @@ export const importEntityTypeSchema = z.enum(IMPORT_ENTITY_TYPES);
 export function isImportEntityType(value: unknown): value is ImportEntityType {
   return typeof value === "string" && (IMPORT_ENTITY_TYPES as readonly string[]).includes(value);
 }
+export function parseImportEntityType(input: unknown): SafeParseResult<ImportEntityType> {
+  return parseOrError(importEntityTypeSchema, input);
+}
+/** Lax read: a type this build doesn't know reads as null (the row is skipped). */
+export function normalizeImportEntityType(input: unknown): ImportEntityType | null {
+  return isImportEntityType(input) ? input : null;
+}
 /** What a run did to a row: made it, or updated it by its "imported from" key. */
 export const IMPORT_ROW_ACTIONS = ["created", "updated"] as const;
 export type ImportRowAction = (typeof IMPORT_ROW_ACTIONS)[number];
 export const importRowActionSchema = z.enum(IMPORT_ROW_ACTIONS);
 export function isImportRowAction(value: unknown): value is ImportRowAction {
   return typeof value === "string" && (IMPORT_ROW_ACTIONS as readonly string[]).includes(value);
+}
+export function parseImportRowAction(input: unknown): SafeParseResult<ImportRowAction> {
+  return parseOrError(importRowActionSchema, input);
+}
+/** Lax read: an action this build doesn't know reads as "updated" (never undone). */
+export function normalizeImportRowAction(input: unknown): ImportRowAction {
+  return isImportRowAction(input) ? input : "updated";
 }
 
 /** What a Waiting on… entry waits on (default q): a person, an email thread,

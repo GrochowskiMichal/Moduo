@@ -279,14 +279,25 @@ export const tasksModuleManifest: ModuleManifest = {
       args: { p_workspace_id: "workspace uuid", p_source: "e.g. todoist", p_label: "optional" },
     },
     {
-      op: "imports.note",
-      rpc: "imports_op_note",
-      summary: "Record a project or a section the run made, for Undo.",
+      op: "imports.project_create",
+      rpc: "imports_op_project_create",
+      summary:
+        "Make a project inside an import run and record it for Undo, in one go (a refused run makes nothing).",
       args: {
         p_workspace_id: "workspace uuid",
         p_import_id: "the run",
-        p_entity_type: "'bucket' or 'section'",
-        p_entity_id: "uuid",
+        p_project: "as projects_op_create's p_project",
+      },
+    },
+    {
+      op: "imports.section_create",
+      rpc: "imports_op_section_create",
+      summary: "Add a section inside an import run and record it for Undo, in one go.",
+      args: {
+        p_workspace_id: "workspace uuid",
+        p_import_id: "the run",
+        p_project_id: "project uuid",
+        p_section: "as sections_op_create's p_section",
       },
     },
     {

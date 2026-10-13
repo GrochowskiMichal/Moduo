@@ -8,6 +8,12 @@
 // A database before the migration reads as "no agent work, no imports", and
 // the writes say what's missing instead of failing quietly.
 
+import {
+  type ImportEntityType,
+  type ImportRowAction,
+  normalizeImportEntityType,
+  normalizeImportRowAction,
+} from "@contracts/vocabularies";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AgentSession } from "../features/spine/agent-session";
 import { agentSessionRowToModel, isMissingFunctionError, isMissingTableError } from "./task-rows";
@@ -25,6 +31,13 @@ export type ImportRun = {
   undoneAt: string | null;
   /** Made by an agent through this key (its id), or by you in the app. */
   keyId: string | null;
+  /** What the run made or updated. */
+  rows: Array<{
+    entityType: ImportEntityType;
+    entityId: string;
+    action: ImportRowAction;
+    loggedAt: string;
+  }>;
 };
 
 /** What "Undo this import" did (counts of the run's own rows you can see). */
@@ -124,7 +137,9 @@ export function createTasksAgents(
     },
 
     /** Your agent sessions in a workspace (the data export). */
-    async listMyAgentSessions(workspaceId: string): Promise<AgentSession[]> {
+    async listMyAgentSessions(
+      workspaceId: string,
+    ): Promise<Array<AgentSession & { summary: string | null }>> {
       const userId = await deps.userId();
       if (!userId) return [];
       const { data, error } = await client
@@ -138,7 +153,22 @@ export function createTasksAgents(
         if (isMissingTableError(error, "agent_sessions")) return [];
         throw new Error(error.message);
       }
-      return (data ?? []).map(agentSessionRowToModel);
+      const sessions = (data ?? []).map(agentSessionRowToModel);
+      // Your hand-back summaries ride along (RLS: only yours).
+      const summaries = new Map<string, string>();
+      if (sessions.length) {
+        const res = await client
+          .from("agent_session_summaries")
+          .select("session_id, summary")
+          .eq("workspace_id", workspaceId)
+          .eq("user_id", userId)
+          .limit(5000);
+        if (res.error && !isMissingTableError(res.error, "agent_session_summaries")) {
+          throw new Error(res.error.message);
+        }
+        for (const r of res.data ?? []) summaries.set(r.session_id as string, r.summary as string);
+      }
+      return sessions.map((s) => ({ ...s, summary: summaries.get(s.id) ?? null }));
     },
 
     /** Your import runs in a workspace, newest first (the export; TV-U18's list). */
@@ -153,7 +183,32 @@ export function createTasksAgents(
         if (isMissingTableError(error, "imports")) return [];
         throw new Error(error.message);
       }
-      return (data ?? []).map((r) => ({
+      const runs = data ?? [];
+      // What each run made or updated (RLS: only your runs' rows).
+      const rowsByRun = new Map<string, ImportRun["rows"]>();
+      if (runs.length) {
+        const res = await client
+          .from("import_rows")
+          .select("import_id, entity_type, entity_id, action, logged_at")
+          .eq("workspace_id", workspaceId)
+          .limit(20000);
+        if (res.error && !isMissingTableError(res.error, "import_rows")) {
+          throw new Error(res.error.message);
+        }
+        for (const r of res.data ?? []) {
+          const type = normalizeImportEntityType(r.entity_type);
+          if (!type) continue;
+          const list = rowsByRun.get(r.import_id as string) ?? [];
+          list.push({
+            entityType: type,
+            entityId: r.entity_id as string,
+            action: normalizeImportRowAction(r.action),
+            loggedAt: r.logged_at as string,
+          });
+          rowsByRun.set(r.import_id as string, list);
+        }
+      }
+      return runs.map((r) => ({
         id: r.id as string,
         source: r.source as string,
         label: (r.label as string | null) ?? null,
@@ -161,6 +216,7 @@ export function createTasksAgents(
         finishedAt: (r.finished_at as string | null) ?? null,
         undoneAt: (r.undone_at as string | null) ?? null,
         keyId: (r.key_id as string | null) ?? null,
+        rows: rowsByRun.get(r.id as string) ?? [],
       }));
     },
 

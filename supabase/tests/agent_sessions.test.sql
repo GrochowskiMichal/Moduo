@@ -125,6 +125,12 @@ BEGIN
     'switched off, teammates stop seeing it at once', r);
   r := test.as_key('K', 'SELECT public.user_op_set_agent_work(true)');
   PERFORM test.ok(r LIKE '42501%' AND test.seen('F', 'T1') = 0, 'a key can''t switch it', r);
+  DELETE FROM public.access_changes WHERE workspace_id = test.id('W');
+  r := test.as_user('E', 'UPDATE public.user_preferences SET show_agent_work = true WHERE user_id = auth.uid()');
+  PERFORM test.ok(test.seen('F', 'T1') = 1
+              AND EXISTS (SELECT 1 FROM public.access_changes WHERE workspace_id = test.id('W') AND resource_type = 'workspace'),
+    'a direct write to the person''s own row tells teammates'' copies too', r);
+  PERFORM test.as_user('E', 'SELECT public.user_op_set_agent_work(false)');
 
   -- The read the panel and MCP use follows the same rule.
   v := test.value_as('F', format($q$SELECT public.tasks_agent_sessions(%L, %L)::text$q$, test.id('W'), test.id('T1')))::jsonb;

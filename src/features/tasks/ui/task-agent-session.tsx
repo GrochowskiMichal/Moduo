@@ -76,29 +76,44 @@ function AgentSessionLine({
   const now = new Date();
   const parts = agentLineParts(session, now);
   const [open, setOpen] = useState(false);
-  const [summary, setSummary] = useState<string | null>(null);
+  // The summary read, tagged with the summary it belongs to: a newer one (a
+  // re-report, a new run) reads again, so the fold never shows text other
+  // than what "Post as comment" would post.
+  const [summary, setSummary] = useState<{ at: string; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const hasSummary = own && !!session.summaryAt;
+  const summaryText = summary && summary.at === session.summaryAt ? summary.text : null;
   const canFold = session.earlier.length > 0 || hasSummary;
   const loud = !session.stoppedAt && (session.state === "needs_you" || session.state === "failed");
 
   // The summary is read only when its person opens the fold (it never rides the store).
   useEffect(() => {
-    if (!open || !hasSummary || summary !== null || !runtime?.tasks.agentSessionsFor) return;
+    const at = session.summaryAt;
+    if (!open || !hasSummary || !at || summaryText !== null || !runtime?.tasks.agentSessionsFor)
+      return;
     let live = true;
     runtime.tasks
       .agentSessionsFor({ workspaceId, taskId: session.taskId })
       .then((list) => {
         if (!live) return;
-        setSummary(list.find((s) => s.id === session.id)?.summary ?? "");
+        setSummary({ at, text: list.find((s) => s.id === session.id)?.summary ?? "" });
       })
       .catch(() => {
-        if (live) setSummary("");
+        if (live) setSummary({ at, text: "" });
       });
     return () => {
       live = false;
     };
-  }, [open, hasSummary, summary, runtime, workspaceId, session.taskId, session.id]);
+  }, [
+    open,
+    hasSummary,
+    summaryText,
+    runtime,
+    workspaceId,
+    session.taskId,
+    session.id,
+    session.summaryAt,
+  ]);
 
   const post = async () => {
     if (!runtime?.tasks.postAgentSummary || busy) return;
@@ -193,7 +208,7 @@ function AgentSessionLine({
           {hasSummary ? (
             <div className="flex flex-col gap-1">
               <p className="whitespace-pre-wrap text-foreground">
-                {summary === null ? "…" : summary || "No summary."}
+                {summaryText === null ? "…" : summaryText || "No summary."}
               </p>
               {session.summaryPostedAt ? (
                 <span>Posted as a comment.</span>

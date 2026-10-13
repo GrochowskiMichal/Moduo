@@ -534,23 +534,41 @@ BEGIN
     RAISE EXCEPTION 'Showing your agent work is on or off.' USING ERRCODE = '22023';
   END IF;
   INSERT INTO public.user_preferences (user_id) VALUES (v_user) ON CONFLICT (user_id) DO NOTHING;
+  -- The trigger below tells teammates' copies, whichever way it changed.
   UPDATE public.user_preferences up SET show_agent_work = p_show
   WHERE up.user_id = v_user AND up.show_agent_work IS DISTINCT FROM p_show;
-  IF FOUND THEN
-    -- Teammates' copies follow at once: a row now shown arrives as a change,
-    -- and one now hidden leaves through their access check.
-    UPDATE public.agent_sessions s SET updated_at = now()
-    WHERE s.user_id = v_user AND s.deleted_at IS NULL;
-    FOR v_ws IN
-      SELECT DISTINCT s.workspace_id FROM public.agent_sessions s
-      WHERE s.user_id = v_user AND s.deleted_at IS NULL
-    LOOP
-      PERFORM public.access_changes__note(v_ws, NULL, 'workspace', v_ws);
-    END LOOP;
-  END IF;
   RETURN p_show;
 END;
 $$;
+
+-- However the switch changes (the op, or a direct write to the person's own
+-- row), teammates' copies follow at once: a row now shown arrives as a change,
+-- and one now hidden leaves through their access check.
+CREATE OR REPLACE FUNCTION public.user_preferences__agent_work_changed()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_ws uuid;
+BEGIN
+  UPDATE public.agent_sessions s SET updated_at = now()
+  WHERE s.user_id = NEW.user_id AND s.deleted_at IS NULL;
+  FOR v_ws IN
+    SELECT DISTINCT s.workspace_id FROM public.agent_sessions s
+    WHERE s.user_id = NEW.user_id AND s.deleted_at IS NULL
+  LOOP
+    PERFORM public.access_changes__note(v_ws, NULL, 'workspace', v_ws);
+  END LOOP;
+  RETURN NULL;
+END;
+$$;
+DROP TRIGGER IF EXISTS user_preferences_agent_work_changed ON public.user_preferences;
+CREATE TRIGGER user_preferences_agent_work_changed
+  AFTER UPDATE OF show_agent_work ON public.user_preferences
+  FOR EACH ROW WHEN (OLD.show_agent_work IS DISTINCT FROM NEW.show_agent_work)
+  EXECUTE FUNCTION public.user_preferences__agent_work_changed();
 
 -- A revoked key stops what it was doing: "Stopped (key revoked)" (spec §12's
 -- edge case); the trail keeps "via <key name>". Waiting on it ends too.
@@ -946,47 +964,79 @@ BEGIN
 END;
 $$;
 
--- Record a project or a section this run made (MCP projects_create /
--- sections_create with an import id). Only one the caller made since the run
--- began, in a project they can edit.
-CREATE OR REPLACE FUNCTION public.imports_op_note(
-  p_workspace_id uuid, p_import_id uuid, p_entity_type text, p_entity_id uuid)
-RETURNS jsonb
+-- A run's projects and sections are made through it, in one transaction with
+-- the row that records them for Undo (MCP projects_create / sections_create
+-- with an import id; TV-U18's importers): a refused run makes nothing, and
+-- only what the run made is ever recorded.
+DROP FUNCTION IF EXISTS public.imports_op_note(uuid, uuid, text, uuid);
+
+CREATE OR REPLACE FUNCTION public.imports__open(p_workspace_id uuid, p_import_id uuid)
+RETURNS public.imports
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
-  v_actor uuid := public.perm_actor_id();
   i public.imports;
 BEGIN
   i := public.imports__own(p_workspace_id, p_import_id);
   IF i.finished_at IS NOT NULL OR i.undone_at IS NOT NULL THEN
     RAISE EXCEPTION 'That import is finished: begin a new one to run it again.' USING ERRCODE = '22023';
   END IF;
-  IF p_entity_type = 'bucket' THEN
-    IF NOT EXISTS (SELECT 1 FROM public.buckets b
-                   WHERE b.id = p_entity_id AND b.workspace_id = p_workspace_id AND b.deleted_at IS NULL
-                     AND NOT b.is_system AND b.owner_id = v_actor AND b.created_at >= i.started_at)
-       OR NOT public.projects__visible_to(p_entity_id, v_actor) THEN
-      RAISE EXCEPTION 'That project isn''t one this import made.' USING ERRCODE = '22023';
-    END IF;
-  ELSIF p_entity_type = 'section' THEN
-    IF NOT EXISTS (SELECT 1 FROM public.sections s
-                   WHERE s.id = p_entity_id AND s.workspace_id = p_workspace_id AND s.deleted_at IS NULL
-                     AND s.created_at >= i.started_at
-                     AND public.projects__visible_to(s.project_id, v_actor)
-                     AND public.projects__editable_to(s.project_id, v_actor)) THEN
-      RAISE EXCEPTION 'That section isn''t one this import made.' USING ERRCODE = '22023';
-    END IF;
-  ELSE
-    RAISE EXCEPTION 'An import records projects and sections here; tasks go through tasks_op_create_with.'
-      USING ERRCODE = '22023';
+  RETURN i;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.imports_op_project_create(p_workspace_id uuid, p_import_id uuid, p_project jsonb)
+RETURNS public.buckets
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  i public.imports := public.imports__open(p_workspace_id, p_import_id);
+  v_existed boolean;
+  b public.buckets;
+BEGIN
+  v_existed := EXISTS (SELECT 1 FROM public.buckets x
+                       WHERE x.id = public.tasks__try_uuid(p_project ->> 'id'));
+  b := public.projects_op_create(p_workspace_id, p_project);
+  -- A resend of a create that landed answers with the project it made; one
+  -- that was there before this run is never the run's to undo.
+  IF NOT v_existed THEN
+    INSERT INTO public.import_rows (import_id, workspace_id, entity_type, entity_id, action)
+    VALUES (i.id, p_workspace_id, 'bucket', b.id, 'created')
+    ON CONFLICT (import_id, entity_type, entity_id) DO NOTHING;
   END IF;
-  INSERT INTO public.import_rows (import_id, workspace_id, entity_type, entity_id, action)
-  VALUES (i.id, p_workspace_id, p_entity_type, p_entity_id, 'created')
-  ON CONFLICT (import_id, entity_type, entity_id) DO NOTHING;
-  RETURN public.imports__summary(i);
+  RETURN b;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.imports_op_section_create(
+  p_workspace_id uuid, p_import_id uuid, p_project_id uuid, p_section jsonb)
+RETURNS SETOF public.sections
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  i public.imports := public.imports__open(p_workspace_id, p_import_id);
+  v_section jsonb := coalesce(p_section, '{}'::jsonb);
+  v_id uuid;
+  v_existed boolean;
+BEGIN
+  IF jsonb_typeof(v_section) <> 'object' THEN
+    RAISE EXCEPTION 'Expected an object of section fields.' USING ERRCODE = '22023';
+  END IF;
+  v_id := coalesce(public.tasks__try_uuid(v_section ->> 'id'), gen_random_uuid());
+  v_existed := EXISTS (SELECT 1 FROM public.sections x WHERE x.id = v_id);
+  RETURN QUERY SELECT * FROM public.sections_op_create(p_workspace_id, p_project_id,
+    v_section || jsonb_build_object('id', v_id));
+  IF NOT v_existed THEN
+    INSERT INTO public.import_rows (import_id, workspace_id, entity_type, entity_id, action)
+    VALUES (i.id, p_workspace_id, 'section', v_id, 'created')
+    ON CONFLICT (import_id, entity_type, entity_id) DO NOTHING;
+  END IF;
 END;
 $$;
 
@@ -1292,7 +1342,8 @@ BEGIN
   -- Server-only helpers.
   FOREACH fn IN ARRAY ARRAY[
     'agent_sessions__shown_to(uuid, uuid, uuid)', 'agent_sessions__links(jsonb)',
-    'agent_sessions__key_revoked()', 'imports__own(uuid, uuid)', 'imports__summary(public.imports)'
+    'agent_sessions__key_revoked()', 'imports__own(uuid, uuid)', 'imports__summary(public.imports)',
+    'imports__open(uuid, uuid)', 'user_preferences__agent_work_changed()'
   ] LOOP
     EXECUTE format('REVOKE ALL ON FUNCTION public.%s FROM PUBLIC, anon, authenticated', fn);
     EXECUTE format('GRANT EXECUTE ON FUNCTION public.%s TO service_role', fn);
@@ -1304,7 +1355,8 @@ BEGIN
     'tasks_op_agent_session_post(uuid, uuid)', 'tasks_op_agent_session_dismiss(uuid, uuid)',
     'user_agent_work()', 'user_op_set_agent_work(boolean)',
     'tasks_op_tag(uuid, uuid, text[], text[])',
-    'imports_op_begin(uuid, text, text)', 'imports_op_note(uuid, uuid, text, uuid)',
+    'imports_op_begin(uuid, text, text)',
+    'imports_op_project_create(uuid, uuid, jsonb)', 'imports_op_section_create(uuid, uuid, uuid, jsonb)',
     'imports_op_finish(uuid, uuid)', 'imports_op_undo(uuid, uuid)',
     'tasks_op_create_with(uuid, jsonb, jsonb)', 'tasks_op_update_with(uuid, uuid, jsonb, jsonb)'
   ] LOOP

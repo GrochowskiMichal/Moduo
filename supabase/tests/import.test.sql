@@ -75,16 +75,23 @@ BEGIN
   i1 := test.begin_import('Run 1');
   PERFORM test.ok(i1 IS NOT NULL AND (SELECT user_id = test.id('E') AND key_id = test.id('K') FROM public.imports WHERE id = i1),
     'a key begins an import run, its person''s');
-  PERFORM test.as_key('K', format($q$SELECT public.projects_op_create(%L, %L::jsonb)$q$, test.id('W'),
+  r := test.as_key('K', format($q$SELECT public.imports_op_project_create(%L, %L, %L::jsonb)$q$, test.id('W'), i1,
     jsonb_build_object('id', test.id('P1'), 'name', 'Biology')));
-  r := test.as_key('K', format($q$SELECT public.imports_op_note(%L, %L, 'bucket', %L)$q$, test.id('W'), i1, test.id('P1')));
-  PERFORM test.ok(r = 'ok 1', 'the run records the project it made', r);
-  PERFORM test.as_key('K', format($q$SELECT * FROM public.sections_op_create(%L, %L, %L::jsonb)$q$, test.id('W'), test.id('P1'),
-    jsonb_build_object('id', test.id('S1'), 'name', 'Week 1')));
-  r := test.as_key('K', format($q$SELECT public.imports_op_note(%L, %L, 'section', %L)$q$, test.id('W'), i1, test.id('S1')));
-  PERFORM test.ok(r = 'ok 1', 'and the section', r);
-  r := test.as_key('K', format($q$SELECT public.imports_op_note(%L, %L, 'bucket', %L)$q$, test.id('W'), i1, test.id('SB')));
-  PERFORM test.ok(r LIKE '22023%isn''t one this import made%', 'a project it didn''t make can''t be recorded', r);
+  PERFORM test.ok(r = 'ok 1' AND EXISTS (SELECT 1 FROM public.import_rows WHERE import_id = i1 AND entity_id = test.id('P1')),
+    'the run makes its project and records it, in one go', r);
+  r := test.as_key('K', format($q$SELECT * FROM public.imports_op_section_create(%L, %L, %L, %L::jsonb)$q$, test.id('W'), i1,
+    test.id('P1'), jsonb_build_object('id', test.id('S1'), 'name', 'Week 1')));
+  PERFORM test.ok(r LIKE 'ok%' AND EXISTS (SELECT 1 FROM public.import_rows WHERE import_id = i1 AND entity_id = test.id('S1')),
+    'and the section', r);
+  r := test.as_key('K', format($q$SELECT public.imports_op_project_create(%L, %L, %L::jsonb)$q$, test.id('W'), i1,
+    jsonb_build_object('id', test.id('SB'), 'name', 'Shared')));
+  PERFORM test.ok(r = 'ok 1' AND NOT EXISTS (SELECT 1 FROM public.import_rows WHERE entity_id = test.id('SB')),
+    'a project that was already there is never the run''s', r);
+  r := test.as_key('K', format($q$SELECT * FROM public.imports_op_section_create(%L, %L, %L, %L::jsonb)$q$, test.id('W'), i1,
+    test.id('PB'), jsonb_build_object('id', test.id('S-PB'), 'name', 'Not mine')));
+  PERFORM test.ok(r LIKE '%isn''t in this workspace%' AND NOT EXISTS (SELECT 1 FROM public.sections WHERE id = test.id('S-PB'))
+              AND NOT EXISTS (SELECT 1 FROM public.import_rows WHERE entity_id = test.id('S-PB')),
+    'nor add sections to a project its person can''t see; nothing is recorded', r);
 
   r := test.create_with('K',
     jsonb_build_object('id', test.id('A'), 'title', 'Read ch. 1', 'bucket_id', test.id('P1'), 'section_id', test.id('S1'),
@@ -170,9 +177,8 @@ BEGIN
   PERFORM test.ok(r LIKE '22023%already undone%', 'a run is undone once', r);
 
   i3 := test.begin_import('Run 3');
-  PERFORM test.as_key('K', format($q$SELECT public.projects_op_create(%L, %L::jsonb)$q$, test.id('W'),
+  PERFORM test.as_key('K', format($q$SELECT public.imports_op_project_create(%L, %L, %L::jsonb)$q$, test.id('W'), i3,
     jsonb_build_object('id', test.id('P3'), 'name', 'Chemistry')));
-  PERFORM test.as_key('K', format($q$SELECT public.imports_op_note(%L, %L, 'bucket', %L)$q$, test.id('W'), i3, test.id('P3')));
   PERFORM test.create_with('K', jsonb_build_object('id', test.id('D'), 'title', 'Titration', 'bucket_id', test.id('P3')),
     jsonb_build_object('import_id', i3));
   r := test.as_key('K', format($q$SELECT public.imports_op_undo(%L, %L)$q$, test.id('W'), i3));
@@ -196,8 +202,29 @@ BEGIN
     'someone else''s import reads exactly like one that doesn''t exist', r);
   r := test.as_key('KX', format($q$SELECT public.imports_op_finish(%L, %L)$q$, test.id('W2'), i2));
   PERFORM test.ok(r LIKE '22023%No import with that id.%', 'a key from another workspace gets the same answer', r);
-  r := test.as_user('F', format($q$SELECT public.imports_op_note(%L, %L, 'bucket', %L)$q$, test.id('W'), i2, test.id('SB')));
-  PERFORM test.ok(r LIKE '22023%No import with that id.%', 'nor can anyone else add to it', r);
+  r := test.as_user('F', format($q$SELECT public.imports_op_project_create(%L, %L, '{"name": "Sneaky"}'::jsonb)$q$,
+    test.id('W'), i4));
+  PERFORM test.ok(r LIKE '22023%No import with that id.%' AND NOT EXISTS (SELECT 1 FROM public.buckets WHERE name = 'Sneaky'),
+    'nor can anyone else add to it; nothing is made', r);
+  r := test.as_key('K', format($q$SELECT public.imports_op_project_create(%L, %L, '{"name": "Late project"}'::jsonb)$q$,
+    test.id('W'), i2));
+  PERFORM test.ok(r LIKE '22023%finished%' AND NOT EXISTS (SELECT 1 FROM public.buckets WHERE name = 'Late project'),
+    'a finished run makes no project', r);
+
+  -- A task handed into a teammate's Inbox stays its creator's to tag, remind
+  -- and re-import (20a).
+  r := test.create_with('K', jsonb_build_object('id', test.id('H'), 'title', 'For F', 'assignee_id', test.id('F'),
+      'imported_from', jsonb_build_object('source', 'todoist', 'key', '777')),
+    jsonb_build_object('tags', jsonb_build_array('handoff'),
+      'reminders', jsonb_build_array(jsonb_build_object('kind', 'at', 'at', '2030-02-01T09:00:00Z'))));
+  PERFORM test.ok(r = 'ok 1' AND test.tags_of('H') = 'handoff'
+              AND (SELECT b.owner_id = test.id('F') AND b.is_system FROM public.tasks t JOIN public.buckets b ON b.id = t.bucket_id
+                   WHERE t.id = test.id('H')),
+    'a task made for a teammate lands in their Inbox with its tags and reminder', r);
+  r := test.create_with('K', jsonb_build_object('title', 'For F again', 'imported_from', jsonb_build_object('source', 'todoist', 'key', '777')),
+    '{}'::jsonb);
+  PERFORM test.ok(r = 'ok 1' AND (SELECT title FROM public.tasks WHERE id = test.id('H')) = 'For F again',
+    'and a re-run updates it there', r);
   PERFORM test.ok(test.value_as('F', 'SELECT count(*)::text FROM public.imports') = '0'
               AND test.value_as('F', 'SELECT count(*)::text FROM public.import_rows') = '0'
               AND test.value_as('O', 'SELECT count(*)::text FROM public.imports') = '0'

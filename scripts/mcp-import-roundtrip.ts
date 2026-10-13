@@ -31,7 +31,10 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 const URL_ = process.env.MODUO_MCP_URL ?? "http://127.0.0.1:54321/functions/v1/moduo-mcp";
 const DB_URL =
   process.env.MODUO_DB_URL ?? "postgresql://supabase_admin:postgres@127.0.0.1:54322/postgres";
-if (!/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\//.test(URL_) || !/@(127\.0\.0\.1|localhost):/.test(DB_URL)) {
+if (
+  !/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\//.test(URL_) ||
+  !/@(127\.0\.0\.1|localhost):/.test(DB_URL)
+) {
   console.error("This round-trip runs against the local stack only.");
   process.exit(2);
 }
@@ -74,7 +77,9 @@ function teardown() {
       DELETE FROM auth.users WHERE id = ${lit(person)};
     `);
   } catch (err) {
-    console.warn(`Couldn't remove the round-trip's workspace ${workspace}: ${(err as Error).message}`);
+    console.warn(
+      `Couldn't remove the round-trip's workspace ${workspace}: ${(err as Error).message}`,
+    );
   }
 }
 
@@ -110,10 +115,34 @@ const TODOIST = {
     { id: "s-2", name: "Week 2" },
   ],
   tasks: [
-    { id: "7001", content: "Read chapter 1", section: "s-1", due: "2030-01-07", labels: ["reading"] },
-    { id: "7002", content: "Lab report", section: "s-1", due: "2030-01-09", labels: ["lab", "graded"] },
-    { id: "7003", content: "Weekly quiz", section: "s-2", due: "2030-01-14", recurring: "FREQ=WEEKLY;BYDAY=TU" },
-    { id: "7004", content: "Essay draft", section: "s-2", due: "2030-01-16", reminder: "2030-01-15T09:00:00Z" },
+    {
+      id: "7001",
+      content: "Read chapter 1",
+      section: "s-1",
+      due: "2030-01-07",
+      labels: ["reading"],
+    },
+    {
+      id: "7002",
+      content: "Lab report",
+      section: "s-1",
+      due: "2030-01-09",
+      labels: ["lab", "graded"],
+    },
+    {
+      id: "7003",
+      content: "Weekly quiz",
+      section: "s-2",
+      due: "2030-01-14",
+      recurring: "FREQ=WEEKLY;BYDAY=TU",
+    },
+    {
+      id: "7004",
+      content: "Essay draft",
+      section: "s-2",
+      due: "2030-01-16",
+      reminder: "2030-01-15T09:00:00Z",
+    },
     { id: "7005", content: "Find three sources", parent: "7004" },
   ],
 };
@@ -122,13 +151,16 @@ async function importRun(label: string, titleSuffix = "") {
   const run = await call("imports_begin", { source: "todoist", label });
   const projects = await call("projects_list");
   let project = projects.find((p: Json) => p.name === TODOIST.project.name);
-  if (!project) project = await call("projects_create", { name: TODOIST.project.name, import_id: run.id });
+  if (!project)
+    project = await call("projects_create", { name: TODOIST.project.name, import_id: run.id });
   const sections: Record<string, string> = {};
   const existing = await call("sections_list", { project_id: project.id });
   for (const s of TODOIST.sections) {
     const found = existing.find((e: Json) => e.name === s.name);
     sections[s.id] =
-      found?.id ?? (await call("sections_create", { project_id: project.id, name: s.name, import_id: run.id })).section_id;
+      found?.id ??
+      (await call("sections_create", { project_id: project.id, name: s.name, import_id: run.id }))
+        .section_id;
   }
   const ids: Record<string, string> = {};
   const actions: string[] = [];
@@ -163,9 +195,13 @@ try {
   const tools: string[] = ((await rpc("tools/list")).tools ?? []).map((t: Json) => t.name);
   expectThat(
     "the key lists the v3 tools",
-    ["imports_begin", "imports_undo", "projects_create", "sections_create", "tasks_session_status"].every((n) =>
-      tools.includes(n),
-    ),
+    [
+      "imports_begin",
+      "imports_undo",
+      "projects_create",
+      "sections_create",
+      "tasks_session_status",
+    ].every((n) => tools.includes(n)),
     `${tools.length} tools; ${String(init.instructions ?? "").slice(0, 60)}…`,
   );
 
@@ -180,28 +216,45 @@ try {
     JSON.stringify(first.summary),
   );
   const quiz = await call("tasks_get", { task_id: first.ids["7003"] });
-  expectThat("a repeat imports", quiz.recurrence?.rrule === "FREQ=WEEKLY;BYDAY=TU", JSON.stringify(quiz.recurrence));
+  expectThat(
+    "a repeat imports",
+    quiz.recurrence?.rrule === "FREQ=WEEKLY;BYDAY=TU",
+    JSON.stringify(quiz.recurrence),
+  );
   const lab = await call("tasks_get", { task_id: first.ids["7002"] });
   expectThat(
     "labels import as tags, the due date as a date",
-    JSON.stringify([...(lab.tags ?? [])].sort()) === JSON.stringify(["graded", "lab"]) && lab.due_on === "2030-01-09",
+    JSON.stringify([...(lab.tags ?? [])].sort()) === JSON.stringify(["graded", "lab"]) &&
+      lab.due_on === "2030-01-09",
     JSON.stringify({ tags: lab.tags, due_on: lab.due_on }),
   );
   const essay = await call("tasks_get", { task_id: first.ids["7004"] });
-  expectThat("its reminder is the key person's", essay.my_reminders?.length === 1, JSON.stringify(essay.my_reminders));
+  expectThat(
+    "its reminder is the key person's",
+    essay.my_reminders?.length === 1,
+    JSON.stringify(essay.my_reminders),
+  );
   expectThat(
     "the trail says 'Alex · via Claude Desktop'",
     (essay.activity ?? []).some((a: Json) => a.actor_label === "Alex · via Claude Desktop"),
     JSON.stringify((essay.activity ?? []).map((a: Json) => a.actor_label)),
   );
   const byKey = await call("tasks_search", { q: "7002" });
-  expectThat("the Todoist id finds its task", byKey[0]?.id === first.ids["7002"], JSON.stringify(byKey.map((t: Json) => t.id)));
+  expectThat(
+    "the Todoist id finds its task",
+    byKey[0]?.id === first.ids["7002"],
+    JSON.stringify(byKey.map((t: Json) => t.id)),
+  );
   const byHandle = await call("tasks_get", { task_id: lab.handle });
   expectThat("a handle works as a task id", byHandle.id === lab.id, String(lab.handle));
 
   // 2 · the same import again
   const second = await importRun("Biology syllabus, again", " (v2)");
-  const listed = await call("tasks_list", { project_id: first.project.id, category: "open", limit: 200 });
+  const listed = await call("tasks_list", {
+    project_id: first.project.id,
+    category: "open",
+    limit: 200,
+  });
   expectThat(
     "second run: every task updated by its key, nothing new",
     second.actions.every((a) => a === "updated") &&
@@ -237,7 +290,11 @@ try {
     () => false,
     () => true,
   );
-  expectThat("Undo removes what nobody touched since", undo2.tasks_removed === 1 && gone, JSON.stringify(undo2));
+  expectThat(
+    "Undo removes what nobody touched since",
+    undo2.tasks_removed === 1 && gone,
+    JSON.stringify(undo2),
+  );
 
   // 4 · the agent at work
   const status = await call("tasks_session_status", {
@@ -248,16 +305,38 @@ try {
     steps: 3,
     links: [{ url: "https://example.com/doc/42", label: "Draft" }],
   });
-  expectThat("a session status posts", status.state === "working" && status.step === 1, JSON.stringify(status));
-  const ready = await call("tasks_session_status", { task_id: first.ids["7004"], state: "ready", summary: "Outline done." });
-  const notices = Number(
-    sql(`SELECT count(*) FROM public.notice_deliveries WHERE user_id = ${lit(person)} AND kind = 'agent'`),
+  expectThat(
+    "a session status posts",
+    status.state === "working" && status.step === 1,
+    JSON.stringify(status),
   );
-  expectThat("ready for review notifies its person once", ready.state === "ready" && notices === 1, `${notices} notices`);
+  const ready = await call("tasks_session_status", {
+    task_id: first.ids["7004"],
+    state: "ready",
+    summary: "Outline done.",
+  });
+  const notices = Number(
+    sql(
+      `SELECT count(*) FROM public.notice_deliveries WHERE user_id = ${lit(person)} AND kind = 'agent'`,
+    ),
+  );
+  expectThat(
+    "ready for review notifies its person once",
+    ready.state === "ready" && notices === 1,
+    `${notices} notices`,
+  );
   const done = await call("tasks_set_status", { task_id: first.ids["7004"], status: "done" });
-  expectThat("finishing the parent finishes its open subtask", done.also_finished === 1, JSON.stringify(done));
+  expectThat(
+    "finishing the parent finishes its open subtask",
+    done.also_finished === 1,
+    JSON.stringify(done),
+  );
   const statuses = await call("statuses_list", { project_id: first.project.id });
-  expectThat("statuses list by category", statuses.some((s: Json) => s.category === "done"), String(statuses.length));
+  expectThat(
+    "statuses list by category",
+    statuses.some((s: Json) => s.category === "done"),
+    String(statuses.length),
+  );
 } catch (err) {
   expectThat("round-trip ran to the end", false, (err as Error).message);
 } finally {
@@ -268,5 +347,7 @@ for (const r of results) {
   console.log(`${r.ok ? "✓" : "✗"} ${r.check}${r.detail ? `  — ${r.detail}` : ""}`);
   if (!r.ok) exitCode = 1;
 }
-console.log(exitCode ? "\nThe import round-trip failed." : `\nAll ${results.length} checks passed.`);
+console.log(
+  exitCode ? "\nThe import round-trip failed." : `\nAll ${results.length} checks passed.`,
+);
 process.exit(exitCode);
