@@ -7,6 +7,7 @@
 import { ChevronRight, MoreHorizontal, Plus } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { TeamMark } from "../../../components/ui/avatar";
+import { Button } from "../../../components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -81,11 +82,12 @@ export function ListGroupHeader({
   addState,
   onAdd,
   section,
+  extraAction,
   className,
 }: {
   groupKey: string;
   label: string;
-  count: ReactNode;
+  count?: ReactNode;
   sub?: ReactNode;
   leading?: ReactNode;
   collapsed: boolean;
@@ -94,6 +96,8 @@ export function ListGroupHeader({
   onAdd: (add: GroupAdd) => void;
   /** A section's own edits (Section groups inside an editable project). */
   section?: { onRename: (name: string) => void; onDelete: () => void } | null;
+  /** Something the header always offers before its "+" (Upcoming's Earlier: "Move all…"). */
+  extraAction?: ReactNode;
   className?: string;
 }) {
   const [renaming, setRenaming] = useState(false);
@@ -150,8 +154,49 @@ export function ListGroupHeader({
           </DropdownMenu>
         ) : undefined
       }
-      persistentActions={add}
+      persistentActions={
+        extraAction ? (
+          <>
+            {extraAction}
+            {add}
+          </>
+        ) : (
+          add
+        )
+      }
     />
+  );
+}
+
+/**
+ * The line under an extra group's first rows (My tasks' team block, research
+ * §8): "Show 3 more", then "Show fewer".
+ */
+export function ShowMoreLine({
+  count,
+  shown,
+  onToggle,
+}: {
+  count: number;
+  shown: boolean;
+  onToggle: () => void;
+}) {
+  if (count <= 0) return null;
+  return (
+    <div className="flex min-h-(--row-h-sm) items-center px-1">
+      <Button
+        variant="ghost"
+        size="sm"
+        aria-expanded={shown}
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggle();
+        }}
+        className="text-muted-foreground tabular-nums hover:text-foreground"
+      >
+        {shown ? "Show fewer" : `Show ${count} more`}
+      </Button>
+    </div>
   );
 }
 

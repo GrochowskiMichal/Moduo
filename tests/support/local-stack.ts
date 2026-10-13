@@ -156,5 +156,17 @@ export async function signInPage(
   }, entries);
 }
 
+/**
+ * End a person's open Focus runs (TV-F6's `focus_runs`), so a session another
+ * test left running (it reads as "on your other device") doesn't become the
+ * Now card of the next one.
+ */
+export async function endFocusRuns(userId: string): Promise<void> {
+  await rest("service", `focus_runs?user_id=eq.${userId}&status=neq.ended`, {
+    method: "PATCH",
+    body: { status: "ended", ended_at: new Date().toISOString() },
+  });
+}
+
 /** A unique tag for this run's rows, so runs never collide. */
 export const runTag = () => Math.random().toString(36).slice(2, 7);

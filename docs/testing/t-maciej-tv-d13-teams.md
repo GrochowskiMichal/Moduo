@@ -9,7 +9,8 @@
 - [ ] **Do:** Change Letters to "DE", press Enter; clear them and blur → **Expect:** the mark reads DE, then DS again (made from the name) _(both)_
 - [ ] **Do:** Pick Violet, then Automatic → **Expect:** the mark turns violet, then back to its own colour everywhere (rail, capture, the panel's Team) _(both)_
 - [ ] **Do:** Default project → a shared project → **Expect:** it's shown; the hint says to pick one the team can open _(both)_
-- [ ] **Do:** As Tess (not the team's creator, not an admin) open Design → **Expect:** no Delete button; she can still rename it and add/remove people _(both)_
+- [ ] **Do:** As Tess (not the team's creator, not an admin) open Design → **Expect:** no Delete button; Name, Letters, Colour and Default project are read-only, with one line saying who can change them; she can add people, and only her own row has an × (Leave) _(both)_
+- [ ] **Do:** As Tess, on a team with no default project, pick one she can edit → **Expect:** it's saved; once it's set the picker is read-only for her _(both)_
 - [ ] **Do:** As its creator, Delete → Undo within 8 s → **Expect:** Settings stays open, Design comes back with its people and its tasks still routed to it; Delete again and let the toast go → Design is gone and its tasks show no team _(both)_
 
 ## Routing and the team's notices
@@ -35,6 +36,7 @@
 
 ## Migrations / data
 - [ ] **Do:** Confirm `20261013150000_teams_routing`, `20261013170000_teams_mention_once` and `20261013180000_teams_routing_fixes` are applied in that order (local stack) and `bun run db:test teams_routing` passes → **Expect:** 87 checks green _(local)_
+- [ ] **Do:** Confirm `20261013210000_teams_access_fix` is applied and `bun run db:test teams_access` passes → **Expect:** 48 checks green _(local)_
 
 ## Known gaps / not-yet-testable
 - The 3-day / day-before check-back is proven by the SQL test with set clocks; a live one needs a task routed 3 days ago (or a due date tomorrow and 9:00 your time).

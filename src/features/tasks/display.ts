@@ -101,8 +101,11 @@ export const TASKS_DISPLAY_DEFAULTS: TasksDisplay = {
  */
 export function tasksDisplayDefaults(scope: string): TasksDisplay {
   if (scope === "mine") return { ...TASKS_DISPLAY_DEFAULTS, group: "status" };
-  // Upcoming (TV-U6's interim until TV-U15): by date, Earlier · Today · …
-  if (scope === "upcoming") return { ...TASKS_DISPLAY_DEFAULTS, group: "date", order: "due" };
+  // Upcoming (TV-U15) groups by its days and orders its own rows; dated
+  // subtasks show flat, with "↳ Parent" (research §6).
+  if (scope === "upcoming") {
+    return { ...TASKS_DISPLAY_DEFAULTS, group: "date", order: "manual", subtasks: "flat" };
+  }
   if (groupsByBucket(scope)) return { ...TASKS_DISPLAY_DEFAULTS, group: "bucket" };
   if (isProjectScope(scope)) return { ...TASKS_DISPLAY_DEFAULTS, group: "section" };
   return { ...TASKS_DISPLAY_DEFAULTS };
@@ -323,6 +326,11 @@ export function tasksDisplayControls(
   choices: GroupChoices = ALL_CHOICES,
 ): DisplayControl<TasksDisplay>[] {
   if (layout === "timeline") return [LAYOUT_CONTROL];
+  // Upcoming's List groups by its days in its own order (TV-U15): no Group
+  // by, Order by or nesting to choose.
+  if (scope === "upcoming" && layout === "list") {
+    return [LAYOUT_CONTROL, COMPLETED_CONTROL, ROWS_CONTROL, PROPERTIES_CONTROL];
+  }
   if (scope === "today") {
     return layout === "board"
       ? [LAYOUT_CONTROL, ROWS_CONTROL, CARD_PROPERTIES_CONTROL, DESCRIPTION_CONTROL]

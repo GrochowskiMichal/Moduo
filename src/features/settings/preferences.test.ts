@@ -41,6 +41,7 @@ describe("DEFAULT_PREFERENCES", () => {
       confirmBeforeQuit: false,
       keepInMenuBar: true,
       tasksSidebar: { hidden: [], pinned: {} },
+      tasksInbox: { snoozed: {} },
     });
   });
 });
@@ -84,6 +85,7 @@ describe("sanitizePreferences", () => {
       confirmBeforeQuit: true,
       keepInMenuBar: true,
       tasksSidebar: { hidden: [], pinned: {} },
+      tasksInbox: { snoozed: {} },
     });
   });
 
@@ -145,6 +147,32 @@ describe("sanitizePreferences", () => {
       hidden: [],
       pinned: {},
     });
+  });
+
+  it("keeps snoozed Inbox tasks, dropping bad entries (TV-U15)", () => {
+    expect(
+      sanitizePreferences({
+        tasksInbox: {
+          snoozed: {
+            ws1: {
+              t1: { until: "2026-10-20", stamp: "s#1" },
+              t2: { until: "next week" },
+              t3: { until: "2026-10-21" },
+              t4: null,
+            },
+            ws2: "nope",
+          },
+        },
+      }).tasksInbox,
+    ).toEqual({
+      snoozed: {
+        ws1: {
+          t1: { until: "2026-10-20", stamp: "s#1" },
+          t3: { until: "2026-10-21", stamp: null },
+        },
+      },
+    });
+    expect(sanitizePreferences({ tasksInbox: "nope" }).tasksInbox).toEqual({ snoozed: {} });
   });
 
   it("defaults confirmBeforeQuit false and coerces to boolean", () => {

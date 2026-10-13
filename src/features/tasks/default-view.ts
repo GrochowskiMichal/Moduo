@@ -80,12 +80,7 @@ export function resolveDefaultSelection({ lastBucket, bucketIds, inboxId }: Reso
   return "inbox";
 }
 
-// ── My tasks (tasks-v2 §1, TV-D4) ────────────────────────────────────────────
-
-/** The "My tasks" rail row exists only where there's someone else to tell apart. */
-export function showsMyTasks(activeMemberCount: number): boolean {
-  return activeMemberCount >= 2;
-}
+// ── My tasks (tasks-v2 §1, TV-D4; in every workspace since TV-U15) ──────────
 
 /**
  * The "My tasks" scope: tasks assigned to me, across buckets. Like All it

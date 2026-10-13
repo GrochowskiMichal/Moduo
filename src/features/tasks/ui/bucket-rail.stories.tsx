@@ -105,8 +105,6 @@ function Harness({
   };
   return (
     <BucketRail
-      mode="plan"
-      onModeChange={() => {}}
       selection={selection}
       onSelect={setSelection}
       buckets={projects}
