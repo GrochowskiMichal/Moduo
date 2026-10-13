@@ -83,6 +83,33 @@ describe("file + favorite replay (NR-1, AC2/AC3)", () => {
     expect(calls.map((c) => c.split(":")[0])).toEqual(["create", "fileNote", "setFavorite"]);
   });
 
+  it("replaying the same file/favorite twice (lost response) leaves one result", async () => {
+    // A set-to-value server, like notes_op_file / notes_op_set_favorite: the
+    // SQL rehearsal (docs/testing/2026-W42/nr-1) shows a re-add keeps the row
+    // and its position, and re-filing writes no second activity row.
+    const inbox = new Map<string, boolean>();
+    const favorites = new Map<string, string>();
+    const rt = {
+      notesV2: {
+        fileNote: async (a: any) => void inbox.set(a.noteId, a.inInbox),
+        setFavorite: async (a: any) =>
+          a.value
+            ? void favorites.set(a.noteId, favorites.get(a.noteId) ?? a.position ?? "a0")
+            : void favorites.delete(a.noteId),
+      },
+    } as any;
+    const file = { ...entry("file", 1, 1), args: { noteId: "n1", inInbox: false } };
+    const fav = {
+      ...entry("setFavorite", 2, 2),
+      args: { noteId: "n1", value: true, position: "b" },
+    };
+    for (let attempt = 0; attempt < 2; attempt++) {
+      for (const e of replayOrder([fav, file])) await callMetaOp(rt, e.kind, e.args);
+    }
+    expect([...inbox]).toEqual([["n1", false]]);
+    expect([...favorites]).toEqual([["n1", "b"]]);
+  });
+
   it("keeps a file/favorite queued on a network failure and drops a refusal", () => {
     expect(replayDecision(entry("file", 1), new TypeError("Failed to fetch"))).toBe("retry-later");
     expect(replayDecision(entry("setFavorite", 1), new Error("Note not found"))).toBe("drop");

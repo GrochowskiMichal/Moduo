@@ -107,9 +107,12 @@ ALTER TABLE public.note_favorites ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS note_favorites_own_read ON public.note_favorites;
 CREATE POLICY note_favorites_own_read ON public.note_favorites
   FOR SELECT TO authenticated
-  USING (user_id = auth.uid() AND public.can_access('note', note_id, 'view'));
+  USING (user_id = (SELECT auth.uid()) AND public.can_access('note', note_id, 'view'));
 -- No INSERT/UPDATE/DELETE policies: writes go through the op.
+-- Supabase's default privileges hand `authenticated` every table right; RLS
+-- gates the DML but not TRUNCATE, so take the write rights back explicitly.
 REVOKE ALL ON public.note_favorites FROM PUBLIC, anon;
+REVOKE INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON public.note_favorites FROM authenticated;
 GRANT SELECT ON public.note_favorites TO authenticated;
 GRANT ALL ON public.note_favorites TO service_role;
 
@@ -124,11 +127,100 @@ SELECT n.workspace_id, m.user_id, n.id, coalesce(n.position, ''), now()
    AND public.can_access('note', n.id, 'view', m.user_id)
 ON CONFLICT (user_id, note_id) DO NOTHING;
 
+-- Someone who leaves a workspace takes their favorites with them (RLS would
+-- only hide the rows, and they'd resurface on a re-invite). Account erasure
+-- is covered by the auth.users cascade above.
+CREATE OR REPLACE FUNCTION public.note_favorites__member_removed()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  DELETE FROM public.note_favorites
+   WHERE workspace_id = OLD.workspace_id AND user_id = OLD.user_id;
+  RETURN OLD;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.note_favorites__member_removed() FROM PUBLIC, anon, authenticated;
+
+DROP TRIGGER IF EXISTS note_favorites_member_removed ON public.workspace_members;
+CREATE TRIGGER note_favorites_member_removed
+  AFTER DELETE ON public.workspace_members
+  FOR EACH ROW EXECUTE FUNCTION public.note_favorites__member_removed();
+
 -- ── 3. Ops ───────────────────────────────────────────────────────────────────
 
+-- A sub-note that follows its parent's sharing (`inherit`) has nothing to
+-- follow once it becomes a root: can_access stops at a parentless inherit note
+-- and only its creator and direct grants count, so everyone who reached it
+-- through an ancestor would lose it. Before re-rooting, freeze what the chain
+-- gave: copy each walked ancestor's member/workspace grants (highest level
+-- wins) and give each walked ancestor's creator `full` (can_access ranks a
+-- creator at every level it walks), then make the note `custom`. Public links
+-- are not copied: a published ancestor doesn't publish a filed-away child.
+CREATE OR REPLACE FUNCTION public.notes__keep_access_on_reroot(
+  p_workspace_id uuid,
+  p_note_id uuid
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_self_creator uuid;
+  v_id uuid;
+  v_parent uuid;
+  v_mode text;
+  v_creator uuid;
+  v_guard int := 0;
+BEGIN
+  SELECT parent_id, created_by INTO v_id, v_self_creator
+    FROM public.notes WHERE id = p_note_id AND workspace_id = p_workspace_id;
+  IF NOT FOUND THEN RETURN; END IF;
+
+  WHILE v_id IS NOT NULL AND v_guard < 100 LOOP
+    v_guard := v_guard + 1;
+    SELECT parent_id, coalesce(share_mode, 'custom'), created_by
+      INTO v_parent, v_mode, v_creator
+      FROM public.notes WHERE id = v_id;
+    EXIT WHEN NOT FOUND;
+
+    INSERT INTO public.resource_grants
+      (workspace_id, resource_type, resource_id, subject_type, subject_id, level, created_by)
+    SELECT p_workspace_id, 'note', p_note_id, g.subject_type, g.subject_id, g.level,
+           public.perm_actor_id()
+      FROM public.resource_grants g
+     WHERE g.resource_type = 'note' AND g.resource_id = v_id
+       AND g.subject_type IN ('member', 'workspace')
+    ON CONFLICT (resource_type, resource_id, subject_type, subject_key) DO UPDATE
+      SET level = CASE
+        WHEN public.grant_level_rank(EXCLUDED.level) > public.grant_level_rank(public.resource_grants.level)
+        THEN EXCLUDED.level ELSE public.resource_grants.level END;
+
+    IF v_creator IS NOT NULL AND v_creator IS DISTINCT FROM v_self_creator THEN
+      INSERT INTO public.resource_grants
+        (workspace_id, resource_type, resource_id, subject_type, subject_id, level, created_by)
+      VALUES (p_workspace_id, 'note', p_note_id, 'member', v_creator, 'full', public.perm_actor_id())
+      ON CONFLICT (resource_type, resource_id, subject_type, subject_key) DO UPDATE
+        SET level = 'full';
+    END IF;
+
+    EXIT WHEN v_mode IS DISTINCT FROM 'inherit' OR v_parent IS NULL;
+    v_id := v_parent;
+  END LOOP;
+
+  UPDATE public.notes SET share_mode = 'custom' WHERE id = p_note_id;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.notes__keep_access_on_reroot(uuid, uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.notes__keep_access_on_reroot(uuid, uuid) TO service_role;
+
 -- Move a note between the Inbox and Pages. Filing INTO the Inbox re-roots a
--- nested note (the Inbox only holds roots); filing out keeps the note where it
--- is in the tree. Attributed: filing is a move.
+-- nested note (the Inbox only holds roots) without changing who can open it;
+-- filing out keeps the note where it is in the tree. Attributed: filing is a
+-- move.
 CREATE OR REPLACE FUNCTION public.notes_op_file(
   p_workspace_id uuid,
   p_note_id uuid,
@@ -151,6 +243,11 @@ BEGIN
   n := public.notes_op__guard_note(p_workspace_id, p_note_id);
   v_was_inbox := n.in_inbox;
   v_old_parent := n.parent_id;
+
+  -- Re-rooting an inherit sub-note keeps everyone's access (see the helper).
+  IF p_in_inbox AND n.parent_id IS NOT NULL AND coalesce(n.share_mode, 'custom') = 'inherit' THEN
+    PERFORM public.notes__keep_access_on_reroot(p_workspace_id, n.id);
+  END IF;
 
   UPDATE public.notes
      SET parent_id = CASE WHEN p_in_inbox THEN NULL ELSE parent_id END,
@@ -194,7 +291,7 @@ BEGIN
   IF v_user IS NULL THEN
     RAISE EXCEPTION 'Sign in to keep favorites.';
   END IF;
-  IF public.notes_module_permission(p_workspace_id) NOT IN ('view', 'edit', 'admin') THEN
+  IF coalesce(public.notes_module_permission(p_workspace_id), 'none') NOT IN ('view', 'edit', 'admin') THEN
     RAISE EXCEPTION 'You do not have access to notes in this workspace.';
   END IF;
 
@@ -274,6 +371,9 @@ $$;
 -- duplicate: the copy stays in its source's section (a duplicated page is a
 -- page, not a fresh capture) and is attributed to the actor, so an API key's
 -- duplicate is owned by the key's creator like every other key write.
+-- Rebuilt from PROD's body, not the repo's 20260703 one: prod carries
+-- 20261008130000_definer_reads_item_visibility (on `maciej`, applied
+-- 2026-10-08), which added the can-open check below. Keep it.
 CREATE OR REPLACE FUNCTION public.notes_op_duplicate(
   p_workspace_id uuid,
   p_source_note_id uuid,
@@ -288,6 +388,13 @@ DECLARE
   src public.notes;
   n public.notes;
 BEGIN
+  -- The copy carries the whole note, so only from a note the caller can open.
+  -- Checked before the guard reads (and locks) the row, so a hidden note gets
+  -- the same answer as a missing one, trashed or not.
+  PERFORM public.notes_op__guard(p_workspace_id);
+  IF NOT coalesce(public.can_access('note', p_source_note_id, 'view'), false) THEN
+    RAISE EXCEPTION 'Note not found in this workspace.';
+  END IF;
   src := public.notes_op__guard_note(p_workspace_id, p_source_note_id);
   INSERT INTO public.notes
     (workspace_id, created_by, parent_id, title, icon, kind, position,

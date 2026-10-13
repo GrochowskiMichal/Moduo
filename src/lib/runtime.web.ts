@@ -73,6 +73,7 @@ import {
 } from "../features/tasks/model";
 import { toMemberPerm, toMemberRole } from "../features/workspaces/workspace-mappers";
 import { clearIgnoredAuthLink, SUPABASE_AUTH_OPTIONS } from "./auth-url";
+import { isMissingTableError, selectFirstDeployedTier } from "./deploy-tiers";
 import type { EntityLink, EntityRecord } from "./entity-links";
 import { collectTruncations, READ_CAPS, readPaged, type Truncation } from "./paged-select";
 import {
@@ -935,24 +936,14 @@ export const webRuntime: ModuoRuntime = {
               .or(`deleted_at.is.null,deleted_at.gt.${cutoff}`),
           order: (q) => q.order("position").order("id"),
         });
-      let res = await query(NR1_COLS);
-      if (res.error?.code === "42703") res = await query(V2_COLS);
-      if (!res.error) {
-        return {
-          notes: mapKnownRows(res.rows, mapNoteRow),
-          degraded: false,
-          truncated: collectTruncations(res.truncation),
-        };
-      }
+      const { res, tier } = await selectFirstDeployedTier([NR1_COLS, V2_COLS, LEGACY_COLS], query);
       // Degrade ONLY on the deploy gap (missing v2 columns = 42703). An
       // outage/auth error must surface as an error, not an empty module.
-      if (res.error.code !== "42703") throw new Error(res.error.message);
-      const legacy = await query(LEGACY_COLS);
-      if (legacy.error) throw new Error(legacy.error.message);
+      if (res.error) throw new Error(res.error.message);
       return {
-        notes: mapKnownRows(legacy.rows, mapNoteRow),
-        degraded: true,
-        truncated: collectTruncations(legacy.truncation),
+        notes: mapKnownRows(res.rows, mapNoteRow),
+        degraded: tier === 2,
+        truncated: collectTruncations(res.truncation),
       };
     },
 
@@ -1059,7 +1050,7 @@ export const webRuntime: ModuoRuntime = {
         .order("created_at");
       if (error) {
         // Deploy gap (table not created yet) → no favorites, never a wall.
-        if (error.code === "42P01" || error.code === "PGRST205") return [];
+        if (isMissingTableError(error)) return [];
         throw new Error(error.message);
       }
       return mapKnownRows(data ?? [], (raw) => {
@@ -1495,7 +1486,7 @@ export const webRuntime: ModuoRuntime = {
       // The habits table is deploy-gated — a missing relation degrades to [] (a
       // widget must never wall), like notesV2.recent's 42703 guard.
       if (error) {
-        if (error.code === "42P01" || error.code === "PGRST205") return [];
+        if (isMissingTableError(error)) return [];
         throw new Error(error.message);
       }
       return mapKnownRows(data, mapHabitRow);

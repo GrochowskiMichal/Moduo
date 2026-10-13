@@ -408,6 +408,7 @@ The core (NR-1–NR-7, NR-12) never cuts.
 
   `routes/pages/notes-page.tsx` becomes a thin switch, and the classic page moves to `notes-classic-page.tsx` unchanged.
 - **Behaviour:** everything under §Layout, §Sidebar and §Capture above, plus §Rollout's switch buttons.
+- **Sharing on re-root:** `notes_op_file(inInbox: true)` re-roots a nested note exactly like `notes_op_move` to the top level, so an `inherit` sub-note becomes private. Filing a nested note into Inbox must therefore show the same "Keep current access / Match the new parent" dialog as a drag to the top level, and run the same follow-up. The server stays consistent with move and does not decide this (found in NR-1 review).
 - **The editor column:** mounts today's `NoteEditor` unchanged in the `--width-prose-max` column. The meta line arrives in NR-3.
 - **Right panel:** today's variants, lifted. Closed by default, with the open variant and state persisted through the existing `panel-prefs.ts`.
 - **States:**
