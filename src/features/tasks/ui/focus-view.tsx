@@ -125,13 +125,23 @@ export function FocusView({
 
   // The panel follows Now (its Details), until you open something else: a row
   // in Up next or a scheduled task. A subtask stacks on top instead (65a).
+  // Opening Focus shows Now, unless the task already open is lined up here (a
+  // link to it); a task opened in another view doesn't follow you in.
   const shownNowRef = useRef<string | null>(null);
+  const queuedRef = useRef(api.queuedTaskIds);
+  useLayoutEffect(() => {
+    queuedRef.current = api.queuedTaskIds;
+  });
   useEffect(() => {
     const prev = shownNowRef.current;
     const next = now?.id ?? null;
     shownNowRef.current = next;
     if (!next || next.startsWith("tmp-")) return;
-    if (selectedTaskId === null || selectedTaskId === prev) onSelectTask(next);
+    const keep =
+      selectedTaskId !== null &&
+      selectedTaskId !== prev &&
+      (prev !== null || queuedRef.current.has(selectedTaskId));
+    if (!keep) onSelectTask(next);
   }, [now?.id, selectedTaskId, onSelectTask]);
 
   // ── the session's verbs (Start · Pause · Done · Stop) ──────────────────────
