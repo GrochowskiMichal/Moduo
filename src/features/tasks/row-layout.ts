@@ -116,6 +116,9 @@ export type RowColumnsContext = {
   taskKey?: string | null;
   /** Waiting on someone or something (TV-D10). */
   isWaiting?: (taskId: string) => boolean;
+  /** The view words a row's date its own way, dateless rows too (a snoozed
+   *  task's "until Fri", TV-U15). */
+  hasWhen?: (task: Task) => boolean;
 };
 
 /**
@@ -133,7 +136,10 @@ export function rowColumns(tasks: readonly Task[], ctx: RowColumnsContext): RowC
   return {
     priority: on.has("priority") && any((t) => t.priority !== null),
     energy: on.has("energy") && any((t) => t.energyLevel !== null),
-    date: !detailed && on.has("date") && any((t) => t.scheduledAt !== null || t.dueDate !== null),
+    date:
+      !detailed &&
+      on.has("date") &&
+      any((t) => t.scheduledAt !== null || t.dueDate !== null || (ctx.hasWhen?.(t) ?? false)),
     assignee,
     // Done and archived tasks can't be queued, so they never carry the mark.
     // Read-only, the mark only shows what someone has queued.

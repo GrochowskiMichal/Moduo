@@ -54,6 +54,8 @@ export type PillValues = {
   waitingOn: string[];
   /** The status a List group's "+" opened it with (TV-U10); null: To do. */
   status?: TaskStatusCategory | null;
+  /** A Board column's own status name (TV-U11), for the chip. */
+  statusName?: string | null;
 };
 
 /** A hand pick, by field. */
@@ -131,7 +133,9 @@ export function CapturePills({
     someoneElse || team ? (
       <span className="flex min-w-0 items-center gap-1.5">
         {someoneElse ? <PersonAvatar name={nameOf(people, someoneElse)} id={someoneElse} /> : null}
-        {team ? <TeamMark name={team.name} id={team.id} letters={team.mark || null} /> : null}
+        {team ? (
+          <TeamMark name={team.name} id={team.id} letters={team.mark || null} color={team.color} />
+        ) : null}
         <span className="truncate">
           {someoneElse
             ? team
@@ -194,7 +198,7 @@ export function CapturePills({
                       onChange({ field: "team", value: values.teamId === t.id ? null : t.id })
                     }
                   >
-                    <TeamMark name={t.name} id={t.id} letters={t.mark || null} />
+                    <TeamMark name={t.name} id={t.id} letters={t.mark || null} color={t.color} />
                     <span className="truncate">{t.name}</span>
                     {values.teamId === t.id ? <Check className="ms-auto" aria-hidden /> : null}
                   </DropdownMenuItem>
@@ -332,11 +336,11 @@ function MoreChips({
 }) {
   const chips: Array<{ key: string; icon: typeof Bell; label: string; clear: () => void }> = [];
   // A status set by a List group's "+" is said out loud, and × drops it.
-  if (values.status && values.status !== "todo")
+  if (values.status && (values.status !== "todo" || values.statusName))
     chips.push({
       key: "status",
       icon: CircleDot,
-      label: CATEGORY_LABELS[values.status],
+      label: values.statusName ?? CATEGORY_LABELS[values.status],
       clear: () => onChange({ field: "status", value: null }),
     });
   if (values.scheduledAt)

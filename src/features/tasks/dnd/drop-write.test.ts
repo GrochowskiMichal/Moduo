@@ -68,6 +68,16 @@ describe("undoWrite — Undo never overwrites a newer change", () => {
     });
   });
 
+  it("puts a status back by id, even within one category (In progress → In review, TV-U11)", () => {
+    const before = { ...base, status: "in_progress" as const, statusId: "s-doing" };
+    const w = { taskId: "t", status: "in_progress" as const, statusId: "s-review" };
+    const saved = { ...before, statusId: "s-review" };
+    expect(undoWrite({ write: w, before, after: saved, current: saved })).toEqual({
+      write: { taskId: "t", status: "in_progress", statusId: "s-doing" },
+      kept: [],
+    });
+  });
+
   it("restores a cleared parent and an assignee", () => {
     const before = { ...base, parentId: "p", assigneeId: "u1" };
     const w = { taskId: "t", parentId: null, assigneeId: null };

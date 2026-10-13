@@ -85,6 +85,7 @@ describe("Filter dimensions", () => {
   it("offers every §7 dimension; yes/no ones take one value under 'is'", () => {
     expect(TASK_FILTER_DIMENSIONS).toEqual([
       "assignee",
+      "team",
       "creator",
       "tag",
       "status",
@@ -100,6 +101,15 @@ describe("Filter dimensions", () => {
     ]);
     expect(taskFilterShape("blocked")).toMatchObject({ operators: ["is"], multiple: false });
     expect(taskFilterShape("tag").operators).toBeUndefined();
+  });
+
+  it("Team (TV-D13): a team's tasks, No team", () => {
+    const routed = task("r", { teamId: "team-ds" });
+    expect(taskFilterValues(routed, "team", ctx)).toEqual(["team-ds"]);
+    expect(taskFilterValues(task("n"), "team", ctx)).toEqual(["none"]);
+    const tasks = [routed, task("n")];
+    expect(filterTasks(tasks, [is("team", "team-ds")], ctx).map((t) => t.id)).toEqual(["r"]);
+    expect(filterTasks(tasks, [is("team", "none")], ctx).map((t) => t.id)).toEqual(["n"]);
   });
 
   it("Assignee: a member, Unassigned, is not, any of", () => {

@@ -567,7 +567,11 @@ function validDate(iso: string | null): Date | null {
  */
 export function showBucketPill(scope: string, groupBy: GroupBy): boolean {
   const crossBucket =
-    scope === "all" || scope === "mine" || scope === "today" || scope === "upcoming";
+    scope === "all" ||
+    scope === "mine" ||
+    scope === "today" ||
+    scope === "upcoming" ||
+    scope === "wontdo";
   return crossBucket && groupBy !== "bucket";
 }
 
@@ -577,7 +581,7 @@ export function showBucketPill(scope: string, groupBy: GroupBy): boolean {
  * ordered line-up, never grouped.
  */
 export function groupsByBucket(scope: string): boolean {
-  return scope === "all" || scope === "mine";
+  return scope === "all" || scope === "mine" || scope === "wontdo";
 }
 
 /** The rail's scopes that aren't one project (see `bucket-rail.tsx`). */
@@ -587,6 +591,7 @@ const NON_PROJECT_SCOPES: ReadonlySet<string> = new Set([
   "today",
   "inbox",
   "upcoming",
+  "wontdo",
   "archived",
   "trash",
 ]);

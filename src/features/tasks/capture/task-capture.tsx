@@ -206,6 +206,10 @@ export function TaskCaptureBody({
           ...(seed.teamId ? { teamId: seed.teamId } : {}),
           ...(seed.dueDay ? { dueDay: seed.dueDay } : {}),
           ...(seed.status ? { status: seed.status } : {}),
+          // A Board column's own status (TV-U11) rides with its category.
+          ...(seed.status && seed.statusId
+            ? { statusId: seed.statusId, statusName: seed.statusName ?? null }
+            : {}),
           tags: (seed.tagIds ?? []).map((id) => ({ id, name: "" })),
         },
       };
@@ -345,7 +349,7 @@ export function TaskCaptureBody({
       }
       if (token.kind === "team" && !token.label) {
         const t = teams.find((x) => x.id === token.teamId);
-        return t ? { ...token, label: t.name, letters: t.mark || null } : null;
+        return t ? { ...token, label: t.name, letters: t.mark || null, color: t.color } : null;
       }
       if (token.kind === "tag" && token.tagId && !token.label) {
         const t = tags.find((x) => x.id === token.tagId);
@@ -401,6 +405,7 @@ export function TaskCaptureBody({
     tags: tagValues,
     waitingOn: fields.waitingOn,
     status: fields.status ?? null,
+    statusName: fields.statusId ? (fields.statusName ?? null) : null,
   };
 
   // ── where it goes ─────────────────────────────────────────────────────────
@@ -536,6 +541,7 @@ export function TaskCaptureBody({
             teamId: candidate.teamId,
             label: candidate.label,
             letters: candidate.letters,
+            color: candidate.color ?? null,
           };
         case "entity":
           return candidate.ref.type === "bucket"
@@ -636,8 +642,9 @@ export function TaskCaptureBody({
         setFields((f) => ({ ...f, remindAt: change.value }));
         return;
       case "status":
-        // A List group's "+" set it (TV-U10); its chip's × clears it.
-        setFields((f) => ({ ...f, status: change.value }));
+        // A List group's "+" set it (TV-U10); its chip's × clears it, with
+        // a Board column's own status (TV-U11).
+        setFields((f) => ({ ...f, status: change.value, statusId: null, statusName: null }));
         return;
       case "tag": {
         const { tag, on } = change;
@@ -697,7 +704,12 @@ export function TaskCaptureBody({
   const lineContext = useMemo(
     () => ({
       people: menuPeople.map((p) => ({ userId: p.userId, name: p.name })),
-      teams: teams.map((t) => ({ id: t.id, name: t.name, letters: t.mark || null })),
+      teams: teams.map((t) => ({
+        id: t.id,
+        name: t.name,
+        letters: t.mark || null,
+        color: t.color,
+      })),
       tags: tags.map((t) => ({ id: t.id, name: t.name, color: t.color })),
     }),
     [menuPeople, teams, tags],
@@ -1007,6 +1019,16 @@ export function TaskCaptureBody({
       remindAt: values.remindAt,
       waitingOn: values.waitingOn,
       status: values.status,
+      // A Board column's own status belongs to the project it was opened
+      // in: filed elsewhere, the task takes that project's first of the
+      // category (TV-U11).
+      // (Your Inbox is "no project" on both sides: the default set's.)
+      statusId:
+        values.status &&
+        fields.statusId &&
+        (projectId ?? null) === (context?.destination?.projectId ?? null)
+          ? fields.statusId
+          : null,
     };
     const lines = subtasks.map((s) => s.trim()).filter(Boolean);
     const childPositions = positionsAfter(lines.length, []);

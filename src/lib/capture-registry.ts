@@ -45,6 +45,10 @@ export type CaptureRequest = {
     teamId?: string | null;
     dueDay?: string | null;
     status?: TaskStatusCategory | null;
+    /** A Board column's own status (TV-U11): applies with `status` while
+     *  the task files into `destination`'s project; `statusName` names it. */
+    statusId?: string | null;
+    statusName?: string | null;
   };
 };
 

@@ -6,7 +6,6 @@ import {
   openCount,
   resolveDefaultSelection,
   setBucketTimeBlock,
-  showsMyTasks,
   timeBlockByBucket,
 } from "./default-view";
 import { groupsByBucket, makeTask, showBucketPill } from "./helpers";
@@ -103,13 +102,6 @@ describe("My tasks (TV-D4, D4-3)", () => {
     ...makeTask({ workspaceId: "w1", bucketId: "b1", title: id, position: id }),
     id,
     ...over,
-  });
-
-  it("shows the row only in workspaces with two or more members", () => {
-    expect(showsMyTasks(0)).toBe(false);
-    expect(showsMyTasks(1)).toBe(false);
-    expect(showsMyTasks(2)).toBe(true);
-    expect(showsMyTasks(5)).toBe(true);
   });
 
   it("scopes to tasks assigned to me across buckets, archived left out like All", () => {

@@ -20,6 +20,10 @@ export type GroupAdd = {
     /** YYYY-MM-DD. */
     dueDay?: string | null;
     status?: TaskStatusCategory | null;
+    /** One project's own status (a Board column, TV-U11): it rides with
+     *  `status` and applies only while the task files into that project. */
+    statusId?: string | null;
+    statusName?: string | null;
   };
 };
 
@@ -53,7 +57,8 @@ export function groupAddState(input: {
   inboxId: string | null;
 }): GroupAddState {
   const { scope, groupBy, key, canEdit, today, inboxId } = input;
-  if (!canEdit || groupBy === "none" || scope === "today") return NONE;
+  // Won't do lists finished decisions: a new task never starts there.
+  if (!canEdit || groupBy === "none" || scope === "today" || scope === "wontdo") return NONE;
   if (scope === "upcoming" && groupBy !== "date") return NONE;
 
   const project = isProjectScope(scope) && scope !== inboxId ? scope : undefined;

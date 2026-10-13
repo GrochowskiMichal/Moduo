@@ -301,16 +301,16 @@ describe("the comp layout and property rule C (U3-1)", () => {
   });
 });
 
-describe("the queue toggle lives in the header (U3-3)", () => {
-  it("has one queue control, in the header beside copy link and ⋯; no full-width button", () => {
+describe("the Focus toggle lives in the header (U3-3; call 61 renamed the Queue)", () => {
+  it("has one Focus toggle, in the header beside copy link and ⋯; no full-width button", () => {
     const a = api(task());
     renderPanel(task(), a);
-    const queue = screen.getAllByRole("button", { name: /queue/i });
+    const queue = screen.getAllByRole("button", { name: /to Focus|in Focus/i });
     expect(queue).toHaveLength(1);
-    expect(queue[0].textContent).toBe("Queue");
+    expect(queue[0].getAttribute("aria-label")).toBe("Add to Focus");
     expect(queue[0].getAttribute("aria-pressed")).toBe("false");
     expect(screen.queryByText("Commit to Queue")).toBeNull();
-    expect(screen.queryByText("Add to queue")).toBeNull();
+    expect(screen.queryByRole("button", { name: /queue/i })).toBeNull();
     const header = queue[0].parentElement as HTMLElement;
     expect(within(header).getByRole("button", { name: "More actions" })).toBeTruthy();
     expect(within(header).getByRole("navigation", { name: "Location" }).textContent).toContain(
@@ -320,14 +320,21 @@ describe("the queue toggle lives in the header (U3-3)", () => {
     expect(a.toggleQueue).toHaveBeenCalledWith("t1");
   });
 
-  it("reads 'In queue' once queued, and offers nothing for a done task", () => {
+  it("reads 'In Focus' once queued, and offers nothing for a done task", () => {
     renderPanel(task(), api(task(), { queuedTaskIds: new Set(["t1"]) }));
-    const toggle = screen.getByRole("button", { name: "In queue" });
+    const toggle = screen.getByRole("button", { name: "In Focus" });
     expect(toggle.getAttribute("aria-pressed")).toBe("true");
     cleanup();
     const done = task({ status: "done" });
     renderPanel(done, api(done));
-    expect(screen.queryByRole("button", { name: /queue/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Focus/ })).toBeNull();
+  });
+
+  it("▶ is Focus on this (call 31): on top of Up next, with the clock", () => {
+    const a = api(task(), { focusOnTask: rs.fn(() => true) });
+    renderPanel(task(), a);
+    fireEvent.click(screen.getByRole("button", { name: "Focus on this" }));
+    expect(a.focusOnTask).toHaveBeenCalledWith("t1");
   });
 });
 

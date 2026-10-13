@@ -19,6 +19,7 @@ rs.mock("../assignees", () => ({
 }));
 
 import { TooltipProvider } from "../../../components/ui/tooltip";
+import { setRunClaims } from "../../focus/claims";
 import type { Bucket, Task } from "../model";
 import { TaskListView } from "./task-list-view";
 
@@ -161,6 +162,19 @@ describe("one edit redraws one row (TV-D11b)", () => {
     expect(screen.getByText("Renamed")).toBeTruthy();
     // The list itself, then one row: the row and its queue mark.
     expect(draws.n).toBe(LIST_DRAW + ROW_DRAWS);
+  });
+
+  it("a claims poll redraws only the mark of the task someone is on (TV-F7)", () => {
+    renderList();
+    draws.n = 0;
+    act(() => setRunClaims("w", new Map([["7", ["u2"]]])));
+    // Row 7's Focus mark only: no list, no other row.
+    expect(draws.n).toBe(1);
+    draws.n = 0;
+    // The next poll answers the same: a new map, nothing redraws.
+    act(() => setRunClaims("w", new Map([["7", ["u2"]]])));
+    expect(draws.n).toBe(0);
+    act(() => setRunClaims(null, new Map()));
   });
 
   it("a new module API with nothing changed for a row redraws no row", () => {

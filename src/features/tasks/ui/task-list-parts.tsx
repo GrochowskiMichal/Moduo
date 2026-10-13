@@ -7,6 +7,7 @@
 import { ChevronRight, MoreHorizontal, Plus } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { TeamMark } from "../../../components/ui/avatar";
+import { Button } from "../../../components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,7 +33,8 @@ import { StatusIcon } from "./status-icon";
 export type GroupMarkContext = {
   bucketColor: (bucketId: string) => string | null;
   assignee: (userId: string) => Assignee | null;
-  teamName: (teamId: string) => string | null;
+  /** A team's name, letters and colour (its mark, TV-D13). */
+  team: (teamId: string) => { name: string; mark: string; color: string | null } | null;
 };
 
 /** Each kind of group leads with its mark (research §2): glyph, dot, avatar. */
@@ -54,8 +56,10 @@ export function groupMark(groupBy: GroupBy, key: string, ctx: GroupMarkContext):
       return <AssigneeAvatar assignee={ctx.assignee(key)} assigneeId={key} size="icon" />;
     }
     case "team": {
-      const name = key === "none" ? null : ctx.teamName(key);
-      return name ? <TeamMark name={name} id={key} /> : null;
+      const team = key === "none" ? null : ctx.team(key);
+      return team ? (
+        <TeamMark name={team.name} id={key} letters={team.mark} color={team.color} />
+      ) : null;
     }
     default:
       return null;
@@ -78,11 +82,12 @@ export function ListGroupHeader({
   addState,
   onAdd,
   section,
+  extraAction,
   className,
 }: {
   groupKey: string;
   label: string;
-  count: ReactNode;
+  count?: ReactNode;
   sub?: ReactNode;
   leading?: ReactNode;
   collapsed: boolean;
@@ -91,6 +96,8 @@ export function ListGroupHeader({
   onAdd: (add: GroupAdd) => void;
   /** A section's own edits (Section groups inside an editable project). */
   section?: { onRename: (name: string) => void; onDelete: () => void } | null;
+  /** Something the header always offers before its "+" (Upcoming's Earlier: "Move all…"). */
+  extraAction?: ReactNode;
   className?: string;
 }) {
   const [renaming, setRenaming] = useState(false);
@@ -147,8 +154,49 @@ export function ListGroupHeader({
           </DropdownMenu>
         ) : undefined
       }
-      persistentActions={add}
+      persistentActions={
+        extraAction ? (
+          <>
+            {extraAction}
+            {add}
+          </>
+        ) : (
+          add
+        )
+      }
     />
+  );
+}
+
+/**
+ * The line under an extra group's first rows (My tasks' team block, research
+ * §8): "Show 3 more", then "Show fewer".
+ */
+export function ShowMoreLine({
+  count,
+  shown,
+  onToggle,
+}: {
+  count: number;
+  shown: boolean;
+  onToggle: () => void;
+}) {
+  if (count <= 0) return null;
+  return (
+    <div className="flex min-h-(--row-h-sm) items-center px-1">
+      <Button
+        variant="ghost"
+        size="sm"
+        aria-expanded={shown}
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggle();
+        }}
+        className="text-muted-foreground tabular-nums hover:text-foreground"
+      >
+        {shown ? "Show fewer" : `Show ${count} more`}
+      </Button>
+    </div>
   );
 }
 
@@ -228,7 +276,7 @@ export function AddSectionLine({ onAdd }: { onAdd: (name: string) => void }) {
 }
 
 /** A one-line name field: Enter saves, Esc or leaving it cancels an empty one. */
-function NameInput({
+export function NameInput({
   initial,
   label,
   placeholder,

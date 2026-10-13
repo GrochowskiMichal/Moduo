@@ -207,6 +207,23 @@ export function createTasksTemplates(
       return { ...t, body: templateBodyOf((data as { body?: unknown }).body, input.kind) };
     },
 
+    /**
+     * May you copy this project or task (Duplicate, Save as template)? Copying
+     * needs Edit on it (D15-11). A server before that rule answers yes (it
+     * decides on the copy itself).
+     */
+    async canCopyTemplateSource(input: { kind: TemplateKind; id: string }): Promise<boolean> {
+      const { data, error } = (await client.rpc("templates_can_copy", {
+        p_kind: input.kind,
+        p_id: input.id,
+      })) as Answer;
+      if (error) {
+        if (isMissingFunctionError(error, "templates_can_copy")) return true;
+        throw new Error(error.message ?? "Couldn't check access.");
+      }
+      return data === true;
+    },
+
     /** "Save as template" on a task: yours, not shared. */
     async saveTaskTemplate(input: {
       workspaceId: string;

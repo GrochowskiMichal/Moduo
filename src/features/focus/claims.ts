@@ -52,6 +52,7 @@ function emit(): void {
 
 /** Replace a workspace's claims (only while it's the one on screen). */
 export function setRunClaims(workspaceId: string | null, byTask: Map<string, string[]>): void {
+  if (workspaceId !== current.workspaceId) handedOut.clear();
   current = { workspaceId, byTask };
   emit();
 }
@@ -73,13 +74,33 @@ export function useRunClaims(workspaceId: string | null | undefined): Map<string
   return workspaceId && snap.workspaceId === workspaceId ? snap.byTask : EMPTY;
 }
 
-/** The teammates (user ids) on one task right now; empty when nobody is. */
+/** Each task's claim list as last handed out, so an unchanged one keeps its identity. */
+const handedOut = new Map<string, readonly string[]>();
+
+function claimFor(workspaceId: string | null | undefined, taskId: string | null | undefined) {
+  if (!workspaceId || !taskId || current.workspaceId !== workspaceId) return NOBODY;
+  const ids = current.byTask.get(taskId);
+  if (!ids || ids.length === 0) {
+    handedOut.delete(taskId);
+    return NOBODY;
+  }
+  const prev = handedOut.get(taskId);
+  if (prev && prev.length === ids.length && prev.every((id, i) => id === ids[i])) return prev;
+  handedOut.set(taskId, ids);
+  return ids;
+}
+
+/**
+ * The teammates (user ids) on one task right now; empty when nobody is. A row
+ * redraws only when its own task's claim changes, not on every poll (TV-F7:
+ * rows show "is on this", and the List's rows are memoised, TV-D11b).
+ */
 export function useTaskClaim(
   workspaceId: string | null | undefined,
   taskId: string | null | undefined,
 ): readonly string[] {
-  const byTask = useRunClaims(workspaceId);
-  return (taskId ? byTask.get(taskId) : undefined) ?? NOBODY;
+  const read = () => claimFor(workspaceId, taskId);
+  return useSyncExternalStore(subscribe, read, read);
 }
 
 /**

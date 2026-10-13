@@ -84,7 +84,13 @@ export function mentionEntries(
     out.push({ kind: "person", memberId: p.userId, label: personLabel(p), icon: null });
   }
   for (const t of ctx.teams.filter((t) => includesWord(t.name, query)).slice(0, 2)) {
-    out.push({ kind: "team", teamId: t.id, label: t.name, letters: t.mark || null });
+    out.push({
+      kind: "team",
+      teamId: t.id,
+      label: t.name,
+      letters: t.mark || null,
+      color: t.color,
+    });
   }
   const projects = ctx.projects.filter((b) => includesWord(b.name, query)).slice(0, 3);
   for (const b of projects) {

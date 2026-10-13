@@ -19,13 +19,16 @@ import {
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { LabelColor } from "../../../components/tag-colors";
+import { readLocalFocusPrefs } from "../../../lib/focus-prefs";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import type { ProjectFields } from "../../../lib/runtime.web.structure";
 import { isNetworkError } from "../../../lib/sync/network";
 import { useStoreSnapshot, useWorkspaceStore } from "../../../lib/sync/react";
 import type { OverlayChange, PendingWrite } from "../../../lib/sync/store";
-import { editableTaskFields } from "../../../lib/task-rows";
+import { dueOnToLocalInstant, editableTaskFields } from "../../../lib/task-rows";
 import { undoToast } from "../../../lib/undo-toast";
+import type { FocusTaskRef } from "../../focus/engine";
+import { focusOn } from "../../focus/timer";
 import {
   createOrAttachByName,
   deleteTag as deleteWorkspaceTag,
@@ -188,6 +191,9 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
   /** The rows as they are now, for a save or an Undo that runs later. */
   const tasksRef = useRef(allTasks);
   tasksRef.current = allTasks;
+  /** The projects (and my Inbox) I can see now, for an answer that arrives later. */
+  const bucketsRef = useRef(allBuckets);
+  bucketsRef.current = allBuckets;
   /** Your own reminders, for the "Restore the reminder?" offer (TV-D12). */
   const remindersRef = useRef(snap.reminders);
   remindersRef.current = snap.reminders;
@@ -611,7 +617,12 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         extra?: OverlayChange[];
         /** Rows the server drops with this op (queue rows of a closed task). */
         forget?: string[];
+        /** Tasks the answer took out of my sight (TV-D13: an unfiled task
+         *  handed into someone else's Inbox): dropped from the copy at once. */
+        leaves?: (saved: Task) => string[];
         offline?: { status: string; recurrence?: RecurrenceRule | null };
+        /** Once the server took it (a caller's own toast, say "Taken", TV-U15). */
+        onSaved?: (saved: Task) => void;
       } = {},
     ) => {
       if (!runtime || !workspaceId || !canEdit || !store) {
@@ -653,7 +664,10 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         .then((saved) => {
           write.settle({ tasks: [saved] });
           if (opts.forget?.length) store.forget("queue", opts.forget);
+          const gone = opts.leaves?.(saved);
+          if (gone?.length) store.forget("tasks", gone);
           setActivityStamp((s) => s + 1);
+          opts.onSaved?.(saved);
         })
         .catch((e) => {
           if (queueing && isNetworkError(e)) {
@@ -675,6 +689,25 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         });
     },
     [runtime, workspaceId, canEdit, store, backlogToTodo, refused, archivedBlocked],
+  );
+
+  /**
+   * Take a team's unclaimed task (TV-D13, "Take it" on My tasks' team block):
+   * shown as yours at once; the server checks you're in its team and can edit
+   * it, and refuses one somebody took first (the copy goes back and says so).
+   */
+  const claimTask = useCallback(
+    (id: string, onClaimed?: () => void) => {
+      if (!userId) return;
+      applyOp(
+        id,
+        { assigneeId: userId },
+        () => runtime!.tasks.opClaim({ workspaceId: workspaceId!, taskId: id }),
+        // Only a claim the server took says so (TV-U15's "Taken" toast).
+        { onSaved: onClaimed ? () => onClaimed() : undefined },
+      );
+    },
+    [applyOp, runtime, workspaceId, userId],
   );
 
   /** Fetch a task's quiet activity trail (newest first). */
@@ -895,6 +928,46 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       else addToQueue(id);
     },
     [queuedTaskIds, removeFromQueue, addToQueue],
+  );
+
+  /** What the one clock binds for a task here (title, project, workspace). */
+  const focusRefOf = useCallback(
+    (taskId: string): FocusTaskRef | null => {
+      const task = tasksRef.current.find((t) => t.id === taskId);
+      if (!task || !workspaceId) return null;
+      const project =
+        task.bucketId === inbox?.id
+          ? "Inbox"
+          : (liveBuckets.find((b) => b.id === task.bucketId)?.name ?? null);
+      return { id: task.id, title: task.title || "Untitled", bucketName: project, workspaceId };
+    },
+    [workspaceId, inbox, liveBuckets],
+  );
+
+  /**
+   * "Focus on this" (⇧F, the row and panel menus, call 31): the task goes on
+   * top of my Up next and gets the one clock now. A session on moves to it with
+   * its rhythm; none starts one with my default Timer (Calendar's ▶ recipe,
+   * TV-F6). False when it can't: a viewer, a finished task, one still saving.
+   */
+  const focusOnTask = useCallback(
+    (id: string): boolean => {
+      if (!canEdit) {
+        toast.error(NO_EDIT);
+        return false;
+      }
+      if (isTempId(id)) {
+        toast.error(STILL_SAVING);
+        return false;
+      }
+      const task = liveTasks.find((t) => t.id === id);
+      const ref = focusRefOf(id);
+      if (!task || !ref || isClosedTask(task)) return false;
+      addToQueue(id, "top");
+      focusOn(ref, { timer: readLocalFocusPrefs().timer, resolveTask: focusRefOf });
+      return true;
+    },
+    [canEdit, liveTasks, focusRefOf, addToQueue],
   );
 
   /** Skip in Focus: the task goes to the end of my queue. Not a reschedule. */
@@ -1132,10 +1205,50 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       // any, saves as usual below.
       if (patch.assigneeId !== undefined) {
         const assigneeId = patch.assigneeId;
-        applyOp(id, { assigneeId }, () =>
-          runtime!.tasks.opAssign({ workspaceId: workspaceId!, taskId: id, assigneeId }),
-        );
         const { assigneeId: _assigned, ...rest } = patch;
+        // Someone else's unfiled task handed on into another Inbox (TV-D13,
+        // call 20) is out of my sight now: drop it and the steps that went
+        // with it, rather than keep them until the next access check.
+        const leaves = (saved: Task) =>
+          saved.bucketId !== existing.bucketId &&
+          !bucketsRef.current.some((b) => b.id === saved.bucketId) &&
+          saved.creatorId !== userId &&
+          saved.assigneeId !== userId
+            ? [
+                saved.id,
+                ...tasksRef.current
+                  .filter((t) => t.parentId === saved.id && t.bucketId === existing.bucketId)
+                  .map((t) => t.id),
+              ]
+            : [];
+        // An Inbox task assigned and edited in one gesture ("Assign to Mike ·
+        // in Bugs", 20a): the edit lands first, then the assignment, so a
+        // hand-over can't take the task away before the edit does.
+        const restFields = editableTaskFields(rest);
+        const inInbox =
+          bucketsRef.current.find((b) => b.id === existing.bucketId)?.isSystem === true;
+        if (inInbox && Object.keys(restFields).length > 0) {
+          applyOp(
+            id,
+            { ...restFields, assigneeId } as Partial<Task>,
+            async () => {
+              await runtime!.tasks.opUpdateTask({
+                workspaceId: workspaceId!,
+                taskId: id,
+                patch: restFields,
+              });
+              return runtime!.tasks.opAssign({ workspaceId: workspaceId!, taskId: id, assigneeId });
+            },
+            { leaves },
+          );
+          return;
+        }
+        applyOp(
+          id,
+          { assigneeId },
+          () => runtime!.tasks.opAssign({ workspaceId: workspaceId!, taskId: id, assigneeId }),
+          { leaves },
+        );
         // Without edit access applyOp has already said so; don't say it twice.
         if (Object.keys(rest).length === 0 || !canEdit || store?.isOffline()) return;
         patch = rest;
@@ -1271,6 +1384,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       editBlocked,
       refused,
       archivedBlocked,
+      userId,
     ],
   );
 
@@ -1849,6 +1963,25 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       toast(`Skipped — next: ${formatScheduled(scheduledAt)}`);
     },
     [bundle.tasks, applyOp, runtime, workspaceId, store],
+  );
+
+  /**
+   * "Move just this one" on a repeat (TV-D12's op; TV-U15's Upcoming drag and
+   * day keys): this cycle's due date or its work session's start moves, the
+   * other date by the same days, and the rule stays (the next cycle is back on
+   * the pattern). Shown at once; the server's row settles it.
+   */
+  const moveOccurrence = useCallback(
+    (id: string, to: { dueOn: string } | { startsAt: string }) => {
+      const optimistic: Partial<Task> =
+        "dueOn" in to
+          ? { dueOn: to.dueOn, dueDate: dueOnToLocalInstant(to.dueOn) }
+          : { scheduledAt: to.startsAt };
+      applyOp(id, optimistic, () =>
+        runtime!.tasks.opMoveOccurrence({ workspaceId: workspaceId!, taskId: id, ...to }),
+      );
+    },
+    [applyOp, runtime, workspaceId],
   );
 
   const deleteTask = useCallback(
@@ -3349,6 +3482,11 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     pendingSync: store ? snap.pending : 0,
     /** Done, Won't do and Backlog tasks have arrived (they load after the open ones). */
     restLoaded: !!store && snap.restLoaded,
+    /**
+     * A read reached the server this session (not just the device copy): what
+     * isn't here now is really gone (TV-U15's snoozes are forgotten only then).
+     */
+    reachedServer: !!store && snap.loadStamp > 0 && !snap.fromCache && !snap.offline,
     /** Live comments per task (TV-D11a; TV-D5's promised counts). */
     commentCounts: snap.commentCounts,
     /** Tasks with a capture or check-off waiting on this device (a row's clock). */
@@ -3406,6 +3544,8 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     createQueuedTask,
     captureToQueue,
     patchTask,
+    /** Take a team's unclaimed task (TV-D13); `unclaimedForMe` in teams.ts lists them. */
+    claimTask,
     toggleDone,
     markDone,
     archiveTask,
@@ -3421,10 +3561,15 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     unscheduleTask,
     scheduleTaskAt,
     toggleQueue,
+    focusOnTask,
+    /** What the one clock binds for a task here (Focus's Start and Done). */
+    focusRefOf,
     addToQueue,
     removeFromQueue,
     moveQueuedToEnd,
     skipOccurrence,
+    /** "Move just this one" on a repeat (TV-D12's op, TV-U15's Upcoming). */
+    moveOccurrence,
     reorderQueue,
     deleteTask,
     loadActivity,

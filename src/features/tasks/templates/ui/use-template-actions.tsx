@@ -20,12 +20,13 @@ import type { ModuoRuntime } from "../../../../lib/runtime.types";
 import type { WorkspaceStore } from "../../../../lib/sync/store";
 import { undoToast } from "../../../../lib/undo-toast";
 import type { Area, Bucket, Section, Task } from "../../model";
-import type { Template, TemplatePatchable, TemplateWithBody } from "../model";
+import type { Template, TemplateKind, TemplatePatchable, TemplateWithBody } from "../model";
 import { applyProjectTemplate, applyTaskTemplate, duplicateProject, newCopyId } from "../ops";
 import { forgetTemplate, rememberTemplate, useTemplates } from "../templates-store";
 import { CopyProjectDialog, SaveTemplateDialog, UseTaskTemplateDialog } from "./template-dialogs";
 import { TemplateEditor } from "./template-editor";
 import { TemplatesView } from "./templates-view";
+import { useCopyAccess } from "./use-copy-access";
 
 type Dialogs =
   | { kind: "save-task"; task: Task }
@@ -92,6 +93,25 @@ export function useTemplateActions({
     setDialog(null);
     attemptId.current = null;
   }, []);
+
+  // May you copy what the open dialog copies (Edit on it, D15-11)?
+  const copyKind: TemplateKind | null =
+    dialog?.kind === "save-task"
+      ? "task"
+      : dialog?.kind === "save-project" || dialog?.kind === "duplicate"
+        ? "project"
+        : null;
+  const copyId =
+    dialog?.kind === "save-task"
+      ? dialog.task.id
+      : dialog?.kind === "save-project" || dialog?.kind === "duplicate"
+        ? dialog.bucket.id
+        : null;
+  const copySource = useMemo(
+    () => (copyKind && copyId ? { kind: copyKind, id: copyId } : null),
+    [copyKind, copyId],
+  );
+  const copyAccess = useCopyAccess(runtime, copySource);
 
   // ── saving ──────────────────────────────────────────────────────────────
   const saveAs = async (
@@ -246,6 +266,7 @@ export function useTemplateActions({
               ? dialog.bucket.name
               : ""
         }
+        access={copyAccess}
         onSave={(name) => {
           if (dialog?.kind === "save-task") void saveAs({ kind: "task", id: dialog.task.id }, name);
           if (dialog?.kind === "save-project")
@@ -258,6 +279,7 @@ export function useTemplateActions({
         mode="duplicate"
         source={duplicateSource}
         busy={busy}
+        access={copyAccess}
         onCreate={(form) => {
           if (dialog?.kind !== "duplicate" || !deps) return;
           const bucket = dialog.bucket;

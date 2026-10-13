@@ -198,6 +198,24 @@ export function filterPeople(people: CommentPerson[], query: string, limit = 6):
   return [...starts, ...contains].slice(0, limit);
 }
 
+/** Teams whose name matches the typed query (TV-D13: `@Design` in a comment). */
+export function filterTeams<T extends { name: string }>(
+  teams: readonly T[],
+  query: string,
+  limit = 3,
+): T[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return teams.slice(0, limit);
+  const starts: T[] = [];
+  const contains: T[] = [];
+  for (const t of teams) {
+    const name = t.name.toLowerCase();
+    if (name.split(/\s+/).some((w) => w.startsWith(q))) starts.push(t);
+    else if (name.includes(q)) contains.push(t);
+  }
+  return [...starts, ...contains].slice(0, limit);
+}
+
 export type CommentSegment = { text: string; mention: boolean };
 
 /**

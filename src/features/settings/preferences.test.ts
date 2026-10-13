@@ -34,12 +34,14 @@ describe("DEFAULT_PREFERENCES", () => {
         completed: true,
         dueFollowUp: true,
         waiting: true,
+        teams: true,
         overdueTasks: false,
         storage: true,
       },
       confirmBeforeQuit: false,
       keepInMenuBar: true,
       tasksSidebar: { hidden: [], pinned: {} },
+      tasksInbox: { snoozed: {} },
     });
   });
 });
@@ -76,12 +78,14 @@ describe("sanitizePreferences", () => {
         completed: true,
         dueFollowUp: false,
         waiting: true,
+        teams: true,
         overdueTasks: false,
         storage: true,
       },
       confirmBeforeQuit: true,
       keepInMenuBar: true,
       tasksSidebar: { hidden: [], pinned: {} },
+      tasksInbox: { snoozed: {} },
     });
   });
 
@@ -114,6 +118,7 @@ describe("sanitizePreferences", () => {
       dueFollowUp: true,
       // A saved `unblocked: false` (before TV-D12) carries over to `waiting`.
       waiting: false,
+      teams: true,
       overdueTasks: false,
       storage: true,
     });
@@ -144,6 +149,32 @@ describe("sanitizePreferences", () => {
     });
   });
 
+  it("keeps snoozed Inbox tasks, dropping bad entries (TV-U15)", () => {
+    expect(
+      sanitizePreferences({
+        tasksInbox: {
+          snoozed: {
+            ws1: {
+              t1: { until: "2026-10-20", stamp: "s#1" },
+              t2: { until: "next week" },
+              t3: { until: "2026-10-21" },
+              t4: null,
+            },
+            ws2: "nope",
+          },
+        },
+      }).tasksInbox,
+    ).toEqual({
+      snoozed: {
+        ws1: {
+          t1: { until: "2026-10-20", stamp: "s#1" },
+          t3: { until: "2026-10-21", stamp: null },
+        },
+      },
+    });
+    expect(sanitizePreferences({ tasksInbox: "nope" }).tasksInbox).toEqual({ snoozed: {} });
+  });
+
   it("defaults confirmBeforeQuit false and coerces to boolean", () => {
     expect(sanitizePreferences({}).confirmBeforeQuit).toBe(false);
     expect(sanitizePreferences({ confirmBeforeQuit: true }).confirmBeforeQuit).toBe(true);
@@ -168,6 +199,11 @@ describe("notificationTypeForOp", () => {
     expect(notificationTypeForOp("tasks.reminder")).toBeNull();
     expect(notificationTypeForOp("attachments.storage_80")).toBe("storage");
     expect(notificationTypeForOp("attachments.storage_95")).toBe("storage");
+    // TV-D13: your team's mute; tasks back from someone who left are yours.
+    expect(notificationTypeForOp("tasks.routed")).toBe("teams");
+    expect(notificationTypeForOp("tasks.team_check_back")).toBe("teams");
+    expect(notificationTypeForOp("comments.team_mention")).toBe("teams");
+    expect(notificationTypeForOp("tasks.handed_back")).toBe("assigned");
   });
 
   it("returns null for ops outside the quiet set (legacy / future)", () => {
@@ -186,6 +222,7 @@ describe("isNotificationEnabled", () => {
       completed: false,
       dueFollowUp: true,
       waiting: false,
+      teams: false,
       overdueTasks: false,
       storage: false,
     };
@@ -216,6 +253,7 @@ describe("isNotificationEnabled", () => {
       completed: false,
       dueFollowUp: false,
       waiting: false,
+      teams: false,
       overdueTasks: false,
       storage: false,
     };

@@ -41,7 +41,17 @@
 - [ ] **Do:** Settings → Advanced → Export data → **Expect:** `tasks` carries `timeEntries` (yours, with days and notes). _(web)_
 
 ## Migrations / data
-- [ ] **Do:** `bun run db:test time_report` → **Expect:** 90 checks pass (logging, edits, give-backs, the read gate, the report's people and scopes, outsiders, zones, Time & region, erasure). `20261013200000` and `20261013201000` are on the local stack. _(local)_
+- [ ] **Do:** `bun run db:test time_report` → **Expect:** 93 checks pass (logging, edits, give-backs, the read gate, the report's people and scopes, outsiders, zones, Time & region, erasure). `20261013200000` and `20261013201000` are on the local stack. _(local)_
+
+## Polish later
+From the validator round (MINOR/NIT, screen side; not blocking):
+- The view's Print… layout stays mounted up to two minutes when the desktop's print dialog doesn't report closing; printing the report sheet in that window would print both.
+- Removing an entry reads your entries twice (the total's change reads them again).
+- Undo after removing a Focus entry logs it back as logged time (it loses its run and start).
+- Two projects you can't see show as two sections both called "Private project" in a whole-workspace report.
+- Chat's message rows are memoised: a Time & region change shows there at their next redraw.
+- `tasks_time_totals`' "since" share dates a logged entry at UTC midnight of its day (nothing passes `since` yet; TV-H1 will).
+- A very long report (thousands of entries) re-reads the server function per 1,000-row page (each page stops at its end); fine for a month, slow for a busy year.
 
 ## Known gaps / not-yet-testable
 - Times on screen are this device's clock; the saved zone is the clock your day runs on (repeats, reminders, due times, report days). When they differ, the travel prompt offers to line them up.

@@ -30,6 +30,7 @@ export type ListKeyAction =
   | "due"
   | "status"
   | "queue"
+  | "focus-on"
   | "expand"
   | "collapse"
   | "delete"
@@ -111,6 +112,8 @@ export function listKeyAction(
   }
   // ⇧S: the status menu (default k), before `s` (schedule) matches below.
   if (shiftKey && key.toLowerCase() === "s") return "status";
+  // ⇧F "Focus on this" (call 31); a bare f stays Filter's (use-tasks-filters).
+  if (shiftKey && key.toLowerCase() === "f") return "focus-on";
   switch (key.toLowerCase()) {
     case "j":
       return "next";

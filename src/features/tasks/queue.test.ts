@@ -167,11 +167,11 @@ describe("queueMove", () => {
 
 describe("claim wording (D4-2)", () => {
   it("names one or more people", () => {
-    expect(claimLabel(["Mike"])).toBe("In Mike’s queue");
-    expect(claimLabel(["Mike", "Ola"])).toBe("In Mike’s and Ola’s queues");
-    expect(claimLabel(["Mike", "Ola", "Sam"])).toBe("In Mike’s, Ola’s and Sam’s queues");
+    expect(claimLabel(["Mike"])).toBe("In Mike’s Focus");
+    expect(claimLabel(["Mike", "Ola"])).toBe("In Mike’s and Ola’s Focus");
+    expect(claimLabel(["Mike", "Ola", "Sam"])).toBe("In Mike’s, Ola’s and Sam’s Focus");
     expect(claimLabel([])).toBe("");
-    expect(alsoInLabel(["Mike"])).toBe("Also in Mike’s queue");
+    expect(alsoInLabel(["Mike"])).toBe("Also in Mike’s Focus");
   });
 });
 
