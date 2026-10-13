@@ -163,16 +163,34 @@ export function declineComment(byName: string, note: string): string {
 
 /**
  * Where an Inbox task came from, as its row says it (research §7): your own
- * captures say nothing; one someone else made reads "from Mike".
+ * captures say nothing; one someone else made reads "from Mike"; one an agent
+ * made through a key reads "via Claude Desktop" (the key's name, TV-U13b), or
+ * "from Mike via Claude Desktop" when it was someone else's agent.
  */
 export function inboxSourceLabel(
   task: Pick<Task, "creatorId" | "creatorUnknown">,
   me: string | null,
   firstNameOf: (userId: string) => string | null,
+  agentVia: string | null = null,
 ): string | null {
-  if (task.creatorUnknown || !task.creatorId || !me || task.creatorId === me) return null;
-  const name = firstNameOf(task.creatorId);
-  return name ? `from ${name}` : null;
+  const via = agentVia ? `via ${agentVia}` : null;
+  const fromOther = !task.creatorUnknown && !!task.creatorId && !!me && task.creatorId !== me;
+  const name = fromOther && task.creatorId ? firstNameOf(task.creatorId) : null;
+  if (name) return via ? `from ${name} ${via}` : `from ${name}`;
+  return via;
+}
+
+/**
+ * The key's name in a key-made trail row's label: "Alex · via Claude Desktop"
+ * → "Claude Desktop"; a person with no name leaves the key's name alone
+ * ("Claude Desktop"). Null for an empty label (erasure clears it).
+ */
+export function agentViaOf(label: string | null | undefined): string | null {
+  const text = label?.trim() ?? "";
+  if (!text) return null;
+  const at = text.indexOf(" · via ");
+  const name = at >= 0 ? text.slice(at + " · via ".length).trim() : text;
+  return name || null;
 }
 
 /**

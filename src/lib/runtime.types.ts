@@ -1259,6 +1259,16 @@ export type ModuoRuntime = {
     }): Promise<Task>;
     /** A repeat's cycles, done and skipped, with your own tracked time (TV-D12). */
     taskHistory(input: { workspaceId: string; taskId: string }): Promise<TaskCycle[]>;
+    /**
+     * Which of these tasks an API key made, with the trail's label for it
+     * ("Alex · via Claude Desktop"; TV-U13b, the Inbox's agent chip). Read from
+     * the tasks' `tasks.create` trail rows, so only tasks the caller can see
+     * answer. Batched; tasks no key made are left out.
+     */
+    listAgentCaptures(input: {
+      workspaceId: string;
+      taskIds: readonly string[];
+    }): Promise<Array<{ taskId: string; label: string }>>;
     /** Notify the people picked by `@` in a task's description (TV-D12). */
     mentionInTask(input: {
       workspaceId: string;

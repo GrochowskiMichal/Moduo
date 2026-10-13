@@ -3019,6 +3019,32 @@ export const webRuntime: ModuoRuntime = {
       return taskCyclesFromJson(data);
     },
 
+    async listAgentCaptures({ workspaceId, taskIds }) {
+      // The trail's own read policy answers only tasks the caller can see, so a
+      // key's name never reaches anyone else (TV-U13b). 100 ids per request
+      // keeps the URL short.
+      const out: Array<{ taskId: string; label: string }> = [];
+      for (let i = 0; i < taskIds.length; i += 100) {
+        const { data, error } = await supabaseClient
+          .from("module_activity")
+          .select("entity_id, actor_label")
+          .eq("workspace_id", workspaceId)
+          .eq("module", "tasks")
+          .eq("entity_type", "task")
+          .eq("op", "tasks.create")
+          .eq("actor_type", "api_key")
+          .in("entity_id", taskIds.slice(i, i + 100));
+        if (error) throw new Error(error.message);
+        for (const row of (data ?? []) as Array<{
+          entity_id: string;
+          actor_label: string | null;
+        }>) {
+          if (row.actor_label?.trim()) out.push({ taskId: row.entity_id, label: row.actor_label });
+        }
+      }
+      return out;
+    },
+
     async mentionInTask({ workspaceId, taskId, userIds }) {
       if (userIds.length === 0) return 0;
       const { data, error } = await supabaseClient.rpc("tasks_op_mention", {
