@@ -116,6 +116,8 @@ describe("the pool meter", () => {
       emphasis: true,
     });
     expect(meterLine({ usedBytes: 1 * GB, totalBytes: 50 * GB }).emphasis).toBe(false);
+    // A little use never reads as "0 of 2 GB".
+    expect(meterLine({ usedBytes: 9 * MB, totalBytes: 2 * GB }).text).toBe("9 MB of 2 GB used");
   });
 
   it("over the limit, the owner sees why uploads paused and can upgrade", async () => {

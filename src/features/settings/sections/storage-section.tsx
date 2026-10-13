@@ -32,6 +32,7 @@ import { SettingsSectionShell } from "./section-shell";
 
 /** How many of the largest files the list shows. */
 export const LARGEST_SHOWN = 50;
+const GIB = 1073741824;
 
 const TIER_NAMES: Record<string, string> = {
   free: "Free",
@@ -55,8 +56,14 @@ export function meterLine(status: Pick<StorageStatus, "usedBytes" | "totalBytes"
   const total = Math.max(status.totalBytes, 1);
   const percent = Math.floor((Math.max(status.usedBytes, 0) / total) * 100);
   const emphasis = percent >= 80;
+  // Under a gigabyte, each side in its own unit ("9 MB of 2 GB"), so a little
+  // use never reads as "0 of 2 GB".
+  const amounts =
+    status.usedBytes < GIB
+      ? `${formatBytes(status.usedBytes)} of ${formatBytes(status.totalBytes)}`
+      : formatUsage(status.usedBytes, status.totalBytes);
   return {
-    text: `${formatUsage(status.usedBytes, status.totalBytes)} used${emphasis ? ` · ${percent}%` : ""}`,
+    text: `${amounts} used${emphasis ? ` · ${percent}%` : ""}`,
     percent,
     emphasis,
   };

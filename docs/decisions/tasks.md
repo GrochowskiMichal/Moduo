@@ -2,6 +2,51 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index.
 
+## 2026-10-14 · AT-3 Attachments everywhere + Settings → Storage — the agent's choices (deferred to by Maciej)
+
+Built in attachments block 3 ([specs/attachments.md](../../specs/attachments.md) AT3-1–AT3-4; the "From AT-2" carry-forward) on the local stack, with migration `20261013272000_attachments_everywhere`. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **AT3D-1 · File marks join the shared store** → `sync/store.ts`, `sync/types.ts`, `runtime.web.ts` (SYNC_SOURCES), `features/tasks/live.ts`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: the store keeps one mark per finished file on a task (id, task, status, stamps; never a name, path or size), read as a delta table under RLS, live on its own Realtime channel, dropped with its task; the snapshot carries `attachmentCounts` and `attachmentStamps`. Every 📎 mark reads the counts; an open strip reads its list again when its task's stamp moves. `CACHE_VERSION` 6.
+  - Why: one live feed serves the counts on every surface and the open strip (AT2V3-4), with the access check that already drops rows you stop seeing.
+  - Rejected: a counts read per surface (not live, one more read each); a per-panel channel.
+- **AT3D-2 · Where the 📎 mark sits** → `task-meta.tsx`, `timeline-row.tsx`, `focus-now-card.tsx`, `focus-up-next.tsx`, `task-block-chip.tsx`, `calendar-grid.tsx`, `tasks-widget.tsx`, `task-line-plugin.tsx`, `global-command-palette.tsx`, `task-capture.tsx`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: the kit's `MetaCount` (paperclip + count, "1 file", hidden at 0) after the tags and before comments on rows and cards; beside the title in the Timeline's name column (tasks are points there, not bars); on the Focus Now card's meta line and each Up next line; on calendar task blocks (and their hover text) and due chips; on Home's Tasks widget rows; beside a note task line's details chip; on ⌘K task results; the capture's file chips carry the paperclip. "In flight" doesn't exist yet (TV-F8).
+  - Why: the spec's list, one look everywhere; the Timeline has no task bars to hold a mark.
+  - Rejected: a mark in the Timeline point's tooltip only (invisible without hovering).
+- **AT3D-3 · Rows and cards take file drops with one listener and say what happened** → `ui/row-drop.ts`, `attachments/attach-to-task.ts`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: the List's and the Board's container find the row or card under the pointer by `data-task-id` and light it with the shared drop look (only the entered and the left row redraw); the view's edit access decides; a drop queues the files for that task and one quiet toast says it ("Attaching shot.png · on “Fix login”", a refused file named in the same line, a full pool with Free up space, Open selects the task); refused files are dismissed from the queue once the toast has said why.
+  - Why: rows have no strip to show progress or problems; memoised rows must not redraw for a drag elsewhere.
+  - Rejected: a listener per row; a silent drop; leaving refused tiles waiting on the task.
+- **AT3D-4 · Capture: the task first, then its files, even offline** → `capture/task-capture.tsx`, `capture/capture-hooks.ts`, `attachments/capture.ts`, `uploads/queue.ts`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: a screenshot pasted into the title or the description, or files dropped on the capture (folders left out), become chips; Create makes the task, then queues the files for it. A task captured offline waits in the store's outbox and its files wait with it (`awaitTask`: "the task is gone" reads as "still syncing" for a day). With a template the files go on the task it makes; with a pasted list, on the list's first task. The seam now hands `userId` and `task: {id, queued} | null`.
+  - Why: AT3-2 ("the task is always created; the chip retries until attached"); offline the files were dropped before.
+  - Rejected: uploading before the task exists; refusing files offline.
+- **AT3D-5 · An unfinished upload lets its space go at once** → migration `20261013272000`, `uploads/queue.ts`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14 (the AT-2 server follow-up, done here).
+  - Decision: `attachments_op_abandon` (only the uploader, only an unfinished upload): with nothing stored the row goes; with bytes stored it turns failed and holds only what it stored until the daily purge. The queue calls it on Dismiss, on Retry after a failure, on a refusal, before beginning again, and for a begin answered after a Dismiss.
+  - Why: a retried or dismissed upload held its whole declared size in the owner's pool for up to 24 h.
+  - Rejected: deleting a row whose bytes are stored (they'd stop counting while still in storage); keeping the 24 h wait.
+- **AT3D-6 · Settings → Storage: the pool for owners and admins, the files for everyone** → `settings/sections/storage-section.tsx`, `attachments_largest`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14 (the pool's audience per the orchestrator's ruling).
+  - Decision: a Workspace-group section after Members and access. Owners and admins see the meter ("9 MB of 2 GB used", each side in its own unit under a gigabyte; emphasis from 80%, never red), the plan, the per-file limit and its reach, and the over-limit banner (the owner gets Upgrade). Everyone sees the 50 largest finished files on tasks they can see (name · task · who · when · size), with Delete only where they may edit the task, and Undo. No count or total of files anywhere on the page.
+  - Why: the pool adds up files across every workspace the owner has, which a member may not see; the list runs under the reader's own access, so it shows nothing hidden.
+  - Rejected: the meter for everyone (spec text); building the list from the whole-workspace `attachments.list` read (no Delete rights, every row read).
+- **AT3D-7 · The 80/95% notices open Settings → Storage** → `spine/notifications.ts`, `app-chrome.tsx`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: the storage alerts (on the workspace, which no page opens) deep-link as `settings` / `storage`; the entity-open host opens Settings there, for the bell and Home's activity widget alike.
+  - Why: AT3-4; the card did nothing before.
+  - Rejected: a special case in the bell only.
+- **AT3D-8 · Filter → Has attachments reads the store's counts** → `ui/use-tasks-filters.tsx`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: the filter counts from `attachmentCounts`; the full attachments read it made each time it was turned on is gone.
+  - Why: the comment there asked for it; one source for the 📎 and the filter.
+  - Rejected: keeping both reads.
+
 ## 2026-10-13 · TV-TL2 Timeline interactions — the agent's choices (deferred to by Maciej)
 
 Built in tasks-v3 block 26 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §6, AC9.6–9.8; REPLAN 70, 68b, 71; research `.design/tasks-v3/research/timeline-competitors.md` §4–5; the carry-forwards from TV-TL1, TV-U12, TV-U15 and RF-1) on the local stack, no migration. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to change.
