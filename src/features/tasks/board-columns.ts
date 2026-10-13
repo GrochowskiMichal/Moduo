@@ -202,19 +202,34 @@ function statusShows(
 }
 
 /** A status column's "+": its category, and its own status when it isn't
- *  the category's first in a project (the capture files there by id). */
+ *  the category's first where the new task files (the capture files there
+ *  by id). `own` picks it from the set of where the "+" files: the board's
+ *  project, or (with no project) your Inbox's, the workspace default. */
 function statusAdd(
   ctx: BoardContext,
   key: StatusKey,
-  own: { id: string; name: string } | null,
+  own: (set: readonly ProjectStatus[]) => ProjectStatus | null,
 ): GroupAddState {
   const add = addFor(ctx, "status", key);
-  if (add.kind !== "add" || !own || !add.add.projectId) return add;
+  if (add.kind !== "add") return add;
+  const files = add.add.projectId
+    ? ctx.buckets.find((b) => b.id === add.add.projectId)
+    : ctx.buckets.find((b) => b.id === ctx.inboxId);
+  const set = statusSetFor(ctx.statuses, files);
+  const status = own(set);
+  // The category's first is what the capture picks anyway: no chip for it.
+  if (!status || firstStatusOf(set, status.category)?.id === status.id) return add;
   return {
     kind: "add",
-    add: { ...add.add, seed: { ...add.add.seed, statusId: own.id, statusName: own.name } },
+    add: {
+      ...add.add,
+      seed: { ...add.add.seed, statusId: status.id, statusName: status.name },
+    },
   };
 }
+
+/** No status of its own: the category's first. */
+const NO_OWN = () => null;
 
 function projectStatusColumns(
   tasks: readonly Task[],
@@ -257,7 +272,7 @@ function projectStatusColumns(
         target: { field: "status", key, statusId: s.id, name: null },
         persistent: true,
         startsFolded: s.category === "backlog" || s.category === "wont_do",
-        add: statusAdd(ctx, key, firstStatusOf(set, s.category)?.id === s.id ? null : s),
+        add: statusAdd(ctx, key, (into) => into.find((x) => x.id === s.id) ?? null),
         tasks: byStatus.get(s.id) ?? [],
         category: s.category,
         statusId: s.id,
@@ -286,7 +301,7 @@ function categoryColumns(tasks: readonly Task[], ctx: BoardContext): BoardColumn
     target: { field: "status", key, statusId: null, name: null },
     persistent: true,
     startsFolded: key === "backlog" || key === "archived",
-    add: statusAdd(ctx, key, null),
+    add: statusAdd(ctx, key, NO_OWN),
     tasks: byKey.get(key) ?? [],
     category: statusKeyCategory(key),
   }));
@@ -377,7 +392,14 @@ function namedStatusColumns(
         target: { field: "status", key, statusId: null, name: s.nameKey },
         persistent: true,
         startsFolded: s.category === "backlog" || s.category === "wont_do",
-        add: statusAdd(ctx, key, null),
+        // Where the "+" files (your Inbox, from My tasks): its status of this name.
+        add: statusAdd(
+          ctx,
+          key,
+          (into) =>
+            into.find((x) => x.category === s.category && statusNameKey(x.name) === s.nameKey) ??
+            null,
+        ),
         tasks: byName.get(s.nameKey) ?? [],
         category: s.category,
       };

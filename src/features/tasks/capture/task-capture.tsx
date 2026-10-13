@@ -1022,8 +1022,11 @@ export function TaskCaptureBody({
       // A Board column's own status belongs to the project it was opened
       // in: filed elsewhere, the task takes that project's first of the
       // category (TV-U11).
+      // (Your Inbox is "no project" on both sides: the default set's.)
       statusId:
-        values.status && fields.statusId && projectId === context?.destination?.projectId
+        values.status &&
+        fields.statusId &&
+        (projectId ?? null) === (context?.destination?.projectId ?? null)
           ? fields.statusId
           : null,
     };

@@ -328,7 +328,7 @@ export function TaskBoardView({
         ...c,
         shown: revealed.has(c.id) ? c.tasks : shown,
         hidden,
-        folded: (folds.get(`col:${c.id}`) ?? c.startsFolded) && !holdsSelection,
+        folded: (folds.get(c.id) ?? c.startsFolded) && !holdsSelection,
       };
     });
   }, [
@@ -391,10 +391,17 @@ export function TaskBoardView({
   }, [cells]);
   const laneFolded = useCallback(
     (lane: BoardLane) =>
-      (folds.get(`lane:${lane.key}`) ?? false) &&
+      (folds.get(`lane:${laneBy}:${lane.key}`) ?? false) &&
       !(selectedTaskId && lane.tasks.some((t) => t.id === selectedTaskId)),
-    [folds, selectedTaskId],
+    [folds, selectedTaskId, laneBy],
   );
+  // Folding or unfolding unmounts the control you used: the keys come back
+  // to the board (a frame later, after a menu hands focus back).
+  const setFold = (id: string, folded: boolean) => {
+    folds.set(id, folded);
+    if (typeof window === "undefined") return;
+    window.requestAnimationFrame(() => boardRef.current?.focus({ preventScroll: true }));
+  };
   /** The cards a cell draws (a lane cell stops at 20 until "+ n more"). */
   const drawnIn = useCallback(
     (cell: Cell) => {
@@ -836,7 +843,7 @@ export function TaskBoardView({
         count={column.tasks.length}
         mark={column.mark}
         markCtx={markCtx}
-        onUnfold={() => folds.set(`col:${column.id}`, false)}
+        onUnfold={() => setFold(column.id, false)}
       />
     ) : (
       <BoardColumnHeader
@@ -846,7 +853,7 @@ export function TaskBoardView({
         markCtx={markCtx}
         add={column.add}
         onAdd={onRequestCapture}
-        onFold={() => folds.set(`col:${column.id}`, true)}
+        onFold={() => setFold(column.id, true)}
         section={sectionEdits(column)}
         onEditStatuses={canEdit && column.statusId ? onEditStatuses : null}
       />
@@ -865,7 +872,7 @@ export function TaskBoardView({
       lanes={laneList}
       cells={cells}
       laneFolded={laneFolded}
-      onToggleLane={(lane) => folds.set(`lane:${lane.key}`, !laneFolded(lane))}
+      onToggleLane={(lane) => setFold(`lane:${laneBy}:${lane.key}`, !laneFolded(lane))}
       headerOf={header_}
       drawnIn={drawnIn}
       moreOpen={moreOpen}

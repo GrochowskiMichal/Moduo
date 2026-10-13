@@ -10,7 +10,7 @@
 import { useCallback, useState } from "react";
 
 export type BoardFolds = {
-  /** The fold you chose for an id ("col:…" or "lane:…"), else undefined. */
+  /** The fold you chose for an id (a column id, "col:…", or "lane:<kind>:<key>"), else undefined. */
   get: (id: string) => boolean | undefined;
   set: (id: string, folded: boolean) => void;
 };

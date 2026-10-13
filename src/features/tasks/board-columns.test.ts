@@ -175,6 +175,38 @@ describe("one project's board by status (53a)", () => {
   });
 });
 
+describe('the "+" files into the status it was clicked on', () => {
+  const REVIEW_DEFAULT = status("d-review", null, "in_progress", "In review", 1);
+
+  it("the Inbox's board: a default-set status that isn't its category's first", () => {
+    const cols = buildBoardColumns(
+      [task("i", { bucketId: "inbox" })],
+      ctx({ scope: "inbox", statuses: [...DEV, ...DEFAULTS, REVIEW_DEFAULT] }),
+    );
+    expect(cols.find((c) => c.label === "In review")?.add).toEqual({
+      kind: "add",
+      add: { seed: { status: "in_progress", statusId: "d-review", statusName: "In review" } },
+    });
+  });
+
+  it("My tasks' shared names: your Inbox's status of that name", () => {
+    const p2 = [...DEFAULTS, REVIEW_DEFAULT].map((s) => ({
+      ...s,
+      id: `p2-${s.id}`,
+      projectId: "p2",
+    }));
+    const statuses = [...DEFAULTS, REVIEW_DEFAULT, ...p2];
+    const cols = buildBoardColumns(
+      [task("a", { bucketId: "p2", statusId: "p2-d-review", status: "in_progress" })],
+      ctx({ scope: "mine", statuses }),
+    );
+    expect(cols.find((c) => c.label === "In review")?.add).toEqual({
+      kind: "add",
+      add: { seed: { status: "in_progress", statusId: "d-review", statusName: "In review" } },
+    });
+  });
+});
+
 describe("boards across projects (53a, research §5)", () => {
   it("group by category: Backlog and Won't do only when present, folded", () => {
     const tasks = [task("a"), task("b", { bucketId: "p2", status: "in_progress" })];

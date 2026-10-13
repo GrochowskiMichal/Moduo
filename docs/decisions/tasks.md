@@ -9,11 +9,11 @@ Built in tasks-v3 block 15 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §5, AC
 - **U11-1 · Which status columns a board shows** → TV-U11 (`board-columns.ts` `statusColumns`)
   - Who: agent's choice, deferred to by Maciej, 2026-10-13.
   - Decision: one project's board (and the Inbox's, on the workspace default set) shows the project's own statuses in category order, each with its category's icon; Backlog is always there (folded), Won't do and hidden statuses only while a card needs them or Filter → Status asks. Boards across projects show the five categories (Backlog and Won't do only when they have cards), or the shared names when every project in view has exactly the same set (and it isn't just the five usual names). A task whose status isn't read yet sits in its category's first.
-  - Why: 53a ("+ Add status", names per project, categories across projects) and U2-4 (Won't do shows only when asked); a status set nobody has read must never lose a card.
-  - Rejected: always five category columns on a project board (In review would vanish into In progress); a Won't do column on every board.
+  - Why: 53a ("+ Add status", names per project, categories across projects) and U2-4 (Won't do shows only when asked); a status set nobody has read must never lose a card. Won't do tasks sit out of every scope until Filter → Status asks (TV-P0), so an always-there Won't do button would read "0" on a project full of them, and a folded button takes no drops anyway (53b): the way to Won't do stays the status menu, ⇧S and the late fixes.
+  - Rejected: always five category columns on a project board (In review would vanish into In progress); a Won't do button on every board (it would miscount).
 - **U11-2 · Folding: any column, a 32 px button, remembered per device** → TV-U11 (`FoldedColumn`, `use-board-folds.ts`)
   - Who: agent's choice, deferred to by Maciej, 2026-10-13.
-  - Decision: every column's ⋯ has Fold; a folded column is the 53b button (mark · count · chevron, hover names it), never a drop target; Backlog and Won't do start folded; a section's button shows two letters. A folded column opens while the selected card is in it (a deep link, the panel), without changing what you chose. Folds are remembered per person, workspace, scope and grouping on this device (the List's U10-7 rule).
+  - Decision: every column's ⋯ has Fold; a folded column is the 53b button (mark · count · chevron, hover names it), never a drop target; Backlog and Won't do start folded; a section's button shows two letters. A folded column opens while the selected card is in it (a deep link, the panel), without changing what you chose. Folds are remembered per person, workspace, scope and grouping on this device (the List's U10-7 rule; lanes per lane kind). Folding or unfolding hands the keys back to the board.
   - Why: 53b, research §2; "Fold" sits in the prototype's ⋯.
   - Rejected: synced folds now (preferences sync is TV-U8's lane); a folded column that still takes drops (53b says unfold first).
 - **U11-3 · Group by and which columns hide** → TV-U11 (`display.ts` `boardGroupsFor`, `board-columns.ts`)
@@ -43,7 +43,7 @@ Built in tasks-v3 block 15 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §5, AC
   - Rejected: h/l for columns (not in the keymap).
 - **U11-8 · A column's "+" files into its own status** → TV-U11 (`statusAdd`, the capture seed's `statusId`)
   - Who: agent's choice, deferred to by Maciej, 2026-10-13.
-  - Decision: the "+" follows U10-6's rule (All: "Pick a project first"; Done and Won't do: none); on one project's status that isn't its category's first (In review), the capture carries the status by id with a chip naming it, used only if the task is still filed into that project (else that project's first of the category), never kept in a draft.
+  - Decision: the "+" follows U10-6's rule (All: "Pick a project first"; Done and Won't do: none); on a status that isn't its category's first where the task files (the project's own set; the Inbox's, the workspace default, on the Inbox's board and for My tasks' shared names), the capture carries it by id with a chip naming it, used only if the task still files where the capture was opened (else that place's first of the category), never kept in a draft. The server takes a default-set status for an Inbox task (`tasks__status_in_set`).
   - Why: default n ("adds with the group's value filled in"); a new task in In review must not land in In progress.
   - Rejected: a status picker in the capture (the chip is enough; More → Status is TV-U13's panel).
 - **U11-9 · Undo puts a status back by id** → TV-U11 (`drop-write.ts` `undoWrite`)
