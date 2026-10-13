@@ -137,6 +137,7 @@ describe("sanitizePreferences", () => {
 describe("notificationTypeForOp", () => {
   it("maps each quiet-set op to its governing toggle", () => {
     expect(notificationTypeForOp("comments.add")).toBe("mention");
+    expect(notificationTypeForOp("comments.edit")).toBe("mention");
     expect(notificationTypeForOp("tasks.assigned")).toBe("assigned");
     expect(notificationTypeForOp("tasks.completed")).toBe("completed");
     expect(notificationTypeForOp("email.snooze_due")).toBe("dueFollowUp");

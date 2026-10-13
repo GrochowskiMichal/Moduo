@@ -133,26 +133,47 @@ test("AC11.8 — a comment edits, takes a reaction and deletes with Undo", async
   ]);
 });
 
-test("AC1.16 — at 280 px nothing in the panel truncates; the label column narrows", async ({
+test("AC1.16 — at 280 and 320 px nothing in the panel truncates; the label column narrows under 320", async ({
   page,
 }) => {
   const task = await createTask(`A long title that has to wrap in a narrow panel ${tag}`);
+  // A long estimate with tracked time and a due date: the widest values.
+  await rpc(dev, "tasks_op_update", {
+    p_workspace_id: ws.id,
+    p_task_id: task.id,
+    p_patch: { estimate_minutes: 2400, due_date: "2026-12-30T12:00:00Z" },
+  });
+  await rpc(dev, "tasks_op_track_time", {
+    p_workspace_id: ws.id,
+    p_task_id: task.id,
+    p_action: "set_total",
+    p_seconds: 45_000,
+    p_ended_at: new Date().toISOString(),
+    p_client_key: `u13-${tag}`,
+    p_entry_id: null,
+  });
   await openTask(page, task.id);
   const panel = page.locator('[data-layout="panel"]').first();
-  await panel.evaluate((el) => {
-    // The shell's floor is 280 px (call 89).
-    (el.closest("[data-panel-module]") as HTMLElement).style.width = "280px";
-  });
-  const clipped = await panel.evaluate(
-    (el) =>
-      Array.from(el.querySelectorAll<HTMLElement>("[data-slot=property-value]")).filter(
-        (v) => v.scrollWidth > v.clientWidth + 1,
-      ).length,
-  );
-  expect(clipped).toBe(0);
-  const labelWidth = await panel
-    .locator("[data-slot=property-row] > :first-child")
-    .first()
-    .evaluate((el) => el.getBoundingClientRect().width);
-  expect(labelWidth).toBeLessThan(80);
+  await expect(panel.getByRole("button", { name: /^Estimate: 12h 30m, of ~40h/ })).toBeVisible();
+  for (const width of [280, 320]) {
+    await panel.evaluate((el, w) => {
+      // The shell's floor is 280 px (call 89).
+      (el.closest("[data-panel-module]") as HTMLElement).style.width = `${w}px`;
+    }, width);
+    const clipped = await panel.evaluate(
+      (el) =>
+        Array.from(el.querySelectorAll<HTMLElement>("[data-slot=property-value]")).filter(
+          (v) =>
+            v.scrollWidth > v.clientWidth + 1 ||
+            v.getBoundingClientRect().right > el.getBoundingClientRect().right + 1,
+        ).length,
+    );
+    expect(clipped, `clipped values at ${width} px`).toBe(0);
+    const labelWidth = await panel
+      .locator("[data-slot=property-row] > :first-child")
+      .first()
+      .evaluate((el) => el.getBoundingClientRect().width);
+    if (width < 320) expect(labelWidth).toBeLessThan(80);
+    else expect(labelWidth).toBeGreaterThan(90);
+  }
 });

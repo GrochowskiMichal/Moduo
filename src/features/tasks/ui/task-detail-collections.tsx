@@ -165,7 +165,7 @@ function SubtaskRow({
         aria-label={`Open subtask: ${subtask.title || "Untitled"}`}
         className={cn(
           // Titles wrap in the panel, never truncate (AC1.16).
-          "min-w-0 flex-1 break-words rounded-sm py-0.5 text-left font-sans text-base",
+          "hit-min min-w-0 flex-1 break-words rounded-sm py-0.5 text-left font-sans text-base",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
           closed ? "text-muted-foreground line-through" : "text-foreground",
         )}

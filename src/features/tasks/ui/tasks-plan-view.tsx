@@ -1290,7 +1290,10 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       setTaskDone: (taskId: string, done: boolean) => {
         const { taskById: byId, api: moduleApi } = latestForHost.current;
         if (byId.has(taskId)) {
-          moduleApi.patchTask(taskId, { status: done ? "done" : "todo" });
+          // Done through the module's check-off, so its open subtasks finish
+          // too (call 87).
+          if (done) moduleApi.markDone(taskId);
+          else moduleApi.patchTask(taskId, { status: "todo" });
           return;
         }
         referenceStore?.completeTask(taskId, done).catch((error: unknown) => {
@@ -1443,7 +1446,10 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
           ) : (
             details
           ),
-        project: projectView ? () => projectView : undefined,
+        // Always listed, so the menu keeps its shape; with no project (an
+        // Inbox task) it says so.
+        project: () =>
+          projectView ?? <ProjectPanel project={null} tasks={api.tasks} sections={api.sections} />,
       }}
       activeId={panelActive}
       onChange={setPanelView}
@@ -1467,7 +1473,8 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
         task={fullPageTask}
         buckets={buckets}
         inbox={inbox}
-        canEdit={canEdit}
+        // A task of an archived project stays read-only here too (TV-U6).
+        canEdit={canEdit && !api.archivedTasks.some((t) => t.id === fullPageTask.id)}
         onRequestCapture={openCapture}
         onSelectTask={setSelectedTaskId}
         onOpenTask={openTaskInPanel}

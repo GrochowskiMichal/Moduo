@@ -93,7 +93,7 @@ function FeedCard({
       className={cn("group/card rounded-lg border border-hairline px-3 py-2.5", className)}
       {...props}
     >
-      <header className="mb-1 flex min-h-(--ctrl-h-sm) min-w-0 items-center gap-2 font-sans text-xs text-muted-foreground">
+      <header className="mb-1 flex min-h-(--ctrl-h-sm) min-w-0 flex-wrap items-center gap-x-2 font-sans text-xs text-muted-foreground">
         {avatar ? <span className="flex shrink-0">{avatar}</span> : null}
         <span className="break-words font-medium text-foreground">{author}</span>
         {time ? (

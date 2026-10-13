@@ -344,7 +344,7 @@ function MergedLine({
         type="button"
         onClick={onExpand}
         aria-label={`${mergedLine(entries)}. Show each change`}
-        className="inline rounded-sm text-left underline-offset-2 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+        className="hit-min inline rounded-sm text-left underline-offset-2 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
       >
         {mergedLine(entries)}
       </button>
@@ -500,11 +500,12 @@ function CommentItem({
                     aria-label={`${REACTION_NAMES[g.reaction]}: ${reactedBy(g.people)}`}
                     onClick={() => react(g.reaction, !g.mine)}
                     className={cn(
-                      "inline-flex h-(--ctrl-h-xs) items-center gap-1 rounded-full border px-1.5 font-sans text-xs tabular-nums",
+                      "hit-min inline-flex h-(--ctrl-h-xs) items-center gap-1 rounded-full border px-1.5 font-sans text-xs tabular-nums",
                       "transition-colors duration-(--motion-fade) ease-(--ease-out)",
                       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+                      // A pressed toggle is neutral (R5); the accent stays for selection.
                       g.mine
-                        ? "border-primary/40 bg-state-selected text-foreground"
+                        ? "border-border bg-state-active text-foreground"
                         : "border-hairline text-muted-foreground hover:bg-state-hover",
                     )}
                   >
@@ -554,7 +555,7 @@ function ReactionPicker({
               "flex size-(--ctrl-h-sm) items-center justify-center rounded-md text-base",
               "transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-              mine.has(reaction) && "bg-state-selected",
+              mine.has(reaction) && "bg-state-active",
             )}
           >
             <span aria-hidden>{REACTION_GLYPHS[reaction]}</span>

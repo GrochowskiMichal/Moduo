@@ -43,7 +43,7 @@ Built in tasks-v3 block 17 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §9, AC
   - Rejected: moving it client-side.
 - **U13-8 · Call 87 runs in the app for now** → TV-U13 (`finishOpenSubtasks`), TV-D16 (MCP), TV-D7 (a server cascade if wanted)
   - Who: agent's choice, deferred to by Maciej, 2026-10-13 (87 decided).
-  - Decision: the checkbox, a status pick, a check-off (Focus) and a Board drop into Done finish the task's open subtasks too, with one toast "Done · also 2 subtasks" whose Undo puts each back to the status it had (only while it's still done). A repeating parent keeps its subtasks open (TV-D12 resets them per cycle); MCP's complete doesn't cascade yet.
+  - Decision: the checkbox, a status pick, a check-off (Focus), a reference chip's check and a Board drop into Done finish the task's open subtasks too, with one toast "Done · also 2 subtasks" whose Undo puts each back to the status it had (only while it's still done). A repeating parent keeps its subtasks open (TV-D12 resets them per cycle); MCP's complete and the Home widget's check-off don't cascade yet (TV-D16, TV-H1).
   - Why: `tasks__apply_status` is being re-cut by TV-D12; redefining it here would be overwritten.
   - Rejected: a server cascade in this block.
 - **U13-9 · Project view and the full page** → TV-U13, TV-U16 (the full overview)

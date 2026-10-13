@@ -278,7 +278,7 @@ function SessionRow({
         disabled={!canEdit}
         onClick={onMove}
         aria-label={`Move the session at ${formatDayTime(session.startsAt)}`}
-        className="min-w-0 rounded-sm text-left break-words focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+        className="hit-min min-w-0 rounded-sm text-left break-words focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
       >
         {formatDayTime(session.startsAt)}
       </button>
@@ -607,6 +607,8 @@ export function EstimateValue({
           <PropertyValue
             empty={!hasAny}
             icon={<Timer />}
+            // "you 50m" takes a second line before the value would break (AC1.16).
+            className="flex-wrap"
             aria-label={hasAny ? `Estimate: ${spoken}` : "Estimate: add one"}
             trailing={
               row.mine ? (
