@@ -7,7 +7,14 @@ type TusOptions = Record<string, unknown> & {
   onError: (err: Error & { originalResponse?: unknown }) => void;
   fingerprint: () => Promise<string>;
 };
-const tus = { last: null as TusOptions | null, resumed: false, previous: [] as unknown[] };
+const tus = {
+  last: null as TusOptions | null,
+  resumed: false,
+  started: false,
+  previous: [] as unknown[],
+  /** Holds findPreviousUploads until released (the abort race). */
+  gate: null as Promise<void> | null,
+};
 
 rs.mock("tus-js-client", () => ({
   Upload: class {
@@ -15,12 +22,14 @@ rs.mock("tus-js-client", () => ({
       tus.last = opts;
     }
     async findPreviousUploads() {
+      if (tus.gate) await tus.gate;
       return tus.previous;
     }
     resumeFromPreviousUpload() {
       tus.resumed = true;
     }
     start() {
+      tus.started = true;
       const o = tus.last as TusOptions;
       void o.onBeforeRequest({
         setHeader: (k, v) => ((o as Record<string, unknown>)[`sent:${k}`] = v),
@@ -80,7 +89,9 @@ const realXhr = globalThis.XMLHttpRequest;
 beforeEach(() => {
   tus.last = null;
   tus.resumed = false;
+  tus.started = false;
   tus.previous = [];
+  tus.gate = null;
 });
 afterEach(() => {
   globalThis.XMLHttpRequest = realXhr;
@@ -126,6 +137,25 @@ describe("uploadObject — small files: one request with progress", () => {
     await expect(uploadObject({ ...base, blob })).rejects.toBeInstanceOf(AttachmentOpError);
   });
 
+  it("reads the real status from Storage's body when it answers 400", async () => {
+    const blob = new Blob([new Uint8Array(3)]);
+    installXhr({ status: 400, body: '{"statusCode":"413","error":"Payload too large"}' });
+    await expect(uploadObject({ ...base, blob })).rejects.toMatchObject({
+      code: "upload_too_large",
+    });
+    installXhr({ status: 400, body: '{"statusCode":"403","error":"Unauthorized"}' });
+    await expect(uploadObject({ ...base, blob })).rejects.toMatchObject({ code: "upload_refused" });
+    // A token that lapsed mid-upload is a retry, not a refusal (no new pending row).
+    installXhr({
+      status: 400,
+      body: '{"statusCode":"403","error":"Unauthorized","message":"jwt expired"}',
+    });
+    await expect(uploadObject({ ...base, blob })).rejects.toMatchObject({ code: "upload_server" });
+    // A body that merely mentions 403 somewhere isn't a refusal.
+    installXhr({ status: 400, body: '{"statusCode":"400","message":"bad key 403abc"}' });
+    await expect(uploadObject({ ...base, blob })).rejects.toMatchObject({ code: "upload_failed" });
+  });
+
   it("reports a dropped connection as a network error", async () => {
     installXhr({ network: true });
     await expect(uploadObject({ ...base, blob: new Blob([new Uint8Array(3)]) })).rejects.toThrow(
@@ -163,5 +193,24 @@ describe("uploadObject — big files: resumable (TUS)", () => {
     tus.previous = [{ uploadUrl: "https://x/u/1" }];
     await uploadObject({ ...base, blob: new Blob([new Uint8Array(TUS_THRESHOLD_BYTES + 1)]) });
     expect(tus.resumed).toBe(true);
+  });
+
+  it("never starts an upload cancelled while it looked for a half-sent one", async () => {
+    let release = () => {};
+    tus.gate = new Promise<void>((r) => {
+      release = r;
+    });
+    const ctrl = new AbortController();
+    const done = uploadObject({
+      ...base,
+      blob: new Blob([new Uint8Array(TUS_THRESHOLD_BYTES + 1)]),
+      signal: ctrl.signal,
+    });
+    while (!tus.last) await Promise.resolve();
+    ctrl.abort();
+    await expect(done).rejects.toMatchObject({ name: "AbortError" });
+    release();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(tus.started).toBe(false);
   });
 });

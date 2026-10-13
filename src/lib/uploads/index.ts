@@ -1,6 +1,7 @@
 // The app's one upload queue (AT-2), shared by every surface that attaches
 // files (the task panel now; capture, rows and Notes later).
 
+import { isReadOnlyBuild } from "../min-build";
 import { getRuntime } from "../runtime";
 import { prepareUpload } from "./pipeline";
 import { UploadQueue } from "./queue";
@@ -13,6 +14,7 @@ export function getUploadQueue(): UploadQueue {
     store: idbUploadStore(),
     getApi: () => getRuntime()?.attachments ?? null,
     prepare: (file, perFileBytes) => prepareUpload(file, { perFileBytes }),
+    isReadOnly: isReadOnlyBuild,
     requestPersist: () => {
       // Keep the waiting bytes through storage pressure (web; a no-op elsewhere).
       void navigator.storage?.persist?.().catch(() => {});

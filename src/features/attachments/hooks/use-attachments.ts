@@ -40,11 +40,17 @@ export function useUploadQueueBoot(
     return () => {
       window.removeEventListener("online", wake);
       document.removeEventListener("visibilitychange", onVisible);
+      // Signing out unmounts the shell before it renders with no user, so the
+      // stop has to happen here. A re-run (another account) starts again.
+      queue.stop();
     };
   }, [userId, api]);
 }
 
 const STATUS_TTL_MS = 60_000;
+/** How often an open strip checks its preview links. Only links within the
+ *  cache's one-minute margin are signed again, so a check costs nothing else. */
+const PREVIEW_CHECK_MS = 60_000;
 const statusCache = new Map<string, { at: number; value: StorageStatus }>();
 
 async function cachedStatus(
@@ -127,7 +133,12 @@ export function useEntityAttachments({
       if (paths.length === 0) return;
       try {
         const signed = await signPaths(runtime, paths, ATTACHMENT_LINK_TTL_SECONDS.preview);
-        setPreviews((prev) => new Map([...prev, ...signed]));
+        // The minute check mostly gets the same links back: keep the map then.
+        setPreviews((prev) =>
+          [...signed].some(([path, url]) => prev.get(path) !== url)
+            ? new Map([...prev, ...signed])
+            : prev,
+        );
       } catch {
         // No thumbnail: the tile shows the file type instead.
       }
@@ -160,6 +171,24 @@ export function useEntityAttachments({
       reqRef.current += 1;
     };
   }, [reload]);
+
+  // Preview links last an hour and a panel can stay open longer: sign them
+  // again as they near the end, and when the window comes back (a laptop that
+  // slept past the hour). Unexpired links come from the cache.
+  const recordsRef = useRef(records);
+  recordsRef.current = records;
+  useEffect(() => {
+    const refresh = () => void signPreviews(recordsRef.current);
+    const timer = setInterval(refresh, PREVIEW_CHECK_MS);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [signPreviews]);
 
   useEffect(
     () =>

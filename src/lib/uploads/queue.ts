@@ -133,6 +133,8 @@ export type UploadQueueDeps = {
   newId?: () => string;
   /** Asks the browser to keep IndexedDB through storage pressure (web). */
   requestPersist?: () => void;
+  /** This build may only read (below the minimum build): files keep waiting. */
+  isReadOnly?: () => boolean;
   /**
    * Runs `fn` holding a cross-tab claim on one file, or answers false when
    * another tab holds it. Every tab loads the same stored queue, so without it
@@ -491,6 +493,8 @@ export class UploadQueue {
     const userId = this.userId;
     const api = this.api ?? this.deps.getApi();
     if (!userId || !api) return;
+    // Every op would be refused; the files wait for an updated app.
+    if (this.deps.isReadOnly?.()) return;
     const now = this.now();
     let next = Number.POSITIVE_INFINITY;
     for (const item of [...this.items.values()].sort((a, b) => a.createdAt - b.createdAt)) {

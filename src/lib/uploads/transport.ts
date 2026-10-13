@@ -26,8 +26,29 @@ export type UploadObjectInput = {
   signal?: AbortSignal;
 };
 
+/** Storage can answer 400 and put the real status in the body's `statusCode`. */
+export function storageStatus(httpStatus: number, body: string): number {
+  try {
+    const code = Number((JSON.parse(body) as { statusCode?: unknown })?.statusCode);
+    if (Number.isInteger(code) && code >= 400 && code < 600) return code;
+  } catch {
+    // Not JSON: the HTTP status stands.
+  }
+  return httpStatus;
+}
+
 /** A refused upload: what the queue should do about it. */
-function refusal(status: number, message: string, sizeBytes: number): AttachmentOpError {
+export function refusal(
+  httpStatus: number,
+  message: string,
+  sizeBytes: number,
+  body = "",
+): AttachmentOpError {
+  const status = storageStatus(httpStatus, body);
+  // A token that lapsed mid-upload: the next try reads a fresh one.
+  if (/jwt expired/i.test(`${message} ${body}`)) {
+    return new AttachmentOpError("upload_server", null, status);
+  }
   if (status === 413) {
     return new AttachmentOpError("upload_too_large", { size_bytes: sizeBytes }, status);
   }
@@ -35,7 +56,7 @@ function refusal(status: number, message: string, sizeBytes: number): Attachment
   // 400/403: the pending row moved on (finalized elsewhere, swept, older than
   // 24 h) or the guard refused the path. The queue starts the file over.
   return new AttachmentOpError(
-    /row-level security|attachment_object_locked|unauthorized|403/i.test(message) || status === 403
+    status === 403 || /row-level security|attachment_object_locked/i.test(`${message} ${body}`)
       ? "upload_refused"
       : "upload_failed",
     null,
@@ -79,7 +100,8 @@ async function uploadStandard(input: UploadObjectInput): Promise<void> {
         resolve();
         return;
       }
-      reject(refusal(xhr.status, xhr.responseText ?? "", input.blob.size));
+      const body = xhr.responseText ?? "";
+      reject(refusal(xhr.status, "", input.blob.size, body));
     };
     xhr.onerror = () => reject(new Error("Network error"));
     xhr.ontimeout = () => reject(new Error("Network error: timed out"));
@@ -124,7 +146,7 @@ async function uploadResumable(input: UploadObjectInput): Promise<void> {
         }
         const body =
           "originalResponse" in err && err.originalResponse ? err.originalResponse.getBody() : "";
-        reject(refusal(status, `${err.message} ${body ?? ""}`, input.blob.size));
+        reject(refusal(status, err.message, input.blob.size, body ?? ""));
       },
       onSuccess: () => resolve(),
     });
@@ -136,12 +158,16 @@ async function uploadResumable(input: UploadObjectInput): Promise<void> {
       },
       { once: true },
     );
+    // Cancelled while looking for a half-sent upload: never start it.
     void upload
       .findPreviousUploads()
       .then((previous) => {
+        if (input.signal?.aborted) return;
         if (previous.length > 0) upload.resumeFromPreviousUpload(previous[0]);
         upload.start();
       })
-      .catch(() => upload.start());
+      .catch(() => {
+        if (!input.signal?.aborted) upload.start();
+      });
   });
 }

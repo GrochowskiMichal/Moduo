@@ -229,7 +229,9 @@ function ReadyTile({
   previewUrl: string | null;
   onOpen: () => void;
 }) {
-  const [broken, setBroken] = useState(false);
+  // Keyed by link: a fresh link (the old one lapsed) gets another try.
+  const [brokenUrl, setBrokenUrl] = useState<string | null>(null);
+  const broken = previewUrl != null && brokenUrl === previewUrl;
   if (rec.previewPath && !broken) {
     return (
       <button
@@ -244,7 +246,7 @@ function ReadyTile({
             src={previewUrl}
             alt=""
             draggable={false}
-            onError={() => setBroken(true)}
+            onError={() => setBrokenUrl(previewUrl)}
             className="size-full object-cover"
           />
         ) : (

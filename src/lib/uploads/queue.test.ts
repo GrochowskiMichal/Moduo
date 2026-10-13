@@ -95,6 +95,7 @@ function setup(
     store?: ReturnType<typeof memoryUploadStore>;
     online?: () => boolean;
     claim?: (id: string, fn: () => Promise<void>) => Promise<boolean>;
+    readOnly?: () => boolean;
   } = {},
 ) {
   let clock = 1_000_000;
@@ -122,6 +123,7 @@ function setup(
       if (i >= 0) timers.splice(i, 1);
     },
     requestPersist: () => persisted.push("asked"),
+    isReadOnly: opts.readOnly,
   });
   const uploaded: AttachmentRecord[] = [];
   queue.onUploaded((rec) => {
@@ -169,6 +171,32 @@ describe("UploadQueue", () => {
     expect(t.queue.getSnapshot().items).toEqual([]);
     expect(t.store.items.size).toBe(0);
     expect(t.persisted).toEqual(["asked"]);
+  });
+
+  it("keeps files waiting while the build is read-only, and sends them once it isn't", async () => {
+    let readOnly = true;
+    const t = setup({ readOnly: () => readOnly });
+    await t.queue.start("u1");
+    await t.queue.add([png()], TARGET, "u1", status());
+    await settle();
+    expect(t.api.calls).toEqual([]);
+    expect(t.queue.getSnapshot().items.map((i) => i.state)).toEqual(["queued"]);
+    readOnly = false;
+    t.queue.wake();
+    await settle();
+    expect(t.uploaded.map((r) => r.id)).toEqual(["a1"]);
+  });
+
+  it("stops moving bytes when stopped (signed out), and resumes on start", async () => {
+    const t = setup();
+    await t.queue.start("u1");
+    t.queue.stop();
+    await t.queue.add([png()], TARGET, "u1", status());
+    await settle();
+    expect(t.api.calls).toEqual([]);
+    await t.queue.start("u1");
+    await settle();
+    expect(t.uploaded.map((r) => r.id)).toEqual(["a1"]);
   });
 
   it("refuses a file over the per-file limit before any bytes move", async () => {
