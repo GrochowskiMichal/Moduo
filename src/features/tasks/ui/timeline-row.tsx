@@ -283,10 +283,14 @@ function NameContent({
             {row.section ? row.section.name || "Untitled section" : "No section"}
           </span>
           {/* The counts and dates never truncate (research §3). */}
-          <span className="shrink-0 font-sans text-xs whitespace-nowrap tabular-nums text-subtle-foreground">
-            · {row.done} of {row.total}
-            {dates ? ` · ${dates}` : ""}
-          </span>
+          {row.total > 0 || dates ? (
+            <span className="shrink-0 font-sans text-xs whitespace-nowrap tabular-nums text-subtle-foreground">
+              {[row.total > 0 ? `${row.done} of ${row.total}` : null, dates]
+                .filter(Boolean)
+                .map((part) => `· ${part}`)
+                .join(" ")}
+            </span>
+          ) : null}
         </span>
       );
     }

@@ -258,6 +258,7 @@ export function TaskTimelineView({
       buildTimelineRows({
         scope: scopeKind,
         tasks,
+        allTasks: api.tasks,
         projects,
         areas: api.areas,
         sections: api.sections,
@@ -278,6 +279,7 @@ export function TaskTimelineView({
     [
       scopeKind,
       tasks,
+      api.tasks,
       projects,
       api.areas,
       api.sections,
@@ -875,9 +877,15 @@ export function TaskTimelineView({
                 className="pointer-events-none absolute z-(--z-sticky) rounded-md bg-card/90 px-3 py-2"
                 style={{ left: nameW + 24, top: size.header + 16 }}
               >
-                <p className="font-sans text-sm text-foreground">Nothing has a date yet.</p>
+                {/* The rows stay listed, with today's line (71). TV-TL2 adds
+                    "Click a day on a row" once a click sets a date. */}
+                <p className="font-sans text-sm text-foreground">
+                  {tasks.length === 0 ? "No tasks here yet." : "Nothing has a date yet."}
+                </p>
                 <p className="font-sans text-xs text-muted-foreground">
-                  Set a due date on a task, or open No date.
+                  {tasks.length === 0
+                    ? "Tasks you give a date show up on the timeline."
+                    : "Set a due date on a task, or open No date."}
                 </p>
               </div>
             ) : null}

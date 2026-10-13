@@ -18,7 +18,9 @@ export function spanWords(start: number, end: number, now: Date = new Date()): s
       ? `${a.getDate()}–${formatDate(b, now)}`
       : `${formatDate(a, now)}–${b.getDate()}`;
   }
-  return `${formatDate(a, now)} – ${formatDate(b, now)}`;
+  // One year, said once, at the end: "Jan 11 – Feb 14, 2027".
+  const first = a.getFullYear() === b.getFullYear() ? formatDate(a, a) : formatDate(a, now);
+  return `${first} – ${formatDate(b, now)}`;
 }
 
 /** A section's dates after its name: "Oct 13–24", or "by Nov 7" for an end date only. */

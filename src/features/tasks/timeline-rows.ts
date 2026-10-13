@@ -121,6 +121,11 @@ export type TimelineRowsInput = {
   scope: TimelineScope;
   /** The scope's tasks after Filter and search; done ones included (they count). */
   tasks: readonly Task[];
+  /**
+   * Every task of the workspace: a project's progress line is the project's,
+   * whatever Filter and search show (absent: `tasks`).
+   */
+  allTasks?: readonly Task[];
   /** Projects in the sidebar's order. */
   projects: readonly Bucket[];
   areas: readonly Area[];
@@ -225,6 +230,8 @@ type Ctx = {
   sectionById: Map<string, Section>;
   sectionsByProject: Map<string, Section[]>;
   tasksByProject: Map<string, Task[]>;
+  /** Every task per project (the progress line). */
+  allByProject: Map<string, Task[]>;
   scopeIds: Set<string>;
   points: Map<string, TimelinePoint | null>;
   extent: { min: number; max: number } | null;
@@ -344,6 +351,12 @@ function taskRow(ctx: Ctx, task: Task, depth: number, band: DaySpan | null): Tim
   return { kind: "task", key: taskRowKey(task.id), task, depth, point, band, sessionDays };
 }
 
+/** A project's own tasks, without the subtasks of its tasks. */
+function topLevel(tasks: readonly Task[]): Task[] {
+  const ids = new Set(tasks.map((t) => t.id));
+  return tasks.filter((t) => !t.parentId || t.parentId === t.id || !ids.has(t.parentId));
+}
+
 /** Done / all, counting each task once (Won't do sits out). */
 function progressOf(tasks: readonly Task[]): { done: number; total: number } {
   let done = 0;
@@ -457,6 +470,8 @@ function projectBody(
     const key = sectionRowKey(projectId, section.id);
     const folded = ctx.input.folded.has(key);
     const own = bySection.get(section.id) ?? [];
+    // A filter or a search lists only the sections with a match.
+    if (ctx.input.filtering && own.length === 0) continue;
     const counts = progressOf(own);
     const { band, milestone } = sectionSpan(section);
     if (band) {
@@ -516,10 +531,12 @@ function assigneeGroups(
 }
 
 function projectRow(ctx: Ctx, project: Bucket, depth: number, expandable: boolean): TimelineRow {
-  const tasks = ctx.tasksByProject.get(project.id) ?? [];
+  // The bar and the progress line are the project's own: all its work,
+  // whatever Filter and search list below it.
+  const all = ctx.allByProject.get(project.id) ?? [];
   const sections = ctx.sectionsByProject.get(project.id) ?? [];
   const openDays: number[] = [];
-  for (const task of tasks) {
+  for (const task of all) {
     if (isClosedTask(task)) continue;
     const point = pointFor(ctx, task);
     if (point) openDays.push(point.day);
@@ -536,7 +553,7 @@ function projectRow(ctx: Ctx, project: Bucket, depth: number, expandable: boolea
     project,
     depth,
     bar,
-    progress: progressOf(tasks.filter((t) => !parentInScope(ctx, t))),
+    progress: progressOf(topLevel(all)),
     expandable,
     expanded,
     muted: project.status === "on_hold" || project.status === "done",
@@ -566,12 +583,20 @@ export function buildTimelineRows(input: TimelineRowsInput): TimelineRowsResult 
     if (list) list.push(task);
     else tasksByProject.set(task.bucketId, [task]);
   }
+  const allByProject = new Map<string, Task[]>();
+  for (const task of input.allTasks ?? input.tasks) {
+    if (task.deletedAt) continue;
+    const list = allByProject.get(task.bucketId);
+    if (list) list.push(task);
+    else allByProject.set(task.bucketId, [task]);
+  }
   const ctx: Ctx = {
     input,
     sessionsByTask,
     sectionById,
     sectionsByProject,
     tasksByProject,
+    allByProject,
     scopeIds: new Set(input.tasks.map((t) => t.id)),
     points: new Map(),
     extent: null,

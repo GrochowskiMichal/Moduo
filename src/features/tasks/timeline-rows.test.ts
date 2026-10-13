@@ -185,6 +185,19 @@ describe("rows follow the scope (AC9.1)", () => {
     expect(shape(rows)).toEqual(["area:Clients", "project:north"]);
   });
 
+  it("a filter lists only the sections with a match; the project's bar and progress stay whole", () => {
+    const { rows } = buildTimelineRows(
+      input({
+        scope: { kind: "project", projectId: "acme" },
+        filtering: true,
+        tasks: TASKS.filter((t) => t.id === "pdf"),
+        allTasks: TASKS,
+      }),
+    );
+    expect(shape(rows)).toEqual(["project:acme", "section:build", "task:pdf"]);
+    expect(rows[0]).toMatchObject({ progress: { done: 1, total: 5 } });
+  });
+
   it("inside a project: the project row, then sections with their tasks", () => {
     const { rows } = buildTimelineRows(input({ scope: { kind: "project", projectId: "acme" } }));
     expect(shape(rows)).toEqual([

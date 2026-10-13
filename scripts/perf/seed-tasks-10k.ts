@@ -25,7 +25,12 @@ export const PERF_TASKS = 10_000;
 /** The word only the fixture's every 500th task carries. */
 export const PERF_SEARCH_WORD = "quokka";
 
-export type Status = { API_URL: string; DB_URL: string; SERVICE_ROLE_KEY?: string; SECRET_KEY?: string };
+export type Status = {
+  API_URL: string;
+  DB_URL: string;
+  SERVICE_ROLE_KEY?: string;
+  SECRET_KEY?: string;
+};
 
 export function stack(): Status {
   const status = JSON.parse(
