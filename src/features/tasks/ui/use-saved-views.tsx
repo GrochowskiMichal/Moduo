@@ -213,7 +213,8 @@ export function useSavedViews({
     });
   }, [seedNow, workspaceId, api]);
 
-  const canSaveInto = !!openView && openView.ownerId === userId;
+  // Your view; a shared one only with Tasks edit (it changes what others see).
+  const canSaveInto = !!openView && openView.ownerId === userId && (canShare || !openView.shared);
   return {
     viewActions,
     saveAsMenu:

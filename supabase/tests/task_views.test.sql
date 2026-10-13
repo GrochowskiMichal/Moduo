@@ -424,13 +424,11 @@ BEGIN
                   = 'Due this week',
     'the first view going up stays first', v::text);
 
-  -- An admin deletes a shared view (and can undo it); the maker still can't
-  -- be overruled on its name.
-  v := test.op('A', test.update_sql('W', 'VP', '{"deleted": true}'));
-  PERFORM test.ok(v ->> 'deleted_at' IS NOT NULL AND test.sees('E', ARRAY[test.id('VP')]) = 0,
-    'an admin deletes a shared view', v::text);
-  v := test.op('A', test.update_sql('W', 'VP', '{"deleted": false}'));
-  PERFORM test.ok(v ->> 'deleted_at' IS NULL, 'and can undo it', v::text);
+  -- An admin takes a shared view off the workspace; deleting it stays its
+  -- maker's (20261013271000).
+  r := test.try('A', test.update_sql('W', 'VP', '{"deleted": true}'));
+  PERFORM test.ok(r LIKE '42501%' AND test.sees('E', ARRAY[test.id('VP')]) = 1,
+    'an admin can''t delete someone else''s shared view', r);
 
   -- ── Erasure takes a person's views (shared ones too), nobody else's ──────
   v := public.account_erase_workspace_data(test.id('E'), true);
