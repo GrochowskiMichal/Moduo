@@ -29,6 +29,7 @@ import * as Y from "yjs";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { tryDeriveNoteBody } from "../editor/doc-markdown";
 import { decodeBase64ToUint8, encodeUint8ToBase64 } from "../utils/base64";
+import { AgentOrigin, type AgentUndo, createAgentUndo, isForeignOrigin } from "./agent-origin";
 import {
   type DocOutboxEntry,
   deleteDocOutboxEntries,
@@ -122,6 +123,8 @@ type NoteSession = {
   compactVeto: boolean;
   lastUsedAt: number;
   destroyed: boolean;
+  /** NR-6: Undo for agent writes that reached this session's doc. */
+  agentUndo: AgentUndo;
 };
 
 /** Keep at most this many idle note sessions alive (fast note switching)
@@ -271,6 +274,7 @@ export class NotesSyncEngineV2 {
       compactVeto: false,
       lastUsedAt: Date.now(),
       destroyed: false,
+      agentUndo: createAgentUndo(doc),
     };
     this.sessions.set(noteId, s);
     this.evictIdleSessions(noteId);
@@ -283,8 +287,9 @@ export class NotesSyncEngineV2 {
     doc.on("update", (update: Uint8Array, origin: unknown) => {
       if (s!.destroyed) return;
       // Ignore what we applied ourselves: remote pulls, the local IDB cache
-      // replaying at boot, and awareness/bootstrap application.
-      if (origin === "remote" || origin === persistence) return;
+      // replaying at boot, agent writes (already stored server-side), and
+      // awareness/bootstrap application.
+      if (isForeignOrigin(origin, persistence)) return;
       // A draft's edits live in the doc (and its local cache) only; promoting
       // it queues the whole state as one update.
       if (this.drafts.has(noteId)) return;
@@ -346,7 +351,10 @@ export class NotesSyncEngineV2 {
         // has them, and a cache-evicted client NEEDS them (skipping by
         // clientId lost history whenever local persistence didn't survive).
         try {
-          Y.applyUpdate(s.doc, decodeBase64ToUint8(u.updateB64), "remote");
+          // Agent rows get an agent origin: that is what the session's Undo
+          // tracks (NR-6). Everything else is plain remote.
+          const origin = u.origin === "agent" ? new AgentOrigin(u.actorKeyId, null) : "remote";
+          Y.applyUpdate(s.doc, decodeBase64ToUint8(u.updateB64), origin);
           ids.push(u.id);
         } catch (e) {
           // The cursor still advances (or we'd re-pull a poison row forever),
@@ -645,8 +653,14 @@ export class NotesSyncEngineV2 {
     if (s.flushTimer) clearTimeout(s.flushTimer);
     this.sessions.delete(noteId);
     s.provider.awareness.destroy();
+    s.agentUndo.destroy();
     await s.persistence.clearData().catch(() => {});
     s.doc.destroy();
+  }
+
+  /** Undo for agent writes on an open note (null when it isn't open). */
+  agentUndo(noteId: string): AgentUndo | null {
+    return this.sessions.get(noteId)?.agentUndo ?? null;
   }
 
   async pullNote(noteId: string): Promise<void> {
@@ -662,6 +676,7 @@ export class NotesSyncEngineV2 {
     if (s.retryTimer) clearTimeout(s.retryTimer);
     if (s.flushTimer) clearTimeout(s.flushTimer);
     s.provider.awareness.destroy();
+    s.agentUndo.destroy();
     await s.persistence.destroy().catch(() => {});
     s.doc.destroy();
     this.sessions.delete(noteId);

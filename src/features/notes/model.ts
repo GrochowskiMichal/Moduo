@@ -7,6 +7,7 @@
  * ./types.ts stays until the old surfaces retire with NO-2/NO-3.
  */
 
+import { type NoteUpdateOrigin, normalizeNoteUpdateOrigin } from "@contracts/vocabularies";
 import type { Truncation } from "../../lib/paged-select";
 
 export type Note = {
@@ -35,6 +36,10 @@ export type Note = {
   inInbox: boolean | null;
   /** NR-1: the note opts out of the reading measure. */
   fullWidth: boolean;
+  /** NR-6: the last person to edit the body (agent writes leave it alone). */
+  editedBy?: string | null;
+  /** NR-6: when that person last edited the body. */
+  editedAt?: string | null;
 };
 
 /** A per-user favorite (NR-1): the note it points at, in the user's order. */
@@ -62,6 +67,9 @@ export type NoteUpdateRow = {
   clientId: string;
   clientSeq: number;
   updateB64: string;
+  /** NR-6: "agent" rows were written by an MCP key (`actorKeyId`). */
+  origin: NoteUpdateOrigin;
+  actorKeyId: string | null;
 };
 
 export type NoteDocPull = {
@@ -107,6 +115,8 @@ export function noteRowToModel(r: any): Note {
     workspaceShared: r.workspace_shared === true,
     inInbox: typeof r.in_inbox === "boolean" ? r.in_inbox : null,
     fullWidth: r.full_width === true,
+    editedBy: r.edited_by ?? null,
+    editedAt: r.edited_at ?? null,
   };
 }
 
@@ -116,6 +126,8 @@ export function noteUpdateRowToModel(r: any): NoteUpdateRow {
     clientId: r.client_id ?? "",
     clientSeq: Number(r.client_seq ?? 0),
     updateB64: r.update_b64 ?? "",
+    origin: normalizeNoteUpdateOrigin(r.origin),
+    actorKeyId: r.actor_key_id ?? null,
   };
 }
 

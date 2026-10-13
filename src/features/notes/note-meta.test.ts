@@ -5,6 +5,7 @@
 import { describe, expect, it } from "@rstest/core";
 import type { EntityLink, EntityRecord, EntityRef, RelationKind } from "../../lib/entity-links";
 import { entityRefKey, rollupSections } from "../spine/rollup";
+import { relativeTimeAgo } from "../spine/snippet-format";
 import { backlinkCount, META_CHIP_CAP, shapeBacklinks, shapeNoteMetaLine } from "./note-meta";
 
 const NOTE: EntityRef = { type: "note", id: "n0" };
@@ -128,6 +129,51 @@ describe("meta line (AC6)", () => {
       "Edited 2 hours ago by Maciej",
     );
     expect(shapeNoteMetaLine({ ...base, editedBy: "  " }).edited).toBe("Edited 2 hours ago");
+  });
+
+  it("prefers the person's own edit time when it is known (NR-6)", () => {
+    const line = shapeNoteMetaLine({
+      sections: [],
+      updatedAt: "2026-10-13T11:59:00Z",
+      editedAt: "2026-10-13T10:00:00Z",
+      editedBy: "Maciej",
+      now: NOW,
+    });
+    expect(line.edited).toBe("Edited 2 hours ago by Maciej");
+    expect(line.undoable).toBe(false);
+  });
+
+  it("names the agent after its write, with Undo only when the session can undo (AC11)", () => {
+    const base = {
+      sections: [],
+      updatedAt: "2026-10-13T11:58:00Z",
+      editedAt: "2026-10-13T10:00:00Z",
+      editedBy: "Maciej",
+      agentEdit: { label: "Research bot", at: "2026-10-13T11:58:00Z" },
+      now: NOW,
+    };
+    const line = shapeNoteMetaLine({ ...base, canUndoAgent: true });
+    expect(line.edited).toBe(`Research bot edited · ${relativeTimeAgo(base.agentEdit.at, NOW)}`);
+    expect(line.undoable).toBe(true);
+    expect(shapeNoteMetaLine(base).undoable).toBe(false);
+    // An unnamed key reads as Claude.
+    expect(
+      shapeNoteMetaLine({ ...base, agentEdit: { label: null, at: base.agentEdit.at } }).edited,
+    ).toMatch(/^Claude edited · /);
+  });
+
+  it("goes back to the person once they edit after the agent", () => {
+    const line = shapeNoteMetaLine({
+      sections: [],
+      updatedAt: "2026-10-13T11:59:00Z",
+      editedAt: "2026-10-13T11:59:00Z",
+      editedBy: "Maciej",
+      agentEdit: { label: "Research bot", at: "2026-10-13T11:00:00Z" },
+      canUndoAgent: true,
+      now: NOW,
+    });
+    expect(line.edited).toMatch(/^Edited .* by Maciej$/);
+    expect(line.undoable).toBe(false);
   });
 });
 

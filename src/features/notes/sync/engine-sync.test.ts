@@ -8,6 +8,10 @@
 import { afterEach, describe, expect, it, rs } from "@rstest/core";
 import * as Y from "yjs";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
+import { applyAgentEdit } from "../editor/agent-write";
+import { deriveNoteBody, NOTES_DOC_ROOT } from "../editor/doc-markdown";
+import { buildDocStateFromMarkdown } from "../editor/materialize";
+import { encodeUint8ToBase64 } from "../utils/base64";
 import { NotesSyncEngineV2 } from "./engine-v2";
 
 rs.mock("y-indexeddb", () => ({
@@ -149,5 +153,52 @@ describe("honest provider (NR-3)", () => {
     await engine.flushNote("d2");
     const push = runtime.notesV2.pushUpdates as unknown as { mock: { calls: unknown[][] } };
     expect(push.mock.calls.at(-1)![0]).toMatchObject({ bodyMd: "capture" });
+  });
+});
+
+describe("agent writes reach an open note (NR-6)", () => {
+  it("a pulled agent row lands, is not pushed back, and Undo reverts it with a push", async () => {
+    const base = buildDocStateFromMarkdown("n9", "# Plan\n\nHello")!;
+    const server = new Y.Doc();
+    server.get(NOTES_DOC_ROOT, Y.XmlElement);
+    Y.applyUpdate(server, Uint8Array.from(Buffer.from(base.docStateB64, "base64")));
+    const before = Y.encodeStateVector(server);
+    applyAgentEdit(server, { kind: "append", markdown: "From the agent" });
+    const agentB64 = encodeUint8ToBase64(Y.encodeStateAsUpdate(server, before));
+
+    const pullDoc = rs.fn(async () => ({
+      snapshotB64: base.docStateB64,
+      docVersion: 1,
+      updates: [
+        {
+          id: 7,
+          clientId: "agent:x",
+          clientSeq: 1,
+          updateB64: agentB64,
+          origin: "agent",
+          actorKeyId: "key-1",
+        },
+      ],
+    }));
+    const pushUpdates = rs.fn(async () => ({ inserted: 1, duplicates: 0, maxUpdateId: 8 }));
+    const runtime = { notesV2: { pullDoc, pushUpdates } } as unknown as ModuoRuntime;
+    engine = new NotesSyncEngineV2(runtime, "ws1");
+    const session = engine.getOrCreateSession("n9");
+    await session.booted;
+    await tick();
+
+    expect(deriveNoteBody(session.doc).md).toBe("# Plan\n\nHello\n\nFrom the agent");
+    expect(pushUpdates).not.toHaveBeenCalled();
+    const undo = engine.agentUndo("n9")!;
+    expect(undo.canUndo()).toBe(true);
+
+    undo.undo();
+    await tick();
+    await engine.flushNote("n9");
+    await tick();
+    expect(deriveNoteBody(session.doc).md).toBe("# Plan\n\nHello");
+    expect(pushUpdates).toHaveBeenCalled();
+    const pushed = (pushUpdates.mock.calls.at(-1) as unknown as [{ bodyMd?: string | null }])[0];
+    expect(pushed.bodyMd).toBe("# Plan\n\nHello");
   });
 });

@@ -18,6 +18,7 @@ import { NoteEditor } from "../ui/note-editor";
 import { NotesEditorDropZone } from "../ui/notes-editor-drop-zone";
 import { LinkedFromFooter } from "./linked-from-footer";
 import { NoteMetaLineView } from "./note-meta-line";
+import { useAgentEdit } from "./use-agent-edit";
 import { useNoteLinks } from "./use-note-links";
 
 export function NoteView({
@@ -38,6 +39,7 @@ export function NoteView({
   onRestore,
   onOpenEntity,
   onOpenDetail,
+  memberName,
 }: {
   topBar: ReactNode;
   runtime: ModuoRuntime | null;
@@ -59,9 +61,19 @@ export function NoteView({
   onOpenEntity: (ref: EntityRef) => void;
   /** Open the right panel on its Detail variant (a count chip's target). */
   onOpenDetail: () => void;
+  /** A workspace member's display name, for "Edited … by …". */
+  memberName?: (userId: string) => string | null;
 }) {
   const liveNote = note && !note.deletedAt && !isDraft ? note : null;
-  const links = useNoteLinks({ runtime, workspaceId, note: liveNote });
+  const agent = useAgentEdit({ runtime, engine, workspaceId, noteId: liveNote?.id ?? null });
+  const links = useNoteLinks({
+    runtime,
+    workspaceId,
+    note: liveNote,
+    editedBy: liveNote?.editedBy ? (memberName?.(liveNote.editedBy) ?? null) : null,
+    agentEdit: agent.agentEdit,
+    canUndoAgent: agent.canUndo && editable,
+  });
   let body: ReactNode;
   if (note?.deletedAt) {
     body = (
@@ -106,6 +118,7 @@ export function NoteView({
                   line={links.line}
                   onOpenEntity={onOpenEntity}
                   onOpenDetail={onOpenDetail}
+                  onUndo={agent.undo}
                 />
               ) : null
             }

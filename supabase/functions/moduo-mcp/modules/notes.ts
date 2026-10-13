@@ -8,29 +8,27 @@
  * comes from the key, never from tool args; reads run as service_role (RLS
  * bypassed) so every query MUST filter on ctx.key.workspaceId.
  *
- * Markdown, not CRDT (specs/notes.md assumption 10). The server never parses
- * the Yjs doc; the connector writes the derived `body_md` (the read/search/
- * publish source) and a plain-text `body_text` for FTS. A headless Deno Yjs
- * builder was deliberately NOT attempted here. Consequence: a note
- * created/appended here is immediately listable, gettable-as-markdown,
- * searchable, exportable, and publishable.
- *
- * UPDATED by NOTE-FIX-1 (2026-07-29) — read this before touching the writes.
- * A headless builder IS now proven in the APP (`src/features/notes/editor/
- * materialize.ts`, `@lexical/headless` + `createBindingV2__EXPERIMENTAL`), and
- * the app repairs body-only notes via `notes_op_seed_doc`. So:
- *   - a note CREATED here still lands correctly — it has a body and no doc, so
- *     the app's blank-note sweep materializes it the next time /notes loads;
- *   - a note APPENDED/UPDATED here that is ALREADY materialized no longer
- *     reaches the editor at all. The doc wins on open, and the user's next
- *     keystroke flushes `deriveBody(doc)` over this body write, discarding it.
- * That second case used to self-heal (imported notes stayed un-materialized);
- * it no longer does. Giving the connector a real CRDT write path — or routing
- * its edits through the same materializer — is now REQUIRED for MCP-1.
+ * Writes are real CRDT changes (specs/notes-refresh.md NR-6, AC11). Append
+ * and update rebuild the note's Yjs doc from the server (snapshot + update
+ * log), apply the edit through the app's own headless editor (the prebuilt
+ * `_shared/notes-doc/notes-doc.bundle.js`; rebuild it with
+ * `bun run build:notes-doc` whenever the notes editor schema changes), and
+ * push the resulting update through `notes_op_apply_updates` as an agent
+ * write. The server records the key and logs `notes.agent_edit`; the update
+ * is broadcast on the note's live channel so an open editor shows it at once,
+ * and a closed one pulls it on the next open. `body_md` / `body_text` come
+ * from the same converter the app uses, so reads, search and publish agree
+ * with the doc. Create builds the doc up front, so a new note is complete
+ * the moment it exists.
  */
 
 import type { ConnectorModule, ToolContext } from "../registry.ts";
 import { assertReach, visibleIds } from "../share.ts";
+import {
+  type AgentEdit,
+  agentCreateDoc,
+  agentWriteFromLog,
+} from "../../_shared/notes-doc/notes-doc.bundle.js";
 
 type Row = Record<string, any>;
 
@@ -127,6 +125,108 @@ async function getNote(ctx: ToolContext, id: string, cols: string): Promise<Row 
   return found[0] ?? null;
 }
 
+/** The app's live channel for a note (src/features/notes/sync/notes-realtime.ts
+ * `noteChannelName`, event `NOTE_UPDATE_EVENT`). */
+const NOTE_CHANNEL_PREFIX = "notes:";
+const NOTE_UPDATE_EVENT = "u";
+const UPDATE_PAGE = 1000;
+
+/** Every update row after the snapshot, paged past PostgREST's 1000-row cap. */
+async function noteUpdateLog(ctx: ToolContext, noteId: string): Promise<string[]> {
+  const out: string[] = [];
+  let after = 0;
+  for (;;) {
+    const page = await rows(
+      ctx.db
+        .from("note_updates")
+        .select("id, update_b64")
+        .eq("workspace_id", ctx.key.workspaceId)
+        .eq("note_id", noteId)
+        .gt("id", after)
+        .order("id", { ascending: true })
+        .limit(UPDATE_PAGE),
+    );
+    for (const r of page) {
+      if (typeof r.update_b64 === "string") out.push(r.update_b64);
+      after = Math.max(after, Number(r.id));
+    }
+    if (page.length < UPDATE_PAGE) return out;
+  }
+}
+
+/** Tell open editors right away. Best effort: a missed broadcast is caught
+ * up by the editor's next pull, so it never fails the write. */
+async function broadcastAgentUpdate(ctx: ToolContext, noteId: string, updateB64: string) {
+  const payload = {
+    b64: updateB64,
+    origin: "agent",
+    keyId: ctx.key.id,
+    label: ctx.key.name ?? null,
+  };
+  try {
+    const channel = ctx.db.channel(`${NOTE_CHANNEL_PREFIX}${noteId}`);
+    try {
+      if (typeof channel.httpSend === "function") {
+        await channel.httpSend(NOTE_UPDATE_EVENT, payload);
+      } else {
+        await channel.send({ type: "broadcast", event: NOTE_UPDATE_EVENT, payload });
+      }
+    } finally {
+      await ctx.db.removeChannel(channel);
+    }
+  } catch (e) {
+    console.warn("[notes] live broadcast failed; editors catch up on their next pull", e);
+  }
+}
+
+/** Apply an agent edit to the note's doc as the server holds it. Returns
+ * the `notes_op_apply_updates` arguments for the write, or null when the edit
+ * changed nothing. The tool itself makes the call (so the key-scope check
+ * sees which tool needs what). */
+async function prepareAgentEdit(
+  ctx: ToolContext,
+  noteId: string,
+  edit: AgentEdit,
+): Promise<{ args: Row; updateB64: string } | null> {
+  // Log first, snapshot second (the app's pull order): a compaction in between
+  // only makes the snapshot newer than the log, and applying both is lossless.
+  const updatesB64 = await noteUpdateLog(ctx, noteId);
+  const note = await getNote(ctx, noteId, "id, body_md, doc_state");
+  if (!note) throw new Error("Note not found in this workspace.");
+  const result = agentWriteFromLog({
+    noteId,
+    snapshotB64: typeof note.doc_state === "string" && note.doc_state ? note.doc_state : null,
+    updatesB64,
+    bodyMd: String(note.body_md ?? ""),
+    edit,
+  });
+  if (!result.updateB64) return null;
+  return {
+    updateB64: result.updateB64,
+    args: {
+      p_note_id: noteId,
+      // A fresh client id per write: seq 1 can never collide with an earlier
+      // write's row (a reused id would be dropped as a duplicate).
+      p_client_id: `agent:${crypto.randomUUID()}`,
+      p_updates: [{ clientSeq: 1, updateB64: result.updateB64 }],
+      p_body_md: result.bodyMd,
+      p_body_text: result.bodyText,
+      p_origin: "agent",
+    },
+  };
+}
+
+/** After the write: refuse a silent no-op, then tell open editors. */
+async function finishAgentEdit(
+  ctx: ToolContext,
+  noteId: string,
+  applied: Row | null,
+  updateB64: string,
+): Promise<void> {
+  if (Number(applied?.inserted ?? 0) < 1) throw new Error("The edit could not be saved.");
+  await broadcastAgentUpdate(ctx, noteId, updateB64);
+}
+
 export const notesConnectorModule: ConnectorModule = {
   module: "notes",
   tools: [
@@ -214,7 +314,7 @@ export const notesConnectorModule: ConnectorModule = {
     {
       name: "notes_create",
       description:
-        "Create a note from markdown (optionally under a parent) — agents build whole trees this way. The note is immediately listable / searchable / publishable; its rich editor materializes from the markdown on first open.",
+        "Create a note from markdown (optionally under a parent) — agents build whole trees this way. The note is immediately listable, searchable, publishable and editable, and lands in the Inbox when it has no parent.",
       access: "edit",
       inputSchema: {
         type: "object",
@@ -236,14 +336,17 @@ export const notesConnectorModule: ConnectorModule = {
         if (parentId) await assertReach(ctx, "note", parentId);
         const id = crypto.randomUUID();
         const bodyMd = composeBody(title, body);
+        // Built here, so the note opens complete everywhere, with no seeding.
+        const built = agentCreateDoc(id, bodyMd);
         const result = await callOp(ctx, "notes_op_import", {
           p_rows: [
             {
               id,
               parentId,
               title,
-              bodyMd,
-              bodyText: mdToPlain(bodyMd),
+              docStateB64: built?.docStateB64 ?? null,
+              bodyMd: built?.bodyMd ?? bodyMd,
+              bodyText: built?.bodyText ?? mdToPlain(bodyMd),
             },
           ],
         });
@@ -255,7 +358,7 @@ export const notesConnectorModule: ConnectorModule = {
     {
       name: "notes_append",
       description:
-        "Append markdown to the end of a note's body (adds to the read/search/publish source; the live editor reflects it after its next materialization).",
+        "Append markdown to the end of a note. It appears live for anyone with the note open, is attributed to this key, and they can undo it.",
       access: "edit",
       inputSchema: {
         type: "object",
@@ -269,23 +372,18 @@ export const notesConnectorModule: ConnectorModule = {
         const noteId = str(args, "note_id");
         const addition = md(args, "markdown");
         await assertReach(ctx, "note", noteId);
-        const existing = await getNote(ctx, noteId, "id, body_md");
-        if (!existing) throw new Error("Note not found in this workspace.");
-        const combined = `${(existing.body_md ?? "").replace(/\s+$/g, "")}\n\n${addition}`.trim();
-        await callOp(ctx, "notes_op_apply_updates", {
-          p_note_id: noteId,
-          p_client_id: "mcp",
-          p_updates: null,
-          p_body_md: combined,
-          p_body_text: mdToPlain(combined),
-        });
+        const edit = await prepareAgentEdit(ctx, noteId, { kind: "append", markdown: addition });
+        if (edit) {
+          const applied = await callOp(ctx, "notes_op_apply_updates", edit.args);
+          await finishAgentEdit(ctx, noteId, applied, edit.updateB64);
+        }
         return { id: noteId, ok: true };
       },
     },
     {
       name: "notes_update",
       description:
-        "Replace a note's markdown body wholesale (optionally rename it). The live editor reflects it after its next materialization.",
+        "Replace a note's markdown body wholesale (optionally rename it). It appears live for anyone with the note open, is attributed to this key, and they can undo it.",
       access: "edit",
       inputSchema: {
         type: "object",
@@ -312,14 +410,14 @@ export const notesConnectorModule: ConnectorModule = {
           if (!cur) throw new Error("Note not found in this workspace.");
           firstLine = (cur.title ?? "").trim();
         }
-        const bodyMd = composeBody(firstLine, body);
-        await callOp(ctx, "notes_op_apply_updates", {
-          p_note_id: noteId,
-          p_client_id: "mcp",
-          p_updates: null,
-          p_body_md: bodyMd,
-          p_body_text: mdToPlain(bodyMd),
+        const edit = await prepareAgentEdit(ctx, noteId, {
+          kind: "replace",
+          markdown: composeBody(firstLine, body),
         });
+        if (edit) {
+          const applied = await callOp(ctx, "notes_op_apply_updates", edit.args);
+          await finishAgentEdit(ctx, noteId, applied, edit.updateB64);
+        }
         return { id: noteId, ok: true };
       },
     },

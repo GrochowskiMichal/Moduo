@@ -545,3 +545,24 @@ export function isContentAuthorKind(value: unknown): value is ContentAuthorKind 
 export function normalizeContentAuthorKind(input: unknown): ContentAuthorKind {
   return isContentAuthorKind(input) ? input : "user";
 }
+
+// ---------------------------------------------------------------------------
+// Note update origins — who wrote a Yjs update in `note_updates` (NR-6).
+// Mirrors note_updates_origin_check (20261014120000_notes_agent_writes).
+// `agent` = an MCP key's write; clients apply those with an agent origin so
+// the session's Undo can revert exactly them.
+// ---------------------------------------------------------------------------
+
+export const NOTE_UPDATE_ORIGINS = ["user", "agent"] as const;
+export type NoteUpdateOrigin = (typeof NOTE_UPDATE_ORIGINS)[number];
+export const noteUpdateOriginSchema = z.enum(NOTE_UPDATE_ORIGINS);
+export function isNoteUpdateOrigin(value: unknown): value is NoteUpdateOrigin {
+  return typeof value === "string" && (NOTE_UPDATE_ORIGINS as readonly string[]).includes(value);
+}
+/** Read-side normalization: rows written before the column existed are a person's. */
+export function normalizeNoteUpdateOrigin(input: unknown): NoteUpdateOrigin {
+  return isNoteUpdateOrigin(input) ? input : "user";
+}
+export function parseNoteUpdateOrigin(input: unknown): SafeParseResult<NoteUpdateOrigin> {
+  return parseOrError(noteUpdateOriginSchema, input);
+}

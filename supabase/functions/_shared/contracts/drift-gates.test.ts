@@ -15,6 +15,7 @@ import {
   EMAIL_PROVIDERS,
   MEMBER_DB_PERMISSIONS,
   MEMBER_DB_ROLES,
+  NOTE_UPDATE_ORIGINS,
   PLAN_TIERS,
   TASK_STATUSES,
   WAITLIST_SOURCES,
@@ -67,6 +68,16 @@ describe("cross-runtime drift guards", () => {
     expect(read("20261008123000_key_writes_act_as_creator.sql")).toContain(
       `author_kind IN (${list(CONTENT_AUTHOR_KINDS, ",")})`,
     );
+  });
+
+  it("NOTE_UPDATE_ORIGINS matches note_updates_origin_check", () => {
+    const sql = readFileSync(
+      resolve(MIGRATIONS_DIR, "20261014120000_notes_agent_writes.sql"),
+      "utf8",
+    );
+    const inList = NOTE_UPDATE_ORIGINS.map((v) => `'${v}'`).join(",");
+    expect(sql).toContain(`CHECK (origin IN (${inList}))`);
+    expect(sql).toContain(`v_origin NOT IN (${inList})`);
   });
 
   it("task statuses stay the closed set used by MCP parsers", () => {

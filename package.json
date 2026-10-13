@@ -29,6 +29,7 @@
     "lint:js": "biome check .",
     "lint:css": "stylelint \"src/**/*.css\"",
     "lint:tw": "bun ./scripts/check-arbitrary-tw.ts",
+    "build:notes-doc": "bun ./scripts/build-notes-doc.ts",
     "format": "biome format --write .",
     "format:fix": "biome check --write .",
     "test": "rstest",

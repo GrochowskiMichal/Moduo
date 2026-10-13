@@ -51,6 +51,8 @@ describe("noteRowToModel", () => {
       workspaceShared: false,
       inInbox: null,
       fullWidth: false,
+      editedBy: null,
+      editedAt: null,
     });
   });
 
@@ -98,7 +100,21 @@ describe("noteUpdateRowToModel", () => {
   it("maps and coerces numeric fields", () => {
     expect(
       noteUpdateRowToModel({ id: "42", client_id: "c1", client_seq: "7", update_b64: "QQ==" }),
-    ).toEqual({ id: 42, clientId: "c1", clientSeq: 7, updateB64: "QQ==" });
+    ).toEqual({
+      id: 42,
+      clientId: "c1",
+      clientSeq: 7,
+      updateB64: "QQ==",
+      origin: "user",
+      actorKeyId: null,
+    });
+  });
+
+  it("carries an agent row's origin and key (NR-6)", () => {
+    expect(
+      noteUpdateRowToModel({ id: 1, update_b64: "QQ==", origin: "agent", actor_key_id: "k1" }),
+    ).toMatchObject({ origin: "agent", actorKeyId: "k1" });
+    expect(noteUpdateRowToModel({ id: 1, origin: "robot" }).origin).toBe("user");
   });
 });
 

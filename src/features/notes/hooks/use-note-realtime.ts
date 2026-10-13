@@ -19,6 +19,7 @@
 import { useEffect, useState } from "react";
 import * as Y from "yjs";
 import { supabaseClient } from "@/lib/runtime.web";
+import { AgentOrigin, isForeignOrigin } from "../sync/agent-origin";
 import type { NotesSyncEngineV2 } from "../sync/engine-v2";
 import {
   coalesceUpdates,
@@ -123,7 +124,7 @@ export function useNoteRealtime({ engine, noteId, enabled, selfUserId, selfName 
         // Mirror the engine's own guard (engine-v2 getOrCreateSession observer):
         // ignore remote applications and the IndexedDB replay — relay only
         // genuine local edits.
-        if (origin === "remote" || origin === persistence) return;
+        if (isForeignOrigin(origin, persistence)) return;
         buffer.push(update);
         if (!timer) timer = setTimeout(flush, BROADCAST_COALESCE_MS);
       };
@@ -134,10 +135,20 @@ export function useNoteRealtime({ engine, noteId, enabled, selfUserId, selfName 
 
       channel
         .on("broadcast", { event: NOTE_UPDATE_EVENT }, (msg) => {
-          const b64 = (msg.payload as { b64?: unknown } | undefined)?.b64;
+          const payload = msg.payload as Record<string, unknown> | undefined;
+          const b64 = payload?.b64;
           if (typeof b64 !== "string") return;
+          // An MCP write (NR-6) arrives marked as the agent's, so the
+          // session's Undo can revert exactly it.
+          const origin =
+            payload?.origin === "agent"
+              ? new AgentOrigin(
+                  typeof payload.keyId === "string" ? payload.keyId : null,
+                  typeof payload.label === "string" ? payload.label : null,
+                )
+              : "remote";
           try {
-            Y.applyUpdate(doc, decodeBase64ToUint8(b64), "remote");
+            Y.applyUpdate(doc, decodeBase64ToUint8(b64), origin);
           } catch {
             // A malformed peer update can't wedge us; the next pull reconciles.
           }

@@ -85,6 +85,9 @@ export const noteRowSchema = z.object({
   // NR-1: stored Inbox + per-note reading width (optional until deployed).
   in_inbox: z.boolean().optional(),
   full_width: z.boolean().optional(),
+  // NR-6: the last human editor (optional until deployed).
+  edited_by: optStr,
+  edited_at: optStr,
   created_at: z.string(),
   updated_at: z.string(),
   deleted_at: optStr,
@@ -104,6 +107,9 @@ export const noteUpdateRowSchema = z.object({
   client_id: z.string().optional(),
   client_seq: z.union([z.number(), z.string()]).optional(),
   update_b64: z.string().optional(),
+  // NR-6: who wrote the update (optional until deployed; absent = "user").
+  origin: z.string().optional(),
+  actor_key_id: optStr,
 });
 export type NoteUpdateRowDto = z.infer<typeof noteUpdateRowSchema>;
 
