@@ -48,4 +48,7 @@ Migration `20261013240000_project_description_team_defaults` is on the local sta
 - A Done or Archive with Move shows its toast before the moves land, and keeps it if they're refused (Archive has the same).
 - A starter template's description now lands on the project made from it; check the starter copy reads well as a project description.
 - The ⌘K "Archived" tag reads the store when results arrive (not live).
+- "Done this month" re-reads its month only when the panel draws; left open untouched across midnight on the 1st, it shows last month until something changes.
+- The overview's helpers each scan the workspace's task list (and sections clone their tasks); filter the project's tasks once and pass them in.
+- A view-only reader's overview is read-only after one access check per project; there's a moment while it's asked when nothing is editable.
 - No tests for the hub rollup's rendering, the ⌘K tag, archived deep links or the dimmed rows (logic covered by unit tests where pure).

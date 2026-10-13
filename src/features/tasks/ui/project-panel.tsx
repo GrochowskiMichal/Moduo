@@ -49,7 +49,7 @@ import {
 } from "./project-overview-parts";
 import { TaskStatusIcon } from "./status-icon";
 import { TimeReportSheet } from "./time-report-sheet";
-import { useProjectFiles, useProjectTime } from "./use-project-overview-data";
+import { useProjectEditable, useProjectFiles, useProjectTime } from "./use-project-overview-data";
 
 export { projectFacts } from "../project-overview";
 
@@ -154,7 +154,10 @@ function ProjectOverview({
   const region = useTimeRegion();
   const [reportOpen, setReportOpen] = useState(false);
   const [revealed, setRevealed] = useState<Optional | null>(null);
-  const editable = canEdit && !!onEdit;
+  // Tasks edit in the workspace isn't enough: a project can be shared view-only.
+  const access = useProjectEditable(project.id, canEdit);
+  const allowed = canEdit && access === true;
+  const editable = allowed && !!onEdit;
   const edit = (patch: ProjectOverviewPatch) => onEdit?.(project.id, patch);
 
   const mine = useMemo(() => tasksOfProject(tasks, project.id), [tasks, project.id]);
@@ -178,7 +181,7 @@ function ProjectOverview({
   );
   // "Done this month · 14 · 22h" (AC6.6): the same month and zone as the
   // time report, so the two always agree.
-  // Re-read on a new day, so a panel left open into a new month moves with it.
+  // Re-read when the panel draws on a new day (a new month follows then).
   const today = new Date().toDateString();
   // biome-ignore lint/correctness/useExhaustiveDependencies: `today` is the re-read cue
   const month = useMemo(
@@ -261,7 +264,7 @@ function ProjectOverview({
           <PropertyRow label="Status">
             <ProjectStateValue
               state={state}
-              canEdit={canEdit && !!onSetState}
+              canEdit={allowed && !!onSetState}
               onChange={(s) => onSetState?.(project, s)}
             />
           </PropertyRow>
@@ -535,13 +538,13 @@ function ProjectOverview({
           <Copy aria-hidden />
           Copy as text
         </Button>
-        {onDuplicate ? (
+        {onDuplicate && access === true ? (
           <Button size="sm" variant="ghost" onClick={() => onDuplicate(project)}>
             <CopyPlus aria-hidden />
             Duplicate…
           </Button>
         ) : null}
-        {canEdit && onArchive ? (
+        {allowed && onArchive ? (
           <Button size="sm" variant="ghost" onClick={() => onArchive(project)}>
             <Archive aria-hidden />
             Archive…

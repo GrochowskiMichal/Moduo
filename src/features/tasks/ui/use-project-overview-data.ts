@@ -92,3 +92,35 @@ export function useProjectFiles(workspaceId: string, taskIds: readonly string[])
     return { files, partial: all.partial, loaded: true };
   }, [all, key]);
 }
+
+/**
+ * Whether the reader may change this project (Edit on it, D15-11's
+ * `templates_can_copy`), asked once per project: the workspace's Tasks edit
+ * isn't enough when a project is shared view-only. Null while asking; a
+ * server that can't answer leaves it to the ops (yes).
+ */
+export function useProjectEditable(projectId: string, enabled: boolean): boolean | null {
+  const [answer, setAnswer] = useState<{ id: string; ok: boolean } | null>(null);
+  useEffect(() => {
+    if (!enabled) return;
+    const runtime = getRuntime();
+    if (!runtime?.tasks.canCopyTemplateSource) {
+      setAnswer({ id: projectId, ok: true });
+      return;
+    }
+    let live = true;
+    runtime.tasks.canCopyTemplateSource({ kind: "project", id: projectId }).then(
+      (ok) => {
+        if (live) setAnswer({ id: projectId, ok });
+      },
+      () => {
+        if (live) setAnswer({ id: projectId, ok: true });
+      },
+    );
+    return () => {
+      live = false;
+    };
+  }, [projectId, enabled]);
+  if (!enabled) return false;
+  return answer?.id === projectId ? answer.ok : null;
+}
