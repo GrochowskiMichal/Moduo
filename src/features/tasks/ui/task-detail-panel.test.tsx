@@ -137,6 +137,8 @@ function fakeRuntime(opts: { comments?: SpineComment[]; mySeconds?: number } = {
         createdAt: "2026-10-09T10:00:00Z",
         updatedAt: "2026-10-09T10:00:00Z",
         deletedAt: null,
+        editedAt: null,
+        reactions: [],
       };
       comments = [...comments, row];
       return row;
@@ -315,6 +317,8 @@ describe("comments on a task (U3-2)", () => {
           createdAt: "2026-10-07T20:02:00Z",
           updatedAt: "2026-10-07T20:02:00Z",
           deletedAt: null,
+          editedAt: null,
+          reactions: [],
         },
       ],
     });

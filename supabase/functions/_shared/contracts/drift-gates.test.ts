@@ -14,6 +14,7 @@ import {
   ATTACHMENT_PREVIEW_MIMES,
   ATTACHMENT_STATUSES,
   CALENDAR_ACCOUNT_STATUSES,
+  COMMENT_REACTIONS,
   CONTENT_AUTHOR_KINDS,
   EMAIL_KINDS,
   EMAIL_OUTBOX_STATUSES,
@@ -191,6 +192,17 @@ describe("cross-runtime drift guards", () => {
     for (const t of SYNC_TOMBSTONE_TABLES) {
       expect(sql).toContain(`CREATE TRIGGER sync_tombstone AFTER DELETE ON public.${t}`);
     }
+  });
+
+  it("the six comment reactions match TV-U13's CHECK and op", () => {
+    const sql = readFileSync(
+      resolve(MIGRATIONS_DIR, "20261013100000_comment_reactions_edits.sql"),
+      "utf8",
+    );
+    const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(",");
+    const opList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(", ");
+    expect(sql).toContain(`CHECK (reaction IN (${inList(COMMENT_REACTIONS)}))`);
+    expect(sql).toContain(`p_reaction NOT IN (${opList(COMMENT_REACTIONS)})`);
   });
 
   it("the booking busy read leaves out the closed categories (TV-D10-fix)", () => {

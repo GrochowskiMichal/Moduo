@@ -36,6 +36,7 @@ import {
   isOpenTask,
   normalizeAccessChangeResource,
   normalizeAttachmentStatus,
+  normalizeCommentReaction,
   normalizeContentAuthorKind,
   normalizeTaskStatusCategory,
 } from "@contracts/vocabularies";
@@ -101,6 +102,7 @@ import type {
   AttachmentRecord,
   AuthChangeEvent,
   AuthListener,
+  CommentReactionMark,
   EmailAccountRef,
   EmailThreadRef,
   HabitRow,
@@ -2921,18 +2923,66 @@ export const webRuntime: ModuoRuntime = {
     },
 
     async listComments({ workspaceId, entityType, entityId }) {
-      const { data, error } = await supabaseClient
-        .from("comments")
-        // `*`, not a column list: author_kind / author_label arrive with
-        // 20261008123000, and naming them would fail this read until it applies.
-        .select("*")
-        .eq("workspace_id", workspaceId)
-        .eq("entity_type", entityType)
-        .eq("entity_id", entityId)
-        .is("deleted_at", null)
-        .order("created_at", { ascending: true });
+      // `*`, not a column list: author_kind / author_label arrive with
+      // 20261008123000, and naming them would fail this read until it applies.
+      // The reactions ride along (TV-U13); a database before 20261013100000
+      // has no such table, so the thread is read without them there.
+      const read = (select: string) =>
+        supabaseClient
+          .from("comments")
+          .select(select)
+          .eq("workspace_id", workspaceId)
+          .eq("entity_type", entityType)
+          .eq("entity_id", entityId)
+          .is("deleted_at", null)
+          .order("created_at", { ascending: true });
+      let { data, error } = await read("*, comment_reactions(user_id, reaction)");
+      if (error && isMissingReactionsError(error)) ({ data, error } = await read("*"));
       if (error) throw new Error(error.message);
       return mapKnownRows(data, commentRowToModel);
+    },
+
+    // ── Comment edit / delete / reactions (TV-U13) ───────────────────────────
+    async editComment({ commentId, body, mentionedUserIds }) {
+      const { data, error } = await supabaseClient.rpc("comments_op_edit", {
+        p_comment_id: commentId,
+        p_body: body,
+        p_mentioned_user_ids: mentionedUserIds ?? [],
+      });
+      if (error) throw new Error(error.message);
+      const row = Array.isArray(data) ? data[0] : data;
+      if (!row) throw new Error("The comment operation returned nothing.");
+      return commentRowToModel(row);
+    },
+
+    async deleteComment({ commentId }) {
+      const { data, error } = await supabaseClient.rpc("comments_op_delete", {
+        p_comment_id: commentId,
+      });
+      if (error) throw new Error(error.message);
+      const row = Array.isArray(data) ? data[0] : data;
+      if (!row) throw new Error("The comment operation returned nothing.");
+      return commentRowToModel(row);
+    },
+
+    async restoreComment({ commentId }) {
+      const { data, error } = await supabaseClient.rpc("comments_op_restore", {
+        p_comment_id: commentId,
+      });
+      if (error) throw new Error(error.message);
+      const row = Array.isArray(data) ? data[0] : data;
+      if (!row) throw new Error("The comment operation returned nothing.");
+      return commentRowToModel(row);
+    },
+
+    async reactToComment({ commentId, reaction, on }) {
+      const { data, error } = await supabaseClient.rpc("comments_op_react", {
+        p_comment_id: commentId,
+        p_reaction: reaction,
+        p_on: on,
+      });
+      if (error) throw new Error(error.message);
+      return reactionMarks(Array.isArray(data) ? data : []);
     },
 
     async listNotifications({ workspaceId, limit }) {
@@ -4416,7 +4466,30 @@ function commentRowToModel(raw: unknown): SpineComment {
     createdAt: r.created_at,
     updatedAt: r.updated_at,
     deletedAt: r.deleted_at ?? null,
+    editedAt: r.edited_at ?? null,
+    reactions: reactionMarks(r.comment_reactions ?? []),
   };
+}
+
+/** Reaction rows → marks; a reaction this build doesn't know is left out. */
+function reactionMarks(rows: readonly unknown[]): CommentReactionMark[] {
+  const out: CommentReactionMark[] = [];
+  for (const raw of rows) {
+    if (!raw || typeof raw !== "object") continue;
+    const row = raw as { user_id?: unknown; reaction?: unknown };
+    const reaction = normalizeCommentReaction(row.reaction);
+    if (typeof row.user_id === "string" && reaction) out.push({ userId: row.user_id, reaction });
+  }
+  return out;
+}
+
+/** PostgREST's answer when the comments read names `comment_reactions` before
+ *  20261013100000 made it (no relationship, or no table). */
+function isMissingReactionsError(error: { code?: string; message?: string }): boolean {
+  return (
+    (error.code === "PGRST200" || error.code === "PGRST205" || error.code === "42P01") &&
+    (error.message ?? "").includes("comment_reactions")
+  );
 }
 
 /** A `notifications_list` row → the normalized NotificationItem the reducer groups. */

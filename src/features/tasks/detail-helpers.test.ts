@@ -124,6 +124,8 @@ function comment(id: string, at: string): SpineComment {
     createdAt: at,
     updatedAt: at,
     deletedAt: null,
+    editedAt: null,
+    reactions: [],
   };
 }
 
