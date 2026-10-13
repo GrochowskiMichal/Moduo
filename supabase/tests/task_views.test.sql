@@ -20,7 +20,16 @@ INSERT INTO public.workspace_members (workspace_id, user_id, role) VALUES
   (test.id('W'), test.id('V'), 'viewer');
 INSERT INTO public.workspace_api_keys (id, workspace_id, name, key_prefix, key_hash, scopes, created_by)
 VALUES (test.id('K'), test.id('W'), 'Claude Desktop', 'mdo_test', md5('db-test-key-views'),
-        '{"tasks": "edit"}'::jsonb, test.id('E'));
+        '{"tasks": "edit"}'::jsonb, test.id('E')),
+       (test.id('KV'), test.id('W'), 'Read-only agent', 'mdo_tsv', md5('db-test-key-views-ro'),
+        '{"tasks": "view"}'::jsonb, test.id('E'));
+-- A tag of each workspace, and a team of each.
+INSERT INTO public.tags (id, workspace_id, owner_id, name) VALUES
+  (test.id('TG'), test.id('W'), test.id('O'), 'legal'),
+  (test.id('TG2'), test.id('W2'), test.id('X'), 'elsewhere');
+INSERT INTO public.teams (id, workspace_id, name, mark, created_by) VALUES
+  (test.id('TM'), test.id('W'), 'Design', 'DE', test.id('O')),
+  (test.id('TM2'), test.id('W2'), 'Their team', 'TT', test.id('X'));
 
 -- An op's answer, run as a signed-in person.
 CREATE FUNCTION test.op(p_who text, p_sql text) RETURNS jsonb LANGUAGE plpgsql AS $$
@@ -130,7 +139,8 @@ BEGIN
   v := test.op('O', test.create_sql(jsonb_build_object(
     'id', test.id('VB'), 'name', 'Acquisition: waiting on lawyers', 'scope', 'project',
     'project_id', test.id('PB'), 'shared', true,
-    'filters', '[{"dimension": "tag", "operator": "is", "values": ["d1f6c0a2-0000-4000-8000-000000000001"]}]'::jsonb)));
+    'filters', jsonb_build_array(jsonb_build_object('dimension', 'tag', 'operator', 'is',
+                                                    'values', jsonb_build_array(test.id('TG')))))));
   PERFORM test.ok(v ->> 'project_id' = test.id('PB')::text AND (v ->> 'shared')::boolean,
     'O shares a view of their private project', v::text);
   PERFORM test.ok(test.sees('O', ARRAY[test.id('VB')]) = 1
@@ -228,7 +238,7 @@ BEGIN
     'anon runs no op; signed-in people do');
   PERFORM test.ok(NOT has_function_privilege('authenticated', 'public.task_views__sees(uuid, boolean, uuid, uuid)', 'EXECUTE')
               AND NOT has_function_privilege('authenticated', 'public.task_views__actor(uuid)', 'EXECUTE')
-              AND NOT has_function_privilege('authenticated', 'public.task_views__check_filters(jsonb)', 'EXECUTE')
+              AND NOT has_function_privilege('authenticated', 'public.task_views__check_filters(uuid, jsonb)', 'EXECUTE')
               AND NOT has_function_privilege('authenticated', 'public.task_views__check_display(jsonb)', 'EXECUTE')
               AND NOT has_function_privilege('anon', 'public.task_views__sees(uuid, boolean, uuid, uuid)', 'EXECUTE'),
     'the helpers are service only');
@@ -256,6 +266,61 @@ BEGIN
   PERFORM test.ok(r LIKE '22023%needs a name%', 'a view needs a name', r);
   r := test.try('E', test.create_sql(jsonb_build_object('name', 'Bad', 'owner_id', test.id('M'))));
   PERFORM test.ok(r LIKE '22023%', 'nobody names a view''s owner', r);
+
+  -- A view keeps only this workspace's people, teams and tags, and the
+  -- app's own words: nothing from elsewhere, nothing it can't read back.
+  v := test.op('E', test.create_sql(jsonb_build_object('name', 'Legal, Design, me',
+    'filters', jsonb_build_array(
+      jsonb_build_object('dimension', 'tag', 'operator', 'is', 'values', jsonb_build_array(test.id('TG'))),
+      jsonb_build_object('dimension', 'team', 'operator', 'any_of', 'values', jsonb_build_array(test.id('TM'), 'none')),
+      jsonb_build_object('dimension', 'assignee', 'operator', 'is', 'values', jsonb_build_array(test.id('E'))),
+      jsonb_build_object('dimension', 'creator', 'operator', 'is', 'values', jsonb_build_array(test.id('O'))),
+      jsonb_build_object('dimension', 'waiting', 'operator', 'is', 'values', jsonb_build_array('any'))))));
+  PERFORM test.ok(jsonb_array_length(v -> 'filters') = 5, 'this workspace''s tag, team and people save', v::text);
+  r := test.try('E', test.create_sql(jsonb_build_object('name', 'Leak',
+    'filters', jsonb_build_array(jsonb_build_object('dimension', 'tag', 'operator', 'is',
+      'values', jsonb_build_array(test.id('TG2')))))));
+  PERFORM test.ok(r LIKE '22023%tag that isn''t in this workspace%', 'another workspace''s tag is refused', r);
+  r := test.try('E', test.create_sql(jsonb_build_object('name', 'Leak',
+    'filters', jsonb_build_array(jsonb_build_object('dimension', 'team', 'operator', 'is',
+      'values', jsonb_build_array(test.id('TM2')))))));
+  PERFORM test.ok(r LIKE '22023%team that isn''t in this workspace%', 'another workspace''s team is refused', r);
+  r := test.try('E', test.create_sql(jsonb_build_object('name', 'Leak',
+    'filters', jsonb_build_array(jsonb_build_object('dimension', 'assignee', 'operator', 'is',
+      'values', jsonb_build_array(test.id('X')))))));
+  PERFORM test.ok(r LIKE '22023%someone who isn''t in this workspace%', 'someone from outside is refused', r);
+  r := test.try('E', test.create_sql(jsonb_build_object('name', 'Leak',
+    'filters', jsonb_build_array(jsonb_build_object('dimension', 'project', 'operator', 'is',
+      'values', jsonb_build_array(test.id('PB')))))));
+  PERFORM test.ok(r LIKE '22023%', 'a dimension the app doesn''t have (a project id) is refused', r);
+  r := test.try('E', test.create_sql(jsonb_build_object('name', 'Leak',
+    'filters', jsonb_build_array(jsonb_build_object('dimension', 'status', 'operator', 'is',
+      'values', jsonb_build_array(test.id('PB')))))));
+  PERFORM test.ok(r LIKE '22023%', 'an id where a word belongs is refused', r);
+  r := test.try('E', test.create_sql(jsonb_build_object('name', 'Leak', 'display',
+    jsonb_build_object('group', test.id('PB')))));
+  PERFORM test.ok(r LIKE '22023%', 'an id in Display is refused', r);
+  r := test.try('E', test.update_sql('W', 'V1', jsonb_build_object('filters', jsonb_build_array(
+    jsonb_build_object('dimension', 'tag', 'operator', 'is', 'values', jsonb_build_array(test.id('TG2')))))));
+  PERFORM test.ok(r LIKE '22023%', 'and the same when saving changes', r);
+
+  -- Sharing a view of a project you no longer see is refused, like a
+  -- project that isn't there.
+  v := test.op('M', test.create_sql(jsonb_build_object(
+    'id', test.id('VM'), 'name', 'Season 1, mine', 'scope', 'project', 'project_id', test.id('P'))));
+  DELETE FROM public.resource_grants WHERE resource_type = 'bucket' AND resource_id = test.id('P')
+    AND subject_type = 'workspace';
+  r := test.try('M', test.update_sql('W', 'VM', '{"shared": true}'));
+  PERFORM test.ok(r LIKE '%That project isn''t here any more%', 'nobody shares a view of a project they can''t see', r);
+  PERFORM test.ok(test.sees('M', ARRAY[test.id('VM')]) = 1, 'their own view of it stays theirs');
+  INSERT INTO public.resource_grants (workspace_id, resource_type, resource_id, subject_type, level, created_by)
+  VALUES (test.id('W'), 'bucket', test.id('P'), 'workspace', 'edit', test.id('O'));
+
+  -- A key that may only read Tasks writes nothing either.
+  r := test.as_key('KV', test.create_sql(jsonb_build_object('name', 'From a reader')));
+  PERFORM test.ok(r LIKE '42501%', 'a view-only key can''t save a view', r);
+  r := test.as_key('KV', format($q$SELECT public.task_views_op_move(%L, %L, 'up')$q$, test.id('W'), test.id('V1')));
+  PERFORM test.ok(r LIKE '42501%', 'or move one', r);
 
   -- ── Seeds: once per person, workspace and seed ────────────────────────────
   v := test.op('E', test.create_sql(jsonb_build_object('name', 'Done last week', 'seed', 'done_last_week',
@@ -285,7 +350,7 @@ BEGIN
   PERFORM test.op('E', test.create_sql(jsonb_build_object('id', test.id('V3'), 'name', 'Third')));
   v := test.op('E', format($q$SELECT public.task_views_op_move(%L, %L, 'up')$q$, test.id('W'), test.id('V3')));
   PERFORM test.ok((SELECT string_agg(e ->> 'name', ' · ' ORDER BY ord) FROM jsonb_array_elements(v) WITH ORDINALITY AS t(e, ord))
-                  = 'Due this week · Side project, mine · Third · Second',
+                  = 'Due this week · Side project, mine · Legal, Design, me · Third · Second',
     'moving a view up swaps it with the one above', v::text);
   v := test.op('E', format($q$SELECT public.task_views_op_move(%L, %L, 'up')$q$, test.id('W'), test.id('V1')));
   PERFORM test.ok((SELECT e ->> 'name' FROM jsonb_array_elements(v) WITH ORDINALITY AS t(e, ord) WHERE ord = 1)

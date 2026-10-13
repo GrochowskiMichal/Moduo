@@ -49,7 +49,9 @@ import {
   TASK_TIME_ADJUSTMENT_REASONS,
   TASK_TIME_ENTRY_KINDS,
   TASK_TIME_STATUSES,
+  TASK_VIEW_ID_DIMENSIONS,
   TASK_VIEW_SCOPES,
+  TASK_VIEW_WORD_DIMENSIONS,
   TASK_WAITING_KINDS,
   TEMPLATE_KINDS,
   TEMPLATE_LINK_TYPES,
@@ -274,6 +276,8 @@ describe("cross-runtime drift guards", () => {
     const opList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(", ");
     expect(sql).toContain(`CHECK (scope IN (${inList(TASK_VIEW_SCOPES)}))`);
     expect(sql).toContain(`v_scope NOT IN (${opList(TASK_VIEW_SCOPES)})`);
+    expect(sql).toContain(`v_dim NOT IN (${opList(TASK_VIEW_ID_DIMENSIONS)})`);
+    expect(sql).toContain(`v_dim NOT IN (${opList(TASK_VIEW_WORD_DIMENSIONS)})`);
   });
 
   it("the booking busy read leaves out the closed categories (TV-D10-fix)", () => {

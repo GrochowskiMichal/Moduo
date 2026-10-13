@@ -1096,6 +1096,32 @@ export function normalizeTaskViewScope(input: unknown): TaskViewScope | null {
   return isTaskViewScope(input) ? input : null;
 }
 
+/**
+ * The Filter dimensions a saved view may keep (mirrors
+ * task_views__check_filters). An id dimension holds "none" or the id of a
+ * person, team or tag of the same workspace; a word dimension holds short
+ * words. The app's Filter offers exactly these (TASK_FILTER_DIMENSIONS in
+ * features/tasks/filters.ts, held to them by a test).
+ */
+export const TASK_VIEW_ID_DIMENSIONS = ["assignee", "creator", "team", "tag"] as const;
+export const TASK_VIEW_WORD_DIMENSIONS = [
+  "status",
+  "completed",
+  "priority",
+  "energy",
+  "due",
+  "scheduled",
+  "queued",
+  "blocked",
+  "waiting",
+  "recurring",
+  "subtasks",
+  "attachments",
+] as const;
+export type TaskViewFilterDimension =
+  | (typeof TASK_VIEW_ID_DIMENSIONS)[number]
+  | (typeof TASK_VIEW_WORD_DIMENSIONS)[number];
+
 // ---------------------------------------------------------------------------
 // Attachments (AT-1, specs/attachments.md) — mirrors the CHECKs on
 // public.attachments in 20261008210500_attachments_storage. `pending` = begun,

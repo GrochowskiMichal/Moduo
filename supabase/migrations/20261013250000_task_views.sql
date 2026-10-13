@@ -9,11 +9,16 @@
 -- Views are yours until you share one with the workspace (`shared`). A shared
 -- view that keeps a project shows only to people who can see that project:
 -- its name and its filter never reach anyone else. The read policy and every
--- op ask the same question (`task_views__sees`). Keeping your own views
--- needs only Tasks view access; sharing one needs edit access. Only the maker
--- changes a view; the workspace's owner or an admin can also unshare or delete
--- a shared one. API keys can't call the ops. Writes go through the ops only,
--- and a view you can't see answers like one that doesn't exist.
+-- op ask the same question (`task_views__sees`). A filter keeps only the
+-- app's words and the ids of this workspace's people, teams and tags (never
+-- a project or anything from another workspace); Display keeps only words.
+-- Keeping your own views needs only Tasks view access; sharing one needs
+-- edit access and that you still see its project. Only the maker renames,
+-- edits, re-shares or moves a view; the workspace's owner or an admin can
+-- also unshare or delete (and restore) a shared one they can see, so a view
+-- left by someone who has gone can still be taken down. API keys can't call
+-- the ops, whatever their scope. Writes go through the ops only, and a view
+-- you can't see answers like one that doesn't exist.
 --
 -- `seed` names a view onboarding made for someone (TV-U17's role defaults):
 -- one per person, workspace and seed, deleted ones included, so a resend or a
@@ -91,15 +96,23 @@ GRANT ALL ON public.task_views TO service_role;
 -- ── 3. Shapes ──────────────────────────────────────────────────────────────
 
 -- The Filter's conditions as the app keeps them (`FilterCondition`): at most
--- 30, each { dimension, operator: is | is_not | any_of, values: up to 100
--- short strings }. What a dimension or value means is the app's to read; an
--- id that names nothing (a deleted tag, a project you can't see) filters out
--- every task, so it can only narrow a view.
-CREATE OR REPLACE FUNCTION public.task_views__check_filters(p_filters jsonb)
-RETURNS jsonb LANGUAGE plpgsql IMMUTABLE SET search_path = '' AS $$
+-- 30, each { dimension, operator: is | is_not | any_of, values: 1 to 100 }.
+-- Only the app's dimensions (TASK_VIEW_ID_DIMENSIONS and
+-- TASK_VIEW_WORD_DIMENSIONS in @contracts/vocabularies). A word dimension
+-- holds short words ("week", "done"); a person, team or tag dimension holds
+-- "none" or the id of someone or something in this same workspace: a person
+-- who works here (or is named on one of its tasks), a team or a tag of the
+-- workspace. Nothing else is kept, so a view never carries anything a reader
+-- of the workspace couldn't see already.
+DROP FUNCTION IF EXISTS public.task_views__check_filters(jsonb);
+CREATE OR REPLACE FUNCTION public.task_views__check_filters(p_workspace_id uuid, p_filters jsonb)
+RETURNS jsonb LANGUAGE plpgsql STABLE SET search_path = '' AS $$
 DECLARE
   c jsonb;
   v jsonb;
+  v_dim text;
+  v_text text;
+  v_id uuid;
 BEGIN
   IF p_filters IS NULL OR jsonb_typeof(p_filters) <> 'array' THEN
     RAISE EXCEPTION 'A view''s filter is a list of conditions.' USING ERRCODE = '22023';
@@ -107,33 +120,65 @@ BEGIN
   IF jsonb_array_length(p_filters) > 30 THEN
     RAISE EXCEPTION 'A view keeps at most 30 filter conditions.' USING ERRCODE = '22023';
   END IF;
+  IF octet_length(p_filters::text) > 32768 THEN
+    RAISE EXCEPTION 'That filter is too large to save in a view.' USING ERRCODE = '22023';
+  END IF;
   FOR c IN SELECT value FROM jsonb_array_elements(p_filters) LOOP
     IF jsonb_typeof(c) <> 'object'
        OR EXISTS (SELECT 1 FROM jsonb_object_keys(c) k WHERE k NOT IN ('dimension', 'operator', 'values'))
        OR jsonb_typeof(c -> 'dimension') IS DISTINCT FROM 'string'
        OR jsonb_typeof(c -> 'operator') IS DISTINCT FROM 'string'
        OR jsonb_typeof(c -> 'values') IS DISTINCT FROM 'array'
-       OR char_length(c ->> 'dimension') NOT BETWEEN 1 AND 40
        OR (c ->> 'operator') NOT IN ('is', 'is_not', 'any_of')
        OR jsonb_array_length(c -> 'values') NOT BETWEEN 1 AND 100 THEN
       RAISE EXCEPTION 'That filter can''t be saved in a view.' USING ERRCODE = '22023';
     END IF;
+    v_dim := c ->> 'dimension';
+    IF v_dim NOT IN ('assignee', 'creator', 'team', 'tag')
+       AND v_dim NOT IN ('status', 'completed', 'priority', 'energy', 'due', 'scheduled', 'queued', 'blocked', 'waiting', 'recurring', 'subtasks', 'attachments') THEN
+      RAISE EXCEPTION 'That filter can''t be saved in a view.' USING ERRCODE = '22023';
+    END IF;
     FOR v IN SELECT value FROM jsonb_array_elements(c -> 'values') LOOP
-      IF jsonb_typeof(v) <> 'string' OR char_length(v #>> '{}') NOT BETWEEN 1 AND 200 THEN
+      IF jsonb_typeof(v) <> 'string' THEN
         RAISE EXCEPTION 'That filter can''t be saved in a view.' USING ERRCODE = '22023';
+      END IF;
+      v_text := v #>> '{}';
+      IF v_text = 'none' THEN
+        CONTINUE;
+      END IF;
+      IF v_dim NOT IN ('assignee', 'creator', 'team', 'tag') THEN
+        IF v_text !~ '^[a-z][a-z_]{0,23}$' THEN
+          RAISE EXCEPTION 'That filter can''t be saved in a view.' USING ERRCODE = '22023';
+        END IF;
+        CONTINUE;
+      END IF;
+      IF v_text !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+        RAISE EXCEPTION 'That filter can''t be saved in a view.' USING ERRCODE = '22023';
+      END IF;
+      v_id := v_text::uuid;
+      IF v_dim IN ('assignee', 'creator') AND NOT (
+           EXISTS (SELECT 1 FROM public.workspace_members m
+                   WHERE m.workspace_id = p_workspace_id AND m.user_id = v_id)
+           OR EXISTS (SELECT 1 FROM public.workspaces w WHERE w.id = p_workspace_id AND w.owner_id = v_id)
+           OR EXISTS (SELECT 1 FROM public.tasks t WHERE t.assignee_id = v_id AND t.workspace_id = p_workspace_id)) THEN
+        RAISE EXCEPTION 'That filter names someone who isn''t in this workspace.' USING ERRCODE = '22023';
+      ELSIF v_dim = 'team' AND NOT EXISTS (
+           SELECT 1 FROM public.teams x WHERE x.id = v_id AND x.workspace_id = p_workspace_id) THEN
+        RAISE EXCEPTION 'That filter names a team that isn''t in this workspace.' USING ERRCODE = '22023';
+      ELSIF v_dim = 'tag' AND NOT EXISTS (
+           SELECT 1 FROM public.tags x WHERE x.id = v_id AND x.workspace_id = p_workspace_id) THEN
+        RAISE EXCEPTION 'That filter names a tag that isn''t in this workspace.' USING ERRCODE = '22023';
       END IF;
     END LOOP;
   END LOOP;
-  IF octet_length(p_filters::text) > 32768 THEN
-    RAISE EXCEPTION 'That filter is too large to save in a view.' USING ERRCODE = '22023';
-  END IF;
   RETURN p_filters;
 END;
 $$;
 
--- Display's choices as the app keeps them: one level of short words, yes/no
--- switches and lists of short words (Show on rows). The app reads them back
--- through its own sanitiser; anything it doesn't know falls back.
+-- Display's choices as the app keeps them: one level of short words
+-- ("board", "detailed"), yes/no switches and lists of short words (Show on
+-- rows). No ids, no free text. The app reads them back through its own
+-- sanitiser; anything it doesn't know falls back.
 CREATE OR REPLACE FUNCTION public.task_views__check_display(p_display jsonb)
 RETURNS jsonb LANGUAGE plpgsql IMMUTABLE SET search_path = '' AS $$
 DECLARE
@@ -144,15 +189,15 @@ BEGIN
   IF p_display IS NULL OR jsonb_typeof(p_display) <> 'object' THEN
     RAISE EXCEPTION 'A view''s Display is a set of choices.' USING ERRCODE = '22023';
   END IF;
-  IF octet_length(p_display::text) > 8192 THEN
+  IF octet_length(p_display::text) > 4096 THEN
     RAISE EXCEPTION 'That Display is too large to save in a view.' USING ERRCODE = '22023';
   END IF;
   FOR k, v IN SELECT key, value FROM jsonb_each(p_display) LOOP
-    IF char_length(k) NOT BETWEEN 1 AND 40 THEN
+    IF k !~ '^[a-zA-Z][a-zA-Z_]{0,39}$' THEN
       RAISE EXCEPTION 'That Display can''t be saved in a view.' USING ERRCODE = '22023';
     END IF;
     IF jsonb_typeof(v) = 'string' THEN
-      IF char_length(v #>> '{}') > 40 THEN
+      IF (v #>> '{}') !~ '^[a-z][a-z_]{0,23}$' THEN
         RAISE EXCEPTION 'That Display can''t be saved in a view.' USING ERRCODE = '22023';
       END IF;
     ELSIF jsonb_typeof(v) = 'array' THEN
@@ -160,7 +205,7 @@ BEGIN
         RAISE EXCEPTION 'That Display can''t be saved in a view.' USING ERRCODE = '22023';
       END IF;
       FOR w IN SELECT value FROM jsonb_array_elements(v) LOOP
-        IF jsonb_typeof(w) <> 'string' OR char_length(w #>> '{}') > 40 THEN
+        IF jsonb_typeof(w) <> 'string' OR (w #>> '{}') !~ '^[a-z][a-z_]{0,23}$' THEN
           RAISE EXCEPTION 'That Display can''t be saved in a view.' USING ERRCODE = '22023';
         END IF;
       END LOOP;
@@ -256,7 +301,7 @@ BEGIN
   ELSIF v_fields ? 'project_id' AND jsonb_typeof(v_fields -> 'project_id') <> 'null' THEN
     RAISE EXCEPTION 'Only a project view keeps a project.' USING ERRCODE = '22023';
   END IF;
-  v_filters := public.task_views__check_filters(coalesce(v_fields -> 'filters', '[]'::jsonb));
+  v_filters := public.task_views__check_filters(p_workspace_id, coalesce(v_fields -> 'filters', '[]'::jsonb));
   v_display := public.task_views__check_display(coalesce(v_fields -> 'display', '{}'::jsonb));
   IF v_fields ? 'shared' THEN
     IF jsonb_typeof(v_fields -> 'shared') <> 'boolean' THEN
@@ -338,7 +383,7 @@ BEGIN
 
   v_name := CASE WHEN v_patch ? 'name' THEN public.tasks__clean_name(v_patch ->> 'name', 'A view', 80)
                  ELSE r.name END;
-  v_filters := CASE WHEN v_patch ? 'filters' THEN public.task_views__check_filters(v_patch -> 'filters')
+  v_filters := CASE WHEN v_patch ? 'filters' THEN public.task_views__check_filters(p_workspace_id, v_patch -> 'filters')
                     ELSE r.filters END;
   v_display := CASE WHEN v_patch ? 'display' THEN public.task_views__check_display(v_patch -> 'display')
                     ELSE r.display END;
@@ -456,7 +501,7 @@ DECLARE
 BEGIN
   FOREACH fn IN ARRAY ARRAY[
     'task_views__sees(uuid, boolean, uuid, uuid)',
-    'task_views__check_filters(jsonb)', 'task_views__check_display(jsonb)',
+    'task_views__check_filters(uuid, jsonb)', 'task_views__check_display(jsonb)',
     'task_views__actor(uuid)'] LOOP
     EXECUTE format('REVOKE ALL ON FUNCTION public.%s FROM PUBLIC', fn);
     EXECUTE format('REVOKE ALL ON FUNCTION public.%s FROM anon', fn);
