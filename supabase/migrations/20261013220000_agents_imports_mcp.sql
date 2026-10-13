@@ -1136,6 +1136,46 @@ BEGIN
 END;
 $gate$;
 
+-- ── 5b'. push-send learns what a delivery is ─────────────────────────────────
+
+-- A browser notice says "Reminder" for a reminder and the agent's own line
+-- for an agent's state, so the claim now answers each delivery's kind. Re-cut
+-- from the live body (TV-D12's fix), with `kind` after `user_id`; a push-send
+-- from before ignores it.
+DROP FUNCTION IF EXISTS public.notice_deliveries__claim(integer);
+CREATE FUNCTION public.notice_deliveries__claim(p_limit integer DEFAULT 100)
+RETURNS TABLE (id uuid, user_id uuid, kind text, title text, body text, url text, task_id uuid, subscriptions jsonb)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  RETURN QUERY
+  WITH picked AS (
+    SELECT d.id FROM public.notice_deliveries d
+    WHERE d.pushed_at IS NULL AND d.push_attempts < 5 AND d.created_at > now() - interval '1 day'
+      AND EXISTS (SELECT 1 FROM public.push_subscriptions s WHERE s.user_id = d.user_id)
+      -- Still theirs to see at send time (TV-D10-fix).
+      AND (d.task_id IS NULL OR public.tasks__visible_to(d.task_id, d.user_id))
+    ORDER BY d.created_at
+    LIMIT greatest(least(coalesce(p_limit, 100), 500), 1)
+    FOR UPDATE OF d SKIP LOCKED
+  ), bumped AS (
+    UPDATE public.notice_deliveries d SET push_attempts = d.push_attempts + 1
+    FROM picked WHERE d.id = picked.id
+    RETURNING d.*
+  )
+  SELECT b.id, b.user_id, b.kind, b.title, b.body, b.url, b.task_id,
+         (SELECT coalesce(jsonb_agg(jsonb_build_object('endpoint', s.endpoint, 'p256dh', s.p256dh, 'auth', s.auth)), '[]'::jsonb)
+          FROM public.push_subscriptions s WHERE s.user_id = b.user_id)
+  FROM bumped b;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.notice_deliveries__claim(integer) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.notice_deliveries__claim(integer) FROM anon;
+REVOKE ALL ON FUNCTION public.notice_deliveries__claim(integer) FROM authenticated;
+GRANT EXECUTE ON FUNCTION public.notice_deliveries__claim(integer) TO service_role;
+
 -- ── 5c. Search answers keys too ──────────────────────────────────────────────
 
 -- tasks_search (TV-D11b) asked perm_can_view, which reads auth.uid() only, so

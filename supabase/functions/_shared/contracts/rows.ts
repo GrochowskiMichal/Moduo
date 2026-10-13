@@ -223,6 +223,28 @@ export const taskWaitingRowSchema = z.object({
 });
 export type TaskWaitingRow = z.infer<typeof taskWaitingRowSchema>;
 
+/** An agent session on a task (TV-D16; RLS: its person, or teammates while they share). */
+export const agentSessionRowSchema = z.object({
+  id,
+  workspace_id: id,
+  task_id: id,
+  user_id: id,
+  agent: z.string(),
+  state: z.string(),
+  note: optStr,
+  step: optNum,
+  steps: optNum,
+  links: z.unknown().optional(),
+  earlier: z.unknown().optional(),
+  summary_at: optStr,
+  summary_posted_at: optStr,
+  started_at: z.string(),
+  updated_at: z.string(),
+  stopped_at: optStr,
+  deleted_at: optStr,
+});
+export type AgentSessionRow = z.infer<typeof agentSessionRowSchema>;
+
 /** Notes meta row — v2 columns optional so pre-migration (legacy) reads still parse. */
 export const noteRowSchema = z.object({
   id,

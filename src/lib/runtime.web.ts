@@ -162,6 +162,7 @@ import {
   taskTimeAnswerToModel,
   taskTimeTotalsRowToModel,
   taskWaitingRowToModel,
+  agentSessionRowToModel,
   teamMemberRowToModel,
   teamRowToModel,
   withFieldFallback,
@@ -4085,6 +4086,15 @@ const SYNC_SOURCES: Record<SyncTableName, SyncSource> = {
     cap: READ_CAPS.taskWaiting,
     delta: true,
     scope: "waiting entries",
+  },
+  // TV-D16: agent sessions, under RLS (yours, and teammates' they share).
+  agentSessions: {
+    table: "agent_sessions",
+    select: "*",
+    map: agentSessionRowToModel,
+    cap: READ_CAPS.agentSessions,
+    delta: true,
+    scope: "agent sessions",
   },
 };
 

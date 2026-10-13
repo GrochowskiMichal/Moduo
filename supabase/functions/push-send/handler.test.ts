@@ -74,4 +74,23 @@ describe("push-send", () => {
     expect(message).toEqual({ uid: "u1", title: "Reminder", body: "T", url: "/", tag: "notice-d" });
     expect(pushMessage({ ...base, title: "x".repeat(200), url: null }).body).toHaveLength(80);
   });
+
+  it("says an agent's state with the task's title (TV-D16)", () => {
+    const base = { id: "d", user_id: "u1", subscriptions: [] };
+    const message = pushMessage({
+      ...base,
+      kind: "agent",
+      title: "Claude is ready for review",
+      body: "Ship the importer",
+      task_id: "t9",
+      url: "/tasks?id=t9",
+    });
+    expect(message).toEqual({
+      uid: "u1",
+      title: "Claude is ready for review",
+      body: "Ship the importer",
+      url: "/tasks?id=t9",
+      tag: "agent-t9",
+    });
+  });
 });

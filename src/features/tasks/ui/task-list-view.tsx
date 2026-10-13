@@ -101,6 +101,7 @@ import type { ListExtraGroup, ListGrouping } from "./list-extensions";
 import { listKeyActionFor } from "./list-keys";
 import { type PlanHeaderControls, type PlanView, PlanViewHeader } from "./plan-view-header";
 import { ProjectChoicesProvider, StatusChoicesProvider } from "./project-choices";
+import { type AgentSession, agentRowMarks } from "../../spine/agent-session";
 import { type FactsSource, taskFactsOf, useRowActions, waitingLabelsOf } from "./row-facts";
 import { type SortColumn, TaskListHeader } from "./task-list-header";
 import {
@@ -114,6 +115,8 @@ import { CompletedLine } from "./task-meta";
 import { activateGlyph, type RowCommand, TaskRow } from "./task-row";
 import { TaskListSkeleton, TasksEmptyScope, TasksNoMatch } from "./task-view-states";
 import { VirtualStack } from "./virtual-stack";
+
+const NO_AGENT_SESSIONS: readonly AgentSession[] = [];
 
 type Props = {
   tasks: Task[];
@@ -615,6 +618,11 @@ export function TaskListView({
       return viewWhen ? viewWhen(t, now) : null;
     };
   }, [grouping, extraGroups, today, whenTick]);
+  // TV-D16: "Claude · working" on the rows an agent session you can see works on.
+  const agentMarks = useMemo(
+    () => agentRowMarks(api.agentSessions ?? NO_AGENT_SESSIONS, (id) => taskById.get(id) ?? null),
+    [api.agentSessions, taskById],
+  );
   const factsSource = useMemo<FactsSource>(
     () => ({
       queuedTaskIds: api.queuedTaskIds,
@@ -631,8 +639,10 @@ export function TaskListView({
       whenOf,
       takeableIds,
       sourceOf,
+      agentMarks,
     }),
     [
+      agentMarks,
       whenOf,
       takeableIds,
       sourceOf,

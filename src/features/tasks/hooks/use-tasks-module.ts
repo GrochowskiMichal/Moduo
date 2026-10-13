@@ -3398,6 +3398,8 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     sessions: snap.sessions,
     reminders: snap.reminders,
     waiting: snap.waiting,
+    /** TV-D16: agent sessions you can see (yours; teammates' while they share). */
+    agentSessions: snap.agentSessions,
     restoreTask,
     addSession,
     updateSession,
