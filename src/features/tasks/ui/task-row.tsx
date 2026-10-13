@@ -3,6 +3,7 @@ import type { DraggableSyntheticListeners } from "@dnd-kit/core";
 import { ChevronDown, ChevronRight, CornerDownRight } from "lucide-react";
 import { memo, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { Button } from "../../../components/ui/button";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -389,17 +390,18 @@ function TaskRowView({
           {facts.takeable && onTake && canEdit ? (
             // The team block's one action (TV-U15): always shown, so the
             // block says what to do with it.
-            <button
-              type="button"
+            <Button
+              variant="outline"
+              size="sm"
               data-slot="row-take"
               onClick={(e) => {
                 e.stopPropagation();
                 onTake(task.id);
               }}
-              className="shrink-0 rounded-sm px-1.5 font-sans text-xs whitespace-nowrap text-muted-foreground ring-1 ring-border transition-colors duration-(--motion-fade) ease-(--ease-out) ring-inset hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+              className="shrink-0"
             >
               Take it
-            </button>
+            </Button>
           ) : null}
           {/* A late row's fixes, over the cell's end on hover or selection:
               they fade in and take no room from the title (R6: nothing

@@ -140,6 +140,13 @@ test("2 declines: someone else's goes back to them with a note", async ({ page }
   await page.getByRole("textbox", { name: "Note" }).fill(`not mine ${tag}`);
   await page.keyboard.press("Enter");
   await expect.poll(async () => (await rowOf(id))?.assignee_id).toBe(mate.user.id);
+  // TV-D13's hand-over: an unfiled task given to someone goes into their Inbox.
+  const [mateInbox] = await rest<Array<{ id: string }>>(
+    "service",
+    `buckets?workspace_id=eq.${ws.id}&owner_id=eq.${mate.user.id}&is_system=eq.true&select=id`,
+  );
+  await expect.poll(async () => (await rowOf(id))?.bucket_id).toBe(mateInbox?.id);
+  await expect(page.locator(`[data-task-id="${id}"]`)).toHaveCount(0);
   const comments = await rest<Array<{ body: string }>>(
     "service",
     `comments?entity_type=eq.task&entity_id=eq.${id}&select=body`,

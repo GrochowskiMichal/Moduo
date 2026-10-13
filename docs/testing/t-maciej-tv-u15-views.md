@@ -13,7 +13,7 @@ Set up: `bun run local:up`, `bun run env:local`, `bun run dev:web`, sign in as t
 - [ ] **Do:** drag a row onto Earlier → **Expect:** nothing (Earlier takes no drops); onto Later → a day picker opens _(web)_
 - [ ] **Do:** select a row, press ⌥→, ⌥⇧→, `t` → **Expect:** a day later, a week later, back to today; ⌥← never goes before today _(both)_
 - [ ] **Do:** move the repeating task (drag or ⌥→) → **Expect:** "Move “…” to Tomorrow" asks Just this one · Change the pattern · Cancel; Just this one moves only this occurrence (the next one is back on the pattern) _(both)_
-- [ ] **Do:** with late tasks, Earlier's header → Move all… → Today → **Expect:** all of them move to today, one "Moved 4 tasks to Today · Undo" _(both)_
+- [ ] **Do:** with late tasks, Earlier's header → Move all… → Today → **Expect:** all of them move to today, one "Moved 4 tasks to Today · Undo"; Move all… → Pick… a past day → "Pick today or a day after." _(both)_
 - [ ] **Do:** a day's "+" → **Expect:** the capture opens with that day as Due; the new task shows under that day. Earlier and Later have no "+"; New in the toolbar dates the task today _(both)_
 - [ ] **Do:** an unassigned task routed to a team you're not in, with a due date → **Expect:** not in Upcoming; one routed to your team is _(both)_
 - [ ] **Do:** Display in Upcoming → **Expect:** Layout, Completed, Rows and Show on rows only (no Group by, Order by or Subtasks); dated subtasks show flat with "↳ Parent" _(both)_
@@ -23,7 +23,7 @@ Set up: `bun run local:up`, `bun run env:local`, `bun run dev:web`, sign in as t
 - [ ] **Do:** select a task → **Expect:** the bottom bar's centre reads "Accept 1 · Decline 2 · Duplicate 3 · Snooze H" instead of Search · capture · New; clicking one acts on the selected task _(both)_
 - [ ] **Do:** press 1 → **Expect:** "File “…” in…" with your projects; pick one → "Filed in X · Undo", the task leaves the Inbox, assigned to you, the cursor on the next row _(both)_
 - [ ] **Do:** press 2 on your own task → **Expect:** it's Won't do (with Undo) _(both)_
-- [ ] **Do:** press 2 on a task someone else handed you → **Expect:** "Hand “…” back" with a note field; Hand back → it goes to them with a comment "Declined by <you>: <note>" _(both)_
+- [ ] **Do:** press 2 on a task someone else handed you → **Expect:** "Hand “…” back" with a note field; Hand back → it leaves your Inbox for theirs, with a comment "Declined by <you>: <note>" _(both)_
 - [ ] **Do:** press 3 → pick the task it duplicates → **Expect:** "Duplicate of “…” · Won't do · Undo"; the original has a comment "Merged “…” into this task." with the duplicate's comments; the duplicate's links moved over and the two are linked _(both)_
 - [ ] **Do:** press H → Tomorrow → **Expect:** the row leaves, "Snoozed until Tomorrow · Undo"; "Snoozed 1" sits folded at the end, its row reading "until Tomorrow"; H on it brings it back at once _(both)_
 - [ ] **Do:** snooze a task, then comment on it from the panel (or have someone else) → **Expect:** it comes back on top of the Inbox _(both)_
@@ -48,6 +48,7 @@ Set up: `bun run local:up`, `bun run env:local`, `bun run dev:web`, sign in as t
 ## Edge cases
 - [ ] **Do:** snooze a task, then file it into a project from the panel → **Expect:** it's in the project; the snooze is forgotten (no stray "Snoozed" later) _(both)_
 - [ ] **Do:** switch workspaces with a snoozed task in each → **Expect:** each Inbox keeps its own snoozes _(both)_
+- [ ] **Do:** snooze a task, quit, turn the network off, open the app (it opens from the device copy) → **Expect:** the snooze is still there after you go back online _(desktop)_
 - [ ] **Do:** a viewer (read-only) member opens the Inbox / Upcoming → **Expect:** no triage row, no drag, no "+" or Take it _(both)_
 
 ## Migrations / data
@@ -55,5 +56,5 @@ Set up: `bun run local:up`, `bun run env:local`, `bun run dev:web`, sign in as t
 
 ## Known gaps / not-yet-testable
 - Email "From:" and agent "via Claude Desktop" chips on Inbox rows (only "from Mike" is built); the triage buttons in the panel's Details header (the bottom bar carries them); Duplicate's comments are copied into one comment (no server op moves comments). See decisions U15-5/6.
-- Take it goes through TV-D13's claim op once it lands; until then it assigns through the assign op (no "someone already took it" refusal).
+- Take it goes through TV-D13's claim op (live-checked: "Taken · it's yours", Undo gives it back to the team).
 - **Verify before release:** the triage row and Upcoming's ⌥←/→ in the signed desktop build (webview key handling), preferences sync of snoozes between two devices on prod, and Upcoming at 10,000 tasks (the perf fixture: the view filters every task once per change).

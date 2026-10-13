@@ -42,6 +42,7 @@ import {
 } from "./helpers";
 import { dateGroupDay } from "./list-group-add";
 import { estimateOf, isLate, type Task } from "./model";
+import { isOtherTeamsWork } from "./teams";
 
 /** Upcoming's groups, in order: the Date groups without No date. */
 export const UPCOMING_GROUPS = DATE_GROUPS.filter((g) => g !== "none") as Exclude<
@@ -85,7 +86,7 @@ export function inUpcoming(task: Task, coverage: UpcomingCoverage, now: Date): b
   if (assignee === "" || (assignee !== null && assignee === coverage.me)) return true;
   if (assignee !== null) return false;
   // Unassigned: everyone's to plan, unless it's routed to a team you're not in.
-  return !task.teamId || coverage.myTeams.has(task.teamId);
+  return !isOtherTeamsWork(task, coverage.myTeams);
 }
 
 /** The group a task's row date puts it in (never No date for a task in scope). */
@@ -328,4 +329,21 @@ export function upcomingAccepts(group: string, task: Task, now: Date): boolean {
   if (group === "later") return upcomingGroupOf(task, now) !== "later";
   const day = dropDayFor(group, now);
   return typeof day === "string" && day !== "pick" && day !== rowDay(task);
+}
+
+/**
+ * Whether a row still stands where a move put it, so its Undo may put it
+ * back (Undo never overwrites a newer change). Compared as moments, never as
+ * strings: the server's row says "…+00:00" where the app wrote "…Z".
+ */
+export function stillMoved(
+  current: Pick<Task, "scheduledAt" | "dueDate"> | null | undefined,
+  move: UpcomingMove,
+): boolean {
+  if (!current) return false;
+  const same = (a: string | null | undefined, b: string) =>
+    !!a && new Date(a).getTime() === new Date(b).getTime();
+  return move.kind === "session"
+    ? same(current.scheduledAt, move.scheduledAt)
+    : same(current.dueDate, move.dueDate);
 }

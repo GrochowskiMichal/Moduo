@@ -72,7 +72,7 @@ import { createLinkWithToast } from "../../spine/ui/drop-link-toast";
 import { WorkspaceContext } from "../../workspaces/workspace-context";
 import { useAssignees } from "../assignees";
 import { myTasksScope, openCount, resolveDefaultSelection } from "../default-view";
-import { nextHeaderSort, type TaskLayout, tasksDisplayDefaults } from "../display";
+import { nextHeaderSort, orderTasks, type TaskLayout, tasksDisplayDefaults } from "../display";
 import {
   asRailDropTarget,
   isSideDroppable,
@@ -500,6 +500,9 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   const isInboxScope = selection === "inbox" || (inboxId !== null && selection === inboxId);
   const projectIds = useMemo(() => buckets.map((b) => b.id), [buckets]);
   const upcoming = useUpcomingView({ api, canEdit, inboxId, projectIds });
+  // The Inbox's rows as the List shows them (set below, once filtered): the
+  // cursor after a triage moves to the next of these.
+  const inboxRowsRef = useRef<readonly Task[]>([]);
   const inboxView = useInboxView({
     api,
     runtime,
@@ -508,6 +511,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     canEdit,
     selectedTaskId,
     onSelectTask: setSelectedTaskId,
+    visibleRows: inboxRowsRef,
   });
   // My tasks' team block (54): your teams' tasks nobody has taken yet.
   const blocks = useMemo(
@@ -519,17 +523,30 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     [api.waiting],
   );
   const myOrder = tasksDisplay.display.order;
+  // The block's groups change only when what they show does: an edit to any
+  // other task makes `blocks` anew, and a new group array re-measures the
+  // whole List.
+  const blocksKey = blocks
+    .map(
+      (b) =>
+        `${b.team.id}:${b.team.name}:${b.team.mark}:${b.team.color}:${b.tasks.map((t) => t.id).join(",")}`,
+    )
+    .join("|");
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the key names what the ids depend on.
   const takeableIds = useMemo(
     () => new Set(blocks.flatMap((b) => b.tasks.map((t) => t.id))),
-    [blocks],
+    [blocksKey],
   );
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the key names what the groups show.
   const mineExtraGroups = useMemo<readonly ListExtraGroup[]>(
     () =>
       blocks.map((b) => ({
         key: `team:${b.team.id}`,
         place: "lead" as const,
         label: `For ${b.team.name}`,
-        leading: <TeamMark name={b.team.name} id={b.team.id} />,
+        leading: (
+          <TeamMark name={b.team.name} id={b.team.id} letters={b.team.mark} color={b.team.color} />
+        ),
         sub: `· ${b.tasks.length} unclaimed`,
         count: null,
         taskIds: b.tasks.map((t) => t.id),
@@ -538,11 +555,10 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
           ? { kind: "add" as const, add: { seed: { teamId: b.team.id } } }
           : { kind: "none" as const },
       })),
-    [blocks, canEdit],
+    [blocksKey, canEdit],
   );
-  // Take it (54): the task becomes yours and keeps its team, with Undo.
-  // TV-D13's claim op refuses one somebody took first; until it's here the
-  // assignment goes through the assign op.
+  // Take it (54): TV-D13's claim op makes the task yours and keeps its team
+  // (it refuses one somebody took first), with Undo while it's still yours.
   const takeRef = useRef({ api, currentUserId });
   useLayoutEffect(() => {
     takeRef.current = { api, currentUserId };
@@ -550,15 +566,14 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   const takeTask = useCallback((id: string) => {
     const { api: moduleApi, currentUserId: me } = takeRef.current;
     if (!me) return;
-    const claim = (moduleApi as { claimTask?: (taskId: string) => void }).claimTask;
-    if (claim) {
-      claim(id);
-      undoToast("Taken · it’s yours", {
-        onUndo: () => moduleApi.patchTask(id, { assigneeId: null }),
-      });
-      return;
-    }
-    void moduleApi.dropTask({ taskId: id, assigneeId: me }, "Taken · it’s yours");
+    moduleApi.claimTask(id);
+    undoToast("Taken · it’s yours", {
+      onUndo: () => {
+        // Never over a newer change: only while it's still yours.
+        const now = takeRef.current.api.tasks.find((t) => t.id === id);
+        if (now?.assigneeId === me) takeRef.current.api.patchTask(id, { assigneeId: null });
+      },
+    });
   }, []);
   // All (research §8): projects in the sidebar's order, area by area; a
   // project's header names its area and an On hold or Done state, and those
@@ -670,6 +685,11 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     searchExtra: archivedSearchTasks,
   });
   const scopeTasks = filtering.tasks;
+  useLayoutEffect(() => {
+    inboxRowsRef.current = isInboxScope
+      ? orderTasks(scopeTasks, tasksDisplay.display.order, tasksDisplay.display.orderDir)
+      : [];
+  });
   // What New pre-fills: the filters you can see (none in Focus), and never
   // someone who can't take the task (a former member a stored filter still
   // names: the server would refuse the save).

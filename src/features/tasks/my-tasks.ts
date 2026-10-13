@@ -11,9 +11,9 @@
 //   project in the sidebar's order (areas as quiet dividers); On hold and
 //   Done projects start folded.
 
-import { isOpenTask } from "@contracts/vocabularies";
 import { LEVEL_ORDER, rowDateOf } from "./helpers";
 import type { Bucket, Task, Team, TeamMember } from "./model";
+import { unclaimedForMe } from "./teams";
 
 /**
  * My tasks' scope: assigned to you, Won't do left out (the one kept in view
@@ -60,8 +60,9 @@ export function orderMyTasks<T extends Task>(
 export type TeamBlock = { team: Team; tasks: Task[] };
 
 /**
- * "For Design · 2 unclaimed" (54): per team you're in (name order), its open
- * tasks with no assignee, ordered by date. Teams with none are left out.
+ * "For Design · 2 unclaimed" (54): TV-D13's rule (`unclaimedForMe`: per team
+ * you're in, in name order, its open tasks nobody has taken), each ordered by
+ * date like the rest of My tasks. Teams with none are left out.
  */
 export function teamBlocks(
   tasks: readonly Task[],
@@ -69,21 +70,10 @@ export function teamBlocks(
   members: readonly Pick<TeamMember, "teamId" | "userId">[],
   me: string | null,
 ): TeamBlock[] {
-  if (!me) return [];
-  const mine = new Set(members.filter((m) => m.userId === me).map((m) => m.teamId));
-  if (mine.size === 0) return [];
-  const byTeam = new Map<string, Task[]>();
-  for (const task of tasks) {
-    if (!task.teamId || !mine.has(task.teamId) || task.assigneeId || task.deletedAt) continue;
-    if (!isOpenTask(task)) continue;
-    const list = byTeam.get(task.teamId);
-    if (list) list.push(task);
-    else byTeam.set(task.teamId, [task]);
-  }
-  return teams
-    .filter((t) => byTeam.has(t.id))
-    .sort((a, b) => a.name.localeCompare(b.name))
-    .map((team) => ({ team, tasks: orderMyTasks(byTeam.get(team.id) ?? [], new Set()) }));
+  return unclaimedForMe(tasks, teams, members, me).map(({ team, tasks: list }) => ({
+    team,
+    tasks: orderMyTasks(list, new Set()),
+  }));
 }
 
 /** The team block's rows before "Show n more" (research §8). */

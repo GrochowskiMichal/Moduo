@@ -72,6 +72,7 @@ import type { ListExtraGroup } from "./list-extensions";
 type InboxApi = Pick<
   TasksModuleApi,
   | "loaded"
+  | "reachedServer"
   | "tasks"
   | "buckets"
   | "inbox"
@@ -90,6 +91,8 @@ type Open =
   | { kind: "snooze-pick"; taskId: string };
 
 const SNOOZED_KEY = "snoozed";
+/** The snoozes preferences keep per workspace (`preferences.ts`). */
+const MAX_SNOOZES = 500;
 const captureShortcut = SHORTCUTS.find((s) => s.id === "capture");
 
 /** First name, as rows and notes say it ("Mike"). */
@@ -105,6 +108,7 @@ export function useInboxView({
   canEdit,
   selectedTaskId,
   onSelectTask,
+  visibleRows,
 }: {
   api: InboxApi;
   runtime: ModuoRuntime | null;
@@ -114,6 +118,9 @@ export function useInboxView({
   canEdit: boolean;
   selectedTaskId: string | null;
   onSelectTask: (id: string | null) => void;
+  /** The rows as the List shows them now (Filter, search and order applied):
+   *  after an action the cursor moves to the next of these. */
+  visibleRows: { readonly current: readonly Task[] };
 }): {
   /** The Inbox's tasks before Filter and search: the snoozed at the end. */
   scope: (inboxTasks: readonly Task[]) => Task[];
@@ -169,9 +176,11 @@ export function useInboxView({
   const wokenKey = `${split.woken.join(",")}|${split.stale.join(",")}`;
   // biome-ignore lint/correctness/useExhaustiveDependencies: the key names what changed.
   useEffect(() => {
-    // Not before the tasks are in: every snooze would read as stale.
-    // Nor while the module still holds another workspace's tasks (a switch).
-    if (!api.loaded || !inboxId || api.inbox?.workspaceId !== workspaceId) return;
+    // Only once a read reached the server this session (the device copy can
+    // lack a task snoozed elsewhere, which would read as stale and be lost on
+    // every device), online, and never while the module still holds another
+    // workspace's tasks (a switch).
+    if (!api.reachedServer || !inboxId || api.inbox?.workspaceId !== workspaceId) return;
     if (split.woken.length === 0 && split.stale.length === 0) return;
     if (canEdit && split.woken.length > 0) {
       const tops = api.tasks.filter((t) => t.bucketId === inboxId && !t.parentId && !t.deletedAt);
@@ -188,7 +197,7 @@ export function useInboxView({
       for (const id of gone) delete mine[id];
       return mine;
     });
-  }, [wokenKey, api.loaded, inboxId]);
+  }, [wokenKey, api.reachedServer, inboxId]);
 
   const [showSnoozed, setShowSnoozed] = useState(false);
   const scope = useCallback(
@@ -203,6 +212,10 @@ export function useInboxView({
     [snoozedIds, showSnoozed],
   );
 
+  // Anew only when the snoozed rows change: `split` is new on any task's edit,
+  // and a new group array re-measures the whole List.
+  const snoozedKey = split.snoozed.map((t) => t.id).join(",");
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the key names the snoozed rows.
   const extraGroups = useMemo<readonly ListExtraGroup[]>(
     () =>
       split.snoozed.length === 0
@@ -220,7 +233,7 @@ export function useInboxView({
               },
             },
           ],
-    [split.snoozed, showSnoozed, mySnoozes],
+    [snoozedKey, showSnoozed, mySnoozes],
   );
 
   const sourceOf = useCallback(
@@ -242,17 +255,18 @@ export function useInboxView({
     [],
   );
 
-  /** After an action the cursor moves to the next row (else the one above). */
+  /** After an action the cursor moves to the next row shown (else the one above). */
   const selectNextAfter = useCallback(
     (id: string) => {
-      const rows = latest.current.inboxOpen.filter(
-        (t) => !latest.current.split.snoozed.some((s) => s.id === t.id),
+      const snoozed = new Set(latest.current.split.snoozed.map((t) => t.id));
+      const rows = visibleRows.current.filter(
+        (t) => !t.parentId && isOpenTask(t) && !snoozed.has(t.id),
       );
       const i = rows.findIndex((t) => t.id === id);
-      const next = rows[i + 1] ?? rows[i - 1] ?? null;
+      const next = i < 0 ? null : (rows[i + 1] ?? rows[i - 1] ?? null);
       onSelectTask(next?.id ?? null);
     },
-    [onSelectTask],
+    [onSelectTask, visibleRows],
   );
 
   const [open, setOpen] = useState<Open | null>(null);
@@ -372,7 +386,42 @@ export function useInboxView({
     close();
     if (!task || !runtime) return;
     selectNextAfter(task.id);
+    let moved = 0;
     try {
+      // Its links move over first (a re-run finds the moved ones gone), then
+      // the two are linked, and its comments are copied last, once.
+      const links = await runtime.spine.listLinks({
+        workspaceId,
+        entityType: "task",
+        entityId: task.id,
+      });
+      for (const link of links) {
+        const fromDup = link.sourceType === "task" && link.sourceId === task.id;
+        const other = fromDup
+          ? { type: link.targetType, id: link.targetId }
+          : { type: link.sourceType, id: link.sourceId };
+        if (other.type === "task" && other.id === original.id) continue;
+        // A dependency is the duplicate's own (and could close a loop on the
+        // original): it stays, and goes quiet with the Won't do.
+        if (link.relationKind === "blocks") continue;
+        const here = { type: "task", id: original.id };
+        await runtime.spine.createLink({
+          workspaceId,
+          source: fromDup ? here : other,
+          target: fromDup ? other : here,
+          relationKind: link.relationKind,
+          origin: link.origin,
+        });
+        await runtime.spine.deleteLink({ workspaceId, linkId: link.id });
+        moved += 1;
+      }
+      await runtime.spine.createLink({
+        workspaceId,
+        source: { type: "task", id: task.id },
+        target: { type: "task", id: original.id },
+        relationKind: "references",
+        origin: "manual",
+      });
       // Its comments, copied to the task it duplicates (with who wrote each).
       const comments = await runtime.spine.listComments({
         workspaceId,
@@ -394,40 +443,12 @@ export function useInboxView({
           comments.map((c) => ({ author: authorOf(c), body: c.body })),
         ),
       });
-      // Its links move over; the two stay linked, so each trail says so.
-      const links = await runtime.spine.listLinks({
-        workspaceId,
-        entityType: "task",
-        entityId: task.id,
-      });
-      for (const link of links) {
-        const fromDup = link.sourceType === "task" && link.sourceId === task.id;
-        const other = fromDup
-          ? { type: link.targetType, id: link.targetId }
-          : { type: link.sourceType, id: link.sourceId };
-        if (other.type === "task" && other.id === original.id) continue;
-        // A dependency is the duplicate's own (and could close a loop on the
-        // original): it stays, and goes quiet with the Won't do.
-        if (link.relationKind === "blocks") continue;
-        const here = { type: "task", id: original.id };
-        await runtime.spine.createLink({
-          workspaceId,
-          source: fromDup ? here : other,
-          target: fromDup ? other : here,
-          relationKind: link.relationKind,
-          origin: "manual",
-        });
-        await runtime.spine.deleteLink({ workspaceId, linkId: link.id });
-      }
-      await runtime.spine.createLink({
-        workspaceId,
-        source: { type: "task", id: task.id },
-        target: { type: "task", id: original.id },
-        relationKind: "references",
-        origin: "manual",
-      });
     } catch {
-      toast.error("Couldn’t move everything over; the task stays open.");
+      toast.error(
+        moved > 0
+          ? `Couldn’t finish: ${moved === 1 ? "1 link" : `${moved} links`} moved to “${original.title || "Untitled"}”; the task stays open.`
+          : "Couldn’t merge it; the task stays open.",
+      );
       return;
     }
     void api.dropTask(
@@ -440,6 +461,11 @@ export function useInboxView({
     const task = openTask;
     close();
     if (!task) return;
+    // Preferences keep at most this many per workspace (the sanitiser drops the rest).
+    if (Object.keys(mySnoozes).length >= MAX_SNOOZES) {
+      toast(`${MAX_SNOOZES} tasks are snoozed here already; bring some back first.`);
+      return;
+    }
     selectNextAfter(task.id);
     const stamp = api.commentStamps.get(task.id) ?? null;
     writeSnoozes((mine) => ({ ...mine, [task.id]: { until, stamp } }));
@@ -488,13 +514,14 @@ export function useInboxView({
             <Kbd>{captureHint}</Kbd> captures from anywhere in Moduo
           </span>
           {split.snoozed.length > 0 ? (
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground tabular-nums"
               onClick={() => setShowSnoozed(true)}
-              className="rounded-sm tabular-nums transition-colors duration-(--motion-fade) ease-(--ease-out) hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
             >
               {split.snoozed.length} snoozed · show
-            </button>
+            </Button>
           ) : null}
         </span>
       }

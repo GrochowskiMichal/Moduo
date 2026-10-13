@@ -15,6 +15,7 @@ import {
   moveToDay,
   orderUpcoming,
   shiftDay,
+  stillMoved,
   upcomingAccepts,
   upcomingGroups,
   upcomingHeaderLine,
@@ -207,6 +208,21 @@ describe("day groups and one row per task (AC2.2, AC11.3)", () => {
     });
     expect(moveToDay(due, "2026-10-15")).toBeNull();
     expect(shiftDay("2026-10-31", 1)).toBe("2026-11-01");
+  });
+
+  it("a move's Undo checks the row still stands where it went, as a moment", () => {
+    const session = task("s", { scheduledAt: at(15, 9, 30), durationMinutes: 45 });
+    const move = moveToDay(session, "2026-10-19");
+    if (!move) throw new Error("no move");
+    // The server's row writes the same moment its own way.
+    const fromServer = at(19, 9, 30).replace(".000Z", "+00:00");
+    expect(stillMoved({ scheduledAt: fromServer, dueDate: null }, move)).toBe(true);
+    // Moved again since: Undo leaves it.
+    expect(stillMoved({ scheduledAt: at(20, 9, 30), dueDate: null }, move)).toBe(false);
+    const due = moveToDay(task("d", { dueDate: at(15) }), "2026-10-17");
+    if (!due) throw new Error("no move");
+    expect(stillMoved({ scheduledAt: null, dueDate: at(17) }, due)).toBe(true);
+    expect(stillMoved(null, due)).toBe(false);
   });
 
   it("drops: Earlier takes nothing, Later opens the picker, a day its date", () => {

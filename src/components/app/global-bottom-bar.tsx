@@ -2,6 +2,7 @@ import { ChevronDown, Plus, Search, SquarePen } from "lucide-react";
 import { Fragment } from "react";
 
 import { formatShortcut, SHORTCUTS } from "../../lib/shortcuts";
+import { Button } from "../ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -56,15 +57,16 @@ const captureShortcut = SHORTCUTS.find((s) => s.id === "capture");
 /** One action of a mode's row: its label, then its key. */
 function ModeButton({ action }: { action: BottomBarAction }) {
   return (
-    <button
-      type="button"
+    <Button
+      variant="ghost"
+      size="sm"
       disabled={action.disabled}
       onClick={action.run}
-      className="flex h-8 items-center gap-1.5 rounded-md px-2 font-sans text-sm text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
+      className="text-muted-foreground hover:text-foreground"
     >
       {action.label}
       {action.keyHint ? <Kbd>{action.keyHint}</Kbd> : null}
-    </button>
+    </Button>
   );
 }
 
@@ -97,13 +99,14 @@ function ModeRow({ mode }: { mode: BottomBarMode }) {
       {more.length > 0 ? (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              className="flex h-8 items-center gap-1 rounded-md px-2 font-sans text-sm text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground hover:text-foreground"
             >
               More
               <ChevronDown aria-hidden className="size-icon-xs" />
-            </button>
+            </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent side="top" align="center" className="min-w-40">
             {more.map((action) => (

@@ -7,6 +7,7 @@
 import { ChevronRight, MoreHorizontal, Plus } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { TeamMark } from "../../../components/ui/avatar";
+import { Button } from "../../../components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -182,18 +183,19 @@ export function ShowMoreLine({
 }) {
   if (count <= 0) return null;
   return (
-    <div className="flex min-h-(--row-h-sm) items-center px-2.5 font-sans text-xs text-muted-foreground">
-      <button
-        type="button"
+    <div className="flex min-h-(--row-h-sm) items-center px-1">
+      <Button
+        variant="ghost"
+        size="sm"
         aria-expanded={shown}
         onClick={(e) => {
           e.stopPropagation();
           onToggle();
         }}
-        className="rounded-sm tabular-nums transition-colors duration-(--motion-fade) ease-(--ease-out) hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+        className="text-muted-foreground tabular-nums hover:text-foreground"
       >
         {shown ? "Show fewer" : `Show ${count} more`}
-      </button>
+      </Button>
     </div>
   );
 }

@@ -8,6 +8,7 @@
 import { isOpenTask } from "@contracts/vocabularies";
 import { ChevronDown } from "lucide-react";
 import { type ReactNode, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import { Button } from "../../../components/ui/button";
 import {
   Dialog,
@@ -39,6 +40,7 @@ import {
   orderUpcoming,
   rowDay,
   shiftDay,
+  stillMoved,
   upcomingAccepts,
   upcomingGroupOf,
   upcomingGroups,
@@ -139,7 +141,9 @@ export function useUpcomingView({
           const ruleBefore = task.recurrence;
           undos.push(() => {
             const now2 = current(task.id);
-            if (!now2 || JSON.stringify(now2.recurrence) !== JSON.stringify(rule)) return;
+            // Still the rule and the day this move made (the server works the
+            // rule's pointer out again, so compare the pattern, not the JSON).
+            if (!now2 || now2.recurrence?.rrule !== rule.rrule || !stillMoved(now2, write)) return;
             latest.current.patchTask(
               task.id,
               write.kind === "due"
@@ -154,7 +158,7 @@ export function useUpcomingView({
             write.kind === "due" ? { dueOn: day } : { startsAt: write.scheduledAt },
           );
           undos.push(() => {
-            if (!back) return;
+            if (!back || !stillMoved(current(task.id), write)) return;
             latest.current.moveOccurrence(
               task.id,
               write.kind === "due"
@@ -165,13 +169,13 @@ export function useUpcomingView({
         } else if (write.kind === "due") {
           writer.patchTask(task.id, { dueDate: write.dueDate });
           undos.push(() => {
-            if (current(task.id)?.dueDate !== write.dueDate) return;
+            if (!stillMoved(current(task.id), write)) return;
             latest.current.patchTask(task.id, { dueDate: before.dueDate });
           });
         } else {
           writer.scheduleTaskAt(task.id, write.scheduledAt);
           undos.push(() => {
-            if (current(task.id)?.scheduledAt !== write.scheduledAt || !before.scheduledAt) return;
+            if (!stillMoved(current(task.id), write) || !before.scheduledAt) return;
             latest.current.scheduleTaskAt(task.id, before.scheduledAt);
           });
         }
@@ -305,8 +309,14 @@ export function useUpcomingView({
         }
         onPick={(day) => {
           const tasks = pendingTasks;
+          const picked = todayStr(day);
+          // A new date is never in the past (the keys clamp the same way).
+          if (picked < todayStr(new Date())) {
+            toast("Pick today or a day after.");
+            return;
+          }
           close();
-          requestMove(tasks, todayStr(day));
+          requestMove(tasks, picked);
         }}
         onClose={close}
       />

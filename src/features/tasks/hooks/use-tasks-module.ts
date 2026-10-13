@@ -3327,6 +3327,11 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     pendingSync: store ? snap.pending : 0,
     /** Done, Won't do and Backlog tasks have arrived (they load after the open ones). */
     restLoaded: !!store && snap.restLoaded,
+    /**
+     * A read reached the server this session (not just the device copy): what
+     * isn't here now is really gone (TV-U15's snoozes are forgotten only then).
+     */
+    reachedServer: !!store && snap.loadStamp > 0 && !snap.fromCache && !snap.offline,
     /** Live comments per task (TV-D11a; TV-D5's promised counts). */
     commentCounts: snap.commentCounts,
     /** Tasks with a capture or check-off waiting on this device (a row's clock). */
