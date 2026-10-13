@@ -126,6 +126,13 @@ export function AttachmentViewer({
           e.preventDefault();
           contentRef.current?.focus();
         }}
+        // Delete's Undo toast sits outside the viewer: pressing it restores
+        // the file and keeps the viewer open.
+        onInteractOutside={(e) => {
+          if (e.target instanceof Element && e.target.closest("[data-sonner-toaster]")) {
+            e.preventDefault();
+          }
+        }}
         onCloseAutoFocus={(e) => {
           const back = returnFocus.current;
           returnFocus.current = null;
