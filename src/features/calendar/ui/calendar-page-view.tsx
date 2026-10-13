@@ -738,6 +738,18 @@ export function CalendarPageView({
   // on this" (call 66), the same clock as Focus and the top-bar timer, saved
   // through the app shell from any page.
   const focus = useFocusTaskState();
+  // The block the session's clock shows on: the focused task's block that
+  // holds now, else its nearest one (a task can have several blocks).
+  const focusBlockId = useMemo(() => {
+    if (!focus.taskId) return null;
+    const mine = blocks.filter((b) => b.taskId === focus.taskId);
+    if (mine.length === 0) return null;
+    const inside = mine.find((b) => b.startMs <= nowTick && nowTick < b.endMs);
+    const nearest = mine.reduce((a, b) =>
+      Math.abs(b.startMs - nowTick) < Math.abs(a.startMs - nowTick) ? b : a,
+    );
+    return (inside ?? nearest).blockId;
+  }, [blocks, focus.taskId, nowTick]);
   const { prefs: focusPrefs } = useFocusPrefs();
   const focusTaskRef = useCallback(
     (taskId: string) => {
@@ -1142,7 +1154,7 @@ export function CalendarPageView({
               onTriageLater={onTriageLater}
               onTriageLonger={onTriageLonger}
               onTriageRemove={onTriageRemove}
-              focusTaskId={focus.taskId}
+              focusBlockId={focusBlockId}
             />
           </div>
         }

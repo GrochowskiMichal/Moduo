@@ -102,8 +102,8 @@ type Props = {
   onTriageLater: (taskId: string) => void;
   onTriageLonger: (taskId: string) => void;
   onTriageRemove: (taskId: string) => void;
-  /** The focus session's task (the one time engine; null when idle). */
-  focusTaskId: string | null;
+  /** The block the focus session shows on (the one time engine; null when idle). */
+  focusBlockId: string | null;
 };
 
 /** Re-render tick for the now-line; catches up on tab wake. */
@@ -190,7 +190,7 @@ export function CalendarGrid({
   onTriageLater,
   onTriageLonger,
   onTriageRemove,
-  focusTaskId,
+  focusBlockId,
 }: Props) {
   const now = useNowTick(30_000);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -752,7 +752,7 @@ export function CalendarGrid({
                 onTriageLater={onTriageLater}
                 onTriageLonger={onTriageLonger}
                 onTriageRemove={onTriageRemove}
-                focusTaskId={focusTaskId}
+                focusBlockId={focusBlockId}
                 canEdit={canEdit}
                 onToggleDone={onToggleDone}
                 onBackgroundPointerDown={onBackgroundPointerDown}
@@ -799,7 +799,7 @@ const DayColumn = memo(function DayColumn({
   onTriageLater,
   onTriageLonger,
   onTriageRemove,
-  focusTaskId,
+  focusBlockId,
   canEdit,
   onToggleDone,
   onBackgroundPointerDown,
@@ -832,7 +832,7 @@ const DayColumn = memo(function DayColumn({
   onTriageLater: (taskId: string) => void;
   onTriageLonger: (taskId: string) => void;
   onTriageRemove: (taskId: string) => void;
-  focusTaskId: string | null;
+  focusBlockId: string | null;
   canEdit: boolean;
   onToggleDone: (taskId: string) => void;
   onBackgroundPointerDown: (e: React.PointerEvent, dayIdx: number) => void;
@@ -928,7 +928,7 @@ const DayColumn = memo(function DayColumn({
           if (!span) return null;
           const elapsed = isElapsedBlock(block, nowMs);
           const worked = workedTaskIds.has(block.taskId);
-          const focusing = focusTaskId === block.taskId;
+          const focusing = focusBlockId === block.blockId;
           const awaitingTriage = elapsed && !block.done && !worked;
           return (
             <div
