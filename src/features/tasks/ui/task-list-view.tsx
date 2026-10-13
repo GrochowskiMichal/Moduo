@@ -66,7 +66,7 @@ import {
 } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import { type GroupAdd, groupAddState } from "../list-group-add";
-import type { Bucket, Section, Task, Team } from "../model";
+import type { Bucket, ProjectStatus, Section, Task, Team } from "../model";
 import { BACK_TO_MANUAL_ORDER, dragOrderFor, sortedByLabel } from "../order";
 import {
   columnVar,
@@ -194,6 +194,7 @@ type Props = {
 const NO_IDS: ReadonlySet<string> = new Set();
 const NO_SECTIONS: readonly Section[] = [];
 const NO_TEAMS: readonly Team[] = [];
+const NO_STATUS_NAMES: ReadonlyMap<string, ProjectStatus> = new Map<string, ProjectStatus>();
 
 /**
  * One line of the List as drawn (TV-D11b): the groups flattened, so the
@@ -544,18 +545,30 @@ export function TaskListView({
   );
   // Each sized column is as wide as its widest value in view (call 41), the
   // same on every row and the header: the frame's `--tl-col-*` variables.
+  // Each task's words are kept per task object (the store keeps an unchanged
+  // task's object), so an edit re-reads one row, not 10,000 (TV-D11b's
+  // budget); anything else the words depend on starts the cache again.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: each dep is what the cached words depend on; a change starts a new cache.
+  const textCache = useMemo(
+    () => new WeakMap<Task, RowTexts>(),
+    [today, detailed, byId, taskKey, bucketNameById, sectionNames, api.statusById, waitingLabels],
+  );
   const widths = useMemo(() => {
     const now = nowOn(today);
-    const texts: RowTexts[] = listedRows.map((t) => {
+    const statusById = api.statusById ?? NO_STATUS_NAMES;
+    const cache = textCache;
+    const textsOf = (t: Task): RowTexts => {
+      const known = cache.get(t);
+      if (known) return known;
       const person = t.assigneeId ? byId(t.assigneeId) : null;
-      return detailed
+      const texts: RowTexts = detailed
         ? {
             handle: handleLabel(taskKey, t.number),
             project: projectLabel(
               bucketNameById(t.bucketId),
               t.sectionId ? (sectionNames.get(t.sectionId) ?? null) : null,
             ),
-            status: statusNameOf(t, api.statusById ?? new Map()),
+            status: statusNameOf(t, statusById),
             due: dueLabel(t, now),
             session: sessionLabel(t, now),
             time: rowTime(t),
@@ -563,11 +576,15 @@ export function TaskListView({
             assignee: person ? person.name.trim().split(/\s+/)[0] : null,
             updated: updatedLabel(t, now),
           }
-        : { date: rowDate(t, now)?.label ?? null };
-    });
-    return columnWidths(texts, { headers: detailed });
+        : // Standard sizes only its date column (most tasks have none).
+          { date: t.scheduledAt || t.dueDate ? (rowDate(t, now)?.label ?? null) : null };
+      cache.set(t, texts);
+      return texts;
+    };
+    return columnWidths(listedRows.map(textsOf), { headers: detailed });
   }, [
     listedRows,
+    textCache,
     today,
     detailed,
     byId,
