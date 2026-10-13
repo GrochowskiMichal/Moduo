@@ -2,6 +2,66 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index.
 
+## 2026-10-13 · TV-U15 Upcoming, Inbox, My tasks, All (tasks-v3 block 20) — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 20 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §8, AC2.2, AC2.1, AC3.3, AC5.2, AC11.3, AC11.5; REPLAN 83, 84, 20, 20a, 29, 82b, defaults b, h, r–t; research views-list-upcoming.md §6–9; prototype round-2b frames 2, 3, 7). No migration. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **U15-1 · The four views are the List with seams, not new lists** → TV-U15 (`ui/list-extensions.ts`, `task-list-view.tsx`), TV-U11, TV-U12, TL1
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the List takes a view's own grouping (`grouping`: its groups, empty ones kept, its header line and action, what a drop into a group does, its "+", its row date words), groups added around its own (`extraGroups`: on top or at the end, a limit with "Show n more", folded), the view's keys first (`onViewKey`), "Take it" and source words as row facts (`takeable`, `source`, through `TaskFacts`), a teaching `emptyState`, a `note` under the toolbar, `defaultFolded`, `groupSub` and `countEvery`. Upcoming, the Inbox, My tasks, All and Won't do are hooks that hand the List these (`upcoming-view.tsx`, `inbox-view.tsx`, the plan view's wiring).
+  - Why: TV-U10's "reuse the rows, groups, columns and states, don't fork them"; rows stay memoised (D11b) because every new thing a row shows is a fact.
+  - Rejected: an Upcoming list of its own (a second set of rows, keys and drops to keep in step).
+- **U15-2 · Upcoming: one row per task at its row date; missed and late are words, not colours** → TV-U15 (`upcoming.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the row stands on its next session or its due date, whichever comes first by day (`rowDateOf`, the List's rule, on the session mirror); a session that ended with the task open reads "missed 2:00 PM" (in Today when it was today, in Earlier before), a passed due date "Oct 8 · late"; inside a day only a time shows ("3:00 PM · 45m", "due 5:00 PM", "due Thu"); timed rows first, then priority, then the sidebar's project order. Covered: your dated tasks and unassigned ones, minus Backlog, Won't do and unassigned tasks routed to a team you're not in; a task done today or later stays in its day behind "N completed · show". The seven days always show (an empty one takes drops); Earlier and Later only with work; Later has no month dividers yet. Headers: "Today · Tue, Oct 13 · 3 · ~1h", "Thu · Oct 15 · 2", the total being sessions' lengths and estimates.
+  - Why: call 83 and research §6; reading sessions from the mirror keeps a move's optimistic row and its echo the same row.
+  - Rejected: reading `task_sessions` for placement (a moved session would sit on its old day until the task's echo).
+- **U15-3 · Moving between days: the row's own date moves; a repeat asks first** → TV-U15 (`upcoming-view.tsx`, `use-tasks-module.ts` `moveOccurrence`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: a drop on a day (its header or rows), ⌥←/→ (a day), ⌥⇧←/→ (a week) and `t` (Today) move a due date to the day, or a session to the day at the same time and length (the reschedule op, so the trail says so); never before today; Earlier takes no drop, Later opens a day picker; Earlier's header has "Move all…" (Today · Tomorrow · Next week · Pick…). A repeat asks "Move “…” to Thu: Just this one · Change the pattern · Cancel" (TV-D12's `tasks_op_move_occurrence`, or `changePatternRule` saved with the date); "Move all…" asks once for every repeat in it. One Undo per move, which never overwrites a newer change.
+  - Why: research §6 and TV-D12's carry-forward (27 g).
+  - Rejected: moving both dates of a non-repeating task (only the date the row stands for moves; the other shows in its own cell).
+- **U15-4 · Upcoming's New dates the task today; Display is the view's** → TV-U15 (`tasks-plan-view.tsx`, `display.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: New and ⌘N in Upcoming open the capture due today (into your Inbox); a day's "+" names its day; Earlier and Later have no "+". Display offers Layout, Completed, Rows and Show on rows (no Group by, Order by or Subtasks: its days and order are fixed, dated subtasks flat with "↳ Parent").
+  - Why: a task made in Upcoming should land where you are looking (TV-U14's "here").
+  - Rejected: a dateless New (it would vanish from the view at once).
+- **U15-5 · Inbox triage: four keys, one bottom-bar row, snoozes in preferences** → TV-U15 (`inbox-triage.ts`, `inbox-view.tsx`, `bottom-bar-mode.ts`, `preferences.ts` `tasksInbox`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: 1 · 2 · 3 · H work only in the Inbox, on a top-level task, and the bottom bar's centre shows "Accept 1 · Decline 2 · Duplicate 3 · Snooze H" while one is selected. **Accept** opens "File “…” in…" (your projects, searchable) and files it assigned to you in one write with Undo. **Decline** makes your own task Won't do (Undo); someone else's asks for a one-line note, comments "Declined by Maciej: …" and assigns it back to its maker (TV-D13 moves it to their Inbox), with no Undo (it's no longer yours to take back). **Duplicate of…** copies the duplicate's comments into one comment on the task you pick ("Merged “…” into this task." with who wrote each), moves its links there, links the two, then marks it Won't do (Undo reopens it; the copies stay). **Snooze**: Tomorrow · Next week (next Monday) · Pick a day…; the snooze is the person's (`user_preferences.preferences.tasksInbox`, synced, at most 500 per workspace), it comes back on top on its day or as soon as its comment stamp moves, H on a snoozed task brings it back, and a snooze whose task left the Inbox is forgotten (only once the tasks have loaded, never across a workspace switch). After each action the cursor moves to the next row.
+  - Why: default b and research §7; the Inbox is personal, so a per-person snooze needs no table and no migration.
+  - Rejected: a snooze column on tasks (a migration for a personal state); moving comments on the server (no op; a data-lane job if it's ever wanted); Decline's Undo (the task is in someone else's Inbox by then).
+- **U15-6 · Where an Inbox task came from: "from Mike" now, email and agent chips later** → TV-U15 (`inboxSourceLabel`), TV-D16, a later email read
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: a task someone else made reads "from Mike" after its title; your own says nothing. The email's "From: …" chip and an agent's "via Claude Desktop" need a read of links and create activity per row, so they wait (the agent's for TV-D16, the email's for a batched links read).
+  - Why: one read per row would break D11b's budget; the store has neither.
+  - Rejected: `listLinks` per Inbox row.
+- **U15-7 · Empty views teach the one gesture** → TV-U15 (`view-empty-states.tsx`, `inbox-view.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: Inbox "Inbox is clear · New captures from anywhere, email and your agents land here, newest on top." with Capture a task, "⌘⇧K captures from anywhere in Moduo" and "n snoozed · show"; Upcoming "Nothing dated yet · Tasks with a due date or a work session show here, by day." with Add a task for today and the date-words hint; My tasks "Nothing assigned to you" with Add a task and the `c` / `@` hint; All "No projects yet" naming New project (or "No open tasks in your projects"); Won't do "Nothing marked Won't do · Reopen brings one back". A cleared Inbox shows its state even with finished rows left, and Won't do shows the skeleton until closed tasks arrive.
+  - Why: the hackathon brief (Inbox and My tasks are a new person's first look); research §9's wording.
+  - Rejected: a celebration or a streak on zero Inbox (research §7).
+- **U15-8 · My tasks: always there, by status in its own order, the team block on top** → TV-U15 (`my-tasks.ts`, `bucket-rail.tsx`), TV-D13
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: My tasks shows in every workspace (tasks-v3 §3; tasks-v2's two-member rule retired); its scope includes your Backlog (folded behind its group, U10-12); under Order by: Manual it orders by date, then priority, waiting tasks last in each group. On top, per team you're in, "For Design · 2 unclaimed" with the team's mark: up to five rows then "Show n more", each with Take it (TV-D13's claim op when the module has it, else the assign op), with Undo; its "+" routes a new task to the team; it folds like any group and is absent when nothing is unclaimed.
+  - Why: call 84 and 54, research §8.
+  - Rejected: Created and Subscribed tabs (a filter chip says "Created by me").
+- **U15-9 · All: your projects, never your Inbox, area by area** → TV-U15 (`my-tasks.ts` `allView`, `allProjectOrder`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: All lists every task in projects you can see and never your Inbox (its sidebar count too), project by project in the sidebar's order; a project's header names its area and "On hold" / "Done" ("Acme rebrand · Client work · On hold"), and On hold and Done projects start folded. One sticky level.
+  - Why: research §8 and 20.
+  - Rejected: Area › Project as two sticky header levels (the virtual stack pins one header; a nested sticky is its own block).
+- **U15-10 · Won't do is a list in the sidebar's ⋯** → TV-U15 (`bucket-rail.tsx` `WONTDO_SELECTION`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the hairline's ⋯ opens "Won't do · n": every Won't do task by project, each group counting all of its tasks, no "+"; the crossed icon and the panel's Reopen bring one back.
+  - Why: tasks-v3 §2 ("a reachable list with Reopen") without a permanent sidebar row (98).
+  - Rejected: only Filter → Status (reachable, but not findable).
+- **U15-11 · The bottom bar's modes (82b)** → TV-U15 (`components/app/bottom-bar-mode.ts`), TV-U12
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: a page owns the bar's centre while a mode applies (`useBottomBarModeOwner`): its first six actions with their keys, then More ▾, then a quiet note ("4 selected · Esc"); one mode at a time, cleared when the page lets go. The Inbox's triage row is the first; TV-U12's multi-select row is the next.
+  - Why: 82b's one pattern for every mode.
+  - Rejected: Tasks drawing its own bar (the 3×3 layout has one bottom bar).
+
 ## 2026-10-13 · TV-U10 List v3 — the agent's choices (deferred to by Maciej)
 
 Built in tasks-v3 block 14 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §4, AC11.2–11.5, AC3.5, AC1.5; research views-list-upcoming.md §1–3, §9; defaults i–n). Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.

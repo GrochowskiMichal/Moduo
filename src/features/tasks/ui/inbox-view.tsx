@@ -406,6 +406,9 @@ export function useInboxView({
           ? { type: link.targetType, id: link.targetId }
           : { type: link.sourceType, id: link.sourceId };
         if (other.type === "task" && other.id === original.id) continue;
+        // A dependency is the duplicate's own (and could close a loop on the
+        // original): it stays, and goes quiet with the Won't do.
+        if (link.relationKind === "blocks") continue;
         const here = { type: "task", id: original.id };
         await runtime.spine.createLink({
           workspaceId,
