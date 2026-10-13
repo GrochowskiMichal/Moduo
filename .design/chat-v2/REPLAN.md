@@ -1,10 +1,9 @@
 # Chat v2 — the re-plan
 
-> **Status (2026-10-13): round 4 sent (prototype round-4.html; his round 3 observations answered in §8 group J). Waiting on Maciej.**
+> **Status (2026-10-13): group J answered; group K sent (what's left + five new topics). Next: round 5 (every surface and state) and the gap audit.**
 >
-> - **Decided since round 1:** CH4a; CH29 = A (Slack calm) as the base, centred dates, a fade at both ends; CH29b; CH29d (a centred "New" pill + a floating chip when scrolled up); tidying up afterwards.
-> - **Open in group J (this pass):** CH29g composer, CH30d replies wrapped by hand, CH28a presence colour, CH28d saved statuses, CH32 channel icons.
-> - **Open in group H (saved for his next pass):** CH29f, CH29a, CH29c, CH30a, CH30c, CH28c, CH28b, CH3a, CH16a, CH16b, CH23a, CH26a; plus CH31. CH29e → CH29g and CH30b → CH30d.
+> - **Decided:** the shape (CH1–CH19, CH22, CH25, CH27, CH28, CH4a); the look (CH29 = Slack calm base, CH29b, CH29d); the composer (CH29g); replies (CH30a, CH30d; CH30b retired); presence (CH28a with the target mark for Focusing, CH28c, CH28d); channel icons (CH32).
+> - **Open (group K):** CH29f, CH29a, CH29c, CH30c, CH28b, CH3a, CH16a, CH16b, CH23a, CH26a, CH31; new CH33 notification text, CH34 sound, CH35 Home widgets, CH36 people who leave, CH37 first open.
 > - **Mike's ask:** the tech-stack decision blueprint landed → [research/tech-blueprint.md](./research/tech-blueprint.md), folded into §6 (#2, #3, #6, #7, #18, #19–#22). Open from it: **CH31** (the Supabase plan before the hackathon).
 > - **Research lanes** ([`research/`](./research/)): six landed and folded in (early-decisions audit, role journeys, competitor structure, hackathon, visual audit → §5, current state → §1.3 B and §6 #15–18). **Threads** (→ CH30) and **visual competitors** (→ CH29) landed.
 > - **Research data in the shared local database** (kept for round 2's live checks; remove when the plan is done): workspace **"Chat replan research"** `669be464-0b9a-4d84-8537-544ac04dba5f` (10 channels, 3,032 messages, one task) and a third local user `third@moduo.local`. Full ledger and a cleanup sketch: [current state](./research/current-state.md), last section. `dev@moduo.local`'s plan is back to `free` (checked).
@@ -921,6 +920,8 @@ In his words, then what each one changes:
 
 ❓ a, b or c?
 
+✅ **Decided 2026-10-13:** a (one row that grows; "+" for upload, link and create).
+
 **CH30d · Replies, simpler: wrap up by hand instead of folding automatically** *(replaces CH30b; he asked "What am I getting wrong?")*
 - **Nothing:** the round 3 design was at fault. The folded row sat indented under Mike's message, so it read as a reply to him, and automatic folding is hard to predict.
 - **The simpler model** (frame 4):
@@ -934,12 +935,16 @@ In his words, then what each one changes:
 
 ❓ a, b or c?
 
+✅ **Decided 2026-10-13:** *"ok, a"*. This also settles **CH30a** (replies stay in the stream, with "N replies" grouping) and retires **CH30b** (automatic folding).
+
 **CH28a · Presence colour, again** *(his idea weighed: "green for people that are in chat, and white for those who are active and reachable, but not currently looking at the chat … might enable surveillance")*
 - **His idea, honestly:** it does lean toward surveillance. It shows teammates when you're reading chat but not answering, and when you're elsewhere in the app: reply pressure, the thing the quiet bar exists to prevent. It also doesn't answer the question you have when you look at a dot: "can I reach them now?"
 - **Recommended:** **green means one thing, "reachable now"** (Moduo open, not idle, not on do not disturb). Everything else is a shape in grey: an outline for away, a thick bar for do not disturb (vacation, sick, by hand), the same bar for Focusing with "Focusing on X · until 3:00 PM" next to it, nothing for offline. Green stays the only presence colour, which leaves room for Focus to get its own mark later.
 - **Options:** (a) **green = reachable, shapes for the rest** *(recommended)*; (b) his split (green in Chat, white elsewhere); (c) no colour at all.
 
 ❓ a, b or c?
+
+✅ **Decided 2026-10-13:** a, with a change: *"the target icon for focusing was actually nice."* → **Focusing keeps the target mark** (a ring with a centre dot, from round 3), not the do-not-disturb bar. Green = reachable; an outline = away; the thick bar = do not disturb; the target = focusing; nothing = offline. With CH28d this also settles **CH28c** (the status set).
 
 **CH28d · Saved statuses** *(new, from "out sick, vacation … we should allow people to create those")*
 - **A status** = an emoji + a short text + "clear after" (30 min, 1 h, today, this week, a date, never) + optionally "do not disturb while it's on".
@@ -951,6 +956,8 @@ In his words, then what each one changes:
 
 ❓ a, b or c?
 
+✅ **Decided 2026-10-13:** a (Moduo's presets plus your own saved statuses).
+
 **CH32 · Channel icons** *(new, from "the icons that we use for chats, looks messy now")*
 - **Today:** five kinds in one list (a project dot, a company icon, a team mark, a bubble, a lock).
 - **Options** (frame 7):
@@ -961,7 +968,60 @@ In his words, then what each one changes:
 
 ❓ a, b, c or d?
 
+✅ **Decided 2026-10-13:** a, with a question: *"why would we see a channel we can't read? why not make it invisible to those who can't open?"*
+- **Answer: you don't, already.** A private channel you're not in never appears anywhere for you (the server never sends it). The lock marks a private channel **you are in**, so you know before posting that only its members will see it. Public channels you haven't joined appear only in "Browse channels", not in your sidebar.
+
 **Still open from group H, saved for his next pass:** CH29f spacing, CH29a 15 px text, CH29c past dates, CH30a replies in the stream, CH30c who moves others' messages, CH28c statuses (Active · Away · Do not disturb, now with CH28d), CH28b where state shows, CH3a, CH16a, CH16b, CH23a, CH26a, and CH31 (the Supabase plan). CH29e is replaced by CH29g and CH30b by CH30d.
+
+### K · What's left *(2026-10-13, after his group J answers)*
+
+**Still needing his decision from earlier rounds** (each recommended as written; "ok" settles it):
+- **CH29f** 24 px between different people (20 compact, 16 dense), 6 px between one person's lines.
+- **CH29a** Message text 15 px at every density.
+- **CH29c** Dates for the recent past, app-wide: Today · Yesterday · Mon · Oct 9 · Oct 9, 2025.
+- **CH30c** Who may move others' messages: everyone their own; channel managers and admins anyone's (b).
+- **CH28b** Besides where you'd message someone (decided with CH28d), also a "Team now" line on Home (a).
+- **CH3a** Channel names as typed, spaces and capitals allowed.
+- **CH16a** Your own quick-reaction row, used on comments too (amends Tasks 88).
+- **CH16b** Custom emoji right after the hackathon cut.
+- **CH23a** Announcement channels: keep the switch, managers can change it later, each post notifies everyone once.
+- **CH26a** The build order (hackathon cut first).
+- **CH31** The Supabase plan: run the 100-client test, then Pro before the event if it shows more than ~150 connections (b).
+
+**New topics nobody has raised yet** (one opening call each):
+
+**CH33 · What a desktop or browser notification shows**
+- (a) **The sender and the message text** ("Sofia Ortiz · Acme rebrand: Can someone get the logo SVGs…"), with a switch in Settings → Notifications, "Show message text", for people who share their screen. *Recommended.*
+- (b) Only the sender and the conversation, never the text.
+- **48a:** anyone presenting or screen-sharing wants the switch; everyone else wants the text.
+
+❓ a or b?
+
+**CH34 · Sound**
+- (a) **One soft sound for direct messages and `@you`, off by default**, one switch to turn it on. *Recommended:* the banner already tells you; sound is the loudest signal there is.
+- (b) On by default (Slack and Discord).
+- (c) Never.
+
+❓ a, b or c?
+
+**CH35 · Chat's Home widgets** (the module contract requires them)
+- (a) **Two:** "Catch up" (what's waiting for you, in the S and M sizes) and "Team now" (who's reachable, focusing, away or on vacation; CH28b). *Recommended.*
+- (b) v1's single "Conversations" widget (recent conversations, what needs you first).
+
+❓ a or b?
+
+**CH36 · When someone leaves the workspace**
+- (a) **Their messages stay, with their name and a quiet "former member" label;** your direct messages with them stay readable. *Recommended:* the history keeps its meaning. (Deleting an account is separate and already defined: the name goes.)
+- (b) Their messages stay, but their name becomes "Former member".
+
+❓ a or b?
+
+**CH37 · Chat's first open in a new workspace**
+- (a) **"General" exists, with a one-line welcome** that teaches the two gestures ("Reply to keep answers together · @ links anything in Moduo") and disappears after the first message. *Recommended.*
+- (b) An empty General.
+- (c) A few sample messages.
+
+❓ a, b or c?
 
 ### F · Visual *(added after round 1 was sent, from the visual audit)*
 
@@ -996,6 +1056,21 @@ In his words, then what each one changes:
 ❓ **Answered 2026-10-13:** *"not sure what you mean"* → re-asked as **CH26a**.
 
 ## 9. What happens next
+
+**The plan from here (2026-10-13), in order:**
+1. **Round 5, every surface and state in one prototype**, built on the decisions so far and my defaults for the details. Maciej skims it and flags only what's wrong:
+   - Catch up; search results and ⌘K;
+   - new conversation and Browse channels; a channel's Details and settings (managers, announcement switch, notification level, linking);
+   - message actions, editing, a failed send, uploading, previews;
+   - empty, loading, offline, very large, paused, archived;
+   - the Home widgets; notification wording; the key map.
+2. **A gap audit by a separate agent:** every role's week (hackathon team, duo, dev team, PM, agency) against every view in every state; it reports only what's unaddressed, contradictory or too thin. Its findings become calls or fixes.
+3. **Round 3 for Mike:** the list of database changes (tables kept; columns, ops and indexes added; the v1 message conversion; the realtime setup), for his review.
+4. **The cross-module proposals, sent to their owners:** "Mentioned in" on items (CH11, Notes and Tasks); "Make a note" and "Move to a task's comments" (CH30d tidy-up, Notes and Tasks); a status in Tasks' assign picker (CH28d); Focus and quiet hours holding pings (TV-F6, TV-D14); chat's rows in the notification table (TV-D12).
+5. **The spec, `specs/chat-v2.md`, on Fable 5.1** (Maciej switches the model for that step): acceptance criteria as one normal week per role; a test for each; the notification table and the key map; migrations named per block; the five spikes as the first block; the hackathon cut drawn as a line once the date is known.
+6. **Decision entries** in `docs/decisions/chat.md`, a supersession banner on `specs/chat.md`, a validator pass, fixes, "Ready to execute".
+
+**Earlier outline (kept for reference):**
 
 1. **Round 1** (this): Maciej answers CH1–CH26. The current-state and visual lanes fold into §1.3 and §5 as they land.
 2. **Rounds 2a/2b:** every surface, view by view and state by state (empty, loading, error, read-only, offline, very large); Chat's panel views, capture type, References previews, MCP tools, notification rows, Home widgets, key map; a gap audit by a separate agent.

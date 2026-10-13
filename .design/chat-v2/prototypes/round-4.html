@@ -1281,8 +1281,8 @@ html[data-scrolled="up"] .newchip { display: inline-flex; bottom: 84px; }
 html[data-pres="split"] .pd.elsewhere { background: var(--foreground) !important; }
 .pd.dnd { background: color-mix(in oklab, var(--foreground) 62%, var(--card)); }
 .pd.dnd::after { content: ""; position: absolute; left: 1.5px; right: 1.5px; top: 3px; height: 3px; border-radius: 2px; background: var(--card); }
-.pd.focus { background: color-mix(in oklab, var(--foreground) 62%, var(--card)); box-shadow: 0 0 0 2px var(--card); }
-.pd.focus::after { content: ""; position: absolute; left: 1.5px; right: 1.5px; top: 3px; height: 3px; border-radius: 2px; background: var(--card); }
+.pd.focus { background: var(--card); box-shadow: 0 0 0 2px var(--card), inset 0 0 0 1.5px color-mix(in oklab, var(--foreground) 72%, var(--card)); }
+.pd.focus::after { content: ""; position: absolute; inset: 2.75px; border-radius: 9999px; background: color-mix(in oklab, var(--foreground) 72%, var(--card)); }
 .legend { position: absolute; z-index: 7; left: 16px; bottom: 70px; width: 300px; }
 .legend .pnote { display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
 .legend .lr { display: flex; align-items: center; gap: 10px; }
@@ -1612,7 +1612,7 @@ html[data-icons="none"] .nav.chrow .slot { display: none; }
             <span class="lr"><span class="sw"><span class="ava" style="width:16px;height:16px;font-size:7px;--ava:var(--person-ar)">KN</span><span class="pd on"></span></span>Active: Moduo is open, not idle</span>
             <span class="lr"><span class="sw"><span class="ava mc" style="width:16px;height:16px;font-size:7px">MC</span><span class="pd away"></span></span>Away: idle for 10 minutes</span>
             <span class="lr"><span class="sw"><span class="ava an" style="width:16px;height:16px;font-size:7px">JL</span><span class="pd dnd"></span></span>Do not disturb: by hand, or a status like vacation</span>
-            <span class="lr"><span class="sw"><span class="ava so" style="width:16px;height:16px;font-size:7px">SO</span><span class="pd focus"></span></span>Focusing: do not disturb, with what and until when</span>
+            <span class="lr"><span class="sw"><span class="ava so" style="width:16px;height:16px;font-size:7px">SO</span><span class="pd focus"></span></span>Focusing: the target mark, with what and until when</span>
             <span class="lr"><span class="sw"><span class="ava" style="width:16px;height:16px;font-size:7px;--ava: color-mix(in oklab, var(--label-green) 40%, var(--card))">TB</span></span>Offline: no dot</span>
           </div>
         </div>
