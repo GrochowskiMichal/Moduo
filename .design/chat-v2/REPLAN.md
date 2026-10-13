@@ -799,6 +799,8 @@ Every open question in one place, each readable on its own: the question, the op
 
 ❓ a, b, c or d? (recommended: b)
 
+✅ **Decided 2026-10-13 (round 3 pass), his version:** a pill **centred** on the line (like the date separators), **no unread tint**, and **a floating "N new" chip when you're scrolled up and something arrives while you're in the conversation**.
+
 **CH29e · The composer: one row or two?**
 - (a) **One row:** attach · text · @ · emoji · send; formatting appears when you select text. *Recommended:* fewer things to look at, which is his main complaint.
 - (b) Two rows (Slack): the text, then a row of tools under it.
@@ -885,6 +887,22 @@ Every open question in one place, each readable on its own: the question, the op
 - **CH16b** Custom workspace emoji: build them right after the hackathon cut, not inside it. *Recommended: right after.*
 - **CH23a** Announcement channels (only managers post): keep v1's switch, let managers turn it on later, and have each post ping everyone once. *Recommended: yes.*
 - **CH26a** Build order: chat in the handed-out Team workspaces → messages that reach you outside the app → the new look → files → links and "make a task" → Catch up → replies. Then the rest for teams of 2–5. *Recommended: yes.*
+
+### I · Round 3 observations *(2026-10-13, Maciej's first pass on prototype round 3; the group H questions stay open for his next pass)*
+
+In his words, then what each one changes:
+1. *"For some reason, it looks cleaner now on the first tab. Much easier to look at, but there still a couple of things that I'd try to modify."*
+2. *"The image is too close to the text below it. It feels like the message below it is the message's description, maybe because the image's gap between the text above and below it is different — on Discord it reads equal, or related more to the message above. … a message below an image starting with a task chip reads like it's too close to it."* → media gets the same space below as above, and a following line from the same person starts after a clear gap (round 4).
+3. *"Your artifact broke on dense, the message is 1 word per line."* → fixed (the hidden hover time kept its column).
+4. *"I don't understand why the new pill is not centered like everything else above it. What's the reasoning behind that decision?"* → there was none beyond copying Slack; centred now.
+5. ✅ **CH29d decided, his version:** *"the pill layout with the pill centered, no unread row tint, and a floating chip if we're scrolled up and something appears but we were in the chat when that happened."*
+6. **CH29e reopened as CH29g (the composer):** *"discord's approach is bad (making the text area very small only to give space to an icon row), and I really like a composer … that is the compact, one row version, but when someone's message becomes more lines, it expands and moves the text above the icon row … The icons could also be below the composer as in Claude Code, considering that we might want to use that space later to add more options on compose. We can already link a lot of stuff, why not add module icons to that row to make it quicker to connect/attach chips or cards from other modules? … If the "+" icon would be more interactive, or shown as a list of choices on what to add, or if we find an interesting solution for users to easily add relations, or if just using text in the message holds up as an idea, we can also abandon the bottom row solution. Need advice."*
+7. **Replies (CH30):** *"Not sure the 'tangled chain folds' solution is going to be easy for the users to understand, if it's hard for me. I don't know why Mike Chen's message looks like it's responding to the thread when it isn't. I like replies in the stream, but overall it's harder to find threads this way (everything is kinda out there), and I understand that this should help us solve that problem, but I just don't get it visually. What am I getting wrong?"* · frame 5: *"now I see the concept a bit better … but it looking like it's related to Mike Chen's standup message threw me off. Solving a thread (wrapping) should also make the messages in the main chat (that were responses to it) disappear, right?"* · frame 6: *"looks okay to me, not sure what to click to wrap"* → **CH30d** (a simpler model: wrapping by hand instead of automatic folding) and a "Reply chains" view to find them.
+8. *"On 7, the dnd icon's rectangle is almost invisible, tempted to make it so large it reads as two half-circles."* → done (round 4).
+9. *"We need to talk about the icons that we use for chats, looks messy now."* → **CH32**.
+10. **Presence (CH28a reopened):** *"Green is so easy to understand, and so common, that even white feels off somehow. It also takes away our options to use color to display statuses that are more complex, which we're going to have with the focus mode. We could use green for people that are in chat, and white for those who are active and reachable, but not currently looking at the chat. Not sure if it's a good idea and if it might enable surveillance. Tell me what you think."* → **CH28a** re-asked with that idea weighed.
+11. **Saved statuses:** *"What about saved statuses like out sick, vacation, and other stuff? we should allow people to create those, I think."* → **CH28d**.
+12. *"Not going through the question list in this pass, save those that still need decisions and those that were only partially answered."* → group H stays open as written (minus CH29d, now decided).
 
 ### F · Visual *(added after round 1 was sent, from the visual audit)*
 
