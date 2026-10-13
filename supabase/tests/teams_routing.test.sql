@@ -465,5 +465,58 @@ BEGIN
                               WHERE b.owner_id = test.id('M') AND b.is_system AND b.workspace_id = test.id('W')
                                 AND t.deleted_at IS NULL),
     'nothing is left in an Inbox nobody can open');
+  PERFORM test.ok(EXISTS (SELECT 1 FROM public.module_activity a
+                          WHERE a.op = 'tasks.handed_back' AND a.entity_id = test.inbox('E')
+                            AND (a.payload ->> 'left')::boolean IS FALSE),
+    'removed by someone else, the notice doesn''t say they left on their own');
+  -- The removal's bypass stays on in this transaction (gotchas/supabase.md).
+  PERFORM set_config('share.bypass', '', true);
+
+  -- ── 8. Review fixes (20261013180000) ─────────────────────────────────────
+  -- A finished task routed to a team, or given back to it, calls nobody.
+  DELETE FROM public.module_activity WHERE workspace_id = test.id('W') AND op = 'tasks.routed';
+  PERFORM test.make('E', jsonb_build_object('id', test.id('F1'), 'title', 'Already shipped', 'bucket_id', test.id('SB'),
+                                            'team_id', test.id('DS'), 'assignee_id', NULL, 'status', 'done'));
+  PERFORM test.make('E', jsonb_build_object('id', test.id('F2'), 'title', 'Done by A', 'bucket_id', test.id('SB'),
+                                            'team_id', test.id('DS'), 'assignee_id', test.id('A'), 'status', 'done'));
+  r := test.patch('A', 'F2', '{"assignee_id": null}'::jsonb);
+  PERFORM test.ok(NOT EXISTS (SELECT 1 FROM public.module_activity a WHERE a.workspace_id = test.id('W') AND a.op = 'tasks.routed'),
+    'a finished task routed to the team, or given back, tells nobody', r);
+
+  -- Assigning and changing the status in one edit hands the task over after
+  -- the status is set (the caller doesn't lose it half-way).
+  PERFORM test.make('O', jsonb_build_object('id', test.id('G1'), 'title', 'For E', 'assignee_id', test.id('E')));
+  PERFORM test.ok((test.task('G1')).bucket_id = test.inbox('E'), 'O''s task made for E sits in E''s Inbox');
+  r := test.patch('E', 'G1', jsonb_build_object('assignee_id', test.id('A'), 'status', 'in_progress'));
+  PERFORM test.ok(r = 'ok 1' AND (test.task('G1')).bucket_id = test.inbox('A')
+              AND (test.task('G1')).status_category = 'in_progress' AND (test.task('G1')).assignee_id = test.id('A'),
+    'assign + status in one edit both land, then it moves to A''s Inbox', r);
+  PERFORM test.make('E', jsonb_build_object('id', test.id('G2'), 'title', 'Plan'));
+  PERFORM test.make('E', jsonb_build_object('id', test.id('G2s'), 'title', 'Step', 'parent_id', test.id('G2')));
+  PERFORM test.ok(test.as_user('E', format($q$SELECT * FROM public.tasks_op_update(%L, %L, %L::jsonb)$q$,
+                    test.id('W'), test.id('G2'), jsonb_build_object('assignee_id', test.id('A')))) = 'ok 2',
+    'a hand-over answers with the subtasks it moved too');
+
+  -- Account erasure: a task someone else made, sitting in the leaving
+  -- person's Inbox with nobody's grant on it, goes back to its creator.
+  PERFORM test.make('E', jsonb_build_object('id', test.id('R1'), 'title', 'Proofread', 'assignee_id', test.id('N')));
+  r := test.patch('N', 'R1', '{"assignee_id": null}'::jsonb);
+  PERFORM test.ok((test.task('R1')).bucket_id = test.inbox('N') AND (test.task('R1')).assignee_id IS NULL
+              AND NOT EXISTS (SELECT 1 FROM public.resource_grants g WHERE g.resource_type = 'task' AND g.resource_id = test.id('R1'))
+              AND test.can('E', 'R1', 'view'),
+    'set-up: E''s task in N''s Inbox, unassigned, no grant, E still sees it', r);
+  r := test.run(NULL, format($q$SELECT public.account_erase_workspace_data(%L, false)$q$, test.id('N')), false);
+  PERFORM test.ok(r = 'ok 1' AND (test.task('R1')).id IS NOT NULL AND (test.task('R1')).bucket_id = test.inbox('E'),
+    'erasing N''s account hands it back to E instead of deleting it (as a plain removal does)', r);
+
+  -- A team mention needs its author to still see the item.
+  r := test.as_user('A', format($q$SELECT public.comments_op_add(%L, 'task', %L, 'Noted', '{}'::uuid[], 'Salaries', 'task')$q$,
+    test.id('W'), test.id('PT2')));
+  SELECT c.id INTO v_notice FROM public.comments c
+  WHERE c.entity_id = test.id('PT2') AND c.created_by = test.id('A') ORDER BY c.created_at DESC LIMIT 1;
+  DELETE FROM public.resource_grants WHERE resource_type = 'bucket' AND resource_id = test.id('PP') AND subject_id = test.id('A');
+  DELETE FROM public.resource_grants WHERE resource_type = 'task' AND resource_id = test.id('PT2') AND subject_id = test.id('A');
+  r := test.try('A', format($q$SELECT public.comments_op_mention_teams(%L, %L::uuid[])$q$, v_notice, ARRAY[test.id('DS')]));
+  PERFORM test.ok(r LIKE '%isn''t there any more%', 'someone who lost sight of the item can''t name a team on it', r);
 END;
 $$;
