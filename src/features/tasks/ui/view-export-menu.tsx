@@ -5,7 +5,7 @@
 
 import { isClosedTask } from "@contracts/vocabularies";
 import { MoreHorizontal } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { PrintRoot } from "../../../components/app/print-root";
@@ -48,6 +48,9 @@ export function ViewExportMenu({
   saveAsView?: { label: string; onSelect: () => void };
 }) {
   const [printing, setPrinting] = useState<Task[] | null>(null);
+  // Save as view… opens its dialog once the menu has closed, so the menu's
+  // focus return doesn't land on the trigger over the dialog's field.
+  const openAfterClose = useRef<(() => void) | null>(null);
 
   // Print once the layout is in the page; take it away when printing is done.
   useEffect(() => {
@@ -101,10 +104,26 @@ export function ViewExportMenu({
         <DropdownMenuTrigger asChild>
           <IconButton icon={MoreHorizontal} label="More view options" tooltip={null} />
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-52">
+        <DropdownMenuContent
+          align="end"
+          className="w-52"
+          onCloseAutoFocus={(event) => {
+            const open = openAfterClose.current;
+            if (!open) return;
+            openAfterClose.current = null;
+            event.preventDefault();
+            open();
+          }}
+        >
           {saveAsView ? (
             <>
-              <DropdownMenuItem onSelect={saveAsView.onSelect}>{saveAsView.label}</DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => {
+                  openAfterClose.current = saveAsView.onSelect;
+                }}
+              >
+                {saveAsView.label}
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
             </>
           ) : null}

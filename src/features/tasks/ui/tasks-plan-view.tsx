@@ -1456,13 +1456,13 @@ export function TasksPlanView({
     place === "mine" ? mineExtraGroups : isInboxScope ? inboxView.extraGroups : NO_EXTRAS;
   const extraTaskIds = new Set(viewExtraGroups.flatMap((g) => g.taskIds));
   const header: PlanHeaderControls = {
-    // Won't do counts what it lists (none of it is open); a saved view, what
-    // its filter lets through.
+    // Won't do counts what it lists (none of it is open); a saved view, the
+    // tasks it shows ("Done last week" counts its done ones).
     count:
       place === WONTDO_SELECTION
         ? scopeTasksAll.length
         : openView
-          ? openCount(scopeTasks.filter((t) => !extraTaskIds.has(t.id)))
+          ? scopeTasks.filter((t) => !extraTaskIds.has(t.id) && !isHiddenByDisplay(t)).length
           : openCount(
               extraTaskIds.size === 0
                 ? scopeTasksAll
@@ -2166,6 +2166,7 @@ export function TasksPlanView({
         }
       />
       {templateActions.dialogs}
+      {savedViews.dialog}
       <FrontierOfferDialog
         open={frontierOfferTaskId !== null}
         onOpenChange={(o) => !o && setFrontierOfferTaskId(null)}
