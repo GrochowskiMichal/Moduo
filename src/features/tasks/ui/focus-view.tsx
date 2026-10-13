@@ -730,7 +730,7 @@ function FocusMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"
-        className="w-60"
+        className="w-64"
         onCloseAutoFocus={(event) => {
           // Settings takes focus: open it once the menu has closed, not while
           // the menu is still handing focus back (ui.md gotcha).

@@ -105,7 +105,7 @@ export function HandOffPopover({
         </TooltipTrigger>
         <TooltipContent>Keep it going while you wait: it moves to In flight</TooltipContent>
       </Tooltip>
-      <PopoverContent align="start" className="w-72 p-0" data-slot="focus-hand-off">
+      <PopoverContent align="start" className="w-80 p-0" data-slot="focus-hand-off">
         {open ? (
           <HandOffForm
             me={me}
