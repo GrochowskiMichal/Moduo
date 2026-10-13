@@ -610,11 +610,13 @@ $$;
 -- tasks_notify_spine (live body after TV-D12's 20261013110000), plus the
 -- "routed to your team" notice (§13, default s): when a task with nobody on
 -- it gets a team, or a team task is given back, each other member of the
--- team who can see it hears once. Notices from one person (or key) to one
--- team within the hour gather on one while none of its recipients has read
--- or dismissed it ("Maciej routed 4 tasks to Design"); once one has, the next
--- starts a new one. The trail already says so through the op's own
--- tasks.update line, so tasks.routed is a notice only.
+-- team who can see it hears once. Each member's notice is a row of their own
+-- on their own Inbox (like TV-D12's reminders), so nobody else reads it and
+-- it never names a task its reader can't see. One person's (or key's)
+-- routings to one team within the hour gather on that member's notice while
+-- they haven't read or dismissed it ("Maciej routed 4 tasks to Design");
+-- after that the next starts a new one. The trail already says so through
+-- the op's own tasks.update line, so tasks.routed is a notice only.
 CREATE OR REPLACE FUNCTION public.tasks_notify_spine()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -632,7 +634,9 @@ DECLARE
   v_routed boolean := false;
   v_returned boolean := false;
   v_team_name text;
-  v_members jsonb;
+  v_member uuid;
+  v_inbox uuid;
+  v_bypass text;
 BEGIN
   -- Never notify about a soft-deleted row (a delete is an UPDATE that stamps
   -- deleted_at; it must not read as an assignment or an unblock).
@@ -733,16 +737,25 @@ BEGIN
   IF v_routed THEN
     BEGIN
       SELECT x.name INTO v_team_name FROM public.teams x WHERE x.id = NEW.team_id;
-      SELECT coalesce(jsonb_agg(m.user_id::text ORDER BY m.created_at, m.id), '[]'::jsonb) INTO v_members
-      FROM public.team_members m
-      WHERE m.team_id = NEW.team_id AND m.deleted_at IS NULL
-        AND m.user_id IS DISTINCT FROM v_actor
-        AND public.tasks__visible_to(NEW.id, m.user_id);
-      IF jsonb_array_length(v_members) > 0 THEN
+      FOR v_member IN
+        SELECT m.user_id FROM public.team_members m
+        WHERE m.team_id = NEW.team_id AND m.deleted_at IS NULL
+          AND m.user_id IS DISTINCT FROM v_actor
+          AND public.tasks__visible_to(NEW.id, m.user_id)
+        ORDER BY m.created_at, m.id
+      LOOP
+        -- Each member's notice is their own, hung on their own Inbox: only
+        -- they (and whoever routed) read it, and everything it names is a
+        -- task they can see.
+        v_bypass := current_setting('share.bypass', true);
+        PERFORM set_config('share.bypass', '1', true);
+        v_inbox := public.tasks__inbox(NEW.workspace_id, v_member);
+        PERFORM set_config('share.bypass', coalesce(v_bypass, ''), true);
         v_group := NULL;
         SELECT ma.id INTO v_group FROM public.module_activity ma
         WHERE ma.workspace_id = NEW.workspace_id AND ma.module = 'tasks'
           AND ma.op = 'tasks.routed'
+          AND ma.entity_type = 'bucket' AND ma.entity_id = v_inbox
           AND ma.created_at > now() - interval '1 hour'
           AND CASE WHEN auth.uid() IS NOT NULL
                    THEN ma.actor_type = 'user' AND ma.actor_id = auth.uid()
@@ -750,12 +763,8 @@ BEGIN
           AND ma.payload ->> 'team_id' = NEW.team_id::text
           AND NOT EXISTS (
             SELECT 1 FROM public.notification_state ns
-            WHERE ns.activity_id = ma.id
+            WHERE ns.activity_id = ma.id AND ns.user_id = v_member
               AND (ns.read_at IS NOT NULL OR ns.dismissed_at IS NOT NULL))
-          -- Only while everyone it already reaches can see this task too.
-          AND NOT EXISTS (
-            SELECT 1 FROM jsonb_array_elements_text(coalesce(ma.payload -> 'mentioned_user_ids', '[]'::jsonb)) AS u(id)
-            WHERE NOT (v_members @> jsonb_build_array(u.id)))
         ORDER BY ma.created_at DESC, ma.id DESC
         LIMIT 1
         FOR UPDATE;
@@ -766,18 +775,14 @@ BEGIN
                  'count', coalesce((ma.payload ->> 'count')::integer, 1) + 1,
                  'task_ids', CASE WHEN jsonb_array_length(coalesce(ma.payload -> 'task_ids', '[]'::jsonb)) < 100
                                   THEN coalesce(ma.payload -> 'task_ids', '[]'::jsonb) || jsonb_build_array(NEW.id::text)
-                                  ELSE ma.payload -> 'task_ids' END,
-                 -- Whoever joined the team (or can see it now) since hears too.
-                 'mentioned_user_ids', (
-                   SELECT coalesce(jsonb_agg(DISTINCT u), '[]'::jsonb)
-                   FROM (SELECT jsonb_array_elements_text(coalesce(ma.payload -> 'mentioned_user_ids', '[]'::jsonb))
-                         UNION SELECT jsonb_array_elements_text(v_members)) AS s(u)))
+                                  ELSE ma.payload -> 'task_ids' END)
           WHERE ma.id = v_group;
         ELSE
           PERFORM public.module_activity_log(
-            NEW.workspace_id, 'tasks', 'task', NEW.id, 'tasks.routed',
+            NEW.workspace_id, 'tasks', 'bucket', v_inbox, 'tasks.routed',
             jsonb_strip_nulls(jsonb_build_object(
-              'mentioned_user_ids', v_members,
+              'mentioned_user_ids', jsonb_build_array(v_member::text),
+              'task_id', NEW.id,
               'task_ids', jsonb_build_array(NEW.id::text),
               'count', 1,
               'team_id', NEW.team_id,
@@ -785,7 +790,7 @@ BEGIN
               'title', NEW.title,
               'returned', CASE WHEN v_returned THEN true END)));
         END IF;
-      END IF;
+      END LOOP;
     EXCEPTION WHEN OTHERS THEN
       RAISE WARNING 'tasks_notify_spine: team notification failed for task %: %', NEW.id, SQLERRM;
     END;
@@ -962,9 +967,11 @@ $$;
 -- item hears once: never the author, nobody the comment already reached
 -- (named in person, or through a team before), and a person in two named
 -- teams once. A team named again in an edit is told nothing new. Answers
--- with how many people were told.
-CREATE OR REPLACE FUNCTION public.comments_op_mention_teams(p_comment_id uuid, p_team_ids uuid[])
-RETURNS integer
+-- nothing (who can see the item isn't the author's to count). The notice
+-- hangs on the item, so only people who can see it read it.
+DROP FUNCTION IF EXISTS public.comments_op_mention_teams(uuid, uuid[]);
+CREATE FUNCTION public.comments_op_mention_teams(p_comment_id uuid, p_team_ids uuid[])
+RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
@@ -1006,7 +1013,7 @@ BEGIN
         AND a.payload ->> 'comment_id' = c.id::text
         AND (a.payload -> 'team_ids') @> jsonb_build_array(x.id::text));
   IF v_teams IS NULL THEN
-    RETURN 0;
+    RETURN;
   END IF;
 
   -- Everyone this comment already reached.
@@ -1034,7 +1041,6 @@ BEGIN
       'team_ids', to_jsonb(v_teams),
       'team_names', v_names,
       'mentioned_user_ids', v_people));
-  RETURN jsonb_array_length(v_people);
 END;
 $$;
 

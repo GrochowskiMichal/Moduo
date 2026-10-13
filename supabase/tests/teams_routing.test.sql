@@ -190,52 +190,69 @@ BEGIN
     'someone who can edit it assigns it: the assignee gets that task, not its project (PERM-1, unchanged)', r);
 
   -- ── 3. "Routed to your team": once, gathered by the hour (§13, s) ────────
+  -- Each member's notice is their own row, on their own Inbox.
   PERFORM test.ok((SELECT count(*) FROM test.routed('N', 'DS')) = 1
-              AND (SELECT payload -> 'mentioned_user_ids' FROM test.routed('N', 'DS') LIMIT 1) = test.ids('A'),
+              AND (SELECT payload -> 'mentioned_user_ids' FROM test.routed('N', 'DS') LIMIT 1) = test.ids('A')
+              AND (SELECT entity_id FROM test.routed('N', 'DS') LIMIT 1) = test.inbox('A'),
     'routing a task in a private project tells only the members who can see it (here A, who may read it)');
   PERFORM test.ok(test.value_as('M', format($q$SELECT count(*)::text FROM public.module_activity
-                                              WHERE op = 'tasks.routed' AND entity_id = %L$q$, test.id('PT2'))) = '0',
-    'and nobody else can read it (its title stays with the task)');
+                                              WHERE op = 'tasks.routed'
+                                                AND (payload ->> 'task_id' = %L OR payload -> 'task_ids' ? %L)$q$,
+                                            test.id('PT2'), test.id('PT2'))) = '0'
+              AND test.value_as('E', format($q$SELECT count(*)::text FROM public.module_activity
+                                              WHERE op = 'tasks.routed' AND payload -> 'task_ids' ? %L$q$, test.id('PT2'))) = '0',
+    'an outsider reads no notice that names it (not its title, not that it exists)');
+  PERFORM test.ok(test.value_as('M', format($q$SELECT count(*)::text FROM public.tasks
+                                              WHERE id = %L AND team_routed_at IS NOT NULL$q$, test.id('PT1'))) = '0',
+    'nor its routing clock (that is the task''s own row)');
   DELETE FROM public.module_activity WHERE workspace_id = test.id('W') AND op = 'tasks.routed';
   PERFORM test.make('E', jsonb_build_object('id', test.id('T10'), 'title', 'Hero image', 'bucket_id', test.id('SB'),
                                             'team_id', test.id('DS'), 'assignee_id', NULL));
-  PERFORM test.ok((SELECT count(*) FROM test.routed('E', 'DS')) = 1
-              AND test.same((SELECT payload -> 'mentioned_user_ids' FROM test.routed('E', 'DS') LIMIT 1), test.ids('M', 'A', 'S')),
-    'a task routed with nobody on it tells the team''s other members (never the router)');
+  PERFORM test.ok((SELECT count(*) FROM test.routed('E', 'DS')) = 3
+              AND test.same((SELECT jsonb_agg(x.payload -> 'mentioned_user_ids' -> 0) FROM test.routed('E', 'DS') x),
+                            test.ids('M', 'A', 'S'))
+              AND NOT EXISTS (SELECT 1 FROM test.routed('E', 'DS') x
+                              WHERE x.entity_id IS DISTINCT FROM test.inbox(
+                                CASE x.payload -> 'mentioned_user_ids' ->> 0
+                                  WHEN test.id('M')::text THEN 'M' WHEN test.id('A')::text THEN 'A' ELSE 'S' END)),
+    'a task routed with nobody on it tells each other member of the team (never the router), on their own Inbox');
   PERFORM test.ok(test.value_as('M', format($q$SELECT count(*)::text FROM public.notifications_list(%L) WHERE op = 'tasks.routed'$q$,
                                             test.id('W'))) = '1'
               AND test.value_as('E', format($q$SELECT count(*)::text FROM public.notifications_list(%L) WHERE op = 'tasks.routed'$q$,
-                                            test.id('W'))) = '0',
-    'it''s in their bell, not the router''s');
+                                            test.id('W'))) = '0'
+              AND test.value_as('M', $q$SELECT count(*)::text FROM public.module_activity WHERE op = 'tasks.routed'$q$) = '1',
+    'it''s in their bell, not the router''s, and nobody reads another member''s');
   PERFORM test.make('E', jsonb_build_object('id', test.id('T11'), 'title', 'Icons', 'bucket_id', test.id('SB'),
                                             'team_id', test.id('DS'), 'assignee_id', NULL));
-  SELECT id INTO v_notice FROM test.routed('E', 'DS') LIMIT 1;
-  PERFORM test.ok((SELECT count(*) FROM test.routed('E', 'DS')) = 1
-              AND (SELECT (payload ->> 'count')::integer FROM public.module_activity WHERE id = v_notice) = 2
-              AND test.same((SELECT payload -> 'task_ids' FROM public.module_activity WHERE id = v_notice), test.ids('T10', 'T11')),
-    'a second one within the hour joins the same notice ("routed 2 tasks to Design")');
+  PERFORM test.ok((SELECT count(*) FROM test.routed('E', 'DS')) = 3
+              AND NOT EXISTS (SELECT 1 FROM test.routed('E', 'DS') x
+                              WHERE (x.payload ->> 'count')::integer <> 2
+                                 OR NOT test.same(x.payload -> 'task_ids', test.ids('T10', 'T11'))),
+    'a second one within the hour joins each member''s notice ("routed 2 tasks to Design")');
+  SELECT x.id INTO v_notice FROM test.routed('E', 'DS') x WHERE x.payload -> 'mentioned_user_ids' = test.ids('A');
   PERFORM test.as_user('A', format($q$SELECT public.notifications_op_mark_read(%L, %L)$q$, test.id('W'), v_notice));
   PERFORM test.make('E', jsonb_build_object('id', test.id('T12'), 'title', 'Fonts', 'bucket_id', test.id('SB'),
                                             'team_id', test.id('DS'), 'assignee_id', NULL));
-  PERFORM test.ok((SELECT count(*) FROM test.routed('E', 'DS')) = 2,
-    'once someone has read it, the next one is a new notice');
+  PERFORM test.ok((SELECT count(*) FROM test.routed('E', 'DS')) = 4
+              AND (SELECT count(*) FROM test.routed('E', 'DS') x WHERE (x.payload ->> 'count')::integer = 3) = 2,
+    'once a member has read theirs, their next one is a new notice; the others keep gathering');
   PERFORM test.make('E', jsonb_build_object('id', test.id('T13'), 'title', 'Photos', 'bucket_id', test.id('SB'),
                                             'team_id', test.id('DS'), 'assignee_id', test.id('A')));
-  -- (One transaction stamps every row with the same time, so "newest" is
-  -- read by content, not by order.)
-  PERFORM test.ok((SELECT count(*) FROM test.routed('E', 'DS')) = 2
+  PERFORM test.ok((SELECT count(*) FROM test.routed('E', 'DS')) = 4
               AND NOT EXISTS (SELECT 1 FROM test.routed('E', 'DS') x WHERE x.payload -> 'task_ids' @> test.ids('T13')),
     'a routed task someone already has calls nobody');
   PERFORM test.make('O', jsonb_build_object('id', test.id('T14'), 'title', 'Brochure', 'bucket_id', test.id('SB'),
                                             'team_id', test.id('DS'), 'assignee_id', NULL));
-  PERFORM test.ok((SELECT count(*) FROM test.routed('O', 'DS')) = 1
-              AND test.same((SELECT payload -> 'mentioned_user_ids' FROM test.routed('O', 'DS') LIMIT 1), test.ids('E', 'M', 'A', 'S')),
+  PERFORM test.ok((SELECT count(*) FROM test.routed('O', 'DS')) = 4
+              AND test.same((SELECT jsonb_agg(x.payload -> 'mentioned_user_ids' -> 0) FROM test.routed('O', 'DS') x),
+                            test.ids('E', 'M', 'A', 'S')),
     'someone outside the team routing to it tells every member');
   PERFORM test.as_user('M', format($q$SELECT public.tasks_op_claim(%L, %L)$q$, test.id('W'), test.id('T14')));
   r := test.patch('M', 'T14', '{"assignee_id": null}'::jsonb);
-  PERFORM test.ok((SELECT count(*) FROM test.routed('M', 'DS')) = 1
-              AND test.same((SELECT payload -> 'mentioned_user_ids' FROM test.routed('M', 'DS') LIMIT 1), test.ids('E', 'A', 'S'))
-              AND (SELECT (payload ->> 'returned')::boolean FROM test.routed('M', 'DS') LIMIT 1),
+  PERFORM test.ok((SELECT count(*) FROM test.routed('M', 'DS')) = 3
+              AND test.same((SELECT jsonb_agg(x.payload -> 'mentioned_user_ids' -> 0) FROM test.routed('M', 'DS') x),
+                            test.ids('E', 'A', 'S'))
+              AND NOT EXISTS (SELECT 1 FROM test.routed('M', 'DS') x WHERE NOT coalesce((x.payload ->> 'returned')::boolean, false)),
     'giving a task back tells the rest of the team it''s free again', r);
   PERFORM test.ok((test.task('T14')).team_routed_at IS NOT NULL AND (test.task('T14')).team_check_back_at IS NULL,
     'and starts its clock again');
@@ -287,18 +304,27 @@ BEGIN
   PERFORM test.make('S', jsonb_build_object('id', test.id('C5'), 'title', 'Flyer', 'bucket_id', test.id('SB'),
                                             'team_id', test.id('DS'), 'assignee_id', NULL));
   UPDATE public.tasks SET team_routed_at = now() - interval '4 days' WHERE id = test.id('C5');
+  PERFORM test.make('O', jsonb_build_object('id', test.id('PC'), 'title', 'Board pack', 'bucket_id', test.id('PP'),
+                                            'team_id', test.id('DS'), 'assignee_id', NULL));
+  UPDATE public.tasks SET team_routed_at = now() - interval '4 days' WHERE id = test.id('PC');
   SELECT m.id INTO v_member FROM public.workspace_members m WHERE m.workspace_id = test.id('W') AND m.user_id = test.id('S');
   PERFORM test.as_user('O', format($q$SELECT public.workspace_op_remove_member(%L)$q$, v_member));
   -- A removal sets share.bypass for the rest of its transaction (it is its
   -- own request in the app); this test runs on in the same one.
   PERFORM set_config('share.bypass', '', true);
   v_count := public.tasks__team_check_backs(now(), 500);
-  PERFORM test.ok(v_count = 0 AND (test.task('C1')).team_check_back_at IS NOT NULL AND (test.task('C5')).team_check_back_at IS NOT NULL
+  PERFORM test.ok(v_count = 1 AND (test.task('C1')).team_check_back_at IS NOT NULL AND (test.task('C5')).team_check_back_at IS NOT NULL
               AND NOT EXISTS (SELECT 1 FROM public.module_activity a
                               WHERE a.entity_id = test.id('C5') AND a.op = 'tasks.team_check_back')
               AND (SELECT count(*) FROM public.module_activity a
                    WHERE a.entity_id = test.id('C1') AND a.op = 'tasks.team_check_back') = 1,
     'a creator who can''t see the task any more, or has left, gets nothing, and the task is settled', v_count::text);
+  PERFORM test.ok(EXISTS (SELECT 1 FROM public.module_activity a
+                          WHERE a.entity_id = test.id('PC') AND a.op = 'tasks.team_check_back'
+                            AND a.payload -> 'notify_user_ids' = test.ids('O'))
+              AND test.value_as('M', format($q$SELECT count(*)::text FROM public.module_activity
+                                              WHERE op = 'tasks.team_check_back' AND entity_id = %L$q$, test.id('PC'))) = '0',
+    'a check-back on a private task reaches its creator; an outsider can''t read it');
   r := test.as_user('M', format($q$UPDATE public.tasks SET team_routed_at = now() - interval '9 days', team_check_back_at = NULL WHERE id = %L$q$,
                                test.id('C1')));
   PERFORM test.ok((test.task('C1')).team_routed_at > now() - interval '5 days' AND (test.task('C1')).team_check_back_at IS NOT NULL,
@@ -416,6 +442,8 @@ BEGIN
               AND NOT EXISTS (SELECT 1 FROM public.module_activity a
                               WHERE a.op = 'tasks.handed_back' AND a.payload -> 'mentioned_user_ids' = test.ids('O')),
     'one quiet notice to each person who received something (never the remover)');
+  PERFORM test.ok(test.value_as('A', $q$SELECT count(*)::text FROM public.module_activity WHERE op = 'tasks.handed_back'$q$) = '0',
+    'and nobody else reads it');
   PERFORM test.ok((test.task('T11')).assignee_id IS NULL AND (test.task('T11')).team_id = test.id('DS'),
     'what they''d taken from a team goes back to the team');
   PERFORM test.ok(NOT EXISTS (SELECT 1 FROM public.tasks t
