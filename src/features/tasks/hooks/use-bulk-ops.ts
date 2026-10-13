@@ -370,7 +370,7 @@ export function useBulkOps(deps: BulkOpsDeps) {
       );
       shown.settle({ tasks: [...saved.values()] });
       // What Undo puts back: every task with a part that saved.
-      const undoable = [...changed, ...partial];
+      const landedAny = [...changed, ...partial];
       // A refused check-off isn't kept on show in my queue (as one drop's isn't).
       for (const p of planned) {
         if (p.category !== undefined && !statusSaved.has(p.write.taskId)) {
@@ -401,7 +401,7 @@ export function useBulkOps(deps: BulkOpsDeps) {
         }
       }
       if (gone.length > 0) store.forget("tasks", gone);
-      if (undoable.length > 0) onSaved();
+      if (landedAny.length > 0) onSaved();
       if (offlineError) failed(offlineError, "");
 
       const mainChanged = changed.filter((p) => !followers.has(p.write.taskId)).length;
@@ -419,20 +419,20 @@ export function useBulkOps(deps: BulkOpsDeps) {
       });
       if (unsent > 0 && !text.description)
         text.description = `${tasksWord(unsent)} waiting for the connection weren’t sent.`;
-      if (undoable.length === 0) {
+      if (landedAny.length === 0) {
         if (mainRefused.length > 0) toast.error(text.title, { description: text.description });
         return [];
       }
       if (opts.undoable === false) {
         if (mainRefused.length > 0) toast(text.title, { description: text.description });
-        return undoable.map((p) => p.write.taskId);
+        return landedAny.map((p) => p.write.taskId);
       }
       undoToast(text.title, {
         description: text.description,
         onUndo: () => {
           const reverse: BulkWrite[] = [];
           let kept = 0;
-          for (const p of undoable) {
+          for (const p of landedAny) {
             const after = saved.get(p.write.taskId);
             const current = tasksRef.current.find((t) => t.id === p.write.taskId);
             if (!after || !current || current.deletedAt) continue;
@@ -481,7 +481,7 @@ export function useBulkOps(deps: BulkOpsDeps) {
             });
         },
       });
-      return undoable.map((p) => p.write.taskId);
+      return landedAny.map((p) => p.write.taskId);
     },
     [
       store,
