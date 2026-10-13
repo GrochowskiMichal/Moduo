@@ -1397,6 +1397,16 @@ export type ModuoRuntime = {
       entityLabel?: string;
       entityIcon?: string | null;
     }): Promise<SpineComment>;
+    /**
+     * The opening words (140 characters) of comments a bell notice names by
+     * id (TV-D16: notices carry no comment text). Read through the comments'
+     * own policy, so only comments on items the reader can still see answer;
+     * a deleted comment doesn't.
+     */
+    getCommentExcerpts?(input: {
+      workspaceId: string;
+      commentIds: string[];
+    }): Promise<Array<{ id: string; excerpt: string }>>;
     /** Read an entity's comment thread (oldest first, tombstones excluded) —
      * the Comments rail (NO-7 AC9). Direct member-read SELECT (RLS-guarded). */
     listComments(input: {

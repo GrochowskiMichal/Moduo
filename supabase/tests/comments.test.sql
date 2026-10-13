@@ -48,14 +48,17 @@ CREATE FUNCTION test.comment(p_who text, p_name text, p_task text, p_body text,
                              p_mentions uuid[] DEFAULT '{}') RETURNS text LANGUAGE plpgsql AS $$
 DECLARE
   r text;
+  v_made uuid;
 BEGIN
   r := test.as_user(p_who, format(
     $q$SELECT public.comments_op_add(%L, 'task', %L, %L, %L::uuid[], 'Task', 'task')$q$,
     test.id('W'), test.id(p_task), p_body, p_mentions));
-  UPDATE public.comments SET id = test.id(p_name)
+  SELECT id INTO v_made FROM public.comments
    WHERE entity_id = test.id(p_task) AND body = p_body AND id <> test.id(p_name);
+  UPDATE public.comments SET id = test.id(p_name) WHERE id = v_made;
+  -- The notice names the comment by id (it carries no text, 20261013269000).
   UPDATE public.module_activity SET payload = jsonb_set(payload, '{comment_id}', to_jsonb(test.id(p_name)::text))
-   WHERE op = 'comments.add' AND entity_id = test.id(p_task) AND payload ->> 'excerpt' = left(p_body, 140);
+   WHERE op = 'comments.add' AND payload ->> 'comment_id' = v_made::text;
   RETURN r;
 END;
 $$;
@@ -361,12 +364,12 @@ BEGIN
   PERFORM test.as_user('O', format($q$SELECT public.comments_op_add(%L, 'task', %L, 'For @E and @F', %L::uuid[], 'x', 'task')$q$,
     test.id('W'), test.id('TP'), ARRAY[test.id('E'), test.id('F')]));
   PERFORM test.ok((SELECT payload -> 'mentioned_user_ids' FROM public.module_activity
-                   WHERE op = 'comments.add' AND payload ->> 'excerpt' = 'For @E and @F') = '[]'::jsonb,
+                   WHERE op = 'comments.add' AND payload ->> 'comment_id' = (SELECT id::text FROM public.comments WHERE body = 'For @E and @F')) = '[]'::jsonb,
     'mentions: nobody who can''t see the task is named (no notice, no excerpt)');
   PERFORM test.as_user('O', format($q$SELECT public.comments_op_add(%L, 'task', %L, 'Shared: @E', %L::uuid[], 'x', 'task')$q$,
     test.id('W'), test.id('T'), ARRAY[test.id('E'), test.id('M')]));
   PERFORM test.ok((SELECT payload -> 'mentioned_user_ids' FROM public.module_activity
-                   WHERE op = 'comments.add' AND payload ->> 'excerpt' = 'Shared: @E')
+                   WHERE op = 'comments.add' AND payload ->> 'comment_id' = (SELECT id::text FROM public.comments WHERE body = 'Shared: @E'))
                   @> jsonb_build_array(test.id('E')::text, test.id('M')::text),
     'mentions: people who can see it are named');
   PERFORM test.comment('O', 'CM', 'TP', 'Draft for me');
@@ -380,7 +383,7 @@ BEGIN
   PERFORM test.as_user('O', format($q$SELECT public.comments_op_add(%L, 'task', %L, 'After S left', '{}'::uuid[], 'x', 'task')$q$,
     test.id('W'), test.id('TS')));
   PERFORM test.ok(NOT ((SELECT payload -> 'notify_user_ids' FROM public.module_activity
-                        WHERE op = 'comments.add' AND payload ->> 'excerpt' = 'After S left')
+                        WHERE op = 'comments.add' AND payload ->> 'comment_id' = (SELECT id::text FROM public.comments WHERE body = 'After S left'))
                        @> jsonb_build_array(test.id('S')::text)),
     'notices: a past commenter who can''t see the task any more isn''t notified');
 

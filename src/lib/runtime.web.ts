@@ -3256,6 +3256,23 @@ export const webRuntime: ModuoRuntime = {
       return commentRowToModel(row);
     },
 
+    async getCommentExcerpts({ workspaceId, commentIds }) {
+      const ids = [...new Set(commentIds)].slice(0, 200);
+      if (ids.length === 0) return [];
+      // RLS: only comments on items the reader can still see.
+      const { data, error } = await supabaseClient
+        .from("comments")
+        .select("id, body")
+        .eq("workspace_id", workspaceId)
+        .in("id", ids)
+        .is("deleted_at", null);
+      if (error) throw new Error(error.message);
+      return (data ?? []).map((r) => ({
+        id: String(r.id),
+        excerpt: String(r.body ?? "").slice(0, 140),
+      }));
+    },
+
     async listComments({ workspaceId, entityType, entityId }) {
       // `*`, not a column list: author_kind / author_label arrive with
       // 20261008123000, and naming them would fail this read until it applies.
