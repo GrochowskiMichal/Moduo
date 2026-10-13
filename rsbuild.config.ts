@@ -39,6 +39,8 @@ const stripePriceTeamYearly = readLocalEnvValue("PUBLIC_STRIPE_PRICE_TEAM_YEARLY
 // PostHog — disabled until needed; leave empty so analytics.ts is a no-op
 const posthogKey = readLocalEnvValue("PUBLIC_POSTHOG_KEY");
 const posthogHost = readLocalEnvValue("PUBLIC_POSTHOG_HOST");
+// Web Push (TV-D12): the VAPID public key browsers subscribe with. Optional; unset = browser notifications show as unavailable.
+const vapidPublicKey = readLocalEnvValue("PUBLIC_VAPID_PUBLIC_KEY");
 // Deployed web origin for public share links (NO-9b). On web, window.location
 // .origin is used when unset; desktop (tauri://) needs this to point at the
 // deployed web app so a shared /p/<token> link resolves.
@@ -116,6 +118,7 @@ export default defineConfig({
       "import.meta.env.PUBLIC_STRIPE_PRICE_TEAM_YEARLY": JSON.stringify(stripePriceTeamYearly),
       "import.meta.env.PUBLIC_POSTHOG_KEY": JSON.stringify(posthogKey),
       "import.meta.env.PUBLIC_POSTHOG_HOST": JSON.stringify(posthogHost),
+      "import.meta.env.PUBLIC_VAPID_PUBLIC_KEY": JSON.stringify(vapidPublicKey),
       "import.meta.env.PUBLIC_WEB_ORIGIN": JSON.stringify(publicWebOrigin),
       "import.meta.env.PUBLIC_STAGING_PORTAL": JSON.stringify(stagingPortal),
       "import.meta.env.PUBLIC_DESKTOP_CHANNEL": JSON.stringify(desktopChannel),

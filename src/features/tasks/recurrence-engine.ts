@@ -12,23 +12,37 @@
 //   - recurrenceOnStatusChange — the pointer a status change gives (preview)
 //   - skipOccurrencePatch      — the skip-occurrence affordance
 //
+// Since TV-D12 rules read in a time zone: a 9:00 repeat stays at 9:00 across
+// a daylight-saving change. rrule.js computes in "floating" time (the zone's
+// wall clock written as UTC), exactly like the server's tasks__rrule_next_in.
+// Every function takes the zone last; the default is UTC (the old behaviour,
+// and what a pure test wants). The app passes the device's zone.
+//
 // No React, no IO — easy to unit-test.
 
 import { isOpenTaskStatus } from "@contracts/vocabularies";
 import { RRule } from "rrule";
 
+import { deviceTimeZone } from "../../lib/device-time-zone";
+import { fromFloating, toFloating } from "../../lib/zoned-time";
 import { todayStr } from "./helpers";
 import type { RecurrenceRule, Task, TaskStatus } from "./model";
 
-/** Build an RRule from a stored rule. Defensive: invalid input → null. */
-function toRRule(rec: RecurrenceRule, fallbackDtstart?: string | null): RRule | null {
+/** The zone the app reads rules in: the device's (UTC when unknown). */
+export function engineZone(): string {
+  return deviceTimeZone() ?? "UTC";
+}
+
+/** Build an RRule in floating time for `zone`. Defensive: invalid input → null. */
+function toRRule(rec: RecurrenceRule, fallbackDtstart: string | null | undefined, zone: string): RRule | null {
   try {
     const options = RRule.parseString(rec.rrule);
     const anchor = rec.dtstart ?? fallbackDtstart;
     if (anchor) {
       const d = new Date(anchor);
-      if (!Number.isNaN(d.getTime())) options.dtstart = d;
+      if (!Number.isNaN(d.getTime())) options.dtstart = toFloating(d, zone);
     }
+    if (options.until) options.until = toFloating(options.until, zone);
     return new RRule(options);
   } catch {
     return null;
@@ -40,9 +54,11 @@ export function occurrenceAfter(
   rec: RecurrenceRule,
   after: Date,
   fallbackDtstart?: string | null,
+  zone = "UTC",
 ): Date | null {
-  const rule = toRRule(rec, fallbackDtstart);
-  return rule ? rule.after(after, false) : null;
+  const rule = toRRule(rec, fallbackDtstart, zone);
+  const next = rule ? rule.after(toFloating(after, zone), false) : null;
+  return next ? fromFloating(next, zone) : null;
 }
 
 /** Latest occurrence at or before `now` — the task's *current* occurrence. */
@@ -50,9 +66,62 @@ export function currentOccurrence(
   rec: RecurrenceRule,
   now: Date,
   fallbackDtstart?: string | null,
+  zone = "UTC",
 ): Date | null {
-  const rule = toRRule(rec, fallbackDtstart);
-  return rule ? rule.before(now, true) : null;
+  const rule = toRRule(rec, fallbackDtstart, zone);
+  const prev = rule ? rule.before(toFloating(now, zone), true) : null;
+  return prev ? fromFloating(prev, zone) : null;
+}
+
+/**
+ * The occurrences from `from` to `to` (both included), at most `limit`: the
+ * Calendar draws the ones after the task's current date as faint ghosts
+ * (REPLAN 27 f). A repeat that counts from completion has no ghosts (its next
+ * date isn't known until it's done).
+ */
+export function occurrencesBetween(
+  rec: RecurrenceRule,
+  from: Date,
+  to: Date,
+  fallbackDtstart?: string | null,
+  zone = "UTC",
+  limit = 60,
+): Date[] {
+  if (rec.mode === "after_completion" || to.getTime() < from.getTime()) return [];
+  const rule = toRRule(rec, fallbackDtstart, zone);
+  if (!rule) return [];
+  const out: Date[] = [];
+  rule.between(toFloating(from, zone), toFloating(to, zone), true, (d) => {
+    out.push(fromFloating(d, zone));
+    return out.length < limit;
+  });
+  return out;
+}
+
+/**
+ * "Change the pattern" (REPLAN 27 g): the rule moved so that an occurrence
+ * on `from` falls on `to` instead. DTSTART moves to `to`; a weekly rule's one
+ * weekday and a monthly rule's one day of the month follow it. Other rules
+ * keep their parts and only start again from `to`.
+ */
+export function changePatternRule(rec: RecurrenceRule, to: Date, zone = "UTC"): RecurrenceRule {
+  const DAYS = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
+  const wall = toFloating(to, zone);
+  const parts = rec.rrule.split(";").filter((p) => p.trim() !== "");
+  const freq = parts.find((p) => p.toUpperCase().startsWith("FREQ="))?.slice(5).toUpperCase();
+  const next = parts.map((part) => {
+    const [rawKey, value = ""] = part.split("=");
+    const key = (rawKey ?? "").trim().toUpperCase();
+    if (key === "BYDAY" && freq === "WEEKLY" && /^[A-Z]{2}$/i.test(value.trim())) {
+      return `BYDAY=${DAYS[wall.getUTCDay()]}`;
+    }
+    if (key === "BYMONTHDAY" && freq === "MONTHLY" && /^\d{1,2}$/.test(value.trim())) {
+      return `BYMONTHDAY=${wall.getUTCDate()}`;
+    }
+    return part;
+  });
+  const { movedFrom: _from, movedDays: _days, ...rest } = rec;
+  return { ...rest, rrule: next.join(";"), dtstart: to.toISOString(), nextOccurrence: null };
 }
 
 function isOpenStatus(status: TaskStatus): boolean {
@@ -85,17 +154,18 @@ export function recurrenceOnStatusChange(
   task: Pick<Task, "recurrence" | "status" | "scheduledAt" | "createdAt">,
   nextStatus: TaskStatus,
   now: Date,
+  zone = "UTC",
 ): RecurrenceRule | null {
   const rec = task.recurrence;
   if (!rec || nextStatus === task.status) return null;
   const completing = nextStatus === "done" && task.status !== "done";
   const reopening = task.status === "done" && isOpenStatus(nextStatus);
   if (!completing && !reopening) return null;
-  let next = occurrenceAfter(rec, advanceBase(task, now), task.createdAt);
+  let next = occurrenceAfter(rec, advanceBase(task, now), task.createdAt, zone);
   if (completing) {
     const today = todayStr(now);
     for (let i = 0; next && todayStr(next) <= today && i < 400; i += 1) {
-      next = occurrenceAfter(rec, next, task.createdAt);
+      next = occurrenceAfter(rec, next, task.createdAt, zone);
     }
   }
   return { ...rec, nextOccurrence: next ? next.toISOString() : null };
@@ -108,12 +178,12 @@ export function recurrenceOnStatusChange(
  * deliberately does NOT touch `rescheduleCount` — a skipped occurrence is a
  * decision, not a slip. Returns null when there's nothing to skip to.
  */
-export function skipOccurrencePatch(task: Task, now: Date): Partial<Task> | null {
+export function skipOccurrencePatch(task: Task, now: Date, zone = "UTC"): Partial<Task> | null {
   const rec = task.recurrence;
   if (!rec || task.deletedAt || !isOpenStatus(task.status)) return null;
-  const next = occurrenceAfter(rec, advanceBase(task, now), task.createdAt);
+  const next = occurrenceAfter(rec, advanceBase(task, now), task.createdAt, zone);
   if (!next) return null;
-  const after = occurrenceAfter(rec, next, task.createdAt);
+  const after = occurrenceAfter(rec, next, task.createdAt, zone);
   const patch: Partial<Task> = {
     scheduledAt: next.toISOString(),
     recurrence: { ...rec, nextOccurrence: after ? after.toISOString() : null },

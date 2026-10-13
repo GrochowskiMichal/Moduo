@@ -790,6 +790,19 @@ export function createTasksStructure(
       );
     },
 
+    /**
+     * Bring back the reminders a move to Backlog / Won't do suspended (TV-D12),
+     * once the task is open again: everyone's when you can edit it, else your
+     * own; only those still ahead. Answers with your reminders on the task.
+     */
+    restoreReminders(input: { workspaceId: string; taskId: string }) {
+      return rpcRows(
+        "tasks_op_reminders_restore",
+        { p_workspace_id: input.workspaceId, p_task_id: input.taskId },
+        taskReminderRowToModel,
+      );
+    },
+
     // ── Waiting on… ──────────────────────────────────────────────────────────
 
     addWaiting(input: {

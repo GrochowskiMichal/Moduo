@@ -249,6 +249,18 @@ function DetailBody({
                   onCommit={(html) => {
                     if (html !== task.description) api.patchTask(task.id, { description: html });
                   }}
+                  // TV-D12: an @person in the description notifies them (people
+                  // who can see the task; the server checks). Keep this wiring
+                  // when the panel is rebuilt (TV-U13).
+                  onMentionPerson={
+                    runtime && workspaceId
+                      ? async (memberId) => {
+                          await runtime.tasks
+                            .mentionInTask({ workspaceId, taskId: task.id, userIds: [memberId] })
+                            .catch(() => undefined);
+                        }
+                      : undefined
+                  }
                 />
               </div>
             ) : null}

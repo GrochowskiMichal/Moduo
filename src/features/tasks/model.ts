@@ -12,6 +12,7 @@ import type {
   EnergyLevel,
   PriorityLevel,
   ProjectState,
+  RecurrenceMode,
   TaskReminderKind,
   TaskStatus,
   TaskStatusCategory,
@@ -27,6 +28,7 @@ export type {
   EnergyLevel,
   PriorityLevel,
   ProjectState,
+  RecurrenceMode,
   TaskReminderKind,
   TaskStatus,
   TaskStatusCategory,
@@ -147,8 +149,10 @@ export type TaskReminder = {
   kind: TaskReminderKind;
   /** When it fires; null for a relative one while the task has no due date. */
   at: string | null;
-  /** When the sender picked it up (TV-D12 delivers it). */
+  /** When the sender picked it up and delivered it (or retired it unsent). */
   firedAt: string | null;
+  /** Set while the task sits in Backlog or Won't do (TV-D12); restoring clears it. */
+  suspendedAt: string | null;
   updatedAt: string;
 };
 
@@ -179,9 +183,16 @@ export type RecurrenceRule = {
   nextOccurrence: string | null;
   /**
    * "after_completion": the next one counts from the day it was done (the
-   * server reads it; the picker comes with TV-D12/TV-U13). Absent: by the rule.
+   * server reads it; the picker is TV-U13's). Absent: by the rule.
    */
-  mode?: "after_completion";
+  mode?: RecurrenceMode;
+  /**
+   * "Move just this one" (TV-D12, server-written): the pattern's slot this
+   * cycle was moved from, and by how many days. The next cycle is back on the
+   * pattern.
+   */
+  movedFrom?: string;
+  movedDays?: number;
 };
 
 /**
@@ -434,6 +445,19 @@ export type TaskCompletion = {
   cycleKey: string;
   updatedAt: string;
   deletedAt: string | null;
+};
+
+/**
+ * One cycle of a repeat in its history (TV-D12, `tasks_op_history`): done or
+ * skipped, when, by whom, and the reader's own tracked seconds in it (nobody
+ * sees anyone else's). Misses are never listed.
+ */
+export type TaskCycle = {
+  kind: "done" | "skipped";
+  at: string;
+  cycle: string | null;
+  by: string | null;
+  mySeconds: number;
 };
 
 /**

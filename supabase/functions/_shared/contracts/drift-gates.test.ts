@@ -29,8 +29,10 @@ import {
   GRANT_ORIGINS,
   MEMBER_DB_PERMISSIONS,
   MEMBER_DB_ROLES,
+  NOTICE_DELIVERY_KINDS,
   PLAN_TIERS,
   PROJECT_STATES,
+  RECURRENCE_MODES,
   SYNC_TOMBSTONE_TABLES,
   TASK_CLOSED_CATEGORIES,
   TASK_REMINDER_KINDS,
@@ -197,6 +199,16 @@ describe("cross-runtime drift guards", () => {
     const sql = readFileSync(resolve(MIGRATIONS_DIR, "20261011110000_task_sessions_access.sql"), "utf8");
     const opList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(", ");
     expect(sql).toContain(`'todo') NOT IN (${opList(TASK_CLOSED_CATEGORIES)})`);
+  });
+
+  it("repeat modes and notice delivery kinds match the server's checks (TV-D8, TV-D12)", () => {
+    const read = (file: string) => readFileSync(resolve(MIGRATIONS_DIR, file), "utf8");
+    const ops = read("20261010160000_tasks_ops_registry_handles.sql");
+    expect(RECURRENCE_MODES).toEqual(["after_completion"]);
+    expect(ops).toContain(`p_rec ->> 'mode' <> '${RECURRENCE_MODES[0]}'`);
+    const notices = read("20261013110000_notifications_v3.sql");
+    const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(", ");
+    expect(notices).toContain(`kind text NOT NULL CHECK (kind IN (${inList(NOTICE_DELIVERY_KINDS)}))`);
   });
 
   it("every MCP module tool name has a TOOL_ARG_SCHEMAS parser and vice versa", () => {

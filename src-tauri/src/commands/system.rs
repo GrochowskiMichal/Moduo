@@ -23,6 +23,17 @@ pub async fn open_external_url(url: String) -> Result<(), String> {
 /// native quit handlers in lib.rs (the custom Quit menu item for ⌘Q and the window
 /// `CloseRequested` handler) can read it synchronously. The webview pushes this on boot
 /// and on every toggle (see `useConfirmBeforeQuit`). DF-19f-quit.
+/// Mirror the webview's `keepInMenuBar` preference (TV-D12, on by default): when on,
+/// closing the main window hides it and Moduo keeps running in the menu bar, so
+/// reminders still arrive. Pushed on boot and on every toggle.
+#[tauri::command]
+pub fn set_keep_in_menu_bar(state: State<'_, AppState>, value: bool) -> Result<(), String> {
+    state
+        .keep_in_menu_bar
+        .store(value, std::sync::atomic::Ordering::SeqCst);
+    Ok(())
+}
+
 #[tauri::command]
 pub fn set_confirm_before_quit(state: State<'_, AppState>, value: bool) -> Result<(), String> {
     *state

@@ -192,6 +192,12 @@ export type EntityTextEditorProps = {
   /** Extra classes for the placeholder (match a changed text size). */
   placeholderClassName?: string;
   onCommit?: (html: string, text: string) => void;
+  /**
+   * People in the `@` menu (TV-D12): picking one inserts their name as text
+   * and calls this, which notifies them (a task's description). Without it
+   * the menu offers things only.
+   */
+  onMentionPerson?: (memberId: string, label: string) => Promise<void> | void;
 };
 
 export function EntityTextEditor({
@@ -208,6 +214,7 @@ export function EntityTextEditor({
   className,
   placeholderClassName,
   onCommit,
+  onMentionPerson,
 }: EntityTextEditorProps) {
   const initialConfig = useMemo(
     () => ({
@@ -304,7 +311,12 @@ export function EntityTextEditor({
       {editable ? <CommitOnBlurPlugin onCommit={onCommit} /> : null}
       {editable ? (
         <>
-          <MentionMenuPlugin {...shared} triggerChar="@" trigger="mention" />
+          <MentionMenuPlugin
+            {...shared}
+            triggerChar="@"
+            trigger="mention"
+            onMentionPerson={onMentionPerson}
+          />
           <MentionMenuPlugin
             {...shared}
             triggerChar="/"

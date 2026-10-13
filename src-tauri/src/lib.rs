@@ -8,10 +8,10 @@ use std::{
 };
 
 use tauri::menu::Menu;
+use tauri::menu::MenuItem;
 #[cfg(target_os = "macos")]
-use tauri::menu::{
-    AboutMetadata, MenuItem, PredefinedMenuItem, Submenu, HELP_SUBMENU_ID, WINDOW_SUBMENU_ID,
-};
+use tauri::menu::{AboutMetadata, PredefinedMenuItem, Submenu, HELP_SUBMENU_ID, WINDOW_SUBMENU_ID};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager, WindowEvent};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
 
@@ -44,6 +44,13 @@ pub struct AppState {
     /// it returns immediately and leaves the event loop live — a repeated ⌘Q (or another
     /// close) would otherwise stack a second dialog. Cleared when the user cancels.
     pub quit_prompt_open: AtomicBool,
+    /// Keep running in the menu bar when the window closes (TV-D12, on by default):
+    /// closing hides the window, so reminders still arrive as OS notifications.
+    /// Mirrored from the webview's `keepInMenuBar` preference by `set_keep_in_menu_bar`.
+    pub keep_in_menu_bar: AtomicBool,
+    /// Where we remember that "Reminders won't arrive while Moduo is quit" was shown
+    /// (once per install).
+    pub quit_notice_marker: PathBuf,
     /// Background cloud-sync worker. Present only when signed in with a Supabase JWT.
     /// Feature-gated behind the future offline/"lite" build.
     #[cfg(feature = "lite")]
@@ -52,6 +59,10 @@ pub struct AppState {
 
 impl AppState {
     fn new(db_path: PathBuf) -> anyhow::Result<Self> {
+        let quit_notice_marker = db_path
+            .parent()
+            .map(|dir| dir.join("quit-reminder-notice.shown"))
+            .unwrap_or_else(|| PathBuf::from("quit-reminder-notice.shown"));
         let config = config::AppConfig::from_env();
         if let Some(parent) = db_path.parent() {
             fs::create_dir_all(parent)?;
@@ -75,6 +86,8 @@ impl AppState {
             acl,
             confirm_before_quit: Mutex::new(false),
             quit_prompt_open: AtomicBool::new(false),
+            keep_in_menu_bar: AtomicBool::new(true),
+            quit_notice_marker,
             #[cfg(feature = "lite")]
             sync_worker: Mutex::new(None),
         })
@@ -256,14 +269,102 @@ fn prompt_quit_confirm(app: &AppHandle) {
         });
 }
 
-/// Unified quit gate for the app-level ⌘Q gesture (custom Quit menu item). Prompts when
-/// the toggle is on, otherwise exits immediately.
+/// Whether closing the window keeps Moduo running in the menu bar (TV-D12).
+fn keep_in_menu_bar(app: &AppHandle) -> bool {
+    app.state::<AppState>().keep_in_menu_bar.load(Ordering::SeqCst)
+}
+
+/// Bring the main window back (tray click, "Open Moduo", the Dock icon).
+fn show_main_window(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
+/// The first time someone who keeps Moduo in the menu bar quits it, say once that
+/// reminders stop while it's quit (spec §13 edge cases), with Quit / Cancel. Returns
+/// true when the notice took over the quit (it exits on Quit itself).
+fn quit_reminder_notice(app: &AppHandle) -> bool {
+    let state = app.state::<AppState>();
+    if !state.keep_in_menu_bar.load(Ordering::SeqCst) || state.quit_notice_marker.exists() {
+        return false;
+    }
+    if state.quit_prompt_open.swap(true, Ordering::SeqCst) {
+        return true;
+    }
+    if let Some(parent) = state.quit_notice_marker.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    let _ = fs::write(&state.quit_notice_marker, chrono::Utc::now().to_rfc3339());
+    let app = app.clone();
+    app.dialog()
+        .message("Reminders won't arrive while Moduo is quit. Closing the window instead keeps it running in the menu bar.")
+        .title("Quit Moduo")
+        .buttons(MessageDialogButtons::OkCancelCustom(
+            "Quit".to_string(),
+            "Cancel".to_string(),
+        ))
+        .show(move |confirmed| {
+            if confirmed {
+                app.exit(0);
+            } else {
+                app.state::<AppState>()
+                    .quit_prompt_open
+                    .store(false, Ordering::SeqCst);
+            }
+        });
+    true
+}
+
+/// Unified quit gate for the app-level ⌘Q gesture (custom Quit menu item) and the
+/// tray's Quit. The one-time reminder notice first, then the confirm when the toggle
+/// is on, otherwise exits immediately.
 fn request_app_quit(app: &AppHandle) {
+    if quit_reminder_notice(app) {
+        return;
+    }
     if confirm_before_quit_enabled(app) {
         prompt_quit_confirm(app);
     } else {
         app.exit(0);
     }
+}
+
+const TRAY_OPEN_ID: &str = "moduo-tray-open";
+const TRAY_QUIT_ID: &str = "moduo-tray-quit";
+
+/// The menu-bar icon (TV-D12): Moduo keeps running there when its window closes, so
+/// reminders still arrive. Click (or "Open Moduo") brings the window back.
+fn build_tray(app: &AppHandle) -> tauri::Result<()> {
+    let open = MenuItem::with_id(app, TRAY_OPEN_ID, "Open Moduo", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, TRAY_QUIT_ID, "Quit Moduo", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&open, &quit])?;
+    let mut tray = TrayIconBuilder::with_id("moduo-tray")
+        .tooltip("Moduo")
+        .menu(&menu)
+        .show_menu_on_left_click(false)
+        .on_menu_event(|app, event| match event.id().as_ref() {
+            TRAY_OPEN_ID => show_main_window(app),
+            TRAY_QUIT_ID => request_app_quit(app),
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
+                show_main_window(tray.app_handle());
+            }
+        });
+    if let Some(icon) = app.default_window_icon() {
+        tray = tray.icon(icon.clone());
+    }
+    tray.build(app)?;
+    Ok(())
 }
 
 pub fn run() {
@@ -288,9 +389,18 @@ pub fn run() {
         // Quit and keeps the window on Cancel. Off → let it close natively (unchanged).
         // Scoped to the "main" window: closing this single-window app IS quitting it, but a
         // future secondary window (OAuth/preview popup) should close on its own, not prompt.
+        // TV-D12: with "keep running in the menu bar" on (the default), closing the main
+        // window only hides it, so reminders keep arriving; the tray and the Dock bring it
+        // back, and quitting is ⌘Q or the tray's Quit.
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
-                if window.label() == "main" && confirm_before_quit_enabled(window.app_handle()) {
+                if window.label() != "main" {
+                    return;
+                }
+                if keep_in_menu_bar(window.app_handle()) {
+                    api.prevent_close();
+                    let _ = window.hide();
+                } else if confirm_before_quit_enabled(window.app_handle()) {
                     api.prevent_close();
                     prompt_quit_confirm(window.app_handle());
                 }
@@ -302,6 +412,10 @@ pub fn run() {
                 perform_one_time_auth_v3_reset(app.handle(), &config).map_err(|e| e.to_string())?;
             let state = AppState::new(db_path).map_err(|e| e.to_string())?;
             app.manage(state);
+            // A tray that fails to build (no menu bar on this desktop) never stops the app.
+            if let Err(err) = build_tray(app.handle()) {
+                eprintln!("[tray] not available: {err}");
+            }
             commands::email::bootstrap_idle_workers(app.handle());
             Ok(())
         })
@@ -399,6 +513,7 @@ pub fn run() {
             commands::integrations::integration_disconnect,
             commands::system::open_external_url,
             commands::system::set_confirm_before_quit,
+            commands::system::set_keep_in_menu_bar,
             commands::window::window_toggle_fullscreen,
             commands::timetracking::tt_list,
             commands::timetracking::tt_upsert_entry,
@@ -417,13 +532,18 @@ pub fn run() {
         ])
         .build(tauri::generate_context!())
         .expect("error while building moduo desktop application")
-        .run(|_app, event| {
+        .run(|app, event| {
             // The confirm-before-quit decision now lives in the menu + window-close
             // handlers above (which run BEFORE the exit request), so this only cleans up
             // once an exit is actually happening — including for exits we can't intercept
             // (dock right-click → Quit, system logout), which go straight to `Exit`.
-            if let tauri::RunEvent::Exit = event {
-                commands::email::stop_all_idle_workers();
+            match event {
+                tauri::RunEvent::Exit => commands::email::stop_all_idle_workers(),
+                // The Dock icon brings a hidden window back (TV-D12).
+                #[cfg(target_os = "macos")]
+                tauri::RunEvent::Reopen { .. } => show_main_window(app),
+                _ => {}
             }
+            let _ = app;
         });
 }
