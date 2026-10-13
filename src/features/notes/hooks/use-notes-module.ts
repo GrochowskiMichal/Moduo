@@ -384,6 +384,17 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
     [engine, workspaceId, patchLocal, guard],
   );
 
+  /** Full width (NR-1/NR-3): a per-note opt-out of the reading measure.
+   * Stored on the note, written through `notes_op_set_meta`, no activity. */
+  const setFullWidth = useCallback(
+    (noteId: string, fullWidth: boolean) => {
+      if (!engine || !workspaceId) return;
+      patchLocal(noteId, { fullWidth });
+      guard(() => engine.runMetaOp("setMeta", { workspaceId, noteId, patch: { fullWidth } }));
+    },
+    [engine, workspaceId, patchLocal, guard],
+  );
+
   const togglePin = useCallback(
     (noteId: string) => {
       if (!engine || !workspaceId) return;
@@ -703,6 +714,7 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
     materializeDraft,
     fileNote,
     setFavorite,
+    setFullWidth,
     renameNote,
     moveNote,
     setIcon,

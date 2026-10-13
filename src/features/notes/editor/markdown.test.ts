@@ -30,6 +30,7 @@ import {
   extractTaskLineIds,
   NOTES_DOC_ROOT,
 } from "./doc-markdown";
+import { FIDELITY_MD } from "./fidelity.fixture";
 import { HR_TRANSFORMER, looksLikeMarkdown, NOTES_TRANSFORMERS } from "./markdown";
 import { buildDocStateFromMarkdown } from "./materialize";
 
@@ -259,36 +260,6 @@ describe("copy: selection → markdown through the same transformers (NR-3)", ()
   });
 });
 
-/** Every construct AC9 names, in the exact bytes the converter writes. */
-const FIDELITY = [
-  "# Plan",
-  "",
-  "Intro with **bold**, *italic*, ***both***, ~~struck~~, `code` and a [link](https://example.com/a).",
-  "A second line inside the same block.",
-  "",
-  "## Steps",
-  "",
-  "- first",
-  "- second",
-  "",
-  "1. one",
-  "2. two",
-  "",
-  "- [x] done thing",
-  "- [ ] open thing",
-  "",
-  "- [ ] Ship the report <!-- moduo:task:task-123 -->",
-  "",
-  "Talked to [Jane Doe](moduo://contact/abc-123) today.",
-  "",
-  "| Name | Status |",
-  "| --- | --- |",
-  "| Acme | **Active** |",
-  "| Globex | [site](https://globex.test) |",
-  "",
-  "[Kickoff notes](moduo://note/n-1)",
-].join("\n");
-
 function docFrom(md: string): Y.Doc {
   const built = buildDocStateFromMarkdown("note-fidelity", md)!;
   const doc = new Y.Doc();
@@ -299,15 +270,15 @@ function docFrom(md: string): Y.Doc {
 
 describe("single dialect (NR-3, AC9)", () => {
   it("markdown → editor → markdown is byte-stable for every listed construct", () => {
-    expect(roundTrip(FIDELITY)).toBe(FIDELITY);
+    expect(roundTrip(FIDELITY_MD)).toBe(FIDELITY_MD);
   });
 
   it("the derived body_md survives the CRDT: markdown → Yjs doc → body_md is byte-identical", () => {
-    expect(deriveNoteBody(docFrom(FIDELITY)).md).toBe(FIDELITY);
+    expect(deriveNoteBody(docFrom(FIDELITY_MD)).md).toBe(FIDELITY_MD);
   });
 
   it("deriving twice is stable (no drift on every push)", () => {
-    const once = deriveNoteBody(docFrom(FIDELITY)).md;
+    const once = deriveNoteBody(docFrom(FIDELITY_MD)).md;
     expect(deriveNoteBody(docFrom(once)).md).toBe(once);
   });
 
@@ -329,7 +300,7 @@ describe("single dialect (NR-3, AC9)", () => {
   });
 
   it("body_text is the plain projection: no markers, chips and page rows read as labels", () => {
-    const { text } = deriveNoteBody(docFrom(FIDELITY));
+    const { text } = deriveNoteBody(docFrom(FIDELITY_MD));
     expect(text.split("\n")[0]).toBe("Plan");
     expect(text).toContain("Talked to Jane Doe today.");
     expect(text).toContain("Kickoff notes");
@@ -344,7 +315,7 @@ describe("single dialect (NR-3, AC9)", () => {
   });
 
   it("task-line ids are read off the doc (the trash flow's detach list)", () => {
-    expect(extractTaskLineIds(docFrom(FIDELITY))).toEqual(["task-123"]);
+    expect(extractTaskLineIds(docFrom(FIDELITY_MD))).toEqual(["task-123"]);
   });
 
   it("the old doc-text walker is gone", () => {

@@ -43,10 +43,11 @@ import {
   KEY_TAB_COMMAND,
   OUTDENT_CONTENT_COMMAND,
 } from "lexical";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import type * as Y from "yjs";
 import { $createEntityRefNode } from "@/features/spine/editor/entity-ref-node";
 import { MentionMenuPlugin } from "@/features/spine/editor/mention-menu-plugin";
+import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 import { tryDeriveNoteBody } from "../editor/doc-markdown";
 import { NOTES_TRANSFORMERS } from "../editor/markdown";
@@ -85,6 +86,13 @@ type Props = {
   bridge: NotesEditorBridge;
   /** Put the caret in the note on open (a fresh capture, NR-2). */
   autoFocus?: boolean;
+  /** The refreshed shell (NR-3): the column's width comes from the host (the
+   * reading measure or Full width), not from the editor. */
+  bare?: boolean;
+  /** Drawn under the title line (the meta line). */
+  belowTitle?: ReactNode;
+  /** Drawn after the document (the Linked-from footer). */
+  footer?: ReactNode;
 };
 
 function CodeHighlightingPlugin() {
@@ -172,6 +180,48 @@ function TitleDerivationPlugin({
     };
   }, [doc]);
   return null;
+}
+
+/**
+ * Draws `children` right under the document's first block (the title line).
+ * Lexical owns every node inside the contenteditable and reclaims foreign DOM
+ * there (the NO-5 trap), so this is an overlay NEXT TO it: the first block
+ * reserves the room (`data-meta-line` in global.css) and the overlay is placed
+ * at its bottom edge, re-measured on every editor update and every resize
+ * (a title that wraps to a second line pushes the line down with it).
+ */
+function BelowTitleSlot({ children }: { children: ReactNode }) {
+  const [editor] = useLexicalComposerContext();
+  const [top, setTop] = useState<number | null>(null);
+  useEffect(() => {
+    let frame = 0;
+    const measure = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const first = editor.getRootElement()?.firstElementChild as HTMLElement | null;
+        setTop(first ? first.offsetTop + first.offsetHeight : null);
+      });
+    };
+    const observer = new ResizeObserver(measure);
+    const unregisterRoot = editor.registerRootListener((root, prev) => {
+      if (prev) observer.unobserve(prev);
+      if (root) observer.observe(root);
+      measure();
+    });
+    const unregisterUpdate = editor.registerUpdateListener(measure);
+    return () => {
+      cancelAnimationFrame(frame);
+      unregisterRoot();
+      unregisterUpdate();
+      observer.disconnect();
+    };
+  }, [editor]);
+  if (top === null) return null;
+  return (
+    <div className="absolute inset-x-0 px-6 pt-1" style={{ top }}>
+      {children}
+    </div>
+  );
 }
 
 /** The sidebar's "+ child" mirrors into the OPEN parent as a page-row — via
@@ -326,6 +376,9 @@ export function NoteEditor({
   seedWelcome = false,
   bridge,
   autoFocus = false,
+  bare = false,
+  belowTitle,
+  footer,
 }: Props) {
   const { userId, runtime } = useAuth();
   const session = useMemo(() => engine.getOrCreateSession(noteId), [engine, noteId]);
@@ -412,16 +465,32 @@ export function NoteEditor({
   }
 
   return (
-    <div className="pane-scroll notes-editor-v2 relative h-full min-h-0 overflow-auto">
+    <div
+      data-meta-line={belowTitle ? "" : undefined}
+      className={cn(
+        "pane-scroll notes-editor-v2 relative h-full min-h-0 overflow-auto",
+        bare && "flex flex-col",
+      )}
+    >
       <NotesEditorBridgeContext.Provider value={bridge}>
         <LexicalCollaboration key={`collab-${noteId}`}>
           <LexicalComposer initialConfig={initialConfig} key={noteId}>
             <RichTextPlugin
               contentEditable={
-                <ContentEditable className="mx-auto min-h-full w-full max-w-3xl px-6 pb-24 pt-10 text-base leading-relaxed text-foreground outline-none" />
+                <ContentEditable
+                  className={cn(
+                    "w-full px-6 pt-10 text-base leading-relaxed text-foreground outline-none",
+                    bare ? "flex-1 pb-12" : "mx-auto min-h-full max-w-3xl pb-24",
+                  )}
+                />
               }
               placeholder={
-                <div className="pointer-events-none absolute left-1/2 top-10 w-full max-w-3xl -translate-x-1/2 px-6 font-display text-3xl font-semibold text-muted-foreground/60">
+                <div
+                  className={cn(
+                    "pointer-events-none absolute top-10 px-6 font-display text-3xl font-semibold text-muted-foreground/60",
+                    bare ? "inset-x-0" : "left-1/2 w-full max-w-3xl -translate-x-1/2",
+                  )}
+                >
                   Untitled
                 </div>
               }
@@ -481,9 +550,11 @@ export function NoteEditor({
             <TitleDerivationPlugin doc={session.doc} onTitleDerived={onTitleDerived} />
             <WelcomeSeedPlugin enabled={seedWelcome && editable && booted} />
             {autoFocus && editable ? <AutoFocusPlugin /> : null}
+            {belowTitle ? <BelowTitleSlot>{belowTitle}</BelowTitleSlot> : null}
           </LexicalComposer>
         </LexicalCollaboration>
       </NotesEditorBridgeContext.Provider>
+      {footer ? <div className="w-full px-6">{footer}</div> : null}
     </div>
   );
 }
