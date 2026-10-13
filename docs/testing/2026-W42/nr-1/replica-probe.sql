@@ -101,13 +101,14 @@ SELECT pg_temp.ok(format('notes_op_move L back to root keeps it in Pages (in_inb
 \echo
 \echo ==== 5. THE SHARING CASE: C (did not create K; edit only via the workspace grant on P) files K into the Inbox
 RESET ROLE;
-\echo -- control: what plain re-rooting (prod notes_op_move to root, no freeze) would do, rolled back
+\echo -- notes_op_move to root (also freezes access now, NR-1 §5), rolled back
 BEGIN;
 SET LOCAL ROLE authenticated;
 SET LOCAL request.jwt.claim.sub = 'cccccccc-0000-0000-0000-000000000003';
-SELECT 'control moved K to root as ' || share_mode FROM public.notes_op_move(:'W', :'K', NULL);
-SELECT format('  control after plain re-root: %s view K=%s view G=%s', u.n,
-              public.can_access('note', :'K', 'view', u.id), public.can_access('note', :'G', 'view', u.id))
+SELECT pg_temp.ok('notes_op_move(K, root) as C -> share_mode custom', share_mode = 'custom') FROM public.notes_op_move(:'W', :'K', NULL);
+SELECT pg_temp.ok(format('after move to root: %s view K=%s view G=%s', u.n,
+              public.can_access('note', :'K', 'view', u.id), public.can_access('note', :'G', 'view', u.id)),
+              public.can_access('note', :'K', 'view', u.id) AND public.can_access('note', :'G', 'view', u.id))
   FROM (VALUES ('A', :'A'::uuid), ('B', :'B'::uuid), ('C', :'C'::uuid)) u(n, id);
 ROLLBACK;
 SET ROLE authenticated;
@@ -332,6 +333,49 @@ SET ROLE authenticated;
 SELECT pg_temp.err('authenticated calling notes__keep_access_on_reroot refused',
   format('SELECT public.notes__keep_access_on_reroot(%L, %L)', :'W', :'K'), 'permission denied');
 RESET ROLE;
+
+\echo
+\echo ==== 13b. Restore and purge re-roots keep access; create records the actor
+RESET ROLE;
+RESET request.jwt.claim.sub;
+\set P3 '10000000-0000-0000-0000-000000000031'
+\set K3 '10000000-0000-0000-0000-000000000032'
+\set P4 '10000000-0000-0000-0000-000000000041'
+\set K4 '10000000-0000-0000-0000-000000000042'
+INSERT INTO public.notes (id, workspace_id, created_by, parent_id, title, position) VALUES
+  (:'P3', :'W', :'A', NULL,    'P3 shared root',          'r3'),
+  (:'K3', :'W', :'B', :'P3',   'K3 sub-note restored alone', 'a'),
+  (:'P4', :'W', :'A', NULL,    'P4 shared root purged',   'r4'),
+  (:'K4', :'W', :'B', :'P4',   'K4 live sub-note of P4',  'a');
+SELECT pg_temp.ok('fixtures: K3/K4 inherit, P3/P4 carry a workspace grant',
+  (SELECT bool_and(share_mode = 'inherit') FROM public.notes WHERE id IN (:'K3', :'K4'))
+  AND (SELECT count(*) = 2 FROM public.resource_grants WHERE resource_type = 'note'
+        AND resource_id IN (:'P3', :'P4') AND subject_type = 'workspace'));
+UPDATE public.notes SET deleted_at = now() WHERE id IN (:'P3', :'K3', :'P4');
+
+SET ROLE authenticated;
+SET request.jwt.claim.sub = 'aaaaaaaa-0000-0000-0000-000000000001';
+SELECT pg_temp.ok('restore K3 alone (parent stays trashed) as A -> restored', (r->>'count')::int = 1)
+  FROM public.notes_op_restore(:'W', :'K3') r;
+SELECT pg_temp.ok(format('K3 re-rooted as %s (custom)', share_mode), parent_id IS NULL AND share_mode = 'custom')
+  FROM public.notes WHERE id = :'K3';
+SELECT pg_temp.ok(format('after restore re-root: %s view K3=%s', u.n, public.can_access('note', :'K3', 'view', u.id)),
+                  public.can_access('note', :'K3', 'view', u.id))
+  FROM (VALUES ('A', :'A'::uuid), ('B', :'B'::uuid), ('C', :'C'::uuid)) u(n, id);
+
+RESET ROLE;  -- notes__purge_ids is internal; called as its definer would be, with A as the actor
+SELECT pg_temp.ok(format('purge P4 as A -> %s deleted', n), n = 1) FROM public.notes__purge_ids(:'W', ARRAY[:'P4']::uuid[]) n;
+SELECT pg_temp.ok(format('K4 survived, re-rooted as %s', share_mode), parent_id IS NULL AND share_mode = 'custom' AND deleted_at IS NULL)
+  FROM public.notes WHERE id = :'K4';
+SELECT pg_temp.ok(format('after purge re-root: %s view K4=%s', u.n, public.can_access('note', :'K4', 'view', u.id)),
+                  public.can_access('note', :'K4', 'view', u.id))
+  FROM (VALUES ('A', :'A'::uuid), ('B', :'B'::uuid), ('C', :'C'::uuid)) u(n, id);
+
+SET ROLE authenticated;
+SELECT pg_temp.ok(format('notes_op_create as A stamps created_by=actor (%s)', right(created_by::text, 1)), created_by = :'A')
+  FROM public.notes_op_create(:'W', '10000000-0000-0000-0000-000000000051'::uuid);
+RESET ROLE;
+RESET request.jwt.claim.sub;
 
 \echo
 \echo ==== 14. Member removal and account erasure

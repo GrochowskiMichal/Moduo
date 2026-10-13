@@ -13,6 +13,9 @@
 --   4. Ops: `notes_op_file`, `notes_op_set_favorite`; `notes_op_set_meta`
 --      learns `fullWidth`; `notes_op_import` takes a per-row `inInbox`;
 --      `notes_op_duplicate` keeps the copy in its source's section.
+--   5. Every path that puts a shared sub-note at the top level (file, move,
+--      restore, purge) keeps everyone's access to it; `notes_op_create`
+--      records the actor as creator (API-key creates had none).
 --
 -- Additive: the classic UI never reads the new columns, and its creates still
 -- land where they did (roots → Inbox). Same-signature CREATE OR REPLACE keeps
@@ -508,5 +511,286 @@ BEGIN
       jsonb_build_object('imported', v_imported, 'skipped', v_skipped));
   END IF;
   RETURN jsonb_build_object('imported', v_imported, 'skipped', v_skipped);
+END;
+$$;
+
+-- ── 4. Every re-root keeps access; every create has a creator ────────────────
+--
+-- The same freeze `notes_op_file` does, for the three older paths that put a
+-- sub-note at the top level (moving it there, restoring it while its parent
+-- stays in the trash, deleting its parent forever). Each was hiding a shared
+-- sub-note from everyone but its creator. Bodies rebuilt from PROD's, with the
+-- helper call the only change. Same signatures, so grants are kept.
+
+CREATE OR REPLACE FUNCTION public.notes_op_move(
+  p_workspace_id uuid,
+  p_note_id uuid,
+  p_parent_id uuid DEFAULT NULL,
+  p_position text DEFAULT ''
+)
+RETURNS public.notes
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  n public.notes;
+  v_old_parent uuid;
+BEGIN
+  n := public.notes_op__guard_note(p_workspace_id, p_note_id);
+  v_old_parent := n.parent_id;
+
+  IF p_parent_id IS NOT NULL THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM public.notes
+      WHERE id = p_parent_id AND workspace_id = p_workspace_id AND deleted_at IS NULL
+    ) THEN
+      RAISE EXCEPTION 'Target parent not found in this workspace.';
+    END IF;
+    IF EXISTS (
+      SELECT 1 FROM public.notes__subtree_ids(p_workspace_id, p_note_id) s
+      WHERE s = p_parent_id
+    ) THEN
+      RAISE EXCEPTION 'A note cannot be moved into its own subtree.';
+    END IF;
+  END IF;
+
+  IF p_parent_id IS NULL AND v_old_parent IS NOT NULL
+     AND coalesce(n.share_mode, 'custom') = 'inherit' THEN
+    PERFORM public.notes__keep_access_on_reroot(p_workspace_id, n.id);
+  END IF;
+
+  UPDATE public.notes
+    SET parent_id = p_parent_id,
+        position = coalesce(p_position, ''),
+        updated_at = now()
+    WHERE id = n.id
+    RETURNING * INTO n;
+
+  IF v_old_parent IS DISTINCT FROM p_parent_id THEN
+    PERFORM public.module_activity_log(
+      p_workspace_id, 'notes', 'note', n.id, 'notes.move',
+      jsonb_build_object('from_parent', v_old_parent, 'to_parent', p_parent_id));
+  END IF;
+  RETURN n;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.notes_op_restore(
+  p_workspace_id uuid,
+  p_note_id uuid
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  n public.notes;
+  v_ids uuid[];
+  v_id uuid;
+  v_reroot boolean := false;
+BEGIN
+  n := public.notes_op__guard_note(p_workspace_id, p_note_id, true);
+  IF n.deleted_at IS NULL THEN
+    RAISE EXCEPTION 'This note is not in the trash.';
+  END IF;
+
+  SELECT array_agg(t.id) INTO v_ids FROM (
+    SELECT nn.id FROM public.notes nn
+    WHERE nn.id IN (SELECT public.notes__subtree_ids(p_workspace_id, p_note_id))
+      AND nn.deleted_at IS NOT NULL
+  ) t;
+
+  IF n.parent_id IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM public.notes p
+    WHERE p.id = n.parent_id AND p.workspace_id = p_workspace_id AND p.deleted_at IS NULL
+  ) THEN
+    v_reroot := true;
+  END IF;
+
+  UPDATE public.notes
+    SET deleted_at = NULL, updated_at = now()
+    WHERE workspace_id = p_workspace_id AND id = ANY (v_ids);
+  IF v_reroot THEN
+    IF coalesce(n.share_mode, 'custom') = 'inherit' THEN
+      PERFORM public.notes__keep_access_on_reroot(p_workspace_id, n.id);
+    END IF;
+    UPDATE public.notes SET parent_id = NULL
+      WHERE workspace_id = p_workspace_id AND id = n.id;
+  END IF;
+
+  FOREACH v_id IN ARRAY v_ids LOOP
+    PERFORM public.entities_op_upsert(
+      p_workspace_id, 'note', v_id,
+      (SELECT coalesce(nullif(btrim(nn.title), ''), 'Untitled')
+         FROM public.notes nn WHERE nn.id = v_id), 'note');
+  END LOOP;
+
+  PERFORM public.module_activity_log(
+    p_workspace_id, 'notes', 'note', n.id, 'notes.restore',
+    jsonb_build_object('title', n.title, 'count', coalesce(array_length(v_ids, 1), 0)));
+
+  RETURN jsonb_build_object(
+    'restored_ids', to_jsonb(coalesce(v_ids, '{}'::uuid[])),
+    'count', coalesce(array_length(v_ids, 1), 0));
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.notes__purge_ids(
+  p_workspace_id uuid,
+  p_ids uuid[]
+)
+RETURNS integer
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_ids uuid[];
+  v_gone uuid[] := '{}';
+  v_batch uuid[];
+  v_survivor uuid;
+BEGIN
+  -- Lock what we're about to delete: a Restore of one of these notes now waits
+  -- for this purge (then finds no note), or wins first and the note isn't
+  -- collected. Without the lock a Restore could land between the history
+  -- delete and the note delete, and the note would survive without its history.
+  -- Id order keeps two overlapping purges from locking in opposite orders.
+  SELECT array_agg(s.id) INTO v_ids FROM (
+    SELECT nn.id FROM public.notes nn
+      WHERE nn.workspace_id = p_workspace_id
+        AND nn.id = ANY (coalesce(p_ids, '{}'::uuid[]))
+        AND nn.deleted_at IS NOT NULL
+      ORDER BY nn.id
+      FOR UPDATE
+  ) s;
+  IF v_ids IS NULL THEN
+    RETURN 0;
+  END IF;
+
+  -- Live survivors that follow a parent being deleted keep their access first
+  -- (NR-1): the parent's grants are about to disappear with it.
+  FOR v_survivor IN
+    SELECT nn.id FROM public.notes nn
+     WHERE nn.workspace_id = p_workspace_id
+       AND nn.deleted_at IS NULL
+       AND nn.parent_id = ANY (v_ids)
+       AND coalesce(nn.share_mode, 'custom') = 'inherit'
+     ORDER BY nn.id
+  LOOP
+    PERFORM public.notes__keep_access_on_reroot(p_workspace_id, v_survivor);
+  END LOOP;
+
+  -- Re-root live survivors so the hard delete can't strand or cascade them.
+  UPDATE public.notes
+    SET parent_id = NULL, updated_at = now()
+    WHERE workspace_id = p_workspace_id
+      AND deleted_at IS NULL
+      AND parent_id = ANY (v_ids);
+
+  -- History before its notes: perm_enforce_write on note_updates checks access
+  -- through the note, which the FK cascade would only reach once it's gone.
+  DELETE FROM public.note_updates u
+    WHERE u.workspace_id = p_workspace_id
+      AND u.note_id IN (SELECT nn.id FROM public.notes nn
+                        WHERE nn.id = ANY (v_ids) AND nn.deleted_at IS NOT NULL);
+
+  -- Leaves first: perm_enforce_write's access check reads a sub-note's access
+  -- through its parent, which must still be there. Only rows still in the trash.
+  LOOP
+    WITH d AS (
+      DELETE FROM public.notes nn
+        WHERE nn.workspace_id = p_workspace_id
+          AND nn.id = ANY (v_ids)
+          AND nn.deleted_at IS NOT NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM public.notes ch
+            WHERE ch.parent_id = nn.id AND ch.id = ANY (v_ids))
+        RETURNING nn.id
+    )
+    SELECT array_agg(d.id) INTO v_batch FROM d;
+    EXIT WHEN v_batch IS NULL;
+    v_gone := v_gone || v_batch;
+  END LOOP;
+
+  -- Trashed rows left with no leaf among them sit in a parent cycle. Break it
+  -- (re-rooting anything restored meanwhile too), then delete the trashed ones.
+  IF EXISTS (SELECT 1 FROM public.notes
+             WHERE workspace_id = p_workspace_id AND id = ANY (v_ids)
+               AND deleted_at IS NOT NULL) THEN
+    UPDATE public.notes
+      SET parent_id = NULL, updated_at = now()
+      WHERE workspace_id = p_workspace_id AND id = ANY (v_ids);
+    WITH d AS (
+      DELETE FROM public.notes
+        WHERE workspace_id = p_workspace_id AND id = ANY (v_ids)
+          AND deleted_at IS NOT NULL
+        RETURNING id
+    )
+    SELECT v_gone || coalesce(array_agg(d.id), '{}'::uuid[]) INTO v_gone FROM d;
+  END IF;
+
+  IF cardinality(v_gone) = 0 THEN
+    RETURN 0;
+  END IF;
+
+  UPDATE public.entity_links
+    SET deleted_at = now()
+    WHERE workspace_id = p_workspace_id
+      AND deleted_at IS NULL
+      AND ((source_type = 'note' AND source_id = ANY (v_gone))
+        OR (target_type = 'note' AND target_id = ANY (v_gone)));
+
+  -- Registry tombstones inline (see notes_op_trash for why not
+  -- entities_op_tombstone).
+  UPDATE public.entities
+    SET deleted_at = now(), updated_at = now()
+    WHERE workspace_id = p_workspace_id AND entity_type = 'note'
+      AND entity_id = ANY (v_gone) AND deleted_at IS NULL;
+
+  RETURN cardinality(v_gone);
+END;
+$$;
+
+-- create: the creator is the actor (the signed-in person, or the API key's
+-- creator) — `auth.uid()` is NULL under a key, which left MCP-created notes
+-- with no owner.
+CREATE OR REPLACE FUNCTION public.notes_op_create(
+  p_workspace_id uuid,
+  p_id uuid DEFAULT NULL,
+  p_parent_id uuid DEFAULT NULL,
+  p_title text DEFAULT '',
+  p_position text DEFAULT '',
+  p_icon text DEFAULT NULL
+)
+RETURNS public.notes
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  n public.notes;
+BEGIN
+  PERFORM public.notes_op__guard(p_workspace_id);
+  IF p_parent_id IS NOT NULL THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM public.notes
+      WHERE id = p_parent_id AND workspace_id = p_workspace_id AND deleted_at IS NULL
+    ) THEN
+      RAISE EXCEPTION 'Parent note not found in this workspace.';
+    END IF;
+  END IF;
+  INSERT INTO public.notes
+    (id, workspace_id, created_by, parent_id, title, icon, kind, position)
+  VALUES
+    (coalesce(p_id, gen_random_uuid()), p_workspace_id, public.perm_actor_id(), p_parent_id,
+     coalesce(p_title, ''), p_icon, 'note', coalesce(p_position, ''))
+  RETURNING * INTO n;
+
+  PERFORM public.entities_op_upsert(
+    p_workspace_id, 'note', n.id,
+    coalesce(nullif(btrim(n.title), ''), 'Untitled'), 'note');
+  RETURN n;
 END;
 $$;

@@ -1087,3 +1087,11 @@ UPDATE public.notes SET updated_at = '2026-01-01';
 -- One un-compacted update on P so duplicate's tail copy is exercised.
 INSERT INTO public.note_updates (workspace_id, note_id, client_id, client_seq, update_b64) VALUES
   ('00000000-0000-0000-0000-0000000000a1','10000000-0000-0000-0000-000000000001','client-x',1,'AAAA');
+
+-- Spine tables notes__purge_ids writes to (columns it touches only).
+CREATE TABLE public.entity_links (
+  workspace_id uuid, source_type text, source_id uuid,
+  target_type text, target_id uuid, deleted_at timestamptz);
+CREATE TABLE public.entities (
+  workspace_id uuid, entity_type text, entity_id uuid,
+  deleted_at timestamptz, updated_at timestamptz);

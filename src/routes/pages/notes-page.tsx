@@ -326,19 +326,8 @@ export function NotesPage() {
         betweenPositions,
       });
       if (!drop) return; // self/cycle/unknown — quiet no-op
-      // A sub-note that follows its parent's sharing has nothing to follow at
-      // the top level: it becomes private. Say so before teammates lose it.
-      const dragged = notes.find((n) => n.id === dragId);
-      if (
-        dragged?.shareMode === "inherit" &&
-        !drop.parentId &&
-        !noteIsPrivate(dragId, notes) &&
-        !window.confirm(
-          "This note follows its parent's sharing. At the top level it becomes private to you. Move it anyway?",
-        )
-      ) {
-        return;
-      }
+      // A sub-note moved to the top level keeps everyone's access: the server
+      // freezes what its parent gave it (NR-1, notes__keep_access_on_reroot).
       const parentPrivate = drop.parentId ? noteIsPrivate(drop.parentId, notes) : false;
       const keepSharing =
         parentPrivate &&

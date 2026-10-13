@@ -1,71 +1,8 @@
-# NR-1 replica rehearsal output — 2026-10-13T19:18Z
-# server: PostgreSQL 17.11 (Homebrew) on aarch64-apple-darwin25.6.0, compiled by Apple clang version 21.0.0 (clang-2100.1.1.101), 64-bit
-# migration sha256: 27d54d8d528cf1a5439bb44f0b6aa5a7e6031bb06e6f2af8acda23d993c83697  (supabase/migrations/20261013120000_notes_refresh_organize.sql, working tree)
-# setup sha256:     82222769374bf09b9f3b2f41e2474b5a5b44ca0cd05e13cffb9ae5cc8fb2dd3b
-# probe sha256:     bf7097c0c78568b6f2f83e03ee1803f6045d8414823fcec4acdf8494de260a2d
+# NR-1 replica rehearsal output — 2026-10-13T20:11Z
+# migration sha256: 72b3b7188a7501fc5035480d598007794739609c5737f3f6fce7d7e082dee9e8
+# runner: see the header of replica-probe.sql (setup → migration in one transaction → probe)
+# result: 124 PASS, 0 FAIL
 
-## build: DROP/CREATE DATABASE replica; psql -v ON_ERROR_STOP=1 -f replica-setup.sql
-setup exit=0
-
-## seed as built (before the migration)
-1 P shared root              parent=- custom pinned=false archived=false trashed=false grants=workspace:edit
-2 K child by B               parent=1 inherit pinned=false archived=false trashed=false grants=none
-3 G grandchild by A          parent=2 inherit pinned=false archived=false trashed=false grants=none
-4 L loose root               parent=- custom pinned=false archived=false trashed=false grants=workspace:edit
-5 PIN pinned root            parent=- custom pinned=true archived=false trashed=false grants=workspace:edit
-6 ARC archived root          parent=- custom pinned=false archived=true trashed=false grants=workspace:edit
-7 TR root w/ trashed child   parent=- custom pinned=false archived=false trashed=false grants=workspace:edit
-8 TRC trashed child          parent=7 inherit pinned=false archived=false trashed=true grants=none
-9 PRV private root by C      parent=- custom pinned=true archived=false trashed=false grants=none
-
-## apply #1: psql -v ON_ERROR_STOP=1 -1 -f supabase/migrations/20261013120000_notes_refresh_organize.sql
-SET
-DO
-ALTER TABLE
-ALTER TABLE
-UPDATE 4
-ALTER TABLE
-psql:supabase/migrations/20261013120000_notes_refresh_organize.sql:61: NOTICE:  constraint "notes_in_inbox_roots_only" of relation "notes" does not exist, skipping
-ALTER TABLE
-ALTER TABLE
-CREATE FUNCTION
-REVOKE
-psql:supabase/migrations/20261013120000_notes_refresh_organize.sql:83: NOTICE:  trigger "notes_in_inbox_default" for relation "public.notes" does not exist, skipping
-DROP TRIGGER
-CREATE TRIGGER
-CREATE TABLE
-CREATE INDEX
-CREATE INDEX
-COMMENT
-ALTER TABLE
-psql:supabase/migrations/20261013120000_notes_refresh_organize.sql:107: NOTICE:  policy "note_favorites_own_read" for relation "public.note_favorites" does not exist, skipping
-DROP POLICY
-CREATE POLICY
-REVOKE
-REVOKE
-GRANT
-GRANT
-INSERT 0 4
-CREATE FUNCTION
-REVOKE
-psql:supabase/migrations/20261013120000_notes_refresh_organize.sql:147: NOTICE:  trigger "note_favorites_member_removed" for relation "public.workspace_members" does not exist, skipping
-DROP TRIGGER
-CREATE TRIGGER
-CREATE FUNCTION
-REVOKE
-GRANT
-CREATE FUNCTION
-REVOKE
-GRANT
-CREATE FUNCTION
-REVOKE
-GRANT
-CREATE FUNCTION
-CREATE FUNCTION
-CREATE FUNCTION
-apply #1 exit=0
-
-## probe: psql -X -f replica-probe.sql
 Null display is "∅".
 Output format is unaligned.
 SET
@@ -109,14 +46,14 @@ PASS  notes_op_move L back to root keeps it in Pages (in_inbox=f)
 
 ==== 5. THE SHARING CASE: C (did not create K; edit only via the workspace grant on P) files K into the Inbox
 RESET
--- control: what plain re-rooting (prod notes_op_move to root, no freeze) would do, rolled back
+-- notes_op_move to root (also freezes access now, NR-1 §5), rolled back
 BEGIN
 SET
 SET
-control moved K to root as inherit
-  control after plain re-root: A view K=f view G=t
-  control after plain re-root: B view K=t view G=t
-  control after plain re-root: C view K=f view G=f
+PASS  notes_op_move(K, root) as C -> share_mode custom
+PASS  after move to root: A view K=t view G=t
+PASS  after move to root: B view K=t view G=t
+PASS  after move to root: C view K=t view G=t
 ROLLBACK
 SET
 SET
@@ -267,6 +204,30 @@ SET
 PASS  authenticated calling notes__keep_access_on_reroot refused -> permission denied for function notes__keep_access_on_reroot
 RESET
 
+==== 13b. Restore and purge re-roots keep access; create records the actor
+RESET
+RESET
+INSERT 0 4
+PASS  fixtures: K3/K4 inherit, P3/P4 carry a workspace grant
+UPDATE 3
+SET
+SET
+PASS  restore K3 alone (parent stays trashed) as A -> restored
+PASS  K3 re-rooted as custom (custom)
+PASS  after restore re-root: A view K3=t
+PASS  after restore re-root: B view K3=t
+PASS  after restore re-root: C view K3=t
+RESET
+PASS  purge P4 as A -> 1 deleted
+PASS  K4 survived, re-rooted as custom
+PASS  after purge re-root: A view K4=t
+PASS  after purge re-root: B view K4=t
+PASS  after purge re-root: C view K4=t
+SET
+PASS  notes_op_create as A stamps created_by=actor (1)
+RESET
+RESET
+
 ==== 14. Member removal and account erasure
 RESET
 RESET
@@ -284,14 +245,12 @@ SET
 
 RESET
 RESET
-SELECT 22
+SELECT 26
 SELECT 1
 BEGIN
 SET
 DO
-ALTER TABLE
-ALTER TABLE
-UPDATE 9
+DO
 ALTER TABLE
 ALTER TABLE
 ALTER TABLE
@@ -299,7 +258,7 @@ CREATE FUNCTION
 REVOKE
 DROP TRIGGER
 CREATE TRIGGER
-CREATE TABLE
+DO
 CREATE INDEX
 CREATE INDEX
 COMMENT
@@ -310,7 +269,6 @@ REVOKE
 REVOKE
 GRANT
 GRANT
-INSERT 0 2
 CREATE FUNCTION
 REVOKE
 DROP TRIGGER
@@ -327,27 +285,16 @@ GRANT
 CREATE FUNCTION
 CREATE FUNCTION
 CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
 INSERT 0 1
 COMMIT
 PASS  re-apply committed without error
 PASS  re-apply: still exactly one notes_in_inbox_default trigger and one member trigger
 -- data drift caused by re-running (informational: a migration runs once)
-  in_inbox changed by re-run: L loose root f -> t
-  in_inbox changed by re-run: P shared root (copy) f -> t
-  in_inbox changed by re-run: raw root, false f -> t
-  favorite re-added by re-run: user 1 note PIN pinned root
-  favorite re-added by re-run: user 1 note L loose root
 PASS  re-run left updated_at untouched
 
 ==== Summary
 (count PASS/FAIL lines in this output)
-
-## tally
-PASS=108 FAIL=0 (no FAIL lines; every psql statement above succeeded)
-
-## re-run after the first-run-only backfill change — 2026-10-13T19:20Z
-# migration sha256: 94877bb6e60d5168b279904f8894ecfabdee093066394231a391618d62d5cd3c
-# fresh replica → apply once → replica-probe.sql: 108 PASS lines, 0 FAIL (same cases as above)
-# then: every Inbox root manually filed to Pages + every favorite deleted → re-apply the migration
-#   Inbox roots after re-apply: 0 (backfill did not re-run)
-#   favorites after re-apply:   0 (pin backfill did not re-run)
