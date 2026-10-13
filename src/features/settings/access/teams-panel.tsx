@@ -312,8 +312,12 @@ export function TeamEditor({ team, teams }: { team: Team; teams: WorkspaceTeams 
   const { userId } = useAuth();
   const { members: workspaceMembers } = useWorkspace();
   const editable = teams.canEdit;
-  const [name, setName] = useState(team.name);
-  const [letters, setLetters] = useState(team.mark);
+  // What's being typed (null: not editing), so a change a teammate made while
+  // the pane was open shows, and leaving a field untouched never saves it.
+  const [nameDraft, setNameDraft] = useState<string | null>(null);
+  const [lettersDraft, setLettersDraft] = useState<string | null>(null);
+  const name = nameDraft ?? team.name;
+  const letters = lettersDraft ?? team.mark;
   const people = useMemo(
     () =>
       teams.members
@@ -346,22 +350,16 @@ export function TeamEditor({ team, teams }: { team: Team; teams: WorkspaceTeams 
   ).toLowerCase();
 
   const saveName = () => {
-    const next = name.trim();
-    if (!next || next === team.name) {
-      setName(team.name);
-      return;
-    }
-    void teams.update(team, { name: next }).then((ok) => {
-      if (!ok) setName(team.name);
-    });
+    if (nameDraft === null) return;
+    const next = nameDraft.trim();
+    setNameDraft(null);
+    if (next && next !== team.name) void teams.update(team, { name: next });
   };
   const saveLetters = () => {
-    const next = letters.trim().toUpperCase();
-    if (next === team.mark) return;
-    void teams.update(team, { mark: next }).then((ok) => {
-      if (!ok) setLetters(team.mark);
-      else if (!next) setLetters(teamLettersOf(team.name));
-    });
+    if (lettersDraft === null) return;
+    const next = lettersDraft.trim().toUpperCase();
+    setLettersDraft(null);
+    if (next !== team.mark) void teams.update(team, { mark: next });
   };
 
   return (
@@ -403,11 +401,11 @@ export function TeamEditor({ team, teams }: { team: Team; teams: WorkspaceTeams 
             value={name}
             maxLength={60}
             disabled={!editable}
-            onChange={(e) => setName(e.target.value)}
+            onChange={(e) => setNameDraft(e.target.value)}
             onBlur={saveName}
             onKeyDown={(e) => {
               if (e.key === "Enter") e.currentTarget.blur();
-              if (e.key === "Escape") setName(team.name);
+              if (e.key === "Escape") setNameDraft(null);
             }}
           />
         </div>
@@ -419,21 +417,19 @@ export function TeamEditor({ team, teams }: { team: Team; teams: WorkspaceTeams 
             maxLength={2}
             disabled={!editable}
             placeholder={teamLettersOf(team.name)}
-            onChange={(e) => setLetters(e.target.value.toUpperCase())}
+            onChange={(e) => setLettersDraft(e.target.value.toUpperCase())}
             onBlur={saveLetters}
             onKeyDown={(e) => {
               if (e.key === "Enter") e.currentTarget.blur();
-              if (e.key === "Escape") setLetters(team.mark);
+              if (e.key === "Escape") setLettersDraft(null);
             }}
           />
         </div>
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <Label id={`team-color-${team.id}`}>Colour</Label>
+        <Label>Colour</Label>
         <div
-          role="radiogroup"
-          aria-labelledby={`team-color-${team.id}`}
           className="flex flex-wrap items-center gap-1.5"
         >
           <ColorChoice
@@ -560,9 +556,8 @@ function ColorChoice({
   return (
     <button
       type="button"
-      role="radio"
-      aria-checked={selected}
-      aria-label={label}
+      aria-pressed={selected}
+      aria-label={`Colour: ${label}`}
       title={label}
       disabled={disabled}
       onClick={onPick}
