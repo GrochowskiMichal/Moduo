@@ -5,7 +5,7 @@
 import { useMemo } from "react";
 import { timeAgo } from "@/features/notes/recent";
 import {
-  useNotificationLabels,
+  useNotificationDetails,
   useNotificationReferenceNames,
 } from "@/features/spine/hooks/use-notification-labels";
 import {
@@ -13,6 +13,7 @@ import {
   notificationDeepLink,
   notificationSubject,
   notificationSummary,
+  withNoticeDetails,
 } from "@/features/spine/notifications";
 import { isNotificationEnabled, usePreferencesValue } from "@/lib/preferences";
 import { cn } from "@/lib/utils";
@@ -41,7 +42,7 @@ export function ActivityFeedWidget({ size }: WidgetComponentProps) {
   const prefs = usePreferencesValue();
 
   // Group + stamp only when the underlying items (or the mute prefs) change.
-  const { groups, now } = useMemo(
+  const { groups: rawGroups, now } = useMemo(
     () => ({
       groups: groupNotifications(
         notifications.data.filter((item) =>
@@ -52,8 +53,11 @@ export function ActivityFeedWidget({ size }: WidgetComponentProps) {
     }),
     [notifications.data, prefs.notifications, userId],
   );
-  // Every task card names its task (TV-P0): comment notices carry no title.
-  const labels = useNotificationLabels(groups);
+  // Notices name their items by id (TV-P0, TV-D16): the task, a comment's
+  // text and an unblocking task are looked up for this reader.
+  const details = useNotificationDetails(rawGroups);
+  const groups = useMemo(() => withNoticeDetails(rawGroups, details), [rawGroups, details]);
+  const labels = details.labels;
   const referenceName = useNotificationReferenceNames(groups);
 
   if (notifications.loading && groups.length === 0) return <WidgetLoading />;

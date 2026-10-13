@@ -305,13 +305,16 @@ export function notificationReferences(groups: NotificationGroup[]): ReferenceRe
 
 /**
  * Task ids whose card needs a resolved name: task cards whose event carried
- * no title (comments), and the task an Inbox notice names (reminders, team
- * notices and agents carry only its id). The caller looks them up in the
- * entity registry.
+ * no title (every notice since 20261013269000 names its task by id), the
+ * task an Inbox notice names (reminders, team notices, agents), and the task
+ * whose finishing unblocked yours (`blocker_id`). The caller looks them up in
+ * the entity registry, which answers only for what the reader can see.
  */
 export function unnamedTaskTargets(groups: NotificationGroup[]): string[] {
   const ids = new Set<string>();
   for (const g of groups) {
+    const blocker = unblockedBy(newestItem(g));
+    if (blocker) ids.add(blocker);
     if (notificationSubject(g)) continue;
     const inboxTask = inboxNoticeTask(g);
     if (inboxTask) ids.add(inboxTask);
@@ -320,6 +323,72 @@ export function unnamedTaskTargets(groups: NotificationGroup[]): string[] {
     }
   }
   return [...ids];
+}
+
+/** Notices that name a comment by id; its text is read per reader. */
+const COMMENT_NOTICES = new Set(["comments.add", "comments.edit", "comments.team_mention"]);
+
+/** The comment a notice names whose text it doesn't carry. */
+function unreadComment(item: NotificationItem): string | null {
+  if (!COMMENT_NOTICES.has(item.op) || typeof item.payload.excerpt === "string") return null;
+  const id = item.payload.comment_id;
+  return typeof id === "string" && id ? id : null;
+}
+
+/** The task whose finishing unblocked this one, when the notice names it by id only. */
+function unblockedBy(item: NotificationItem): string | null {
+  if (item.op !== "tasks.unblocked" || typeof item.payload.blocker_title === "string") return null;
+  const id = item.payload.blocker_id;
+  return typeof id === "string" && id ? id : null;
+}
+
+/** Comment ids whose text the cards would quote (the newest item of each card). */
+export function noticeCommentIds(groups: NotificationGroup[]): string[] {
+  const ids = new Set<string>();
+  for (const g of groups) {
+    const id = unreadComment(newestItem(g));
+    if (id) ids.add(id);
+  }
+  return [...ids];
+}
+
+/** What a reader may see of the items notices name, looked up per reader. */
+export type NoticeDetails = {
+  /** Task (and note) names from the entity registry, by id. */
+  labels: ReadonlyMap<string, string>;
+  /** A comment's opening words, by comment id (only comments the reader can read). */
+  excerpts: ReadonlyMap<string, string>;
+};
+
+/**
+ * The cards with what this reader may see filled in (TV-D16): a comment's
+ * text where the notice names the comment, the name of the task that
+ * unblocked yours. Notices carry ids only, so anything the reader can't (or
+ * can no longer) see stays out: "left a comment", "unblocked this".
+ */
+export function withNoticeDetails(
+  groups: NotificationGroup[],
+  details: NoticeDetails,
+): NotificationGroup[] {
+  return groups.map((g) => {
+    let changed = false;
+    const items = g.items.map((item) => {
+      const comment = unreadComment(item);
+      const excerpt = comment ? details.excerpts.get(comment) : undefined;
+      if (excerpt) {
+        changed = true;
+        return { ...item, payload: { ...item.payload, excerpt } };
+      }
+      const blocker = unblockedBy(item);
+      const name = blocker ? details.labels.get(blocker)?.trim() : undefined;
+      if (name) {
+        changed = true;
+        return { ...item, payload: { ...item.payload, blocker_title: name } };
+      }
+      return item;
+    });
+    return changed ? { ...g, items } : g;
+  });
 }
 
 /** A deep-link target for a card, or null when the type isn't routable yet. */

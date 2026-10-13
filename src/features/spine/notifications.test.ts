@@ -9,6 +9,7 @@ import {
   deriveNotificationFeeds,
   groupNotifications,
   type NotificationItem,
+  noticeCommentIds,
   notificationDeepLink,
   notificationDeepLinkNoun,
   notificationSubject,
@@ -16,6 +17,7 @@ import {
   partitionBySource,
   unnamedTaskTargets,
   unreadCount,
+  withNoticeDetails,
 } from "./notifications";
 
 function item(
@@ -534,6 +536,76 @@ describe("an agent's notice (TV-D16)", () => {
     expect(subjects).toContain("Call the venue");
     expect(subjects).toContain("Icons");
     expect(subjects).not.toContain("Never named");
+  });
+});
+
+describe("notices name their items by id (TV-D16)", () => {
+  const groups = () =>
+    groupNotifications([
+      item({
+        id: "c1",
+        createdAt: "2030-01-01T10:00:00Z",
+        op: "comments.add",
+        targetId: "t1",
+        payload: { comment_id: "cm1", mentioned_user_ids: ["me"] },
+      }),
+      item({
+        id: "u1",
+        createdAt: "2030-01-01T09:00:00Z",
+        op: "tasks.unblocked",
+        targetId: "t2",
+        payload: { notify_user_ids: ["me"], blocker_id: "t9" },
+      }),
+      item({
+        id: "a1",
+        createdAt: "2030-01-01T08:00:00Z",
+        op: "tasks.assigned",
+        targetId: "t3",
+        payload: { mentioned_user_ids: ["me"] },
+      }),
+    ]);
+
+  it("asks for each card's task, the blocker and the comment, by id", () => {
+    expect(unnamedTaskTargets(groups()).sort()).toEqual(["t1", "t2", "t3", "t9"]);
+    expect(noticeCommentIds(groups())).toEqual(["cm1"]);
+  });
+
+  it("fills in only what the reader may see", () => {
+    const seen = withNoticeDetails(groups(), {
+      labels: new Map([
+        ["t1", "Brief"],
+        ["t2", "Launch"],
+        ["t3", "Deck"],
+        ["t9", "Copy review"],
+      ]),
+      excerpts: new Map([["cm1", "Looks good"]]),
+    });
+    const lines = seen.map((g) =>
+      notificationSummary(
+        g,
+        "me",
+        notificationSubject(
+          g,
+          new Map([
+            ["t1", "Brief"],
+            ["t2", "Launch"],
+            ["t3", "Deck"],
+          ]),
+        ),
+      ),
+    );
+    expect(lines).toContain("Mike commented on “Brief”: “Looks good”");
+    expect(lines).toContain("Mike finished “Copy review”, unblocking “Launch”");
+    expect(lines).toContain("Mike assigned “Deck” to you");
+
+    // Lost access: the registry and the comments answer nothing.
+    const unseen = withNoticeDetails(groups(), { labels: new Map(), excerpts: new Map() });
+    const quiet = unseen.map((g) =>
+      notificationSummary(g, "me", notificationSubject(g, new Map())),
+    );
+    expect(quiet).toContain("Mike left a comment");
+    expect(quiet).toContain("Mike unblocked this");
+    expect(quiet).toContain("Mike assigned this to you");
   });
 });
 

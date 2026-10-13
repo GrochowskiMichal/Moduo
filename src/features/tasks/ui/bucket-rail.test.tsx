@@ -461,7 +461,7 @@ describe("Views (TV-U8, AC11.1; REPLAN 29b–29e)", () => {
     expect(calls.onShareView).toHaveBeenCalledWith("v1", true);
   });
 
-  it("someone else's shared view: only Pin and Copy link (an admin can also take it down)", async () => {
+  it("someone else's shared view: only Pin and Copy link (an admin can also stop sharing it)", async () => {
     renderRail({ views: VIEWS });
     await rowMenu(/^Mike's board$/);
     expect(screen.getAllByRole("menuitem").map((i) => i.textContent)).toEqual([
@@ -475,21 +475,23 @@ describe("Views (TV-U8, AC11.1; REPLAN 29b–29e)", () => {
       "Pin to sidebar",
       "Stop sharing",
       "Copy link",
-      "Delete view",
     ]);
-    fireEvent.click(screen.getByRole("menuitem", { name: "Delete view" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Stop sharing" }));
     await settle();
-    expect(calls.onDeleteView).toHaveBeenCalledWith("v3");
+    expect(calls.onShareView).toHaveBeenCalledWith("v3", false);
   });
 
   it("a viewer keeps views but can't share them; a shared one can still stop", async () => {
     renderRail({ views: VIEWS, canEdit: false });
     await rowMenu(/^Due this week$/);
     expect(screen.queryByRole("menuitem", { name: "Share with the workspace" })).toBeNull();
+    expect(screen.getByRole("menuitem", { name: "Rename" })).toBeTruthy();
     fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
     await settle();
     await rowMenu(/^Waiting on client$/);
     expect(screen.getByRole("menuitem", { name: "Stop sharing" })).toBeTruthy();
+    // What a shared view shows needs Tasks edit to change.
+    expect(screen.queryByRole("menuitem", { name: "Rename" })).toBeNull();
   });
 
   it("Pin puts a view in Pinned, in pin order with projects", async () => {

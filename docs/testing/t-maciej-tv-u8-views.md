@@ -23,8 +23,9 @@
 - [ ] **Do:** ⋯ → Share with the workspace → **Expect:** a toast "… is shared with the workspace · People see the tasks they can see through it, nothing more"; a teammate sees it after their next refresh or return to the window, after their own views _(web, two accounts)_
 - [ ] **Do:** as the teammate, open the shared view and change its filter → **Expect:** "Unsaved changes · Save as new view… · Revert" (no Save: only its maker changes it); their ⋯ offers Pin and Copy link only _(web)_
 - [ ] **Do:** share a view of a private project → **Expect:** only people who can see that project see the view; everyone else never sees its name _(web, two accounts)_
-- [ ] **Do:** as the workspace owner or an admin, open a teammate's shared view's ⋯ → **Expect:** Stop sharing and Delete view (no Rename) _(web)_
+- [ ] **Do:** as the workspace owner or an admin, open a teammate's shared view's ⋯ → **Expect:** Stop sharing only (no Rename, no Delete); after it, the view is its maker's alone and leaves your sidebar _(web)_
 - [ ] **Do:** as a Viewer, save a view → **Expect:** it saves; its ⋯ has no "Share with the workspace" _(web)_
+- [ ] **Do:** demote someone who shared a view to Viewer, then have them open it and change its filter → **Expect:** no Save (only "Save as new view…" and Revert), no Rename in its ⋯; they can still Stop sharing or delete it _(web, two accounts)_
 
 ## Seeded views and the new filters
 - [ ] **Do:** a person who answered the role question (or skipped it) opens Tasks in a workspace → **Expect:** their role's views appear once (PM: Waiting, Due this week; founder: Waiting on people; client work: Waiting on client; creator: Pipeline, Publish dates; student: Today; developer: This week) plus "Done last week" for everyone; deleting one never brings it back, on any device _(web)_
@@ -41,11 +42,11 @@
 - [ ] **Do:** a teammate who shared views leaves the workspace → **Expect:** their shared views disappear for everyone _(web, two accounts)_
 
 ## Migrations / data
-- [ ] **Do:** `bun run db:test task_views` → **Expect:** 87 checks pass (outsiders, a view of a project you can't see, ids from elsewhere, keys refused, raw writes refused, seeds once, erasure) _(local stack)_
+- [ ] **Do:** `bun run db:test task_views` → **Expect:** `task_views` (86) and `task_views_access` (35) pass (outsiders, a view of a project you can't see, ids from elsewhere, keys refused, raw writes refused, who may change someone else's view, seeds once, erasure) _(local stack)_
 - [ ] **Do:** after the release apply, check `account_erase_workspace_data` on prod has the `task_views` count, `'views_deleted'` and the DELETE line → **Expect:** present (the migration patches it by anchored replace and refuses to run if the anchors are missing)
 
 ## Verify before release
-- Apply `20261013250000_task_views` once, its final file, with the other v3 migrations (it was re-applied on the local stack while it was revised; it's re-runnable), after TV-D15's and TV-D16's erasure patches (its anchors are TV-D15's template lines in `account_erase_workspace_data`; check them on prod's body first).
+- Apply `20261013250000_task_views` once, its final file, with the other v3 migrations (it was re-applied on the local stack while it was revised; it's re-runnable), after TV-D15's and TV-D16's erasure patches (its anchors are TV-D15's template lines in `account_erase_workspace_data`; check them on prod's body first); then the follow-up `20261013271000_task_views_access_fix` (it redefines `task_views_op_update` only).
 - Views read through prod's PostgREST (the read policy calls `task_views__readable` per row; small table).
 - Two real devices: a view saved on one shows on the other after a window return; folds follow; seeds don't double.
 - The signed desktop build: Copy link writes `/tasks?view=…` with the web origin (check what the desktop app's origin gives).

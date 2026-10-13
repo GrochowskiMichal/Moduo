@@ -188,9 +188,9 @@ Built in tasks-v3 block 21 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §3, AC
   - Rejected: sharing with chosen people through PERM grants (more machinery than a lens needs; later if asked); copying a shared view's results.
 - **U8-2 · Only the maker changes a view; the owner or an admin can take a shared one down** → TV-U8 (`task_views_op_update`)
   - Who: agent's choice, deferred to by Maciej, 2026-10-13 (the orchestrator kept the exception).
-  - Decision: the maker renames, saves, re-shares, moves and deletes; anyone else who sees a shared view can pin it, copy its link and "Save as new view…"; the workspace's owner or an admin can also Stop sharing or Delete (and Undo) a shared view they can see.
-  - Why: templates' precedent; a workspace needs a way to tidy shared views.
-  - Rejected: anyone editing a shared view (one person's change rewrites everyone's lens).
+  - Decision: the maker renames, saves, re-shares, moves and deletes; anyone else who sees a shared view can pin it, copy its link and "Save as new view…"; the workspace's owner or an admin can also Stop sharing a shared, live view they can see, and nothing more (no delete, no restore, no edit: follow-up `20261013271000`, 2026-10-14). Putting a view in front of the workspace (sharing it, restoring a shared one) and changing what a shared view shows need Tasks edit; a maker without it can still delete it, or keep it as their own.
+  - Why: templates' precedent; a workspace needs a way to tidy shared views, and a take-down that only unshares leaves the view with its maker, who decides whether it goes.
+  - Rejected: anyone editing a shared view (one person's change rewrites everyone's lens); an admin deleting or restoring someone else's view (it would bring back what its maker deleted).
 - **U8-3 · A view keeps one place: All, My tasks, Upcoming or a project** → TV-U8 (`TASK_VIEW_SCOPES`, `viewScopeOf`)
   - Who: agent's choice, deferred to by Maciej, 2026-10-13.
   - Decision: "Save as view…" (the toolbar's ⋯) saves the place's Filter and Display (layout, Group by, Board grouping and lanes, order, Completed, subtasks, rows, Show on rows); a view saved in a project keeps that project (29d). The Inbox, Focus, Won't do, Archived and Recently deleted don't save. The selection (multi-select) and the search are never saved.
@@ -442,6 +442,16 @@ Built in tasks-v3 block 31 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §12, �
   - Decision: a comment written through a key reads "Claude Desktop" as its author, as before.
   - Why: comments are read only by people who can see their item, the same rule as the trail's "via" label.
   - Rejected: hiding the key's name on comments.
+- **D16-19 · Every bell notice names its item by id** → TV-D16 follow-up (`20261013269000_notice_ids_only`; `withNoticeDetails`, `useNotificationDetails`, `runtime.spine.getCommentExcerpts`)
+  - Who: agent's choice, at the orchestrator's ask, 2026-10-14.
+  - Decision: no notice carries a task's title, a note's title or a comment's text: assigned, completed, unblocked (the finished task by `blocker_id`), team check-back, waiting resolved, mentioned, a note's mention, and the comment notices (`comment_id`), as reminders, team notices and agents' notices already did (D16-16). The bell and Home's Activity widget name tasks through the entity registry and quote a comment through the comments' read policy, each for the reader, so a card about something they can no longer see reads "assigned this to you", "left a comment", "unblocked this". A deleted project's name stays on its notice (`tasks.project_deleted`: its readers could see it when it was deleted). The task trail shows "unblocked this" without the other task's name.
+  - Why: a notice outlives its reader's access to what it's about; an unblocking task can be one its reader never saw.
+  - Rejected: re-checking access in the bell's read for each kind (every new kind would have to remember it).
+- **D16-20 · A deleted project's notice keeps its name** → (`projects_op_delete`, `tasks.project_deleted`, unchanged)
+  - Who: agent's choice, confirmed by the orchestrator, 2026-10-14.
+  - Decision: "deleted “Website” · your task is in your Inbox" keeps the project's name in the notice.
+  - Why: it goes only to people who could see the project when it was deleted, and once it's gone the registry can't name it.
+  - Rejected: "deleted a project" with no name.
 
 ## 2026-10-13 · TV-U12 Multi-select and the bottom-bar mode pattern — the agent's choices (deferred to by Maciej)
 
