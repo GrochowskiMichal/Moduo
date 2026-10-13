@@ -188,6 +188,9 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
   /** Your own reminders, for the "Restore the reminder?" offer (TV-D12). */
   const remindersRef = useRef(snap.reminders);
   remindersRef.current = snap.reminders;
+  /** Offline, a status change only queues: no offer to restore until it's sent. */
+  const offlineRef = useRef(!!store && snap.offline);
+  offlineRef.current = !!store && snap.offline;
   /** Every queue row I can see here (TV-D2): my line-up and others' claims. */
   const queueRows = snap.queue;
   const queueRowsRef = useRef(queueRows);
@@ -1029,7 +1032,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
    */
   const offerReminderRestore = useCallback(
     (task: Task, to: TaskStatusCategory | undefined) => {
-      if (!runtime || !workspaceId) return;
+      if (!runtime || !workspaceId || !canEdit || offlineRef.current) return;
       if (to !== "todo" && to !== "in_progress") return;
       const from = taskCategoryOf(task);
       if (from !== "backlog" && from !== "wont_do") return;
@@ -1046,17 +1049,25 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         action: {
           label: "Restore",
           onClick: () => {
+            const parkedIds = new Set(parked.map((r) => r.id));
             void rt.tasks
               .restoreReminders({ workspaceId: ws, taskId: task.id })
               .then((mine) => {
-                if (mine.every((r) => r.suspendedAt)) toast("Its time has already passed.");
+                const back = mine.filter((r) => parkedIds.has(r.id) && !r.suspendedAt).length;
+                if (back === 0) {
+                  toast(
+                    parked.length === 1
+                      ? "Its time has already passed."
+                      : "Their times have already passed.",
+                  );
+                }
               })
               .catch(() => toast.error("Couldn’t restore the reminder. Try again."));
           },
         },
       });
     },
-    [runtime, workspaceId],
+    [runtime, workspaceId, canEdit],
   );
 
   /** "Still in Backlog · Move to To do": the offer after assigning a backlog

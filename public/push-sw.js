@@ -54,7 +54,11 @@ self.addEventListener("push", (event) => {
   }
   event.waitUntil(
     (async () => {
-      const shown = self.moduoPushDisplay(data, await signedInUser());
+      const user = await signedInUser();
+      // Moduo in front shows its own toast for its person's notice: no second one.
+      const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      if (user && data && data.uid === user && windows.some((c) => c.focused)) return;
+      const shown = self.moduoPushDisplay(data, user);
       await self.registration.showNotification(shown.title, {
         body: shown.body,
         tag: shown.tag,

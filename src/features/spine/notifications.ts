@@ -61,6 +61,11 @@ export type NotificationGroup = {
 };
 
 function groupKey(item: NotificationItem): string {
+  // Reminders all hang on your Inbox (TV-D12): one card per task they name.
+  if (item.op === "tasks.reminder") {
+    const taskId = item.payload.task_id;
+    return `reminder:${typeof taskId === "string" && taskId ? taskId : item.id}`;
+  }
   return `${item.targetType ?? "?"}:${item.targetId ?? "?"}#${item.op}`;
 }
 

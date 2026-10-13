@@ -72,7 +72,14 @@ export async function runPush(deps: PushDeps): Promise<{ claimed: number; sent: 
     let ok = false;
     let error: string | undefined;
     for (const subscription of delivery.subscriptions ?? []) {
-      const outcome = await deps.send(subscription, message);
+      const outcome: PushOutcome = await deps
+        .send(subscription, message)
+        .catch((e: unknown) => ({
+          ok: false as const,
+          gone: false as const,
+          status: 0,
+          error: e instanceof Error ? e.message : String(e),
+        }));
       if (outcome.ok) ok = true;
       else if (outcome.gone) gone.push(subscription.endpoint);
       else error = outcome.error;

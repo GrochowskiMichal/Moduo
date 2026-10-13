@@ -135,17 +135,35 @@ function isOpenStatus(status: TaskStatus): boolean {
   return isOpenTaskStatus(status);
 }
 
+/** The pattern's slot a repeat stands on now, close to the server's
+ * tasks__pattern_slot (TV-D12): where "move just this one" took it from, else
+ * its due date (the end of that day, so a due date today counts as today's),
+ * else its work session. A preview: the server decides. */
+function patternSlot(
+  task: Pick<Task, "scheduledAt" | "recurrence"> & { dueOn?: string | null },
+): Date | null {
+  const candidates = [
+    task.recurrence?.movedFrom,
+    task.dueOn ? `${task.dueOn}T23:59:59.000Z` : null,
+    task.scheduledAt,
+  ];
+  for (const iso of candidates) {
+    if (!iso) continue;
+    const d = new Date(iso);
+    if (!Number.isNaN(d.getTime())) return d;
+  }
+  return null;
+}
+
 /** The instant a completion advances from: the pending occurrence if it's still
  * ahead (completing early skips it), otherwise now (completing late never
  * backfills). */
-function advanceBase(task: Pick<Task, "scheduledAt">, now: Date): Date {
-  if (task.scheduledAt) {
-    const scheduled = new Date(task.scheduledAt);
-    if (!Number.isNaN(scheduled.getTime()) && scheduled.getTime() > now.getTime()) {
-      return scheduled;
-    }
-  }
-  return now;
+function advanceBase(
+  task: Pick<Task, "scheduledAt" | "recurrence"> & { dueOn?: string | null },
+  now: Date,
+): Date {
+  const slot = patternSlot(task);
+  return slot && slot.getTime() > now.getTime() ? slot : now;
 }
 
 /**
@@ -158,7 +176,9 @@ function advanceBase(task: Pick<Task, "scheduledAt">, now: Date): Date {
  * done-transition on a recurring task (archived is terminal — no advance).
  */
 export function recurrenceOnStatusChange(
-  task: Pick<Task, "recurrence" | "status" | "scheduledAt" | "createdAt">,
+  task: Pick<Task, "recurrence" | "status" | "scheduledAt" | "createdAt"> & {
+    dueOn?: string | null;
+  },
   nextStatus: TaskStatus,
   now: Date,
   zone = "UTC",
@@ -168,6 +188,8 @@ export function recurrenceOnStatusChange(
   const completing = nextStatus === "done" && task.status !== "done";
   const reopening = task.status === "done" && isOpenStatus(nextStatus);
   if (!completing && !reopening) return null;
+  // Counting from completion: only the server knows the next date (TV-D8).
+  if (rec.mode === "after_completion") return { ...rec, nextOccurrence: null };
   let next = occurrenceAfter(rec, advanceBase(task, now), task.createdAt, zone);
   if (completing) {
     const today = todayStr(now);

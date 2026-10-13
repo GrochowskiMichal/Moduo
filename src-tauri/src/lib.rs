@@ -48,6 +48,9 @@ pub struct AppState {
     /// closing hides the window, so reminders still arrive as OS notifications.
     /// Mirrored from the webview's `keepInMenuBar` preference by `set_keep_in_menu_bar`.
     pub keep_in_menu_bar: AtomicBool,
+    /// Whether the menu-bar icon was built. Without it (a Linux desktop with no tray
+    /// host) a hidden window could never come back, so closing quits as before.
+    pub tray_ready: AtomicBool,
     /// Where we remember that "Reminders won't arrive while Moduo is quit" was shown
     /// (once per install).
     pub quit_notice_marker: PathBuf,
@@ -87,6 +90,7 @@ impl AppState {
             confirm_before_quit: Mutex::new(false),
             quit_prompt_open: AtomicBool::new(false),
             keep_in_menu_bar: AtomicBool::new(true),
+            tray_ready: AtomicBool::new(false),
             quit_notice_marker,
             #[cfg(feature = "lite")]
             sync_worker: Mutex::new(None),
@@ -269,9 +273,12 @@ fn prompt_quit_confirm(app: &AppHandle) {
         });
 }
 
-/// Whether closing the window keeps Moduo running in the menu bar (TV-D12).
+/// Whether closing the window keeps Moduo running in the menu bar (TV-D12): the person
+/// wants it, and there's a way back (the menu-bar icon, or the Dock on macOS).
 fn keep_in_menu_bar(app: &AppHandle) -> bool {
-    app.state::<AppState>().keep_in_menu_bar.load(Ordering::SeqCst)
+    let state = app.state::<AppState>();
+    state.keep_in_menu_bar.load(Ordering::SeqCst)
+        && (state.tray_ready.load(Ordering::SeqCst) || cfg!(target_os = "macos"))
 }
 
 /// Bring the main window back (tray click, "Open Moduo", the Dock icon).
@@ -287,8 +294,11 @@ fn show_main_window(app: &AppHandle) {
 /// reminders stop while it's quit (spec §13 edge cases), with Quit / Cancel. Returns
 /// true when the notice took over the quit (it exits on Quit itself).
 fn quit_reminder_notice(app: &AppHandle) -> bool {
+    if !keep_in_menu_bar(app) {
+        return false;
+    }
     let state = app.state::<AppState>();
-    if !state.keep_in_menu_bar.load(Ordering::SeqCst) || state.quit_notice_marker.exists() {
+    if state.quit_notice_marker.exists() {
         return false;
     }
     if state.quit_prompt_open.swap(true, Ordering::SeqCst) {
@@ -412,9 +422,14 @@ pub fn run() {
                 perform_one_time_auth_v3_reset(app.handle(), &config).map_err(|e| e.to_string())?;
             let state = AppState::new(db_path).map_err(|e| e.to_string())?;
             app.manage(state);
-            // A tray that fails to build (no menu bar on this desktop) never stops the app.
-            if let Err(err) = build_tray(app.handle()) {
-                eprintln!("[tray] not available: {err}");
+            // A tray that fails to build (no menu bar on this desktop) never stops the app;
+            // closing the window then quits as before (see `keep_in_menu_bar`).
+            match build_tray(app.handle()) {
+                Ok(()) => app
+                    .state::<AppState>()
+                    .tray_ready
+                    .store(true, Ordering::SeqCst),
+                Err(err) => eprintln!("[tray] not available: {err}"),
             }
             commands::email::bootstrap_idle_workers(app.handle());
             Ok(())

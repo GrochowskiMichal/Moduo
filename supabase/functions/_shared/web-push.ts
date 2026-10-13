@@ -159,10 +159,11 @@ export async function sendWebPush(
     return { ok: false, gone: true, status: 0 };
   }
   const doFetch = opts.fetch ?? fetch;
-  const body = await encryptPayload(encoder.encode(JSON.stringify(message)), subscription);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? 10_000);
   try {
+    // Keys that don't read (a browser's, or the VAPID pair) fail this one send only.
+    const body = await encryptPayload(encoder.encode(JSON.stringify(message)), subscription);
     const response = await doFetch(subscription.endpoint, {
       method: "POST",
       headers: {

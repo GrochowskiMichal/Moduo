@@ -40,7 +40,11 @@ function openTask(delivery: NoticeDelivery): void {
 
 export function NoticeDeliveries() {
   const { userId } = useAuth();
-  const { refreshNotifications } = useWorkspace();
+  const { refreshNotifications, selectedWorkspaceId } = useWorkspace();
+  const workspaceRef = useRef(selectedWorkspaceId);
+  useEffect(() => {
+    workspaceRef.current = selectedWorkspaceId;
+  }, [selectedWorkspaceId]);
   const refresh = useRef(refreshNotifications);
   useEffect(() => {
     refresh.current = refreshNotifications;
@@ -62,11 +66,15 @@ export function NoticeDeliveries() {
           // Web: the push service worker shows it (browser notifications, opt-in).
           if (isTauriRuntime()) void notifyDesktop(copy.title, copy.body);
         } else {
+          // Open only a task of the workspace on screen; another workspace's
+          // reminder is in that workspace's bell.
+          const here = !delivery.workspaceId || delivery.workspaceId === workspaceRef.current;
           toast(copy.title, {
             description: copy.body,
-            action: delivery.taskId
-              ? { label: "Open", onClick: () => openTask(delivery) }
-              : undefined,
+            action:
+              delivery.taskId && here
+                ? { label: "Open", onClick: () => openTask(delivery) }
+                : undefined,
           });
         }
       }
