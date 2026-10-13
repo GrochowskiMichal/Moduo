@@ -2,18 +2,17 @@
 -- block 28, §1, §13, §15, Edge cases "Structure moves"; REPLAN 20, 20a, 54,
 -- 94, 95, defaults s and t; decisions in docs/decisions/tasks.md "TV-D13").
 --
---   * A team works on what's routed to it. A live member of a task's team can
---     see and edit that task, even in a project they can't open (routing is
---     handing a task to a group, the way assigning hands it to a person; it
---     never opens the project). can_access is redefined for that, and for
---     20a: a task you created that sits in someone else's Inbox stays yours to
---     see and edit ("Created by me").
---   * Claiming: tasks_op_claim assigns an unclaimed team task to the member
---     who takes it (the team stays on it as context). Two people taking the
---     same task: the second is told someone already took it.
+--   * Routing shares nothing (54: routing now, access later). A team sees a
+--     task routed to it only where its members could see it anyway; nothing
+--     here grants anyone a task or a project. can_access is redefined for
+--     20a only: a task you created that sits in someone else's Inbox stays
+--     yours to see and edit ("Created by me") while it's there.
+--   * Claiming: tasks_op_claim assigns an unclaimed team task to a member of
+--     its team who can already edit it (the team stays on it as context). Two
+--     people taking the same task: the second is told someone already took it.
 --   * An unfiled task given to someone goes into their Inbox (20): assigning
---     a top-level task that sits in an Inbox to someone else moves it, with
---     its subtasks, into that person's Inbox (tasks_op_assign, and so
+--     a top-level task that sits in your own Inbox to someone else moves it,
+--     with its subtasks, into that person's Inbox (tasks_op_assign, and so
 --     tasks_op_update, and tasks_op_create for a task made for someone).
 --   * Notices (§13, default s): a task becoming unclaimed for a team (routed
 --     with nobody on it, or given back) tells the team's other members once,
@@ -31,8 +30,6 @@
 --     is handed on: tasks others created go back to those creators' Inboxes,
 --     the rest to whoever removed them (else the owner), with one quiet notice
 --     per person who received something.
---   * The grant feed hears about every new way access changes: a task's team
---     changing, and someone joining or leaving a team that has tasks.
 --
 -- Apply after TV-D12's 20261013140000 and TV-U13's 20261013100000. Expand
 -- only. Verified on the local stack by supabase/tests/teams.test.sql and
@@ -160,14 +157,14 @@ CREATE TRIGGER tasks_team_check
   BEFORE INSERT OR UPDATE OF team_id, bucket_id, assignee_id ON public.tasks
   FOR EACH ROW EXECUTE FUNCTION public.tasks__team_check();
 
--- ── 2. Who sees a task: its team, and its creator while it's in an Inbox ────
+-- ── 2. A task you handed over unfiled stays in your sight (20a) ────────────
 
--- can_access (live body after PERM-W / TV-D10), the task branch only:
---   * a live member of the task's live team works on it (Edit), so the team
---     sees what's routed to it and can take it, wherever it's filed;
---   * the task's creator keeps Edit while it sits in someone else's Inbox
---     (20a, "Created by me"), so handing an unfiled task over never loses it.
--- Both are capped by the person's role in Tasks, like everything else here.
+-- can_access (live body after PERM-W / TV-D10), the task branch only: the
+-- task's creator keeps Edit while it sits in someone else's Inbox (20a,
+-- "Created by me"), so handing an unfiled task over never loses it. It ends
+-- the moment the task leaves the Inbox, and covers that task alone (never the
+-- Inbox or anything else in it). Capped by the person's role in Tasks, like
+-- everything else here. Teams add nothing to who sees a task.
 CREATE OR REPLACE FUNCTION public.can_access(p_type text, p_id uuid, p_min text, p_user uuid DEFAULT NULL::uuid)
 RETURNS boolean
 LANGUAGE plpgsql
@@ -189,7 +186,6 @@ DECLARE
   v_bucket uuid;
   v_cal uuid;
   v_guard int := 0;
-  v_team uuid;
   v_unknown boolean;
 BEGIN
   IF v_user IS NULL OR p_id IS NULL OR v_need = 0 THEN
@@ -225,8 +221,8 @@ BEGIN
     v_module := 'tasks';
 
   ELSIF p_type = 'task' THEN
-    SELECT workspace_id, bucket_id, team_id, owner_id, creator_unknown
-      INTO v_ws, v_bucket, v_team, v_creator, v_unknown
+    SELECT workspace_id, bucket_id, owner_id, creator_unknown
+      INTO v_ws, v_bucket, v_creator, v_unknown
     FROM public.tasks WHERE id = p_id;
     IF NOT FOUND THEN RETURN false; END IF;
     v_rank := public.share_direct_rank('task', p_id, v_user);
@@ -237,13 +233,6 @@ BEGIN
       ELSIF public.can_access('bucket', v_bucket, 'edit', v_user) THEN v_rank := greatest(v_rank, 3);
       ELSIF public.can_access('bucket', v_bucket, 'view', v_user) THEN v_rank := greatest(v_rank, 2);
       END IF;
-    END IF;
-    -- TV-D13 (54): the team a task is routed to works on it.
-    IF v_rank < 3 AND v_team IS NOT NULL AND EXISTS (
-         SELECT 1 FROM public.team_members m
-         JOIN public.teams x ON x.id = m.team_id AND x.deleted_at IS NULL
-         WHERE m.team_id = v_team AND m.user_id = v_user AND m.deleted_at IS NULL) THEN
-      v_rank := 3;
     END IF;
     -- TV-D13 (20a): a task you made that you handed, unfiled, to someone.
     IF v_rank < 3 AND v_creator = v_user AND NOT coalesce(v_unknown, false) AND v_bucket IS NOT NULL
@@ -325,54 +314,25 @@ BEGIN
 END;
 $function$;
 
--- ── 3. The grant feed hears about the new ways access changes ──────────────
+-- ── 3. (Teams change nobody's access) ──────────────────────────────────────
 
--- A task's team changed: whoever was or is in either team checks it again.
-CREATE OR REPLACE FUNCTION public.access_changes__task_team()
-RETURNS trigger
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = ''
-AS $$
-BEGIN
-  PERFORM public.access_changes__note(NEW.workspace_id, NULL, 'task', NEW.id);
-  RETURN NULL;
-END;
-$$;
-
+-- An earlier local draft of this migration gave a team access to its routed
+-- tasks and told the grant feed; neither is part of it.
 DROP TRIGGER IF EXISTS access_changes_task_team ON public.tasks;
-CREATE TRIGGER access_changes_task_team
-  AFTER UPDATE OF team_id ON public.tasks
-  FOR EACH ROW WHEN (OLD.team_id IS DISTINCT FROM NEW.team_id)
-  EXECUTE FUNCTION public.access_changes__task_team();
-
--- Someone joined or left a team that has tasks: they check everything again.
-CREATE OR REPLACE FUNCTION public.access_changes__team_member()
-RETURNS trigger
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = ''
-AS $$
-BEGIN
-  IF (TG_OP = 'INSERT' OR NEW.deleted_at IS DISTINCT FROM OLD.deleted_at)
-     AND EXISTS (SELECT 1 FROM public.tasks t WHERE t.team_id = NEW.team_id AND t.deleted_at IS NULL) THEN
-    PERFORM public.access_changes__note(NEW.workspace_id, NEW.user_id, 'workspace', NEW.workspace_id);
-  END IF;
-  RETURN NULL;
-END;
-$$;
-
 DROP TRIGGER IF EXISTS access_changes_team_member ON public.team_members;
-CREATE TRIGGER access_changes_team_member
-  AFTER INSERT OR UPDATE OF deleted_at ON public.team_members
-  FOR EACH ROW EXECUTE FUNCTION public.access_changes__team_member();
+DROP FUNCTION IF EXISTS public.access_changes__task_team();
+DROP FUNCTION IF EXISTS public.access_changes__team_member();
 
 -- ── 4. An unfiled task given to someone goes to their Inbox (20, 20a) ───────
 
--- A top-level task in an Inbox whose assignee is someone other than that
--- Inbox's owner moves, with its subtasks, into the assignee's Inbox. The
--- move is the assignment's own consequence (nobody can write into another
--- person's Inbox), so it runs as system work. Answers with the task.
+-- A top-level task in the caller's own Inbox, assigned to someone else,
+-- moves with the subtasks the caller can edit (D8-14) into the assignee's
+-- Inbox. Only your own unfiled tasks move this way (one sitting in someone
+-- else's Inbox stays there, whoever assigns it). The move is the
+-- assignment's own consequence (nobody can write into another person's
+-- Inbox), so it runs as system work, after the assignment itself passed the
+-- usual checks; the assignee gets nothing the assignment didn't give them.
+-- Answers with the task.
 CREATE OR REPLACE FUNCTION public.tasks__hand_to_inbox(p_task_id uuid)
 RETURNS public.tasks
 LANGUAGE plpgsql
@@ -384,13 +344,15 @@ DECLARE
   v_from uuid;
   v_inbox uuid;
   v_bypass text;
+  v_actor uuid := public.perm_actor_id();
 BEGIN
   SELECT * INTO t FROM public.tasks WHERE id = p_task_id;
   IF NOT FOUND OR t.deleted_at IS NOT NULL OR t.parent_id IS NOT NULL OR t.assignee_id IS NULL THEN
     RETURN t;
   END IF;
   SELECT b.owner_id INTO v_from FROM public.buckets b WHERE b.id = t.bucket_id AND b.is_system;
-  IF NOT FOUND OR v_from IS NOT DISTINCT FROM t.assignee_id THEN
+  IF NOT FOUND OR v_actor IS NULL OR v_from IS DISTINCT FROM v_actor
+     OR v_from IS NOT DISTINCT FROM t.assignee_id THEN
     RETURN t;
   END IF;
   v_bypass := current_setting('share.bypass', true);
@@ -398,14 +360,17 @@ BEGIN
   v_inbox := public.tasks__inbox(t.workspace_id, t.assignee_id);
   UPDATE public.tasks x SET bucket_id = v_inbox, updated_at = now()
   WHERE x.id = t.id
-     OR (x.parent_id = t.id AND x.bucket_id = t.bucket_id AND x.deleted_at IS NULL);
+     OR (x.parent_id = t.id AND x.bucket_id = t.bucket_id AND x.deleted_at IS NULL
+         AND public.can_access('task', x.id, 'edit', v_actor));
   PERFORM set_config('share.bypass', coalesce(v_bypass, ''), true);
   SELECT * INTO t FROM public.tasks WHERE id = p_task_id;
   RETURN t;
 END;
 $$;
 
--- tasks_op_assign (live body after TV-D1 / TV-D8), plus the hand-over above.
+-- tasks_op_assign (live body after TV-D1 / TV-D8), plus: a task the caller
+-- can't see reads as missing, and the hand-over above. Who may assign, and
+-- the grant an assignment gives (share_task_assign, PERM-1), are unchanged.
 CREATE OR REPLACE FUNCTION public.tasks_op_assign(p_workspace_id uuid, p_task_id uuid, p_assignee_id uuid)
 RETURNS public.tasks
 LANGUAGE plpgsql
@@ -416,6 +381,10 @@ DECLARE
   t public.tasks;
 BEGIN
   t := public.tasks_op__guard(p_workspace_id, p_task_id);
+  -- TV-D13: a task the caller can't see reads as missing.
+  IF NOT public.can_access('task', t.id, 'view', public.perm_actor_id()) THEN
+    RAISE EXCEPTION 'Task not found in this workspace.';
+  END IF;
   -- Already so: nothing to check or write (a task can stay with someone who
   -- has since left).
   IF t.assignee_id IS NOT DISTINCT FROM p_assignee_id THEN
@@ -581,9 +550,10 @@ $function$;
 
 -- ── 5. Take a team's task ───────────────────────────────────────────────────
 
--- A member of the task's team takes it: it becomes theirs, and the team stays
--- on it as context. Taking one you already have answers with it; one somebody
--- else took first is refused. Giving it back is an ordinary unassign.
+-- A live member of the task's team who can already edit the task takes it:
+-- it becomes theirs, and the team stays on it as context; nothing else
+-- changes. Taking one you already have answers with it; one somebody else
+-- took first is refused. Giving it back is an ordinary unassign.
 CREATE OR REPLACE FUNCTION public.tasks_op_claim(p_workspace_id uuid, p_task_id uuid)
 RETURNS public.tasks
 LANGUAGE plpgsql
@@ -621,9 +591,13 @@ BEGIN
   IF t.status_category IN ('done', 'wont_do') THEN
     RAISE EXCEPTION 'This task is already closed.' USING ERRCODE = '22023';
   END IF;
+  -- Being in the team gives nothing: taking it needs Edit on it already.
+  IF NOT public.can_access('task', t.id, 'edit', v_actor) THEN
+    RAISE EXCEPTION 'You can''t edit this task, so you can''t take it.' USING ERRCODE = '42501';
+  END IF;
   PERFORM public.tasks__check_assignee(p_workspace_id, v_actor);
-  -- perm_enforce_write checks the write as usual (the team gives Edit);
-  -- tasks_notify_spine logs it as taking the task.
+  -- perm_enforce_write checks the write as usual; tasks_notify_spine logs it
+  -- as taking the task.
   UPDATE public.tasks SET assignee_id = v_actor, updated_at = now()
   WHERE id = t.id
   RETURNING * INTO t;
@@ -778,6 +752,10 @@ BEGIN
             SELECT 1 FROM public.notification_state ns
             WHERE ns.activity_id = ma.id
               AND (ns.read_at IS NOT NULL OR ns.dismissed_at IS NOT NULL))
+          -- Only while everyone it already reaches can see this task too.
+          AND NOT EXISTS (
+            SELECT 1 FROM jsonb_array_elements_text(coalesce(ma.payload -> 'mentioned_user_ids', '[]'::jsonb)) AS u(id)
+            WHERE NOT (v_members @> jsonb_build_array(u.id)))
         ORDER BY ma.created_at DESC, ma.id DESC
         LIMIT 1
         FOR UPDATE;
@@ -1169,8 +1147,6 @@ BEGIN
   FOREACH fn IN ARRAY ARRAY[
     'tasks__routing_columns_guard()',
     'tasks__team_check()',
-    'access_changes__task_team()',
-    'access_changes__team_member()',
     'tasks__hand_to_inbox(uuid)',
     'tasks_notify_spine()',
     'tasks__team_check_backs(timestamptz, integer)',
