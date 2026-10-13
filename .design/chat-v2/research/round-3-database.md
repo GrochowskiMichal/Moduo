@@ -323,7 +323,7 @@ Changed reads and helpers: `chat_unread_counts(ws)` (counts replies, reads the m
 | Delete a message | anyone's ² | own | own | own | — | D7, §6 #10 |
 | Pin, unpin | ✓ | ✓ | — | ✓ | — | my choice |
 | Mark, unmark a decision | ✓ | ✓ | — | ✓ | — | my choice (G15) |
-| Wrap up, reopen a chain | ✓ | ✓ | root's author | in a DM: either person | — | CH30d |
+| Wrap up, reopen a chain | ✓ | ✓ | root's author | in a DM: anyone in it who can post | — | CH30d |
 | Reply to… / move own messages | ✓ | ✓ | own | own | — | CH30c, CH55 |
 | Reply to… / move others' messages (same or narrower audience) | ✓ | ✓ | — | — | — | CH30c, CH55 |
 | Link, unlink the channel | ✓ | ✓ | — | ✓ | — | my choice (G14) |
@@ -493,7 +493,7 @@ Chat adds rows to the app's one pipeline; it never builds its own sender (§6 #6
 - Device notices (`notice_deliveries.kind`, `NOTICE_DELIVERY_KINDS` + CHECK + `noticeCopy`): `chat_message` (a DM or an Every-message burst), `chat_mention`, `chat_reply`, `chat_announcement`, `chat_reminder`, `chat_focus_summary`. Title and text are built on the server: "Sofia Ortiz · Acme" plus the workspace's name; the text only when the person keeps "Show message text" on (CH33), with references drawn as names that person can see, else "Private item"; the link is `/chat?c=<conversation>&m=<message>`, so a click lands on the message.
 - Catch up reasons: §2.2.
 
-**(c) Chat's rows in the notification table** (the spec carries them in Tasks' §13 format; §6 #23). "Count" is the number on the conversation and the Chat tab (CH5).
+**(c) Chat's rows in the notification table** (superseded 2026-10-14 by the spec's §11, which adds the When column, the five switches and pause on announcements; kept here for the reasons and op names; §6 #23). "Count" is the number on the conversation and the Chat tab (CH5).
 
 | Event | Who hears | OS / browser | Bell | Catch up | Count | Email after 1 h | Turned off by |
 | --- | --- | --- | --- | --- | --- | --- | --- |

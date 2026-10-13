@@ -1,6 +1,6 @@
 # Chat v2 — the re-plan
 
-> **Status (2026-10-14): the spec is written ([`specs/chat-v2.md`](../../specs/chat-v2.md), 29 block rows CV-0…CV-23 with a/b/c splits, on Fable 5.1); BUILD_ORDER has the Chat v2 section; decision entries in `docs/decisions/chat.md`; `specs/chat.md` carries the supersession banner. The validator's findings (1 blocker, 7 major, 26 minor) were applied on 2026-10-14; a confirmation pass closes it.**
+> **Status (2026-10-14): the spec is written ([`specs/chat-v2.md`](../../specs/chat-v2.md), 29 block rows CV-0…CV-23 with a/b/c splits, on Fable 5.1); BUILD_ORDER has the Chat v2 section; decision entries in `docs/decisions/chat.md`; `specs/chat.md` carries the supersession banner. The validator's findings (1 blocker, 7 major, 26 minor) were applied on 2026-10-14 and the confirmation pass found no blocker or major. **Ready to execute**: CV-0 first.**
 >
 > - **Decided:** CH1–CH75. CH24 stays parked; CH20/CH21 are facts.
 > - **Round 3 for Mike:** [research/round-3-database.md](./research/round-3-database.md) (its CV- names were re-cut by the spec; the mapping is in the spec's §Execution blocks).
