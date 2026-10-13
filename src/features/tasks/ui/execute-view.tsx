@@ -21,8 +21,8 @@ import {
   previewFocusInterval,
   useFocusSession,
 } from "../../focus/engine";
-import { stopFocusWithUndo } from "../../focus/stop-with-undo";
 import { recordRunDone } from "../../focus/run";
+import { stopFocusWithUndo } from "../../focus/stop-with-undo";
 import { changeFocusTimer, focusOn, toggleFocusPause } from "../../focus/timer";
 import { FocusAwayPrompt } from "../../focus/ui/away-prompt";
 import { dispatchOpenSettings } from "../../settings/settings-events";

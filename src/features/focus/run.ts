@@ -131,7 +131,12 @@ const endedHere = new Set<string>();
 /** A start whose request failed (offline): sent again on the next look. */
 let startRetry: { localId: string } | null = null;
 /** Stop pressed: the end waits out the Undo window (62a). */
-let pendingEnd: { run: FocusRun; handle: ReturnType<typeof setTimeout> } | null = null;
+let pendingEnd: {
+  run: FocusRun;
+  handle: ReturnType<typeof setTimeout>;
+  /** The clock's last numbers for this run, kept from when Stop was pressed. */
+  snap: FocusRunSnapshot | null;
+} | null = null;
 /** This store is stopping the engine itself (another device took over). */
 let relinquishing = false;
 let windowListening = false;
@@ -631,7 +636,7 @@ function beginEnd(run: FocusRun): void {
   saveTimer = null;
   pendingTake = false;
   const handle = setTimeout(() => finishEnd(), STOP_UNDO_MS);
-  pendingEnd = { run, handle };
+  pendingEnd = { run, handle, snap: lastSnap };
   set({ ...state, run: null });
 }
 
@@ -641,7 +646,7 @@ function finishEnd(): void {
   pendingEnd = null;
   const run = held.run;
   const now = Date.now();
-  const snap = lastSnap;
+  const snap = held.snap;
   const ended: FocusRun = {
     ...run,
     status: "ended",
@@ -650,8 +655,11 @@ function finishEnd(): void {
     focusedSeconds: snap?.focusedSeconds ?? run.focusedSeconds,
     blocksCompleted: snap?.blocksCompleted ?? run.blocksCompleted,
   };
-  lastSnap = null;
-  lastSessionKey = "";
+  // A run started meanwhile (another workspace) keeps its own numbers.
+  if (!state.run) {
+    lastSnap = null;
+    lastSessionKey = "";
+  }
   endedHere.add(run.id);
   const serverId = serverIds.get(run.id);
   if (serverId) endedHere.add(serverId);
