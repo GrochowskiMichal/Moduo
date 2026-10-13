@@ -125,5 +125,29 @@ describe("honest provider (NR-3)", () => {
     expect(push.mock.calls[0]![0]).toMatchObject({ bodyText: null, bodyMd: null });
     settle("ok");
     await session.booted;
+    // Once the pull lands, the body owed goes out on its own (no updates).
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const last = push.mock.calls.at(-1)![0] as { updates: unknown[]; bodyMd: string | null };
+    expect(last.updates).toEqual([]);
+    expect(last.bodyMd).toBe("typed before the pull");
+  });
+
+  it("a draft is synced from the start, so its first push carries its body", async () => {
+    const { runtime } = heldPullRuntime();
+    engine = new NotesSyncEngineV2(runtime, "ws1");
+    const session = engine.openDraft("d2");
+    await session.booted;
+    expect(engine.isSynced("d2")).toBe(true);
+    const root = session.doc.get("root-v2", Y.XmlElement);
+    const run = new Y.XmlText();
+    run.insert(0, "capture");
+    const p = new Y.XmlElement("paragraph");
+    p.insert(0, [run]);
+    root.insert(0, [p]);
+    await engine.promoteDraft("d2");
+    engine.releasePush("d2");
+    await engine.flushNote("d2");
+    const push = runtime.notesV2.pushUpdates as unknown as { mock: { calls: unknown[][] } };
+    expect(push.mock.calls.at(-1)![0]).toMatchObject({ bodyMd: "capture" });
   });
 });

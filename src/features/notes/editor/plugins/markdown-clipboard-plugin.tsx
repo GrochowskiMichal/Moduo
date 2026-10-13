@@ -43,6 +43,8 @@ export function $isPartialWithinOneBlock(selection: RangeSelection): boolean {
   const a = $topBlock(selection.anchor.getNode());
   const b = $topBlock(selection.focus.getNode());
   if (!a || !b || !a.is(b)) return false;
+  // A chip's markdown form (`[label](moduo://…)`) is the point of copying it.
+  if (selection.getNodes().some((n) => n.getType() === "entity-ref")) return false;
   const norm = (s: string) => s.replace(/\s+/g, "");
   return norm(selection.getTextContent()) !== norm(a.getTextContent());
 }

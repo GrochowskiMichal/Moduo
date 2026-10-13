@@ -98,8 +98,12 @@ type NoteSession = {
   cacheReady: Promise<void>;
   /** Cache loaded, first pull settled, first flush done. */
   booted: Promise<void>;
-  /** A pull has completed against the server this session. */
+  /** A pull has completed against the server this session (a draft is
+   * synced from the start: its local doc is the whole note). */
   synced: boolean;
+  /** A push went out without bodies (before the first pull); the next flush
+   * after a pull owes the server one body-only save. */
+  bodyOwed: boolean;
   /** The provider has told Lexical `sync` (after the first pull settled). */
   syncReported: boolean;
   syncListeners: Set<(isSynced: boolean) => void>;
@@ -255,6 +259,7 @@ export class NotesSyncEngineV2 {
       cacheReady: Promise.resolve(),
       booted: Promise.resolve(),
       synced: false,
+      bodyOwed: false,
       syncReported: false,
       syncListeners,
       flushTimer: null,
@@ -300,6 +305,7 @@ export class NotesSyncEngineV2 {
     }
     if (this.drafts.has(s.noteId)) {
       // Nothing on the server yet: the local doc is the whole truth.
+      s.synced = true;
       this.reportSync(s);
       return;
     }
@@ -355,6 +361,7 @@ export class NotesSyncEngineV2 {
       await writeNoteState(s.state);
       s.synced = true;
       this.recoveredFromOffline(s);
+      if (s.bodyOwed) this.scheduleFlush(s, 0);
       return ids.length;
     } catch (e) {
       if (isNetworkError(e)) this.setStatus("offline");
@@ -415,13 +422,34 @@ export class NotesSyncEngineV2 {
       for (;;) {
         const durable = await readDocOutbox(s.noteId);
         const queue = [...durable, ...s.memOutbox];
-        if (queue.length === 0) break;
+        if (queue.length === 0) {
+          // Pushes before the first pull went out bodiless: now that the doc
+          // is complete, write its body once (an update-free save).
+          if (s.bodyOwed && s.synced) {
+            const owed = tryDeriveNoteBody(s.doc);
+            if (owed) {
+              await this.runtime.notesV2.pushUpdates({
+                workspaceId: this.workspaceId,
+                noteId: s.noteId,
+                clientId,
+                updates: [],
+                bodyText: owed.text,
+                bodyMd: owed.md,
+              });
+              s.bodyOwed = false;
+              pushed = true;
+            }
+          }
+          break;
+        }
         pushed = true;
         const batch = planPushBatch(queue);
         // Before the first pull lands, the doc may lack other devices' edits:
         // push the update alone (null bodies keep the server's last ones),
         // or search, export and MCP would hold a stale body.
         const body = s.synced ? tryDeriveNoteBody(s.doc) : null;
+        if (!body) s.bodyOwed = true;
+        else s.bodyOwed = false;
         const res = await this.runtime.notesV2.pushUpdates({
           workspaceId: this.workspaceId,
           noteId: s.noteId,
