@@ -47,6 +47,12 @@ type Props<T> = {
   overscan?: number;
   /** Override the threshold (tests, a surface that always virtualizes). */
   virtualizeFrom?: number;
+  /**
+   * Pixels between the scroller's top and the stack's (a sticky header above
+   * it, the Timeline's time header): items are placed and brought into view
+   * below it.
+   */
+  scrollMargin?: number;
   className?: string;
 };
 
@@ -66,6 +72,7 @@ export function VirtualStack<T>({
   gapClassName,
   overscan = 8,
   virtualizeFrom = VIRTUALIZE_FROM,
+  scrollMargin = 0,
   className,
 }: Props<T>) {
   const virtual = items.length >= virtualizeFrom;
@@ -96,6 +103,8 @@ export function VirtualStack<T>({
     rangeExtractor,
     overscan,
     gap,
+    scrollMargin,
+    scrollPaddingStart: scrollMargin,
     enabled: virtual,
     // React 19 warns about flushSync inside effects; a frame late is fine.
     useFlushSync: false,
@@ -163,7 +172,7 @@ export function VirtualStack<T>({
               "left-0 w-full",
               sticky ? cn("sticky top-0", stickyClassName) : "absolute top-0",
             )}
-            style={sticky ? undefined : { transform: `translateY(${v.start}px)` }}
+            style={sticky ? undefined : { transform: `translateY(${v.start - scrollMargin}px)` }}
           >
             {render(item, v.index, { sticky })}
           </div>

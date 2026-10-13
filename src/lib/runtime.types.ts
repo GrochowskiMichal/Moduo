@@ -73,6 +73,7 @@ import type { Truncation } from "./paged-select";
 import type { TasksAgentsApi } from "./runtime.web.agents";
 import type { TasksStructureApi } from "./runtime.web.structure";
 import type { TasksTemplatesApi } from "./runtime.web.templates";
+import type { TasksViewsApi } from "./runtime.web.views";
 import type {
   SyncAccessResult,
   SyncIdsResult,
@@ -99,6 +100,13 @@ export type TasksStructureRuntime = Omit<TasksStructureApi, "getTimeBlocks" | "s
  * row it made. Optional: a runtime without them offers neither.
  */
 export type TasksTemplatesRuntime = Partial<TasksTemplatesApi>;
+
+/**
+ * TV-U8's saved views (runtime.web.views.ts): the store reads `task_views`
+ * through `syncRead`; these are the ops. Optional: a runtime without them
+ * offers no views.
+ */
+export type TasksViewsRuntime = Partial<TasksViewsApi>;
 
 /**
  * TV-D16's agent work and import runs (runtime.web.agents.ts): a session's
@@ -1294,6 +1302,7 @@ export type ModuoRuntime = {
     }): Promise<ActivityEntry[]>;
   } & TasksStructureRuntime &
     TasksTemplatesRuntime &
+    TasksViewsRuntime &
     TasksAgentsRuntime;
 
   /**

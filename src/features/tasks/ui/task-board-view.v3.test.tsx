@@ -23,6 +23,7 @@ rs.mock("../assignees", () => ({
 }));
 
 import { TooltipProvider } from "../../../components/ui/tooltip";
+import { readFolds, resetFoldsForTests } from "../folds";
 import { makeTask } from "../helpers";
 import type { Bucket, ProjectStatus, Task } from "../model";
 import { TaskBoardView } from "./task-board-view";
@@ -38,6 +39,7 @@ beforeAll(() => {
 afterEach(() => {
   cleanup();
   window.localStorage.clear();
+  resetFoldsForTests();
 });
 
 const STAMP = "2026-10-01T00:00:00.000Z";
@@ -155,10 +157,8 @@ describe("Board v3 (TV-U11)", () => {
     expect(backlog.textContent).not.toContain("Backlog");
     fireEvent.click(backlog);
     expect(columnNames()).toEqual(["Backlog", "Todo", "In progress", "In review", "Done"]);
-    // Remembered on this device (key per scope and grouping).
-    expect(window.localStorage.getItem("moduo:tasks:folds:test")).toContain(
-      '"col:status:s-backlog":false',
-    );
+    // Remembered for the person (key per scope and grouping, TV-U8).
+    expect(readFolds("moduo:tasks:folds:test")["col:status:s-backlog"]).toBe(false);
   });
 
   it("a status's ⋯ folds it into the button", () => {
