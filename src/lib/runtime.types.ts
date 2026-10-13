@@ -6,6 +6,7 @@
 import type {
   AttachmentPreviewMime,
   AttachmentStatus,
+  CommentReaction,
   ContentAuthorKind,
 } from "@contracts/vocabularies";
 import type {
@@ -51,6 +52,7 @@ import type {
   TagLink,
   Task,
   TaskCompletion,
+  TaskCycle,
   TaskQueueEntry,
   TaskRelation,
   TaskStatus,
@@ -100,7 +102,14 @@ export type SpineComment = {
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
+  /** When its author last edited it (TV-U13); null when never: it reads "edited". */
+  editedAt: string | null;
+  /** Who reacted with which of the six (TV-U13, REPLAN 88), oldest first. */
+  reactions: CommentReactionMark[];
 };
+
+/** One person's reaction on a comment. */
+export type CommentReactionMark = { userId: string; reaction: CommentReaction };
 
 export type RuntimeSession = {
   access_token: string;
@@ -1186,6 +1195,25 @@ export type ModuoRuntime = {
       releaseCommit: boolean;
     }): Promise<Task>;
     /**
+     * "Move just this one" (TV-D12): move this cycle's due date or its work
+     * session's start; the other date moves by the same days and the rule
+     * stays (the next cycle is back on the pattern). One of the two.
+     */
+    opMoveOccurrence(input: {
+      workspaceId: string;
+      taskId: string;
+      dueOn?: string | null;
+      startsAt?: string | null;
+    }): Promise<Task>;
+    /** A repeat's cycles, done and skipped, with your own tracked time (TV-D12). */
+    taskHistory(input: { workspaceId: string; taskId: string }): Promise<TaskCycle[]>;
+    /** Notify the people picked by `@` in a task's description (TV-D12). */
+    mentionInTask(input: {
+      workspaceId: string;
+      taskId: string;
+      userIds: string[];
+    }): Promise<number>;
+    /**
      * Ask the server to roll this workspace's repeats over now (TV-D8): it
      * answers with what changed, plus the tasks named in `items`, as it has
      * them. Builds since TV-D8 send no items; the server's engine decides.
@@ -1301,11 +1329,44 @@ export type ModuoRuntime = {
       entityId: string;
     }): Promise<SpineComment[]>;
     /**
+     * Edit your own comment (`comments_op_edit`, TV-U13): only its author, and
+     * only someone named for the first time (`mentionedUserIds`) is notified.
+     */
+    editComment(input: {
+      commentId: string;
+      body: string;
+      mentionedUserIds?: string[];
+    }): Promise<SpineComment>;
+    /** Delete a comment (`comments_op_delete`): yours, or anyone's with Full
+     *  access to the task or note. A soft delete, so the 8 s Undo can restore it. */
+    deleteComment(input: { commentId: string }): Promise<SpineComment>;
+    /** Undo a comment's delete (`comments_op_restore`). */
+    restoreComment(input: { commentId: string }): Promise<SpineComment>;
+    /** Add (`on`) or take back one of the six reactions; answers the comment's
+     *  reactions after the change. Never notifies (REPLAN 88). */
+    reactToComment(input: {
+      commentId: string;
+      reaction: CommentReaction;
+      on: boolean;
+    }): Promise<CommentReactionMark[]>;
+    /**
      * The derived notification feed: `module_activity` rows targeting me,
      * overlaid with my read state, newest first (AC10). The NotificationCenter
      * groups these by target then verb.
      */
     listNotifications(input: { workspaceId: string; limit?: number }): Promise<NotificationItem[]>;
+    /**
+     * Register this browser for Web Push notices (TV-D12): the subscription's
+     * endpoint (a known push service) and keys, for the signed-in person.
+     */
+    pushSubscribe(input: {
+      endpoint: string;
+      p256dh: string;
+      auth: string;
+      userAgent?: string | null;
+    }): Promise<void>;
+    /** Forget this browser's Web Push subscription (only your own). */
+    pushUnsubscribe(input: { endpoint: string }): Promise<void>;
     /** Mark one notification (activity row) read. Idempotent. */
     markNotificationRead(input: { workspaceId: string; activityId: string }): Promise<void>;
     /** Mark every targeting-me notification in the workspace read. */

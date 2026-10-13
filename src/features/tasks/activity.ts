@@ -19,6 +19,7 @@ export function activityActorName(
 }
 
 const str = (v: unknown): string | null => (typeof v === "string" && v ? v : null);
+const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
 /** "Jun 12" from a queue date (YYYY-MM-DD), in the one grammar. */
 function formatQueueDate(v: unknown): string | null {
@@ -134,7 +135,7 @@ function waitingLine(verb: string, p: Record<string, unknown>): string {
  * (TV-D1) tells a task's creator that a teammate finished it; the trail
  * already says so through `tasks.set_status`.
  */
-const NOTIFICATION_ONLY_OPS = new Set(["tasks.completed"]);
+const NOTIFICATION_ONLY_OPS = new Set(["tasks.completed", "tasks.reminder"]);
 
 export function isTrailEntry(entry: Pick<ActivityEntry, "op">): boolean {
   return !NOTIFICATION_ONLY_OPS.has(entry.op);
@@ -219,14 +220,28 @@ export function activityLine(entry: Pick<ActivityEntry, "op" | "payload">): stri
     case "tasks.catch_up": {
       const to = formatScheduled(str(p.to));
       const kind = str(p.kind);
+      // TV-D12: finished subtasks reset when a repeat comes back.
+      const reset = num(p.subtasks_reset) ?? 0;
+      const resetTail =
+        reset > 0 ? ` · ${reset} ${reset === 1 ? "subtask" : "subtasks"} to do again` : "";
       if (kind === "reopen")
-        return to ? `reopened this for ${to} (recurrence)` : "reopened this (recurrence)";
+        return `${to ? `reopened this for ${to}` : "reopened this"} (recurrence)${resetTail}`;
       if (kind === "adopt")
         return to
-          ? `scheduled its occurrence, ${to} (recurrence)`
-          : "adopted its occurrence (recurrence)";
+          ? `dated its occurrence, ${to} (recurrence)`
+          : "dated its occurrence (recurrence)";
       return to ? `caught this up to ${to} (recurrence)` : "caught this up (recurrence)";
     }
+    // TV-D12: "move just this one" — the pattern stays.
+    case "tasks.move_occurrence":
+      return "moved just this occurrence";
+    case "tasks.mentioned":
+      return "mentioned someone in the description";
+    // The actor is whoever answered (a comment) or the mailbox's owner (an email).
+    case "tasks.waiting_resolved":
+      return str(p.reason) === "email"
+        ? "got the reply this was waiting on"
+        : "answered · no longer waited on";
     // ── DF-9 spine-generated task notifications, seen in the trail too ─────────
     // Logged by the tasks_notify_spine trigger (module='tasks'), so they surface
     // in this entity trail — render a neutral, third-person sentence here (the

@@ -151,6 +151,9 @@ export type StoreSnapshot = {
   completions: TaskCompletion[];
   /** Live comments per task. */
   commentCounts: ReadonlyMap<string, number>;
+  /** Per task, a stamp that moves whenever one of its comments is added,
+   *  edited, deleted or reacted to (TV-U13): an open thread re-reads on it. */
+  commentStamps: ReadonlyMap<string, string>;
   /** TV-D10: work sessions on tasks you can see, your own reminders, Waiting on… entries. */
   sessions: TaskSession[];
   reminders: TaskReminder[];
@@ -188,6 +191,7 @@ export const EMPTY_SNAPSHOT: StoreSnapshot = {
   kept: [],
   completions: [],
   commentCounts: new Map(),
+  commentStamps: new Map(),
   sessions: [],
   reminders: [],
   waiting: [],
@@ -1974,9 +1978,9 @@ export class WorkspaceStore {
           truncated,
         };
     const comments = this.rendered("comments");
-    const commentCounts =
+    const { counts: commentCounts, stamps: commentStamps } =
       prev && prev.commentsSource === comments
-        ? prev.snapshot.commentCounts
+        ? { counts: prev.snapshot.commentCounts, stamps: prev.snapshot.commentStamps }
         : countComments(comments);
     const queue = this.queueRows();
     // The tasks waiting in the outbox (a List row's clock, TV-U10), the same
@@ -2006,6 +2010,7 @@ export class WorkspaceStore {
       kept: this.kept,
       completions: this.rendered("completions"),
       commentCounts,
+      commentStamps,
       sessions: this.rendered("sessions"),
       reminders: this.rendered("reminders"),
       waiting: this.rendered("waiting"),
@@ -2021,13 +2026,23 @@ export class WorkspaceStore {
   } | null = null;
 }
 
-function countComments(comments: readonly SyncRows["comments"][]): ReadonlyMap<string, number> {
+/** Live comments per task, and each task's comment stamp: its newest
+ *  comment change plus the live count (a delete that drops the row moves it). */
+function countComments(comments: readonly SyncRows["comments"][]): {
+  counts: ReadonlyMap<string, number>;
+  stamps: ReadonlyMap<string, string>;
+} {
   const counts = new Map<string, number>();
+  const newest = new Map<string, string>();
   for (const c of comments) {
+    const seen = newest.get(c.taskId);
+    if (!seen || c.updatedAt > seen) newest.set(c.taskId, c.updatedAt);
     if (c.deletedAt) continue;
     counts.set(c.taskId, (counts.get(c.taskId) ?? 0) + 1);
   }
-  return counts;
+  const stamps = new Map<string, string>();
+  for (const [taskId, at] of newest) stamps.set(taskId, `${at}#${counts.get(taskId) ?? 0}`);
+  return { counts, stamps };
 }
 
 function sameTruncations(a: readonly Truncation[], b: readonly Truncation[]): boolean {

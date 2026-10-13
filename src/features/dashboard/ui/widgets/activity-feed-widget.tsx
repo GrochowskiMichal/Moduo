@@ -44,11 +44,13 @@ export function ActivityFeedWidget({ size }: WidgetComponentProps) {
   const { groups, now } = useMemo(
     () => ({
       groups: groupNotifications(
-        notifications.data.filter((item) => isNotificationEnabled(item.op, prefs.notifications)),
+        notifications.data.filter((item) =>
+          isNotificationEnabled(item.op, prefs.notifications, item.payload, userId),
+        ),
       ),
       now: new Date(),
     }),
-    [notifications.data, prefs.notifications],
+    [notifications.data, prefs.notifications, userId],
   );
   // Every task card names its task (TV-P0): comment notices carry no title.
   const labels = useNotificationLabels(groups);

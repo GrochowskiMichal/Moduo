@@ -67,6 +67,151 @@ Built in tasks-v3 block 14 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §4, AC
   - Why: one block per session; each sits with the block that owns its surface.
   - Rejected: —
 
+## 2026-10-13 · TV-U13 Detail panel v3 + full page (tasks-v3 block 17) — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 17 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §9, AC11.7–11.8, AC1.16, AC3.1, AC3.7; REPLAN 32, 56, 65a, 72a, 87, 88, 89, 20a, defaults p and q). Migration `20261013100000_comment_reactions_edits` (local stack only). Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **U13-1 · Who may comment, edit, delete and react: one item gate for every comment op, and for reading** → TV-U13 (`comments__item_level`), TV-D12 (re-cut `comments_op_add` and the comments read policy from the live catalog)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (after two security reviews of the first cut).
+  - Decision: a comment's item is a task (`tasks__visible`, Full through `can_access 'full'`; `task_project` reads as a task but never takes the Full path), a note (`can_access`), or one of the known spine types (seeing it); an unknown type is nobody's. Reading comments (and so their reactions), adding, editing, deleting, restoring and reacting all ask it. Edit: the author only. Delete and Undo: the author, or Full access to the task or note. React: whoever can comment there (the spine guard + seeing the item), so a workspace viewer can't, a view-only share can. An app over an API key comments as its creator but can't edit, delete, restore or react. Hidden and missing answer the same refusal. A mention, and a participant's notice, reach only people who can see the item.
+  - Why: read and write can never disagree; a reaction is a lightweight comment and follows the same rule; the old add op let a member comment on an item hidden from them.
+  - Rejected: per-op checks against `perm_can_see_entity` (it reads an unknown type as visible to the workspace) and reactions for anyone who can read.
+- **U13-2 · Reactions are six words, live through the comment's stamp, and never notify** → TV-U13 (`COMMENT_REACTIONS`, `comment_reactions`, `comments_op_react`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (88 decided the six).
+  - Decision: stored as `thumbs_up · check · eyes · pray · heart · smile` (a closed vocabulary with its CHECK and drift gate), shown as 👍 ✅ 👀 🙏 ❤️ 😄; a react writes no activity row; it moves the comment's `updated_at`, so the store's comment marks change and an open feed re-reads (`commentStamps`), instead of a Realtime channel of its own.
+  - Why: the store already hears comments live; one more published table would mean another channel for six emoji.
+  - Rejected: storing the emoji characters, and a `comment_reactions` Realtime listener.
+- **U13-3 · Delete is soft with an 8 s Undo; edits show "edited"; an edit names only new people** → TV-U13
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: delete sets `deleted_at` (the Undo restores it; no tombstone in the feed); `comments.add/edit/delete/restore` rows stay in the trail; an edit notifies only someone named for the first time (`comments.edit`), and its excerpt is the new text. Editing turns stored references the reader can name back into `@Title` and keeps one they can't (and date chips) as stored, so an edit never loses them.
+  - Why: research §9; nobody hears about the same mention twice.
+  - Rejected: a hard delete (no Undo across a reload) and re-notifying everyone named.
+- **U13-4 · The feed: merged changes, folded runs, All · Comments per person on this device** → TV-U13 (`feed.ts` `shapeFeed`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (default q).
+  - Decision: one person's changes within 10 minutes of the first merge ("changed due, priority and 2 more", click to see each); a run of more than two change lines between comments folds into "Show n earlier changes", and the run after the last comment shows its latest five. The All · Comments switch is remembered per person in local storage.
+  - Why: research §9; the switch is a reading habit, not a setting worth syncing yet.
+  - Rejected: tabs (Jira's All · Comments · History · Work log) and a synced preference.
+- **U13-5 · The panel's anatomy follows the spec's order; the agent line sits under the title** → TV-U13, TV-D16 (fills `AgentSessionSlot`), TV-F7 (fills `claimSlot`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: header (project › section pickers, handle, the claims slot, queue, ⤢, ⋯) · status toggle + title · the agent session line's slot (52's placement, not the spec list's) · Done/Won't do line · properties (Status, Assignee + Team, Priority, Due + time, Tags; "+ Energy · Scheduled · Reminder · Estimate · Repeat · Waiting on") · description · Subtasks · Waiting on · Blocked by · Blocks · Linked (reference cards, five then "Show n more") · the feed. Copy link moved into ⋯ beside Copy branch name; ⋯ shows for viewers too (copying only).
+  - Why: the spec's order with REPLAN 52's decided spot for the agent line.
+  - Rejected: research §7's "description before properties".
+- **U13-6 · Pickers open in place inside their popover** → TV-U13 (`task-detail-pickers.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: Scheduled lists the sessions ("Thu 2:00 PM · 1h", then "+2"); Add and Move show the date panel inside the same popover, with a length and "Mine / the assignee's" (nobody else, TV-D10-fix); resizing keeps the start and the person. Reminder offers 1 hour / 1 day before due (when there's a due date) and "At a time…"; Estimate has 15m · 30m · 45m · 1h · 2h · 4h or typed, plus Tracked. Repeat: presets, Custom (every n days/weeks/months/years, weekdays, a day of the month or the nth weekday, an end, "count from when it's done") and one summary line ("Every 3rd Friday, until Dec 15"); a repeat set on a task with no dates gives it its first occurrence as the due date.
+  - Why: a popover opened from inside another loses its clicks; due and scheduled move together (27c), so due is the repeat's anchor now that sessions are separate.
+  - Rejected: nested DateField popovers, and anchoring a repeat on a session.
+- **U13-7 · Inbox assign asks for a project; "Keep unfiled" just assigns** → TV-U13, TV-D13 (the server move to the assignee's Inbox, 20)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (20a decided; AC5.1).
+  - Decision: picking someone else for a task in your Inbox shows "Assign to Mike · in" with the projects and "Keep unfiled"; a project assigns and files in one edit. Keep unfiled assigns only: the task stays in your Inbox (granted to Mike) until the server moves it.
+  - Why: don't show a move the server doesn't make.
+  - Rejected: moving it client-side.
+- **U13-8 · Call 87 runs in the app for now** → TV-U13 (`finishOpenSubtasks`), TV-D16 (MCP), TV-D7 (a server cascade if wanted)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (87 decided).
+  - Decision: the checkbox, a status pick, a check-off (Focus), a reference chip's check and a Board drop into Done finish the task's open subtasks too, with one toast "Done · also 2 subtasks" whose Undo puts each back to the status it had (only while it's still done). A repeating parent keeps its subtasks open (TV-D12 resets them per cycle); MCP's complete and the Home widget's check-off don't cascade yet (TV-D16, TV-H1).
+  - Why: `tasks__apply_status` is being re-cut by TV-D12; redefining it here would be overwritten.
+  - Rejected: a server cascade in this block.
+- **U13-9 · Project view and the full page** → TV-U13, TV-U16 (the full overview)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (defaults p, 32).
+  - Decision: "Project" registers next to Details; it shows on its own when nothing is selected inside a project and while a task fills the centre (the Details entry then reads "Shown in the centre"). Its content is the project's name, status, dates, lead, progress ("1 of 3 done · 2 open") and sections; TV-U16 builds the rest. The full page is state on the same route: "← List · Acme rebrand", "3 of 18" with ↑ ↓ / k j, ⤡, Esc or ⌘[ back; properties take a 280 px column once the centre is about 900 px wide. No key opens it (b is Move to project).
+  - Why: default p, call 32; the keymap has no free key for it.
+  - Rejected: a route of its own (AGENTS.md rule 7).
+- **U13-10 · Your own avatar without a display name reads your email's name** → TV-U13 (`withOwnName`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (checkpoint 1).
+  - Decision: the member list names you by your email's local part when your profile has no name (the top bar's rule), so every avatar of yours reads two of your initials; someone else without a name reads "?", never "ME" from a "Member" placeholder.
+  - Why: rule 43; the local seed account has no display name.
+  - Rejected: fixing each avatar consumer separately.
+
+## 2026-10-13 · TV-D12 recurrence a–h, reminders, the notification table — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 27 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §2 "Reminders" and "Repeats", §13, §Assumptions #5, #16, #26; REPLAN 24, 27 a–i, 73, 80; migrations `20261013110000_notifications_v3`, `20261013111000_recurrence_moves_dst` and `20261013140000_reminders_repeats_fixes`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **D12-1 · Reminders are delivered by one minute job, and only while they make sense** → TV-D12 (`tasks__fire_reminders`, `tasks__notice`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: every minute the sender claims due reminders; one is delivered only while its person sees the task, the task is To do or In progress and its project isn't archived; anything else that's due is retired unsent. The bell notice is written as "Moduo" and hangs on the person's own Inbox (the task id rides in it, the card opens the task), with the title read for that person at send time.
+  - Why: "one precise notice" (REPLAN 24); a reminder is its person's alone (D10F-3), and a notice on the task would show in a shared task's trail; the cron path has no person, and `module_activity_log` needs one.
+  - Rejected: every five minutes (late by up to five), the notice on the task itself.
+- **D12-2 · Backlog and Won't do suspend reminders; bringing the task back asks** → TV-D12 (`task_reminders.suspended_at`, `tasks_op_reminders_restore`, the "Restore the reminder?" toast)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: entering Backlog or Won't do suspends every person's unfired reminders on the task (a reminder added there starts suspended); reminders already on parked tasks were marked suspended once; moving it back to To do or In progress offers "Restore the reminder?" to whoever moves it (if they can edit it and are online), if they had one; Restore brings back everyone's when they can edit the task (else their own), only those still ahead.
+  - Why: the spec's edge case; a reminder whose time passed meanwhile would otherwise fire at once.
+  - Rejected: deleting them (nothing to restore), restoring by itself.
+- **D12-3 · A person's devices hear a notice through one table; the browser through Web Push** → TV-D12 (`notice_deliveries`, `push_subscriptions`, `push-send`, `NoticeDeliveries`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the sender writes one `notice_deliveries` row per notice (RLS: its person only; published), which a running app hears on a channel filtered by person, in any workspace: the desktop shows an OS notification when it isn't in front and a toast when it is, the web a toast; both refresh the bell. Browsers that opted in get it from `push-send` (VAPID and aes128gcm on WebCrypto, no library), kicked by the database only when Vault holds the function's URL and secret.
+  - Why: neither `module_activity` nor `notification_state` is published (and shouldn't be); a local stack must never call a deployed function by accident.
+  - Rejected: email and a calendar feed (REPLAN 73), a hard-coded function URL like the email worker's.
+- **D12-4 · The desktop app keeps running in the menu bar, on by default** → TV-D12 (`src-tauri/src/lib.rs`, `keepInMenuBar`, `set_keep_in_menu_bar`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: closing the window hides it; a menu-bar icon (Open Moduo · Quit Moduo) and the Dock bring it back; the first quit says once "Reminders won't arrive while Moduo is quit"; Settings → Preferences → Reminders turns it off (closing then quits as before).
+  - Why: REPLAN 73's answer; the notice once, so quitting stays a deliberate act.
+  - Rejected: "Open at login" now (later), asking on every quit.
+- **D12-5 · A browser's notices are its signed-in person's only** → TV-D12 (`push_op_subscribe`, `public/push-sw.js`, `public/push-display.js`, `forgetBrowserPush`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: a subscription stays its maker's (another person's registration of the same endpoint is refused, and the app then makes the browser a fresh one); signing out unsubscribes the browser and tells the server; the page tells the worker who's signed in, and a notice for anyone else shows a plain line; a push carries ids and the task's title cut to 80 characters, never a description or comment.
+  - Why: one browser can be shared; the words of a notice are the person's.
+  - Rejected: re-pointing an endpoint to whoever signed in last.
+- **D12-6 · The table's switches live in the synced preferences, as they did** → TV-D12 (`src/lib/preferences.ts`, Settings → Preferences)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: Assigned to me (assignments, and tasks handed into your Inbox when a project is deleted), Mentions (a comment naming you, an `@` in a task's description, a note mention), Comments (any other comment notice), Waiting (an unblocked task, a Waiting on… that came in; replaces "Task unblocked", whose saved value it takes), Completed by someone else and Due & follow-up kept; a reminder has no switch (the reminder turns it off). Mutes stay a read-side filter.
+  - Why: spec §Assumptions #16 names a `notification_prefs` column, but the mutes already sync in `preferences.notifications` and gotchas/spine.md forbids a second classifier.
+  - Rejected: a new column and a server-side filter.
+- **D12-7 · Assignments gather per person and hour; every assignment keeps its trail line** → TV-D12 (`tasks_notify_spine`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the first assignment of an hour from one person (or key) to one person is the notice; later ones add to its count and task list while it's unread and not dismissed ("<name> assigned you 12 tasks"); once read, the next one is a new notice. Every assignment still logs its own `tasks.assigned` row.
+  - Why: AC5.7 "twelve assignments make one notice", and the trail (TV-D1) needs one line per task.
+  - Rejected: grouping only in the bell (twelve rows would still be twelve unread), one row for many tasks (the trail would lose them).
+- **D12-8 · `@person` in a description notifies on pick; comment and mention notices reach only people who can see the item** → TV-D12 (`tasks_op_mention`, `module_activity_gate_recipients`, `spine__visible_to`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the description editor offers people in its `@` menu and, on a pick, calls `tasks_op_mention` (edit access; people who can see the task; once per person and task in 10 minutes), like notes. Whoever writes a `comments.add`, `notes.mention` or `tasks.mentioned` row, its recipients are narrowed at that moment to people who can see the item.
+  - Why: RF-1 stores no person in a description, so there's nothing to diff on save; a notice carries an excerpt or a title.
+  - Rejected: parsing descriptions on save, gating only in the read.
+- **D12-9 · Waiting on… clears when it comes in** → TV-D12 (`tasks__waiting_came_in` and its triggers on `comments` and `email_refs`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: a person entry clears when that person comments on the task; an email entry when its thread's ref gets a newer message from someone other than its owner; whoever added it gets one quiet notice (switch: Waiting) if they still see the task; agent entries are TV-D16's.
+  - Why: AC5.3; email lives on the device, so the server sees only what the email engine reports into a thread's ref.
+  - Rejected: matching every inbound message's sender (the server never sees them).
+- **D12-10 · "Completed by someone else" and the opt-in overdue list stay** → TV-D12
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: §13 doesn't list a completion notice to the creator, and says a passed due date notifies nobody; both stay as they are: the completion notice was Maciej's call (2026-10-08), and the overdue list is an opt-in view inside the bell, never badged.
+  - Why: removing either is a product change §13 didn't ask for in so many words.
+  - Rejected: dropping them silently.
+- **D12-11 · Repeats read in the task's zone, on both sides** → TV-D12 (`tasks__rrule_next_in` / `_prev_in`, `recurrence-engine.ts`, `src/lib/zoned-time.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the engines still work in floating time (D8-5); DTSTART and UNTIL are read as the zone's wall clock (assignee's, else creator's; the app uses the device's) and answers read back in it, resolving a skipped or repeated hour the way Postgres does. UTC is unchanged.
+  - Why: a 9:00 repeat must stay at 9:00 after the clocks change; preview and server must agree.
+  - Rejected: a DST-aware rewrite of the engine itself (the 2,300-rule parity sweep would need redoing).
+- **D12-12 · Which date a repeat sits on, and how its dates move** → TV-D12 (`tasks__occurrence_of`, `tasks__shift_dates`, `tasks__roll_over`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the occurrence is the due date when it's on the rule's pattern, else the work session when that is, else the due date, else the session. When it comes back or catches up, every date moves by the same days (a session sitting on the occurrence lands exactly on the new one); a repeat whose session comes before its due date comes back on the session's day, and one with a "1 day before" reminder the day before (so the reminder re-arms every cycle); a repeat with no date gets a due date, no longer a calendar block; a rule only the app reads keeps the session-on-occurrence model.
+  - Why: "due and scheduled move together, keeping their gap" (27 c); a date alone is a due date (spec §10).
+  - Rejected: `scheduled_at` alone (due never moved), the due date always first (a session-based rule with a later due would jump).
+- **D12-13 · Subtasks reset each cycle** → TV-D12 (`tasks__roll_over`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: when a repeat comes back, its Done and Won't do subtasks go to the first To do status; their completions stay in the history; Backlog subtasks stay.
+  - Why: 27 e, a weekly checklist; Won't do this week isn't Won't do next week.
+  - Rejected: Done only.
+- **D12-14 · Move just this one, change the pattern, skip** → TV-D12 (`tasks_op_move_occurrence`, `changePatternRule`, `tasks__rule_changed`, `tasks_op_skip_occurrence`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: "just this one" moves the due date or the session (the other by the same days) and remembers the pattern's slot (`movedFrom`, `movedDays`), so completing counts from the pattern and the next cycle is back on it; "change the pattern" is the app's rule rewrite (DTSTART, a weekly rule's one weekday, a monthly rule's day) saved through `tasks_op_update`, and any rule change works the pointer out again on the server; skip is worked out on the server (the app's datetimes only for a rule it alone reads). The prompts belong to the drag surfaces (TL2, U15, the Calendar).
+  - Why: 27 g; the server owns the pointer (D8).
+  - Rejected: a second task for a moved occurrence.
+- **D12-15 · A repeat's history is a read** → TV-D12 (`tasks_op_history`), TV-U13 (the panel)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: done cycles (from `task_completions`) and skipped ones (from the trail), newest first, each with who did it and the reader's own tracked seconds in that cycle; misses are never listed.
+  - Why: 27 d; each person sees only their own time.
+  - Rejected: a `kind` column on `task_completions` (every reader of completions would have to learn it).
+- **D12-16 · An old build's local midnight at 11:00 UTC is the next day** → TV-D12 (`tasks__due_on_of`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: with no saved zone, 11:00 UTC reads as UTC+13's midnight (New Zealand in summer, Samoa, Tonga), not UTC-11's.
+  - Why: far more people; noon stays the mirror's own value, so UTC+12 can't be told apart (known limit, TV-D7).
+  - Rejected: leaving it.
+- **D12-17 · Ghosts, the picker and the summary line are the views'** → Calendar rebuild, TV-U13
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: `occurrencesBetween` gives the Calendar its faint future occurrences (none for a repeat after completion); the picker and its summary line are TV-U13's (row 17).
+  - Why: the Calendar is rebuilt later; Tasks provides.
+  - Rejected: drawing ghosts on today's calendar grid.
+
 ## 2026-10-13 · AT-2 on v3: the attachments section, toasts over dialogs, uploads in a read-only build — the agent's choices (deferred to by Maciej)
 
 Finished in tasks-v3 block 2 ([specs/attachments.md](../../specs/attachments.md) AT2-1–AT2-6, decisions 3, 7–11; REPLAN §8 L, #327) on the local stack. The pipeline's own decision is in [decisions/data.md](data.md) (2026-10-10 · AT-2). Each below is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.

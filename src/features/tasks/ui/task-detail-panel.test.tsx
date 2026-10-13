@@ -117,6 +117,23 @@ function api(t: Task, over: Partial<TasksModuleApi> = {}): TasksModuleApi {
     archiveTask: rs.fn(),
     deleteTask: rs.fn(),
     setTaskParent: rs.fn(),
+    // TV-U13: the task's rows and structure from the store.
+    sessions: [],
+    reminders: [],
+    waiting: [],
+    teams: [],
+    areas: [],
+    sections: [],
+    commentStamps: new Map(),
+    inbox: INBOX,
+    addSession: rs.fn(),
+    updateSession: rs.fn(),
+    removeSession: rs.fn(),
+    addReminder: rs.fn(),
+    removeReminder: rs.fn(),
+    addWaiting: rs.fn(),
+    removeWaiting: rs.fn(),
+    restoreTask: rs.fn(async () => true),
     ...over,
   } as unknown as TasksModuleApi;
 }
@@ -137,6 +154,8 @@ function fakeRuntime(opts: { comments?: SpineComment[]; mySeconds?: number } = {
         createdAt: "2026-10-09T10:00:00Z",
         updatedAt: "2026-10-09T10:00:00Z",
         deletedAt: null,
+        editedAt: null,
+        reactions: [],
       };
       comments = [...comments, row];
       return row;
@@ -195,10 +214,11 @@ const ROW_LABELS = [
   "Status",
   "Assignee",
   "Priority",
-  "Energy",
   "Due",
+  "Energy",
   "Scheduled",
-  "Time",
+  "Reminder",
+  "Estimate",
   "Repeat",
   "Tags",
 ];
@@ -211,7 +231,7 @@ describe("the comp layout and property rule C (U3-1)", () => {
   it("shows the core properties always and names the rest in one quiet line", () => {
     renderPanel(task(), api(task()));
     expect(shownRows()).toEqual(["Status", "Assignee", "Priority", "Due", "Tags"]);
-    for (const name of ["energy", "scheduled", "time", "repeat"]) {
+    for (const name of ["energy", "scheduled", "reminder", "estimate", "repeat", "waiting on"]) {
       expect(screen.getByRole("button", { name: `Add ${name}` })).toBeTruthy();
     }
     // Checkbox beside a wrapping title, no chevrons on the values.
@@ -232,13 +252,13 @@ describe("the comp layout and property rule C (U3-1)", () => {
       "Status",
       "Assignee",
       "Priority",
-      "Energy",
       "Due",
+      "Energy",
       "Scheduled",
       "Tags",
     ]);
     expect(screen.queryByRole("button", { name: "Add energy" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Add time" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Add estimate" })).toBeTruthy();
   });
 
   it("picking a name in the quiet line shows that row, empty", () => {
@@ -248,23 +268,32 @@ describe("the comp layout and property rule C (U3-1)", () => {
     expect(screen.queryByRole("button", { name: "Add repeat" })).toBeNull();
   });
 
-  it('reads the Time row as "1h 20m of ~4h" with my share', async () => {
+  it('reads the Estimate row as "1h 20m of ~4h" with my share, the bar on its own line', async () => {
     const t = task({ timeSpentSeconds: 4800, durationMinutes: 240 });
     const { runtime } = fakeRuntime({ mySeconds: 3000 });
     renderPanel(t, api(t), runtime);
-    const time = screen.getByRole("button", { name: /^Time: 1h 20m, of ~4h/ });
+    const time = screen.getByRole("button", { name: /^Estimate: 1h 20m, of ~4h/ });
+    // "1h 20m of ~4h" never breaks between its parts (checkpoint 1).
+    expect(time.querySelector(".whitespace-nowrap")?.textContent).toBe("1h 20m of ~4h");
     expect(time.textContent).toContain("1h 20m");
     expect(time.textContent).toContain("of ~4h");
-    await waitFor(() => expect(time.textContent).toContain("you 50m"));
+    // My share sits on the line under the value, with the bar (never inside it).
+    await waitFor(() => expect(screen.getByText("you 50m")).toBeTruthy());
+    expect(time.textContent).not.toContain("you 50m");
   });
 
-  it("view-only members see the values but no quiet line and no ⋯", () => {
+  it("view-only members see the values but no quiet line, and ⋯ only copies", async () => {
     renderPanel(task(), api(task()), null, false);
     expect(screen.queryByRole("button", { name: "Add energy" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "More actions" })).toBeNull();
     expect(
       (screen.getByRole("button", { name: "Status: To do" }) as HTMLButtonElement).disabled,
     ).toBe(true);
+    const more = screen.getByRole("button", { name: "More actions" });
+    fireEvent.pointerDown(more, { button: 0, pointerType: "mouse" });
+    await waitFor(() =>
+      expect(screen.getByRole("menuitem", { name: /Copy branch name/ })).toBeTruthy(),
+    );
+    expect(screen.queryByRole("menuitem", { name: /Delete/ })).toBeNull();
   });
 });
 
@@ -279,7 +308,6 @@ describe("the queue toggle lives in the header (U3-3)", () => {
     expect(screen.queryByText("Commit to Queue")).toBeNull();
     expect(screen.queryByText("Add to queue")).toBeNull();
     const header = queue[0].parentElement as HTMLElement;
-    expect(within(header).getByRole("button", { name: "Copy link" })).toBeTruthy();
     expect(within(header).getByRole("button", { name: "More actions" })).toBeTruthy();
     expect(within(header).getByRole("navigation", { name: "Location" }).textContent).toContain(
       "Moduo App",
@@ -315,6 +343,8 @@ describe("comments on a task (U3-2)", () => {
           createdAt: "2026-10-07T20:02:00Z",
           updatedAt: "2026-10-07T20:02:00Z",
           deletedAt: null,
+          editedAt: null,
+          reactions: [],
         },
       ],
     });
@@ -382,7 +412,7 @@ describe("validator round", () => {
     const before = task({ timeSpentSeconds: 4800, durationMinutes: 240 });
     const a = api(before);
     const view = renderPanel(before, a);
-    fireEvent.click(screen.getByRole("button", { name: /^Time: 1h 20m/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Estimate: 1h 20m/ }));
     const estimate = (await screen.findByLabelText("Estimate")) as HTMLInputElement;
     // Focus saves a minute while the editor is open.
     const after = { ...before, timeSpentSeconds: 4860 };
@@ -412,7 +442,7 @@ describe("validator round", () => {
     const before = task({ timeSpentSeconds: 4800, durationMinutes: 240 });
     const a = api(before);
     const view = renderPanel(before, a);
-    fireEvent.click(screen.getByRole("button", { name: /^Time: 1h 20m/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Estimate: 1h 20m/ }));
     const tracked = (await screen.findByLabelText("Tracked")) as HTMLInputElement;
     fireEvent.change(tracked, { target: { value: "2h" } });
     fireEvent.blur(tracked);

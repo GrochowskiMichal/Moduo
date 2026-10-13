@@ -183,7 +183,7 @@ describe("deriveNotificationFeeds", () => {
   });
 
   it("drops muted event types from active AND history (AC10)", () => {
-    const isEnabled = (op: string) => op !== "tasks.assigned";
+    const isEnabled = (row: { op: string }) => row.op !== "tasks.assigned";
     const feeds = deriveNotificationFeeds(
       [
         item({ id: "keep", createdAt: "x", workspaceId: "w1", op: "comments.add" }),

@@ -258,6 +258,38 @@ export function normalizeTaskReminderKind(input: unknown): TaskReminderKind {
   return isTaskReminderKind(input) ? input : "at";
 }
 
+/** How a repeat counts its next occurrence (REPLAN 27 b): by its rule, or
+ *  from the day it was done ("after_completion"; no value = by the rule).
+ *  Postgres: tasks__recurrence_problem accepts only these. */
+export const RECURRENCE_MODES = ["after_completion"] as const;
+export type RecurrenceMode = (typeof RECURRENCE_MODES)[number];
+export const recurrenceModeSchema = z.enum(RECURRENCE_MODES);
+export function isRecurrenceMode(value: unknown): value is RecurrenceMode {
+  return typeof value === "string" && (RECURRENCE_MODES as readonly string[]).includes(value);
+}
+export function parseRecurrenceMode(input: unknown): SafeParseResult<RecurrenceMode> {
+  return parseOrError(recurrenceModeSchema, input);
+}
+/** Lax read: an unknown mode reads as "by the rule" (undefined). */
+export function normalizeRecurrenceMode(input: unknown): RecurrenceMode | undefined {
+  return isRecurrenceMode(input) ? input : undefined;
+}
+
+/** What a notice to a person's devices is about (TV-D12, `notice_deliveries.kind`). */
+export const NOTICE_DELIVERY_KINDS = ["reminder"] as const;
+export type NoticeDeliveryKind = (typeof NOTICE_DELIVERY_KINDS)[number];
+export const noticeDeliveryKindSchema = z.enum(NOTICE_DELIVERY_KINDS);
+export function isNoticeDeliveryKind(value: unknown): value is NoticeDeliveryKind {
+  return typeof value === "string" && (NOTICE_DELIVERY_KINDS as readonly string[]).includes(value);
+}
+export function parseNoticeDeliveryKind(input: unknown): SafeParseResult<NoticeDeliveryKind> {
+  return parseOrError(noticeDeliveryKindSchema, input);
+}
+/** Lax read: an unknown kind reads as a reminder (the only kind so far). */
+export function normalizeNoticeDeliveryKind(input: unknown): NoticeDeliveryKind {
+  return isNoticeDeliveryKind(input) ? input : "reminder";
+}
+
 /** What a Waiting on… entry waits on (default q): a person, an email thread,
  *  an agent (an API key) or free text. */
 export const TASK_WAITING_KINDS = ["person", "email", "agent", "text"] as const;
@@ -871,6 +903,27 @@ export function isContentAuthorKind(value: unknown): value is ContentAuthorKind 
 /** Read-side normalization: rows written before the column existed are a person's. */
 export function normalizeContentAuthorKind(input: unknown): ContentAuthorKind {
   return isContentAuthorKind(input) ? input : "user";
+}
+
+// ---------------------------------------------------------------------------
+// Comment reactions (TV-U13, REPLAN 88) — mirrors comment_reactions.reaction's
+// CHECK and comments_op_react in 20261013100000_comment_reactions_edits. Six,
+// fixed, in this order: 👍 ✅ 👀 🙏 ❤️ 😄. Nobody adds their own, and a
+// reaction never notifies anyone.
+// ---------------------------------------------------------------------------
+
+export const COMMENT_REACTIONS = ["thumbs_up", "check", "eyes", "pray", "heart", "smile"] as const;
+export type CommentReaction = (typeof COMMENT_REACTIONS)[number];
+export const commentReactionSchema = z.enum(COMMENT_REACTIONS);
+export function isCommentReaction(value: unknown): value is CommentReaction {
+  return typeof value === "string" && (COMMENT_REACTIONS as readonly string[]).includes(value);
+}
+export function parseCommentReaction(input: unknown): SafeParseResult<CommentReaction> {
+  return parseOrError(commentReactionSchema, input);
+}
+/** Lax read: a reaction this build doesn't know is left out (null), never shown wrong. */
+export function normalizeCommentReaction(input: unknown): CommentReaction | null {
+  return isCommentReaction(input) ? input : null;
 }
 
 // ---------------------------------------------------------------------------

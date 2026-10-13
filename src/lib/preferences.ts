@@ -38,12 +38,19 @@ export type MotionPref = "system" | "reduced" | "full";
 //     task resolves. It lives here (not a fork) so the settings UI + synced domain
 //     stay single-source (spec Assumption 7).
 
+// TV-D12 (the notification table, spec §13) adds `comments` (a comment on a
+// task you created, own or commented on, split from `mention`, which is now
+// "@you" only) and `waiting` ("something you were waiting on came in": an
+// unblocked task or a Waiting on… entry that cleared; it replaces
+// `unblocked`, whose saved value it takes). Reminders have no switch: "turned
+// off by the reminder".
 export type NotificationType =
   | "mention"
   | "assigned"
+  | "comments"
   | "completed"
   | "dueFollowUp"
-  | "unblocked"
+  | "waiting"
   | "overdueTasks"
   | "storage";
 export type NotificationPrefs = Record<NotificationType, boolean>;
@@ -51,9 +58,10 @@ export type NotificationPrefs = Record<NotificationType, boolean>;
 const NOTIFICATION_TYPES: ReadonlyArray<NotificationType> = [
   "mention",
   "assigned",
+  "comments",
   "completed",
   "dueFollowUp",
-  "unblocked",
+  "waiting",
   "overdueTasks",
   "storage",
 ];
@@ -61,9 +69,10 @@ const NOTIFICATION_TYPES: ReadonlyArray<NotificationType> = [
 export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
   mention: true,
   assigned: true,
+  comments: true,
   completed: true,
   dueFollowUp: true,
-  unblocked: true,
+  waiting: true,
   // Opt-in: overdue work otherwise lives in Tasks/Home, not the bell (AC9).
   overdueTasks: false,
   // Only a workspace owner ever gets these (AT-1: the pool passed 80% / 95%).
@@ -77,24 +86,47 @@ export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
  *  your entity (DF-21d), both governed by `mention`; the two `email.*_due` ops
  *  share the `dueFollowUp` toggle. */
 const OP_TO_NOTIFICATION_TYPE: Record<string, NotificationType> = {
-  "comments.add": "mention",
+  "comments.add": "comments",
+  // TV-U13: an edit only reaches the people it newly names, so it's a mention.
+  "comments.edit": "mention",
+  "notes.mention": "mention",
+  "tasks.mentioned": "mention",
   "tasks.assigned": "assigned",
+  // Tasks handed into your Inbox (a project deleted, REPLAN 20a / U6-2).
+  "tasks.project_deleted": "assigned",
   "tasks.completed": "completed",
   "email.snooze_due": "dueFollowUp",
   "email.follow_up_due": "dueFollowUp",
-  "tasks.unblocked": "unblocked",
+  "tasks.unblocked": "waiting",
+  "tasks.waiting_resolved": "waiting",
   "attachments.storage_80": "storage",
   "attachments.storage_95": "storage",
 };
 
-export function notificationTypeForOp(op: string): NotificationType | null {
+/** The switch that governs a feed row. A comment that names you is a
+ *  mention; any other comment notice is "comments". */
+export function notificationTypeForOp(
+  op: string,
+  payload?: Record<string, unknown> | null,
+  userId?: string | null,
+): NotificationType | null {
+  if (op === "comments.add" && userId && payload) {
+    const named = payload.mentioned_user_ids;
+    if (Array.isArray(named) && named.includes(userId)) return "mention";
+  }
   return OP_TO_NOTIFICATION_TYPE[op] ?? null;
 }
 
 /** Whether a feed row of this `op` is visible under these prefs. Unmapped ops
- *  fail OPEN (always shown) so an unknown/legacy type is never silently hidden. */
-export function isNotificationEnabled(op: string, prefs: NotificationPrefs): boolean {
-  const type = notificationTypeForOp(op);
+ *  (a reminder, legacy types) fail OPEN (always shown) so nothing unknown is
+ *  silently hidden. */
+export function isNotificationEnabled(
+  op: string,
+  prefs: NotificationPrefs,
+  payload?: Record<string, unknown> | null,
+  userId?: string | null,
+): boolean {
+  const type = notificationTypeForOp(op, payload, userId);
   return type === null ? true : prefs[type];
 }
 
@@ -126,6 +158,10 @@ export interface Preferences {
    *  which reads this value from `AppState` — mirrored there by the `set_confirm_before_quit`
    *  command. See src/lib/confirm-before-quit.ts + src-tauri/src/lib.rs. */
   confirmBeforeQuit: boolean;
+  /** Desktop-only: closing the window keeps Moduo running in the menu bar, so
+   *  reminders still arrive (TV-D12, REPLAN 73; on by default). Mirrored into Rust
+   *  by `set_keep_in_menu_bar` (src/lib/keep-in-menu-bar.ts). */
+  keepInMenuBar: boolean;
   /** The Tasks sidebar's Customize and Pin choices (TV-U6), following the person. */
   tasksSidebar: TasksSidebarPrefs;
 }
@@ -137,6 +173,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   motion: "system",
   notifications: { ...DEFAULT_NOTIFICATION_PREFS },
   confirmBeforeQuit: false,
+  keepInMenuBar: true,
   tasksSidebar: { hidden: [], pinned: {} },
 };
 
@@ -147,15 +184,28 @@ const LANDING_VIEWS = ["home", "tasks", "calendar", "notes", "contacts", "email"
 const MOTION_PREFS = ["system", "reduced", "full"] as const;
 
 const notificationPrefsSchema = z
-  .object({
-    mention: z.boolean().catch(true),
-    assigned: z.boolean().catch(true),
-    completed: z.boolean().catch(true),
-    dueFollowUp: z.boolean().catch(true),
-    unblocked: z.boolean().catch(true),
-    overdueTasks: z.boolean().catch(false),
-    storage: z.boolean().catch(true),
-  })
+  .preprocess(
+    (raw) => {
+      // `unblocked` became `waiting` (TV-D12): carry a saved choice over.
+      if (raw && typeof raw === "object" && !("waiting" in raw) && "unblocked" in raw) {
+        return {
+          ...(raw as Record<string, unknown>),
+          waiting: (raw as { unblocked: unknown }).unblocked,
+        };
+      }
+      return raw;
+    },
+    z.object({
+      mention: z.boolean().catch(true),
+      assigned: z.boolean().catch(true),
+      comments: z.boolean().catch(true),
+      completed: z.boolean().catch(true),
+      dueFollowUp: z.boolean().catch(true),
+      waiting: z.boolean().catch(true),
+      overdueTasks: z.boolean().catch(false),
+      storage: z.boolean().catch(true),
+    }),
+  )
   .catch({ ...DEFAULT_NOTIFICATION_PREFS });
 // A bad entry drops alone; a workspace keeps at most 50 pins.
 const tasksSidebarSchema = z
@@ -193,6 +243,7 @@ const preferencesSchema = z.object({
   motion: z.enum(MOTION_PREFS).catch(DEFAULT_PREFERENCES.motion),
   notifications: notificationPrefsSchema,
   confirmBeforeQuit: z.boolean().catch(DEFAULT_PREFERENCES.confirmBeforeQuit),
+  keepInMenuBar: z.boolean().catch(DEFAULT_PREFERENCES.keepInMenuBar),
   tasksSidebar: tasksSidebarSchema,
 });
 

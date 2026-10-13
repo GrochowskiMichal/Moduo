@@ -30,13 +30,15 @@ describe("DEFAULT_PREFERENCES", () => {
       notifications: {
         mention: true,
         assigned: true,
+        comments: true,
         completed: true,
         dueFollowUp: true,
-        unblocked: true,
+        waiting: true,
         overdueTasks: false,
         storage: true,
       },
       confirmBeforeQuit: false,
+      keepInMenuBar: true,
       tasksSidebar: { hidden: [], pinned: {} },
     });
   });
@@ -65,17 +67,20 @@ describe("sanitizePreferences", () => {
       soundEnabled: false,
       motion: "reduced",
       // overdueTasks absent from input → coerced to its opt-in default (off);
-      // completed (added in TV-D1) and storage (AT-1) absent → on, like every other mute.
+      // completed (added in TV-D1), storage (AT-1) and comments (TV-D12) absent →
+      // on, like every other mute; the old `unblocked` becomes `waiting`.
       notifications: {
         mention: false,
         assigned: true,
+        comments: true,
         completed: true,
         dueFollowUp: false,
-        unblocked: true,
+        waiting: true,
         overdueTasks: false,
         storage: true,
       },
       confirmBeforeQuit: true,
+      keepInMenuBar: true,
       tasksSidebar: { hidden: [], pinned: {} },
     });
   });
@@ -104,12 +109,24 @@ describe("sanitizePreferences", () => {
     ).toEqual({
       mention: false,
       assigned: true,
+      comments: true,
       completed: true,
       dueFollowUp: true,
-      unblocked: false,
+      // A saved `unblocked: false` (before TV-D12) carries over to `waiting`.
+      waiting: false,
       overdueTasks: false,
       storage: true,
     });
+    expect(
+      sanitizePreferences({ notifications: { unblocked: false, waiting: true } }).notifications
+        .waiting,
+    ).toBe(true);
+  });
+
+  it("defaults keepInMenuBar on and coerces to boolean (TV-D12)", () => {
+    expect(sanitizePreferences({}).keepInMenuBar).toBe(true);
+    expect(sanitizePreferences({ keepInMenuBar: false }).keepInMenuBar).toBe(false);
+    expect(sanitizePreferences({ keepInMenuBar: "no" }).keepInMenuBar).toBe(true);
   });
 
   it("keeps the Tasks sidebar's hidden rows and pins, dropping bad entries (TV-U6)", () => {
@@ -136,12 +153,19 @@ describe("sanitizePreferences", () => {
 
 describe("notificationTypeForOp", () => {
   it("maps each quiet-set op to its governing toggle", () => {
-    expect(notificationTypeForOp("comments.add")).toBe("mention");
+    expect(notificationTypeForOp("comments.add")).toBe("comments");
+    expect(notificationTypeForOp("comments.edit")).toBe("mention");
+    expect(notificationTypeForOp("tasks.mentioned")).toBe("mention");
+    expect(notificationTypeForOp("notes.mention")).toBe("mention");
     expect(notificationTypeForOp("tasks.assigned")).toBe("assigned");
+    expect(notificationTypeForOp("tasks.project_deleted")).toBe("assigned");
+    expect(notificationTypeForOp("tasks.waiting_resolved")).toBe("waiting");
     expect(notificationTypeForOp("tasks.completed")).toBe("completed");
     expect(notificationTypeForOp("email.snooze_due")).toBe("dueFollowUp");
     expect(notificationTypeForOp("email.follow_up_due")).toBe("dueFollowUp");
-    expect(notificationTypeForOp("tasks.unblocked")).toBe("unblocked");
+    expect(notificationTypeForOp("tasks.unblocked")).toBe("waiting");
+    // A reminder has no switch: the reminder itself turns it off (spec §13).
+    expect(notificationTypeForOp("tasks.reminder")).toBeNull();
     expect(notificationTypeForOp("attachments.storage_80")).toBe("storage");
     expect(notificationTypeForOp("attachments.storage_95")).toBe("storage");
   });
@@ -158,9 +182,10 @@ describe("isNotificationEnabled", () => {
     const prefs = {
       mention: true,
       assigned: false,
+      comments: true,
       completed: false,
       dueFollowUp: true,
-      unblocked: false,
+      waiting: false,
       overdueTasks: false,
       storage: false,
     };
@@ -172,16 +197,29 @@ describe("isNotificationEnabled", () => {
     expect(isNotificationEnabled("tasks.unblocked", prefs)).toBe(false);
   });
 
+  it("splits a comment notice: naming you is a mention, anything else is comments (TV-D12)", () => {
+    const prefs = { ...DEFAULT_NOTIFICATION_PREFS, mention: true, comments: false };
+    const named = { mentioned_user_ids: ["me"], notify_user_ids: [] };
+    const participant = { mentioned_user_ids: [], notify_user_ids: ["me"] };
+    expect(isNotificationEnabled("comments.add", prefs, named, "me")).toBe(true);
+    expect(isNotificationEnabled("comments.add", prefs, participant, "me")).toBe(false);
+    const quiet = { ...prefs, mention: false, comments: true };
+    expect(isNotificationEnabled("comments.add", quiet, named, "me")).toBe(false);
+    expect(isNotificationEnabled("comments.add", quiet, participant, "me")).toBe(true);
+  });
+
   it("fails open for an unmapped op regardless of prefs", () => {
     const allOff = {
       mention: false,
       assigned: false,
+      comments: false,
       completed: false,
       dueFollowUp: false,
-      unblocked: false,
+      waiting: false,
       overdueTasks: false,
       storage: false,
     };
+    expect(isNotificationEnabled("tasks.reminder", allOff)).toBe(true);
     expect(isNotificationEnabled("workspace.invite_accepted", allOff)).toBe(true);
     expect(isNotificationEnabled("note_shared", allOff)).toBe(true);
   });

@@ -83,6 +83,12 @@ describe("spineActivityLine", () => {
       "commented: “ping me when ready”",
     );
     expect(spineActivityLine(entry("comments.add"))).toBe("left a comment");
+    // TV-U13: edits, deletes and their Undo read as words, never the op name.
+    expect(spineActivityLine(entry("comments.edit", { excerpt: "now with @Mike" }))).toBe(
+      "edited a comment: “now with @Mike”",
+    );
+    expect(spineActivityLine(entry("comments.delete"))).toBe("deleted a comment");
+    expect(spineActivityLine(entry("comments.restore"))).toBe("brought back a comment");
   });
 
   it("never lies by omission — unknown ops fall back to the op name", () => {

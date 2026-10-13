@@ -1,0 +1,179 @@
+import { expect, type Page, test } from "@playwright/test";
+
+import {
+  DEV,
+  devWorkspace,
+  rest,
+  rpc,
+  runTag,
+  type Session,
+  signIn,
+  signInPage,
+} from "./support/local-stack";
+
+/**
+ * Tasks v3 TV-U13 — the detail panel v3 and the full page (AC11.7, AC11.8,
+ * AC3.7, AC1.16), against the local stack. Run it with the stack up and a dev
+ * server pointed at it:
+ *   bun run local:up && bun run env:local
+ *   MODUO_TARGET=web ./node_modules/.bin/rsbuild dev --host 127.0.0.1 --port 8131
+ *   E2E_BASE_URL=http://127.0.0.1:8131 bunx playwright test --project=e2e tests/tasks-detail.spec.ts
+ */
+
+type TaskRow = { id: string; title: string; number: number | null };
+
+let dev: Session;
+let ws: { id: string; inboxId: string };
+let tag: string;
+let project: { id: string };
+
+test.describe.configure({ mode: "serial" });
+
+test.beforeAll(async () => {
+  dev = await signIn(DEV);
+  ws = await devWorkspace(dev);
+  tag = runTag();
+  [project] = await rest<Array<{ id: string }>>(dev, "buckets", {
+    method: "POST",
+    body: {
+      workspace_id: ws.id,
+      owner_id: dev.user.id,
+      name: `Detail ${tag}`,
+      position: `z${tag}`,
+    },
+  });
+});
+
+async function createTask(title: string, bucketId = project.id): Promise<TaskRow> {
+  const id = crypto.randomUUID();
+  await rpc(dev, "tasks_op_create", {
+    p_workspace_id: ws.id,
+    p_task: { id, title, bucket_id: bucketId },
+  });
+  const [row] = await rest<TaskRow[]>("service", `tasks?id=eq.${id}&select=id,title,number`);
+  return row;
+}
+
+async function openTask(page: Page, taskId: string) {
+  await signInPage(page, dev, ws.id);
+  await page.goto(`/tasks?id=${taskId}`);
+  await expect(page.getByRole("navigation", { name: "Location" })).toBeVisible({ timeout: 20_000 });
+}
+
+test("AC11.7 — Details ▾ lists Details · Project; the full page keeps the route and the panel shows Project", async ({
+  page,
+}) => {
+  const task = await createTask(`Logo concepts ${tag}`);
+  await openTask(page, task.id);
+  await page.getByRole("button", { name: "Panel view: Details" }).click();
+  await expect(page.getByRole("menuitemradio", { name: /Details/ })).toBeVisible();
+  await expect(page.getByRole("menuitemradio", { name: /Project/ })).toBeVisible();
+  await expect(page.getByRole("menuitemradio", { name: /In flight/ })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+
+  const url = page.url();
+  await page.getByRole("button", { name: "Open full page" }).first().click();
+  const full = page.locator('[data-slot="task-full-page"]');
+  await expect(full).toBeVisible();
+  await expect(full.getByRole("textbox", { name: "Task title" })).toHaveValue(task.title);
+  expect(new URL(page.url()).pathname).toBe(new URL(url).pathname);
+  await expect(page.getByRole("button", { name: "Panel view: Project" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(full).toHaveCount(0);
+});
+
+test("AC3.7 — ⋯ copies the branch name", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  const task = await createTask(`Logo concepts ${tag}`);
+  await openTask(page, task.id);
+  await page.getByRole("button", { name: "More actions" }).first().click();
+  await page.getByRole("menuitem", { name: "Copy branch name" }).click();
+  const copied = await page.evaluate(() => navigator.clipboard.readText());
+  expect(copied).toMatch(new RegExp(`^[a-z]+-${task.number}-logo-concepts-${tag}$`));
+});
+
+test("AC11.8 — a comment edits, takes a reaction and deletes with Undo", async ({ page }) => {
+  const task = await createTask(`Feedback ${tag}`);
+  await openTask(page, task.id);
+  const box = page.getByRole("textbox", { name: "Comment on this task" });
+  await box.fill(`First pass ${tag}`);
+  await box.press("ControlOrMeta+Enter");
+  const card = page.locator("article", { hasText: `First pass ${tag}` });
+  await expect(card).toBeVisible();
+
+  await card.hover();
+  await card.getByRole("button", { name: "React" }).click();
+  await page.getByRole("button", { name: "Thumbs up" }).click();
+  await expect(card.getByRole("button", { name: /Thumbs up: You/ })).toBeVisible();
+
+  await card.getByRole("button", { name: "Comment actions" }).click();
+  await page.getByRole("menuitem", { name: "Edit" }).click();
+  const editor = page.getByRole("textbox", { name: "Edit comment" });
+  await editor.fill(`First pass ${tag}, ship it`);
+  await editor.press("ControlOrMeta+Enter");
+  const edited = page.locator("article", { hasText: `ship it` });
+  await expect(edited.getByText("edited")).toBeVisible();
+
+  await edited.hover();
+  await edited.getByRole("button", { name: "Comment actions" }).click();
+  await page.getByRole("menuitem", { name: "Delete" }).click();
+  await expect(page.locator("article", { hasText: "ship it" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Undo" }).click();
+  await expect(page.locator("article", { hasText: "ship it" })).toBeVisible();
+  // No notice for a reaction (REPLAN 88): nothing in the trail but the add and the edit.
+  const ops = await rest<Array<{ op: string }>>(
+    "service",
+    `module_activity?entity_id=eq.${task.id}&module=eq.comments&select=op`,
+  );
+  expect(ops.map((o) => o.op).sort()).toEqual([
+    "comments.add",
+    "comments.delete",
+    "comments.edit",
+    "comments.restore",
+  ]);
+});
+
+test("AC1.16 — at 280 and 320 px nothing in the panel truncates; the label column narrows under 320", async ({
+  page,
+}) => {
+  const task = await createTask(`A long title that has to wrap in a narrow panel ${tag}`);
+  // A long estimate with tracked time and a due date: the widest values.
+  await rpc(dev, "tasks_op_update", {
+    p_workspace_id: ws.id,
+    p_task_id: task.id,
+    p_patch: { estimate_minutes: 2400, due_date: "2026-12-30T12:00:00Z" },
+  });
+  await rpc(dev, "tasks_op_track_time", {
+    p_workspace_id: ws.id,
+    p_task_id: task.id,
+    p_action: "set_total",
+    p_seconds: 45_000,
+    p_ended_at: new Date().toISOString(),
+    p_client_key: `u13-${tag}`,
+    p_entry_id: null,
+  });
+  await openTask(page, task.id);
+  const panel = page.locator('[data-layout="panel"]').first();
+  await expect(panel.getByRole("button", { name: /^Estimate: 12h 30m, of ~40h/ })).toBeVisible();
+  for (const width of [280, 320]) {
+    await panel.evaluate((el, w) => {
+      // The shell's floor is 280 px (call 89).
+      (el.closest("[data-panel-module]") as HTMLElement).style.width = `${w}px`;
+    }, width);
+    const clipped = await panel.evaluate(
+      (el) =>
+        Array.from(el.querySelectorAll<HTMLElement>("[data-slot=property-value]")).filter(
+          (v) =>
+            v.scrollWidth > v.clientWidth + 1 ||
+            v.getBoundingClientRect().right > el.getBoundingClientRect().right + 1,
+        ).length,
+    );
+    expect(clipped, `clipped values at ${width} px`).toBe(0);
+    const labelWidth = await panel
+      .locator("[data-slot=property-row] > :first-child")
+      .first()
+      .evaluate((el) => el.getBoundingClientRect().width);
+    if (width < 320) expect(labelWidth).toBeLessThan(80);
+    else expect(labelWidth).toBeGreaterThan(90);
+  }
+});

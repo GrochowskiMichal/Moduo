@@ -61,6 +61,7 @@ import { GlobalCommandPalette } from "./global-command-palette";
 import { GlobalShortcutsDialog } from "./global-shortcuts-dialog";
 import { HelpMenu } from "./help-menu";
 import { MinBuildBanner } from "./min-build-banner";
+import { NoticeDeliveries } from "./notice-deliveries";
 import { TasksSyncStatus } from "./sync-status";
 import { useUnknownRouteRedirect } from "./use-unknown-route-redirect";
 
@@ -542,6 +543,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
             <FocusSessionChip />
             <HelpMenu />
             <NotificationCenter />
+            <NoticeDeliveries />
             <UserMenu
               avatarDataUrl={avatarDataUrl}
               profileInitial={derivedInitial}

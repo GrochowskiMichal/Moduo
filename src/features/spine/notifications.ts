@@ -61,6 +61,11 @@ export type NotificationGroup = {
 };
 
 function groupKey(item: NotificationItem): string {
+  // Reminders all hang on your Inbox (TV-D12): one card per task they name.
+  if (item.op === "tasks.reminder") {
+    const taskId = item.payload.task_id;
+    return `reminder:${typeof taskId === "string" && taskId ? taskId : item.id}`;
+  }
   return `${item.targetType ?? "?"}:${item.targetId ?? "?"}#${item.op}`;
 }
 
@@ -157,11 +162,11 @@ export type NotificationFeeds = {
  */
 export function deriveNotificationFeeds(
   items: NotificationItem[],
-  opts: { workspaceId: string | null; isEnabled: (op: string) => boolean },
+  opts: { workspaceId: string | null; isEnabled: (item: NotificationItem) => boolean },
 ): NotificationFeeds {
   const { spine, workspace } = partitionBySource(items);
   const wsEvents = spine.filter(
-    (item) => item.workspaceId === opts.workspaceId && opts.isEnabled(item.op),
+    (item) => item.workspaceId === opts.workspaceId && opts.isEnabled(item),
   );
   const active = activeNotifications(wsEvents);
   return {
@@ -198,7 +203,8 @@ export function notificationSubject(
   group: NotificationGroup,
   labels?: ReadonlyMap<string, string>,
 ): string | null {
-  if (group.targetType !== "task") return null;
+  // A reminder hangs on your Inbox but is about the task it names (TV-D12).
+  if (group.targetType !== "task" && group.op !== "tasks.reminder") return null;
   const title = newestItem(group).payload.title;
   if (typeof title === "string" && title.trim()) return title.trim();
   const label = group.targetId ? labels?.get(group.targetId)?.trim() : "";
@@ -318,6 +324,13 @@ export function notificationDeepLinkNoun(entityType: string): string {
 
 /** Resolve where clicking a card should navigate (best-effort by entity type). */
 export function notificationDeepLink(group: NotificationGroup): NotificationDeepLink | null {
+  // A reminder opens its task, not the Inbox it hangs on (TV-D12).
+  if (group.op === "tasks.reminder") {
+    const taskId = newestItem(group).payload.task_id;
+    if (typeof taskId === "string" && taskId) {
+      return { route: "/tasks", entityType: "task", entityId: taskId };
+    }
+  }
   if (!group.targetType || !group.targetId) return null;
   const route = ROUTE_BY_TYPE[group.targetType];
   if (!route) return null;
