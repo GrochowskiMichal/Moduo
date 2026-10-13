@@ -3,9 +3,9 @@
 > **Status (2026-10-13): round 1 answered; round 1b sent (re-asks), two research lanes running for round 2.**
 >
 > - **Decided:** CH1–CH11, CH13–CH19, CH22 (no event workspace: Team plans per team), CH25, CH27, CH28. CH12 (threads) not accepted → CH30. CH24 parked. Facts: CH20 (≤ ~100 people, Polish + English, app in English, date unknown), CH21.
-> - **Open:** CH3a, CH4a, CH16a, CH16b, CH23a, CH26a, CH28a, CH28b; next round with a prototype: ★ CH29 (the look), ★ CH30 (threads).
+> - **Open:** CH3a, CH4a, CH16a, CH16b, CH23a, CH26a, CH28a, CH28b; with round 2's prototype: ★ CH29 (the look, waiting on its research lane), ★ CH30 (replies, not threads: proposal written).
 > - **Maciej on the look:** v1's interface is a placeholder; nothing carries over unconfirmed; he likes Slack's and Discord's looks.
-> - **Research lanes** ([`research/`](./research/)): six landed and folded in (early-decisions audit, role journeys, competitor structure, hackathon, visual audit → §5, current state → §1.3 B and §6 #15–18). Running for round 2: **threads** (→ CH30) and **visual competitors** (→ CH29).
+> - **Research lanes** ([`research/`](./research/)): six landed and folded in (early-decisions audit, role journeys, competitor structure, hackathon, visual audit → §5, current state → §1.3 B and §6 #15–18). **Threads** landed (→ CH30). Running: **visual competitors** (→ CH29).
 > - **Research data in the shared local database** (kept for round 2's live checks; remove when the plan is done): workspace **"Chat replan research"** `669be464-0b9a-4d84-8537-544ac04dba5f` (10 channels, 3,032 messages, one task) and a third local user `third@moduo.local`. Full ledger and a cleanup sketch: [current state](./research/current-state.md), last section. `dev@moduo.local`'s plan is back to `free` (checked).
 > - **Prototype:** [`prototypes/round-1.html`](./prototypes/round-1.html) (keys 1–7 frames, V variants; serve the folder over http to see the Geist font).
 > - **Uncommitted:** nothing.
@@ -696,7 +696,23 @@ The hackathon readiness plan (`t/maciej/hackathon-plan`) owns workspaces, invite
 
 **CH29 · The look** *(new topic; the next round's prototype answers it)* — Slack/Discord-grade visuals on Tasks' kit. A research lane is measuring Slack, Discord, Teams, Google Chat, Linear, Campfire, Zulip, Telegram, Element and Mattermost; the next prototype shows 2–3 complete variants, and lists every place a Tasks rule would have to bend.
 
-**CH30 · Threads, rethought** *(new topic; the next round's prototype answers it)* — a research lane is reviewing how a dozen products handle replies and side conversations, and what fixes "half in the thread, half under it" and "I didn't know it would become a thread". The next prototype shows the options in a real conversation.
+**★ CH30 · Replies, not threads** *(rethought from CH12; [research/threads.md](./research/threads.md), prototype round 2)*
+- **What the research found:** his complaint is the oldest known problem with chat threads, and Slack's own team wrote it up first (2017): it was unclear when to start a thread, so they "did both interchangeably". Replies shown *in* the channel made busy channels unreadable; replies taken *out* stopped marking anything unread, so Slack had to invent an "All Threads" view. Google Chat and Teams moved toward Slack's model in 2023–25 and still get the same complaint (a June 2026 Google forum post). Discord's separate threads keep the up-front choice. **Nobody has solved "people don't pick the right place up front".** The tools that cope best **remove the choice** (every answer is just a reply; the app shows the structure: iMessage, WhatsApp) or **let anyone fix it afterwards** (Zulip moves messages between topics).
+- **Options weighed:** A Slack threads (v1) · B quote-replies in the stream only · C replies shown in place under their message · D people just reply and the app groups a chain once it gets tangled · E anyone tidies afterwards · F Zulip topics · G "wrap up" a chain with its outcome (Linear's resolve). Comparison table in the research file, §3.
+- **Proposed: B as the base, D on top, E and G as tidy tools.**
+  1. **One action, Reply.** A reply posts at the bottom, in time order, visible to everyone, with one muted line quoting what it answers (click it to jump). No "Reply in thread", no "Also send to channel", no second reply button.
+  2. **A message with replies gets a small line:** "2 replies · Alex, Mike ›". Clicking it opens the whole chain in the right panel (root, replies in order, its own reply box), as an item with a back arrow.
+  3. **A chain folds only when it gets tangled:** once it has 3+ replies *and* other talk has happened in between, its replies in the stream become **one row**, sitting where the latest reply is: "↳ Sofia's 'Can someone get the logo SVGs…' · 6 replies · Anna: Sent them… · 11:02". A new reply moves that row to the bottom, so an active side conversation is never buried. A chain that isn't tangled never folds: two people going back and forth just read as chat. Nothing folds above where you're reading.
+  4. **Tidy afterwards**, from a message's ⋯ or with several selected: **Reply to…** (attach a stray message to its chain), **Move to a conversation**, **Make a task** (CH10), **Make a note** and **Move to a task's comments** (proposals for the Notes and Tasks plans), and **Wrap up** on a chain (it folds for good, showing the reply that settled it).
+  5. **Per-person display option:** "Reply chains: Fold when tangled (default) · Always show every reply".
+- **What reaches you (CH6, CH8):** "a reply in a thread you're in" becomes **"a reply in a chain you're in"** (you wrote its first message, replied, or were mentioned). A reply to your own message is always addressed to you. Catch up groups a chain's new replies as one item. Every reply is an ordinary message, so unread works as everywhere else (no separate thread unread, Slack's and Matrix's trap).
+- **Why it fixes his two problems:** "half in, half out" is gone for anything sent with Reply, and "Reply to…" fixes anything sent without it; "I didn't know it would become a thread" is gone, because growing a side conversation is the app's job, by a rule anyone can predict.
+- **The new part is the fold rule** (no product found folds only when tangled). It's tested in round 2's prototype and later on the research workspace's 3,000 messages; the threshold (2/3/5 replies) and whether a folded chain ever unfolds are tuned there.
+- **Hackathon cut:** 1, 2 and the chain in the right panel (cheap; the database already stores what a message replies to). 3–5 follow in the teams-of-2–5 cut once the fold is tested.
+- **48a:** this is how WhatsApp and iMessage already work, so it suits people who never used Slack; Slack users lose a checkbox, not a capability.
+- *Recommend: yes.*
+
+❓ OK? (prototype round 2, frame "Replies")
 
 ### F · Visual *(added after round 1 was sent, from the visual audit)*
 
