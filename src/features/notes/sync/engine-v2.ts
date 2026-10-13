@@ -29,7 +29,13 @@ import * as Y from "yjs";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { tryDeriveNoteBody } from "../editor/doc-markdown";
 import { decodeBase64ToUint8, encodeUint8ToBase64 } from "../utils/base64";
-import { AgentOrigin, type AgentUndo, createAgentUndo, isForeignOrigin } from "./agent-origin";
+import {
+  AgentOrigin,
+  type AgentUndo,
+  createAgentUndo,
+  isAgentOrigin,
+  isForeignOrigin,
+} from "./agent-origin";
 import {
   type DocOutboxEntry,
   deleteDocOutboxEntries,
@@ -131,6 +137,10 @@ type NoteSession = {
  * before closing the least-recently-used — each holds a Y.Doc + an
  * IndexedDB connection for the whole workspace visit otherwise. */
 const MAX_IDLE_SESSIONS = 8;
+
+/** After an agent write lands, wait this long (for the broadcast and pull
+ * of the same write to settle) before re-saving the merged body. */
+const AGENT_BODY_RESAVE_MS = 1500;
 
 type StatusListener = (status: NotesSyncStatusV2) => void;
 
@@ -286,6 +296,14 @@ export class NotesSyncEngineV2 {
 
     doc.on("update", (update: Uint8Array, origin: unknown) => {
       if (s!.destroyed) return;
+      // An agent's write carries the body as the connector saw the doc; if
+      // this session pushed an edit the connector hadn't seen yet, that body
+      // lacks it. Re-derive once from the merged doc (an update-free save).
+      if (isAgentOrigin(origin) && s!.synced && !this.drafts.has(noteId)) {
+        s!.bodyOwed = true;
+        this.scheduleFlush(s!, AGENT_BODY_RESAVE_MS);
+        return;
+      }
       // Ignore what we applied ourselves: remote pulls, the local IDB cache
       // replaying at boot, agent writes (already stored server-side), and
       // awareness/bootstrap application.
@@ -351,9 +369,12 @@ export class NotesSyncEngineV2 {
         // has them, and a cache-evicted client NEEDS them (skipping by
         // clientId lost history whenever local persistence didn't survive).
         try {
-          // Agent rows get an agent origin: that is what the session's Undo
-          // tracks (NR-6). Everything else is plain remote.
-          const origin = u.origin === "agent" ? new AgentOrigin(u.actorKeyId, null) : "remote";
+          // Agent rows that land while the note is open get an agent origin:
+          // that is what the session's Undo tracks (NR-6). The first pull's
+          // rows are history (possibly days old and built upon), so they
+          // apply as plain remote and are never offered for Undo.
+          const origin =
+            u.origin === "agent" && s.synced ? new AgentOrigin(u.actorKeyId, null) : "remote";
           Y.applyUpdate(s.doc, decodeBase64ToUint8(u.updateB64), origin);
           ids.push(u.id);
         } catch (e) {

@@ -154,12 +154,12 @@ export function agentWriteFromLog(input: {
       if (seeded) Y.applyUpdate(doc, decodeBase64ToUint8(seeded.docStateB64));
     }
     const result = applyAgentEdit(doc, input.edit);
-    const seededOnly = Y.encodeStateAsUpdate(doc, before);
+    const sinceServer = Y.encodeStateAsUpdate(doc, before);
     // Push everything new since the server's state: the seed (if any) and
     // the edit travel as one update.
     const changed = result.update !== null;
     return {
-      updateB64: changed ? encodeUint8ToBase64(seededOnly) : null,
+      updateB64: changed ? encodeUint8ToBase64(sinceServer) : null,
       bodyMd: result.bodyMd,
       bodyText: result.bodyText,
     };

@@ -157,48 +157,71 @@ describe("honest provider (NR-3)", () => {
 });
 
 describe("agent writes reach an open note (NR-6)", () => {
-  it("a pulled agent row lands, is not pushed back, and Undo reverts it with a push", async () => {
+  function agentScenario() {
     const base = buildDocStateFromMarkdown("n9", "# Plan\n\nHello")!;
     const server = new Y.Doc();
     server.get(NOTES_DOC_ROOT, Y.XmlElement);
     Y.applyUpdate(server, Uint8Array.from(Buffer.from(base.docStateB64, "base64")));
     const before = Y.encodeStateVector(server);
     applyAgentEdit(server, { kind: "append", markdown: "From the agent" });
-    const agentB64 = encodeUint8ToBase64(Y.encodeStateAsUpdate(server, before));
-
+    const agentRow = {
+      id: 7,
+      clientId: "agent:x",
+      clientSeq: 1,
+      updateB64: encodeUint8ToBase64(Y.encodeStateAsUpdate(server, before)),
+      origin: "agent",
+      actorKeyId: "key-1",
+    };
+    let rows: (typeof agentRow)[] = [];
     const pullDoc = rs.fn(async () => ({
       snapshotB64: base.docStateB64,
       docVersion: 1,
-      updates: [
-        {
-          id: 7,
-          clientId: "agent:x",
-          clientSeq: 1,
-          updateB64: agentB64,
-          origin: "agent",
-          actorKeyId: "key-1",
-        },
-      ],
+      updates: rows,
     }));
-    const pushUpdates = rs.fn(async () => ({ inserted: 1, duplicates: 0, maxUpdateId: 8 }));
+    const pushUpdates = rs.fn(async (_input: { updates: unknown[]; bodyMd?: string | null }) => ({
+      inserted: 1,
+      duplicates: 0,
+      maxUpdateId: 8,
+    }));
     const runtime = { notesV2: { pullDoc, pushUpdates } } as unknown as ModuoRuntime;
+    return { runtime, pushUpdates, agentRow, setRows: (r: (typeof agentRow)[]) => (rows = r) };
+  }
+
+  it("a live agent row lands, is not pushed back, re-saves the merged body, and Undo reverts it", async () => {
+    const { runtime, pushUpdates, agentRow, setRows } = agentScenario();
     engine = new NotesSyncEngineV2(runtime, "ws1");
     const session = engine.getOrCreateSession("n9");
     await session.booted;
-    await tick();
 
+    setRows([agentRow]);
+    await engine.pullNote("n9");
     expect(deriveNoteBody(session.doc).md).toBe("# Plan\n\nHello\n\nFrom the agent");
-    expect(pushUpdates).not.toHaveBeenCalled();
     const undo = engine.agentUndo("n9")!;
     expect(undo.canUndo()).toBe(true);
+
+    // The agent's update itself is never echoed; only an update-free body save.
+    await engine.flushNote("n9");
+    await tick();
+    for (const [call] of pushUpdates.mock.calls) expect(call.updates).toEqual([]);
+    expect(pushUpdates.mock.calls.at(-1)?.[0].bodyMd).toBe("# Plan\n\nHello\n\nFrom the agent");
 
     undo.undo();
     await tick();
     await engine.flushNote("n9");
     await tick();
     expect(deriveNoteBody(session.doc).md).toBe("# Plan\n\nHello");
-    expect(pushUpdates).toHaveBeenCalled();
-    const pushed = (pushUpdates.mock.calls.at(-1) as unknown as [{ bodyMd?: string | null }])[0];
-    expect(pushed.bodyMd).toBe("# Plan\n\nHello");
+    const last = pushUpdates.mock.calls.at(-1)?.[0];
+    expect(last?.updates.length).toBeGreaterThan(0);
+    expect(last?.bodyMd).toBe("# Plan\n\nHello");
+  });
+
+  it("agent rows in the first pull are history: shown, never offered for Undo", async () => {
+    const { runtime, agentRow, setRows } = agentScenario();
+    setRows([agentRow]);
+    engine = new NotesSyncEngineV2(runtime, "ws1");
+    const session = engine.getOrCreateSession("n9");
+    await session.booted;
+    expect(deriveNoteBody(session.doc).md).toBe("# Plan\n\nHello\n\nFrom the agent");
+    expect(engine.agentUndo("n9")!.canUndo()).toBe(false);
   });
 });
