@@ -6,14 +6,17 @@
 // bare −/= too), and a canvas that scrolls endlessly both ways, drawing only
 // the rows on screen (VirtualStack) over a grid painted as one background.
 //
-// The read view and its keys. TV-TL2 brings the drags (points, diamonds,
-// bars), click-to-create, multi-move, edge scroll, Undo, ⌥←/→, D, the
-// dependency lines and the panel's "No date" view; the seams it builds on:
-//   - `dayAtX` / `xOfDay` / `dayCenterX` (timeline-scale.ts) against the
-//     `TimelineGeometry` context's range and day width;
-//   - every mark's `data-timeline-mark` + ids (timeline-marks.tsx), every
-//     row's `data-row-key` and `data-timeline-row`;
-//   - `TimelineRowHandlers` (one stable object) for anything a row asks.
+// Working on the canvas (TV-TL2, REPLAN 70, 68b): drag a point (its due
+// date; a selection moves together), a diamond, a band or a bar and their
+// ends; click a day on a row with no date; the view scrolls near its edges;
+// every change has one Undo; ⌥←/→ (⇧ a week), d, ⇧D, ⇧T, ⇧↑↓, ⌘A; the
+// selected or hovered task's "waits on" lines, a contradicting date shown
+// with its one fix; "No date · n" opens the right panel's No date view, whose
+// tasks drop onto a day. The pieces: `use-timeline-canvas.ts` (the pointer),
+// `use-timeline-writes.tsx` (what's saved), `use-timeline-drop.tsx` (the
+// panel's drop), `timeline-deps-layer.tsx` (the lines), and the marks reading
+// a drag from `timeline-drag-store.ts`. A person who can't edit gets none of
+// the handles: nothing offers a drag that would be refused.
 
 import { CalendarOff } from "lucide-react";
 import {
@@ -37,10 +40,19 @@ import { useAssignees } from "../assignees";
 import { type CompletedMode, isCompletedHidden } from "../completed";
 import { type TasksDisplay, type TimelineShow, timelineScopeOf } from "../display";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
-import type { Bucket, Task } from "../model";
-import { isTypingTarget, type TimelineKeyAction, timelineKeyAction } from "../timeline-keys";
+import type { Bucket, Task, TaskRelation } from "../model";
+import { PRIVATE_PROJECT_LABEL } from "../model";
+import { contradictions } from "../timeline-deps";
+import { fitZoom } from "../timeline-drag";
+import {
+  isTypingTarget,
+  shiftDaysOf,
+  type TimelineKeyAction,
+  timelineKeyAction,
+} from "../timeline-keys";
 import {
   buildTimelineRows,
+  type DaySpan,
   type TimelineGroup,
   type TimelineRow,
   taskRowKey,
@@ -72,6 +84,8 @@ import { PlanViewHeader } from "./plan-view-header";
 import { ProjectChoicesProvider, StatusChoicesProvider } from "./project-choices";
 import { useRowActions } from "./row-facts";
 import { activateTask, type TaskCommand } from "./task-context-menu";
+import { TimelineDepsLayer } from "./timeline-deps-layer";
+import { createCanvasStore, TimelineCanvasContext } from "./timeline-drag-store";
 import { TimelineHeader } from "./timeline-header";
 import {
   createViewportStore,
@@ -80,7 +94,16 @@ import {
   TimelineViewportContext,
   TimelineWindowContext,
 } from "./timeline-marks";
-import { type TimelineRowHandlers, TimelineRowItem, timelineRowDomId } from "./timeline-row";
+import {
+  type RowStubs,
+  type TimelineRowHandlers,
+  TimelineRowItem,
+  timelineRowDomId,
+} from "./timeline-row";
+import type { MultiSelect } from "./use-task-selection";
+import { type CanvasLive, useTimelineCanvas } from "./use-timeline-canvas";
+import { useTimelineDrop } from "./use-timeline-drop";
+import { useTimelineWrites } from "./use-timeline-writes";
 import { VirtualStack } from "./virtual-stack";
 
 type Props = {
@@ -115,7 +138,44 @@ type Props = {
   onOpenTask?: (id: string) => void;
   /** ⏎ (or a double-click) on a project at All opens its own Timeline. */
   onOpenProject?: (id: string) => void;
+  /** The page's selection of several tasks (TV-U12): ⇧/⌘-click, ⇧↑↓, ⌘A; they move together. */
+  multiSelect?: MultiSelect;
+  /** Where the view writes the task rows' order (a range, ⌘A, the bulk bar). */
+  orderRef?: { current: readonly string[] };
+  /** The page's keys on a selection (the bulk bar's), asked before the view's own. */
+  onViewKey?: (event: ReactKeyboardEvent<HTMLDivElement>, selected: Task | null) => boolean;
+  /** "No date · n": open the right panel's No date view (absent: it shows the undated rows). */
+  onOpenNoDate?: () => void;
+  /**
+   * May this person move dates here (TV-TL2): Edit in the workspace, and on
+   * the project when the place is one. False: no drag handles at all.
+   */
+  canDrag?: boolean;
 };
+
+const NO_IDS: ReadonlySet<string> = new Set();
+const NO_RELATIONS: readonly TaskRelation[] = [];
+
+/** The keys the view keeps while several tasks are selected (the rest are the bulk bar's). */
+const VIEW_KEYS_ON_A_SELECTION: ReadonlySet<TimelineKeyAction> = new Set<TimelineKeyAction>([
+  "shift-earlier",
+  "shift-later",
+  "shift-earlier-week",
+  "shift-later-week",
+  "extend-next",
+  "extend-prev",
+  "select-all",
+  "clear",
+  "fit",
+  "next",
+  "prev",
+  "today",
+  "zoom-in",
+  "zoom-out",
+  "name-column",
+  "fold",
+  "unfold",
+]);
 
 /** The name column (69): 280 px, 200–480, ⇧[ hides it. Per device. */
 const NAME_W_DEFAULT = 280;
@@ -190,9 +250,19 @@ export function TaskTimelineView({
   taskKey = null,
   onOpenTask,
   onOpenProject,
+  multiSelect,
+  orderRef,
+  onViewKey,
+  onOpenNoDate,
+  canDrag: canDragProp,
 }: Props) {
   const scopeKey = inbox && selection === inbox.id ? "inbox" : selection;
   const scopeKind = useMemo(() => timelineScopeOf(scopeKey), [scopeKey]);
+  // Drags need Edit (TV-TL2): the page works it out (`canDrag`); without one,
+  // the workspace's Edit decides. The server still checks every write.
+  const canDrag = canEdit && (canDragProp ?? true);
+  const [canvas] = useState(createCanvasStore);
+  const selectedIds = multiSelect?.ids ?? NO_IDS;
   const zoom = display.timelineZoom;
   const dw = DAY_WIDTH[zoom];
   const show = new Set(display.timelineShow ?? NO_SHOW);
@@ -304,6 +374,14 @@ export function TaskTimelineView({
     ],
   );
   const { rows } = built;
+  // The task rows in the order drawn: a ⇧-click range, ⇧↑↓, ⌘A (TV-U12).
+  const taskOrder = useMemo(
+    () => rows.flatMap((r) => (r.kind === "task" ? [r.task.id] : [])),
+    [rows],
+  );
+  useLayoutEffect(() => {
+    if (orderRef) orderRef.current = taskOrder;
+  });
   const stickyIndexes = useMemo(
     () =>
       rows.flatMap((r, i) =>
@@ -568,26 +646,182 @@ export function TaskTimelineView({
         : Math.max(0, Math.min(stops.length - 1, at + delta));
     const row = stops[index];
     if (!row) return;
+    multiSelect?.clear();
     setCursorKey(row.key);
     onSelectTask(row.kind === "task" ? row.task.id : null);
     reveal(row);
+  };
+
+  // ── Who may move what (TV-TL2) ──────────────────────────────────────────
+  const canDragRow = useCallback(
+    (row: TimelineRow) =>
+      canDrag && (row.kind === "task" || row.kind === "section" || row.kind === "project"),
+    [canDrag],
+  );
+
+  // ── Dependencies (70, 68b) ──────────────────────────────────────────────
+  // Only the reader's own copy: a relation to a task they can't see draws nothing.
+  const taskById = useMemo(() => new Map(api.tasks.map((t) => [t.id, t])), [api.tasks]);
+  const relations = api.taskRelations ?? NO_RELATIONS;
+  const depMode = display.timelineDeps ?? "selected";
+  const lateMarks = useMemo(
+    () => (depMode === "off" ? new Map() : contradictions(relations, taskById)),
+    [depMode, relations, taskById],
+  );
+  /** Where a task's point is on the canvas (null: it has none, or no row). */
+  const pointDay = useCallback(
+    (id: string) => {
+      const row = rowByKey.get(taskRowKey(id));
+      return row?.kind === "task" && row.point ? row.point.day : null;
+    },
+    [rowByKey],
+  );
+  const lineSelection = useMemo(
+    () =>
+      selectedIds.size >= 2 ? selectedIds : selectedTaskId ? new Set([selectedTaskId]) : NO_IDS,
+    [selectedIds, selectedTaskId],
+  );
+  // The selected task's lines whose other end isn't drawn: stubs on its row.
+  const stubs = useMemo<RowStubs | null>(() => {
+    if (depMode === "off" || !selectedTaskId || selectedIds.size >= 2) return null;
+    const self = taskById.get(selectedTaskId);
+    if (!self || pointDay(self.id) === null) return null;
+    const projectName = (id: string) =>
+      id === inbox?.id
+        ? "Inbox"
+        : (buckets.find((b) => b.id === id)?.name ?? PRIVATE_PROJECT_LABEL);
+    const words = (other: Task) => {
+      const title = other.title || "Untitled";
+      if (!other.dueOn && !other.dueDate && !other.scheduledAt) return `${title} · no date`;
+      if (other.bucketId !== self.bucketId) return `↗ ${projectName(other.bucketId)} · ${title}`;
+      return `↗ ${title}`;
+    };
+    const before: string[] = [];
+    const after: string[] = [];
+    for (const rel of relations) {
+      const waitsOn = rel.blockedTaskId === self.id;
+      const blocks = rel.blockerTaskId === self.id;
+      if (!waitsOn && !blocks) continue;
+      const other = taskById.get(waitsOn ? rel.blockerTaskId : rel.blockedTaskId);
+      if (!other || other.deletedAt || isHidden(other) || pointDay(other.id) !== null) continue;
+      (waitsOn ? before : after).push(words(other));
+    }
+    return before.length + after.length > 0 ? { before, after } : null;
+  }, [
+    depMode,
+    selectedTaskId,
+    selectedIds,
+    taskById,
+    relations,
+    pointDay,
+    isHidden,
+    buckets,
+    inbox?.id,
+  ]);
+
+  // ── The canvas: drags, clicks on undated rows, the No date drop ─────────
+  const writes = useTimelineWrites(api, zoom);
+  const canvasLive = useRef<CanvasLive>({
+    range,
+    dw,
+    nameW,
+    rowOf: (key) => rowByKey.get(key),
+    canDrag: canDragRow,
+    canEditTask: () => canDrag,
+    selection: selectedIds,
+  });
+  useLayoutEffect(() => {
+    canvasLive.current = {
+      range,
+      dw,
+      nameW,
+      rowOf: (key) => rowByKey.get(key),
+      canDrag: canDragRow,
+      canEditTask: () => canDrag,
+      selection: selectedIds,
+    };
+  });
+  const [dragRowKey, setDragRowKey] = useState<string | null>(null);
+  const pointer = useTimelineCanvas({
+    scrollerRef,
+    store: canvas,
+    live: canvasLive,
+    onCommit: writes.commit,
+    onDragRow: setDragRowKey,
+  });
+  const drop = useTimelineDrop({
+    scrollerRef,
+    store: canvas,
+    geometry: canvasLive,
+    canEdit: canDrag,
+    taskOf: (id) => taskById.get(id) ?? null,
+    onDrop: writes.placeTask,
+  });
+  const { setDropRef } = drop;
+  const setScroller = useCallback(
+    (el: HTMLDivElement | null) => {
+      scrollerRef.current = el;
+      setDropRef(el);
+    },
+    [setDropRef],
+  );
+  /** The task under the pointer: its lines show too (70). */
+  const onCanvasPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    pointer.onPointerMove(e);
+    const key =
+      e.target instanceof Element
+        ? e.target.closest<HTMLElement>("[data-row-key]")?.dataset.rowKey
+        : undefined;
+    const row = key ? rowByKey.get(key) : undefined;
+    canvas.setHoverTask(row?.kind === "task" ? row.task.id : null);
+  };
+  const onCanvasPointerLeave = () => {
+    pointer.onPointerLeave();
+    canvas.setHoverTask(null);
   };
 
   // ── What rows ask for ─────────────────────────────────────────────────
   const [command, setCommand] = useState<{ id: string; command: TaskCommand } | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const refocus = useCallback(() => scrollerRef.current?.focus({ preventScroll: true }), []);
-  const latest = useRef({ onSelectTask, onOpenProject, toggleRow, api, canEdit });
+  const latest = useRef({
+    onSelectTask,
+    onOpenProject,
+    toggleRow,
+    api,
+    canEdit,
+    multiSelect,
+    taskOrder,
+    placeTask: writes.placeTask,
+  });
   useLayoutEffect(() => {
-    latest.current = { onSelectTask, onOpenProject, toggleRow, api, canEdit };
+    latest.current = {
+      onSelectTask,
+      onOpenProject,
+      toggleRow,
+      api,
+      canEdit,
+      multiSelect,
+      taskOrder,
+      placeTask: writes.placeTask,
+    };
   });
   const handlers = useMemo<TimelineRowHandlers>(
     () => ({
-      activate: (row) => {
-        setCursorKey(row.key);
-        latest.current.onSelectTask(row.kind === "task" ? row.task.id : null);
+      activate: (row, mods) => {
+        const { multiSelect: multi, taskOrder: order } = latest.current;
+        if (row.kind === "task" && multi) {
+          // ⇧ a range, ⌘ one more (TV-U12); a plain click is this one alone.
+          multi.select(row.task.id, mods, order);
+          if (!mods.range && !mods.toggle) setCursorKey(row.key);
+        } else {
+          multi?.clear();
+          setCursorKey(row.key);
+          latest.current.onSelectTask(row.kind === "task" ? row.task.id : null);
+        }
         scrollerRef.current?.focus({ preventScroll: true });
       },
+      moveTaskTo: (taskId, day) => latest.current.placeTask(taskId, day),
       toggle: (key) => latest.current.toggleRow(key),
       openProject: (id) => latest.current.onOpenProject?.(id),
       openTask: (id) => latest.current.onSelectTask(id),
@@ -613,6 +847,15 @@ export function TaskTimelineView({
     if (!scroller || !(e.target instanceof Node) || !scroller.contains(e.target)) return;
     if (isTypingTarget(e.target)) return;
     const action = timelineKeyAction(e);
+    // A selection's own keys first (TV-U12's bar: d the date picker, Space,
+    // ⌫…); the Timeline's date moves and its cursor keys stay the view's.
+    if (selectedIds.size >= 2 && onViewKey && !(action && VIEW_KEYS_ON_A_SELECTION.has(action))) {
+      const selectedNow = selectedTaskId ? (taskById.get(selectedTaskId) ?? null) : null;
+      if (onViewKey(e, selectedNow)) {
+        e.preventDefault();
+        return;
+      }
+    }
     if (!action) return;
     const row = cursorKey ? rowByKey.get(cursorKey) : undefined;
     // A key the view didn't use keeps its native job (←/→ off a header and
@@ -620,11 +863,81 @@ export function TaskTimelineView({
     if (runKey(action, row)) e.preventDefault();
   };
 
+  /** The selected tasks while two or more are, else none. */
+  const selectedTasks = (): Task[] =>
+    selectedIds.size >= 2
+      ? [...selectedIds].flatMap((id) => {
+          const task = taskById.get(id);
+          return task ? [task] : [];
+        })
+      : [];
+
+  /** ⇧T: bring the selection's marks into view, zooming out only if they don't fit. */
+  const fitSelection = (row: TimelineRow | undefined): boolean => {
+    const days: number[] = [];
+    if (selectedIds.size >= 2) {
+      for (const id of selectedIds) {
+        const day = pointDay(id);
+        if (day !== null) days.push(day);
+      }
+    } else if (row?.kind === "task" && row.point) days.push(row.point.day);
+    else if (row?.kind === "section" && row.band) days.push(row.band.start, row.band.end);
+    else if (row?.kind === "section" && row.milestone !== null) days.push(row.milestone);
+    else if (row?.kind === "project" && row.bar) days.push(row.bar.start, row.bar.end);
+    if (days.length === 0) return false;
+    const span: DaySpan = { start: Math.min(...days), end: Math.max(...days) };
+    const next = fitZoom(span, trackWidth, zoom);
+    const center = (span.start + span.end + 1) / 2;
+    if (next !== zoom) {
+      pending.current = { kind: "day", day: center, at: trackWidth / 2 };
+      onDisplayChange({ ...display, timelineZoom: next });
+    } else {
+      scrollerRef.current?.scrollTo({
+        left: Math.max(0, (center - range.start) * dw - trackWidth / 2),
+        behavior: "smooth",
+      });
+    }
+    return true;
+  };
+
   /** Run a key's action; false when it did nothing here. */
   const runKey = (action: TimelineKeyAction, row: TimelineRow | undefined): boolean => {
     const foldable =
       row?.kind === "section" || (row?.kind === "project" && row.expandable) ? row : null;
+    const shift = shiftDaysOf(action);
+    if (shift !== 0) {
+      // ⌥←/→ (⇧ a week): the selection, or the row under the cursor (70).
+      if (!canDrag) return false;
+      const several = selectedTasks();
+      if (several.length > 0) writes.shiftTasks(several, shift);
+      else if (row?.kind === "task") writes.shiftTasks([row.task], shift);
+      else if (!row || !writes.shiftRow(row, shift)) return false;
+      return true;
+    }
     switch (action) {
+      case "date":
+        if (row?.kind !== "task" || !canDrag) return false;
+        setCommand({ id: row.task.id, command: "due" });
+        return true;
+      case "clear-date": {
+        if (!canDrag) return false;
+        const several = selectedTasks();
+        const targets = several.length > 0 ? several : row?.kind === "task" ? [row.task] : [];
+        if (targets.length === 0) return false;
+        writes.clearDue(targets);
+        return true;
+      }
+      case "fit":
+        return fitSelection(row);
+      case "extend-next":
+      case "extend-prev":
+        if (!multiSelect || row?.kind !== "task") return false;
+        multiSelect.extend(action === "extend-next" ? 1 : -1, taskOrder);
+        return true;
+      case "select-all":
+        if (!multiSelect || taskOrder.length === 0) return false;
+        multiSelect.selectAll(taskOrder);
+        return true;
       case "next":
         moveCursor(1);
         return true;
@@ -675,9 +988,13 @@ export function TaskTimelineView({
         toggleNameColumn();
         return true;
       case "clear":
+        // Esc: a selection of several first, then the cursor.
+        if (multiSelect?.clear()) return true;
         setCursorKey(null);
         onSelectTask(null);
         return true;
+      default:
+        return false;
     }
   };
 
@@ -725,7 +1042,13 @@ export function TaskTimelineView({
   const gridStyle = { left: nameW, width: canvasW } as CSSProperties;
   const bodyMin = Math.max(0, size.height - size.header);
   const cursorIndex = cursorKey ? rows.findIndex((r) => r.key === cursorKey) : -1;
-  const pinned = useMemo(() => (cursorIndex >= 0 ? [cursorIndex] : []), [cursorIndex]);
+  // The row a drag holds stays drawn while the canvas scrolls under it.
+  const dragIndex = dragRowKey ? rows.findIndex((r) => r.key === dragRowKey) : -1;
+  const pinned = useMemo(
+    () => [cursorIndex, dragIndex].filter((i) => i >= 0),
+    [cursorIndex, dragIndex],
+  );
+  const bodyRef = useRef<HTMLDivElement>(null);
   const statusesFor = useCallback(
     (bucketId: string) => api.statusesForBucket?.(bucketId) ?? [],
     [api.statusesForBucket],
@@ -741,190 +1064,255 @@ export function TaskTimelineView({
   return (
     <ProjectChoicesProvider projects={buckets} inboxId={inbox?.id ?? null}>
       <StatusChoicesProvider statusesFor={statusesFor} any={(api.statuses?.length ?? 0) > 0}>
-        <div className="flex h-full min-h-0 flex-col">
-          <PlanViewHeader
-            title={scopeTitle}
-            view={view}
-            onViewChange={onViewChange}
-            controls={header}
-            canEdit={canEdit}
-            onRequestCapture={onRequestCapture}
-          />
-          {/* The Timeline's own bar: No date on the left; Today and the zoom on the right. */}
-          <div className="-mt-1 mb-2 flex shrink-0 items-center gap-1.5">
-            {built.undated > 0 || showUndated ? (
+        <TimelineCanvasContext.Provider value={canvas}>
+          <div className="flex h-full min-h-0 flex-col">
+            <PlanViewHeader
+              title={scopeTitle}
+              view={view}
+              onViewChange={onViewChange}
+              controls={header}
+              canEdit={canEdit}
+              onRequestCapture={onRequestCapture}
+            />
+            {/* The Timeline's own bar: No date on the left; Today and the zoom on the right. */}
+            <div className="-mt-1 mb-2 flex shrink-0 items-center gap-1.5">
+              {built.undated > 0 || showUndated ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    {onOpenNoDate ? (
+                      // The right panel's No date view (70): drag a task from there onto a day.
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={onOpenNoDate}
+                        className="px-2"
+                        data-timeline-no-date-open=""
+                      >
+                        <CalendarOff aria-hidden />
+                        No date
+                        <span className="tabular-nums text-subtle-foreground">
+                          · {built.undated}
+                        </span>
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        aria-pressed={showUndated}
+                        onClick={toggleUndated}
+                        className={cn("px-2", showUndated && "bg-state-active")}
+                      >
+                        <CalendarOff aria-hidden />
+                        No date
+                        <span className="tabular-nums text-subtle-foreground">
+                          · {built.undated}
+                        </span>
+                      </Button>
+                    )}
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {onOpenNoDate
+                      ? "Open the tasks with no date beside the timeline"
+                      : showUndated
+                        ? "Hide the rows with no date"
+                        : "Show the tasks with no date as rows"}
+                  </TooltipContent>
+                </Tooltip>
+              ) : null}
+              <div className="flex-1" />
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    aria-pressed={showUndated}
-                    onClick={toggleUndated}
-                    className={cn("px-2", showUndated && "bg-state-active")}
-                  >
-                    <CalendarOff aria-hidden />
-                    No date
-                    <span className="tabular-nums text-subtle-foreground">· {built.undated}</span>
+                  <Button variant="ghost" size="sm" onClick={() => scrollToToday(true)}>
+                    Today
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>
-                  {showUndated
-                    ? "Hide the rows with no date"
-                    : "Show the tasks with no date as rows"}
-                </TooltipContent>
+                <TooltipContent>Go to today · T</TooltipContent>
               </Tooltip>
-            ) : null}
-            <div className="flex-1" />
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="sm" onClick={() => scrollToToday(true)}>
-                  Today
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Go to today · T</TooltipContent>
-            </Tooltip>
-            <SegmentedControl
-              aria-label="Timeline zoom"
-              size="sm"
-              value={zoom}
-              onValueChange={(value) => changeZoom(value as TimelineZoom)}
-              items={TIMELINE_ZOOMS.map((z) => ({ value: z, label: ZOOM_LABELS[z] }))}
-            />
-          </div>
+              <SegmentedControl
+                aria-label="Timeline zoom"
+                size="sm"
+                value={zoom}
+                onValueChange={(value) => changeZoom(value as TimelineZoom)}
+                items={TIMELINE_ZOOMS.map((z) => ({ value: z, label: ZOOM_LABELS[z] }))}
+              />
+            </div>
 
-          <div className="relative -mx-(--pad-x) -mb-(--pad-x) min-h-0 flex-1 border-t border-hairline">
-            <TimelineGeometryContext.Provider value={geometry}>
-              <TimelineWindowContext.Provider value={drawn}>
-                <TimelineViewportContext.Provider value={viewport}>
-                  <div
-                    ref={scrollerRef}
-                    role="grid"
-                    aria-label={`${scopeTitle} timeline`}
-                    aria-activedescendant={
-                      cursorKey && rowByKey.has(cursorKey) ? timelineRowDomId(cursorKey) : undefined
-                    }
-                    tabIndex={0}
-                    onKeyDown={onKeyDown}
-                    onScroll={handleScroll}
-                    data-timeline=""
-                    data-zoom={zoom}
-                    className="scrollbar-thin h-full overflow-auto overscroll-x-contain focus-visible:outline-none"
-                  >
-                    <div className="relative" style={frameStyle}>
-                      <div ref={headerRef} className="sticky top-0 z-(--z-header)">
-                        <TimelineHeader
-                          topCells={topCells}
-                          weekStartsOn={weekStartsOn}
-                          dueCounts={dueCounts}
-                          onResizeStart={startResize}
-                        />
-                      </div>
-                      <div className="relative flex flex-col" style={{ minHeight: bodyMin }}>
-                        {/* The canvas under the rows: the grid, month lines, today. */}
-                        <div
-                          aria-hidden
-                          className="timeline-grid pointer-events-none absolute inset-y-0"
-                          data-unit={unit}
-                          data-weekends={unit === "day" ? "" : undefined}
-                          style={gridStyle}
-                        >
-                          {yearMonths.map((day) => (
-                            <span
-                              key={`m${day}`}
-                              className="absolute inset-y-0 w-px bg-timeline-grid"
-                              style={{ left: xOfDay(range, dw, day) }}
-                            />
-                          ))}
-                          {strong.map((day) => (
-                            <span
-                              key={day}
-                              className="absolute inset-y-0 w-px bg-timeline-grid-strong"
-                              style={{ left: xOfDay(range, dw, day) }}
-                            />
-                          ))}
-                          <span
-                            data-timeline-today=""
-                            className="absolute inset-y-0 w-px -translate-x-1/2 bg-primary"
-                            style={{ left: dayCenterX(range, dw, today) }}
+            <div className="relative -mx-(--pad-x) -mb-(--pad-x) min-h-0 flex-1 border-t border-hairline">
+              <TimelineGeometryContext.Provider value={geometry}>
+                <TimelineWindowContext.Provider value={drawn}>
+                  <TimelineViewportContext.Provider value={viewport}>
+                    <div
+                      ref={setScroller}
+                      role="grid"
+                      aria-label={`${scopeTitle} timeline`}
+                      aria-activedescendant={
+                        cursorKey && rowByKey.has(cursorKey)
+                          ? timelineRowDomId(cursorKey)
+                          : undefined
+                      }
+                      aria-multiselectable={multiSelect ? true : undefined}
+                      tabIndex={0}
+                      onKeyDown={onKeyDown}
+                      onScroll={handleScroll}
+                      onPointerDown={pointer.onPointerDown}
+                      onPointerMove={onCanvasPointerMove}
+                      onPointerLeave={onCanvasPointerLeave}
+                      onClickCapture={pointer.onClickCapture}
+                      data-timeline=""
+                      data-zoom={zoom}
+                      data-can-drag={canDrag || undefined}
+                      className="scrollbar-thin h-full overflow-auto overscroll-x-contain focus-visible:outline-none data-dragging:cursor-grabbing data-dragging:**:cursor-grabbing"
+                    >
+                      <div className="relative" style={frameStyle}>
+                        <div ref={headerRef} className="sticky top-0 z-(--z-header)">
+                          <TimelineHeader
+                            topCells={topCells}
+                            weekStartsOn={weekStartsOn}
+                            dueCounts={dueCounts}
+                            onResizeStart={startResize}
                           />
                         </div>
-                        <VirtualStack
-                          items={rows}
-                          itemKey={(row) => row.key}
-                          estimateSize={(row) =>
-                            row.kind === "area" || row.kind === "group" || row.kind === "section"
-                              ? HEADER_ROW_GUESS
-                              : ROW_GUESS
-                          }
-                          scrollRef={scrollerRef}
-                          scrollMargin={size.header}
-                          stickyIndexes={stickyIndexes}
-                          stickyClassName="top-(--timeline-head-h) z-(--z-sticky)"
-                          pinned={pinned}
-                          scrollTo={scrollTo}
-                          className="relative z-[1]"
-                          render={(row, _index, place) => (
-                            <TimelineRowItem
-                              row={row}
-                              selected={row.kind === "task" && row.task.id === selectedTaskId}
-                              cursor={row.key === cursorKey}
-                              sticky={place.sticky}
-                              canEdit={canEdit}
-                              queued={row.kind === "task" && api.queuedTaskIds.has(row.task.id)}
-                              hue={
-                                row.kind === "project"
-                                  ? (row.project.color ?? null)
-                                  : row.kind === "task"
-                                    ? (hueById.get(row.task.bucketId) ?? null)
-                                    : null
-                              }
-                              showRepeats={show.has("repeats")}
-                              command={
-                                row.kind === "task" && command?.id === row.task.id
-                                  ? command.command
-                                  : null
-                              }
-                              editing={row.kind === "task" && editingId === row.task.id}
-                              taskKey={taskKey}
-                              handlers={handlers}
-                              actions={rowActions}
-                            />
-                          )}
-                        />
-                        {/* Below the last row the name column runs on (its edge, its surface). */}
-                        <div aria-hidden className="relative z-[1] flex flex-1">
+                        <div
+                          ref={bodyRef}
+                          className="relative flex flex-col"
+                          style={{ minHeight: bodyMin }}
+                        >
+                          {/* The canvas under the rows: the grid, month lines, today. */}
                           <div
-                            className={cn(
-                              "sticky left-0 w-(--timeline-name-w) shrink-0 bg-card",
-                              !nameColumn.hidden && "border-r border-hairline",
+                            aria-hidden
+                            className="timeline-grid pointer-events-none absolute inset-y-0"
+                            data-unit={unit}
+                            data-weekends={unit === "day" ? "" : undefined}
+                            style={gridStyle}
+                          >
+                            {yearMonths.map((day) => (
+                              <span
+                                key={`m${day}`}
+                                className="absolute inset-y-0 w-px bg-timeline-grid"
+                                style={{ left: xOfDay(range, dw, day) }}
+                              />
+                            ))}
+                            {strong.map((day) => (
+                              <span
+                                key={day}
+                                className="absolute inset-y-0 w-px bg-timeline-grid-strong"
+                                style={{ left: xOfDay(range, dw, day) }}
+                              />
+                            ))}
+                            <span
+                              data-timeline-today=""
+                              className="absolute inset-y-0 w-px -translate-x-1/2 bg-primary"
+                              style={{ left: dayCenterX(range, dw, today) }}
+                            />
+                          </div>
+                          {/* The "waits on" lines, under the rows (70, 68b). */}
+                          {depMode !== "off" ? (
+                            <TimelineDepsLayer
+                              relations={relations}
+                              byId={taskById}
+                              mode={depMode}
+                              selected={lineSelection}
+                              isHidden={isHidden}
+                              pointDay={pointDay}
+                              nameW={nameW}
+                              bodyRef={bodyRef}
+                              scrollerRef={scrollerRef}
+                              layoutKey={rows}
+                            />
+                          ) : null}
+                          <VirtualStack
+                            items={rows}
+                            itemKey={(row) => row.key}
+                            estimateSize={(row) =>
+                              row.kind === "area" || row.kind === "group" || row.kind === "section"
+                                ? HEADER_ROW_GUESS
+                                : ROW_GUESS
+                            }
+                            scrollRef={scrollerRef}
+                            scrollMargin={size.header}
+                            stickyIndexes={stickyIndexes}
+                            stickyClassName="top-(--timeline-head-h) z-(--z-sticky)"
+                            pinned={pinned}
+                            scrollTo={scrollTo}
+                            className="relative z-[1]"
+                            render={(row, _index, place) => (
+                              <TimelineRowItem
+                                row={row}
+                                selected={
+                                  row.kind === "task" &&
+                                  (row.task.id === selectedTaskId || selectedIds.has(row.task.id))
+                                }
+                                editable={canDragRow(row)}
+                                contradiction={
+                                  row.kind === "task" ? (lateMarks.get(row.task.id) ?? null) : null
+                                }
+                                stubs={
+                                  row.kind === "task" && row.task.id === selectedTaskId
+                                    ? stubs
+                                    : null
+                                }
+                                cursor={row.key === cursorKey}
+                                sticky={place.sticky}
+                                canEdit={canEdit}
+                                queued={row.kind === "task" && api.queuedTaskIds.has(row.task.id)}
+                                hue={
+                                  row.kind === "project"
+                                    ? (row.project.color ?? null)
+                                    : row.kind === "task"
+                                      ? (hueById.get(row.task.bucketId) ?? null)
+                                      : null
+                                }
+                                showRepeats={show.has("repeats")}
+                                command={
+                                  row.kind === "task" && command?.id === row.task.id
+                                    ? command.command
+                                    : null
+                                }
+                                editing={row.kind === "task" && editingId === row.task.id}
+                                taskKey={taskKey}
+                                handlers={handlers}
+                                actions={rowActions}
+                              />
                             )}
                           />
+                          {/* Below the last row the name column runs on (its edge, its surface). */}
+                          <div aria-hidden className="relative z-[1] flex flex-1">
+                            <div
+                              className={cn(
+                                "sticky left-0 w-(--timeline-name-w) shrink-0 bg-card",
+                                !nameColumn.hidden && "border-r border-hairline",
+                              )}
+                            />
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                </TimelineViewportContext.Provider>
-              </TimelineWindowContext.Provider>
-            </TimelineGeometryContext.Provider>
-            {empty ? (
-              <div
-                className="pointer-events-none absolute z-(--z-sticky) rounded-md bg-card/90 px-3 py-2"
-                style={{ left: nameW + 24, top: size.header + 16 }}
-              >
-                {/* The rows stay listed, with today's line (71). TV-TL2 adds
-                    "Click a day on a row" once a click sets a date. */}
-                <p className="font-sans text-sm text-foreground">
-                  {tasks.length === 0 ? "No tasks here yet." : "Nothing has a date yet."}
-                </p>
-                <p className="font-sans text-xs text-muted-foreground">
-                  {tasks.length === 0
-                    ? "Tasks you give a date show up on the timeline."
-                    : "Set a due date on a task, or open No date."}
-                </p>
-              </div>
-            ) : null}
+                  </TimelineViewportContext.Provider>
+                </TimelineWindowContext.Provider>
+              </TimelineGeometryContext.Provider>
+              {empty ? (
+                <div
+                  className="pointer-events-none absolute z-(--z-sticky) rounded-md bg-card/90 px-3 py-2"
+                  style={{ left: nameW + 24, top: size.header + 16 }}
+                >
+                  {/* The rows stay listed, with today's line and one sentence (71). */}
+                  <p className="font-sans text-sm text-foreground">
+                    {tasks.length === 0 ? "No tasks here yet." : "Nothing has a date yet."}
+                  </p>
+                  <p className="font-sans text-xs text-muted-foreground">
+                    {tasks.length === 0
+                      ? "Tasks you give a date show up on the timeline."
+                      : canDrag
+                        ? "Click a day on a row, or open No date."
+                        : "Tasks show up here once they have a date."}
+                  </p>
+                </div>
+              ) : null}
+            </div>
           </div>
-        </div>
+          {writes.dialog}
+          {drop.overlay}
+        </TimelineCanvasContext.Provider>
       </StatusChoicesProvider>
     </ProjectChoicesProvider>
   );

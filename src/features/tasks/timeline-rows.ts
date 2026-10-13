@@ -222,6 +222,28 @@ export function pointOf(
   return { day, kind: "session", late: false, closed, repeat };
 }
 
+/**
+ * The open tasks of a place with no date and no work session: the "No date ·
+ * n" count and the right panel's No date view (TV-TL2). A subtask whose parent
+ * is in the place goes with its parent, as on the canvas.
+ */
+export function undatedTasks(
+  tasks: readonly Task[],
+  sessions: readonly TaskSession[],
+  today: number,
+  now: number,
+): Task[] {
+  const ids = new Set(tasks.map((t) => t.id));
+  const withSessions = new Set(sessions.map((s) => s.taskId));
+  return tasks.filter((task) => {
+    if (!isOpenTask(task)) return false;
+    if (task.parentId && task.parentId !== task.id && ids.has(task.parentId)) return false;
+    // A work session is a date (a hollow point).
+    if (withSessions.has(task.id)) return false;
+    return pointOf(task, [], today, now) === null;
+  });
+}
+
 // ── Building ─────────────────────────────────────────────────────────────────
 
 type Ctx = {

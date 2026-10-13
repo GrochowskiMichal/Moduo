@@ -54,6 +54,8 @@ describe("Tasks Display — stored value", () => {
       colorBy: "none",
       timelineShow: [],
       timelineSubtasks: "hidden",
+      // TV-TL2: the selected task's dependency lines (REPLAN 70).
+      timelineDeps: "selected",
     });
     expect(tasksDisplayDefaults("all").group).toBe("bucket");
     // Call 84: My tasks answers "what am I in the middle of".
@@ -100,6 +102,7 @@ describe("Tasks Display — stored value", () => {
       colorBy: "project",
       timelineShow: ["repeats", "undated"],
       timelineSubtasks: "nested",
+      timelineDeps: "all",
       filters: [{ dimension: "priority", operator: "is", values: ["high"] }],
     };
     expect(sanitizeTasksView(stored, tasksViewDefaults("all"), "all")).toEqual({
@@ -299,15 +302,18 @@ describe("Tasks Display — controls per scope and layout", () => {
     ]);
   });
 
-  it("the Timeline has its own (REPLAN 71): Group by, Show done, Colour by, Show, Subtasks", () => {
+  it("the Timeline has its own (REPLAN 71): Group by, Show done, Colour by, Dependencies, Show, Subtasks", () => {
     expect(controlIds("inbox", "timeline")).toEqual([
       "layout",
       "timelineGroup",
       "completed",
       "colorBy",
+      "timelineDeps",
       "timelineShow",
       "timelineSubtasks",
     ]);
+    // The lines show for the selected task by default (TV-TL2, REPLAN 70).
+    expect(tasksDisplayDefaults("inbox").timelineDeps).toBe("selected");
   });
 });
 

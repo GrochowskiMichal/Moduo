@@ -22,6 +22,7 @@ import {
 import type { Task } from "./model";
 import { DEFAULT_ROW_PROPERTIES, type RowPreset, type RowProperty } from "./row-layout";
 import { statusKeyOf } from "./statuses";
+import type { TimelineDeps } from "./timeline-deps";
 import {
   type TimelineGroup,
   type TimelineScope,
@@ -65,8 +66,9 @@ export type { RowPreset };
 /** The Timeline's Colour by (REPLAN 71): points take the project's hue, or their status's. */
 export type TimelineColorBy = "none" | "project" | "status";
 /** What the Timeline adds when asked (REPLAN 71): undated rows, session ticks,
- *  repeat ghosts, the Due per week counts. Dependencies join with TV-TL2. */
+ *  repeat ghosts, the Due per week counts. */
 export type TimelineShow = "undated" | "sessions" | "repeats" | "duePerWeek";
+export type { TimelineDeps };
 
 export type TasksDisplay = {
   layout: TaskLayout;
@@ -92,6 +94,8 @@ export type TasksDisplay = {
   colorBy: TimelineColorBy;
   timelineShow: TimelineShow[];
   timelineSubtasks: TimelineSubtasks;
+  /** The Timeline's "waits on" lines (TV-TL2, REPLAN 70): the selected task's, all, or none. */
+  timelineDeps: TimelineDeps;
 };
 
 /** What one scope remembers: its Display, plus its filters. */
@@ -114,6 +118,7 @@ export const TASKS_DISPLAY_DEFAULTS: TasksDisplay = {
   colorBy: "none",
   timelineShow: [],
   timelineSubtasks: "hidden",
+  timelineDeps: "selected",
 };
 
 /** Which shape of Timeline rows a scope gets (REPLAN 67). */
@@ -449,11 +454,24 @@ const TIMELINE_SUBTASKS_CONTROL: DisplayControl<TasksDisplay> = {
   ],
 };
 
+/** Dependencies (TV-TL2, REPLAN 70–71): the selected or hovered task's lines by default. */
+const TIMELINE_DEPS_CONTROL: DisplayControl<TasksDisplay> = {
+  type: "segmented",
+  id: "timelineDeps",
+  label: "Dependencies",
+  options: [
+    { value: "off", label: "Off" },
+    { value: "selected", label: "Selected" },
+    { value: "all", label: "All" },
+  ],
+};
+
 function timelineControls(scope: string): DisplayControl<TasksDisplay>[] {
   return [
     timelineGroupControl(scope),
     SHOW_DONE_CONTROL,
     colorByControl(scope),
+    TIMELINE_DEPS_CONTROL,
     TIMELINE_SHOW_CONTROL,
     TIMELINE_SUBTASKS_CONTROL,
   ];
@@ -465,8 +483,8 @@ function timelineControls(scope: string): DisplayControl<TasksDisplay>[] {
  *   (done tasks leave every queue; one you check off there stays until the
  *   next load, TV-D4) or subtask nesting.
  * - The Timeline has its own (REPLAN 71): Group by, Show done, Colour by,
- *   Show (No date, Sessions, Repeats, Due per week) and Subtasks; its zoom
- *   sits on its own bar.
+ *   Dependencies, Show (No date, Sessions, Repeats, Due per week) and
+ *   Subtasks; its zoom sits on its own bar.
  * - The Board has its own Group by (call 22), Lanes (85), Rows (Standard or
  *   Detailed cards) and the Description preview (AC7.4) (TV-U11).
  */

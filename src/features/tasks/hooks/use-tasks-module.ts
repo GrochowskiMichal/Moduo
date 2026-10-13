@@ -3070,6 +3070,53 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     [editProject],
   );
 
+  // Undo runs seconds later: it saves through the newest `editProject`.
+  const editProjectRef = useRef(editProject);
+  editProjectRef.current = editProject;
+
+  /**
+   * A project's start and target (the Timeline's bar, TV-TL2): one write,
+   * shown at once; with `label`, a toast whose Undo puts the old dates back
+   * unless they changed again since.
+   */
+  const setProjectDates = useCallback(
+    (
+      id: string,
+      dates: { startsOn: string | null; targetOn: string | null },
+      label?: string,
+    ): Promise<boolean> => {
+      const existing = allBuckets.find((b) => b.id === id);
+      if (!existing) return Promise.resolve(false);
+      const before = {
+        startsOn: existing.startsOn ?? null,
+        targetOn: existing.targetOn ?? null,
+      };
+      if (before.startsOn === dates.startsOn && before.targetOn === dates.targetOn) {
+        return Promise.resolve(false);
+      }
+      return editProject(id, dates, dates).then((ok) => {
+        if (ok && label) {
+          undoToast(label, {
+            onUndo: () => {
+              const now = store?.getSnapshot().bundle.buckets.find((b) => b.id === id);
+              if (!now) return;
+              if (
+                (now.startsOn ?? null) !== dates.startsOn ||
+                (now.targetOn ?? null) !== dates.targetOn
+              ) {
+                toast("Undo kept a newer change.");
+                return;
+              }
+              void editProjectRef.current(id, before, before);
+            },
+          });
+        }
+        return ok;
+      });
+    },
+    [allBuckets, editProject, store],
+  );
+
   /**
    * Bring something back from Recently deleted (TV-U6): a project with the
    * finished tasks (and files) deleted with it and the open ones its delete
@@ -3416,6 +3463,50 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
   );
 
   /**
+   * A section's dates (the Timeline's diamond and band, TV-TL2): an end date,
+   * or a start and an end (YYYY-MM-DD; null clears). Shown at once, one write;
+   * with `label`, a toast whose Undo puts the old dates back unless they
+   * changed again since (Undo never overwrites a newer change).
+   */
+  const setSectionDates = useCallback(
+    (
+      sectionId: string,
+      dates: { startsOn: string | null; endsOn: string | null },
+      label?: string,
+    ): Promise<boolean> => {
+      const existing = (bundle.sections ?? []).find((s) => s.id === sectionId);
+      if (!existing || !runtime || !workspaceId) return Promise.resolve(false);
+      if (existing.startsOn === dates.startsOn && existing.endsOn === dates.endsOn) {
+        return Promise.resolve(false);
+      }
+      const before = { startsOn: existing.startsOn, endsOn: existing.endsOn };
+      const save = (to: typeof dates) =>
+        runSectionOp(
+          () => runtime.tasks.updateSection({ workspaceId, sectionId, patch: to }),
+          [{ table: "sections", patch: { id: sectionId, fields: to } }],
+        );
+      return save(dates).then((next) => {
+        if (!next) return false;
+        if (label) {
+          undoToast(label, {
+            onUndo: () => {
+              const now = store?.getSnapshot().bundle.sections?.find((s) => s.id === sectionId);
+              if (!now) return;
+              if (now.startsOn !== dates.startsOn || now.endsOn !== dates.endsOn) {
+                toast("Undo kept a newer change.");
+                return;
+              }
+              void save(before);
+            },
+          });
+        }
+        return true;
+      });
+    },
+    [bundle.sections, runSectionOp, runtime, workspaceId, store],
+  );
+
+  /**
    * Delete a section: its tasks stay in the project, under No section (the
    * op clears their section). Undo restores the section and puts back the
    * tasks that are still under No section in the same project (one changed
@@ -3725,6 +3816,8 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     unarchiveBucket,
     setProjectState,
     updateProjectFields,
+    /** The Timeline's bar: start and target, one write, an Undo (TV-TL2). */
+    setProjectDates,
     /** The areas' ops (TV-U6 on TV-D10's ops); `areas` is above. */
     createArea,
     renameArea,
@@ -3734,6 +3827,8 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     /** Sections' ops (TV-D10's; the List's "+ Add section", TV-U10). */
     createSection,
     renameSection,
+    /** The Timeline's diamond and band: a section's dates, one write, an Undo (TV-TL2). */
+    setSectionDates,
     deleteSection,
     /** Recently deleted (TV-U6), when read (`includeTrash`); null otherwise. */
     trash,

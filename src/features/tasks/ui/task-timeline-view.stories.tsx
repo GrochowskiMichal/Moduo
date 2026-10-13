@@ -1,3 +1,4 @@
+import { DndContext } from "@dnd-kit/core";
 import type { Meta, StoryObj } from "@storybook/react";
 import { addDays, format } from "date-fns";
 import { useState } from "react";
@@ -169,27 +170,30 @@ function Harness({
   );
   const [selected, setSelected] = useState<string | null>(null);
   const scoped = scope === "all" ? tasks : tasks.filter((t) => t.bucketId === scope);
+  // The page's one drag context (the No date view's drop needs it, TV-TL2).
   return (
     <TeamWorkspace>
-      <TaskTimelineView
-        tasks={scoped}
-        scopeTitle={scope === "all" ? "All" : (PROJECTS.find((p) => p.id === scope)?.name ?? "")}
-        selection={scope}
-        view="timeline"
-        onViewChange={() => {}}
-        buckets={PROJECTS}
-        inbox={INBOX}
-        canEdit={canEdit}
-        onRequestCapture={() => {}}
-        selectedTaskId={selected}
-        onSelectTask={setSelected}
-        api={api(tasks)}
-        workspaceId="w1"
-        display={display}
-        onDisplayChange={setDisplay}
-        completed={display.completed}
-        stayingIds={new Set()}
-      />
+      <DndContext>
+        <TaskTimelineView
+          tasks={scoped}
+          scopeTitle={scope === "all" ? "All" : (PROJECTS.find((p) => p.id === scope)?.name ?? "")}
+          selection={scope}
+          view="timeline"
+          onViewChange={() => {}}
+          buckets={PROJECTS}
+          inbox={INBOX}
+          canEdit={canEdit}
+          onRequestCapture={() => {}}
+          selectedTaskId={selected}
+          onSelectTask={setSelected}
+          api={api(tasks)}
+          workspaceId="w1"
+          display={display}
+          onDisplayChange={setDisplay}
+          completed={display.completed}
+          stayingIds={new Set()}
+        />
+      </DndContext>
     </TeamWorkspace>
   );
 }

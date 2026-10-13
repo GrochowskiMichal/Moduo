@@ -111,6 +111,12 @@ export type BulkWriteOptions = {
   followers?: ReadonlySet<string>;
   /** False for Undo's own write: no second Undo, and quiet unless something was refused. */
   undoable?: boolean;
+  /**
+   * A quiet follow-up in the toast's body, offered once the change saved
+   * (the Timeline's "Also move the 3 that wait on this", TV-TL2). It gets the
+   * ids that changed; clicking it closes the toast without undoing.
+   */
+  followUp?: (changed: readonly string[]) => { label: string; onClick: () => void } | null;
 };
 
 /** One task's planned write, with the row it started from. */
@@ -124,7 +130,11 @@ type Planned = {
   fields: ReturnType<typeof editableTaskFields>;
   moving: boolean;
   queueRows: string[];
+  /** The work session a reschedule moves with the task (kept on show until its row comes back). */
+  sessionMove: SessionMove | null;
 };
+
+type SessionMove = { id: string; fields: { startsAt: string; endsAt: string } };
 
 export function useBulkOps(deps: BulkOpsDeps) {
   const {
@@ -151,6 +161,28 @@ export function useBulkOps(deps: BulkOpsDeps) {
   const latestBulkWrite = useRef<
     (writes: readonly BulkWrite[], opts: BulkWriteOptions) => Promise<string[]>
   >(async () => []);
+
+  /** The session a reschedule moves: the one that starts at the task's old time. */
+  const movedSession = useCallback(
+    (write: BulkWrite, before: Task): SessionMove | null => {
+      if (write.scheduledAt === undefined || !before.scheduledAt || !store) return null;
+      const from = Date.parse(before.scheduledAt);
+      const by = Date.parse(write.scheduledAt) - from;
+      if (!Number.isFinite(by)) return null;
+      const session = store
+        .getSnapshot()
+        .sessions.find((s) => s.taskId === write.taskId && Date.parse(s.startsAt) === from);
+      if (!session) return null;
+      return {
+        id: session.id,
+        fields: {
+          startsAt: new Date(Date.parse(session.startsAt) + by).toISOString(),
+          endsAt: new Date(Date.parse(session.endsAt) + by).toISOString(),
+        },
+      };
+    },
+    [store],
+  );
 
   /** Archived tasks are read-only (TV-U6): left out, quietly. */
   const isArchived = useCallback(
@@ -236,9 +268,20 @@ export function useBulkOps(deps: BulkOpsDeps) {
             : {}),
           ...(statusRecurrence !== undefined ? { recurrence: statusRecurrence } : {}),
           ...(write.assigneeId !== undefined ? { assigneeId: write.assigneeId } : {}),
+          ...(write.scheduledAt !== undefined ? { scheduledAt: write.scheduledAt } : {}),
           updatedAt: stamp,
         };
         changes.push(patchOf(write.taskId, shown), ...follow.changes);
+        // A session moved (the Timeline's hollow point): the session the task
+        // shows moves with it at once, as the server moves it (the one that
+        // started at the old time), so the row doesn't wait for the echo.
+        const sessionMove = movedSession(write, before);
+        if (sessionMove) {
+          changes.push({
+            table: "sessions",
+            patch: { id: sessionMove.id, fields: sessionMove.fields },
+          });
+        }
         // A parent's subtasks show in the new project at once (the server
         // carries the ones this person can edit).
         if (moving) {
@@ -256,6 +299,7 @@ export function useBulkOps(deps: BulkOpsDeps) {
           fields,
           moving,
           queueRows: follow.rowIds,
+          sessionMove,
         });
       }
       if (planned.length === 0) {
@@ -310,6 +354,15 @@ export function useBulkOps(deps: BulkOpsDeps) {
                 }),
               );
             }
+            if (write.scheduledAt !== undefined) {
+              rows.push(
+                await rt.tasks.opReschedule({
+                  workspaceId: ws,
+                  taskId: write.taskId,
+                  scheduledAt: write.scheduledAt,
+                }),
+              );
+            }
             if (p.category !== undefined) {
               rows.push(
                 await rt.tasks.opSetStatus({
@@ -342,6 +395,10 @@ export function useBulkOps(deps: BulkOpsDeps) {
         () => offlineError !== null,
       );
       shown.settle({ tasks: [...saved.values()] });
+      // A moved session stays where it went until its own row comes back.
+      for (const p of changed) {
+        if (p.sessionMove) store.patchCopy("sessions", p.sessionMove.id, p.sessionMove.fields);
+      }
       // A refused check-off isn't kept on show in my queue (as one drop's isn't).
       for (const p of planned) {
         if (p.category !== undefined && !changed.includes(p)) store.unkeep(p.write.taskId);
@@ -394,8 +451,10 @@ export function useBulkOps(deps: BulkOpsDeps) {
         if (mainRefused.length > 0) toast(text.title, { description: text.description });
         return changed.map((p) => p.write.taskId);
       }
+      const followUp = opts.followUp?.(changed.map((p) => p.write.taskId)) ?? undefined;
       undoToast(text.title, {
         description: text.description,
+        link: followUp,
         onUndo: () => {
           const reverse: BulkWrite[] = [];
           let kept = 0;
@@ -420,6 +479,14 @@ export function useBulkOps(deps: BulkOpsDeps) {
             if (p.write.recurrence !== undefined && p.category === undefined) {
               if (current.recurrence?.rrule === after.recurrence?.rrule) {
                 back.recurrence = p.before.recurrence ?? null;
+              } else keptHere = true;
+            }
+            // A moved session goes back, unless it moved again since.
+            if (p.write.scheduledAt !== undefined && p.before.scheduledAt) {
+              if (current.scheduledAt === after.scheduledAt) {
+                if (current.scheduledAt !== p.before.scheduledAt) {
+                  back.scheduledAt = p.before.scheduledAt;
+                }
               } else keptHere = true;
             }
             // A status going back takes its repeat rule back too, unless the
@@ -458,6 +525,7 @@ export function useBulkOps(deps: BulkOpsDeps) {
       userId,
       editBlocked,
       isArchived,
+      movedSession,
       statusesForBucket,
       queueFollowStatus,
       failed,

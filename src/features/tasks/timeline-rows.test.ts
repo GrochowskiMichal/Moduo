@@ -15,6 +15,7 @@ import {
   sectionRowKey,
   type TimelineRow,
   type TimelineRowsInput,
+  undatedTasks,
 } from "./timeline-rows";
 import { dayNumOf } from "./timeline-scale";
 
@@ -387,5 +388,34 @@ describe("sections and projects are spans (AC9.3, AC9.4, 68a)", () => {
       solid: false,
     });
     expect(projectBarOf({}, [], [])).toBeNull();
+  });
+});
+
+describe("No date (TV-TL2)", () => {
+  it("lists the open tasks with no date and no session, a subtask going with its parent", () => {
+    const tasks = [
+      task("dated", "acme", { dueOn: key(20) }),
+      task("loose", "acme"),
+      task("booked", "acme"),
+      task("finished", "acme", { status: "done", statusCategory: "done" }),
+      task("parent", "acme"),
+      task("child", "acme", { parentId: "parent" }),
+      task("orphan", "acme", { parentId: "elsewhere" }),
+    ];
+    const sessions: TaskSession[] = [
+      {
+        id: "s9",
+        workspaceId: "w1",
+        taskId: "booked",
+        userId: "me",
+        startsAt: new Date(2026, 9, 15, 9).toISOString(),
+        endsAt: new Date(2026, 9, 15, 10).toISOString(),
+        updatedAt: "",
+      },
+    ];
+    const ids = undatedTasks(tasks, sessions, TODAY, NOW).map((t) => t.id);
+    expect(ids).toEqual(["loose", "parent", "orphan"]);
+    // The canvas's "No date · n" counts the same tasks.
+    expect(buildTimelineRows(input({ tasks, sessions })).undated).toBe(ids.length);
   });
 });

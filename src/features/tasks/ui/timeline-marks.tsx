@@ -5,20 +5,25 @@
 // surface. Positions come from the shared geometry (`TimelineGeometry`); the
 // pieces take day numbers, never pixels.
 //
-// TV-TL2's seam: every mark carries `data-timeline-mark` (point · diamond ·
-// bar · band) and the ids it moves (`data-task-id`, `data-section-id`,
-// `data-project-id`), so a drag finds what it grabbed without new markup.
+// Every mark carries `data-timeline-mark` (point · diamond · bar · band) and
+// the ids it moves (`data-task-id`, `data-section-id`, `data-project-id`), so
+// the canvas's drag (TV-TL2, `use-timeline-canvas.ts`) finds what it grabbed;
+// a bar's and a band's ends carry `data-timeline-edge`. While a drag runs, a
+// mark reads where it's going from the canvas store (`timeline-drag-store.ts`)
+// and says the date beside itself. A person who can't edit gets no grab
+// cursor and no ends to resize: nothing offers a drag that would be refused.
 
 import { CircleCheck, Repeat } from "lucide-react";
 import { createContext, useContext, useMemo, useSyncExternalStore } from "react";
 
 import { normalizeLabelColor } from "../../../components/tag-colors";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
-import { formatDate } from "../../../lib/time-format";
+import { formatDate, formatWeekdayDate } from "../../../lib/time-format";
 import { cn } from "../../../lib/utils";
 import type { TimelineColorBy } from "../display";
 import type { RecurrenceRule } from "../model";
 import { engineZone, occurrencesBetween } from "../recurrence-engine";
+import { newBarSpan } from "../timeline-drag";
 import type { DaySpan, ProjectBar, TimelinePoint } from "../timeline-rows";
 import {
   dateOfDay,
@@ -30,6 +35,8 @@ import {
   type TimelineZoom,
   xOfDay,
 } from "../timeline-scale";
+import { spanWords } from "../timeline-words";
+import { useDragFor, useHoverDay, usePointDelta } from "./timeline-drag-store";
 
 // ── Shared geometry ──────────────────────────────────────────────────────────
 
@@ -62,6 +69,11 @@ export const TimelineWindowContext = createContext<{ from: number; to: number }>
 
 export function useTimelineGeometry(): TimelineGeometry {
   return useContext(TimelineGeometryContext);
+}
+
+/** The DOM id of a row (the grid's active descendant; the lines find rows by it). */
+export function timelineRowDomId(key: string): string {
+  return `timeline-row-${key.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
 }
 
 type DaysOnScreen = { from: number; to: number };
@@ -185,6 +197,7 @@ export function TaskPointMark({
   tone,
   selected,
   label,
+  editable,
 }: {
   point: TimelinePoint;
   taskId: string;
@@ -192,9 +205,15 @@ export function TaskPointMark({
   selected: boolean;
   /** What a hover says: "Due Wed, Oct 14 · late". */
   label: string;
+  /** It can be dragged (Edit on its task). */
+  editable: boolean;
 }) {
   const { range, dw, colorBy } = useTimelineGeometry();
-  const left = dayCenterX(range, dw, point.day);
+  // A drag holding this point (alone, or with a selection) moves it here.
+  const delta = usePointDelta(taskId);
+  const leads = useDragFor((d) => d.kind === "point" && d.leadId === taskId) !== null;
+  const day = point.day + delta;
+  const left = dayCenterX(range, dw, day);
   const done = point.closed && tone.category === "done";
   const fill = done
     ? null
@@ -226,6 +245,7 @@ export function TaskPointMark({
               fill,
               done && "flex items-center justify-center bg-card text-primary",
               selected && "shadow-[0_0_0_2px_var(--card),0_0_0_4px_var(--timeline-outline)] ring-0",
+              editable && "cursor-grab",
             )}
             style={{ left }}
           >
@@ -241,7 +261,24 @@ export function TaskPointMark({
           style={{ left: left + 9 }}
         />
       ) : null}
+      {leads && delta !== 0 ? (
+        <DragLabel x={left + (point.repeat ? 24 : 10)} text={formatWeekdayDate(dateOfDay(day))} />
+      ) : null}
     </>
+  );
+}
+
+/** The date a drag would set, beside the mark it moves (never under the pointer). */
+export function DragLabel({ x, text }: { x: number; text: string }) {
+  return (
+    <span
+      aria-hidden
+      data-timeline-drag-label=""
+      className="pointer-events-none absolute top-1/2 z-[3] -translate-y-1/2 rounded-sm bg-popover px-1.5 py-0.5 font-sans text-2xs whitespace-nowrap tabular-nums text-popover-foreground shadow-sm ring-1 ring-hairline"
+      style={{ left: x }}
+    >
+      {text}
+    </span>
   );
 }
 
@@ -300,18 +337,79 @@ export function RepeatGhosts({
 
 // ── Sections ─────────────────────────────────────────────────────────────────
 
-/** A section's range: a faint band on its row and behind its tasks (68a). */
-export function SectionBand({ band, sectionId }: { band: DaySpan; sectionId: string | null }) {
-  const { range, dw } = useTimelineGeometry();
-  const left = xOfDay(range, dw, band.start);
+/**
+ * A span's ends, inside it: grab one to resize (only for someone who can
+ * edit). A span too narrow for ends and a middle only moves.
+ */
+function SpanEdges({ width }: { width: number }) {
+  if (width < 24) return null;
   return (
-    <span
-      data-timeline-mark="band"
-      data-section-id={sectionId ?? undefined}
-      aria-hidden
-      className="pointer-events-none absolute inset-y-0 bg-timeline-band"
-      style={{ left, width: (band.end - band.start + 1) * dw }}
-    />
+    <>
+      <span
+        data-timeline-edge="start"
+        aria-hidden
+        className="absolute inset-y-0 left-0 z-[2] w-1.5 cursor-ew-resize"
+      />
+      <span
+        data-timeline-edge="end"
+        aria-hidden
+        className="absolute inset-y-0 right-0 z-[2] w-1.5 cursor-ew-resize"
+      />
+    </>
+  );
+}
+
+/**
+ * A section's range: a faint band on its row and behind its tasks (68a). On
+ * the section's own row (`interactive`) it's the handle for its dates: drag
+ * it to move them, its ends to resize. A drag of it moves the bands behind its
+ * tasks too.
+ */
+export function SectionBand({
+  band,
+  sectionId,
+  interactive = false,
+  editable = false,
+}: {
+  band: DaySpan;
+  sectionId: string | null;
+  interactive?: boolean;
+  editable?: boolean;
+}) {
+  const { range, dw } = useTimelineGeometry();
+  const drag = useDragFor((d) => d.kind === "band" && d.sectionId === sectionId);
+  const span = drag?.kind === "band" ? drag.span : band;
+  const left = xOfDay(range, dw, span.start);
+  const width = (span.end - span.start + 1) * dw;
+  if (!interactive) {
+    return (
+      <span
+        data-timeline-mark="band"
+        data-section-id={sectionId ?? undefined}
+        aria-hidden
+        className="pointer-events-none absolute inset-y-0 bg-timeline-band"
+        style={{ left, width }}
+      />
+    );
+  }
+  return (
+    <>
+      <span
+        data-timeline-mark="band"
+        data-section-id={sectionId ?? undefined}
+        data-interactive=""
+        aria-hidden
+        className={cn(
+          "absolute inset-y-0 bg-timeline-band",
+          editable ? "cursor-grab" : "pointer-events-none",
+          drag && "bg-timeline-segment",
+        )}
+        style={{ left, width }}
+      >
+        {editable ? <SpanEdges width={width} /> : null}
+      </span>
+      {drag ? <DragLabel x={left + width + 8} text={spanWords(span.start, span.end)} /> : null}
+    </>
   );
 }
 
@@ -323,35 +421,47 @@ export function SectionDiamond({
   sectionId,
   label,
   small = false,
+  editable = false,
 }: {
   day: number;
   sectionId: string;
   label: string;
   /** On a folded project's bar. */
   small?: boolean;
+  /** It can be dragged (Edit on its project). */
+  editable?: boolean;
 }) {
   const { range, dw } = useTimelineGeometry();
+  const drag = useDragFor((d) => d.kind === "diamond" && d.sectionId === sectionId);
+  const at = drag?.kind === "diamond" ? drag.day : day;
+  const x = dayCenterX(range, dw, at);
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <svg
-          data-timeline-mark="diamond"
-          data-section-id={sectionId}
-          viewBox="0 0 14 14"
-          strokeWidth={2}
-          paintOrder="stroke"
-          aria-hidden
-          className={cn(
-            "absolute top-1/2 -translate-x-1/2 -translate-y-1/2 overflow-visible fill-muted-foreground stroke-card",
-            small ? "size-2.5" : "size-3.5",
-          )}
-          style={{ left: dayCenterX(range, dw, day) }}
-        >
-          <path d={DIAMOND_PATH} />
-        </svg>
-      </TooltipTrigger>
-      <TooltipContent>{label}</TooltipContent>
-    </Tooltip>
+    <>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <svg
+            data-timeline-mark="diamond"
+            data-section-id={sectionId}
+            viewBox="0 0 14 14"
+            strokeWidth={2}
+            paintOrder="stroke"
+            aria-hidden
+            className={cn(
+              "absolute top-1/2 -translate-x-1/2 -translate-y-1/2 overflow-visible fill-muted-foreground stroke-card",
+              small ? "size-2.5" : "size-3.5",
+              editable && "cursor-grab",
+            )}
+            style={{ left: x }}
+          >
+            <path d={DIAMOND_PATH} />
+          </svg>
+        </TooltipTrigger>
+        <TooltipContent>{label}</TooltipContent>
+      </Tooltip>
+      {drag && !small ? (
+        <DragLabel x={x + 12} text={`Ends ${formatWeekdayDate(dateOfDay(at))}`} />
+      ) : null}
+    </>
   );
 }
 
@@ -378,6 +488,7 @@ export function ProjectBarMark({
   muted,
   label,
   milestoneLabel,
+  editable = false,
 }: {
   projectId: string;
   bar: ProjectBar;
@@ -388,11 +499,17 @@ export function ProjectBarMark({
   /** What a hover says: "Oct 1 – Nov 7 · 5 of 12 done". */
   label: string;
   milestoneLabel: (name: string, day: number) => string;
+  /** It can be dragged and resized (Edit on the project). */
+  editable?: boolean;
 }) {
   const { range, dw } = useTimelineGeometry();
-  const left = xOfDay(range, dw, bar.start);
-  const width = (bar.end - bar.start + 1) * dw;
+  const drag = useDragFor((d) => d.kind === "bar" && d.projectId === projectId);
+  const span = drag?.kind === "bar" ? drag.span : bar;
+  const left = xOfDay(range, dw, span.start);
+  const width = (span.end - span.start + 1) * dw;
   const share = progress.total > 0 ? progress.done / progress.total : 0;
+  // A drag sets both dates: the bar it leaves is a solid one.
+  const solid = bar.solid || drag !== null;
   return (
     <>
       <Tooltip>
@@ -400,7 +517,7 @@ export function ProjectBarMark({
           <span
             data-timeline-mark="bar"
             data-project-id={projectId}
-            data-solid={bar.solid || undefined}
+            data-solid={solid || undefined}
             data-label={normalizeLabelColor(color)}
             aria-hidden
             className={cn(
@@ -409,13 +526,15 @@ export function ProjectBarMark({
               "absolute top-1/2 h-(--ctrl-h-xs) -translate-y-1/2 overflow-clip rounded-sm",
               // Worked out from its work: an outline over the faintest fill, so a
               // bar wider than the screen still reads as a bar, not two lines.
-              bar.solid ? "bg-timeline-bar" : "border border-timeline-outline bg-timeline-band",
+              solid ? "bg-timeline-bar" : "border border-timeline-outline bg-timeline-band",
               muted && "opacity-60",
+              editable && "cursor-grab",
             )}
             style={{ left, width: Math.max(width, 4) }}
           >
             {bar.segments.map((s) => {
-              const segLeft = (s.start - bar.start) * dw;
+              // Sections keep their own dates when the project's move.
+              const segLeft = (s.start - span.start) * dw;
               // A quiet gap between phases that touch (68a).
               const segWidth = Math.max(1, (s.end - s.start + 1) * dw - 1);
               return (
@@ -436,10 +555,12 @@ export function ProjectBarMark({
                 style={{ width: `${share * 100}%` }}
               />
             ) : null}
+            {editable ? <SpanEdges width={width} /> : null}
           </span>
         </TooltipTrigger>
         <TooltipContent>{label}</TooltipContent>
       </Tooltip>
+      {drag ? <DragLabel x={left + width + 8} text={spanWords(span.start, span.end)} /> : null}
       {showMilestones
         ? bar.milestones.map((m) => (
             <SectionDiamond
@@ -448,9 +569,83 @@ export function ProjectBarMark({
               sectionId={m.sectionId}
               label={milestoneLabel(m.name, m.day)}
               small
+              editable={editable}
             />
           ))
         : null}
+    </>
+  );
+}
+
+// ── Dating an undated row (click-to-create, 70) ──────────────────────────────
+
+const GHOST_POINT =
+  "pointer-events-none absolute top-1/2 size-icon-xs -translate-x-1/2 -translate-y-1/2 rounded-full border border-dashed border-muted-foreground";
+
+/**
+ * What a click would set on a row with no date yet, under the pointer
+ * (research §4, Notion's "phantom"): a task's point ("Set due · Fri, Oct 17"),
+ * a section's diamond ("Ends …", dragged: a range), a project's bar (as long
+ * as the zoom suggests, dragged: the days you drew). Drawn only for someone
+ * who can edit.
+ */
+export function CreateGhost({
+  rowKey,
+  kind,
+}: {
+  rowKey: string;
+  kind: "task" | "section" | "project";
+}) {
+  const { range, dw, zoom } = useTimelineGeometry();
+  const hover = useHoverDay(rowKey);
+  const drawing = useDragFor((d) => d.kind === "draw" && d.rowKey === rowKey);
+  let span: DaySpan | null = null;
+  if (drawing?.kind === "draw") span = drawing.span;
+  else if (hover !== null) {
+    span = kind === "project" ? newBarSpan(hover, zoom) : { start: hover, end: hover };
+  }
+  if (!span) return null;
+  const left = xOfDay(range, dw, span.start);
+  const width = (span.end - span.start + 1) * dw;
+  const center = dayCenterX(range, dw, span.end);
+  const date = formatWeekdayDate(dateOfDay(span.end));
+  if (kind === "task") {
+    return (
+      <>
+        <span aria-hidden data-timeline-ghost="" className={GHOST_POINT} style={{ left: center }} />
+        <DragLabel x={center + 10} text={`Set due · ${date}`} />
+      </>
+    );
+  }
+  if (kind === "section" && span.start === span.end) {
+    return (
+      <>
+        <svg
+          aria-hidden
+          data-timeline-ghost=""
+          viewBox="0 0 14 14"
+          className="pointer-events-none absolute top-1/2 size-3.5 -translate-x-1/2 -translate-y-1/2 overflow-visible fill-none stroke-muted-foreground"
+          strokeDasharray="2 2"
+          style={{ left: center }}
+        >
+          <path d={DIAMOND_PATH} />
+        </svg>
+        <DragLabel x={center + 12} text={`Ends ${date}`} />
+      </>
+    );
+  }
+  return (
+    <>
+      <span
+        aria-hidden
+        data-timeline-ghost=""
+        className={cn(
+          "pointer-events-none absolute top-1/2 -translate-y-1/2 rounded-sm border border-dashed border-timeline-outline",
+          kind === "project" ? "h-(--ctrl-h-xs)" : "h-full",
+        )}
+        style={{ left, width }}
+      />
+      <DragLabel x={left + width + 8} text={spanWords(span.start, span.end)} />
     </>
   );
 }

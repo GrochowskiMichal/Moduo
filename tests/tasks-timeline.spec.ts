@@ -20,6 +20,14 @@ import {
  *   - inside a project: its sections on their own rows, a range as a band,
  *     an end date as a diamond, each task a point on its due day;
  *   - nothing on the canvas is rotated (46a).
+ * And TV-TL2 — "drag, create, keyboard, dependencies" (AC9.6–9.8):
+ *   - dragging a point moves its due date (Undo puts it back); ⌥→ a day,
+ *     ⌥⇧→ a week; a diamond, a band and a bar's end drag their dates;
+ *   - a click on an undated section's row gives it an end date;
+ *   - the selected task's line shows, a contradicting date runs backwards
+ *     with "Move to …"; moving a blocker offers to move what waits on it;
+ *   - "No date · n" opens the panel's No date view, and a task dragged from
+ *     there onto the canvas is due that day.
  * Run it like the other Tasks specs:
  *   bun run local:up && bun run env:local
  *   MODUO_TARGET=web ./node_modules/.bin/rsbuild dev --host 127.0.0.1 --port 8131
@@ -33,10 +41,14 @@ const dated = { id: crypto.randomUUID(), name: "" };
 const undated = { id: crypto.randomUUID(), name: "" };
 const design = crypto.randomUUID();
 const build = crypto.randomUUID();
+// TV-TL2: a section with no dates yet (a click dates it).
+const launch = crypto.randomUUID();
 const ids = {
   logo: crypto.randomUUID(),
   late: crypto.randomUUID(),
   guide: crypto.randomUUID(),
+  // TV-TL2: no date at all (the No date view's).
+  kit: crypto.randomUUID(),
   loose: crypto.randomUUID(),
   old: crypto.randomUUID(),
 };
@@ -94,6 +106,18 @@ test.beforeAll(async () => {
   // Long ago: All's canvas starts months before the dated project's, so a
   // scroll worked out against the wrong one lands far from today.
   await make(ids.old, `Kickoff notes ${tag}`, undated.id, { due_on: dayKey(-220) });
+  // TV-TL2: an undated section and task, and "Logo concepts" waiting on
+  // "Guidelines", which is due after it (a contradiction, 68b).
+  await rpc(dev, "sections_op_create", {
+    p_workspace_id: ws.id,
+    p_project_id: dated.id,
+    p_section: { id: launch, name: `Launch ${tag}` },
+  });
+  await make(ids.kit, `Press kit ${tag}`, dated.id, { section_id: design });
+  await rest(dev, "task_relations", {
+    method: "POST",
+    body: { workspace_id: ws.id, blocker_task_id: ids.guide, blocked_task_id: ids.logo },
+  });
 });
 
 test.afterAll(async () => {
@@ -247,4 +271,192 @@ test("rows follow scope; points and spans", async ({ page }) => {
     }),
   );
   expect(rotated).toBe(false);
+});
+
+/** A task's due day, as the server keeps it. */
+async function dueOf(id: string): Promise<string | null> {
+  const rows = await rest<Array<{ due_on: string | null }>>(
+    "service",
+    `tasks?id=eq.${id}&select=due_on`,
+  );
+  return rows[0]?.due_on ?? null;
+}
+
+/** A section's dates, as the server keeps them. */
+async function sectionOf(id: string): Promise<string> {
+  const rows = await rest<Array<{ starts_on: string | null; ends_on: string | null }>>(
+    "service",
+    `sections?id=eq.${id}&select=starts_on,ends_on`,
+  );
+  return `${rows[0]?.starts_on ?? "-"}..${rows[0]?.ends_on ?? "-"}`;
+}
+
+/** Press, move in steps, let go: a real pointer drag. */
+async function dragBy(page: Page, from: { x: number; y: number }, dx: number) {
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move(from.x + dx / 2, from.y, { steps: 5 });
+  await page.mouse.move(from.x + dx, from.y, { steps: 5 });
+  await page.mouse.up();
+}
+
+async function centerOf(page: Page, selector: string) {
+  const box = await page.locator(selector).first().boundingBox();
+  if (!box) throw new Error(`nothing at ${selector}`);
+  return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+}
+
+/** Where something is once a smooth scroll has stopped moving it. */
+async function settledCenter(page: Page, selector: string) {
+  let last = "";
+  await expect
+    .poll(async () => {
+      const at = await centerOf(page, selector);
+      const now = `${Math.round(at.x)}:${Math.round(at.y)}`;
+      const settled = now === last;
+      last = now;
+      return settled;
+    })
+    .toBe(true);
+  return centerOf(page, selector);
+}
+
+const DAY_WIDTH: Record<string, number> = { week: 120, month: 24, quarter: 10, year: 3 };
+
+/**
+ * Select a row and ⇧T (fit the selection): its mark comes into view, the
+ * zoom widening only if it has to. Waits for the smooth scroll to settle and
+ * answers the day width it ended at.
+ */
+async function fitRow(page: Page, key: string, mark: string): Promise<number> {
+  await row(page, key).locator('[role="rowheader"]').click();
+  await page.keyboard.press("Shift+T");
+  let last = "";
+  await expect
+    .poll(async () => {
+      const box = await page.locator(`[data-row-key="${key}"] ${mark}`).first().boundingBox();
+      const now = box ? `${Math.round(box.x)}:${Math.round(box.width)}` : "none";
+      const settled = now === last && now !== "none";
+      last = now;
+      return settled;
+    })
+    .toBe(true);
+  const zoom = (await page.locator("[data-timeline]").getAttribute("data-zoom")) ?? "month";
+  return DAY_WIDTH[zoom] ?? 24;
+}
+
+test("drag, create, keyboard, dependencies", async ({ page }) => {
+  await signInPage(page, dev, ws.id);
+  await page.goto("/tasks");
+  await expect(page.locator("nav").getByText(dated.name, { exact: true })).toBeVisible({
+    timeout: 20_000,
+  });
+  // Inside the project, at Month: 24 px a day.
+  await openTimeline(page, dated.name);
+  await expect(page.locator("[data-timeline]")).toHaveAttribute("data-zoom", "month");
+  const DAY = 24;
+  const logoPoint = `[data-row-key="task:${ids.logo}"] [data-timeline-mark="point"]`;
+
+  // ── Drag a point: its due date moves; Undo puts it back (AC9.6) ──
+  await dragBy(page, await centerOf(page, logoPoint), DAY * 2);
+  await expect.poll(() => dueOf(ids.logo)).toBe(dayKey(5));
+  await page.getByRole("button", { name: "Undo" }).first().click();
+  await expect.poll(() => dueOf(ids.logo)).toBe(dayKey(3));
+
+  // ── The keys: ⌥→ a day, ⌥⇧→ a week, and back (AC9.6) ──
+  await row(page, `task:${ids.logo}`).locator('[role="rowheader"]').click();
+  await page.keyboard.press("Alt+ArrowRight");
+  await expect.poll(() => dueOf(ids.logo)).toBe(dayKey(4));
+  await page.keyboard.press("Alt+Shift+ArrowRight");
+  await expect.poll(() => dueOf(ids.logo)).toBe(dayKey(11));
+  await page.keyboard.press("Alt+Shift+ArrowLeft");
+  await expect.poll(() => dueOf(ids.logo)).toBe(dayKey(4));
+  await page.keyboard.press("Alt+ArrowLeft");
+  await expect.poll(() => dueOf(ids.logo)).toBe(dayKey(3));
+
+  // ── The selected task's line; a date due before what it waits on (AC9.7, 68b) ──
+  // "Logo concepts" (in 3 days) waits on "Guidelines" (in 18): the line runs
+  // backwards, and its mark offers the day after.
+  const line = page.locator(`[data-timeline-dep="${ids.guide}>${ids.logo}"]`);
+  await expect(line).toHaveAttribute("data-backwards", "true");
+  await row(page, `task:${ids.logo}`).locator("[data-timeline-contradiction]").click();
+  await page.getByRole("button", { name: /^Move to / }).click();
+  await expect.poll(() => dueOf(ids.logo)).toBe(dayKey(19));
+  await expect(line).not.toHaveAttribute("data-backwards", /.*/);
+  await expect(row(page, `task:${ids.logo}`).locator("[data-timeline-contradiction]")).toHaveCount(
+    0,
+  );
+
+  // Moving the blocker later offers to move what waits on it (70), never on
+  // its own. ⇧T brings its point into view first (it's off to the right).
+  const guidePoint = `[data-row-key="task:${ids.guide}"] [data-timeline-mark="point"]`;
+  const point = '[data-timeline-mark="point"]';
+  await fitRow(page, `task:${ids.guide}`, point);
+  await dragBy(page, await centerOf(page, guidePoint), DAY);
+  await expect.poll(() => dueOf(ids.guide)).toBe(dayKey(19));
+  expect(await dueOf(ids.logo)).toBe(dayKey(19));
+  await page.getByRole("button", { name: "Also move the one that waits on this" }).click();
+  await expect.poll(() => dueOf(ids.logo)).toBe(dayKey(20));
+
+  // ── Sections: a diamond, a band (AC9.6) ──
+  const diamond = '[data-timeline-mark="diamond"]';
+  const buildKey = `section:${dated.id}:${build}`;
+  await fitRow(page, buildKey, diamond);
+  await dragBy(page, await centerOf(page, `[data-row-key="${buildKey}"] ${diamond}`), -DAY);
+  await expect.poll(() => sectionOf(build)).toBe(`-..${dayKey(19)}`);
+  const band = '[data-timeline-mark="band"]';
+  const designKey = `section:${dated.id}:${design}`;
+  await fitRow(page, designKey, band);
+  await dragBy(page, await centerOf(page, `[data-row-key="${designKey}"] ${band}`), DAY);
+  await expect.poll(() => sectionOf(design)).toBe(`${dayKey(-1)}..${dayKey(11)}`);
+
+  // ── A click on an undated section's row gives it an end date (AC9.6) ──
+  await page.keyboard.press("t");
+  const today = await settledCenter(page, "[data-timeline-today]");
+  const launchRow = await row(page, `section:${dated.id}:${launch}`).boundingBox();
+  if (!launchRow) throw new Error("no Launch row");
+  // Hovering shows what a click would set.
+  await page.mouse.move(today.x + 40, launchRow.y + launchRow.height / 2);
+  await expect(
+    row(page, `section:${dated.id}:${launch}`).locator("[data-timeline-ghost]"),
+  ).toHaveCount(1);
+  await page.mouse.click(today.x, launchRow.y + launchRow.height / 2);
+  await expect.poll(() => sectionOf(launch)).toBe(`-..${dayKey(0)}`);
+
+  // ── "No date · n" opens the panel's view; a task dragged onto the canvas is due then (AC9.8) ──
+  await page.locator("[data-timeline-no-date-open]").click();
+  const panel = page.locator("[data-timeline-no-date]");
+  await expect(panel).toContainText(`Press kit ${tag}`);
+  const kit = await centerOf(page, `[data-no-date-task="${ids.kit}"]`);
+  const target = await row(page, `task:${ids.late}`).boundingBox();
+  if (!target) throw new Error("no row to drop on");
+  // Where today is now that the panel is open.
+  const day0 = await settledCenter(page, "[data-timeline-today]");
+  await page.mouse.move(kit.x, kit.y);
+  await page.mouse.down();
+  await page.mouse.move(kit.x - 12, kit.y, { steps: 3 });
+  await page.mouse.move(day0.x, target.y + target.height / 2, { steps: 12 });
+  await page.mouse.move(day0.x + 1, target.y + target.height / 2, { steps: 2 });
+  await page.mouse.up();
+  await expect.poll(() => dueOf(ids.kit)).toBe(dayKey(0));
+  // It was the place's last undated task: the view says so.
+  await expect(page.getByText("Everything here has a date")).toBeVisible();
+
+  // ── The project's bar: its end resizes (AC9.6); ⇧T fits the bar, zooming out ──
+  const projectKey = `project:${dated.id}`;
+  const dw = await fitRow(page, projectKey, '[data-timeline-mark="bar"]');
+  await dragBy(
+    page,
+    await centerOf(page, `[data-row-key="${projectKey}"] [data-timeline-edge="end"]`),
+    dw,
+  );
+  await expect
+    .poll(async () => {
+      const rows = await rest<Array<{ target_on: string | null }>>(
+        "service",
+        `buckets?id=eq.${dated.id}&select=target_on`,
+      );
+      return rows[0]?.target_on ?? null;
+    })
+    .toBe(dayKey(31));
 });

@@ -2,7 +2,10 @@
 // (titles live there, so a bar never cuts one) and the track on the right,
 // where the row's marks sit on the shared time axis. Memoised (TV-D11b): a
 // row takes its row, a few flags and one actions object that never changes,
-// so editing one task redraws one row.
+// so editing one task redraws one row. TV-TL2: the track is where the
+// canvas's drags start (`data-timeline-track`; the view listens on the
+// scroller), a row with no date yet shows what a click would set, and a task
+// carries its dependency mark and stubs (68b).
 
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { memo, type ReactNode } from "react";
@@ -11,13 +14,17 @@ import { normalizeLabelColor } from "../../../components/tag-colors";
 import { useTimeRegion } from "../../../lib/time-region";
 import { cn } from "../../../lib/utils";
 import { useAssignees } from "../assignees";
+import { type SelectMods, selectModsOf } from "../selection";
+import type { Contradiction } from "../timeline-deps";
 import type { TimelineRow } from "../timeline-rows";
 import { barWords, milestoneWords, pointWords, sectionDateWords } from "../timeline-words";
 import { AssigneeAvatar } from "./assignee-avatar";
 import type { TaskRowActions } from "./row-facts";
 import { type TaskCommand, TaskContextMenu } from "./task-context-menu";
 import { TitleEditor } from "./task-row";
+import { ContradictionMark, DepStubs } from "./timeline-deps-layer";
 import {
+  CreateGhost,
   OffscreenHint,
   ProjectBarMark,
   RepeatGhosts,
@@ -26,14 +33,22 @@ import {
   SessionTicks,
   TaskPointMark,
   TrackLines,
+  timelineRowDomId,
   useTimelineGeometry,
 } from "./timeline-marks";
 import { TimelineTaskCommand } from "./timeline-row-commands";
 
+export { timelineRowDomId };
+
+/** The selected task's lines' ends the canvas doesn't draw (68b). */
+export type RowStubs = { before: readonly string[]; after: readonly string[] };
+
 /** What a row can ask of the view: one object for the life of the view. */
 export type TimelineRowHandlers = {
-  /** A click: the row takes the cursor (a task row is selected). */
-  activate: (row: TimelineRow) => void;
+  /** A click: the row takes the cursor (a task row is selected; ⇧/⌘ add to a selection). */
+  activate: (row: TimelineRow, mods: SelectMods) => void;
+  /** Move a task's due date to a day (the dependency mark's one fix). */
+  moveTaskTo: (taskId: string, day: number) => void;
   /** ▸ / ▾ on a project or a section. */
   toggle: (rowKey: string) => void;
   /** Open a project's own Timeline (a project row at All). */
@@ -72,11 +87,22 @@ export type TimelineRowProps = {
   taskKey: string | null;
   handlers: TimelineRowHandlers;
   actions: TaskRowActions;
+  /** Its dates can be dragged (Edit). False: no grab cursor, no ends, no ghost. */
+  editable: boolean;
+  /** A task due before something it waits on (68b). */
+  contradiction: Contradiction | null;
+  /** The selected task's undrawn line ends. */
+  stubs: RowStubs | null;
 };
 
-/** The DOM id of a row (the grid's active descendant). */
-export function timelineRowDomId(key: string): string {
-  return `timeline-row-${key.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+/** Which kind of date a click on this row's empty track would set, or null. */
+export function drawableKind(row: TimelineRow): "task" | "section" | "project" | null {
+  if (row.kind === "task") return row.point ? null : "task";
+  if (row.kind === "section") {
+    return row.section && !row.band && row.milestone === null ? "section" : null;
+  }
+  if (row.kind === "project") return row.bar ? null : "project";
+  return null;
 }
 
 /** Where a row's content starts: one step per level; tasks line up with their header's name. */
@@ -107,7 +133,7 @@ function TimelineRowView(props: TimelineRowProps) {
       data-timeline-row={row.kind}
       data-row-key={row.key}
       data-cursor={cursor || undefined}
-      onClick={() => handlers.activate(row)}
+      onClick={(e) => handlers.activate(row, selectModsOf(e))}
       onDoubleClick={() => {
         if (row.kind === "project" && row.expandable) handlers.openProject(row.project.id);
       }}
@@ -121,6 +147,8 @@ function TimelineRowView(props: TimelineRowProps) {
       <NameCell {...props} expandable={expandable} expanded={!!expanded} />
       <div
         role="gridcell"
+        // Where the canvas's drags and clicks-to-date start (TV-TL2).
+        data-timeline-track=""
         // Stuck, the row is opaque: its track paints the canvas's grid itself
         // (the frame holds the grid's geometry).
         className={cn("relative min-w-0 flex-1", sticky && "timeline-grid")}
@@ -344,7 +372,19 @@ function NameContent({
 }
 
 /** The marks on a row's track. */
-function Track({ row, selected, hue, showRepeats, handlers }: TimelineRowProps) {
+function Track({
+  row,
+  selected,
+  hue,
+  showRepeats,
+  handlers,
+  editable,
+  contradiction,
+  stubs,
+}: TimelineRowProps) {
+  // A row with no date yet shows what a click would set (only to an editor).
+  const drawable = editable ? drawableKind(row) : null;
+  const ghost = drawable ? <CreateGhost rowKey={row.key} kind={drawable} /> : null;
   switch (row.kind) {
     case "area":
     case "group":
@@ -361,19 +401,30 @@ function Track({ row, selected, hue, showRepeats, handlers }: TimelineRowProps) 
             muted={row.muted}
             label={barWords(row.bar, row.progress)}
             milestoneLabel={milestoneWords}
+            editable={editable}
           />
           <OffscreenHint start={row.bar.start} end={row.bar.end} onGo={handlers.scrollToDay} />
         </>
-      ) : null;
+      ) : (
+        ghost
+      );
     case "section":
       return (
         <>
-          {row.band ? <SectionBand band={row.band} sectionId={row.section?.id ?? null} /> : null}
+          {row.band ? (
+            <SectionBand
+              band={row.band}
+              sectionId={row.section?.id ?? null}
+              interactive={!!row.section}
+              editable={editable}
+            />
+          ) : null}
           {row.milestone !== null && row.section ? (
             <SectionDiamond
               day={row.milestone}
               sectionId={row.section.id}
               label={milestoneWords(row.section.name, row.milestone)}
+              editable={editable}
             />
           ) : null}
           {row.band || row.milestone !== null ? (
@@ -382,7 +433,9 @@ function Track({ row, selected, hue, showRepeats, handlers }: TimelineRowProps) 
               end={row.band?.end ?? row.milestone ?? 0}
               onGo={handlers.scrollToDay}
             />
-          ) : null}
+          ) : (
+            ghost
+          )}
         </>
       );
     case "task": {
@@ -400,16 +453,31 @@ function Track({ row, selected, hue, showRepeats, handlers }: TimelineRowProps) 
           ) : null}
           {point ? (
             <>
+              {contradiction ? (
+                <ContradictionMark
+                  taskId={task.id}
+                  day={point.day}
+                  contradiction={contradiction}
+                  editable={editable}
+                  onMove={(day) => handlers.moveTaskTo(task.id, day)}
+                />
+              ) : null}
               <TaskPointMark
                 point={point}
                 taskId={task.id}
                 tone={{ hue, category: task.statusCategory ?? task.status }}
                 selected={selected}
                 label={pointWords(point)}
+                editable={editable}
               />
+              {stubs ? (
+                <DepStubs day={point.day} before={stubs.before} after={stubs.after} />
+              ) : null}
               <OffscreenHint start={point.day} end={point.day} onGo={handlers.scrollToDay} />
             </>
-          ) : null}
+          ) : (
+            ghost
+          )}
         </>
       );
     }
@@ -465,7 +533,10 @@ function sameRowProps(a: TimelineRowProps, b: TimelineRowProps): boolean {
     a.editing === b.editing &&
     a.taskKey === b.taskKey &&
     a.handlers === b.handlers &&
-    a.actions === b.actions
+    a.actions === b.actions &&
+    a.editable === b.editable &&
+    a.contradiction === b.contradiction &&
+    a.stubs === b.stubs
   );
 }
 

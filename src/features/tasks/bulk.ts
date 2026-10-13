@@ -31,6 +31,9 @@ export type BulkWrite = TaskDropWrite & {
   occurrenceOn?: string;
   /** A repeat's pattern, changed with its date ("Change the patterns"). */
   recurrence?: RecurrenceRule | null;
+  /** A task's work session moves here (`tasks_op_reschedule`, the Timeline's
+   *  hollow point, TV-TL2): the session it shows moves with it. */
+  scheduledAt?: string;
 };
 
 /** Where a bulk Date goes: a day, each task's own date moved by n days, or none. */

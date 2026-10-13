@@ -81,6 +81,9 @@ function fakeRuntime(tasks: Task[], readOnly: string) {
     opAssign: rs.fn(({ taskId, assigneeId }: { taskId: string; assigneeId: string | null }) =>
       write(taskId, { assigneeId }),
     ),
+    opReschedule: rs.fn(({ taskId, scheduledAt }: { taskId: string; scheduledAt: string }) =>
+      write(taskId, { scheduledAt }),
+    ),
     // As the server: a delete promotes the task's live subtasks to the top.
     deleteTask: rs.fn(async ({ taskId }: { taskId: string }) => {
       await new Promise((r) => setTimeout(r, 2));
@@ -153,6 +156,32 @@ describe("bulkWrite — one write for a selection, one Undo (AC4.6, AC11.9)", ()
       );
     });
     expect(toastMock.mock.calls.some((c) => c[0] === "Completed 2 tasks")).toBe(true);
+  });
+
+  it("TV-TL2: moves a work session through the reschedule op; Undo puts it back; a follow-up is offered", async () => {
+    const from = new Date(2026, 9, 15, 14, 30).toISOString();
+    const to = new Date(2026, 9, 16, 14, 30).toISOString();
+    const { hook, api, rows } = await mount([task("a", { scheduledAt: from })], "none");
+    const followUp = rs.fn((_changed: readonly string[]) => null);
+    await act(async () => {
+      await hook.result.current.bulkWrite([{ taskId: "a", scheduledAt: to }], {
+        label: () => "Moved to Fri",
+        followUp,
+      });
+    });
+    expect(api.opReschedule).toHaveBeenCalledWith({
+      workspaceId: "w1",
+      taskId: "a",
+      scheduledAt: to,
+    });
+    expect(rows.get("a")?.scheduledAt).toBe(to);
+    expect(followUp).toHaveBeenCalledWith(["a"]);
+    const call = toastMock.mock.calls.find((c) => c[0] === "Moved to Fri");
+    await act(async () => {
+      (call?.[1] as ToastOpts | undefined)?.action?.onClick();
+      await new Promise((r) => setTimeout(r, 40));
+    });
+    await waitFor(() => expect(rows.get("a")?.scheduledAt).toBe(from));
   });
 
   it("deleting a parent and its selected subtask, then Undo, keeps the subtask under its parent", async () => {

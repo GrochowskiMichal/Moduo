@@ -57,6 +57,7 @@ import { UNDO_TOAST_MS, undoToast } from "../../../lib/undo-toast";
 import { readViewPrefs, writeViewPrefs } from "../../../lib/view-prefs";
 import { HubDropZone } from "../../contacts/ui/hub-drop-zone";
 import { consumeFocusViewRequest, FOCUS_VIEW_REQUEST_EVENT } from "../../focus/view-request";
+import { dispatchLayoutPanelsSet, readFeaturePanelState } from "../../layout/panel-events";
 import { looksLikeHandle } from "../../spine/grammar";
 import {
   type ReferenceHost,
@@ -114,11 +115,14 @@ import {
 } from "../my-tasks";
 import { defaultRowsFor, firstViewFor, timelineRoleFor } from "../onboarding";
 import { showsSortedNote, sortedByLabel } from "../order";
+import { NO_DATE_PANEL_VIEW } from "../panel-views";
 import { handleLabel } from "../row-layout";
 import { resolveTasksDeepLink, taskIdForHandle } from "../search";
 import { inViewOrder } from "../selection";
 import { projectDeleteSummary, projectOpenWork } from "../sidebar";
 import { useTemplateActions } from "../templates/ui/use-template-actions";
+import { undatedTasks } from "../timeline-rows";
+import { dayNumOfKey } from "../timeline-scale";
 import { ArchivedProjectBanner, ArchivedProjectsView } from "./archived-projects-view";
 import {
   ARCHIVED_SELECTION,
@@ -149,13 +153,16 @@ import { TaskListView } from "./task-list-view";
 import { TaskTimelineView } from "./task-timeline-view";
 import { TaskListSkeleton } from "./task-view-states";
 import { TasksWelcomeDialog } from "./tasks-welcome-dialog";
+import { TimelineNoDatePanel } from "./timeline-no-date-panel";
 import { useUpcomingView } from "./upcoming-view";
 import { boardDropName } from "./use-board-folds";
 import { useBulkActions } from "./use-bulk-actions";
+import { useProjectEditable } from "./use-project-overview-data";
 import { useTaskSelection } from "./use-task-selection";
 import { useTasksDisplay } from "./use-tasks-display";
 import { useTasksFilters } from "./use-tasks-filters";
 import { useTasksWelcome } from "./use-tasks-welcome";
+import { TIMELINE_DROP_ID } from "./use-timeline-drop";
 import { AllEmpty, MyTasksEmpty, UpcomingEmpty, WontDoEmpty } from "./view-empty-states";
 import { ViewExportMenu } from "./view-export-menu";
 
@@ -1549,6 +1556,40 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   const onViewKey = (event: React.KeyboardEvent<HTMLDivElement>, selected: Task | null) =>
     bulk.onKey(event) || (ownViewKey?.(event, selected) ?? false);
 
+  // ── The Timeline's No date view (TV-TL2, REPLAN 70) ─────────────────────────
+  // The centre shows the Timeline (not Focus, Templates, Trash or Archived).
+  const timelineShown =
+    view === "timeline" &&
+    selection !== "today" &&
+    selection !== TEMPLATES_SELECTION &&
+    selection !== TRASH_SELECTION &&
+    selection !== ARCHIVED_SELECTION;
+  // Its drags need Edit: the workspace's, and inside a project the project's
+  // own (shared view-only, D15-11's question, asked once). A person who can't
+  // gets no handles anywhere, the No date view's rows included.
+  const timelineProjectId =
+    timelineShown && buckets.some((b) => b.id === selection && !b.isSystem) ? selection : "";
+  const timelineProjectAccess = useProjectEditable(
+    timelineProjectId,
+    canEdit && timelineProjectId !== "",
+  );
+  const timelineCanDrag =
+    canEdit && !archivedProject && (timelineProjectId === "" || timelineProjectAccess === true);
+  // "No date · n" opens the panel on that view (the panel too, if it's closed).
+  const openNoDate = useCallback(() => {
+    setPanelView(NO_DATE_PANEL_VIEW);
+    const state = readFeaturePanelState("tasks");
+    if (!state.right) dispatchLayoutPanelsSet({ feature: "tasks", left: state.left, right: true });
+  }, []);
+  // The place's open tasks with no date and no session (the button's count).
+  const undated = useMemo(
+    () =>
+      timelineShown
+        ? undatedTasks(scopeTasks, api.sessions, dayNumOfKey(todayStr()) ?? 0, Date.now())
+        : [],
+    [timelineShown, scopeTasks, api.sessions],
+  );
+
   // The "← item" stack (SH-1) for references opened from the panel (RF-1). A
   // new selection is a new context, so the stack starts over.
   const panelStack = usePanelStack<{ key: string; type: string; id: string }>();
@@ -1649,6 +1690,11 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
         taskKey={taskKey}
         onOpenTask={setFullPageId}
         onOpenProject={pickSelection}
+        // TV-TL2: a selection's bar keys (never Upcoming's or the Inbox's own),
+        // and "No date · n" opening the right panel's view.
+        onViewKey={bulk.onKey}
+        onOpenNoDate={openNoDate}
+        canDrag={timelineCanDrag}
       />
     ) : (
       <TaskListView
@@ -1701,11 +1747,10 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   // the hub as a ready-but-sourceless drop target) so a task dragged from the
   // List or Board can be dropped on the selected task's hub to link it. The List
   // & Board render as `useDndMonitor` consumers (dndMode="external", the NO-7b
-  // pattern); the Timeline keeps its OWN nested context — its tray→axis drag
-  // needs autoScroll off and a keyboard-disabled, pointer-derived drop that
-  // genuinely conflict with a shared context, and it has no cross-pane drop
-  // target (bars are custom pointer engines, not dnd-kit). Nested = the inner
-  // timeline context claims tray drags, so the hub handler never sees them.
+  // pattern). The Timeline (TV-TL2) is one too, for one drag only: a task from
+  // the right panel's No date view onto its canvas (one droppable, the day from
+  // the raw pointer at the drop). Its own marks drag with plain pointer events
+  // (`use-timeline-canvas.ts`), never through this context.
   const pageSensors = useTaskDndSensors();
   // Refs so the collision fn (stable, empty-deps) always reads the live surface;
   // neither can change mid-drag (switching view/scope remounts the body).
@@ -1742,6 +1787,11 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     if (selectionRef.current === "today") {
       return closestCenter({ ...args, droppableContainers: centerContainers });
     }
+    // The Timeline's canvas takes a No date task only while the pointer is on it.
+    if (viewRef.current === "timeline") {
+      const canvas = centerContainers.filter((c) => c.id === TIMELINE_DROP_ID);
+      return canvas.length > 0 ? pointerWithin({ ...args, droppableContainers: canvas }) : [];
+    }
     return [];
   }, []);
 
@@ -1761,6 +1811,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       if (id.startsWith("link:")) return "the open task, to link them";
       // A Board column or lane cell: the name the board registered (TV-U11).
       if (id.startsWith("col:")) return boardDropName(id);
+      if (id === TIMELINE_DROP_ID) return "the timeline, to give it a due date";
       return taskName(id);
     };
     return taskDragAnnouncements({ taskName: (id) => taskName(id) ?? "the task", targetName });
@@ -2005,14 +2056,18 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   ) : null;
   // Nothing selected inside a project, or a task in the centre: the panel
   // shows Project (the one exception to "the panel remembers its view").
+  // The Timeline's No date stays open while you work the canvas (TV-TL2).
   const panelActive = multiSelect.multi
     ? "details"
-    : projectView && (fullPageTask || (!selectedTask && !privateLinkId && scopeProject))
-      ? "project"
-      : panelView;
+    : panelView === NO_DATE_PANEL_VIEW && timelineShown && !fullPageTask
+      ? NO_DATE_PANEL_VIEW
+      : projectView && (fullPageTask || (!selectedTask && !privateLinkId && scopeProject))
+        ? "project"
+        : panelView;
 
   // The right panel's title row names and switches its views (SH-1): Details
-  // and Project (TV-U13); In flight and No date register later.
+  // and Project (TV-U13), No date beside the Timeline (TV-TL2); In flight
+  // registers later (TV-F8).
   const right = (
     <RightPanel
       module="tasks"
@@ -2030,6 +2085,23 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
         // Inbox task) it says so.
         project: () =>
           projectView ?? <ProjectPanel project={null} tasks={api.tasks} sections={api.sections} />,
+        // Listed only while the Timeline shows (the registry hides a view a
+        // page can't render).
+        [NO_DATE_PANEL_VIEW]: timelineShown
+          ? () => (
+              <TimelineNoDatePanel
+                tasks={undated}
+                projects={buckets}
+                inboxId={inbox?.id ?? null}
+                canEdit={timelineCanDrag}
+                selectedTaskId={selectedTaskId}
+                onOpen={(id) => {
+                  setPanelView("details");
+                  setSelectedTaskId(id);
+                }}
+              />
+            )
+          : undefined,
       }}
       activeId={panelActive}
       onChange={setPanelView}
