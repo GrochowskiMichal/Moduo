@@ -8,9 +8,10 @@ import { Check } from "lucide-react";
 import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
 import { toast } from "sonner";
 import { useFocusTaskState } from "@/features/focus/timer";
-import { checkOffWithSubtasks, undoCheckOff } from "@/features/tasks/check-off";
+import { checkOffWithSubtasks, restoreFocusPlace, undoCheckOff } from "@/features/tasks/check-off";
 import { focusOrOpen } from "@/features/tasks/home";
 import type { Task } from "@/features/tasks/model";
+import { queueEntriesOf } from "@/features/tasks/queue";
 import { teamIdsOf } from "@/features/tasks/teams";
 import { getRuntime } from "@/lib/runtime";
 import { findWorkspaceStore } from "@/lib/sync/store";
@@ -111,10 +112,10 @@ export function TasksWidget({ widget, size, canWrite }: WidgetComponentProps) {
     [tasks, taskQueue.data, userId, projectIds, sessionTaskId, teamMembers],
   );
 
-  // The newest copy, for an Undo that runs from a toast later.
-  const latest = useRef(tasks);
+  // The newest copy and line-up, for an Undo that runs from a toast later.
+  const latest = useRef({ tasks, queue: taskQueue.data });
   useLayoutEffect(() => {
-    latest.current = tasks;
+    latest.current = { tasks, queue: taskQueue.data };
   });
 
   const markDone = useCallback(
@@ -124,23 +125,31 @@ export function TasksWidget({ widget, size, canWrite }: WidgetComponentProps) {
       // Home's tasks are the shared store's copy (TV-D11a): no store, no rows.
       const store = findWorkspaceStore(runtime, workspaceId);
       if (!store) return;
-      void checkOffWithSubtasks(store, task, latest.current)
+      // Finishing takes it out of my Focus on the server; Undo puts it back there.
+      const lineupBefore = queueEntriesOf(latest.current.queue, userId).map((e) => e.taskId);
+      void checkOffWithSubtasks(store, task, latest.current.tasks)
         .then(({ subtasks, refused }) => {
           if (refused > 0) toast.error(`Couldn’t finish ${subtaskWord(refused)}.`);
-          if (subtasks.length === 0) return;
-          // Call 87: "Done · also 2 subtasks", one Undo for all of them.
-          undoToast(`Done · also ${subtaskWord(subtasks.length)}`, {
+          // Call 87: "Done · also 2 subtasks", one Undo for all of them. The
+          // row leaves the widget at once, so a lone check-off has an Undo too.
+          const label =
+            subtasks.length > 0 ? `Done · also ${subtaskWord(subtasks.length)}` : "Done";
+          undoToast(label, {
             onUndo: () => {
-              const current = (id: string) => latest.current.find((t) => t.id === id);
-              void undoCheckOff(store, [task, ...subtasks], current).then((failed) => {
-                if (failed > 0) toast.error("Couldn’t undo all of that.");
-              });
+              const current = (id: string) => latest.current.tasks.find((t) => t.id === id);
+              void undoCheckOff(store, [task, ...subtasks], current)
+                .then(async ({ restored, failed }) => {
+                  if (failed > 0) toast.error("Couldn’t undo all of that.");
+                  if (!restored.includes(task.id) || !lineupBefore.includes(task.id)) return;
+                  await restoreFocusPlace(store, runtime.tasks, workspaceId, task.id, lineupBefore);
+                })
+                .catch(() => toast.error("Couldn’t put it back in Focus."));
             },
           });
         })
         .catch(() => toast.error("Couldn’t complete that task."));
     },
-    [canWrite, workspaceId],
+    [canWrite, workspaceId, userId],
   );
 
   if ((taskSource.loading || taskQueue.loading) && rows.length === 0) return <WidgetLoading />;

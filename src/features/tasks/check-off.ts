@@ -8,6 +8,7 @@
 
 import { legacyTaskStatus, taskCategoryOf, taskStatusWord } from "@contracts/vocabularies";
 
+import type { ModuoRuntime } from "../../lib/runtime.types";
 import type { WorkspaceStore } from "../../lib/sync/store";
 import { subtasksToFinish } from "./home";
 import type { Task } from "./model";
@@ -63,18 +64,66 @@ export async function checkOffWithSubtasks(
 
 /**
  * Undo a check-off: each task that is still done goes back to the status it
- * had. `current` reads a task as the copy has it now. Resolves to how many
- * couldn't be put back.
+ * had. `current` reads a task as the copy has it now. Resolves to the ids put
+ * back and how many couldn't be.
  */
 export async function undoCheckOff(
   store: StatusSender,
   before: readonly Task[],
   current: (id: string) => Task | undefined,
-): Promise<number> {
+): Promise<{ restored: string[]; failed: number }> {
   const back = before.filter((b) => {
     const now = current(b.id);
     return !!now && !now.deletedAt && taskCategoryOf(now) === "done";
   });
   const results = await Promise.allSettled(back.map((b) => store.sendStatus(statusBackWrite(b))));
-  return results.filter((r) => r.status === "rejected").length;
+  return {
+    restored: back.filter((_, i) => results[i]?.status === "fulfilled").map((b) => b.id),
+    failed: results.filter((r) => r.status === "rejected").length,
+  };
+}
+
+/**
+ * Where a task goes back into my Focus line-up after an Undo (finishing took
+ * it out on the server): right after the nearest task before it in the
+ * line-up as it was that is still lined up now; null = the top.
+ */
+export function focusAnchor(
+  taskId: string,
+  lineupBefore: readonly string[],
+  lineupNow: ReadonlySet<string>,
+): string | null {
+  const at = lineupBefore.indexOf(taskId);
+  for (let i = at - 1; i >= 0; i -= 1) {
+    const id = lineupBefore[i];
+    if (id && lineupNow.has(id)) return id;
+  }
+  return null;
+}
+
+type QueueRuntime = {
+  opQueueAdd: ModuoRuntime["tasks"]["opQueueAdd"];
+  opQueueReorder: ModuoRuntime["tasks"]["opQueueReorder"];
+};
+
+/**
+ * Put a task back in my Focus line-up where it was (the module's drop Undo
+ * does the same, `restoreQueuePlace`), through the store's line-up so every
+ * surface shows it. The place is worked out from the server's answer to the
+ * add (my line-up as it is now), never from the copy, which may still show
+ * the row the check-off took out.
+ */
+export function restoreFocusPlace(
+  store: Pick<WorkspaceStore, "queueOp">,
+  tasks: QueueRuntime,
+  workspaceId: string,
+  taskId: string,
+  lineupBefore: readonly string[],
+): Promise<unknown> {
+  return store.queueOp(null, async () => {
+    const mine = await tasks.opQueueAdd({ workspaceId, taskId, at: "end" });
+    const others = new Set(mine.map((e) => e.taskId).filter((id) => id !== taskId));
+    const afterTaskId = focusAnchor(taskId, lineupBefore, others);
+    return tasks.opQueueReorder({ workspaceId, taskId, afterTaskId });
+  });
 }

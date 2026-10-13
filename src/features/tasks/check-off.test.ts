@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from "@rstest/core";
 
-import { checkOffWithSubtasks, undoCheckOff } from "./check-off";
+import { checkOffWithSubtasks, focusAnchor, restoreFocusPlace, undoCheckOff } from "./check-off";
 import { makeTask } from "./helpers";
 import type { Task } from "./model";
 
@@ -83,8 +83,8 @@ describe("undoCheckOff", () => {
       ["b", { ...b, statusCategory: "todo" }],
     ]);
     const store = fakeStore();
-    const failed = await undoCheckOff(store, [parent, a, b], (id) => now.get(id));
-    expect(failed).toBe(0);
+    const out = await undoCheckOff(store, [parent, a, b], (id) => now.get(id));
+    expect(out).toEqual({ restored: ["p", "a"], failed: 0 });
     expect(store.sent).toEqual([
       {
         taskId: "p",
@@ -93,5 +93,44 @@ describe("undoCheckOff", () => {
       },
       { taskId: "a", status: "todo", fields: { statusCategory: "todo", status: "todo" } },
     ]);
+  });
+});
+
+describe("focusAnchor (Undo puts a task back in Focus where it was)", () => {
+  it("goes back after the nearest task before it that is still lined up", () => {
+    expect(focusAnchor("c", ["a", "b", "c", "d"], new Set(["a", "d"]))).toBe("a");
+    expect(focusAnchor("c", ["a", "b", "c", "d"], new Set(["b", "d"]))).toBe("b");
+  });
+
+  it("goes to the top when nothing before it is still lined up", () => {
+    expect(focusAnchor("a", ["a", "b"], new Set(["b"]))).toBeNull();
+    expect(focusAnchor("b", ["a", "b"], new Set())).toBeNull();
+  });
+
+  it("restoreFocusPlace adds it back, then places it by the server's line-up", async () => {
+    const calls: string[] = [];
+    const entry = (taskId: string) => ({
+      id: taskId,
+      workspaceId: "w1",
+      userId: "me",
+      taskId,
+      position: taskId,
+      queuedAt: "",
+      updatedAt: "",
+    });
+    const tasks = {
+      // On the server "b" has left the line-up meanwhile; the copy may not know yet.
+      opQueueAdd: async () => {
+        calls.push("add");
+        return [entry("a"), entry("d"), entry("c")];
+      },
+      opQueueReorder: async (input: { afterTaskId: string | null }) => {
+        calls.push(`after:${input.afterTaskId}`);
+        return [];
+      },
+    };
+    const store = { queueOp: (_o: unknown, op: () => Promise<unknown>) => op() };
+    await restoreFocusPlace(store as never, tasks as never, "w1", "c", ["a", "b", "c", "d"]);
+    expect(calls).toEqual(["add", "after:a"]);
   });
 });
