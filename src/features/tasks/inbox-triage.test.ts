@@ -38,23 +38,34 @@ describe("Inbox triage", () => {
   });
 
   it("a snooze holds until its day or a new comment; one whose task left is stale", () => {
-    const tasks = [{ id: "a" }, { id: "b" }, { id: "c" }, { id: "d" }];
+    const tasks = [{ id: "a" }, { id: "b" }, { id: "c" }, { id: "d" }, { id: "e" }];
     const split = splitSnoozed(
       tasks,
       {
         a: { until: "2026-10-20", stamp: null },
         b: { until: "2026-10-14", stamp: null },
         c: { until: "2026-10-20", stamp: "t1#1" },
+        // Its comments not read yet (a boot): no stamp now, so it holds.
+        e: { until: "2026-10-21", stamp: "t1#1" },
         gone: { until: "2026-10-20", stamp: null },
       },
       "2026-10-14",
       new Map([["c", "t2#2"]]),
     );
-    expect(split.snoozed.map((t) => t.id)).toEqual(["a"]);
+    expect(split.snoozed.map((t) => t.id)).toEqual(["a", "e"]);
     // b's day came; c got a comment since.
     expect(split.woken).toEqual(["b", "c"]);
     expect(split.active.map((t) => t.id)).toEqual(["b", "c", "d"]);
     expect(split.stale).toEqual(["gone"]);
+    // A first comment on a task snoozed without any wakes it too.
+    expect(
+      splitSnoozed(
+        [{ id: "a" }],
+        { a: { until: "2026-10-20", stamp: null } },
+        "2026-10-14",
+        new Map([["a", "t#1"]]),
+      ).woken,
+    ).toEqual(["a"]);
   });
 
   it("snoozes until tomorrow or next Monday", () => {

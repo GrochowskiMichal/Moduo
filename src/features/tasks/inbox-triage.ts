@@ -48,13 +48,18 @@ export function triageActionFor(
 
 // ── snoozing ─────────────────────────────────────────────────────────────
 
-/** Whether a snooze still holds: before its day, and no comment since. */
+/**
+ * Whether a snooze still holds: before its day, and no comment since. A task
+ * with no comment stamp now (its comments not read yet, as at a boot) holds:
+ * only a stamp that moved wakes it.
+ */
 export function snoozeHolds(
   entry: TasksInboxSnooze,
   today: string,
   stampNow: string | null | undefined,
 ): boolean {
-  return entry.until > today && (stampNow ?? null) === entry.stamp;
+  if (entry.until <= today) return false;
+  return stampNow == null || stampNow === entry.stamp;
 }
 
 export type SnoozeSplit<T extends Pick<Task, "id">> = {
