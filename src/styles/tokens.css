@@ -486,6 +486,9 @@
    size with an invisible ::before, so its glyph never grows. */
 :root {
   --hit-min: 1.5rem; /* 24 */
+  /* How tall the fade is at the foot of a menu that scrolls, while more items
+     wait below (`[data-more-below]`, global.css; TV-U10). */
+  --menu-fade: 1.75rem; /* 28 */
 }
 
 /* ============================================================================

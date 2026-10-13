@@ -15,6 +15,7 @@ import {
 } from "../../features/dashboard/edit-mode-events";
 import { PageDots } from "../../features/dashboard/ui/page-dots";
 import { EmailDueWebSweep } from "../../features/email/hooks/use-email-due-web-sweep";
+import { FocusRunFollower } from "../../features/focus/focus-run-follower";
 import { useFocusTimeSaver } from "../../features/focus/use-focus-time-saver";
 import {
   dispatchLayoutPanelsApply,
@@ -539,6 +540,9 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
             {/* The shared Tasks store for this workspace, held all session, and its
                 quiet sync state: Offline / "2 waiting to sync" (TV-D11a). */}
             <TasksSyncStatus />
+            {/* The run rules + claims for the one time engine, app-wide (TV-F6;
+                renders nothing). */}
+            <FocusRunFollower />
             {/* Global, so top bar (call 96): the running Focus timer, then Help. */}
             <FocusSessionChip />
             <HelpMenu />

@@ -49,6 +49,8 @@ const SORTED_BY: Record<Exclude<TaskOrder, "manual">, string> = {
   priority: "priority",
   created: "date created",
   updated: "last updated",
+  title: "title",
+  status: "status",
 };
 
 /** "Sorted by due date": the sorted note, the drag note and the drop toast. */

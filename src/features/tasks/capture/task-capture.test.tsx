@@ -401,6 +401,18 @@ describe("a team task (54, 94)", () => {
   });
 });
 
+describe("a group's + (TV-U10)", () => {
+  it("shows the status it opened with as a chip, and files the task in it", async () => {
+    renderBody({ seed: { status: "in_progress" } }, referenceStore({}), "Sketch the banner");
+    expect(await screen.findByRole("button", { name: "Clear In progress" })).toBeTruthy();
+    const title = await screen.findByRole("textbox", { name: "Task title" });
+    await waitFor(() => expect(title.textContent).toBe("Sketch the banner"));
+    fireEvent.click(screen.getByRole("button", { name: /^Create\s*⏎$/ }));
+    await waitFor(() => expect(fake.saved.length).toBe(1));
+    expect(fake.saved[0]?.statusCategory).toBe("in_progress");
+  });
+});
+
 describe("Create (AC10.3, AC5.4)", () => {
   async function createWith(context: Partial<CaptureContext>, removeSource = false) {
     saveDraft(ME, WS, {

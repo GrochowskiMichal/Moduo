@@ -9,7 +9,7 @@
 // then Notes, Calendar and Contacts register the one-line captures ⌘⇧K already
 // had, so nothing that worked stops working).
 
-import type { PriorityLevel } from "@contracts/vocabularies";
+import type { PriorityLevel, TaskStatusCategory } from "@contracts/vocabularies";
 import type { LucideIcon } from "lucide-react";
 import type { ComponentType, ReactNode } from "react";
 import { calendarCaptureType } from "../features/calendar/capture-type";
@@ -33,11 +33,18 @@ export type CaptureRequest = {
   destination?: { projectId: string; sectionId?: string | null };
   /** Put the new task at the top of your Up next (⌘N in Focus). */
   queueTop?: boolean;
-  /** What a filtered scope pre-fills: its tags, assignee and priority. */
+  /**
+   * What a filtered scope pre-fills (its tags, assignee and priority), and
+   * what a List group's "+" fills in (TV-U10): the group's team, due day
+   * (YYYY-MM-DD) or status category.
+   */
   seed?: {
     tagIds?: string[];
     assigneeId?: string | null;
     priority?: PriorityLevel | null;
+    teamId?: string | null;
+    dueDay?: string | null;
+    status?: TaskStatusCategory | null;
   };
 };
 

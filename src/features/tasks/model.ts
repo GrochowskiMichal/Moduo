@@ -630,6 +630,30 @@ export function isDrifted(
 }
 
 /**
+ * Late (REPLAN 23, TV-U10): an open task whose due day has passed. Muted,
+ * never red; the List offers Move · Won't do · Break down on it. Backlog is
+ * never late (TV-D9), and the server's `tasks_late` says the same. `today` is
+ * the local date key (`useToday`), so the flag rolls over at midnight.
+ */
+export function isLate(
+  task: Pick<Task, "dueDate" | "dueOn" | "status" | "statusCategory">,
+  today: string,
+): boolean {
+  if (!isOpenTask(task)) return false;
+  const day = task.dueOn ?? localDayKey(task.dueDate);
+  return day !== null && day < today;
+}
+
+/** The local date key ("2026-10-13") of an instant, or null. */
+function localDayKey(iso: string | null): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/**
  * Who a task's attention goes to: its assignee, else its creator when the
  * creator is known. Mirrors the SQL that targets unblocked notifications
  * (tasks_notify_spine); the bell's overdue list uses it. Comments notify the

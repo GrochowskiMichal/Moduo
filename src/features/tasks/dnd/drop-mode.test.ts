@@ -138,6 +138,26 @@ describe("resolveListHover — reorder vs nest (manual order)", () => {
     expect(hover(C, over, { x: LEFT, y: UPPER })).toBeNull();
   });
 
+  it("a nested subtask reorders among its siblings in any view order (they keep their own)", () => {
+    const S2 = task("s2", "0000000050", { parentId: "c" });
+    const over = rowOver(S1, { depth: 1, rect: { ...ROW, left: ROW.left + 40 } });
+    for (const order of ["sorted", "none"] as const) {
+      expect(
+        hover(S2, over, { x: LEFT + 40, y: UPPER }, { order, activeNested: true }),
+      ).toMatchObject({
+        kind: "reorder",
+        depth: 1,
+        parentId: "c",
+        ref: { id: "s1", edge: "before" },
+      });
+    }
+    // Joining another parent in a sorted view still only nests (no place to keep).
+    expect(hover(A, over, { x: LEFT + 40, y: UPPER }, { order: "sorted" })).toEqual({
+      kind: "nest",
+      targetId: "c",
+    });
+  });
+
   it("a subtask listed top level keeps its parent when reordered; a nested one comes out", () => {
     const orphan = task("o", "0000000050", { parentId: "elsewhere" });
     expect(hover(orphan, rowOver(A), { x: LEFT, y: UPPER })).toMatchObject({
@@ -164,12 +184,13 @@ describe("resolveListHover — sorted: a reorder asks to switch back", () => {
       kind: "sorted",
       line: { id: "b", edge: "top" },
     });
-    // among its own parent's subtasks too
+    // ...but not among its own parent's subtasks: they keep their own order
+    // in every view, so that reorder places (TV-U10).
     const sibling = task("s2", "0000000045", { parentId: "c" });
     const over = rowOver(sibling, { depth: 1 });
     expect(
       hover(S1, over, { x: LEFT, y: UPPER }, { order: "sorted", activeNested: true })?.kind,
-    ).toBe("sorted");
+    ).toBe("reorder");
   });
 
   it("still nests (that isn't a reorder)", () => {
@@ -470,5 +491,16 @@ describe("positionNextTo", () => {
 
   it("is null for an unknown anchor", () => {
     expect(positionNextTo(ALL, { id: "zz", edge: "after" }, "a")).toBeNull();
+  });
+
+  it("lands on the right side of a ref whose key another project's task shares", () => {
+    // x (another project) shares b's key and sorts just before it.
+    const x = task("x", B.position, { bucketId: "b2" });
+    const all = [A, x, B, C];
+    const before = positionNextTo(all, { id: "b", edge: "before" }, "c")!;
+    expect(before > A.position && before < B.position).toBe(true);
+    const tied = [A, B, x, C];
+    const after = positionNextTo(tied, { id: "b", edge: "after" }, "a")!;
+    expect(after > B.position && after < C.position).toBe(true);
   });
 });

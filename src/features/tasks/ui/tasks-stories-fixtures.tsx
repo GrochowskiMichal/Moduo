@@ -146,7 +146,10 @@ const TAGS: Record<string, Array<{ id: string; name: string; color: string }>> =
 };
 
 /** Enough of the module api for the List and Board to render every mark. */
-export function stubApi(tasks: Task[] = TASKS): TasksModuleApi {
+export function stubApi(
+  tasks: Task[] = TASKS,
+  extra: Partial<Record<keyof TasksModuleApi, unknown>> = {},
+): TasksModuleApi {
   const byParent = new Map<string, Task[]>();
   for (const t of tasks) {
     if (!t.parentId) continue;
@@ -181,6 +184,23 @@ export function stubApi(tasks: Task[] = TASKS): TasksModuleApi {
     deleteTask: () => {},
     setTaskParent: () => {},
     skipOccurrence: () => {},
+    // TV-U10's row facts: a comment count and a waiting line to show.
+    commentCounts: new Map([["review", 3]]),
+    waiting: [
+      {
+        id: "w1",
+        workspaceId: "w",
+        taskId: "accounts",
+        kind: "text",
+        ref: null,
+        label: "Anna",
+        since: "2026-10-10T09:00:00.000Z",
+        createdBy: null,
+        updatedAt: "2026-10-10T09:00:00.000Z",
+      },
+    ],
+    pendingTaskIds: new Set<string>(),
+    ...extra,
   } as unknown as TasksModuleApi;
 }
 

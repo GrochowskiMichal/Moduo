@@ -1,18 +1,16 @@
-// Where the Focus engine saves tracked time, from any page (TV-P0, tasks-v3
-// AC1.6). The sink used to belong to the Tasks page, so time tracked while you
-// were on Notes waited until you next opened Tasks. It now lives in the app
-// shell (`useFocusTimeSaver`) and writes straight through
-// `tasks_op_track_time`: the server keeps the total and answers "gone" when
-// the task can't take the time any more, so the sink needs no task list. A
-// mounted Tasks page hears each saved total (FOCUS_TIME_SAVED_EVENT) and shows
-// it. TV-F6 replaces this with the one app-wide time engine.
+// Where the one time engine saves tracked time, from any page (TV-P0, AC1.6;
+// TV-F6, spec §6.10). The app shell registers it once (`useFocusTimeSaver`);
+// it writes straight through `tasks_op_track_time`: the server keeps the
+// total and answers "gone" when the task can't take the time any more, so the
+// sink needs no task list. Each saved total lands in the workspace's shared
+// store copy (`store.patchCopy`), so every list, card and panel shows it.
+// Focus, the top-bar timer, Calendar's block focus and Home's pomodoro all
+// save through here: there is no other sink.
 
 import type { TaskTimeResult, TrackTimeInput } from "../tasks/model";
 import type { FocusFlushSink } from "./engine";
 
-/** A saved focus stretch's new total, for any list showing that task. */
-export const FOCUS_TIME_SAVED_EVENT = "moduo:focus:time-saved";
-
+/** A saved focus stretch's new total, for any copy showing that task. */
 export type FocusTimeSaved = {
   workspaceId: string;
   taskId: string;
@@ -64,10 +62,4 @@ export function createFocusTimeSink(deps: {
         () => false,
       );
   };
-}
-
-/** Tell any mounted task list a task's new total. */
-export function announceFocusTimeSaved(saved: FocusTimeSaved): void {
-  if (typeof window === "undefined") return;
-  window.dispatchEvent(new CustomEvent<FocusTimeSaved>(FOCUS_TIME_SAVED_EVENT, { detail: saved }));
 }

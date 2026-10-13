@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 import { attachFocusUser } from "../features/focus/engine";
+import { attachRunUser } from "../features/focus/run";
 import { attachTagUser } from "../features/tags/store";
 import { forgetCaptureDrafts, keepCaptureDraftsOf } from "../features/tasks/capture/capture-draft";
 import { clearTemplates } from "../features/tasks/templates/templates-store";
@@ -223,6 +224,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
     // The push worker shows a notice's words only to who's signed in (TV-D12).
     void postPushUser(sessionUserId);
   }, [loading, sessionUserId]);
+  // The session's shared record follows the engine, after it (TV-F6, run.ts).
+  useEffect(() => {
+    if (loading) return;
+    attachRunUser(sessionUserId, rt);
+  }, [loading, sessionUserId, rt]);
 
   const signOut = async () => {
     if (!rt) return;

@@ -71,7 +71,7 @@ import { createLinkWithToast } from "../../spine/ui/drop-link-toast";
 import { WorkspaceContext } from "../../workspaces/workspace-context";
 import { useAssignees } from "../assignees";
 import { myTasksScope, openCount, resolveDefaultSelection, showsMyTasks } from "../default-view";
-import type { TaskLayout } from "../display";
+import { nextHeaderSort, type TaskLayout, tasksDisplayDefaults } from "../display";
 import {
   asRailDropTarget,
   isSideDroppable,
@@ -84,6 +84,7 @@ import {
 } from "../dnd/rail-drop";
 import { type CaptureSeed, showsArchived, showsBacklog, statusesLetThrough } from "../filters";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
+import type { GroupAdd } from "../list-group-add";
 import { type Bucket, isDrifted, PRIVATE_PROJECT_LABEL, type Task } from "../model";
 import { showsSortedNote, sortedByLabel } from "../order";
 import { resolveTasksDeepLink, taskIdForHandle } from "../search";
@@ -452,7 +453,18 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   // the one selected.
   const linkedTaskId =
     revealRequest && revealRequest.id === selectedTaskId ? revealRequest.id : null;
-  const tasksDisplay = useTasksDisplay(workspaceId, selection, tasks, linkedTaskId, legacyLayout);
+  const groupChoices = useMemo(() => ({ teams: api.teams.length > 0 }), [api.teams.length]);
+  // The Inbox opened by its id is still the Inbox: its Display (no Section
+  // grouping, its own saved choices) is the Inbox's.
+  const displayScope = inboxId && selection === inboxId ? "inbox" : selection;
+  const tasksDisplay = useTasksDisplay(
+    workspaceId,
+    displayScope,
+    tasks,
+    linkedTaskId,
+    legacyLayout,
+    groupChoices,
+  );
   const isHiddenByDisplay = tasksDisplay.isHidden;
   const view: PlanView = tasksDisplay.display.layout;
   const setView = useCallback(
@@ -612,17 +624,22 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   }, [triageBucketId, tasks]);
 
   const openCapture = useCallback(
-    (at?: { sectionId?: string | null }) => {
+    (at?: GroupAdd) => {
       if (!canEdit) return;
-      const { projectId, queueTop } = captureHere;
+      const { queueTop } = captureHere;
+      // A List group's "+" (TV-U10) names its own project, section and value.
+      const projectId = at?.projectId ?? captureHere.projectId;
       const open = selectedTaskId ? tasks.find((t) => t.id === selectedTaskId) : null;
       const sectionId =
-        at?.sectionId ??
-        (projectId && open?.bucketId === projectId ? (open.sectionId ?? null) : null);
+        at?.sectionId !== undefined
+          ? at.sectionId
+          : projectId && open?.bucketId === projectId
+            ? (open.sectionId ?? null)
+            : null;
       dispatchOpenCapture({
         destination: projectId ? { projectId, sectionId } : undefined,
         queueTop,
-        seed: captureSeed,
+        seed: { ...captureSeed, ...at?.seed },
       });
     },
     [canEdit, captureHere, selectedTaskId, tasks, captureSeed],
@@ -1072,6 +1089,38 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   };
   // List and Board follow Display; the Timeline keeps its own rules.
   const displayProps = tasksDisplay.viewProps;
+  // The List's own wiring (TV-U10), kept in one place: handles, sections
+  // and teams, the Detailed headers' sort, section edits, remembered folds.
+  const projectScope = buckets.some((b) => b.id === selection);
+  const listExtras = {
+    taskKey,
+    sections: api.sections,
+    teams: api.teams,
+    filteredOut: filtering.active
+      ? {
+          hidden: scopeTasksAll.length - scopeTasks.length,
+          filters: tasksDisplay.filters.length + (filtering.searching ? 1 : 0),
+        }
+      : undefined,
+    onSort: (column: Parameters<typeof nextHeaderSort>[1]) =>
+      setDisplay({
+        ...display,
+        ...nextHeaderSort(display, column, tasksDisplayDefaults(displayScope).order),
+      }),
+    onAddSection:
+      projectScope && canEdit
+        ? (name: string) => void api.createSection(selection, name)
+        : undefined,
+    // ⏎ opens the selected task's full page (decision 22; the panel's
+    // "↑↓ to move · ⏎ to open").
+    onOpenTask: setFullPageId,
+    onRenameSection: canEdit ? api.renameSection : undefined,
+    onDeleteSection: canEdit ? api.deleteSection : undefined,
+    collapseKey: lsKey(
+      workspaceId,
+      `folds:${api.currentUserId ?? "anon"}:${selection}:${effectiveGroupBy}`,
+    ),
+  };
 
   // Execute mode is enclosed in the center panel (rails stay visible).
   // Archived projects and Recently deleted open from the sidebar's ⋯ (98).
@@ -1145,6 +1194,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
         onReorder={api.reorderQueue}
         onManualOrder={backToManualOrder}
         revealRequest={revealRequest}
+        {...listExtras}
       />
     );
 

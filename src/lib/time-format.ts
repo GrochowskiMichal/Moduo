@@ -82,6 +82,25 @@ export function formatStamp(value: DateInput, now: Date = new Date()): string {
   return `${formatDate(d, now)}, ${formatTime(d)}`;
 }
 
+/**
+ * How long ago, as short as a column allows (a List's Updated and Waiting on
+ * cells, TV-U10): "now", "5m", "3h", "2d", "3w", then the date ("Oct 16").
+ * A moment in the future (a clock ahead) reads "now".
+ */
+export function formatAge(value: DateInput, now: Date = new Date()): string {
+  const d = toDate(value);
+  if (!d) return "";
+  const minutes = Math.floor((now.getTime() - d.getTime()) / 60_000);
+  if (minutes < 1) return "now";
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d`;
+  if (days < 35) return `${Math.floor(days / 7)}w`;
+  return formatDate(d, now);
+}
+
 /** A length in whole minutes: "0m", "45m", "4h", "1h 30m". */
 export function formatDuration(minutes: number): string {
   const total = Number.isFinite(minutes) ? Math.max(0, Math.round(minutes)) : 0;

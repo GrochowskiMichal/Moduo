@@ -1,124 +1,129 @@
-// DB-6 — "Pomodoro" widget (S). A focus/break timer: work↔break auto-switch,
-// wall-clock `endsAtMs` accrual (throttle-immune), 250ms tick. Durations come from
-// config (default 25/5; edited in the DB-8 popover). Running state is ephemeral —
-// a page switch resets it (a dashboard timer needn't survive navigation).
+// DB-6 — "Pomodoro" widget (S), on the one time engine since TV-F6 (spec §6.10,
+// TV-F5 folded in): it shows and controls the same session as Focus, the
+// top-bar timer and Calendar's blocks, so a pomodoro started here is saved to
+// the task it ran on, from any page, and survives navigation. Idle, Start runs
+// a Pomodoro on the top of Up next; with nothing lined up it says so. The
+// lengths are your Focus lengths (Settings → Focus, or this widget's settings).
 
-import { Pause, Play, RotateCcw, SkipForward } from "lucide-react";
-import { useEffect, useState } from "react";
+import { isClosedTask } from "@contracts/vocabularies";
+import { Pause, Play, Square } from "lucide-react";
+import { useMemo } from "react";
 import { Eyebrow } from "@/components/ui/eyebrow";
 import { IconButton } from "@/components/ui/icon-button";
+import { formatFocusClock } from "@/features/focus/clock";
+import { stopFocusWithUndo } from "@/features/focus/stop-with-undo";
+import { focusOn, toggleFocusPause, useFocusTimer } from "@/features/focus/timer";
+import { queueEntriesOf } from "@/features/tasks/queue";
+import { useFocusPrefs } from "@/lib/focus-prefs";
+import { getRuntime } from "@/lib/runtime";
+import { useStoreSnapshot, useWorkspaceStore } from "@/lib/sync/react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/providers/auth-provider";
+import { useWorkspace } from "@/providers/workspace-provider";
 
 import type { WidgetComponentProps } from "../../registry/types";
 
-type Phase = "work" | "break";
-
-function num(config: Record<string, unknown>, key: string, fallback: number): number {
-  const v = config[key];
-  return typeof v === "number" && v > 0 ? v : fallback;
+/** The first open task of my Up next, from the shared store the shell holds. */
+function useUpNextHead() {
+  const { userId } = useAuth();
+  const { selectedWorkspaceId, modulePermissions } = useWorkspace();
+  const store = useWorkspaceStore(
+    getRuntime(),
+    userId,
+    selectedWorkspaceId,
+    modulePermissions.tasks !== "none",
+  );
+  const snap = useStoreSnapshot(store);
+  return useMemo(() => {
+    if (!snap.workspaceId) return null;
+    const byId = new Map(snap.bundle.tasks.map((t) => [t.id, t]));
+    for (const entry of queueEntriesOf(snap.queue, userId)) {
+      const task = byId.get(entry.taskId);
+      if (!task || task.deletedAt || isClosedTask(task) || task.id.startsWith("tmp-")) continue;
+      return {
+        id: task.id,
+        title: task.title || "Untitled",
+        bucketName: snap.bundle.buckets.find((b) => b.id === task.bucketId)?.name ?? null,
+        workspaceId: snap.workspaceId,
+      };
+    }
+    return null;
+  }, [snap, userId]);
 }
 
-function phaseSeconds(phase: Phase, work: number, brk: number): number {
-  return (phase === "work" ? work : brk) * 60;
-}
+export function PomodoroWidget({ canWrite }: WidgetComponentProps) {
+  const timer = useFocusTimer();
+  const { prefs } = useFocusPrefs();
+  const head = useUpNextHead();
 
-function formatMMSS(totalSeconds: number): string {
-  const safe = Math.max(0, totalSeconds);
-  const m = Math.floor(safe / 60);
-  const s = safe % 60;
-  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-}
-
-export function PomodoroWidget({ widget }: WidgetComponentProps) {
-  const workMinutes = num(widget.config, "pomodoroWorkMinutes", 25);
-  const breakMinutes = num(widget.config, "pomodoroBreakMinutes", 5);
-
-  const [phase, setPhase] = useState<Phase>("work");
-  const [running, setRunning] = useState(false);
-  const [endsAtMs, setEndsAtMs] = useState<number | null>(null);
-  const [remaining, setRemaining] = useState(() => phaseSeconds("work", workMinutes, breakMinutes));
-
-  useEffect(() => {
-    if (!running || endsAtMs == null) return;
-    const tick = () => {
-      const next = Math.max(0, Math.ceil((endsAtMs - Date.now()) / 1000));
-      if (next > 0) {
-        setRemaining(next);
-        return;
-      }
-      // Expired → auto-switch phase and keep running.
-      const nextPhase: Phase = phase === "work" ? "break" : "work";
-      const nextSeconds = phaseSeconds(nextPhase, workMinutes, breakMinutes);
-      setPhase(nextPhase);
-      setRemaining(nextSeconds);
-      setEndsAtMs(Date.now() + nextSeconds * 1000);
-    };
-    tick();
-    const interval = window.setInterval(tick, 250);
-    return () => window.clearInterval(interval);
-  }, [running, endsAtMs, phase, workMinutes, breakMinutes]);
-
-  const start = () => {
-    if (running) return;
-    setRunning(true);
-    setEndsAtMs(Date.now() + remaining * 1000);
-  };
-  const pause = () => {
-    if (!running) return;
-    setRemaining(endsAtMs ? Math.max(0, Math.ceil((endsAtMs - Date.now()) / 1000)) : remaining);
-    setRunning(false);
-    setEndsAtMs(null);
-  };
-  const reset = () => {
-    setRunning(false);
-    setEndsAtMs(null);
-    setRemaining(phaseSeconds(phase, workMinutes, breakMinutes));
-  };
-  const skip = () => {
-    const nextPhase: Phase = phase === "work" ? "break" : "work";
-    const nextSeconds = phaseSeconds(nextPhase, workMinutes, breakMinutes);
-    setPhase(nextPhase);
-    setRemaining(nextSeconds);
-    setEndsAtMs(running ? Date.now() + nextSeconds * 1000 : null);
-  };
-
-  const total = phaseSeconds(phase, workMinutes, breakMinutes);
-  const progress = total > 0 ? Math.min(100, Math.max(0, ((total - remaining) / total) * 100)) : 0;
+  const pomodoro = timer.active && timer.timer === "pomodoro";
+  const eyebrow = !timer.active
+    ? "Pomodoro"
+    : pomodoro && timer.phase === "break"
+      ? timer.longBreak
+        ? "Long break"
+        : "Break"
+      : "Focus";
+  const clock = !timer.active
+    ? formatFocusClock(prefs.workMinutes * 60)
+    : timer.timer === "off"
+      ? null
+      : formatFocusClock(timer.bigClock);
+  const progress =
+    pomodoro && timer.phaseSeconds > 0
+      ? Math.min(
+          100,
+          Math.max(0, ((timer.phaseSeconds - timer.bigClock) / timer.phaseSeconds) * 100),
+        )
+      : 0;
+  const caption = timer.active
+    ? timer.taskTitle || "Untitled"
+    : head
+      ? `Next: ${head.title}`
+      : "Nothing in Up next";
 
   return (
     <div className="flex h-full flex-col items-center justify-center gap-2 px-3">
-      <Eyebrow>{phase === "work" ? "Focus" : "Break"}</Eyebrow>
-      <p className="font-display text-3xl font-semibold tabular-nums text-foreground">
-        {formatMMSS(remaining)}
-      </p>
-      <div className="h-1 w-full max-w-[8rem] overflow-hidden rounded-full bg-foreground/15">
-        <div
-          className="h-full rounded-full bg-foreground/70 transition-[width] duration-[var(--motion-fade)]"
-          style={{ width: `${progress}%` }}
-        />
-      </div>
+      <Eyebrow>{eyebrow}</Eyebrow>
+      {clock ? (
+        <p className="font-display text-3xl font-semibold tabular-nums text-foreground">{clock}</p>
+      ) : null}
+      {pomodoro ? (
+        <div className="h-1 w-full max-w-[8rem] overflow-hidden rounded-full bg-foreground/15">
+          <div
+            className="h-full rounded-full bg-foreground/70 transition-[width] duration-[var(--motion-fade)]"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+      ) : null}
+      <p className="max-w-full text-center text-xs text-muted-foreground">{caption}</p>
       <div className="flex items-center gap-1">
-        {running ? (
-          <IconButton icon={Pause} label="Pause" onClick={pause} />
+        {timer.active ? (
+          <>
+            <IconButton
+              icon={timer.running ? Pause : Play}
+              label={timer.running ? "Pause" : "Resume"}
+              onClick={() => toggleFocusPause()}
+            />
+            <IconButton icon={Square} label="Stop" onClick={stopFocusWithUndo} />
+          </>
         ) : (
           <button
             type="button"
-            onClick={start}
-            aria-label="Start"
+            disabled={!head || !canWrite}
+            onClick={() => {
+              if (head) focusOn(head, { timer: "pomodoro" });
+            }}
+            aria-label={head ? `Start a pomodoro on ${head.title}` : "Start a pomodoro"}
             className={cn(
               "grid size-[var(--ctrl-h-sm)] place-items-center rounded-full bg-primary text-primary-foreground",
               "hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              "disabled:pointer-events-none disabled:opacity-50",
             )}
           >
             <Play className="size-icon-sm" aria-hidden />
           </button>
         )}
-        <IconButton icon={RotateCcw} label="Reset" onClick={reset} />
-        <IconButton
-          icon={SkipForward}
-          label={phase === "work" ? "Skip to break" : "Skip to focus"}
-          onClick={skip}
-        />
       </div>
     </div>
   );
