@@ -49,6 +49,8 @@ describe("noteRowToModel", () => {
       deletedAt: null,
       shareMode: "custom",
       workspaceShared: false,
+      inInbox: null,
+      fullWidth: false,
     });
   });
 

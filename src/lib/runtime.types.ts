@@ -29,6 +29,7 @@ import type { ReconnectItem } from "../features/contacts/reconnect";
 import type { DashboardLayout } from "../features/dashboard/engine/types";
 import type {
   NoteDocPull,
+  NoteFavorite,
   NotesImportRow,
   NotesV2Bundle,
   Note as NoteV2,
@@ -373,8 +374,26 @@ export type ModuoRuntime = {
     setMeta(input: {
       workspaceId: string;
       noteId: string;
-      patch: { icon?: string | null; isPinned?: boolean };
+      patch: { icon?: string | null; isPinned?: boolean; fullWidth?: boolean };
     }): Promise<NoteV2>;
+    /** NR-1: move a note between the stored Inbox and Pages. Filing INTO the
+     * Inbox re-roots a nested note (Inbox only holds roots). */
+    fileNote(input: {
+      workspaceId: string;
+      noteId: string;
+      inInbox: boolean;
+      position?: string;
+    }): Promise<NoteV2>;
+    /** NR-1: the viewer's own favorites in this workspace. Degrades to []
+     * while the table isn't deployed (a sidebar never walls). */
+    listFavorites(workspaceId: string): Promise<NoteFavorite[]>;
+    /** NR-1: add/remove/reorder one of the viewer's favorites. */
+    setFavorite(input: {
+      workspaceId: string;
+      noteId: string;
+      value: boolean;
+      position?: string | null;
+    }): Promise<void>;
     duplicate(input: {
       workspaceId: string;
       sourceNoteId: string;

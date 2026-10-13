@@ -22,6 +22,7 @@ import {
   habitRowSchema,
   linkSuggestionRowSchema,
   mapKnownRows,
+  noteFavoriteRowSchema,
   noteRowSchema,
   noteUpdateRowSchema,
   notificationRowSchema,
@@ -916,6 +917,9 @@ export const webRuntime: ModuoRuntime = {
     async listMeta(workspaceId) {
       const V2_COLS =
         "id, workspace_id, created_by, parent_id, title, icon, is_pinned, position, is_archived, published_at, publish_token, doc_version, share_mode, workspace_shared, created_at, updated_at, deleted_at";
+      // NR-1 columns ride on top of v2; until that migration is applied the
+      // v2 read still works fully (not degraded) and sections derive Inbox.
+      const NR1_COLS = `${V2_COLS}, in_inbox, full_width`;
       const LEGACY_COLS =
         "id, workspace_id, created_by, parent_id, title, icon, is_pinned, position, is_archived, created_at, updated_at, deleted_at";
       const cutoff = trashWindowCutoffIso(new Date());
@@ -931,7 +935,8 @@ export const webRuntime: ModuoRuntime = {
               .or(`deleted_at.is.null,deleted_at.gt.${cutoff}`),
           order: (q) => q.order("position").order("id"),
         });
-      const res = await query(V2_COLS);
+      let res = await query(NR1_COLS);
+      if (res.error?.code === "42703") res = await query(V2_COLS);
       if (!res.error) {
         return {
           notes: mapKnownRows(res.rows, mapNoteRow),
@@ -1032,6 +1037,45 @@ export const webRuntime: ModuoRuntime = {
       });
       if (error) throw new Error(error.message);
       return mapNoteRow(firstRow(data, "notes_op_set_meta"));
+    },
+
+    async fileNote({ workspaceId, noteId, inInbox, position }) {
+      const { data, error } = await supabaseClient.rpc("notes_op_file", {
+        p_workspace_id: workspaceId,
+        p_note_id: noteId,
+        p_in_inbox: inInbox,
+        p_position: position ?? "",
+      });
+      if (error) throw new Error(error.message);
+      return mapNoteRow(firstRow(data, "notes_op_file"));
+    },
+
+    async listFavorites(workspaceId) {
+      const { data, error } = await supabaseClient
+        .from("note_favorites")
+        .select("note_id, position, created_at")
+        .eq("workspace_id", workspaceId)
+        .order("position")
+        .order("created_at");
+      if (error) {
+        // Deploy gap (table not created yet) → no favorites, never a wall.
+        if (error.code === "42P01" || error.code === "PGRST205") return [];
+        throw new Error(error.message);
+      }
+      return mapKnownRows(data ?? [], (raw) => {
+        const r = requireRow(noteFavoriteRowSchema, raw, "note favorite");
+        return { noteId: r.note_id, position: r.position, createdAt: r.created_at };
+      });
+    },
+
+    async setFavorite({ workspaceId, noteId, value, position }) {
+      const { error } = await supabaseClient.rpc("notes_op_set_favorite", {
+        p_workspace_id: workspaceId,
+        p_note_id: noteId,
+        p_value: value,
+        p_position: position ?? null,
+      });
+      if (error) throw new Error(error.message);
     },
 
     async duplicate({ workspaceId, sourceNoteId, position }) {
@@ -1247,6 +1291,8 @@ export const webRuntime: ModuoRuntime = {
         docStateB64: r.docStateB64 ?? null,
         bodyText: r.bodyText ?? "",
         bodyMd: r.bodyMd ?? "",
+        // Omitted (undefined → dropped by JSON) lets the server decide.
+        inInbox: r.inInbox,
       }));
       const { data, error } = await supabaseClient.rpc("notes_op_import", {
         p_workspace_id: workspaceId,
