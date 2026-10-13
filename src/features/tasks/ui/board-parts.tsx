@@ -117,7 +117,7 @@ export function BoardColumnHeader({
   }
   return (
     <GroupHeader
-      data-board-column={label}
+      data-board-header={label}
       label={label}
       count={count}
       leading={<BoardMarkView mark={mark} ctx={markCtx} />}

@@ -345,7 +345,7 @@ test("Board: a card dropped on another status column changes it, and Undo puts i
   await openTasks(page, card.id);
   const source = page.locator(`[role="button"][data-task-id="${card.id}"]`);
   await expect(source).toBeVisible();
-  const column = page.locator("section").filter({ hasText: "In progress" }).first();
+  const column = page.locator('section[data-board-column="In progress"]');
   const box = await column.boundingBox();
   if (!box) throw new Error("no In progress column");
   await drag(page, source, { x: box.x + box.width / 2, y: box.y + 80 });

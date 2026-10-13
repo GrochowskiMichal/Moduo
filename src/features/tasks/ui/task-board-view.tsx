@@ -536,6 +536,23 @@ export function TaskBoardView({
   if (selectionSeq.id !== selectedTaskId) {
     setSelectionSeq({ id: selectedTaskId, seq: selectionSeq.seq + 1 });
   }
+  // …and sideways: a key that walks to (or moves the card into) a column
+  // off screen brings that column into view (the column's own scroller
+  // handles up and down). A frame later, once the card is drawn there.
+  const selectedColumnId = selectedTaskId
+    ? (cellOfTask.get(selectedTaskId)?.column.id ?? null)
+    : null;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new selection or column asks again.
+  useEffect(() => {
+    if (!selectedTaskId || typeof window === "undefined") return;
+    const frame = window.requestAnimationFrame(() => {
+      const card = boardRef.current?.querySelector<HTMLElement>(
+        `[role="button"][data-task-id="${selectedTaskId}"]`,
+      );
+      card?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [selectedTaskId, selectedColumnId]);
 
   // ── drag and drop ─────────────────────────────────────────────────────────
   const sensors = useTaskDndSensors();
@@ -1073,7 +1090,10 @@ function BoardColumnView({
 
   return (
     // A fixed width per density (default o): the board never reflows.
-    <section className="flex h-full w-(--board-col-w) shrink-0 flex-col">
+    <section
+      data-board-column={cell.column.label}
+      className="flex h-full w-(--board-col-w) shrink-0 flex-col"
+    >
       <header className="mb-1.5 px-1">{header}</header>
       <div
         ref={setColumnRef}
