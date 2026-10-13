@@ -1,9 +1,9 @@
 # Chat v2 — the re-plan
 
-> **Status (2026-10-13): group J answered; group K sent (what's left + five new topics). Next: round 5 (every surface and state) and the gap audit.**
+> **Status (2026-10-13): every call so far is decided ("all ok" on group K). Now: round 5 (every surface and state in one prototype, built on the decisions plus the agent's defaults) and a gap audit by a separate agent, both started.**
 >
-> - **Decided:** the shape (CH1–CH19, CH22, CH25, CH27, CH28, CH4a); the look (CH29 = Slack calm base, CH29b, CH29d); the composer (CH29g); replies (CH30a, CH30d; CH30b retired); presence (CH28a with the target mark for Focusing, CH28c, CH28d); channel icons (CH32).
-> - **Open (group K):** CH29f, CH29a, CH29c, CH30c, CH28b, CH3a, CH16a, CH16b, CH23a, CH26a, CH31; new CH33 notification text, CH34 sound, CH35 Home widgets, CH36 people who leave, CH37 first open.
+> - **Decided:** CH1–CH19, CH22, CH25, CH27, CH28 (a–d), CH29 (A base, a, b, c, d, f, g), CH30 (a, c, d; b retired), CH31 (b), CH32, CH33–CH37, CH3a, CH4a, CH16a, CH16b, CH23a, CH26a. Facts: CH20, CH21. Parked: CH24.
+> - **Running:** the gap audit ([research/gap-audit.md](./research/gap-audit.md)); round 5 prototype (`prototypes/round-5.html`).
 > - **Mike's ask:** the tech-stack decision blueprint landed → [research/tech-blueprint.md](./research/tech-blueprint.md), folded into §6 (#2, #3, #6, #7, #18, #19–#22). Open from it: **CH31** (the Supabase plan before the hackathon).
 > - **Research lanes** ([`research/`](./research/)): six landed and folded in (early-decisions audit, role journeys, competitor structure, hackathon, visual audit → §5, current state → §1.3 B and §6 #15–18). **Threads** (→ CH30) and **visual competitors** (→ CH29) landed.
 > - **Research data in the shared local database** (kept for round 2's live checks; remove when the plan is done): workspace **"Chat replan research"** `669be464-0b9a-4d84-8537-544ac04dba5f` (10 channels, 3,032 messages, one task) and a third local user `third@moduo.local`. Full ledger and a cleanup sketch: [current state](./research/current-state.md), last section. `dev@moduo.local`'s plan is back to `free` (checked).
@@ -988,6 +988,8 @@ In his words, then what each one changes:
 - **CH26a** The build order (hackathon cut first).
 - **CH31** The Supabase plan: run the 100-client test, then Pro before the event if it shows more than ~150 connections (b).
 
+✅ **Decided 2026-10-13:** *"all ok"*: every item above as recommended (CH29f, CH29a, CH29c, CH30c (b), CH28b (a), CH3a, CH16a with comments following, CH16b, CH23a, CH26a, CH31 (b)).
+
 **New topics nobody has raised yet** (one opening call each):
 
 **CH33 · What a desktop or browser notification shows**
@@ -997,6 +999,8 @@ In his words, then what each one changes:
 
 ❓ a or b?
 
+✅ **Decided 2026-10-13:** a ("all ok").
+
 **CH34 · Sound**
 - (a) **One soft sound for direct messages and `@you`, off by default**, one switch to turn it on. *Recommended:* the banner already tells you; sound is the loudest signal there is.
 - (b) On by default (Slack and Discord).
@@ -1004,11 +1008,15 @@ In his words, then what each one changes:
 
 ❓ a, b or c?
 
+✅ **Decided 2026-10-13:** a ("all ok").
+
 **CH35 · Chat's Home widgets** (the module contract requires them)
 - (a) **Two:** "Catch up" (what's waiting for you, in the S and M sizes) and "Team now" (who's reachable, focusing, away or on vacation; CH28b). *Recommended.*
 - (b) v1's single "Conversations" widget (recent conversations, what needs you first).
 
 ❓ a or b?
+
+✅ **Decided 2026-10-13:** a ("all ok").
 
 **CH36 · When someone leaves the workspace**
 - (a) **Their messages stay, with their name and a quiet "former member" label;** your direct messages with them stay readable. *Recommended:* the history keeps its meaning. (Deleting an account is separate and already defined: the name goes.)
@@ -1016,12 +1024,16 @@ In his words, then what each one changes:
 
 ❓ a or b?
 
+✅ **Decided 2026-10-13:** a ("all ok").
+
 **CH37 · Chat's first open in a new workspace**
 - (a) **"General" exists, with a one-line welcome** that teaches the two gestures ("Reply to keep answers together · @ links anything in Moduo") and disappears after the first message. *Recommended.*
 - (b) An empty General.
 - (c) A few sample messages.
 
 ❓ a, b or c?
+
+✅ **Decided 2026-10-13:** a ("all ok").
 
 ### F · Visual *(added after round 1 was sent, from the visual audit)*
 
