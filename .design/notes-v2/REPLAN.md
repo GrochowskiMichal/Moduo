@@ -3,9 +3,9 @@
 > **Status (2026-10-13): round 1 sent. Waiting on Maciej's answers to N1–N23.**
 >
 > - **Open calls:** N1–N23, all ❓. Load-bearing: ★ N1 (the ceiling), ★ N2 (the hackathon cut, ranked until the date is known, and the guide published once; facts already answered in Chat CH20–CH22), ★ N3 (where notes live), ★ N4 (a way in), ★ N5 (the grammar), ★ N6 (task lines). N20–N23 are opening calls.
-> - **Research lanes:** four landed and folded in (decisions audit, competitor structure, role journeys, connectivity). Two still running: current state (live walkthrough) and visual audit; they fold into §1.3 and §5 when they land, without changing the calls unless they find something that should.
+> - **Research lanes:** five landed and folded in (decisions audit, competitor structure, role journeys, connectivity, current state with a live two-person walkthrough). The visual audit is still running; it folds into §5 when it lands. The walkthrough added a trust pass to N2's cut (§1.3 B).
 > - **Received:** seven proposals from the Chat re-plan (§1.6), answered in N19.
-> - **Research data in the shared local database:** none yet; the current-state lane lists what it seeds in `research/current-state.md`.
+> - **Research data in the shared local database:** workspace "Notes replan research" (`3e15da47-dec0-4a1b-9b6d-82c26b1936e1`, 354 notes, 6 tasks, 1 contact); every row is listed in [`research/current-state.md`](./research/current-state.md) §8. The e2e teammate user was reused.
 > - **Prototype:** [`prototypes/structure.html`](./prototypes/structure.html), keys 1–9 switch frames, V cycles variants.
 > - **Waiting on Maciej, outside the calls:** one technical item, told in chat.
 > - **Uncommitted:** nothing.
@@ -81,7 +81,7 @@ Tasks' root cause was "a solo planner's assumption stored as a column"; Calendar
 - **Agents create whole trees** through MCP.
 - **Notes gave the app its reference chip**: RF-1 grew Notes' chip into the References node in place.
 
-**Platform:** CRDT bodies with an idempotent outbox; one-time server materialisation of imported notes; every read through the same sharing rules as MCP.
+**Platform:** CRDT bodies with an idempotent outbox; one-time server materialisation of imported notes; every read through the same sharing rules as MCP. **Measured live:** 350 notes paint in under half a second; a 9,600-word note opens in 0.6 s; a teammate's keystrokes arrive in about 0.2 s; an offline edit merges about 0.1 s after reconnecting, with nothing lost.
 
 **The ideas are right. What's missing is the reader, the team, and the app-wide rules that came after.**
 
@@ -94,12 +94,16 @@ Tasks' root cause was "a solo planner's assumption stored as a column"; Calendar
 - Notes built by an import or an agent don't list the notes inside them in their text (only the editor's own "+" writes that list).
 - A task written in a shared note lands in the writer's private Inbox.
 
-**B · Trust: things that make people keep the old tool open** (ranked; [current state](./research/current-state.md) adds what the live walkthrough found):
-1. **A note's markdown loses formatting once it's edited.** The saved copy drops links, bold and tables, and that copy feeds the published page, export, search and agents. An organiser fixing a typo in the rules strips the links from the public rules page.
-2. **An agent's edit to an existing note is overwritten** by the next keystroke. Creating works; appending and replacing don't.
-3. **Tasks written in a shared note read "Private item" for teammates** (they're filed into the writer's Inbox).
-4. **Nobody can tell who changed what.** No "edited by", no history, no "changed since you read".
-5. **A teammate's new note, rename or move shows only when you come back to the window.**
+**B · Trust: things that make people keep the old tool open** (ranked; reproduced in the running app with two people unless marked, [current state §3](./research/current-state.md)):
+1. **Opening a quick-captured note erases it.** A note made with ⌘⇧K then ⌘2 is stored as a title with no text; opening it renames it to "Untitled" within half a second, without a keystroke.
+2. **An agent's edit to an existing note vanishes.** Creating works; an append or a replace on a note that has been opened is wiped by the next keystroke.
+3. **Two people typing near a task line rename the real task into garbage.** In Tasks and on Home the task then reads "(10:30 works)" or "mate-c dev-cooncurrencurrennt…". Two people typing at one spot interleave their letters.
+4. **A note's markdown loses formatting once it's edited.** The saved copy drops bold, link addresses, chips and tables, writes every top heading as `###`, and glues the line after a task line onto it. Search, export, the published page and agents read that copy, so an organiser fixing a typo in the rules strips the links from the public rules page.
+5. **Typing right after "New note" makes empty notes.** Focus stays on the button, so each space presses it again: one sentence made five "Untitled" notes, never cleaned up.
+6. **A teammate's new note, rename or move never shows** in your open sidebar until you reload.
+7. **"Saved locally — will sync" can show for an edit the server refused**, and it never retries.
+8. **Tasks written in a shared note read "Private item" for teammates** (they're filed into the writer's Inbox).
+9. **Nobody can tell who changed what.** No "edited by", no history, no "changed since you read".
 
 **C · Capability gaps** ([role journeys §2](./research/role-journeys.md), 24 gaps):
 - no images or files in a note;
@@ -254,7 +258,7 @@ Each: decision · why · rejected. Most come from the [connectivity lane](./rese
 5. **Sections are computed from a top-level note's sharing**: the workspace grant → Workspace; only people → Shared; none → Private. Moving a note between sections is a sharing change, with Undo. *Why:* the tree and the sharing can never disagree. *Rejected:* a stored section column.
 6. **Pins live in each person's synced preferences** (Tasks U6-6), and **the start page is one setting on the workspace**, set by an owner or admin. The shared `is_pinned` flag is read once into the admin's start choice, then dropped. *Rejected:* keeping the shared flag.
 7. **A note's project is a column on the note** (`project_id`), inherited from the nearest note above that has one, shown as the project's dot. It never changes who can see the note. *Rejected:* notes held inside projects (breaks for members without Tasks access; two sharing rules).
-8. **Task lines are re-cut onto Tasks v3** before TV-D7: the status icon by category (Won't do has its own, never struck through), `due_on`, sessions, facts read from the shared store; a new task is made through `tasks_op_create` in the note's project, else in the writer's Inbox; the link is written task → note `spawned-from`, as capture does, with a one-off fix for old links that point the other way. *Rejected:* the July bridge (it breaks at TV-D7, and Won't do already shows as an open line).
+8. **Task lines are re-cut onto Tasks v3** before TV-D7. **The line's title lives on the task, not in the note's text:** the line shows the task's title and edits it like a task row (one person's edit, saved when they pause), so two people typing never interleave into a task's name, and Enter at the start of a line adds a line above instead of splitting the task. Also: the status icon by category (Won't do has its own, never struck through), `due_on`, sessions, facts read from the shared store; a new task is made through `tasks_op_create` in the note's project, else in the writer's Inbox; the link is written task → note `spawned-from`, as capture does, with a one-off fix for old links that point the other way. *Rejected:* the July bridge (it breaks at TV-D7, and Won't do already shows as an open line).
 9. **One `@ # /` grammar:** the spine's three menu plugins, with Notes' block commands fed into `/` through `candidatesFor`. References are stored as `{type, id, display}` with no title (old stored titles are ignored when shown). The date chip node is registered in notes. *Rejected:* keeping Notes' own slash plugin (two grammars, three meanings of `@` today).
 10. **Lossless markdown.** The editor writes a note's markdown with its own transformers on save, and server paths (import, agents) build it with the same transformers headless; the lossy text extraction is retired from export, the published page, search and agents. *Why:* the editor is the only faithful serializer. *Rejected:* making the extraction lossless (two serializers drift).
 11. **Agent edits are real CRDT writes.** The connector loads a note's document, applies the edit headless, and appends the update like any client, so open editors receive it live and nothing is overwritten. A spike comes first; until it lands, `notes_append` and `notes_update` refuse notes that already have a document instead of half-working. Agent writes are attributed "via <key name>". *Rejected:* writing the markdown copy directly (today's bug); queueing markdown for the next client to apply (a note nobody opens never updates).
@@ -265,7 +269,8 @@ Each: decision · why · rejected. Most come from the [connectivity lane](./rese
 16. **Duplicate and templates copy a branch on the server** and return a source → copy map, so task lines in a copy point at copies of their tasks, never at the originals (TV-D15's apply does the same for tasks). *Rejected:* copies that point at the same tasks (two notes would tick one task).
 17. **Search is one RPC** (`notes_search`, under the same sharing rules, with snippets) used by Notes, ⌘K and MCP. *Rejected:* each surface querying the text index itself.
 18. **Recently deleted empties on the server clock** (`purge-deleted`, like tasks and files). *Rejected:* the client sweep.
-19. **Every new table** (`note_reads`, `note_versions`, `note_changes`) joins account erasure and the full export in the block that creates it, with a test (Tasks Assumption #26).
+20. **A note's title and its first line never disagree.** Capture and agents write the title as the document's first line; a note with a title and no document is seeded from its title before the editor opens it; imports take the title from the first heading when there is one. *Rejected:* a separate title field (two sources again).
+21. **Every new table** (`note_reads`, `note_versions`, `note_changes`) joins account erasure and the full export in the block that creates it, with a test (Tasks Assumption #26).
 
 ## 7. What Notes waits on from the Tasks v3 build
 
@@ -326,7 +331,7 @@ Prototype: [`prototypes/structure.html`](./prototypes/structure.html), keys 1–
 
   | If the hackathon is… | Notes ships before it |
   | --- | --- |
-  | **4 weeks or less** | **Must:** the Inbox fix and the sections (N3) · the start page and a way in (N4) · task lines that land where the team sees them (N6) · published pages that keep their formatting and show "Updated …" (N14) · "Edited by" (N8, first part) · copying a prepared set of notes, with the notes inside, into each team's workspace (N9, first part; the hackathon plan runs the copy) · agent edits that land (N20, if organisers write with Claude) · one technical item, told in chat |
+  | **4 weeks or less** | **Must:** **a trust pass first**, like Tasks' TV-P0: the nine bugs in §1.3 B · the Inbox fix and the sections (N3) · the start page and a way in (N4) · task lines that land where the team sees them (N6) · published pages that keep their formatting and show "Updated …" (N14) · "Edited by" (N8, first part) · copying a prepared set of notes, with the notes inside, into each team's workspace (N9, first part; the hackathon plan runs the copy) · agent edits that land (N20, if organisers write with Claude) · one technical item, told in chat |
   | **5–8 weeks** | the above, plus **pleasant:** images (N10) · "Changed since you last read", in a team's own notes and on the published guide (N8, N14) · comments on the app's feed (N7) · the `@ # /` grammar (N5) · collapsible headings (N17) |
   | **more than 8 weeks** | the whole first wave in §9 |
 
@@ -557,7 +562,7 @@ Prototype: [`prototypes/structure.html`](./prototypes/structure.html), keys 1–
 ## 9. What happens next
 
 1. ✅ Research lanes land → diagnosis (§1) and round 1 (§2, §3, §8) with a structure prototype. *(The current-state and visual-audit lanes fold in as they land.)*
-2. Rounds 2a/2b: every view and state; a separate gap audit.
+2. Rounds 2a/2b: every view and state; a separate gap audit. The first build wave starts with Notes' trust pass (§1.3 B), as Tasks started with TV-P0.
 3. Round 3: in-flight work reconciled.
 4. The spec, `specs/notes-v2.md`, on Fable 5.1.
 5. Decision entries, a supersession banner on `specs/notes.md`, a validator pass, "Ready to execute".
