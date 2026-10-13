@@ -2,7 +2,7 @@
  * Supabase Auth's Send Email Hook (specs/transactional-email.md TX-2, T7):
  * every email Auth would send goes through here and out through Resend.
  *
- * - The request must carry a valid Standard Webhooks signature (webhook.ts).
+ * - The request must carry a valid Standard Webhooks signature (_shared/standard-webhooks.ts).
  * - `signup`, `magiclink` and `email` get A1, the sign-in code. `invite` (the
  *   dashboard's "Send invitation") keeps its confirmation link: with sign-ups off
  *   it is the only way an invitee's address gets confirmed (auth-variants.ts).
@@ -34,7 +34,7 @@ import {
 import { AUTH_CODE_VALID_MINUTES, authCodeEmail } from "../_shared/email/templates/auth-code.ts";
 import { authConfirmCodeEmail, authInviteEmail } from "../_shared/email/templates/auth-variants.ts";
 import type { EmailKind, EmailOutboxStatus, EmailStream } from "../_shared/contracts/vocabularies.ts";
-import { verifyWebhook, type WebhookHeaders } from "./webhook.ts";
+import { verifyWebhook, type WebhookHeaders } from "../_shared/standard-webhooks.ts";
 
 /** A sanity cap on what we hash and parse. Auth's payload is a user object and a few tokens. */
 export const MAX_HOOK_BODY_BYTES = 256 * 1024;

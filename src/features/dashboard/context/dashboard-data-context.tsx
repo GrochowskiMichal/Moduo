@@ -1,6 +1,7 @@
 // DB-5 — the shared dashboard data context (spec assumption 6). Mounts each
-// module read ONCE for the whole page and shares it, so five Tasks widgets =
-// one `tasks.list`, not five. Sources are presence-gated: a read only fires if
+// module read ONCE for the whole page and shares it. Tasks and the queue come
+// from the workspace's shared store (TV-D11a), the one live copy every surface
+// reads, so Home reads no tasks of its own. Sources are presence-gated: a read only fires if
 // a widget that needs it is somewhere in the layout (no Email fetch on a
 // dashboard with no Email widget). Every source refetches on `moduo:data-refresh`
 // and on tab re-focus, and degrades to its empty value on any error (a widget
@@ -25,8 +26,11 @@ import type { RecentNoteRow } from "@/features/notes/recent";
 import type { NotificationItem } from "@/features/spine/notifications";
 import type { RecentLinkItem } from "@/features/spine/recent";
 import type { TaskQueueEntry, TasksModuleBundle } from "@/features/tasks/model";
+import { WorkspaceContext } from "@/features/workspaces/workspace-context";
 import { getRuntime } from "@/lib/runtime";
 import type { EmailModuleBundle, HabitRow, ModuoRuntime } from "@/lib/runtime.types";
+import { useStoreSnapshot, useWorkspaceStore } from "@/lib/sync/react";
+import { useAuth } from "@/providers/auth-provider";
 
 import type { DashboardLayout, WidgetType } from "../engine/types";
 
@@ -78,6 +82,7 @@ const EMPTY_TASKS: TasksModuleBundle = {
   taskRelations: [],
   truncated: [],
 };
+const NO_QUEUE: TaskQueueEntry[] = [];
 const EMPTY_CALENDAR: CalendarModuleBundle = {
   events: [],
   accounts: [],
@@ -213,14 +218,43 @@ export function DashboardDataProvider({
   const present = useMemo(() => presentTypes(layout), [layout]);
   const has = (type: WidgetType) => present.has(type);
 
-  // Calendar-today composes tasks + events, so the tasks read is enabled by
-  // either the Tasks widget or the Calendar widget (shared — one fetch).
-  const tasks = useSource(has("tasks") || has("calendar"), workspaceId, EMPTY_TASKS, (rt, ws) =>
-    rt.tasks.list(ws),
+  // Tasks and my queue come from the workspace's shared store (TV-D11a): the
+  // copy the app shell keeps live, so Home reads nothing of its own for them
+  // and a change anywhere shows here at once. Calendar-today composes tasks +
+  // events, so either widget holds the store.
+  const { userId } = useAuth();
+  const tasksAccess = useContext(WorkspaceContext)?.modulePermissions.tasks ?? "none";
+  const store = useWorkspaceStore(
+    getRuntime(),
+    userId,
+    workspaceId,
+    (has("tasks") || has("calendar")) && tasksAccess !== "none",
+  );
+  const snap = useStoreSnapshot(store);
+  const reloadStore = useCallback(async () => {
+    await store?.reload();
+  }, [store]);
+  const storeLoading = !!store && !snap.loaded;
+  const storeError = !!store && !!snap.error;
+  const tasks = useMemo<WidgetSource<TasksModuleBundle>>(
+    () => ({
+      data: store ? snap.bundle : EMPTY_TASKS,
+      loading: storeLoading,
+      error: storeError,
+      reload: reloadStore,
+    }),
+    [store, snap.bundle, storeLoading, storeError, reloadStore],
   );
   // The Tasks widget shows my queue (TV-D4).
-  const taskQueue = useSource<TaskQueueEntry[]>(has("tasks"), workspaceId, [], (rt, ws) =>
-    rt.tasks.listQueue(ws),
+  const wantsQueue = has("tasks");
+  const taskQueue = useMemo<WidgetSource<TaskQueueEntry[]>>(
+    () => ({
+      data: store && wantsQueue ? snap.queue : NO_QUEUE,
+      loading: storeLoading,
+      error: storeError,
+      reload: reloadStore,
+    }),
+    [store, wantsQueue, snap.queue, storeLoading, storeError, reloadStore],
   );
   const calendar = useSource(has("calendar"), workspaceId, EMPTY_CALENDAR, (rt, ws) =>
     rt.calendar.listModule(ws),

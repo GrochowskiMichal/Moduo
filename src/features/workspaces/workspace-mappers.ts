@@ -113,6 +113,8 @@ export function mapWorkspace(row: any, currentUserId?: string): WorkspaceSummary
     name: row.name,
     icon: typeof row.icon === "string" && row.icon.trim() ? row.icon : null,
     logoUrl: row.logo_url ?? row.logoUrl ?? null,
+    taskKey:
+      typeof (row.task_key ?? row.taskKey) === "string" ? (row.task_key ?? row.taskKey) : null,
     role: isOwner ? "owner" : normalizeMemberRole(mine?.role ?? row.role ?? "owner"),
     permissions: modulePermissionsFromPerms(perms, ownerLike),
     perms,

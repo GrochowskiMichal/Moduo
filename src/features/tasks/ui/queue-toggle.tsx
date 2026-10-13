@@ -1,3 +1,4 @@
+import { isClosedTask } from "@contracts/vocabularies";
 import { ListChecks } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import { cn } from "../../../lib/utils";
@@ -15,8 +16,17 @@ export function useQueueClaim(
   taskId: string,
   api: Pick<TasksModuleApi, "queueClaims">,
 ): { names: string[]; first: Assignee | null } {
+  return useClaimNames(api.queueClaims.get(taskId) ?? NO_CLAIMS);
+}
+
+const NO_CLAIMS: readonly string[] = [];
+
+/** The names behind a task's claims (user ids, earliest first). */
+export function useClaimNames(ids: readonly string[]): {
+  names: string[];
+  first: Assignee | null;
+} {
   const { byId } = useAssignees();
-  const ids = api.queueClaims.get(taskId) ?? [];
   return {
     names: ids.map((id) => byId(id)?.name || "a teammate"),
     first: ids.length > 0 ? byId(ids[0]) : null,
@@ -26,15 +36,19 @@ export function useQueueClaim(
 /** The small ringed avatar that marks a task in someone else's queue. */
 export function ClaimAvatar({
   assignee,
+  size = "sm",
   className,
 }: {
   assignee: Assignee | null;
+  /** `icon` on rows, cards and the panel header, where it sits with icons. */
+  size?: "sm" | "icon";
   className?: string;
 }) {
   return (
     <AssigneeAvatar
       assignee={assignee}
-      className={cn("size-4 ring-1 ring-foreground/35", className)}
+      size={size}
+      className={cn("ring-1 ring-foreground/35", className)}
     />
   );
 }
@@ -48,31 +62,44 @@ export function ClaimAvatar({
  */
 export function QueueToggle({
   task,
-  api,
+  queued,
+  claims,
+  onToggle,
   canEdit,
+  revealOnHover = false,
 }: {
   task: Task;
-  api: Pick<TasksModuleApi, "queuedTaskIds" | "queueClaims" | "toggleQueue">;
+  /** In my queue (the row's facts, TV-D11b). */
+  queued: boolean;
+  /** Who else has it queued (user ids, earliest first). */
+  claims: readonly string[];
+  onToggle: (taskId: string) => void;
   canEdit: boolean;
+  /**
+   * List rows (TV-U1, the comp): my plain toggle stays invisible until the row
+   * is hovered, selected or the toggle is focused. It keeps its space and
+   * fades (R6). A queued or claimed mark always shows.
+   */
+  revealOnHover?: boolean;
 }) {
-  const queued = api.queuedTaskIds.has(task.id);
-  const claim = useQueueClaim(task.id, api);
+  const claim = useClaimNames(claims);
   const claimed = claim.names.length > 0;
   const showClaim = claimed && !queued;
-  if (task.status === "done" || task.status === "archived") return null;
+  // Backlog can be queued: it moves to To do (TV-D9).
+  if (isClosedTask(task)) return null;
   // Both of us: their claim stays visible next to my toggle (the toggle's
   // label already says "Also in Mike's queue", so the avatar is decoration).
   const besideClaim =
     claimed && queued ? (
       <span aria-hidden className="flex items-center">
-        <ClaimAvatar assignee={claim.first} />
+        <ClaimAvatar assignee={claim.first} size="icon" />
       </span>
     ) : null;
 
   const mark = showClaim ? (
-    <ClaimAvatar assignee={claim.first} />
+    <ClaimAvatar assignee={claim.first} size="icon" />
   ) : (
-    <ListChecks className="size-3.5" aria-hidden />
+    <ListChecks className="size-icon-sm" aria-hidden />
   );
 
   if (!canEdit) {
@@ -114,16 +141,21 @@ export function QueueToggle({
             aria-pressed={queued}
             onClick={(e) => {
               e.stopPropagation();
-              api.toggleQueue(task.id);
+              onToggle(task.id);
             }}
             className={cn(
-              "flex size-icon items-center justify-center rounded transition-colors duration-(--motion-fade) ease-(--ease-out)",
+              // hit-min pads the pointer target to 24 px; the glyph stays put.
+              "hit-min flex size-icon items-center justify-center rounded transition-[color,opacity] duration-(--motion-fade) ease-(--ease-out)",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
               queued
                 ? "text-primary"
                 : showClaim
                   ? "text-muted-foreground"
                   : "text-muted-foreground/40 hover:text-foreground",
+              revealOnHover &&
+                !queued &&
+                !claimed &&
+                "opacity-0 group-hover:opacity-100 group-aria-selected:opacity-100 focus-visible:opacity-100",
             )}
           >
             {mark}

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "@rstest/core";
 
 import { betweenPositions, endPosition, positionsAfter } from "./helpers";
-import { moveItem, positionForReorder } from "./reorder";
+import { boardDropPosition, moveItem, positionForReorder } from "./reorder";
 
 describe("positionForReorder", () => {
   // a stable, sorted position ladder
@@ -160,5 +160,55 @@ describe("positionsAfter", () => {
   it("is empty for a zero/negative count", () => {
     expect(positionsAfter(0)).toEqual([]);
     expect(positionsAfter(-3)).toEqual([]);
+  });
+});
+
+describe("boardDropPosition (TV-U1: hidden completed cards still count)", () => {
+  const [a, hiddenDone, b, c] = positionsAfter(4);
+  const column = [
+    { id: "a", position: a },
+    { id: "done", position: hiddenDone }, // hidden by Display, still in the column
+    { id: "b", position: b },
+  ];
+
+  it("a reorder never lands on a hidden task's key", () => {
+    // Drag "b" onto "a" (on screen, only "a" sits above it).
+    const pos = boardDropPosition({ activeId: "b", overId: "a", source: column, dest: column });
+    expect(pos).not.toBeNull();
+    expect((pos as string) < a).toBe(true);
+  });
+
+  it("dropping into a column whose cards are all hidden goes after them, not to a fixed key", () => {
+    const doneColumn = [
+      { id: "d1", position: a },
+      { id: "d2", position: b },
+    ];
+    const pos = boardDropPosition({
+      activeId: "x",
+      overId: null,
+      source: [{ id: "x", position: c }],
+      dest: doneColumn,
+    });
+    expect((pos as string) > b).toBe(true);
+    expect(pos).not.toBe(betweenPositions(null, null));
+  });
+
+  it("dropping on a card inserts before it, between it and the task before it (hidden or not)", () => {
+    const pos = boardDropPosition({
+      activeId: "x",
+      overId: "b",
+      source: [{ id: "x", position: c }],
+      dest: column,
+    }) as string;
+    expect(pos > hiddenDone && pos < b).toBe(true);
+  });
+
+  it("is no move on its own column's gutter or onto itself", () => {
+    expect(boardDropPosition({ activeId: "a", overId: null, source: column, dest: column })).toBe(
+      null,
+    );
+    expect(boardDropPosition({ activeId: "a", overId: "a", source: column, dest: column })).toBe(
+      null,
+    );
   });
 });

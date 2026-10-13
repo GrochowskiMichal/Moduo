@@ -23,7 +23,7 @@ import {
 import { Switch } from "../../../components/ui/switch";
 import { Textarea } from "../../../components/ui/textarea";
 import { cn } from "../../../lib/utils";
-import { type GuestQuestion, newQuestionId } from "../booking/model";
+import { type GuestQuestion, newQuestionId, TASKS_BUSY_ID } from "../booking/model";
 import { WEEKDAYS, type Weekday, type WeeklyHours } from "../booking/slots";
 import type { VideoSetting } from "../booking/video";
 import type { CalendarAccountModel } from "../events";
@@ -660,6 +660,19 @@ export function BookingLinkDialog({
                       }}
                     />
                     Moduo
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-foreground">
+                    <Checkbox
+                      checked={draft.busyCalendarIds.includes(TASKS_BUSY_ID)}
+                      onCheckedChange={(checked) => {
+                        const rest = draft.busyCalendarIds.filter((id) => id !== TASKS_BUSY_ID);
+                        onChange({
+                          ...draft,
+                          busyCalendarIds: checked ? [...rest, TASKS_BUSY_ID] : rest,
+                        });
+                      }}
+                    />
+                    Work sessions from Tasks
                   </label>
                   {accounts.map((account) => (
                     <label

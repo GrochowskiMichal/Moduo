@@ -10,7 +10,15 @@ import type { OtpSendError } from "@/lib/runtime";
 /** The ratified "couldn't send" line (specs/transactional-email.md, flow 1). */
 export const OTP_SEND_FAILED_MESSAGE = "We couldn't send your code. Try again in a minute.";
 export const OTP_TOO_MANY_MESSAGE = "Too many code requests right now. Try again in a few minutes.";
+/** The ratified invite-only line (specs/transactional-email.md, flow 1; TX-4). */
 export const OTP_INVITE_ONLY_MESSAGE =
+  "Moduo is invite-only right now. Join the waitlist at moduo.app, or ask the person who invited you to use this address.";
+/**
+ * While sign-ups are still off on the project (before TX-4's dashboard steps),
+ * Auth refuses an unconfirmed address as `signup_disabled`, and a dashboard
+ * invitee gets in only by clicking their invite link first (TX-2).
+ */
+export const OTP_SIGNUPS_OFF_MESSAGE =
   "Moduo is invite-only right now. If you were invited, click the link in your invite email first, then ask for a code here. If that link has expired, ask for a new invite.";
 
 /**
@@ -34,10 +42,15 @@ export function describeOtpSendError(error: OtpSendError): OtpSendFailure {
   const message = error.message ?? "";
   const code = error.code ?? "";
 
-  // Sign-ups are closed, so only confirmed people get a code. A dashboard invitee
-  // is confirmed by clicking their invite link once (docs/decisions/data.md).
-  if (code === "signup_disabled" || /signups? not allowed/i.test(message)) {
+  // An address nobody invited: the before-user-created hook refuses it with the
+  // message `invite_only` (TX-4, 20261010150000). Checked before the
+  // hook-failure branch below, so a refusal never reads as "couldn't send".
+  if (/\binvite_only\b/.test(message)) {
     return { kind: "message", message: OTP_INVITE_ONLY_MESSAGE };
+  }
+  // Sign-ups still off on the project: only a confirmed address gets a code.
+  if (code === "signup_disabled" || /signups? not allowed/i.test(message)) {
+    return { kind: "message", message: OTP_SIGNUPS_OFF_MESSAGE };
   }
 
   // One address asked again inside `max_frequency`: Auth names the wait.

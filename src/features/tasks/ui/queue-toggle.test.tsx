@@ -25,6 +25,7 @@ import { TooltipProvider } from "../../../components/ui/tooltip";
 import { makeTask } from "../helpers";
 import type { Task } from "../model";
 import { QueueToggle } from "./queue-toggle";
+import { type TaskFacts, taskFactsOf } from "./row-facts";
 import { TaskBoardView } from "./task-board-view";
 import { CardBody } from "./task-card";
 import { TaskListView } from "./task-list-view";
@@ -50,16 +51,44 @@ function task(id: string, over: Partial<Task> = {}): Task {
 
 function api(queued: string[], claims: Record<string, string[]>) {
   return {
+    loaded: true,
     queuedTaskIds: new Set(queued),
     queueClaims: new Map(Object.entries(claims)),
     toggleQueue: rs.fn(),
   };
 }
 
+/** A row's facts with nothing on it but the queue. */
+function facts(a: ReturnType<typeof api>, t: Task): TaskFacts {
+  return taskFactsOf(t, {
+    ...a,
+    blockedTaskIds: new Set(),
+    blockersByTask: new Map(),
+    tagsByTask: new Map(),
+    subtaskProgressByTask: new Map(),
+    statusById: new Map(),
+  });
+}
+
+const noActions = {
+  toggleDone: rs.fn(),
+  patchTask: rs.fn(),
+  toggleQueue: rs.fn(),
+  skipOccurrence: rs.fn(),
+  setTaskParent: rs.fn(),
+  deleteTask: rs.fn(),
+} as never;
+
 function renderToggle(t: Task, a: ReturnType<typeof api>, canEdit = true) {
   return render(
     <TooltipProvider>
-      <QueueToggle task={t} api={a} canEdit={canEdit} />
+      <QueueToggle
+        task={t}
+        queued={a.queuedTaskIds.has(t.id)}
+        claims={a.queueClaims.get(t.id) ?? []}
+        onToggle={a.toggleQueue}
+        canEdit={canEdit}
+      />
     </TooltipProvider>,
   );
 }
@@ -124,17 +153,11 @@ describe("QueueToggle (D4-1, D4-2)", () => {
 describe("TaskRow in My tasks (D4-4)", () => {
   function renderRow(showAssignee: boolean) {
     const t = task("t1", { assigneeId: "u1" });
-    const rowApi = {
-      tagsByTask: new Map(),
-      blockedTaskIds: new Set(),
-      ...api([], {}),
-    };
     return render(
       <TooltipProvider>
         <TaskRow
           task={t}
           bucketName="Work"
-          buckets={[]}
           inboxId={null}
           showBucket={false}
           selected={false}
@@ -147,7 +170,9 @@ describe("TaskRow in My tasks (D4-4)", () => {
           onClearCommand={() => {}}
           onRequestCommand={() => {}}
           showAssignee={showAssignee}
-          api={rowApi as never}
+          facts={facts(api([], {}), t)}
+          actions={noActions}
+          today="2026-10-01"
         />
       </TooltipProvider>,
     );
@@ -172,6 +197,8 @@ describe("List, Board and cards in My tasks (D4-4)", () => {
     subtaskProgressByTask: new Map(),
     tagsByTask: new Map(),
     blockedTaskIds: new Set(),
+    blockersByTask: new Map(),
+    statusById: new Map(),
     toggleDone: rs.fn(),
     patchTask: rs.fn(),
     deleteTask: rs.fn(),
@@ -199,7 +226,7 @@ describe("List, Board and cards in My tasks (D4-4)", () => {
   it("the List leaves the avatar out in My tasks and keeps it in All", () => {
     render(
       <TooltipProvider>
-        <TaskListView {...shared("mine")} groupBy="none" onGroupByChange={() => {}} />
+        <TaskListView {...shared("mine")} groupBy="none" />
       </TooltipProvider>,
     );
     expect(screen.getAllByRole("row")).toHaveLength(2);
@@ -207,7 +234,7 @@ describe("List, Board and cards in My tasks (D4-4)", () => {
     cleanup();
     render(
       <TooltipProvider>
-        <TaskListView {...shared("all")} groupBy="none" onGroupByChange={() => {}} />
+        <TaskListView {...shared("all")} groupBy="none" />
       </TooltipProvider>,
     );
     expect(avatars()).toBe(2);
@@ -216,7 +243,7 @@ describe("List, Board and cards in My tasks (D4-4)", () => {
   it("the Board leaves the avatar out in My tasks and keeps it in All", () => {
     render(
       <TooltipProvider>
-        <TaskBoardView {...shared("mine")} boardGroupBy="status" onBoardGroupByChange={() => {}} />
+        <TaskBoardView {...shared("mine")} boardGroupBy="status" />
       </TooltipProvider>,
     );
     expect(screen.getByText("Task t1")).toBeTruthy();
@@ -224,7 +251,7 @@ describe("List, Board and cards in My tasks (D4-4)", () => {
     cleanup();
     render(
       <TooltipProvider>
-        <TaskBoardView {...shared("all")} boardGroupBy="status" onBoardGroupByChange={() => {}} />
+        <TaskBoardView {...shared("all")} boardGroupBy="status" />
       </TooltipProvider>,
     );
     expect(avatars()).toBe(2);
@@ -240,7 +267,10 @@ describe("List, Board and cards in My tasks (D4-4)", () => {
           showBucket={false}
           showAssignee={showAssignee}
           canEdit={false}
-          api={viewApi as never}
+          facts={facts(api([], {}), tasks[0])}
+          parentTitle={null}
+          actions={noActions}
+          today="2026-10-01"
         />
       </TooltipProvider>
     );

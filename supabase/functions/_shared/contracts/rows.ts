@@ -26,7 +26,6 @@ import {
   normalizeRelationKind,
   priorityLevelSchema,
   relationKindSchema,
-  taskStatusSchema,
   taskTimeStatusSchema,
 } from "./vocabularies.ts";
 
@@ -55,7 +54,27 @@ export const taskRowSchema = z.object({
   recurrence: z.unknown().optional(),
   energy_level: z.union([energyLevelSchema, z.null()]).optional(),
   priority: z.union([priorityLevelSchema, z.null()]).optional(),
-  status: taskStatusSchema.optional(),
+  /** Lax (TV-D8): a status this build doesn't know is read through
+   *  normalizeTaskStatus, so the row still shows instead of being dropped. */
+  status: z.string().optional(),
+  /** The handle number (TV-D8); absent on a database before that migration. */
+  number: optNum,
+  /** TV-D9: the project status, its category (lax, like status), when and by
+   *  whom it was finished, and the due date as a date plus an optional time.
+   *  All absent on a database before that migration. */
+  status_id: optStr,
+  status_category: z.string().nullable().optional(),
+  completed_at: optStr,
+  completed_by: optStr,
+  due_on: optStr,
+  due_time: optStr,
+  /** TV-D10: the section, the team, the estimate (duration_minutes mirrors
+   *  the next work session from then on) and where it was imported from.
+   *  All absent on a database before that migration. */
+  section_id: optStr,
+  team_id: optStr,
+  estimate_minutes: optNum,
+  imported_from: z.unknown().optional(),
   committed_for: optStr,
   commit_order: optNum,
   reschedule_count: optNum,
@@ -63,8 +82,145 @@ export const taskRowSchema = z.object({
   created_at: z.string(),
   updated_at: z.string(),
   deleted_at: optStr,
+  /** Set while the task is in the trash as part of a batch (TV-U6). */
+  deleted_batch_id: optStr,
 });
 export type TaskRow = z.infer<typeof taskRowSchema>;
+
+/** A task_completions row (TV-D8). */
+export const taskCompletionRowSchema = z.object({
+  id,
+  workspace_id: id,
+  task_id: id,
+  user_id: optStr,
+  completed_at: z.string(),
+  cycle_key: z.string(),
+  updated_at: z.string(),
+  deleted_at: optStr,
+});
+export type TaskCompletionRow = z.infer<typeof taskCompletionRowSchema>;
+
+/** A project_statuses row (TV-D9): one status of a project, or of the
+ *  workspace default set (project_id null). The category is lax on read. */
+export const projectStatusRowSchema = z.object({
+  id,
+  workspace_id: id,
+  project_id: optStr,
+  category: z.string(),
+  name: z.string(),
+  position: optNum,
+  hidden: z.boolean().optional(),
+  created_at: z.string(),
+  updated_at: z.string(),
+  deleted_at: optStr,
+});
+export type ProjectStatusRow = z.infer<typeof projectStatusRowSchema>;
+
+// ── TV-D10: areas, sections, teams, sessions, reminders, Waiting on… ───────
+// Kinds and states are lax on read (open strings), like status_category: a
+// value this build doesn't know never drops the row.
+
+/** An areas row: an optional group of projects in the sidebar. */
+export const areaRowSchema = z.object({
+  id,
+  workspace_id: id,
+  name: z.string(),
+  color: optStr,
+  position: optNum,
+  shared: z.boolean().optional(),
+  created_by: optStr,
+  created_at: z.string(),
+  updated_at: z.string(),
+  deleted_at: optStr,
+});
+export type AreaRow = z.infer<typeof areaRowSchema>;
+
+/** A sections row: an ordered part of a project, with a range or an end date. */
+export const sectionRowSchema = z.object({
+  id,
+  workspace_id: id,
+  project_id: id,
+  name: z.string(),
+  position: optNum,
+  starts_on: optStr,
+  ends_on: optStr,
+  created_at: z.string(),
+  updated_at: z.string(),
+  deleted_at: optStr,
+});
+export type SectionRow = z.infer<typeof sectionRowSchema>;
+
+/** A teams row: a named group that tasks are routed to. */
+export const teamRowSchema = z.object({
+  id,
+  workspace_id: id,
+  name: z.string(),
+  mark: z.string(),
+  color: optStr,
+  default_project_id: optStr,
+  created_by: optStr,
+  created_at: z.string(),
+  updated_at: z.string(),
+  deleted_at: optStr,
+});
+export type TeamRow = z.infer<typeof teamRowSchema>;
+
+/** A team_members row. */
+export const teamMemberRowSchema = z.object({
+  id,
+  workspace_id: id,
+  team_id: id,
+  user_id: id,
+  created_at: z.string(),
+  updated_at: z.string(),
+  deleted_at: optStr,
+});
+export type TeamMemberRow = z.infer<typeof teamMemberRowSchema>;
+
+/** A task_sessions row: one scheduled block of work on a task. */
+export const taskSessionRowSchema = z.object({
+  id,
+  workspace_id: id,
+  task_id: id,
+  user_id: optStr,
+  starts_at: z.string(),
+  ends_at: z.string(),
+  created_at: z.string(),
+  updated_at: z.string(),
+  deleted_at: optStr,
+});
+export type TaskSessionRow = z.infer<typeof taskSessionRowSchema>;
+
+/** A task_reminders row: one of the reader's own reminders. */
+export const taskReminderRowSchema = z.object({
+  id,
+  workspace_id: id,
+  task_id: id,
+  user_id: id,
+  kind: z.string(),
+  at: optStr,
+  fired_at: optStr,
+  created_at: z.string(),
+  updated_at: z.string(),
+  deleted_at: optStr,
+});
+export type TaskReminderRow = z.infer<typeof taskReminderRowSchema>;
+
+/** A task_waiting row: one Waiting on… entry. */
+export const taskWaitingRowSchema = z.object({
+  id,
+  workspace_id: id,
+  task_id: id,
+  kind: z.string(),
+  ref: optStr,
+  label: optStr,
+  since: z.string(),
+  created_by: optStr,
+  created_at: z.string(),
+  updated_at: z.string(),
+  deleted_at: optStr,
+});
+export type TaskWaitingRow = z.infer<typeof taskWaitingRowSchema>;
 
 /** Notes meta row — v2 columns optional so pre-migration (legacy) reads still parse. */
 export const noteRowSchema = z.object({
@@ -105,9 +261,23 @@ export const bucketRowSchema = z.object({
   is_system: z.boolean().optional(),
   group_label: optStr,
   position: z.string().optional(),
+  /** TV-D10: the project's fields (status lax on read). Absent on a database
+   *  before that migration. */
+  status: z.string().optional(),
+  starts_on: optStr,
+  target_on: optStr,
+  lead_id: optStr,
+  client_contact_id: optStr,
+  area_id: optStr,
   created_at: z.string(),
   updated_at: z.string(),
   deleted_at: optStr,
+  /** TV-U6. Absent before its migration. A label hue name (an open string, like tags.color). */
+  color: optStr,
+  archived_at: optStr,
+  deleted_batch_id: optStr,
+  /** The open tasks a project's delete sent to Inboxes (REPLAN 78; Restore takes back the untouched ones). */
+  trash_moved_task_ids: z.union([z.array(z.string()), z.null()]).optional(),
 });
 export type BucketRow = z.infer<typeof bucketRowSchema>;
 

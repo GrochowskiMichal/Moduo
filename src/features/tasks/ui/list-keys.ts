@@ -3,7 +3,8 @@
 //
 //   • Modified keys aren't the List's (tasks-v2 Q1-1). Any ⌘/Ctrl/Alt combo
 //     belongs to the app (⌘K palette, ⌘⇧K capture, ⌘N, ⌘1–7…) or to the OS
-//     (⌘C/⌘V/⌘X), except the ones the List explicitly binds — today only ⌘⌫.
+//     (⌘C/⌘V/⌘X), except the ones the List explicitly binds: ⌘⌫, and ⌥⇧↑/↓
+//     to move a task in the manual order (the keymap's move keys, TV-U4).
 //     Swallowing one also hides it from `useGlobalShortcuts`, which skips any
 //     event that was already default-prevented.
 //   • A row's own controls keep their Space/Enter (Q1-2). Pressed on the
@@ -13,7 +14,9 @@
 //     never reach the List, though React bubbles them up to it.
 //
 // Shift isn't a bail-out: letters match case-insensitively (TV-U5 claims ⇧J/⇧K
-// for extending the selection, checked before the lowercase match).
+// for extending the selection, checked before the lowercase match), and `>` /
+// `<` (nest under the row above, un-nest; default k) match `event.key`,
+// whatever the keyboard needs to type them.
 
 export type ListKeyAction =
   | "next"
@@ -27,9 +30,14 @@ export type ListKeyAction =
   | "queue"
   | "expand"
   | "collapse"
-  | "delete";
+  | "delete"
+  | "nest"
+  | "unnest"
+  | "move-up"
+  | "move-down";
 
-type ListKey = Pick<KeyboardEvent, "key" | "metaKey" | "ctrlKey" | "altKey">;
+type ListKey = Pick<KeyboardEvent, "key" | "metaKey" | "ctrlKey" | "altKey"> &
+  Partial<Pick<KeyboardEvent, "shiftKey">>;
 
 /**
  * The attribute a row puts on its title button. Clicking the title is how a
@@ -70,8 +78,12 @@ export function listKeyAction(
   event: ListKey,
   opts: { onControl?: boolean } = {},
 ): ListKeyAction | null {
-  const { key, metaKey, ctrlKey, altKey } = event;
+  const { key, metaKey, ctrlKey, altKey, shiftKey } = event;
   if (metaKey || ctrlKey || altKey) {
+    if (altKey && shiftKey && !metaKey && !ctrlKey) {
+      if (key === "ArrowUp") return "move-up";
+      if (key === "ArrowDown") return "move-down";
+    }
     const command = (metaKey || ctrlKey) && !altKey;
     return command && (key === "Backspace" || key === "Delete") ? "delete" : null;
   }
@@ -89,6 +101,10 @@ export function listKeyAction(
       return "toggle-done";
     case "Enter":
       return "edit";
+    case ">":
+      return "nest";
+    case "<":
+      return "unnest";
   }
   switch (key.toLowerCase()) {
     case "j":

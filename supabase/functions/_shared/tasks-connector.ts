@@ -4,6 +4,7 @@
  * (MCC-1; tool catalog in docs/moduo-mcp-connector.md).
  */
 
+import { isOpenTask, normalizeTaskStatusCategory } from "./contracts/vocabularies.ts";
 import { assigneeIdOf, taskPeople } from "./task-people.ts";
 
 type Row = Record<string, any>;
@@ -141,6 +142,8 @@ export type ShapeData = {
   names: ReadonlyMap<string, string>;
   /** Tasks in the key creator's own queue (TV-D2). */
   queuedByMe?: ReadonlySet<string>;
+  /** The workspace's task key (TV-D8): with a task's number, its handle. */
+  taskKey?: string | null;
 };
 
 /**
@@ -160,14 +163,47 @@ export function queueTaskIds(
     .map((r) => r.task_id);
 }
 
+/**
+ * Every row of a read, page by page (TV-D8, AC1.13): PostgREST answers at most
+ * 1,000 rows per request whatever the limit says (docs/gotchas/supabase.md),
+ * so a workspace past that lost tasks silently. The query must be in a total
+ * order (end it with `.order("id")`) or a page boundary skips and repeats rows.
+ */
+export async function readAllPages<T>(
+  page: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
+  pageSize = 1000,
+  maxRows = 100_000,
+): Promise<T[]> {
+  const out: T[] = [];
+  for (let from = 0; from < maxRows; from += pageSize) {
+    const { data, error } = await page(from, from + pageSize - 1);
+    if (error) throw new Error(error.message);
+    const got = data ?? [];
+    out.push(...got);
+    if (got.length < pageSize) break;
+  }
+  return out;
+}
+
+/** A row's state through the one open rule (TV-D9): its category, else its
+ *  legacy status (a row from before TV-D9). */
+export function rowTaskState(t: Row): { status: unknown; statusCategory: ReturnType<typeof normalizeTaskStatusCategory> | null } {
+  return {
+    status: t.status,
+    statusCategory: t.status_category ? normalizeTaskStatusCategory(t.status_category) : null,
+  };
+}
+
 export function isDrifted(t: Row, now: Date): boolean {
-  if (t.status === "done" || t.status === "archived") return false;
+  if (!isOpenTask(rowTaskState(t))) return false;
   return !!t.scheduled_at && new Date(t.scheduled_at).getTime() < now.getTime();
 }
 
 /** Quiet, compact task shape for agents — full row noise stays out. */
 export function shapeTask(t: Row, data: ShapeData, now: Date, full = false): Row {
   const out: Row = {
+    // TV-D8: lead with the handle (MOD-142) when the task has one.
+    ...(data.taskKey && t.number != null ? { handle: `${data.taskKey}-${t.number}` } : {}),
     id: t.id,
     title: t.title,
     bucket_id: t.bucket_id,
@@ -184,6 +220,12 @@ export function shapeTask(t: Row, data: ShapeData, now: Date, full = false): Row
   const description = (t.description ?? "").trim();
   if (description) out.description = full ? description : description.slice(0, 280);
   if (t.parent_id && data.byId.has(t.parent_id)) out.parent_id = t.parent_id;
+  // TV-D9: the status's category (backlog · todo · in_progress · done ·
+  // wont_do) and the due date as a date, the same for everyone (due_date is
+  // its noon-UTC mirror until TV-D7), plus an optional due time.
+  if (t.status_category) out.status_category = t.status_category;
+  if (t.due_on) out.due_on = t.due_on;
+  if (t.due_time) out.due_time = t.due_time;
   if (t.due_date) out.due_date = t.due_date;
   if (t.scheduled_at) out.scheduled_at = t.scheduled_at;
   if (t.duration_minutes != null) out.duration_minutes = t.duration_minutes;

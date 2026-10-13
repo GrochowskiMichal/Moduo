@@ -213,7 +213,7 @@ export function MessageList({
         type="button"
         onClick={() => scrollToBottom(true)}
         className={cn(
-          "fx-overlay absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-border bg-popover px-3 py-1 font-display text-xs text-foreground transition-opacity duration-(--motion-fade)",
+          "absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-border bg-popover px-3 py-1 font-display text-xs text-foreground transition-opacity duration-(--motion-fade)",
           showJump || unseen > 0 ? "opacity-100" : "pointer-events-none opacity-0",
         )}
         style={{ boxShadow: "var(--shadow-md)" }}

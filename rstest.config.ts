@@ -40,6 +40,7 @@ export default defineConfig({
     "supabase/functions/_shared/email/**/*.test.ts",
     "supabase/functions/send-workspace-invite/*.test.ts",
     "supabase/functions/auth-email-hook/*.test.ts",
+    "supabase/functions/email-worker/*.test.ts",
     "scripts/brand/*.test.ts",
   ],
   globals: true,

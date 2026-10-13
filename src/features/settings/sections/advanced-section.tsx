@@ -36,6 +36,7 @@ import {
   isModuoIdbName,
   type ModuleReadResult,
   moduoCacheKeysToClear,
+  readTasksExport,
   resetBlockedMessage,
 } from "../advanced";
 import { SettingsSectionShell } from "./section-shell";
@@ -85,7 +86,7 @@ async function gatherExport(
   };
 
   return Promise.all([
-    read("tasks", () => runtime.tasks.list(workspaceId)),
+    read("tasks", () => readTasksExport(runtime.tasks, workspaceId)),
     read("notes", async () => {
       const bundle = await runtime.notesV2.listMeta(workspaceId);
       const ids = bundle.notes.map((n) => n.id);

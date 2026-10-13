@@ -76,6 +76,125 @@ export function isTaskStatus(value: unknown): value is TaskStatus {
   return typeof value === "string" && (TASK_STATUSES as readonly string[]).includes(value);
 }
 
+/**
+ * Lax read of a task's status (TV-D8, REPLAN §6.3): a value this build doesn't
+ * know still shows, as its category, and the row is never dropped. Tasks v3
+ * stores five categories (TV-D9): "backlog" reads as To do here and
+ * "wont_do" as Won't do (`archived` until TV-D7); anything else unknown
+ * reads as To do, so it stays in view.
+ */
+export function normalizeTaskStatus(input: unknown): TaskStatus {
+  if (isTaskStatus(input)) return input;
+  const v = typeof input === "string" ? input.trim().toLowerCase().replace(/[\s'’-]+/g, "_") : "";
+  if (isTaskStatus(v)) return v;
+  if (v === "wont_do" || v === "won_t_do" || v === "cancelled" || v === "canceled") return "archived";
+  if (v === "completed" || v === "complete" || v === "closed") return "done";
+  if (v === "started" || v === "in_review") return "in_progress";
+  return "todo";
+}
+
+/** Statuses that still need doing (the one "is open" rule; MCP and the app share it). */
+export const TASK_OPEN_STATUSES = ["todo", "in_progress"] as const satisfies readonly TaskStatus[];
+
+/**
+ * Is this legacy status value still open? Unknown values read through
+ * {@link normalizeTaskStatus}. A task's own openness reads its category:
+ * use {@link isOpenTask} (a backlog task stores "todo" here).
+ */
+export function isOpenTaskStatus(status: unknown): boolean {
+  return (TASK_OPEN_STATUSES as readonly string[]).includes(normalizeTaskStatus(status));
+}
+
+// ---------------------------------------------------------------------------
+// Task status categories (TV-D9, REPLAN 53/53a) — mirrors the CHECKs on
+// project_statuses.category and tasks.status_category in
+// 20261010170000_project_statuses. Each project names its own statuses inside
+// these five; the app's behaviour hangs on the category. Replaces
+// TASK_STATUSES at TV-D7 (archived → wont_do, plus backlog).
+// ---------------------------------------------------------------------------
+
+export const TASK_STATUS_CATEGORIES = ["backlog", "todo", "in_progress", "done", "wont_do"] as const;
+export type TaskStatusCategory = (typeof TASK_STATUS_CATEGORIES)[number];
+export const taskStatusCategorySchema = z.enum(TASK_STATUS_CATEGORIES);
+
+export function isTaskStatusCategory(value: unknown): value is TaskStatusCategory {
+  return (
+    typeof value === "string" && (TASK_STATUS_CATEGORIES as readonly string[]).includes(value)
+  );
+}
+
+/** Strict parse for write paths: only the five stored tokens. */
+export function parseTaskStatusCategory(input: unknown): SafeParseResult<TaskStatusCategory> {
+  return parseOrError(taskStatusCategorySchema, input);
+}
+
+/**
+ * Lax read: the five tokens, the legacy column's values (archived → Won't do)
+ * and the words people write ("To do", "Won't do"). Unknown reads as To do,
+ * so a row is never dropped (REPLAN §6.3). Same reading as the server's
+ * `tasks__status_category_of`.
+ */
+export function normalizeTaskStatusCategory(input: unknown): TaskStatusCategory {
+  if (isTaskStatusCategory(input)) return input;
+  const v = typeof input === "string" ? input.trim().toLowerCase().replace(/[\s'’_-]+/g, "") : "";
+  if (v === "backlog") return "backlog";
+  if (v === "inprogress") return "in_progress";
+  if (v === "done") return "done";
+  if (v === "wontdo" || v === "archived") return "wont_do";
+  // Everything else as the legacy reading does (started → In progress, …).
+  const legacy = normalizeTaskStatus(input);
+  return legacy === "archived" ? "wont_do" : legacy;
+}
+
+/** The legacy column's value for a category (what builds before TV-D9 read). */
+export function legacyTaskStatus(category: TaskStatusCategory): TaskStatus {
+  if (category === "backlog") return "todo";
+  if (category === "wont_do") return "archived";
+  return category;
+}
+
+/**
+ * The word a status op is sent for a category: the legacy value (every
+ * database reads "archived" as Won't do, so a write works before TV-D9's
+ * migration too), and "backlog", which only TV-D9 knows.
+ */
+export function taskStatusWord(category: TaskStatusCategory): string {
+  return category === "backlog" ? "backlog" : legacyTaskStatus(category);
+}
+
+/** Categories still to be worked on: the one "is open" rule. Backlog is
+ *  parked, so it sits out of counts, My tasks, Upcoming, Focus, drift and late. */
+export const TASK_OPEN_CATEGORIES = ["todo", "in_progress"] as const satisfies readonly TaskStatusCategory[];
+/** Categories that are finished, one way or the other. */
+export const TASK_CLOSED_CATEGORIES = ["done", "wont_do"] as const satisfies readonly TaskStatusCategory[];
+
+/** A task's category: the stored one, else read from its legacy status (a row
+ *  from before TV-D9). */
+export function taskCategoryOf(task: {
+  status: unknown;
+  statusCategory?: TaskStatusCategory | null;
+}): TaskStatusCategory {
+  return task.statusCategory ?? normalizeTaskStatusCategory(task.status);
+}
+
+/** Is this task open (To do or In progress)? Backlog is not. */
+export function isOpenTask(task: { status: unknown; statusCategory?: TaskStatusCategory | null }) {
+  return (TASK_OPEN_CATEGORIES as readonly string[]).includes(taskCategoryOf(task));
+}
+
+/** Is this task finished (Done or Won't do)? Backlog is not. */
+export function isClosedTask(task: { status: unknown; statusCategory?: TaskStatusCategory | null }) {
+  return (TASK_CLOSED_CATEGORIES as readonly string[]).includes(taskCategoryOf(task));
+}
+
+/** Is this task parked in Backlog? */
+export function isBacklogTask(task: {
+  status: unknown;
+  statusCategory?: TaskStatusCategory | null;
+}) {
+  return taskCategoryOf(task) === "backlog";
+}
+
 // ---------------------------------------------------------------------------
 // Task time entries (TV-D3) — mirrors task_time_entries' kind CHECK and
 // tasks_op_track_time's actions and answers in 20261008225500_tasks_time_entries.
@@ -100,6 +219,99 @@ export const taskTimeActionSchema = z.enum(TASK_TIME_ACTIONS);
 export const TASK_TIME_STATUSES = ["saved", "duplicate", "noop", "gone"] as const;
 export type TaskTimeStatus = (typeof TASK_TIME_STATUSES)[number];
 export const taskTimeStatusSchema = z.enum(TASK_TIME_STATUSES);
+
+// ---------------------------------------------------------------------------
+// Tasks v3 structure (TV-D10) — mirrors buckets.status in
+// 20261010180000_areas_projects_sections, and task_reminders.kind and
+// task_waiting.kind in 20261010181000_task_sessions_reminders_waiting.
+// ---------------------------------------------------------------------------
+
+/** A project's state (REPLAN 16): Active · On hold · Done. Only the overview,
+ *  a dimmed sidebar row and MCP read it; it never hides tasks. (Not the
+ *  per-project task statuses, which live in `project_statuses`.) */
+export const PROJECT_STATES = ["active", "on_hold", "done"] as const;
+export type ProjectState = (typeof PROJECT_STATES)[number];
+export const projectStateSchema = z.enum(PROJECT_STATES);
+export function isProjectState(value: unknown): value is ProjectState {
+  return typeof value === "string" && (PROJECT_STATES as readonly string[]).includes(value);
+}
+export function parseProjectState(input: unknown): SafeParseResult<ProjectState> {
+  return parseOrError(projectStateSchema, input);
+}
+/** Lax read: unknown reads as Active, so a project never disappears. */
+export function normalizeProjectState(input: unknown): ProjectState {
+  return isProjectState(input) ? input : "active";
+}
+
+/** When a reminder fires (REPLAN 24): at a time, or a day / an hour before due. */
+export const TASK_REMINDER_KINDS = ["at", "day_before", "hour_before"] as const;
+export type TaskReminderKind = (typeof TASK_REMINDER_KINDS)[number];
+export const taskReminderKindSchema = z.enum(TASK_REMINDER_KINDS);
+export function isTaskReminderKind(value: unknown): value is TaskReminderKind {
+  return typeof value === "string" && (TASK_REMINDER_KINDS as readonly string[]).includes(value);
+}
+export function parseTaskReminderKind(input: unknown): SafeParseResult<TaskReminderKind> {
+  return parseOrError(taskReminderKindSchema, input);
+}
+/** Lax read: a kind this build doesn't know reads as a reminder at its time. */
+export function normalizeTaskReminderKind(input: unknown): TaskReminderKind {
+  return isTaskReminderKind(input) ? input : "at";
+}
+
+/** What a Waiting on… entry waits on (default q): a person, an email thread,
+ *  an agent (an API key) or free text. */
+export const TASK_WAITING_KINDS = ["person", "email", "agent", "text"] as const;
+export type TaskWaitingKind = (typeof TASK_WAITING_KINDS)[number];
+export const taskWaitingKindSchema = z.enum(TASK_WAITING_KINDS);
+export function isTaskWaitingKind(value: unknown): value is TaskWaitingKind {
+  return typeof value === "string" && (TASK_WAITING_KINDS as readonly string[]).includes(value);
+}
+export function parseTaskWaitingKind(input: unknown): SafeParseResult<TaskWaitingKind> {
+  return parseOrError(taskWaitingKindSchema, input);
+}
+/** Lax read: a kind this build doesn't know reads as free text. */
+export function normalizeTaskWaitingKind(input: unknown): TaskWaitingKind {
+  return isTaskWaitingKind(input) ? input : "text";
+}
+
+/**
+ * What a grant feed row names (`access_changes.resource_type`, TV-D11b): a
+ * project (`bucket`) or a task shared or unshared, a task moved project, or a
+ * member's role in the `workspace` changed.
+ */
+export const ACCESS_CHANGE_RESOURCES = ["bucket", "task", "workspace"] as const;
+export type AccessChangeResource = (typeof ACCESS_CHANGE_RESOURCES)[number];
+export const accessChangeResourceSchema = z.enum(ACCESS_CHANGE_RESOURCES);
+export function isAccessChangeResource(value: unknown): value is AccessChangeResource {
+  return (
+    typeof value === "string" && (ACCESS_CHANGE_RESOURCES as readonly string[]).includes(value)
+  );
+}
+export function parseAccessChangeResource(input: unknown): SafeParseResult<AccessChangeResource> {
+  return parseOrError(accessChangeResourceSchema, input);
+}
+/** Lax read: a resource this build doesn't know reads as the whole workspace (check everything). */
+export function normalizeAccessChangeResource(input: unknown): AccessChangeResource {
+  return isAccessChangeResource(input) ? input : "workspace";
+}
+
+/**
+ * The hard-delete tables whose deletes leave a `sync_tombstones` row
+ * (TV-D11b), so the shared store reads their changes instead of all of them.
+ */
+export const SYNC_TOMBSTONE_TABLES = ["task_queue", "tag_links", "task_relations"] as const;
+export type SyncTombstoneTable = (typeof SYNC_TOMBSTONE_TABLES)[number];
+export const syncTombstoneTableSchema = z.enum(SYNC_TOMBSTONE_TABLES);
+export function isSyncTombstoneTable(value: unknown): value is SyncTombstoneTable {
+  return typeof value === "string" && (SYNC_TOMBSTONE_TABLES as readonly string[]).includes(value);
+}
+export function parseSyncTombstoneTable(input: unknown): SafeParseResult<SyncTombstoneTable> {
+  return parseOrError(syncTombstoneTableSchema, input);
+}
+/** Lax read: a table this build doesn't know isn't one it keeps (null). */
+export function normalizeSyncTombstoneTable(input: unknown): SyncTombstoneTable | null {
+  return isSyncTombstoneTable(input) ? input : null;
+}
 
 export const ENERGY_LEVELS = ["low", "medium", "high"] as const;
 export type EnergyLevel = (typeof ENERGY_LEVELS)[number];
@@ -269,6 +481,19 @@ export function isShareResourceType(value: unknown): value is ShareResourceType 
 export const GRANT_SUBJECT_TYPES = ["member", "workspace", "public_link"] as const;
 export type GrantSubjectType = (typeof GRANT_SUBJECT_TYPES)[number];
 
+/**
+ * Where a grant came from (`resource_grants.origin`, CHECK in
+ * 20261010120000_tighten_write_checks.sql). `assign` grants come and go with a
+ * task's assignee; `manual` ones are shares set by hand and are never revoked
+ * by reassigning.
+ */
+export const GRANT_ORIGINS = ["assign", "manual"] as const;
+export type GrantOrigin = (typeof GRANT_ORIGINS)[number];
+export const grantOriginSchema = z.enum(GRANT_ORIGINS);
+export function isGrantOrigin(value: unknown): value is GrantOrigin {
+  return typeof value === "string" && (GRANT_ORIGINS as readonly string[]).includes(value);
+}
+
 /** Workspace default for a new container. `private` writes no workspace grant. */
 export const SHARE_DEFAULT_LEVELS = ["private", "freebusy", "view", "edit", "full"] as const;
 export type ShareDefaultLevel = (typeof SHARE_DEFAULT_LEVELS)[number];
@@ -361,9 +586,11 @@ export const inviteStatusSchema = z.enum(INVITE_STATUSES);
 
 // ---------------------------------------------------------------------------
 // Landing waitlist — public.waitlist.source / .status (CHECKs in
-// 20261001160000 + 20261001170000 waitlist migrations). Source = which landing CTA.
+// 20261010150000_tx4_invite_only_gate.sql; the join function's source list in
+// 20261001170000_waitlist_footer_source.sql).
 // ---------------------------------------------------------------------------
 
+/** The landing CTAs a person can join from: what `waitlist-join` / `waitlist_join()` accept. */
 export const WAITLIST_SOURCES = ["nav", "hero", "close", "footer"] as const;
 export type WaitlistSource = (typeof WAITLIST_SOURCES)[number];
 export const waitlistSourceSchema = z.enum(WAITLIST_SOURCES);
@@ -372,7 +599,17 @@ export function isWaitlistSource(input: unknown): input is WaitlistSource {
   return waitlistSourceSchema.safeParse(input).success;
 }
 
-export const WAITLIST_STATUSES = ["pending", "confirmed", "cancelled"] as const;
+/**
+ * Every source a waitlist row can have (the CHECK): the landing CTAs plus
+ * `manual`, a person invited by `waitlist_invite_email()` without joining
+ * (TX-4). Never accepted from the landing.
+ */
+export const WAITLIST_ROW_SOURCES = [...WAITLIST_SOURCES, "manual"] as const;
+export type WaitlistRowSource = (typeof WAITLIST_ROW_SOURCES)[number];
+export const waitlistRowSourceSchema = z.enum(WAITLIST_ROW_SOURCES);
+
+/** `invited` (TX-4): the person may sign up; set in the dashboard or by the waitlist_invite_* helpers. */
+export const WAITLIST_STATUSES = ["pending", "confirmed", "cancelled", "invited"] as const;
 export type WaitlistStatus = (typeof WAITLIST_STATUSES)[number];
 export const waitlistStatusSchema = z.enum(WAITLIST_STATUSES);
 
@@ -447,6 +684,37 @@ export const emailOutboxStatusSchema = z.enum(EMAIL_OUTBOX_STATUSES);
 export function isEmailOutboxStatus(input: unknown): input is EmailOutboxStatus {
   return emailOutboxStatusSchema.safeParse(input).success;
 }
+
+/**
+ * Why an address gets no more email (T13): a hard bounce or a spam complaint
+ * reported by Resend's webhook, or added by hand. CHECK on
+ * public.email_suppressions.reason (20261008233000_email_outbox_worker.sql).
+ */
+export const EMAIL_SUPPRESSION_REASONS = ["bounce", "complaint", "manual"] as const;
+export type EmailSuppressionReason = (typeof EMAIL_SUPPRESSION_REASONS)[number];
+export const emailSuppressionReasonSchema = z.enum(EMAIL_SUPPRESSION_REASONS);
+
+export function isEmailSuppressionReason(input: unknown): input is EmailSuppressionReason {
+  return emailSuppressionReasonSchema.safeParse(input).success;
+}
+
+/**
+ * Build-updates subscriptions (T21), public.email_subscriptions. TX-4 creates
+ * the table so a waitlist person's build-updates request survives their
+ * sign-up (AC22); TX-8 and TX-10 add confirming, Settings and unsubscribing.
+ * CHECKs in 20261010150000_tx4_invite_only_gate.sql.
+ */
+export const EMAIL_SUBSCRIPTION_TOPICS = ["build_updates"] as const;
+export type EmailSubscriptionTopic = (typeof EMAIL_SUBSCRIPTION_TOPICS)[number];
+export const emailSubscriptionTopicSchema = z.enum(EMAIL_SUBSCRIPTION_TOPICS);
+
+export const EMAIL_SUBSCRIPTION_STATUSES = ["pending", "subscribed", "unsubscribed"] as const;
+export type EmailSubscriptionStatus = (typeof EMAIL_SUBSCRIPTION_STATUSES)[number];
+export const emailSubscriptionStatusSchema = z.enum(EMAIL_SUBSCRIPTION_STATUSES);
+
+export const EMAIL_SUBSCRIPTION_SOURCES = ["waitlist", "settings"] as const;
+export type EmailSubscriptionSource = (typeof EMAIL_SUBSCRIPTION_SOURCES)[number];
+export const emailSubscriptionSourceSchema = z.enum(EMAIL_SUBSCRIPTION_SOURCES);
 
 // ---------------------------------------------------------------------------
 // Email accounts — provider/status vocabularies.

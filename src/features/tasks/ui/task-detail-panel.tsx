@@ -8,7 +8,8 @@
 // the spine's `comments_op_add`. Files pasted or dropped anywhere on the panel
 // (the description included) attach to the task.
 
-import { CircleDashed, ListChecks, Plus, X } from "lucide-react";
+import { isClosedTask } from "@contracts/vocabularies";
+import { Ban, CircleDashed, ListChecks, Lock, Plus, RotateCcw, X } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { dragHasFiles, filesFromDataTransfer, pastedFiles } from "@/features/attachments/files";
@@ -22,6 +23,8 @@ import { EntityHub } from "@/features/spine/ui/entity-hub";
 import type { EntityLink, EntityRef, RelationKind } from "@/lib/entity-links";
 import { ENTITY_OPEN_EVENT } from "@/lib/entity-open";
 import type { ModuoRuntime } from "@/lib/runtime.types";
+import { Button } from "../../../components/ui/button";
+import { CollectionHeader } from "../../../components/ui/collection-header";
 import {
   Command,
   CommandEmpty,
@@ -33,6 +36,7 @@ import {
 import { CompleteToggle } from "../../../components/ui/complete-toggle";
 import { detailTitleVariants } from "../../../components/ui/detail-title";
 import { DROP_TARGET } from "../../../components/ui/drag-visuals";
+import { EmptyState } from "../../../components/ui/empty-state";
 import { IconButton } from "../../../components/ui/icon-button";
 import { Input } from "../../../components/ui/input";
 import { Kbd } from "../../../components/ui/kbd";
@@ -335,6 +339,13 @@ function DetailBody({
             ) : null}
           </div>
 
+          {task.status === "archived" ? (
+            <WontDoLine
+              canEdit={canEdit}
+              onReopen={() => api.patchTask(task.id, { status: "todo" })}
+            />
+          ) : null}
+
           <TaskDetailProperties task={task} api={api} canEdit={canEdit} mySeconds={mySeconds} />
 
           <div className="flex flex-col gap-2">
@@ -465,25 +476,7 @@ function TitleField({ task, canEdit, api }: { task: Task; canEdit: boolean; api:
 }
 
 // ── collections ───────────────────────────────────────────────────────────────
-
-/** Every collection's header: label · count · + (comp §1). */
-function CollectionHeader({
-  label,
-  count,
-  action,
-}: {
-  label: string;
-  count: React.ReactNode;
-  action?: React.ReactNode;
-}) {
-  return (
-    <div className="flex h-(--ctrl-h-sm) items-center gap-1.5 font-display text-sm font-medium text-foreground">
-      <span>{label}</span>
-      <span className="font-sans font-normal text-muted-foreground tabular-nums">{count}</span>
-      {action ? <span className="ml-auto flex items-center">{action}</span> : null}
-    </div>
-  );
-}
+// Every collection's header is the kit's CollectionHeader: label · count · + (comp §1).
 
 function SubtasksSection({
   task,
@@ -575,13 +568,14 @@ function SubtaskRow({
   const done = subtask.status === "done";
   const queued = api.queuedTaskIds.has(subtask.id);
   return (
-    <div className="group flex h-(--ctrl-h-sm) items-center gap-2 rounded-md px-1 transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover">
+    <div className="group flex min-h-(--ctrl-h-sm) items-center gap-2 rounded-md px-1 transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover">
       <CompleteToggle done={done} disabled={!canEdit} onToggle={() => api.toggleDone(subtask)} />
       <button
         type="button"
         onClick={onSelect}
         className={cn(
-          "min-w-0 flex-1 truncate text-left font-sans text-base",
+          // Titles wrap in the panel, never truncate (TV-P0, AC1.16).
+          "min-w-0 flex-1 break-words py-0.5 text-left font-sans text-base",
           done ? "text-muted-foreground line-through" : "text-foreground",
         )}
       >
@@ -598,7 +592,8 @@ function SubtaskRow({
               aria-pressed={queued}
               onClick={() => api.toggleQueue(subtask.id)}
               className={cn(
-                "flex size-5 shrink-0 items-center justify-center rounded transition-opacity duration-(--motion-fade) ease-(--ease-out)",
+                // hit-min pads the pointer target to 24 px; the glyph stays put.
+                "hit-min flex size-5 shrink-0 items-center justify-center rounded transition-opacity duration-(--motion-fade) ease-(--ease-out)",
                 "focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
                 queued
                   ? "text-primary"
@@ -680,34 +675,30 @@ function RelatedTaskRow({
   onSelect: () => void;
   onRemove?: () => void;
 }) {
-  const closed = task.status === "done" || task.status === "archived";
+  const closed = isClosedTask(task);
   return (
-    <div className="group flex h-(--ctrl-h-sm) items-center gap-2 rounded-md px-1 transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover">
+    <div className="group flex min-h-(--ctrl-h-sm) items-center gap-2 rounded-md px-1 transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover">
       <CircleDashed className="size-icon-sm shrink-0 text-muted-foreground/70" aria-hidden />
       <button
         type="button"
         onClick={onSelect}
         className={cn(
-          "min-w-0 flex-1 truncate text-left font-sans text-base",
+          "min-w-0 flex-1 break-words py-0.5 text-left font-sans text-base",
           closed ? "text-muted-foreground line-through" : "text-foreground",
         )}
       >
         {task.title || "Untitled"}
       </button>
       {onRemove ? (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              aria-label="Remove dependency"
-              onClick={onRemove}
-              className="flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground opacity-0 transition-opacity duration-(--motion-fade) ease-(--ease-out) hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 group-hover:opacity-100"
-            >
-              <X className="size-icon-sm" aria-hidden />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent>Remove dependency (keeps the task)</TooltipContent>
-        </Tooltip>
+        // Revealed on row hover or focus: it keeps its space and fades (R6).
+        // hit-min keeps a 24 px target on the dense rung.
+        <IconButton
+          icon={X}
+          label="Remove dependency"
+          tooltip="Remove dependency (keeps the task)"
+          onClick={onRemove}
+          className="hit-min text-muted-foreground opacity-0 transition-[color,background-color,opacity] hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+        />
       ) : null}
     </div>
   );
@@ -746,7 +737,7 @@ function BlockerPicker({ task, api }: { task: Task; api: TasksModuleApi }) {
                     setOpen(false);
                   }}
                 >
-                  <span className="min-w-0 flex-1 truncate">{t.title || "Untitled"}</span>
+                  <span className="min-w-0 flex-1 break-words">{t.title || "Untitled"}</span>
                 </CommandItem>
               ))}
             </CommandGroup>
@@ -759,6 +750,45 @@ function BlockerPicker({ task, api }: { task: Task; api: TasksModuleApi }) {
 
 // ── empty / teaching state ─────────────────────────────────────────────────────
 
+/**
+ * A Won't do task reads as one, with Reopen right there (TV-P0, tasks-v3
+ * AC1.4): Won't do ends a task without doing it, and it can always come back.
+ */
+function WontDoLine({ canEdit, onReopen }: { canEdit: boolean; onReopen: () => void }) {
+  return (
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md bg-muted px-2 py-1.5 font-sans text-sm text-muted-foreground">
+      <Ban className="size-icon-sm shrink-0" aria-hidden />
+      <span className="min-w-0 flex-1">Won’t do</span>
+      {canEdit ? (
+        <Button variant="ghost" size="sm" onClick={onReopen}>
+          <RotateCcw aria-hidden />
+          Reopen
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * A link to a task you can't open (TV-P0, AC1.10): "Private item", never
+ * another task in its place. It may also have been deleted; the panel can't
+ * tell the two apart without the server (RF-1 makes the registry answer).
+ */
+export function PrivateItemPanel({ onBack }: { onBack: () => void }) {
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-2 px-2 text-center">
+      <Lock className="size-icon text-muted-foreground" aria-hidden />
+      <p className="font-display text-sm text-foreground">Private item</p>
+      <p className="text-xs text-muted-foreground">
+        This task isn’t shared with you, or it no longer exists.
+      </p>
+      <Button variant="ghost" size="sm" className="mt-1" onClick={onBack}>
+        Back to your tasks
+      </Button>
+    </div>
+  );
+}
+
 function DetailEmptyState({
   canEdit,
   onRequestCapture,
@@ -767,22 +797,24 @@ function DetailEmptyState({
   onRequestCapture: () => void;
 }) {
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-2 px-2 text-center">
-      <p className="font-display text-sm text-foreground">No task selected</p>
-      <p className="text-xs text-muted-foreground">Pick a task to see and edit its details here.</p>
-      {canEdit ? (
-        <p className="mt-1 text-xs text-muted-foreground">
-          Press <Kbd>c</Kbd> to{" "}
-          <button
-            type="button"
-            onClick={onRequestCapture}
-            className="underline-offset-2 hover:text-foreground hover:underline"
-          >
-            capture
-          </button>{" "}
-          a new one.
-        </p>
-      ) : null}
-    </div>
+    <EmptyState
+      title="No task selected"
+      description="Pick a task to see and edit its details here."
+      hint={
+        canEdit ? (
+          <>
+            Press <Kbd>c</Kbd> to {/* A link inside the sentence: a Button would break the line. */}
+            <button
+              type="button"
+              onClick={onRequestCapture}
+              className="rounded-sm underline-offset-2 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+            >
+              capture
+            </button>{" "}
+            a new one.
+          </>
+        ) : undefined
+      }
+    />
   );
 }

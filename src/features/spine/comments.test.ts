@@ -2,6 +2,7 @@ import { describe, expect, it } from "@rstest/core";
 
 import {
   commentAuthorName,
+  commentBodyWithReferences,
   filterPeople,
   insertMention,
   keptMentionIds,
@@ -10,6 +11,87 @@ import {
   relativeTime,
   splitMentions,
 } from "./comments";
+
+describe("what a comment stores (RF-1)", () => {
+  const TASK = { type: "task", id: "11111111-1111-4111-8111-111111111111" };
+  const NOTE = { type: "note", id: "22222222-2222-4222-8222-222222222222" };
+  const WED = new Date(2026, 9, 14, 10);
+
+  it("a picked thing still written @Title becomes its reference, never its title", () => {
+    const body = commentBodyWithReferences(
+      "Chase @Collect assets and @Brand voice, @Mike",
+      [
+        { ref: TASK, label: "Collect assets" },
+        { ref: NOTE, label: "Brand voice" },
+      ],
+      [{ id: "u2", label: "Mike" }],
+      WED,
+    );
+    expect(body).toBe(`Chase moduo://task/${TASK.id} and moduo://note/${NOTE.id}, @Mike`);
+    expect(body).not.toContain("Collect assets");
+  });
+
+  it("leaves a thing that was edited away, and a person who shares its name", () => {
+    expect(
+      commentBodyWithReferences(
+        "Ask @Mike",
+        [{ ref: TASK, label: "Mike" }],
+        [{ id: "u2", label: "Mike" }],
+      ),
+    ).toBe("Ask @Mike");
+    expect(
+      commentBodyWithReferences("Ask @Collectors", [{ ref: TASK, label: "Collect" }], []),
+    ).toBe("Ask @Collectors");
+  });
+
+  it("never cuts into a person's longer name that starts with a thing's", () => {
+    expect(
+      commentBodyWithReferences(
+        "ping @Anna Lee and @Anna",
+        [{ ref: TASK, label: "Anna" }],
+        [{ id: "u9", label: "Anna Lee" }],
+      ),
+    ).toBe(`ping @Anna Lee and moduo://task/${TASK.id}`);
+  });
+
+  it("never keeps a thing's title because a shorter person name starts it", () => {
+    expect(
+      commentBodyWithReferences(
+        "ping @Anna and @Anna's laptop, see @Anna Lee review",
+        [
+          { ref: TASK, label: "Anna's laptop" },
+          { ref: NOTE, label: "Anna Lee review" },
+        ],
+        [{ id: "u1", label: "Anna" }],
+      ),
+    ).toBe(`ping @Anna and moduo://task/${TASK.id}, see moduo://note/${NOTE.id}`);
+  });
+
+  it("stores a picked thing after punctuation, and two things sharing a title in pick order", () => {
+    expect(
+      commentBodyWithReferences("(@Secret plan)", [{ ref: TASK, label: "Secret plan" }], []),
+    ).toBe(`(moduo://task/${TASK.id})`);
+    expect(
+      commentBodyWithReferences(
+        "x @Plan and @Plan",
+        [
+          { ref: TASK, label: "Plan" },
+          { ref: NOTE, label: "Plan" },
+        ],
+        [],
+      ),
+    ).toBe(`x moduo://task/${TASK.id} and moduo://note/${NOTE.id}`);
+    expect(commentBodyWithReferences("mail ann@Plan", [{ ref: TASK, label: "Plan" }], [])).toBe(
+      "mail ann@Plan",
+    );
+  });
+
+  it("turns /today, /tomorrow and /next week into date chips", () => {
+    expect(commentBodyWithReferences("Ship /tomorrow", [], [], WED)).toBe(
+      "Ship moduo://date/2026-10-15",
+    );
+  });
+});
 
 describe("mentions that still notify", () => {
   it("needs the label at a word boundary", () => {

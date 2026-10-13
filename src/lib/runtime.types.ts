@@ -39,18 +39,22 @@ import type {
 } from "../features/notes/model";
 import type { NotificationItem } from "../features/spine/notifications";
 import type { RecentLinkItem } from "../features/spine/recent";
+import type { ReferencePreviewApi } from "../features/spine/references/rows";
 import type { RawLinkSuggestion } from "../features/spine/suggest";
 import type {
   ActivityEntry,
   Bucket,
+  ProjectStatus,
   QueuePlacement,
   RecurrenceRule,
   Tag,
   TagLink,
   Task,
+  TaskCompletion,
   TaskQueueEntry,
   TaskRelation,
   TaskStatus,
+  TaskStatusCategory,
   TasksCatchUpItem,
   TasksModuleBundle,
   TaskTimeResult,
@@ -60,7 +64,25 @@ import type {
 } from "../features/tasks/model";
 import type { EntityLink, EntityRecord, EntityRef, LinkOrigin, RelationKind } from "./entity-links";
 import type { Truncation } from "./paged-select";
+import type { TasksStructureApi } from "./runtime.web.structure";
+import type {
+  SyncAccessResult,
+  SyncIdsResult,
+  SyncReadInput,
+  SyncReadResult,
+  SyncRows,
+  SyncTableName,
+  TaskSearchResult,
+} from "./sync/types";
 import type { TaskFieldPatch } from "./task-rows";
+
+/**
+ * TV-D10's structure around tasks (runtime.web.structure.ts): areas, project
+ * fields ("bucket" calls stay as aliases), sections, teams, work sessions,
+ * your reminders, Waiting on…; each write is an op. Time blocks keep their
+ * own signatures above.
+ */
+export type TasksStructureRuntime = Omit<TasksStructureApi, "getTimeBlocks" | "setTimeBlocks">;
 
 /** A comment on any registered entity (spine block CT-5). */
 export type SpineComment = {
@@ -306,6 +328,14 @@ export type ModuoRuntime = {
       workspaceId: string,
       branding: { icon: string | null; logoUrl: string | null },
     ): Promise<any>;
+    /**
+     * Owner-only (TV-D8): change the workspace's task key (2–5 letters, A–Z),
+     * the prefix of every handle (`MOD-142`). The old key stays an alias.
+     */
+    setTaskKey(
+      workspaceId: string,
+      key: string,
+    ): Promise<{ taskKey: string; taskKeyAliases: string[] }>;
     leave(workspaceId: string): Promise<void>;
     softDelete(workspaceId: string): Promise<void>;
     issueInvite(
@@ -552,6 +582,17 @@ export type ModuoRuntime = {
   preferences: {
     get(): Promise<UserPreferences | null>;
     set(patch: Partial<UserPreferences>): Promise<UserPreferences | null>;
+    /**
+     * Save the device's time zone for the signed-in person (TV-D8): repeats
+     * come back at their midnight. Sent at every sign-in; an unknown zone is
+     * refused by the server.
+     */
+    setTimeZone(timeZone: string): Promise<void>;
+    /**
+     * The oldest app version that may still save (`app_settings.min_build`,
+     * TV-D8), or null when it can't be read (the app then runs as normal).
+     */
+    getMinBuild(): Promise<string | null>;
   };
 
   /**
@@ -900,9 +941,49 @@ export type ModuoRuntime = {
    */
   tasks: {
     list(workspaceId: string): Promise<TasksModuleBundle>;
+    /**
+     * The shared store's read (TV-D11a): one table's live rows, or every row
+     * changed since a server stamp (deleted ones as ids). Paged by key, so a
+     * row saved during the read is never skipped. Optional: a runtime without
+     * it (test doubles) is read whole through `list` + `listQueue`.
+     */
+    syncRead?<T extends SyncTableName>(
+      input: SyncReadInput<T>,
+    ): Promise<SyncReadResult<SyncRows[T]>>;
+    /** Every live id of a table you can see (tasks, buckets, statuses): what
+     *  the store keeps after access was taken away. */
+    syncIds?(input: { workspaceId: string; table: SyncTableName }): Promise<SyncIdsResult>;
+    /**
+     * The grant feed (TV-D11b): what changed in who can see which project or
+     * task since a stamp (yours and the workspace's), so the store checks
+     * access at once instead of at its next periodic check.
+     */
+    syncAccessChanges?(input: {
+      workspaceId: string;
+      since: string | null;
+    }): Promise<SyncAccessResult>;
+    /**
+     * Search every task you can see on the server (`tasks_search`, TV-D11b):
+     * every word in the title or the description's text. Ids only; the rows
+     * come from the store (which reads the ones it lacks).
+     */
+    searchTasks?(input: {
+      workspaceId: string;
+      query: string;
+      limit?: number;
+    }): Promise<TaskSearchResult>;
+    /**
+     * Create a task under the id it carries (`tasks_op_create`, idempotent on
+     * a resent id), so a capture sent again after a lost answer, or from the
+     * offline queue, never makes two. Optional: `upsertTask` does the same.
+     */
+    createTask?(task: Task): Promise<Task>;
     seedInbox(workspaceId: string): Promise<Bucket>;
+    /** The pre-TV-D10 project save (raw), kept as the "bucket" alias. New
+     *  projects and edits go through `createProject` / `updateProject`;
+     *  deleting, Recently deleted and access are in the structure part
+     *  (`deleteProject`, `listTrash`, `restoreTrash`, `purgeTrash`, TV-U6). */
     upsertBucket(bucket: Bucket): Promise<Bucket>;
-    deleteBucket(input: { workspaceId: string; bucketId: string }): Promise<void>;
     /**
      * Create a task. The server records the creator; an assignee of "" means
      * the creator. Re-saving a task that exists writes its editable fields only.
@@ -917,7 +998,55 @@ export type ModuoRuntime = {
       taskId: string;
       patch: TaskFieldPatch;
     }): Promise<Task>;
+    /**
+     * The edit op itself (TV-D8, `tasks_op_update`): the task first, then any
+     * subtasks the change carried along (a move takes them, a delete promotes
+     * them). `updateTask` is this, first row only.
+     */
+    opUpdateTask(input: {
+      workspaceId: string;
+      taskId: string;
+      patch: TaskFieldPatch;
+    }): Promise<Task[]>;
+    /** Soft-deletes through the edit op; its live subtasks move to the top level. */
     deleteTask(input: { workspaceId: string; taskId: string }): Promise<Task>;
+    /**
+     * Every completion in the workspace you can see (TV-D8), for the export;
+     * `truncated` says when the read hit its cap.
+     */
+    listCompletions(
+      workspaceId: string,
+    ): Promise<{ completions: TaskCompletion[]; truncated: Truncation[] }>;
+    /**
+     * Statuses (TV-D9): every status the reader can see (the workspace default
+     * set and each visible project's). Empty before the migration.
+     */
+    listStatuses(workspaceId: string): Promise<ProjectStatus[]>;
+    /**
+     * Status ops (`project_statuses_op_*`): add a status at the end of its
+     * category in a project (null = the workspace default set); rename, hide
+     * or show, and reorder inside the category (`after`: the status to follow,
+     * null for first). Each answers with the whole set, in order.
+     */
+    createStatus(input: {
+      workspaceId: string;
+      projectId: string | null;
+      category: TaskStatusCategory;
+      name: string;
+    }): Promise<ProjectStatus[]>;
+    updateStatus(input: {
+      workspaceId: string;
+      statusId: string;
+      patch: { name?: string; hidden?: boolean; after?: string | null };
+    }): Promise<ProjectStatus[]>;
+    /**
+     * Delete a status: its tasks move to the first other status of its
+     * category (`movedToName`); the last status of a category can't go.
+     */
+    deleteStatus(input: {
+      workspaceId: string;
+      statusId: string;
+    }): Promise<{ moved: number; movedTo: string | null; movedToName: string | null }>;
     upsertTag(tag: Tag): Promise<Tag>;
     deleteTag(input: { workspaceId: string; tagId: string }): Promise<void>;
     attachTag(input: {
@@ -958,7 +1087,7 @@ export type ModuoRuntime = {
       blockedTaskId: string;
     }): Promise<TaskRelation>;
     deleteTaskRelation(input: { workspaceId: string; relationId: string }): Promise<void>;
-    /** Workspace-scoped time-of-day slot → bucket map (one row per workspace). */
+    /** Your time-of-day slot → project map in a workspace (yours alone since TV-D10). */
     getTimeBlocks(workspaceId: string): Promise<TimeBlockMap>;
     setTimeBlocks(input: { workspaceId: string; blocks: TimeBlockMap }): Promise<TimeBlockMap>;
 
@@ -1033,7 +1162,12 @@ export type ModuoRuntime = {
     opSetStatus(input: {
       workspaceId: string;
       taskId: string;
-      status: TaskStatus;
+      /**
+       * A legacy status, a category word (`backlog`, `wont_do`, …), one of the
+       * project's status ids or one of its status names (TV-D9). The server
+       * keeps a status already in a category it's given.
+       */
+      status: TaskStatus | TaskStatusCategory | (string & {});
       recurrence?: RecurrenceRule | null;
       position?: string;
     }): Promise<Task>;
@@ -1051,6 +1185,11 @@ export type ModuoRuntime = {
       recurrence: RecurrenceRule;
       releaseCommit: boolean;
     }): Promise<Task>;
+    /**
+     * Ask the server to roll this workspace's repeats over now (TV-D8): it
+     * answers with what changed, plus the tasks named in `items`, as it has
+     * them. Builds since TV-D8 send no items; the server's engine decides.
+     */
     opCatchUp(input: { workspaceId: string; items: TasksCatchUpItem[] }): Promise<Task[]>;
     /** Read the entity's quiet activity trail (newest first). */
     listActivity(input: {
@@ -1063,7 +1202,7 @@ export type ModuoRuntime = {
        * under module='contacts', not 'tasks'. */
       module?: string;
     }): Promise<ActivityEntry[]>;
-  };
+  } & TasksStructureRuntime;
 
   /**
    * Connective-tissue spine — the link substrate (specs/connective-tissue.md
@@ -1208,6 +1347,14 @@ export type ModuoRuntime = {
      * `entity_links` read + one batched registry lookup, shaped newest-first.
      */
     recentLinks(input: { workspaceId: string; limit?: number }): Promise<RecentLinkItem[]>;
+
+    // ── References (RF-1, tasks-v3 §11) ──────────────────────────────────────
+    /**
+     * The reads behind a reference's chip, card and hover preview: one batched
+     * select per kind under the module table's row-level security (`can_access`),
+     * so an item the reader can't open never comes back ("Private item").
+     */
+    previews: ReferencePreviewApi;
   };
 
   /**

@@ -5,7 +5,7 @@
 // queue places, subtasks, blockers, links, comments and attachments. Pure.
 
 import type { NewTaskFields } from "./helpers";
-import type { Task } from "./model";
+import { estimateOf, type Task } from "./model";
 
 export function duplicateFields(task: Task): Omit<NewTaskFields, "workspaceId" | "position"> {
   return {
@@ -19,6 +19,7 @@ export function duplicateFields(task: Task): Omit<NewTaskFields, "workspaceId" |
     dueDate: task.dueDate,
     scheduledAt: task.scheduledAt,
     durationMinutes: task.durationMinutes,
+    estimateMinutes: estimateOf(task),
     recurrence: task.recurrence,
   };
 }

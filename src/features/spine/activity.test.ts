@@ -40,6 +40,15 @@ describe("spineActivityLine", () => {
     expect(spineActivityLine(entry("tasks.completed"))).toBe("completed this");
   });
 
+  it("renders a project delete's notice, naming the project only when it can (TV-U6)", () => {
+    expect(spineActivityLine(entry("tasks.project_deleted", { title: "Acme", count: 3 }))).toBe(
+      "deleted “Acme” · 3 of your tasks are in your Inbox",
+    );
+    expect(spineActivityLine(entry("tasks.project_deleted", { count: 1 }))).toBe(
+      "deleted a project · your task is in your Inbox",
+    );
+  });
+
   it("renders link creation, by kind", () => {
     expect(spineActivityLine(entry("links.create", { relation_kind: "references" }))).toBe(
       "linked this",

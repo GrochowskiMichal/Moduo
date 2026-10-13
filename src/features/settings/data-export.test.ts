@@ -6,6 +6,7 @@ import {
   type ExportMeta,
   exportZipName,
   type ModuleReadResult,
+  readTasksExport,
 } from "./advanced";
 
 const META: ExportMeta = {
@@ -172,5 +173,115 @@ describe("attachmentsManifest — the export lists files, not their bytes (AT1-8
     const manifest = attachmentsManifest([record("a")], { shown: 10000, total: 12000 });
 
     expect(manifest.truncated).toEqual({ shown: 10000, total: 12000 });
+  });
+});
+
+/** TV-D10's reads, empty: for the tests about other tables. */
+const noD10Reads = {
+  listSessions: async () => ({ sessions: [], truncated: [] }),
+  listReminders: async () => ({ reminders: [], truncated: [] }),
+  listWaiting: async () => ({ waiting: [], truncated: [] }),
+};
+
+describe("the tasks export carries every new tasks table (TV-D8, §Assumptions #26)", () => {
+  it("adds the completions to the tasks bundle", async () => {
+    const data = await readTasksExport(
+      {
+        list: async () => ({ tasks: [{ id: "t1", number: 7 }], buckets: [], truncated: [] }),
+        listCompletions: async () => ({
+          completions: [{ id: "c1", taskId: "t1", cycleKey: "once" }],
+          truncated: [],
+        }),
+        ...noD10Reads,
+      },
+      "ws-1",
+    );
+    expect(data.tasks).toEqual([{ id: "t1", number: 7 }]);
+    expect(data.completions).toEqual([{ id: "c1", taskId: "t1", cycleKey: "once" }]);
+    expect(data.truncated).toEqual([]);
+  });
+
+  it("says when the completions were cut, next to the tasks' own cuts", async () => {
+    const tasksCut = { scope: "tasks", shown: 10000, total: 10400 };
+    const completionsCut = { scope: "completions", shown: 20000, total: 25000 };
+    const data = await readTasksExport(
+      {
+        list: async () => ({ tasks: [], buckets: [], truncated: [tasksCut] }),
+        listCompletions: async () => ({ completions: [], truncated: [completionsCut] }),
+        ...noD10Reads,
+      },
+      "ws-1",
+    );
+    expect(data.truncated).toEqual([tasksCut, completionsCut]);
+  });
+
+  it("carries the statuses and each task's status, completion and due date (TV-D9)", async () => {
+    const status = { id: "s1", projectId: "p1", category: "in_progress", name: "In review" };
+    const task = {
+      id: "t1",
+      statusId: "s1",
+      statusCategory: "in_progress",
+      completedAt: null,
+      completedBy: null,
+      dueOn: "2026-11-08",
+      dueTime: "15:00:00",
+    };
+    const data = await readTasksExport(
+      {
+        list: async () => ({ tasks: [task], buckets: [], statuses: [status], truncated: [] }),
+        listCompletions: async () => ({ completions: [], truncated: [] }),
+        ...noD10Reads,
+      },
+      "ws-1",
+    );
+    expect(data.statuses).toEqual([status]);
+    expect(data.tasks).toEqual([task]);
+  });
+
+  it("carries areas, sections, teams, sessions, your reminders and Waiting on (TV-D10)", async () => {
+    const project = {
+      id: "p1",
+      status: "on_hold",
+      areaId: "a1",
+      leadId: "u1",
+      targetOn: "2026-12-18",
+    };
+    const bundle = {
+      tasks: [{ id: "t1", sectionId: "s1", teamId: "tm1", estimateMinutes: 90 }],
+      buckets: [project],
+      areas: [{ id: "a1", name: "Clients" }],
+      sections: [{ id: "s1", projectId: "p1", name: "Week 1", endsOn: "2026-09-13" }],
+      teams: [{ id: "tm1", name: "Design", mark: "DS" }],
+      teamMembers: [{ id: "m1", teamId: "tm1", userId: "u1" }],
+      truncated: [],
+    };
+    const session = { id: "x1", taskId: "t1", startsAt: "2030-03-04T09:00:00Z" };
+    const sessionsCut = { scope: "work sessions", shown: 20000, total: 20500 };
+    const data = await readTasksExport(
+      {
+        list: async () => bundle,
+        listCompletions: async () => ({ completions: [], truncated: [] }),
+        listSessions: async () => ({ sessions: [session], truncated: [sessionsCut] }),
+        listReminders: async () => ({
+          reminders: [{ id: "r1", kind: "day_before" }],
+          truncated: [],
+        }),
+        listWaiting: async () => ({
+          waiting: [{ id: "w1", kind: "text", label: "Feedback" }],
+          truncated: [],
+        }),
+      },
+      "ws-1",
+    );
+    expect(data.buckets).toEqual([project]);
+    expect(data.areas).toEqual(bundle.areas);
+    expect(data.sections).toEqual(bundle.sections);
+    expect(data.teams).toEqual(bundle.teams);
+    expect(data.teamMembers).toEqual(bundle.teamMembers);
+    expect(data.tasks).toEqual(bundle.tasks);
+    expect(data.sessions).toEqual([session]);
+    expect(data.reminders).toEqual([{ id: "r1", kind: "day_before" }]);
+    expect(data.waiting).toEqual([{ id: "w1", kind: "text", label: "Feedback" }]);
+    expect(data.truncated).toEqual([sessionsCut]);
   });
 });

@@ -8,12 +8,14 @@ import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
 import { stopAnalyticsForDeletedAccount } from "../../../lib/analytics";
 import { SUPABASE_URL, supabaseClient } from "../../../lib/runtime.web";
+import { wipeSyncCopies } from "../../../lib/sync/store";
 import { useAuth } from "../../../providers/auth-provider";
 import { validateImageFile } from "../../branding/image-asset";
 import { ensureProfileAvatar } from "../../branding/profile-avatar";
 import { clearProfileAvatar, uploadProfileAvatar } from "../../branding/upload-image";
 import { forgetFocusUser } from "../../focus/engine";
 import { notifyProfileUpdated, writeStoredAvatar } from "../../profile/profile-storage";
+import { forgetCaptureDrafts } from "../../tasks/capture/capture-draft";
 import { isPasswordProvider, providerLabel, validateNewPassword } from "../account";
 import { DANGER_ZONE_COPY, finishAccountDeletion, matchesDeleteConfirm } from "../delete-account";
 import { SettingsSectionShell } from "./section-shell";
@@ -106,6 +108,9 @@ export function AccountSection() {
           if (!userId) return;
           void stopAnalyticsForDeletedAccount(userId);
           forgetFocusUser(userId);
+          forgetCaptureDrafts(userId);
+          // The Tasks device copy (TV-D11a): the account is gone, so is its copy.
+          void wipeSyncCopies();
         },
         goToSignInWithNotice: () => navigate({ to: "/auth", search: { deleted: 1 } }),
         signOut,

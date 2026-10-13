@@ -5,6 +5,9 @@
 // DOM or a runtime.
 
 import type { SpineComment } from "@/lib/runtime.types";
+import { replaceSlashDates } from "./grammar";
+import { dateUri, referenceUri } from "./references/text";
+import type { ReferenceRef } from "./references/types";
 
 /** A person who can be @mentioned in a comment, or who wrote one. */
 export type CommentPerson = {
@@ -35,6 +38,82 @@ export function keptMentionIds(text: string, mentions: PickedMention[]): string[
   const ids = new Set<string>();
   for (const m of mentions) if (mentionStillPresent(text, m.label)) ids.add(m.id);
   return [...ids];
+}
+
+/** A thing picked after `@` in the composer (RF-1): written `@Title` while typing. */
+export type PickedThing = { ref: ReferenceRef; label: string };
+
+/**
+ * The body a comment stores (RF-1, research §8): every picked thing still
+ * written `@Title` becomes its reference (`moduo://task/<id>`) and every
+ * `/today` · `/tomorrow` · `/next week` a date chip (`moduo://date/…`), so
+ * the stored text carries no title for anyone to read, notifications
+ * included. A person mention keeps its `@Name` (people win a name clash).
+ */
+export function commentBodyWithReferences(
+  text: string,
+  things: PickedThing[],
+  people: PickedMention[],
+  now: Date = new Date(),
+): string {
+  const personLabels = new Set(people.map((p) => p.label));
+  // Longest first, so "@Brand guidelines PDF" wins over "@Brand"; things that
+  // share a title keep the order they were picked in (the sort is stable).
+  const byLabel = new Map<string, PickedThing[]>();
+  const picked = [...things]
+    .filter((t) => !personLabels.has(t.label))
+    .sort((a, b) => b.label.length - a.label.length);
+  for (const t of picked) {
+    const group = byLabel.get(t.label) ?? [];
+    if (!group.some((g) => g.ref.type === t.ref.type && g.ref.id === t.ref.id)) group.push(t);
+    byLabel.set(t.label, group);
+  }
+  let out = text;
+  for (const [label, group] of byLabel) {
+    const needle = `@${label}`;
+    let from = 0;
+    // A task "Plan" and a note "Plan": the first "@Plan" is the first picked.
+    let nth = 0;
+    for (;;) {
+      const i = out.indexOf(needle, from);
+      if (i < 0) break;
+      const before = out[i - 1];
+      const after = out[i + needle.length];
+      // "(@Title)" counts too; "name@Title" (an address) doesn't.
+      const atStart = i === 0 || !/\w/.test(before ?? "");
+      const atEnd = after === undefined || !/\w/.test(after);
+      if (atStart && atEnd && !insidePersonMention(out, i, people, label)) {
+        const thing = group[Math.min(nth, group.length - 1)] as PickedThing;
+        nth += 1;
+        const uri = referenceUri(thing.ref);
+        out = `${out.slice(0, i)}${uri}${out.slice(i + needle.length)}`;
+        from = i + uri.length;
+      } else {
+        from = i + 1;
+      }
+    }
+  }
+  return replaceSlashDates(out, dateUri, now);
+}
+
+/**
+ * Whether `@` at `i` starts a picked person's longer name ("@Anna Lee" for a
+ * thing "Anna"). Only a name longer than the thing's title counts: a person
+ * "Anna" never keeps "@Anna's laptop" as text (that would store its title).
+ */
+function insidePersonMention(
+  text: string,
+  i: number,
+  people: PickedMention[],
+  thingLabel: string,
+): boolean {
+  return people.some((p) => {
+    if (p.label.length <= thingLabel.length) return false;
+    const needle = `@${p.label}`;
+    if (!text.startsWith(needle, i)) return false;
+    const after = text[i + needle.length];
+    return after === undefined || !/\w/.test(after);
+  });
 }
 
 /**

@@ -180,7 +180,7 @@ function DraggableRow({
 
 function LetterHeader({ letter }: { letter: string }) {
   return (
-    <Eyebrow as="div" className="sticky top-0 z-10 bg-card/95 px-2 py-0.5 backdrop-blur">
+    <Eyebrow as="div" className="sticky top-0 z-10 bg-card px-2 py-0.5">
       {letter}
     </Eyebrow>
   );

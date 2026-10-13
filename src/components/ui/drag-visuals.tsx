@@ -18,6 +18,8 @@ import { cn } from "@/lib/utils";
  * - `DragOverlaySurface`: what follows the pointer, on the popover surface.
  * - `NestPreview`: "becomes a subtask of the row above". An indented ghost row
  *   with a dashed accent outline.
+ * - `SortedNote`: the list is sorted, so this spot takes no reorder. A quiet
+ *   note where the line would be.
  *
  * Drop targets and the insertion line are accent status marks (DESIGN_RULES
  * R5), so they compose `--primary` directly and never the selection recipes.
@@ -131,5 +133,36 @@ function NestPreview({
   );
 }
 
-export type { DragOverlaySurfaceProps, InsertionLineProps, NestPreviewProps };
-export { DragOverlaySurface, InsertionLine, NestPreview };
+type SortedNoteProps = {
+  /** Which edge of the positioned parent the note sits on (the line's). */
+  edge?: "top" | "bottom";
+  /** "Sorted by due date": why this spot takes no reorder. */
+  children: React.ReactNode;
+  className?: string;
+};
+
+/**
+ * Where a sorted list would have drawn the insertion line: a quiet note on
+ * the same edge, at the row's end, on the popover surface. The list is sorted,
+ * so a reorder here can't keep its place; the drop asks to switch back to
+ * manual order instead. Decorative, like the line.
+ */
+function SortedNote({ edge = "top", children, className }: SortedNoteProps) {
+  return (
+    <span
+      aria-hidden
+      data-slot="sorted-note"
+      data-edge={edge}
+      className={cn(
+        "pointer-events-none absolute end-2 z-(--z-sticky) rounded-md border border-hairline bg-popover px-2 py-0.5 font-sans text-xs text-muted-foreground shadow-sm",
+        edge === "top" ? "top-0 -translate-y-1/2" : "bottom-0 translate-y-1/2",
+        className,
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
+export type { DragOverlaySurfaceProps, InsertionLineProps, NestPreviewProps, SortedNoteProps };
+export { DragOverlaySurface, InsertionLine, NestPreview, SortedNote };

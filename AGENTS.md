@@ -74,6 +74,7 @@ Tauri 2 + React 19 + Rsbuild + TanStack Router + Tailwind CSS v4, TypeScript 7, 
 ## Build / dev
 
 - `bun run dev:web` (http://127.0.0.1:8081) · `bun run dev:desktop` · `bun run build:web` / `build:desktop` · `bun run storybook` (port 6006)
+- **Local stack first:** `bun run local:up` (Supabase + functions + Mailpit on this Mac, `.env.local` switched to it), `bun run local:reset` to test a migration, `bun run env:cloud` to go back. Prod migrations and deploys wait for a release train. See [docs/local-dev.md](./docs/local-dev.md).
 - `bun run verify` = typecheck + Biome + lint:tw + lint:css + tests: **the block-done gate**. It covers no Rust: see `src-tauri/AGENTS.md`.
 - `bun test` / `bun run e2e`
 
@@ -85,7 +86,7 @@ Tauri 2 + React 19 + Rsbuild + TanStack Router + Tailwind CSS v4, TypeScript 7, 
 
 Concise present-tense imperative subjects, single line preferred, Co-Authored-By trailer for agent-authored commits. Full contract: [CONTRIBUTING.md](./CONTRIBUTING.md).
 
-- GitHub's default branch is `develop`. **Standing authorization:** after a bigger chunk lands on the personal branch, merge personal → `develop` yourself (`/s3` step 5b), unless the designer said to keep it on the task branch or the duplication guard finds overlap.
+- GitHub's default branch is `develop`. **Standing authorization:** after a bigger chunk lands on the personal branch, merge personal → `develop` yourself (`/s3` step 5b), unless the designer said to keep it on the task branch or the duplication guard finds overlap. **Hold (2026-10-11): `maciej` carries Tasks v3 migrations that are not on prod; no `maciej` → `develop` sync until Maciej releases Tasks v3.**
 - `maciej` and `mike` are hot: integrate with merge commits, never fast-forward.
 
 ## Entire.io

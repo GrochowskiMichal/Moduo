@@ -16,6 +16,9 @@ rs.mock("../../../lib/undo-toast", () => ({
   },
 }));
 
+// Live updates (TV-D5) need a socket; these tests drive the hook without one.
+rs.mock("../realtime", () => ({ listenTasksLive: () => () => {} }));
+
 import { useTasksModule } from "./use-tasks-module";
 
 const BUCKET = {

@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react";
 import { CalendarDays, Circle, Clock, Flag, Plus } from "lucide-react";
 import { Badge } from "./badge";
+import { AtThreeDensities } from "./kit-densities";
 import { PropertyRow, PropertyValue } from "./property-row";
 
 const meta: Meta<typeof PropertyRow> = {
@@ -74,5 +75,26 @@ export const MultiLineValue: Story = {
         <PropertyValue icon={<Plus />} aria-label="Add tag" />
       </div>
     </PropertyRow>
+  ),
+};
+
+/** Property rows at the three density steps: 26 / 24 / 22 px. */
+export const Densities: Story = {
+  render: () => (
+    <AtThreeDensities direction="column">
+      <div className="space-y-px">
+        <PropertyRow label="Status">
+          <PropertyValue icon={<Circle />}>In progress</PropertyValue>
+        </PropertyRow>
+        <PropertyRow label="Priority">
+          <PropertyValue icon={<Flag />} empty>
+            Set priority
+          </PropertyValue>
+        </PropertyRow>
+        <PropertyRow label="Due">
+          <PropertyValue icon={<CalendarDays />}>Thu, Oct 9</PropertyValue>
+        </PropertyRow>
+      </div>
+    </AtThreeDensities>
   ),
 };

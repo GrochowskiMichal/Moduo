@@ -36,6 +36,25 @@ describe("listKeyAction (tasks-v2 Q1-1)", () => {
     }
   });
 
+  it("binds the move keys ⌥⇧↑/↓ (TV-U4, the keymap) and nothing else under ⌥", () => {
+    expect(listKeyAction(press("ArrowUp", { alt: true, shift: true }))).toBe("move-up");
+    expect(listKeyAction(press("ArrowDown", { alt: true, shift: true }))).toBe("move-down");
+    // ⌥↑ alone, ⌘⇧↑ and ⌥⇧← are not the List's.
+    expect(listKeyAction(press("ArrowUp", { alt: true }))).toBeNull();
+    expect(listKeyAction(press("ArrowUp", { meta: true, shift: true }))).toBeNull();
+    expect(listKeyAction(press("ArrowUp", { alt: true, shift: true, meta: true }))).toBeNull();
+    expect(listKeyAction(press("ArrowLeft", { alt: true, shift: true }))).toBeNull();
+  });
+
+  it("nests with > and un-nests with < (default k), however they're typed", () => {
+    expect(listKeyAction(press(">", { shift: true }))).toBe("nest");
+    expect(listKeyAction(press("<", { shift: true }))).toBe("unnest");
+    expect(listKeyAction(press(">"))).toBe("nest");
+    // ⌘] / ⌘[ stay the browser's Back and Forward.
+    expect(listKeyAction(press("]", { meta: true }))).toBeNull();
+    expect(listKeyAction(press("[", { meta: true }))).toBeNull();
+  });
+
   it("keeps ⌘⌫, the one modified key the List binds", () => {
     expect(listKeyAction(press("Backspace", { meta: true }))).toBe("delete");
     expect(listKeyAction(press("Backspace", { ctrl: true }))).toBe("delete");

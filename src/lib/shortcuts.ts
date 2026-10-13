@@ -51,8 +51,8 @@ export const SHORTCUTS: ReadonlyArray<ShortcutEntry> = [
       event.key.toLowerCase() === "k",
   },
   {
-    // Global capture bar (DF-20): a capture-anywhere line that creates a task by
-    // default and routes to notes/events/contacts via `/`-prefixes. Sits next to
+    // The app's capture (components/app/capture-shell.tsx, SH-1): opens as a
+    // Task; inside it ⌘1–7 switch the type (tasks-v3 call 90b). Sits next to
     // the ⌘K palette as its write-instead-of-search sibling. Like the palette it
     // fires even from inputs/editors (capture must reach you mid-typing).
     id: "capture",

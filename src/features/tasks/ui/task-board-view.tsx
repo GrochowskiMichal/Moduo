@@ -5,28 +5,41 @@ import {
   type DragStartEvent,
   useDroppable,
 } from "@dnd-kit/core";
-import { arrayMove, SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { type ReactNode, useMemo, useState } from "react";
-import { createPortal } from "react-dom";
-import { Eyebrow } from "../../../components/ui/eyebrow";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../../../components/ui/select";
+  SortableContext,
+  type SortingStrategy,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { Plus } from "lucide-react";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { toast } from "sonner";
+import { Button } from "../../../components/ui/button";
+import { DROP_TARGET, DragOverlaySurface } from "../../../components/ui/drag-visuals";
+import { EmptyState } from "../../../components/ui/empty-state";
+import { GroupHeader } from "../../../components/ui/group-header";
 import { cn } from "../../../lib/utils";
-import { groupsByBucket, nestedSubtaskIds, STATUS_LABELS, showBucketPill } from "../helpers";
+import { type CompletedMode, partitionCompleted } from "../completed";
+import { type BoardGroupBy, orderTasks, type SubtaskMode, type TaskOrder } from "../display";
+import { boardColumnAccepts, planBoardDrop } from "../dnd/board-drop";
+import { groupsByBucket, isUnfinished, nestedSubtaskIds, showBucketPill } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
-import type { Bucket, Task, TaskStatus } from "../model";
-import { positionForReorder } from "../reorder";
-import { DndBoundary, useTaskDndSensors } from "./dnd/task-dnd";
-import type { PlanView } from "./plan-view-header";
+import type { Bucket, Task } from "../model";
+import { BACK_TO_MANUAL_ORDER, dragOrderFor, sortedByLabel } from "../order";
+import { DEFAULT_ROW_PROPERTIES } from "../row-layout";
+import { STATUS_KEY_LABELS, type StatusKey, statusKeyOf } from "../statuses";
+import { useToday } from "../use-today";
+import { DndBoundary, taskDragAnnouncements, useTaskDndSensors } from "./dnd/task-dnd";
+import type { PlanHeaderControls, PlanView } from "./plan-view-header";
 import { PlanViewHeader } from "./plan-view-header";
+import { ProjectChoicesProvider } from "./project-choices";
+import { type TaskFacts, type TaskRowActions, taskFactsOf, useRowActions } from "./row-facts";
 import { CardBody, TaskCard } from "./task-card";
+import { CompletedLine } from "./task-meta";
+import { TaskBoardSkeleton, TasksNoMatch } from "./task-view-states";
+import { VirtualStack } from "./virtual-stack";
 
-export type BoardGroupBy = "status" | "bucket";
+export type { BoardGroupBy };
 
 type Props = {
   tasks: Task[];
@@ -34,8 +47,8 @@ type Props = {
   selection: string; // "all" | "mine" | "inbox" | "today" | bucketId
   view: PlanView;
   onViewChange: (view: PlanView) => void;
+  /** Display → Group by (Project only across projects). */
   boardGroupBy: BoardGroupBy;
-  onBoardGroupByChange: (next: BoardGroupBy) => void;
   buckets: Bucket[];
   inbox: Bucket | null;
   bucketNameById: (id: string) => string;
@@ -43,9 +56,33 @@ type Props = {
   onRequestCapture: () => void;
   selectedTaskId: string | null;
   onSelectTask: (id: string | null) => void;
-  tagFilterControl?: ReactNode;
-  activeTagFilters?: ReactNode;
-  onTagFilter?: (tagId: string) => void;
+  /** The toolbar's search, Filter, Display and count (built by the page). */
+  header?: PlanHeaderControls;
+  /** A filter is narrowing the scope: an empty result reads "No tasks match". */
+  filterActive?: boolean;
+  onClearFilters?: () => void;
+  /** The statuses Filter → Status lets through (null: no Status filter). */
+  statusFilter?: ReadonlySet<StatusKey> | null;
+  /**
+   * "+ Add status" at the end of one project's board grouped by status
+   * (REPLAN 53a): opens that project's Statuses. Absent elsewhere.
+   */
+  onAddStatus?: () => void;
+  /** Display → Completed (tasks-v2 §6). Default: hidden. */
+  completed?: CompletedMode;
+  /** Display → "Show on rows" — cards follow it too. */
+  properties?: readonly string[];
+  /** Display → Order by, inside each column. */
+  order?: TaskOrder;
+  /** Display → Order by back to Manual: the sorted drop toast's action. */
+  onManualOrder?: () => void;
+  /** Display → Subtasks: on their parent's card, or cards of their own. */
+  subtasks?: SubtaskMode;
+  /**
+   * Tasks that stay listed whatever Display says, until the scope changes:
+   * checked off here, or opened here (selected, deep-linked).
+   */
+  stayingIds?: ReadonlySet<string>;
   /** "external" = an ancestor owns the DndContext (DF-22: so a card can be
    * dragged onto the right-pane hub to link it); board move/reorder binds via a
    * monitor. Default "internal" (own DndContext) keeps standalone mounts working. */
@@ -53,11 +90,42 @@ type Props = {
   api: TasksModuleApi;
 };
 
-// Reading order for status columns (left→right flow), distinct from the List's
-// "open work first" order. Archived is never a board column (out of scope).
-const BOARD_STATUS_ORDER: TaskStatus[] = ["todo", "in_progress", "done"];
+// Reading order for status groups (left→right flow), distinct from the List's
+// "open work first" order. Won't do tasks are out of every scope until Filter →
+// Status asks for them (or one is kept selected, TV-P0), so their group shows
+// only then; a Status filter shows only the groups it lets through (TV-U2,
+// AC1.4). Backlog comes first and shows only when the board has backlog tasks
+// (TV-D9; the folded Backlog button is TV-U11's).
+const BOARD_STATUS_ORDER: StatusKey[] = ["todo", "in_progress", "done"];
+const ALL_BOARD_STATUSES: StatusKey[] = ["backlog", ...BOARD_STATUS_ORDER, "archived"];
 
-type Column = { id: string; label: string; dim: BoardGroupBy; value: string; tasks: Task[] };
+type Column = {
+  id: string;
+  label: string;
+  dim: BoardGroupBy;
+  value: string;
+  /** The cards the column lists. */
+  tasks: Task[];
+  /** Every task in the column, in order: drops are placed among these, so a
+   * new position never collides with a hidden completed task's. */
+  all: Task[];
+  /** Completed tasks Display hides, behind the column's "N completed" line. */
+  hidden: Task[];
+};
+
+const NO_IDS: ReadonlySet<string> = new Set();
+
+/** Cards stay put while dragging where the board has no manual order (sorted,
+ *  or across projects): parting them would promise a reorder the drop won't
+ *  make. */
+const NO_SHIFT: SortingStrategy = () => null;
+
+/** A column draws only the cards on screen from this many (TV-D11b, AC12.4). */
+const VIRTUALIZE_CARDS_FROM = 40;
+/** A first guess at a card's height (px), corrected once it's drawn. */
+const CARD_ESTIMATE = 72;
+/** The column's `gap-1.5`, for the drawn-on-screen layout. */
+const CARD_GAP = 6;
 
 export function TaskBoardView({
   tasks,
@@ -66,7 +134,6 @@ export function TaskBoardView({
   view,
   onViewChange,
   boardGroupBy,
-  onBoardGroupByChange,
   buckets,
   inbox,
   bucketNameById,
@@ -74,54 +141,160 @@ export function TaskBoardView({
   onRequestCapture,
   selectedTaskId,
   onSelectTask,
-  tagFilterControl,
-  activeTagFilters,
-  onTagFilter,
+  header,
+  filterActive = false,
+  onClearFilters,
+  statusFilter = null,
+  completed = "hidden",
+  properties = DEFAULT_ROW_PROPERTIES,
+  order = "manual",
+  onManualOrder,
+  subtasks = "nested",
+  stayingIds = NO_IDS,
   dndMode = "internal",
+  onAddStatus,
   api,
 }: Props) {
   const [activeId, setActiveId] = useState<string | null>(null);
+  // Columns whose hidden completed cards were asked for ("· show"); forgotten
+  // when the scope changes (the set belongs to the scope it was made in).
+  const [reveal, setReveal] = useState<{ scope: string; ids: ReadonlySet<string> }>({
+    scope: selection,
+    ids: NO_IDS,
+  });
+  const revealed = reveal.scope === selection ? reveal.ids : NO_IDS;
 
-  // Columns by bucket only make sense across buckets (All, My tasks); otherwise status.
+  // Grouping by project only makes sense across projects (All, My tasks); otherwise status.
   const groupDim: BoardGroupBy = groupsByBucket(selection) ? boardGroupBy : "status";
   const showBucketTag = showBucketPill(selection, groupDim);
   // In My tasks every card is mine, so cards leave the avatar out (D4-4).
   const showAssignee = selection !== "mine";
 
   // Subtasks whose parent is on this board stay off it — the parent card
-  // carries the quiet n/m mirror and the detail panel lists them. Today stays
-  // flat (committed subtasks are first-class queue items), and a subtask whose
-  // parent isn't on the board renders as a normal card (never invisible).
+  // carries the quiet n/m mirror and the detail panel lists them — unless
+  // Display says Flat. The Queue stays flat (queued subtasks are first-class
+  // queue items), and a subtask whose parent isn't on the board renders as a
+  // normal card (never invisible). Cards follow Display → Order by.
   const nestedIds = useMemo(
-    () => nestedSubtaskIds(tasks, selection !== "today"),
-    [tasks, selection],
+    () => nestedSubtaskIds(tasks, selection !== "today" && subtasks === "nested"),
+    [tasks, selection, subtasks],
   );
-  const boardTasks = useMemo(
-    () => (nestedIds.size === 0 ? tasks : tasks.filter((t) => !nestedIds.has(t.id))),
-    [tasks, nestedIds],
-  );
+  const sorted = order !== "manual" && selection !== "today";
+  const boardTasks = useMemo(() => {
+    const top = nestedIds.size === 0 ? tasks : tasks.filter((t) => !nestedIds.has(t.id));
+    return sorted ? orderTasks(top, order) : top;
+  }, [tasks, nestedIds, sorted, order]);
+
+  // A card's facts and actions (row-facts.ts, TV-D11b): each card redraws
+  // only when its own task or facts change.
+  const actions = useRowActions(api);
+  // Each new selection is brought into view once in its column (a deep
+  // link, the panel's subtask list), again when selected again.
+  const [selectionSeq, setSelectionSeq] = useState({ id: selectedTaskId, seq: 0 });
+  if (selectionSeq.id !== selectedTaskId) {
+    setSelectionSeq({ id: selectedTaskId, seq: selectionSeq.seq + 1 });
+  }
+  // The cards\' date labels roll over at midnight.
+  const today = useToday();
+  const taskById = useMemo(() => new Map(api.tasks.map((t) => [t.id, t])), [api.tasks]);
+  const factsOf = (task: Task) => taskFactsOf(task, api);
+  const parentTitleOf = (task: Task): string | null => {
+    if (!task.parentId) return null;
+    const parent = taskById.get(task.parentId);
+    return parent ? parent.title || "Untitled" : null;
+  };
 
   const columns = useMemo<Column[]>(() => {
+    const now = new Date();
+    // Kept even when done: staying (checked off or opened in this scope); the
+    // selected card and its parent (a deep link or the panel must never point
+    // at a card that isn't there); a parent with open subtasks (they live on
+    // its card's n/m).
+    const selectedParentId = selectedTaskId
+      ? (taskById.get(selectedTaskId)?.parentId ?? null)
+      : null;
+    const keep = (t: Task) =>
+      stayingIds.has(t.id) ||
+      t.id === selectedTaskId ||
+      t.id === selectedParentId ||
+      (api.subtasksByParent.get(t.id) ?? []).some(isUnfinished);
+    const column = (id: string, label: string, dim: BoardGroupBy, value: string, all: Task[]) => {
+      const { shown, hidden } = partitionCompleted(all, { mode: completed, now, keep });
+      return { id, label, dim, value, tasks: revealed.has(id) ? all : shown, all, hidden };
+    };
     if (groupDim === "bucket") {
       const ordered: Bucket[] = inbox ? [inbox, ...buckets] : buckets;
-      return ordered.map((b) => ({
-        id: `col:bucket:${b.id}`,
-        label: bucketNameById(b.id),
-        dim: "bucket" as const,
-        value: b.id,
-        tasks: boardTasks.filter((t) => t.bucketId === b.id),
-      }));
+      return ordered.map((b) =>
+        column(
+          `col:bucket:${b.id}`,
+          bucketNameById(b.id),
+          "bucket",
+          b.id,
+          boardTasks.filter((t) => t.bucketId === b.id),
+        ),
+      );
     }
-    return BOARD_STATUS_ORDER.map((s) => ({
-      id: `col:status:${s}`,
-      label: STATUS_LABELS[s],
-      dim: "status" as const,
-      value: s,
-      tasks: boardTasks.filter((t) => t.status === s),
-    }));
-  }, [groupDim, boardTasks, buckets, inbox, bucketNameById]);
+    const shown = statusFilter
+      ? ALL_BOARD_STATUSES.filter((s) => statusFilter.has(s))
+      : BOARD_STATUS_ORDER;
+    // A card on the board always has its group (the kept Won't do task).
+    const statuses = ALL_BOARD_STATUSES.filter(
+      (s) => shown.includes(s) || boardTasks.some((t) => statusKeyOf(t) === s),
+    );
+    return statuses.map((s) =>
+      column(
+        `col:status:${s}`,
+        STATUS_KEY_LABELS[s],
+        "status",
+        s,
+        boardTasks.filter((t) => statusKeyOf(t) === s),
+      ),
+    );
+  }, [
+    groupDim,
+    boardTasks,
+    statusFilter,
+    buckets,
+    inbox,
+    bucketNameById,
+    completed,
+    stayingIds,
+    selectedTaskId,
+    revealed,
+    taskById,
+    api.subtasksByParent,
+  ]);
+
+  const toggleReveal = (id: string) => {
+    const next = new Set(revealed);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setReveal({ scope: selection, ids: next });
+  };
 
   const sensors = useTaskDndSensors();
+
+  // Manual order lives inside one project (order.ts, default m): only a
+  // project's or the Inbox's board, under Manual, takes a reorder.
+  const dragOrder = dragOrderFor(selection, order);
+  const askManualOrder = () => {
+    if (order === "manual") return;
+    toast(sortedByLabel(order), {
+      action: onManualOrder ? { label: BACK_TO_MANUAL_ORDER, onClick: onManualOrder } : undefined,
+    });
+  };
+  // Screen readers hear titles and column names, never ids (standalone
+  // mounts; on the tasks page the page's one context speaks).
+  const announcements = useMemo(() => {
+    const cardName = (id: string) => {
+      const task = tasks.find((t) => t.id === id);
+      return task ? `“${task.title || "Untitled"}”` : null;
+    };
+    return taskDragAnnouncements({
+      taskName: (id) => cardName(id) ?? "the task",
+      targetName: (id) => columns.find((c) => c.id === id)?.label ?? cardName(id),
+    });
+  }, [tasks, columns]);
 
   const onDragStart = (e: DragStartEvent) => {
     if (!canEdit) return;
@@ -149,113 +322,122 @@ export function TaskBoardView({
       : columns.find((c) => c.tasks.some((t) => t.id === overId));
     if (!task || !sourceCol || !destCol) return;
 
-    if (sourceCol.id === destCol.id) {
-      // within-column reorder
-      if (overIsColumn) return; // dropped on own column gutter — no move
-      const ids = sourceCol.tasks.map((t) => t.id);
-      const from = ids.indexOf(activeId);
-      const to = ids.indexOf(overId);
-      if (from < 0 || to < 0 || from === to) return;
-      const reordered = arrayMove(sourceCol.tasks, from, to);
-      api.patchTask(activeId, { position: positionForReorder(reordered, to) });
-      return;
-    }
-
-    // cross-column move — insert before the hovered card, or at the column end
-    const destTasks = destCol.tasks; // excludes the active card (other column)
-    const overIdx = overIsColumn ? destTasks.length : destTasks.findIndex((t) => t.id === overId);
-    const at = Math.max(0, Math.min(destTasks.length, overIdx < 0 ? destTasks.length : overIdx));
-    const ordered = [...destTasks.slice(0, at), task, ...destTasks.slice(at)];
-    const patch: Partial<Task> = { position: positionForReorder(ordered, at) };
-    if (destCol.dim === "status") patch.status = destCol.value as TaskStatus;
-    else patch.bucketId = destCol.value;
-    api.patchTask(activeId, patch);
+    // Positions are worked out among EVERY task in the column, hidden
+    // completed ones included (TV-U1), and only where the board is one
+    // project's manual order (board-drop.ts, default m).
+    const decision = planBoardDrop({
+      task,
+      parent: task.parentId ? (taskById.get(task.parentId) ?? null) : null,
+      source: sourceCol,
+      dest: destCol,
+      overId: overIsColumn ? null : overId,
+      order: dragOrder,
+      inboxId: inbox?.id ?? null,
+      bucketName: bucketNameById,
+    });
+    if (decision.kind === "ask-manual") askManualOrder();
+    else if (decision.kind === "write") void api.dropTask(decision.write, decision.label);
   };
 
   const activeTask = activeId ? (tasks.find((t) => t.id === activeId) ?? null) : null;
 
-  const groupControl = groupsByBucket(selection) ? (
-    <div className="flex items-center gap-1.5">
-      <span className="font-sans text-xs text-muted-foreground">Columns</span>
-      <Select value={boardGroupBy} onValueChange={(v) => onBoardGroupByChange(v as BoardGroupBy)}>
-        <SelectTrigger size="sm" variant="ghost" className="w-28">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="status">Status</SelectItem>
-          <SelectItem value="bucket">Bucket</SelectItem>
-        </SelectContent>
-      </Select>
-    </div>
-  ) : undefined;
-
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <PlanViewHeader
-        title={scopeTitle}
-        view={view}
-        onViewChange={onViewChange}
-        groupControl={groupControl}
-        filterControl={tagFilterControl}
-        activeFilters={activeTagFilters}
-        canEdit={canEdit}
-        onRequestCapture={onRequestCapture}
-      />
+    // The projects a card's menu offers, read only by an open menu (TV-D11b).
+    <ProjectChoicesProvider projects={buckets} inboxId={inbox?.id ?? null}>
+      <div className="flex h-full min-h-0 flex-col">
+        <PlanViewHeader
+          title={scopeTitle}
+          view={view}
+          onViewChange={onViewChange}
+          controls={header}
+          canEdit={canEdit}
+          onRequestCapture={onRequestCapture}
+        />
 
-      {/* One boundary: a self-owned context ("internal") or a monitor bound to
+        {/* One boundary: a self-owned context ("internal") or a monitor bound to
           the tasks page's app-level context ("external", DF-22 — so a card can
           be dropped on the right-pane hub). onDragEnd early-returns unless the
           drop resolves to a board column/card, so a hub drop falls through to
           the page's link handler. */}
-      <DndBoundary
-        dndMode={dndMode}
-        sensors={sensors}
-        collisionDetection={closestCorners}
-        onDragStart={onDragStart}
-        onDragEnd={onDragEnd}
-        onDragCancel={() => setActiveId(null)}
-      >
-        <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto pb-1">
-          {columns.map((col) => (
-            <BoardColumn
-              key={col.id}
-              column={col}
-              canEdit={canEdit}
-              showBucketTag={showBucketTag}
-              showAssignee={showAssignee}
-              buckets={buckets}
-              inbox={inbox}
-              bucketNameById={bucketNameById}
-              selectedTaskId={selectedTaskId}
-              onSelectTask={onSelectTask}
-              onTagFilter={onTagFilter}
-              api={api}
-            />
-          ))}
-        </div>
-
-        {typeof document !== "undefined"
-          ? createPortal(
-              <DragOverlay>
-                {activeTask ? (
-                  <div className="w-72 rounded-md border border-border bg-background px-2 py-1.5 shadow-lg">
-                    <CardBody
-                      task={activeTask}
-                      bucketName={bucketNameById(activeTask.bucketId)}
-                      inboxId={inbox?.id ?? null}
-                      showBucket={showBucketTag}
-                      showAssignee={showAssignee}
-                      canEdit={false}
-                      api={api}
-                    />
+        <DndBoundary
+          dndMode={dndMode}
+          sensors={sensors}
+          collisionDetection={closestCorners}
+          onDragStart={onDragStart}
+          onDragEnd={onDragEnd}
+          onDragCancel={() => setActiveId(null)}
+          announcements={announcements}
+        >
+          <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto pb-1">
+            {!api.loaded ? (
+              <TaskBoardSkeleton />
+            ) : filterActive && tasks.length === 0 ? (
+              <TasksNoMatch onClearFilters={onClearFilters} />
+            ) : (
+              <>
+                {columns.map((col) => (
+                  <BoardColumn
+                    key={col.id}
+                    column={col}
+                    canEdit={canEdit}
+                    showBucketTag={showBucketTag}
+                    showAssignee={showAssignee}
+                    properties={properties}
+                    inbox={inbox}
+                    bucketNameById={bucketNameById}
+                    selectedTaskId={selectedTaskId}
+                    selectionSeq={selectionSeq.seq}
+                    onSelectTask={onSelectTask}
+                    revealed={revealed.has(col.id)}
+                    onToggleReveal={() => toggleReveal(col.id)}
+                    activeTask={activeTask}
+                    reorderable={dragOrder === "manual"}
+                    factsOf={factsOf}
+                    parentTitleOf={parentTitleOf}
+                    actions={actions}
+                    today={today}
+                  />
+                ))}
+                {canEdit && onAddStatus && groupDim === "status" ? (
+                  <div className="shrink-0 pt-0.5">
+                    <Button variant="ghost" size="sm" onClick={onAddStatus}>
+                      <Plus aria-hidden />
+                      Add status
+                    </Button>
                   </div>
                 ) : null}
-              </DragOverlay>,
-              document.body,
-            )
-          : null}
-      </DndBoundary>
-    </div>
+              </>
+            )}
+          </div>
+
+          {typeof document !== "undefined"
+            ? createPortal(
+                <DragOverlay>
+                  {activeTask ? (
+                    // DS-4's overlay surface, card-shaped (U4-5: one drag look).
+                    <DragOverlaySurface className="w-full items-start rounded-lg px-3 py-2.5 text-sm">
+                      <CardBody
+                        task={activeTask}
+                        bucketName={bucketNameById(activeTask.bucketId)}
+                        inboxId={inbox?.id ?? null}
+                        showBucket={showBucketTag}
+                        showAssignee={showAssignee}
+                        properties={properties}
+                        canEdit={false}
+                        facts={factsOf(activeTask)}
+                        parentTitle={parentTitleOf(activeTask)}
+                        actions={actions}
+                        today={today}
+                      />
+                    </DragOverlaySurface>
+                  ) : null}
+                </DragOverlay>,
+                document.body,
+              )
+            : null}
+        </DndBoundary>
+      </div>
+    </ProjectChoicesProvider>
   );
 }
 
@@ -264,72 +446,132 @@ function BoardColumn({
   canEdit,
   showBucketTag,
   showAssignee,
-  buckets,
+  properties,
   inbox,
   bucketNameById,
   selectedTaskId,
+  selectionSeq,
   onSelectTask,
-  onTagFilter,
-  api,
+  revealed,
+  onToggleReveal,
+  activeTask,
+  reorderable,
+  factsOf,
+  parentTitleOf,
+  actions,
+  today,
 }: {
   column: Column;
   canEdit: boolean;
   showBucketTag: boolean;
   showAssignee: boolean;
-  buckets: Bucket[];
+  properties: readonly string[];
   inbox: Bucket | null;
   bucketNameById: (id: string) => string;
   selectedTaskId: string | null;
+  /** Bumped by each new selection: it is brought into view once. */
+  selectionSeq: number;
   onSelectTask: (id: string | null) => void;
-  onTagFilter?: (tagId: string) => void;
-  api: TasksModuleApi;
+  revealed: boolean;
+  onToggleReveal: () => void;
+  /** The card being dragged, if any. */
+  activeTask: Task | null;
+  /** The board is one project's manual order: cards part to make room. */
+  reorderable: boolean;
+  factsOf: (task: Task) => TaskFacts;
+  parentTitleOf: (task: Task) => string | null;
+  actions: TaskRowActions;
+  today: string;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: column.id, disabled: !canEdit });
+  // The column scrolls on its own and draws only the cards on screen once it
+  // is long (TV-D11b): its droppable box is also its scroller.
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const setColumnRef = useCallback(
+    (el: HTMLDivElement | null) => {
+      scrollRef.current = el;
+      setNodeRef(el);
+    },
+    [setNodeRef],
+  );
+  // Only a column that would take the card lights up (never the Inbox for a
+  // project's task).
+  const accepting =
+    isOver && (!activeTask || boardColumnAccepts(column, activeTask, inbox?.id ?? null));
+  // While revealed, the column lists its completed cards too; the count in
+  // the header is always every task in the column.
+  const total = revealed ? column.tasks.length : column.tasks.length + column.hidden.length;
+  const ids = useMemo(() => column.tasks.map((t) => t.id), [column.tasks]);
+  // The card being dragged stays drawn while its column scrolls (dnd-kit
+  // loses a draggable that unmounts mid-drag).
+  const activeIndex = activeTask ? ids.indexOf(activeTask.id) : -1;
+  const pinned = useMemo(() => (activeIndex >= 0 ? [activeIndex] : []), [activeIndex]);
+  // The selected card is brought into view once (a deep link into a long column).
+  const scrollTo = useMemo(
+    () => (selectedTaskId ? { key: selectedTaskId, seq: selectionSeq } : null),
+    [selectedTaskId, selectionSeq],
+  );
+  const inboxId = inbox?.id ?? null;
 
   return (
-    <section className="flex h-full w-72 shrink-0 flex-col">
-      <header className="mb-2 flex items-center gap-1.5 px-1">
-        <Eyebrow>{column.label}</Eyebrow>
-        <span className="font-sans text-xs tabular-nums text-muted-foreground/70">
-          {column.tasks.length}
-        </span>
+    // Columns flex between 280 and 400 px (tasks-v2 §6).
+    <section className="flex h-full min-w-70 max-w-100 flex-1 flex-col">
+      {/* The column's name as typed (a bucket, a status): sentence case (call 40). */}
+      <header className="mb-2">
+        <GroupHeader label={column.label} count={total} />
       </header>
       <div
-        ref={setNodeRef}
+        ref={setColumnRef}
         className={cn(
           // Linear-quiet: columns are transparent on the canvas; cards carry the
           // elevation (bg-card + hairline). Only a drag-over state lights up.
           "flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto rounded-md p-1 transition-colors duration-(--motion-fade) ease-(--ease-out)",
-          isOver ? "bg-accent/40 ring-1 ring-ring/40" : "bg-transparent",
+          accepting ? DROP_TARGET : "bg-transparent",
         )}
       >
         <SortableContext
-          items={column.tasks.map((t) => t.id)}
-          strategy={verticalListSortingStrategy}
+          items={ids}
+          strategy={reorderable ? verticalListSortingStrategy : NO_SHIFT}
         >
-          {column.tasks.length === 0 ? (
-            <p className="px-2 py-6 text-center text-xs text-muted-foreground/50">
-              {canEdit ? "Drop tasks here" : "Empty"}
-            </p>
+          {column.tasks.length === 0 && column.hidden.length === 0 ? (
+            <EmptyState size="inline" title={canEdit ? "Drop tasks here" : "Empty"} />
           ) : (
-            column.tasks.map((task) => (
-              <TaskCard
-                key={task.id}
-                task={task}
-                bucketName={bucketNameById(task.bucketId)}
-                buckets={buckets}
-                inboxId={inbox?.id ?? null}
-                showBucket={showBucketTag}
-                showAssignee={showAssignee}
-                canEdit={canEdit}
-                selected={task.id === selectedTaskId}
-                onSelect={() => onSelectTask(task.id)}
-                onTagFilter={onTagFilter}
-                api={api}
-              />
-            ))
+            <VirtualStack
+              items={column.tasks}
+              itemKey={(task) => task.id}
+              estimateSize={() => CARD_ESTIMATE}
+              scrollRef={scrollRef}
+              gap={CARD_GAP}
+              gapClassName="gap-1.5"
+              virtualizeFrom={VIRTUALIZE_CARDS_FROM}
+              pinned={pinned}
+              scrollTo={scrollTo}
+              render={(task) => (
+                <TaskCard
+                  task={task}
+                  bucketName={bucketNameById(task.bucketId)}
+                  inboxId={inboxId}
+                  showBucket={showBucketTag}
+                  showAssignee={showAssignee}
+                  properties={properties}
+                  canEdit={canEdit}
+                  selected={task.id === selectedTaskId}
+                  onSelect={onSelectTask}
+                  facts={factsOf(task)}
+                  parentTitle={parentTitleOf(task)}
+                  actions={actions}
+                  today={today}
+                />
+              )}
+            />
           )}
         </SortableContext>
+        <CompletedLine
+          count={column.hidden.length}
+          shown={revealed}
+          onToggle={onToggleReveal}
+          className="px-1"
+        />
       </div>
     </section>
   );

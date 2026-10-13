@@ -1,7 +1,7 @@
 import { describe, expect, it } from "@rstest/core";
 
 import { type AuthEmailLogRow, type HookDeps, handleAuthEmailHook, inviteConfirmUrl } from "./handler.ts";
-import { parseHookSecrets, signWebhook } from "./webhook.ts";
+import { parseHookSecrets, signWebhook } from "../_shared/standard-webhooks.ts";
 
 const SECRET = `v1,whsec_${btoa("a-thirty-two-byte-test-secret!!!")}`;
 const NOW_MS = 1_791_500_000_000;

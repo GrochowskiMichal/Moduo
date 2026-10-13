@@ -17,6 +17,8 @@ const RICH_HTML_PREFIX = /^\s*<(p|ul|ol|li|div|h[1-6]|blockquote)\b/i;
 
 /** Our chip marker (see `entity-ref-node.tsx`). */
 const CHIP_MARKER = "data-lexical-entity-ref";
+/** A date chip's marker (references/date-node.tsx). */
+const DATE_MARKER = "data-moduo-date";
 
 /**
  * True when `value` is our editor's HTML (render/parse as markup); false for
@@ -27,7 +29,7 @@ const CHIP_MARKER = "data-lexical-entity-ref";
  */
 export function looksLikeRichHtml(value: string): boolean {
   if (!value) return false;
-  return value.includes(CHIP_MARKER) || RICH_HTML_PREFIX.test(value);
+  return value.includes(CHIP_MARKER) || value.includes(DATE_MARKER) || RICH_HTML_PREFIX.test(value);
 }
 
 /**
@@ -37,7 +39,7 @@ export function looksLikeRichHtml(value: string): boolean {
  */
 export function stripEntityRefAttrs(html: string): string {
   return html.replace(
-    /\s+data-(?:lexical-entity-ref|entity-type|entity-id|entity-icon)="[^"]*"/g,
+    /\s+data-(?:lexical-entity-ref|entity-type|entity-id|entity-icon|display|ref-v)="[^"]*"/g,
     "",
   );
 }
