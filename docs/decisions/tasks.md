@@ -82,6 +82,66 @@ Built in tasks-v3 block 31 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §12, �
   - Why: #27's columns exist so the delta sync sees every change; nothing syncs these.
   - Rejected: columns nothing reads or writes.
 
+## 2026-10-13 · TV-U12 Multi-select and the bottom-bar mode pattern — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 16 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §4, AC11.9, AC4.6; REPLAN 82, 82a, 82b, defaults a and e; prototype round-2b frame 1, Bulk). No migration. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **U12-1 · The keys stay as ratified, not as first typed** → TV-U12 (`use-bulk-actions.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (the build brief quoted his first message: del, f, ⏎, ⇧2, ⇧3).
+  - Decision: the bar's row is Complete `Space` · Focus `Q` · Assign `@` · Tag `#` · Date `D` · Delete `⌫`, then More ▾ (Move `B` · Status `⇧S` · Section · Priority `P` · Waiting · Team), then "4 selected · Esc", as 82b decided; `a` and `l` alias `@` and `#`, `i` assigns to you, `x` completes, bare ⌫/Del deletes only with two or more selected (⌘⌫ too).
+  - Why: 82b resolved the collisions in his message: ⏎ opens and F is Filter (⇧F is "Focus on this").
+  - Rejected: ⏎ to complete and F for Focus (both already taken).
+- **U12-2 · The selection is a set beside the cursor** → TV-U12 (`selection.ts`, `ui/use-task-selection.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: a click selects one task (the cursor: the panel, the URL and the keys follow it); ⌘/Ctrl-click adds or takes out one, starting from the cursor; ⇧-click and ⇧↑↓ (⇧J/⇧K) select the range from the anchor (the last ⌘-clicked task, else the cursor) in the view's order, folded groups left out; ⌘A selects every task the view shows; Esc and a plain click or arrow go back to one. The set lives in the page and lasts within one place and one layout; a task that leaves the scope leaves it, and rows scrolled away stay in it.
+  - Why: Finder's and Linear's grammar; the cursor stays the one thing the panel, the deep link and the keys already follow (TV-D11b's rows stay memoised: a row gets a boolean).
+  - Rejected: a separate checkbox column (spec: no checkboxes); a range that adds to an earlier ⌘-selection (Finder replaces it).
+- **U12-3 · One mode mechanism, and triage yields to a selection** → TV-U12 (`bottom-bar-mode.ts`, `inbox-view.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the selection owns the bar through TV-U15's `useBottomBarModeOwner` (the same six-then-More row); while two or more are selected in the Inbox, the triage row and its keys 1 · 2 · 3 · H step aside and come back when the selection goes. A viewer gets the note alone ("4 selected · Esc"), no actions.
+  - Why: 82b's one pattern for every mode; one mode at a time.
+  - Rejected: triage keys acting on a selection (Duplicate needs one original per task; left for later).
+- **U12-4 · Every bulk change is one write and one Undo, each task checked on its own** → TV-U12 (`hooks/use-bulk-ops.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: every row shows the change at once (one store write); each task then goes through its own server op (so its own permission check), four at a time; the ones that saved stay, a refused one goes back. The toast says the change ("Moved 4 tasks to Website"), or "3 of 4 changed" with "“Pricing copy” is read-only to you." (one refused task is named; it's in your selection, so yours to see; several are counted; a subtask brought along is never named). One Undo puts back every field the batch changed unless it changed again since ("Undo kept a newer change to 1 task."), and a check-off's queue places. A lost connection stops sending and says Offline.
+  - Why: default a ("one Undo for the batch"), the spec's read-only edge case, and the store's one-write rule.
+  - Rejected: one server call for the batch (no per-task op exists; a new op would be a migration); N separate writes with N toasts.
+- **U12-5 · What each bulk verb does** → TV-U12 (`bulk.ts` `planBulk`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: Complete finishes the open ones and their open subtasks (call 87; "· also 2 subtasks"), or reopens them all when every one is closed; Focus adds the ones not in your Focus at its end, or takes them all out when all are in it; Tag adds a tag to the ones without it, or takes it off when all have it (a typed new name makes the tag); Status by a project's own name when one project is selected, by category across projects (each takes its project's first of it); Section only within one project (dimmed otherwise); Move files into a project at its end, in order, a subtask going with a selected parent; Waiting on adds the person or the words to each (skipping a task already waiting on that person); Date: Today · Tomorrow · Next week · A day later · A week later (each from its own date; a dateless task counts from today) · Pick a date… · No date; a task that already has the value is skipped.
+  - Why: default e (Date, Status, Section, Waiting, Team) and Linear's toggles; 87 for finishing parents.
+  - Rejected: a second Complete that only finishes (a selection of closed tasks would do nothing).
+- **U12-6 · A repeat under a bulk Date moves just this occurrence by default** → TV-U12 (`repeat-move-dialog.tsx`, lifted from Upcoming)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: when a selection holds repeating tasks with a due date, a date asks "Just these · Change the pattern" (Upcoming's dialog, now shared); Just these moves each repeat's one occurrence (`tasks_op_move_occurrence`), Change the pattern moves its rule with it; No date never asks.
+  - Why: the spec's edge case ("default the occurrences").
+  - Rejected: always changing the pattern.
+- **U12-7 · The panel's "n tasks · Mixed"** → TV-U12 (`bulk-panel.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: with two or more selected the right panel shows Details as "4 tasks": the first eight titles with their status icons ("and n more"), then Status · Assignee · Priority · Due · Project · Section · Tags · Team with the shared value, "Mixed" or "None"; a value opens the same picker as the bar; "A change here applies to all 4. One Undo covers it."
+  - Why: call 82 and the prototype's Bulk frame.
+  - Rejected: editing values inline in the panel (the pickers are one set for the bar, the keys and the panel).
+- **U12-8 · Pickers are one search dialog** → TV-U12 (`bulk-picker.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: Assign, Tag, Date, Move, Status, Section, Priority, Waiting on and Team open one search dialog (as the Inbox's "File in…"), and focus goes back to the List or the Board when it closes.
+  - Why: a key or the bar has nothing on screen to anchor a popover to.
+  - Rejected: popovers anchored to the bar's buttons (no anchor for the keys).
+- **U12-9 · Right-clicking, and dragging, a selected task act on the selection** → TV-U12 (`selection-menu.tsx`, `dnd/multi-drop.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (82a's "the same menu as right-clicking a selection"; TV-U4's carry-forward).
+  - Decision: the one context menu, opened on a task of a selection, lists the selection's verbs; right-clicking a task outside it acts on that task alone. Dragging a selected row or card moves the selection: the held task's drop is planned as always, the others take the same change and line up right behind it (a project move: the project's end, in order); a parent never nests and a task never nests under itself. The sidebar's project, Focus and My tasks rows take a selection too. The drag preview counts the others ("+3").
+  - Why: one gesture for one change; one write, one Undo.
+  - Rejected: Upcoming's day drop for a selection (it moves the held row only; its own Move all… covers many).
+- **U12-10 · The Board grouped by Waiting on** → TV-U12 (deferred here by TV-U11; `board-columns.ts` `waitingColumns`, `dnd/board-drop.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: Display → Group by → Waiting on gives a column per person or thing waited on (people with their avatar, by name), a task under the newest of its waits, then "Not waiting"; empty columns hide; a drop into a column adds that wait (with Undo, a selection too), and "Not waiting" takes no drop (a wait ends when what it waits on arrives, or from the panel).
+  - Why: tasks-v3 §5 lists Waiting among the Board's groupings; a wait isn't a field, so a drop adds an entry rather than moving the card off its others.
+  - Rejected: a drop into "Not waiting" clearing every wait (destructive from a drag).
+- **U12-11 · The Inbox's cursor follows the List's own order** → TV-U12 (TV-U15's carry-forward; `tasks-plan-view.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the List and the Board write the order they draw into a ref the page reads; after a triage the cursor moves to the next row as shown, grouped or not.
+  - Why: a grouped Inbox's next row isn't the flat order's.
+  - Rejected: re-deriving the List's groups in the page.
+
 ## 2026-10-13 · TV-D14 Time entries, the time report, Time & region — the agent's choices (deferred to by Maciej)
 
 Built in tasks-v3 block 29 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §14, §Assumptions #17, #18, #26; REPLAN 75, 76, default f; migrations `20261013200000_user_preferences_time_region` and `20261013201000_time_entries_add`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to change.

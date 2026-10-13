@@ -105,6 +105,7 @@ import {
   statusKeyCategory,
   statusSetFor,
 } from "../statuses";
+import { useBulkOps } from "./use-bulk-ops";
 
 /** An adjustment `logTimeAdjustment` recorded, as its Undo needs it. */
 export type TimeAdjustment = {
@@ -3470,6 +3471,29 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     [tagContext],
   );
 
+  // ── bulk edits on a selection (TV-U12): one write, one Undo ─────────────────
+  const bumpActivity = useCallback(() => setActivityStamp((s) => s + 1), []);
+  const bulk = useBulkOps({
+    store,
+    runtime,
+    workspaceId,
+    userId,
+    tasksRef,
+    bucketsRef,
+    myQueueRef,
+    statusesForBucket,
+    queueFollowStatus,
+    editBlocked,
+    failed,
+    onSaved: bumpActivity,
+    reloadTrash,
+    restoreQueuePlace,
+    runQueueOp,
+    optimisticEntry,
+    backlogToTodo,
+    tagContext,
+  });
+
   return {
     loading,
     loaded,
@@ -3623,6 +3647,12 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     createTagForTask,
     setTagColor,
     deleteTag,
+    /** A selection's change as one write with one Undo (TV-U12, `use-bulk-ops.ts`). */
+    bulkWrite: bulk.bulkWrite,
+    bulkDelete: bulk.bulkDelete,
+    bulkQueue: bulk.bulkQueue,
+    bulkWaiting: bulk.bulkWaiting,
+    bulkTag: bulk.bulkTag,
     INBOX_BUCKET_NAME,
   };
 }

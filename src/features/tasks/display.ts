@@ -34,7 +34,9 @@ export type BoardGroupBy =
   | "team"
   | "priority"
   | "bucket"
-  | "area";
+  | "area"
+  /** Who or what each task waits on (TV-U12; a drop adds a Waiting on). */
+  | "waiting";
 /** The Board's lanes (call 85): one level, off by default. */
 export type BoardLanes = "none" | "assignee" | "priority" | "bucket" | "team";
 /** Display → Description on cards (AC7.4): hidden, or a two-line preview. */
@@ -188,6 +190,7 @@ export const BOARD_GROUP_LABELS: Record<BoardGroupBy, string> = {
   priority: "Priority",
   bucket: "Project",
   area: "Area",
+  waiting: "Waiting on",
 };
 
 /** What the Board can be grouped by in a scope (TV-U11, call 22). */

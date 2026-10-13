@@ -73,6 +73,7 @@ import {
 import { createLinkWithToast } from "../../spine/ui/drop-link-toast";
 import { WorkspaceContext } from "../../workspaces/workspace-context";
 import { useAssignees } from "../assignees";
+import { tasksWord } from "../bulk";
 import { myTasksScope, openCount, resolveDefaultSelection } from "../default-view";
 import {
   nextHeaderSort,
@@ -83,6 +84,8 @@ import {
   tasksDisplayKey,
   tasksViewDefaults,
 } from "../display";
+import type { TaskDropWrite } from "../dnd/drop-write";
+import { multiDropWrites } from "../dnd/multi-drop";
 import {
   asRailDropTarget,
   isSideDroppable,
@@ -112,6 +115,7 @@ import { defaultRowsFor, firstViewFor } from "../onboarding";
 import { showsSortedNote, sortedByLabel } from "../order";
 import { handleLabel } from "../row-layout";
 import { resolveTasksDeepLink, taskIdForHandle } from "../search";
+import { inViewOrder } from "../selection";
 import { projectDeleteSummary, projectOpenWork } from "../sidebar";
 import { useTemplateActions } from "../templates/ui/use-template-actions";
 import { sanitizeTimelineZoom, type TimelineZoom } from "../timeline-geometry";
@@ -126,6 +130,7 @@ import {
   UPCOMING_SELECTION,
   WONTDO_SELECTION,
 } from "./bucket-rail";
+import { BulkPanel } from "./bulk-panel";
 import { ArchiveProjectDialog, DeleteBucketDialog } from "./delete-bucket-dialog";
 import { asTaskDrag, taskDragAnnouncements, useTaskDndSensors } from "./dnd/task-dnd";
 import { DriftTriageDialog } from "./drift-triage-dialog";
@@ -146,6 +151,8 @@ import { TaskListSkeleton } from "./task-view-states";
 import { TasksWelcomeDialog } from "./tasks-welcome-dialog";
 import { useUpcomingView } from "./upcoming-view";
 import { boardDropName } from "./use-board-folds";
+import { useBulkActions } from "./use-bulk-actions";
+import { useTaskSelection } from "./use-task-selection";
 import { useTasksDisplay } from "./use-tasks-display";
 import { useTasksFilters } from "./use-tasks-filters";
 import { useTasksWelcome } from "./use-tasks-welcome";
@@ -290,6 +297,12 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   // Task-level selection (distinct from `selection`, which is the bucket scope).
   // Lifted here so the right-rail detail panel can bind to it across List/Board.
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  // Several selected (TV-U12): a set beside the cursor (selection.ts); the
+  // views pass their order with each gesture.
+  const multiSelect = useTaskSelection(selectedTaskId, setSelectedTaskId);
+  // The order the List or the Board shows now (they write it as they draw):
+  // the Inbox's cursor after a triage, and a selection's order.
+  const viewOrderRef = useRef<readonly string[]>([]);
   // DF-1 — URL sync bookkeeping. Selection is STATE mirrored into the URL —
   // not URL-derived like notes NO-3 — because this selection is a j/k
   // key-repeat cursor: it must not ride the router on every press, and WebKit
@@ -600,7 +613,8 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     api,
     runtime,
     workspaceId,
-    enabled: isInboxScope,
+    // A selection owns the bar and the keys while it lasts (TV-U12).
+    enabled: isInboxScope && !multiSelect.multi,
     canEdit,
     selectedTaskId,
     onSelectTask: setSelectedTaskId,
@@ -782,9 +796,50 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   });
   const scopeTasks = filtering.tasks;
   useLayoutEffect(() => {
-    inboxRowsRef.current = isInboxScope
-      ? orderTasks(scopeTasks, tasksDisplay.display.order, tasksDisplay.display.orderDir)
-      : [];
+    if (!isInboxScope) {
+      inboxRowsRef.current = [];
+      return;
+    }
+    // The rows as the List shows them (grouped or not, TV-U12); before it has
+    // drawn, the flat order.
+    const byId = new Map(scopeTasks.map((t) => [t.id, t]));
+    const shown = view === "list" ? viewOrderRef.current.flatMap((id) => byId.get(id) ?? []) : [];
+    inboxRowsRef.current =
+      shown.length > 0
+        ? shown
+        : orderTasks(scopeTasks, tasksDisplay.display.order, tasksDisplay.display.orderDir);
+  });
+  // A selection lasts within one place and one layout; tasks that leave the
+  // scope leave it (a set of ids: rows scrolled away stay in it).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new place or layout is the cue
+  useEffect(() => {
+    multiSelect.clear();
+  }, [selection, view, workspaceId]);
+  useEffect(() => {
+    if (multiSelect.multi && selectedTaskId && !multiSelect.ids.has(selectedTaskId)) {
+      multiSelect.clear();
+    }
+  }, [selectedTaskId, multiSelect]);
+  const scopeIdSet = useMemo(() => new Set(scopeTasks.map((t) => t.id)), [scopeTasks]);
+  useEffect(() => {
+    multiSelect.prune((id) => scopeIdSet.has(id), viewOrderRef.current);
+  }, [scopeIdSet, multiSelect.prune]);
+  const bulkIds = useMemo(
+    () =>
+      multiSelect.multi
+        ? inViewOrder(
+            multiSelect.ids,
+            viewOrderRef.current.length > 0 ? viewOrderRef.current : scopeTasks.map((t) => t.id),
+          )
+        : EMPTY_IDS,
+    [multiSelect.multi, multiSelect.ids, scopeTasks],
+  );
+  // The bottom bar's row, its keys and pickers while several are selected.
+  const bulk = useBulkActions({
+    api,
+    ids: bulkIds,
+    canEdit: canEdit && !archivedProject,
+    bucketNameById,
   });
   // What New pre-fills: the filters you can see (none in Focus), and never
   // someone who can't take the task (a former member a stored filter still
@@ -963,6 +1018,26 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       if (!task) return;
       const action = railDropAction(target, task, railCtx);
       if (!action) return;
+      // A row of a selection carries the selection (TV-U12): one write, one Undo.
+      if (multiSelect.ids.size >= 2 && multiSelect.ids.has(task.id)) {
+        if (action.kind === "queue") {
+          api.bulkQueue(bulkIds);
+          return;
+        }
+        const write: TaskDropWrite =
+          action.kind === "move"
+            ? { taskId: task.id, bucketId: action.bucketId }
+            : { taskId: task.id, assigneeId: action.userId };
+        const writes = multiDropWrites(write, task, bulkIds, api.tasks);
+        if (writes.length === 0) return;
+        void api.bulkWrite(writes, {
+          label: (n) =>
+            action.kind === "move"
+              ? `Moved ${tasksWord(n)} to ${bucketNameById(action.bucketId)}`
+              : `Assigned ${tasksWord(n)} to you`,
+        });
+        return;
+      }
       switch (action.kind) {
         case "move": {
           const parent = task.parentId ? (taskById.get(task.parentId) ?? null) : null;
@@ -995,7 +1070,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
           return;
       }
     },
-    [canEdit, taskById, railCtx, api, bucketNameById, guardedToggleQueue],
+    [canEdit, taskById, railCtx, api, bucketNameById, guardedToggleQueue, multiSelect.ids, bulkIds],
   );
 
   // A project's Archive… asks first only when it still has open work
@@ -1341,6 +1416,8 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
 
   const sharedViewProps = {
     tasks: scopeTasks,
+    multiSelect,
+    orderRef: viewOrderRef,
     scopeTitle,
     selection,
     view,
@@ -1434,6 +1511,11 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
                 }
               : {};
 
+  // A selection's keys come first (TV-U12), then the view's own.
+  const ownViewKey = "onViewKey" in viewExtras ? viewExtras.onViewKey : undefined;
+  const onViewKey = (event: React.KeyboardEvent<HTMLDivElement>, selected: Task | null) =>
+    bulk.onKey(event) || (ownViewKey?.(event, selected) ?? false);
+
   // The "← item" stack (SH-1) for references opened from the panel (RF-1). A
   // new selection is a new context, so the stack starts over.
   const panelStack = usePanelStack<{ key: string; type: string; id: string }>();
@@ -1515,6 +1597,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
         // The Board's own wiring (TV-U11): handles, ⏎ to the full page, folds.
         taskKey={taskKey}
         onOpenTask={setFullPageId}
+        onViewKey={bulk.onKey}
         foldKey={lsKey(
           workspaceId,
           `folds:${api.currentUserId ?? "anon"}:${selection}:board:${tasksDisplay.display.boardGroup}`,
@@ -1532,6 +1615,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
         revealRequest={revealRequest}
         {...listExtras}
         {...viewExtras}
+        onViewKey={onViewKey}
       />
     );
 
@@ -1754,7 +1838,22 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   );
   // The hub is a drop target within the ONE page-level DndContext (below); no
   // own context — that's exactly what let center rows reach it (DF-22).
-  const details = privateLinkId ? (
+  const bulkTasks = useMemo(
+    () => bulkIds.flatMap((id) => taskById.get(id) ?? []),
+    [bulkIds, taskById],
+  );
+  const details = multiSelect.multi ? (
+    <BulkPanel
+      tasks={bulkTasks}
+      statusById={api.statusById}
+      bucketNameById={bucketNameById}
+      sections={api.sections}
+      teams={api.teams}
+      tagsByTask={api.tagsByTask}
+      canEdit={canEdit && !archivedProject}
+      onPick={bulk.openPicker}
+    />
+  ) : privateLinkId ? (
     <TaskGonePanel
       taskId={privateLinkId}
       api={api}
@@ -1843,8 +1942,9 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   ) : null;
   // Nothing selected inside a project, or a task in the centre: the panel
   // shows Project (the one exception to "the panel remembers its view").
-  const panelActive =
-    projectView && (fullPageTask || (!selectedTask && !privateLinkId && scopeProject))
+  const panelActive = multiSelect.multi
+    ? "details"
+    : projectView && (fullPageTask || (!selectedTask && !privateLinkId && scopeProject))
       ? "project"
       : panelView;
 
@@ -1930,6 +2030,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       </DndContext>
       {upcoming.dialogs}
       {inboxView.dialogs}
+      {bulk.dialogs}
       <StatusesDialog
         open={statusesEditor !== null}
         projectName={statusesEditor?.projectId ? bucketNameById(statusesEditor.projectId) : null}

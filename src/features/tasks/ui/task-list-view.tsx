@@ -54,6 +54,7 @@ import {
   resolveListHover,
 } from "../dnd/drop-mode";
 import { type DropNames, dropLabel, type TaskDropWrite, writeFromPlan } from "../dnd/drop-write";
+import { multiDropLabel, multiDropWrites } from "../dnd/multi-drop";
 import { isSideDroppable } from "../dnd/rail-drop";
 import {
   canNestUnder,
@@ -86,6 +87,7 @@ import {
   sessionLabel,
   updatedLabel,
 } from "../row-layout";
+import { inViewOrder, PLAIN_SELECT, type SelectMods } from "../selection";
 import { statusNameOf } from "../statuses";
 import { nowOn, useMinuteTick, useToday } from "../use-today";
 import {
@@ -114,6 +116,7 @@ import {
 import { CompletedLine } from "./task-meta";
 import { activateGlyph, type RowCommand, TaskRow } from "./task-row";
 import { TaskListSkeleton, TasksEmptyScope, TasksNoMatch } from "./task-view-states";
+import type { MultiSelect } from "./use-task-selection";
 import { VirtualStack } from "./virtual-stack";
 
 const NO_AGENT_SESSIONS: readonly AgentSession[] = [];
@@ -138,6 +141,14 @@ type Props = {
   /** Lifted task selection — drives the keyboard cursor and the detail rail. */
   selectedTaskId: string | null;
   onSelectTask: (id: string | null) => void;
+  /**
+   * Several selected (TV-U12): ⇧/⌘-click, ⇧↑↓, ⌘A and Esc go to the page's
+   * selection with this view's order. Absent: one task at a time.
+   */
+  multiSelect?: MultiSelect;
+  /** Filled with the task ids in the order drawn (folded groups left out): the
+   *  page's Inbox cursor and a selection's order read it (TV-U12). */
+  orderRef?: { current: readonly string[] };
   /** The toolbar's search, Filter, Display and count (built by the page). */
   header?: PlanHeaderControls;
   /** A filter is narrowing the scope: an empty result reads "No tasks match". */
@@ -301,6 +312,8 @@ export function TaskListView({
   onRequestCapture,
   selectedTaskId,
   onSelectTask,
+  multiSelect,
+  orderRef,
   header,
   filterActive = false,
   onClearFilters,
@@ -924,6 +937,25 @@ export function TaskListView({
 
   const selectedTask = visibleTasks.find((t) => t.id === selectedId) ?? null;
 
+  // Multi-select (TV-U12): a row hands its click's ⇧ / ⌘ to the page's
+  // selection with the order on screen (folded groups left out), so a range
+  // is what you see; a row scrolled away stays selected (it's a set of ids).
+  const visibleOrder = useMemo(() => visibleTasks.map((t) => t.id), [visibleTasks]);
+  const selectionRef = useRef({ multiSelect, visibleOrder });
+  useLayoutEffect(() => {
+    selectionRef.current = { multiSelect, visibleOrder };
+    if (orderRef) orderRef.current = visibleOrder;
+  });
+  const onRowSelect = useCallback(
+    (id: string, mods?: SelectMods) => {
+      const { multiSelect: multi, visibleOrder: order } = selectionRef.current;
+      if (multi) multi.select(id, mods ?? PLAIN_SELECT, order);
+      else setSelectedId(id);
+    },
+    [setSelectedId],
+  );
+  const multiIds = multiSelect?.ids ?? NO_IDS;
+
   // ── drops and move keys (TV-U4) ──────────────────────────────────────────────
   // Manual order lives inside one project (order.ts, default m): a drag or a
   // move key writes a position only in a project or the Inbox under Manual.
@@ -1102,11 +1134,27 @@ export function TaskListView({
       switch (action) {
         case "next":
           e.preventDefault();
+          multiSelect?.clear();
           move(1);
           return;
         case "prev":
           e.preventDefault();
+          multiSelect?.clear();
           move(-1);
+          return;
+        case "extend-next":
+        case "extend-prev":
+          if (!multiSelect) return;
+          e.preventDefault();
+          multiSelect.extend(action === "extend-next" ? 1 : -1, visibleOrder);
+          return;
+        case "select-all":
+          if (!multiSelect) return;
+          e.preventDefault();
+          multiSelect.selectAll(visibleOrder);
+          return;
+        case "clear-selection":
+          if (multiSelect?.clear()) e.preventDefault();
           return;
         case "toggle-done":
           // The status icon's click (default k): finish, or reopen a closed one.
@@ -1223,6 +1271,8 @@ export function TaskListView({
       onViewKey,
       visibleTasks,
       selectedId,
+      multiSelect,
+      visibleOrder,
     ],
   );
 
@@ -1255,7 +1305,7 @@ export function TaskListView({
     inboxId: inboxIdForRows,
     showBucket: showBucketTag,
     showAssignee,
-    selected: t.id === selectedId,
+    selected: t.id === selectedId || multiIds.has(t.id),
     editing: t.id === editingId,
     command: command?.taskId === t.id ? command.kind : null,
     canEdit,
@@ -1263,7 +1313,7 @@ export function TaskListView({
     actions,
     today,
     ageTick: fitted.updated ? ageTick : 0,
-    onSelect: setSelectedId,
+    onSelect: onRowSelect,
     onStartEdit: setEditingId,
     onEndEdit: endEdit,
     onClearCommand: clearCommand,
@@ -1450,9 +1500,22 @@ export function TaskListView({
     (plan: ListDropPlan, active: Task) => {
       const parentId = plan.parentId;
       if (parentId && nest) setExpandedParents((prev) => new Set(prev).add(parentId));
-      drop(writeFromPlan(plan), active);
+      const write = writeFromPlan(plan);
+      // A row of a selection carries the selection (TV-U12): the same change
+      // for each, behind the held row, as one write with one Undo.
+      const { multiSelect: multi, visibleOrder: order } = selectionRef.current;
+      if (multi && multi.ids.size >= 2 && multi.ids.has(active.id)) {
+        const writes = multiDropWrites(write, active, inViewOrder(multi.ids, order), api.tasks);
+        if (writes.length === 0) return;
+        void api.bulkWrite(writes, {
+          label: (n) =>
+            n === 1 ? dropLabel(write, dropNames, active) : multiDropLabel(write, n, dropNames),
+        });
+        return;
+      }
+      drop(write, active);
     },
-    [nest, drop],
+    [nest, drop, api, dropNames],
   );
 
   const onListDragEnd = useCallback(
@@ -1856,6 +1919,11 @@ export function TaskListView({
             {overlayTask ? (
               <DragOverlaySurface className={dragTask ? "w-64" : undefined}>
                 <span className="min-w-0 flex-1 truncate">{overlayTask.title || "Untitled"}</span>
+                {dragTask && multiIds.size >= 2 && multiIds.has(dragTask.id) ? (
+                  <span className="shrink-0 font-sans text-xs text-muted-foreground">
+                    +{multiIds.size - 1}
+                  </span>
+                ) : null}
               </DragOverlaySurface>
             ) : null}
           </DragOverlay>,
