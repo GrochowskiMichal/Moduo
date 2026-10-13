@@ -124,8 +124,10 @@ export function NotesSidebar(props: NotesSidebarProps) {
 
   const onTreeKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     // Only the treeitem itself; a row's menu or button handles its own keys.
-    if (!(e.target as HTMLElement).matches('[role="treeitem"]')) return;
-    const action = treeKeyAction(rows, effectiveFocus, e, { canEdit });
+    const target = e.target as HTMLElement;
+    if (!target.matches('[role="treeitem"]')) return;
+    const current = target.dataset.rowKey ?? effectiveFocus;
+    const action = treeKeyAction(rows, current, e, { canEdit });
     if (!action) return;
     e.preventDefault();
     e.stopPropagation();

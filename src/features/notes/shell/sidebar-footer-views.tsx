@@ -56,17 +56,17 @@ export function SidebarFooter({
   return (
     <nav
       aria-label="More notes"
-      className="flex flex-wrap items-center gap-x-1 border-t border-hairline px-2 pt-2 text-xs text-muted-foreground"
+      className="flex items-center gap-0.5 overflow-hidden border-t border-hairline px-1 pt-2 text-xs whitespace-nowrap text-muted-foreground"
     >
       {(Object.keys(VIEW_TITLE) as FooterView[]).map((view, i) => (
-        <span key={view} className="flex items-center gap-1">
+        <span key={view} className="flex items-center gap-0.5">
           {i > 0 ? <span aria-hidden>·</span> : null}
           <button
             type="button"
             onClick={() => onOpenView(view)}
-            className="rounded-sm px-1 py-0.5 outline-none hover:bg-state-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
+            className="rounded-sm px-1 py-0.5 tabular-nums outline-none hover:bg-state-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
           >
-            {VIEW_TITLE[view]} <span className="tabular-nums">({counts[view]})</span>
+            {VIEW_TITLE[view]} ({counts[view]})
           </button>
         </span>
       ))}
