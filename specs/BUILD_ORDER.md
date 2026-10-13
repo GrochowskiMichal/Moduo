@@ -161,7 +161,7 @@ _Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
 > **Planned 2026-10-13 (`/s1`, engineer mode, Mike).** Keeps Lexical + the Yjs/`note_updates` model; rebuilds the surface and editor core behind a per-user "New Notes" switch, then flips (NR-12). NR-1 and NR-2 are done (see BUILD_LOG); NR-3 is next in the editor lane and NR-7 can run beside it. NR-9 waits for AT-1 to reach `develop` (it is held on `maciej`) and is not a flip dependency.
 
 - [ ] **NR-7 — Secure live channel + named presence** · deps: — · lane notes-data · Tier 2 (`realtime.messages` policy)
-- [~] **NR-3 — Editor core: schema/view split, one markdown converter, honest provider, meta line + Linked-from footer** · deps: NR-2 · lane notes-editor
+- [x] **NR-3 — Editor core: schema/view split, one markdown converter, honest provider, meta line + Linked-from footer** · deps: NR-2 · lane notes-editor · ✅ built 2026-10-13 (`t/mike/nr-3-editor-core`, #358)
 - [ ] **NR-4 — Writing UX: quiet block handles, unified menus, `[[` links, ⌘K link dialog, mindmap drop** · deps: NR-3 · lane notes-editor
 - [ ] **NR-5 — Task lines in the document (no overlay), inline due/schedule/assignee** · deps: NR-3 · lane notes-editor
 - [ ] **NR-6 — Agent writes land live (MCP CRDT path, attribution, Undo)** · deps: NR-3 · lane notes-data · Tier 2 (migration, `moduo-mcp`, contracts) · closes MCP-1's notes half
