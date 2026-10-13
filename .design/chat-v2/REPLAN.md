@@ -1,11 +1,11 @@
 # Chat v2 — the re-plan
 
-> **Status (2026-10-13): orienting. Six research lanes are running; round 1 has not been sent.**
+> **Status (2026-10-13): round 1 sent. Waiting on Maciej's answers to CH1–CH26.**
 >
-> - **Open calls:** none yet. Round 1 (the shape, plus the hackathon questions) goes out once the lanes land.
-> - **Research lanes** (each writes its own file in [`research/`](./research/)): current state (code + a live look in a seeded local workspace with three members), visual audit, early-decisions audit, competitor structure, role journeys, the hackathon.
-> - **Research data in the shared local database:** the current-state lane seeds a workspace named "Chat replan research" and lists every row to remove in its file's last section.
-> - **Prototypes:** none yet.
+> - **Open calls:** CH1–CH26, all ❓. Load-bearing: ★ CH1 (the bar), ★ CH2 (the shape), ★ CH6 (what reaches you), ★ CH8 (Catch up), ★ CH20 (the hackathon's facts), ★ CH22 (the hackathon's structure, shared with the hackathon plan).
+> - **Research lanes** ([`research/`](./research/)): four landed and folded in (early-decisions audit, role journeys, competitor structure, hackathon). Two still running: **current state** (code + a live look; folds into §1.3 B) and **visual audit** (folds into §5).
+> - **Research data in the shared local database** (the current-state lane; its file's last section will list every row): workspace **"Chat replan research"** `669be464-0b9a-4d84-8537-544ac04dba5f` with ~3,000 seeded messages; a third local user (`third@moduo.local`); **`dev@moduo.local`'s `plan_tier` was changed from `free` and must be put back** (the lane restores it when it finishes; check).
+> - **Prototype:** [`prototypes/round-1.html`](./prototypes/round-1.html) (keys 1–7 frames, V variants; serve the folder over http to see the Geist font).
 > - **Uncommitted:** nothing.
 >
 > **Numbering:** Chat calls are **CH1, CH2, …**, numbered once and never renumbered. Tasks v3 calls are cited as "Tasks 64", "Tasks default r"; Calendar's as "Calendar C7". The decisions audit's contradiction list uses its own "A1…"; here those are cited as "audit A1".
@@ -148,7 +148,7 @@ Top bar (global):   modules · Focus timer · Help · bell · you
 │  SO Sofia Ortiz  1   │ [composer: @ people/things · # tags · /]   │                             │
 └──────────────────────┴────────────────────────────────────────────┴─────────────────────────────┘
 Bottom bar (module tools): ◧ · Shortcuts · Search · Capture · New conversation · ◨
-                           (Catch up swaps the centre for its mode row: Reply R · Done E · Task T · Later H · Open ⏎ · More)
+                           (Catch up swaps the centre for its mode row: Reply R · Done Space · Task T · Later H · Open ⏎ · More)
 ```
 
 - **Conversations are channels and direct messages** (CH2, CH3). A channel can be **linked** to one project, client or team; then it shows that item's live state, capture files into it, and the item shows the conversation (CH11).
@@ -205,7 +205,7 @@ Per the module-replan rules these are mine to decide. Each lands in `docs/decisi
 11. **PERM-7 made honest** (audit D4, D36): the ops read channel managers and "Manage any channel"; Details gets "Add manager" and the announcement switch; "Start calls" hides until Meet ships; chat's switches live once, in the role editor. *Rejected:* keeping two places that decide "who can create a channel".
 12. **Agent posts are authored by the key's creator** with `via` = the key's name, as Tasks 52; mentions by an agent notify like a person's (audit D15). *Rejected:* the null author and "App" badge.
 13. **No history limit.** Everything stays searchable for as long as the workspace exists (Slack's free plan hides older than 90 days and deletes after a year).
-14. **Chat gets its own key table**, collision-checked against Tasks' keymap (audit D22): ⌥↑↓ previous/next conversation, ⌥⇧↑↓ next unread (a listed scope-separated collision), ↑ edits your last message, `R` `E` `T` `H` in Catch up, `T` on a selected message.
+14. **Chat gets its own key table**, collision-checked against Tasks' keymap (audit D22): ⌥↑↓ previous/next conversation, ⌥⇧↑↓ next unread (a listed scope-separated collision), ↑ edits your last message, `R` `Space` `T` `H` in Catch up, `T` on a selected message (`T` is Today on the Timeline: a separate scope, listed as accepted).
 
 ## 7. What Chat waits on from the Tasks v3 build
 
@@ -270,6 +270,7 @@ Chat's own blocks can start on what's landed (structure, editor, References, pan
 - **No `#` in front of channel names.** `#` means tags everywhere else in Moduo (CH14); `#design` the channel and `#design` the tag would look identical.
 - **"Star" becomes "Pin to sidebar"** (Tasks 29b's word). A message pinned to a conversation keeps "Pin to conversation": the same idea (keep it at the top) at two places. *Alternative:* a different word for messages ("Keep at top"); I don't think the overlap confuses.
 - **Notes to self (a DM with yourself) goes.** ⌘⇧K already captures into your Inbox, or a quick note with ⌘2; a third scratchpad splits what you meant to find later. Picking only yourself offers "Capture a note" instead.
+- **48a:** names as typed and one meaning per symbol help everyone; Slack migrants lose `#channel` and the self-DM habit, and capture serves them better once learned.
 - *Recommend: all five.* · changes v1
 
 ❓ OK? (any you'd keep as v1?)
@@ -327,8 +328,8 @@ Chat's own blocks can start on what's landed (structure, editor, References, pan
 
 **★ CH8 · Catch up: one place for what's addressed to you** (frame 2)
 - **What it is:** the first row of the left panel. It lists only what CH6 would ping you for (DMs, `@you`, replies in your threads, announcements), grouped by conversation (variant: newest first).
-- **It's a mode, like Tasks' Inbox triage** (Tasks 82b): the bottom bar shows **Reply `R` · Done `E` · Task `T` · Later `H` · Open `⏎` · More**, then "4 left · Esc". The selected item opens in context on the right.
-  - **Done** clears it (reading it in its conversation clears it too).
+- **It's a mode, like Tasks' Inbox triage** (Tasks 82b): the bottom bar shows **Reply `R` · Done `Space` · Task `T` · Later `H` · Open `⏎` · More**, then "4 left · Esc". The selected item opens in context on the right.
+  - **Done (`Space`)** clears it (reading it in its conversation clears it too). `Space` because it's how Tasks completes a row; `E` already means "edit" in the key map.
   - **Task** opens the capture (CH10).
   - **Later** brings it back at a time you pick ("in 1 hour · this evening · tomorrow"), like Tasks' Snooze `H`. No separate "saved for later" list.
 - **Empty:** "You're caught up." Channels with messages you weren't asked about stay bold in the sidebar; they keep.
@@ -405,6 +406,7 @@ Chat's own blocks can start on what's landed (structure, editor, References, pan
 - **v1:** a plain text box with `**bold**`-style markup; a picked item reads as raw words until sent.
 - **Proposed:** the composer is the app's shared editor (the one capture and notes use): references appear as chips while you type, formatting shows as you type, and markdown shortcuts still work (`**`, `` ` ``, `>`). ⏎ sends, ⇧⏎ makes a new line. Pasting stays clean text.
 - **Why it's a call:** you'd feel it every message. The rest (storage, the one grammar) is technical and in §6.
+- **48a:** people who never type markup get formatting they can see; people who do keep their shortcuts.
 - *Recommend: yes.* · changes v1
 
 ❓ OK?
@@ -413,6 +415,7 @@ Chat's own blocks can start on what's landed (structure, editor, References, pan
 - **The six fixed reactions** every comment has (👍 ✅ 👀 🙏 ❤️ 😄) are the one-click row on hover; **any emoji** sits behind ☺. Comments keep only the six (88 unchanged).
 - **Reactions never notify** (as today, and as in Tasks).
 - **Alternative:** the six only, for strict sameness. I'd keep the full picker: chat is where people are social, and a hackathon team will want 🎉 and 🚀.
+- **48a:** everyone reacts; the fixed row makes the common ones one click for people who never open a picker.
 - *Recommend: six + any emoji behind ☺.* · changes v1 slightly
 
 ❓ Six + any, or six only?
@@ -420,6 +423,7 @@ Chat's own blocks can start on what's landed (structure, editor, References, pan
 **CH17 · Files in chat** (audit D38)
 - Paste, drop or attach: images and PDFs preview inline; everything else is a file chip. Through the app's attachments pipeline (50 MB per file today). Files are listed in the conversation's Details.
 - **Every role's week needs it** (screenshots, logos, decks); without it, teams keep WhatsApp or Discord open beside Moduo.
+- **48a:** universal; no group would skip it.
 - *Recommend: yes, in the hackathon MVP.* · new
 
 ❓ OK, and in the MVP?
@@ -436,6 +440,7 @@ Chat's own blocks can start on what's landed (structure, editor, References, pan
 - **The need:** agencies talk to clients, PMs to stakeholders, hackathons to judges and sponsors. A guest would see one conversation (and later one project or note) and nothing else, without taking a seat.
 - **Why later:** permissions v1 left guests out; a chat-only guest would have to be rebuilt when Notes and Tasks want the same.
 - **Proposed:** not in this plan's MVP. Planned with the permissions model as one guest for every module, after the hackathon.
+- **48a:** anyone client-facing (freelancers, consultants, teachers with parents) would want it; that's why it should be one app-wide model, not chat's.
 - *Recommend: later, one model.* · new (later)
 
 ❓ OK?
@@ -479,6 +484,7 @@ The hackathon readiness plan (`t/maciej/hackathon-plan`) owns workspaces, invite
 - **An announcement channel** (v1's "Only managers can post", kept) pings everyone once per post, **even on "Mentions and replies"**; only "Nothing" silences it. It reaches people in any workspace (CH6, CH22 C).
 - **Organizers see a quiet "Seen by 38 of 41"** under their own post; nobody else sees counts, and there are no per-person read receipts.
 - **Scheduled posts** ("Submissions close in 1 hour" written the night before): should-have for the event.
+- **48a:** a founder's weekly update, an agency's client notice and a teacher's class news are the same thing: rare posts that must land once.
 - *Recommend: yes; scheduled posts if the date allows.* · changes v1
 
 ❓ OK?
@@ -496,6 +502,7 @@ The hackathon readiness plan (`t/maciej/hackathon-plan`) owns workspaces, invite
 - **v1:** chat works only when the workspace owner is on Duo, Team or Founder. Hackathon workspaces' owners won't be.
 - **Proposed:** keep the owner's-plan rule, and add a second way in: a workspace can carry its own chat entitlement **with an end date**, set by Moduo staff (an event or a comp). After it ends, history stays readable, posting stops, and the owner sees "Keep chatting on Duo or Team".
 - **Rejected:** ungating chat in "event" workspaces with no end (a loophole), and spending each team owner's one trial on the event.
+- **48a:** the same dated grant serves classes, bootcamps and comps for early users.
 - *Recommend: yes.* · changes v1
 
 ❓ OK?
