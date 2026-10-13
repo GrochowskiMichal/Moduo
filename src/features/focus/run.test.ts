@@ -468,6 +468,30 @@ describe("two devices never both count (AC8.11)", () => {
     expect(givenBack).toEqual([]);
   });
 
+  it("a refused takeover isn't sent again: the run stays with the device that has it", async () => {
+    const { rows, rt } = fakeServer();
+    await rt.startRun({
+      workspaceId: WS,
+      deviceId: "desktop-1234",
+      mode: "per_task",
+      state: { nowTaskId: "t1", status: "running", phaseStartedAt: iso(T0) },
+    });
+    attach(rt);
+    await settle();
+    let saves = 0;
+    rt.saveRun = async () => {
+      saves += 1;
+      throw Object.assign(new Error("No edit access."), { code: "42501" });
+    };
+    takeRunControl(resolve);
+    await settle();
+    await refreshFocusRun();
+    await settle();
+    expect(saves).toBe(1);
+    expect(getFocusSession().tracking).toBe(false);
+    expect(rows[0].deviceId).toBe("desktop-1234");
+  });
+
   it("a later takeover elsewhere gives back only what this device counted", async () => {
     const { rows, rt, givenBack } = fakeServer();
     const saved: number[] = [];

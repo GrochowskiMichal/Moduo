@@ -113,8 +113,9 @@ let pendingTake = false;
 /** While a take is owed: the control moment the run had when this device
  *  took it (another device's), and when it took it (this device's clock). A
  *  server copy naming another device from no later than either is the take
- *  not having landed yet, not a newer takeover: the device acted on last
- *  keeps the run. */
+ *  not having landed yet, not a newer takeover. (Compared to this device's
+ *  clock too, so a take from elsewhere a moment before this one, unheard,
+ *  doesn't win; clock skew can blur that moment.) */
 let takeFrom: number | null = null;
 let takeAt: number | null = null;
 /** Server writes go one at a time, in the order they were made. */
@@ -535,7 +536,15 @@ async function saveNow(target?: FocusRun): Promise<void> {
       state: snapshotFor(run, Date.now()),
     });
   } catch (error) {
-    if (take) pendingTake = true;
+    // Offline or a passing failure: the take stays owed. A refusal (no edit
+    // access any more, a bad state) isn't: the run is left to the device
+    // that has it.
+    const code = (error as { code?: unknown }).code;
+    if (take && code !== "42501" && code !== "22023") pendingTake = true;
+    else if (take && !pendingTake) {
+      takeFrom = null;
+      takeAt = null;
+    }
     throw error;
   }
   if (take && !pendingTake) {

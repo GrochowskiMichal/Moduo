@@ -818,10 +818,11 @@ export function CalendarPageView({
           toast("No open slot left today — it's waiting in the strip below.");
           return;
         }
-        api.updateSession(session.id, {
+        const moved = api.updateSession(session.id, {
           startsAt: new Date(gap).toISOString(),
           endsAt: new Date(gap + durMs).toISOString(),
         });
+        if (!moved) return; // refused up front, and said why
         toast(`Moved to ${formatTimeOfDay(gap)}`, {
           duration: UNDO_TOAST_MS,
           action: {
@@ -884,7 +885,7 @@ export function CalendarPageView({
       // back at the same times.
       const session = sessionId ? api.sessions.find((s) => s.id === sessionId) : undefined;
       if (session) {
-        api.removeSession(session.id);
+        if (!api.removeSession(session.id)) return; // refused up front, and said why
         markWorked(taskId, false);
         toast("Removed from the calendar", {
           duration: UNDO_TOAST_MS,

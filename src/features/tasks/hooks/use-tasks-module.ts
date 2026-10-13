@@ -2224,13 +2224,19 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
   // its own change. A session's person is me or the task's assignee (the
   // server refuses anyone else, TV-D10-fix), and moving or resizing keeps it.
 
+  // Each answers whether the write started (false: it was refused up front
+  // and said why), so a caller's own toast and Undo show only for a real one.
+
   /** Schedule a work session (the panel's Scheduled picker). */
   const addSession = useCallback(
-    (taskId: string, input: { startsAt: string; endsAt: string; userId: string | null }) => {
-      if (editBlocked() || !store || !runtime || !workspaceId) return;
+    (
+      taskId: string,
+      input: { startsAt: string; endsAt: string; userId: string | null },
+    ): boolean => {
+      if (editBlocked() || !store || !runtime || !workspaceId) return false;
       if (isTempId(taskId)) {
         toast.error(STILL_SAVING);
-        return;
+        return false;
       }
       const shown: TaskSession = {
         id: crypto.randomUUID(),
@@ -2256,14 +2262,15 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
           setActivityStamp((n) => n + 1);
         })
         .catch((e) => refused(write, e, "Couldn’t schedule the session."));
+      return true;
     },
     [editBlocked, store, runtime, workspaceId, refused],
   );
 
   /** Move or resize a session; its person stays. */
   const updateSession = useCallback(
-    (sessionId: string, patch: { startsAt?: string; endsAt?: string }) => {
-      if (editBlocked() || !store || !runtime || !workspaceId) return;
+    (sessionId: string, patch: { startsAt?: string; endsAt?: string }): boolean => {
+      if (editBlocked() || !store || !runtime || !workspaceId) return false;
       const write = store.begin([{ table: "sessions", patch: { id: sessionId, fields: patch } }]);
       void runtime.tasks
         .updateSession({ workspaceId, sessionId, patch })
@@ -2272,13 +2279,14 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
           setActivityStamp((n) => n + 1);
         })
         .catch((e) => refused(write, e, "Couldn’t move the session."));
+      return true;
     },
     [editBlocked, store, runtime, workspaceId, refused],
   );
 
   const removeSession = useCallback(
-    (sessionId: string) => {
-      if (editBlocked() || !store || !runtime || !workspaceId) return;
+    (sessionId: string): boolean => {
+      if (editBlocked() || !store || !runtime || !workspaceId) return false;
       const write = store.begin([{ table: "sessions", remove: sessionId }]);
       void runtime.tasks
         .removeSession({ workspaceId, sessionId })
@@ -2288,6 +2296,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
           setActivityStamp((n) => n + 1);
         })
         .catch((e) => refused(write, e, "Couldn’t remove the session."));
+      return true;
     },
     [editBlocked, store, runtime, workspaceId, refused],
   );
