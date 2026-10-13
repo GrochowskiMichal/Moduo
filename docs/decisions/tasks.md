@@ -387,6 +387,11 @@ Built in tasks-v3 block 31 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §12, �
   - Decision: no notice carries a task's title, a note's title or a comment's text: assigned, completed, unblocked (the finished task by `blocker_id`), team check-back, waiting resolved, mentioned, a note's mention, and the comment notices (`comment_id`), as reminders, team notices and agents' notices already did (D16-16). The bell and Home's Activity widget name tasks through the entity registry and quote a comment through the comments' read policy, each for the reader, so a card about something they can no longer see reads "assigned this to you", "left a comment", "unblocked this". A deleted project's name stays on its notice (`tasks.project_deleted`: its readers could see it when it was deleted). The task trail shows "unblocked this" without the other task's name.
   - Why: a notice outlives its reader's access to what it's about; an unblocking task can be one its reader never saw.
   - Rejected: re-checking access in the bell's read for each kind (every new kind would have to remember it).
+- **D16-20 · A deleted project's notice keeps its name** → (`projects_op_delete`, `tasks.project_deleted`, unchanged)
+  - Who: agent's choice, confirmed by the orchestrator, 2026-10-14.
+  - Decision: "deleted “Website” · your task is in your Inbox" keeps the project's name in the notice.
+  - Why: it goes only to people who could see the project when it was deleted, and once it's gone the registry can't name it.
+  - Rejected: "deleted a project" with no name.
 
 ## 2026-10-13 · TV-U12 Multi-select and the bottom-bar mode pattern — the agent's choices (deferred to by Maciej)
 
