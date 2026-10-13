@@ -317,7 +317,9 @@ export function TeamEditor({ team, teams }: { team: Team; teams: WorkspaceTeams 
   const { members: workspaceMembers } = useWorkspace();
   const editable = teams.canEdit;
   const manages = teams.canManage(team);
-  const creator = workspaceMembers.find((w) => w.userId === team.createdBy && !w.removedAt);
+  const creatorName = workspaceMembers
+    .find((w) => w.userId === team.createdBy && !w.removedAt)
+    ?.displayName?.trim();
   // What's being typed (null: not editing), so a change a teammate made while
   // the pane was open shows, and leaving a field untouched never saves it.
   const [nameDraft, setNameDraft] = useState<string | null>(null);
@@ -403,9 +405,9 @@ export function TeamEditor({ team, teams }: { team: Team; teams: WorkspaceTeams 
       <ExplainStrip>{WHAT_TEAMS_DO}</ExplainStrip>
       {editable && !manages ? (
         <p className="text-xs text-muted-foreground">
-          Only {creator ? memberLabel(creator) : "its creator"}, the workspace owner or an admin
-          renames {team.name}, changes its colour or default project, or takes people out. You can
-          add people, or leave it.
+          Only {creatorName || "its creator"}, the workspace owner or an admin renames {team.name},
+          changes its colour or default project, or takes people out. You can add people, or leave
+          it.
         </p>
       ) : null}
 
