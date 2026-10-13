@@ -160,9 +160,7 @@ _Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
 
 > **Planned 2026-10-13 (`/s1`, engineer mode, Mike).** Keeps Lexical + the Yjs/`note_updates` model; rebuilds the surface and editor core behind a per-user "New Notes" switch, then flips (NR-12). NR-1 and NR-2 are DoR-ready; NR-7 has no deps and can run beside NR-1. NR-9 waits for AT-1 to reach `develop` (it is held on `maciej`) and is not a flip dependency.
 
-- [x] **NR-1 — Organizing data: stored Inbox, per-user Favorites, full width** · deps: — · lane notes-data · Tier 2 (migration) · ✅ done 2026-10-13 (#354); migration applied to prod 2026-10-13 (version 20261013120000)
 - [ ] **NR-7 — Secure live channel + named presence** · deps: — · lane notes-data · Tier 2 (`realtime.messages` policy)
-- [x] **NR-2 — New Notes shell + sidebar, behind the switch** · deps: NR-1 · lane notes-ui · ✅ built 2026-10-13 (`t/mike/nr-2-notes-shell`, #356); signed-in live check pending (docs/testing/2026-W42/NR-2.md)
 - [ ] **NR-3 — Editor core: schema/view split, one markdown converter, honest provider, meta line + Linked-from footer** · deps: NR-2 · lane notes-editor
 - [ ] **NR-4 — Writing UX: quiet block handles, unified menus, `[[` links, ⌘K link dialog, mindmap drop** · deps: NR-3 · lane notes-editor
 - [ ] **NR-5 — Task lines in the document (no overlay), inline due/schedule/assignee** · deps: NR-3 · lane notes-editor
