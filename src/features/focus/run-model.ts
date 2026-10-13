@@ -99,13 +99,15 @@ export interface FocusRunRuntime {
   /**
    * Give back seconds this device saved on a task after another device took
    * the run over (they were counted there too): one negative adjustment
-   * through `tasks_op_track_time`, under `key` so a resend counts once.
+   * through `tasks_op_track_time`, under `key` so a resend counts once,
+   * labelled a give-back from `runId` (TV-D14).
    */
   giveBackTime(input: {
     workspaceId: string;
     taskId: string;
     seconds: number;
     key: string;
+    runId?: string | null;
   }): Promise<void>;
 }
 

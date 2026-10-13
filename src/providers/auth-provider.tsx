@@ -14,7 +14,6 @@ import { forgetCaptureDrafts, keepCaptureDraftsOf } from "../features/tasks/capt
 import { clearTemplates } from "../features/tasks/templates/templates-store";
 import { forgetRememberedWorkspaces } from "../features/workspaces/remembered-workspaces";
 import { Analytics, setAnalyticsUser } from "../lib/analytics";
-import { sendDeviceTimeZone } from "../lib/device-time-zone";
 import { forgetBrowserPush, postPushUser } from "../lib/notices/browser-push";
 import {
   initRuntime,
@@ -23,6 +22,7 @@ import {
   runtimeConfigError,
 } from "../lib/runtime";
 import { attachSyncUser, wipeSyncCopies } from "../lib/sync/store";
+import { forgetTimeRegion, syncTimeRegion } from "../lib/time-region";
 
 export type { PlanTier } from "@contracts/vocabularies";
 
@@ -152,6 +152,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       setSession(nextSession ?? null);
       setLoading(false);
       const uid = event === "SIGNED_OUT" ? null : (nextSession?.user?.id ?? null);
+      const previousUser = sessionUser.current;
       sessionUser.current = uid;
 
       if (event === "TOKEN_REFRESHED") {
@@ -163,8 +164,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
       // Refresh plan tier on sign-in events, and start analytics once the account is confirmed.
       if ((event === "SIGNED_IN" || event === "INITIAL_SESSION") && uid) {
-        // Repeats come back at their assignee's midnight (TV-D8).
-        sendDeviceTimeZone(rt, uid);
+        // Time & region (TV-D14): the person's zone, week start, clock and
+        // date order; a zone nobody picked becomes this device's (repeats
+        // come back at their assignee's midnight, TV-D8), a saved zone that
+        // isn't the device's asks once.
+        void syncTimeRegion(rt.preferences, uid);
         rt.workspace
           .getProfile(uid)
           .then((result) => {
@@ -181,6 +185,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
         forgetCaptureDrafts();
         // Nor does the template list read this session (TV-D15).
         clearTemplates();
+        // Dates read the device's way again; the person's copy goes (TV-D14).
+        forgetTimeRegion(previousUser);
         // Analytics opts out and forgets them. `app_signed_out` is tracked in signOut(),
         // only when the person signs out: one auth-js does on its own, like a refused
         // refresh after the account was deleted elsewhere, must not send an event that

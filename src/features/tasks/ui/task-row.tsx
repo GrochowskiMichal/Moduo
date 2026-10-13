@@ -6,6 +6,7 @@ import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
 import { Row, RowColumn, RowColumns as RowColumnsSlot } from "../../../components/ui/row";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
+import { useTimeRegion } from "../../../lib/time-region";
 import { cn } from "../../../lib/utils";
 import { assigneeLabel } from "../assignee-options";
 import { useAssignees } from "../assignees";
@@ -171,6 +172,9 @@ function TaskRowView({
   actions,
   today,
 }: Props) {
+  // Dates and times redraw when Time & region changes (TV-D14): this row is
+  // memoised on its facts, which don't carry the setting.
+  useTimeRegion();
   // A Won't do task kept in view (TV-P0) reads closed, like a done one.
   const closed = isClosedTask(task);
   const late = isLate(task, today);

@@ -6,6 +6,7 @@ import { memo, useCallback } from "react";
 import { TeamMark } from "../../../components/ui/avatar";
 import { ItemCard, ItemCardMeta, ItemCardTitle } from "../../../components/ui/item-card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
+import { useTimeRegion } from "../../../lib/time-region";
 import { cn } from "../../../lib/utils";
 import { assigneeLabel } from "../assignee-options";
 import { useAssignees } from "../assignees";
@@ -120,6 +121,8 @@ function TaskCardView({
   taskKey = null,
   team = null,
 }: Props) {
+  // Dates redraw when Time & region changes (TV-D14; the card is memoised).
+  useTimeRegion();
   const {
     attributes,
     listeners,

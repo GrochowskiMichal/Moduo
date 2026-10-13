@@ -1,38 +1,29 @@
-// Locale-aware time formatters for the grid chrome. Intl.DateTimeFormat
-// construction is expensive (~0.1–1ms) and the grid calls these per chip per
-// render — the instances are cached at module level (the tasks/helpers
-// pattern) and hour labels are memoized over their 24-value domain.
+// Time formatters for the grid chrome. They read the app's one date grammar
+// (`lib/time-format.ts`), so the clock and the date order follow Settings →
+// Time & region (TV-D14). Hour labels are memoized over their 24-value domain
+// per clock, since the grid asks for them every render.
 
-const TIME_FMT = new Intl.DateTimeFormat(undefined, {
-  hour: "numeric",
-  minute: "2-digit",
-});
+import { formatHour, formatTime, formatWeekdayDate } from "../../../lib/time-format";
+import { getResolvedTimeRegion } from "../../../lib/time-region";
 
-const HOUR_FMT = new Intl.DateTimeFormat(undefined, { hour: "numeric" });
+const hourLabelCache = new Map<string, string>();
 
-const hourLabelCache = new Map<number, string>();
-
-/** "9 AM" / "14" — the hour-gutter label. */
+/** "9 AM" / "09" — the hour-gutter label. */
 export function formatHourLabel(hour: number): string {
-  const cached = hourLabelCache.get(hour);
+  const key = `${getResolvedTimeRegion().hour12}|${hour}`;
+  const cached = hourLabelCache.get(key);
   if (cached !== undefined) return cached;
-  const label = HOUR_FMT.format(new Date(2000, 0, 1, hour));
-  hourLabelCache.set(hour, label);
+  const label = formatHour(hour);
+  hourLabelCache.set(key, label);
   return label;
 }
 
 /** "9:00 AM" — chip time readouts, from a real instant. */
 export function formatTimeOfDay(ms: number): string {
-  return TIME_FMT.format(ms);
+  return formatTime(ms);
 }
-
-const DAY_FMT = new Intl.DateTimeFormat(undefined, {
-  weekday: "short",
-  month: "short",
-  day: "numeric",
-});
 
 /** "Thu, Jul 2" — the chip popovers' day line. */
 export function formatDayLabel(ms: number): string {
-  return DAY_FMT.format(ms);
+  return formatWeekdayDate(ms);
 }

@@ -1,6 +1,7 @@
 import {
   Building2,
   CreditCard,
+  Globe,
   Info,
   KeyRound,
   type LucideIcon,
@@ -31,6 +32,7 @@ import { BillingSection } from "./sections/billing-section";
 import { FocusSection } from "./sections/focus-section";
 import { IntegrationsSection } from "./sections/integrations-section";
 import { PreferencesSection } from "./sections/preferences-section";
+import { TimeRegionSection } from "./sections/time-region-section";
 import { WorkspaceSection } from "./sections/workspace-section";
 import {
   clearPendingOpenSettings,
@@ -63,6 +65,7 @@ const SECTIONS: SectionEntry[] = [
     icon: Sliders,
     Component: PreferencesSection,
   },
+  { id: "timeregion", label: "Time & region", icon: Globe, Component: TimeRegionSection },
   { id: "focus", label: "Focus", icon: Timer, Component: FocusSection },
   {
     id: "advanced",

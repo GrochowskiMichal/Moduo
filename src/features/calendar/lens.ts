@@ -8,6 +8,7 @@
 // Everything here is real-instant math over local calendar days — never hour
 // indices — so DST days (23h/25h) resolve correctly (see grid-layout.ts).
 
+import { formatDate, formatWeekdayDate } from "../../lib/time-format";
 import { todayStr } from "../tasks/helpers";
 import type { Task, TaskSession } from "../tasks/model";
 
@@ -258,6 +259,12 @@ export function blocksByDay(blocks: TaskBlock[]): Map<string, TaskBlock[]> {
 export function rangeLabel(range: VisibleRange, locale?: string, now: Date = new Date()): string {
   const first = range.days[0];
   const last = range.days[range.days.length - 1];
+  // The app passes no locale: the label reads the one date grammar, so it
+  // follows Time & region's date order (TV-D14).
+  if (!locale) {
+    if (range.view === "day") return formatWeekdayDate(first, now);
+    return `${formatDate(first, now)} – ${formatDate(last, now)}`;
+  }
   if (range.view === "day") {
     return first.toLocaleDateString(locale, {
       weekday: "long",

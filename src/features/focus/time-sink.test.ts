@@ -72,6 +72,19 @@ describe("createFocusTimeSink", () => {
     expect(saved).toEqual([{ workspaceId: WS, taskId: "t1", totalSeconds: 1500 }]);
   });
 
+  it("stamps the Focus run the stretch belongs to (TV-D14)", async () => {
+    const { inputs, trackTime } = fakeTrackTime("saved", 60);
+    const sink = createFocusTimeSink({
+      workspaceId: WS,
+      canEdit: () => true,
+      trackTime,
+      runId: () => "run-1",
+      onGone: () => {},
+    });
+    await expect(sink("t1", 60, ctx())).resolves.toBe(true);
+    expect(inputs[0]?.runId).toBe("run-1");
+  });
+
   it("drops time the task can't take, and says so once", async () => {
     const { trackTime } = fakeTrackTime("gone");
     const gone: number[] = [];

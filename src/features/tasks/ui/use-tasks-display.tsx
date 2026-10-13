@@ -22,6 +22,7 @@ import {
 } from "../display";
 import { showsDone } from "../filters";
 import type { Task } from "../model";
+import type { RowPreset } from "../row-layout";
 
 /** What List and Board take from Display. */
 export type TasksDisplayProps = {
@@ -54,6 +55,8 @@ export function useTasksDisplay(
   fallbackLayout?: TaskLayout,
   /** What Group by offers beyond the scope (Team once teams exist). */
   groupChoices?: GroupChoices,
+  /** The row preset a view starts with (the person's role's, TV-U17). */
+  rowsDefault: RowPreset = "standard",
 ): {
   display: TasksDisplay;
   setDisplay: (next: TasksDisplay) => void;
@@ -65,8 +68,9 @@ export function useTasksDisplay(
 } {
   const [prefs, setPrefs] = useViewPrefs<TasksViewPrefs>(
     tasksDisplayKey(workspaceId, scope),
-    () => tasksViewDefaults(scope, fallbackLayout),
+    () => tasksViewDefaults(scope, fallbackLayout, rowsDefault),
     (raw, defaults) => sanitizeTasksView(raw, defaults, scope),
+    rowsDefault,
   );
   const display = useMemo(() => displayOf(prefs), [prefs]);
   const filters = prefs.filters;
@@ -120,7 +124,7 @@ export function useTasksDisplay(
           setDisplay(next.order !== display.order ? { ...next, orderDir: "asc" } : next)
         }
         // Reset puts the choices back, not the layout you're looking at.
-        defaultValue={{ ...tasksDisplayDefaults(scope), layout: display.layout }}
+        defaultValue={{ ...tasksDisplayDefaults(scope, rowsDefault), layout: display.layout }}
       />
     ),
     viewProps: {

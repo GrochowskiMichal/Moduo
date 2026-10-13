@@ -10,6 +10,7 @@ import { Eyebrow } from "@/components/ui/eyebrow";
 import { IconButton } from "@/components/ui/icon-button";
 import { Input } from "@/components/ui/input";
 import type { ModuoRuntime } from "@/lib/runtime.types";
+import { formatFullDate } from "@/lib/time-format";
 import { cn } from "@/lib/utils";
 import { toPlainText } from "../markup";
 import type { ChatChannel, ChatMember, ChatMessage, ChatPerson } from "../model";
@@ -65,8 +66,6 @@ export function ThreadPanel({
     </div>
   );
 }
-
-const CREATED = new Intl.DateTimeFormat(undefined, { dateStyle: "long" });
 
 export function DetailsPanel({
   runtime,
@@ -152,8 +151,7 @@ export function DetailsPanel({
               {channel.topic || <span className="text-muted-foreground">No topic yet.</span>}
             </p>
             <p className="text-xs text-muted-foreground">
-              Created {creator ? `by ${creator.name} ` : ""}on{" "}
-              {CREATED.format(new Date(channel.createdAt))}
+              Created {creator ? `by ${creator.name} ` : ""}on {formatFullDate(channel.createdAt)}
             </p>
             {channel.archivedAt ? (
               <p className="text-xs text-muted-foreground">Archived — read only.</p>

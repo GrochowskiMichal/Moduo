@@ -86,7 +86,11 @@ async function gatherExport(
   };
 
   return Promise.all([
-    read("tasks", () => readTasksExport(runtime.tasks, workspaceId, runtime.focus)),
+    read("tasks", async () => ({
+      ...(await readTasksExport(runtime.tasks, workspaceId, runtime.focus)),
+      // Your Time & region and the share switch your time entries follow (TV-D14).
+      timeRegion: await runtime.preferences.getTimeRegion().catch(() => null),
+    })),
     read("notes", async () => {
       const bundle = await runtime.notesV2.listMeta(workspaceId);
       const ids = bundle.notes.map((n) => n.id);

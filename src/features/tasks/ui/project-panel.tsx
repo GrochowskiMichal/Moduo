@@ -5,8 +5,11 @@
 // overview (time, files, waiting, activity, "Done this month") is TV-U16's.
 
 import { isClosedTask, taskCategoryOf } from "@contracts/vocabularies";
-import { FolderKanban } from "lucide-react";
+import { Clock, Copy, FolderKanban } from "lucide-react";
+import { useState } from "react";
+import { toast } from "sonner";
 
+import { Button } from "../../../components/ui/button";
 import { CollectionHeader } from "../../../components/ui/collection-header";
 import { EmptyState } from "../../../components/ui/empty-state";
 import { NavRowDot } from "../../../components/ui/nav-row";
@@ -14,8 +17,10 @@ import { Progress } from "../../../components/ui/progress";
 import { PropertyRow } from "../../../components/ui/property-row";
 import { formatDate } from "../../../lib/time-format";
 import { useAssignees } from "../assignees";
+import { projectOverviewText } from "../list-export";
 import type { Bucket, Section, Task } from "../model";
 import { bucketDotColor } from "../sidebar";
+import { TimeReportSheet } from "./time-report-sheet";
 
 const STATE_LABEL: Record<string, string> = {
   active: "Active",
@@ -48,6 +53,7 @@ export function ProjectPanel({
   sections: readonly Section[];
 }) {
   const { byId } = useAssignees();
+  const [reportOpen, setReportOpen] = useState(false);
   if (!project || project.isSystem) {
     return (
       <EmptyState
@@ -106,6 +112,47 @@ export function ProjectPanel({
           {facts.backlog > 0 ? ` · Backlog ${facts.backlog}` : ""}
         </p>
       </div>
+      {/* The time report and getting the overview out (TV-D14); TV-U16
+          fills the rest of the overview. */}
+      <div className="flex flex-wrap gap-1.5">
+        <Button size="sm" variant="secondary" onClick={() => setReportOpen(true)}>
+          <Clock aria-hidden />
+          Time report
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => {
+            const open = tasks.filter(
+              (t) => t.bucketId === project.id && !t.deletedAt && !isClosedTask(t),
+            );
+            const text = projectOverviewText(project, facts, open, {
+              projectName: () => project.name,
+              assigneeName: (id) => {
+                const person = id ? byId(id) : null;
+                return person ? person.fullName || person.name : null;
+              },
+            });
+            if (!navigator.clipboard) {
+              toast.error("Couldn’t copy.");
+              return;
+            }
+            void navigator.clipboard.writeText(text).then(
+              () => toast("Copied"),
+              () => toast.error("Couldn’t copy."),
+            );
+          }}
+        >
+          <Copy aria-hidden />
+          Copy as text
+        </Button>
+      </div>
+      <TimeReportSheet
+        open={reportOpen}
+        onOpenChange={setReportOpen}
+        workspaceId={project.workspaceId}
+        scope={{ kind: "project", projectId: project.id, name: project.name }}
+      />
       {projectSections.length > 0 ? (
         <div>
           <CollectionHeader label="Sections" count={projectSections.length} />

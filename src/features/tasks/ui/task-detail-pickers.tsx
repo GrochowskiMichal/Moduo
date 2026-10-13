@@ -11,7 +11,7 @@
 import type { TaskReminderKind } from "@contracts/vocabularies";
 import { isOpenTask } from "@contracts/vocabularies";
 import { Bell, CalendarClock, Clock, Plus, Repeat, SkipForward, Timer, X } from "lucide-react";
-import { type ReactNode, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import { Button } from "../../../components/ui/button";
 import { Calendar } from "../../../components/ui/calendar";
@@ -55,6 +55,7 @@ import {
 } from "../repeat";
 import { formatMinutes, formatTracked, parseMinutes, timeRow } from "../time-format";
 import { AssigneeAvatar } from "./assignee-avatar";
+import { TaskTimeEntries } from "./task-time-entries";
 
 // ── Due time ──────────────────────────────────────────────────────────────────
 
@@ -612,7 +613,7 @@ export function EstimateValue({
             {value}
           </PropertyValue>
         </PopoverTrigger>
-        <PopoverContent align="start" className="w-64 p-3">
+        <PopoverContent align="start" className="w-80 p-3">
           <EstimateEditor task={task} api={api} onDone={() => setOpen(false)} />
         </PopoverContent>
       </Popover>
@@ -682,6 +683,18 @@ function EstimateEditor({
   });
   const [estimate, setEstimate] = useState(baseline.current.estimate);
   const [tracked, setTracked] = useState(baseline.current.tracked);
+  // A total that moves while the editor is open ("Add time…", Focus) shows in
+  // the field as long as nobody is typing there; the new baseline means a
+  // field left alone still writes nothing (TV-D14).
+  const shownTotal = formatTracked(task.timeSpentSeconds);
+  useEffect(() => {
+    if (shownTotal === baseline.current.tracked) return;
+    setTracked((typed) => {
+      if (typed !== baseline.current.tracked) return typed;
+      baseline.current.tracked = shownTotal;
+      return shownTotal;
+    });
+  }, [shownTotal]);
 
   const saveEstimate = (minutes: number | null) => {
     const next = minutes && minutes > 0 ? minutes : null;
@@ -763,6 +776,8 @@ function EstimateEditor({
           onKeyDown={onKey}
         />
       </div>
+      {/* "Add time…" and your own entries (TV-D14). */}
+      <TaskTimeEntries task={task} api={api} />
     </div>
   );
 }

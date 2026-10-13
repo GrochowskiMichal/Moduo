@@ -62,6 +62,127 @@ Built in tasks-v3 block 16 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §4, AC
   - Why: a grouped Inbox's next row isn't the flat order's.
   - Rejected: re-deriving the List's groups in the page.
 
+## 2026-10-13 · TV-D14 Time entries, the time report, Time & region — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 29 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §14, §Assumptions #17, #18, #26; REPLAN 75, 76, default f; migrations `20261013200000_user_preferences_time_region` and `20261013201000_time_entries_add`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to change.
+
+- **D14-1 · Time & region is plain columns on `user_preferences`, written by one op and read by one** → TV-D14 (`user_op_set_time_region`, `user_time_region`, `src/lib/time-region.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: `time_zone` (TV-D8's), `time_zone_manual`, `week_start`, `hour_cycle`, `date_order` and `share_time_with_owner`; NULL follows the device. Only the ops write them: a trigger keeps a direct write's old values (a new row starts from the defaults), so every value has passed the op's checks. The app keeps a copy per person (localStorage, for the first paint), reads the server's at every sign-in and when the section opens, and every module reads it through `getResolvedTimeRegion()` / `useTimeRegion()`.
+  - Why: spec #17 names the columns; the server needs the zone and the share switch; a synced prefs domain would let a prefs push carry a stale copy over op-written columns.
+  - Rejected: a field in the synced `preferences` jsonb (D12-6's route for mutes), per-module settings.
+- **D14-2 · Clocks on screen stay the device's; the saved zone is the clock your day runs on** → TV-D14 (`engineZone`, `tasks_time_report`'s `p_zone`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: times show in the device's zone (as before); the saved zone decides when repeats roll over, how reminders and due times are read (TV-D8/D12), the repeat preview in the app, and which day a time report puts an entry on. Week start, the 12/24-hour clock and the date order change every displayed date: Tasks, Focus, comments and date chips, snippets and the bell, the Calendar (hours, chips, the range, quick create, spoken repeats), the Clock widget, Email (detail dates, snooze labels and hints), Chat (times, day headers, channel dates), Contacts' dates and Settings' "Joined" / "Last used". Booking pages (a guest's view in the host's zone), ICS and the email list's compact "13Oct" keep their own formats.
+  - Why: the app reads every date-only value as a device-local midnight; re-zoning only some displays would put due dates on the wrong day across zones.
+  - Rejected: formatting every moment in the saved zone (an app-wide refactor; the Calendar rebuild can take it on).
+- **D14-3 · The zone is the person's; a device elsewhere asks once** → TV-D14 (`syncTimeRegion`, `TimeRegionPrompt`, `user_op_set_time_zone` re-cut)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the first sign-in on a current build adopts the device's zone silently (as TV-D8's sign-in write did) and marks it the person's; afterwards a device in another zone asks once per zone and device: "Your computer is on New York time now." · Use New York time · Keep Tokyo. Picking a zone in Settings counts as answering. An older build's sign-in write no longer moves a zone that is the person's.
+  - Why: REPLAN 76's travel prompt; a silent follow-the-device would move repeats and reminders while travelling.
+  - Rejected: an "Automatic" zone mode, asking at every sign-in.
+- **D14-4 · One week start; Calendar's own isn't carried over** → TV-D14 (`day-buckets.ts`, `use-calendar-prefs.ts`, `grammar.ts`, `date-field.tsx`, `calendar.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: Filter → This week, the Calendar's weeks, `/next week`, the date picker's "Next week" and its month grid follow Time & region (the device's first day by default, Monday when the engine has no week data). `calendar.weekStartsOn` isn't copied: nothing ever let anyone change it, so it only held the old default. Date grouping stays rolling (TV-U2).
+  - Why: REPLAN 76 ("Calendar's own week-start setting moves here").
+  - Rejected: carrying a value nobody chose (it would pin Monday for everyone who opened the Calendar).
+- **D14-5 · "Add time…" is one quick line; your entries are listed under it** → TV-D14 (`tasks_op_track_time` add/edit/remove, `time-entries.ts`, `TaskTimeEntries`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: "2h yesterday call with Anna": the length first, then an optional day (today, yesterday, a weekday, a date), then the note; one minute to 24 hours, up to 13 months back, never after tomorrow. A logged entry is kind `manual` with its day. Logged and Focus entries can be edited (length, note; a logged entry's day) and removed (Undo logs it back); an edit sends only what changed, so a note never rounds a Focus stretch to the minute, and a Focus stretch keeps its end (a new length moves its start, so it never ends after now). Adjustments keep their Undo; give-backs are labelled and fixed. Only your own entries change, and only with Edit on the task: "or someone with Edit" is read as the gate on adding, never a licence to change a teammate's hours.
+  - Why: the spec's "2h · yesterday · note"; Harvest and Toggl log the same way.
+  - Rejected: three separate fields, editing teammates' entries.
+- **D14-6 · Your entries sit behind the task gate** → TV-D14 (`task_time_entries_read_own`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: you read your own entries only on tasks you can still see; your time on a task taken away from you isn't in your list, your report or your export until the task comes back.
+  - Why: TV-D10-fix's rule for everything on a task; a report must never reveal a hidden task.
+  - Rejected: REPLAN 75's "your own time is always yours to export" for hidden tasks (it would show their titles).
+- **D14-7 · The report reads one row per entry, and the app groups them** → TV-D14 (`tasks_time_report`, `time-report.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: rows on tasks the reader can see, dated in the reader's zone; your own always; a teammate's only for the workspace owner and only while that teammate shares; waiting time and the dateless legacy totals never; a project or client report reads only projects the reader can see, and a project the reader can't see has no name ("Private project"). Lines sum their entries (a give-back nets out) and never go below zero; rounding is per line, up to the next quarter hour.
+  - Why: TV-H1, TV-U16 and TV-D16 reuse the same rows; billing rounds up.
+  - Rejected: server-side totals, rounding to the nearest quarter, rounding the total.
+- **D14-8 · One share switch, with the owner, in Time & region** → TV-D14 (`share_time_with_owner`, Settings → Time & region → Tracked time)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: off by default; it applies in every workspace you're in; owners see your entries (length, day, note) only on tasks they can see; turning it off takes them away at once.
+  - Why: REPLAN 75 (no surveillance unless you opt in); there is no Settings → Tasks yet.
+  - Rejected: a switch per workspace (the spec names one column).
+- **D14-9 · The report opens from the Project panel and a client's hub** → TV-D14 (`ProjectPanel`, `ClientTimeReport`, `TimeReportSheet`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the Project panel gains Time report and Copy as text (TV-U16 fills the rest); a contact who is the client of a project you can see gets a "Time" section in their hub. The sheet: period (this/last week, this/last month, last 30 days, picked dates), by task or by day, round to 15 minutes, the total, Export CSV, Export PDF.
+  - Why: REPLAN 75 ("a sheet from a project's overview and a client's hub").
+  - Rejected: a report page (AGENTS.md rule 7).
+- **D14-10 · Export PDF is the print layout through the system print dialog** → TV-D14 (`PrintRoot`, `lib/print.ts`, `print_page`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: one light layout whatever the theme (the client, the period and the total on top, lines with notes, who tracked it where more than one person did, "Made with Moduo"); the browser's print, or on the desktop a `print_page` command (WKWebView ignores `window.print()`). The CSV holds the sheet's lines, hours as a decimal and as a duration, with cells a spreadsheet won't run as formulas.
+  - Why: spec #18 (no PDF service for one document).
+  - Rejected: a server PDF renderer, a PDF library in the bundle.
+- **D14-11 · Getting a list out: the view's ⋯** → TV-D14 (`ViewExportMenu`, `list-export.ts`), default f
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: a ⋯ beside Display: Copy as text · Export view as CSV · Print…, on the tasks the view shows (scope, filter, Display) in its order. A selection's "Copy as text" is the row menu's (TV-U10) until TV-U12's multi-select. The data export gains your own time entries.
+  - Why: default f; the toolbar's controls stay where they were.
+  - Rejected: an export page, items inside the Display menu.
+- **D14-12 · Focus saves stamp their run; give-backs say what they are** → TV-D14 (`time-sink.ts`, `giveBackTime`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: a save carries the open (or just ended) run of its workspace; the server keeps it only when it is the caller's own run there. A takeover's give-back carries its run and `reason = give_back`.
+  - Why: TV-F6's asks; the entries list labels give-backs.
+  - Rejected: stamping runs on the device only.
+- **D14-13 · Erasure clears your notes; the seconds stay** → TV-D14 (`account_erase_workspace_data`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: deleting an account clears the person's notes on time entries in workspaces they don't own (counted in the preview as `time_notes_cleared`); the seconds stay in each task's total and the profile cascade forgets whose they were (TV-D3).
+  - Why: §Assumptions #26; a note is the person's words.
+  - Rejected: deleting the entries (teams would lose real time from their totals).
+- **Known limits (TV-D14, revisitable):** times on screen don't follow a saved zone that differs from the device's (D14-2); a second device learns a changed setting at its next sign-in or when the section opens; Intl week data is missing on some engines (then Monday).
+
+## 2026-10-13 · TV-U17 Onboarding and welcome (tasks-v3 block 34) — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 34 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §16, AC2–AC7 defaults, AC11.1; REPLAN 34, 9, 30, 61, 66, 48b). Migration `20261013230000_templates_starter` (local stack only). Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **U17-1 · The role question opens Tasks' welcome, not workspace setup** → TV-U17 (`ui/tasks-welcome-dialog.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: "What will you run in Moduo?" is the welcome's first page, asked once per person the first time Tasks opens (six answers and Skip; closing it counts as Skip). Then the basics. Everyone gets it, including people who join a prepared workspace.
+  - Why: REPLAN 34 ("the role question first, then Tasks' welcome"); every default it sets is a Tasks default; the workspace setup screen stays one step.
+  - Rejected: asking on the workspace setup screen (only people who create a workspace would see it, never someone joining a prepared one).
+- **U17-2 · Once per person: synced preferences, read before deciding, only ever forward** → TV-U17 (`preferences.ts` `tasksOnboarding`, `prefs-sync.ts`, `ui/use-tasks-welcome.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the role, when it was answered, when the welcome first showed and which workspaces were seeded live in the synced preferences. The welcome decides only after this session has read the person's preferences (`usePreferencesReady`) and the task store has reached the server; it counts as seen the moment it shows; taking the cloud's copy never undoes "seen" or an answer this device knows (`mergeOnboardingForward`, same person only).
+  - Why: "per person, never per device"; a new device's mirror holds defaults until the account's copy arrives, and the preferences sync as one blob, last write wins.
+  - Rejected: localStorage (per device); a table (a migration for four fields).
+- **U17-3 · Someone who already made tasks here never gets the welcome** → TV-U17 (`onboarding.ts` `welcomeDecision`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: if the person created any task in this workspace, the welcome is marked seen quietly and the role isn't asked. Anyone can open it from the sidebar's ⋯ or Help.
+  - Why: "stay out of the way for experienced people": everyone using Tasks today would otherwise get a first-run dialog for a module they know.
+  - Rejected: showing it to everyone once at release.
+- **U17-4 · Teaching tasks only for the owner of an empty workspace** → TV-U17 (`onboarding.ts` `shouldSeedWorkspace`, `teachingTaskTitles`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: when the welcome first opens for someone who owns this workspace and it holds no tasks and no projects, three tasks go into their Inbox, once per workspace: "Press ⌘⇧K anywhere to capture a task", "Type @, # or / in a task's name to assign, tag or date it", "Press Q on this task to line it up in Focus" (the capture keys as this device writes them).
+  - Why: REPLAN 34 ("seeded once, for whoever creates the workspace"); the empty states already teach each view's gesture (TV-U15), these are the gestures to try.
+  - Rejected: seeding for everyone (it would fill every hackathon attendee's Inbox in a prepared workspace).
+- **U17-5 · Starter templates are built on the server from a key** → TV-U17 (`20261013230000_templates_starter`, `STARTER_TEMPLATES` in `@contracts/vocabularies`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (the key, not a body, was the orchestrator's ask).
+  - Decision: `project_templates_op_starter(workspace, {id, starter})` makes Project kickoff (a PM), Monthly close (a founder or ops), Client onboarding (client work) or Episode (a creator, with Ideas · Planned · Drafting · Editing · Published) from a body the server writes. It's the caller's, private, never shareable, needs Tasks edit, refuses API keys, and a resend makes nothing twice. The welcome says where it is ("… is in your templates: the sidebar's ⋯, then New project from template…").
+  - Why: REPLAN 9 is yes, so the role's starter template is in; a body the server writes can't point at anyone's items.
+  - Rejected: an op that stores a body the app sends; saving a template from a throwaway project and deleting it (activity and a Recently deleted row for nothing).
+- **U17-6 · What a role sets** → TV-U17 (`onboarding.ts` `ROLE_DEFAULTS`, `default-view.ts`, `display.ts`, `view-prefs.ts`), TV-U8
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: REPLAN §3's table. The first view opens on answering and on any first open later (nothing remembered on that device): Upcoming (student), the Inbox (developer, founder), the first project as its Board (PM, creator; All while there's none), All (client work: every project's tasks, project by project). Developers start on Detailed rows wherever a view remembers no Display of its own. The seeded saved views wait for TV-U8 (`ROLE_DEFAULTS[role].views`).
+  - Why: defaults only, never a feature on or off (REPLAN 34).
+  - Rejected: writing Detailed into every view's saved Display (a later role change couldn't tell a choice from a default).
+- **U17-7 · The welcome's pages and words** → TV-U17 (`ui/tasks-welcome-dialog.tsx`, `ui/focus-empty-state.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the basics: "Welcome to Tasks" and three lines (⌘⇧K captures from anywhere and lands in your Inbox; click a task or press ⏎ to open it; Focus works through what's next, one task at a time) with Explore on my own and Learn more. Then three steps, each a clip, a title and a sentence or two: "Above the line is yours", "Line things up in Focus" (the Focus empty state's own words, `FOCUS_WHAT_IT_IS` and `FocusKeyHints`), "@, # and / work everywhere" (Maciej's line). Back · Next (Done on the last) · three dots · Close always · Esc. The dialog takes focus itself, so no answer looks picked. No celebration.
+  - Why: REPLAN 34 as decided 2026-10-10; under a minute for someone new.
+  - Rejected: a fourth step; a toast or confetti on Done.
+- **U17-8 · Clips are frames of the whole window, recorded by script** → TV-U17 (`tests/clips/welcome-clips.spec.ts`, `public/welcome/`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: a Playwright script drives the real app in a tidy sample workspace and saves 3–4 frames per step (the whole 1280 × 720 window, bottom bar included, shrunk to 960 px JPEGs, ~55 KB each); the dialog cross-fades them every 1.8 s and shows the first frame under reduced motion; a frame that won't load hides the clip, not the words. Re-run the script when the UI changes.
+  - Why: REPLAN 34 ("recorded from the real app by script") and 48b (show the 3×3 with the bottom bar); still frames play in every webview.
+  - Rejected: Playwright's WebM video (no ffmpeg here to make MP4, and WebM in the desktop app's WebKit is unproven); drawn illustrations (they go stale).
+- **U17-9 · Reopening it** → TV-U17 (`bucket-rail.tsx`, `help-menu.tsx`, `welcome-request.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: "What's in Tasks" at the end of the sidebar hairline's ⋯ and in Help (after Keyboard shortcuts, only with Tasks access; from another page it opens Tasks first). Both open the basics, never the role question.
+  - Why: REPLAN 34 ("reopened from the module's ⋯ menu and from Help"); SH-0's Help is global.
+  - Rejected: a Settings switch to "show the welcome again".
+
 ## 2026-10-13 · TV-U11 Board v3 — the agent's choices (deferred to by Maciej)
 
 Built in tasks-v3 block 15 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §5, AC4.2, AC7.1, AC7.4, AC11.6; REPLAN 22, 22a, 53a, 53b, 85, 86, defaults n and o; research views-board-detail.md §1–6). No migration. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.

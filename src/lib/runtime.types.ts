@@ -60,9 +60,12 @@ import type {
   TaskStatusCategory,
   TasksCatchUpItem,
   TasksModuleBundle,
+  TaskTimeEntry,
   TaskTimeResult,
   TaskTimeTotals,
   TimeBlockMap,
+  TimeReportQuery,
+  TimeReportResult,
   TrackTimeInput,
 } from "../features/tasks/model";
 import type { EntityLink, EntityRecord, EntityRef, LinkOrigin, RelationKind } from "./entity-links";
@@ -79,6 +82,7 @@ import type {
   TaskSearchResult,
 } from "./sync/types";
 import type { TaskFieldPatch } from "./task-rows";
+import type { TimeRegion, TimeRegionPatch } from "./time-region";
 
 /**
  * TV-D10's structure around tasks (runtime.web.structure.ts): areas, project
@@ -606,6 +610,14 @@ export type ModuoRuntime = {
      * refused by the server.
      */
     setTimeZone(timeZone: string): Promise<void>;
+    /**
+     * Time & region (TV-D14): the person's zone, week start, clock, date
+     * order and "Share my tracked time with the workspace owner". Null when
+     * signed out or before the migration.
+     */
+    getTimeRegion(): Promise<TimeRegion | null>;
+    /** Change some of them (`user_op_set_time_region`); answers the whole setting. */
+    setTimeRegion(patch: TimeRegionPatch): Promise<TimeRegion | null>;
     /**
      * The oldest app version that may still save (`app_settings.min_build`,
      * TV-D8), or null when it can't be read (the app then runs as normal).
@@ -1167,6 +1179,23 @@ export type ModuoRuntime = {
      * migration reaches the database.
      */
     listTimeTotals(workspaceId: string, since?: string | null): Promise<TaskTimeTotals[]>;
+    /**
+     * Your own time entries on a task (TV-D14), newest first: what "Add time…"
+     * logged, Focus stretches, adjustments and give-backs. Only on a task you
+     * can see. Empty until the migration reaches the database.
+     */
+    listMyTimeEntries(workspaceId: string, taskId: string): Promise<TaskTimeEntry[]>;
+    /**
+     * The time report's rows (TV-D14, `tasks_time_report`): one per entry, on
+     * tasks the reader can see, dated in `query.zone`; yours, and for the
+     * workspace owner the time of people who share theirs. Paged past
+     * PostgREST's row cap; `truncated` when it held more than it reads.
+     */
+    timeReport(query: TimeReportQuery): Promise<TimeReportResult>;
+    /** Your own time entries in a workspace, on tasks you can see, for the data export (TV-D14). */
+    exportTimeEntries(
+      workspaceId: string,
+    ): Promise<{ entries: TaskTimeEntry[]; truncated: Truncation[] }>;
     /**
      * Assign (or, with null, unassign) through `tasks_op_assign`: the person
      * has to be a member who can work on tasks. Assigning someone else

@@ -5,9 +5,10 @@
 // mirror for instant first paint. View state + panel widths stay per-device
 // (see prefs.ts) and never touch this domain.
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useDomainSync } from "../../../lib/prefs-sync";
+import { useTimeRegion } from "../../../lib/time-region";
 import {
   type CalendarPrefs,
   DEFAULT_CALENDAR_PREFS,
@@ -60,5 +61,10 @@ export function useCalendarPrefs(userId: string): {
     [pushLocalChange],
   );
 
-  return { prefs, updatePrefs };
+  // The week starts where Time & region says, for the whole app (TV-D14,
+  // REPLAN 76): the domain's own `weekStartsOn` is no longer read.
+  const { weekStartsOn } = useTimeRegion();
+  const withRegion = useMemo(() => ({ ...prefs, weekStartsOn }), [prefs, weekStartsOn]);
+
+  return { prefs: withRegion, updatePrefs };
 }
