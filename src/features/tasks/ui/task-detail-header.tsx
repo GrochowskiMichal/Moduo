@@ -1,7 +1,8 @@
 // The detail panel's header (Tasks v3 §9, research views-board-detail §7):
 // the breadcrumb "● Project › Section" (each part a picker that moves the
 // task; a subtask goes on to "↳ parent"), the handle (click to copy), a slot
-// for who "is on this" (claims, TV-F7), the queue toggle, ⤢ full page, and
+// for who "is on this" (claims, TV-F7), the Focus toggle and ▶ "Focus on
+// this" (call 31), ⤢ full page, and
 // ⋯ (Copy branch name, Copy link, Duplicate, Make it a task, Won't do /
 // Reopen, Delete).
 
@@ -18,6 +19,7 @@ import {
   Lock,
   Maximize2,
   Minimize2,
+  Play,
   RotateCcw,
   Trash2,
   Unlink,
@@ -48,6 +50,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/
 import { taskHandle } from "../../../lib/task-handle";
 import { cn } from "../../../lib/utils";
 import { taskUrl } from "../../../lib/web-origin";
+import { useTaskClaim } from "../../focus/claims";
+import { useFocusTaskState } from "../../focus/timer";
 import { TaskClaimMark } from "../../focus/ui/claim-mark";
 import { WorkspaceContext } from "../../workspaces/workspace-context";
 import { branchName } from "../detail-properties";
@@ -56,7 +60,7 @@ import { isUnfinished } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import { type Bucket, PRIVATE_PROJECT_LABEL, type Task } from "../model";
 import { alsoInLabel, claimLabel } from "../queue";
-import { ClaimAvatar, useQueueClaim } from "./queue-toggle";
+import { ClaimAvatar, useClaimNames, withoutPeopleOnIt } from "./queue-toggle";
 
 type Props = {
   task: Task;
@@ -188,6 +192,7 @@ export function TaskDetailHeader({
 
       {claimSlot ?? <TaskClaimMark workspaceId={task.workspaceId} taskId={task.id} />}
       {open ? <QueueButton task={task} api={api} canEdit={canEdit} /> : null}
+      {open && canEdit ? <FocusOnThisButton task={task} api={api} /> : null}
       {onOpenFullPage ? (
         <IconButton icon={Maximize2} label="Open full page" onClick={onOpenFullPage} />
       ) : null}
@@ -394,9 +399,32 @@ function SectionCrumb({
 }
 
 /**
- * My queue toggle (TV-D4), plus who else has the task lined up: their ringed
- * avatar beside it, named in the tooltip ("In Mike's queue"). View-only members
- * see the state without the action.
+ * "Focus on this" (call 31): on top of my Up next, with the one clock. Hidden
+ * while my session is already on this task.
+ */
+function FocusOnThisButton({ task, api }: { task: Task; api: TasksModuleApi }) {
+  const focus = useFocusTaskState();
+  if (focus.active && focus.taskId === task.id) return null;
+  return (
+    <IconButton
+      icon={Play}
+      label="Focus on this"
+      tooltip={
+        <>
+          Focus on this <Kbd>⇧F</Kbd>
+        </>
+      }
+      onClick={() => api.focusOnTask(task.id)}
+    />
+  );
+}
+
+/**
+ * My Focus toggle (TV-D4; call 61 renamed the Queue), plus who else has the
+ * task lined up: their ringed avatar beside it, named in the tooltip ("In
+ * Mike's Focus"). Someone whose session is on it shows once, in the claim
+ * slot as "Mike is on this", not here too (TV-F7: one avatar per person).
+ * View-only members see the state without the action.
  */
 function QueueButton({
   task,
@@ -408,7 +436,8 @@ function QueueButton({
   canEdit: boolean;
 }) {
   const queued = api.queuedTaskIds.has(task.id);
-  const claim = useQueueClaim(task.id, api);
+  const onIt = useTaskClaim(task.workspaceId, task.id);
+  const claim = useClaimNames(withoutPeopleOnIt(api.queueClaims.get(task.id) ?? [], onIt));
   const claimed = claim.names.length > 0;
   const note = claimed ? (queued ? alsoInLabel(claim.names) : claimLabel(claim.names)) : null;
   const claimMark = claimed ? (
@@ -433,13 +462,13 @@ function QueueButton({
         {claimMark}
         <span className="flex h-(--ctrl-h-sm) shrink-0 items-center gap-1.5 px-1.5 font-sans text-xs text-muted-foreground">
           <ListChecks className="size-icon-sm text-primary" aria-hidden />
-          In queue
+          In Focus
         </span>
       </>
     );
   }
 
-  const action = queued ? "Remove from queue" : "Add to queue";
+  const action = queued ? "Remove from Focus" : "Add to Focus";
   return (
     <>
       {claimMark}
@@ -454,7 +483,7 @@ function QueueButton({
             className="shrink-0 px-2"
           >
             <ListChecks className={queued ? "text-primary" : "text-muted-foreground"} aria-hidden />
-            {queued ? "In queue" : "Queue"}
+            {queued ? "In Focus" : "Add to Focus"}
           </Button>
         </TooltipTrigger>
         <TooltipContent>

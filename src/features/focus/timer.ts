@@ -19,6 +19,7 @@ import type { FocusTimerMode } from "@contracts/vocabularies";
 import { useSyncExternalStore } from "react";
 
 import {
+  bindFocusTask,
   canUndoFocusStop,
   type FocusAwaySummary,
   type FocusTaskRef,
@@ -133,6 +134,8 @@ export interface FocusTaskState {
   running: boolean;
   taskId: string | null;
   workspaceId: string | null;
+  /** The session's Timer (Focus puts Pomodoro's pill in its header); null with none. */
+  timer: FocusTimerMode | null;
 }
 
 const NO_TASK: FocusTaskState = {
@@ -141,6 +144,7 @@ const NO_TASK: FocusTaskState = {
   running: false,
   taskId: null,
   workspaceId: null,
+  timer: null,
 };
 let cachedTaskState: FocusTaskState = NO_TASK;
 
@@ -154,6 +158,7 @@ function taskStateNow(): FocusTaskState {
         running: s.running,
         taskId: s.taskId,
         workspaceId: s.workspaceId,
+        timer: s.timer,
       }
     : run
       ? {
@@ -162,6 +167,7 @@ function taskStateNow(): FocusTaskState {
           running: run.status === "running",
           taskId: run.nowTaskId,
           workspaceId: run.workspaceId,
+          timer: run.mode,
         }
       : NO_TASK;
   const c = cachedTaskState;
@@ -170,7 +176,8 @@ function taskStateNow(): FocusTaskState {
     c.elsewhere === next.elsewhere &&
     c.running === next.running &&
     c.taskId === next.taskId &&
-    c.workspaceId === next.workspaceId
+    c.workspaceId === next.workspaceId &&
+    c.timer === next.timer
   ) {
     return c;
   }
@@ -215,6 +222,27 @@ export function focusOn(
 ): void {
   takeOverIfElsewhere(opts.resolveTask);
   focusOnTask(task, opts.timer);
+}
+
+/**
+ * Act on the session here: when another device runs it, this device takes it
+ * over first (Focus's Done counts the task on the device that runs the clock).
+ */
+export function takeOverFocus(resolveTask?: TaskRefResolver): void {
+  takeOverIfElsewhere(resolveTask);
+}
+
+/**
+ * Done or Skip on the task the session is on (Focus's Now card, TV-F7): the
+ * session moves to `task` with its rhythm, running or paused as it was; null
+ * ends it (Up next ran out). Takes the run over first when another device has
+ * it. Without a session nothing happens: Done and Skip never start one.
+ */
+export function moveFocusTo(task: FocusTaskRef | null, resolveTask?: TaskRefResolver): void {
+  const { run } = getFocusRunState();
+  if (!getFocusSession().tracking && !run) return;
+  takeOverIfElsewhere(resolveTask);
+  bindFocusTask(task);
 }
 
 /** Pause or resume, wherever the session runs (Pause lives in the pill, 62). */

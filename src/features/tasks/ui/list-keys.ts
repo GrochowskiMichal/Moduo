@@ -28,6 +28,7 @@ export type ListKeyAction =
   | "schedule"
   | "due"
   | "queue"
+  | "focus-on"
   | "expand"
   | "collapse"
   | "delete"
@@ -106,6 +107,8 @@ export function listKeyAction(
     case "<":
       return "unnest";
   }
+  // ⇧F "Focus on this" (call 31); a bare f stays Filter's (use-tasks-filters).
+  if (shiftKey && key.toLowerCase() === "f") return "focus-on";
   switch (key.toLowerCase()) {
     case "j":
       return "next";

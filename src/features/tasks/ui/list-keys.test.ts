@@ -83,6 +83,13 @@ describe("listKeyAction (tasks-v2 Q1-1)", () => {
     expect(listKeyAction(press("z"))).toBeNull();
     expect(listKeyAction(press("?", { shift: true }))).toBeNull();
   });
+
+  it("⇧F is Focus on this (call 31, TV-F7); a bare f stays Filter's", () => {
+    expect(listKeyAction(press("F", { shift: true }))).toBe("focus-on");
+    expect(listKeyAction(press("f", { shift: true }))).toBe("focus-on");
+    expect(listKeyAction(press("f"))).toBeNull();
+    expect(listKeyAction(press("Q", { shift: true }))).toBe("queue");
+  });
 });
 
 describe("a row's own controls (tasks-v2 Q1-2)", () => {

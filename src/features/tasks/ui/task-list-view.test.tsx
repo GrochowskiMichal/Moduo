@@ -135,7 +135,7 @@ describe("TaskListView keys (tasks-v2 Q1-1, Q1-2)", () => {
   it("Queue: Space on a row's queue toggle stays that button's — no keyboard drag, no list action", async () => {
     const { api } = renderList({ queue: true });
     await wait();
-    const toggle = rowOf("Beta").querySelector<HTMLElement>('[aria-label="Remove from queue"]')!;
+    const toggle = rowOf("Beta").querySelector<HTMLElement>('[aria-label="Remove from Focus"]')!;
     toggle.focus();
 
     expect(fireEvent.keyDown(toggle, SPACE)).toBe(true); // not prevented → the browser clicks it

@@ -102,7 +102,13 @@ export function sameValues<T extends object>(a: T, b: T): boolean {
 /** The actions a row or card can take. */
 export type TaskRowActions = Pick<
   TasksModuleApi,
-  "toggleDone" | "patchTask" | "toggleQueue" | "skipOccurrence" | "setTaskParent" | "deleteTask"
+  | "toggleDone"
+  | "patchTask"
+  | "toggleQueue"
+  | "focusOnTask"
+  | "skipOccurrence"
+  | "setTaskParent"
+  | "deleteTask"
 >;
 
 /**
@@ -118,6 +124,7 @@ export function useRowActions(api: TaskRowActions): TaskRowActions {
     toggleDone: (...args) => latest.current.toggleDone(...args),
     patchTask: (...args) => latest.current.patchTask(...args),
     toggleQueue: (...args) => latest.current.toggleQueue(...args),
+    focusOnTask: (...args) => latest.current.focusOnTask(...args),
     skipOccurrence: (...args) => latest.current.skipOccurrence(...args),
     setTaskParent: (...args) => latest.current.setTaskParent(...args),
     deleteTask: (...args) => latest.current.deleteTask(...args),

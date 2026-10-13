@@ -185,7 +185,7 @@ describe("useTasksModule: my queue (TV-D4)", () => {
     const { api, hook } = await mount([task("t1")], [row(MIKE, "t1", "1")]);
     act(() => hook.result.current.toggleQueue("t1"));
     await waitFor(() => expect(api.opQueueAdd).toHaveBeenCalledTimes(1));
-    expect(toasts.notes).toEqual(["Also in Mike’s queue"]);
+    expect(toasts.notes).toEqual(["Also in Mike’s Focus"]);
     // Mike's claim stays.
     expect(hook.result.current.queueClaims.get("t1")).toEqual([MIKE]);
   });
