@@ -480,7 +480,18 @@ function hasLink(workspaceId: string, tagId: string, entity: TagEntity): boolean
   return tagsOf(getTagView(workspaceId), entity).some((t) => t.id === tagId);
 }
 
-function writeLink(ctx: TagContext, tagId: string, entity: TagEntity, present: boolean): void {
+/**
+ * Put a link on or take it off: shown at once, saved in order per link.
+ * Resolves to the refusal's words, or null once saved. Quiet: no toast (a
+ * batch says one thing for all, `attachOrDetachMany`).
+ */
+function writeLink(
+  ctx: TagContext,
+  tagId: string,
+  entity: TagEntity,
+  present: boolean,
+  quiet = false,
+): Promise<string | null> {
   const { runtime, workspaceId } = ctx;
   const id = nextOpId++;
   const op = addOp<LinkOp>(workspaceId, {
@@ -501,41 +512,79 @@ function writeLink(ctx: TagContext, tagId: string, entity: TagEntity, present: b
     settledAt: null,
   });
   const input = { workspaceId, tagId, ...entity };
-  void chain(linkKey(tagId, entity.entityType, entity.entityId), async () => {
-    // A tag created a moment ago may not have its row yet; a tag whose create
-    // failed never will (its own toast has said so).
-    if (!(await (tagReady.get(tagId) ?? true))) {
-      dropOp(workspaceId, op);
-      return;
-    }
-    try {
-      if (present) op.link = await runtime.tasks.attachTag(input);
-      else await runtime.tasks.detachTag(input);
-      settleOp(workspaceId, op);
-    } catch (e) {
-      dropOp(workspaceId, op);
-      toast.error(present ? "Couldn’t add the tag" : "Couldn’t remove the tag", {
-        description: errorText(e),
-      });
-    }
-  });
+  return chain(
+    linkKey(tagId, entity.entityType, entity.entityId),
+    async (): Promise<string | null> => {
+      // A tag created a moment ago may not have its row yet; a tag whose create
+      // failed never will (its own toast has said so).
+      if (!(await (tagReady.get(tagId) ?? true))) {
+        dropOp(workspaceId, op);
+        return "The tag wasn’t created.";
+      }
+      try {
+        if (present) op.link = await runtime.tasks.attachTag(input);
+        else await runtime.tasks.detachTag(input);
+        settleOp(workspaceId, op);
+        return null;
+      } catch (e) {
+        dropOp(workspaceId, op);
+        if (!quiet) {
+          toast.error(present ? "Couldn’t add the tag" : "Couldn’t remove the tag", {
+            description: errorText(e),
+          });
+        }
+        return errorText(e) ?? "Something went wrong.";
+      }
+    },
+  );
 }
 
 /** Put a tag on an item (no-op if it's already there). */
 export function attachTag(ctx: TagContext, entity: TagEntity, tagId: string): void {
   if (hasLink(ctx.workspaceId, tagId, entity)) return;
-  writeLink(ctx, tagId, entity, true);
+  void writeLink(ctx, tagId, entity, true);
 }
 
 /** Take a tag off an item. The tag itself stays. */
 export function detachTag(ctx: TagContext, entity: TagEntity, tagId: string): void {
   if (!hasLink(ctx.workspaceId, tagId, entity)) return;
-  writeLink(ctx, tagId, entity, false);
+  void writeLink(ctx, tagId, entity, false);
 }
 
 /** Attach or detach, whichever the item doesn't have. */
 export function toggleTag(ctx: TagContext, entity: TagEntity, tagId: string): void {
-  writeLink(ctx, tagId, entity, !hasLink(ctx.workspaceId, tagId, entity));
+  void writeLink(ctx, tagId, entity, !hasLink(ctx.workspaceId, tagId, entity));
+}
+
+/**
+ * A tag on several items at once, or off them (a selection's bulk Tag,
+ * TV-U12): each shown at once and saved on its own; resolves with the ones
+ * that changed and the ones refused, without a toast (the caller says one
+ * thing for all, with one Undo). Items already as asked count as changed.
+ */
+export async function attachOrDetachMany(
+  ctx: TagContext,
+  tagId: string,
+  entities: readonly TagEntity[],
+  present: boolean,
+): Promise<{ changed: TagEntity[]; failed: Array<{ entity: TagEntity; message: string }> }> {
+  const results = await Promise.all(
+    entities.map(async (entity) => {
+      if (hasLink(ctx.workspaceId, tagId, entity) === present) return { entity, error: null };
+      return { entity, error: await writeLink(ctx, tagId, entity, present, true) };
+    }),
+  );
+  return {
+    changed: results.filter((r) => r.error === null).map((r) => r.entity),
+    failed: results.flatMap((r) => (r.error === null ? [] : [{ entity: r.entity, message: r.error }])),
+  };
+}
+
+/** The live tag with this name (any case), or a new one (shown at once). Null for a blank name. */
+export function tagNamed(ctx: TagContext, name: string): Tag | null {
+  const trimmed = name.trim();
+  if (!trimmed) return null;
+  return findTagByName(getTagView(ctx.workspaceId).tags, trimmed) ?? createTag(ctx, trimmed).tag;
 }
 
 /** Create a workspace tag (auto-coloured). Shown at once; resolves when saved. */
