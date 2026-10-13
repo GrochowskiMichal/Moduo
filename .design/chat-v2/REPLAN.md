@@ -269,6 +269,11 @@ Chat's own blocks can start on what's landed (structure, editor, References, pan
 | ❓ Re-asked or follow-ups (group G below) | CH3a channel names, CH4a when the plan lacks chat, CH16a who configures reactions, CH16b custom emoji, CH23a announcement channels, CH26a the build order, CH28a presence colour, CH28b a shared "who's around" |
 | ❓ New topics, next round with a prototype | CH29 the look (Slack/Discord-grade visuals on Tasks' kit), CH30 threads rethought |
 
+**Round 2 answers (2026-10-13, on prototype round 2):** in Maciej's words, recorded under each call.
+- **Overall:** *"It looks messy. I like and understand the direction you're suggesting, but something about the chat in its current form makes it hard to scan quickly. Too many things I have to look at at the same time."* · *"The links in text are not centered vertically, probably adding to the mess a bit."* · *"The chips and cards need a bit of love in terms of placement and padding in the chat."* · *"The time that displays on hover left to the message is a bit too tight and looks unpolished. Could also be vertically centered to the first line of text, that might help."* → fixed in prototype round 3 (calmer sample content, chips inline on the text's baseline, cards with room, the hover time on the first line's centre).
+- **Mike (relayed by Maciej):** *"Regarding this plan of implementing e2e chat feature - please let's make some deeper analysis about preferred tech stack - libraries to make entire feature top on the performance utilizing senior like solutions; we talking here about propositions like substituting flash list with legend list in beta as alternative… prepare the entire decision blueprint about this."* → a research lane writes [research/tech-blueprint.md](./research/tech-blueprint.md); it becomes §6 and the spec's technical decisions. Technical, so decided by the agent with the rejected alternatives recorded (module-replan rules); Mike reviews the blueprint.
+- **On the questions:** *"I'd like you to organize them better and give me actual questions, options and recommendations, not just references to the artifact."* → every open question now reads on its own (question · options · recommendation) in the reply and here.
+
 **Also from Maciej (2026-10-13), on the look:** *"Also not sure if I like how the chat looks like right now, keep in mind that the current version was a placeholder and no stylistic decisions should carry over to the new version without reconsideration and confirmation that it's the best path forward — for me, the current chat module could be removed altogether and there's nothing worth saving it there. I like how discord and slack look, and this version currently simply looks bad for multiple reasons. I want you to go in-depth on the competition's visuals and present the best possible option, while still respecting the visual decisions made in the Tasks module and the shell of Moduo. If we can reuse any components that were decided in Tasks, we should."*
 - **Recorded:** nothing from v1's interface carries over; every visual choice is re-made and confirmed (CH29). Research lane: [research/visual-competitors.md](./research/visual-competitors.md).
 - **Agent's position on the rest of v1:** the screens go entirely. The database layer (tables, server ops, the one-row live updates) is sound and stays (§6 #1, a technical call; rejected: rebuilding the tables, which would cost weeks and fix nothing users see). Round 3 shrinks to "what in the database layer changes". ★ = load-bearing (CH1, CH2, CH6, CH8, CH20, CH22). Prototype: [`prototypes/round-1.html`](./prototypes/round-1.html) (keys 1–7 switch frames, V cycles variants).
@@ -631,6 +636,8 @@ The hackathon readiness plan (`t/maciej/hackathon-plan`) owns workspaces, invite
 
 ❓ OK?
 
+✅ **Decided 2026-10-13 (round 2):** *"looks okay."*
+
 **CH16a · Who configures the quick reactions** *(from "those should be configurable")*
 - **Options:** (a) **per person**: your own one-click row, starting from Moduo's six (Slack lets each person set theirs); (b) **per workspace**: an admin picks the six for everyone; (c) a workspace default that each person can override.
 - **Recommended: (a)**, set in Settings → Chat and from "Customize…" at the end of the hover row. The full picker, with the workspace's custom emoji (CH16b), is always one click further.
@@ -683,6 +690,8 @@ The hackathon readiness plan (`t/maciej/hackathon-plan`) owns workspaces, invite
 
 ❓ Grey or green?
 
+💬 **Round 2:** *"I think green dots are much easier to notice, but that could also be caused by the gray dots' color. Can we use white, or lighter gray? Also, what about other statuses, like inactive or don't disturb? Should we add those or skip? As for the person card, the "focusing on" layout is messed up, with parts of it being two lines. Verify that, keep in mind that some tasks can have very long names and we need to figure out that edge case."* → prototype round 3 compares green, white and light grey (**CH28a** re-asked); statuses → **CH28c**; the person card is fixed (the task name gives way, on its own line).
+
 **CH28b · A shared "who's around" indicator** *(re-asked: "should we have a shared workspace activity/presence indicator, or is that useless?")*
 - **What it would show:** the team's state at a glance: who's here, who's focusing on what, who's in quiet hours.
 - **Where it could live:**
@@ -722,17 +731,25 @@ The hackathon readiness plan (`t/maciej/hackathon-plan`) owns workspaces, invite
 
 ❓ C, A or B?
 
+✅ **Decided 2026-10-13 (round 2): A, Slack calm, as the base.** *"I think that the Moduo hybrid version looks worse than slack calm. I like the centered text on date separators, makes it cleaner and easier to look at. The "new" line looks like a mistake for some reason, just a pure white line separator. Not sure what better options we have available. It would be great if the chat's top and bottom ends would make the text slightly fade away, the straight cuts are not great to look at."*
+- Centred date separators: yes. The fade at the top and bottom of the conversation: yes (his ask). The "New" line → **CH29d**. A's two-row composer → **CH29e** (he didn't comment on it).
+
 **CH29a · Message text is 15 px at every density** *(bends CH27's "body text 14 px at every step")*
 - 15 px is on Moduo's type ladder (a Tasks title is 15); Slack is 15, Discord 16; 14 is where v1's "looks bad" starts. Density changes space and avatar size, never the reading size (frame 2 shows comfortable, compact, dense).
 - *Recommend: yes.*
 
 ❓ OK?
 
+💬 **Round 2:** *"The density settings look good, but I think the messages themselves are too compact on all. Unrelated lines seem to be too close to each other for some reason, might just be an illusion though, influenced by the overall mess."* → more space between different people (**CH29f**); 15 px not objected to, re-asked in the organized list.
+
 **CH29b · Hover shows three quick reactions, not six** *(bends CH16)*
 - The hover toolbar holds the first three of your quick reactions (CH16a), any emoji, then Reply · Task · ⋯. Six reactions plus the verbs is ten controls (≈280 px): it doesn't fit a reply chain in the 320 px right panel, and it's wider than Slack's or Discord's whole toolbar. All six stay at the top of the picker and of the right-click menu (frame 6).
 - *Recommend: three.*
 
 ❓ OK?
+
+✅ **Decided 2026-10-13 (round 2):** *"Happy with reactions. I'd think about swapping the position of task and reply, but I can follow your recommendations here."*
+- **Agent's choice, deferred to by Maciej — confirmed for building, may be reconsidered:** Reply stays before Task. *Why:* replying is the most frequent action after reacting, so it sits closest to the reactions; Task is the rarer, bigger action. *Rejected:* Task first.
 
 **CH29c · The past in the date grammar** *(an app-wide addition to rule 41)*
 - Today the grammar's weekday names mean the coming week ("Mon" = next Monday). Chat looks back: day headers and "last reply" times need **Today · Yesterday · Mon (last Monday, up to six days back) · Oct 9 · Oct 9, 2025**.
@@ -760,6 +777,8 @@ The hackathon readiness plan (`t/maciej/hackathon-plan`) owns workspaces, invite
 - *Recommend: yes.*
 
 ❓ OK? (prototype round 2, frame "Replies")
+
+💬 **Round 2:** frames 3–4 *"Not sure what I'm looking at, and what the consequences are of each decision, and what use cases it helps with, and what the risks are"* → re-asked as **CH30a–CH30c** with use cases, consequences and risks. Frame 5: ✅ *"I like the option to tidy up by moving messages to a thread after a mistake was made - I had problems with that in the companies I worked with before - someone sent a message outside of a thread, and the only way to move it back in is to delete it and send again, so it doesn't happen and the mess keeps building up."* → tidying up afterwards is decided; who may move others' messages → **CH30c**.
 
 ### F · Visual *(added after round 1 was sent, from the visual audit)*
 
