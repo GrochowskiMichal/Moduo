@@ -6,20 +6,26 @@
 -- 2. `comment_reactions`: who reacted with which of the six (👍 ✅ 👀 🙏 ❤️ 😄,
 --    stored as words; COMMENT_REACTIONS in @contracts/vocabularies). Read by
 --    whoever can read the comment (its own RLS); written only by the op.
--- 3. Ops, every one SECURITY DEFINER and checked:
+-- 3. One gate for the item a comment is on, `comments__item_level`: a task's
+--    (tasks__visible; can_access … 'full'), a note's (can_access), or for any
+--    other item whether you can see it (perm_can_see_entity). Every op asks it:
+--    - comments_op_add (redefined from its live body): you comment only on
+--      what you can see;
 --    - comments_op_edit:    the author only, while they can see the item; a
 --                           person named for the first time is notified
 --                           (`comments.edit`), nobody else;
---    - comments_op_delete:  the author, or whoever has Full access to the
---                           task / note; a soft delete (the 8 s Undo);
+--    - comments_op_delete:  the author while they can see the item, or Full
+--                           access to the task or note; a soft delete (the
+--                           8 s Undo);
 --    - comments_op_restore: the same people, while it is deleted;
---    - comments_op_react:   anyone who can comment on the item; never notifies
---                           and writes no activity row (88).
---    Each one moves the comment's `updated_at`, so the shared store's delta
---    and the `comments` Realtime feed carry the change to open panels.
+--    - comments_op_react:   whoever can comment on it (the same guard and item
+--                           gate as comments_op_add); never notifies and
+--                           writes no activity row (88).
+--    Edit, delete, restore and react are a person's: an app over an API key
+--    can't call them. Each one moves the comment's `updated_at`, so the shared
+--    store's delta and the `comments` Realtime feed carry the change.
 --
 -- Re-runnable: every statement is IF NOT EXISTS / OR REPLACE / DROP … IF EXISTS.
--- Nothing here redefines an existing function.
 
 -- ── 1. Edited ─────────────────────────────────────────────────────────────────
 ALTER TABLE public.comments ADD COLUMN IF NOT EXISTS edited_at timestamptz;
@@ -44,7 +50,7 @@ GRANT SELECT ON public.comment_reactions TO authenticated;
 GRANT ALL ON public.comment_reactions TO service_role;
 
 -- A reaction reads like its comment: the subquery runs under the comment's
--- own policy (the workspace and the item's visibility).
+-- own policy (a member of its workspace who can see the item it's on).
 DROP POLICY IF EXISTS comment_reactions_read ON public.comment_reactions;
 CREATE POLICY comment_reactions_read ON public.comment_reactions
   FOR SELECT TO authenticated
@@ -52,31 +58,42 @@ CREATE POLICY comment_reactions_read ON public.comment_reactions
 
 -- ── 3. Ops ────────────────────────────────────────────────────────────────────
 
--- Who may delete (or restore) a comment: its author while they can still see
--- the item, or whoever has Full access to the task or note it's on.
-CREATE OR REPLACE FUNCTION public.comments__can_remove(c public.comments)
-RETURNS boolean
+-- How far the caller reaches the item a comment is on: 'full', 'view' (sees
+-- it, without Full) or 'none'. Tasks and notes must be in the comment's
+-- workspace; other items (contacts, events, email threads…) are seen or not,
+-- and nobody has Full on them here. Workspace membership is the callers' own
+-- check (the spine guard, comments__find). A key acts as its creator.
+CREATE OR REPLACE FUNCTION public.comments__item_level(p_workspace_id uuid, p_type text, p_id uuid)
+RETURNS text
 LANGUAGE plpgsql
 STABLE SECURITY DEFINER
 SET search_path TO 'public'
 AS $$
 BEGIN
-  IF public.module_api_key_id() IS NULL
-     AND c.author_kind = 'user'
-     AND c.created_by = public.perm_actor_id()
-     AND public.perm_can_see_entity(c.workspace_id, c.entity_type, c.entity_id) THEN
-    RETURN true;
+  IF p_type IN ('task', 'task_project') THEN
+    IF NOT EXISTS (SELECT 1 FROM public.tasks t WHERE t.id = p_id AND t.workspace_id = p_workspace_id) THEN
+      RETURN 'none';
+    END IF;
+    IF NOT public.tasks__visible(p_id) THEN RETURN 'none'; END IF;
+    -- 'task_project' names a task under an older registry type: only a task
+    -- proper takes the Full path.
+    IF p_type = 'task' AND public.can_access('task', p_id, 'full') THEN RETURN 'full'; END IF;
+    RETURN 'view';
+  ELSIF p_type = 'note' THEN
+    IF NOT EXISTS (SELECT 1 FROM public.notes n WHERE n.id = p_id AND n.workspace_id = p_workspace_id) THEN
+      RETURN 'none';
+    END IF;
+    IF NOT public.can_access('note', p_id, 'view') THEN RETURN 'none'; END IF;
+    IF public.can_access('note', p_id, 'full') THEN RETURN 'full'; END IF;
+    RETURN 'view';
   END IF;
-  IF c.entity_type IN ('task', 'task_project') THEN
-    RETURN public.can_access('task', c.entity_id, 'full');
-  ELSIF c.entity_type = 'note' THEN
-    RETURN public.can_access('note', c.entity_id, 'full');
-  END IF;
-  RETURN false;
+  RETURN CASE WHEN public.perm_can_see_entity(p_workspace_id, p_type, p_id) THEN 'view' ELSE 'none' END;
 END;
 $$;
 
--- The comment, locked, in a workspace the caller belongs to; else refused.
+-- A person (never an app over a key), a member of the comment's workspace
+-- who can comment there and can see the item: the comment, locked. Anyone
+-- else is refused without learning whether it exists.
 CREATE OR REPLACE FUNCTION public.comments__find(p_comment_id uuid)
 RETURNS public.comments
 LANGUAGE plpgsql
@@ -86,15 +103,128 @@ AS $$
 DECLARE
   v public.comments;
 BEGIN
+  IF public.module_api_key_id() IS NOT NULL OR auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'Only people can change comments here.' USING ERRCODE = '42501';
+  END IF;
   SELECT * INTO v FROM public.comments WHERE id = p_comment_id FOR UPDATE;
   IF NOT FOUND
      OR NOT public.tasks_module_can_access_workspace(v.workspace_id)
-     OR NOT public.perm_can_see_entity(v.workspace_id, v.entity_type, v.entity_id) THEN
+     OR public.comments__item_level(v.workspace_id, v.entity_type, v.entity_id) = 'none' THEN
     RAISE EXCEPTION 'That comment isn''t there any more.' USING ERRCODE = 'P0002';
   END IF;
+  PERFORM public.spine_op__guard(v.workspace_id);
   RETURN v;
 END;
 $$;
+
+-- Who may delete (or restore) a comment comments__find handed back: its
+-- author, or Full access to the task or note it's on.
+CREATE OR REPLACE FUNCTION public.comments__can_remove(c public.comments)
+RETURNS boolean
+LANGUAGE sql
+STABLE SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+  SELECT public.module_api_key_id() IS NULL AND auth.uid() IS NOT NULL AND (
+    (c.author_kind = 'user' AND c.created_by = auth.uid())
+    OR public.comments__item_level(c.workspace_id, c.entity_type, c.entity_id) = 'full')
+$$;
+
+-- Redefined from its live body (20261008150000's), plus one check: you
+-- comment only on an item you can see (comments__item_level).
+CREATE OR REPLACE FUNCTION public.comments_op_add(p_workspace_id uuid, p_entity_type text, p_entity_id uuid, p_body text, p_mentioned_user_ids uuid[] DEFAULT '{}'::uuid[], p_entity_label text DEFAULT NULL::text, p_entity_icon text DEFAULT NULL::text)
+ RETURNS comments
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_comment public.comments;
+  v_body text := coalesce(p_body, '');
+  v_mentions jsonb := to_jsonb(coalesce(p_mentioned_user_ids, '{}'::uuid[]));
+  v_owner uuid;
+  v_creator uuid;  -- tasks: the creator, when known (TV-D1)
+  v_notify jsonb;
+  v_key uuid := public.module_api_key_id();
+  v_key_label text;
+BEGIN
+  PERFORM public.spine_op__guard(p_workspace_id);
+  IF trim(v_body) = '' THEN
+    RAISE EXCEPTION 'A comment can''t be empty.';
+  END IF;
+  -- TV-U13: only on something you can see (a key acts as its creator).
+  IF public.comments__item_level(p_workspace_id, p_entity_type, p_entity_id) = 'none' THEN
+    RAISE EXCEPTION 'That item isn''t there any more.' USING ERRCODE = 'P0002';
+  END IF;
+
+  -- Ensure the target exists in the registry (satisfies the FK) without
+  -- reviving a tombstone or clobbering an authoritative label.
+  PERFORM public.entities_op_ensure(p_workspace_id, p_entity_type, p_entity_id, p_entity_label, p_entity_icon);
+
+  -- A key's comment belongs to its creator (created_by is NOT NULL, and the
+  -- creator's access governs it) but reads as the app that wrote it.
+  IF v_key IS NOT NULL THEN
+    SELECT k.name INTO v_key_label FROM public.workspace_api_keys k WHERE k.id = v_key;
+  END IF;
+  INSERT INTO public.comments
+    (workspace_id, entity_type, entity_id, body, created_by, author_kind, author_label)
+  VALUES (
+    p_workspace_id, p_entity_type, p_entity_id, v_body, public.perm_actor_id(),
+    CASE WHEN v_key IS NULL THEN 'user' ELSE 'api_key' END,
+    CASE WHEN v_key IS NULL THEN NULL ELSE coalesce(v_key_label, 'App') END)
+  RETURNING * INTO v_comment;
+
+  -- Resolve the entity owner for the types that have one. Owner-less entities
+  -- (contact/company/event) leave v_owner NULL → only participants notify. A
+  -- soft-deleted (trashed) task/note resolves to NULL too — don't ping an owner
+  -- about a comment on something in their trash.
+  IF p_entity_type = 'task' THEN
+    -- A task comment reaches its assignee and its creator (TV-D1: owner_id is
+    -- the creator; left out when unknown or when they can no longer see the
+    -- task), plus everyone who commented before.
+    SELECT t.assignee_id,
+           CASE WHEN t.creator_unknown OR NOT public.can_access('task', t.id, 'view', t.owner_id)
+                THEN NULL ELSE t.owner_id END
+      INTO v_owner, v_creator FROM public.tasks t
+      WHERE t.id = p_entity_id AND t.workspace_id = p_workspace_id AND t.deleted_at IS NULL;
+  ELSIF p_entity_type = 'note' THEN
+    SELECT n.created_by INTO v_owner FROM public.notes n
+      WHERE n.id = p_entity_id AND n.workspace_id = p_workspace_id AND n.deleted_at IS NULL;
+  END IF;
+
+  -- notify_user_ids = (owner ∪ prior participants) − the actor. De-duped; TEXT
+  -- ids to match the predicate's `@> jsonb_build_array(auth.uid()::text)`.
+  -- New here: a key's comment reads as the app, not as its creator, so it
+  -- notifies the creator like anyone else's comment would (Maciej, 2026-10-08).
+  SELECT coalesce(jsonb_agg(DISTINCT s.uid::text), '[]'::jsonb) INTO v_notify
+  FROM (
+    SELECT c.created_by AS uid
+    FROM public.comments c
+    WHERE c.workspace_id = p_workspace_id
+      AND c.entity_type = p_entity_type
+      AND c.entity_id = p_entity_id
+      AND c.deleted_at IS NULL
+    UNION
+    SELECT v_owner
+    WHERE v_owner IS NOT NULL
+    UNION
+    SELECT v_creator
+    WHERE v_creator IS NOT NULL
+  ) s
+  WHERE v_key IS NOT NULL OR s.uid IS DISTINCT FROM public.perm_actor_id();
+
+  PERFORM public.module_activity_log(
+    p_workspace_id, 'comments', p_entity_type, p_entity_id, 'comments.add',
+    jsonb_build_object(
+      'comment_id', v_comment.id,
+      -- A short excerpt for the notification card — never the full body.
+      'excerpt', left(v_body, 140),
+      'mentioned_user_ids', v_mentions,
+      'notify_user_ids', v_notify)
+  );
+  RETURN v_comment;
+END;
+$function$;
 
 CREATE OR REPLACE FUNCTION public.comments_op_edit(
   p_comment_id uuid,
@@ -113,10 +243,7 @@ DECLARE
   v_new jsonb;
 BEGIN
   v := public.comments__find(p_comment_id);
-  PERFORM public.spine_op__guard(v.workspace_id);
-  IF public.module_api_key_id() IS NOT NULL
-     OR v.author_kind <> 'user'
-     OR v.created_by IS DISTINCT FROM public.perm_actor_id() THEN
+  IF v.author_kind <> 'user' OR v.created_by IS DISTINCT FROM auth.uid() THEN
     RAISE EXCEPTION 'Only its author can edit a comment.' USING ERRCODE = '42501';
   END IF;
   IF v.deleted_at IS NOT NULL THEN
@@ -143,7 +270,7 @@ BEGIN
   SELECT coalesce(jsonb_agg(DISTINCT u::text), '[]'::jsonb) INTO v_new
   FROM unnest(coalesce(p_mentioned_user_ids, '{}'::uuid[])) AS u
   WHERE NOT (v_before @> jsonb_build_array(u::text))
-    AND u IS DISTINCT FROM public.perm_actor_id();
+    AND u IS DISTINCT FROM auth.uid();
 
   UPDATE public.comments
      SET body = v_body, edited_at = now(), updated_at = now()
@@ -170,7 +297,6 @@ DECLARE
   v public.comments;
 BEGIN
   v := public.comments__find(p_comment_id);
-  PERFORM public.spine_op__guard(v.workspace_id);
   IF NOT public.comments__can_remove(v) THEN
     RAISE EXCEPTION 'You can delete your own comments; Full access deletes anyone''s.'
       USING ERRCODE = '42501';
@@ -198,7 +324,6 @@ DECLARE
   v public.comments;
 BEGIN
   v := public.comments__find(p_comment_id);
-  PERFORM public.spine_op__guard(v.workspace_id);
   IF NOT public.comments__can_remove(v) THEN
     RAISE EXCEPTION 'You can delete your own comments; Full access deletes anyone''s.'
       USING ERRCODE = '42501';
@@ -216,8 +341,9 @@ BEGIN
 END;
 $$;
 
--- Toggle one reaction; answers the comment's reactions after the change. A
--- person reacts (never an app over a key). No activity row, no notice (88).
+-- Toggle one reaction; answers the comment's reactions after the change.
+-- Whoever can comment on the item can react (comments__find runs the same
+-- guard and item gate as comments_op_add). No activity row, no notice (88).
 CREATE OR REPLACE FUNCTION public.comments_op_react(
   p_comment_id uuid,
   p_reaction text,
@@ -230,27 +356,22 @@ SET search_path TO 'public'
 AS $$
 DECLARE
   v public.comments;
-  v_me uuid := public.perm_actor_id();
 BEGIN
-  IF public.module_api_key_id() IS NOT NULL OR v_me IS NULL THEN
-    RAISE EXCEPTION 'Reactions come from people.' USING ERRCODE = '42501';
-  END IF;
   IF p_reaction IS NULL OR p_reaction NOT IN ('thumbs_up', 'check', 'eyes', 'pray', 'heart', 'smile') THEN
     RAISE EXCEPTION 'Pick one of the six reactions.' USING ERRCODE = '22023';
   END IF;
   v := public.comments__find(p_comment_id);
-  PERFORM public.spine_op__guard(v.workspace_id);
   IF v.deleted_at IS NOT NULL THEN
     RAISE EXCEPTION 'That comment was deleted.' USING ERRCODE = 'P0002';
   END IF;
 
   IF coalesce(p_on, true) THEN
     INSERT INTO public.comment_reactions (comment_id, user_id, reaction, workspace_id)
-    VALUES (v.id, v_me, p_reaction, v.workspace_id)
+    VALUES (v.id, auth.uid(), p_reaction, v.workspace_id)
     ON CONFLICT (comment_id, user_id, reaction) DO NOTHING;
   ELSE
     DELETE FROM public.comment_reactions
-     WHERE comment_id = v.id AND user_id = v_me AND reaction = p_reaction;
+     WHERE comment_id = v.id AND user_id = auth.uid() AND reaction = p_reaction;
   END IF;
   -- Carries the change to open panels (delta + Realtime); not an edit.
   UPDATE public.comments SET updated_at = now() WHERE id = v.id;
@@ -262,8 +383,10 @@ BEGIN
 END;
 $$;
 
+REVOKE ALL ON FUNCTION public.comments__item_level(uuid, text, uuid) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.comments__can_remove(public.comments) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.comments__find(uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.comments__item_level(uuid, text, uuid) TO service_role;
 GRANT EXECUTE ON FUNCTION public.comments__can_remove(public.comments) TO service_role;
 GRANT EXECUTE ON FUNCTION public.comments__find(uuid) TO service_role;
 

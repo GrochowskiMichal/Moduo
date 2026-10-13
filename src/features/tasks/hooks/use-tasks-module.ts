@@ -2792,6 +2792,8 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     restLoaded: !!store && snap.restLoaded,
     /** Live comments per task (TV-D11a; TV-D5's promised counts). */
     commentCounts: snap.commentCounts,
+    /** Per task, moves on any comment change (TV-U13): the open feed re-reads on it. */
+    commentStamps: snap.commentStamps,
     /** TV-D10's structure, live from the store: areas (in sidebar order),
      *  sections, teams, members. */
     areas,
