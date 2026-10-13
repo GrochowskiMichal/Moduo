@@ -237,7 +237,8 @@ export function ProjectMenu({
             "flex min-w-0 rounded-sm px-1 transition-colors duration-(--motion-fade) ease-(--ease-out)",
             canEdit && "hover:bg-state-hover",
             variant === "inline" && "shrink-0",
-            variant === "column" && "shrink-0 items-center min-w-(--tl-col-project) max-w-(--tl-col-project)",
+            variant === "column" &&
+              "shrink-0 items-center min-w-(--tl-col-project) max-w-(--tl-col-project)",
             // Takes no width and gives back the row's gap, so nothing shifts.
             implied && "pointer-events-none -ms-2.5 w-0 overflow-hidden px-0 opacity-0",
           )}
@@ -311,7 +312,7 @@ export function DateCell({
   const cell = cn("flex shrink-0 items-center justify-end", width);
   // Which editor a click opens: the asked one, else the shown date's.
   const editing: "schedule" | "due" =
-    command ?? (kind === "session" ? "schedule" : kind === "due" ? "due" : shown?.edit ?? "due");
+    command ?? (kind === "session" ? "schedule" : kind === "due" ? "due" : (shown?.edit ?? "due"));
   // One save when the popover closes (TV-P0): a scheduled time goes through
   // the reschedule op, so it lands in the task's trail.
   const current = editing === "schedule" ? task.scheduledAt : task.dueDate;

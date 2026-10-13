@@ -39,6 +39,7 @@ import { EnergyMark, PriorityMark } from "./level-icons";
 import { ROW_TITLE_ATTR } from "./list-keys";
 import { QueueToggle } from "./queue-toggle";
 import { sameTaskFacts, sameValues, type TaskFacts, type TaskRowActions } from "./row-facts";
+import { TaskCounts } from "./task-meta";
 import {
   DateCell,
   glyphAction,
@@ -47,7 +48,6 @@ import {
   ProjectMenu,
   StatusGlyph,
 } from "./task-row-cells";
-import { TaskCounts } from "./task-meta";
 
 // The blocked marker moved to task-meta; the Timeline still imports it here.
 export { BlockedMarker } from "./task-meta";
@@ -392,10 +392,7 @@ function TaskRowView({
       <RowColumnsSlot data-slot="row-columns">
         {columns.project ? projectMenu("column") : null}
         {columns.status ? (
-          <RowColumn
-            data-col="status"
-            className="justify-start min-w-(--tl-col-status)"
-          >
+          <RowColumn data-col="status" className="justify-start min-w-(--tl-col-status)">
             {/* The project's own name; the icon (the lead) is the category's. */}
             {canEdit ? (
               <button
@@ -582,9 +579,7 @@ function TaskRowView({
         <ContextMenuItem onSelect={() => activateGlyph(task, actions)}>
           {done ? "Mark not done" : closed ? "Reopen" : "Mark done"}
         </ContextMenuItem>
-        <ContextMenuItem
-          onSelect={() => afterMenuClose(() => onRequestCommand(task.id, "status"))}
-        >
+        <ContextMenuItem onSelect={() => afterMenuClose(() => onRequestCommand(task.id, "status"))}>
           Status…
         </ContextMenuItem>
         {!closed && task.status !== "archived" ? (

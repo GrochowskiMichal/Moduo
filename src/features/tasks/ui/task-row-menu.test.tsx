@@ -5,7 +5,7 @@
 // back to the list, and the title editor saving once on Enter and not on Esc.
 
 import { afterEach, beforeAll, describe, expect, it, rs } from "@rstest/core";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { useState } from "react";
 
 rs.mock("../assignees", () => ({
@@ -327,16 +327,31 @@ describe("TaskRow popovers: the other ways in", () => {
 });
 
 describe("TaskRow read-only", () => {
-  it("a chip opens nothing and right-click opens no menu", async () => {
+  it("a chip opens nothing; right-click offers only Open · Copy link · Copy as text (TV-U10)", async () => {
     renderList({ canEdit: false });
     await settle();
     const chip = rowOf("Beta").querySelector<HTMLElement>('[aria-label^="Due "]')!;
 
     fireEvent.click(chip);
+    await settle();
+    expect(popover()).toBeNull();
+
     fireEvent.contextMenu(rowOf("Beta"));
     await settle();
+    const menu = screen.getByRole("menu");
+    expect(within(menu).getAllByRole("menuitem").map((i) => i.textContent)).toEqual([
+      "Open",
+      "Copy link",
+      "Copy as text",
+    ]);
+  });
 
-    expect(popover()).toBeNull();
-    expect(screen.queryByRole("menu")).toBeNull();
+  it("the status icon is inert", async () => {
+    const { api } = renderList({ canEdit: false });
+    await settle();
+    const glyph = within(rowOf("Beta")).getByRole("button", { name: "Mark as done" });
+    expect((glyph as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(glyph);
+    expect(api.toggleDone).not.toHaveBeenCalled();
   });
 });

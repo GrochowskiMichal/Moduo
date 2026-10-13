@@ -14,9 +14,9 @@
 //     never reach the List, though React bubbles them up to it.
 //
 // Shift isn't a bail-out: letters match case-insensitively (TV-U5 claims ⇧J/⇧K
-// for extending the selection, checked before the lowercase match), and `>` /
-// `<` (nest under the row above, un-nest; default k) match `event.key`,
-// whatever the keyboard needs to type them.
+// for extending the selection, checked before the lowercase match; ⇧S opens
+// the status menu, TV-U10), and `>` / `<` (nest under the row above, un-nest;
+// default k) match `event.key`, whatever the keyboard needs to type them.
 
 export type ListKeyAction =
   | "next"
@@ -27,6 +27,7 @@ export type ListKeyAction =
   | "bucket"
   | "schedule"
   | "due"
+  | "status"
   | "queue"
   | "expand"
   | "collapse"
@@ -106,6 +107,8 @@ export function listKeyAction(
     case "<":
       return "unnest";
   }
+  // ⇧S: the status menu (default k), before `s` (schedule) matches below.
+  if (shiftKey && key.toLowerCase() === "s") return "status";
   switch (key.toLowerCase()) {
     case "j":
       return "next";

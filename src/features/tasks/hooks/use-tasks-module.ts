@@ -1811,6 +1811,8 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         parentId: write.parentId,
         bucketId: write.bucketId,
         priority: write.priority,
+        sectionId: write.sectionId,
+        teamId: write.teamId,
         // The place rides with the status op when there is one.
         position: status === undefined ? write.position : undefined,
       });
@@ -1859,20 +1861,20 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       const saved: Task[] = [];
       try {
         if (Object.keys(fields).length > 0) {
-          const row = await rt.tasks.updateTask({ workspaceId: ws, taskId, patch: fields });
-          saved.push(row);
-          // Subtasks follow the project the parent really landed in.
-          saved.push(
-            ...(await Promise.all(
-              followers.map((child) =>
-                rt.tasks.updateTask({
-                  workspaceId: ws,
-                  taskId: child.id,
-                  patch: { bucketId: row.bucketId },
-                }),
-              ),
-            )),
-          );
+          if (
+            followers.length > 0 ||
+            (write.bucketId !== undefined && write.bucketId !== existing.bucketId)
+          ) {
+            // A move is one op (TV-D8, as `patchTask`): the server carries the
+            // subtasks it lets you edit in the same transaction and answers
+            // with every row it changed; one you can only view stays where the
+            // server has it, and the drop still lands (TV-U10).
+            saved.push(
+              ...(await rt.tasks.opUpdateTask({ workspaceId: ws, taskId, patch: fields })),
+            );
+          } else {
+            saved.push(await rt.tasks.updateTask({ workspaceId: ws, taskId, patch: fields }));
+          }
         }
         if (category !== undefined) {
           saved.push(

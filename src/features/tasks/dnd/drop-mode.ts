@@ -84,6 +84,10 @@ export function groupAccepts(
   switch (groupBy) {
     case "status":
     case "priority":
+    // A section is one project's (the List only groups by section inside
+    // one), and a team routes without hiding (TV-D10): both take any task.
+    case "section":
+    case "team":
       return true;
     case "assignee":
       return key === NO_ASSIGNEE || ctx.assignableIds.has(key);
@@ -103,7 +107,7 @@ export function canMoveInto(
   return bucketId !== inboxId || active.bucketId === inboxId;
 }
 
-/** The assignee grouping's "No assignee" key (`groupKeyFor`). */
+/** The "no value" key of the assignee, section and team groupings (`groupKeyFor`). */
 const NO_ASSIGNEE = "none";
 
 export function resolveListHover(input: {
@@ -233,7 +237,7 @@ export type ListDropPlan = {
   bucketId?: string;
 };
 
-type GroupFieldPatch = Partial<Pick<Task, "priority" | "assigneeId">> & {
+type GroupFieldPatch = Partial<Pick<Task, "priority" | "assigneeId" | "sectionId" | "teamId">> & {
   /** A status group: Backlog is its own key (TV-D9). */
   status?: StatusKey;
 };
@@ -252,6 +256,10 @@ export function groupFieldPatch(groupBy: GroupBy, key: string): GroupFieldPatch 
       return { priority: key === "unset" ? null : (key as PriorityLevel) };
     case "assignee":
       return { assigneeId: key === NO_ASSIGNEE ? null : key };
+    case "section":
+      return { sectionId: key === NO_ASSIGNEE ? null : key };
+    case "team":
+      return { teamId: key === NO_ASSIGNEE ? null : key };
     default:
       return null;
   }

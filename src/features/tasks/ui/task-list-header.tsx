@@ -87,7 +87,11 @@ export function TaskListHeader({
         {columns.hidden > 0 ? (
           <Tooltip>
             <TooltipTrigger asChild>
-              <span className={cn(LABEL, "tabular-nums")} role="img" aria-label={hiddenLabel(columns.hidden)}>
+              <span
+                className={cn(LABEL, "tabular-nums")}
+                role="img"
+                aria-label={hiddenLabel(columns.hidden)}
+              >
                 +{columns.hidden}
               </span>
             </TooltipTrigger>
@@ -119,11 +123,13 @@ export function TaskListHeader({
         {columns.waiting
           ? plain(COLUMN_LABELS.waiting, "min-w-(--tl-col-waiting) max-w-(--tl-col-waiting)")
           : null}
-        {columns.assignee
-          ? columns.assigneeName
-            ? plain(COLUMN_LABELS.assignee, "min-w-(--tl-col-assignee)")
-            : <span aria-hidden className="size-icon shrink-0" />
-          : null}
+        {columns.assignee ? (
+          columns.assigneeName ? (
+            plain(COLUMN_LABELS.assignee, "min-w-(--tl-col-assignee)")
+          ) : (
+            <span aria-hidden className="size-icon shrink-0" />
+          )
+        ) : null}
         {columns.updated
           ? sortCell("updated", COLUMN_LABELS.updated, "justify-end min-w-(--tl-col-updated)")
           : null}

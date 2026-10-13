@@ -63,6 +63,10 @@ export function PlanViewHeader({
               {count}
             </span>
           ) : null}
+          {/* Read-only (research §9): said once, after the title. */}
+          {canEdit ? null : (
+            <span className="shrink-0 font-sans text-xs text-subtle-foreground">View only</span>
+          )}
         </div>
         <Toolbar.Spacer />
         {viewControls ? <Toolbar.Group>{viewControls}</Toolbar.Group> : null}
@@ -73,13 +77,18 @@ export function PlanViewHeader({
         </Toolbar.Group>
         <ToolbarSeparator />
         <ViewSwitcher view={view} onViewChange={onViewChange} />
-        <ToolbarSeparator />
-        <Toolbar.Primary>
-          <Button size="sm" onClick={onRequestCapture} disabled={!canEdit}>
-            <Plus aria-hidden />
-            New
-          </Button>
-        </Toolbar.Primary>
+        {/* Read-only views have no New (research §9: no add in that project). */}
+        {canEdit ? (
+          <>
+            <ToolbarSeparator />
+            <Toolbar.Primary>
+              <Button size="sm" onClick={() => onRequestCapture()}>
+                <Plus aria-hidden />
+                New
+              </Button>
+            </Toolbar.Primary>
+          </>
+        ) : null}
       </Toolbar>
       {activeFilters}
       {sortedNote}
