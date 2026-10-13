@@ -2,6 +2,71 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index.
 
+## 2026-10-13 · TV-D16 Agents and MCP v3 — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 31 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §12, §13's agent row, §Assumptions #14, #15, #20, #26; REPLAN 6, 7, 35, 51, 52, 74; migration `20261013220000_agents_imports_mcp`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to change. The tool surface is in [docs/moduo-mcp-connector.md](../moduo-mcp-connector.md).
+
+- **D16-1 · The trail names the person and the key: "Alex · via Claude Desktop"** → TV-D16 (`module_activity_log`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (REPLAN 52's wording).
+  - Decision: a key's trail rows carry the label "<person> · via <key name>" as their snapshot, for every module; the key's name alone when the person has no name. Notices an agent writes about its own state are labelled with the agent's name.
+  - Why: one place, so the app's trail, notification cards, contact hubs and MCP's own `tasks_activity` all read it without a client change; the label is a snapshot like the key's name was.
+  - Rejected: a new "on behalf of" column the app joins to a name (every renderer changes; old rows unaffected either way).
+- **D16-2 · One live session per task and key, updated in place** → TV-D16 (`agent_sessions`, `tasks_op_agent_report`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: a report states the current line: its note and step replace the last ones (the last 20 lines fold under it), links stay until new ones come, the agent's name stays once given (default: the key's name); reporting `working` after `ready` or `failed` starts a new run (earlier lines, links and summary cleared). Keys only, with Tasks edit and edit access to the task.
+  - Why: "status, not conversation" (52): one line and a short history, never a log to scroll.
+  - Rejected: one row per report; letting a person post a status (their words go in comments).
+- **D16-3 · Private by default; the switch shows the line, never the summary** → TV-D16 (`agent_sessions__shown`, `agent_session_summaries`, Settings → Preferences → Agents)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (52's "private to whoever started it").
+  - Decision: only the session's person reads it until they turn on "Show my agent work to teammates"; then anyone who can see the task does, while the person can still see it. The hand-back summary lives in its own table only its person reads, until "Post as comment" makes it their comment. The switch sits in Settings → Preferences (a group "Agents") until Settings has a Tasks section; switching it bumps the person's sessions and tells teammates' copies to re-check, so a line disappears at once.
+  - Why: a column grant can't hide a value from Realtime; a separate table can.
+  - Rejected: column-level grants on the summary; a per-session share toggle.
+- **D16-4 · One notice per loud change, to the person who started it; one switch** → TV-D16 (`tasks.agent_status`, delivery kind `agent`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (§13's agent row).
+  - Decision: a change into needs you · ready for review · failed writes one bell notice on the person's own Inbox (like a reminder; it opens the task) and one OS / browser notice; the same state again is quiet. The bell's "Your agents" switch mutes both (the OS notice is skipped on the server). The notice gate only lets it reach someone who can see the task it names.
+  - Why: §13's "That key's notifications" for the usual one or two keys, with one switch.
+  - Rejected: a switch per key (added when someone has several agents worth telling apart).
+- **D16-5 · A session adds no trail row and no Waiting entry** → TV-D16
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: status reports write nothing to the trail (the trail already has the agent's writes); a "Waiting on" this agent that a person added clears at needs you · ready · failed (a teammate who added it hears it came back; its person hears only the agent), and when the key is revoked.
+  - Why: an automatic "Waiting on Claude" would show a private session to everyone who sees the task.
+  - Rejected: adding Waiting on when an agent starts (REPLAN 6's wording) until sharing is on.
+- **D16-6 · Rows say "working" and "needs you"; the line says everything** → TV-D16 (`agentRowMark`, `task-agent-session.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the row's quiet mark ("Claude · working", "Claude · needs you") shows on open tasks only; ready, failed and stopped show on the task's line ("Claude · Ready for review: Draft is up · step 3 of 5 · 2m ago · PR #42 ↗"), with "No update for 40m" after 30 quiet minutes while working (never a notice), "Stopped (key revoked)", earlier lines and the summary folded, and an × for its person to clear the line.
+  - Why: the row is for what's happening now; a finished run's details belong on the task.
+  - Rejected: a mark for every state on rows.
+- **D16-7 · "Imported from" is unique per person, not per workspace** → TV-D16 (index `tasks_imported_from_key`, `tasks_op_create`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (refines D10-14).
+  - Decision: a live task's import key is unique among the tasks its creator made in the workspace.
+  - Why: a re-run finds what you made; two people importing the same shared source don't collide, and a collision never tells you a task you can't see exists.
+  - Rejected: per workspace (D10-14's first cut).
+- **D16-8 · Re-run by key, Undo what nobody touched** → TV-D16 (`tasks_op_create_with`, `imports_op_*`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (74).
+  - Decision: creating with a key you already used on a live task of yours updates that task (fields, added tags; reminders and work sessions only on create), in or out of a run; a run records what it made or updated. "Undo this import" sends the run's created tasks that have no activity after the run wrote them to Recently deleted (subtasks first), then the sections and projects it made that are left empty; rows it only updated stay as they are; anything the person can no longer see isn't counted. Runs are their person's alone (keys or the app). The whole create (task, tags, reminders, sessions, the run's row) is one transaction.
+  - Why: "a second run updates, creates nothing new; Undo removes exactly the first run's rows that weren't edited since" (spec edge case); soft deletes keep 30 days to change your mind.
+  - Rejected: restoring the old values of updated rows; deciding "edited since" from `updated_at` (triggers move it).
+- **D16-9 · Tags by name through one op** → TV-D16 (`tasks_op_tag`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: add and take off by name in any case; a missing name becomes a workspace tag when the person may make tags; needs edit access to the task; one trail line ("tagged this “exam” and untagged “week1”").
+  - Why: agents had no way to tag, and a raw `tag_links` write as the service role would skip the app's checks.
+  - Rejected: raw writes from the connector.
+- **D16-10 · The v3 tool names, under the Tasks key scope; the old names stay** → TV-D16 (`modules/tasks.ts`, `ops-manifest.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (#14).
+  - Decision: `projects_*`, `sections_*`, `areas_*`, `statuses_list`, `teams_list`, `templates_*`, `imports_*` and the new `tasks_*` tools are the Tasks module's (a Tasks key reaches them); `tasks_today`, `tasks_commit`, `tasks_uncommit`, `tasks_skip_today` and `tasks_list_buckets` stay, marked deprecated in the manifest and their descriptions, until TV-D7. `tasks_comment` needs Links: Edit too (it's a spine comment). Every task argument takes a handle or a uuid; status takes a category word, a project's name or an id; finishing a task finishes its open subtasks the person can edit (call 87, connector-side).
+  - Why: #14's list; one key scope for one module's work.
+  - Rejected: a separate "projects" key scope.
+- **D16-11 · Search answers keys** → TV-D16 (`tasks_search` re-cut)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the search RPC checks the module permission (a key's scope capped by its person) instead of a person-only check; the task gate per match is unchanged; MCP search also finds a handle and an import key.
+  - Why: under a key it returned nothing; AC3.6 ("ENG-123 is findable after import").
+  - Rejected: keeping MCP on its old substring query (it filled its limit before the gate).
+- **D16-12 · The import end-to-end test runs locally; the real connector run is a release step** → TV-D16 (`scripts/mcp-import-roundtrip.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (74's "tested end to end with Claude + Todoist's connector before it's announced").
+  - Decision: a script imports a Todoist-shaped project through the local connector with a real key (dates, labels, a repeat, a subtask, a reminder), re-runs it, undoes, posts a session and finishes a parent, in a disposable workspace it removes; Claude with Todoist's own connector is on the release checklist.
+  - Why: no Claude or Todoist account belongs in a local build; the script exercises the same HTTP surface.
+  - Rejected: skipping the end-to-end check until release.
+
 ## 2026-10-13 · TV-D14 Time entries, the time report, Time & region — the agent's choices (deferred to by Maciej)
 
 Built in tasks-v3 block 29 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §14, §Assumptions #17, #18, #26; REPLAN 75, 76, default f; migrations `20261013200000_user_preferences_time_region` and `20261013201000_time_entries_add`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to change.

@@ -99,10 +99,11 @@ an `x-moduo-key-id` header. `module_api_key_id()` trusts that header **only
 under a service_role JWT** — an authenticated client sending it is ignored
 (`auth.uid()` keeps precedence in `module_activity_log`), anon can't execute
 ops at all, and the secret itself never reaches Postgres. Every mutation lands
-in `module_activity` as `actor_type 'api_key'` with the key's id and name
-snapshot, rendered in the task detail trail like any other actor ("An API
-client committed this…"). A call with neither a user nor a key context fails
-loudly — nothing ever logs anonymously.
+in `module_activity` as `actor_type 'api_key'` with the key's id and a label
+snapshot that names the person and the key, **"Alex · via Claude Desktop"**
+(TV-D16, REPLAN 51/52; the key's name alone when the person has none). A call
+with neither a user nor a key context fails loudly — nothing ever logs
+anonymously.
 
 `<module>_module_permission()` resolves a key call to the key's module scope
 (live, unrevoked, workspace-matched, capped by the creator), so each
@@ -114,50 +115,81 @@ key (`20261008123000` fixed the last six). A key's comment also records
 `author_kind 'api_key'` and the key's name, so it reads as the app, never as
 the person (like chat messages).
 
-## Tools (Tasks, module #1)
+## Tools (Tasks, module #1) — v3 (TV-D16)
 
-Read (view scope) — mirror the manifest's resources
-([ops-manifest.ts](../src/features/tasks/ops-manifest.ts)):
+The surface of specs/tasks-v3.md §Assumptions #14, in
+[`modules/tasks.ts`](../supabase/functions/moduo-mcp/modules/tasks.ts)
+(shared reads in [`tasks-helpers.ts`](../supabase/functions/moduo-mcp/tasks-helpers.ts),
+argument schemas in `_shared/contracts/mcp-tool-args.ts`). Every tool goes
+through the same ops and gates as the app; the rule for all of them:
 
-| tool | returns |
+- **No tool returns what the key's person can't see.** Reads run as
+  service_role, so every task and project passes `share_visible_ids` /
+  `perm_can_see_entity`; a hidden task or project answers exactly like a
+  missing one ("Task not found in this workspace." / "That project isn't in
+  this workspace."), and nothing counts hidden items (tag usage counts only
+  visible tasks; search limits after the gate).
+- **Every task argument takes a handle or a uuid** (`MOD-142`, any case).
+- **Status by category or name:** a category word (`backlog` · `todo` ·
+  `in_progress` · `done` · `wont_do`; the older `archived` = won't do), the
+  project's own status name, or its id (`tasks__resolve_status`).
+
+| Read (View) | What |
 | --- | --- |
-| `tasks_list_buckets` | buckets (Inbox flagged, group labels) |
-| `tasks_list` | tasks with computed `drifted`/`blocked`, tags, `parent_id`, `subtask_count`, recurrence, `assignee` (`{id, name}`, null = Unassigned), `assignee_id` (the same assignee's id, null = Unassigned; before TV-D1 it carried the creator's `owner_id`) and `creator` (left out when unknown); default open, ordered by bucket then position. Args: `assignee` (`me` = tasks assigned to the key's creator, by `assignee_id`: not ones they only created, never Unassigned ones; default `anyone`), `top_level` (no subtasks as rows), `limit` (max 200) + `offset` (a page shorter than `limit` is the last; the return stays an array) |
-| `tasks_focus_settings` | the key creator's Focus settings (work/break/long-break minutes, rhythm, auto-start, chime) with the app's defaults filled in |
-| `tasks_queue` | the key creator's own queue, in order (TV-D2): personal, not tied to a date; every task anywhere carries `queued_by_me: true` when it's in it |
-| `tasks_today` | older name for `tasks_queue`, kept until TV-D7: the same queue; `date` is echoed back, not a filter |
-| `tasks_drift` | open tasks whose scheduled time passed (oldest first) |
-| `tasks_list_tags` | workspace tags + task usage counts |
-| `tasks_search` | title/description substring search |
-| `tasks_get` | one task in full: edges, subtasks, recent trail |
-| `tasks_attachments_list` | a task's files (AT-1): name, type, size, when added, and a download `url` signed for 5 minutes (`link_lifetime_seconds`); only tasks the key's creator can see |
-| `tasks_activity` | the attributed trail (one task, or workspace-recent) |
-| `tasks_list_assignees` | who a task can be assigned to: members with `is_me` and `can_be_assigned` (TV-D1) |
+| `projects_list` | projects the person sees: Inbox (`is_inbox`), status, area, colour, dates, lead; `include_archived` |
+| `areas_list`, `sections_list`, `statuses_list`, `teams_list` | structure (a team's default project only when visible) |
+| `templates_list` | own and shared task/project templates: name, kind, counts; never the body or its sources |
+| `tasks_list` | paged (`limit` ≤ 200 + `offset`); filters `category` (or a legacy `status` word: `todo` leaves Backlog out), `project_id`, `section_id`, `area_id`, `team_id`, `assignee`, `completed_from/to`, `top_level`, `include_archived` |
+| `tasks_get` | one task in full: edges, subtasks, work sessions, **your** reminders, waiting on, the agent sessions you may see, the trail |
+| `tasks_search` | words (`tasks_search` RPC, gated per match), a handle, or an import key (`ENG-123`) |
+| `tasks_history` | a repeat's past cycles (`tasks_op_history`) |
+| `tasks_time_report` | tracked time for a period by task or day (`tasks_time_report`: your own, plus sharers' for the owner) |
+| `tasks_queue`, `tasks_drift`, `tasks_list_tags`, `tasks_activity`, `tasks_attachments_list`, `tasks_list_assignees`, `tasks_focus_settings` | as before |
+| `tasks_list_buckets`, `tasks_today` | **deprecated** until TV-D7 (use `projects_list`, `tasks_queue`) |
 
-Write (edit scope) — **exactly the intent ops**, same RPCs the app calls.
-The queue (TV-D2) is always the key creator's: `tasks_queue_add` (`at`: `end`
-default, or `top`), `tasks_queue_remove`, `tasks_queue_reorder` (`position`:
-`top`, `end`, or `after` with `after_task_id`); each returns the queue. The
-older `tasks_commit` / `tasks_uncommit` / `tasks_skip_today` stay as aliases
-until TV-D7: they now add to or take out of the creator's queue too (and still
-write the shared day columns old app builds read), and skipping no longer
-counts as a reschedule. Then `tasks_set_status`, `tasks_reschedule`,
-`tasks_unschedule`,
-`tasks_skip_occurrence`, and `tasks_assign` (TV-D1: `tasks_op_assign`; a
-member id, `"me"` for the key's creator, or `null` to unassign; the same
-membership check as the app, and the assignee is notified unless it's the
-key's own creator). Agents are never asked to compute rrule pointers —
-the connector runs the recurrence-engine port
-([recurrence.ts](../supabase/functions/moduo-mcp/recurrence.ts), kept in sync
-with `src/features/tasks/recurrence-engine.ts`) before calling
-`tasks_op_set_status` / `tasks_op_skip_occurrence`; the ops still enforce the
-structural invariants, so port drift degrades to a rejected call, never
-corruption.
+| Write (Edit) | Op |
+| --- | --- |
+| `tasks_create` | `tasks_op_create_with`: fields + project/section/status/assignee/team/due/estimate/repeat + tags (by name), reminders, work sessions, `imported_from {source, key}`, `import_id`; atomic; a key you already used on a live task **of yours** updates it (a re-run) |
+| `tasks_update` | `tasks_op_update_with`: fields + `tags_add` / `tags_remove` |
+| `tasks_set_status` | `tasks_op_set_status`; finishing a top-level, non-repeating task finishes its open subtasks the person can edit (`also_finished`, call 87) |
+| `tasks_assign`, `tasks_route_team`, `tasks_claim` | `tasks_op_assign`, `tasks_op_update {team_id}`, `tasks_op_claim` |
+| `tasks_handoff`, `tasks_waiting_clear` | `tasks_op_waiting_add` (a person or words), `tasks_op_waiting_remove` |
+| `tasks_comment` | `comments_op_add` — only when a person asked; **needs Links: Edit too** (`MCP_TOOL_NEEDS`) |
+| `tasks_session_status` | `tasks_op_agent_report` (below) |
+| `tasks_reminder_add/remove`, `tasks_work_session_add/update/remove`, `tasks_move_occurrence` | the D10/D12 ops (reminders are the person's own; a session is theirs or the assignee's) |
+| `projects_create/update/duplicate`, `sections_create`, `areas_create`, `templates_apply` | the D10/U6/D15 ops; `projects_duplicate` asks `templates_can_copy` first; keys can't share, edit or delete templates |
+| `imports_begin/finish/undo` | `imports_op_*` (below) |
+| `tasks_queue_add/remove/reorder`, `tasks_reschedule`, `tasks_unschedule`, `tasks_skip_occurrence` | as before; `tasks_commit/uncommit/skip_today` **deprecated** until TV-D7 |
 
-Deliberately **not** exposed: `tasks.catch_up` (app-lifecycle batch pass, not
-an agent intent — also not granted to `service_role`); capture/plain field
-edits/tag and relation edges (not ops yet — they join the surface when they
-become ops, per the contract's v1 boundary).
+**Agent sessions** (`agent_sessions`, spec §12 / #15): `tasks_session_status`
+posts the five fields — state (`working` · `needs_you` · `ready` · `failed`),
+a note, step n of m, links, times — plus an optional hand-back summary. One
+live session per task and key; `working` after `ready`/`failed` starts a new
+run. A session is **private to its person** (RLS `agent_sessions__shown`)
+unless they turn on "Show my agent work to teammates"
+(`user_preferences.show_agent_work`, Settings → Preferences → Agents); the
+summary is theirs alone (`agent_session_summaries`) until they post it as a
+comment. `needs_you` / `ready` / `failed` notify the person once (a bell
+notice on their own Inbox, op `tasks.agent_status`, gated to people who can
+see the task; an OS/browser notice, delivery kind `agent`, muted with the
+"Your agents" switch); a `Waiting on` this agent clears. A revoked key
+stops its sessions ("Stopped (key revoked)"). No trail row: the trail
+already has every write.
+
+**Imports** (#20): `imports_begin` → `projects_create` / `sections_create`
+/ `tasks_create` with `import_id` and `imported_from` → `imports_finish`.
+A re-run is a new run whose tasks update by key. `imports_undo` sends what
+the run made and nobody touched since (any activity on it after the run
+wrote it) to Recently deleted — tasks, then its empty sections and
+projects; rows it only updated stay. Runs are their person's only.
+`imported_from` is unique per (workspace, person) among live tasks.
+
+Deliberately **not** exposed: `tasks.catch_up` (app-lifecycle batch pass),
+Focus runs (a signed-in person's), template share/edit/delete, hard deletes.
+
+The local end-to-end check is `bun scripts/mcp-import-roundtrip.ts` (with
+`bun run local:functions` serving the connector): a Todoist-shaped import,
+its re-run, Undo, a session and a cascade, in a disposable workspace.
 
 ## Onboard a module to MCP (the recipe)
 
