@@ -2,6 +2,25 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index.
 
+## 2026-10-13 · TV-SEC1 The access check answers only for the caller unless a server function asks — the agent's choices (deferred to by Maciej)
+
+Built as a follow-up data block (migration `20261013260000_access_check_caller`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to change.
+
+- **SEC1-1 · `public.can_access` is a front door; the rules live in `private.can_access`** → TV-SEC1
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: `public.can_access(type, id, min, user)` keeps its signature and grants and becomes a SECURITY INVOKER SQL function. Asked in a signed-in client's request, it answers only for that client; a question naming anyone else reads false. Asked by a server function (owned by `postgres` or `supabase_admin`) or the service role, it answers for whoever is named. The rules move unchanged into `private.can_access` (SECURITY DEFINER), which the API doesn't serve; `authenticated` and `service_role` get USAGE on `private` so the front door can reach it.
+  - Why: inside a SECURITY DEFINER function `current_user` is the owner, so only an invoker layer can tell a client's question from a server function's. Keeping the name and signature keeps every policy (they depend on the function's id), op and server helper unchanged.
+  - Rejected: a GUC or call-stack check inside the definer (forgeable or fragile); moving every server helper to a new name (about 50 functions re-cut, and a forgotten one silently reads false); a second exposed self-only definer in `public` (two definer hops per row, and `__` helpers must stay unexposed).
+- **SEC1-2 · Someone else reads false, the same as a missing item** → TV-SEC1
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: no error. Policies, `coalesce(…, false)` callers and the app all expect a boolean.
+  - Rejected: raising a refusal (would turn a policy check into a failed read).
+- **SEC1-3 · Person-level helpers are server-only; the assign warning asks only about people in the workspace** → TV-SEC1
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: `share_direct_rank`, `perm_ceiling_rank` and `chat_is_workspace_member` lose client EXECUTE (only definer functions call them; no policy, view or app code does). `share_assign_preview` asks about the person being assigned by design, so it stays callable, now only about someone who works in the project's workspace.
+  - Why: the same rule as the access check, where a helper names a person.
+  - Rejected: a front door for each helper (no client needs them).
+
 ## 2026-10-13 · TV-D16 Agents and MCP v3 — the agent's choices (deferred to by Maciej)
 
 Built in tasks-v3 block 31 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §12, §13's agent row, §Assumptions #14, #15, #20, #26; REPLAN 6, 7, 35, 51, 52, 74; migration `20261013220000_agents_imports_mcp`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to change. The tool surface is in [docs/moduo-mcp-connector.md](../moduo-mcp-connector.md).
