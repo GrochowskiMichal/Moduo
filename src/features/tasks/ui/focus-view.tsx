@@ -23,7 +23,7 @@
 // Hand off W with In flight.
 
 import { type FocusTimerMode, isFocusTimerMode } from "@contracts/vocabularies";
-import { Ellipsis, Pause, Play } from "lucide-react";
+import { Ellipsis, Pause, Play, X } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { CompleteToggle } from "../../../components/ui/complete-toggle";
@@ -46,7 +46,7 @@ import { type FocusPrefs, useFocusPrefs } from "../../../lib/focus-prefs";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { formatFocusClock } from "../../focus/clock";
 import { previewFocusInterval } from "../../focus/engine";
-import { recordRunDone, useFocusRunState } from "../../focus/run";
+import { recordRunDone, setRunNotice, useFocusRunState } from "../../focus/run";
 import { stopFocusWithUndo } from "../../focus/stop-with-undo";
 import {
   changeFocusTimer,
@@ -106,7 +106,7 @@ export function FocusView({
   dndMode = "external",
 }: Props) {
   const focus = useFocusTaskState();
-  const { run, ended } = useFocusRunState();
+  const { run, ended, notice } = useFocusRunState();
   const { prefs, setPrefs } = useFocusPrefs();
   const [showDone, setShowDone] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -149,12 +149,14 @@ export function FocusView({
     if (!now || !canEdit) return;
     const ref = refOf(now.id);
     if (!ref) return;
+    setRunNotice(null);
     focusOn(ref, { timer: prefs.timer, resolveTask: refOf });
   }, [now, canEdit, refOf, prefs.timer]);
 
   const done = useCallback(() => {
     if (!now || !canEdit) return;
     const next = firstReal(upNext);
+    setRunNotice(null);
     api.markDone(now.id);
     if (!onNow) return;
     // Counted in "n done" by the device that runs the clock: this one, now.
@@ -168,6 +170,7 @@ export function FocusView({
   const skip = useCallback(() => {
     if (!now || !canEdit) return;
     const next = firstReal(upNext);
+    setRunNotice(null);
     if (api.queuedTaskIds.has(now.id)) api.moveQueuedToEnd(now.id);
     else api.addToQueue(now.id, "end");
     if (onNow && next) moveFocusTo(refOf(next.id), refOf);
@@ -274,6 +277,7 @@ export function FocusView({
       {header}
       <div className="pane-scroll min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto flex w-full max-w-2xl flex-col gap-5 pb-6">
+          {notice ? <NoticeLine text={notice} onDismiss={() => setRunNotice(null)} /> : null}
           {now ? (
             <>
               <NowCard
@@ -473,6 +477,22 @@ function PomodoroPill() {
         {where}
       </TooltipContent>
     </Tooltip>
+  );
+}
+
+// ── the session moving on by itself ("Mike completed …", F6-6) ────────────
+
+/** Why the card changed under you; the follower also toasts it once. */
+function NoticeLine({ text, onDismiss }: { text: string; onDismiss: () => void }) {
+  return (
+    <p
+      role="status"
+      data-slot="focus-notice"
+      className="-mb-2 flex items-center gap-1 px-1 font-sans text-xs text-muted-foreground"
+    >
+      <span className="min-w-0 flex-1">{text}</span>
+      <IconButton icon={X} label="Dismiss" onClick={onDismiss} />
+    </p>
   );
 }
 

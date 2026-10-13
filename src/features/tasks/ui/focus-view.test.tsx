@@ -17,6 +17,7 @@ import {
   getFocusSession,
   setFocusTimer,
 } from "../../focus/engine";
+import { setRunNotice } from "../../focus/run";
 import { makeTask } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { Task, TaskSession } from "../model";
@@ -213,6 +214,22 @@ describe("Focus: the Now card and the session (AC8.2, AC8.3)", () => {
     expect(api.markDone).toHaveBeenCalledWith("t1");
     fireEvent.keyDown(document.body, { key: "s" });
     expect(api.moveQueuedToEnd).toHaveBeenCalledWith("t1");
+  });
+});
+
+describe("Focus: the session moving on by itself (F6-6)", () => {
+  afterEach(() => act(() => setRunNotice(null)));
+
+  it("says why the card changed until you act or dismiss it", () => {
+    const api = fakeApi([task("t1"), task("t2")]);
+    renderView(api);
+    act(() => setRunNotice("Mike completed “Task t0”."));
+    expect(screen.getByText("Mike completed “Task t0”.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /^Done/ }));
+    expect(screen.queryByText("Mike completed “Task t0”.")).toBeNull();
+    act(() => setRunNotice("“Task t9” was deleted or is no longer shared with you."));
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(document.querySelector('[data-slot="focus-notice"]')).toBeNull();
   });
 });
 
