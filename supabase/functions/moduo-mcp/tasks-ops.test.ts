@@ -111,12 +111,12 @@ function setup(count: number) {
     share_visible_ids: (a) =>
       a.p_resource_type === "bucket" ? [BUCKET] : tables.tasks!.map((t) => t.id as string),
     perm_can_see_entity: () => true,
-    tasks_op_create: (a) => {
+    tasks_op_create_with: (a) => {
       const created = task(count + 1, { ...(a.p_task as Row), id: "tnew" });
       tables.tasks!.push(created);
-      return created;
+      return { action: "created", task: created, reminders_added: 0, sessions_added: 0 };
     },
-    tasks_op_update: (a) => {
+    tasks_op_update_with: (a) => {
       const t = tables.tasks!.find((x) => x.id === a.p_task_id)!;
       Object.assign(t, a.p_patch as Row);
       return [t];
@@ -176,14 +176,14 @@ describe("MCP task lists page past 1,000 (AC1.13)", () => {
 });
 
 describe("agents create and edit through the ops (AC12.1)", () => {
-  it("tasks_create calls tasks_op_create with the fields given", async () => {
+  it("tasks_create calls tasks_op_create_with with the fields given", async () => {
     const { ctx, rpcCalls } = setup(2);
     const created = (await call(
       "tasks_create",
       { title: "From the agent", bucket_id: BUCKET, due_date: "2026-10-20T00:00:00Z", priority: "high" },
       ctx,
     )) as Row;
-    const op = rpcCalls.find((c) => c.fn === "tasks_op_create");
+    const op = rpcCalls.find((c) => c.fn === "tasks_op_create_with");
     expect(op?.args).toEqual({
       p_workspace_id: WS,
       p_task: {
@@ -192,18 +192,21 @@ describe("agents create and edit through the ops (AC12.1)", () => {
         due_date: "2026-10-20T00:00:00.000Z",
         priority: "high",
       },
+      p_with: {},
     });
     expect(created.handle).toBe("MOD-3");
+    expect(created.action).toBe("created");
   });
 
   it("tasks_update sends only what changes, and null clears", async () => {
     const { ctx, rpcCalls } = setup(2);
     await call("tasks_update", { task_id: "t00001", title: "Renamed", due_date: null }, ctx);
-    const op = rpcCalls.find((c) => c.fn === "tasks_op_update");
+    const op = rpcCalls.find((c) => c.fn === "tasks_op_update_with");
     expect(op?.args).toEqual({
       p_workspace_id: WS,
       p_task_id: "t00001",
       p_patch: { title: "Renamed", due_date: null },
+      p_with: {},
     });
   });
 

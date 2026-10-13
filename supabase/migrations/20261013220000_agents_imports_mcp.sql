@@ -1136,6 +1136,74 @@ BEGIN
 END;
 $gate$;
 
+-- ── 5c. Search answers keys too ──────────────────────────────────────────────
+
+-- tasks_search (TV-D11b) asked perm_can_view, which reads auth.uid() only, so
+-- a key (MCP tasks_search) found nothing. It now asks the module permission,
+-- which reads a key's scope capped by its person, and a member's role as
+-- before; the task gate per match is unchanged. Re-cut from the live body.
+CREATE OR REPLACE FUNCTION public.tasks_search(p_workspace_id uuid, p_query text, p_limit integer DEFAULT 200)
+RETURNS SETOF uuid
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_user uuid := public.perm_actor_id();
+  v_words text[];
+  v_limit integer := least(greatest(coalesce(p_limit, 200), 1), 500);
+  v_found integer := 0;
+  v_id uuid;
+BEGIN
+  IF v_user IS NULL OR p_workspace_id IS NULL
+     OR public.tasks_module_permission(p_workspace_id) NOT IN ('view', 'edit', 'admin') THEN
+    RETURN;
+  END IF;
+  v_words := ARRAY(
+    SELECT w FROM regexp_split_to_table(lower(btrim(coalesce(p_query, ''))), '\s+') AS w
+    WHERE w <> '' LIMIT 8
+  );
+  IF coalesce(array_length(v_words, 1), 0) = 0 THEN
+    RETURN;
+  END IF;
+  -- The text first (cheap), then the access check on the matches only.
+  -- A task reads as its title and its description's text, lower-cased: the
+  -- editor stores HTML, so tags go, the common entities are decoded, and a
+  -- reference's stored text is never searchable (the app's
+  -- `descriptionText`, which searches the device copy, follows the same rules).
+  FOR v_id IN
+    SELECT t.id
+    FROM public.tasks t
+    CROSS JOIN LATERAL (
+      SELECT lower(
+        t.title || E'\n' ||
+        CASE
+          WHEN t.description ~ '^\s*<' THEN
+            replace(replace(replace(replace(replace(replace(
+              regexp_replace(
+                regexp_replace(t.description,
+                  '<span[^>]*data-lexical-entity-ref[^>]*>[^<]*</span>', ' ', 'g'),
+                '<[^>]*>', ' ', 'g'),
+              '&nbsp;', ' '), '&quot;', '"'), '&#39;', ''''), '&lt;', '<'), '&gt;', '>'), '&amp;', '&')
+          ELSE t.description
+        END
+      ) AS hay
+    ) AS h
+    WHERE t.workspace_id = p_workspace_id
+      AND t.deleted_at IS NULL
+      AND (SELECT bool_and(strpos(h.hay, w) > 0) FROM unnest(v_words) AS w)
+    ORDER BY t.updated_at DESC, t.id
+  LOOP
+    IF public.tasks__visible_to(v_id, v_user) THEN
+      RETURN NEXT v_id;
+      v_found := v_found + 1;
+      EXIT WHEN v_found >= v_limit;
+    END IF;
+  END LOOP;
+END;
+$$;
+
 -- ── 6. Account erasure covers the new tables (§Assumptions #26) ─────────────
 
 DO $erase$

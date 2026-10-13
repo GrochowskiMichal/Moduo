@@ -1,0 +1,301 @@
+/**
+ * Shared reads and argument helpers for the Tasks connector module
+ * (modules/tasks.ts). They live outside modules/ so the drift gate that
+ * collects tool names reads only tool definitions.
+ *
+ * Workspace scoping comes from the key, never from tool args. Reads run as
+ * service_role (RLS bypassed), so every query here filters on
+ * ctx.key.workspaceId and every task or project passes the creator's gate
+ * (share_visible_ids / perm_can_see_entity). Something the key's person can't
+ * see reads exactly like something that isn't there.
+ */
+
+import { isClosedTask, isOpenTask } from "../_shared/contracts/vocabularies.ts";
+import {
+  queueTaskIds,
+  readAllPages,
+  rowTaskState,
+  shapeTask,
+  subtaskCounts,
+} from "../_shared/tasks-connector.ts";
+import type { ToolContext } from "./registry.ts";
+import { visibleIds } from "./share.ts";
+
+// deno-lint-ignore no-explicit-any
+export type Row = Record<string, any>;
+
+/** The answer for a task that's hidden from the key's person or not there. */
+export const TASK_NOT_FOUND = "Task not found in this workspace.";
+/** The same for a project. */
+export const PROJECT_NOT_FOUND = "That project isn't in this workspace.";
+
+// The creator's "completed" notification (TV-D1). The trail already says so
+// through tasks.set_status, so agents don't get it twice (like the app's
+// isTrailEntry).
+export const NOTIFICATION_ONLY_OP = "tasks.completed";
+
+export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** A task's handle, `MOD-142` (TV-D8: the workspace's key + the task's number). */
+export const HANDLE = /^([A-Za-z]{2,5})-(\d{1,9})$/;
+
+export function str(args: Row, name: string, required = true): string {
+  const v = args?.[name];
+  if (typeof v === "string" && v.trim() !== "") return v.trim();
+  if (!required) return "";
+  throw new Error(`Missing required argument: ${name}`);
+}
+
+export function isoOrThrow(value: string, name: string): string {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) throw new Error(`${name} must be an ISO 8601 datetime.`);
+  return d.toISOString();
+}
+
+export function dayOrThrow(value: string, name: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error(`${name} must be YYYY-MM-DD.`);
+  return value;
+}
+
+export function clampLimit(args: Row, fallback: number, max: number): number {
+  const v = Number(args?.limit);
+  if (!Number.isFinite(v) || v <= 0) return fallback;
+  return Math.min(Math.floor(v), max);
+}
+
+/** Projects archived in the app (TV-U6): they and their tasks stay out of every
+ *  tool unless one asks for them (`include_archived`), and search finds them,
+ *  labelled `project_archived` (REPLAN 78). */
+export function archivedBucketIds(buckets: Row[]): Set<string> {
+  return new Set(buckets.filter((b) => b.archived_at && !b.is_system).map((b) => b.id));
+}
+
+export async function rows(
+  query: PromiseLike<{ data: Row[] | null; error: { message: string } | null }>,
+): Promise<Row[]> {
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
+/** An RPC's data, or its error's message thrown. */
+export async function unwrap<T = unknown>(
+  query: PromiseLike<{ data: unknown; error: { message: string } | null }>,
+): Promise<T> {
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+  return data as T;
+}
+
+/** The workspace's task key (TV-D8), or null before that migration. */
+export async function workspaceTaskKey(ctx: ToolContext): Promise<string | null> {
+  const { data, error } = await ctx.db.from("workspaces").select("task_key")
+    .eq("id", ctx.key.workspaceId).maybeSingle();
+  if (error) return null;
+  return typeof data?.task_key === "string" ? data.task_key : null;
+}
+
+/** The key creator's queue rows here (TV-D2). Before the migration: none. */
+export async function myQueueRows(ctx: ToolContext): Promise<Row[]> {
+  const { data, error } = await ctx.db.from("task_queue")
+    .select("id, task_id, position")
+    .eq("workspace_id", ctx.key.workspaceId).eq("user_id", ctx.key.createdBy);
+  if (error) {
+    // PostgREST's "no such table" (PGRST205) or Postgres's (42P01): the
+    // migration isn't there yet. Anything else is a real failure.
+    const code = (error as { code?: string }).code;
+    if ((code === "PGRST205" || code === "42P01") && /task_queue/.test(error.message ?? "")) return [];
+    throw new Error(error.message);
+  }
+  return data ?? [];
+}
+
+/** The workspace's members (the owner is one too), with names and permissions. */
+export async function workspaceMembers(
+  ctx: ToolContext,
+): Promise<{ user_id: string; perms: string[] | null; name: string }[]> {
+  const found = await rows(
+    ctx.db.from("workspace_members")
+      .select("user_id, perms, profiles(display_name)")
+      .eq("workspace_id", ctx.key.workspaceId),
+  );
+  return found.map((m) => ({
+    user_id: m.user_id as string,
+    perms: (m.perms as string[] | null) ?? null,
+    name: ((m.profiles?.display_name as string | null) ?? "").trim() || "Member",
+  }));
+}
+
+/** Tasks + the cross-row context needed for computed state, one fetch. The
+ * big reads go page by page: PostgREST stops at 1,000 rows a request, and a
+ * list past that used to lose tasks silently (TV-D8, AC1.13). */
+export async function loadWorkspace(ctx: ToolContext) {
+  const ws = ctx.key.workspaceId;
+  const visible = await visibleIds(ctx, "task");
+  const [allTasks, relations, tags, tagLinks, members, queueRows, taskKey, bucketRows] = await Promise.all([
+    readAllPages<Row>((from, to) =>
+      ctx.db.from("tasks").select("*").eq("workspace_id", ws).is("deleted_at", null)
+        .order("id").range(from, to)),
+    readAllPages<Row>((from, to) =>
+      ctx.db.from("task_relations").select("*").eq("workspace_id", ws).order("id").range(from, to)),
+    rows(ctx.db.from("tags").select("id, name, color").eq("workspace_id", ws).is("deleted_at", null)),
+    readAllPages<Row>((from, to) =>
+      ctx.db.from("tag_links").select("id, tag_id, entity_type, entity_id").eq("workspace_id", ws)
+        .eq("entity_type", "task").order("id").range(from, to)),
+    workspaceMembers(ctx),
+    myQueueRows(ctx),
+    workspaceTaskKey(ctx),
+    // select("*"): a database without TV-U6's archived_at still answers.
+    rows(ctx.db.from("buckets").select("*").eq("workspace_id", ws).is("deleted_at", null)),
+  ]);
+  // TV-U6: an archived project's tasks are out of every list and queue; only
+  // search and `include_archived` reach them (labelled).
+  const archived = archivedBucketIds(bucketRows);
+  const tasks = allTasks.filter((t) => visible.has(t.id) && !archived.has(t.bucket_id));
+  const archivedTasks = allTasks.filter((t) => visible.has(t.id) && archived.has(t.bucket_id));
+  // TV-D2: the key creator's own queue, in order (live, visible tasks only).
+  const queue = queueTaskIds(queueRows as { id: string; task_id: string; position: string }[],
+    new Set(tasks.map((t) => t.id)));
+  const byId = new Map(tasks.map((t) => [t.id, t]));
+  const open = (id: string) => {
+    const t = byId.get(id);
+    // A backlog blocker still blocks (TV-D9): only finished ones don't.
+    return !!t && !isClosedTask(rowTaskState(t));
+  };
+  const blockedIds = new Set(
+    relations.filter((r) => open(r.blocker_task_id) && byId.has(r.blocked_task_id))
+      .map((r) => r.blocked_task_id),
+  );
+  // Assignees and creators by name; someone no longer a member reads "Former member".
+  const names = new Map(members.map((m) => [m.user_id, m.name]));
+  const tagName = new Map(tags.map((t) => [t.id, t.name]));
+  // Tags on the tasks the key's person can see, and nothing else: a count over
+  // every task would tell about hidden ones (TV-D16).
+  const seen = new Set([...tasks, ...archivedTasks].map((t) => t.id));
+  const taskTags = new Map<string, string[]>();
+  for (const link of tagLinks) {
+    const name = tagName.get(link.tag_id);
+    if (!name || !seen.has(link.entity_id)) continue;
+    const list = taskTags.get(link.entity_id) ?? [];
+    list.push(name);
+    taskTags.set(link.entity_id, list);
+  }
+  return {
+    tasks, relations, tags, byId, blockedIds, taskTags, names,
+    subtaskCounts: subtaskCounts(tasks),
+    queue,
+    queuedByMe: new Set(queue),
+    taskKey,
+    archivedTasks,
+  };
+}
+
+export type WorkspaceData = Awaited<ReturnType<typeof loadWorkspace>>;
+
+/** The key creator's queue, shaped, in order. */
+export async function shapedQueue(ctx: ToolContext): Promise<Row[]> {
+  const data = await loadWorkspace(ctx);
+  const now = new Date();
+  return data.queue.map((id) => shapeTask(data.byId.get(id)!, data, now));
+}
+
+/**
+ * A task's id from what an agent sends: its uuid or its handle (`MOD-142`,
+ * TV-D8; any case). Anything else, or a handle of a task that isn't there,
+ * reads as not found.
+ */
+export async function resolveTaskRef(ctx: ToolContext, ref: string): Promise<string> {
+  const value = ref.trim();
+  const handle = value.match(HANDLE);
+  // Not a handle: an id, checked by the lookup that follows.
+  if (!handle) return value;
+  const key = await workspaceTaskKey(ctx);
+  if (!key || key.toUpperCase() !== handle[1]!.toUpperCase()) throw new Error(TASK_NOT_FOUND);
+  const found = await rows(
+    ctx.db.from("tasks").select("id")
+      .eq("workspace_id", ctx.key.workspaceId).eq("number", Number(handle[2])).is("deleted_at", null)
+      .limit(1),
+  );
+  if (!found.length) throw new Error(TASK_NOT_FOUND);
+  return found[0]!.id as string;
+}
+
+/** One live task the key's person can see (by uuid or handle), or not found. */
+export async function fetchTask(ctx: ToolContext, ref: string): Promise<Row> {
+  const id = await resolveTaskRef(ctx, ref);
+  const { data, error } = await ctx.db.from("tasks").select("*")
+    .eq("workspace_id", ctx.key.workspaceId).eq("id", id).is("deleted_at", null);
+  // Not an id Postgres reads (22P02): there's no such task.
+  if (error && (error as { code?: string }).code === "22P02") throw new Error(TASK_NOT_FOUND);
+  if (error) throw new Error(error.message);
+  const found = (data ?? []) as Row[];
+  // Service role sees every row: only tasks shared with the key's creator exist.
+  if (!found.length || !(await visibleIds(ctx, "task")).has(found[0]!.id)) {
+    throw new Error(TASK_NOT_FOUND);
+  }
+  return found[0]!;
+}
+
+/** A live project the key's person can see, or not found. */
+export async function fetchProject(ctx: ToolContext, id: string): Promise<Row> {
+  if (!UUID.test(id)) throw new Error(PROJECT_NOT_FOUND);
+  const found = await rows(
+    ctx.db.from("buckets").select("*")
+      .eq("workspace_id", ctx.key.workspaceId).eq("id", id).is("deleted_at", null),
+  );
+  if (!found.length || !(await visibleIds(ctx, "bucket")).has(found[0]!.id)) {
+    throw new Error(PROJECT_NOT_FOUND);
+  }
+  return found[0]!;
+}
+
+/** Call a tasks_op_* RPC that answers with a task (or tasks), and shape it. */
+export async function callOp(ctx: ToolContext, fn: string, args: Row): Promise<Row> {
+  const { data, error } = await ctx.db.rpc(fn, {
+    p_workspace_id: ctx.key.workspaceId,
+    ...args,
+  });
+  if (error) throw new Error(error.message);
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) throw new Error("The operation returned nothing.");
+  return shapeOne(ctx, row);
+}
+
+/** A task row as agents see it, with the workspace's context. A row the key's
+ *  person can't see any more (a hand-over into someone else's Inbox) comes
+ *  back as its handle and id only. */
+export async function shapeOne(ctx: ToolContext, row: Row): Promise<Row> {
+  const ws = await loadWorkspace(ctx);
+  if (!ws.byId.has(row.id) && !ws.archivedTasks.some((t) => t.id === row.id)) {
+    return {
+      ...(ws.taskKey && row.number != null ? { handle: `${ws.taskKey}-${row.number}` } : {}),
+      id: row.id,
+      note: "Handed on: it's no longer in your view.",
+    };
+  }
+  return shapeTask(row, ws, new Date(), true);
+}
+
+/** Open, not closed: the one rule (TV-D9). */
+export function isRowOpen(t: Row): boolean {
+  return isOpenTask(rowTaskState(t));
+}
+export function isRowClosed(t: Row): boolean {
+  return isClosedTask(rowTaskState(t));
+}
+
+/** The repeat an agent sends: an RRULE string, or {rrule, mode}, or null. */
+export function recurrenceFromArg(value: unknown): Row | null {
+  if (value === null) return null;
+  if (typeof value === "string") {
+    const rule = value.trim().replace(/^RRULE:/i, "");
+    if (!rule) throw new Error("repeat must be an RRULE like FREQ=WEEKLY;BYDAY=TU.");
+    return { rrule: rule };
+  }
+  if (value && typeof value === "object") {
+    const v = value as Row;
+    const rule = typeof v.rrule === "string" ? v.rrule.trim().replace(/^RRULE:/i, "") : "";
+    if (!rule) throw new Error("repeat must be an RRULE like FREQ=WEEKLY;BYDAY=TU.");
+    return v.mode ? { rrule: rule, mode: v.mode } : { rrule: rule };
+  }
+  throw new Error("repeat must be an RRULE like FREQ=WEEKLY;BYDAY=TU.");
+}

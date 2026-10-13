@@ -82,6 +82,14 @@ BEGIN
                   = 'api_key:Claude Desktop',
     'a comment when asked reads as the app that wrote it', r);
 
+  -- Search answers a key, with the task gate per match.
+  PERFORM test.as_user('O', format($q$SELECT public.tasks_op_create(%L, %L::jsonb)$q$, test.id('W'),
+    jsonb_build_object('id', test.id('TS'), 'title', 'Ship notes (private)', 'bucket_id', test.id('PB'))));
+  PERFORM test.ok(test.as_key('K', format($q$SELECT * FROM public.tasks_search(%L, 'ship', 50)$q$, test.id('W'))) = 'ok 1',
+    'tasks_search finds a key''s matches and leaves out the private one (2 matches, 1 seen)');
+  PERFORM test.ok(test.as_key('KV', format($q$SELECT * FROM public.tasks_search(%L, 'ship', 50)$q$, test.id('W'))) = 'ok 1',
+    'a view-only key searches too');
+
   -- A disallowed write is refused whole.
   r := test.as_key('K', format($q$SELECT public.tasks_op_create_with(%L, %L::jsonb, %L::jsonb)$q$, test.id('W'),
     jsonb_build_object('id', test.id('T2'), 'title', 'Two'),
