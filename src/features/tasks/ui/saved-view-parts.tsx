@@ -103,7 +103,8 @@ export function ViewChangesLine({
   /** The view is yours: Save writes into it. Else only Save as new view…. */
   canSave: boolean;
   onSave: () => void;
-  onSaveAsNew: () => void;
+  /** Absent when the view's place is gone (a deleted project): nothing to save over. */
+  onSaveAsNew?: () => void;
   onRevert: () => void;
 }) {
   const action =
@@ -121,10 +122,14 @@ export function ViewChangesLine({
         </button>
       ) : null}
       {canSave ? <span aria-hidden>·</span> : null}
-      <button type="button" onClick={onSaveAsNew} className={action}>
-        Save as new view…
-      </button>
-      <span aria-hidden>·</span>
+      {onSaveAsNew ? (
+        <>
+          <button type="button" onClick={onSaveAsNew} className={action}>
+            Save as new view…
+          </button>
+          <span aria-hidden>·</span>
+        </>
+      ) : null}
       <button type="button" onClick={onRevert} className={action}>
         Revert
       </button>

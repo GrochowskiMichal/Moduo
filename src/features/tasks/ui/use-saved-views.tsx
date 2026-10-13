@@ -210,7 +210,7 @@ export function useSavedViews({
         <ViewChangesLine
           canSave={canSaveInto}
           onSave={saveChanges}
-          onSaveAsNew={openSave}
+          onSaveAsNew={target ? openSave : undefined}
           onRevert={revert}
         />
       ) : undefined,
