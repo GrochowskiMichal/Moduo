@@ -237,10 +237,11 @@ export function activityLine(entry: Pick<ActivityEntry, "op" | "payload">): stri
       return "moved just this occurrence";
     case "tasks.mentioned":
       return "mentioned someone in the description";
+    // The actor is whoever answered (a comment) or the mailbox's owner (an email).
     case "tasks.waiting_resolved":
       return str(p.reason) === "email"
-        ? "stopped waiting — the reply came in"
-        : "stopped waiting — they commented";
+        ? "got the reply this was waiting on"
+        : "answered · no longer waited on";
     // ── DF-9 spine-generated task notifications, seen in the trail too ─────────
     // Logged by the tasks_notify_spine trigger (module='tasks'), so they surface
     // in this entity trail — render a neutral, third-person sentence here (the

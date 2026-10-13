@@ -317,6 +317,13 @@ BEGIN
               AND (SELECT count(*) FROM public.push_subscriptions WHERE user_id = test.id('E')) = 1,
     'settling marks it sent and forgets a browser the push service says is gone');
   PERFORM test.ok(NOT EXISTS (SELECT 1 FROM public.notice_deliveries__claim(10)), 'a sent delivery isn''t claimed again');
+  -- A delivery whose task its person can no longer see isn't pushed.
+  INSERT INTO public.notice_deliveries (user_id, workspace_id, kind, task_id, title, url)
+  VALUES (test.id('E'), test.id('W'), 'reminder', test.id('Private plan'), 'Private plan', '/tasks');
+  PERFORM test.ok(NOT EXISTS (SELECT 1 FROM public.notice_deliveries__claim(10)),
+    'a delivery for a task its person can''t see any more is never pushed');
+  r := test.as_op('O', format($q$INSERT INTO public.notice_deliveries (user_id, kind, title, url) VALUES (%L, 'reminder', 'x', '//evil.example')$q$, test.id('O')));
+  PERFORM test.ok(r NOT LIKE 'ok%', 'a delivery''s link is a path inside Moduo', r);
   -- Someone else can't take E's browser over, or remove it.
   r := test.try('A', format($q$SELECT public.push_op_subscribe('https://fcm.googleapis.com/fcm/send/abc', %L, %L)$q$, v_key, v_auth));
   PERFORM test.ok(r LIKE '%set up for someone else%'

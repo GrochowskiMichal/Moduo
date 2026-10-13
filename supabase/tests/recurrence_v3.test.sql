@@ -164,6 +164,44 @@ BEGIN
 END;
 $$;
 
+-- ── A "1 day before" reminder comes back every cycle ────────────────────────
+DO $$
+DECLARE
+  d date := (now() AT TIME ZONE 'UTC')::date;
+  v_at timestamptz;
+BEGIN
+  PERFORM test.new_task('E', 'Assignment', jsonb_build_object('due_on', d + 1, 'recurrence', test.weekly(d + 1)));
+  PERFORM test.as_user('E', format($q$SELECT * FROM public.tasks_op_reminder_add(%L, %L, 'day_before')$q$,
+    test.id('W'), test.id('Assignment')));
+  -- This week's fired.
+  UPDATE public.task_reminders SET fired_at = now() WHERE task_id = test.id('Assignment');
+  PERFORM test.as_user('E', format($q$SELECT (public.tasks_op_set_status(%L, %L, 'done')).status$q$, test.id('W'), test.id('Assignment')));
+  -- The day before next week's due date, just after midnight.
+  PERFORM count(*) FROM public.tasks__roll_over(test.id('W'), ((d + 7) + time '00:05') AT TIME ZONE 'UTC', 100, interval '10 seconds');
+  SELECT r.at INTO v_at FROM public.task_reminders r WHERE r.task_id = test.id('Assignment');
+  PERFORM test.ok((test.t('Assignment')).status = 'todo' AND (test.t('Assignment')).due_on = d + 8
+              AND v_at = ((d + 7) + time '09:00') AT TIME ZONE 'UTC'
+              AND (SELECT fired_at FROM public.task_reminders WHERE task_id = test.id('Assignment')) IS NULL,
+    'a repeat with a "1 day before" reminder comes back the day before, with the reminder armed again',
+    (test.t('Assignment')).status || ' ' || (test.t('Assignment')).due_on || ' ' || v_at);
+END;
+$$;
+
+-- ── The history keeps the newest cycles ────────────────────────────────────
+DO $$
+DECLARE
+  r jsonb;
+BEGIN
+  PERFORM test.new_task('E', 'Daily habit', jsonb_build_object('recurrence', test.weekly((now() AT TIME ZONE 'UTC')::date)));
+  INSERT INTO public.task_completions (workspace_id, task_id, user_id, completed_at, cycle_key)
+  SELECT test.id('W'), test.id('Daily habit'), test.id('E'), now() - make_interval(days => n), 'c' || n
+  FROM generate_series(1, 120) n;
+  r := test.value_as('E', format($q$SELECT public.tasks_op_history(%L, %L)::text$q$, test.id('W'), test.id('Daily habit')))::jsonb;
+  PERFORM test.ok(jsonb_array_length(r) = 100 AND r -> 0 ->> 'cycle' = 'c1' AND r -> 99 ->> 'cycle' = 'c100',
+    'the history lists the newest 100 cycles, newest first', r -> 0 ->> 'cycle');
+END;
+$$;
+
 -- ── An old build's local midnight at UTC+13 ─────────────────────────────────
 DO $$
 BEGIN
@@ -171,5 +209,8 @@ BEGIN
               AND public.tasks__due_on_of('2026-10-13T12:00:00Z', NULL) = '2026-10-13'
               AND public.tasks__due_on_of('2026-10-13T10:00:00Z', NULL) = '2026-10-13',
     'with no saved zone, 11:00 UTC is the next day''s midnight at UTC+13; noon is the mirror''s own date');
+  PERFORM test.ok(public.tasks__due_on_of('2026-11-08T11:00:00Z', 'Europe/London') = '2026-11-08'
+              AND public.tasks__due_on_of('2026-11-08T11:00:00Z', 'America/New_York') = '2026-11-08',
+    'with a saved zone, 11:00 UTC keeps its date');
 END;
 $$;

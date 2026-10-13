@@ -559,6 +559,7 @@ pub fn run() {
                 tauri::RunEvent::Reopen { .. } => show_main_window(app),
                 _ => {}
             }
+            // `app` is only read on macOS (Reopen); keep other targets warning-free.
             let _ = app;
         });
 }

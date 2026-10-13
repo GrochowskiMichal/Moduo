@@ -29,6 +29,7 @@
 
 ## Repeats
 - [ ] **Do:** a weekly repeat due Friday with a work session Thursday 2 PM; complete it → **Expect:** next week it comes back on Thursday with the session Thursday 2 PM and due Friday (both moved by a week). _(both)_
+- [ ] **Do:** a weekly repeat with a "1 day before" reminder; complete it → **Expect:** next week it comes back the day before it's due and the reminder fires again. _(both)_
 - [ ] **Do:** a repeat with a checklist of subtasks; tick some, complete the parent → **Expect:** when it comes back, the subtasks are To do again. _(both)_
 - [ ] **Do:** a repeat at 9:00 across a daylight-saving change → **Expect:** still 9:00 after the change. _(both)_
 - [ ] **Do:** skip an occurrence (row ⋯ → Skip) → **Expect:** it moves to the next one the rule picks; the activity says so. _(both)_
@@ -39,7 +40,7 @@
 - [ ] **Do:** a laptop asleep for an hour with several reminders → **Expect:** at most three toasts, newest first; all are in the bell. _(both)_
 
 ## Migrations / data
-- [ ] **Do:** `20261013110000_notifications_v3.sql` then `20261013111000_recurrence_moves_dst.sql` on the local stack → **Expect:** `bun run db:test` passes (notifications, recurrence_v3, waiting and every older suite). _(db)_
+- [ ] **Do:** `20261013110000_notifications_v3.sql`, `20261013111000_recurrence_moves_dst.sql`, then `20261013140000_reminders_repeats_fixes.sql` on the local stack → **Expect:** `bun run db:test` passes (notifications, recurrence_v3, waiting and every older suite). _(db)_
 
 ## Known gaps / not-yet-testable (verify before release)
 - **Desktop:** the menu-bar icon, close-to-tray, Dock reopen and OS notifications need a signed desktop build (`tauri-plugin-notification` fails silently unsigned; gotchas/desktop.md).

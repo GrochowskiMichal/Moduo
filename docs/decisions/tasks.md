@@ -4,7 +4,7 @@ Full entries for this area, newest first. The one-line index of every area is [d
 
 ## 2026-10-13 · TV-D12 recurrence a–h, reminders, the notification table — the agent's choices (deferred to by Maciej)
 
-Built in tasks-v3 block 27 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §2 "Reminders" and "Repeats", §13, §Assumptions #5, #16, #26; REPLAN 24, 27 a–i, 73, 80; migrations `20261013110000_notifications_v3` and `20261013111000_recurrence_moves_dst`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+Built in tasks-v3 block 27 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §2 "Reminders" and "Repeats", §13, §Assumptions #5, #16, #26; REPLAN 24, 27 a–i, 73, 80; migrations `20261013110000_notifications_v3`, `20261013111000_recurrence_moves_dst` and `20261013140000_reminders_repeats_fixes`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
 
 - **D12-1 · Reminders are delivered by one minute job, and only while they make sense** → TV-D12 (`tasks__fire_reminders`, `tasks__notice`)
   - Who: agent's choice, deferred to by Maciej, 2026-10-13.
@@ -13,7 +13,7 @@ Built in tasks-v3 block 27 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §2 "Re
   - Rejected: every five minutes (late by up to five), the notice on the task itself.
 - **D12-2 · Backlog and Won't do suspend reminders; bringing the task back asks** → TV-D12 (`task_reminders.suspended_at`, `tasks_op_reminders_restore`, the "Restore the reminder?" toast)
   - Who: agent's choice, deferred to by Maciej, 2026-10-13.
-  - Decision: entering Backlog or Won't do suspends every person's unfired reminders on the task (a reminder added there starts suspended); moving it back to To do or In progress offers "Restore the reminder?" to whoever moves it, if they had one; Restore brings back everyone's when they can edit the task (else their own), only those still ahead.
+  - Decision: entering Backlog or Won't do suspends every person's unfired reminders on the task (a reminder added there starts suspended); reminders already on parked tasks were marked suspended once; moving it back to To do or In progress offers "Restore the reminder?" to whoever moves it (if they can edit it and are online), if they had one; Restore brings back everyone's when they can edit the task (else their own), only those still ahead.
   - Why: the spec's edge case; a reminder whose time passed meanwhile would otherwise fire at once.
   - Rejected: deleting them (nothing to restore), restoring by itself.
 - **D12-3 · A person's devices hear a notice through one table; the browser through Web Push** → TV-D12 (`notice_deliveries`, `push_subscriptions`, `push-send`, `NoticeDeliveries`)
@@ -63,7 +63,7 @@ Built in tasks-v3 block 27 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §2 "Re
   - Rejected: a DST-aware rewrite of the engine itself (the 2,300-rule parity sweep would need redoing).
 - **D12-12 · Which date a repeat sits on, and how its dates move** → TV-D12 (`tasks__occurrence_of`, `tasks__shift_dates`, `tasks__roll_over`)
   - Who: agent's choice, deferred to by Maciej, 2026-10-13.
-  - Decision: the occurrence is the due date when it's on the rule's pattern, else the work session when that is, else the due date, else the session. When it comes back or catches up, every date moves by the same days (a session sitting on the occurrence lands exactly on the new one); a repeat whose session comes before its due date comes back on the session's day; a repeat with no date gets a due date, no longer a calendar block; a rule only the app reads keeps the session-on-occurrence model.
+  - Decision: the occurrence is the due date when it's on the rule's pattern, else the work session when that is, else the due date, else the session. When it comes back or catches up, every date moves by the same days (a session sitting on the occurrence lands exactly on the new one); a repeat whose session comes before its due date comes back on the session's day, and one with a "1 day before" reminder the day before (so the reminder re-arms every cycle); a repeat with no date gets a due date, no longer a calendar block; a rule only the app reads keeps the session-on-occurrence model.
   - Why: "due and scheduled move together, keeping their gap" (27 c); a date alone is a due date (spec §10).
   - Rejected: `scheduled_at` alone (due never moved), the due date always first (a session-based rule with a later due would jump).
 - **D12-13 · Subtasks reset each cycle** → TV-D12 (`tasks__roll_over`)
