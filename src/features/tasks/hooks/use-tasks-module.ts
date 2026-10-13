@@ -8,6 +8,7 @@
 
 import {
   isBacklogTask,
+  isClosedTask,
   isOpenTask,
   legacyTaskStatus,
   normalizeTaskStatusCategory,
@@ -64,9 +65,12 @@ import {
   type Tag,
   type Task,
   type TaskQueueEntry,
+  type TaskReminder,
   type TaskRelation,
+  type TaskSession,
   type TaskStatus,
   type TasksTrash,
+  type TaskWaitingEntry,
   type TaskTimeResult,
   type TimeBlockMap,
   type TimeBlockSlot,
@@ -1212,6 +1216,11 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     ],
   );
 
+  /** Call 87's helpers, declared below (with the check-offs they reuse). */
+  type Finished = { count: number; undo: () => void };
+  const finishOpenSubtasksRef = useRef<(before: Task) => Finished | null>(() => null);
+  const sayFinishedWithRef = useRef<(before: Task, finished: Finished) => void>(() => {});
+
   /**
    * Set a task's status (TV-D9): one of its project's statuses by id, or a
    * category (the project's first status of it, unless the task is already in
@@ -1222,6 +1231,10 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     (id: string, target: StatusTarget) => {
       const existing = tasksRef.current.find((t) => t.id === id);
       if (!existing) return;
+      const toCategory =
+        "statusId" in target
+          ? statusesForBucket(existing.bucketId).find((x) => x.id === target.statusId)?.category
+          : target.category;
       if ("statusId" in target) {
         const s = statusesForBucket(existing.bucketId).find((x) => x.id === target.statusId);
         if (!s || s.id === existing.statusId) return;
@@ -1230,12 +1243,20 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
           statusCategory: s.category,
           status: legacyTaskStatus(s.category),
         });
-        return;
+      } else {
+        if (taskCategoryOf(existing) === target.category) return;
+        patchTask(id, {
+          statusCategory: target.category,
+          status: legacyTaskStatus(target.category),
+        });
       }
-      if (taskCategoryOf(existing) === target.category) return;
-      patchTask(id, { statusCategory: target.category, status: legacyTaskStatus(target.category) });
+      // Call 87: into Done from an open status finishes the open subtasks.
+      if (toCategory === "done" && canEdit && !isClosedTask(existing)) {
+        const finished = finishOpenSubtasksRef.current(existing);
+        if (finished) sayFinishedWithRef.current(existing, finished);
+      }
     },
-    [statusesForBucket, patchTask],
+    [statusesForBucket, patchTask, canEdit],
   );
 
   offerMoveToTodoRef.current = (task: Task) => {
@@ -1348,14 +1369,88 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       });
   }, [loadStamp, canEdit, runtime, workspaceId, store]);
 
-  const toggleDone = useCallback(
-    (task: Task) => {
-      patchTask(task.id, { status: task.status === "done" ? "todo" : "done" });
-    },
-    [patchTask],
+  /** A task's status as it was, for an Undo: its own status when it has one. */
+  const statusBack = useCallback(
+    (before: Task): Partial<Task> =>
+      before.statusId
+        ? {
+            statusId: before.statusId,
+            statusCategory: taskCategoryOf(before),
+            status: legacyTaskStatus(taskCategoryOf(before)),
+          }
+        : { statusCategory: taskCategoryOf(before), status: legacyTaskStatus(taskCategoryOf(before)) },
+    [],
   );
 
-  const markDone = useCallback((id: string) => patchTask(id, { status: "done" }), [patchTask]);
+  /**
+   * Call 87: finishing a task finishes its open subtasks too. Sends each
+   * subtask's check-off and answers how many it finished, with the Undo that
+   * puts them back (each only while it's still done: a later change wins).
+   * A subtask has none of its own; a repeating parent keeps its subtasks
+   * open (TV-D12 resets them per cycle). Null when there's nothing to finish.
+   */
+  const finishOpenSubtasks = useCallback(
+    (before: Task): { count: number; undo: () => void } | null => {
+      if (before.parentId || before.recurrence || isClosedTask(before)) return null;
+      const open = tasksRef.current.filter(
+        (t) => t.parentId === before.id && !t.deletedAt && !isTempId(t.id) && !isClosedTask(t),
+      );
+      if (open.length === 0) return null;
+      for (const subtask of open) patchTask(subtask.id, { status: "done" });
+      return {
+        count: open.length,
+        undo: () => {
+          for (const subtask of open) {
+            const now = tasksRef.current.find((t) => t.id === subtask.id);
+            if (now && taskCategoryOf(now) === "done") patchTask(subtask.id, statusBack(subtask));
+          }
+        },
+      };
+    },
+    [patchTask, statusBack],
+  );
+
+  /** "Done · also 2 subtasks" with one Undo for the parent and its subtasks. */
+  const sayFinishedWith = useCallback(
+    (before: Task, finished: { count: number; undo: () => void }) => {
+      undoToast(
+        `Done · also ${finished.count === 1 ? "1 subtask" : `${finished.count} subtasks`}`,
+        {
+          onUndo: () => {
+            finished.undo();
+            const now = tasksRef.current.find((t) => t.id === before.id);
+            if (now && taskCategoryOf(now) === "done") patchTask(before.id, statusBack(before));
+          },
+        },
+      );
+    },
+    [patchTask, statusBack],
+  );
+
+  finishOpenSubtasksRef.current = finishOpenSubtasks;
+  sayFinishedWithRef.current = sayFinishedWith;
+
+  const toggleDone = useCallback(
+    (task: Task) => {
+      const finishing = task.status !== "done";
+      patchTask(task.id, { status: finishing ? "done" : "todo" });
+      if (!finishing || !canEdit) return;
+      const finished = finishOpenSubtasks(task);
+      if (finished) sayFinishedWith(task, finished);
+    },
+    [patchTask, canEdit, finishOpenSubtasks, sayFinishedWith],
+  );
+
+  const markDone = useCallback(
+    (id: string) => {
+      const before = tasksRef.current.find((t) => t.id === id);
+      patchTask(id, { status: "done" });
+      if (!before || !canEdit || taskCategoryOf(before) === "done") return;
+      const finished = finishOpenSubtasks(before);
+      if (finished) sayFinishedWith(before, finished);
+    },
+    [patchTask, canEdit, finishOpenSubtasks, sayFinishedWith],
+  );
 
   /** Archive a task — terminal, removes it from open lists (used by drift triage). */
   const archiveTask = useCallback(
@@ -1986,8 +2081,17 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         : write;
       const after = await saveTaskWrite(saving);
       if (!after) return false;
-      undoToast(label, {
+      // Call 87: a drop into Done finishes the open subtasks too, under the drop's Undo.
+      const finished =
+        canEdit && taskCategoryOf(after) === "done" && !isClosedTask(before)
+          ? finishOpenSubtasks(before)
+          : null;
+      const said = finished
+        ? `${label} · also ${finished.count === 1 ? "1 subtask" : `${finished.count} subtasks`}`
+        : label;
+      undoToast(said, {
         onUndo: () => {
+          finished?.undo();
           const current = tasksRef.current.find((t) => t.id === write.taskId);
           const title = `“${before.title || "Untitled"}”`;
           if (!current || current.deletedAt) {
@@ -2023,7 +2127,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       });
       return true;
     },
-    [liveTasks, saveTaskWrite, restoreQueuePlace],
+    [liveTasks, saveTaskWrite, restoreQueuePlace, canEdit, finishOpenSubtasks],
   );
 
   // ── blocked-by mutations (edges, not statuses — spec §5c) ────────────────────
@@ -2083,6 +2187,186 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         .catch((e) => refused(write, e));
     },
     [bundle.taskRelations, editBlocked, store, runtime, workspaceId, refused],
+  );
+
+  // ── sessions, reminders, Waiting on… (TV-U13, on TV-D10's ops) ──────────────
+  // Each op answers with the task's rows of that table (sessions: everyone's;
+  // reminders: mine), which become the copy; a refused write puts back only
+  // its own change. A session's person is me or the task's assignee (the
+  // server refuses anyone else, TV-D10-fix), and moving or resizing keeps it.
+
+  /** Schedule a work session (the panel's Scheduled picker). */
+  const addSession = useCallback(
+    (taskId: string, input: { startsAt: string; endsAt: string; userId: string | null }) => {
+      if (editBlocked() || !store || !runtime || !workspaceId) return;
+      if (isTempId(taskId)) {
+        toast.error(STILL_SAVING);
+        return;
+      }
+      const shown: TaskSession = {
+        id: crypto.randomUUID(),
+        workspaceId,
+        taskId,
+        userId: input.userId,
+        startsAt: input.startsAt,
+        endsAt: input.endsAt,
+        updatedAt: new Date().toISOString(),
+      };
+      const write = store.begin([{ table: "sessions", insert: shown }]);
+      void runtime.tasks
+        .addSession({
+          workspaceId,
+          taskId,
+          id: shown.id,
+          startsAt: input.startsAt,
+          endsAt: input.endsAt,
+          ...(input.userId ? { userId: input.userId } : {}),
+        })
+        .then((rows) => {
+          write.settle({ sessions: rows });
+          setActivityStamp((n) => n + 1);
+        })
+        .catch((e) => refused(write, e, "Couldn’t schedule the session."));
+    },
+    [editBlocked, store, runtime, workspaceId, refused],
+  );
+
+  /** Move or resize a session; its person stays. */
+  const updateSession = useCallback(
+    (sessionId: string, patch: { startsAt?: string; endsAt?: string }) => {
+      if (editBlocked() || !store || !runtime || !workspaceId) return;
+      const write = store.begin([{ table: "sessions", patch: { id: sessionId, fields: patch } }]);
+      void runtime.tasks
+        .updateSession({ workspaceId, sessionId, patch })
+        .then((rows) => {
+          write.settle({ sessions: rows });
+          setActivityStamp((n) => n + 1);
+        })
+        .catch((e) => refused(write, e, "Couldn’t move the session."));
+    },
+    [editBlocked, store, runtime, workspaceId, refused],
+  );
+
+  const removeSession = useCallback(
+    (sessionId: string) => {
+      if (editBlocked() || !store || !runtime || !workspaceId) return;
+      const write = store.begin([{ table: "sessions", remove: sessionId }]);
+      void runtime.tasks
+        .removeSession({ workspaceId, sessionId })
+        .then((rows) => {
+          store.forget("sessions", [sessionId]);
+          write.settle({ sessions: rows });
+          setActivityStamp((n) => n + 1);
+        })
+        .catch((e) => refused(write, e, "Couldn’t remove the session."));
+    },
+    [editBlocked, store, runtime, workspaceId, refused],
+  );
+
+  /** One of my reminders: at a time, or a day / an hour before due. */
+  const addReminder = useCallback(
+    (taskId: string, kind: TaskReminder["kind"], at: string | null = null) => {
+      if (!store || !runtime || !workspaceId || !userId) return;
+      if (store.isOffline()) {
+        sayOffline();
+        return;
+      }
+      if (isTempId(taskId)) {
+        toast.error(STILL_SAVING);
+        return;
+      }
+      const shown: TaskReminder = {
+        id: `tmp-${crypto.randomUUID()}`,
+        workspaceId,
+        taskId,
+        userId,
+        kind,
+        at,
+        firedAt: null,
+        updatedAt: new Date().toISOString(),
+      };
+      const write = store.begin([{ table: "reminders", insert: shown }]);
+      void runtime.tasks
+        .addReminder({ workspaceId, taskId, kind, at })
+        .then((rows) => write.settle({ reminders: rows }))
+        .catch((e) => refused(write, e, "Couldn’t set the reminder."));
+    },
+    [store, runtime, workspaceId, userId, refused],
+  );
+
+  const removeReminder = useCallback(
+    (reminderId: string) => {
+      if (!store || !runtime || !workspaceId) return;
+      if (store.isOffline()) {
+        sayOffline();
+        return;
+      }
+      if (isTempId(reminderId)) return;
+      const write = store.begin([{ table: "reminders", remove: reminderId }]);
+      void runtime.tasks
+        .removeReminder({ workspaceId, reminderId })
+        .then((rows) => {
+          store.forget("reminders", [reminderId]);
+          write.settle({ reminders: rows });
+        })
+        .catch((e) => refused(write, e, "Couldn’t remove the reminder."));
+    },
+    [store, runtime, workspaceId, refused],
+  );
+
+  /** Waiting on… someone or something (a person, or a typed note). */
+  const addWaiting = useCallback(
+    (taskId: string, entry: { kind: TaskWaitingEntry["kind"]; ref?: string | null; label?: string | null }) => {
+      if (editBlocked() || !store || !runtime || !workspaceId) return;
+      if (isTempId(taskId)) {
+        toast.error(STILL_SAVING);
+        return;
+      }
+      const now = new Date().toISOString();
+      const shown: TaskWaitingEntry = {
+        id: crypto.randomUUID(),
+        workspaceId,
+        taskId,
+        kind: entry.kind,
+        ref: entry.ref ?? null,
+        label: entry.label ?? null,
+        since: now,
+        createdBy: userId,
+        updatedAt: now,
+      };
+      const write = store.begin([{ table: "waiting", insert: shown }]);
+      void runtime.tasks
+        .addWaiting({
+          workspaceId,
+          taskId,
+          id: shown.id,
+          kind: entry.kind,
+          ref: entry.ref ?? null,
+          label: entry.label ?? null,
+        })
+        .then((rows) => {
+          write.settle({ waiting: rows });
+          setActivityStamp((n) => n + 1);
+        })
+        .catch((e) => refused(write, e, "Couldn’t add it to Waiting on."));
+    },
+    [editBlocked, store, runtime, workspaceId, userId, refused],
+  );
+
+  const removeWaiting = useCallback(
+    (entryId: string) => {
+      if (editBlocked() || !store || !runtime || !workspaceId) return;
+      const write = store.begin([{ table: "waiting", remove: entryId }]);
+      void runtime.tasks
+        .removeWaiting({ workspaceId, entryId })
+        .then((rows) => {
+          store.forget("waiting", [entryId]);
+          write.settle({ waiting: rows });
+          setActivityStamp((n) => n + 1);
+        })
+        .catch((e) => refused(write, e, "Couldn’t remove it from Waiting on."));
+    },
+    [editBlocked, store, runtime, workspaceId, refused],
   );
 
   // ── project mutations ("buckets" in the schema until TV-D7) ─────────────────
@@ -2804,6 +3088,13 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     sessions: snap.sessions,
     reminders: snap.reminders,
     waiting: snap.waiting,
+    addSession,
+    updateSession,
+    removeSession,
+    addReminder,
+    removeReminder,
+    addWaiting,
+    removeWaiting,
     buckets,
     inbox,
     tasks: liveTasks,
