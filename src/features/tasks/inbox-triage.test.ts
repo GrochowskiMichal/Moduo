@@ -3,7 +3,13 @@
 // day or with a comment, Decline's two ways, the source words and the
 // Duplicate's copied comments.
 
-import { describe, expect, it } from "@rstest/core";
+import { beforeAll, describe, expect, it } from "@rstest/core";
+
+import { applyTimeRegion, EMPTY_TIME_REGION } from "../../lib/time-region";
+
+// Written for a Monday week start (Time & region, TV-D14): Next week is the
+// first day of the coming week.
+beforeAll(() => applyTimeRegion({ ...EMPTY_TIME_REGION, weekStart: 1 }, null));
 
 import {
   declineComment,
