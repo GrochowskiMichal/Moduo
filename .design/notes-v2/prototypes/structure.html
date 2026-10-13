@@ -1,0 +1,1380 @@
+<!doctype html>
+<html lang="en" data-frame="1">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Notes v2 round 1 prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+/* biome-ignore-all lint: a throwaway static prototype, not app code */
+/* Throwaway prototype for round 1 of .design/notes-v2/REPLAN.md (the shape).
+   Built on .design/tasks-v3/prototypes/round-2b.html: same tokens, 3×3 shell
+   with the bottom bar, rail, panel title dropdown and harness. Not a spec. */
+/* ── Tokens (tokens.css dark theme) ─────────────────────────────────────── */
+:root {
+  --neutral-50: oklch(0.985 0 0); --neutral-400: oklch(0.72 0 0);
+  --neutral-800: oklch(0.22 0 0); --neutral-850: oklch(0.18 0 0); --neutral-900: oklch(0.14 0 0);
+  --background: oklch(0 0 0); --foreground: var(--neutral-50);
+  --card: var(--neutral-900); --popover: var(--neutral-850); --muted: var(--neutral-850);
+  --muted-foreground: var(--neutral-400);
+  --primary: oklch(0.95 0 0); --primary-foreground: oklch(0.10 0 0);
+  --label-gray: var(--neutral-400); --label-blue: oklch(0.66 0.18 245); --label-green: oklch(0.72 0.17 150);
+  --label-amber: oklch(0.80 0.16 75); --label-violet: oklch(0.66 0.20 295); --label-teal: oklch(0.72 0.13 200);
+  --motion-fade: 100ms; --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --font: "Geist", "Inter", system-ui, -apple-system, sans-serif;
+
+  /* State layer (tokens.css §5b) */
+  --state-hover: color-mix(in oklab, var(--foreground) 5%, transparent);
+  --state-active: color-mix(in oklab, var(--foreground) 9%, transparent);
+  --state-active-hover: color-mix(in oklab, var(--foreground) 14%, transparent);
+  --state-selected: color-mix(in oklab, var(--primary) 13%, transparent);
+  --hairline: color-mix(in oklab, var(--foreground) 10%, transparent);
+  --control-raised: color-mix(in oklab, var(--foreground) 14%, var(--muted));
+  --scroll-thumb: color-mix(in oklab, var(--foreground) 16%, transparent);
+  --scroll-thumb-hover: color-mix(in oklab, var(--foreground) 32%, transparent);
+  --hover-solid: color-mix(in oklab, var(--foreground) 5%, var(--card));
+
+  /* Density: comfortable (tokens.css §7) */
+  --row-h: 2.25rem; --row-h-sm: 1.75rem; --ctrl-h: 2rem; --ctrl-h-sm: 1.625rem;
+  --icon-xs: .75rem; --icon-sm: .875rem; --icon: 1rem; --bar-h: 3rem;
+  /* Radius: soft (tokens.css §8) */
+  --radius-sm: .25rem; --radius-md: .5rem; --radius-lg: .75rem; --radius-xl: 1rem; --avatar-radius: 9999px;
+
+  /* Call 38: three readable text levels */
+  --text-1: var(--foreground);
+  --text-2: var(--muted-foreground);
+  --text-3: color-mix(in oklab, var(--muted-foreground) 86%, var(--card));
+  /* Call 43: two initials + one stable colour per person (contacts too) */
+  --person-ar: color-mix(in oklab, var(--label-blue) 55%, var(--card));
+  --person-so: color-mix(in oklab, var(--label-teal) 50%, var(--card));
+  --person-mc: color-mix(in oklab, var(--label-violet) 52%, var(--card));
+  --person-an: color-mix(in oklab, var(--label-amber) 40%, var(--card));
+  /* references: one neutral fill, no hue (EntityRefChip is monochrome) */
+  --ref-bg: color-mix(in oklab, var(--foreground) 7%, var(--card));
+  --ref-bg-hover: color-mix(in oklab, var(--foreground) 12%, var(--card));
+}
+
+* { scrollbar-width: thin; scrollbar-color: var(--scroll-thumb) transparent; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border-radius: 9999px; border: 3px solid transparent; background-clip: content-box; }
+* { box-sizing: border-box; margin: 0; }
+[hidden] { display: none !important; }
+html, body { background: var(--background); color: var(--text-1); }
+body { font: 400 14px/1.4 var(--font); -webkit-font-smoothing: antialiased; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; padding: 0; }
+.ic { width: var(--icon-sm); height: var(--icon-sm); stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+.ic-xs { width: var(--icon-xs); height: var(--icon-xs); }
+.ic-md { width: var(--icon); height: var(--icon); }
+.gl { width: 10px; height: 10px; fill: currentColor; stroke: none; flex-shrink: 0; }
+.num { font-variant-numeric: tabular-nums; }
+.t1 { color: var(--text-1); } .t2 { color: var(--text-2); } .t3 { color: var(--text-3); }
+
+/* ── Prototype chrome (NOT part of the app) ──────────────────────────────── */
+.stage { display: flex; flex-direction: column; height: 100vh; min-height: 860px; min-width: 1280px; }
+.strip { flex-shrink: 0; position: relative; z-index: 60; padding: 7px 16px 7px; display: flex; flex-direction: column; gap: 5px; font-size: 12px;
+  background: repeating-linear-gradient(-45deg, color-mix(in oklab, var(--foreground) 4%, var(--popover)) 0 7px, var(--popover) 7px 14px);
+  border-bottom: 1px dashed color-mix(in oklab, var(--foreground) 26%, transparent); }
+.strip .l1, .strip .l2 { display: flex; align-items: center; gap: 12px; min-height: 26px; }
+.ptag { height: 22px; display: inline-flex; align-items: center; padding: 0 8px; border-radius: var(--radius-sm); background: var(--foreground); color: var(--background); font-weight: 600; white-space: nowrap; }
+.pcalls { color: var(--text-2); white-space: nowrap; }
+.pcalls b { color: var(--text-1); font-weight: 500; }
+.strip .grow { flex: 1; }
+.strip .lab { color: var(--text-3); white-space: nowrap; }
+.strip .seg { background: var(--background); flex-shrink: 0; }
+.strip .seg button { font-size: 12px; padding: 0 9px; }
+.strip .seg button.soon { color: var(--text-3); }
+.strip .l2 { color: var(--text-2); }
+.strip .cap { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.strip .keys { color: var(--text-3); white-space: nowrap; }
+.strip .keys b { color: var(--text-2); font-weight: 500; }
+.ctl { display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.appframe { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+/* annotation inside a frame: striped like the strip, so it never reads as UI */
+.pnote { font-size: 11.5px; line-height: 1.45; color: var(--text-2); padding: 4px 8px; border-radius: var(--radius-sm);
+  border: 1px dashed color-mix(in oklab, var(--foreground) 26%, transparent);
+  background: repeating-linear-gradient(-45deg, color-mix(in oklab, var(--foreground) 4%, var(--popover)) 0 7px, var(--popover) 7px 14px); }
+.pnote b { color: var(--text-1); font-weight: 600; }
+
+/* ── Primitives ─────────────────────────────────────────────────────────── */
+.seg { display: inline-flex; align-items: center; gap: 2px; padding: 2px; height: var(--ctrl-h-sm); background: var(--muted); border-radius: var(--radius-md); }
+.seg button { height: 100%; padding: 0 8px; display: inline-flex; align-items: center; gap: 6px; border-radius: calc(var(--radius-md) - 2px); color: var(--text-2); font-size: 13px; font-weight: 500; transition: background-color var(--motion-fade) var(--ease-out), color var(--motion-fade) var(--ease-out); white-space: nowrap; }
+.seg button:hover { color: var(--text-1); }
+.seg button.on { background: var(--control-raised); color: var(--text-1); }
+.seg.icons button { padding: 0 6px; }
+
+.btn { height: var(--ctrl-h-sm); padding: 0 8px; display: inline-flex; align-items: center; gap: 6px; border-radius: var(--radius-md); font-size: 14px; font-weight: 500; color: var(--text-2); transition: background-color var(--motion-fade) var(--ease-out), color var(--motion-fade) var(--ease-out); white-space: nowrap; }
+.btn:hover { background: var(--state-hover); color: var(--text-1); }
+.btn.on { background: var(--state-active); color: var(--text-1); }
+.btn.icon { width: var(--ctrl-h-sm); padding: 0; justify-content: center; }
+.btn.primary { background: var(--primary); color: var(--primary-foreground); padding: 0 10px; }
+.btn.primary:hover { background: color-mix(in oklab, var(--primary) 90%, var(--background)); }
+.btn.secondary { background: var(--state-active); color: var(--text-1); }
+.btn.secondary:hover { background: var(--state-active-hover); }
+.btn.sm { font-size: 13px; }
+.kbd { font-size: 11px; color: var(--text-2); border: 1px solid var(--hairline); border-radius: 4px; padding: 0 4px; line-height: 16px; font-weight: 500; white-space: nowrap; }
+.kbdin { opacity: .6; font-weight: 400; }
+
+/* Avatar: 16px, two initials, a stable colour per person (call 43) */
+.ava { width: var(--icon); height: var(--icon); border-radius: var(--avatar-radius); display: inline-grid; place-items: center; font-size: 8.5px; font-weight: 600; letter-spacing: 0; line-height: 1; color: var(--text-1); background: var(--ava, color-mix(in oklab, var(--foreground) 20%, var(--card))); flex-shrink: 0; }
+.ava.ar { --ava: var(--person-ar); }
+.ava.so { --ava: var(--person-so); }
+.ava.mc { --ava: var(--person-mc); }
+.ava.an { --ava: var(--person-an); }
+.ava.none { background: none; border: 1px dashed var(--text-3); }
+.ava.lg { width: 26px; height: 26px; font-size: 10.5px; }
+.ava.xl { width: 32px; height: 32px; font-size: 12px; }
+
+/* Checkbox (CompleteToggle) — rest border clears 3:1 */
+.cb { width: var(--icon); height: var(--icon); border-radius: 9999px; border: 1.5px solid color-mix(in oklab, var(--foreground) 42%, transparent); display: grid; place-items: center; flex-shrink: 0; transition: border-color var(--motion-fade); }
+.cb:hover { border-color: color-mix(in oklab, var(--foreground) 70%, transparent); }
+.cb.done { background: var(--primary); border-color: var(--primary); color: var(--primary-foreground); }
+.cb.done .ic { width: 70%; height: 70%; stroke-width: 3; }
+.cb.sm { width: var(--icon-sm); height: var(--icon-sm); }
+/* the step you're on: a ring with a centre, never a colour */
+.cb.cur { border-color: var(--text-1); }
+.cb.cur::after { content: ""; width: 6px; height: 6px; border-radius: 9999px; background: var(--text-1); }
+.cb.sm.cur::after { width: 5px; height: 5px; }
+
+/* Priority glyph — fixed footprint, ghost bars are decoration */
+.pri { width: var(--icon-sm); height: var(--icon-sm); color: var(--text-2); fill: currentColor; flex-shrink: 0; }
+
+/* ── App shell ───────────────────────────────────────────────────────────── */
+.topbar { flex-shrink: 0; height: var(--bar-h); display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 0 20px; }
+.tleft { display: flex; align-items: center; gap: 4px; }
+.mark { width: 28px; height: 28px; color: var(--foreground); margin-right: 2px; }
+.wsbtn { height: 32px; display: inline-flex; align-items: center; gap: 6px; padding: 0 8px; border-radius: var(--radius-md); font-size: 13px; color: var(--text-1); }
+.wsbtn:hover { background: var(--state-hover); }
+.wsbtn .ic { color: var(--text-2); }
+.mtabs { display: flex; gap: 4px; }
+.mtab { height: 32px; display: inline-flex; align-items: center; gap: 8px; padding: 0 12px; border-radius: var(--radius-md); font-size: 13px; color: var(--text-2); transition: background-color var(--motion-fade) var(--ease-out), color var(--motion-fade) var(--ease-out); }
+.mtab:hover { background: var(--state-hover); color: var(--text-1); }
+.mtab.on { background: var(--state-active); color: var(--text-1); }
+.tright { display: flex; justify-content: flex-end; align-items: center; gap: 8px; }
+.ibtn { width: 32px; height: 32px; display: grid; place-items: center; border-radius: var(--radius-md); color: var(--text-2); }
+.ibtn:hover { background: var(--state-hover); color: var(--text-1); }
+
+.app { position: relative; flex: 1; min-height: 0; display: flex; gap: 12px; padding: 0 16px; }
+.panel { background: var(--card); border: 1px solid var(--hairline); border-radius: var(--radius-lg); min-height: 0; }
+.rail { position: relative; width: 236px; flex-shrink: 0; padding: 8px; display: flex; flex-direction: column; gap: 1px; overflow: auto; }
+.center { flex: 1; min-width: 0; display: flex; flex-direction: column; position: relative; overflow: hidden; }
+.rpanel { position: relative; width: 340px; flex-shrink: 0; display: flex; flex-direction: column; overflow: hidden; }
+
+/* ── Rail (NavRow + one header recipe) ───────────────────────────────────── */
+.nav { height: var(--row-h); flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding: 0 6px 0 8px; border-radius: var(--radius-md); color: var(--text-2); font-weight: 500; cursor: pointer; transition: background-color var(--motion-fade) var(--ease-out), color var(--motion-fade) var(--ease-out); }
+.nav:hover { background: var(--state-hover); color: var(--text-1); }
+.nav.active { background: var(--state-active); color: var(--text-1); }
+.nav .slot { width: var(--icon); display: grid; place-items: center; flex-shrink: 0; }
+.nav .lbl { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dot { width: 8px; height: 8px; border-radius: 2px; background: var(--c, var(--label-gray)); flex-shrink: 0; }
+.trail { position: relative; display: flex; align-items: center; justify-content: flex-end; flex-shrink: 0; height: 20px; min-width: 20px; }
+.count { font-size: 12px; color: var(--text-2); transition: opacity var(--motion-fade) var(--ease-out); }
+.more { width: 20px; height: 20px; border-radius: var(--radius-sm); display: grid; place-items: center; color: var(--text-2); opacity: 0; transition: opacity var(--motion-fade) var(--ease-out); }
+.more:hover { background: var(--state-active); color: var(--text-1); }
+.trail .more { position: absolute; right: 0; top: 0; }
+.nav:hover .trail .count, .ghdr:hover .trail .count { opacity: 0; }
+.nav:hover .trail .more, .ghdr:hover .trail .more { opacity: 1; }
+.nav.add { color: var(--text-3); font-weight: 400; margin-top: 4px; }
+.nav.add:hover { color: var(--text-1); }
+html[data-frame="3"] #rail .fcount { display: none; }
+.area { display: flex; flex-direction: column; gap: 1px; flex-shrink: 0; }
+.ghdr { flex-shrink: 0; display: flex; align-items: center; gap: 5px; height: var(--row-h-sm); margin-top: 8px; padding: 0 6px 0 8px; border-radius: var(--radius-md); font-size: 13px; font-weight: 500; color: var(--text-2); cursor: pointer; transition: color var(--motion-fade) var(--ease-out); }
+.ghdr:hover { color: var(--text-1); }
+.ghdr .chev { color: var(--text-3); transition: transform 140ms var(--ease-out); }
+.ghdr .trail { margin-left: auto; }
+.ghdr .count { color: var(--text-3); }
+.area.collapsed .ghdr .chev { transform: rotate(-90deg); }
+.area.collapsed .kids { display: none; }
+.kids { display: flex; flex-direction: column; gap: 1px; }
+.rdiv { flex-shrink: 0; position: relative; height: 13px; display: flex; align-items: center; padding: 0 8px; }
+.rdiv .line { flex: 1; height: 1px; background: var(--hairline); }
+.rdiv .more { position: absolute; right: 6px; top: -4px; background: var(--card); }
+.cust-more { opacity: 0; }
+.rail:has(.rdiv:hover) .cust-more { opacity: 1; }
+
+/* ── Toolbar ─────────────────────────────────────────────────────────────── */
+.toolbar { display: flex; align-items: center; gap: 4px; padding: 12px 12px 8px 16px; flex-shrink: 0; }
+.toolbar .title { display: flex; align-items: baseline; gap: 8px; margin-right: auto; min-width: 0; }
+.toolbar .title.proj { align-items: center; gap: 10px; }
+.toolbar h3 { font-size: 18px; font-weight: 600; letter-spacing: -.01em; white-space: nowrap; }
+.toolbar .sep { width: 1px; height: 16px; background: var(--hairline); margin: 0 4px; }
+.pdot { width: 10px; height: 10px; border-radius: 3px; background: var(--c); flex-shrink: 0; }
+.toolbar .title .pmore { margin-left: -4px; }
+
+/* ── Right panel: one header recipe, the view's name + collapse ──────────── */
+.rphead { position: relative; flex-shrink: 0; height: 44px; display: flex; align-items: center; gap: 4px; padding: 0 9px 0 16px; }
+.rphead .vname { font-size: 13px; font-weight: 600; color: var(--text-1); margin-right: auto; white-space: nowrap; }
+.rphead .btn.icon { color: var(--text-3); }
+.rphead .btn.icon:hover { color: var(--text-1); }
+.rpbody { flex: 1; min-height: 0; overflow: auto; }
+
+
+/* ── Lists (frame 7), from round 1c ─────────────────────────────────────── */
+.pmeta { display: flex; align-items: center; gap: 4px; padding: 0 16px 10px; flex-shrink: 0; }
+.pm { height: 24px; display: inline-flex; align-items: center; gap: 6px; padding: 0 6px; border-radius: var(--radius-md); font-size: 13px; color: var(--text-2); white-space: nowrap; cursor: default; transition: background-color var(--motion-fade) var(--ease-out); }
+.pm:hover { background: var(--state-hover); color: var(--text-1); }
+.pm .ic { color: var(--text-3); }
+.pm .lab { color: var(--text-3); }
+.chip { height: 24px; display: inline-flex; align-items: center; gap: 6px; padding: 0 8px; border-radius: var(--radius-md); font-size: 13px; color: var(--text-1); box-shadow: inset 0 0 0 1px var(--hairline); white-space: nowrap; cursor: pointer; transition: background-color var(--motion-fade) var(--ease-out); }
+.chip:hover { background: var(--state-hover); }
+.chip .ic { color: var(--text-2); }
+.chip .ext { color: var(--text-3); }
+.pmeta .chip { margin-right: 6px; }
+.pbar { width: 44px; height: 3px; border-radius: 9999px; background: var(--hairline); overflow: hidden; }
+.pbar i { display: block; height: 100%; background: var(--text-2); }
+/* ── Details (frames 2 B, 7), from round 1c ─────────────────────────────── */
+.dbody { padding: 2px 16px 18px; display: flex; flex-direction: column; gap: 16px; }
+.dcrumb { display: flex; align-items: center; gap: 2px; margin-right: -7px; }
+.crumb { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-2); margin-right: auto; height: var(--ctrl-h-sm); white-space: nowrap; }
+.crumb .ic { color: var(--text-3); }
+.crumb .dot { width: 7px; height: 7px; }
+.dcrumb .btn.icon { color: var(--text-3); }
+.dcrumb .btn.icon:hover { color: var(--text-1); }
+.dcrumb .btn.icon.on { color: var(--text-1); }
+.dtitle { display: flex; gap: 10px; align-items: flex-start; }
+.dtitle .cb { margin-top: 4px; }
+.dtitle h4 { font-size: 18px; font-weight: 600; line-height: 1.35; letter-spacing: -.01em; }
+.desc { font-size: 14px; line-height: 1.55; color: color-mix(in oklab, var(--foreground) 86%, transparent); margin: 6px 0 0 calc(var(--icon) + 10px); }
+.props { display: grid; grid-template-columns: 92px minmax(0, 1fr); align-items: center; row-gap: 1px; }
+.plabel { font-size: 13px; color: var(--text-2); height: var(--ctrl-h-sm); display: flex; align-items: center; }
+.pval { justify-self: start; max-width: 100%; height: var(--ctrl-h-sm); display: inline-flex; align-items: center; gap: 8px; padding: 0 6px; margin-left: -6px; border-radius: var(--radius-md); font-size: 14px; color: var(--text-1); white-space: nowrap; cursor: pointer; transition: background-color var(--motion-fade) var(--ease-out); }
+.pval:hover { background: var(--state-hover); }
+.pval .ic, .pval .pri { color: var(--text-2); }
+.addprop { justify-self: start; grid-column: 1 / -1; height: var(--ctrl-h-sm); display: inline-flex; align-items: center; gap: 8px; padding: 0 6px; margin-left: -6px; border-radius: var(--radius-md); color: var(--text-3); font-size: 13px; }
+.addprop:hover { background: var(--state-hover); color: var(--text-1); }
+.shead { display: flex; align-items: center; gap: 6px; height: var(--ctrl-h-sm); font-size: 13px; font-weight: 500; color: var(--text-1); }
+.shead .num { color: var(--text-3); font-weight: 400; }
+.shead .btn { margin-left: auto; margin-right: -7px; color: var(--text-3); }
+.coll { display: flex; flex-direction: column; }
+.subrow { display: flex; align-items: center; gap: 10px; height: 28px; font-size: 14px; }
+.subrow .cb { margin: 0 1px; }
+.subrow.done span:last-child { color: var(--text-2); text-decoration: line-through; text-decoration-color: color-mix(in oklab, var(--foreground) 32%, transparent); }
+.lrow { display: grid; grid-template-columns: var(--icon) minmax(0, 1fr) auto; align-items: center; column-gap: 10px; height: 30px; margin: 0 -8px; padding: 0 8px; border-radius: var(--radius-md); font-size: 13.5px; cursor: pointer; transition: background-color var(--motion-fade) var(--ease-out); }
+.lrow:hover { background: var(--state-hover); }
+.lrow > .ic { justify-self: center; color: var(--text-2); }
+.lrow .lt { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text-1); }
+.lrow .lm { font-size: 12px; color: var(--text-3); white-space: nowrap; }
+
+/* ── Frame 7 · three ways to switch the panel ───────────────────────────── */
+.vpick { height: 28px; display: inline-flex; align-items: center; gap: 6px; padding: 0 8px; margin-left: -8px; margin-right: auto; border-radius: var(--radius-md); font-size: 13px; font-weight: 600; color: var(--text-1); white-space: nowrap; transition: background-color var(--motion-fade) var(--ease-out); }
+.vpick .ic { color: var(--text-2); }
+.vpick:hover, .vpick.open { background: var(--state-active); }
+/* ── Popovers and menus ──────────────────────────────────────────────────── */
+.menu { position: absolute; z-index: 30; min-width: 176px; background: var(--popover); border: 1px solid var(--hairline); border-radius: var(--radius-md); box-shadow: 0 12px 30px rgb(0 0 0 / .5); padding: 4px; }
+.menu .mi { height: 30px; display: flex; align-items: center; gap: 9px; padding: 0 8px; border-radius: var(--radius-sm); font-size: 13px; color: var(--text-1); cursor: pointer; white-space: nowrap; }
+.menu .mi .ic { color: var(--text-2); }
+.menu .mi:hover, .menu .mi.hl { background: var(--state-active); }
+.menu .mi .n { font-size: 12px; color: var(--text-3); }
+.menu .mi .sc { margin-left: auto; font-size: 12px; color: var(--text-3); }
+.menu .mi .ck { width: 14px; display: grid; place-items: center; color: var(--text-1); }
+.menu hr { border: 0; height: 1px; background: var(--hairline); margin: 4px 0; }
+.menu .mlab { height: 26px; display: flex; align-items: center; padding: 0 8px; font-size: 12px; color: var(--text-3); }
+
+/* ── Bottom bar: the module's tools; each side panel's toggle sits under it ── */
+.bbar { flex-shrink: 0; height: var(--bar-h); display: flex; align-items: center; padding: 0 16px; }
+.bside { flex: 1; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.bside.r { justify-content: flex-end; }
+.bmid { display: flex; align-items: center; gap: 8px; }
+.bbtn { width: 32px; height: 32px; display: grid; place-items: center; border-radius: var(--radius-md); color: var(--text-2); transition: background-color var(--motion-fade) var(--ease-out), color var(--motion-fade) var(--ease-out); }
+.bbtn:hover { background: var(--state-hover); color: var(--text-1); }
+.bbtn .rt-closed, .bbar.rclosed .bbtn .rt-open { display: none; }
+.bbar.rclosed .bbtn .rt-closed { display: block; }
+/* the running Focus chip: only while a session runs; a calm dot, never a colour */
+.fchip { height: 32px; display: inline-flex; align-items: center; gap: 7px; padding: 0 10px; border-radius: var(--radius-md); background: var(--card); font-size: 12px; color: var(--text-1); white-space: nowrap; transition: background-color var(--motion-fade) var(--ease-out); }
+.fchip:hover { background: var(--hover-solid); }
+.fchip .fdot { width: 6px; height: 6px; border-radius: 9999px; background: var(--text-2); }
+.fchip .fpause { width: 9px; height: 9px; color: var(--text-2); display: none; }
+.fchip .fl { color: var(--text-2); }
+.bbar.fpaused .fchip .fdot { display: none; }
+.bbar.fpaused .fchip .fpause { display: block; }
+
+/* ── The right panel's title row is its switch (B) ─────────────────────────── */
+.rphead { padding: 0 12px 0 16px; }
+.rphead .vpick { margin-left: -8px; }
+.rphead .backbtn { margin-left: -6px; }
+
+
+/* ══════════════ Notes v2 · round 1 additions (not in round-2b) ══════════════ */
+.grow { flex: 1; }
+.hidden-by-v { display: none !important; }
+
+/* top bar: Help · bell · you (Tasks 96) */
+.helpb { width: 32px; height: 32px; display: grid; place-items: center; border-radius: var(--radius-md); color: var(--text-2); font-size: 14px; font-weight: 600; }
+.helpb:hover { background: var(--state-hover); color: var(--text-1); }
+
+/* ── Notes sidebar: NavRow tree ─────────────────────────────────────────── */
+.nav.tree { padding-left: calc(8px + var(--lvl, 0) * 16px); }
+.nav .disc { width: var(--icon); display: grid; place-items: center; color: var(--text-3); flex-shrink: 0; }
+.nav .disc .ic { transition: transform 140ms var(--ease-out); }
+.nav.shut .disc .ic { transform: rotate(-90deg); }
+.nav .disc.none { visibility: hidden; }
+.nav .pg { width: var(--icon); display: grid; place-items: center; color: var(--text-3); flex-shrink: 0; }
+.nav .upd { width: 6px; height: 6px; border-radius: 9999px; background: var(--text-2); flex-shrink: 0; }
+.nav .emo { width: var(--icon); text-align: center; font-size: 13px; flex-shrink: 0; }
+.nav.dim .lbl { color: var(--text-3); }
+.railsearch { height: var(--ctrl-h-sm); display: flex; align-items: center; gap: 8px; padding: 0 8px; margin-bottom: 6px; border-radius: var(--radius-md); background: var(--muted); color: var(--text-3); font-size: 13px; flex-shrink: 0; }
+.ghdr .gnote { font-weight: 400; color: var(--text-3); }
+
+/* ── Centre: the note ────────────────────────────────────────────────────── */
+.ntool { display: flex; align-items: center; gap: 4px; padding: 10px 12px 6px 16px; flex-shrink: 0; min-height: 50px; }
+.ncrumb { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-2); margin-right: auto; min-width: 0; white-space: nowrap; }
+.ncrumb .sl { color: var(--text-3); }
+.ncrumb b { font-weight: 500; color: var(--text-1); }
+.pres { display: flex; align-items: center; margin-right: 6px; }
+.pres .ava { box-shadow: 0 0 0 2px var(--card); margin-left: -4px; }
+.pres .ava:first-child { margin-left: 0; }
+.nscroll { flex: 1; min-height: 0; overflow: auto; position: relative; }
+.doc { max-width: 700px; margin: 0 auto; padding: 22px 40px 90px; position: relative; }
+.ntitle { font-size: 30px; font-weight: 600; letter-spacing: -.02em; line-height: 1.2; margin-bottom: 8px; }
+.nmeta { font-size: 12px; color: var(--text-3); margin-bottom: 22px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.nmeta .ava { width: 14px; height: 14px; font-size: 7px; }
+.doc h2 { font-size: 19px; font-weight: 600; margin: 26px 0 6px; letter-spacing: -.01em; }
+.doc h3 { font-size: 16px; font-weight: 600; margin: 18px 0 4px; }
+.doc p { font-size: 15px; line-height: 1.65; margin: 6px 0; }
+.doc ul, .doc ol { margin: 4px 0 4px 22px; padding: 0; }
+.doc li { font-size: 15px; line-height: 1.65; }
+.doc .t2 { color: var(--text-2); }
+.mention { font-weight: 500; color: var(--text-1); background: color-mix(in oklab, var(--foreground) 6%, transparent); border-radius: var(--radius-sm); padding: 0 3px; }
+
+/* references in prose (RF-1): one neutral chip, no hue */
+.rchip { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 6px; border-radius: var(--radius-sm); background: var(--ref-bg); font-size: 14px; line-height: 1; vertical-align: 1px; white-space: nowrap; cursor: pointer; transition: background-color var(--motion-fade) var(--ease-out); }
+.rchip:hover { background: var(--ref-bg-hover); }
+.rchip .ic { color: var(--text-2); width: 13px; height: 13px; }
+.rchip .ava { width: 14px; height: 14px; font-size: 7px; }
+.rchip .f { color: var(--text-2); font-size: 12.5px; }
+.datechip { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 6px; border-radius: var(--radius-sm); box-shadow: inset 0 0 0 1px var(--hairline); font-size: 13.5px; color: var(--text-1); vertical-align: 1px; white-space: nowrap; }
+.datechip .ic { color: var(--text-3); width: 12px; height: 12px; }
+.rlink { color: var(--text-1); text-decoration: underline; text-decoration-color: color-mix(in oklab, var(--foreground) 35%, transparent); text-underline-offset: 3px; }
+.rlink .ic { width: 12px; height: 12px; color: var(--text-2); vertical-align: -1px; margin-right: 3px; }
+
+/* the task line: a task's own form inside a note */
+.tline { position: relative; display: flex; align-items: center; gap: 10px; min-height: 32px; margin: 1px -8px; padding: 2px 8px; border-radius: var(--radius-md); transition: background-color var(--motion-fade) var(--ease-out); }
+.tline:hover, .tline.is-hover { background: var(--state-hover); }
+.tline.sel { background: var(--state-selected); }
+.tline .st { width: var(--icon); height: var(--icon); color: var(--text-2); flex-shrink: 0; }
+.tline .tt { font-size: 15px; flex: 1; min-width: 0; }
+.tline .tf { display: inline-flex; gap: 10px; align-items: center; font-size: 12px; color: var(--text-2); white-space: nowrap; flex-shrink: 0; }
+.tline .tf .ic { color: var(--text-3); width: 12px; height: 12px; }
+.tline .tf .ava { width: 16px; height: 16px; }
+.tline.done .tt { color: var(--text-2); text-decoration: line-through; text-decoration-color: color-mix(in oklab, var(--foreground) 32%, transparent); }
+.tline.done .st { color: var(--text-1); }
+.tline .hov { display: none; gap: 2px; }
+.tline.is-hover .hov { display: inline-flex; }
+.tline.is-hover .tf { display: none; }
+.chk { display: flex; gap: 10px; align-items: center; min-height: 30px; font-size: 15px; }
+.chk .box { width: 14px; height: 14px; margin: 0 1px; border-radius: 4px; border: 1.5px solid color-mix(in oklab, var(--foreground) 42%, transparent); flex-shrink: 0; }
+.chk .mk { font-size: 12px; color: var(--text-3); margin-left: 6px; }
+
+/* reference card, alone on its line */
+.rcard { display: grid; grid-template-columns: var(--icon) minmax(0, 1fr) auto; column-gap: 10px; row-gap: 2px; align-items: center; padding: 10px 12px; margin: 10px 0; border-radius: var(--radius-md); box-shadow: inset 0 0 0 1px var(--hairline); background: color-mix(in oklab, var(--foreground) 2%, var(--card)); cursor: pointer; transition: background-color var(--motion-fade) var(--ease-out); }
+.rcard:hover { background: var(--hover-solid); }
+.rcard > .ic { color: var(--text-2); }
+.rcard .ct { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rcard .cm { grid-column: 2 / -1; font-size: 12.5px; color: var(--text-2); }
+.rcard .cx { grid-column: 2 / -1; font-size: 13px; color: var(--text-2); line-height: 1.5; }
+.rcard .ca { font-size: 12px; color: var(--text-2); }
+.showas { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-3); margin: -4px 0 8px; }
+.showas .seg { height: 22px; }
+.showas .seg button { font-size: 12px; padding: 0 6px; }
+
+/* table */
+.ntable { border-collapse: collapse; width: 100%; font-size: 14px; margin: 10px 0; }
+.ntable th, .ntable td { border: 1px solid var(--hairline); padding: 6px 10px; text-align: left; vertical-align: top; }
+.ntable th { color: var(--text-2); font-weight: 500; }
+.ntable td.num { white-space: nowrap; }
+
+/* page rows: a note inside this note */
+.prow { display: flex; align-items: center; gap: 8px; height: 30px; margin: 0 -8px; padding: 0 8px; border-radius: var(--radius-md); font-size: 15px; cursor: pointer; }
+.prow:hover { background: var(--state-hover); }
+.prow .ic { color: var(--text-2); }
+.prow .pm2 { margin-left: auto; font-size: 12px; color: var(--text-3); }
+.prow b { font-weight: 500; text-decoration: underline; text-decoration-color: color-mix(in oklab, var(--foreground) 25%, transparent); text-underline-offset: 3px; }
+
+/* quiet lines at the top of a note */
+.qline { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text-2); padding: 7px 10px; border-radius: var(--radius-md); background: color-mix(in oklab, var(--foreground) 4%, transparent); margin: -6px 0 18px; }
+.qline .ic { color: var(--text-3); }
+.qline button { color: var(--text-1); font-weight: 500; }
+.qline .grow { flex: 1; }
+
+/* "changed since you read": a neutral bar, never a colour */
+.chg { position: relative; }
+.chg::before { content: ""; position: absolute; left: -16px; top: 4px; bottom: 4px; width: 2px; border-radius: 2px; background: var(--text-2); }
+.chg .was { color: var(--text-3); text-decoration: line-through; }
+
+/* comments on a passage */
+.hl { background: color-mix(in oklab, var(--foreground) 9%, transparent); box-shadow: inset 0 -1.5px 0 color-mix(in oklab, var(--foreground) 45%, transparent); border-radius: 2px; cursor: pointer; }
+.hl.on { background: var(--state-selected); }
+.cmark { position: absolute; right: -6px; display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--text-2); }
+.cmark .ic { width: 13px; height: 13px; }
+.selpop { position: absolute; z-index: 20; display: inline-flex; gap: 2px; padding: 3px; background: var(--popover); border: 1px solid var(--hairline); border-radius: var(--radius-md); box-shadow: 0 10px 24px rgb(0 0 0 / .45); }
+.selpop button { height: 26px; display: inline-flex; align-items: center; gap: 6px; padding: 0 8px; border-radius: var(--radius-sm); font-size: 13px; color: var(--text-1); }
+.selpop button:hover { background: var(--state-active); }
+.selpop .ic { color: var(--text-2); }
+
+/* the right panel: comments, history, details */
+.thr { display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: var(--radius-md); box-shadow: inset 0 0 0 1px var(--hairline); }
+.thr.on { box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--foreground) 26%, transparent); background: color-mix(in oklab, var(--foreground) 2%, var(--card)); }
+.thr .q { font-size: 12.5px; color: var(--text-2); padding-left: 9px; box-shadow: inset 2px 0 0 var(--hairline); line-height: 1.5; }
+.cm1 { display: grid; grid-template-columns: 20px minmax(0, 1fr); column-gap: 8px; }
+.cm1 .ava { width: 20px; height: 20px; font-size: 8px; }
+.cm1 .who { font-size: 13px; font-weight: 500; }
+.cm1 .who span { font-weight: 400; color: var(--text-3); font-size: 12px; margin-left: 6px; }
+.cm1 .tx { font-size: 13.5px; line-height: 1.5; margin-top: 2px; }
+.cm1 .rx { display: flex; gap: 4px; margin-top: 6px; }
+.rxn { height: 22px; display: inline-flex; align-items: center; gap: 4px; padding: 0 6px; border-radius: 9999px; box-shadow: inset 0 0 0 1px var(--hairline); font-size: 12px; color: var(--text-2); }
+.thr .tfoot { display: flex; align-items: center; gap: 8px; }
+.thr .reply { flex: 1; height: 28px; display: flex; align-items: center; padding: 0 9px; border-radius: var(--radius-md); background: var(--muted); font-size: 12.5px; color: var(--text-3); }
+.composer { height: 34px; display: flex; align-items: center; padding: 0 10px; border-radius: var(--radius-md); background: var(--muted); font-size: 13px; color: var(--text-3); }
+.feedseg { display: flex; align-items: center; justify-content: space-between; }
+.hrow { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; column-gap: 10px; align-items: center; height: 40px; margin: 0 -8px; padding: 0 8px; border-radius: var(--radius-md); cursor: pointer; }
+.hrow:hover, .hrow.on { background: var(--state-hover); }
+.hrow .ava { width: 20px; height: 20px; font-size: 8px; }
+.hrow .hw { font-size: 13px; }
+.hrow .hm { font-size: 12px; color: var(--text-3); }
+.hrow .hd { font-size: 12px; color: var(--text-2); }
+.pvlink { font-size: 13px; color: var(--text-2); }
+
+/* the `@` and `/` menus in the editor */
+.emenu { position: absolute; z-index: 25; width: 312px; background: var(--popover); border: 1px solid var(--hairline); border-radius: var(--radius-md); box-shadow: 0 14px 34px rgb(0 0 0 / .55); padding: 4px; }
+.emenu .mlab { height: 26px; display: flex; align-items: center; padding: 0 8px; font-size: 12px; color: var(--text-3); }
+.emenu .mi { height: 32px; display: flex; align-items: center; gap: 9px; padding: 0 8px; border-radius: var(--radius-sm); font-size: 13.5px; color: var(--text-1); white-space: nowrap; }
+.emenu .mi.hl2 { background: var(--state-active); }
+.emenu .mi .ic { color: var(--text-2); }
+.emenu .mi .ava { width: 18px; height: 18px; font-size: 7.5px; }
+.emenu .mi .k { font-size: 12px; color: var(--text-3); }
+.emenu .mi .sc { margin-left: auto; font-size: 12px; color: var(--text-3); }
+.emenu hr { border: 0; height: 1px; background: var(--hairline); margin: 4px 0; }
+.emenu .mfoot { height: 28px; display: flex; align-items: center; gap: 10px; padding: 0 8px; font-size: 11.5px; color: var(--text-3); border-top: 1px solid var(--hairline); margin-top: 4px; }
+.typing { color: var(--text-1); }
+.typing .tok { background: color-mix(in oklab, var(--foreground) 8%, transparent); border-radius: 3px; padding: 0 2px; }
+.caret { display: inline-block; width: 1.5px; height: 18px; background: var(--foreground); vertical-align: -3px; margin-left: 1px; animation: blink 1.1s steps(2, start) infinite; }
+@keyframes blink { to { visibility: hidden; } }
+
+/* /task picker with its destination row */
+.tpick { position: absolute; z-index: 25; width: 420px; background: var(--popover); border: 1px solid var(--hairline); border-radius: var(--radius-md); box-shadow: 0 14px 34px rgb(0 0 0 / .55); padding: 4px; }
+.tpick .dest { display: flex; align-items: center; gap: 8px; padding: 6px 8px 8px; font-size: 12.5px; color: var(--text-2); border-bottom: 1px solid var(--hairline); margin-bottom: 4px; }
+.tpick .dest .dbtn { height: 24px; display: inline-flex; align-items: center; gap: 6px; padding: 0 7px; border-radius: var(--radius-sm); background: var(--state-active); color: var(--text-1); }
+.tpick .dest .dot { width: 7px; height: 7px; }
+.tpick .mi { height: 32px; display: flex; align-items: center; gap: 9px; padding: 0 8px; border-radius: var(--radius-sm); font-size: 13.5px; }
+.tpick .mi.hl2 { background: var(--state-active); }
+.tpick .mi .ic { color: var(--text-2); }
+.tpick .mi .k { margin-left: auto; font-size: 12px; color: var(--text-3); }
+
+/* capture modal (⌘⇧K, ⌘2) */
+.scrim { position: absolute; inset: 0; z-index: 40; background: rgb(0 0 0 / .45); display: flex; justify-content: center; align-items: flex-start; padding-top: 96px; }
+.capm { width: 620px; background: var(--popover); border: 1px solid var(--hairline); border-radius: var(--radius-lg); box-shadow: 0 24px 60px rgb(0 0 0 / .6); padding: 12px 14px 12px; display: flex; flex-direction: column; gap: 10px; }
+.cdest { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-2); }
+.cdest .dbtn { height: 26px; display: inline-flex; align-items: center; gap: 6px; padding: 0 8px; border-radius: var(--radius-md); background: var(--state-active); color: var(--text-1); font-size: 13px; }
+.cdest .dbtn .ic { color: var(--text-2); }
+.cdest .sl { color: var(--text-3); }
+.srcchip { height: 26px; display: inline-flex; align-items: center; gap: 6px; padding: 0 6px 0 8px; border-radius: var(--radius-md); box-shadow: inset 0 0 0 1px var(--hairline); font-size: 12.5px; color: var(--text-1); }
+.srcchip .ic { color: var(--text-2); }
+.ctitle2 { font-size: 18px; font-weight: 600; padding: 2px 2px; }
+.cbody { min-height: 92px; font-size: 14.5px; line-height: 1.6; color: var(--text-1); padding: 0 2px; }
+.cbody .ph { color: var(--text-3); }
+.cfoot { display: flex; align-items: center; gap: 6px; padding-top: 8px; border-top: 1px solid var(--hairline); }
+.cpill2 { height: 28px; display: inline-flex; align-items: center; gap: 6px; padding: 0 9px; border-radius: var(--radius-md); box-shadow: inset 0 0 0 1px var(--hairline); font-size: 13px; color: var(--text-2); }
+.cpill2 .ic { color: var(--text-3); }
+.cfoot .hint { font-size: 12px; color: var(--text-3); margin-left: auto; display: inline-flex; gap: 10px; align-items: center; }
+
+/* share / publish popover */
+.sharepop { position: absolute; z-index: 30; right: 14px; top: 46px; width: 380px; background: var(--popover); border: 1px solid var(--hairline); border-radius: var(--radius-lg); box-shadow: 0 18px 44px rgb(0 0 0 / .55); padding: 6px; }
+.sharepop .sec2 { padding: 8px 10px; }
+.sharepop .sec2 + .sec2 { border-top: 1px solid var(--hairline); }
+.sharepop .lab2 { font-size: 12px; color: var(--text-3); margin-bottom: 6px; }
+.prow2 { display: flex; align-items: center; gap: 9px; height: 32px; font-size: 13.5px; }
+.prow2 .ava { width: 22px; height: 22px; font-size: 8.5px; }
+.prow2 .lvl { margin-left: auto; font-size: 12.5px; color: var(--text-2); display: inline-flex; align-items: center; gap: 4px; }
+.prow2 .grp { width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center; background: var(--state-active); color: var(--text-2); }
+.toggle { width: 30px; height: 18px; border-radius: 9999px; background: var(--state-active); position: relative; flex-shrink: 0; }
+.toggle::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 9999px; background: var(--text-2); }
+.toggle.on { background: var(--primary); }
+.toggle.on::after { left: 14px; background: var(--primary-foreground); }
+.urlrow { display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 8px; border-radius: var(--radius-md); background: var(--muted); font-size: 12.5px; color: var(--text-2); margin-top: 6px; }
+.urlrow .grow { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* a public page, in a browser window over the app */
+.bwin { width: 920px; height: 600px; background: var(--background); border: 1px solid var(--hairline); border-radius: var(--radius-lg); box-shadow: 0 24px 60px rgb(0 0 0 / .6); overflow: hidden; display: flex; flex-direction: column; }
+.bwin .bbar2 { height: 36px; display: flex; align-items: center; gap: 10px; padding: 0 12px; background: var(--neutral-850); font-size: 12px; color: var(--text-2); flex-shrink: 0; }
+.bwin .lights { display: flex; gap: 6px; }
+.bwin .lights i { width: 10px; height: 10px; border-radius: 9999px; background: color-mix(in oklab, var(--foreground) 20%, transparent); }
+.bwin .addr { flex: 1; height: 24px; display: flex; align-items: center; padding: 0 10px; border-radius: 6px; background: var(--neutral-900); color: var(--text-2); }
+.pub { flex: 1; display: grid; grid-template-columns: 220px minmax(0, 1fr); min-height: 0; }
+.pub .pnav { padding: 22px 14px; border-right: 1px solid var(--hairline); display: flex; flex-direction: column; gap: 2px; overflow: auto; }
+.pub .pnav .ptitle { font-size: 13px; font-weight: 600; padding: 0 8px 10px; }
+.pub .pnav a { height: 28px; display: flex; align-items: center; padding: 0 8px; border-radius: var(--radius-md); font-size: 13px; color: var(--text-2); }
+.pub .pnav a.on { background: var(--state-active); color: var(--text-1); }
+.pub .pmain { overflow: auto; padding: 30px 48px; }
+.pub .pmain .doc { padding: 0; margin: 0; }
+.pub .pfoot { font-size: 12px; color: var(--text-3); margin-top: 28px; display: flex; gap: 10px; }
+
+/* a project's notes, as a list in the centre */
+.nlist { padding: 0 8px 12px; overflow: auto; flex: 1; }
+.nrow { display: grid; grid-template-columns: var(--icon) minmax(0, 1fr) auto; column-gap: 12px; align-items: start; padding: 10px; margin: 0; border-radius: var(--radius-md); cursor: pointer; }
+.nrow:hover { background: var(--state-hover); }
+.nrow > .ic { color: var(--text-2); margin-top: 2px; }
+.nrow .nt { font-size: 15px; font-weight: 500; }
+.nrow .nx { font-size: 13px; color: var(--text-2); margin-top: 2px; line-height: 1.5; }
+.nrow .nd { font-size: 12px; color: var(--text-3); white-space: nowrap; display: inline-flex; gap: 8px; align-items: center; }
+.nrow .nd .ava { width: 16px; height: 16px; font-size: 7px; }
+
+/* empty / offline / read-only states */
+.empty2 { max-width: 420px; margin: 90px auto 0; text-align: center; display: flex; flex-direction: column; gap: 10px; align-items: center; }
+.empty2 h4 { font-size: 16px; font-weight: 600; }
+.empty2 p { font-size: 13.5px; color: var(--text-2); line-height: 1.55; }
+.empty2 .acts { display: flex; gap: 8px; margin-top: 6px; }
+.offdot { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-2); }
+.offdot i { width: 6px; height: 6px; border-radius: 9999px; background: var(--text-2); }
+
+/* welcome dialog (once per person) */
+.wdlg { width: 520px; background: var(--popover); border: 1px solid var(--hairline); border-radius: var(--radius-lg); box-shadow: 0 24px 60px rgb(0 0 0 / .6); overflow: hidden; }
+.wdlg .clip { height: 200px; background: repeating-linear-gradient(-45deg, color-mix(in oklab, var(--foreground) 4%, var(--card)) 0 9px, var(--card) 9px 18px); display: grid; place-items: center; font-size: 12px; color: var(--text-3); }
+.wdlg .wb { padding: 18px 20px 16px; display: flex; flex-direction: column; gap: 8px; }
+.wdlg h4 { font-size: 17px; font-weight: 600; }
+.wdlg p { font-size: 13.5px; color: var(--text-2); line-height: 1.55; }
+.wdlg .wf { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.wdlg .steps { display: flex; gap: 5px; margin-right: auto; }
+.wdlg .steps i { width: 6px; height: 6px; border-radius: 9999px; background: var(--hairline); }
+.wdlg .steps i.on { background: var(--text-1); }
+svg.st { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.appframe { position: relative; }
+.backbtn { margin-left: -6px; font-weight: 600; color: var(--text-1); }
+.backbtn .ic { color: var(--text-2); }
+.rphead .vpick .num { margin-left: 2px; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></symbol>
+  <symbol id="i-queue" viewBox="0 0 24 24"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></symbol>
+  <symbol id="i-inbox" viewBox="0 0 24 24"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></symbol>
+  <symbol id="i-upcoming" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/></symbol>
+  <symbol id="i-mine" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5"/><circle cx="12" cy="10" r="3"/><path d="M7 19.5V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v.5"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-filter" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M7 12h10"/><path d="M10 18h4"/></symbol>
+  <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M21 4h-7"/><path d="M10 4H3"/><path d="M21 12h-9"/><path d="M8 12H3"/><path d="M21 20h-5"/><path d="M12 20H3"/><path d="M14 2v4"/><path d="M8 10v4"/><path d="M16 18v4"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></symbol>
+  <symbol id="i-cols" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="M15 3v18"/></symbol>
+  <symbol id="i-gantt" viewBox="0 0 24 24"><path d="M10 6h8"/><path d="M12 16h6"/><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M8 11h7"/></symbol>
+  <symbol id="i-chev-d" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-chev-u" viewBox="0 0 24 24"><path d="m18 15-6-6-6 6"/></symbol>
+  <symbol id="i-chev-r" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="i-fold" viewBox="0 0 24 24"><path d="m11 17-5-5 5-5"/><path d="m18 17-5-5 5-5"/></symbol>
+  <symbol id="i-unfold" viewBox="0 0 24 24"><path d="m6 17 5-5-5-5"/><path d="m13 17 5-5-5-5"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></symbol>
+  <symbol id="i-cal" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="i-repeat" viewBox="0 0 24 24"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></symbol>
+  <symbol id="i-clip" viewBox="0 0 24 24"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></symbol>
+  <symbol id="i-msg" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+  <symbol id="i-sub" viewBox="0 0 24 24"><path d="M21 12h-8"/><path d="M21 6H8"/><path d="M21 18h-8"/><path d="M3 6v4c0 1.1.9 2 2 2h3"/><path d="M3 10v6c0 1.1.9 2 2 2h3"/></symbol>
+  <symbol id="i-steps" viewBox="0 0 24 24"><path d="M10 12h11"/><path d="M10 18h11"/><path d="M10 6h11"/><path d="M4 10h2"/><path d="M4 6h1v4"/><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-check-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.9"/></symbol>
+  <symbol id="i-x-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="m14.8 9.2-5.6 5.6"/><path d="m9.2 9.2 5.6 5.6"/></symbol>
+  <symbol id="i-hash" viewBox="0 0 24 24"><path d="M4 9h16"/><path d="M4 15h16"/><path d="M10 3 8 21"/><path d="M16 3l-2 18"/></symbol>
+  <symbol id="i-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/></symbol>
+  <symbol id="i-backlog" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" stroke-dasharray="3.4 2.9"/></symbol>
+  <symbol id="i-progress" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5a4.5 4.5 0 0 1 0 9z" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-review" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5a4.5 4.5 0 1 1-4.5 4.5H12z" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4.5"/><path d="M20 21a8 8 0 0 0-16 0"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></symbol>
+  <symbol id="i-timer" viewBox="0 0 24 24"><path d="M10 2h4"/><path d="M12 14l3-3"/><circle cx="12" cy="14" r="8"/></symbol>
+  <symbol id="i-hourglass" viewBox="0 0 24 24"><path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.17a2 2 0 0 0-.59-1.42L12 12l-4.41 4.41A2 2 0 0 0 7 17.83V22"/><path d="M7 2v4.17a2 2 0 0 0 .59 1.42L12 12l4.41-4.41A2 2 0 0 0 17 6.17V2"/></symbol>
+  <symbol id="i-building" viewBox="0 0 24 24"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/></symbol>
+  <symbol id="i-flag" viewBox="0 0 24 24"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><path d="M4 22v-7"/></symbol>
+  <symbol id="i-corner" viewBox="0 0 24 24"><path d="m15 10 5 5-5 5"/><path d="M4 4v7a4 4 0 0 0 4 4h12"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M10.27 21a2 2 0 0 0 3.46 0"/><path d="M3.26 15.33A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.67C19.41 13.96 18 12.5 18 8A6 6 0 0 0 6 8c0 4.5-1.41 5.96-2.74 7.33"/></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .71-1.53l7-6a2 2 0 0 1 2.58 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+  <symbol id="i-note" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/></symbol>
+  <symbol id="i-tasks" viewBox="0 0 24 24"><path d="M21 10.66V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12.34"/><path d="m9 11 3 3L22 4"/></symbol>
+  <symbol id="i-mail" viewBox="0 0 24 24"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></symbol>
+  <symbol id="i-contact" viewBox="0 0 24 24"><path d="M16 2v2"/><path d="M7 22v-2a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v2"/><path d="M8 2v2"/><circle cx="12" cy="11" r="3"/><rect x="3" y="4" width="18" height="18" rx="2"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></symbol>
+  <symbol id="i-ext" viewBox="0 0 24 24"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></symbol>
+  <symbol id="i-handoff" viewBox="0 0 24 24"><path d="M3 5v14"/><path d="M21 12H7"/><path d="m15 18 6-6-6-6"/></symbol>
+  <symbol id="i-grip" viewBox="0 0 24 24"><circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="18" r="1"/></symbol>
+  <symbol id="i-msg-sq" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+  <!-- right panel views -->
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5"/><path d="M12 16v-4.5"/><path d="M12 8h.01"/></symbol>
+  <symbol id="i-flight" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></symbol>
+  <symbol id="i-panel-close" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/><path d="m8 9 3 3-3 3"/></symbol>
+  <symbol id="i-project" viewBox="0 0 24 24"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/><path d="M8 10v4"/><path d="M12 10v2"/><path d="M16 10v6"/></symbol>
+  <symbol id="i-nodate" viewBox="0 0 24 24"><path d="M4.2 4.2A2 2 0 0 0 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 1.82-1.18"/><path d="M21 15.5V6a2 2 0 0 0-2-2H9.5"/><path d="M16 2v4"/><path d="M3 10h7"/><path d="M21 10h-5.5"/><path d="m2 2 20 20"/></symbol>
+  <symbol id="i-group" viewBox="0 0 24 24"><rect width="7" height="7" x="3" y="3" rx="1.5"/><rect width="7" height="7" x="14" y="3" rx="1.5"/><path d="M14 17.5h7"/><path d="M3 17.5h7"/></symbol>
+  <symbol id="i-stop" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/></symbol>
+  <symbol id="i-keyboard" viewBox="0 0 24 24"><path d="M10 8h.01"/><path d="M12 12h.01"/><path d="M14 8h.01"/><path d="M16 12h.01"/><path d="M18 8h.01"/><path d="M6 8h.01"/><path d="M7 16h10"/><path d="M8 12h.01"/><rect width="20" height="16" x="2" y="4" rx="2"/></symbol>
+  <symbol id="i-pen" viewBox="0 0 24 24"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z"/></symbol>
+  <symbol id="i-focus" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></symbol>
+  <!-- filled glyphs for the timer pill -->
+  <symbol id="g-pause" viewBox="0 0 24 24"><rect x="5.5" y="4" width="4.5" height="16" rx="1.4"/><rect x="14" y="4" width="4.5" height="16" rx="1.4"/></symbol>
+  <symbol id="g-play" viewBox="0 0 24 24"><path d="M7 5.2v13.6a1.2 1.2 0 0 0 1.8 1.03l11.2-6.8a1.2 1.2 0 0 0 0-2.06L8.8 4.17A1.2 1.2 0 0 0 7 5.2z"/></symbol>
+  <symbol id="p0" viewBox="0 0 16 16"><rect x="2" y="9" width="3" height="5" rx="1" opacity=".25"/><rect x="6.5" y="6" width="3" height="8" rx="1" opacity=".25"/><rect x="11" y="3" width="3" height="11" rx="1" opacity=".25"/></symbol>
+  <symbol id="p1" viewBox="0 0 16 16"><rect x="2" y="9" width="3" height="5" rx="1"/><rect x="6.5" y="6" width="3" height="8" rx="1" opacity=".25"/><rect x="11" y="3" width="3" height="11" rx="1" opacity=".25"/></symbol>
+  <symbol id="p2" viewBox="0 0 16 16"><rect x="2" y="9" width="3" height="5" rx="1"/><rect x="6.5" y="6" width="3" height="8" rx="1"/><rect x="11" y="3" width="3" height="11" rx="1" opacity=".25"/></symbol>
+  <symbol id="p3" viewBox="0 0 16 16"><rect x="2" y="9" width="3" height="5" rx="1"/><rect x="6.5" y="6" width="3" height="8" rx="1"/><rect x="11" y="3" width="3" height="11" rx="1"/></symbol>
+
+  <symbol id="i-cal-plus" viewBox="0 0 24 24"><path d="M8 2v4"/><path d="M16 2v4"/><path d="M21 13V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8"/><path d="M3 10h18"/><path d="M16 19h6"/><path d="M19 16v6"/></symbol>
+  <symbol id="i-expand" viewBox="0 0 24 24"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></symbol>
+  <symbol id="i-shrink" viewBox="0 0 24 24"><path d="m15 15 6 6"/><path d="m15 9 6-6"/><path d="M21 16v5h-5"/><path d="M21 8V3h-5"/><path d="M3 16v5h5"/><path d="m3 21 6-6"/><path d="M3 8V3h5"/><path d="M9 9 3 3"/></symbol>
+  <symbol id="i-arrow-up" viewBox="0 0 24 24"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></symbol>
+  <symbol id="i-image" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.09-3.09a2 2 0 0 0-2.82 0L6 21"/></symbol>
+  <symbol id="i-smile" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 9h.01"/><path d="M15 9h.01"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+  <symbol id="i-bot" viewBox="0 0 24 24"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></symbol>
+  <symbol id="i-snooze" viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M5 3 2 6"/><path d="m22 6-3-3"/><path d="M10 10h4l-4 5h4"/></symbol>
+  <symbol id="i-inbox-in" viewBox="0 0 24 24"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></symbol>
+  <symbol id="mark" viewBox="0 0 1000 1000"><path fill="currentColor" fill-rule="evenodd" clip-rule="evenodd" d="M621.122 228.124C634.336 227.102 647.241 232.464 655.842 242.551C665.755 254.176 665.755 279.231 665.755 329.34V363.215L746.907 282.348C782.394 246.985 800.138 229.303 815.367 228.125C828.58 227.103 841.485 232.465 850.087 242.552C859.999 254.177 860 279.232 860 329.341V472.45C860 482.617 860 487.701 858.849 492.483C857.829 496.723 856.147 500.776 853.864 504.491C851.289 508.681 847.688 512.268 840.488 519.443L641.582 717.653C606.095 753.016 588.351 770.698 573.122 771.876C559.909 772.898 547.004 767.535 538.403 757.449C528.49 745.824 528.489 720.769 528.489 670.66V637.249L653.561 512.616C661.367 504.838 665.755 494.268 665.755 483.245V363.679L540.684 488.312C532.878 496.091 528.489 506.661 528.489 517.683V636.785L447.338 717.653C411.85 753.016 394.106 770.697 378.878 771.875C365.664 772.897 352.759 767.534 344.158 757.448C334.245 745.823 334.245 720.769 334.245 670.66V636.785L253.093 717.653C217.606 753.016 199.862 770.698 184.633 771.876C171.42 772.898 158.515 767.535 149.913 757.449C140.001 745.824 140 720.769 140 670.66V527.551C140 517.385 140 512.3 141.151 507.518C142.171 503.278 143.853 499.226 146.136 495.511C148.711 491.32 152.312 487.732 159.512 480.557L358.418 282.348C393.905 246.985 411.649 229.303 426.878 228.125C440.091 227.103 452.996 232.465 461.597 242.552C471.51 254.177 471.511 279.232 471.511 329.341V363.214L552.662 282.347C588.15 246.984 605.894 229.302 621.122 228.124ZM346.439 487.848C338.633 495.627 334.245 506.197 334.245 517.219V636.785L459.316 512.152C467.122 504.373 471.511 493.804 471.511 482.781V363.214L346.439 487.848Z"/></symbol>
+</svg>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5"/><path d="M2.5 12h19"/><path d="M12 2.5a14.5 14.5 0 0 1 0 19 14.5 14.5 0 0 1 0-19"/></symbol>
+  <symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.06 12.35a1 1 0 0 1 0-.7 10.75 10.75 0 0 1 19.88 0 1 1 0 0 1 0 .7 10.75 10.75 0 0 1-19.88 0"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-quote" viewBox="0 0 24 24"><path d="M16 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/><path d="M5 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/></symbol>
+  <symbol id="i-heading" viewBox="0 0 24 24"><path d="M6 12h12"/><path d="M6 20V4"/><path d="M18 20V4"/></symbol>
+  <symbol id="i-code" viewBox="0 0 24 24"><path d="m16 18 6-6-6-6"/><path d="m8 6-6 6 6 6"/></symbol>
+  <symbol id="i-table" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M12 3v18"/></symbol>
+  <symbol id="i-olist" viewBox="0 0 24 24"><path d="M10 12h11"/><path d="M10 18h11"/><path d="M10 6h11"/><path d="M4 10h2"/><path d="M4 6h1v4"/><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"/></symbol>
+  <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+  <symbol id="i-checksq" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="3"/><path d="m8 12 3 3 5-6"/></symbol>
+  <symbol id="i-wifioff" viewBox="0 0 24 24"><path d="M12 20h.01"/><path d="M8.5 16.43a5 5 0 0 1 7 0"/><path d="M2 8.82a15 15 0 0 1 4.17-2.65"/><path d="M10.66 5c4.01-.36 8.14.9 11.34 3.76"/><path d="M16.85 11.25a10 10 0 0 1 2.22 1.68"/><path d="M5 13a10 10 0 0 1 5.24-2.76"/><path d="m2 2 20 20"/></symbol>
+  <symbol id="i-template" viewBox="0 0 24 24"><rect width="18" height="7" x="3" y="3" rx="1"/><rect width="9" height="7" x="3" y="14" rx="1"/><rect width="5" height="7" x="16" y="14" rx="1"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></symbol>
+</svg>
+
+<div class="stage">
+
+  <!-- ═══════════ PROTOTYPE STRIP (not part of the app) ═══════════ -->
+  <div class="strip" role="banner">
+    <div class="l1">
+      <span class="ptag">Throwaway prototype — not a spec.</span>
+      <span class="pcalls"><b>Notes v2 · round 1</b> calls in .design/notes-v2/REPLAN.md §8</span>
+      <span class="grow"></span>
+      <span class="seg" id="frameSw">
+        <button type="button" data-go="1">1 · Shape</button>
+        <button type="button" data-go="2">2 · Hackathon</button>
+        <button type="button" data-go="3">3 · @ and /</button>
+        <button type="button" data-go="4">4 · Tasks</button>
+        <button type="button" data-go="5">5 · Comments</button>
+        <button type="button" data-go="6">6 · New note</button>
+        <button type="button" data-go="7">7 · Panel</button>
+        <button type="button" data-go="8">8 · Share</button>
+        <button type="button" data-go="9">9 · States</button>
+      </span>
+    </div>
+    <div class="l2">
+      <span class="cap" id="cap"></span>
+      <span class="ctl" id="ctlVar"><span class="lab" id="varLab"></span><span class="seg" id="varSeg"></span></span>
+      <span class="keys">Keys <b>1–9</b> · <b>V</b> variant</span>
+    </div>
+  </div>
+
+  <div class="appframe">
+    <header class="topbar">
+      <div class="tleft">
+        <svg class="mark" aria-label="moduo"><use href="#mark"/></svg>
+        <button type="button" class="wsbtn" data-on="1 4 5 6 7 8 9">Moduo Studio <svg class="ic ic-xs" aria-hidden="true"><use href="#i-chev-d"/></svg></button>
+        <button type="button" class="wsbtn" data-on="2 3">HackWaw 2026 <svg class="ic ic-xs" aria-hidden="true"><use href="#i-chev-d"/></svg></button>
+      </div>
+      <nav class="mtabs" aria-label="Modules">
+        <span class="mtab"><svg class="ic" aria-hidden="true"><use href="#i-home"/></svg>Home</span>
+        <span class="mtab on"><svg class="ic" aria-hidden="true"><use href="#i-note"/></svg>Notes</span>
+        <span class="mtab"><svg class="ic" aria-hidden="true"><use href="#i-tasks"/></svg>Tasks</span>
+        <span class="mtab"><svg class="ic" aria-hidden="true"><use href="#i-cal"/></svg>Calendar</span>
+        <span class="mtab"><svg class="ic" aria-hidden="true"><use href="#i-mail"/></svg>Email</span>
+        <span class="mtab"><svg class="ic" aria-hidden="true"><use href="#i-contact"/></svg>Contacts</span>
+        <span class="mtab"><svg class="ic" aria-hidden="true"><use href="#i-msg"/></svg>Chat</span>
+      </nav>
+      <div class="tright">
+        <button type="button" class="helpb" title="Help: Docs · Keyboard shortcuts · Contact support · Report a bug">?</button>
+        <button type="button" class="ibtn" title="Notifications"><svg class="ic ic-md" aria-hidden="true"><use href="#i-bell"/></svg></button>
+        <span class="ava ar lg" title="Alex Rivera (you)">AR</span>
+      </div>
+    </header>
+
+    <div class="app" id="app">
+
+      <!-- ═══════════ LEFT · PROJECTS HOLD NOTES (alternative B, rejected) ═══════════ -->
+      <aside class="panel rail" id="railB" data-on="1/projects">
+        <div class="nav" data-nav="inbox"><span class="slot"><svg class="ic ic-md" aria-hidden="true"><use href="#i-inbox"/></svg></span><span class="lbl">Inbox</span><span class="trail"><span class="count num">3</span><button type="button" class="more"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button></span></div>
+        <div class="rdiv"><span class="line"></span><button type="button" class="more cust-more" title="Customize sidebar · Archive · Recently deleted · Published"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button></div>
+        <div class="area">
+          <div class="ghdr"><span>Pinned</span><svg class="ic ic-xs chev" aria-hidden="true"><use href="#i-chev-d"/></svg></div>
+          <div class="kids">
+            <div class="nav tree"><span class="disc none"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-chev-d"/></svg></span><span class="lbl">Brand brief</span><span class="trail"><button type="button" class="more"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button></span></div>
+          </div>
+        </div>
+        <div class="area">
+          <div class="ghdr" title="Only you see these"><span>Private</span><svg class="ic ic-xs chev" aria-hidden="true"><use href="#i-chev-d"/></svg><span class="trail"><button type="button" class="more" title="New note · More"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg></button></span></div>
+          <div class="kids">
+            <div class="nav tree"><span class="disc none"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-chev-d"/></svg></span><span class="lbl">Ideas</span></div>
+            <div class="nav tree"><span class="disc none"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-chev-d"/></svg></span><span class="lbl">Weekly review</span></div>
+          </div>
+        </div>
+        <div class="area">
+          <div class="ghdr" title="Everyone in Moduo Studio"><span>Workspace</span><svg class="ic ic-xs chev" aria-hidden="true"><use href="#i-chev-d"/></svg><span class="trail"><button type="button" class="more" title="New note · More"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg></button></span></div>
+          <div class="kids">
+            <div class="nav tree"><span class="disc"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-chev-d"/></svg></span><span class="lbl">Handbook</span><span class="trail"><span class="count num">6</span></span></div>
+            <div class="nav tree" style="--lvl:1"><span class="disc none"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-chev-d"/></svg></span><span class="lbl">Onboarding</span></div>
+            <div class="nav tree" style="--lvl:1"><span class="disc none"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-chev-d"/></svg></span><span class="lbl">How we invoice</span></div>
+          </div>
+        </div>
+        <div class="area">
+          <div class="ghdr" title="An area from Tasks: its projects, with their notes"><span>Clients</span><svg class="ic ic-xs chev" aria-hidden="true"><use href="#i-chev-d"/></svg></div>
+          <div class="kids">
+            <div class="nav tree"><span class="disc"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-chev-d"/></svg></span><span class="slot"><span class="dot" style="--c: var(--label-violet)"></span></span><span class="lbl">Acme rebrand</span><span class="trail"><span class="count num">4</span><button type="button" class="more"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button></span></div>
+            <div class="nav tree active" style="--lvl:1"><span class="disc none"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-chev-d"/></svg></span><span class="lbl">Kickoff notes</span><span class="trail"><button type="button" class="more"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button></span></div>
+                        <div class="nav tree" style="--lvl:1"><span class="disc none"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-chev-d"/></svg></span><span class="lbl">Brand brief</span></div>
+            <div class="nav tree shut" style="--lvl:1"><span class="disc"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-chev-d"/></svg></span><span class="lbl">Meeting notes</span><span class="trail"><span class="count num">6</span></span></div>
+            <div class="nav tree shut"><span class="disc"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-chev-d"/></svg></span><span class="slot"><span class="dot" style="--c: var(--label-green)"></span></span><span class="lbl">Northwind app</span><span class="trail"><span class="count num">2</span></span></div>
+          </div>
+        </div>
+        <div class="area collapsed">
+          <div class="ghdr"><span>School</span><svg class="ic ic-xs chev" aria-hidden="true"><use href="#i-chev-d"/></svg><span class="trail"><span class="count num">9</span></span></div>
+          <div class="kids"></div>
+        </div>
+      </aside>
+
+      <!-- ═══════════ LEFT · RECOMMENDED (N3): one tree, sectioned by who sees it ═══════════ -->
+      <aside class="panel rail" id="railP" data-on="1/rec 4 5 6 7 8 9/readonly 9/offline">
+        <div class="nav" data-nav="inbox"><span class="slot"><svg class="ic ic-md" aria-hidden="true"><use href="#i-inbox"/></svg></span><span class="lbl">Inbox</span><span class="trail"><span class="count num">3</span><button type="button" class="more"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button></span></div>
+        <div class="rdiv"><span class="line"></span><button type="button" class="more cust-more" title="Archive · Recently deleted · Published · Customize sidebar"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button></div>
+        <div class="area">
+          <div class="ghdr" title="Yours: pin anything"><span>Pinned</span><svg class="ic ic-xs chev" aria-hidden="true"><use href="#i-chev-d"/></svg></div>
+          <div class="kids"><div class="nav tree"><span class="disc none"><svg class="ic ic-xs"><use href="#i-chev-d"/></svg></span><span class="lbl">Brand brief</span><span class="trail"><button type="button" class="more"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button></span></div></div>
+        </div>
+        <div class="area">
+          <div class="ghdr" title="Everyone in Moduo Studio"><span>Workspace</span><svg class="ic ic-xs chev" aria-hidden="true"><use href="#i-chev-d"/></svg><span class="trail"><button type="button" class="more" title="New page"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg></button></span></div>
+          <div class="kids">
+            <div class="nav tree"><span class="disc"><svg class="ic ic-xs"><use href="#i-chev-d"/></svg></span><span class="lbl">Handbook</span><span class="trail"><span class="count num">6</span></span></div>
+            <div class="nav tree" style="--lvl:1"><span class="disc none"><svg class="ic ic-xs"><use href="#i-chev-d"/></svg></span><span class="lbl">Onboarding</span></div>
+            <div class="nav tree" style="--lvl:1"><span class="disc none"><svg class="ic ic-xs"><use href="#i-chev-d"/></svg></span><span class="lbl">How we invoice</span></div>
+            <div class="nav tree" title="Linked to the Acme rebrand project"><span class="disc"><svg class="ic ic-xs"><use href="#i-chev-d"/></svg></span><span class="slot"><span class="dot" style="--c: var(--label-violet)"></span></span><span class="lbl">Acme rebrand</span><span class="trail"><span class="count num">4</span><button type="button" class="more"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button></span></div>
+            <div class="nav tree active" style="--lvl:1" id="navKick"><span class="disc none"><svg class="ic ic-xs"><use href="#i-chev-d"/></svg></span><span class="lbl">Kickoff notes</span><span class="trail"><button type="button" class="more"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button></span></div>
+            <div class="nav tree" style="--lvl:1" data-on="6/here" id="navNew"><span class="disc none"><svg class="ic ic-xs"><use href="#i-chev-d"/></svg></span><span class="lbl t3">Untitled</span></div>
+            <div class="nav tree" style="--lvl:1"><span class="disc none"><svg class="ic ic-xs"><use href="#i-chev-d"/></svg></span><span class="lbl">Brand brief</span></div>
+            <div class="nav tree shut" style="--lvl:1"><span class="disc"><svg class="ic ic-xs"><use href="#i-chev-d"/></svg></span><span class="lbl">Meeting notes</span><span class="trail"><span class="count num">6</span></span></div>
+            <div class="nav tree shut" title="Linked to the Northwind app project"><span class="disc"><svg class="ic ic-xs"><use href="#i-chev-d"/></svg></span><span class="slot"><span class="dot" style="--c: var(--label-green)"></span></span><span class="lbl">Northwind app</span><span class="trail"><span class="count num">2</span></span></div>
+          </div>
+        </div>
+        <div class="area">
+          <div class="ghdr" title="Shared with some people"><span>Shared</span><svg class="ic ic-xs chev" aria-hidden="true"><use href="#i-chev-d"/></svg></div>
+          <div class="kids"><div class="nav tree"><span class="disc none"><svg class="ic ic-xs"><use href="#i-chev-d"/></svg></span><span class="lbl">Hiring plan</span><span class="trail"><span class="count num">2</span></span></div></div>
+        </div>
+        <div class="area">
+          <div class="ghdr" title="Only you"><span>Private</span><svg class="ic ic-xs chev" aria-hidden="true"><use href="#i-chev-d"/></svg></div>
+          <div class="kids">
+            <div class="nav tree"><span class="disc none"><svg class="ic ic-xs"><use href="#i-chev-d"/></svg></span><span class="lbl">Ideas</span></div>
+            <div class="nav tree"><span class="disc none"><svg class="ic ic-xs"><use href="#i-chev-d"/></svg></span><span class="lbl">Weekly review</span></div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- ═══════════ LEFT · TODAY (for comparison) ═══════════ -->
+      <aside class="panel rail" id="railX" data-on="1/today">
+        <div class="railsearch"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg>Search notes</div>
+        <div class="area"><div class="ghdr"><span>PINNED</span></div>
+          <div class="kids"><div class="nav tree"><span class="emo">📌</span><span class="lbl">Brand brief</span></div></div></div>
+        <div class="area"><div class="ghdr"><span>INBOX</span></div>
+          <div class="kids">
+            <div class="nav tree"><span class="emo">📝</span><span class="lbl">Untitled</span></div>
+            <div class="nav tree"><span class="emo">💡</span><span class="lbl">Ideas</span></div>
+            <div class="nav tree"><span class="emo">📝</span><span class="lbl">Call with Northwind</span></div>
+          </div></div>
+        <div class="area"><div class="ghdr"><span>WORKSPACE</span></div>
+          <div class="kids">
+            <div class="nav tree"><span class="disc"><svg class="ic ic-xs"><use href="#i-chev-d"/></svg></span><span class="emo">🎨</span><span class="lbl">Acme rebrand</span></div>
+            <div class="nav tree active" style="--lvl:1"><span class="emo">🗒️</span><span class="lbl">Kickoff notes</span></div>
+            <div class="nav tree" style="--lvl:1"><span class="emo">📄</span><span class="lbl">Brand brief</span></div>
+            <div class="nav tree shut"><span class="disc"><svg class="ic ic-xs"><use href="#i-chev-d"/></svg></span><span class="emo">📚</span><span class="lbl">Handbook</span></div>
+          </div></div>
+        <div class="area"><div class="ghdr"><span>PUBLISHED</span></div><div class="kids"><div class="nav tree"><span class="emo">🌐</span><span class="lbl">Handbook</span></div></div></div>
+        <div class="area"><div class="ghdr"><span>ARCHIVE</span></div><div class="kids"><div class="nav tree dim"><span class="emo">🗄️</span><span class="lbl">Q2 planning</span></div></div></div>
+        <div class="area"><div class="ghdr"><span>TRASH</span></div><div class="kids"><div class="nav tree dim"><span class="emo">🗑️</span><span class="lbl">Old draft</span></div></div></div>
+      </aside>
+
+      <!-- ═══════════ LEFT · HACKATHON TEAM WORKSPACE (frames 2, 3) ═══════════ -->
+      <aside class="panel rail" id="railH" data-on="2 3">
+        <div class="area">
+          <div class="ghdr" title="Everyone at HackWaw 2026 · prepared by the organisers, view only"><span>Workspace</span><svg class="ic ic-xs chev" aria-hidden="true"><use href="#i-chev-d"/></svg></div>
+          <div class="kids">
+            <div class="nav tree" data-nav="start2" title="The workspace's start page: it opens first for anyone new"><span class="disc none"><svg class="ic ic-xs"><use href="#i-chev-d"/></svg></span><span class="lbl">Start here</span></div>
+            <div class="nav tree"><span class="disc none"><svg class="ic ic-xs"><use href="#i-chev-d"/></svg></span><span class="lbl">Brief</span></div>
+            <div class="nav tree"><span class="disc none"><svg class="ic ic-xs"><use href="#i-chev-d"/></svg></span><span class="lbl">Rules</span></div>
+            <div class="nav tree"><span class="disc none"><svg class="ic ic-xs"><use href="#i-chev-d"/></svg></span><span class="lbl">Schedule</span></div>
+            <div class="nav tree"><span class="disc none"><svg class="ic ic-xs"><use href="#i-chev-d"/></svg></span><span class="lbl">Judging criteria</span></div>
+            <div class="nav tree"><span class="disc none"><svg class="ic ic-xs"><use href="#i-chev-d"/></svg></span><span class="lbl">Resources</span></div>
+            <div class="nav tree" data-nav="faq"><span class="disc none"><svg class="ic ic-xs"><use href="#i-chev-d"/></svg></span><span class="lbl">FAQ</span><span class="trail"><span class="upd" title="Changed since you last read"></span></span></div>
+          </div>
+        </div>
+        <div class="area">
+          <div class="ghdr" title="Shared with some people: here, your team"><span>Shared</span><svg class="ic ic-xs chev" aria-hidden="true"><use href="#i-chev-d"/></svg></div>
+          <div class="kids">
+            <div class="nav tree"><span class="disc"><svg class="ic ic-xs"><use href="#i-chev-d"/></svg></span><span class="slot"><span class="dot" style="--c: var(--label-teal)"></span></span><span class="lbl">Team 7 · Parkly</span><span class="trail"><span class="count num">4</span></span></div>
+            <div class="nav tree" style="--lvl:1" data-nav="idea"><span class="disc none"><svg class="ic ic-xs"><use href="#i-chev-d"/></svg></span><span class="lbl">Idea</span></div>
+            <div class="nav tree" style="--lvl:1"><span class="disc none"><svg class="ic ic-xs"><use href="#i-chev-d"/></svg></span><span class="lbl">Research</span></div>
+            <div class="nav tree" style="--lvl:1"><span class="disc none"><svg class="ic ic-xs"><use href="#i-chev-d"/></svg></span><span class="lbl">Pitch outline</span></div>
+            <div class="nav tree" style="--lvl:1"><span class="disc none"><svg class="ic ic-xs"><use href="#i-chev-d"/></svg></span><span class="lbl">Submission</span></div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- ═══════════ LEFT · FIRST RUN (frame 9) ═══════════ -->
+      <aside class="panel rail" id="railE" data-on="9/first">
+        <div class="nav"><span class="slot"><svg class="ic ic-md" aria-hidden="true"><use href="#i-inbox"/></svg></span><span class="lbl">Inbox</span></div>
+        <div class="rdiv"><span class="line"></span></div>
+        <div class="nav add"><span class="slot"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg></span><span class="lbl">New note</span></div>
+        <div class="nav add" style="margin-top:0"><span class="slot"><svg class="ic" aria-hidden="true"><use href="#i-download"/></svg></span><span class="lbl">Import from Notion…</span></div>
+      </aside>
+
+      <!-- ═══════════ CENTRE · A NOTE IN A PROJECT (Kickoff notes) ═══════════ -->
+      <main class="panel center" id="cA" data-on="1 4 5 6/quick 7 8 9/readonly 9/offline">
+        <div class="ntool">
+          <span class="ncrumb" data-on="1/rec 1/projects 4 5 6 7 8 9/readonly 9/offline"><span class="dot" style="--c: var(--label-violet)"></span>Acme rebrand<span class="sl">›</span><b>Kickoff notes</b></span>
+          <span class="ncrumb" data-on="1/today">Workspace<span class="sl">›</span>Acme rebrand<span class="sl">›</span><b>Kickoff notes</b></span>
+          <span class="offdot" data-on="9/offline" style="margin-right:10px"><i></i>Offline · your edits are kept on this device</span>
+          <span class="pres" data-on="1 4 5 7 8" title="Mike Chen is here"><span class="ava mc">MC</span></span>
+          <button type="button" class="btn sm" data-on="1 4 5 6 7 8 9/offline"><svg class="ic" aria-hidden="true"><use href="#i-users"/></svg>Share</button>
+          <button type="button" class="btn icon" title="Search in this note · Pin · Save as template · Export · Archive · Delete"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button>
+        </div>
+
+        <!-- frame 8 · the Share menu: people, then the web -->
+        <div class="sharepop" data-on="8/share">
+          <div class="sec2">
+            <div class="lab2">Who can open it</div>
+            <div class="prow2"><span class="grp"><span class="dot" style="--c: var(--label-violet)"></span></span><span>Everyone in Acme rebrand <span class="t3">· 3 people</span></span><span class="lvl">Can edit<svg class="ic ic-xs"><use href="#i-chev-d"/></svg></span></div>
+            <div class="prow2"><span class="ava ar">AR</span><span>Alex Rivera <span class="t3">· you</span></span><span class="lvl">Full</span></div>
+            <div class="prow2"><span class="ava so">SO</span><span>Sara Okafor <span class="t3">· not in the project</span></span><span class="lvl">Can comment<svg class="ic ic-xs"><use href="#i-chev-d"/></svg></span></div>
+            <div class="prow2 t3"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Add people</div>
+          </div>
+          <div class="sec2">
+            <div class="prow2"><svg class="ic" aria-hidden="true"><use href="#i-globe"/></svg><span>Publish to the web</span><span class="grow"></span><span class="toggle on"></span></div>
+            <div class="urlrow"><span class="grow">moduo.app/p/k3x9q2/kickoff-notes</span><svg class="ic" aria-hidden="true"><use href="#i-copy"/></svg></div>
+            <div class="prow2" style="margin-top:4px"><span class="t2">Include the notes inside it</span><span class="grow"></span><span class="toggle on"></span></div>
+            <div class="prow2"><span class="t2">Let search engines find it</span><span class="grow"></span><span class="toggle"></span></div>
+            <div class="prow2"><span class="t3" style="font-size:12px">Anyone with the link can read it. Comments and linked tasks stay private.</span></div>
+          </div>
+        </div>
+
+        <div class="nscroll">
+          <div class="doc">
+            <div class="qline" data-on="9/readonly"><svg class="ic" aria-hidden="true"><use href="#i-eye"/></svg>You can read and comment on this note<span class="grow"></span><span class="t3">Shared by Alex Rivera</span></div>
+            <h1 class="ntitle">Kickoff notes</h1>
+            <div class="nmeta"><span>Edited Today 3:12 PM</span><span class="ava mc">MC</span><span>Mike Chen</span><span>·</span><span>Created Oct 12</span></div>
+
+            <p>Kickoff with <span class="rchip"><span class="ava an">AK</span>Anna Kowalski</span> on <span class="datechip"><svg class="ic"><use href="#i-cal"/></svg>Oct 12</span>. She wants the new site live before the <span class="rchip"><svg class="ic"><use href="#i-cal"/></svg>Board meeting<span class="f">· Nov 14</span></span>, and <span class="mention">@Mike Chen</span> owns the wireframes.</p>
+
+            <h2>Goals</h2>
+            <ul>
+              <li>A homepage that explains the product in one screen</li>
+              <li>Reuse the illustration style from the 2024 campaign</li>
+              <li><span class="hl on" data-on="5/passage">Launch in two languages, English and Polish, on the same day</span><span data-on="1 4 5/page 6 7 8 9">Launch in two languages, English and Polish, on the same day</span></li>
+            </ul>
+
+            <h2>Next steps</h2>
+            <!-- task lines (recommended form) -->
+            <div data-on="1 4/line 5 6 7 8 9">
+              <div class="tline" id="tl1"><svg class="st" aria-hidden="true"><use href="#i-circle"/></svg><span class="tt">Collect brand assets from Anna</span>
+                <span class="tf"><span class="ava ar">AR</span><span class="num">Fri</span></span>
+                <span class="hov"><button type="button" class="btn icon" title="Due · D"><svg class="ic"><use href="#i-cal"/></svg></button><button type="button" class="btn icon" title="Assign · @"><svg class="ic"><use href="#i-user"/></svg></button><button type="button" class="btn icon" title="Open in the panel · ⏎"><svg class="ic"><use href="#i-unfold"/></svg></button></span>
+              </div>
+              <div class="tline"><svg class="st" aria-hidden="true"><use href="#i-progress"/></svg><span class="tt">Draft homepage wireframe</span><span class="tf"><span class="ava mc">MC</span><span class="num">Oct 16</span></span></div>
+              <div class="tline done"><svg class="st" aria-hidden="true"><use href="#i-check-circle"/></svg><span class="tt">Send the kickoff recap</span><span class="tf"><span class="ava ar">AR</span></span></div>
+              <div class="chk"><span class="box"></span>Bring the printed moodboard<span class="mk" data-on="4/line">a plain checkbox: never a task unless you make it one</span></div>
+            </div>
+            <!-- the same tasks as cards -->
+            <div data-on="4/card">
+              <div class="rcard"><svg class="ic" aria-hidden="true"><use href="#i-circle"/></svg><span class="ct">Collect brand assets from Anna</span><span class="ca">Complete</span><span class="cm">MOD-212 · Acme rebrand › Design · Alex Rivera · Due Fri</span></div>
+              <div class="rcard"><svg class="ic" aria-hidden="true"><use href="#i-progress"/></svg><span class="ct">Draft homepage wireframe</span><span class="ca">Complete</span><span class="cm">MOD-213 · Acme rebrand › Design · Mike Chen · Due Oct 16 · 1/3</span></div>
+              <div class="rcard"><svg class="ic" aria-hidden="true"><use href="#i-check-circle"/></svg><span class="ct t2">Send the kickoff recap</span><span class="ca">Reopen</span><span class="cm">MOD-208 · Done Today</span></div>
+            </div>
+            <!-- /task picker: create here or link, and where the new task is filed -->
+            <div data-on="4/new">
+              <div class="tline"><svg class="st" aria-hidden="true"><use href="#i-circle"/></svg><span class="tt">Collect brand assets from Anna</span><span class="tf"><span class="ava ar">AR</span><span class="num">Fri</span></span></div>
+              <div class="tline"><svg class="st" aria-hidden="true"><use href="#i-progress"/></svg><span class="tt">Draft homepage wireframe</span><span class="tf"><span class="ava mc">MC</span><span class="num">Oct 16</span></span></div>
+              <p class="typing" style="position:relative">/task Book the copywriter for <span class="tok">next week</span><span class="caret"></span></p>
+              <div class="tpick" style="left:40px; margin-top:-4px; position:relative">
+                <div class="dest">New tasks go to<span class="dbtn"><span class="dot" style="--c: var(--label-violet)"></span>Acme rebrand<svg class="ic ic-xs"><use href="#i-chev-d"/></svg></span><span class="t3">this note's project</span></div>
+                <div class="mi hl2"><svg class="ic"><use href="#i-plus"/></svg>New task “Book the copywriter” <span class="t3">· due Mon</span><span class="k">⏎</span></div>
+                <div class="mi"><svg class="ic"><use href="#i-circle"/></svg>Book the photographer <span class="t3">· MOD-190</span><span class="k">link</span></div>
+                <div class="mi"><svg class="ic"><use href="#i-circle"/></svg>Copy review with Anna <span class="t3">· MOD-201</span><span class="k">link</span></div>
+              </div>
+            </div>
+
+            <h2>From Anna</h2>
+            <div class="rcard"><svg class="ic" aria-hidden="true"><use href="#i-mail"/></svg><span class="ct">Re: Launch date</span><span class="ca">Waiting on reply</span><span class="cm">Anna Kowalski · Oct 11 · 4 messages</span><span class="cx">“We'd love to have it before the board meeting on the 14th, if the Polish copy can be ready by then…”</span></div>
+            <p class="t2">Open question: who signs off the Polish copy, Anna or her marketing lead?</p>
+          </div>
+        </div>
+      </main>
+
+      <!-- ═══════════ CENTRE · ⌘N IN NOTES: STRAIGHT INTO THE EDITOR (6/here) ═══════════ -->
+      <main class="panel center" id="cN" data-on="6/here">
+        <div class="ntool"><span class="ncrumb"><span class="dot" style="--c: var(--label-violet)"></span>Acme rebrand<span class="sl">›</span><b class="t3">Untitled</b></span>
+          <button type="button" class="btn sm"><svg class="ic"><use href="#i-users"/></svg>Share</button><button type="button" class="btn icon"><svg class="ic"><use href="#i-more"/></svg></button></div>
+        <div class="nscroll"><div class="doc">
+          <h1 class="ntitle"><span class="caret" style="height:30px;vertical-align:-5px;margin:0"></span><span class="t3">Untitled</span></h1>
+          <div class="nmeta"><span>In Acme rebrand, because that's where you were · shared with its 3 people</span></div>
+          <p class="t3">Write, or type / for commands and @ to mention someone or link something.</p>
+          <p class="t3" style="margin-top:18px; font-size:13px">Start from a template: <span class="rlink">Meeting notes</span> · <span class="rlink">Client brief</span> · <span class="rlink">Weekly review</span></p>
+        </div></div>
+      </main>
+
+      <!-- ═══════════ CENTRE · START HERE (2/start) ═══════════ -->
+      <main class="panel center" id="cS" data-on="2/start">
+        <div class="ntool"><span class="ncrumb">Workspace<span class="sl">›</span><b>Start here</b></span>
+          <button type="button" class="btn icon" title="Copy link · Print"><svg class="ic"><use href="#i-more"/></svg></button></div>
+        <div class="nscroll"><div class="doc">
+          <div class="qline"><svg class="ic" aria-hidden="true"><use href="#i-eye"/></svg>Prepared by the organisers · you can read and comment<span class="grow"></span><span class="t3">The workspace’s start page</span></div>
+          <h1 class="ntitle">Start here</h1>
+          <div class="nmeta"><span>Updated Today 9:40 AM</span><span class="ava so">OW</span><span>Ola Wiśniewska, organiser</span></div>
+          <p>Welcome to HackWaw 2026. Everything you need is in this workspace. Read these three first, in this order:</p>
+          <div class="prow"><svg class="ic"><use href="#i-note"/></svg><b>Brief</b><span class="pm2">2 min read</span></div>
+          <div class="prow"><svg class="ic"><use href="#i-note"/></svg><b>Rules</b><span class="pm2">3 min read</span></div>
+          <div class="prow"><svg class="ic"><use href="#i-note"/></svg><b>Schedule</b><span class="pm2">Updated today</span></div>
+          <h2>Your team</h2>
+          <p>Your team's page is <span class="rchip"><svg class="ic"><use href="#i-note"/></svg>Team 7 · Parkly</span> under Shared: only your team and the organisers see it. Your idea, research, pitch outline and submission live there, linked to your team's project in Tasks. These three are due for every team:</p>
+          <div class="tline"><svg class="st" aria-hidden="true"><use href="#i-circle"/></svg><span class="tt">Submit your idea in one paragraph</span><span class="tf"><span class="num">Sat 10:00 AM</span></span></div>
+          <div class="tline"><svg class="st" aria-hidden="true"><use href="#i-circle"/></svg><span class="tt">Submit the demo video</span><span class="tf"><span class="num">Sun 2:00 PM</span></span></div>
+          <div class="tline"><svg class="st" aria-hidden="true"><use href="#i-circle"/></svg><span class="tt">Pitch to the judges, 5 minutes</span><span class="tf"><span class="num">Sun 4:00 PM</span></span></div>
+          <h2>Need help?</h2>
+          <p>Mentors answer in Chat's <b>help</b> conversation, 9 AM to 9 PM. Most answers are already in the <span class="rlink"><svg class="ic"><use href="#i-note"/></svg>FAQ</span>.</p>
+        </div></div>
+      </main>
+
+      <!-- ═══════════ CENTRE · FAQ, CHANGED SINCE YOU READ (2/changed) ═══════════ -->
+      <main class="panel center" id="cF" data-on="2/changed">
+        <div class="ntool"><span class="ncrumb">Workspace<span class="sl">›</span><b>FAQ</b></span><button type="button" class="btn icon"><svg class="ic"><use href="#i-more"/></svg></button></div>
+        <div class="nscroll"><div class="doc">
+          <div class="qline"><svg class="ic" aria-hidden="true"><use href="#i-history"/></svg>Changed since you last read · 2 changes by Ola Wiśniewska, Today 11:20 AM<span class="grow"></span><button type="button">Mark as read</button></div>
+          <h1 class="ntitle">FAQ</h1>
+          <div class="nmeta"><span>Updated Today 11:20 AM</span><span class="ava so">OW</span><span>Ola Wiśniewska, organiser</span></div>
+          <h3>Can we use code we wrote before the hackathon?</h3>
+          <p>Libraries and frameworks, yes. Your product's own code must be written during the event.</p>
+          <h3>When do submissions close?</h3>
+          <p class="chg">Sunday at <span class="was">1:00 PM</span> 2:00 PM. Late submissions can still be shown, but they can't win.</p>
+          <h3>How big can a team be?</h3>
+          <p>Two to five people. Solo entries join the team-matching session on Friday at 7 PM.</p>
+          <h3 class="chg">Is there food for people with allergies?</h3>
+          <p class="chg">Yes. Tell us at the desk, or mention <span class="mention">@Ola Wiśniewska</span> in a comment on this note.</p>
+        </div></div>
+      </main>
+
+      <!-- ═══════════ CENTRE · THE TEAM'S IDEA, WITH @ OR / (3) ═══════════ -->
+      <main class="panel center" id="cI" data-on="3">
+        <div class="ntool"><span class="ncrumb"><span class="dot" style="--c: var(--label-teal)"></span>Team 7 · Parkly<span class="sl">›</span><b>Idea</b></span>
+          <span class="pres" title="Mike and Sara are here"><span class="ava mc">MC</span><span class="ava so">SO</span></span>
+          <button type="button" class="btn sm"><svg class="ic"><use href="#i-users"/></svg>Share</button><button type="button" class="btn icon"><svg class="ic"><use href="#i-more"/></svg></button></div>
+        <div class="nscroll"><div class="doc">
+          <h1 class="ntitle">Idea</h1>
+          <div class="nmeta"><span>Edited just now</span><span class="ava so">SO</span><span>Sara Okafor</span></div>
+          <h2 data-on="3/at">Problem</h2>
+          <p data-on="3/at">Drivers circle the venue for twenty minutes looking for a spot, while half the paid lots nearby sit empty.</p>
+          <h2>Plan</h2>
+          <p>Parkly shows live free spots from the city's open data, and books one in two taps. The judges score impact first (see <span class="rlink"><svg class="ic"><use href="#i-note"/></svg>Judging criteria</span>), so the demo leads with the twenty minutes saved.</p>
+          <p class="typing" data-on="3/at" style="position:relative">Ask <span class="tok">@</span><span class="caret"></span></p>
+          <p class="typing" data-on="3/slash" style="position:relative"><span class="tok">/</span><span class="caret"></span></p>
+
+          <div class="emenu" data-on="3/at" style="left:72px">
+            <div class="mlab">People · they're notified</div>
+            <div class="mi hl2"><span class="ava mc">MC</span>Mike Chen<span class="sc">your team</span></div>
+            <div class="mi"><span class="ava so">SO</span>Sara Okafor<span class="sc">your team</span></div>
+            <div class="mi"><span class="ava ar">OW</span>Ola Wiśniewska<span class="sc">organiser</span></div>
+            <hr>
+            <div class="mlab">Things · they're linked</div>
+            <div class="mi"><svg class="ic"><use href="#i-note"/></svg>Pitch outline<span class="k">note</span></div>
+            <div class="mi"><svg class="ic"><use href="#i-circle"/></svg>Submit the demo video<span class="k">task · Sun 2:00 PM</span></div>
+            <div class="mi"><svg class="ic"><use href="#i-note"/></svg>Judging criteria<span class="k">note</span></div>
+            <div class="mfoot">↑↓ choose · ⏎ insert · keep typing to search everything</div>
+          </div>
+
+          <div class="emenu" data-on="3/slash" style="left:40px; width:330px">
+            <div class="mlab">Insert</div>
+            <div class="mi hl2"><svg class="ic"><use href="#i-circle"/></svg>Task<span class="k">create or link a task</span><span class="sc">/task</span></div>
+            <div class="mi"><svg class="ic"><use href="#i-note"/></svg>Note inside this one<span class="sc">/page</span></div>
+            <div class="mi"><svg class="ic"><use href="#i-cal"/></svg>Today<span class="k">Sat, Oct 18</span><span class="sc">/today</span></div>
+            <div class="mi"><svg class="ic"><use href="#i-cal"/></svg>Date…<span class="sc">/date</span></div>
+            <div class="mi"><svg class="ic"><use href="#i-image"/></svg>Image or file<span class="sc">/file</span></div>
+            <div class="mi"><svg class="ic"><use href="#i-template"/></svg>Template…<span class="sc">/template</span></div>
+            <hr>
+            <div class="mlab">Turn into</div>
+            <div class="mi"><svg class="ic"><use href="#i-heading"/></svg>Heading<span class="sc">/h1 /h2 /h3</span></div>
+            <div class="mi"><svg class="ic"><use href="#i-list"/></svg>Bulleted list<span class="sc">-</span></div>
+            <div class="mi"><svg class="ic"><use href="#i-checksq"/></svg>Checklist<span class="sc">[]</span></div>
+            <div class="mi"><svg class="ic"><use href="#i-table"/></svg>Table<span class="sc">/table</span></div>
+            <div class="mfoot">Quote · Code · Divider · Numbered list · and more as you type</div>
+          </div>
+        </div></div>
+      </main>
+
+      <!-- ═══════════ CENTRE · FIRST RUN (9/first) ═══════════ -->
+      <main class="panel center" id="cE" data-on="9/first">
+        <div class="empty2">
+          <h4>Write something down</h4>
+          <p>Notes are for what you'd keep in Notion, Google Docs or Apple Notes: meeting notes, briefs, a team handbook. Anything you write can link to your tasks, people and email.</p>
+          <div class="acts"><button type="button" class="btn primary">New note <span class="kbd kbdin">⌘N</span></button><button type="button" class="btn secondary">Import from Notion…</button></div>
+        </div>
+      </main>
+
+      <!-- ═══════════ RIGHT · DETAILS OF A PROJECT NOTE ═══════════ -->
+      <aside class="panel rpanel" id="rpD" data-on="1/rec 4 6 8 9/readonly 9/offline">
+        <div class="rphead"><button type="button" class="vpick" title="Details · Comments · Outline · History / Tasks">Details<svg class="ic ic-xs" aria-hidden="true"><use href="#i-chev-d"/></svg></button></div>
+        <div class="rpbody"><div class="dbody">
+          <div class="props">
+            <span class="plabel">In</span><span class="pval">Workspace › Acme rebrand</span>
+            <span class="plabel">Project</span><span class="pval"><span class="dot" style="--c: var(--label-violet)"></span>Acme rebrand <span class="t3">· from the page above</span></span>
+            <span class="plabel">Who sees it</span><span class="pval"><svg class="ic"><use href="#i-users"/></svg>Everyone in Moduo Studio</span>
+            <span class="plabel">Tags</span><span class="pval t2">#kickoff · #client</span>
+            <span class="plabel">Edited</span><span class="pval">Today 3:12 PM <span class="t3">· Mike Chen</span></span>
+            <span class="plabel">Created</span><span class="pval">Oct 12 <span class="t3">· you</span></span>
+          </div>
+          <div>
+            <div class="shead">Linked<span class="num">6</span></div>
+            <div class="coll">
+              <div class="lrow"><span class="ava an">AK</span><span class="lt">Anna Kowalski</span><span class="lm">contact</span></div>
+              <div class="lrow"><svg class="ic"><use href="#i-cal"/></svg><span class="lt">Board meeting</span><span class="lm">Nov 14</span></div>
+              <div class="lrow"><svg class="ic"><use href="#i-mail"/></svg><span class="lt">Re: Launch date</span><span class="lm">email</span></div>
+              <div class="lrow"><svg class="ic"><use href="#i-tasks"/></svg><span class="lt">3 tasks written here</span><span class="lm">1 done</span></div>
+              <div class="lrow"><svg class="ic"><use href="#i-note"/></svg><span class="lt">Brand brief</span><span class="lm">links here</span></div>
+              <div class="lrow"><svg class="ic"><use href="#i-msg"/></svg><span class="lt">Mentioned in Acme · Oct 12</span><span class="lm">chat</span></div>
+            </div>
+          </div>
+          <div>
+            <div class="shead">Activity</div>
+            <div class="coll">
+              <div class="lrow"><span class="ava mc">MC</span><span class="lt t2">Mike Chen edited</span><span class="lm">3:12 PM</span></div>
+              <div class="lrow"><span class="ava ar">AR</span><span class="lt t2">You wrote 3 tasks</span><span class="lm">Oct 12</span></div>
+              <div class="lrow"><span class="ava ar">AR</span><span class="lt t2">You created it</span><span class="lm">Oct 12</span></div>
+            </div>
+          </div>
+        </div></div>
+      </aside>
+
+      <!-- RIGHT · DETAILS, projects hold notes (1/projects) -->
+      <aside class="panel rpanel" id="rpDT" data-on="1/projects">
+        <div class="rphead"><button type="button" class="vpick">Details<svg class="ic ic-xs" aria-hidden="true"><use href="#i-chev-d"/></svg></button></div>
+        <div class="rpbody"><div class="dbody">
+          <div class="props">
+            <span class="plabel">In</span><span class="pval"><span class="dot" style="--c: var(--label-violet)"></span>Acme rebrand <span class="t3">· project</span></span>
+            <span class="plabel">Who sees it</span><span class="pval"><svg class="ic"><use href="#i-users"/></svg>The project's 3 people</span>
+          </div>
+          <div class="pnote">Projects are a Tasks thing. A member with no access to Tasks (module permissions are per person) would see no project notes at all, and Notes would carry two sharing rules: the project's for notes inside it, the page's for everything else.</div>
+        </div></div>
+      </aside>
+
+      <!-- RIGHT · TODAY's panel (1/today) -->
+      <aside class="panel rpanel" id="rpX" data-on="1/today">
+        <div class="rphead"><span class="seg" style="width:100%"><button type="button" class="on" style="flex:1">Detail</button><button type="button" style="flex:1">Comments</button><button type="button" style="flex:1">Outline</button></span></div>
+        <div class="rpbody"><div class="dbody">
+          <div class="shead">Links<span class="num">4</span></div>
+          <div class="coll">
+            <div class="lrow"><svg class="ic"><use href="#i-contact"/></svg><span class="lt">Anna Kowalski</span><span class="lm">CONTACT</span></div>
+            <div class="lrow"><svg class="ic"><use href="#i-tasks"/></svg><span class="lt">Collect brand assets</span><span class="lm">TASK</span></div>
+          </div>
+          <div class="shead">Suggestions</div>
+          <div class="coll"><div class="lrow"><svg class="ic"><use href="#i-link"/></svg><span class="lt t2">Link "Acme Corp"?</span><span class="lm">Accept</span></div></div>
+          <div class="pnote">Today: the tab row is full; Notes, Calendar and Email each draw their own; the switch to the title dropdown (SH-1) registered these tabs unchanged.</div>
+        </div></div>
+      </aside>
+
+      <!-- RIGHT · hackathon details (2) -->
+      <aside class="panel rpanel" id="rpH" data-on="2">
+        <div class="rphead"><button type="button" class="vpick">Outline<svg class="ic ic-xs" aria-hidden="true"><use href="#i-chev-d"/></svg></button></div>
+        <div class="rpbody"><div class="dbody">
+          <div class="coll" data-on="2/start">
+            <div class="lrow"><span></span><span class="lt">Start here</span><span class="lm"></span></div>
+            <div class="lrow"><span></span><span class="lt t2">Your team</span><span class="lm"></span></div>
+            <div class="lrow"><span></span><span class="lt t2">Need help?</span><span class="lm"></span></div>
+          </div>
+          <div class="coll" data-on="2/changed">
+            <div class="lrow"><span></span><span class="lt t2">Can we use code we wrote before?</span><span class="lm"></span></div>
+            <div class="lrow"><span class="upd" style="width:6px;height:6px;border-radius:9999px;background:var(--text-2);justify-self:center"></span><span class="lt">When do submissions close?</span><span class="lm">changed</span></div>
+            <div class="lrow"><span></span><span class="lt t2">How big can a team be?</span><span class="lm"></span></div>
+            <div class="lrow"><span class="upd" style="width:6px;height:6px;border-radius:9999px;background:var(--text-2);justify-self:center"></span><span class="lt">Is there food for allergies?</span><span class="lm">new</span></div>
+          </div>
+          <div class="pnote">For a long organiser note the panel opens on <b>Outline</b>: the headings, with the changed ones marked. Details (who prepared it, who can edit) is one pick away.</div>
+        </div></div>
+      </aside>
+
+      <!-- RIGHT · the idea's details (3) -->
+      <aside class="panel rpanel" id="rpI" data-on="3">
+        <div class="rphead"><button type="button" class="vpick">Details<svg class="ic ic-xs" aria-hidden="true"><use href="#i-chev-d"/></svg></button></div>
+        <div class="rpbody"><div class="dbody">
+          <div class="props">
+            <span class="plabel">In</span><span class="pval">Shared › Team 7 · Parkly</span>
+            <span class="plabel">Project</span><span class="pval"><span class="dot" style="--c: var(--label-teal)"></span>Parkly <span class="t3">· from the page above</span></span>
+            <span class="plabel">Who sees it</span><span class="pval"><svg class="ic"><use href="#i-users"/></svg>Team 7 and the organisers</span>
+            <span class="plabel">Edited</span><span class="pval">Just now <span class="t3">· Sara Okafor</span></span>
+          </div>
+          <div><div class="shead">Linked<span class="num">2</span></div>
+            <div class="coll">
+              <div class="lrow"><svg class="ic"><use href="#i-note"/></svg><span class="lt">Judging criteria</span><span class="lm">note</span></div>
+              <div class="lrow"><svg class="ic"><use href="#i-circle"/></svg><span class="lt">Submit your idea in one paragraph</span><span class="lm">Sat</span></div>
+            </div></div>
+        </div></div>
+      </aside>
+
+      <!-- RIGHT · comments (5) -->
+      <aside class="panel rpanel" id="rpC" data-on="5">
+        <div class="rphead"><button type="button" class="vpick">Comments<span class="t3 num" style="font-weight:400">3</span><svg class="ic ic-xs" aria-hidden="true"><use href="#i-chev-d"/></svg></button></div>
+        <div class="rpbody"><div class="dbody">
+          <div class="thr on" data-on="5/passage">
+            <div class="q">Launch in two languages, English and Polish, on the same day</div>
+            <div class="cm1"><span class="ava mc">MC</span><div><div class="who">Mike Chen<span>Today 2:40 PM</span></div><div class="tx">Polish copy isn't written yet. Same day is risky; can we launch EN first and PL a week later?</div><div class="rx"><span class="rxn">👍 2</span></div></div></div>
+            <div class="cm1"><span class="ava ar">AR</span><div><div class="who">Alex Rivera<span>Today 3:05 PM</span></div><div class="tx">Asking Anna. If she says no, I'll book the translator this week.</div></div></div>
+            <div class="tfoot"><span class="reply">Reply…</span><button type="button" class="btn sm secondary"><svg class="ic"><use href="#i-check"/></svg>Resolve</button></div>
+          </div>
+          <div class="feedseg"><span class="shead">On the note</span><span class="seg"><button type="button" class="on">All</button><button type="button">Comments</button></span></div>
+          <div class="cm1"><span class="ava so">SO</span><div><div class="who">Sara Okafor<span>Oct 12</span></div><div class="tx">Added the 2024 campaign deck to the brief.</div></div></div>
+          <div class="cm1" data-on="5/page"><span class="ava mc">MC</span><div><div class="who">Mike Chen<span>Today 2:40 PM</span></div><div class="tx"><span class="t2" style="display:block;font-size:12.5px;box-shadow:inset 2px 0 0 var(--hairline);padding-left:8px;margin-bottom:4px">“Launch in two languages, English and Polish, on the same day”</span>Polish copy isn't written yet. Same day is risky; can we launch EN first?</div></div></div>
+          <div class="cm1" data-on="5/page"><span class="ava ar">AR</span><div><div class="who">Alex Rivera<span>Today 3:05 PM</span></div><div class="tx">Asking Anna.</div></div></div>
+          <div class="composer">Comment on the note…</div>
+          <div class="pnote" data-on="5/page">The hackathon cut: Notes moves onto the app's comment feed (edit, delete, reactions, @ people and things) and keeps quote-comments. Nothing marks the passage in the text yet, and a discussion can't be resolved: that is the later step.</div>
+        </div></div>
+      </aside>
+
+      <!-- RIGHT · the panel's views (7) -->
+      <aside class="panel rpanel" id="rpV" data-on="7">
+        <div class="rphead" data-on="7/menu 7/history"><button type="button" class="vpick open" data-on="7/menu">Details<svg class="ic ic-xs" aria-hidden="true"><use href="#i-chev-d"/></svg></button><button type="button" class="vpick" data-on="7/history">History<svg class="ic ic-xs" aria-hidden="true"><use href="#i-chev-d"/></svg></button></div>
+        <div class="rphead" data-on="7/task"><button type="button" class="btn sm backbtn" title="Back to Details · Esc"><svg class="ic"><use href="#i-back"/></svg>Collect brand assets from Anna</button><span class="grow"></span><button type="button" class="btn icon" title="Open in Tasks"><svg class="ic"><use href="#i-ext"/></svg></button></div>
+        <div class="menu" data-on="7/menu" style="left:10px; top:40px; width:250px">
+          <div class="mlab">About this note</div>
+          <div class="mi hl"><span class="ck"><svg class="ic ic-xs"><use href="#i-check"/></svg></span>Details<span class="sc">⌥1</span></div>
+          <div class="mi"><span class="ck"></span>Comments <span class="n">3</span><span class="sc">⌥2</span></div>
+          <div class="mi"><span class="ck"></span>Outline<span class="sc">⌥3</span></div>
+          <div class="mi"><span class="ck"></span>History<span class="sc">⌥4</span></div>
+          <hr>
+          <div class="mlab">Alongside</div>
+          <div class="mi"><span class="ck"></span>Tasks in Acme rebrand<span class="sc">⌥5</span></div>
+        </div>
+        <div class="rpbody">
+          <div class="dbody" data-on="7/menu" style="opacity:.35">
+            <div class="props"><span class="plabel">In</span><span class="pval">Acme rebrand</span><span class="plabel">Who sees it</span><span class="pval">3 people</span></div>
+          </div>
+          <div class="dbody" data-on="7/task">
+            <div class="dcrumb"><span class="crumb"><span class="dot" style="--c: var(--label-violet)"></span>Acme rebrand › Design</span></div>
+            <div class="dtitle"><svg class="st" style="width:16px;height:16px;color:var(--text-2);margin-top:4px"><use href="#i-circle"/></svg><h4>Collect brand assets from Anna</h4></div>
+            <div class="props">
+              <span class="plabel">Status</span><span class="pval"><svg class="ic"><use href="#i-circle"/></svg>To do</span>
+              <span class="plabel">Assignee</span><span class="pval"><span class="ava ar">AR</span>Alex Rivera</span>
+              <span class="plabel">Due</span><span class="pval">Fri, Oct 17</span>
+              <span class="plabel">Priority</span><span class="pval t2">None</span>
+            </div>
+            <div><div class="shead">Linked<span class="num">2</span></div><div class="coll">
+              <div class="lrow"><svg class="ic"><use href="#i-note"/></svg><span class="lt">Kickoff notes</span><span class="lm">written here</span></div>
+              <div class="lrow"><span class="ava an">AK</span><span class="lt">Anna Kowalski</span><span class="lm">contact</span></div>
+            </div></div>
+            <div class="pnote">Clicking a task line opens the task itself here, as "← item" (Tasks 72a). The note stays put in the centre; Esc comes back to Details.</div>
+          </div>
+          <div class="dbody" data-on="7/history">
+            <div class="hrow on"><span class="ava mc">MC</span><div><div class="hw">Mike Chen</div><div class="hm">2 lines in Next steps</div></div><span class="hd">Today 3:12 PM</span></div>
+            <div class="hrow"><span class="ava ar">AR</span><div><div class="hw">You</div><div class="hm">Goals, From Anna</div></div><span class="hd">Today 11:05 AM</span></div>
+            <div class="hrow"><span class="ava ar">AR</span><div><div class="hw">Claude · via Alex's key</div><div class="hm">Wrote the first draft from the call</div></div><span class="hd">Oct 12</span></div>
+            <div class="hrow"><span class="ava ar">AR</span><div><div class="hw">You</div><div class="hm">Created</div></div><span class="hd">Oct 12</span></div>
+            <div style="display:flex;gap:8px"><button type="button" class="btn sm secondary">Show changes</button><button type="button" class="btn sm">Restore this version</button></div>
+            <div class="pnote">One row per editing session, not per keystroke. Restoring keeps the newer versions in the list, so nothing is lost.</div>
+          </div>
+        </div>
+      </aside>
+
+    </div><!-- /app -->
+
+    <footer class="bbar" id="bbar">
+      <div class="bside">
+        <button type="button" class="bbtn" id="ltoggle" title="Collapse left panel"><svg class="ic ic-md lt-open" aria-hidden="true"><use href="#i-fold"/></svg><svg class="ic ic-md lt-closed" aria-hidden="true"><use href="#i-unfold"/></svg></button>
+      </div>
+      <div class="bmid bm-tools" role="toolbar" aria-label="Tools">
+        <button type="button" class="bbtn" title="Search  ⌘K"><svg class="ic ic-md" aria-hidden="true"><use href="#i-search"/></svg></button>
+        <button type="button" class="bbtn" title="Quick capture  ⌘⇧K"><svg class="ic ic-md" aria-hidden="true"><use href="#i-pen"/></svg></button>
+        <button type="button" class="bbtn" title="New note here  ⌘N"><svg class="ic ic-md" aria-hidden="true"><use href="#i-plus"/></svg></button>
+      </div>
+      <div class="bside r">
+        <button type="button" class="bbtn" id="rtoggle" title="Collapse right panel"><svg class="ic ic-md rt-open" aria-hidden="true"><use href="#i-unfold"/></svg><svg class="ic ic-md rt-closed" aria-hidden="true"><use href="#i-fold"/></svg></button>
+      </div>
+    </footer>
+
+    <!-- ═══════════ FRAME 6 · QUICK NOTE (⌘⇧K, then ⌘2) ═══════════ -->
+    <div class="scrim" data-on="6/quick">
+      <div class="capm" role="dialog" aria-label="Capture">
+        <div class="cdest">
+          <span class="dbtn" title="⌘1–7 switch the type"><svg class="ic"><use href="#i-note"/></svg>Note<svg class="ic ic-xs"><use href="#i-chev-d"/></svg></span>
+          <span class="sl">in</span>
+          <span class="dbtn">Inbox<svg class="ic ic-xs"><use href="#i-chev-d"/></svg></span>
+          <span class="grow"></span>
+          <span class="srcchip" title="Becomes a link when you save"><svg class="ic ic-xs"><use href="#i-note"/></svg>From: Kickoff notes<svg class="ic ic-xs t3"><use href="#i-x"/></svg></span>
+        </div>
+        <div class="ctitle2">Case study idea with Anna's team</div>
+        <div class="cbody">Ask <span class="rchip"><span class="ava an">AK</span>Anna Kowalski</span> if we can publish the launch numbers after <span class="datechip"><svg class="ic"><use href="#i-cal"/></svg>Dec 1</span>. Angle: a two-language launch in four weeks.<span class="caret"></span></div>
+        <div class="cfoot">
+          <span class="cpill2"><svg class="ic"><use href="#i-hash"/></svg>Tags</span>
+          <span class="cpill2"><svg class="ic"><use href="#i-template"/></svg>Template</span>
+          <span class="hint"><span><span class="kbd">⌘⏎</span> Save</span><span><span class="kbd">⌘⇧⏎</span> Save and open</span><span><span class="kbd">Esc</span> keep as draft</span></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════ FRAME 8 · THE PUBLIC PAGE ═══════════ -->
+    <div class="scrim" data-on="8/public" style="padding-top:40px">
+      <div class="bwin">
+        <div class="bbar2"><span class="lights"><i></i><i></i><i></i></span><span class="addr">moduo.app/p/h7w2k9/hackwaw-2026/rules</span></div>
+        <div class="pub">
+          <nav class="pnav"><div class="ptitle">HackWaw 2026</div><a>Start here</a><a>Brief</a><a class="on">Rules</a><a>Schedule</a><a>Judging criteria</a><a>Resources</a><a>FAQ</a></nav>
+          <div class="pmain"><div class="doc">
+            <h1 class="ntitle">Rules</h1>
+            <div class="nmeta"><span>Updated Oct 18, 9:40 AM</span></div>
+            <h3>Teams</h3><p>Two to five people. Everyone on the team must be registered by Friday 7 PM.</p>
+            <h3>What you can use</h3><p>Any open-source library, public API or design kit. Your product's own code and designs are made during the event.</p>
+            <table class="ntable"><tr><th>Deliverable</th><th>Due</th></tr><tr><td>One-paragraph idea</td><td class="num">Sat 10:00 AM</td></tr><tr><td>Demo video, under 3 min</td><td class="num">Sun 2:00 PM</td></tr><tr><td>Pitch</td><td class="num">Sun 4:00 PM</td></tr></table>
+            <div class="pfoot"><span>Published with Moduo</span><span>·</span><span>Read-only</span></div>
+          </div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════ FRAME 9 · WELCOME, ONCE PER PERSON ═══════════ -->
+    <div class="scrim" data-on="9/first">
+      <div class="wdlg">
+        <div class="clip">a short clip recorded from the app: typing @, then a task line checking off</div>
+        <div class="wb">
+          <h4>Notes · write things down, linked to everything</h4>
+          <p>Private notes are yours. Workspace notes are for everyone. A project's notes sit with its tasks and share its people. Type <b>@</b> to mention someone or link a task, contact or email; type <b>/</b> for everything else.</p>
+          <div class="wf"><span class="steps"><i class="on"></i><i></i><i></i></span><button type="button" class="btn sm">Explore on my own</button><button type="button" class="btn sm primary">Learn more</button></div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /appframe -->
+</div><!-- /stage -->
+
+<script>
+(function () {
+  var html = document.documentElement;
+  var q = new URLSearchParams(location.search);
+  var FRAMES = 9;
+  var VARS = {
+    1: { lab: 'Where notes live', opts: [['rec', 'One tree, by who sees it (recommended)'], ['projects', 'Projects hold notes'], ['today', 'Today']] },
+    2: { lab: 'Participant', opts: [['start', 'First open'], ['changed', 'Changed since you read']] },
+    3: { lab: 'Typing', opts: [['at', '@'], ['slash', '/']] },
+    4: { lab: 'A task in a note', opts: [['line', 'Line (recommended)'], ['card', 'Card'], ['new', '/task: where it goes']] },
+    5: { lab: 'Comments', opts: [['page', 'Hackathon cut: shared feed + quotes'], ['passage', 'Later: on a passage']] },
+    6: { lab: 'New note', opts: [['quick', '⌘⇧K, then ⌘2'], ['here', '⌘N in Notes']] },
+    7: { lab: 'Right panel', opts: [['menu', 'Its views'], ['task', '← a task'], ['history', 'History']] },
+    8: { lab: 'Share', opts: [['share', 'Share menu'], ['public', 'Public page']] },
+    9: { lab: 'State', opts: [['first', 'First open'], ['readonly', 'Can only read'], ['offline', 'Offline']] }
+  };
+  var S = { frame: Math.min(FRAMES, Math.max(1, parseInt(q.get('frame'), 10) || 1)), v: {} };
+  Object.keys(VARS).forEach(function (f) { S.v[f] = VARS[f].opts[0][0]; });
+  if (q.get('v') && VARS[S.frame] && VARS[S.frame].opts.some(function (o) { return o[0] === q.get('v'); })) S.v[S.frame] = q.get('v');
+
+  var CAP = {
+    '1/rec': '1 · N3 One tree, in sections by who sees it: Workspace · Shared · Private, plus your Inbox and pins. A page can be linked to a project (its dot): its tasks go there.',
+    '1/projects': '1 · N3 alternative: Tasks’ areas and projects hold notes. One place per piece of work, but it breaks for anyone without Tasks access, and adds a second sharing rule.',
+    '1/today': '1 · Today, for comparison: small-caps headers, emoji icons, a derived Inbox, Published · Archive · Trash as permanent sections, a tab row in the panel.',
+    '2/start': '2 · N4 A participant’s first open lands on the workspace’s start page (view only, comments allowed). Shown as one workspace for the event, the hackathon plan’s choice: the guide stays live, each team’s page is shared with that team.',
+    '2/changed': '2 · N8 Changed since you read: a quiet line on top, a neutral bar beside what changed, the old value struck through; a dot on the row in the sidebar.',
+    '3/at': '3 · N5 @ in a note: people first (they’re notified), then things (they’re linked). The same grammar as capture and task descriptions.',
+    '3/slash': '3 · N5 / in a note: commands first (task, note inside, dates, file, template), then block types. Linking moves to @.',
+    '4/line': '4 · N6 A task written in a note is a line: status icon · editable title · assignee · due. Hover shows due, assign and open. A [ ] checkbox stays plain.',
+    '4/card': '4 · N6 alternative: the same tasks as RF-1 cards. Heavier, and the title can’t be edited in place.',
+    '4/new': '4 · N6 /task creates or links. A new task goes to the project the page is linked to; otherwise to your Inbox, and the line says so.',
+    '5/passage': '5 · N7 Later: a discussion on a passage: the text is marked, replies stay with it, Resolve clears it. Comments on the whole note stay one flat feed.',
+    '5/page': '5 · N7 Today, and the hackathon cut (moved onto the shared feed): quote-comments in one flat list; nothing marks the passage and nothing resolves.',
+    '6/quick': '6 · N11 ⌘⇧K, then ⌘2: a quick note from anywhere lands in your Inbox, linked to what was open. ⌘⏎ saves.',
+    '6/here': '6 · N11 ⌘N inside Notes: no modal. A new note opens in the editor, in the place you were, title first.',
+    '7/menu': '7 · N12 The panel’s views: Details · Comments · Outline (History when built) about this note; the linked project’s tasks alongside.',
+    '7/task': '7 · N12 Clicking a task line opens the task itself in the panel as “← item”.',
+    '7/history': '7 · N8 History (later): one row per editing session, agents named “via” their key; show changes, restore without losing anything.',
+    '8/share': '8 · N14 Share: who can open it (inherited from the project, plus people you add), then Publish to the web with its own switches.',
+    '8/public': '8 · N14 The public page: the published note and the notes inside it, with a contents column. No app, no comments, no private links.',
+    '9/first': '9 · N4 First open: one welcome (three steps at most, once per person) over an empty Notes that offers New note and Import from Notion.',
+    '9/readonly': '9 · Can only read: no slash, no drag, no Share; comments allowed. The line on top says so once.',
+    '9/offline': '9 · Offline: you keep writing; one quiet line says the edits are on this device and sync when you’re back.'
+  };
+
+  function on(el) {
+    return el.dataset.on.split(' ').some(function (t) {
+      var p = t.split('/');
+      return +p[0] === S.frame && (p.length === 1 || p[1] === S.v[S.frame]);
+    });
+  }
+
+  function renderVariants() {
+    var c = document.getElementById('ctlVar'), seg = document.getElementById('varSeg');
+    var def = VARS[S.frame];
+    c.hidden = !def;
+    if (!def) return;
+    document.getElementById('varLab').textContent = def.lab;
+    seg.innerHTML = '';
+    def.opts.forEach(function (o) {
+      var b = document.createElement('button');
+      b.type = 'button'; b.textContent = o[1]; b.dataset.vset = o[0];
+      if (S.v[S.frame] === o[0]) b.className = 'on';
+      seg.appendChild(b);
+    });
+  }
+
+  function apply() {
+    var f = S.frame, v = S.v[f], key = f + '/' + v;
+    html.dataset.frame = f;
+    document.querySelectorAll('[data-on]').forEach(function (el) { el.hidden = !on(el); });
+    // panels: the right panel is folded on a first open
+    var rightOpen = key !== '9/first';
+    document.querySelectorAll('.rpanel').forEach(function (p) { if (!rightOpen) p.hidden = true; });
+    var bbar = document.getElementById('bbar');
+    bbar.classList.toggle('rclosed', !rightOpen);
+    // row states
+    var tl = document.getElementById('tl1');
+    if (tl) tl.classList.toggle('is-hover', key === '4/line');
+    if (tl) tl.classList.toggle('sel', key === '7/task');
+    var hl = document.querySelectorAll('#railH .nav');
+    hl.forEach(function (n) { n.classList.remove('active'); });
+    var pick = f === 3 ? 'idea' : (v === 'changed' ? 'faq' : 'start2');
+    var a = document.querySelector('#railH .nav[data-nav="' + pick + '"]');
+    if (a) a.classList.add('active');
+    var faqDot = document.querySelector('#railH .nav[data-nav="faq"] .upd');
+    if (faqDot) faqDot.hidden = (key === '2/changed');
+    var kick = document.getElementById('navKick');
+    if (kick) kick.classList.toggle('active', key !== '6/here');
+    var nn = document.getElementById('navNew');
+    if (nn) nn.classList.toggle('active', key === '6/here');
+    document.querySelectorAll('#frameSw [data-go]').forEach(function (b) { b.classList.toggle('on', +b.dataset.go === f); });
+    var cap = document.getElementById('cap');
+    cap.textContent = CAP[key] || ''; cap.title = CAP[key] || '';
+    renderVariants();
+    try {
+      var p = '?frame=' + f + (S.v[f] !== VARS[f].opts[0][0] ? '&v=' + S.v[f] : '');
+      history.replaceState(null, '', p);
+    } catch (e) { /* file:// may refuse; harmless */ }
+  }
+  function setVar(f, v) { S.v[f] = v; apply(); }
+  function cycleVar() {
+    var def = VARS[S.frame]; if (!def) return;
+    var i = def.opts.findIndex(function (o) { return o[0] === S.v[S.frame]; });
+    setVar(S.frame, def.opts[(i + 1) % def.opts.length][0]);
+  }
+  document.addEventListener('click', function (e) {
+    var go = e.target.closest('[data-go]');
+    if (go) { S.frame = +go.dataset.go; apply(); return; }
+    var vs = e.target.closest('[data-vset]');
+    if (vs) { setVar(S.frame, vs.dataset.vset); return; }
+    var ah = e.target.closest('.rail .ghdr');
+    if (ah && !e.target.closest('button')) { ah.parentElement.classList.toggle('collapsed'); return; }
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    var k = e.key.toLowerCase();
+    if (k >= '1' && k <= String(FRAMES)) { S.frame = +k; apply(); }
+    else if (k === 'v') cycleVar();
+  });
+  apply();
+})();
+</script>
+</body>
+</html>
