@@ -21,6 +21,7 @@ import {
   resolveFocusAway,
   STOP_UNDO_MS,
   setFocusTimer,
+  skipFocusBreak,
   startFocus,
   stopFocus,
   toggleFocusPomodoro,
@@ -411,6 +412,22 @@ describe("F1-4 — pomodoro catch-up", () => {
     expect(s.away?.endedPhases).toHaveLength(1);
     resolveFocusAway("keep");
     expect(getFocusSession().accrued).toBe(25 * 60);
+  });
+
+  it("skipping the waiting break starts a fresh work block now (TV-F8's between-tasks offer)", () => {
+    bindFocusTask(task("t1"));
+    toggleFocusPomodoro();
+    startFocus();
+    rs.advanceTimersByTime(25 * MIN + 1000);
+    expect(getFocusSession()).toMatchObject({ phase: "break", running: false });
+    const accrued = getFocusSession().accrued;
+    skipFocusBreak();
+    expect(getFocusSession()).toMatchObject({ phase: "work", running: true, pomoLeft: 25 * 60 });
+    // The break's waiting time was never work.
+    expect(getFocusSession().accrued).toBe(accrued);
+    // Outside a break it does nothing.
+    skipFocusBreak();
+    expect(getFocusSession()).toMatchObject({ phase: "work", running: true });
   });
 
   it("a phase end while you're there alerts once and banks the finished block", () => {

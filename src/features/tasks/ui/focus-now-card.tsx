@@ -2,8 +2,10 @@
 // prototype round-2a frames 1–2): one quiet line (project › section or parent
 // · due, the priority mark when high), the one timer pill (Per task) or Start,
 // the title, the folded description, references as chips, the subtasks as an
-// unordered checklist with small marks, and Done ⏎ · Skip S. A subtask opens
-// its own details in the panel; ⇧F on it makes it the Now card.
+// unordered checklist with small marks, and Done ⏎ · Skip S · Hand off W
+// (TV-F8). A subtask opens its own details in the panel; ⇧F on it makes it
+// the Now card. An agent at work on the task shows as one line under the
+// title (call 52, TV-D16's `AgentSessionLines`).
 
 import { type FocusTimerMode, isClosedTask } from "@contracts/vocabularies";
 import { Pause, Play } from "lucide-react";
@@ -30,7 +32,9 @@ import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import { estimateOf, type Task } from "../model";
 import { bucketDotColor } from "../sidebar";
 import { nowOn, useToday } from "../use-today";
+import { type HandOff, HandOffPopover } from "./focus-hand-off";
 import { PriorityMark } from "./level-icons";
+import { AgentSessionLines } from "./task-agent-session";
 
 export const TIMER_LABELS: Record<FocusTimerMode, string> = {
   per_task: "Per task",
@@ -125,6 +129,9 @@ export function NowCard({
   onStart,
   onDone,
   onSkip,
+  handOffOpen,
+  onHandOffOpenChange,
+  onHandOff,
 }: {
   task: Task;
   api: TasksModuleApi;
@@ -141,6 +148,10 @@ export function NowCard({
   onStart: () => void;
   onDone: () => void;
   onSkip: () => void;
+  /** Hand off W (TV-F8): its popover, open from the button or the key. */
+  handOffOpen: boolean;
+  onHandOffOpenChange: (open: boolean) => void;
+  onHandOff: (handOff: HandOff) => void;
 }) {
   const today = useToday();
   const project = api.buckets.find((b) => b.id === task.bucketId) ?? null;
@@ -154,6 +165,10 @@ export function NowCard({
     : 0;
   const subtasks = api.subtasksByParent.get(task.id) ?? [];
   const saving = task.id.startsWith("tmp-");
+  // An agent's line, only when one is on this task (call 52; the line reads
+  // the workspace's people, so it mounts only then).
+  const agentSessions = api.agentSessions;
+  const hasAgent = !!agentSessions?.some((s) => s.taskId === task.id && !s.deletedAt);
 
   return (
     <section
@@ -229,6 +244,16 @@ export function NowCard({
         <h2 className="font-sans text-2xl leading-snug text-foreground break-words">
           {task.title || "Untitled"}
         </h2>
+        {hasAgent ? (
+          <AgentSessionLines
+            taskId={task.id}
+            workspaceId={workspaceId}
+            sessions={agentSessions}
+            userId={api.currentUserId}
+            runtime={runtime}
+            className="pl-0"
+          />
+        ) : null}
         {task.description ? <FoldedDescription html={task.description} /> : null}
         {runtime ? (
           <NowReferences runtime={runtime} workspaceId={workspaceId} taskId={task.id} />
@@ -266,6 +291,17 @@ export function NowCard({
             </TooltipTrigger>
             <TooltipContent>Moves it to the end of Up next</TooltipContent>
           </Tooltip>
+          <HandOffPopover
+            open={handOffOpen}
+            onOpenChange={onHandOffOpenChange}
+            me={api.currentUserId}
+            onHandOff={onHandOff}
+          >
+            <Button size="sm" variant="ghost" disabled={saving} data-slot="focus-hand-off-button">
+              Hand off
+              <Kbd className="bg-transparent">W</Kbd>
+            </Button>
+          </HandOffPopover>
         </div>
       ) : null}
     </section>

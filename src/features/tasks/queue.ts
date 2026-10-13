@@ -142,6 +142,45 @@ export function movedPosition(
   return betweenPositions(before, after);
 }
 
+/**
+ * The single moves (`opQueueReorder`'s shape) that turn `current` into
+ * `target` (TV-F8's "Arrange by project", and its Undo): walking the target,
+ * each task out of place moves right after the one before it. Ids in only one
+ * of the two lists are left alone.
+ */
+export function queueMoves(
+  current: readonly string[],
+  target: readonly string[],
+): { taskId: string; afterTaskId: string | null }[] {
+  const shared = new Set(current);
+  const goal = target.filter((id) => shared.has(id));
+  const inGoal = new Set(goal);
+  const order = current.filter((id) => inGoal.has(id));
+  const moves: { taskId: string; afterTaskId: string | null }[] = [];
+  goal.forEach((id, i) => {
+    if (order[i] === id) return;
+    order.splice(order.indexOf(id), 1);
+    order.splice(i, 0, id);
+    moves.push({ taskId: id, afterTaskId: i > 0 ? goal[i - 1] : null });
+  });
+  return moves;
+}
+
+/** My line-up after `moves`, each placed like a drag would place it (shown until the server answers). */
+export function applyQueueMoves(
+  mine: readonly TaskQueueEntry[],
+  moves: readonly { taskId: string; afterTaskId: string | null }[],
+): TaskQueueEntry[] {
+  const byPosition = (a: TaskQueueEntry, b: TaskQueueEntry) =>
+    a.position < b.position ? -1 : a.position > b.position ? 1 : 0;
+  let rows = [...mine].sort(byPosition);
+  for (const m of moves) {
+    const position = movedPosition(rows, m.taskId, m.afterTaskId);
+    rows = rows.map((e) => (e.taskId === m.taskId ? { ...e, position } : e)).sort(byPosition);
+  }
+  return rows;
+}
+
 function possessive(name: string): string {
   return `${name}’s`;
 }

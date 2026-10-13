@@ -60,7 +60,7 @@ async function openTask(page: Page, taskId: string) {
   await expect(page.getByRole("navigation", { name: "Location" })).toBeVisible({ timeout: 20_000 });
 }
 
-test("AC11.7 — Details ▾ lists Details · Project; the full page keeps the route and the panel shows Project", async ({
+test("AC11.7 — Details ▾ lists Details · Project / In flight; the full page keeps the route and the panel shows Project", async ({
   page,
 }) => {
   const task = await createTask(`Logo concepts ${tag}`);
@@ -68,7 +68,8 @@ test("AC11.7 — Details ▾ lists Details · Project; the full page keeps the r
   await page.getByRole("button", { name: "Panel view: Details" }).click();
   await expect(page.getByRole("menuitemradio", { name: /Details/ })).toBeVisible();
   await expect(page.getByRole("menuitemradio", { name: /Project/ })).toBeVisible();
-  await expect(page.getByRole("menuitemradio", { name: /In flight/ })).toHaveCount(0);
+  // TV-F8: In flight, the alongside view, ⌥3 away from the Timeline.
+  await expect(page.getByRole("menuitemradio", { name: /In flight/ })).toBeVisible();
   await page.keyboard.press("Escape");
 
   const url = page.url();

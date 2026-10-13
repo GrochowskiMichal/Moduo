@@ -247,6 +247,55 @@ describe("useTasksModule: my queue (TV-D4)", () => {
     );
   });
 
+  it("Arrange by project saves the whole new order as single moves, then Undo walks it back (TV-F8)", async () => {
+    const { api, hook } = await mount(
+      [task("a"), task("b"), task("c"), task("d")],
+      [row(ME, "a", "a0"), row(ME, "b", "a1"), row(ME, "c", "a2"), row(ME, "d", "a3")],
+    );
+    let saved: boolean | null = null;
+    act(() => {
+      hook.result.current.arrangeQueue(["a", "c", "b", "d"], (partial) => {
+        saved = partial;
+      });
+    });
+    // Shown at once, saved after.
+    expect(hook.result.current.queuedTasks.map((t) => t.id)).toEqual(["a", "c", "b", "d"]);
+    await waitFor(() => expect(saved).toBe(false));
+    act(() => {
+      hook.result.current.arrangeQueue(["a", "b", "c", "d"]);
+    });
+    await waitFor(() =>
+      expect(hook.result.current.queuedTasks.map((t) => t.id)).toEqual(["a", "b", "c", "d"]),
+    );
+    expect(api.opQueueReorder).toHaveBeenCalledTimes(2);
+  });
+
+  it("a move refused partway keeps what was saved, shows the server's order and still offers Undo", async () => {
+    const { api, hook } = await mount(
+      [task("a"), task("b"), task("c"), task("d")],
+      [row(ME, "a", "a0"), row(ME, "b", "a1"), row(ME, "c", "a2"), row(ME, "d", "a3")],
+    );
+    const real = api.opQueueReorder.getMockImplementation();
+    let calls = 0;
+    api.opQueueReorder.mockImplementation(async (input) => {
+      calls += 1;
+      if (calls === 2) throw new Error("That task isn't in your queue.");
+      return real ? real(input) : [];
+    });
+    let saved: boolean | null = null;
+    act(() => {
+      // Two moves: d to the top, then c after d.
+      hook.result.current.arrangeQueue(["d", "c", "a", "b"], (partial) => {
+        saved = partial;
+      });
+    });
+    await waitFor(() => expect(saved).toBe(true));
+    // The first move stands on the server and on screen.
+    await waitFor(() =>
+      expect(hook.result.current.queuedTasks.map((t) => t.id)).toEqual(["d", "a", "b", "c"]),
+    );
+  });
+
   it("a drop's Undo, run seconds later, puts the line-up back (TV-U4)", async () => {
     const { api, hook } = await mount(
       [task("a"), task("b"), task("c")],
