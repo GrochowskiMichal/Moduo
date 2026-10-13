@@ -938,8 +938,8 @@ const NO_VIEWS: readonly TaskView[] = [];
 /**
  * A saved view in the sidebar (TV-U8). Yours: Rename · Pin · Share · Move ·
  * Copy link · Delete. Someone else's shared view: Pin · Copy link (and, for
- * the workspace's owner or an admin, Stop sharing · Delete). No glyph: an
- * empty slot keeps its name in line with the projects' (29c).
+ * the workspace's owner or an admin, Stop sharing). No glyph: an empty slot
+ * keeps its name in line with the projects' (29c).
  */
 function ViewRow({
   view,
@@ -965,9 +965,11 @@ function ViewRow({
   onTogglePin: () => void;
 }) {
   const moderate = !mine && view.shared && !!actions?.canModerate;
+  // Changing what a shared view shows needs Tasks edit (the server says so too).
+  const canRename = mine && !!actions && (actions.canShare || !view.shared);
   const menu = (m: MenuKit) => (
     <>
-      {mine && actions ? <m.Item onSelect={m.rename}>Rename</m.Item> : null}
+      {canRename ? <m.Item onSelect={m.rename}>Rename</m.Item> : null}
       <m.Item onSelect={onTogglePin}>{pinned ? "Unpin from sidebar" : "Pin to sidebar"}</m.Item>
       {mine && actions && (actions.canShare || view.shared) ? (
         <m.Item onSelect={() => actions.onShare(view.id, !view.shared)}>
@@ -988,7 +990,7 @@ function ViewRow({
         </>
       ) : null}
       {actions ? <m.Item onSelect={() => actions.onCopyLink(view.id)}>Copy link</m.Item> : null}
-      {(mine || moderate) && actions ? (
+      {mine && actions ? (
         <>
           <m.Separator />
           <m.Item variant="destructive" onSelect={() => actions.onDelete(view.id)}>
@@ -1005,7 +1007,7 @@ function ViewRow({
       icon={<span aria-hidden />}
       current={current}
       onSelect={onSelect}
-      onRename={mine && actions ? (name) => actions.onRename(view.id, name) : undefined}
+      onRename={canRename && actions ? (name) => actions.onRename(view.id, name) : undefined}
       menu={menu}
       menuLabel={`${view.name} options`}
     />

@@ -128,9 +128,9 @@ Built in tasks-v3 block 21 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §3, AC
   - Rejected: sharing with chosen people through PERM grants (more machinery than a lens needs; later if asked); copying a shared view's results.
 - **U8-2 · Only the maker changes a view; the owner or an admin can take a shared one down** → TV-U8 (`task_views_op_update`)
   - Who: agent's choice, deferred to by Maciej, 2026-10-13 (the orchestrator kept the exception).
-  - Decision: the maker renames, saves, re-shares, moves and deletes; anyone else who sees a shared view can pin it, copy its link and "Save as new view…"; the workspace's owner or an admin can also Stop sharing or Delete (and Undo) a shared view they can see.
-  - Why: templates' precedent; a workspace needs a way to tidy shared views.
-  - Rejected: anyone editing a shared view (one person's change rewrites everyone's lens).
+  - Decision: the maker renames, saves, re-shares, moves and deletes; anyone else who sees a shared view can pin it, copy its link and "Save as new view…"; the workspace's owner or an admin can also Stop sharing a shared, live view they can see, and nothing more (no delete, no restore, no edit: follow-up `20261013271000`, 2026-10-14). Putting a view in front of the workspace (sharing it, restoring a shared one) and changing what a shared view shows need Tasks edit; a maker without it can still delete it, or keep it as their own.
+  - Why: templates' precedent; a workspace needs a way to tidy shared views, and a take-down that only unshares leaves the view with its maker, who decides whether it goes.
+  - Rejected: anyone editing a shared view (one person's change rewrites everyone's lens); an admin deleting or restoring someone else's view (it would bring back what its maker deleted).
 - **U8-3 · A view keeps one place: All, My tasks, Upcoming or a project** → TV-U8 (`TASK_VIEW_SCOPES`, `viewScopeOf`)
   - Who: agent's choice, deferred to by Maciej, 2026-10-13.
   - Decision: "Save as view…" (the toolbar's ⋯) saves the place's Filter and Display (layout, Group by, Board grouping and lanes, order, Completed, subtasks, rows, Show on rows); a view saved in a project keeps that project (29d). The Inbox, Focus, Won't do, Archived and Recently deleted don't save. The selection (multi-select) and the search are never saved.
