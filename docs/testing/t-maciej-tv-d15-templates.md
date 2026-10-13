@@ -36,6 +36,12 @@
 - [ ] **Do:** as a workspace admin, a teammate's shared template → **Expect:** Stop sharing and Delete template work; Edit doesn't. _(web)_
 - [ ] **Do:** Delete template → **Undo** in the toast → **Expect:** it's back in the list. _(web)_
 
+## Copying needs Edit (D15-11)
+- [ ] **Do:** as a member who can only view a project (shared with them at view), its ⋯ → Duplicate… → **Expect:** "You need edit access to this project to copy it." and only Close. _(web)_
+- [ ] **Do:** the same project's ⋯ → Save as template… → **Expect:** the same reason; nothing is saved. _(web)_
+- [ ] **Do:** a task in that project → panel ⋯ → Save as template… → **Expect:** "You need edit access to this task to save it as a template." _(web)_
+- [ ] **Do:** the owner shares a template of that project → the member Use…s it → **Expect:** the project is made (using a shared template is unchanged). _(web)_
+
 ## Edge cases
 - [ ] **Do:** Duplicate a project with no dates at all → **Expect:** no "Starts on" field; nothing in the copy is dated. _(web)_
 - [ ] **Do:** go offline and Duplicate → **Expect:** "You're offline. Try again once you're back."; nothing appears. _(web)_

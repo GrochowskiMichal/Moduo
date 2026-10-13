@@ -79,6 +79,12 @@ const NOTIFICATION_ROWS: ReadonlyArray<{
       "When something you were waiting on comes in, or the last thing blocking a task is finished.",
   },
   {
+    type: "teams",
+    title: "Your teams",
+    description:
+      "When a task is routed to a team you're in, or someone @mentions your team. Also the check-back when nobody took a team task you created.",
+  },
+  {
     type: "completed",
     title: "Completed by someone else",
     description: "When a teammate completes a task you created.",

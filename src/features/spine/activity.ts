@@ -86,6 +86,15 @@ export function spineActivityLine(
       const excerpt = excerptText(p.excerpt);
       return excerpt ? `commented: “${excerpt}”` : "left a comment";
     }
+    // TV-D13: @Team in a comment; each member hears once.
+    case "comments.team_mention": {
+      const names = Array.isArray(p.team_names)
+        ? p.team_names.filter((n): n is string => typeof n === "string" && n.length > 0)
+        : [];
+      const teams = names.length > 0 ? names.join(", ") : "your team";
+      const excerpt = excerptText(p.excerpt);
+      return excerpt ? `mentioned ${teams} on this: “${excerpt}”` : `mentioned ${teams} on this`;
+    }
     // TV-U13: a comment edited (it notifies only someone newly named), deleted
     // and brought back by its Undo.
     case "comments.edit": {
@@ -120,6 +129,30 @@ export function spineActivityLine(
     // TV-D1: a teammate finished a task you created.
     case "tasks.completed":
       return "completed this";
+    // TV-D13: a task nobody has taken was routed to (or given back to) a team
+    // you're in. Several from one person within the hour are one notice.
+    case "tasks.routed": {
+      const team = str(p.team_name) ?? "your team";
+      const n = num(p.count) ?? 1;
+      if (n > 1) return `routed ${n} tasks to ${team}`;
+      return p.returned === true ? `gave this back to ${team}` : `routed this to ${team}`;
+    }
+    // TV-D13: a team task you created is still unclaimed (written by Moduo).
+    case "tasks.team_check_back": {
+      const team = str(p.team_name) ?? "the team";
+      return str(p.reason) === "due"
+        ? `checked: nobody in ${team} has taken this, and it's due tomorrow`
+        : `checked: nobody in ${team} has taken this in 3 days`;
+    }
+    // TV-D13: someone left the workspace; tasks from their Inbox that you
+    // created came back to yours (the card opens your Inbox).
+    case "tasks.handed_back": {
+      const name = str(p.name) ?? "someone";
+      const n = num(p.count) ?? 1;
+      const back = `${n > 1 ? `${n} of your tasks are` : "your task is"} back in your Inbox`;
+      // Someone who left on their own is the actor here ("Sam left …").
+      return p.left === true ? `left the workspace · ${back}` : `removed ${name} · ${back}`;
+    }
     // TV-U6 (REPLAN 78): a project was deleted and its open work assigned to
     // you landed in your Inbox (the card's target). One notice per person; the
     // project is named only when you could see it.

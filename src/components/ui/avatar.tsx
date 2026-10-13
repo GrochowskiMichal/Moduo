@@ -204,12 +204,15 @@ function PersonAvatar({
   );
 }
 
-type TeamMarkProps = Omit<React.ComponentProps<"span">, "children"> & {
+type TeamMarkProps = Omit<React.ComponentProps<"span">, "children" | "color"> & {
   /** The team's name. */
   name: string;
   id?: string | null;
   /** The team's own letters, when someone edited them. */
   letters?: string | null;
+  /** The colour picked for the team (one of the avatar hues); else a stable
+   *  one from its id. */
+  color?: string | null;
   size?: IdentitySize;
 };
 
@@ -221,16 +224,18 @@ function TeamMark({
   name,
   id,
   letters,
+  color,
   size = "icon",
   className,
   "aria-hidden": ariaHidden = true,
   ...props
 }: TeamMarkProps) {
+  const picked = color && (AVATAR_HUES as readonly string[]).includes(color) ? color : null;
   return (
     <span
       data-slot="team-mark"
       data-size={size}
-      data-label={avatarHue(id || name)}
+      data-label={picked ?? avatarHue(id || name)}
       aria-hidden={ariaHidden}
       className={cn(
         "inline-flex size-8 shrink-0 select-none items-center justify-center rounded-sm",

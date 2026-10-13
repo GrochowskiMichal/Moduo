@@ -32,7 +32,8 @@ import { StatusIcon } from "./status-icon";
 export type GroupMarkContext = {
   bucketColor: (bucketId: string) => string | null;
   assignee: (userId: string) => Assignee | null;
-  teamName: (teamId: string) => string | null;
+  /** A team's name, letters and colour (its mark, TV-D13). */
+  team: (teamId: string) => { name: string; mark: string; color: string | null } | null;
 };
 
 /** Each kind of group leads with its mark (research §2): glyph, dot, avatar. */
@@ -54,8 +55,10 @@ export function groupMark(groupBy: GroupBy, key: string, ctx: GroupMarkContext):
       return <AssigneeAvatar assignee={ctx.assignee(key)} assigneeId={key} size="icon" />;
     }
     case "team": {
-      const name = key === "none" ? null : ctx.teamName(key);
-      return name ? <TeamMark name={name} id={key} /> : null;
+      const team = key === "none" ? null : ctx.team(key);
+      return team ? (
+        <TeamMark name={team.name} id={key} letters={team.mark} color={team.color} />
+      ) : null;
     }
     default:
       return null;

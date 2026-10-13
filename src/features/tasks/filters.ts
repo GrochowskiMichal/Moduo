@@ -23,6 +23,8 @@ import { type StatusKey, statusKeyOf } from "./statuses";
 
 export const TASK_FILTER_DIMENSIONS = [
   "assignee",
+  // TV-D13: the team a task is routed to.
+  "team",
   "creator",
   "tag",
   "status",
@@ -51,6 +53,7 @@ const YES_NO_DIMENSIONS: ReadonlySet<string> = new Set([
 
 export const TASK_FILTER_LABELS: Record<TaskFilterDimension, string> = {
   assignee: "Assignee",
+  team: "Team",
   creator: "Creator",
   tag: "Tag",
   status: "Status",
@@ -126,6 +129,8 @@ export function taskFilterValues(
   switch (dimension as TaskFilterDimension) {
     case "assignee":
       return [task.assigneeId ?? NONE_VALUE];
+    case "team":
+      return [task.teamId ?? NONE_VALUE];
     case "creator":
       // A creator lost before TV-D1 matches no one.
       return task.creatorUnknown || !task.creatorId ? [] : [task.creatorId];

@@ -34,6 +34,7 @@ describe("DEFAULT_PREFERENCES", () => {
         completed: true,
         dueFollowUp: true,
         waiting: true,
+        teams: true,
         overdueTasks: false,
         storage: true,
       },
@@ -77,6 +78,7 @@ describe("sanitizePreferences", () => {
         completed: true,
         dueFollowUp: false,
         waiting: true,
+        teams: true,
         overdueTasks: false,
         storage: true,
       },
@@ -116,6 +118,7 @@ describe("sanitizePreferences", () => {
       dueFollowUp: true,
       // A saved `unblocked: false` (before TV-D12) carries over to `waiting`.
       waiting: false,
+      teams: true,
       overdueTasks: false,
       storage: true,
     });
@@ -196,6 +199,11 @@ describe("notificationTypeForOp", () => {
     expect(notificationTypeForOp("tasks.reminder")).toBeNull();
     expect(notificationTypeForOp("attachments.storage_80")).toBe("storage");
     expect(notificationTypeForOp("attachments.storage_95")).toBe("storage");
+    // TV-D13: your team's mute; tasks back from someone who left are yours.
+    expect(notificationTypeForOp("tasks.routed")).toBe("teams");
+    expect(notificationTypeForOp("tasks.team_check_back")).toBe("teams");
+    expect(notificationTypeForOp("comments.team_mention")).toBe("teams");
+    expect(notificationTypeForOp("tasks.handed_back")).toBe("assigned");
   });
 
   it("returns null for ops outside the quiet set (legacy / future)", () => {
@@ -214,6 +222,7 @@ describe("isNotificationEnabled", () => {
       completed: false,
       dueFollowUp: true,
       waiting: false,
+      teams: false,
       overdueTasks: false,
       storage: false,
     };
@@ -244,6 +253,7 @@ describe("isNotificationEnabled", () => {
       completed: false,
       dueFollowUp: false,
       waiting: false,
+      teams: false,
       overdueTasks: false,
       storage: false,
     };

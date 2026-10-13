@@ -7,6 +7,7 @@
 
 import type { CommentReaction } from "@contracts/vocabularies";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 
 import type { CommentReactionMark, ModuoRuntime, SpineComment } from "@/lib/runtime.types";
 
@@ -19,9 +20,19 @@ export type CommentThread = {
   failed: boolean;
   reload: () => void;
   /** Post a comment; resolves when it's saved and the thread has reloaded. Throws on failure. */
-  post: (input: { body: string; mentionedUserIds: string[] }) => Promise<void>;
+  /** `mentionedTeamIds`: teams the comment names (TV-D13); each member hears once. */
+  post: (input: {
+    body: string;
+    mentionedUserIds: string[];
+    mentionedTeamIds?: string[];
+  }) => Promise<void>;
   /** Edit your own comment; shown at once, put back if refused. Throws on failure. */
-  edit: (input: { commentId: string; body: string; mentionedUserIds: string[] }) => Promise<void>;
+  edit: (input: {
+    commentId: string;
+    body: string;
+    mentionedUserIds: string[];
+    mentionedTeamIds?: string[];
+  }) => Promise<void>;
   /** Delete a comment (it leaves the thread at once); throws, and puts it back, on failure. */
   remove: (commentId: string) => Promise<void>;
   /** Undo a delete; throws on failure. */
@@ -107,9 +118,17 @@ export function useCommentThread({
   }, [read]);
 
   const post = useCallback(
-    async ({ body, mentionedUserIds }: { body: string; mentionedUserIds: string[] }) => {
+    async ({
+      body,
+      mentionedUserIds,
+      mentionedTeamIds = [],
+    }: {
+      body: string;
+      mentionedUserIds: string[];
+      mentionedTeamIds?: string[];
+    }) => {
       if (!runtime || !workspaceId) throw new Error("Not signed in.");
-      await runtime.spine.addComment({
+      const saved = await runtime.spine.addComment({
         workspaceId,
         entityType,
         entityId,
@@ -118,6 +137,7 @@ export function useCommentThread({
         entityLabel: labelRef.current.trim() || "Untitled",
         entityIcon,
       });
+      tellTeams(runtime, saved.id, mentionedTeamIds);
       await read();
     },
     [runtime, workspaceId, entityType, entityId, entityIcon, read],
@@ -144,16 +164,20 @@ export function useCommentThread({
       commentId,
       body,
       mentionedUserIds,
+      mentionedTeamIds = [],
     }: {
       commentId: string;
       body: string;
       mentionedUserIds: string[];
+      mentionedTeamIds?: string[];
     }) => {
       if (!runtime) throw new Error("Not signed in.");
       const before = commentsRef.current.find((c) => c.id === commentId);
       showComment(commentId, (c) => ({ ...c, body, editedAt: new Date().toISOString() }));
       try {
         const saved = await runtime.spine.editComment({ commentId, body, mentionedUserIds });
+        // A team named for the first time hears; one named before doesn't.
+        tellTeams(runtime, commentId, mentionedTeamIds);
         showComment(commentId, (c) => ({ ...saved, reactions: c.reactions }));
       } catch (e) {
         if (before) showComment(commentId, () => before);
@@ -210,4 +234,15 @@ export function useCommentThread({
   const reload = useCallback(() => void read(), [read]);
 
   return { comments, loading, failed, reload, post, edit, remove, restore, react };
+}
+
+/**
+ * Tell the teams a comment names (TV-D13). The comment is saved either way: a
+ * failure here only costs the team's notices, so it says so and moves on.
+ */
+function tellTeams(runtime: ModuoRuntime, commentId: string, teamIds: readonly string[]): void {
+  if (teamIds.length === 0) return;
+  void runtime.spine.mentionTeams({ commentId, teamIds: [...teamIds] }).catch(() => {
+    toast.error("The comment is saved, but its teams weren't told.");
+  });
 }

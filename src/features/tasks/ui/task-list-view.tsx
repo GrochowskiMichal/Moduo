@@ -1620,7 +1620,7 @@ export function TaskListView({
     () => ({
       bucketColor: (id: string) => buckets.find((b) => b.id === id)?.color ?? null,
       assignee: (id: string) => byId(id),
-      teamName: (id: string) => teams.find((t) => t.id === id)?.name ?? null,
+      team: (id: string) => teams.find((t) => t.id === id) ?? null,
     }),
     [buckets, byId, teams],
   );

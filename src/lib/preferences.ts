@@ -43,7 +43,9 @@ export type MotionPref = "system" | "reduced" | "full";
 // "@you" only) and `waiting` ("something you were waiting on came in": an
 // unblocked task or a Waiting on… entry that cleared; it replaces
 // `unblocked`, whose saved value it takes). Reminders have no switch: "turned
-// off by the reminder".
+// off by the reminder". TV-D13 adds `teams` ("your team's mute": a task routed
+// to a team you're in, `@Team` in a comment, and the check-back on a team task
+// you created that nobody took).
 export type NotificationType =
   | "mention"
   | "assigned"
@@ -51,6 +53,7 @@ export type NotificationType =
   | "completed"
   | "dueFollowUp"
   | "waiting"
+  | "teams"
   | "overdueTasks"
   | "storage";
 export type NotificationPrefs = Record<NotificationType, boolean>;
@@ -62,6 +65,7 @@ const NOTIFICATION_TYPES: ReadonlyArray<NotificationType> = [
   "completed",
   "dueFollowUp",
   "waiting",
+  "teams",
   "overdueTasks",
   "storage",
 ];
@@ -73,6 +77,7 @@ export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
   completed: true,
   dueFollowUp: true,
   waiting: true,
+  teams: true,
   // Opt-in: overdue work otherwise lives in Tasks/Home, not the bell (AC9).
   overdueTasks: false,
   // Only a workspace owner ever gets these (AT-1: the pool passed 80% / 95%).
@@ -99,6 +104,12 @@ const OP_TO_NOTIFICATION_TYPE: Record<string, NotificationType> = {
   "email.follow_up_due": "dueFollowUp",
   "tasks.unblocked": "waiting",
   "tasks.waiting_resolved": "waiting",
+  // TV-D13: your teams.
+  "tasks.routed": "teams",
+  "tasks.team_check_back": "teams",
+  "comments.team_mention": "teams",
+  // Tasks of yours that came back from someone who left (AC5.6).
+  "tasks.handed_back": "assigned",
   "attachments.storage_80": "storage",
   "attachments.storage_95": "storage",
 };
@@ -220,6 +231,7 @@ const notificationPrefsSchema = z
       completed: z.boolean().catch(true),
       dueFollowUp: z.boolean().catch(true),
       waiting: z.boolean().catch(true),
+      teams: z.boolean().catch(true),
       overdueTasks: z.boolean().catch(false),
       storage: z.boolean().catch(true),
     }),

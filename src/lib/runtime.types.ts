@@ -1177,6 +1177,12 @@ export type ModuoRuntime = {
       taskId: string;
       assigneeId: string | null;
     }): Promise<Task>;
+    /**
+     * Take an unclaimed task of a team you're in (TV-D13, `tasks_op_claim`):
+     * it becomes yours and keeps its team. Needs Edit on the task; one someone
+     * else took first is refused ("Someone already took this task.").
+     */
+    opClaim(input: { workspaceId: string; taskId: string }): Promise<Task>;
     opSetStatus(input: {
       workspaceId: string;
       taskId: string;
@@ -1355,6 +1361,12 @@ export type ModuoRuntime = {
     deleteComment(input: { commentId: string }): Promise<SpineComment>;
     /** Undo a comment's delete (`comments_op_restore`). */
     restoreComment(input: { commentId: string }): Promise<SpineComment>;
+    /**
+     * `@Team` in your own comment (TV-D13, `comments_op_mention_teams`): each
+     * member of those teams who can see the item hears once (never you, nor
+     * anyone the comment already reached). Call it after posting or editing.
+     */
+    mentionTeams(input: { commentId: string; teamIds: string[] }): Promise<void>;
     /** Add (`on`) or take back one of the six reactions; answers the comment's
      *  reactions after the change. Never notifies (REPLAN 88). */
     reactToComment(input: {

@@ -62,6 +62,63 @@ Built in tasks-v3 block 20 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §8, AC
   - Why: 82b's one pattern for every mode.
   - Rejected: Tasks drawing its own bar (the 3×3 layout has one bottom bar).
 
+## 2026-10-13 · TV-D13 Teams: routing, marks, settings — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 28 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §1, §13, §15, §17, AC5.1's server half, AC5.2, AC5.6's server half, AC5.7; REPLAN 20, 20a, 54, 94, 95, defaults s and t; migrations `20261013150000_teams_routing` and `20261013170000_teams_mention_once`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **D13-1 · Routing grants no access** → TV-D13 (`can_access` unchanged for teams, `tasks_op_claim`)
+  - Who: agent's choice, deferred to by Maciej (agreed with the orchestrator), 2026-10-13.
+  - Decision: a team member sees a task routed to the team only where they could see it anyway (a project shared with them, an assignment); being in a team, joining one, or having a task routed to it opens nothing. Taking a team's task needs Edit on it already. Settings says so where the default project is picked ("Pick one the team can open").
+  - Why: spec §54 and §Out of scope: "teams here only route"; sharing a project with a whole team is its own Tier-2 permissions spec. It also keeps default t safe: since a team grants nothing, any member may make teams and change their people.
+  - Rejected: a team rule in `can_access` (Edit for live members), and team-origin grants on each routed task; both turn membership into a share that bypasses project privacy.
+- **D13-2 · Taking a team's task** → TV-D13 (`tasks_op_claim`, `claimTask`, `unclaimedForMe`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: a live member of the task's team who can edit it takes an open (To do / In progress) unclaimed task in one op; it becomes theirs and keeps its team; the row is locked, so of two people taking it at once the second hears "Someone already took this task."; taking one you have is a no-op; a hidden task reads "Task not found", like a missing one. Giving it back is the ordinary unassign (it tells the team again, D13-4). No "unclaim" op.
+  - Why: AC5.2 "Take it claims"; one click, no race.
+  - Rejected: claiming Backlog or closed tasks; a separate unclaim op.
+- **D13-3 · An unfiled task given to someone goes to their Inbox (20, 20a)** → TV-D13 (`tasks__hand_to_inbox`, `tasks_op_assign`, `tasks_op_create`, `can_access`)
+  - Who: agent's choice, deferred to by Maciej (TV-U14 and TV-U13 left the server half here), 2026-10-13.
+  - Decision: assigning a top-level task that sits in your own Inbox to someone else moves it, with the subtasks you can edit, into their Inbox; a task made for someone with no project lands there too. Only your own unfiled tasks move this way (one in someone else's Inbox stays put, whoever assigns it). Its creator keeps Edit on it while it sits in someone else's Inbox ("Created by me"), for that task alone, ending when it's filed. Who may assign and the grant an assignment gives (PERM-1) are unchanged.
+  - Why: REPLAN 20 point 3 and 20a; "an unfiled task that belongs to someone else belongs to nobody" unless it moves, and the delegator must not lose it.
+  - Also: account erasure hands such a task back to its creator, the same as a plain removal (it used to be taken for private when nobody held a grant on it); an edit that assigns and sets a status applies the status first; the app drops a task it handed out of its own sight (someone else's task re-delegated) instead of waiting for the access check; and an Inbox task edited and assigned in one gesture sends the edit first, then the assignment.
+  - Rejected: a creator grant (it would outlive the Inbox), moving tasks out of other people's Inboxes.
+- **D13-4 · "Routed to your team": each member's own notice, once per hour** → TV-D13 (`tasks_notify_spine`, op `tasks.routed`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: when a task with nobody on it gets a team, or a team task is given back, each other member who can see it gets a notice of their own, hung on their own Inbox (like TV-D12's reminders), so nobody else reads it and it never names a task its reader can't see. One person's (or key's) routings to one team within the hour gather on each member's notice while that member hasn't read or dismissed it ("routed 4 tasks to Design"). A task routed with an assignee calls nobody. The op's own trail line says it was routed, so `tasks.routed` is a notice only.
+  - Why: default s; per-reader rows are the only way a gathered notice can't disclose another task.
+  - Also: only a task still to do (To do / In progress) calls the team; Backlog is parked (no notice, no check-back, not in the unclaimed block; it can still be taken, and moving it to To do doesn't call the team: a known limit). Whoever routed can read the rows they wrote (the notice table's actor rule): they learn which members could see the task, which a project's editor knows anyway; accepted.
+  - Rejected: one row for the team on the task (its readers saw the ids and count of other tasks), a notice for already-claimed tasks, writing the notices as Moduo (the card would lose who routed).
+- **D13-5 · The check-back** → TV-D13 (`tasks__team_check_backs`, cron `tasks-team-check-backs`, `team_routed_at`, `team_check_back_at`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: every 15 minutes, an open team task still unclaimed 3 days after it became the team's, or from 9:00 on the day before it's due (its creator's clock), sends its creator one check-back (from Moduo), at least an hour after the routing; once per stretch (routing it again or giving it back re-arms it); nothing for a creator who can't see it or has left, nor in an archived project. People can't write the two columns.
+  - Why: default s names the creator; 9:00 the day before reads as a check-back, not a ping a minute after routing.
+  - Known limit: a team task reopened from Done keeps its routing clock, so a 3-day check-back can follow soon after.
+  - Rejected: the router instead of the creator; checking back on Backlog.
+- **D13-6 · `@Team` in a comment** → TV-D13 (`comments_op_mention_teams`, the composer's `@` list, op `comments.team_mention`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the task comment box lists teams after people; after posting (or editing) the app tells the server which teams the text still names, and each member who can see the item hears once: never the author, nobody the comment already reached (named in person, told as a participant, or through a team before), a person in two named teams once. A separate op, so U13's `comments_op_add` stays as it is; a failure there leaves the comment saved and says so.
+  - Why: §13 "One notice each"; spec edge "everyone else in the team hears once; the author doesn't".
+  - Rejected: a team parameter on `comments_op_add` (a second signature on a function another block owns).
+- **D13-7 · "Your teams" is one switch** → TV-D13 (`preferences.ts`, Settings → Preferences)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: §13's "your team's mute" is one `teams` switch covering routed tasks, `@Team` mentions and the check-back on your own team task; tasks back from someone who left go under Assigned to me.
+  - Why: one more line in an existing list is easy to understand; mutes stay a read-side filter (D12-6).
+  - Rejected: a mute per team (another list to manage).
+- **D13-8 · Settings → Members and access → Teams** → TV-D13 (`teams-panel.tsx`, `access-section.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: a "Teams · n" group in the access rail (mark, name, people count; "New team" for Tasks editors); a team's pane says in one line what teams do, then name, letters (blank = from the name), colour (Automatic or one of the six avatar hues), default project, people (add/remove), and Delete for its creator, the owner or an admin. A delete waits out its Undo before reaching the server, so Undo brings back the team and its tasks' routing. Read from and written through the shared store.
+  - Why: §17 "Members → Teams"; easy for people new to Moduo (the hackathon's prepared workspaces).
+  - Rejected: a separate Teams section in the nav, deleting at once with a restore that can't give tasks their team back.
+- **D13-9 · Team marks keep a stable colour** → TV-D13 (`TeamMark color`, `teamHue`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: a team's mark uses the colour picked for it, else one worked out from its id (the same everywhere, unchanged by a rename); gray and red are kept for "nobody" and errors.
+  - Why: 95 "a stable colour".
+  - Rejected: storing a default colour on create (two sources of the same answer).
+- **D13-10 · Someone leaving the workspace (AC5.6, the server half)** → TV-D13 (`teams_member_removed`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: their team memberships end, projects they led lose their lead, and their Inbox is handed on: tasks others created go back to those creators' Inboxes (if they still work on tasks here), the rest to whoever removed them (else the owner), subtasks with their task, one quiet notice per person who received something (never the remover). What they had taken from a team goes back to the team (PRIV-2 unassigns). Private projects still go to the owner as PRIV-2 does; asking to hand them on first is TV-U16's.
+  - Why: "nothing is orphaned" (§15); an Inbox nobody can open orphans its tasks.
+  - Rejected: sending private projects to Recently deleted here (TV-U16's prompt decides).
 ## 2026-10-13 · TV-U10 List v3 — the agent's choices (deferred to by Maciej)
 
 Built in tasks-v3 block 14 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §4, AC11.2–11.5, AC3.5, AC1.5; research views-list-upcoming.md §1–3, §9; defaults i–n). Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
@@ -263,7 +320,7 @@ Built in tasks-v3 block 30 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §15, A
 - **D15-5 · Who sees templates and copies** → TV-D15 (`templates_op_update`, `templates__sources_full`)
   - Who: agent's choice, deferred to by Maciej, 2026-10-13 (after a security review of the first cut).
   - Decision:
-    - A template is its maker's until shared with the workspace. Saving one needs Tasks edit in the workspace and only takes what the saver can see; a hidden task's title or description never reaches a body.
+    - A template is its maker's until shared with the workspace. Saving one needs Tasks edit in the workspace and only takes what the saver can see; a hidden task's title or description never reaches a body. (Since D15-11, saving and duplicating need Edit on the source.)
     - Sharing a template, and changing a shared one, check again that the person has Full access to every project or task it was saved from and that each is still there (`source_ids`, which readers can't see).
     - A template saved from a project the workspace can't see asks before it's shared ("This includes n tasks from a private project. Share?"). While it stays private, a project made from it is private.
     - A copy of a project the workspace can't see is private.
@@ -307,6 +364,15 @@ Built in tasks-v3 block 30 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §15, A
     - Erasure deletes a person's templates, shared ones too. The data export carries yours and the shared ones with their bodies.
   - Why: the same shapes as the rest of v3 (Recently deleted, idempotent ops, §Assumptions #26).
   - Rejected: a hard delete without Undo.
+- **D15-11 · Copying needs Edit on the source** → TV-D15 follow-up (`20261013190000_templates_edit_to_copy`, `templates_can_copy`)
+  - Who: agent's choice (the Tasks v3 orchestrator's call on TV-D15's residual), deferred to by Maciej, 2026-10-13.
+  - Decision:
+    - "Duplicate project…" and "Save as template" (a project's or a task's, even one kept for yourself) need Edit on what they copy.
+    - A task template takes only the subtasks you can edit.
+    - Without Edit, the dialog says so ("You need edit access to this project to copy it." / "…to this task to save it as a template.") instead of offering the action. The app asks `templates_can_copy` when the dialog opens, and the server checks again on the copy.
+    - Using a template that's shared with you is unchanged: it needs Tasks edit in the workspace, as any new task does.
+  - Why: a copy is its maker's, and a copy made from view-only access could later be shared to people the source never reached.
+  - Rejected: keeping view-level duplication as "equivalent to copy-paste" (D15-5's first cut); hiding the menu items per project (the client doesn't know per-project edit access without asking).
 - **D15-10 · Known limits, kept on purpose** → TV-D15, a later migration if they matter
   - Who: agent's choice, deferred to by Maciej, 2026-10-13 (from the validator's review).
   - Decision:

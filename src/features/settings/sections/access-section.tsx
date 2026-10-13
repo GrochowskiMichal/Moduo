@@ -1,6 +1,7 @@
 import { Lock, Plus, UserPlus } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 
+import { TeamMark } from "../../../components/ui/avatar";
 import { Button } from "../../../components/ui/button";
 import {
   Dialog,
@@ -21,6 +22,7 @@ import { PersonAvatar } from "../access/access-ui";
 import { InvitePanel } from "../access/invite-panel";
 import { memberLabel, PersonEditor } from "../access/person-editor";
 import { RoleEditor, type RoleEditorTarget } from "../access/role-editor";
+import { NewTeamPane, TeamEditor, useWorkspaceTeams } from "../access/teams-panel";
 import { SettingsSectionShell } from "./section-shell";
 
 type Selection =
@@ -29,7 +31,9 @@ type Selection =
   | { kind: "person"; id: string }
   | { kind: "invite" }
   | { kind: "defaults" }
-  | { kind: "chat" };
+  | { kind: "chat" }
+  | { kind: "team"; id: string }
+  | { kind: "new-team" };
 
 function RailItem({
   selected,
@@ -67,7 +71,8 @@ function RailItem({
  * Settings → Members & access (PERM-1/2, specs/permissions.md).
  *
  * Roles (what kinds of things people can do) + people (role + personal
- * exceptions) + invites, in one master/detail pane. Everything here is
+ * exceptions) + invites + teams (TV-D13: who work is routed to), in one
+ * master/detail pane. Everything here is
  * enforced in Postgres; the UI mirrors the same rules to explain them and to
  * disable what would be refused.
  */
@@ -77,6 +82,7 @@ export function AccessSection() {
   const isOwner = selectedWorkspace?.role === "owner";
   const canInvite = isOwner || myPerms.includes("ws.invite");
   const canManageRoles = isOwner || myPerms.includes("ws.manage_roles");
+  const teams = useWorkspaceTeams();
 
   useEffect(() => {
     void refreshAccessData();
@@ -122,7 +128,10 @@ export function AccessSection() {
     ) {
       setSelection(null);
     }
-  }, [members, roles, selection]);
+    if (selection.kind === "team" && !teams.teams.some((t) => t.id === selection.id)) {
+      setSelection(null);
+    }
+  }, [members, roles, selection, teams.teams]);
 
   const select = (next: Selection) => {
     if (dirty) {
@@ -157,6 +166,9 @@ export function AccessSection() {
   const pendingInvites = invites.filter((i) => i.status === "pending");
   const selectedPerson =
     selection?.kind === "person" ? (members.find((m) => m.id === selection.id) ?? null) : null;
+  const selectedTeam =
+    selection?.kind === "team" ? (teams.teams.find((t) => t.id === selection.id) ?? null) : null;
+  const teamSize = (teamId: string) => teams.members.filter((m) => m.teamId === teamId).length;
 
   if (!selectedWorkspace) {
     return (
@@ -265,10 +277,50 @@ export function AccessSection() {
                 </>
               ) : null}
             </div>
+
+            {teams.available ? (
+              <div className="flex flex-col gap-0.5">
+                <Eyebrow className="px-2 pb-1">Teams · {teams.teams.length}</Eyebrow>
+                {teams.teams.map((team) => (
+                  <RailItem
+                    key={team.id}
+                    selected={selection?.kind === "team" && selection.id === team.id}
+                    onSelect={() => select({ kind: "team", id: team.id })}
+                    trailing={teamSize(team.id) || null}
+                  >
+                    <TeamMark
+                      name={team.name}
+                      id={team.id}
+                      letters={team.mark}
+                      color={team.color}
+                    />
+                    <span className="truncate">{team.name}</span>
+                  </RailItem>
+                ))}
+                {teams.canEdit ? (
+                  <RailItem
+                    selected={selection?.kind === "new-team"}
+                    onSelect={() => select({ kind: "new-team" })}
+                  >
+                    <Plus className="size-3.5 shrink-0" aria-hidden />
+                    <span>New team</span>
+                  </RailItem>
+                ) : teams.teams.length === 0 ? (
+                  <p className="px-2 text-xs text-muted-foreground">No teams yet.</p>
+                ) : null}
+              </div>
+            ) : null}
           </nav>
 
           <div className="min-w-0">
-            {selection?.kind === "invite" ? (
+            {selection?.kind === "new-team" ? (
+              <NewTeamPane
+                teams={teams}
+                onCreated={(team) => setSelection({ kind: "team", id: team.id })}
+              />
+            ) : selectedTeam ? (
+              <TeamEditor key={selectedTeam.id} team={selectedTeam} teams={teams} />
+            ) : selection?.kind === "invite" ? (
               <InvitePanel />
             ) : selection?.kind === "defaults" && selectedWorkspace ? (
               <ShareDefaultsPanel workspaceId={selectedWorkspace.id} />

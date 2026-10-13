@@ -131,7 +131,9 @@ export function CapturePills({
     someoneElse || team ? (
       <span className="flex min-w-0 items-center gap-1.5">
         {someoneElse ? <PersonAvatar name={nameOf(people, someoneElse)} id={someoneElse} /> : null}
-        {team ? <TeamMark name={team.name} id={team.id} letters={team.mark || null} /> : null}
+        {team ? (
+          <TeamMark name={team.name} id={team.id} letters={team.mark || null} color={team.color} />
+        ) : null}
         <span className="truncate">
           {someoneElse
             ? team
@@ -194,7 +196,7 @@ export function CapturePills({
                       onChange({ field: "team", value: values.teamId === t.id ? null : t.id })
                     }
                   >
-                    <TeamMark name={t.name} id={t.id} letters={t.mark || null} />
+                    <TeamMark name={t.name} id={t.id} letters={t.mark || null} color={t.color} />
                     <span className="truncate">{t.name}</span>
                     {values.teamId === t.id ? <Check className="ms-auto" aria-hidden /> : null}
                   </DropdownMenuItem>
