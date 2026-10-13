@@ -273,8 +273,24 @@ describe("Focus: the empty state teaches three ways in (AC8.9, call 66)", () => 
     const api = fakeApi([], {
       all: [a, b],
       sessions: [
-        { id: "s1", workspaceId: WS, taskId: "a", userId: USER, startsAt: at(1), endsAt: at(2), updatedAt: at(0) },
-        { id: "s2", workspaceId: WS, taskId: "b", userId: USER, startsAt: at(0), endsAt: at(1), updatedAt: at(0) },
+        {
+          id: "s1",
+          workspaceId: WS,
+          taskId: "a",
+          userId: USER,
+          startsAt: at(1),
+          endsAt: at(2),
+          updatedAt: at(0),
+        },
+        {
+          id: "s2",
+          workspaceId: WS,
+          taskId: "b",
+          userId: USER,
+          startsAt: at(0),
+          endsAt: at(1),
+          updatedAt: at(0),
+        },
       ],
     });
     const onSelectTask = rs.fn();

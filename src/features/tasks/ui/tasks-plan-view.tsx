@@ -49,7 +49,7 @@ import {
   usePreferencesValue,
 } from "../../../lib/preferences";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
-import { undoToast } from "../../../lib/undo-toast";
+import { UNDO_TOAST_MS, undoToast } from "../../../lib/undo-toast";
 import { HubDropZone } from "../../contacts/ui/hub-drop-zone";
 import { consumeFocusViewRequest, FOCUS_VIEW_REQUEST_EVENT } from "../../focus/view-request";
 import { looksLikeHandle } from "../../spine/grammar";
@@ -651,7 +651,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       if (started && selection !== "today") {
         const title = tasks.find((t) => t.id === id)?.title || "Untitled";
         toast(`Focusing on “${title}”`, {
-          description: "It’s at the top of Up next.",
+          duration: UNDO_TOAST_MS,
           action: { label: "Open Focus", onClick: openFocus },
         });
       }

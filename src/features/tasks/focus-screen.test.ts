@@ -72,9 +72,9 @@ describe("upNextLines: project dividers (62)", () => {
       "|bugs",
       "d",
     ]);
-    expect(lines.filter((l) => l.kind === "task").map((l) => l.kind === "task" && l.number)).toEqual(
-      [1, 2, 3, 4],
-    );
+    expect(
+      lines.filter((l) => l.kind === "task").map((l) => l.kind === "task" && l.number),
+    ).toEqual([1, 2, 3, 4]);
   });
 
   it("a line-up in one project has no dividers", () => {
@@ -102,9 +102,9 @@ describe("upNextSummary: '· 4 · ~1h'", () => {
 
 describe("pillReading: one number per job (62, 62a, 63)", () => {
   it("no estimate: this sitting's clock alone", () => {
-    expect(pillReading({ sitting: 65, total: 65, estimateMinutes: null, countdown: false })).toEqual(
-      { clock: "1:05", note: null, over: false },
-    );
+    expect(
+      pillReading({ sitting: 65, total: 65, estimateMinutes: null, countdown: false }),
+    ).toEqual({ clock: "1:05", note: null, over: false });
   });
 
   it("'18:02 of ~45m' when nothing was tracked before this sitting", () => {
@@ -127,15 +127,15 @@ describe("pillReading: one number per job (62, 62a, 63)", () => {
     expect(pillReading({ sitting: 600, total: 600, estimateMinutes: 45, countdown: true })).toEqual(
       { clock: "35:00", note: "left", over: false },
     );
-    expect(pillReading({ sitting: 2830, total: 2830, estimateMinutes: 45, countdown: true })).toEqual(
-      { clock: "+2:10", note: null, over: true },
-    );
+    expect(
+      pillReading({ sitting: 2830, total: 2830, estimateMinutes: 45, countdown: true }),
+    ).toEqual({ clock: "+2:10", note: null, over: true });
   });
 
   it("Count down with no estimate counts up (63)", () => {
-    expect(pillReading({ sitting: 30, total: 30, estimateMinutes: null, countdown: true }).clock).toBe(
-      "0:30",
-    );
+    expect(
+      pillReading({ sitting: 30, total: 30, estimateMinutes: null, countdown: true }).clock,
+    ).toBe("0:30");
   });
 });
 

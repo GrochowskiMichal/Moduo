@@ -22,9 +22,9 @@ rs.mock("../assignees", () => ({
 }));
 
 import { TooltipProvider } from "../../../components/ui/tooltip";
+import { setRunClaims } from "../../focus/claims";
 import { makeTask } from "../helpers";
 import type { Task } from "../model";
-import { setRunClaims } from "../../focus/claims";
 import { QueueToggle, withoutPeopleOnIt } from "./queue-toggle";
 import { type TaskFacts, taskFactsOf } from "./row-facts";
 import { TaskBoardView } from "./task-board-view";

@@ -474,19 +474,22 @@ function QueueButton({
       {claimMark}
       <Tooltip>
         <TooltipTrigger asChild>
+          {/* An icon, like ⤢ and ⋯ beside it: the breadcrumb keeps the room
+              (a 280 px panel), and ▶ "Focus on this" sits next to it. */}
           <Button
             type="button"
             variant={queued ? "secondary" : "ghost"}
-            size="sm"
+            size="icon"
             aria-pressed={queued}
+            aria-label={queued ? "In Focus" : "Add to Focus"}
             onClick={() => api.toggleQueue(task.id)}
-            className="shrink-0 px-2"
+            className="shrink-0"
           >
             <ListChecks className={queued ? "text-primary" : "text-muted-foreground"} aria-hidden />
-            {queued ? "In Focus" : "Add to Focus"}
           </Button>
         </TooltipTrigger>
         <TooltipContent>
+          {queued ? "In Focus · " : ""}
           {action} <Kbd>Q</Kbd>
         </TooltipContent>
       </Tooltip>

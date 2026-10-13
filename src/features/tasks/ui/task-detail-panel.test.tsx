@@ -303,7 +303,7 @@ describe("the Focus toggle lives in the header (U3-3; call 61 renamed the Queue)
     renderPanel(task(), a);
     const queue = screen.getAllByRole("button", { name: /to Focus|in Focus/i });
     expect(queue).toHaveLength(1);
-    expect(queue[0].textContent).toBe("Add to Focus");
+    expect(queue[0].getAttribute("aria-label")).toBe("Add to Focus");
     expect(queue[0].getAttribute("aria-pressed")).toBe("false");
     expect(screen.queryByText("Commit to Queue")).toBeNull();
     expect(screen.queryByRole("button", { name: /queue/i })).toBeNull();
