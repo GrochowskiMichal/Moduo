@@ -1,6 +1,6 @@
 # Chat v2 — the re-plan
 
-> **Status (2026-10-13): round 3 being prepared (prototype round-3.html built; tech-stack blueprint for Mike running).**
+> **Status (2026-10-13): round 3 sent (prototype round-3.html; questions in §8 group H). Waiting on Maciej. Tech-stack blueprint for Mike still running.**
 >
 > - **Decided since round 1:** CH4a; CH29 = A (Slack calm) as the base, with centred dates and a fade at both ends; CH29b (three quick reactions, Reply before Task, agent's choice); tidying up afterwards (CH30, round 3 frame 6).
 > - **Open, organized in §8 group H:** CH29d "New" line, CH29e composer, CH29f spacing, CH29a 15 px, CH29c past dates, CH30a replies in the stream, CH30b fold when tangled, CH30c who moves others' messages, CH28a dot colour, CH28c statuses, CH28b where state shows, and the quick confirmations CH3a, CH16a, CH16b, CH23a, CH26a.
