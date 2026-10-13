@@ -220,6 +220,7 @@ describe("Tasks Display — controls per scope and layout", () => {
       "Priority",
       "Project",
       "Area",
+      "Waiting on",
     ]);
     expect(option("b1", "boardGroup")).toEqual([
       "Status",
@@ -227,6 +228,7 @@ describe("Tasks Display — controls per scope and layout", () => {
       "Assignee",
       "Team",
       "Priority",
+      "Waiting on",
     ]);
     expect(option("b1", "boardGroup", false)).not.toContain("Team");
     expect(option("all", "boardGroup", true, false)).not.toContain("Area");

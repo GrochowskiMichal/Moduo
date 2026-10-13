@@ -295,6 +295,7 @@ export function TaskBoardView({
       assignees,
       areas: api.areas,
       statusFilter,
+      waiting: api.waiting,
     }),
     [
       selection,
@@ -310,6 +311,7 @@ export function TaskBoardView({
       assignees,
       api.areas,
       statusFilter,
+      api.waiting,
     ],
   );
   const groupDim = effectiveBoardGroup(boardCtx);
@@ -670,7 +672,15 @@ export function TaskBoardView({
       ctx: dropContext(task),
     });
     if (decision.kind === "ask-manual") askManualOrder();
-    else if (decision.kind === "write") {
+    else if (decision.kind === "waiting") {
+      // A Waiting on column: the task (or the selection) waits on it too, with Undo.
+      const multi = selectionRef.current.multiSelect;
+      const ids =
+        multi && multi.ids.size >= 2 && multi.ids.has(task.id)
+          ? inViewOrder(multi.ids, selectionRef.current.order)
+          : [task.id];
+      void api.bulkWaiting(ids, decision.entry, dest.column.label, api.waiting);
+    } else if (decision.kind === "write") {
       // A card of a selection carries the selection (TV-U12): one write, one Undo.
       const multi = selectionRef.current.multiSelect;
       if (multi && multi.ids.size >= 2 && multi.ids.has(task.id)) {
@@ -738,6 +748,9 @@ export function TaskBoardView({
         ctx: dropContext(task),
       });
       if (decision.kind === "write") void api.dropTask(decision.write, decision.label);
+      if (decision.kind === "waiting") {
+        void api.bulkWaiting([task.id], decision.entry, column.label, api.waiting);
+      }
       return;
     }
   };

@@ -44,6 +44,7 @@ import { AssigneeAvatar } from "./assignee-avatar";
 import { BulkPickerDialog, type BulkPickerItem } from "./bulk-picker";
 import { DayPickerDialog } from "./day-picker-dialog";
 import { RepeatMoveDialog } from "./repeat-move-dialog";
+import { publishSelectionMenu, type SelectionMenu } from "./selection-menu";
 import { StatusIcon } from "./status-icon";
 
 export type BulkPickerKind =
@@ -298,6 +299,28 @@ export function useBulkActions({
     };
   }, [multi, canEdit, count, allClosed, hasSections, hasTeams, complete, focus, remove, setPicker]);
   useBottomBarModeOwner(mode);
+
+  // Right-clicking one of the selected tasks offers the same (82a).
+  const menu = useMemo<SelectionMenu | null>(
+    () =>
+      multi && canEdit
+        ? {
+            ids: new Set(ids),
+            allClosed,
+            sections: hasSections,
+            teams: hasTeams,
+            complete,
+            focus,
+            remove,
+            open: setPicker,
+          }
+        : null,
+    [multi, canEdit, ids, allClosed, hasSections, hasTeams, complete, focus, remove, setPicker],
+  );
+  useEffect(() => {
+    publishSelectionMenu(menu);
+    return () => publishSelectionMenu(null);
+  }, [menu]);
 
   // ── the pickers ───────────────────────────────────────────────────────────
   const close = useCallback(() => setPicker(null), [setPicker]);
