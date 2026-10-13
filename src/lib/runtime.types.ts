@@ -52,6 +52,7 @@ import type {
   TagLink,
   Task,
   TaskCompletion,
+  TaskCycle,
   TaskQueueEntry,
   TaskRelation,
   TaskStatus,
@@ -1194,6 +1195,25 @@ export type ModuoRuntime = {
       releaseCommit: boolean;
     }): Promise<Task>;
     /**
+     * "Move just this one" (TV-D12): move this cycle's due date or its work
+     * session's start; the other date moves by the same days and the rule
+     * stays (the next cycle is back on the pattern). One of the two.
+     */
+    opMoveOccurrence(input: {
+      workspaceId: string;
+      taskId: string;
+      dueOn?: string | null;
+      startsAt?: string | null;
+    }): Promise<Task>;
+    /** A repeat's cycles, done and skipped, with your own tracked time (TV-D12). */
+    taskHistory(input: { workspaceId: string; taskId: string }): Promise<TaskCycle[]>;
+    /** Notify the people picked by `@` in a task's description (TV-D12). */
+    mentionInTask(input: {
+      workspaceId: string;
+      taskId: string;
+      userIds: string[];
+    }): Promise<number>;
+    /**
      * Ask the server to roll this workspace's repeats over now (TV-D8): it
      * answers with what changed, plus the tasks named in `items`, as it has
      * them. Builds since TV-D8 send no items; the server's engine decides.
@@ -1335,6 +1355,18 @@ export type ModuoRuntime = {
      * groups these by target then verb.
      */
     listNotifications(input: { workspaceId: string; limit?: number }): Promise<NotificationItem[]>;
+    /**
+     * Register this browser for Web Push notices (TV-D12): the subscription's
+     * endpoint (a known push service) and keys, for the signed-in person.
+     */
+    pushSubscribe(input: {
+      endpoint: string;
+      p256dh: string;
+      auth: string;
+      userAgent?: string | null;
+    }): Promise<void>;
+    /** Forget this browser's Web Push subscription (only your own). */
+    pushUnsubscribe(input: { endpoint: string }): Promise<void>;
     /** Mark one notification (activity row) read. Idempotent. */
     markNotificationRead(input: { workspaceId: string; activityId: string }): Promise<void>;
     /** Mark every targeting-me notification in the workspace read. */

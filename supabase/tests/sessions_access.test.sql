@@ -381,8 +381,9 @@ $$;
 
 -- ── System work never fills the caller's calendar ───────────────────────────
 -- The repeat engine's catch-up runs as system work from whichever app calls
--- it: a repeat with no time yet gets today's occurrence, and its session is
--- the creator's (who may hold it), never the caller's.
+-- it: a repeat with no date gets today's occurrence as its due date (TV-D12:
+-- a date alone is a due date) and no calendar block at all; a session it
+-- moves stays its person's, never the caller's.
 DO $$
 DECLARE
   r text;
@@ -392,27 +393,33 @@ BEGIN
       VALUES (%L, %L, %L, %L, NULL, 'Daily private', 'todo', %L::jsonb), (%L, %L, %L, %L, NULL, 'Daily shared', 'todo', %L::jsonb)$q$,
     test.id('CU1'), test.id('W'), test.id('PB'), test.id('O'), v_rule,
     test.id('CU2'), test.id('W'), test.id('SB'), test.id('O'), v_rule));
-  -- A third, made by A, who is then made a viewer: nobody may hold its session.
+  -- A third, made by A, who is then made a viewer.
   PERFORM test.as_op('A', format($q$INSERT INTO public.tasks (id, workspace_id, bucket_id, owner_id, assignee_id, title, status, recurrence)
       VALUES (%L, %L, %L, %L, NULL, 'Daily of A', 'todo', %L::jsonb)$q$,
     test.id('CU3'), test.id('W'), test.id('SB'), test.id('A'), v_rule));
+  -- A fourth with O's work session three days ago.
+  PERFORM test.as_op('O', format($q$INSERT INTO public.tasks (id, workspace_id, bucket_id, owner_id, assignee_id, title, status, recurrence, scheduled_at)
+      VALUES (%L, %L, %L, %L, NULL, 'Daily block', 'todo', %L::jsonb, %L)$q$,
+    test.id('CU4'), test.id('W'), test.id('SB'), test.id('O'), v_rule, now() - interval '10 days' + interval '7 days'));
   UPDATE public.workspace_members SET role = 'viewer' WHERE workspace_id = test.id('W') AND user_id = test.id('A');
   r := test.as_user('E', format($q$SELECT * FROM public.tasks_op_catch_up(%L, '[]'::jsonb)$q$, test.id('W')));
   UPDATE public.workspace_members SET role = 'member' WHERE workspace_id = test.id('W') AND user_id = test.id('A');
-  PERFORM test.ok((SELECT scheduled_at FROM public.tasks WHERE id = test.id('CU3')) IS NOT NULL
-              AND (SELECT count(*) FROM public.task_sessions WHERE task_id = test.id('CU3') AND deleted_at IS NULL AND user_id IS NULL) = 1
-              AND NOT EXISTS (SELECT 1 FROM public.task_sessions WHERE task_id = test.id('CU3') AND user_id IS NOT NULL),
-    'path: the repeat engine — with no one who may hold it, the session is nobody''s (never the caller''s)');
+  PERFORM test.ok((SELECT due_on FROM public.tasks WHERE id = test.id('CU3')) = (now() AT TIME ZONE 'UTC')::date
+              AND (SELECT scheduled_at FROM public.tasks WHERE id = test.id('CU3')) IS NULL
+              AND NOT EXISTS (SELECT 1 FROM public.task_sessions WHERE task_id = test.id('CU3')),
+    'path: the repeat engine — a dateless repeat gets today as its due date, and no session');
   PERFORM test.ok(NOT EXISTS (SELECT 1 FROM public.tasks__busy_sessions(test.id('W'), test.id('E'), now() - interval '2 days', now() + interval '2 days') b
                               JOIN public.task_sessions s ON s.starts_at = b.starts_at AND s.task_id = test.id('CU3')),
     'and it blocks no one''s booking links');
-  PERFORM test.ok(r LIKE 'ok%' AND (SELECT scheduled_at FROM public.tasks WHERE id = test.id('CU1')) IS NOT NULL
-              AND (SELECT scheduled_at FROM public.tasks WHERE id = test.id('CU2')) IS NOT NULL,
-    'the catch-up from E''s app gave both repeats today''s occurrence', r);
-  PERFORM test.ok((SELECT count(*) FROM public.tasks WHERE id IN (test.id('CU1'), test.id('CU2')) AND assignee_id IS NULL) = 2
-              AND test.people('CU1') = 'O' AND test.people('CU2') = 'O',
-    'path: the repeat engine — the session is the creator''s, never the caller''s',
-    coalesce(test.people('CU1'), '-') || ' / ' || coalesce(test.people('CU2'), '-'));
+  PERFORM test.ok(r LIKE 'ok%' AND (SELECT due_on FROM public.tasks WHERE id = test.id('CU1')) IS NOT NULL
+              AND (SELECT due_on FROM public.tasks WHERE id = test.id('CU2')) IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM public.task_sessions WHERE task_id IN (test.id('CU1'), test.id('CU2'))),
+    'the catch-up from E''s app gave both repeats today''s occurrence, in nobody''s calendar', r);
+  PERFORM test.ok(test.people('CU4') = 'O'
+              AND public.tasks__local_date((SELECT scheduled_at FROM public.tasks WHERE id = test.id('CU4')), 'UTC')
+                  = (now() AT TIME ZONE 'UTC')::date,
+    'path: the repeat engine — a session it moves stays its person''s, never the caller''s',
+    coalesce(test.people('CU4'), '-'));
 END;
 $$;
 

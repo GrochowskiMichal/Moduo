@@ -258,6 +258,38 @@ export function normalizeTaskReminderKind(input: unknown): TaskReminderKind {
   return isTaskReminderKind(input) ? input : "at";
 }
 
+/** How a repeat counts its next occurrence (REPLAN 27 b): by its rule, or
+ *  from the day it was done ("after_completion"; no value = by the rule).
+ *  Postgres: tasks__recurrence_problem accepts only these. */
+export const RECURRENCE_MODES = ["after_completion"] as const;
+export type RecurrenceMode = (typeof RECURRENCE_MODES)[number];
+export const recurrenceModeSchema = z.enum(RECURRENCE_MODES);
+export function isRecurrenceMode(value: unknown): value is RecurrenceMode {
+  return typeof value === "string" && (RECURRENCE_MODES as readonly string[]).includes(value);
+}
+export function parseRecurrenceMode(input: unknown): SafeParseResult<RecurrenceMode> {
+  return parseOrError(recurrenceModeSchema, input);
+}
+/** Lax read: an unknown mode reads as "by the rule" (undefined). */
+export function normalizeRecurrenceMode(input: unknown): RecurrenceMode | undefined {
+  return isRecurrenceMode(input) ? input : undefined;
+}
+
+/** What a notice to a person's devices is about (TV-D12, `notice_deliveries.kind`). */
+export const NOTICE_DELIVERY_KINDS = ["reminder"] as const;
+export type NoticeDeliveryKind = (typeof NOTICE_DELIVERY_KINDS)[number];
+export const noticeDeliveryKindSchema = z.enum(NOTICE_DELIVERY_KINDS);
+export function isNoticeDeliveryKind(value: unknown): value is NoticeDeliveryKind {
+  return typeof value === "string" && (NOTICE_DELIVERY_KINDS as readonly string[]).includes(value);
+}
+export function parseNoticeDeliveryKind(input: unknown): SafeParseResult<NoticeDeliveryKind> {
+  return parseOrError(noticeDeliveryKindSchema, input);
+}
+/** Lax read: an unknown kind reads as a reminder (the only kind so far). */
+export function normalizeNoticeDeliveryKind(input: unknown): NoticeDeliveryKind {
+  return isNoticeDeliveryKind(input) ? input : "reminder";
+}
+
 /** What a Waiting on… entry waits on (default q): a person, an email thread,
  *  an agent (an API key) or free text. */
 export const TASK_WAITING_KINDS = ["person", "email", "agent", "text"] as const;

@@ -13,6 +13,7 @@ import { forgetCaptureDrafts, keepCaptureDraftsOf } from "../features/tasks/capt
 import { forgetRememberedWorkspaces } from "../features/workspaces/remembered-workspaces";
 import { Analytics, setAnalyticsUser } from "../lib/analytics";
 import { sendDeviceTimeZone } from "../lib/device-time-zone";
+import { forgetBrowserPush, postPushUser } from "../lib/notices/browser-push";
 import {
   initRuntime,
   type ModuoRuntime,
@@ -186,6 +187,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
         // and the remembered workspace list go (TV-D11a).
         void wipeSyncCopies();
         forgetRememberedWorkspaces();
+        // This browser's notices stop showing the person's words (TV-D12).
+        void forgetBrowserPush(null);
       } else if (!uid) {
         void setAnalyticsUser(null);
       }
@@ -214,12 +217,17 @@ export function AuthProvider({ children }: PropsWithChildren) {
     void attachSyncUser(sessionUserId);
     // Another person's kept capture drafts go too (TV-U14).
     if (sessionUserId) keepCaptureDraftsOf(sessionUserId);
+    // The push worker shows a notice's words only to who's signed in (TV-D12).
+    void postPushUser(sessionUserId);
   }, [loading, sessionUserId]);
 
   const signOut = async () => {
     if (!rt) return;
     // Tracked first (if they opted in); the SIGNED_OUT that follows opts analytics out.
     void Analytics.app.signedOut();
+    // While the session still works: this browser stops getting the person's
+    // notices (TV-D12).
+    await forgetBrowserPush(rt);
     await rt.auth.signOut();
     // The person chose to sign out: their Tasks device copy goes even when
     // auth-js couldn't end the session (offline with an expired token, so no

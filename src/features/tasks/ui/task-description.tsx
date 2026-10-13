@@ -115,6 +115,17 @@ export function TaskDescription({
             if (html !== task.description) api.patchTask(task.id, { description: html });
           }}
           onFiles={onFiles}
+          // TV-D12: an @person in the description notifies them (people who
+          // can see the task; the server checks).
+          onMentionPerson={
+            runtime && workspaceId
+              ? async (memberId) => {
+                  await runtime.tasks
+                    .mentionInTask({ workspaceId, taskId: task.id, userIds: [memberId] })
+                    .catch(() => undefined);
+                }
+              : undefined
+          }
         />
       </div>
       {foldable && !editing && (overflow.folds || expanded) ? (

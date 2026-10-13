@@ -150,6 +150,7 @@ import {
   taskCreateOpInput,
   taskCreateRow,
   taskCreateRowLegacy,
+  taskCyclesFromJson,
   taskPatchToColumns,
   taskPatchToOpFields,
   taskQueueRowToModel,
@@ -2857,6 +2858,35 @@ export const webRuntime: ModuoRuntime = {
       });
     },
 
+    async opMoveOccurrence({ workspaceId, taskId, dueOn, startsAt }) {
+      return taskOpRpc("tasks_op_move_occurrence", {
+        p_workspace_id: workspaceId,
+        p_task_id: taskId,
+        p_due_on: dueOn ?? null,
+        p_starts_at: startsAt ?? null,
+      });
+    },
+
+    async taskHistory({ workspaceId, taskId }) {
+      const { data, error } = await supabaseClient.rpc("tasks_op_history", {
+        p_workspace_id: workspaceId,
+        p_task_id: taskId,
+      });
+      if (error) throw new Error(error.message);
+      return taskCyclesFromJson(data);
+    },
+
+    async mentionInTask({ workspaceId, taskId, userIds }) {
+      if (userIds.length === 0) return 0;
+      const { data, error } = await supabaseClient.rpc("tasks_op_mention", {
+        p_workspace_id: workspaceId,
+        p_task_id: taskId,
+        p_user_ids: userIds,
+      });
+      if (error) throw new Error(error.message);
+      return typeof data === "number" ? data : 0;
+    },
+
     async opCatchUp({ workspaceId, items }) {
       const { data, error } = await supabaseClient.rpc("tasks_op_catch_up", {
         p_workspace_id: workspaceId,
@@ -3120,6 +3150,21 @@ export const webRuntime: ModuoRuntime = {
       });
       if (error) throw new Error(error.message);
       return mapKnownRows(data, notificationRowToModel);
+    },
+
+    async pushSubscribe({ endpoint, p256dh, auth, userAgent }) {
+      const { error } = await supabaseClient.rpc("push_op_subscribe", {
+        p_endpoint: endpoint,
+        p_p256dh: p256dh,
+        p_auth: auth,
+        p_user_agent: userAgent ?? null,
+      });
+      if (error) throw new Error(error.message);
+    },
+
+    async pushUnsubscribe({ endpoint }) {
+      const { error } = await supabaseClient.rpc("push_op_unsubscribe", { p_endpoint: endpoint });
+      if (error) throw new Error(error.message);
     },
 
     async markNotificationRead({ workspaceId, activityId }) {
