@@ -6,7 +6,8 @@
 -- 2. `comment_reactions`: who reacted with which of the six (👍 ✅ 👀 🙏 ❤️ 😄,
 --    stored as words; COMMENT_REACTIONS in @contracts/vocabularies). Read by
 --    whoever can read the comment (its own RLS); written only by the op.
--- 3. One gate for the item a comment is on, `comments__item_level`: a task's
+-- 3. One gate for the item a comment is on (`comments__item_seen`, and
+--    `comments__item_level` for Full): a task's
 --    (tasks__visible; can_access … 'full'), a note's (can_access), the other
 --    known types' (comments__item_visible_to), and nobody for an unknown type.
 --    The comments read policy is redefined onto it, so reading and every op
@@ -61,11 +62,24 @@ CREATE POLICY comment_reactions_read ON public.comment_reactions
 
 -- ── 3. Ops ────────────────────────────────────────────────────────────────────
 
+-- Whether the caller can see the item a comment is on (a key acts as its
+-- creator): the comments read policy asks this, row by row, so it never
+-- pays for the Full check below.
+CREATE OR REPLACE FUNCTION public.comments__item_seen(p_workspace_id uuid, p_type text, p_id uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+  SELECT public.comments__item_visible_to(p_workspace_id, p_type, p_id, public.perm_actor_id())
+$$;
+
 -- How far the caller reaches the item a comment is on: 'full', 'view' (sees
--- it, without Full) or 'none'. Tasks and notes must be in the comment's
--- workspace; other items (contacts, events, email threads…) are seen or not,
--- and nobody has Full on them here. Workspace membership is the callers' own
--- check (the spine guard, comments__find). A key acts as its creator.
+-- it, without Full) or 'none'. Full exists only on a task proper and a note
+-- ('task_project' names a task under an older registry type and stays
+-- 'view'); other known items are seen or not; an unknown type is nobody's.
+-- Workspace membership is the callers' own check (the spine guard,
+-- comments__find).
 CREATE OR REPLACE FUNCTION public.comments__item_level(p_workspace_id uuid, p_type text, p_id uuid)
 RETURNS text
 LANGUAGE plpgsql
@@ -73,28 +87,10 @@ STABLE SECURITY DEFINER
 SET search_path TO 'public'
 AS $$
 BEGIN
-  IF p_type IN ('task', 'task_project') THEN
-    IF NOT EXISTS (SELECT 1 FROM public.tasks t WHERE t.id = p_id AND t.workspace_id = p_workspace_id) THEN
-      RETURN 'none';
-    END IF;
-    IF NOT public.tasks__visible(p_id) THEN RETURN 'none'; END IF;
-    -- 'task_project' names a task under an older registry type: only a task
-    -- proper takes the Full path.
-    IF p_type = 'task' AND public.can_access('task', p_id, 'full') THEN RETURN 'full'; END IF;
-    RETURN 'view';
-  ELSIF p_type = 'note' THEN
-    IF NOT EXISTS (SELECT 1 FROM public.notes n WHERE n.id = p_id AND n.workspace_id = p_workspace_id) THEN
-      RETURN 'none';
-    END IF;
-    IF NOT public.can_access('note', p_id, 'view') THEN RETURN 'none'; END IF;
-    IF public.can_access('note', p_id, 'full') THEN RETURN 'full'; END IF;
-    RETURN 'view';
-  ELSIF p_type IN ('bucket', 'contact', 'company', 'event', 'email_thread', 'email_account', 'calendar_account') THEN
-    RETURN CASE WHEN public.comments__item_visible_to(p_workspace_id, p_type, p_id, public.perm_actor_id())
-                THEN 'view' ELSE 'none' END;
-  END IF;
-  -- Any other type: nobody (never "everyone in the workspace").
-  RETURN 'none';
+  IF NOT public.comments__item_seen(p_workspace_id, p_type, p_id) THEN RETURN 'none'; END IF;
+  IF p_type = 'task' AND public.can_access('task', p_id, 'full') THEN RETURN 'full'; END IF;
+  IF p_type = 'note' AND public.can_access('note', p_id, 'full') THEN RETURN 'full'; END IF;
+  RETURN 'view';
 END;
 $$;
 
@@ -139,7 +135,7 @@ DROP POLICY IF EXISTS comments_workspace_read ON public.comments;
 CREATE POLICY comments_workspace_read ON public.comments
   FOR SELECT TO authenticated
   USING (public.tasks_module_can_access_workspace(workspace_id)
-         AND public.comments__item_level(workspace_id, entity_type, entity_id) <> 'none');
+         AND public.comments__item_seen(workspace_id, entity_type, entity_id));
 
 -- A person (never an app over a key), a member of the comment's workspace
 -- who can comment there and can see the item: the comment, locked. Anyone
@@ -159,7 +155,7 @@ BEGIN
   SELECT * INTO v FROM public.comments WHERE id = p_comment_id FOR UPDATE;
   IF NOT FOUND
      OR NOT public.tasks_module_can_access_workspace(v.workspace_id)
-     OR public.comments__item_level(v.workspace_id, v.entity_type, v.entity_id) = 'none' THEN
+     OR NOT public.comments__item_seen(v.workspace_id, v.entity_type, v.entity_id) THEN
     RAISE EXCEPTION 'That comment isn''t there any more.' USING ERRCODE = 'P0002';
   END IF;
   PERFORM public.spine_op__guard(v.workspace_id);
@@ -203,7 +199,7 @@ BEGIN
     RAISE EXCEPTION 'A comment can''t be empty.';
   END IF;
   -- TV-U13: only on something you can see (a key acts as its creator).
-  IF public.comments__item_level(p_workspace_id, p_entity_type, p_entity_id) = 'none' THEN
+  IF NOT public.comments__item_seen(p_workspace_id, p_entity_type, p_entity_id) THEN
     RAISE EXCEPTION 'That item isn''t there any more.' USING ERRCODE = 'P0002';
   END IF;
   -- TV-U13: a mention reaches only someone who can see the item.
@@ -440,14 +436,16 @@ BEGIN
 END;
 $$;
 
--- The read policy asks comments__item_level as the reader: callable by members
+-- The read policy asks comments__item_seen as the reader: callable by members
 -- (it answers only for the caller), never anonymously.
-REVOKE ALL ON FUNCTION public.comments__item_level(uuid, text, uuid) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.comments__item_seen(uuid, text, uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.comments__item_seen(uuid, text, uuid) TO authenticated, service_role;
+REVOKE ALL ON FUNCTION public.comments__item_level(uuid, text, uuid) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.comments__item_visible_to(uuid, text, uuid, uuid) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.comments__item_visible_to(uuid, text, uuid, uuid) TO service_role;
 REVOKE ALL ON FUNCTION public.comments__can_remove(public.comments) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.comments__find(uuid) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.comments__item_level(uuid, text, uuid) TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.comments__item_level(uuid, text, uuid) TO service_role;
 GRANT EXECUTE ON FUNCTION public.comments__can_remove(public.comments) TO service_role;
 GRANT EXECUTE ON FUNCTION public.comments__find(uuid) TO service_role;
 

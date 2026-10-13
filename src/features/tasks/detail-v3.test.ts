@@ -19,7 +19,7 @@ function entry(
   id: string,
   min: number,
   op: string,
-  payload: object = {},
+  payload: Record<string, unknown> = {},
   actor = "u1",
 ): ActivityEntry {
   return {

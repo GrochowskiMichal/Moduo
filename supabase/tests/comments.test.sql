@@ -78,7 +78,9 @@ BEGIN
               AND NOT has_table_privilege('authenticated', 'public.comment_reactions', 'DELETE')
               AND NOT has_table_privilege('anon', 'public.comment_reactions', 'SELECT'),
     'grants: reactions are read-only for the app (the op writes them)');
-  FOREACH v_fn IN ARRAY ARRAY['public.comments__can_remove(public.comments)', 'public.comments__find(uuid)'] LOOP
+  FOREACH v_fn IN ARRAY ARRAY['public.comments__can_remove(public.comments)', 'public.comments__find(uuid)',
+                              'public.comments__item_level(uuid, text, uuid)',
+                              'public.comments__item_visible_to(uuid, text, uuid, uuid)'] LOOP
     PERFORM test.ok(NOT has_function_privilege('authenticated', v_fn, 'EXECUTE')
                 AND NOT has_function_privilege('anon', v_fn, 'EXECUTE'),
       format('grants: %s is the server''s only', v_fn));
@@ -89,6 +91,9 @@ BEGIN
                 AND NOT has_function_privilege('anon', v_fn, 'EXECUTE'),
       format('grants: %s is callable by members, never anonymously', v_fn));
   END LOOP;
+  PERFORM test.ok(has_function_privilege('authenticated', 'public.comments__item_seen(uuid, text, uuid)', 'EXECUTE')
+              AND NOT has_function_privilege('anon', 'public.comments__item_seen(uuid, text, uuid)', 'EXECUTE'),
+    'grants: the read policy''s gate answers members (for themselves), never anonymously');
   PERFORM test.ok(
     pg_get_constraintdef((SELECT oid FROM pg_constraint WHERE conname = 'comment_reactions_reaction_check'))
       LIKE '%thumbs_up%check%eyes%pray%heart%smile%',
