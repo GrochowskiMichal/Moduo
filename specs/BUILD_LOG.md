@@ -270,6 +270,26 @@ _Built and landed locally on `t/maciej/tasks-v3-build` (🟠 LOCAL BUILD MODE in
 **Reviews:** a background security review of the first cut (copies of hidden tasks, people and links in bodies, a save-time share flag, helpers callable by clients, resend ids) was fixed in place before landing. The validator found no BLOCKER. Its one MAJOR is fixed: capture had silently dropped a Due the template couldn't take, other typed tokens and a refused apply. It now refuses with a hint, sends the right date per anchor, waits for the server and keeps the template on a refusal. Its MINORs are fixed (sign-out read race, the Use… toast's destination, the token icon, the notes label) or recorded as D15-10. The re-check found no BLOCKER or MAJOR. Live-verified on the local stack (checklist).
 
 **Records:** choices D15-1…10 in decisions/tasks.md; gotchas in spine.md (resend ids, seeded statuses); checklist [docs/testing/t-maciej-tv-d15-templates.md](../docs/testing/t-maciej-tv-d15-templates.md).
+- [x] **TV-D14 — Time entries, report, Time & region** · tasks-v3 block 29 · deps: TV-D9 · lane server features · _done 2026-10-13 · `t/maciej/tv-d14-time` → `t/maciej/tasks-v3-build` (local). Migrations `20261013200000_user_preferences_time_region` and `20261013201000_time_entries_add` (applied to the local stack only, in that order)._ AC6.1–6.3, AC6.5, AC12.7, default f. **Server:**
+  - Time & region: `user_preferences` gains `time_zone_manual`, `week_start`, `hour_cycle`, `date_order`, `share_time_with_owner` (CHECKs; NULL = the device's), written by `user_op_set_time_region(jsonb)` and read by `user_time_region()`; `user_op_set_time_zone` (TV-D8's sign-in write) no longer moves a zone that is the person's.
+  - Entries: `task_time_entries` gains kind `manual` with `entry_on`, `note` (logged and Focus entries) and `reason` (`give_back`); `tasks_op_track_time` re-cut (old signature dropped and re-granted) with `add`, `edit`, `remove`, `p_run_id` (kept only for your own run) and `p_reason`; your share (`tasks_time__mine`, `tasks_time_totals`) counts logged time; the read policy now also needs `tasks__visible`; the table's grants re-asserted as TV-D3 set them.
+  - `tasks_time_report(workspace, from, to, projects?, client?, zone?, limit?)`: one row per entry on tasks the reader can see, dated in the reader's zone; your own, and the owner's view of people who share; waiting and legacy never; scoped reports only on visible projects; hidden projects unnamed.
+  - Erasure clears the person's notes (`time_notes_cleared`).
+  - `HOUR_CYCLES`, `DATE_ORDERS`, `TASK_TIME_ADJUSTMENT_REASONS` and the new kind and actions in `@contracts`, with drift gates on the D14 files.
+
+**App:**
+  - `src/lib/time-region.ts` (store, device defaults, sign-in sync, travel prompt), `TimeRegionPrompt` in the app chrome, Settings → **Time & region** (zone, week start, clock, date order, the share switch).
+  - `lib/time-format.ts` reads the clock and date order; the week start drives Filter → This week, the Calendar's weeks (`useCalendarPrefs`), `/next week`, the date picker; the Calendar's hour labels and chips, the Clock widget, email detail dates, snooze labels and spine snippets read the setting; `engineZone()` is the saved zone.
+  - "Add time…" and your entries in the Time field's popover (`TaskTimeEntries`, `time-entries.ts`); the module API `logTime` / `editTimeEntry` / `removeTimeEntry` / `listMyTimeEntries`.
+  - The report: `runtime.tasks.timeReport` (paged past PostgREST's cap), `time-report.ts` (grouping, quarter-hour rounding, CSV, periods), `TimeReportSheet` from the Project panel and the client hub (`ClientTimeReport`); Export PDF is a `PrintRoot` layout through `printPage()` (the desktop's new `print_page` command).
+  - Default f: the view's ⋯ (`ViewExportMenu`: Copy as text, Export view as CSV, Print…), the Project panel's Copy as text, and `timeEntries` in the data export.
+  - Focus saves carry their run; a takeover's give-back is labelled.
+
+**Tests:** `supabase/tests/time_report.test.sql` (88 checks: logging, edits, give-backs, runs, the read gate, the report's people and scopes for the owner before and after sharing, a member, M without access, a viewer, an outsider, zones, Time & region's ops, erasure); full `bun run db:test` (19 files) green. Unit: `time-region.test.ts` (one setting for every module, travel prompt), `time-report.test.ts`, `time-region-section.test.tsx`, filters/grammar/capture tests pinned to a week start, the sink's run, the export. E2E `tests/time-report.spec.ts` (Add time, CSV, print layout) on the local stack with system Chrome. `cargo check`, `cargo check --features lite`, `cargo test --lib` green.
+
+**Reviews:** REVIEWS_PLACEHOLDER
+
+**Records:** choices D14-1…13 in decisions/tasks.md; gotchas in ui.md (memoised rows and a module setting; the hidden pane's rAF and Radix pointer events), desktop.md (`print_page`), supabase.md (local table grants); checklist [docs/testing/t-maciej-tv-d14-time.md](../docs/testing/t-maciej-tv-d14-time.md); "From TV-D14" in the 🟠 box.
 
 ## Transactional email — every email Moduo sends · [`specs/transactional-email.md`](./transactional-email.md)
 

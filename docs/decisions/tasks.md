@@ -2,6 +2,77 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index.
 
+## 2026-10-13 · TV-D14 Time entries, the time report, Time & region — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 29 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §14, §Assumptions #17, #18, #26; REPLAN 75, 76, default f; migrations `20261013200000_user_preferences_time_region` and `20261013201000_time_entries_add`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to change.
+
+- **D14-1 · Time & region is plain columns on `user_preferences`, written by one op and read by one** → TV-D14 (`user_op_set_time_region`, `user_time_region`, `src/lib/time-region.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: `time_zone` (TV-D8's), `time_zone_manual`, `week_start`, `hour_cycle`, `date_order` and `share_time_with_owner`; NULL follows the device. The app keeps a copy per person (localStorage, for the first paint), reads the server's at every sign-in and when the section opens, and every module reads it through `getResolvedTimeRegion()` / `useTimeRegion()`.
+  - Why: spec #17 names the columns; the server needs the zone and the share switch; a synced prefs domain would let a prefs push carry a stale copy over op-written columns.
+  - Rejected: a field in the synced `preferences` jsonb (D12-6's route for mutes), per-module settings.
+- **D14-2 · Clocks on screen stay the device's; the saved zone is the clock your day runs on** → TV-D14 (`engineZone`, `tasks_time_report`'s `p_zone`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: times show in the device's zone (as before); the saved zone decides when repeats roll over, how reminders and due times are read (TV-D8/D12), the repeat preview in the app, and which day a time report puts an entry on. Week start, the 12/24-hour clock and the date order change every displayed date.
+  - Why: the app reads every date-only value as a device-local midnight; re-zoning only some displays would put due dates on the wrong day across zones.
+  - Rejected: formatting every moment in the saved zone (an app-wide refactor; the Calendar rebuild can take it on).
+- **D14-3 · The zone is the person's; a device elsewhere asks once** → TV-D14 (`syncTimeRegion`, `TimeRegionPrompt`, `user_op_set_time_zone` re-cut)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the first sign-in on a current build adopts the device's zone silently (as TV-D8's sign-in write did) and marks it the person's; afterwards a device in another zone asks once per zone and device: "Your computer is on New York time now." · Use New York time · Keep Tokyo. Picking a zone in Settings counts as answering. An older build's sign-in write no longer moves a zone that is the person's.
+  - Why: REPLAN 76's travel prompt; a silent follow-the-device would move repeats and reminders while travelling.
+  - Rejected: an "Automatic" zone mode, asking at every sign-in.
+- **D14-4 · One week start; Calendar's own isn't carried over** → TV-D14 (`day-buckets.ts`, `use-calendar-prefs.ts`, `grammar.ts`, `date-field.tsx`, `calendar.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: Filter → This week, the Calendar's weeks, `/next week`, the date picker's "Next week" and its month grid follow Time & region (the device's first day by default, Monday when the engine has no week data). `calendar.weekStartsOn` isn't copied: nothing ever let anyone change it, so it only held the old default. Date grouping stays rolling (TV-U2).
+  - Why: REPLAN 76 ("Calendar's own week-start setting moves here").
+  - Rejected: carrying a value nobody chose (it would pin Monday for everyone who opened the Calendar).
+- **D14-5 · "Add time…" is one quick line; your entries are listed under it** → TV-D14 (`tasks_op_track_time` add/edit/remove, `time-entries.ts`, `TaskTimeEntries`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: "2h yesterday call with Anna": the length first, then an optional day (today, yesterday, a weekday, a date), then the note; one minute to 24 hours, up to 13 months back, never after tomorrow. A logged entry is kind `manual` with its day. Logged and Focus entries can be edited (length, note; a logged entry's day) and removed (Undo logs it back); adjustments keep their Undo; give-backs are labelled and fixed. Only your own entries change, and only with Edit on the task: "or someone with Edit" is read as the gate on adding, never a licence to change a teammate's hours.
+  - Why: the spec's "2h · yesterday · note"; Harvest and Toggl log the same way.
+  - Rejected: three separate fields, editing teammates' entries.
+- **D14-6 · Your entries sit behind the task gate** → TV-D14 (`task_time_entries_read_own`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: you read your own entries only on tasks you can still see; your time on a task taken away from you isn't in your list, your report or your export until the task comes back.
+  - Why: TV-D10-fix's rule for everything on a task; a report must never reveal a hidden task.
+  - Rejected: REPLAN 75's "your own time is always yours to export" for hidden tasks (it would show their titles).
+- **D14-7 · The report reads one row per entry, and the app groups them** → TV-D14 (`tasks_time_report`, `time-report.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: rows on tasks the reader can see, dated in the reader's zone; your own always; a teammate's only for the workspace owner and only while that teammate shares; waiting time and the dateless legacy totals never; a project or client report reads only projects the reader can see, and a project the reader can't see has no name ("Private project"). Lines sum their entries (a give-back nets out) and never go below zero; rounding is per line, up to the next quarter hour.
+  - Why: TV-H1, TV-U16 and TV-D16 reuse the same rows; billing rounds up.
+  - Rejected: server-side totals, rounding to the nearest quarter, rounding the total.
+- **D14-8 · One share switch, with the owner, in Time & region** → TV-D14 (`share_time_with_owner`, Settings → Time & region → Tracked time)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: off by default; it applies in every workspace you're in; owners see your entries (length, day, note) only on tasks they can see; turning it off takes them away at once.
+  - Why: REPLAN 75 (no surveillance unless you opt in); there is no Settings → Tasks yet.
+  - Rejected: a switch per workspace (the spec names one column).
+- **D14-9 · The report opens from the Project panel and a client's hub** → TV-D14 (`ProjectPanel`, `ClientTimeReport`, `TimeReportSheet`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the Project panel gains Time report and Copy as text (TV-U16 fills the rest); a contact who is the client of a project you can see gets a "Time" section in their hub. The sheet: period (this/last week, this/last month, last 30 days, picked dates), by task or by day, round to 15 minutes, the total, Export CSV, Export PDF.
+  - Why: REPLAN 75 ("a sheet from a project's overview and a client's hub").
+  - Rejected: a report page (AGENTS.md rule 7).
+- **D14-10 · Export PDF is the print layout through the system print dialog** → TV-D14 (`PrintRoot`, `lib/print.ts`, `print_page`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: one light layout whatever the theme (the client, the period and the total on top, lines with notes, who tracked it where more than one person did, "Made with Moduo"); the browser's print, or on the desktop a `print_page` command (WKWebView ignores `window.print()`). The CSV holds the sheet's lines, hours as a decimal and as a duration, with cells a spreadsheet won't run as formulas.
+  - Why: spec #18 (no PDF service for one document).
+  - Rejected: a server PDF renderer, a PDF library in the bundle.
+- **D14-11 · Getting a list out: the view's ⋯** → TV-D14 (`ViewExportMenu`, `list-export.ts`), default f
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: a ⋯ beside Display: Copy as text · Export view as CSV · Print…, on the tasks the view shows (scope, filter, Display) in its order. A selection's "Copy as text" is the row menu's (TV-U10) until TV-U12's multi-select. The data export gains your own time entries.
+  - Why: default f; the toolbar's controls stay where they were.
+  - Rejected: an export page, items inside the Display menu.
+- **D14-12 · Focus saves stamp their run; give-backs say what they are** → TV-D14 (`time-sink.ts`, `giveBackTime`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: a save carries the open (or just ended) run of its workspace; the server keeps it only when it is the caller's own run there. A takeover's give-back carries its run and `reason = give_back`.
+  - Why: TV-F6's asks; the entries list labels give-backs.
+  - Rejected: stamping runs on the device only.
+- **D14-13 · Erasure clears your notes; the seconds stay** → TV-D14 (`account_erase_workspace_data`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: deleting an account clears the person's notes on time entries in workspaces they don't own (counted in the preview as `time_notes_cleared`); the seconds stay in each task's total and the profile cascade forgets whose they were (TV-D3).
+  - Why: §Assumptions #26; a note is the person's words.
+  - Rejected: deleting the entries (teams would lose real time from their totals).
+- **Known limits (TV-D14, revisitable):** times on screen don't follow a saved zone that differs from the device's (D14-2); a second device learns a changed setting at its next sign-in or when the section opens; Intl week data is missing on some engines (then Monday).
+
 ## 2026-10-13 · TV-U10 List v3 — the agent's choices (deferred to by Maciej)
 
 Built in tasks-v3 block 14 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §4, AC11.2–11.5, AC3.5, AC1.5; research views-list-upcoming.md §1–3, §9; defaults i–n). Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
