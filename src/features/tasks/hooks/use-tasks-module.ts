@@ -189,6 +189,9 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
   /** The rows as they are now, for a save or an Undo that runs later. */
   const tasksRef = useRef(allTasks);
   tasksRef.current = allTasks;
+  /** The projects (and my Inbox) I can see now, for an answer that arrives later. */
+  const bucketsRef = useRef(allBuckets);
+  bucketsRef.current = allBuckets;
   /** Your own reminders, for the "Restore the reminder?" offer (TV-D12). */
   const remindersRef = useRef(snap.reminders);
   remindersRef.current = snap.reminders;
@@ -612,6 +615,9 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         extra?: OverlayChange[];
         /** Rows the server drops with this op (queue rows of a closed task). */
         forget?: string[];
+        /** Tasks the answer took out of my sight (TV-D13: an unfiled task
+         *  handed into someone else's Inbox): dropped from the copy at once. */
+        leaves?: (saved: Task) => string[];
         offline?: { status: string; recurrence?: RecurrenceRule | null };
       } = {},
     ) => {
@@ -654,6 +660,8 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         .then((saved) => {
           write.settle({ tasks: [saved] });
           if (opts.forget?.length) store.forget("queue", opts.forget);
+          const gone = opts.leaves?.(saved);
+          if (gone?.length) store.forget("tasks", gone);
           setActivityStamp((s) => s + 1);
         })
         .catch((e) => {
@@ -1148,8 +1156,25 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       // any, saves as usual below.
       if (patch.assigneeId !== undefined) {
         const assigneeId = patch.assigneeId;
-        applyOp(id, { assigneeId }, () =>
-          runtime!.tasks.opAssign({ workspaceId: workspaceId!, taskId: id, assigneeId }),
+        applyOp(
+          id,
+          { assigneeId },
+          () => runtime!.tasks.opAssign({ workspaceId: workspaceId!, taskId: id, assigneeId }),
+          {
+            // Someone else's unfiled task handed on into another Inbox (TV-D13,
+            // call 20) is out of my sight now: drop it and its steps, rather
+            // than keep it until the next access check.
+            leaves: (saved) =>
+              saved.bucketId !== existing.bucketId &&
+              !bucketsRef.current.some((b) => b.id === saved.bucketId) &&
+              saved.creatorId !== userId &&
+              saved.assigneeId !== userId
+                ? [
+                    saved.id,
+                    ...tasksRef.current.filter((t) => t.parentId === saved.id).map((t) => t.id),
+                  ]
+                : [],
+          },
         );
         const { assigneeId: _assigned, ...rest } = patch;
         // Without edit access applyOp has already said so; don't say it twice.
@@ -1287,6 +1312,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       editBlocked,
       refused,
       archivedBlocked,
+      userId,
     ],
   );
 

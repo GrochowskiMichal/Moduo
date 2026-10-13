@@ -2832,15 +2832,8 @@ export const webRuntime: ModuoRuntime = {
       return taskRowToModel(row);
     },
 
-    async opClaim({ workspaceId, taskId }) {
-      const { data, error } = await supabaseClient.rpc("tasks_op_claim", {
-        p_workspace_id: workspaceId,
-        p_task_id: taskId,
-      });
-      if (error) throw new Error(error.message);
-      const row = Array.isArray(data) ? data[0] : data;
-      if (!row) throw new Error("The operation returned nothing.");
-      return taskRowToModel(row);
+    opClaim({ workspaceId, taskId }) {
+      return taskOpRpc("tasks_op_claim", { p_workspace_id: workspaceId, p_task_id: taskId });
     },
 
     async opReschedule({ workspaceId, taskId, scheduledAt, days }) {

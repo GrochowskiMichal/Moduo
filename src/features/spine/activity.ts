@@ -149,7 +149,9 @@ export function spineActivityLine(
     case "tasks.handed_back": {
       const name = str(p.name) ?? "someone";
       const n = num(p.count) ?? 1;
-      return `removed ${name} · ${n > 1 ? `${n} of your tasks are` : "your task is"} back in your Inbox`;
+      const back = `${n > 1 ? `${n} of your tasks are` : "your task is"} back in your Inbox`;
+      // Someone who left on their own is the actor here ("Sam left …").
+      return p.left === true ? `left the workspace · ${back}` : `removed ${name} · ${back}`;
     }
     // TV-U6 (REPLAN 78): a project was deleted and its open work assigned to
     // you landed in your Inbox (the card's target). One notice per person; the

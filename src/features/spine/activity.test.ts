@@ -43,6 +43,9 @@ describe("team notices (TV-D13)", () => {
     expect(spineActivityLine(entry("tasks.handed_back", { name: "Sam", count: 2 }))).toBe(
       "removed Sam · 2 of your tasks are back in your Inbox",
     );
+    expect(
+      spineActivityLine(entry("tasks.handed_back", { name: "Sam", count: 1, left: true })),
+    ).toBe("left the workspace · your task is back in your Inbox");
   });
 });
 

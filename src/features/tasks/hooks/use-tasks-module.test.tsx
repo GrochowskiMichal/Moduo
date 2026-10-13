@@ -68,6 +68,10 @@ function fakeRuntime(tasks: Task[]) {
         assigneeId,
       }),
     ),
+    opClaim: rs.fn(async ({ taskId }: { taskId: string }) => ({
+      ...byId(taskId),
+      assigneeId: "u1",
+    })),
     upsertTask: rs.fn(async (t: Task) => ({ ...t, id: "t-new" })),
     deleteTask: rs.fn(async ({ taskId }: { taskId: string }) => ({
       ...byId(taskId),
@@ -86,6 +90,58 @@ async function mount(tasks: Task[]) {
   await waitFor(() => expect(hook.result.current.loading).toBe(false));
   return { ...fake, hook };
 }
+
+describe("teams and hand-overs (TV-D13)", () => {
+  it("taking a team's task shows it as mine at once and keeps the server's row", async () => {
+    const { api, hook } = await mount([task("t1", { assigneeId: null, teamId: "team-ds" })]);
+    act(() => hook.result.current.claimTask("t1"));
+    expect(hook.result.current.tasks.find((t) => t.id === "t1")?.assigneeId).toBe("u1");
+    await waitFor(() =>
+      expect(api.opClaim).toHaveBeenCalledWith({ workspaceId: "w1", taskId: "t1" }),
+    );
+    expect(hook.result.current.tasks.find((t) => t.id === "t1")?.teamId).toBe("team-ds");
+  });
+
+  it("taken by someone first: the claim is refused and the task goes back to unclaimed", async () => {
+    const { api, hook } = await mount([task("t1", { assigneeId: null, teamId: "team-ds" })]);
+    api.opClaim.mockImplementationOnce(async () => {
+      throw new Error("Someone already took this task.");
+    });
+    act(() => hook.result.current.claimTask("t1"));
+    await waitFor(() => expect(api.opClaim).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(hook.result.current.tasks.find((t) => t.id === "t1")?.assigneeId).toBeNull(),
+    );
+  });
+
+  it("someone else's unfiled task handed on to another Inbox leaves my copy, with its steps", async () => {
+    const { api, hook } = await mount([
+      task("t1", { creatorId: "u9", assigneeId: "u1" }),
+      task("s1", { creatorId: "u9", assigneeId: null, parentId: "t1" }),
+    ]);
+    api.opAssign.mockImplementationOnce(async ({ taskId }: { taskId: string }) => ({
+      ...task(taskId, { creatorId: "u9" }),
+      assigneeId: "u3",
+      bucketId: "inbox-u3",
+    }));
+    act(() => hook.result.current.patchTask("t1", { assigneeId: "u3" }));
+    await waitFor(() => expect(api.opAssign).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(hook.result.current.tasks.map((t) => t.id)).toEqual([]));
+  });
+
+  it("my own task handed on stays in my copy (I made it: Created by me)", async () => {
+    const { api, hook } = await mount([task("t1", { creatorId: "u1", assigneeId: "u1" })]);
+    api.opAssign.mockImplementationOnce(async ({ taskId }: { taskId: string }) => ({
+      ...task(taskId, { creatorId: "u1" }),
+      assigneeId: "u3",
+      bucketId: "inbox-u3",
+    }));
+    act(() => hook.result.current.patchTask("t1", { assigneeId: "u3" }));
+    await waitFor(() =>
+      expect(hook.result.current.tasks.find((t) => t.id === "t1")?.bucketId).toBe("inbox-u3"),
+    );
+  });
+});
 
 describe("useTasksModule saves (TV-D1)", () => {
   beforeEach(() => {

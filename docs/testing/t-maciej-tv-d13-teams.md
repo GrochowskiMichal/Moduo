@@ -34,7 +34,7 @@
 - [ ] **Do:** Remove Tess from the workspace while her Inbox holds a task you created → **Expect:** it comes back to your Inbox with one quiet notice ("removed Tess · your task is back in your Inbox"); she's off every team; projects she led have no lead _(both)_
 
 ## Migrations / data
-- [ ] **Do:** Confirm `20261013150000_teams_routing` and `20261013170000_teams_mention_once` are applied (local stack) and `bun run db:test teams_routing` passes → **Expect:** 79 checks green _(local)_
+- [ ] **Do:** Confirm `20261013150000_teams_routing`, `20261013170000_teams_mention_once` and `20261013180000_teams_routing_fixes` are applied in that order (local stack) and `bun run db:test teams_routing` passes → **Expect:** 87 checks green _(local)_
 
 ## Known gaps / not-yet-testable
 - The 3-day / day-before check-back is proven by the SQL test with set clocks; a live one needs a task routed 3 days ago (or a due date tomorrow and 9:00 your time).

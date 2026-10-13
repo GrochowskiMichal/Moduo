@@ -393,8 +393,8 @@ export function TeamEditor({ team, teams }: { team: Team; teams: WorkspaceTeams 
       />
       <ExplainStrip>{WHAT_TEAMS_DO}</ExplainStrip>
 
-      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_8rem]">
-        <div className="flex flex-col gap-1.5">
+      <div className="flex gap-3">
+        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
           <Label htmlFor={`team-name-${team.id}`}>Name</Label>
           <Input
             id={`team-name-${team.id}`}
@@ -409,7 +409,7 @@ export function TeamEditor({ team, teams }: { team: Team; teams: WorkspaceTeams 
             }}
           />
         </div>
-        <div className="flex flex-col gap-1.5">
+        <div className="flex w-32 shrink-0 flex-col gap-1.5">
           <Label htmlFor={`team-mark-${team.id}`}>Letters</Label>
           <Input
             id={`team-mark-${team.id}`}
@@ -552,20 +552,18 @@ function ColorChoice({
   children: ReactNode;
 }) {
   return (
-    <button
+    <Button
       type="button"
+      variant="ghost"
+      size="icon"
       aria-pressed={selected}
       aria-label={`Colour: ${label}`}
       title={label}
       disabled={disabled}
       onClick={onPick}
-      className={cn(
-        "flex size-8 items-center justify-center rounded-md border transition-colors duration-(--motion-fade)",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50",
-        selected ? "border-foreground bg-state-active" : "border-transparent hover:bg-state-hover",
-      )}
+      className={cn("border", selected ? "border-foreground" : "border-transparent")}
     >
       {children}
-    </button>
+    </Button>
   );
 }
