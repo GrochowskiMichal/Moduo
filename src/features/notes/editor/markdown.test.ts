@@ -31,7 +31,12 @@ import {
   NOTES_DOC_ROOT,
 } from "./doc-markdown";
 import { FIDELITY_MD } from "./fidelity.fixture";
-import { HR_TRANSFORMER, looksLikeMarkdown, NOTES_TRANSFORMERS } from "./markdown";
+import {
+  HR_TRANSFORMER,
+  looksLikeMarkdown,
+  NOTES_TRANSFORMERS,
+  TABLE_TRANSFORMER,
+} from "./markdown";
 import { buildDocStateFromMarkdown } from "./materialize";
 
 /** The REAL node set (the live editor's), so these tests can't pass against a
@@ -297,6 +302,35 @@ describe("single dialect (NR-3, AC9)", () => {
   it("a pipe inside a cell is escaped, not a new column", () => {
     const md = "| Formula | Note |\n| --- | --- |\n| a \\| b | ok |";
     expect(roundTrip(md)).toBe(md);
+  });
+
+  it("a line break inside a cell is `<br>`; a literal backslash-n stays text", () => {
+    const md = "| Path | Note |\n| --- | --- |\n| C:\\new | line one<br>line two |";
+    // The exporter escapes the backslash (`C:\\new`); after that the bytes hold.
+    const once = roundTrip(md);
+    expect(roundTrip(once)).toBe(once);
+    expect(once).toContain("line one<br>line two");
+    const editor = makeEditor();
+    editor.update(() => $convertFromMarkdownString(once, NOTES_TRANSFORMERS), { discrete: true });
+    const json = JSON.stringify(editor.getEditorState().toJSON());
+    expect(json).toContain('"text":"C:\\\\new"');
+    expect(json).toContain('"type":"linebreak"');
+  });
+
+  it("typing a pipe line does NOT become a table (import only)", () => {
+    const editor = makeEditor();
+    let handled: boolean | void = true;
+    editor.update(
+      () => {
+        const p = $createParagraphNode();
+        p.append($createTextNode("|x| "));
+        $getRoot().append(p);
+        handled = TABLE_TRANSFORMER.replace(p, [], ["|x| "], false);
+      },
+      { discrete: true },
+    );
+    expect(handled).toBe(false);
+    editor.read(() => expect($getRoot().getFirstChild()?.getType()).toBe("paragraph"));
   });
 
   it("body_text is the plain projection: no markers, chips and page rows read as labels", () => {

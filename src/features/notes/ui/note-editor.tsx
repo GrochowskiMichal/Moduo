@@ -49,7 +49,7 @@ import { $createEntityRefNode } from "@/features/spine/editor/entity-ref-node";
 import { MentionMenuPlugin } from "@/features/spine/editor/mention-menu-plugin";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
-import { tryDeriveNoteBody } from "../editor/doc-markdown";
+import { NOTES_DOC_ROOT, tryDeriveNoteBody } from "../editor/doc-markdown";
 import { NOTES_TRANSFORMERS } from "../editor/markdown";
 import {
   INSERT_ENTITY_CHIP_EVENT,
@@ -383,7 +383,10 @@ export function NoteEditor({
   const { userId, runtime } = useAuth();
   const session = useMemo(() => engine.getOrCreateSession(noteId), [engine, noteId]);
   // Mount as soon as the local copy has loaded (NR-3 honest provider): the
-  // cached doc paints and edits at once while the pull runs underneath.
+  // cached doc paints and edits at once while the pull runs underneath. An
+  // EMPTY cache waits for the pull instead: mounting the binding on an empty
+  // doc makes Lexical append a paragraph that syncs into Yjs and pushes, so a
+  // note opened on a new device would gain a stray empty block.
   const [ready, setReady] = useState(false);
   // The first pull has settled: only then may the welcome seed look at an
   // "empty" doc (before it, empty may just mean "not pulled yet").
@@ -394,10 +397,12 @@ export function NoteEditor({
     setReady(false);
     setBooted(false);
     void session.cacheReady.then(() => {
-      if (active) setReady(true);
+      if (active && session.doc.getXmlElement(NOTES_DOC_ROOT).length > 0) setReady(true);
     });
     void session.booted.then(() => {
-      if (active) setBooted(true);
+      if (!active) return;
+      setReady(true);
+      setBooted(true);
     });
     return () => {
       active = false;

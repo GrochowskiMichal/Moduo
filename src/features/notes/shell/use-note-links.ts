@@ -41,11 +41,14 @@ export function useNoteLinks({
 
   // Typing a mention or a chip writes a link server-side; re-pull whenever the
   // note's meta moves (a retitle, a refresh), so the line catches up quietly.
+  // Only a CHANGE counts: the hub already reads once when the note opens.
   const updatedAt = note?.updatedAt ?? null;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: updatedAt is the trigger
+  const lastSeen = useRef({ noteId, updatedAt });
   useEffect(() => {
-    if (updatedAt) reload();
-  }, [updatedAt, reload]);
+    const prev = lastSeen.current;
+    lastSeen.current = { noteId, updatedAt };
+    if (prev.noteId === noteId && prev.updatedAt !== updatedAt && updatedAt) reload();
+  }, [noteId, updatedAt, reload]);
 
   // The hub keeps its last sections while a reload runs (no flicker), but they
   // belong to whichever note loaded them: never show one note's links on

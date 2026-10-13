@@ -167,7 +167,8 @@ function splitTableRow(line: string): string[] | null {
 function $tableCell(markdown: string): TableCellNode {
   const cell = $createTableCellNode(TableCellHeaderStates.NO_STATUS);
   // Inline syntax (bold, links, chips) inside a cell imports like anywhere else.
-  $convertFromMarkdownString(markdown.replace(/\\n/g, "\n"), NOTES_TRANSFORMERS, cell);
+  // `<br>` is GFM's line break inside a cell (a cell can't span lines).
+  $convertFromMarkdownString(markdown.replace(/<br\s*\/?>/gi, "\n"), NOTES_TRANSFORMERS, cell);
   return cell;
 }
 
@@ -188,7 +189,7 @@ export const TABLE_TRANSFORMER: ElementTransformer = {
           $convertToMarkdownString(NOTES_TRANSFORMERS, cell)
             .trim()
             .replace(/\|/g, "\\|")
-            .replace(/\n/g, "\\n"),
+            .replace(/\n+/g, "<br>"),
         );
       lines.push(`| ${cells.join(" | ")} |`);
       if (lines.length === 1) lines.push(`| ${cells.map(() => "---").join(" | ")} |`);
@@ -196,7 +197,9 @@ export const TABLE_TRANSFORMER: ElementTransformer = {
     return lines.join("\n");
   },
   regExp: TABLE_ROW,
-  replace: (parentNode, _children, match) => {
+  replace: (parentNode, _children, match, isImport) => {
+    // Import only: typing `|x| ` in prose must not turn the line into a table.
+    if (!isImport) return false;
     const previous = parentNode.getPreviousSibling();
     if (TABLE_DIVIDER.test(match[0])) {
       // The divider marks the row above as the header.

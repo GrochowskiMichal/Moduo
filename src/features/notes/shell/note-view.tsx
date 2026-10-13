@@ -101,7 +101,7 @@ export function NoteView({
             autoFocus={isDraft}
             bare
             belowTitle={
-              liveNote ? (
+              liveNote && (links.line.chips.length > 0 || links.line.edited) ? (
                 <NoteMetaLineView
                   line={links.line}
                   onOpenEntity={onOpenEntity}
