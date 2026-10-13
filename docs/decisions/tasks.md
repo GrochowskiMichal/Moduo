@@ -46,6 +46,7 @@ Built in tasks-v3 block 32 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §18, A
   - Decision: a team's name and Upcoming's day names head their groups in sentence case; small caps stay for fixed chrome (`WidgetSectionLabel`: "Focus", "Open").
   - Why: call 40, which `lint:tw` enforces.
   - Rejected: adding the expressions to the small-caps allowlist.
+
 ## 2026-10-14 · TV-F8 Along the way, meeting divider, pace, In flight — the agent's choices (deferred to by Maciej)
 
 Built in tasks-v3 block 24 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §7, AC8.6–8.8, AC8.10, AC3.4's line in Focus; REPLAN 10, 52, 57, 59a, 62a, 63, 64, call 5's reshape of TV-F4) on TV-F7's screen and TV-F6's one engine. No migration. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to change.
