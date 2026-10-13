@@ -181,8 +181,10 @@ BEGIN
     'once someone has read it, the next one is a new notice');
   PERFORM test.make('E', jsonb_build_object('id', test.id('T13'), 'title', 'Photos', 'bucket_id', test.id('SB'),
                                             'team_id', test.id('DS'), 'assignee_id', test.id('A')));
+  -- (One transaction stamps every row with the same time, so "newest" is
+  -- read by content, not by order.)
   PERFORM test.ok((SELECT count(*) FROM test.routed('E', 'DS')) = 2
-              AND (SELECT (payload ->> 'count')::integer FROM test.routed('E', 'DS') LIMIT 1) = 1,
+              AND NOT EXISTS (SELECT 1 FROM test.routed('E', 'DS') x WHERE x.payload -> 'task_ids' @> test.ids('T13')),
     'a routed task someone already has calls nobody');
   PERFORM test.make('O', jsonb_build_object('id', test.id('T14'), 'title', 'Brochure', 'bucket_id', test.id('SB'),
                                             'team_id', test.id('DS'), 'assignee_id', NULL));
