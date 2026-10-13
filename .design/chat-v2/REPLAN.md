@@ -1,6 +1,6 @@
 # Chat v2 — the re-plan
 
-> **Status (2026-10-13): round 1 answered; round 1b sent (re-asks), two research lanes running for round 2.**
+> **Status (2026-10-13): round 2 sent (round 1b re-asks + the look and replies, with prototype round-2). Waiting on Maciej.**
 >
 > - **Decided:** CH1–CH11, CH13–CH19, CH22 (no event workspace: Team plans per team), CH25, CH27, CH28. CH12 (threads) not accepted → CH30. CH24 parked. Facts: CH20 (≤ ~100 people, Polish + English, app in English, date unknown), CH21.
 > - **Open:** CH3a, CH4a, CH16a, CH16b, CH23a, CH26a, CH28a, CH28b; with round 2's prototype ([`prototypes/round-2.html`](./prototypes/round-2.html)): ★ CH29 the look (+ CH29a 15 px text, CH29b three quick reactions, CH29c past dates), ★ CH30 replies, not threads.
