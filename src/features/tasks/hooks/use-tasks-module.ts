@@ -19,6 +19,7 @@ import {
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { LabelColor } from "../../../components/tag-colors";
+import { readLocalFocusPrefs } from "../../../lib/focus-prefs";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import type { ProjectFields } from "../../../lib/runtime.web.structure";
 import { isNetworkError } from "../../../lib/sync/network";
@@ -26,6 +27,8 @@ import { useStoreSnapshot, useWorkspaceStore } from "../../../lib/sync/react";
 import type { OverlayChange, PendingWrite } from "../../../lib/sync/store";
 import { editableTaskFields } from "../../../lib/task-rows";
 import { undoToast } from "../../../lib/undo-toast";
+import type { FocusTaskRef } from "../../focus/engine";
+import { focusOn } from "../../focus/timer";
 import {
   createOrAttachByName,
   deleteTag as deleteWorkspaceTag,
@@ -917,6 +920,46 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       else addToQueue(id);
     },
     [queuedTaskIds, removeFromQueue, addToQueue],
+  );
+
+  /** What the one clock binds for a task here (title, project, workspace). */
+  const focusRefOf = useCallback(
+    (taskId: string): FocusTaskRef | null => {
+      const task = tasksRef.current.find((t) => t.id === taskId);
+      if (!task || !workspaceId) return null;
+      const project =
+        task.bucketId === inbox?.id
+          ? "Inbox"
+          : (liveBuckets.find((b) => b.id === task.bucketId)?.name ?? null);
+      return { id: task.id, title: task.title || "Untitled", bucketName: project, workspaceId };
+    },
+    [workspaceId, inbox, liveBuckets],
+  );
+
+  /**
+   * "Focus on this" (⇧F, the row and panel menus, call 31): the task goes on
+   * top of my Up next and gets the one clock now. A session on moves to it with
+   * its rhythm; none starts one with my default Timer (Calendar's ▶ recipe,
+   * TV-F6). False when it can't: a viewer, a finished task, one still saving.
+   */
+  const focusOnTask = useCallback(
+    (id: string): boolean => {
+      if (!canEdit) {
+        toast.error(NO_EDIT);
+        return false;
+      }
+      if (isTempId(id)) {
+        toast.error(STILL_SAVING);
+        return false;
+      }
+      const task = liveTasks.find((t) => t.id === id);
+      const ref = focusRefOf(id);
+      if (!task || !ref || isClosedTask(task)) return false;
+      addToQueue(id, "top");
+      focusOn(ref, { timer: readLocalFocusPrefs().timer, resolveTask: focusRefOf });
+      return true;
+    },
+    [canEdit, liveTasks, focusRefOf, addToQueue],
   );
 
   /** Skip in Focus: the task goes to the end of my queue. Not a reschedule. */
@@ -3378,6 +3421,9 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     unscheduleTask,
     scheduleTaskAt,
     toggleQueue,
+    focusOnTask,
+    /** What the one clock binds for a task here (Focus's Start and Done). */
+    focusRefOf,
     addToQueue,
     removeFromQueue,
     moveQueuedToEnd,

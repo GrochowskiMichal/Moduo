@@ -128,8 +128,6 @@ function renderRail({
     const [pinned, setPinned] = useState(initialPinned);
     const rail = (
       <BucketRail
-        mode="plan"
-        onModeChange={() => {}}
         selection={selection}
         onSelect={(next) => {
           calls.onSelect(next);
@@ -263,7 +261,7 @@ describe("the decided sidebar (AC11.1)", () => {
     const nav = screen.getByRole("navigation", { name: "Tasks" });
     expect(nav.textContent ?? "").not.toMatch(/bucket/i);
     expect(within(nav).queryByText("Queue")).toBeNull();
-    expect(main(/^Focus, 4 queued$/)).toBeTruthy();
+    expect(main(/^Focus, 4 lined up$/)).toBeTruthy();
     expect(main(/^New project$/)).toBeTruthy();
   });
 
@@ -320,7 +318,7 @@ describe("Customize sidebar, Archived projects and Recently deleted in the ⋯ (
     // The menu stays open while ticking several; Esc closes it.
     fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
     await settle();
-    expect(main(/^Focus, 4 queued$/)).toBeTruthy();
+    expect(main(/^Focus, 4 lined up$/)).toBeTruthy();
   });
 
   it("opens Archived projects and Recently deleted from the ⋯, never as rows", async () => {

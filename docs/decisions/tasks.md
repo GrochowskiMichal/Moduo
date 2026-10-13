@@ -17,6 +17,96 @@ Migration `20261013210000_teams_access_fix` (redefines `teams_op_update` and `te
   - Why: otherwise someone with Edit on an unrelated project could point a team's routing at it. Routing itself still files a task into the default only when the router can edit it, else it's refused without naming the project (TV-D10).
   - Rejected: default changes for managers only (it blocks a member setting up a new team's project); Edit on the new project alone (the redirect above).
 
+## 2026-10-13 · TV-F7 Focus screen v3 — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 23 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §7, AC8.1–8.5, AC8.9; REPLAN 31, 61–66, 62a, 63, 65a; prototype round-2a frames 1–3) on TV-F6's one time engine. No migration. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to change.
+
+- **F7-1 · Focus is a place in the sidebar; the Plan · Focus switch and the Execute view are gone** → TV-F7 (`tasks-plan-view.tsx`, `bucket-rail.tsx`, `ui/focus-view.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (checkpoint-1 note "TV-F7").
+  - Decision: the sidebar's Focus (scope id `today`, unchanged) opens the Focus screen; there is no mode. The top-bar timer and "Open Focus" select it; a device left in the old Focus mode opens Focus once, then the stored mode is dropped.
+  - Why: one name for the list and the doing (61); two ways to the same line-up confused (List of the queue vs the Execute card).
+  - Rejected: keeping a List/Board of the queue under Focus beside the screen.
+- **F7-2 · Now is the session's task, else the head of Up next; Start puts the clock on it** → TV-F7 (`focus-screen.ts` `focusLineup`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: with a session in this workspace (here or read through from another device), the card is its task, wherever it sits in the line-up (a reorder never moves the clock); otherwise the first open lined-up task with a Start pill. Start is "Focus on this" with your default Timer. Done and Skip move a running session (`moveFocusTo`, taking it over first when another device runs it) and never start one; Done on the last one ends it.
+  - Why: spec verbs Start · Pause · Done · Stop; the empty state's "then press Start"; F6-6's run rules.
+  - Rejected: Now = always the head of Up next (a drag would move the clock), starting on screen entry (Focus never pushes, 66).
+- **F7-3 · The pill reads this sitting; its note compares everything tracked with the estimate** → TV-F7 (`pillReading`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (F6-4 left the composition to F7).
+  - Decision: the clock is the time on the task this sitting (the top bar's number); the note is "of ~45m" when nothing was tracked before, "~12m left" when something was, and a neutral "+5m" past the estimate. "Count down the estimate" shows what's left, then "+m:ss"; without an estimate it counts up. Paused: "▶ Paused · 18:02".
+  - Why: one number per job (62), and the estimate is the task's, not the sitting's.
+  - Rejected: the task's whole total as the clock (it disagrees with the top bar), comparing the sitting alone with the estimate (wrong on a task started yesterday).
+- **F7-4 · Start lives on the card for every Timer; Pomodoro's pill moves to the header once started** → TV-F7 (`focus-now-card.tsx`, `PomodoroPill`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: before a session the card's top-right pill is "▶ Start" (its tooltip names the Timer); running, Per task keeps a pill there, Pomodoro shows "Focus 24:58" / "Break 4:12" beside ⋯, Off shows none.
+  - Why: the eye is on the card; one place to begin for a first-time person.
+  - Rejected: Start in the header under Pomodoro (hunting for it).
+- **F7-5 · The ⋯ menu: Timer ▸ · Show what's done · Stop** → TV-F7 (`FocusMenu`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (63's list, minus TV-F8's items).
+  - Decision: Timer ▸ Per task (Count down the estimate under it), Pomodoro (Lengths ▸ 25 / 5 · 50 / 10 · 90 / 15 · Other lengths… → Settings → Focus), Off; Show/Hide what's done this session; a hairline; Stop, alone, with "Focus stopped · Undo". No key for Stop or Pause (the keymap: pill and ⋯ only). Arrange by project and Offer quick tasks join with TV-F8, which builds them.
+  - Why: lengths as presets keep inputs out of a menu (a menu that opens a focusing surface is a known trap); the rest lives in Settings.
+  - Rejected: number inputs inside the menu; showing F8's items disabled.
+- **F7-6 · The panel in Focus: Now's details by default; a subtask stacks on top** → TV-F7 (`FocusView`'s selection effect, `openTaskInPanel`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (In flight, the panel's second view, is TV-F8's).
+  - Decision: opening Focus selects Now (unless the open task is lined up here, a link to it); the panel follows Now as it changes, until you click an Up next row or a scheduled row. A subtask opens as "← Now" on the panel's stack (65a) with its parent above and ▶ Focus on this; the card marks it.
+  - Why: until In flight exists, Now's own comments, files and properties are what the panel can add; the stack keeps the way back.
+  - Rejected: an empty panel until something is clicked.
+- **F7-7 · Keys on the screen: ⏎ Done · S Skip · C new at the top · ⇧F on a focused subtask or row** → TV-F7
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (keymap's Focus table; Hand off W is F8's).
+  - Decision: they act only while the screen holds focus (it is focusable: a click on its empty parts focuses it; it takes focus when it opens with nothing else focused and when the last Done removes the button you used; Start hands focus to the timer pill, so a second ⏎ pauses, which is undoable, instead of finishing the task), never from the sidebar, the panel, a text field, a menu or a dialog; a focused button keeps its own ⏎. ⌥⇧↑/↓ on a focused Up next row moves it.
+  - Why: ⏎ is Done for the focused task (65a) and Done has no Undo without subtasks, so a stray ⏎ must never finish a task (the validator's case: focus fell to the page after Start).
+  - Rejected: window-wide keys, or keys "from nowhere" (⏎ in the panel or after a click elsewhere would finish the task).
+- **F7-8 · ⇧F from any task says where the session went** → TV-F7 (`focusOnTask` in the module, the page's wrapper)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: ⇧F in the List, "Focus on this" in a row's or card's menu, and the panel header's ▶ put the task on top of Up next with the one clock (Calendar's recipe). Away from Focus a toast "Focusing on “…”" offers Open Focus for 8 s; in Focus the card shows it. Viewers and finished tasks don't get it. The blocked-task frontier offer (§5c) stays on single adds (Q, the toggles, the empty state's "+"); ⇧F, "Line up all n" and Remove's Undo skip it: each is an explicit choice or a restore.
+  - Why: call 31 starts a run without building a line-up first; switching screens on a keypress would be abrupt.
+  - Rejected: jumping to Focus on ⇧F.
+- **F7-9 · One avatar per person: "is on this" supersedes that person's Focus claim** → TV-F7 (`queue-toggle.tsx` `useFocusMarks`, `withoutPeopleOnIt`, the header's `QueueButton`)
+  - Who: agent's choice, deferred to by Maciej (the orchestrator decided it for this block), 2026-10-13.
+  - Decision: the panel header shows each person once: a live Focus run ("Mike is on this") replaces the same person's queue-claim avatar. Rows and cards follow the same rule inside their fixed cell: the claim avatar gains the quiet live dot and the label says "Mike is on this".
+  - Why: two avatars of one person read as two people; the cell width keeps the List's columns aligned.
+  - Rejected: showing both.
+- **F7-10 · "Queue" becomes "Focus" in the app's words** → TV-F7 (call 61: words only; data and MCP keep "queue")
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: "Add to Focus" / "Remove from Focus" / "In Focus", "In Mike's Focus" / "Also in Mike's Focus", the filter "In my Focus", "Added to Focus", the rail's "n lined up". The panel header's toggle became an icon (pressed when it's in your Focus), next to ▶: "Add to Focus" as text squeezed the breadcrumb to a letter per line at 390 px. Left for later: the Home widget's "Queue" heading (TV-H1) and the activity trail's "queued this" (a trail wording pass).
+  - Why: 61 ("every other place the app says Queue follows").
+  - Rejected: renaming the code and the database (61 keeps them).
+- **F7-11 · Up next: the line-up's order, numbered, dividers only across projects** → TV-F7 (`upNextLines`, `focus-up-next.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: "Up next · 4 · ~1h" (the estimates there are), a divider with the project's name and dot at each project change when the line-up spans two or more projects (read out to screen readers), ~estimates, hover ▶ and × (Undo). Drag or ⌥⇧↑/↓ reorders with Undo as a move inside the whole line-up (`upNextMove`): the task goes right after the Up next task it now follows, or, at the top, right before the one it now precedes; Now and everything else keep their places, wherever Now sits (a capture during a session lands above it). A line-up's last task says "Last one. Nothing else is lined up."
+  - Why: 62's dividers make a switch visible before you make it; one project needs none.
+  - Rejected: sorting by project (that's TV-F8's undoable Arrange).
+- **F7-12 · Subtask marks: notes · files · links** → TV-F7 (`useSubtaskMarks`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: "notes" when a subtask has a description; files and links counted per subtask (at most 20, best effort, once per card).
+  - Why: 65a's "1 file · 2 links · notes"; no batch count exists yet (AT-3 adds 📎 everywhere).
+  - Rejected: a new server count for one card.
+- **F7-13 · What the old card had and the new one doesn't** → TV-F7
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: manual "Add time / Set total" leave the card (the panel's Time row and TV-D14's "Add time…"); tags leave the card (62's one quiet line); "Back to Plan" goes with the mode; "while you were away" stays on the card.
+  - Why: 62's quiet card; nothing is lost that the panel doesn't hold.
+  - Rejected: keeping the old card's ⋯ popover.
+- **F7-14 · The empty state teaches, first use first** → TV-F7 (`focus-empty-state.tsx`, `scheduledToday`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (66, with the hackathon priority).
+  - Decision: "Line up what you'll do next, then press Start.", one line on what Focus is ("one task at a time, the rest in Up next; the timer is yours to use or turn off"), Q and ⇧F, then today's scheduled tasks as rows (my sessions today, or a scheduled time when no session is known for a task that's mine or nobody's; Backlog, finished and lined-up ones out) with "+" and "Line up all n" in time order, or a line on scheduling; "New task C". Viewers see the hints without the actions. Exported for TV-U17.
+  - Why: three ways in (66); the welcome builds on it.
+  - Rejected: a summary line instead of rows (66 asked for rows).
+- **F7-15 · The done line counts the session** → TV-F7 (`doneLineText`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the run's finished tasks (the ended run's until the next start), else what you checked off here since the list loaded; "· 1h 12m" only when timed and at least a minute; Show lists them, struck through, with their project.
+  - Why: 62a's "2 done · 1h 12m · Show".
+  - Rejected: counting the day's done tasks.
+- **F7-16 · The card says why it changed under you** → TV-F7 (`NoticeLine`; F6-6's `notice`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (spec edge case "Done by Sam · Next").
+  - Decision: when the session moved on by itself (a teammate finished Now, it was deleted or unshared), a quiet line above the card says so ("Mike completed “…”.") until you Start, Done, Skip or dismiss it; the follower's toast stays.
+  - Why: a toast can be missed; the card changing with no reason reads as a bug.
+  - Rejected: holding the card on the finished task until ⏎.
+- **F7-17 · The Settings Timer UI is TV-F8's** → TV-F8
+  - Who: the orchestrator, 2026-10-13 (the block brief), recorded as agent's choice, deferred to by Maciej.
+  - Decision: Settings → Tasks → Focus (Timer, Count down the estimate) moves to TV-F8 with the rest of that section ("Offer quick tasks along the way", usual pace); until then the ⋯ menu changes the Timer everywhere (63) and "Other lengths…" opens Settings → Focus for the Pomodoro lengths.
+  - Why: one Settings section, built once with all its switches.
+  - Rejected: a Timer-only section now.
+
 ## 2026-10-13 · TV-D13 Teams: routing, marks, settings — the agent's choices (deferred to by Maciej)
 
 Built in tasks-v3 block 28 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §1, §13, §15, §17, AC5.1's server half, AC5.2, AC5.6's server half, AC5.7; REPLAN 20, 20a, 54, 94, 95, defaults s and t; migrations `20261013150000_teams_routing` and `20261013170000_teams_mention_once`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.

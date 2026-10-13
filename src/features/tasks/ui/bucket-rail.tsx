@@ -46,7 +46,6 @@ import {
   NavSectionHeader,
   restoreNavFocus,
 } from "../../../components/ui/nav-row";
-import { SegmentedControl } from "../../../components/ui/segmented-control";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import type { TasksSidebarHideable } from "../../../lib/preferences";
 import { useAuth } from "../../../providers/auth-provider";
@@ -56,8 +55,6 @@ import { RAIL_SORT_PREFIX, type RailDropTarget } from "../dnd/rail-drop";
 import type { Area, Bucket } from "../model";
 import { BUCKET_COLOR_OPTIONS, bucketDotColor, sidebarGroups } from "../sidebar";
 import { type RailDropAccepts, RailDropRow } from "./dnd/rail-drop-row";
-
-export type TasksMode = "plan" | "execute";
 
 /** The sidebar's selections besides projects: the centre views its ⋯ opens. */
 export const ARCHIVED_SELECTION = "archived";
@@ -88,8 +85,6 @@ export function asRailProject(data: unknown): string | null {
 }
 
 type Props = {
-  mode: TasksMode;
-  onModeChange: (mode: TasksMode) => void;
   /** "inbox" | "today" (Focus) | "upcoming" | "mine" | "all" | "archived" | "trash" | project id */
   selection: string;
   onSelect: (selection: string) => void;
@@ -194,8 +189,6 @@ export function parseCollapsedSections(raw: string | null): Set<string> {
 type Adding = { kind: "project"; areaId: string | null } | { kind: "area" } | null;
 
 export function BucketRail({
-  mode,
-  onModeChange,
   selection,
   onSelect,
   buckets,
@@ -325,8 +318,6 @@ export function BucketRail({
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
-      <ModeToggle mode={mode} onModeChange={onModeChange} />
-
       <div className="pane-scroll min-h-0 flex-1 overflow-auto">
         <nav ref={nav} className="flex flex-col gap-px" aria-label="Tasks">
           {/* ── Yours ───────────────────────────────────────────────────── */}
@@ -381,7 +372,7 @@ export function BucketRail({
               label="Focus"
               icon={<ListChecks aria-hidden />}
               count={queueCount}
-              countLabel={`${queueCount} queued`}
+              countLabel={`${queueCount} lined up`}
               current={selection === "today"}
               onSelect={() => onSelect("today")}
             />
@@ -549,31 +540,6 @@ export function BucketRail({
         </nav>
       </div>
     </div>
-  );
-}
-
-// ── mode toggle ───────────────────────────────────────────────────────────────
-
-function ModeToggle({
-  mode,
-  onModeChange,
-}: {
-  mode: TasksMode;
-  onModeChange: (mode: TasksMode) => void;
-}) {
-  // Shared SegmentedControl primitive. The internal mode value stays "execute"
-  // (model-level); the label reads "Focus". TV-F7 removes the switch.
-  return (
-    <SegmentedControl
-      aria-label="Tasks mode"
-      fullWidth
-      value={mode}
-      onValueChange={(value) => onModeChange(value as TasksMode)}
-      items={[
-        { value: "plan", label: "Plan" },
-        { value: "execute", label: "Focus" },
-      ]}
-    />
   );
 }
 

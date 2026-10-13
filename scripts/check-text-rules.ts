@@ -70,10 +70,9 @@ const SMALL_CAPS_CHROME: Record<string, string[]> = {
   "src/features/settings/sections/preferences-section.tsx": ["label"],
   "src/features/settings/sections/integrations-section.tsx": ["platform"],
   "src/features/settings/appearance/picker-row.tsx": ["tag"],
-  // Tasks: the timeline's month band ("October 2026"); Focus (rebuilt in
-  // TV-F7) shows its phase word ("Focus", "Break") and a subtask number.
+  // Tasks: the timeline's month band ("October 2026"). Focus (TV-F7) has no
+  // small caps any more.
   "src/features/tasks/ui/task-timeline-view.tsx": ["m.label"],
-  "src/features/tasks/ui/execute-view.tsx": ["session.phaseLabel", "done"],
   // Calendar: its Tasks groups ("Queue", "Due soon", "Backlog"), a weekday on
   // the booking page; colour names ("blue" → "Blue") in the account colour menu.
   "src/features/calendar/ui/calendar-tasks-panel.tsx": ["title"],
