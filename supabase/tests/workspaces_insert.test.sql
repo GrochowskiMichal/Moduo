@@ -1,6 +1,6 @@
 -- SEC2 · Workspaces are created only for the signed-in person; the free-plan
 -- workspace limit is enforced in the database
--- (supabase/migrations/20261013265000_workspaces_insert_owner.sql).
+-- (supabase/migrations/20261013224816_workspaces_insert_owner.sql).
 --
 -- Cast: O owns workspace W. On the free plan, owning nothing at the start:
 -- F; G (a member of W); H (one request, several rows); R (restores); K (a
