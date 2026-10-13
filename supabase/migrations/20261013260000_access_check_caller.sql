@@ -280,7 +280,7 @@ $function$;
 REVOKE ALL ON FUNCTION public.can_access(text, uuid, text, uuid) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.can_access(text, uuid, text, uuid) TO postgres, service_role;
 REVOKE ALL ON FUNCTION public.can_access(text, uuid, text) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.can_access(text, uuid, text) TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.can_access(text, uuid, text) TO postgres, authenticated, service_role;
 
 -- ── 3. Put the policies back, unchanged ─────────────────────────────────────
 DO $put_back$
