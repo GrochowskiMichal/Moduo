@@ -19,12 +19,13 @@ import {
   legacyTaskStatus,
   type PriorityLevel,
   type TaskStatusCategory,
+  type TaskWaitingKind,
   taskCategoryOf,
 } from "@contracts/vocabularies";
 import type { BoardGroupBy, BoardLanes } from "./display";
 import { type GroupBy, groupKeyFor, groupTasks, isProjectScope, PRIORITY_LABELS } from "./helpers";
 import { type GroupAddState, groupAddState } from "./list-group-add";
-import type { Bucket, ProjectStatus, Task } from "./model";
+import type { Bucket, ProjectStatus, Task, TaskWaitingEntry } from "./model";
 import {
   firstStatusOf,
   STATUS_KEY_LABELS,
@@ -45,7 +46,10 @@ export type BoardTarget =
   | { field: "assignee"; value: string | null }
   | { field: "section"; value: string | null }
   | { field: "team"; value: string | null }
-  | { field: "project"; value: string };
+  | { field: "project"; value: string }
+  /** Waiting on someone or something (TV-U12): a drop adds the entry, it
+   *  writes no field. */
+  | { field: "waiting"; kind: TaskWaitingKind; ref: string | null; label: string | null };
 
 /** What a column or lane leads with. */
 export type BoardMark =
@@ -111,6 +115,8 @@ export type BoardContext = {
   areas?: ReadonlyArray<{ id: string; name: string; color: string | null; position: number }>;
   /** The status keys Filter → Status lets through (null: no Status filter). */
   statusFilter?: ReadonlySet<StatusKey> | null;
+  /** Waiting on entries of the tasks in view (Group by Waiting on). */
+  waiting?: ReadonlyArray<Pick<TaskWaitingEntry, "taskId" | "kind" | "ref" | "label" | "since">>;
 };
 
 /** The no-value key of the assignee, section and team groupings. */
@@ -165,6 +171,8 @@ export function buildBoardColumns(tasks: readonly Task[], ctx: BoardContext): Bo
       return projectColumns(tasks, ctx);
     case "area":
       return areaColumns(tasks, ctx);
+    case "waiting":
+      return waitingColumns(tasks, ctx);
     default:
       return statusColumns(tasks, ctx);
   }
@@ -578,6 +586,88 @@ function areaColumns(tasks: readonly Task[], ctx: BoardContext): BoardColumn[] {
     tasks: byArea.get(key) ?? [],
   });
   return [...areas.map((a) => column(a.id, a.name, a.color)), column(NONE, "No area", null)];
+}
+
+// ── waiting on (TV-U12, deferred here by TV-U11) ────────────────────────────
+
+/** A waiting entry's column key: the person, or the words (any case). */
+function waitingKeyOf(entry: Pick<TaskWaitingEntry, "kind" | "ref" | "label">): string {
+  if (entry.kind === "text") return `text:${(entry.label ?? "").trim().toLowerCase()}`;
+  return `${entry.kind}:${entry.ref ?? entry.label ?? ""}`;
+}
+
+/**
+ * One column per someone or something a task waits on, then "Not waiting".
+ * A task waiting on several sits under the newest (a drop adds a newer one,
+ * so the card follows the drop). Columns hide when empty (default o); "Not
+ * waiting" takes no drops: a wait ends when what it waits on arrives, or
+ * from the panel.
+ */
+function waitingColumns(tasks: readonly Task[], ctx: BoardContext): BoardColumn[] {
+  const inView = new Set(tasks.map((t) => t.id));
+  const newest = new Map<string, Pick<TaskWaitingEntry, "kind" | "ref" | "label" | "since">>();
+  for (const entry of ctx.waiting ?? []) {
+    if (!inView.has(entry.taskId)) continue;
+    const had = newest.get(entry.taskId);
+    if (!had || entry.since > had.since) newest.set(entry.taskId, entry);
+  }
+  const byKey = new Map<
+    string,
+    { entry: Pick<TaskWaitingEntry, "kind" | "ref" | "label">; tasks: Task[] }
+  >();
+  const none: Task[] = [];
+  for (const task of tasks) {
+    const entry = newest.get(task.id);
+    if (!entry) {
+      none.push(task);
+      continue;
+    }
+    const key = waitingKeyOf(entry);
+    const col = byKey.get(key);
+    if (col) col.tasks.push(task);
+    else byKey.set(key, { entry, tasks: [task] });
+  }
+  const nameOf = (entry: Pick<TaskWaitingEntry, "kind" | "ref" | "label">) => {
+    if (entry.kind === "person") {
+      return (
+        ctx.assignees?.find((a) => a.userId === entry.ref)?.name ?? entry.label ?? "A former member"
+      );
+    }
+    return entry.label?.trim() || (entry.kind === "email" ? "An email" : "An agent");
+  };
+  const columns: BoardColumn[] = [...byKey.entries()]
+    .map(([key, { entry, tasks: list }]) => ({
+      id: `col:waiting:${key}`,
+      key,
+      label: nameOf(entry),
+      mark:
+        entry.kind === "person" && entry.ref
+          ? ({ kind: "group", groupBy: "assignee", key: entry.ref } as const)
+          : null,
+      target: {
+        field: "waiting" as const,
+        kind: entry.kind,
+        ref: entry.ref ?? null,
+        label: entry.label ?? null,
+      },
+      persistent: false,
+      startsFolded: false,
+      add: { kind: "none" } as const,
+      tasks: list,
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+  columns.push({
+    id: `col:waiting:${NONE}`,
+    key: NONE,
+    label: "Not waiting",
+    mark: null,
+    target: null,
+    persistent: true,
+    startsFolded: false,
+    add: addFor(ctx, "none", NONE),
+    tasks: none,
+  });
+  return columns;
 }
 
 /** The "+" of a column, by the List's rule (U10-6). */

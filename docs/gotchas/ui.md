@@ -203,6 +203,11 @@ Read before working in `src/components/`, `src/routes/`, `.storybook/`, dashboar
 - **A Board drop id is opaque (`col:status:<uuid>`, `col:…|lane:<key>`), so the page's drag announcements can't read a name out of it.** The board registers each target's name (`registerBoardDropNames`, `boardDropName` in `use-board-folds.ts`); the page's `targetName` asks it for any `col:` id. A new drop surface with opaque ids needs the same, or screen readers hear nothing.
 - **Undo of a drop that keeps the status's category (In progress → In review) compared only the key, so it did nothing.** `undoWrite` compares the exact status (`key|statusId`) both for "changed since" and for "is there anything to put back"; a test pins it (`drop-write.test.ts`).
 
+## Multi-select (TV-U12)
+
+- **A search dialog opened by a key and unmounted when it closes (`{open ? <Dialog open … /> : null}`) can hand focus to `<body>`, so the List's next key goes nowhere.** Esc closed the bulk picker, then a second Esc never reached the List to clear the selection. The bulk pickers remember the element that had focus when they opened and give it back when they close, if focus fell to the body (`setPicker` in `use-bulk-actions.tsx`). Do the same for any dialog a view's key opens. → [use-bulk-actions.tsx](../../src/features/tasks/ui/use-bulk-actions.tsx)
+- **Live-verifying with the Browser pane's viewport set larger than the pane: clicks take the emulated viewport's coordinates, not the scaled screenshot's.** A ⌘-click meant for a row landed on the sidebar (Upcoming opened). Click by `ref` (`find`), or reset the viewport to the pane's size so the screenshot and the clicks share one frame.
+
 ## Onboarding (TV-U17)
 
 - **E2E specs sign in with Tasks' welcome already seen; a spec about it has to ask for it.** The welcome opens by itself once per person, and the shared dev and teammate accounts have no "seen" until something sets it, so it would cover the page in every other spec. `signInPage` marks it seen in the person's synced preferences (service role, read-merge-write of the `preferences` blob, stamped newer) unless you pass `{ welcome: true }`, as `tests/onboarding.spec.ts` does with its own person (`newbie@moduo.local`, whose workspace and preferences it resets each test). → [tests/support/local-stack.ts](../../tests/support/local-stack.ts) `markWelcomeSeen`

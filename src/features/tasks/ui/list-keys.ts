@@ -13,8 +13,8 @@
 //   • Keys typed in a row's portaled surfaces (its popovers, its context menu)
 //     never reach the List, though React bubbles them up to it.
 //
-// Shift isn't a bail-out: letters match case-insensitively (TV-U5 claims ⇧J/⇧K
-// for extending the selection, checked before the lowercase match; ⇧S opens
+// Shift isn't a bail-out: letters match case-insensitively (⇧J/⇧K and ⇧↑/⇧↓
+// extend the selection, TV-U12, checked before the lowercase match; ⇧S opens
 // the status menu, TV-U10), and `>` / `<` (nest under the row above, un-nest;
 // default k) match `event.key`, whatever the keyboard needs to type them.
 
@@ -37,7 +37,14 @@ export type ListKeyAction =
   | "nest"
   | "unnest"
   | "move-up"
-  | "move-down";
+  | "move-down"
+  /** ⇧↓ / ⇧J and ⇧↑ / ⇧K: the selection grows to the next row (TV-U12). */
+  | "extend-next"
+  | "extend-prev"
+  /** ⌘A: every row the view shows. */
+  | "select-all"
+  /** Esc: back to the cursor alone (only while several are selected). */
+  | "clear-selection";
 
 type ListKey = Pick<KeyboardEvent, "key" | "metaKey" | "ctrlKey" | "altKey"> &
   Partial<Pick<KeyboardEvent, "shiftKey">>;
@@ -88,9 +95,16 @@ export function listKeyAction(
       if (key === "ArrowDown") return "move-down";
     }
     const command = (metaKey || ctrlKey) && !altKey;
+    // ⌘A selects the view (an explicit binding, keymap; never the page's text).
+    if (command && !shiftKey && key.toLowerCase() === "a") return "select-all";
     return command && (key === "Backspace" || key === "Delete") ? "delete" : null;
   }
   if (opts.onControl && (key === " " || key === "Enter")) return null;
+  if (key === "Escape") return "clear-selection";
+  if (shiftKey) {
+    if (key === "ArrowDown" || key.toLowerCase() === "j") return "extend-next";
+    if (key === "ArrowUp" || key.toLowerCase() === "k") return "extend-prev";
+  }
   switch (key) {
     case "ArrowDown":
       return "next";

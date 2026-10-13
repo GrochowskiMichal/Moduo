@@ -25,6 +25,7 @@ import type { EnergyLevel, PriorityLevel, Task } from "../model";
 import { handleLabel } from "../row-layout";
 import { AssignContextMenu } from "./assign-context-menu";
 import type { TaskFacts, TaskRowActions } from "./row-facts";
+import { SelectionAware } from "./selection-menu";
 
 /** Which inline menu or popover the keyboard (or this menu) asks to open. */
 export type TaskCommand = "bucket" | "schedule" | "due" | "status";
@@ -119,96 +120,103 @@ export function TaskContextMenu({
           action();
         }}
       >
-        <ContextMenuItem onSelect={() => afterMenuClose(() => onRename(task.id))}>
-          Rename
-        </ContextMenuItem>
-        <ContextMenuItem onSelect={() => activateTask(task, actions)}>
-          {done ? "Mark not done" : closed ? "Reopen" : "Mark done"}
-        </ContextMenuItem>
-        <ContextMenuItem onSelect={() => afterMenuClose(() => onRequestCommand(task.id, "status"))}>
-          Status…
-        </ContextMenuItem>
-        {!closed && task.status !== "archived" ? (
-          <>
-            <ContextMenuItem onSelect={() => actions.focusOnTask(task.id)}>
-              Focus on this
-              <ContextMenuShortcut>⇧F</ContextMenuShortcut>
-            </ContextMenuItem>
-            <ContextMenuItem onSelect={() => actions.toggleQueue(task.id)}>
-              {facts.queued ? "Remove from Focus" : "Add to Focus"}
-              <ContextMenuShortcut>Q</ContextMenuShortcut>
-            </ContextMenuItem>
-          </>
-        ) : null}
-        {task.recurrence && !closed ? (
-          <ContextMenuItem onSelect={() => actions.skipOccurrence(task.id)}>
-            Skip occurrence
+        {/* A task of a selection: the menu acts on the selection (TV-U12). */}
+        <SelectionAware taskId={task.id} afterClose={afterMenuClose}>
+          <ContextMenuItem onSelect={() => afterMenuClose(() => onRename(task.id))}>
+            Rename
           </ContextMenuItem>
-        ) : null}
-        <ContextMenuSeparator />
-        <ContextMenuItem
-          onSelect={() => afterMenuClose(() => onRequestCommand(task.id, "schedule"))}
-        >
-          Schedule…
-        </ContextMenuItem>
-        <ContextMenuItem onSelect={() => afterMenuClose(() => onRequestCommand(task.id, "due"))}>
-          Set due date…
-        </ContextMenuItem>
-        <ContextMenuItem onSelect={() => afterMenuClose(() => onRequestCommand(task.id, "bucket"))}>
-          Move to project…
-        </ContextMenuItem>
-        {task.parentId ? (
-          <ContextMenuItem onSelect={() => actions.setTaskParent(task.id, null)}>
-            Detach from parent
+          <ContextMenuItem onSelect={() => activateTask(task, actions)}>
+            {done ? "Mark not done" : closed ? "Reopen" : "Mark done"}
           </ContextMenuItem>
-        ) : null}
-        <ContextMenuSeparator />
-        <AssignContextMenu task={task} api={actions} />
-        <ContextMenuSub>
-          <ContextMenuSubTrigger>Priority</ContextMenuSubTrigger>
-          <ContextMenuSubContent>
-            <ContextMenuRadioGroup
-              value={task.priority ?? "none"}
-              onValueChange={(v) =>
-                actions.patchTask(task.id, {
-                  priority: v === "none" ? null : (v as PriorityLevel),
-                })
-              }
-            >
-              <ContextMenuRadioItem value="none">None</ContextMenuRadioItem>
-              {LEVEL_OPTIONS.map((l) => (
-                <ContextMenuRadioItem key={l.value} value={l.value}>
-                  {l.label}
-                </ContextMenuRadioItem>
-              ))}
-            </ContextMenuRadioGroup>
-          </ContextMenuSubContent>
-        </ContextMenuSub>
-        <ContextMenuSub>
-          <ContextMenuSubTrigger>Energy</ContextMenuSubTrigger>
-          <ContextMenuSubContent>
-            <ContextMenuRadioGroup
-              value={task.energyLevel ?? "none"}
-              onValueChange={(v) =>
-                actions.patchTask(task.id, {
-                  energyLevel: v === "none" ? null : (v as EnergyLevel),
-                })
-              }
-            >
-              <ContextMenuRadioItem value="none">None</ContextMenuRadioItem>
-              {LEVEL_OPTIONS.map((l) => (
-                <ContextMenuRadioItem key={l.value} value={l.value}>
-                  {l.label}
-                </ContextMenuRadioItem>
-              ))}
-            </ContextMenuRadioGroup>
-          </ContextMenuSubContent>
-        </ContextMenuSub>
-        <ContextMenuSeparator />
-        <ContextMenuItem onSelect={copyLink}>Copy link</ContextMenuItem>
-        <ContextMenuItem variant="destructive" onSelect={() => actions.deleteTask(task.id)}>
-          Delete
-        </ContextMenuItem>
+          <ContextMenuItem
+            onSelect={() => afterMenuClose(() => onRequestCommand(task.id, "status"))}
+          >
+            Status…
+          </ContextMenuItem>
+          {!closed && task.status !== "archived" ? (
+            <>
+              <ContextMenuItem onSelect={() => actions.focusOnTask(task.id)}>
+                Focus on this
+                <ContextMenuShortcut>⇧F</ContextMenuShortcut>
+              </ContextMenuItem>
+              <ContextMenuItem onSelect={() => actions.toggleQueue(task.id)}>
+                {facts.queued ? "Remove from Focus" : "Add to Focus"}
+                <ContextMenuShortcut>Q</ContextMenuShortcut>
+              </ContextMenuItem>
+            </>
+          ) : null}
+          {task.recurrence && !closed ? (
+            <ContextMenuItem onSelect={() => actions.skipOccurrence(task.id)}>
+              Skip occurrence
+            </ContextMenuItem>
+          ) : null}
+          <ContextMenuSeparator />
+          <ContextMenuItem
+            onSelect={() => afterMenuClose(() => onRequestCommand(task.id, "schedule"))}
+          >
+            Schedule…
+          </ContextMenuItem>
+          <ContextMenuItem onSelect={() => afterMenuClose(() => onRequestCommand(task.id, "due"))}>
+            Set due date…
+          </ContextMenuItem>
+          <ContextMenuItem
+            onSelect={() => afterMenuClose(() => onRequestCommand(task.id, "bucket"))}
+          >
+            Move to project…
+          </ContextMenuItem>
+          {task.parentId ? (
+            <ContextMenuItem onSelect={() => actions.setTaskParent(task.id, null)}>
+              Detach from parent
+            </ContextMenuItem>
+          ) : null}
+          <ContextMenuSeparator />
+          <AssignContextMenu task={task} api={actions} />
+          <ContextMenuSub>
+            <ContextMenuSubTrigger>Priority</ContextMenuSubTrigger>
+            <ContextMenuSubContent>
+              <ContextMenuRadioGroup
+                value={task.priority ?? "none"}
+                onValueChange={(v) =>
+                  actions.patchTask(task.id, {
+                    priority: v === "none" ? null : (v as PriorityLevel),
+                  })
+                }
+              >
+                <ContextMenuRadioItem value="none">None</ContextMenuRadioItem>
+                {LEVEL_OPTIONS.map((l) => (
+                  <ContextMenuRadioItem key={l.value} value={l.value}>
+                    {l.label}
+                  </ContextMenuRadioItem>
+                ))}
+              </ContextMenuRadioGroup>
+            </ContextMenuSubContent>
+          </ContextMenuSub>
+          <ContextMenuSub>
+            <ContextMenuSubTrigger>Energy</ContextMenuSubTrigger>
+            <ContextMenuSubContent>
+              <ContextMenuRadioGroup
+                value={task.energyLevel ?? "none"}
+                onValueChange={(v) =>
+                  actions.patchTask(task.id, {
+                    energyLevel: v === "none" ? null : (v as EnergyLevel),
+                  })
+                }
+              >
+                <ContextMenuRadioItem value="none">None</ContextMenuRadioItem>
+                {LEVEL_OPTIONS.map((l) => (
+                  <ContextMenuRadioItem key={l.value} value={l.value}>
+                    {l.label}
+                  </ContextMenuRadioItem>
+                ))}
+              </ContextMenuRadioGroup>
+            </ContextMenuSubContent>
+          </ContextMenuSub>
+          <ContextMenuSeparator />
+          <ContextMenuItem onSelect={copyLink}>Copy link</ContextMenuItem>
+          <ContextMenuItem variant="destructive" onSelect={() => actions.deleteTask(task.id)}>
+            Delete
+          </ContextMenuItem>
+        </SelectionAware>
       </ContextMenuContent>
     </ContextMenu>
   );

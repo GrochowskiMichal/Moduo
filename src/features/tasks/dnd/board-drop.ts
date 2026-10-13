@@ -11,6 +11,7 @@
 // area) takes nothing, and Project lanes never move a task to another
 // project (that stays a deliberate Move, call 85's research).
 
+import type { TaskWaitingKind } from "@contracts/vocabularies";
 import type { BoardTarget } from "../board-columns";
 import { statusNameKey } from "../board-columns";
 import type { ProjectStatus, Task } from "../model";
@@ -36,7 +37,13 @@ export type BoardDropDecision =
   | { kind: "none" }
   /** Sorted: nothing moves; the toast asks to go back to manual order. */
   | { kind: "ask-manual" }
-  | { kind: "write"; write: TaskDropWrite; label: string };
+  | { kind: "write"; write: TaskDropWrite; label: string }
+  /** Into a Waiting on column (TV-U12): the task waits on that one too. */
+  | {
+      kind: "waiting";
+      entry: { kind: TaskWaitingKind; ref: string | null; label: string | null };
+      label: string;
+    };
 
 export type BoardDropContext = {
   inboxId: string | null;
@@ -88,6 +95,9 @@ export function targetWrite(
       const { taskId: _id, ...move } = projectMoveWrite(task, target.value, ctx.parent);
       return move;
     }
+    case "waiting":
+      // Not a field: `planBoardDrop` answers with the entry to add.
+      return null;
   }
 }
 
@@ -100,6 +110,8 @@ export function targetLabel(target: BoardTarget, name: string): string {
       return target.value ? `Set to ${name}` : "Priority cleared";
     case "team":
       return target.value ? `Routed to ${name}` : "Team cleared";
+    case "waiting":
+      return `Waiting on ${name}`;
     default:
       return `Moved to ${name}`;
   }
@@ -135,6 +147,14 @@ export function planBoardDrop(input: {
   const laneMoved = (source.lane?.key ?? null) !== (dest.lane?.key ?? null);
   let write: TaskDropWrite = { taskId: task.id };
   let label = "Moved";
+  if (columnMoved && dest.column.target?.field === "waiting") {
+    const { kind, ref, label: words } = dest.column.target;
+    return {
+      kind: "waiting",
+      entry: { kind, ref, label: words },
+      label: targetLabel(dest.column.target, dest.column.label),
+    };
+  }
   if (columnMoved) {
     const target = dest.column.target;
     const fields = target ? targetWrite(target, task, ctx) : null;
