@@ -438,6 +438,113 @@ describe("two devices never both count (AC8.11)", () => {
     ]);
     expect(givenBack[0]?.key).toMatch(/^gb-srv-1-/);
   });
+
+  it("a takeover that hasn't reached the server is sent again, not undone", async () => {
+    const { rows, rt, givenBack } = fakeServer();
+    rs.setSystemTime(T0 - 40 * 60_000);
+    await rt.startRun({
+      workspaceId: WS,
+      deviceId: "desktop-1234",
+      mode: "per_task",
+      state: { nowTaskId: "t1", status: "running", phaseStartedAt: iso(T0 - 40 * 60_000) },
+    });
+    rs.setSystemTime(T0);
+    attach(rt);
+    await settle();
+    const save = rt.saveRun;
+    rt.saveRun = async () => {
+      throw new Error("offline");
+    };
+    takeRunControl(resolve);
+    await settle();
+    rs.advanceTimersByTime(61_000);
+    await settle();
+    // Back online: the server still names the desktop (the take never got there).
+    rt.saveRun = save;
+    await refreshFocusRun();
+    await settle();
+    expect(getFocusSession().tracking).toBe(true);
+    expect(rows[0].deviceId).toBe(runDeviceId());
+    expect(givenBack).toEqual([]);
+  });
+
+  it("a later takeover elsewhere gives back only what this device counted", async () => {
+    const { rows, rt, givenBack } = fakeServer();
+    const saved: number[] = [];
+    registerFocusFlushSink(WS, (_taskId, seconds) => {
+      saved.push(seconds);
+      return true;
+    });
+    rs.setSystemTime(T0 - 40 * 60_000);
+    await rt.startRun({
+      workspaceId: WS,
+      deviceId: "desktop-1234",
+      mode: "per_task",
+      state: { nowTaskId: "t1", status: "running", phaseStartedAt: iso(T0 - 40 * 60_000) },
+    });
+    rs.setSystemTime(T0);
+    attach(rt);
+    await settle();
+    const save = rt.saveRun;
+    rt.saveRun = async () => {
+      throw new Error("offline");
+    };
+    takeRunControl(resolve);
+    await settle();
+    rs.advanceTimersByTime(30_000);
+    toggleFocusRunning(); // pausing saves this device's 30 s
+    toggleFocusRunning();
+    await settle();
+    expect(saved.reduce((a, b) => a + b, 0)).toBe(30);
+    // The phone took it 10 s before that save, after this device's take.
+    rows[0] = {
+      ...rows[0],
+      deviceId: "phone-12345",
+      controlAt: iso(T0 + 20_000),
+      seenAt: iso(T0 + 31_000),
+    };
+    rt.saveRun = save;
+    await refreshFocusRun();
+    await settle();
+    expect(getFocusSession().tracking).toBe(false);
+    // Only the 10 s this device counted after the phone's take; none of the
+    // desktop's 40 minutes it took up.
+    expect(givenBack).toEqual([expect.objectContaining({ taskId: "t1", seconds: 10 })]);
+    rs.advanceTimersByTime(60_000);
+    await settle();
+    expect(rows[0].deviceId).toBe("phone-12345"); // no take left owed
+  });
+
+  it("a give-back that failed is sent again, with the same key", async () => {
+    const { rows, rt, givenBack } = fakeServer();
+    registerFocusFlushSink(WS, () => true);
+    attach(rt);
+    await settle();
+    focusOnTask(refs.t1, "per_task");
+    await settle();
+    rs.advanceTimersByTime(30_000);
+    toggleFocusRunning();
+    toggleFocusRunning();
+    await settle();
+    const giveBack = rt.giveBackTime;
+    rt.giveBackTime = async () => {
+      throw new Error("offline");
+    };
+    rows[0] = {
+      ...rows[0],
+      deviceId: "phone-12345",
+      controlAt: iso(T0 + 20_000),
+      seenAt: iso(T0 + 31_000),
+    };
+    pushRow?.(dbRow(rows[0]));
+    await settle();
+    expect(givenBack).toEqual([]);
+    rt.giveBackTime = giveBack;
+    await refreshFocusRun();
+    await settle();
+    expect(givenBack).toEqual([expect.objectContaining({ taskId: "t1", seconds: 10 })]);
+    expect(givenBack[0]?.key).toMatch(/^gb-srv-1-/);
+  });
 });
 
 describe("Stop, then a new start inside the Undo window", () => {

@@ -110,6 +110,13 @@ let pollHandle: ReturnType<typeof setInterval> | null = null;
 let heartbeatHandle: ReturnType<typeof setInterval> | null = null;
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let pendingTake = false;
+/** While a take is owed: the control moment the run had when this device
+ *  took it (another device's), and when it took it (this device's clock). A
+ *  server copy naming another device from no later than either is the take
+ *  not having landed yet, not a newer takeover: the device acted on last
+ *  keeps the run. */
+let takeFrom: number | null = null;
+let takeAt: number | null = null;
 /** Server writes go one at a time, in the order they were made. */
 let chain: Promise<void> = Promise.resolve();
 /** A run started here, by its local id, once the server answered. */
@@ -132,6 +139,9 @@ const lastSeen = new Map<string, number>();
 const endedHere = new Set<string>();
 /** A start whose request failed (offline): sent again on the next look. */
 let startRetry: { localId: string } | null = null;
+/** Give-backs whose request failed (offline): sent again, same key, on the
+ *  next look. */
+let giveBacksOwed: GiveBack[] = [];
 /** Stop pressed: the end waits out the Undo window (62a). */
 let pendingEnd: {
   run: FocusRun;
@@ -274,6 +284,10 @@ function inControlOf(run: FocusRun | null): boolean {
  *  `takenOver`, what this device already saved after the takeover is given
  *  back: the other device counted it too (AC8.11). */
 function stopHere(at: number, takenOver?: { runId: string }): void {
+  // The run isn't this device's any more: no take is owed.
+  pendingTake = false;
+  takeFrom = null;
+  takeAt = null;
   if (!getFocusSession().tracking) return;
   relinquishing = true;
   let giveBack: FocusGiveBack | null = null;
@@ -284,22 +298,48 @@ function stopHere(at: number, takenOver?: { runId: string }): void {
   }
   lastSessionKey = "";
   lastSnap = null;
-  if (takenOver && giveBack?.workspaceId && rt) {
-    const runtime = rt;
-    const back = giveBack;
-    const key = `gb-${takenOver.runId}-${Math.round(at)}`.slice(0, 64);
-    queue(() =>
-      runtime.giveBackTime({
-        workspaceId: back.workspaceId ?? "",
-        taskId: back.taskId,
-        seconds: back.seconds,
-        key,
-      }),
-    );
+  if (takenOver && giveBack?.workspaceId) {
+    sendGiveBack({
+      workspaceId: giveBack.workspaceId,
+      taskId: giveBack.taskId,
+      seconds: giveBack.seconds,
+      key: `gb-${takenOver.runId}-${Math.round(at)}`.slice(0, 64),
+    });
   }
 }
 
+type GiveBack = Parameters<FocusRunRuntime["giveBackTime"]>[0];
+
+/** Give time back (keyed: a resend never counts twice). A failed request is
+ *  sent again on the next look; a refusal isn't. */
+function sendGiveBack(back: GiveBack): void {
+  if (!rt) return;
+  const runtime = rt;
+  queue(async () => {
+    try {
+      await runtime.giveBackTime(back);
+    } catch (error) {
+      const code = (error as { code?: unknown }).code;
+      if (code !== "42501" && code !== "22023") giveBacksOwed.push(back);
+      throw error;
+    }
+  });
+}
+
+function retryGiveBacks(): void {
+  const owed = giveBacksOwed;
+  giveBacksOwed = [];
+  for (const back of owed) sendGiveBack(back);
+}
+
 // ── receiving the server's copy ──────────────────────────────────────────────
+
+/** A take this device made is still owed, and a copy controlled from
+ *  `controlAt` predates it. */
+function takeStillOwed(controlAt: number): boolean {
+  if (!pendingTake || takeFrom === null || takeAt === null) return false;
+  return controlAt <= takeFrom || controlAt < takeAt;
+}
 
 /** The run ended (elsewhere): stop this device's clock if it ran it. */
 function endedElsewhere(local: FocusRun, at: number, server?: FocusRun): void {
@@ -349,6 +389,13 @@ function receive(server: FocusRun | null, opts: { full?: boolean } = {}): void {
     return;
   }
   const nowMine = server.deviceId === deviceId;
+  if (!nowMine && local?.id === server.id && takeStillOwed(Date.parse(server.controlAt))) {
+    // This device took the run but the take hasn't reached the server yet
+    // (offline): the copy names a device that had it before. The takeover
+    // stands: send it again.
+    scheduleSave(true);
+    return;
+  }
   if (!nowMine) {
     // Another device has the run: this device's clock stops, giving back what
     // it credited after the takeover.
@@ -490,6 +537,10 @@ async function saveNow(target?: FocusRun): Promise<void> {
   } catch (error) {
     if (take) pendingTake = true;
     throw error;
+  }
+  if (take && !pendingTake) {
+    takeFrom = null;
+    takeAt = null;
   }
   receive(saved);
 }
@@ -741,6 +792,7 @@ function onVisible(): void {
   if (now - lastRefreshAt < REFRESH_THROTTLE_MS) return;
   lastRefreshAt = now;
   retryStart();
+  retryGiveBacks();
   void refreshRun();
 }
 
@@ -779,6 +831,8 @@ function stopTimers(): void {
   heartbeatHandle = null;
   saveTimer = null;
   pendingTake = false;
+  takeFrom = null;
+  takeAt = null;
   pendingEnd = null;
 }
 
@@ -796,6 +850,7 @@ function resetMemory(): void {
   writesInFlight = 0;
   recheckAfterWrites = false;
   startRetry = null;
+  giveBacksOwed = [];
   lastSessionKey = "";
   lastSnap = null;
 }
@@ -879,6 +934,7 @@ export function undoStopKeepingRun(): boolean {
 /** Look at the server now, sending a failed start again first. */
 export function refreshFocusRun(): Promise<void> {
   retryStart();
+  retryGiveBacks();
   return refreshRun();
 }
 
@@ -900,6 +956,9 @@ export function takeRunControl(resolveTask?: TaskRefResolver): boolean {
   if (inControlOf(run) && session.tracking && focusClockIsHere()) return true;
   const now = Date.now();
   const task = run.nowTaskId ? (resolveTask?.(run.nowTaskId) ?? null) : null;
+  // A take owed meanwhile keeps the moment it took from.
+  if (!pendingTake || takeFrom === null) takeFrom = Date.parse(run.controlAt);
+  takeAt = now;
   const taken: FocusRun = {
     ...run,
     deviceId,

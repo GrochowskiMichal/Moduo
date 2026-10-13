@@ -39,6 +39,7 @@
 - [ ] **Do:** pause or stop it on the web → **Expect:** the web takes it over; the desktop's clock stops within a few seconds; the task's time isn't counted twice (check Time on the panel against the minutes worked). _(both devices)_
 - [ ] **Do:** Stop on one device → **Expect:** after the 10 s Undo the other stops showing it. _(both devices)_
 - [ ] **Do:** with the desktop's Wi-Fi off, take the session over on the web, wait 2 minutes, turn Wi-Fi back on → **Expect:** the desktop stops within seconds; the task's total is the minutes actually worked (the desktop gives back what it saved after the takeover as one negative adjustment). _(both devices)_
+- [ ] **Do:** the other way round: with the web's Wi-Fi off, press pause/resume on the web (it takes the session), wait a minute, turn Wi-Fi back on → **Expect:** the web keeps the session (it isn't handed back to the desktop); the desktop stops within seconds. _(both devices)_
 
 ## Claims ("is on this")
 - [ ] **Do:** Mike runs Focus on a task you can see → **Expect:** within a minute that task's panel header shows his avatar with a quiet dot; hovering it reads "Mike is on this". You never see yourself there. _(two people)_

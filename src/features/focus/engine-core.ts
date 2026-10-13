@@ -139,6 +139,11 @@ export interface FocusRecord {
    *  that took the run over at T gets back what was credited here after T
    *  (#323, TV-F6). Missing on records written before. */
   creditedTo?: number;
+  /** When this device began crediting this sitting (a start, a takeover, an
+   *  Undo of Stop): a give-back after a takeover never reaches back past it,
+   *  so time another device counted before is never given back from here.
+   *  Missing on records written before. */
+  heldSince?: number;
 }
 
 /** The record's timer. Records from before TV-F6 carry only `pomodoro`. */
@@ -414,6 +419,7 @@ export function startSession(r: FocusRecord, now: number, p: FocusRhythm): Focus
     sitMs: 0,
     taskMs: 0,
     creditedTo: now,
+    heldSince: now,
     away: [],
   };
 }
@@ -441,6 +447,7 @@ export function stopSession(r: FocusRecord, now: number, p: FocusRhythm): FocusR
     phaseDoneMs: 0,
     sitMs: 0,
     taskMs: 0,
+    heldSince: undefined,
     away: [],
   };
 }
@@ -474,6 +481,7 @@ export function undoStopSession(
     since: before.since === null ? null : Math.min(stoppedAt, now),
     seenAt: now,
     creditedTo: now,
+    heldSince: before.heldSince ?? now,
   };
 }
 
@@ -584,6 +592,7 @@ export function adoptSession(
     since: run.running ? now : null,
     seenAt: now,
     creditedTo: now,
+    heldSince: now,
     sitMs: Math.max(0, run.sitMs),
     taskMs: Math.max(0, run.taskMs),
     away: [],
@@ -613,7 +622,10 @@ export function overlapAfter(
   const task = r.task;
   if (!task || timerOf(r) === "off") return null;
   const creditedTo = r.creditedTo ?? r.seenAt;
-  const overlap = Math.min(Math.max(0, creditedTo - at), r.taskMs ?? Number.POSITIVE_INFINITY);
+  // Only what this device counted itself: never before it took the sitting
+  // up (time adopted from another device was that device's to count).
+  const from = Math.max(at, r.heldSince ?? at);
+  const overlap = Math.min(Math.max(0, creditedTo - from), r.taskMs ?? Number.POSITIVE_INFINITY);
   if (overlap <= 0) return null;
   const unsavedMs = Math.min(r.credits[task.id]?.ms ?? 0, overlap);
   const savedMs = Math.min(MAX_GIVE_BACK_MS, Math.max(0, overlap - unsavedMs));
@@ -1006,6 +1018,7 @@ const recordSchema = z.object({
   timer: z.enum(FOCUS_TIMER_MODES).optional().catch(undefined),
   taskMs: z.number().nonnegative().optional().catch(undefined),
   creditedTo: z.number().optional().catch(undefined),
+  heldSince: z.number().optional().catch(undefined),
 });
 
 /** Parse a stored record; anything malformed or from another version is null. */

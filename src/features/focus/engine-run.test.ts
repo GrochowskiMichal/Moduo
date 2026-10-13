@@ -12,6 +12,7 @@ import {
   type FocusRecord,
   type FocusRunClock,
   observe,
+  overlapAfter,
   parseRecord,
   relinquishSession,
   setTimer,
@@ -143,6 +144,17 @@ describe("relinquishSession", () => {
     const after = relinquishSession(r, T0 + 5 * 60_000, T0 + 10 * 60_000, P);
     expect(after.credits.t1.ms).toBe(30_000);
     expect(after.away).toEqual([]);
+  });
+
+  it("gives back only what this device counted, never the time it took up from another", () => {
+    // Adopted 40 min from the desktop, then a minute here; a copy names a
+    // device that had it from before this device took it up.
+    const adopted = adoptSession(blankRecord(T0), clock({ taskMs: 40 * 60_000 }), T0, P);
+    const r = observe(adopted, T0 + 60_000, P).rec;
+    expect(r.taskMs).toBe(41 * 60_000);
+    expect(overlapAfter(r, T0 - 30 * 60_000)).toMatchObject({ unsavedMs: 60_000, savedMs: 0 });
+    const saved: FocusRecord = { ...r, credits: {} };
+    expect(overlapAfter(saved, T0 - 30 * 60_000)).toMatchObject({ unsavedMs: 0, savedMs: 60_000 });
   });
 });
 
