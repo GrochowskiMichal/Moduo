@@ -11,14 +11,6 @@ import { type ReactNode, useCallback, useLayoutEffect, useMemo, useRef, useState
 import { toast } from "sonner";
 import { Button } from "../../../components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "../../../components/ui/dialog";
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -50,6 +42,7 @@ import {
 import { nowOn, useToday } from "../use-today";
 import { DayPickerDialog } from "./day-picker-dialog";
 import type { ListGrouping } from "./list-extensions";
+import { RepeatMoveDialog } from "./repeat-move-dialog";
 
 type UpcomingApi = Pick<
   TasksModuleApi,
@@ -360,54 +353,5 @@ function MoveAllMenu({
         <DropdownMenuItem onSelect={onPick}>Pick…</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
-  );
-}
-
-/**
- * A repeat dragged to another day (27 g, TV-D12's two ways): just this one
- * (the next one is back on the pattern), or the pattern itself.
- */
-function RepeatMoveDialog({
-  open,
-  tasks,
-  dayLabel,
-  onChoose,
-  onClose,
-}: {
-  open: boolean;
-  tasks: readonly Task[];
-  dayLabel: string;
-  onChoose: (choice: "one" | "pattern") => void;
-  onClose: () => void;
-}) {
-  const repeats = tasks.filter((t) => t.recurrence).length;
-  const title =
-    tasks.length === 1
-      ? `Move “${tasks[0]?.title || "Untitled"}” to ${dayLabel}`
-      : `Move ${tasks.length} tasks to ${dayLabel}`;
-  return (
-    <Dialog open={open} onOpenChange={(o) => (o ? undefined : onClose())}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>
-            {repeats === 1 && tasks.length === 1
-              ? "It repeats. Move just this one, and the next one is back on the pattern, or change the pattern from here on."
-              : `${repeats === 1 ? "One of them repeats" : `${repeats} of them repeat`}. Move just these, or change their patterns from here on.`}
-          </DialogDescription>
-        </DialogHeader>
-        <DialogFooter>
-          <Button variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button variant="secondary" onClick={() => onChoose("pattern")}>
-            Change the pattern
-          </Button>
-          <Button autoFocus onClick={() => onChoose("one")}>
-            {tasks.length === 1 ? "Just this one" : "Just these"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }

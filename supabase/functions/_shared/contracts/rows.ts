@@ -227,6 +227,28 @@ export const taskWaitingRowSchema = z.object({
 });
 export type TaskWaitingRow = z.infer<typeof taskWaitingRowSchema>;
 
+/** An agent session on a task (TV-D16; RLS: its person, or teammates while they share). */
+export const agentSessionRowSchema = z.object({
+  id,
+  workspace_id: id,
+  task_id: id,
+  user_id: id,
+  agent: z.string(),
+  state: z.string(),
+  note: optStr,
+  step: optNum,
+  steps: optNum,
+  links: z.unknown().optional(),
+  earlier: z.unknown().optional(),
+  summary_at: optStr,
+  summary_posted_at: optStr,
+  started_at: z.string(),
+  updated_at: z.string(),
+  stopped_at: optStr,
+  deleted_at: optStr,
+});
+export type AgentSessionRow = z.infer<typeof agentSessionRowSchema>;
+
 /** Notes meta row — v2 columns optional so pre-migration (legacy) reads still parse. */
 export const noteRowSchema = z.object({
   id,
@@ -283,6 +305,8 @@ export const bucketRowSchema = z.object({
   deleted_batch_id: optStr,
   /** The open tasks a project's delete sent to Inboxes (REPLAN 78; Restore takes back the untouched ones). */
   trash_moved_task_ids: z.union([z.array(z.string()), z.null()]).optional(),
+  /** TV-U16: the project's description (plain text, '' for none). Absent before its migration. */
+  description: optStr,
 });
 export type BucketRow = z.infer<typeof bucketRowSchema>;
 

@@ -344,4 +344,30 @@ describe("the tasks export carries every new tasks table (TV-D8, §Assumptions #
     expect(data.focusRuns).toEqual([run]);
     expect(data.truncated).toEqual([runsCut]);
   });
+
+  it("carries your own agent sessions and import runs (TV-D16), and none without them", async () => {
+    const session = { id: "s1", agent: "Claude", state: "ready" };
+    const run = { id: "imp-1", source: "todoist", label: "Syllabus" };
+    const base = {
+      list: async () => ({ tasks: [], buckets: [], truncated: [] }),
+      listCompletions: async () => ({ completions: [], truncated: [] }),
+      ...noD10Reads,
+    };
+    const rowsCut = { scope: "imported rows", shown: 100000, total: 100400 };
+    const data = await readTasksExport(
+      {
+        ...base,
+        listMyAgentSessions: async () => ({ sessions: [session], truncated: [] }),
+        listImports: async () => ({ imports: [run], truncated: [rowsCut] }),
+      },
+      "ws-1",
+    );
+    expect(data.agentSessions).toEqual([session]);
+    expect(data.imports).toEqual([run]);
+    // A cut read is named, never silent.
+    expect(data.truncated).toEqual([rowsCut]);
+    const none = await readTasksExport(base, "ws-1");
+    expect(none.agentSessions).toEqual([]);
+    expect(none.imports).toEqual([]);
+  });
 });

@@ -204,8 +204,8 @@ BEGIN
   PERFORM test.ok(r = 'ok 1'
               AND (SELECT owner_id FROM public.tasks WHERE id = test.id('TK')) = test.id('E')
               AND (SELECT actor_type || ':' || actor_label FROM public.module_activity
-                   WHERE entity_id = test.id('TK') AND op = 'tasks.create') = 'api_key:Claude Desktop',
-    'a key creates through the op, as its creator, attributed "via" the key', r);
+                   WHERE entity_id = test.id('TK') AND op = 'tasks.create') = 'api_key:E · via Claude Desktop',
+    'a key creates through the op, as its creator, attributed "E · via" the key (TV-D16)', r);
   r := test.as_key('K', format($q$SELECT * FROM public.tasks_op_update(%L, %L, '{"title": "Renamed by the agent"}'::jsonb)$q$,
     test.id('W'), test.id('TK')));
   PERFORM test.ok(r = 'ok 1' AND (SELECT label FROM public.entities WHERE entity_id = test.id('TK')) = 'Renamed by the agent',

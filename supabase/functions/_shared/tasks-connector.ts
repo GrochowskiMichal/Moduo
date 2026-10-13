@@ -229,6 +229,13 @@ export function shapeTask(t: Row, data: ShapeData, now: Date, full = false): Row
   if (t.due_date) out.due_date = t.due_date;
   if (t.scheduled_at) out.scheduled_at = t.scheduled_at;
   if (t.duration_minutes != null) out.duration_minutes = t.duration_minutes;
+  // TV-D10/D16: the section and team it's in, its estimate, when it was
+  // finished, and where an import brought it from (ENG-123).
+  if (t.section_id) out.section_id = t.section_id;
+  if (t.team_id) out.team_id = t.team_id;
+  if (t.estimate_minutes != null) out.estimate_minutes = t.estimate_minutes;
+  if (t.completed_at) out.completed_at = t.completed_at;
+  if (t.imported_from && typeof t.imported_from === "object") out.imported_from = t.imported_from;
   if (t.energy_level) out.energy_level = t.energy_level;
   if (t.priority) out.priority = t.priority;
   // TV-D2: queues are personal (queued_by_me). committed_for/commit_order are

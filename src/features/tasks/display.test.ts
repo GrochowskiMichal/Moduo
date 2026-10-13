@@ -251,6 +251,7 @@ describe("Tasks Display — controls per scope and layout", () => {
       "Priority",
       "Project",
       "Area",
+      "Waiting on",
     ]);
     expect(option("b1", "boardGroup")).toEqual([
       "Status",
@@ -258,6 +259,7 @@ describe("Tasks Display — controls per scope and layout", () => {
       "Assignee",
       "Team",
       "Priority",
+      "Waiting on",
     ]);
     expect(option("b1", "boardGroup", false)).not.toContain("Team");
     expect(option("all", "boardGroup", true, false)).not.toContain("Area");
@@ -530,8 +532,11 @@ describe("Group by", () => {
   });
 
   it("Section with no sections yet is the plain list (no headers)", () => {
-    const groups = groupTasks([task("a"), task("b")], "section", { ...ctx, sections: [] });
-    expect(groups).toEqual([{ key: "all", label: "", tasks: [task("a"), task("b")] }]);
+    // The same rows both sides: a task's stamps are the clock's (a millisecond
+    // apart under load).
+    const rows = [task("a"), task("b")];
+    const groups = groupTasks(rows, "section", { ...ctx, sections: [] });
+    expect(groups).toEqual([{ key: "all", label: "", tasks: rows }]);
   });
 
   it("Team: teams by name, a team gone, then No team", () => {

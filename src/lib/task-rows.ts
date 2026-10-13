@@ -6,6 +6,7 @@
 // one person's edit could put back a field a teammate had just changed.
 
 import {
+  agentSessionRowSchema,
   areaRowSchema,
   bucketRowSchema,
   projectStatusRowSchema,
@@ -28,6 +29,7 @@ import {
 } from "@contracts/rows";
 import {
   legacyTaskStatus,
+  normalizeAgentSessionState,
   normalizeProjectState,
   normalizeTaskReminderKind,
   normalizeTaskStatus,
@@ -36,6 +38,11 @@ import {
   type TaskStatusCategory,
   taskStatusWord,
 } from "@contracts/vocabularies";
+import type {
+  AgentSession,
+  AgentSessionLine,
+  AgentSessionLink,
+} from "../features/spine/agent-session";
 import type {
   Area,
   Bucket,
@@ -619,6 +626,8 @@ export function bucketRowToModel(raw: unknown): Bucket {
     // TV-U6: the sidebar colour and archiving (absent before its migration).
     color: r.color ?? null,
     archivedAt: r.archived_at ?? null,
+    // TV-U16 (absent before its migration).
+    ...(r.description !== undefined ? { description: r.description ?? "" } : {}),
   };
 }
 
@@ -751,6 +760,54 @@ export function taskWaitingRowToModel(raw: unknown): TaskWaitingEntry {
     since: r.since,
     createdBy: r.created_by ?? null,
     updatedAt: r.updated_at,
+  };
+}
+
+/** An agent session (TV-D16): its links and earlier lines read leniently. */
+export function agentSessionRowToModel(raw: unknown): AgentSession {
+  const r = requireRow(agentSessionRowSchema, raw, "agent session");
+  const links: AgentSessionLink[] = Array.isArray(r.links)
+    ? (r.links as unknown[]).flatMap((l) => {
+        const v = l as { url?: unknown; label?: unknown } | null;
+        if (!v || typeof v.url !== "string" || !/^https?:\/\//i.test(v.url)) return [];
+        return [
+          typeof v.label === "string" && v.label ? { url: v.url, label: v.label } : { url: v.url },
+        ];
+      })
+    : [];
+  const earlier: AgentSessionLine[] = Array.isArray(r.earlier)
+    ? (r.earlier as unknown[]).flatMap((e) => {
+        const v = e as Record<string, unknown> | null;
+        if (!v || typeof v.at !== "string") return [];
+        return [
+          {
+            at: v.at,
+            state: normalizeAgentSessionState(v.state),
+            note: typeof v.note === "string" ? v.note : null,
+            step: typeof v.step === "number" ? v.step : null,
+            steps: typeof v.steps === "number" ? v.steps : null,
+          },
+        ];
+      })
+    : [];
+  return {
+    id: r.id,
+    workspaceId: r.workspace_id,
+    taskId: r.task_id,
+    userId: r.user_id,
+    agent: r.agent,
+    state: normalizeAgentSessionState(r.state),
+    note: r.note ?? null,
+    step: r.step ?? null,
+    steps: r.steps ?? null,
+    links,
+    earlier,
+    summaryAt: r.summary_at ?? null,
+    summaryPostedAt: r.summary_posted_at ?? null,
+    startedAt: r.started_at,
+    updatedAt: r.updated_at,
+    stoppedAt: r.stopped_at ?? null,
+    ...(r.deleted_at ? { deletedAt: r.deleted_at } : {}),
   };
 }
 

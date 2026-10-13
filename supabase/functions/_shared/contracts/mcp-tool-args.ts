@@ -7,25 +7,59 @@ import { z } from "zod";
 
 import { parseOrStructured } from "./errors.ts";
 import {
+  agentSessionStateSchema,
   energyLevelSchema,
   priorityLevelSchema,
+  projectStateSchema,
+  recurrenceModeSchema,
   relationKindSchema,
+  taskReminderKindSchema,
+  taskStatusCategorySchema,
   taskStatusSchema,
+  templateKindSchema,
 } from "./vocabularies.ts";
 
 const nonempty = z.string().trim().min(1);
 const ymd = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "must be YYYY-MM-DD");
+const hhmm = z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/, "must be HH:MM");
 const iso = z.string().trim().min(1);
 const limit = z.coerce.number().int().min(1).max(200).optional();
 const wideLimit = z.coerce.number().int().min(1).max(500).optional();
 const listStatusSchema = z.union([z.literal("open"), taskStatusSchema]);
+/** tasks_list's category: one category, open (to do + in progress) or closed. */
+const listCategorySchema = z.union([z.literal("open"), z.literal("closed"), taskStatusCategorySchema]);
+const minutes = z.coerce.number().int().min(0).max(100000);
+const tagName = z.string().trim().min(1).max(50);
+/** A repeat: an RRULE string, or {rrule, mode}. */
+const repeatSchema = z.union([
+  z.string().trim().min(1).max(500),
+  z.object({ rrule: z.string().trim().min(1).max(500), mode: recurrenceModeSchema.optional() }).strict(),
+]);
+/** Where an import brought a task from: an open source name and its key there. */
+const importedFromSchema = z
+  .object({ source: z.string().trim().min(1).max(40), key: z.string().trim().min(1).max(200) })
+  .strict();
 
 export const TOOL_ARG_SCHEMAS: Record<string, z.ZodType<Record<string, unknown>>> = {
+  // ── Tasks (TV-D16: v3 surface; tasks take a handle or a uuid) ───────────
+  projects_list: z.object({ include_archived: z.boolean().optional() }),
   tasks_list_buckets: z.object({ include_archived: z.boolean().optional() }),
+  areas_list: z.object({}),
+  sections_list: z.object({ project_id: nonempty }),
+  statuses_list: z.object({ project_id: nonempty.optional() }),
+  teams_list: z.object({}),
+  templates_list: z.object({ kind: templateKindSchema.optional() }),
   tasks_list: z.object({
+    project_id: nonempty.optional(),
     bucket_id: nonempty.optional(),
+    section_id: nonempty.optional(),
+    area_id: nonempty.optional(),
+    team_id: nonempty.optional(),
+    category: listCategorySchema.optional(),
     status: listStatusSchema.optional(),
     assignee: z.enum(["me", "anyone"]).optional(),
+    completed_from: ymd.optional(),
+    completed_to: ymd.optional(),
     top_level: z.boolean().optional(),
     include_archived: z.boolean().optional(),
     limit,
@@ -38,6 +72,13 @@ export const TOOL_ARG_SCHEMAS: Record<string, z.ZodType<Record<string, unknown>>
   tasks_list_tags: z.object({}),
   tasks_search: z.object({ q: nonempty, limit }),
   tasks_get: z.object({ task_id: nonempty }),
+  tasks_history: z.object({ task_id: nonempty }),
+  tasks_time_report: z.object({
+    from: ymd,
+    to: ymd,
+    project_id: nonempty.optional(),
+    by: z.enum(["task", "day"]).optional(),
+  }),
   tasks_attachments_list: z.object({ task_id: nonempty }),
   tasks_activity: z.object({ task_id: nonempty.optional(), limit }),
   tasks_queue_add: z.object({ task_id: nonempty, at: z.enum(["end", "top"]).optional() }),
@@ -55,38 +96,144 @@ export const TOOL_ARG_SCHEMAS: Record<string, z.ZodType<Record<string, unknown>>
   tasks_commit: z.object({ task_id: nonempty, for_date: ymd.optional() }),
   tasks_uncommit: z.object({ task_id: nonempty }),
   tasks_skip_today: z.object({ task_id: nonempty }),
-  tasks_set_status: z.object({ task_id: nonempty, status: taskStatusSchema }),
+  // A category word, the project's status name or its id (TV-D9 / D16).
+  tasks_set_status: z.object({ task_id: nonempty, status: z.string().trim().min(1).max(120) }),
   tasks_reschedule: z.object({ task_id: nonempty, scheduled_at: iso }),
   tasks_unschedule: z.object({ task_id: nonempty }),
   tasks_skip_occurrence: z.object({ task_id: nonempty }),
+  tasks_move_occurrence: z.object({ task_id: nonempty, due_on: ymd.optional(), starts_at: iso.optional() }),
   // TV-D1: who can be assigned, and assigning (null unassigns; "me" = the key's creator).
   tasks_list_assignees: z.object({}),
   tasks_assign: z.object({ task_id: nonempty, assignee_id: z.union([nonempty, z.null()]) }),
-  // TV-D8: creates and edits through tasks_op_create / tasks_op_update.
+  tasks_route_team: z.object({ task_id: nonempty, team_id: z.union([nonempty, z.null()]) }),
+  tasks_claim: z.object({ task_id: nonempty }),
+  tasks_handoff: z.object({
+    task_id: nonempty,
+    person_id: nonempty.optional(),
+    label: z.string().trim().min(1).max(200).optional(),
+  }),
+  tasks_waiting_clear: z.object({ entry_id: nonempty }),
+  tasks_comment: z.object({
+    task_id: nonempty,
+    body: z.string().trim().min(1).max(20000),
+    mentioned_user_ids: z.array(nonempty).max(50).optional(),
+  }),
+  tasks_session_status: z.object({
+    task_id: nonempty,
+    state: agentSessionStateSchema,
+    note: z.string().max(280).optional(),
+    step: z.number().int().min(1).max(999).optional(),
+    steps: z.number().int().min(1).max(999).optional(),
+    links: z.array(z.union([nonempty, z.object({ url: nonempty, label: z.string().max(80).optional() })])).max(5).optional(),
+    summary: z.string().max(4000).optional(),
+    agent: z.string().trim().min(1).max(60).optional(),
+  }),
+  tasks_reminder_add: z.object({ task_id: nonempty, kind: taskReminderKindSchema.optional(), at: iso.optional() }),
+  tasks_reminder_remove: z.object({ reminder_id: nonempty }),
+  tasks_work_session_add: z.object({ task_id: nonempty, starts_at: iso, ends_at: iso, person_id: nonempty.optional() }),
+  tasks_work_session_update: z.object({ session_id: nonempty, starts_at: iso.optional(), ends_at: iso.optional() }),
+  tasks_work_session_remove: z.object({ session_id: nonempty }),
+  // TV-D8 / D16: creates and edits through tasks_op_create_with / tasks_op_update_with.
   tasks_create: z.object({
     title: nonempty,
+    project_id: nonempty.optional(),
     bucket_id: nonempty.optional(),
+    section_id: z.union([nonempty, z.null()]).optional(),
     parent_id: nonempty.optional(),
     description: z.string().optional(),
+    status: z.string().trim().min(1).max(120).optional(),
+    assignee_id: z.union([nonempty, z.null()]).optional(),
+    team_id: z.union([nonempty, z.null()]).optional(),
+    due_on: z.union([ymd, z.null()]).optional(),
+    due_time: z.union([hhmm, z.null()]).optional(),
     due_date: z.union([iso, z.null()]).optional(),
     scheduled_at: z.union([iso, z.null()]).optional(),
-    duration_minutes: z.union([z.coerce.number().int().min(0).max(100000), z.null()]).optional(),
+    duration_minutes: z.union([minutes, z.null()]).optional(),
+    estimate_minutes: z.union([minutes, z.null()]).optional(),
     priority: z.union([priorityLevelSchema, z.null()]).optional(),
     energy_level: z.union([energyLevelSchema, z.null()]).optional(),
-    assignee_id: z.union([nonempty, z.null()]).optional(),
+    repeat: z.union([repeatSchema, z.null()]).optional(),
+    tags: z.array(tagName).max(20).optional(),
+    reminders: z
+      .array(z.object({ kind: taskReminderKindSchema.optional(), at: iso.optional() }).strict())
+      .max(10)
+      .optional(),
+    sessions: z.array(z.object({ starts_at: iso, ends_at: iso }).strict()).max(10).optional(),
+    imported_from: importedFromSchema.optional(),
+    import_id: nonempty.optional(),
   }),
   tasks_update: z.object({
     task_id: nonempty,
     title: nonempty.optional(),
+    project_id: nonempty.optional(),
     bucket_id: nonempty.optional(),
+    section_id: z.union([nonempty, z.null()]).optional(),
     parent_id: z.union([nonempty, z.null()]).optional(),
     description: z.string().optional(),
+    status: z.string().trim().min(1).max(120).optional(),
+    team_id: z.union([nonempty, z.null()]).optional(),
+    due_on: z.union([ymd, z.null()]).optional(),
+    due_time: z.union([hhmm, z.null()]).optional(),
     due_date: z.union([iso, z.null()]).optional(),
     scheduled_at: z.union([iso, z.null()]).optional(),
-    duration_minutes: z.union([z.coerce.number().int().min(0).max(100000), z.null()]).optional(),
+    duration_minutes: z.union([minutes, z.null()]).optional(),
+    estimate_minutes: z.union([minutes, z.null()]).optional(),
     priority: z.union([priorityLevelSchema, z.null()]).optional(),
     energy_level: z.union([energyLevelSchema, z.null()]).optional(),
+    repeat: z.union([repeatSchema, z.null()]).optional(),
+    tags_add: z.array(tagName).max(20).optional(),
+    tags_remove: z.array(tagName).max(20).optional(),
   }),
+  projects_create: z.object({
+    name: z.string().trim().min(1).max(120),
+    area_id: nonempty.optional(),
+    status: projectStateSchema.optional(),
+    starts_on: ymd.optional(),
+    target_on: ymd.optional(),
+    color: nonempty.optional(),
+    lead_id: nonempty.optional(),
+    import_id: nonempty.optional(),
+  }),
+  projects_update: z.object({
+    project_id: nonempty,
+    name: z.string().trim().min(1).max(120).optional(),
+    status: projectStateSchema.optional(),
+    area_id: z.union([nonempty, z.null()]).optional(),
+    starts_on: z.union([ymd, z.null()]).optional(),
+    target_on: z.union([ymd, z.null()]).optional(),
+    color: z.union([nonempty, z.null()]).optional(),
+    lead_id: z.union([nonempty, z.null()]).optional(),
+    archived: z.boolean().optional(),
+  }),
+  projects_duplicate: z.object({
+    project_id: nonempty,
+    name: z.string().trim().min(1).max(120).optional(),
+    starts_on: ymd.optional(),
+    area_id: nonempty.optional(),
+  }),
+  sections_create: z.object({
+    project_id: nonempty,
+    name: z.string().trim().min(1).max(120),
+    starts_on: ymd.optional(),
+    ends_on: ymd.optional(),
+    after: z.union([nonempty, z.null()]).optional(),
+    import_id: nonempty.optional(),
+  }),
+  areas_create: z.object({ name: z.string().trim().min(1).max(120), color: nonempty.optional() }),
+  templates_apply: z.object({
+    template_id: nonempty,
+    kind: templateKindSchema,
+    title: nonempty.optional(),
+    project_id: nonempty.optional(),
+    section_id: nonempty.optional(),
+    date: ymd.optional(),
+    name: nonempty.optional(),
+    starts_on: ymd.optional(),
+    area_id: nonempty.optional(),
+  }),
+  imports_begin: z.object({ source: z.string().trim().min(1).max(40), label: z.string().max(120).optional() }),
+  imports_finish: z.object({ import_id: nonempty }),
+  imports_undo: z.object({ import_id: nonempty }),
 
   calendar_list_events: z.object({ from: iso, to: iso, limit: wideLimit }),
   calendar_day: z.object({ date: ymd.optional() }),

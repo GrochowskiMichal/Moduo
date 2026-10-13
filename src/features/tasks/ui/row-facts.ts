@@ -51,6 +51,8 @@ export type TaskFacts = {
   takeable?: boolean;
   /** Where an Inbox task came from ("from Mike"; TV-U15). */
   source?: string | null;
+  /** "Claude · working" while an agent session you can see works on it (TV-D16). */
+  agent?: string | null;
 };
 
 /** The API maps the facts are read from. */
@@ -76,6 +78,8 @@ export type FactsSource = Pick<
   takeableIds?: ReadonlySet<string>;
   /** Where a row's task came from (the Inbox's source words, TV-U15). */
   sourceOf?: (task: Task) => string | null;
+  /** Task id → its agent mark (`agentRowMarks`, TV-D16). */
+  agentMarks?: ReadonlyMap<string, string>;
 };
 
 const NONE: readonly never[] = [];
@@ -104,6 +108,7 @@ export function taskFactsOf(task: Task, api: FactsSource): TaskFacts {
     ...(api.whenOf ? { when: api.whenOf(task) } : {}),
     ...(api.takeableIds?.has(task.id) ? { takeable: true } : {}),
     ...(api.sourceOf ? { source: api.sourceOf(task) } : {}),
+    ...(api.agentMarks?.has(task.id) ? { agent: api.agentMarks.get(task.id) } : {}),
   };
 }
 
@@ -158,6 +163,7 @@ export function sameTaskFacts(a: TaskFacts, b: TaskFacts): boolean {
     (a.when ?? null) === (b.when ?? null) &&
     !!a.takeable === !!b.takeable &&
     (a.source ?? null) === (b.source ?? null) &&
+    (a.agent ?? null) === (b.agent ?? null) &&
     (a.progress === b.progress ||
       (!!a.progress &&
         !!b.progress &&

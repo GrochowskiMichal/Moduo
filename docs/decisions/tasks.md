@@ -61,6 +61,191 @@ Built in tasks-v3 block 25 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §6; RE
   - Decision: grey points; the selected one the brightest mark with a ring; late in the muted late tone; done as the accent's check; a repeat with its mark and, with Show repeats, ghost points for the coming ones; a project's hue only on its dot, its bar's 3 px cap, and points when Colour by Project is on.
   - Why: 69 ("accent only for the selection, today's 1 px line and the done check"), the prototype.
   - Rejected: colouring points by project by default.
+## 2026-10-13 · TV-U16 Project overview, the Done prompt, departures — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 33 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §3, AC5.5–5.6's UI half, AC6.4, AC6.6; REPLAN 16, 17, 78; the carry-forwards from TV-U6, TV-U13, TV-D13, TV-D14 and TV-D15; migration `20261013240000_project_description_team_defaults`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **U16-1 · The overview reads top-down for someone opening a prepared project cold** → TV-U16 (`ui/project-panel.tsx`, `project-overview.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (the hackathon angle).
+  - Decision: name · Status, Start, Target, Lead, Client (the optional three hidden until set, "+ Start · Lead · Client") · the description · progress and "Done this month · n · Xh" · Next up (started work first, then by due date, then the project's own order; five, "and n more open") · Sections ("2 of 5", end date) · People (the lead, then whoever has open work) · Waiting (longest first) · Files · Lately · Time report, Copy as text, Duplicate…, Archive…. Everything is read from the reader's own copy, so a reader sees only what they can. Clicking a task in any list opens it in Details. Its fields, state, Archive… and Duplicate… show as editable only with Edit on that project (asked once per project through `templates_can_copy`), not just Tasks edit in the workspace. Past moments read as days (Today · Yesterday · Oct 9, the Chat re-plan's rule 41), never "2h ago". Chat's two places (the linked conversation and the project's decisions, CH11/CH13/CH52) are empty slots under the description, filled by Chat's blocks.
+  - Why: REPLAN 16's computed fields, ordered for orientation ("what is this, how far, what's next, who's on it").
+  - Rejected: a project page (AGENTS.md rule 7; the panel is the overview), separate tabs for the computed parts.
+- **U16-2 · "Done this month" counts completions; the hours are the time report's** → TV-U16 (`doneInRange`, `useProjectTime`), AC6.6
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: every completion of the project's tasks this month (each cycle of a repeat, a reopened one taken back; a done task from before completions were kept counts by its `completedAt`), dated in the saved zone; the hours are the sum of `timeReport` rows for this month on this project (signed, never below zero, only time the reader may see), over the same month as the report sheet. The hours re-read when the project's tracked totals move.
+  - Why: spec §2.1 ties "Done this month" to the completion record; one source for hours keeps the overview and the report from ever disagreeing.
+  - Rejected: counting done tasks by status alone (misses repeats), server totals.
+- **U16-3 · A project has a description, plain text, written only through the project ops** → TV-U16 (`buckets.description`, `buckets__description_guard`), TV-D15 (templates carry it)
+  - Who: agent's choice, deferred to by Maciej (agreed with the orchestrator), 2026-10-13.
+  - Decision: a column (up to 20,000 characters, '' for none) set by `projects_op_create` / `projects_op_update`, which need Edit; a direct write to the row keeps the old value (the Time & region pattern). Plain text shown as written, edited in place (⌘⏎ or leaving saves, Esc drops). "Save as template" and "Duplicate project…" now keep it, and a template's description lands on the project made from it.
+  - Why: TV-D15 left the choice ("show the template body's, or add the column"); only a column gives every prepared project its words.
+  - Rejected: showing a template body's description (only template-born projects would have one), rich text (no mentions or embeds asked for; plain text keeps MCP and copy simple).
+- **U16-4 · Marking a project Done with open work asks once, like Archive** → TV-U16 (`setProjectState`, `closeOpenWork`, `ArchiveProjectDialog intent="done"`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (REPLAN 78; TV-U6's U6-4 left it here).
+  - Decision: the overview's Status is the only place to change a project's state. Done with open work (Backlog too) asks "n open tasks — Won't do · Move · Keep"; Won't do and Move run as task edits first (Move sends the open tops, subtasks follow), then the state saves on the project's chain, so an Undo always lands after it and puts the state and the tasks back. Keep only changes the state: REPLAN 16, Done never hides or closes tasks. Done needs Edit (Archive needs Full). On hold and Done sidebar rows read one step quieter.
+  - Why: one rule for closing a project, whichever way it's closed.
+  - Rejected: asking also for On hold (nothing to decide), a server op that also edits tasks (U6-4's reason).
+- **U16-5 · Someone leaving: the confirm says where things go, in numbers where the reader can see them** → TV-U16 (`departureSummary`, `departureLines`, Settings → Members, Leave workspace), AC5.6
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: Remove and Leave list: Inbox tasks go back to their makers, the rest to the remover (to the owner when you leave); their open tasks become unassigned, and a team's go back to the team (counted from the reader's copy, archived projects included); the projects they lead lose their lead; the teams they leave; projects only they can see go to the owner, named "From Name (archived) …". The server does all of it (TV-D13, PRIV-2); nothing new is asked.
+  - Why: REPLAN 78 "shows what they leave behind"; the remover can't see another person's Inbox or private projects, so those are rules in words, never counts.
+  - Rejected (deferred): offering "hand on to someone / Recently deleted" for their private projects. It needs a server path that hands over projects the remover can't see; PRIV-2's hand-on to the owner stays. A follow-up if wanted.
+- **U16-6 · Archived stays findable: ⌘K tags it, and its links open** → TV-U16 (palette, `linkable` in `tasks-plan-view.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (REPLAN 78).
+  - Decision: a ⌘K result whose task or project is archived carries an "Archived" tag; a link to an archived task (⌘K, a notice, a chip) opens its project read-only with the task selected, and the panel's Project view shows that project, marked Archived, with nothing to edit.
+  - Why: All's search already did (U6-5); ⌘K and links silently dropped them.
+  - Rejected: hiding archived results from ⌘K.
+- **U16-7 · An archived project is never a team's default** → TV-U16 (`teams__check_project`, `teams__route_project`, teams panel), TV-D13's follow-up
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: naming an archived project as a default is refused; a default archived later counts as none when a task is routed (it asks for a project, as the capture already did), and works again once unarchived. Settings shows "<name> (archived)" and says what that means.
+  - Why: routing into a read-only project would hide the task.
+  - Rejected: clearing the default when a project is archived (an Unarchive couldn't bring it back).
+- **U16-8 · A client's hub rolls up their work** → TV-U16 (`clientRollup`, the hub's Work section), AC6.4
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: for a contact who is the client of live projects the reader can see: those projects with their open counts, the next three tasks by date, what waits (longest first), "n open tasks", and the time report over all of them. Waiting is "tasks in their projects that wait on anything": Waiting on has no contact kind yet.
+  - Why: REPLAN 75/AC6.4 "rolls up tasks, waiting and time".
+  - Rejected: a contact kind for Waiting on (a data change, not this block's).
+- **Known limits (TV-U16, revisitable):** Files re-read only when the project's task list changes; the hours re-read when tracked totals move, not on every entry edit; the project's description isn't in MCP yet (TV-D16).
+
+## 2026-10-13 · TV-D16 Agents and MCP v3 — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 31 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §12, §13's agent row, §Assumptions #14, #15, #20, #26; REPLAN 6, 7, 35, 51, 52, 74; migration `20261013220000_agents_imports_mcp`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to change. The tool surface is in [docs/moduo-mcp-connector.md](../moduo-mcp-connector.md).
+
+- **D16-1 · The trail names the person and the key: "Alex · via Claude Desktop"** → TV-D16 (`module_activity_log`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (REPLAN 52's wording).
+  - Decision: a key's trail rows carry the label "<person> · via <key name>" as their snapshot, for every module; the key's name alone when the person has no name. Notices an agent writes about its own state are labelled with the agent's name.
+  - Why: one place, so the app's trail, notification cards, contact hubs and MCP's own `tasks_activity` all read it without a client change; the label is a snapshot like the key's name was.
+  - Rejected: a new "on behalf of" column the app joins to a name (every renderer changes; old rows unaffected either way).
+- **D16-2 · One live session per task and key, updated in place** → TV-D16 (`agent_sessions`, `tasks_op_agent_report`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: a report states the current line: its note and step replace the last ones (the last 20 lines fold under it), links stay until new ones come, the agent's name stays once given (default: the key's name); reporting `working` after `ready` or `failed` starts a new run (earlier lines, links and summary cleared). Keys only, with Tasks edit and edit access to the task.
+  - Why: "status, not conversation" (52): one line and a short history, never a log to scroll.
+  - Rejected: one row per report; letting a person post a status (their words go in comments).
+- **D16-3 · Private by default; the switch shows the line, never the summary** → TV-D16 (`agent_sessions__shown`, `agent_session_summaries`, Settings → Preferences → Agents)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (52's "private to whoever started it").
+  - Decision: only the session's person reads it until they turn on "Show my agent work to teammates"; then anyone who can see the task does, while the person can still see it. The hand-back summary lives in its own table only its person reads, until "Post as comment" makes it their comment. The switch sits in Settings → Preferences (a group "Agents") until Settings has a Tasks section; switching it bumps the person's sessions and tells teammates' copies to re-check, so a line disappears at once.
+  - Why: a column grant can't hide a value from Realtime; a separate table can.
+  - Rejected: column-level grants on the summary; a per-session share toggle.
+- **D16-4 · One notice per loud change, to the person who started it; one switch** → TV-D16 (`tasks.agent_status`, delivery kind `agent`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (§13's agent row).
+  - Decision: a change into needs you · ready for review · failed writes one bell notice on the person's own Inbox (like a reminder; it opens the task) and one OS / browser notice; the same state again is quiet. The bell's "Your agents" switch mutes both (the OS notice is skipped on the server). The notice gate only lets it reach someone who can see the task it names.
+  - Why: §13's "That key's notifications" for the usual one or two keys, with one switch.
+  - Rejected: a switch per key (added when someone has several agents worth telling apart).
+- **D16-5 · A session adds no trail row and no Waiting entry** → TV-D16
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: status reports write nothing to the trail (the trail already has the agent's writes); a "Waiting on" this agent that a person added clears at needs you · ready · failed (a teammate who added it hears it came back; its person hears only the agent), and when the key is revoked.
+  - Why: an automatic "Waiting on Claude" would show a private session to everyone who sees the task.
+  - Rejected: adding Waiting on when an agent starts (REPLAN 6's wording) until sharing is on.
+- **D16-6 · Rows say "working" and "needs you"; the line says everything** → TV-D16 (`agentRowMark`, `task-agent-session.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the row's quiet mark ("Claude · working", "Claude · needs you") shows on open tasks only; ready, failed and stopped show on the task's line ("Claude · Ready for review: Draft is up · step 3 of 5 · 2m ago · PR #42 ↗"), with "No update for 40m" after 30 quiet minutes while working (never a notice), "Stopped (key revoked)", earlier lines and the summary folded, and an × for its person to clear the line.
+  - Why: the row is for what's happening now; a finished run's details belong on the task.
+  - Rejected: a mark for every state on rows.
+- **D16-7 · "Imported from" is unique per person, not per workspace** → TV-D16 (index `tasks_imported_from_key`, `tasks_op_create`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (refines D10-14).
+  - Decision: a live task's import key is unique among the tasks its creator made in the workspace.
+  - Why: a re-run finds what you made; two people importing the same shared source don't collide, and a collision never tells you a task you can't see exists.
+  - Rejected: per workspace (D10-14's first cut).
+- **D16-8 · Re-run by key, Undo what nobody touched** → TV-D16 (`tasks_op_create_with`, `imports_op_*`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (74).
+  - Decision: creating with a key you already used on a live task of yours updates that task (fields, added tags; reminders and work sessions only on create), in or out of a run; a run records what it made or updated. "Undo this import" sends the run's created tasks that have no activity after the run wrote them to Recently deleted (subtasks first), then the sections and projects it made that are left empty and unchanged since the run's last write (they keep no trail, so their own last change decides); a project with a section left stays. Rows it only updated stay as they are; anything the person can no longer see isn't counted. Runs are their person's alone (keys or the app), and finishing or undoing one needs Tasks edit like beginning it. The whole create (task, tags, reminders, sessions, the run's row) is one transaction, and a run's projects and sections are made through it. A task Undo removed that comes back from Recently deleted after the import made its key again returns unlinked from the source (the newer task keeps the key).
+  - Why: "a second run updates, creates nothing new; Undo removes exactly the first run's rows that weren't edited since" (spec edge case); soft deletes keep 30 days to change your mind.
+  - Rejected: restoring the old values of updated rows; deciding a task's "edited since" from `updated_at` (triggers move it; tasks have a trail); refusing the restore.
+- **D16-9 · Tags by name through one op** → TV-D16 (`tasks_op_tag`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: add and take off by name in any case; a missing name becomes a workspace tag when the person may make tags; needs edit access to the task; one trail line ("tagged this “exam” and untagged “week1”").
+  - Why: agents had no way to tag, and a raw `tag_links` write as the service role would skip the app's checks.
+  - Rejected: raw writes from the connector.
+- **D16-10 · The v3 tool names, under the Tasks key scope; the old names stay** → TV-D16 (`modules/tasks.ts`, `ops-manifest.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (#14).
+  - Decision: `projects_*`, `sections_*`, `areas_*`, `statuses_list`, `teams_list`, `templates_*`, `imports_*` and the new `tasks_*` tools are the Tasks module's (a Tasks key reaches them); `tasks_today`, `tasks_commit`, `tasks_uncommit`, `tasks_skip_today` and `tasks_list_buckets` stay, marked deprecated in the manifest and their descriptions, until TV-D7. `tasks_comment` needs Links: Edit too (it's a spine comment). Every task argument takes a handle or a uuid; status takes a category word, a project's name or an id; finishing a task finishes its open subtasks the person can edit (call 87, connector-side).
+  - Why: #14's list; one key scope for one module's work.
+  - Rejected: a separate "projects" key scope.
+- **D16-11 · Search answers keys** → TV-D16 (`tasks_search` re-cut)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the search RPC checks the module permission (a key's scope capped by its person) instead of a person-only check; the task gate per match is unchanged. A task's import key is searched with its title and description, on the server and in the app's own copy, so "ENG-123" finds it in the search box, ⌘K and MCP alike; MCP also finds a handle.
+  - Why: under a key it returned nothing; AC3.6 ("ENG-123 is findable after import").
+  - Rejected: keeping MCP on its old substring query (it filled its limit before the gate); a connector-only key lookup (the app wouldn't find it).
+- **D16-12 · The import end-to-end test runs locally; the real connector run is a release step** → TV-D16 (`scripts/mcp-import-roundtrip.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (74's "tested end to end with Claude + Todoist's connector before it's announced").
+  - Decision: a script imports a Todoist-shaped project through the local connector with a real key (dates, labels, a repeat, a subtask, a reminder), re-runs it, undoes, posts a session and finishes a parent, in a disposable workspace it removes; Claude with Todoist's own connector is on the release checklist.
+  - Why: no Claude or Todoist account belongs in a local build; the script exercises the same HTTP surface.
+  - Rejected: skipping the end-to-end check until release.
+- **D16-13 · Erasure clears a key's trail label with the key** → TV-D16 (`account_erase_workspace_data`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (§Assumptions #26).
+  - Decision: when a person's data is erased, the trail rows their keys wrote in workspaces they don't own lose their label, as their own rows do; the trail then reads "An API client".
+  - Why: D16-1 puts the person's name in a key's label.
+  - Rejected: keeping the key's name (it's the person's own text too).
+- **D16-14 · A teammate's agent line says whose agent it is** → TV-D16 (`agentWho`, the panel line, the row mark)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: your own sessions read "Claude · …"; a teammate's shared one reads "Anna's Claude · …" on the line and "Anna's Claude · working" on the row (first name on rows), "A teammate's …" when the reader can't name them. Clearing a line is its person's, in the app; a key can't.
+  - Why: an agent names itself, so a shared line shouldn't read as a person.
+  - Rejected: the agent's name alone everywhere.
+- **D16-15 · Runs, run rows and summaries keep no soft delete** → TV-D16 (`imports`, `import_rows`, `agent_session_summaries`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (§Assumptions #27).
+  - Decision: these three are read on demand by their person (never delta-synced), so they carry `workspace_id` but no `deleted_at` (and `import_rows` no `updated_at`); a run is never deleted by hand, its rows go with it, and a new run replaces a session's summary.
+  - Why: #27's columns exist so the delta sync sees every change; nothing syncs these.
+  - Rejected: columns nothing reads or writes.
+
+## 2026-10-13 · TV-U12 Multi-select and the bottom-bar mode pattern — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 16 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §4, AC11.9, AC4.6; REPLAN 82, 82a, 82b, defaults a and e; prototype round-2b frame 1, Bulk). No migration. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **U12-1 · The keys stay as ratified, not as first typed** → TV-U12 (`use-bulk-actions.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (the build brief quoted his first message: del, f, ⏎, ⇧2, ⇧3).
+  - Decision: the bar's row is Complete `Space` · Focus `Q` · Assign `@` · Tag `#` · Date `D` · Delete `⌫`, then More ▾ (Move `B` · Status `⇧S` · Section · Priority `P` · Waiting · Team), then "4 selected · Esc", as 82b decided; `a` and `l` alias `@` and `#`, `i` assigns to you, `x` completes, bare ⌫/Del deletes only with two or more selected (⌘⌫ too).
+  - Why: 82b resolved the collisions in his message: ⏎ opens and F is Filter (⇧F is "Focus on this").
+  - Rejected: ⏎ to complete and F for Focus (both already taken).
+- **U12-2 · The selection is a set beside the cursor** → TV-U12 (`selection.ts`, `ui/use-task-selection.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: a click selects one task (the cursor: the panel, the URL and the keys follow it); ⌘/Ctrl-click adds or takes out one, starting from the cursor; ⇧-click and ⇧↑↓ (⇧J/⇧K) select the range from the anchor (the last ⌘-clicked task, else the cursor) in the view's order, folded groups left out; ⌘A selects every task the view shows; Esc and a plain click or arrow go back to one. The set lives in the page and lasts within one place and one layout; a task that leaves the scope leaves it, and rows scrolled away stay in it.
+  - Why: Finder's and Linear's grammar; the cursor stays the one thing the panel, the deep link and the keys already follow (TV-D11b's rows stay memoised: a row gets a boolean).
+  - Rejected: a separate checkbox column (spec: no checkboxes); a range that adds to an earlier ⌘-selection (Finder replaces it).
+- **U12-3 · One mode mechanism, and triage yields to a selection** → TV-U12 (`bottom-bar-mode.ts`, `inbox-view.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the selection owns the bar through TV-U15's `useBottomBarModeOwner` (the same six-then-More row); while two or more are selected in the Inbox, the triage row and its keys 1 · 2 · 3 · H step aside and come back when the selection goes. A viewer gets the note alone ("4 selected · Esc"), no actions.
+  - Why: 82b's one pattern for every mode; one mode at a time.
+  - Rejected: triage keys acting on a selection (Duplicate needs one original per task; left for later).
+- **U12-4 · Every bulk change is one write and one Undo, each task checked on its own** → TV-U12 (`hooks/use-bulk-ops.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: every row shows the change at once (one store write); each task then goes through its own server op (so its own permission check), four at a time; the ones that saved stay, a refused one goes back. The toast says the change ("Moved 4 tasks to Website"), or "3 of 4 changed" with "“Pricing copy” is read-only to you." (one refused task is named; it's in your selection, so yours to see; several are counted; a subtask brought along is never named). One Undo puts back every field the batch changed unless it changed again since ("Undo kept a newer change to 1 task."), and a check-off's queue places. A lost connection stops sending and says Offline.
+  - Why: default a ("one Undo for the batch"), the spec's read-only edge case, and the store's one-write rule.
+  - Rejected: one server call for the batch (no per-task op exists; a new op would be a migration); N separate writes with N toasts.
+- **U12-5 · What each bulk verb does** → TV-U12 (`bulk.ts` `planBulk`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: Complete finishes the open ones and their open subtasks (call 87; "· also 2 subtasks"), or reopens them all when every one is closed; Focus adds the ones not in your Focus at its end, or takes them all out when all are in it; Tag adds a tag to the ones without it, or takes it off when all have it (a typed new name makes the tag); Status by a project's own name when one project is selected, by category across projects (each takes its project's first of it); Section only within one project (dimmed otherwise); Move files into a project at its end, in order, a subtask going with a selected parent; Waiting on adds the person or the words to each (skipping a task already waiting on that person); Date: Today · Tomorrow · Next week · A day later · A week later (each from its own date; a dateless task counts from today) · Pick a date… · No date; a task that already has the value is skipped.
+  - Why: default e (Date, Status, Section, Waiting, Team) and Linear's toggles; 87 for finishing parents.
+  - Rejected: a second Complete that only finishes (a selection of closed tasks would do nothing).
+- **U12-6 · A repeat under a bulk Date moves just this occurrence by default** → TV-U12 (`repeat-move-dialog.tsx`, lifted from Upcoming)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: when a selection holds repeating tasks with a due date, a date asks "Just these · Change the pattern" (Upcoming's dialog, now shared); Just these moves each repeat's one occurrence (`tasks_op_move_occurrence`), Change the pattern moves its rule with it; No date never asks.
+  - Why: the spec's edge case ("default the occurrences").
+  - Rejected: always changing the pattern.
+- **U12-7 · The panel's "n tasks · Mixed"** → TV-U12 (`bulk-panel.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: with two or more selected the right panel shows Details as "4 tasks": the first eight titles with their status icons ("and n more"), then Status · Assignee · Priority · Due · Project · Section · Tags · Team with the shared value, "Mixed" or "None"; a value opens the same picker as the bar; "A change here applies to all 4. One Undo covers it."
+  - Why: call 82 and the prototype's Bulk frame.
+  - Rejected: editing values inline in the panel (the pickers are one set for the bar, the keys and the panel).
+- **U12-8 · Pickers are one search dialog** → TV-U12 (`bulk-picker.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: Assign, Tag, Date, Move, Status, Section, Priority, Waiting on and Team open one search dialog (as the Inbox's "File in…"), and focus goes back to the List or the Board when it closes.
+  - Why: a key or the bar has nothing on screen to anchor a popover to.
+  - Rejected: popovers anchored to the bar's buttons (no anchor for the keys).
+- **U12-9 · Right-clicking, and dragging, a selected task act on the selection** → TV-U12 (`selection-menu.tsx`, `dnd/multi-drop.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (82a's "the same menu as right-clicking a selection"; TV-U4's carry-forward).
+  - Decision: the one context menu, opened on a task of a selection, lists the selection's verbs; right-clicking a task outside it acts on that task alone. Dragging a selected row or card moves the selection: the held task's drop is planned as always, the others take the same change and line up right behind it (a project move: the project's end, in order); a parent never nests and a task never nests under itself. The sidebar's project, Focus and My tasks rows take a selection too. The drag preview counts the others ("+3").
+  - Why: one gesture for one change; one write, one Undo.
+  - Rejected: Upcoming's day drop for a selection (it moves the held row only; its own Move all… covers many).
+- **U12-10 · The Board grouped by Waiting on** → TV-U12 (deferred here by TV-U11; `board-columns.ts` `waitingColumns`, `dnd/board-drop.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: Display → Group by → Waiting on gives a column per person or thing waited on (people with their avatar, by name), a task under the newest of its waits, then "Not waiting"; empty columns hide; a drop into a column adds that wait (with Undo, a selection too), and "Not waiting" takes no drop (a wait ends when what it waits on arrives, or from the panel).
+  - Why: tasks-v3 §5 lists Waiting among the Board's groupings; a wait isn't a field, so a drop adds an entry rather than moving the card off its others.
+  - Rejected: a drop into "Not waiting" clearing every wait (destructive from a drag).
+- **U12-11 · The Inbox's cursor follows the List's own order** → TV-U12 (TV-U15's carry-forward; `tasks-plan-view.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the List and the Board write the order they draw into a ref the page reads; after a triage the cursor moves to the next row as shown, grouped or not.
+  - Why: a grouped Inbox's next row isn't the flat order's.
+  - Rejected: re-deriving the List's groups in the page.
 
 ## 2026-10-13 · TV-D14 Time entries, the time report, Time & region — the agent's choices (deferred to by Maciej)
 

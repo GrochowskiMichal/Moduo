@@ -9,6 +9,7 @@
 // `features/tasks/live.ts` if it is published.
 
 import type { AccessChangeResource } from "@contracts/vocabularies";
+import type { AgentSession } from "../../features/spine/agent-session";
 import type {
   Area,
   Bucket,
@@ -59,6 +60,8 @@ export type SyncRows = {
   /** Only your own (RLS returns nobody else's). */
   reminders: TaskReminder;
   waiting: TaskWaitingEntry;
+  /** TV-D16: agent sessions the reader may see (RLS). */
+  agentSessions: AgentSession;
 };
 
 export type SyncTableName = keyof SyncRows;

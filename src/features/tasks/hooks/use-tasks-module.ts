@@ -12,6 +12,7 @@ import {
   isOpenTask,
   legacyTaskStatus,
   normalizeTaskStatusCategory,
+  type ProjectState,
   type TaskStatusCategory,
   taskCategoryOf,
   taskStatusWord,
@@ -105,6 +106,7 @@ import {
   statusKeyCategory,
   statusSetFor,
 } from "../statuses";
+import { useBulkOps } from "./use-bulk-ops";
 
 /** An adjustment `logTimeAdjustment` recorded, as its Undo needs it. */
 export type TimeAdjustment = {
@@ -2831,32 +2833,22 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
   );
 
   /**
-   * Archive a project (TV-U6, REPLAN 16 + 78): it leaves the sidebar, every
-   * list, count and queue on every surface at once (the server takes its
-   * tasks out of everyone's queue), and opens from Archived projects; search
-   * still finds its tasks. With open tasks the sidebar asks first: Won't do
-   * (each open task), Move (the open tasks, with their subtasks, to another
-   * project) or Keep. Needs Full access (the server says so). Undo
-   * unarchives and puts the open tasks back as they were.
+   * What closing a project does to its open work (REPLAN 78: "n open tasks —
+   * Won't do · Move · Keep"), shared by Archive and Done (TV-U16): Won't do
+   * marks each open task, Move sends the open tops (their subtasks follow) to
+   * another project, Keep leaves them. Starts the task edits at once and
+   * answers with when the moves landed, how to put everything back (an Undo,
+   * or a refused close; through the newest task ops) and what the toast says.
    */
-  const archiveBucket = useCallback(
-    (id: string, openTasks: ArchiveOpenTasks = { kind: "keep" }) => {
-      if (editBlocked() || !runtime || !workspaceId || !store) return;
-      if (isTempId(id)) {
-        toast.error("Still saving that project — try again in a moment.");
-        return;
-      }
-      const existing = liveBuckets.find((b) => b.id === id);
-      if (!existing || existing.isSystem) return;
+  const closeOpenWork = useCallback(
+    (id: string, openTasks: ArchiveOpenTasks) => {
       const work = projectOpenWork(liveTasks, id);
       const before = work.open.map((t) => ({
         id: t.id,
         statusId: t.statusId ?? null,
         category: taskCategoryOf(t),
       }));
-      /** Put the open tasks back as they were (an Undo, or a refused archive).
-       *  Through the newest ops: this runs renders after the archive. */
-      const revertOpenTasks = () => {
+      const revert = () => {
         const ops = taskOpsRef.current;
         if (openTasks.kind === "wont_do") {
           for (const t of before) {
@@ -2869,13 +2861,10 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
           for (const t of work.tops) ops.patchTask(t.id, { bucketId: id });
         }
       };
-      // Move goes first and the archive waits for it: archiving takes what's
-      // still in the project out of every queue, so a task the archive beat
-      // would lose its place in queues.
       let movesDone: Promise<boolean> = Promise.resolve(true);
       if (openTasks.kind === "wont_do") {
         for (const t of work.open) setTaskStatus(t.id, { category: "wont_do" });
-      } else if (openTasks.kind === "move") {
+      } else if (openTasks.kind === "move" && runtime && workspaceId && store) {
         const target = openTasks.projectId;
         const topIds = new Set(work.tops.map((t) => t.id));
         const steps = liveTasks.filter(
@@ -2901,6 +2890,43 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
           },
         );
       }
+      const moved = openTasks.kind === "move" ? work.tops.length : 0;
+      const marked = openTasks.kind === "wont_do" ? work.open.length : 0;
+      const target =
+        openTasks.kind === "move" ? allBuckets.find((b) => b.id === openTasks.projectId) : null;
+      const note =
+        marked > 0
+          ? `${marked === 1 ? "Its open task is" : `Its ${marked} open tasks are`} marked Won’t do.`
+          : moved > 0
+            ? `${moved === 1 ? "Its open task" : `Its ${moved} open tasks`} moved to ${target?.name ?? "another project"}.`
+            : null;
+      return { work, movesDone, revert, note };
+    },
+    [liveTasks, setTaskStatus, runtime, workspaceId, store, refused, allBuckets],
+  );
+
+  /**
+   * Archive a project (TV-U6, REPLAN 16 + 78): it leaves the sidebar, every
+   * list, count and queue on every surface at once (the server takes its
+   * tasks out of everyone's queue), and opens from Archived projects; search
+   * still finds its tasks. With open tasks the sidebar asks first: Won't do
+   * (each open task), Move (the open tasks, with their subtasks, to another
+   * project) or Keep. Needs Full access (the server says so). Undo
+   * unarchives and puts the open tasks back as they were.
+   */
+  const archiveBucket = useCallback(
+    (id: string, openTasks: ArchiveOpenTasks = { kind: "keep" }) => {
+      if (editBlocked() || !runtime || !workspaceId || !store) return;
+      if (isTempId(id)) {
+        toast.error("Still saving that project — try again in a moment.");
+        return;
+      }
+      const existing = liveBuckets.find((b) => b.id === id);
+      if (!existing || existing.isSystem) return;
+      // Move goes first and the archive waits for it: archiving takes what's
+      // still in the project out of every queue, so a task the archive beat
+      // would lose its place in queues.
+      const { work, movesDone, revert, note } = closeOpenWork(id, openTasks);
       // What stays in the project leaves every queue (the server does it).
       const movedTops = new Set(openTasks.kind === "move" ? work.tops.map((t) => t.id) : []);
       const staying = new Set(
@@ -2941,22 +2967,13 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
             return;
           }
           refused(write, e, "Couldn't archive the project.");
-          revertOpenTasks();
+          revert();
         });
-      const moved = openTasks.kind === "move" ? work.tops.length : 0;
-      const marked = openTasks.kind === "wont_do" ? work.open.length : 0;
-      const target =
-        openTasks.kind === "move" ? allBuckets.find((b) => b.id === openTasks.projectId) : null;
       undoToast(`“${existing.name}” archived`, {
-        description:
-          marked > 0
-            ? `${marked === 1 ? "Its open task is" : `Its ${marked} open tasks are`} marked Won’t do.`
-            : moved > 0
-              ? `${moved === 1 ? "Its open task" : `Its ${moved} open tasks`} moved to ${target?.name ?? "another project"}.`
-              : "It’s in the sidebar’s ⋯ → Archived projects.",
+        description: note ?? "It’s in the sidebar’s ⋯ → Archived projects.",
         onUndo: () => {
           void unarchiveBucket(id);
-          revertOpenTasks();
+          revert();
         },
       });
     },
@@ -2967,12 +2984,90 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       store,
       liveBuckets,
       liveTasks,
-      allBuckets,
       chainProjectOp,
       refused,
       unarchiveBucket,
-      setTaskStatus,
+      closeOpenWork,
     ],
+  );
+
+  /**
+   * Set a project's state (TV-U16, REPLAN 16): Active, On hold or Done. Done
+   * with open work asks first, like Archive (REPLAN 78: Won't do · Move ·
+   * Keep), and runs the task edits before the state; Undo puts the state and
+   * the tasks back. On hold and Done never hide tasks. Needs Edit.
+   */
+  const setProjectState = useCallback(
+    (id: string, status: ProjectState, openTasks: ArchiveOpenTasks = { kind: "keep" }) => {
+      if (editBlocked() || !runtime || !workspaceId || !store) return;
+      const existing = liveBuckets.find((b) => b.id === id);
+      if (!existing || existing.isSystem) return;
+      const previous = existing.status ?? "active";
+      if (previous === status) return;
+      if (status !== "done") {
+        void editProject(id, { status }, { status });
+        return;
+      }
+      if (isTempId(id)) {
+        toast.error("Still saving that project — try again in a moment.");
+        return;
+      }
+      // Shown at once, and queued on the project's chain right now (the moves
+      // go first, like Archive's), so an Undo queues after it, never before.
+      const { movesDone, revert, note } = closeOpenWork(id, openTasks);
+      const write = store.begin([{ table: "buckets", patch: { id, fields: { status } } }]);
+      void chainProjectOp(id, async () => {
+        if (!(await movesDone)) throw NOT_MOVED;
+        return runtime.tasks.updateProject({
+          workspaceId,
+          projectId: id,
+          patch: { status },
+          fallback: { ...existing, status },
+        });
+      })
+        .then((saved) => write.settle({ buckets: [saved] }))
+        .catch((e) => {
+          if (e === NOT_MOVED) {
+            // The move said why; the project keeps its state.
+            write.fail();
+            return;
+          }
+          refused(write, e, "Couldn't save the project.");
+          revert();
+        });
+      undoToast(`“${existing.name}” is done`, {
+        ...(note ? { description: note } : {}),
+        onUndo: () => {
+          void editProject(id, { status: previous }, { status: previous });
+          revert();
+        },
+      });
+    },
+    [
+      editBlocked,
+      runtime,
+      workspaceId,
+      store,
+      liveBuckets,
+      editProject,
+      closeOpenWork,
+      chainProjectOp,
+      refused,
+    ],
+  );
+
+  /** Edit a project's own fields from its overview (TV-U16): dates, lead,
+   *  client, description. Resolves false when it didn't save. */
+  const updateProjectFields = useCallback(
+    (id: string, patch: Omit<ProjectFields, "archived" | "status">): Promise<boolean> => {
+      const local: Partial<Bucket> = {};
+      for (const [key, value] of Object.entries(patch)) {
+        if (value === undefined) continue;
+        (local as Record<string, unknown>)[key] = key === "description" ? (value ?? "") : value;
+      }
+      return editProject(id, patch, local);
+    },
+    [editProject],
   );
 
   /**
@@ -3470,6 +3565,29 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     [tagContext],
   );
 
+  // ── bulk edits on a selection (TV-U12): one write, one Undo ─────────────────
+  const bumpActivity = useCallback(() => setActivityStamp((s) => s + 1), []);
+  const bulk = useBulkOps({
+    store,
+    runtime,
+    workspaceId,
+    userId,
+    tasksRef,
+    bucketsRef,
+    myQueueRef,
+    statusesForBucket,
+    queueFollowStatus,
+    editBlocked,
+    failed,
+    onSaved: bumpActivity,
+    reloadTrash,
+    restoreQueuePlace,
+    runQueueOp,
+    optimisticEntry,
+    backlogToTodo,
+    tagContext,
+  });
+
   return {
     loading,
     loaded,
@@ -3503,6 +3621,10 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     sessions: snap.sessions,
     reminders: snap.reminders,
     waiting: snap.waiting,
+    /** Every completion (each cycle of a repeat): the overview's "Done this month" (TV-U16). */
+    completions: snap.completions,
+    /** TV-D16: agent sessions you can see (yours; teammates' while they share). */
+    agentSessions: snap.agentSessions,
     restoreTask,
     addSession,
     updateSession,
@@ -3601,6 +3723,8 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     archivedTasks,
     archiveBucket,
     unarchiveBucket,
+    setProjectState,
+    updateProjectFields,
     /** The areas' ops (TV-U6 on TV-D10's ops); `areas` is above. */
     createArea,
     renameArea,
@@ -3621,6 +3745,12 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     createTagForTask,
     setTagColor,
     deleteTag,
+    /** A selection's change as one write with one Undo (TV-U12, `use-bulk-ops.ts`). */
+    bulkWrite: bulk.bulkWrite,
+    bulkDelete: bulk.bulkDelete,
+    bulkQueue: bulk.bulkQueue,
+    bulkWaiting: bulk.bulkWaiting,
+    bulkTag: bulk.bulkTag,
     INBOX_BUCKET_NAME,
   };
 }

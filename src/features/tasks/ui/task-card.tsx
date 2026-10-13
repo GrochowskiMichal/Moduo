@@ -13,6 +13,7 @@ import { useAssignees } from "../assignees";
 import type { Task } from "../model";
 import { DEFAULT_ROW_PROPERTIES, handleLabel, rowDate, rowTime } from "../row-layout";
 import { descriptionWords } from "../search";
+import { type SelectMods, selectModsOf } from "../selection";
 import { nowOn } from "../use-today";
 import { AssigneeAvatar } from "./assignee-avatar";
 import { taskDrag } from "./dnd/task-dnd";
@@ -53,8 +54,9 @@ type Props = {
   editing?: boolean;
   /** Which inline menu or popover the keyboard or the menu asked for. */
   command?: TaskCommand | null;
-  /** Callbacks take the task's id, so one function serves every card. */
-  onSelect: (taskId: string) => void;
+  /** Callbacks take the task's id, so one function serves every card. A
+   *  click passes its ⇧ / ⌘ (multi-select, TV-U12). */
+  onSelect: (taskId: string, mods?: SelectMods) => void;
   onStartEdit?: (taskId: string) => void;
   onEndEdit?: () => void;
   onRequestCommand?: (taskId: string, command: TaskCommand) => void;
@@ -160,7 +162,7 @@ function TaskCardView({
       selected={selected}
       done={closed}
       dragging={isDragging}
-      onClick={() => onSelect(task.id)}
+      onClick={(e) => onSelect(task.id, selectModsOf(e))}
       onDoubleClick={() => {
         if (canEdit) onStartEdit(task.id);
       }}

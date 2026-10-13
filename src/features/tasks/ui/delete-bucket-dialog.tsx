@@ -153,14 +153,16 @@ export function DeleteBucketDialog({
 }
 
 /**
- * Asks before archiving a project that still has open work (REPLAN 78): "4 open
- * tasks — Won't do · Move · Keep". Won't do marks each open task; Move sends
- * them (with their subtasks) to a project you pick; Keep leaves them open in
- * the archived project. A project with nothing open archives without asking.
+ * Asks before archiving a project, or marking it Done (TV-U16), while it still
+ * has open work (REPLAN 78): "4 open tasks — Won't do · Move · Keep". Won't do
+ * marks each open task; Move sends them (with their subtasks) to a project
+ * you pick; Keep leaves them open where they are. A project with nothing
+ * open is archived or marked done without asking.
  */
 export function ArchiveProjectDialog({
   bucket,
   open,
+  intent = "archive",
   openCount,
   projects,
   checkAccess,
@@ -169,6 +171,8 @@ export function ArchiveProjectDialog({
   onCloseAutoFocus,
 }: {
   bucket: Bucket | null;
+  /** Archive (needs Full access) or mark Done (needs Edit; the server says). */
+  intent?: "archive" | "done";
   open: boolean;
   /** Open tasks in it (Backlog too: everything not finished). */
   openCount: number;
@@ -179,7 +183,8 @@ export function ArchiveProjectDialog({
   onClose: () => void;
   onCloseAutoFocus?: (event: Event) => void;
 }) {
-  const canManage = useCanManage(bucket, open, checkAccess);
+  // Done needs Edit, not Full: the server refuses with a clear message.
+  const canManage = useCanManage(bucket, open, intent === "archive" ? checkAccess : undefined);
   const [moving, setMoving] = useState(false);
   const [target, setTarget] = useState<string>("");
   useEffect(() => {
@@ -198,7 +203,9 @@ export function ArchiveProjectDialog({
     <Dialog open={open && bucket !== null} onOpenChange={(next) => !next && onClose()}>
       <DialogContent className="max-w-sm" onCloseAutoFocus={onCloseAutoFocus}>
         <DialogHeader>
-          <DialogTitle>Archive “{name}”?</DialogTitle>
+          <DialogTitle>
+            {intent === "done" ? `Mark “${name}” done?` : `Archive “${name}”?`}
+          </DialogTitle>
           <DialogDescription>
             {canManage === false
               ? NO_ACCESS(name, "archive")
@@ -207,7 +214,9 @@ export function ArchiveProjectDialog({
         </DialogHeader>
         {canManage === false ? null : (
           <p className="font-sans text-xs text-muted-foreground">
-            Archived projects leave the sidebar and every list; search still finds their tasks.
+            {intent === "done"
+              ? "Done changes how the project reads, not its tasks: Keep leaves them open where they are."
+              : "Archived projects leave the sidebar and every list; search still finds their tasks."}
           </p>
         )}
         {canManage !== false && moving ? (
@@ -230,7 +239,7 @@ export function ArchiveProjectDialog({
           </Button>
           {canManage === false ? null : moving ? (
             <Button disabled={!target} onClick={() => choose({ kind: "move", projectId: target })}>
-              Move and archive
+              {intent === "done" ? "Move and mark done" : "Move and archive"}
             </Button>
           ) : (
             <>
