@@ -154,13 +154,30 @@ export function useBulkActions({
     [names],
   );
 
-  const [picker, setPicker] = useState<BulkPickerKind | null>(null);
+  const [picker, setPickerState] = useState<BulkPickerKind | null>(null);
   const [pickingDay, setPickingDay] = useState(false);
   const [repeatAsk, setRepeatAsk] = useState<BulkDate | null>(null);
+  // Where the keys were when a picker opened (the List or the Board): focus
+  // goes back there when it closes, so the next key acts on the selection.
+  const returnTo = useRef<HTMLElement | null>(null);
+  const setPicker = useCallback((kind: BulkPickerKind | null) => {
+    if (kind) {
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && active !== document.body) returnTo.current = active;
+    } else {
+      const back = returnTo.current;
+      requestAnimationFrame(() => {
+        if (back?.isConnected && document.activeElement === document.body) {
+          back.focus({ preventScroll: true });
+        }
+      });
+    }
+    setPickerState(kind);
+  }, []);
   // A selection that went (Esc, a click) closes what it opened.
   useEffect(() => {
     if (multi) return;
-    setPicker(null);
+    setPickerState(null);
     setPickingDay(false);
     setRepeatAsk(null);
   }, [multi]);
@@ -188,7 +205,7 @@ export function useBulkActions({
     if (me) apply({ kind: "assign", assigneeId: me });
   }, [apply]);
 
-  const openPicker = useCallback((kind: BulkPickerKind) => setPicker(kind), []);
+  const openPicker = useCallback((kind: BulkPickerKind) => setPicker(kind), [setPicker]);
 
   const onKey = useCallback(
     (e: React.KeyboardEvent<HTMLElement>): boolean => {
@@ -200,12 +217,13 @@ export function useBulkActions({
         return true;
       }
       if (e.metaKey || e.ctrlKey || e.altKey) return false;
-      if (key === "@") return setPicker("assign"), true;
-      if (key === "#") return setPicker("tag"), true;
-      if (e.shiftKey) {
-        if (key.toLowerCase() === "s") return setPicker("status"), true;
-        return false;
-      }
+      const open = (kind: BulkPickerKind) => {
+        setPicker(kind);
+        return true;
+      };
+      if (key === "@") return open("assign");
+      if (key === "#") return open("tag");
+      if (e.shiftKey) return key.toLowerCase() === "s" ? open("status") : false;
       switch (key.toLowerCase()) {
         case " ":
         case "x":
@@ -236,7 +254,7 @@ export function useBulkActions({
           return false;
       }
     },
-    [multi, canEdit, remove, complete, focus, assignToMe],
+    [multi, canEdit, remove, complete, focus, assignToMe, setPicker],
   );
 
   // ── the bar's row (82b): six with their keys, then More ▾ ────────────────
@@ -278,11 +296,11 @@ export function useBulkActions({
       ],
       note,
     };
-  }, [multi, canEdit, count, allClosed, hasSections, hasTeams, complete, focus, remove]);
+  }, [multi, canEdit, count, allClosed, hasSections, hasTeams, complete, focus, remove, setPicker]);
   useBottomBarModeOwner(mode);
 
   // ── the pickers ───────────────────────────────────────────────────────────
-  const close = useCallback(() => setPicker(null), []);
+  const close = useCallback(() => setPicker(null), [setPicker]);
   const n = tasksWord(count);
   const now = new Date();
   const items = ((): {
@@ -569,9 +587,13 @@ export function useBulkActions({
           title={`Date for ${n}`}
           onPick={(d) => {
             setPickingDay(false);
+            close();
             applyDate({ day: todayStr(d) });
           }}
-          onClose={() => setPickingDay(false)}
+          onClose={() => {
+            setPickingDay(false);
+            close();
+          }}
         />
       ) : null}
       <RepeatMoveDialog
@@ -581,9 +603,13 @@ export function useBulkActions({
         onChoose={(choice) => {
           const to = repeatAsk;
           setRepeatAsk(null);
+          close();
           if (to) applyDate(to, choice);
         }}
-        onClose={() => setRepeatAsk(null)}
+        onClose={() => {
+          setRepeatAsk(null);
+          close();
+        }}
       />
     </>
   );
