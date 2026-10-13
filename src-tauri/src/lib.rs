@@ -529,6 +529,7 @@ pub fn run() {
             commands::system::open_external_url,
             commands::system::set_confirm_before_quit,
             commands::system::set_keep_in_menu_bar,
+            commands::system::print_page,
             commands::window::window_toggle_fullscreen,
             commands::timetracking::tt_list,
             commands::timetracking::tt_upsert_entry,

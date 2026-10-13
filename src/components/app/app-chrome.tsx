@@ -64,6 +64,7 @@ import { HelpMenu } from "./help-menu";
 import { MinBuildBanner } from "./min-build-banner";
 import { NoticeDeliveries } from "./notice-deliveries";
 import { TasksSyncStatus } from "./sync-status";
+import { TimeRegionPrompt } from "./time-region-prompt";
 import { useUnknownRouteRedirect } from "./use-unknown-route-redirect";
 
 type ModuleTabProps = {
@@ -548,6 +549,8 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
             <HelpMenu />
             <NotificationCenter />
             <NoticeDeliveries />
+            {/* Asks once when this device is in another time zone (TV-D14). */}
+            <TimeRegionPrompt />
             <UserMenu
               avatarDataUrl={avatarDataUrl}
               profileInitial={derivedInitial}

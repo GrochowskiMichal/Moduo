@@ -291,7 +291,10 @@ function DatePickerPanel({ draft, heading }: { draft: DateDraft; heading?: strin
       {
         label: "Next week",
         // The coming week's first day, where Time & region starts it (TV-D14).
-        date: addDays(startOfWeek(today, { weekStartsOn: getResolvedTimeRegion().weekStartsOn }), 7),
+        date: addDays(
+          startOfWeek(today, { weekStartsOn: getResolvedTimeRegion().weekStartsOn }),
+          7,
+        ),
       },
     ];
   })();

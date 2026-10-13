@@ -19,6 +19,7 @@ import {
 } from "../../../components/ui/context-menu";
 import { DRAG_SOURCE } from "../../../components/ui/drag-visuals";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
+import { useTimeRegion } from "../../../lib/time-region";
 import { cn } from "../../../lib/utils";
 import { assigneeLabel } from "../assignee-options";
 import { useAssignees } from "../assignees";
@@ -85,6 +86,8 @@ function TaskCardView({
   actions,
   today,
 }: Props) {
+  // Dates redraw when Time & region changes (TV-D14; the card is memoised).
+  useTimeRegion();
   const {
     attributes,
     listeners,

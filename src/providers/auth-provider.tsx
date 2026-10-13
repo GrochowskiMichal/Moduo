@@ -14,7 +14,6 @@ import { forgetCaptureDrafts, keepCaptureDraftsOf } from "../features/tasks/capt
 import { clearTemplates } from "../features/tasks/templates/templates-store";
 import { forgetRememberedWorkspaces } from "../features/workspaces/remembered-workspaces";
 import { Analytics, setAnalyticsUser } from "../lib/analytics";
-import { forgetTimeRegion, syncTimeRegion } from "../lib/time-region";
 import { forgetBrowserPush, postPushUser } from "../lib/notices/browser-push";
 import {
   initRuntime,
@@ -23,6 +22,7 @@ import {
   runtimeConfigError,
 } from "../lib/runtime";
 import { attachSyncUser, wipeSyncCopies } from "../lib/sync/store";
+import { forgetTimeRegion, syncTimeRegion } from "../lib/time-region";
 
 export type { PlanTier } from "@contracts/vocabularies";
 

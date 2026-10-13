@@ -330,7 +330,7 @@ function RemindersGroup() {
 /** A labelled cluster (eyebrow above a card), mirroring the Appearance section.
  *  An optional description sits under the eyebrow for groups that need a one-line
  *  explainer (e.g. Notifications). */
-function PrefGroup({
+export function PrefGroup({
   label,
   description,
   children,
@@ -352,7 +352,7 @@ function PrefGroup({
   );
 }
 
-function PrefRow({
+export function PrefRow({
   title,
   description,
   children,

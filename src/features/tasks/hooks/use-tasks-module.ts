@@ -1671,7 +1671,10 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
    * answer counts once (the key).
    */
   const logTime = useCallback(
-    (id: string, entry: { seconds: number; on: string; note?: string | null }): Promise<boolean> => {
+    (
+      id: string,
+      entry: { seconds: number; on: string; note?: string | null },
+    ): Promise<boolean> => {
       const blocked = timeWriteBlocked(id);
       if (blocked || !workspaceId) {
         toast.error(blocked ?? "Couldn't log the time.");

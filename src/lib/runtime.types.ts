@@ -1192,6 +1192,10 @@ export type ModuoRuntime = {
      * PostgREST's row cap; `truncated` when it held more than it reads.
      */
     timeReport(query: TimeReportQuery): Promise<TimeReportResult>;
+    /** Your own time entries in a workspace, on tasks you can see, for the data export (TV-D14). */
+    exportTimeEntries(
+      workspaceId: string,
+    ): Promise<{ entries: TaskTimeEntry[]; truncated: Truncation[] }>;
     /**
      * Assign (or, with null, unassign) through `tasks_op_assign`: the person
      * has to be a member who can work on tasks. Assigning someone else

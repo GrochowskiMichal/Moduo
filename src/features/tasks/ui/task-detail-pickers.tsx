@@ -55,6 +55,7 @@ import {
 } from "../repeat";
 import { formatMinutes, formatTracked, parseMinutes, timeRow } from "../time-format";
 import { AssigneeAvatar } from "./assignee-avatar";
+import { TaskTimeEntries } from "./task-time-entries";
 
 // ── Due time ──────────────────────────────────────────────────────────────────
 
@@ -612,7 +613,7 @@ export function EstimateValue({
             {value}
           </PropertyValue>
         </PopoverTrigger>
-        <PopoverContent align="start" className="w-64 p-3">
+        <PopoverContent align="start" className="w-80 p-3">
           <EstimateEditor task={task} api={api} onDone={() => setOpen(false)} />
         </PopoverContent>
       </Popover>
@@ -763,6 +764,8 @@ function EstimateEditor({
           onKeyDown={onKey}
         />
       </div>
+      {/* "Add time…" and your own entries (TV-D14). */}
+      <TaskTimeEntries task={task} api={api} />
     </div>
   );
 }

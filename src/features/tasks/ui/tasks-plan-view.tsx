@@ -71,7 +71,7 @@ import { createLinkWithToast } from "../../spine/ui/drop-link-toast";
 import { WorkspaceContext } from "../../workspaces/workspace-context";
 import { useAssignees } from "../assignees";
 import { myTasksScope, openCount, resolveDefaultSelection, showsMyTasks } from "../default-view";
-import { nextHeaderSort, type TaskLayout, tasksDisplayDefaults } from "../display";
+import { nextHeaderSort, orderTasks, type TaskLayout, tasksDisplayDefaults } from "../display";
 import {
   asRailDropTarget,
   isSideDroppable,
@@ -84,9 +84,11 @@ import {
 } from "../dnd/rail-drop";
 import { type CaptureSeed, showsArchived, showsBacklog, statusesLetThrough } from "../filters";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
+import type { ListExportContext } from "../list-export";
 import type { GroupAdd } from "../list-group-add";
 import { type Bucket, isDrifted, PRIVATE_PROJECT_LABEL, type Task } from "../model";
 import { showsSortedNote, sortedByLabel } from "../order";
+import { handleLabel } from "../row-layout";
 import { resolveTasksDeepLink, taskIdForHandle } from "../search";
 import { projectDeleteSummary, projectOpenWork } from "../sidebar";
 import { STATUS_KEY_LABELS, type StatusKey } from "../statuses";
@@ -119,6 +121,7 @@ import { TaskListView } from "./task-list-view";
 import { TaskTimelineView } from "./task-timeline-view";
 import { useTasksDisplay } from "./use-tasks-display";
 import { useTasksFilters } from "./use-tasks-filters";
+import { ViewExportMenu } from "./view-export-menu";
 
 type Props = {
   api: TasksModuleApi;
@@ -1056,11 +1059,28 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     () => setDisplay({ ...display, order: "manual" }),
     [setDisplay, display],
   );
+  // Getting the list out (TV-D14, default f): what the view shows, in its order.
+  const exportContext: ListExportContext = {
+    projectName: bucketNameById,
+    assigneeName: (id) => {
+      if (!id) return null;
+      const person = assignees.find((a) => a.userId === id);
+      return person ? person.fullName || person.name : null;
+    },
+    handleOf: (task) => handleLabel(taskKey, task.number),
+  };
+  const shownTasks = () =>
+    orderTasks(
+      scopeTasks.filter((t) => !isHiddenByDisplay(t)),
+      display.order,
+      display.orderDir,
+    );
   const header: PlanHeaderControls = {
     count: openCount(scopeTasksAll),
     search: filtering.search,
     filter: filtering.filter,
     display: tasksDisplay.displayControl,
+    more: <ViewExportMenu tasks={shownTasks} title={scopeTitle} context={exportContext} />,
     activeFilters: filtering.activeFilters,
     sortedNote:
       view !== "timeline" && order !== "manual" && showsSortedNote(selection, order) ? (

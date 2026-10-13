@@ -57,6 +57,7 @@ import type { MentionCandidate } from "../../spine/mention";
 import { LinkSuggestionStrip } from "../../spine/ui/link-suggestion-strip";
 import { EntityTagRow } from "../../tags/ui/entity-tag-row";
 import type { ActivityEntry } from "../../tasks/model";
+import { ClientTimeReport } from "../../tasks/ui/client-time-report";
 import { birthdayCountdown } from "../dates";
 import { parseFieldOptions, selectOptionsFor } from "../field-defs";
 import { useContactSuggestions } from "../hooks/use-contact-suggestions";
@@ -896,6 +897,15 @@ export function ContactHub(props: ContactHubProps) {
             onChangeKind={onChangeKind}
             onUnlink={onUnlink}
             onRetry={onRetry}
+          />
+        ) : null}
+
+        {/* The client's time report, when they're a project's client (TV-D14). */}
+        {!editing && workspaceId ? (
+          <ClientTimeReport
+            workspaceId={workspaceId}
+            contactId={contact.id}
+            contactName={contact.name || "Client"}
           />
         ) : null}
 

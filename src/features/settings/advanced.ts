@@ -33,8 +33,8 @@ export type ModuleReadResult =
  * since TV-D10 projects carry their fields, and the bundle has `areas`,
  * `sections`, `teams` and `teamMembers`) plus every completion (TV-D8),
  * work session, your own reminders and every Waiting on… entry (TV-D10),
- * your own Focus runs (TV-F6), and your templates and the shared ones,
- * with their bodies (TV-D15),
+ * your own Focus runs (TV-F6), your templates and the shared ones,
+ * with their bodies (TV-D15), and your own time entries (TV-D14),
  * specs/tasks-v3.md §Assumptions #26. Every new tasks table joins here in
  * the block that creates it. A cut read joins the bundle's `truncated` list,
  * never silently.
@@ -58,6 +58,10 @@ export async function readTasksExport(
     exportTemplates?(
       workspaceId: string,
     ): Promise<{ templates: unknown[]; truncated: readonly unknown[] }>;
+    /** Your own time entries, with their days and notes (TV-D14). */
+    exportTimeEntries?(
+      workspaceId: string,
+    ): Promise<{ entries: unknown[]; truncated: readonly unknown[] }>;
   },
   workspaceId: string,
   /** TV-F6: your own Focus runs in the workspace (nobody reads anyone else's). */
@@ -65,7 +69,7 @@ export async function readTasksExport(
     listMyRuns(workspaceId: string): Promise<{ runs: unknown[]; truncated: readonly unknown[] }>;
   },
 ): Promise<Record<string, unknown>> {
-  const [bundle, read, sessions, reminders, waiting, runs, templates] = await Promise.all([
+  const [bundle, read, sessions, reminders, waiting, runs, templates, time] = await Promise.all([
     tasks.list(workspaceId),
     tasks.listCompletions(workspaceId),
     tasks.listSessions(workspaceId),
@@ -75,6 +79,9 @@ export async function readTasksExport(
     tasks.exportTemplates
       ? tasks.exportTemplates(workspaceId)
       : Promise.resolve({ templates: [], truncated: [] }),
+    tasks.exportTimeEntries
+      ? tasks.exportTimeEntries(workspaceId)
+      : Promise.resolve({ entries: [], truncated: [] }),
   ]);
   const cut = (bundle as { truncated?: unknown }).truncated;
   return {
@@ -85,6 +92,7 @@ export async function readTasksExport(
     waiting: waiting.waiting,
     focusRuns: runs.runs,
     templates: templates.templates,
+    timeEntries: time.entries,
     truncated: [
       ...(Array.isArray(cut) ? cut : []),
       ...read.truncated,
@@ -93,6 +101,7 @@ export async function readTasksExport(
       ...waiting.truncated,
       ...runs.truncated,
       ...templates.truncated,
+      ...time.truncated,
     ],
   };
 }

@@ -58,7 +58,8 @@ function monthDayText(d: Date, withYear: boolean): string {
   if (f.natural) return (withYear ? f.monthDayYear : f.monthDay).format(d);
   const month = f.month.format(d);
   const day = d.getDate();
-  if (f.order === "day_month") return withYear ? `${day} ${month} ${d.getFullYear()}` : `${day} ${month}`;
+  if (f.order === "day_month")
+    return withYear ? `${day} ${month} ${d.getFullYear()}` : `${day} ${month}`;
   return withYear ? `${month} ${day}, ${d.getFullYear()}` : `${month} ${day}`;
 }
 

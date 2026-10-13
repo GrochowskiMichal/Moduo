@@ -162,11 +162,11 @@ import {
   taskTimeAnswerToModel,
   taskTimeEntryRowToModel,
   taskTimeTotalsRowToModel,
-  timeReportRowToModel,
-  trackTimeExtras,
   taskWaitingRowToModel,
   teamMemberRowToModel,
   teamRowToModel,
+  timeReportRowToModel,
+  trackTimeExtras,
   withFieldFallback,
   withoutTvD9Fields,
 } from "./task-rows";
@@ -2860,6 +2860,45 @@ export const webRuntime: ModuoRuntime = {
       if (error && (error.code === "42703" || error.code === "42P01")) return [];
       if (error) throw new Error(error.message);
       return mapKnownRows(Array.isArray(data) ? data : [], taskTimeEntryRowToModel);
+    },
+
+    async exportTimeEntries(workspaceId) {
+      // Your own entries, on tasks you can still see (RLS), for the export.
+      const build = (opts?: { count: "exact"; head: true }) =>
+        supabaseClient
+          .from("task_time_entries")
+          .select(
+            "id, task_id, kind, seconds, started_at, ended_at, entry_on, note, reason, run_id, created_at",
+            opts,
+          )
+          .eq("workspace_id", workspaceId)
+          .neq("kind", "legacy");
+      const res = await readPaged<Record<string, unknown>, { message: string; code?: string }>({
+        scope: "time entries",
+        cap: TIME_REPORT_CAP,
+        page: async (offset, limit) => {
+          const { data, error } = await build()
+            .order("created_at", { ascending: false })
+            .order("id")
+            .range(offset, offset + limit - 1);
+          return { data: (data ?? null) as Record<string, unknown>[] | null, error };
+        },
+        countTotal: async () => {
+          const { count, error } = await build({ count: "exact", head: true });
+          return error ? null : (count ?? null);
+        },
+        keyOf: (row) => String(row.id),
+      });
+      if (res.error) {
+        if (res.error.code === "42703" || res.error.code === "42P01") {
+          return { entries: [], truncated: [] };
+        }
+        throw new Error(res.error.message);
+      }
+      return {
+        entries: mapKnownRows(res.rows, taskTimeEntryRowToModel),
+        truncated: collectTruncations(res.truncation),
+      };
     },
 
     async timeReport(query) {

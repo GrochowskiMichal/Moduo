@@ -303,7 +303,10 @@ export async function saveTimeRegion(
 ): Promise<TimeRegion> {
   const before = saved;
   const userId = owner;
-  applyTimeRegion({ ...saved, ...patch, ...(patch.timeZone ? { timeZoneManual: true } : {}) }, userId);
+  applyTimeRegion(
+    { ...saved, ...patch, ...(patch.timeZone ? { timeZoneManual: true } : {}) },
+    userId,
+  );
   try {
     const answer = await runtime.setTimeRegion(patch);
     if (!answer) throw new Error("Time & region isn't available yet.");

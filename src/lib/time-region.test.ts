@@ -8,9 +8,9 @@ import { renderHook } from "@testing-library/react";
 
 import { useCalendarPrefs } from "../features/calendar/hooks/use-calendar-prefs";
 import { visibleRange } from "../features/calendar/lens";
+import { dateCommandDay } from "../features/spine/grammar";
 import { daysLeftInWeek } from "../features/tasks/day-buckets";
 import { engineZone } from "../features/tasks/recurrence-engine";
-import { dateCommandDay } from "../features/spine/grammar";
 import { formatDate, formatFullDate, formatTime, formatWeekdayDate } from "./time-format";
 import {
   applyTimeRegion,
@@ -96,7 +96,12 @@ describe("one setting for every module (AC12.7)", () => {
   });
 
   it("resolves the device's values under what isn't set", () => {
-    const device = { zone: "Europe/Warsaw", weekStart: 1 as const, hour12: false, dateOrder: "day_month" as const };
+    const device = {
+      zone: "Europe/Warsaw",
+      weekStart: 1 as const,
+      hour12: false,
+      dateOrder: "day_month" as const,
+    };
     expect(resolveTimeRegion(EMPTY_TIME_REGION, device)).toEqual({
       timeZone: "Europe/Warsaw",
       deviceZone: "Europe/Warsaw",
@@ -105,7 +110,10 @@ describe("one setting for every module (AC12.7)", () => {
       dateOrder: "day_month",
     });
     expect(
-      resolveTimeRegion(region({ timeZone: "America/New_York", weekStart: 0, hourCycle: "h12" }), device),
+      resolveTimeRegion(
+        region({ timeZone: "America/New_York", weekStart: 0, hourCycle: "h12" }),
+        device,
+      ),
     ).toMatchObject({ timeZone: "America/New_York", weekStartsOn: 0, hour12: true });
   });
 });
