@@ -79,11 +79,30 @@ export function useSidebarDrag(input: {
     return intent ? { hit, intent } : null;
   };
 
-  useEffect(() => {
-    if (!drag) return;
+  // The pointer is tracked from the moment the drag starts (listener attached
+  // synchronously, not in an effect) and the drop resolves from it. Never
+  // from dnd-kit's `delta`: it folds in the sidebar's own scroll, so a drag
+  // that scrolls the tree would drop somewhere other than the highlight.
+  const dragRef = useRef<DragState | null>(null);
+  const detachRef = useRef<(() => void) | null>(null);
+
+  const stopTracking = () => {
+    detachRef.current?.();
+    detachRef.current = null;
+    dragRef.current = null;
+    setDrag(null);
+    setHover(null);
+    setHeaderHover(null);
+  };
+
+  const startTracking = (state: DragState) => {
+    detachRef.current?.();
+    dragRef.current = state;
     const onMove = (e: PointerEvent) => {
       pointer.current = { x: e.clientX, y: e.clientY };
-      const res = resolve(drag, e.clientX, e.clientY);
+      const current = dragRef.current;
+      if (!current) return;
+      const res = resolve(current, e.clientX, e.clientY);
       const t = res?.hit.target;
       const nextHover: RowHover =
         t?.kind === "row" && res?.hit.key ? { key: res.hit.key, zone: t.zone } : null;
@@ -93,16 +112,12 @@ export function useSidebarDrag(input: {
       setHeaderHover(t?.kind === "section" ? t.section : null);
     };
     document.addEventListener("pointermove", onMove, { capture: true });
-    return () => document.removeEventListener("pointermove", onMove, { capture: true });
-    // resolve reads the latest input through a ref
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [drag]);
-
-  const reset = () => {
-    setDrag(null);
-    setHover(null);
-    setHeaderHover(null);
+    detachRef.current = () =>
+      document.removeEventListener("pointermove", onMove, { capture: true });
+    setDrag(state);
   };
+
+  useEffect(() => () => detachRef.current?.(), []);
 
   useDndMonitor({
     onDragStart: (e: DragStartEvent) => {
@@ -113,23 +128,17 @@ export function useSidebarDrag(input: {
       // Start from where this drag began, never the previous drag's release.
       const start = e.activatorEvent as PointerEvent | null;
       if (start && "clientX" in start) pointer.current = { x: start.clientX, y: start.clientY };
-      setDrag({ noteId: payload.entityId, section });
+      startTracking({ noteId: payload.entityId, section });
     },
-    onDragEnd: (e: DragEndEvent) => {
-      const state = drag;
-      reset();
+    onDragEnd: (_e: DragEndEvent) => {
+      const state = dragRef.current;
+      const at = pointer.current;
+      stopTracking();
       if (!state) return;
-      // Activator + delta is exact here (auto-scroll is off); the tracked
-      // pointer covers a release before the first move reached our listener.
-      const start = e.activatorEvent as PointerEvent | null;
-      const at =
-        start && "clientX" in start
-          ? { x: start.clientX + e.delta.x, y: start.clientY + e.delta.y }
-          : pointer.current;
       const res = resolve(state, at.x, at.y);
       if (res) inputRef.current.onDrop(res.intent);
     },
-    onDragCancel: reset,
+    onDragCancel: stopTracking,
   });
 
   return { dragging: drag !== null, dragNoteId: drag?.noteId ?? null, hover, headerHover };

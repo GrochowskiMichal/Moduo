@@ -114,4 +114,20 @@ describe("engine drafts — lazy create (NR-2, AC3)", () => {
     expect(pushUpdates).toHaveBeenCalledTimes(1);
     expect((pushUpdates.mock.calls[0][0] as { updates: unknown[] }).updates).toHaveLength(1);
   });
+
+  it("a refused create reverts to a draft: its queue is dropped and later typing stays local", async () => {
+    const { runtime, pushUpdates } = fakeRuntime();
+    engine = new NotesSyncEngineV2(runtime, "ws1");
+    const session = engine.openDraft("d5");
+    await session.booted;
+    type(session.doc, "kept on screen");
+    await engine.promoteDraft("d5");
+    await engine.revertToDraft("d5");
+    type(session.doc, " and more");
+    expect(engine.isDraft("d5")).toBe(true);
+    engine.releasePush("d5"); // no-op: it is no longer held
+    await engine.wake();
+    await settle();
+    expect(pushUpdates).not.toHaveBeenCalled();
+  });
 });

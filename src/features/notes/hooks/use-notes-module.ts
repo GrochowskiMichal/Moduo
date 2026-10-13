@@ -562,10 +562,12 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
             }
           },
           (e) => {
-            // The server refused the create. Keep the note on screen with its
-            // edits held (nothing pushes) so the typed text isn't yanked away,
+            // The server refused the create. Keep the note on screen as a
+            // local draft again (its queued push is dropped: it can never
+            // land) so the typed text isn't yanked away,
             // skip every later op on it, and say plainly it isn't saved.
             failedCreatesRef.current.add(id);
+            void engine.revertToDraft(id);
             toast.error("Couldn't save this new note.", {
               description: `${e instanceof Error ? e.message : "The server said no."} Copy what you typed before leaving it.`,
             });

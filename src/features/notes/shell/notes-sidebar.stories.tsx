@@ -152,5 +152,18 @@ export const TrashView: Story = { args: { initialView: "trash" } };
 /** The Archive sub-view. */
 export const ArchiveView: Story = { args: { initialView: "archive" } };
 
+/** A short sidebar with a long tree, to drag while scrolling (drops follow the pointer). */
+export const LongTree: Story = {
+  args: {
+    notes: [
+      ...NOTES,
+      ...Array.from({ length: 30 }, (_, i) => note({ id: `page-${i}`, title: `Page ${i + 1}` })),
+    ],
+    onDropIntent: (intent) => {
+      (window as unknown as { __lastDrop?: unknown }).__lastDrop = intent;
+    },
+  },
+};
+
 /** The Published sub-view. */
 export const PublishedView: Story = { args: { initialView: "published" } };

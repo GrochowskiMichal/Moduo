@@ -521,6 +521,20 @@ export class NotesSyncEngineV2 {
     await this.enqueueLocalUpdate(s, Y.encodeStateAsUpdate(s.doc));
   }
 
+  /** The server refused a promoted draft's create: drop what it queued (it
+   * can never be accepted) and make it a draft again, so later keystrokes
+   * stay local too. The text stays in the open doc until the page closes. */
+  async revertToDraft(noteId: string): Promise<void> {
+    if (!this.held.delete(noteId)) return;
+    this.drafts.add(noteId);
+    const s = this.sessions.get(noteId);
+    if (s) s.memOutbox = [];
+    const queued = await readDocOutbox(noteId).catch(() => []);
+    const keys = queued.map((e) => e.key).filter((k): k is number => typeof k === "number");
+    if (keys.length > 0) await deleteDocOutboxEntries(keys).catch(() => {});
+    if (this.status === "pending" && !(await this.hasQueuedUpdates())) this.setStatus("synced");
+  }
+
   /** The note's create landed (or is queued ahead in the FIFO meta-outbox):
    * push what the held note queued. */
   releasePush(noteId: string): void {

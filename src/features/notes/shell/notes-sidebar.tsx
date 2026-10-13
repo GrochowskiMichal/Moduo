@@ -152,12 +152,20 @@ export function NotesSidebar(props: NotesSidebarProps) {
         const inFavorites = current?.startsWith("favorites:") ?? false;
         // Keep keyboard focus in the tree: move to a neighbour first.
         const idx = rows.findIndex((r) => r.key === current);
+        // Skip rows trashed with it: the same note, or anything under it.
+        const parentOf = new Map(rows.map((r) => [r.key, r.parentKey]));
+        const goesWithIt = (key: string) => {
+          for (let k: string | null = key, i = 0; k && i < 100; k = parentOf.get(k) ?? null, i++) {
+            if (k === current || rows.find((r) => r.key === k)?.id === note.id) return true;
+          }
+          return false;
+        };
         const next =
-          rows.slice(idx + 1).find((r) => r.id !== note.id) ??
+          rows.slice(idx + 1).find((r) => !goesWithIt(r.key)) ??
           rows
-            .slice(0, idx)
+            .slice(0, Math.max(idx, 0))
             .reverse()
-            .find((r) => r.id !== note.id);
+            .find((r) => !goesWithIt(r.key));
         if (next) focusRow(next.key);
         props.onAction(inFavorites ? "unfavorite" : "trash", note);
         break;

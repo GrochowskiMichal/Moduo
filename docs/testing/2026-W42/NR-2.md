@@ -1,6 +1,6 @@
 # Manual test checklist — NR-2 New Notes shell + sidebar
 
-> Generated 2026-10-13 · branch `t/mike/nr-2-notes-shell` · **Live-verified:** partial. The sidebar was driven live in Storybook (`Features/Notes/New Notes sidebar`): click-to-select, → / → / ↵ by keyboard, drag highlighting for file-to-Pages, nest, and a refused cycle. The signed-in app was not: the agent had no test session. Every item below is still to walk on web.
+> Generated 2026-10-13 · branch `t/mike/nr-2-notes-shell` · **Live-verified:** partial. The sidebar was driven live in Storybook (`Features/Notes/New Notes sidebar`): click-to-select, → / → / ↵ by keyboard, drag highlighting for file-to-Pages, nest, and a refused cycle, and a drop after scrolling the tree mid-drag (`LongTree` story) landing on the row under the pointer. The signed-in app was not: the agent had no test session. Every item below is still to walk on web.
 > Run top-to-bottom; check off as you go. Each item is a step → what you should see → where.
 
 ## The switch (AC1)
