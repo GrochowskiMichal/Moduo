@@ -3,8 +3,8 @@
 > **Status (2026-10-13): round 1 sent. Waiting on Maciej's answers to CH1–CH28** (CH27–CH28 added after the visual audit landed).
 >
 > - **Open calls:** CH1–CH28, all ❓. Load-bearing: ★ CH1 (the bar), ★ CH2 (the shape), ★ CH6 (what reaches you), ★ CH8 (Catch up), ★ CH20 (the hackathon's facts), ★ CH22 (the hackathon's structure, shared with the hackathon plan).
-> - **Research lanes** ([`research/`](./research/)): five landed and folded in (early-decisions audit, role journeys, competitor structure, hackathon, visual audit → §5). One still running: **current state** (code + a live look; folds into §1.3 B).
-> - **Research data in the shared local database** (the current-state lane; its file's last section will list every row): workspace **"Chat replan research"** `669be464-0b9a-4d84-8537-544ac04dba5f` with ~3,000 seeded messages; a third local user (`third@moduo.local`); **`dev@moduo.local`'s `plan_tier` was changed from `free` and must be put back** (the lane restores it when it finishes; check).
+> - **Research lanes** ([`research/`](./research/)): all six landed and folded in (early-decisions audit, role journeys, competitor structure, hackathon, visual audit → §5, current state → §1.3 B and §6 #15–18).
+> - **Research data in the shared local database** (kept for round 2's live checks; remove when the plan is done): workspace **"Chat replan research"** `669be464-0b9a-4d84-8537-544ac04dba5f` (10 channels, 3,032 messages, one task) and a third local user `third@moduo.local`. Full ledger and a cleanup sketch: [current state](./research/current-state.md), last section. `dev@moduo.local`'s plan is back to `free` (checked).
 > - **Prototype:** [`prototypes/round-1.html`](./prototypes/round-1.html) (keys 1–7 frames, V variants; serve the folder over http to see the Geist font).
 > - **Uncommitted:** nothing.
 >
@@ -86,12 +86,25 @@ Every reversal the [decisions audit](./research/early-decisions-audit.md) found 
 
 **A · Structure: an island.** Channels and DMs unrelated to anything (CH2); a notes-to-self DM beside capture (CH3); `general` joined per device, so leaving it on one computer doesn't stick and `@channel` misses anyone who hasn't opened Chat yet (audit D24).
 
-**B · Trust: things that make people stop believing it.**
-1. **A direct message reaches you only if you look at the Chat tab.** Nothing leaves the app; the bell shows only the open workspace.
-2. **Linked items go stale:** a chip keeps the title it had when sent and never shows a status.
-3. **Settings that do nothing:** add a manager, turn announcement mode on later, "Manage any channel", "Start calls" (audit D36).
-4. **"Create task from message" makes an Inbox task silently** with no link back; "Open" goes to Tasks, not to the task (audit D33).
-5. **Delete asks first, then can't be undone**, against the app's undo rule (audit D7).
+**B · Trust: things that make people stop believing it** (ranked; [current state](./research/current-state.md) §7, seen live on the local stack with three people unless marked):
+1. **A message that fails to send looks sent, then vanishes on reload.** The "Not sent · Retry" row can never show, and there's no outbox. A viewer's sends, refused by the server, look sent the same way. Only a toast says otherwise.
+2. **Opening a channel marks everything read**, whatever you saw: 200 unread were cleared while only the newest 50 had loaded.
+3. **The "New" line starts in the wrong place** when more than 50 are unread, then jumps as older messages load.
+4. **Messages go missing:** one that shares a timestamp with a page boundary is never fetched (2,999 of 3,000 shown); after a reconnect with more than 50 new messages, the middle is missing for good (code).
+5. **A direct message reaches you only if you look at the Chat tab.** Nothing leaves the app; the bell shows only the open workspace.
+6. **Links that don't land:** a thread notification opens the channel, not the thread; a link to an older message opens the channel's bottom with no note.
+7. **Counts that lie:** whoever creates a channel is set to "every message" without asking (the badge read "205 unread"); thread replies never count as unread anywhere; "Mark unread" counts only what's loaded.
+8. **A composer where you can't post** (viewers, announcement channels); the send fails and, through #1, looks sent.
+9. **Presence and typing fail silently** (everyone "Away" on the local stack).
+10. **Search can't find people by name** and shows an error as "No messages match"; a full scan that slows as messages grow (410 ms at 3,000).
+11. **Linked items go stale:** a chip keeps the title it had when sent and never shows a status.
+12. **Settings that do nothing:** add a manager, turn announcement mode on later, "Manage any channel", "Start calls" (audit D36).
+13. **"Create task from message" makes an Inbox task silently** with no link back; "Open" goes to Tasks, not to the task (audit D33).
+14. **Delete asks first, then can't be undone**, against the app's undo rule (audit D7).
+
+**Scale, measured:** a 3,000-message channel renders every message (no virtual list, ~119,000 page elements); a new message took ~3 s to appear there against ~0.1 s in a small channel; one incoming message causes 10 requests per open app.
+
+**The module contract** ([current state](./research/current-state.md) §2): writes are ops and there's a manifest, and erasure on account deletion works. But most ops log no activity, nothing renders a trail, channels and messages aren't in the search registry (so they're absent from ⌘K, `@` and References), messages leave no spine links, and **chat isn't in the lossless export**.
 
 **C · Capability gaps for a normal week** ([gap map](./research/role-journeys.md) §2): nothing leaves the app (#1 for every role); no files; no catch-up across conversations; nothing ties a conversation to a project or client; decisions live only as pins; no reminders or "later"; no quiet hours; for the hackathon, nothing reaches across workspaces, no help desk, invites one email at a time.
 
@@ -219,7 +232,11 @@ Per the module-replan rules these are mine to decide. Each lands in `docs/decisi
 11. **PERM-7 made honest** (audit D4, D36): the ops read channel managers and "Manage any channel"; Details gets "Add manager" and the announcement switch; "Start calls" hides until Meet ships; chat's switches live once, in the role editor. *Rejected:* keeping two places that decide "who can create a channel".
 12. **Agent posts are authored by the key's creator** with `via` = the key's name, as Tasks 52; mentions by an agent notify like a person's (audit D15). *Rejected:* the null author and "App" badge.
 13. **No history limit.** Everything stays searchable for as long as the workspace exists (Slack's free plan hides older than 90 days and deletes after a year).
-14. **Chat gets its own key table**, collision-checked against Tasks' keymap (audit D22): ⌥↑↓ previous/next conversation, ⌥⇧↑↓ next unread (a listed scope-separated collision), ↑ edits your last message, `R` `Space` `T` `H` in Catch up, `T` on a selected message (`T` is Today on the Timeline: a separate scope, listed as accepted).
+15. **Every chat op logs an attributed activity row** (edit, delete, react, pin, rename, topic, join, leave, members, managers), and conversations get a quiet history in Details; channels and messages register in the search registry (module contract). *Rejected:* logging only what notifies (v1).
+16. **Chat joins the lossless export** (the brief's launch-day promise): every conversation you can read, with threads, reactions and file links, as JSON plus a readable Markdown per conversation. *Rejected:* leaving chat out (v1).
+17. **Reading is what you saw:** the read mark moves to the last message that was on screen, not to "now"; pages fetch by (time, id) so equal timestamps can't fall between pages; after a reconnect the store fills every gap before showing the window; a failed send stays in the conversation as "Not sent · Retry" from the outbox. *Rejected:* v1's 600 ms "mark all read" and 50-message resync.
+18. **Large conversations are virtualised** (the Tasks TV-D11b approach) with a perf fixture of 10,000 messages in one channel against the 200 ms budget. *Rejected:* rendering every loaded message.
+19. **Chat gets its own key table**, collision-checked against Tasks' keymap (audit D22): ⌥↑↓ previous/next conversation, ⌥⇧↑↓ next unread (a listed scope-separated collision), ↑ edits your last message, `R` `Space` `T` `H` in Catch up, `T` on a selected message (`T` is Today on the Timeline: a separate scope, listed as accepted).
 
 ## 7. What Chat waits on from the Tasks v3 build
 
