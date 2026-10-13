@@ -32,6 +32,7 @@ Set up: `bun run local:up`, `bun run env:local`, `bun run dev:web`, sign in as t
 - [ ] **Do:** fold a group, reload → **Expect:** it stays folded (this device) _(both)_
 - [ ] **Do:** look at the end of a group with a Backlog task → **Expect:** "Backlog · 1 ›"; click → the Backlog task shows; Group by Status → Backlog is the last group, folded _(both)_
 - [ ] **Do:** with three Backlog tasks, open the line and press j through it → **Expect:** each Backlog task in turn, none jumping above the line _(both)_
+- [ ] **Do:** with a Backlog task selected, click "Backlog · n" to close it → **Expect:** it closes and stays closed; the selection moves to the row above the line _(both)_
 - [ ] **Do:** delete a section from its ⋯ → **Expect:** its tasks move to No section; Undo brings the section back with its tasks in it _(both)_
 
 ## Subtasks

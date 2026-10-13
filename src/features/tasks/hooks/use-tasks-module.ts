@@ -3177,22 +3177,29 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
               });
               if (back.length === 0) return;
               const write = store.begin(back.map((m) => patchOf(m.id, { sectionId })));
-              try {
-                const rows = await Promise.all(
-                  back.map((m) =>
-                    runtime.tasks.updateTask({ workspaceId, taskId: m.id, patch: { sectionId } }),
-                  ),
+              // Each task goes back on its own: one refused never undoes the others.
+              const results = await Promise.allSettled(
+                back.map((m) =>
+                  runtime.tasks.updateTask({ workspaceId, taskId: m.id, patch: { sectionId } }),
+                ),
+              );
+              const rows = results.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
+              // The saved rows become the copy; a refused one's overlay goes with the op.
+              write.settle({ tasks: rows });
+              const refusal = results.find((r) => r.status === "rejected");
+              if (refusal) {
+                const left = results.length - rows.length;
+                failed(
+                  refusal.reason,
+                  `Couldn't put ${left === 1 ? "a task" : `${left} tasks`} back in the section.`,
                 );
-                write.settle({ tasks: rows });
-              } catch (e) {
-                refused(write, e, "Couldn't put the tasks back in the section.");
               }
             });
           },
         });
       });
     },
-    [bundle.sections, runSectionOp, runtime, workspaceId, store, refused],
+    [bundle.sections, runSectionOp, runtime, workspaceId, store, failed],
   );
 
   /**

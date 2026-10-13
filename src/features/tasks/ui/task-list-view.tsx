@@ -462,9 +462,21 @@ export function TaskListView({
   const toggleRevealGroup = useCallback((key: string) => {
     setRevealedGroups((prev) => toggled(prev, key));
   }, []);
-  const toggleBacklog = useCallback((key: string) => {
-    setOpenBacklogs((prev) => toggled(prev, key));
-  }, []);
+  const toggleBacklog = useCallback(
+    (key: string) => {
+      // Closing a line that holds the selection: the selection steps up to the
+      // row above the line (else the list's first), or the line would open
+      // straight back for it.
+      const group = openBacklogs.has(key) ? groups.find((g) => g.key === key) : undefined;
+      if (group && selectedId) {
+        const parentId = taskById.get(selectedId)?.parentId ?? null;
+        const holds = group.backlog.some((t) => t.id === selectedId || t.id === parentId);
+        if (holds) setSelectedId(group.tasks[group.tasks.length - 1]?.id ?? null);
+      }
+      setOpenBacklogs((prev) => toggled(prev, key));
+    },
+    [openBacklogs, groups, selectedId, taskById, setSelectedId],
+  );
 
   // ── the facts rows show (row-facts.ts, TV-D11b) ─────────────────────────────
   const sectionNames = useMemo(
@@ -1642,10 +1654,13 @@ export function TaskListView({
               // Chromium focuses a clicked button; after a mouse click on a row's
               // button, hand focus back to the list (as desktop WebKit does), so the
               // next Space/Enter acts on the selected row instead of re-clicking it.
-              // Keyboard activation (detail 0), text fields and portaled popovers keep focus.
+              // Keyboard activation (detail 0), text fields and portaled popovers keep focus,
+              // and so does a menu or picker a button just opened (a group's ⋯): focus
+              // leaving it would close it again at once.
               onClickCapture={(e) => {
                 if (e.detail === 0 || !e.currentTarget.contains(e.target as Node)) return;
-                if (!(e.target instanceof Element) || !e.target.closest("button")) return;
+                const button = e.target instanceof Element ? e.target.closest("button") : null;
+                if (!button || button.hasAttribute("aria-haspopup")) return;
                 e.currentTarget.focus({ preventScroll: true });
               }}
               role="grid"

@@ -207,6 +207,21 @@ describe("Backlog (53b)", () => {
     expect(screen.getByRole("button", { name: /Backlog, 3 tasks, hide/ })).toBeTruthy();
   });
 
+  it("closing the line that holds the selection closes it; the selection steps up", () => {
+    const onSelectTask = rs.fn();
+    renderList([task("a"), task("x", { statusCategory: "backlog" })], {
+      selectedTaskId: "a",
+      onSelectTask,
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Backlog, 1 task, show/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Task x" }));
+    expect(onSelectTask).toHaveBeenLastCalledWith("x");
+    fireEvent.click(screen.getByRole("button", { name: /Backlog, 1 task, hide/ }));
+    expect(screen.getByRole("button", { name: /Backlog, 1 task, show/ })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Task x" })).toBeNull();
+    expect(onSelectTask).toHaveBeenLastCalledWith("a");
+  });
+
   it("grouped by status, Backlog is its own group, folded", () => {
     renderList([task("a"), task("b", { statusCategory: "backlog" })], { groupBy: "status" });
     expect(screen.queryByRole("button", { name: /Backlog, 1 task/ })).toBeNull();
