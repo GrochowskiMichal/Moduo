@@ -253,21 +253,24 @@ Per the module-replan rules these are mine to decide. Each lands in `docs/decisi
 
 ## 7. What Chat waits on from the Tasks v3 build
 
-| Chat needs | From | State (2026-10-13) |
-| --- | --- | --- |
-| The panel dropdown and "← item" stack; the capture shell with ⌘1–7 | SH-1 | Landed |
-| The kit (NavRow, GroupHeader, MetaCount, Chip, EmptyState, Feed) | DS-6 | Landed |
-| References, the grammar, the editor's menus | RF-1, TV-U14 | Landed |
-| The shared store pattern | TV-D11a | Landed (Tasks' store; Chat builds its own on the pattern) |
-| The six fixed reactions component | TV-U13 | Ready, not built |
-| Notification channels (OS, browser, the menu-bar app), the table, reminders | TV-D12 | Ready, not built |
-| `@Team` and claims (the help desk) | TV-D13 | Waits on TV-D12 |
-| Time & region (quiet hours, message times) | TV-D14 | Ready, not built |
-| One time engine (Focus holds pings; "Focusing") | TV-F6 | Ready, not built |
-| Files: the upload pipeline and viewer | AT-2, AT-3 | AT-2 open (attachments session) |
-| Agents' "via <key>" tool surface | TV-D16 | Waits on TV-D13 |
+Re-checked against the integration branch on 2026-10-13 (evening). Every Tasks block Chat needs has landed except three that aren't built yet; what Chat adds on top of a landed block is **Chat's own work, in Chat's blocks**, not a Tasks rework. The same list is in BUILD_ORDER's 🟠 box as "From the Chat re-plan" (CH72).
 
-Chat's own blocks can start on what's landed (structure, editor, References, panel, store) while TV-D12, TV-D13 and AT-2 land; the spec orders them so.
+| Chat needs | From | State | What Chat adds on top |
+| --- | --- | --- | --- |
+| The panel dropdown and "← item" stack; the capture shell with ⌘1–7 | SH-1 | Landed | Chat's panel views (§6 #8) and its capture type (⌘7) |
+| The kit (NavRow, GroupHeader, MetaCount, Chip, EmptyState, Feed) | DS-6 | Landed | The chat-only pieces in §5 (message row, composer, reaction bar, "New" pill, day divider, typing line, presence dot) |
+| References, the grammar, the editor's menus | RF-1, TV-U14 | Landed | A message's link, chip, card and preview; a typed handle becomes a chip (CH66) |
+| The shared store pattern | TV-D11a | Landed | Chat's own store on the pattern (§6 #3) |
+| Comment reactions | TV-U13 | Built with **six fixed reactions** | One reaction component for chat and comments: your quick row, any emoji, custom emoji (CH16a, CH49); a migration widens `comment_reactions` |
+| The bell, web push, the menu-bar app, the notification generator with mute switches | TV-D12 | Built (reminders run every minute) | Chat's rows in the table (§6 #23); a message's push sent **at once** from the write, not on the minute; one device rings; Focus, quiet hours and do not disturb hold pings on the server; a click lands on the message; the email after an hour (CH43, through the TX outbox) |
+| Teams and `@Team` | TV-D13 | Built | A chat `@Team` notifies the team like a mention |
+| Time & region | TV-D14 | Built (zone, week start, 12/24 h, date order) | **Quiet hours** join the same store, for every module's notices (CH41) |
+| One time engine, runs and claims | TV-F6 | Built | A narrow "focusing now" read for teammates: "Focusing" for all, the task title only with the opt-in and only to people who can see the task (CH42, CH47) |
+| Files: the upload pipeline and viewer | AT-2 (AT-3 open) | Built | Files on messages through AT-2's pipeline |
+| Agents' "via <key>" tool surface | TV-D16 | **Not built** | Chat's MCP tools (§6 #25) ship in Chat's block, on TV-D16's surface if it has landed by then |
+| Home widgets | TV-H1 | **Not built** | One "Team" widget (CH70): Chat supplies each person's "now" line; "Catch up" is Chat's own widget |
+| The project overview | TV-U16 | **Not built** | The conversation line (CH11) and decisions (CH13, CH52) on the overview and the client's hub |
+| Grants on a workspace | TX-9b | Not built | The hackathon's dated Team plan (CH67) uses the same grant mechanism; owned by the hackathon plan |
 
 ## 8. The calls
 
@@ -1017,7 +1020,7 @@ In his words, then what each one changes:
 
 ✅ **Decided 2026-10-13:** a ("all ok").
 
-**CH35 · Chat's Home widgets** (the module contract requires them)
+**CH35 · Chat's Home widgets** (the module contract requires them) *(in part superseded by CH70: "Team now" merges into one "Team" widget with Tasks' load)*
 - (a) **Two:** "Catch up" (what's waiting for you, in the S and M sizes) and "Team now" (who's reachable, focusing, away or on vacation; CH28b). *Recommended.*
 - (b) v1's single "Conversations" widget (recent conversations, what needs you first).
 
@@ -1047,57 +1050,62 @@ In his words, then what each one changes:
 The audit walked every role's week and every view in every state and found 28 gaps (20 product, 8 technical) and 16 contradictions. The technical ones are decided in §6 #19 and #23–#28; stale text was fixed in place (CH6, CH23, CH27, CH28, §2, §3, §6 #8, §6 #22). Each question below is one line: the recommendation first, then the alternatives. "All ok" accepts every recommendation.
 
 **Notifications and Catch up**
-- **CH38 · The bell and Catch up show the same mention.** **(a) One shared state: clear it in either, it's gone from both** · (b) Catch up only; the bell shows "3 waiting in Catch up" · (c) both, cleared separately.
-- **CH39 · Does "Every message" ping?** **(a) Yes, one notice per burst, only when Moduo isn't in front of you** · (b) no, it only counts (renamed "Count every message").
-- **CH40 · An `@you` in a conversation set to "Nothing"?** **(a) It waits silently in Catch up (no ping, no count)** · (b) nothing at all.
-- **CH41 · When quiet hours, do not disturb or a vacation end?** **(a) Nothing pings; everything waits in Catch up; announcements don't break through either** · (b) one summary notice, like Focus.
-- **CH42 · Focusing with no end time?** **(a) Just "Focusing"; "until" appears only with a Pomodoro phase or an estimate** · (b) "Focusing since 1:10 PM".
-- **CH43 · Email when Moduo is closed.** **(a) Yes, on by default: an unread direct message or `@you`, after 1 hour with no Moduo open, at most one email per conversation per hour (text follows CH33's switch)** · (b) yes, off by default · (c) never. *(The only channel that reaches a phone until there's a mobile app.)*
-- **CH44 · When does the web app ask to show notifications?** **(a) Once, the first time you open Chat in a browser: "Get a notice when someone messages you · Allow · Not now"; if refused, Catch up says notifications are off in this browser** · (b) only in Settings · (c) the first time a message arrives while you're elsewhere.
-- **CH45 · Is a status (vacation, do not disturb) one for all your workspaces?** **(a) Yes** · (b) per workspace.
-- **CH46 · Pause one workspace's notifications** (e.g. a client's)? **(a) Yes, from the workspace switcher** · (b) no, mute conversations one by one.
+- **CH38 · The bell and Catch up show the same mention.** **(a) One shared state: clear it in either, it's gone from both** · (b) Catch up only; the bell shows "3 waiting in Catch up" · (c) both, cleared separately. ✅ *(a)*
+- **CH39 · Does "Every message" ping?** **(a) Yes, one notice per burst, only when Moduo isn't in front of you** · (b) no, it only counts (renamed "Count every message"). ✅ *(a)*
+- **CH40 · An `@you` in a conversation set to "Nothing"?** **(a) It waits silently in Catch up (no ping, no count)** · (b) nothing at all. ✅ *(a)*
+- **CH41 · When quiet hours, do not disturb or a vacation end?** **(a) Nothing pings; everything waits in Catch up; announcements don't break through either** · (b) one summary notice, like Focus. ✅ *(a)*
+- **CH42 · Focusing with no end time?** **(a) Just "Focusing"; "until" appears only with a Pomodoro phase or an estimate** · (b) "Focusing since 1:10 PM". ✅ *(a)*
+- **CH43 · Email when Moduo is closed.** **(a) Yes, on by default: an unread direct message or `@you`, after 1 hour with no Moduo open, at most one email per conversation per hour (text follows CH33's switch)** · (b) yes, off by default · (c) never. *(The only channel that reaches a phone until there's a mobile app.)* ✅ *(a)*
+- **CH44 · When does the web app ask to show notifications?** **(a) Once, the first time you open Chat in a browser: "Get a notice when someone messages you · Allow · Not now"; if refused, Catch up says notifications are off in this browser** · (b) only in Settings · (c) the first time a message arrives while you're elsewhere. ✅ *(a)*
+- **CH45 · Is a status (vacation, do not disturb) one for all your workspaces?** **(a) Yes** · (b) per workspace. ✅ *(a)*
+- **CH46 · Pause one workspace's notifications** (e.g. a client's)? **(a) Yes, from the workspace switcher** · (b) no, mute conversations one by one. ✅ *(a)*
 
 **Presence privacy**
-- **CH47 · How much of your Focus do teammates see?** **(a) "Focusing" for everyone; the task's title only if you turn on "Show what I'm focusing on" and they can see that task** · (b) the title by default for anyone who can see the task · (c) the title for everyone (round 4). *(Tasks keeps work sessions private; this keeps chat consistent with it.)*
-- **CH48 · "Away" with or without a time?** **(a) Without** ("Away since 1:10 PM" tells people when you stopped) · (b) with.
+- **CH47 · How much of your Focus do teammates see?** **(a) "Focusing" for everyone; the task's title only if you turn on "Show what I'm focusing on" and they can see that task** · (b) the title by default for anyone who can see the task · (c) the title for everyone (round 4). *(Tasks keeps work sessions private; this keeps chat consistent with it.)* ✅ *(a)*
+- **CH48 · "Away" with or without a time?** **(a) Without** ("Away since 1:10 PM" tells people when you stopped) · (b) with. ✅ *(a)*
 
 **Reactions and announcements**
-- **CH49 · What can people react with on task and note comments?** **(a) The same as chat: your quick row, any emoji, the workspace's custom emoji** · (b) your quick row only · (c) six fixed (reverses CH16a).
-- **CH50 · Replying to a post in an announcement channel?** **(a) Members react, or "Reply privately" opens a direct message to the author with the post quoted** · (b) replies stay in the chain on the right, never in the stream · (c) replies in the stream.
+- **CH49 · What can people react with on task and note comments?** **(a) The same as chat: your quick row, any emoji, the workspace's custom emoji** · (b) your quick row only · (c) six fixed (reverses CH16a). ✅ *(a)*
+- **CH50 · Replying to a post in an announcement channel?** **(a) Members react, or "Reply privately" opens a direct message to the author with the post quoted** · (b) replies stay in the chain on the right, never in the stream · (c) replies in the stream. ✅ *(a)*
 
 **Replies, decisions and tidying up**
-- **CH51 · "Remind me" on any message?** **(a) Yes; at its time it comes back into your Catch up with one notice** · (b) only on what's in Catch up.
-- **CH52 · Should a decision show on the items it mentions, even from a direct message?** **(a) Yes, to the people who can read that conversation** ("Decided with Mike · Oct 12: …" on Anna's hub) · (b) only from linked channels.
-- **CH53 · Is a wrap-up's answer a decision?** **(a) Wrap up asks "Which reply settled it?" and offers "Also mark as decision" (ticked in linked channels)** · (b) always · (c) never.
-- **CH54 · A new reply to a wrapped-up chain?** **(a) Reopens it, visibly ("Reopened by Mike")** · (b) starts a new chain quoting the old one.
-- **CH55 · Moving messages to a conversation with different people?** **(a) Freely when everyone there could already read them; otherwise only your own, after a warning ("2 people who aren't in Founders will see this")** · (b) only within the same audience · (c) anywhere, with Undo.
+- **CH51 · "Remind me" on any message?** **(a) Yes; at its time it comes back into your Catch up with one notice** · (b) only on what's in Catch up. ✅ *(a)*
+- **CH52 · Should a decision show on the items it mentions, even from a direct message?** **(a) Yes, to the people who can read that conversation** ("Decided with Mike · Oct 12: …" on Anna's hub) · (b) only from linked channels. ✅ *(a)*
+- **CH53 · Is a wrap-up's answer a decision?** **(a) Wrap up asks "Which reply settled it?" and offers "Also mark as decision" (ticked in linked channels)** · (b) always · (c) never. ✅ *(a)*
+- **CH54 · A new reply to a wrapped-up chain?** **(a) Reopens it, visibly ("Reopened by Mike")** · (b) starts a new chain quoting the old one. ✅ *(a)*
+- **CH55 · Moving messages to a conversation with different people?** **(a) Freely when everyone there could already read them; otherwise only your own, after a warning ("2 people who aren't in Founders will see this")** · (b) only within the same audience · (c) anywhere, with Undo. ✅ *(a)*
 
 **Channels and who may do what**
-- **CH56 · What does "Start a conversation for X" create?** **(a) A channel named after X: private with X's people when X is private, public otherwise** · (b) always public · (c) always ask.
-- **CH57 · Does linking a team add its members?** **(a) A one-time "Add the team's 4 people?" offer, never kept in sync** · (b) kept in sync · (c) a label only.
-- **CH58 · Who adds people to a private channel?** **(a) Its managers** · (b) anyone in it.
-- **CH59 · Can a public channel become private later?** **(a) Yes, by its managers; never the other way** · (b) never (v1).
-- **CH60 · Can viewers react?** **(a) Yes (they still never post)** · (b) no.
-- **CH61 · Someone removes you from a channel.** **(a) A quiet line in Catch up, no ping; the channel leaves your sidebar** · (b) nothing (v1).
-- **CH62 · Can a channel be deleted?** **(a) By its managers and admins, into Recently deleted for 30 days** · (b) archive only (v1).
+- **CH56 · What does "Start a conversation for X" create?** **(a) A channel named after X: private with X's people when X is private, public otherwise** · (b) always public · (c) always ask. ✅ *(a)*
+- **CH57 · Does linking a team add its members?** **(a) A one-time "Add the team's 4 people?" offer, never kept in sync** · (b) kept in sync · (c) a label only. ✅ *(a)*
+- **CH58 · Who adds people to a private channel?** **(a) Its managers** · (b) anyone in it. ✅ *(a)*
+- **CH59 · Can a public channel become private later?** **(a) Yes, by its managers; never the other way** · (b) never (v1). ✅ *(a)*
+- **CH60 · Can viewers react?** **(a) Yes (they still never post)** · (b) no. ✅ *(a)*
+- **CH61 · Someone removes you from a channel.** **(a) A quiet line in Catch up, no ping; the channel leaves your sidebar** · (b) nothing (v1). ✅ *(a)*
+- **CH62 · Can a channel be deleted?** **(a) By its managers and admins, into Recently deleted for 30 days** · (b) archive only (v1). ✅ *(a)*
 
 **The composer and capture**
-- **CH63 · Does ⌘J stay as a conversation switcher?** **(a) No; conversations are in ⌘K** · (b) yes, as ⌘K filtered to conversations.
-- **CH64 · Pressing ⏎ while offline?** **(a) The message waits in place as "Waiting to send" and sends itself in order when you're back; Retry only if the server refuses it** (round 5, frame 6) · (b) it fails at once with Retry · (c) the box is disabled offline.
-- **CH65 · Where does a ⌘7 message go if you don't pick?** **(a) Nowhere: you must pick, recent conversations and people first; after sending, "Sent to Acme · Open · Undo"** · (b) the last conversation you were in.
-- **CH66 · Does a typed task number (`MOD-142`) become a live chip?** **(a) Yes, as you type, like a date chip; Esc or ⌘Z keeps the text** · (b) only through `@`.
+- **CH63 · Does ⌘J stay as a conversation switcher?** **(a) No; conversations are in ⌘K** · (b) yes, as ⌘K filtered to conversations. ✅ *(a)*
+- **CH64 · Pressing ⏎ while offline?** **(a) The message waits in place as "Waiting to send" and sends itself in order when you're back; Retry only if the server refuses it** (round 5, frame 6) · (b) it fails at once with Retry · (c) the box is disabled offline. ✅ *(a)*
+- **CH65 · Where does a ⌘7 message go if you don't pick?** **(a) Nowhere: you must pick, recent conversations and people first; after sending, "Sent to Acme · Open · Undo"** · (b) the last conversation you were in. ✅ *(a)*
+- **CH66 · Does a typed task number (`MOD-142`) become a live chip?** **(a) Yes, as you type, like a date chip; Esc or ⌘Z keeps the text** · (b) only through `@`. ✅ *(a)*
 
 **The hackathon** (shared with the hackathon plan, which has no spec yet)
-- **CH67 · What does a handed-out hackathon grant include?** **(a) A dated Team plan on the workspace: seats for the whole team, chat, Team's file limits; at its end everything stays readable, chat pauses (CH4a), no new invites** · (b) chat only · (c) organizers own every workspace on a comped plan. *(A chat-only grant leaves a Free owner's one seat and 20 MB file limit.)*
-- **CH68 · If the date comes before server push (TV-D12) or uploads (AT-2) are built?** **(a) A stop-gap: notices only from an open desktop app or browser tab, and files as task attachments or links** · (b) keep v1's screens for the event · (c) ship without notices and files.
-- **CH69 · How does event news ("submissions close in 1 hour") reach the teams?** **(a) Outside Moduo for the first event (the organizers' email, venue screens); Chat builds nothing** · (b) an organizer seat in every team workspace with an announcement channel · (c) later, a channel followed into every workspace.
+- **CH67 · What does a handed-out hackathon grant include?** **(a) A dated Team plan on the workspace: seats for the whole team, chat, Team's file limits; at its end everything stays readable, chat pauses (CH4a), no new invites** · (b) chat only · (c) organizers own every workspace on a comped plan. *(A chat-only grant leaves a Free owner's one seat and 20 MB file limit.)* ✅ *(a)*
+- **CH68 · If the date comes before server push (TV-D12) or uploads (AT-2) are built?** **(a) A stop-gap: notices only from an open desktop app or browser tab, and files as task attachments or links** · (b) keep v1's screens for the event · (c) ship without notices and files. ✅ *(a)*
+- **CH69 · How does event news ("submissions close in 1 hour") reach the teams?** **(a) Outside Moduo for the first event (the organizers' email, venue screens); Chat builds nothing** · (b) an organizer seat in every team workspace with an announcement channel · (c) later, a channel followed into every workspace. ✅ *(a)*
 
 **Home and later**
-- **CH70 · Two per-person widgets on Home** (Chat's "Team now" and Tasks' team load)? **(a) One "Team" widget: a "now" line per person plus Tasks' load rows** · (b) two widgets (CH35 as decided).
-- **CH71 · Scheduled send?** **(a) Later, listed in the spec's out-of-scope** · (b) in the teams-of-2–5 cut.
+- **CH70 · Two per-person widgets on Home** (Chat's "Team now" and Tasks' team load)? **(a) One "Team" widget: a "now" line per person plus Tasks' load rows** · (b) two widgets (CH35 as decided). ✅ *(a)*
+- **CH71 · Scheduled send?** **(a) Later, listed in the spec's out-of-scope** · (b) in the teams-of-2–5 cut. ✅ *(a)*
 
 **One permission, not a product call**
-- **CH72 · May I add short "From the Chat re-plan" requirement notes to four Tasks v3 blocks that are ready but not built, on the integration branch now?** TV-D12 (push within seconds, not only on a schedule; only one device rings; the server knows Focus and quiet hours; a click lands on the message), TV-U13 (reactions per CH16a and CH49), TV-F6 (teammates can read "Focusing", per CH47), TV-D14 (quiet hours live in Time & region); plus TX-9b (grants) in §7. **(a) Yes, requirements only, no design changes** · (b) no, wait for the Chat spec (those blocks may be built first and then reworked).
+- **CH72 · May I add short "From the Chat re-plan" requirement notes to four Tasks v3 blocks that are ready but not built, on the integration branch now?** TV-D12 (push within seconds, not only on a schedule; only one device rings; the server knows Focus and quiet hours; a click lands on the message), TV-U13 (reactions per CH16a and CH49), TV-F6 (teammates can read "Focusing", per CH47), TV-D14 (quiet hours live in Time & region); plus TX-9b (grants) in §7. **(a) Yes, requirements only, no design changes** · (b) no, wait for the Chat spec (those blocks may be built first and then reworked). ✅ *(a)*
+
+✅ **Decided 2026-10-13:** *"all ok, go ahead"*: every recommendation (a), CH38–CH72.
+- **CH70 changes CH35:** Chat's Home widgets are now "Catch up" plus a share in one **"Team"** widget (each person's "now" line from Chat, their load from Tasks), built by TV-H1 with Chat's line plugged in.
+- **CH49 reverses what TV-U13 built:** TV-U13 shipped six fixed comment reactions (`comment_reactions`, six words) on 2026-10-13. Chat's reactions block widens them to the quick row, any emoji and custom emoji, for chat and comments alike (a migration on that table; §7).
+- **CH72, as carried out:** by the time the permission came, TV-D12, TV-U13, TV-F6 and TV-D14 had all been built (2026-10-13), so notes on their rows would reach nobody. Instead a **"From the Chat re-plan"** note went into the 🟠 box of BUILD_ORDER on the integration branch (what Chat adds on top of those four, so no Tasks block undoes it), and the two Tasks blocks still to build that Chat's calls touch got a pointer: **TV-H1** (one "Team" widget, CH70) and **TV-U16** (the project overview's conversation line and decisions, CH11, CH13, CH52). Requirements only; the deltas on the built four are Chat's own blocks (§7).
 
 ### F · Visual *(added after round 1 was sent, from the visual audit)*
 
