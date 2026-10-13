@@ -1,6 +1,11 @@
+/**
+ * EmbedNode: a block embed (today only mindmaps; legacy "task" embeds import
+ * and render nothing). Schema only (NR-3): the view lives in
+ * `../views/embed-view.tsx`, installed through the node-view registry.
+ */
+
 import { DecoratorNode, type NodeKey, type SerializedLexicalNode, type Spread } from "lexical";
-import type { ReactNode } from "react";
-import { EmbeddedMindmap } from "./EmbeddedMindmap";
+import { renderNodeView } from "../../../spine/editor/node-views";
 
 export type SerializedEmbedNode = Spread<
   {
@@ -10,7 +15,7 @@ export type SerializedEmbedNode = Spread<
   SerializedLexicalNode
 >;
 
-export class EmbedNode extends DecoratorNode<ReactNode> {
+export class EmbedNode extends DecoratorNode<unknown> {
   __kind: "mindmap" | "task";
   __itemId: string;
 
@@ -31,8 +36,8 @@ export class EmbedNode extends DecoratorNode<ReactNode> {
   createDOM(): HTMLElement {
     const div = document.createElement("div");
     div.className = "lexical-embed-node my-4 pointer-events-auto rounded-lg overflow-hidden";
-    // We set contentEditable to false so that the editor skips over it and cursor
-    // doesn't go inside the React element
+    // contentEditable=false so the caret skips over the embed instead of
+    // landing inside the rendered view.
     div.contentEditable = "false";
     return div;
   }
@@ -46,8 +51,7 @@ export class EmbedNode extends DecoratorNode<ReactNode> {
   }
 
   static importJSON(serializedNode: SerializedEmbedNode): EmbedNode {
-    const node = $createEmbedNode(serializedNode.kind, serializedNode.itemId);
-    return node;
+    return $createEmbedNode(serializedNode.kind, serializedNode.itemId);
   }
 
   exportJSON(): SerializedEmbedNode {
@@ -59,13 +63,8 @@ export class EmbedNode extends DecoratorNode<ReactNode> {
     };
   }
 
-  decorate(): ReactNode {
-    if (this.__kind === "mindmap") {
-      return <EmbeddedMindmap mindmapId={this.__itemId} />;
-    }
-    // The legacy "task" embed was removed with the old tasks model; any
-    // persisted task embeds import cleanly but render nothing.
-    return null;
+  decorate(): unknown {
+    return renderNodeView(this);
   }
 }
 
@@ -73,6 +72,6 @@ export function $createEmbedNode(kind: "mindmap" | "task", itemId: string): Embe
   return new EmbedNode(kind, itemId);
 }
 
-export function $isEmbedNode(node: any): node is EmbedNode {
+export function $isEmbedNode(node: unknown): node is EmbedNode {
   return node instanceof EmbedNode;
 }

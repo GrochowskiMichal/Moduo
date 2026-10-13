@@ -5,53 +5,39 @@
  * never mounted).
  */
 
-import { CodeHighlightNode, CodeNode } from "@lexical/code";
-import { createHeadlessEditor } from "@lexical/headless";
-import { AutoLinkNode, LinkNode } from "@lexical/link";
-import { ListItemNode, ListNode } from "@lexical/list";
-import { $convertFromMarkdownString, $convertToMarkdownString } from "@lexical/markdown";
-import { HorizontalRuleNode } from "@lexical/react/LexicalHorizontalRuleNode";
-import { HeadingNode, QuoteNode } from "@lexical/rich-text";
-import { TableCellNode, TableNode, TableRowNode } from "@lexical/table";
-import { describe, expect, it } from "@rstest/core";
-import { $createParagraphNode, $createTextNode, $getRoot } from "lexical";
-import { EntityRefNode } from "../../spine/editor/entity-ref-node";
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
 import {
-  blocksToMarkdown,
-  HR_TRANSFORMER,
-  looksLikeMarkdown,
-  type MdJsonNode,
-  NOTES_TRANSFORMERS,
-} from "./markdown";
-import { EmbedNode } from "./nodes/EmbedNode";
-import { PageRowNode } from "./nodes/page-row-node";
-import { TaskLineNode } from "./nodes/task-line-node";
+  $convertFromMarkdownString,
+  $convertSelectionToMarkdownString,
+  $convertToMarkdownString,
+} from "@lexical/markdown";
+import { describe, expect, it } from "@rstest/core";
+import {
+  $createParagraphNode,
+  $createRangeSelection,
+  $createTextNode,
+  $getRoot,
+  $getSelection,
+  $selectAll,
+  $setSelection,
+} from "lexical";
+import * as Y from "yjs";
+import { decodeBase64ToUint8 } from "../utils/base64";
+import {
+  createNotesHeadlessEditor,
+  deriveNoteBody,
+  extractTaskLineIds,
+  NOTES_DOC_ROOT,
+} from "./doc-markdown";
+import { HR_TRANSFORMER, looksLikeMarkdown, NOTES_TRANSFORMERS } from "./markdown";
+import { buildDocStateFromMarkdown } from "./materialize";
 
+/** The REAL node set (the live editor's), so these tests can't pass against a
+ * registration the app doesn't have. */
 function makeEditor() {
-  return createHeadlessEditor({
-    namespace: "md-test",
-    nodes: [
-      HeadingNode,
-      QuoteNode,
-      ListNode,
-      ListItemNode,
-      CodeNode,
-      CodeHighlightNode,
-      LinkNode,
-      AutoLinkNode,
-      HorizontalRuleNode,
-      TableNode,
-      TableCellNode,
-      TableRowNode,
-      EntityRefNode,
-      EmbedNode,
-      PageRowNode,
-      TaskLineNode,
-    ],
-    onError: (e: Error) => {
-      throw e;
-    },
-  });
+  const { editor } = createNotesHeadlessEditor("md-test");
+  return editor;
 }
 
 function roundTrip(md: string): string {
@@ -64,6 +50,12 @@ function roundTrip(md: string): string {
     out = $convertToMarkdownString(NOTES_TRANSFORMERS);
   });
   return out;
+}
+
+function $getSelectionOrThrow() {
+  const sel = $getSelection();
+  if (!sel) throw new Error("no selection");
+  return sel;
 }
 
 describe("markdown round-trip (AC11)", () => {
@@ -216,61 +208,147 @@ describe("looksLikeMarkdown (the paste heuristic)", () => {
   });
 });
 
-describe("blocksToMarkdown (the selection copy walker)", () => {
-  it("emits blocks, inline formats, chips and checkboxes", () => {
-    const blocks: MdJsonNode[] = [
-      { type: "heading", tag: "h2", children: [{ type: "text", text: "Notes" }] },
-      {
-        type: "paragraph",
-        children: [
-          { type: "text", text: "Ping " },
-          { type: "entity-ref", label: "Jane", entityType: "contact", entityId: "c1" },
-          { type: "text", text: " re ", format: 0 },
-          { type: "text", text: "pricing", format: 1 },
-        ],
+describe("copy: selection → markdown through the same transformers (NR-3)", () => {
+  function load(md: string) {
+    const editor = makeEditor();
+    editor.update(() => $convertFromMarkdownString(md, NOTES_TRANSFORMERS), { discrete: true });
+    return editor;
+  }
+
+  it("a whole-document selection copies exactly what export writes", () => {
+    const md = [
+      "## Notes",
+      "",
+      "Ping [Jane](moduo://contact/c1) re **pricing**",
+      "",
+      "- [x] sent",
+      "- [ ] follow up",
+      "",
+      "- [x] Ship it <!-- moduo:task:task-1 -->",
+      "",
+      "[Child page](moduo://note/n2)",
+    ].join("\n");
+    const editor = load(md);
+    let copied = "";
+    editor.update(
+      () => {
+        $selectAll();
+        copied = $convertSelectionToMarkdownString(NOTES_TRANSFORMERS, $getSelectionOrThrow());
       },
-      {
-        type: "list",
-        listType: "check",
-        children: [
-          { type: "listitem", checked: true, children: [{ type: "text", text: "sent" }] },
-          { type: "listitem", checked: false, children: [{ type: "text", text: "follow up" }] },
-        ],
-      },
-      { type: "page-row", label: "Child page", noteId: "n2" },
-    ];
-    expect(blocksToMarkdown(blocks)).toBe(
-      [
-        "## Notes",
-        "",
-        "Ping [Jane](moduo://contact/c1) re **pricing**",
-        "",
-        "- [x] sent",
-        "- [ ] follow up",
-        "",
-        "[Child page](moduo://note/n2)",
-      ].join("\n"),
+      { discrete: true },
     );
+    expect(copied.trim()).toBe(md);
   });
 
-  it("emits task lines with the stable-id comment (pending mints stay humble checkboxes)", () => {
-    const blocks: MdJsonNode[] = [
-      {
-        type: "task-line",
-        taskId: "task-1",
-        done: true,
-        children: [{ type: "text", text: "Ship it" }],
+  it("a partial inline range copies only the selected words, marks kept", () => {
+    const editor = load("Ping **pricing** today");
+    let copied = "";
+    editor.update(
+      () => {
+        const texts = $getRoot().getAllTextNodes();
+        const bold = texts.find((t) => t.getTextContent() === "pricing")!;
+        const sel = $createRangeSelection();
+        sel.anchor.set(bold.getKey(), 0, "text");
+        sel.focus.set(bold.getKey(), 7, "text");
+        $setSelection(sel);
+        copied = $convertSelectionToMarkdownString(NOTES_TRANSFORMERS, sel);
       },
-      {
-        type: "task-line",
-        taskId: null, // mid-mint — no id to carry yet
-        done: false,
-        children: [{ type: "text", text: "Still minting" }],
-      },
-    ];
-    expect(blocksToMarkdown(blocks)).toBe(
-      ["- [x] Ship it <!-- moduo:task:task-1 -->", "", "- [ ] Still minting"].join("\n"),
+      { discrete: true },
     );
+    expect(copied.trim()).toBe("**pricing**");
+  });
+});
+
+/** Every construct AC9 names, in the exact bytes the converter writes. */
+const FIDELITY = [
+  "# Plan",
+  "",
+  "Intro with **bold**, *italic*, ***both***, ~~struck~~, `code` and a [link](https://example.com/a).",
+  "A second line inside the same block.",
+  "",
+  "## Steps",
+  "",
+  "- first",
+  "- second",
+  "",
+  "1. one",
+  "2. two",
+  "",
+  "- [x] done thing",
+  "- [ ] open thing",
+  "",
+  "- [ ] Ship the report <!-- moduo:task:task-123 -->",
+  "",
+  "Talked to [Jane Doe](moduo://contact/abc-123) today.",
+  "",
+  "| Name | Status |",
+  "| --- | --- |",
+  "| Acme | **Active** |",
+  "| Globex | [site](https://globex.test) |",
+  "",
+  "[Kickoff notes](moduo://note/n-1)",
+].join("\n");
+
+function docFrom(md: string): Y.Doc {
+  const built = buildDocStateFromMarkdown("note-fidelity", md)!;
+  const doc = new Y.Doc();
+  doc.get(NOTES_DOC_ROOT, Y.XmlElement);
+  Y.applyUpdate(doc, decodeBase64ToUint8(built.docStateB64));
+  return doc;
+}
+
+describe("single dialect (NR-3, AC9)", () => {
+  it("markdown → editor → markdown is byte-stable for every listed construct", () => {
+    expect(roundTrip(FIDELITY)).toBe(FIDELITY);
+  });
+
+  it("the derived body_md survives the CRDT: markdown → Yjs doc → body_md is byte-identical", () => {
+    expect(deriveNoteBody(docFrom(FIDELITY)).md).toBe(FIDELITY);
+  });
+
+  it("deriving twice is stable (no drift on every push)", () => {
+    const once = deriveNoteBody(docFrom(FIDELITY)).md;
+    expect(deriveNoteBody(docFrom(once)).md).toBe(once);
+  });
+
+  it("tables import as REAL table blocks with a header row", () => {
+    const editor = makeEditor();
+    editor.update(
+      () => $convertFromMarkdownString("| a | b |\n| --- | --- |\n| 1 | 2 |", NOTES_TRANSFORMERS),
+      { discrete: true },
+    );
+    const json = JSON.stringify(editor.getEditorState().toJSON());
+    expect(json).toContain('"type":"table"');
+    expect(json).toContain('"headerState":1');
+    expect(json).not.toContain("| a |");
+  });
+
+  it("a pipe inside a cell is escaped, not a new column", () => {
+    const md = "| Formula | Note |\n| --- | --- |\n| a \\| b | ok |";
+    expect(roundTrip(md)).toBe(md);
+  });
+
+  it("body_text is the plain projection: no markers, chips and page rows read as labels", () => {
+    const { text } = deriveNoteBody(docFrom(FIDELITY));
+    expect(text.split("\n")[0]).toBe("Plan");
+    expect(text).toContain("Talked to Jane Doe today.");
+    expect(text).toContain("Kickoff notes");
+    expect(text).not.toContain("**");
+    expect(text).not.toContain("moduo://");
+  });
+
+  it("an empty doc derives empty bodies", () => {
+    const doc = new Y.Doc();
+    doc.get(NOTES_DOC_ROOT, Y.XmlElement);
+    expect(deriveNoteBody(doc)).toEqual({ text: "", md: "" });
+  });
+
+  it("task-line ids are read off the doc (the trash flow's detach list)", () => {
+    expect(extractTaskLineIds(docFrom(FIDELITY))).toEqual(["task-123"]);
+  });
+
+  it("the old doc-text walker is gone", () => {
+    expect(existsSync(resolve(__dirname, "../sync/doc-text.ts"))).toBe(false);
   });
 });
 

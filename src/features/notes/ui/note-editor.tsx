@@ -48,9 +48,8 @@ import type * as Y from "yjs";
 import { $createEntityRefNode } from "@/features/spine/editor/entity-ref-node";
 import { MentionMenuPlugin } from "@/features/spine/editor/mention-menu-plugin";
 import { useAuth } from "@/providers/auth-provider";
+import { tryDeriveNoteBody } from "../editor/doc-markdown";
 import { NOTES_TRANSFORMERS } from "../editor/markdown";
-import { $createPageRowNode } from "../editor/nodes/page-row-node";
-import { NOTE_EDITOR_NODES } from "../editor/note-nodes";
 import {
   INSERT_ENTITY_CHIP_EVENT,
   INSERT_PAGE_ROW_EVENT,
@@ -63,9 +62,14 @@ import { FormatToolbarPlugin } from "../editor/plugins/format-toolbar-plugin";
 import { MarkdownClipboardPlugin } from "../editor/plugins/markdown-clipboard-plugin";
 import { SlashMenuPlugin } from "../editor/plugins/slash-menu-plugin";
 import { TaskLinePlugin } from "../editor/plugins/task-line-plugin";
-import { deriveBody } from "../sync/doc-text";
+import { NOTE_EDITOR_NODES } from "../editor/schema/nodes";
+import { $createPageRowNode } from "../editor/schema/page-row-node";
+import { installNoteNodeViews } from "../editor/views";
 import type { NotesSyncEngineV2 } from "../sync/engine-v2";
 import { displayTitle, firstLineTitle, TITLE_DEBOUNCE_MS } from "../title";
+
+// The schema nodes draw through the view registry (NR-3); fill it once.
+installNoteNodeViews();
 
 type Props = {
   engine: NotesSyncEngineV2;
@@ -156,7 +160,9 @@ function TitleDerivationPlugin({
     const onUpdate = () => {
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
-        callbackRef.current(firstLineTitle(deriveBody(doc).text));
+        // A failed derivation must not retitle the note to "".
+        const body = tryDeriveNoteBody(doc);
+        if (body) callbackRef.current(firstLineTitle(body.text));
       }, TITLE_DEBOUNCE_MS);
     };
     doc.on("update", onUpdate);

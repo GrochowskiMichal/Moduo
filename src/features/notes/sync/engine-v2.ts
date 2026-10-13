@@ -20,8 +20,8 @@ import { IndexeddbPersistence } from "y-indexeddb";
 import { Awareness } from "y-protocols/awareness";
 import * as Y from "yjs";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
+import { tryDeriveNoteBody } from "../editor/doc-markdown";
 import { decodeBase64ToUint8, encodeUint8ToBase64 } from "../utils/base64";
-import { deriveBody } from "./doc-text";
 import {
   type DocOutboxEntry,
   deleteDocOutboxEntries,
@@ -366,14 +366,14 @@ export class NotesSyncEngineV2 {
         const queue = [...durable, ...s.memOutbox];
         if (queue.length === 0) break;
         const batch = planPushBatch(queue);
-        const body = deriveBody(s.doc);
+        const body = tryDeriveNoteBody(s.doc);
         const res = await this.runtime.notesV2.pushUpdates({
           workspaceId: this.workspaceId,
           noteId: s.noteId,
           clientId,
           updates: toPushPayload(batch),
-          bodyText: body.text,
-          bodyMd: body.md,
+          bodyText: body?.text ?? null,
+          bodyMd: body?.md ?? null,
         });
         await deleteDocOutboxEntries(ackedKeys(batch));
         const ackedSeqs = new Set(batch.map((e) => e.clientSeq));
@@ -438,14 +438,14 @@ export class NotesSyncEngineV2 {
       await this.pull(s);
       if (s.compactVeto) return; // the pull we just did may have tripped it
       const snapshot = encodeUint8ToBase64(Y.encodeStateAsUpdate(s.doc));
-      const body = deriveBody(s.doc);
+      const body = tryDeriveNoteBody(s.doc);
       await this.runtime.notesV2.saveSnapshot({
         workspaceId: this.workspaceId,
         noteId: s.noteId,
         snapshotB64: snapshot,
         uptoUpdateId: s.state.lastPulledUpdateId,
-        bodyText: body.text,
-        bodyMd: body.md,
+        bodyText: body?.text ?? null,
+        bodyMd: body?.md ?? null,
       });
       s.state = { ...s.state, updatesSinceCompact: 0 };
       await writeNoteState(s.state);

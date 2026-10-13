@@ -1,14 +1,25 @@
 /**
  * Markdown at every door (Wave-3 NO-4, AC11): the Notes transformer set for
- * @lexical/markdown plus the paste heuristic and a selection→markdown walker
- * for copy. Moduo entities serialize as `[label](moduo://type/id)` — lossless
- * enough to re-import (chips inline, page-rows as a standalone line).
+ * @lexical/markdown plus the paste heuristic. Moduo entities serialize as
+ * `[label](moduo://type/id)` — lossless enough to re-import (chips inline,
+ * page-rows as a standalone line).
+ *
+ * This is the ONLY markdown dialect (NR-3): typing, paste, copy, import, the
+ * derived `body_md` (`doc-markdown.ts`) and so export, publish and MCP reads
+ * all go through `NOTES_TRANSFORMERS`. Schema imports only: no React.
  *
  * NOTE (vitest gotcha): everything here is imported by tests — keep VALUE
  * imports relative, never `@/`.
  */
 
 import {
+  $createHorizontalRuleNode,
+  $isHorizontalRuleNode,
+  HorizontalRuleNode,
+} from "@lexical/extension";
+import {
+  $convertFromMarkdownString,
+  $convertToMarkdownString,
   CHECK_LIST,
   ELEMENT_TRANSFORMERS,
   type ElementTransformer,
@@ -19,16 +30,22 @@ import {
   type Transformer,
 } from "@lexical/markdown";
 import {
-  $createHorizontalRuleNode,
-  $isHorizontalRuleNode,
-  HorizontalRuleNode,
-} from "@lexical/react/LexicalHorizontalRuleNode";
-import type { ElementNode, LexicalNode } from "lexical";
+  $createTableCellNode,
+  $createTableNode,
+  $createTableRowNode,
+  $isTableCellNode,
+  $isTableNode,
+  $isTableRowNode,
+  TableCellHeaderStates,
+  TableCellNode,
+  TableNode,
+  TableRowNode,
+} from "@lexical/table";
 import { $createParagraphNode, $isTextNode } from "lexical";
-import { $createEntityRefNode, EntityRefNode } from "../../spine/editor/entity-ref-node";
-import { $createEmbedNode, $isEmbedNode, EmbedNode } from "./nodes/EmbedNode";
-import { $createPageRowNode, $isPageRowNode, PageRowNode } from "./nodes/page-row-node";
-import { $createTaskLineNode, $isTaskLineNode, TaskLineNode } from "./nodes/task-line-node";
+import { $createEntityRefNode, EntityRefNode } from "../../spine/editor/entity-ref-schema";
+import { $createEmbedNode, $isEmbedNode, EmbedNode } from "./schema/embed-node";
+import { $createPageRowNode, $isPageRowNode, PageRowNode } from "./schema/page-row-node";
+import { $createTaskLineNode, $isTaskLineNode, TaskLineNode } from "./schema/task-line-node";
 
 const MODUO_URI = /moduo:\/\/([a-z][a-z-]*)\/([A-Za-z0-9-]+)/;
 
@@ -136,6 +153,83 @@ export const HR_TRANSFORMER: ElementTransformer = {
   type: "element",
 };
 
+const TABLE_ROW = /^\|(.+)\|\s?$/;
+const TABLE_DIVIDER = /^(\| ?:?-+:? ?)+\|\s?$/;
+
+/** A row's cells, or null when the line isn't a table row. `\|` inside a
+ * cell is an escaped pipe, not a cell boundary. */
+function splitTableRow(line: string): string[] | null {
+  const match = line.match(TABLE_ROW);
+  if (!match) return null;
+  return match[1]!.split(/(?<!\\)\|/).map((cell) => cell.trim().replace(/\\\|/g, "|"));
+}
+
+function $tableCell(markdown: string): TableCellNode {
+  const cell = $createTableCellNode(TableCellHeaderStates.NO_STATUS);
+  // Inline syntax (bold, links, chips) inside a cell imports like anywhere else.
+  $convertFromMarkdownString(markdown.replace(/\\n/g, "\n"), NOTES_TRANSFORMERS, cell);
+  return cell;
+}
+
+/** GFM tables ⇄ table blocks. @lexical/markdown ships none, so a table used
+ * to export as nothing and import as literal pipes. The first row is always
+ * the header (GFM requires one), so markdown → note → markdown is stable. */
+export const TABLE_TRANSFORMER: ElementTransformer = {
+  dependencies: [TableNode, TableRowNode, TableCellNode],
+  export: (node) => {
+    if (!$isTableNode(node)) return null;
+    const lines: string[] = [];
+    for (const row of node.getChildren()) {
+      if (!$isTableRowNode(row)) continue;
+      const cells = row
+        .getChildren()
+        .filter($isTableCellNode)
+        .map((cell) =>
+          $convertToMarkdownString(NOTES_TRANSFORMERS, cell)
+            .trim()
+            .replace(/\|/g, "\\|")
+            .replace(/\n/g, "\\n"),
+        );
+      lines.push(`| ${cells.join(" | ")} |`);
+      if (lines.length === 1) lines.push(`| ${cells.map(() => "---").join(" | ")} |`);
+    }
+    return lines.join("\n");
+  },
+  regExp: TABLE_ROW,
+  replace: (parentNode, _children, match) => {
+    const previous = parentNode.getPreviousSibling();
+    if (TABLE_DIVIDER.test(match[0])) {
+      // The divider marks the row above as the header.
+      if (!$isTableNode(previous)) return false;
+      const header = previous.getLastChild();
+      if ($isTableRowNode(header)) {
+        for (const cell of header.getChildren()) {
+          if ($isTableCellNode(cell)) cell.setHeaderStyles(TableCellHeaderStates.ROW);
+        }
+      }
+      parentNode.remove();
+      return;
+    }
+    const cells = splitTableRow(match[0]);
+    if (!cells) return false;
+    const row = $createTableRowNode();
+    for (const cell of cells) row.append($tableCell(cell));
+    if ($isTableNode(previous)) {
+      // Pad or trim to the table's width so the grid stays rectangular.
+      const width = (previous.getFirstChild() as TableRowNode | null)?.getChildrenSize() ?? 0;
+      while (row.getChildrenSize() < width) row.append($tableCell(""));
+      while (width > 0 && row.getChildrenSize() > width) row.getLastChild()?.remove();
+      previous.append(row);
+      parentNode.remove();
+      return;
+    }
+    const table = $createTableNode();
+    table.append(row);
+    parentNode.replace(table);
+  },
+  type: "element",
+};
+
 /** Inline `[label](moduo://type/id)` ⇄ an entity-ref chip (any type — a
  * note-link INSIDE a sentence stays a chip; only a standalone line becomes a
  * page-row, the element transformer above wins that case). */
@@ -167,6 +261,7 @@ export const ENTITY_REF_TRANSFORMER: TextMatchTransformer = {
  * element transformers must beat the generic ones, and the entity-ref
  * text-match must beat LINK (or moduo:// URIs become plain links). */
 export const NOTES_TRANSFORMERS: Transformer[] = [
+  TABLE_TRANSFORMER,
   PAGE_ROW_TRANSFORMER,
   EMBED_TRANSFORMER,
   HR_TRANSFORMER,
@@ -187,173 +282,4 @@ export const NOTES_TRANSFORMERS: Transformer[] = [
 export function looksLikeMarkdown(text: string): boolean {
   if (!text.includes("\n") && !/^#{1,3} /.test(text)) return false;
   return /^(#{1,3} |[-*+] |\d+\. |> |```|- \[[ x]\] )/m.test(text);
-}
-
-// ── selection → markdown (the copy path) ────────────────────────────────────
-// Copy works on a SELECTION, but @lexical/markdown only exports whole
-// containers — so the copy plugin serializes the selected top-level blocks to
-// plain JSON trees and this pure walker emits markdown. Testable without a
-// clipboard or an editor.
-
-export type MdJsonNode = {
-  type: string;
-  text?: string;
-  format?: number | string;
-  tag?: string;
-  listType?: string;
-  checked?: boolean;
-  start?: number;
-  value?: number;
-  url?: string;
-  label?: string;
-  entityType?: string;
-  entityId?: string;
-  noteId?: string;
-  kind?: string;
-  itemId?: string;
-  taskId?: string | null;
-  done?: boolean;
-  children?: MdJsonNode[];
-};
-
-const FORMAT_BOLD = 1;
-const FORMAT_ITALIC = 2;
-const FORMAT_STRIKETHROUGH = 4;
-const FORMAT_CODE = 16;
-
-function inlineToMd(node: MdJsonNode): string {
-  switch (node.type) {
-    case "text": {
-      let text = node.text ?? "";
-      const format = typeof node.format === "number" ? node.format : 0;
-      if (format & FORMAT_CODE) return `\`${text}\``;
-      if (format & FORMAT_BOLD && format & FORMAT_ITALIC) text = `***${text}***`;
-      else if (format & FORMAT_BOLD) text = `**${text}**`;
-      else if (format & FORMAT_ITALIC) text = `*${text}*`;
-      if (format & FORMAT_STRIKETHROUGH) text = `~~${text}~~`;
-      return text;
-    }
-    case "linebreak":
-      return "\n";
-    case "entity-ref":
-      return `[${(node.label || "Untitled").replace(/\]/g, "")}](moduo://${node.entityType}/${node.entityId})`;
-    case "link":
-    case "autolink":
-      return `[${childrenToMd(node)}](${node.url ?? ""})`;
-    default:
-      // Text-ish leaves (code-highlight tokens etc.) carry .text directly.
-      if (typeof node.text === "string") return node.text;
-      return childrenToMd(node);
-  }
-}
-
-function childrenToMd(node: MdJsonNode): string {
-  return (node.children ?? []).map(inlineToMd).join("");
-}
-
-function listToMd(node: MdJsonNode, indent: string): string {
-  const lines: string[] = [];
-  // Ordered lists serialize their starting number on the LIST node (`start`);
-  // per-item `value` is presentational.
-  let n = typeof node.start === "number" && node.start > 0 ? node.start : 1;
-  for (const item of node.children ?? []) {
-    const nested = (item.children ?? []).filter((c) => c.type === "list");
-    const inline = (item.children ?? []).filter((c) => c.type !== "list");
-    const content = inline.map(inlineToMd).join("");
-    if (content.trim() !== "" || nested.length === 0) {
-      const marker =
-        node.listType === "number"
-          ? `${n}. `
-          : node.listType === "check"
-            ? `- [${item.checked ? "x" : " "}] `
-            : "- ";
-      lines.push(`${indent}${marker}${content}`);
-      n += 1;
-    }
-    for (const sub of nested) lines.push(listToMd(sub, indent + "    "));
-  }
-  return lines.join("\n");
-}
-
-function blockToMd(node: MdJsonNode): string {
-  switch (node.type) {
-    case "heading": {
-      const level = node.tag === "h1" ? "#" : node.tag === "h2" ? "##" : "###";
-      return `${level} ${childrenToMd(node)}`;
-    }
-    case "quote":
-      return childrenToMd(node)
-        .split("\n")
-        .map((l) => `> ${l}`)
-        .join("\n");
-    case "code":
-      return "```\n" + (node.children ?? []).map(inlineToMd).join("") + "\n```";
-    case "list":
-      return listToMd(node, "");
-    case "horizontalrule":
-      return "---";
-    case "task-line": {
-      const box = node.done ? "x" : " ";
-      const title = childrenToMd(node);
-      return node.taskId
-        ? `- [${box}] ${title} <!-- moduo:task:${node.taskId} -->`
-        : `- [${box}] ${title}`;
-    }
-    case "page-row":
-      return `[${(node.label || "Untitled").replace(/\]/g, "")}](moduo://note/${node.noteId})`;
-    case "embed":
-      return node.kind === "mindmap" ? `[Mindmap](moduo://mindmap/${node.itemId})` : "";
-    case "table": {
-      const rows = (node.children ?? []).map((row) =>
-        (row.children ?? []).map((cell) => childrenToMd(cell).replace(/\|/g, "\\|").trim()),
-      );
-      if (rows.length === 0) return "";
-      const header = rows[0]!;
-      const sep = header.map(() => "---");
-      const body = rows.slice(1);
-      return [header, sep, ...body].map((cells) => `| ${cells.join(" | ")} |`).join("\n");
-    }
-    default:
-      return childrenToMd(node);
-  }
-}
-
-/** Markdown for a list of serialized top-level blocks. */
-export function blocksToMarkdown(blocks: MdJsonNode[]): string {
-  return blocks
-    .map(blockToMd)
-    .filter((s) => s !== "")
-    .join("\n\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
-
-/** Serialize a live Lexical node tree to the walker's JSON shape. Must run
- * inside an editor read/update. */
-export function $nodeToMdJson(node: LexicalNode): MdJsonNode {
-  const json = node.exportJSON() as unknown as MdJsonNode;
-  const maybeElement = node as ElementNode & { getChildren?: () => LexicalNode[] };
-  if (typeof maybeElement.getChildren === "function") {
-    json.children = maybeElement.getChildren().map($nodeToMdJson);
-  }
-  return json;
-}
-
-/** The selected top-level blocks (deduped, document order) for the copy path.
- * Must run inside an editor read. */
-export function $selectionTopBlocks(selectedNodes: LexicalNode[]): LexicalNode[] {
-  const seen = new Set<string>();
-  const blocks: LexicalNode[] = [];
-  for (const node of selectedNodes) {
-    let top: LexicalNode | null = node;
-    while (top && top.getParent() && top.getParent()!.getType() !== "root") {
-      top = top.getParent();
-    }
-    if (!top || top.getType() === "root") continue;
-    if (!seen.has(top.getKey())) {
-      seen.add(top.getKey());
-      blocks.push(top);
-    }
-  }
-  return blocks;
 }

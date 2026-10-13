@@ -35,10 +35,14 @@ function fakeRuntime() {
   return { runtime, pullDoc, pushUpdates };
 }
 
+/** Append a paragraph in the v2 binding's shape (a `paragraph` element over
+ * a text run), so the body derivation reads it like editor-typed content. */
 function type(doc: Y.Doc, text: string) {
   const root = doc.get("root-v2", Y.XmlElement);
-  const p = new Y.XmlText();
-  p.insert(0, text);
+  const run = new Y.XmlText();
+  run.insert(0, text);
+  const p = new Y.XmlElement("paragraph");
+  p.insert(0, [run]);
   root.insert(root.length, [p]);
 }
 

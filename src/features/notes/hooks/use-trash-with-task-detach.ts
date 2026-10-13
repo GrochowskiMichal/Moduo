@@ -11,7 +11,7 @@
 import { useCallback } from "react";
 import type { EntityLink } from "../../../lib/entity-links";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
-import { extractTaskLineIds } from "../sync/doc-text";
+import { extractTaskLineIds } from "../editor/doc-markdown";
 import { taskLinksForNote } from "../tasks/detach";
 import { descendantIds } from "../tree";
 import type { NotesModuleApi } from "./use-notes-module";
