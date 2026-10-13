@@ -167,6 +167,8 @@ type Props = {
   };
   /** The hairline's ⋯ → "What's in Tasks" reopens Tasks' welcome (TV-U17). */
   onOpenWelcome?: () => void;
+  /** The hairline's ⋯ → "Import tasks…" (TV-U18). */
+  onImport?: () => void;
 
   /** The sidebar's <nav>, for the page to hand focus back to it (`focusNavRow`). */
   navRef?: RefObject<HTMLElement | null>;
@@ -260,6 +262,7 @@ export function BucketRail({
   wontDoCount = 0,
   templates,
   onOpenWelcome,
+  onImport,
   navRef,
   dropAccepts,
 }: Props) {
@@ -483,6 +486,7 @@ export function BucketRail({
             onOpenTemplates={templates ? () => onSelect(TEMPLATES_SELECTION) : undefined}
             templatesCurrent={selection === TEMPLATES_SELECTION}
             onOpenWelcome={onOpenWelcome}
+            onImport={onImport}
           />
 
           {/* ── Shared ──────────────────────────────────────────────────── */}
@@ -654,6 +658,7 @@ function SidebarHairline({
   onOpenTemplates,
   templatesCurrent,
   onOpenWelcome,
+  onImport,
 }: {
   canEdit: boolean;
   hidden: ReadonlySet<TasksSidebarHideable>;
@@ -674,6 +679,8 @@ function SidebarHairline({
   onOpenTemplates?: () => void;
   templatesCurrent: boolean;
   onOpenWelcome?: () => void;
+  /** "Import tasks…" (TV-U18), when you can import here. */
+  onImport?: () => void;
 }) {
   const rows: TasksSidebarHideable[] = showMine
     ? ["focus", "upcoming", "mine", "all"]
@@ -738,6 +745,10 @@ function SidebarHairline({
                 </DropdownMenuItem>
               ) : null}
               <DropdownMenuItem onSelect={afterClose(onNewArea)}>New area…</DropdownMenuItem>
+              {onImport ? (
+                // Opens a dialog: wait for the menu to close (gotchas/ui.md).
+                <DropdownMenuItem onSelect={afterClose(onImport)}>Import tasks…</DropdownMenuItem>
+              ) : null}
             </>
           ) : null}
           <DropdownMenuSeparator />

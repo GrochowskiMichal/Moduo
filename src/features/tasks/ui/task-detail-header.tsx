@@ -2,8 +2,8 @@
 // the breadcrumb "● Project › Section" (each part a picker that moves the
 // task; a subtask goes on to "↳ parent"), the handle (click to copy), a slot
 // for who "is on this" (claims, TV-F7), the Focus toggle and ▶ "Focus on
-// this" (call 31), ⤢ full page, and ⋯ (Copy branch name, Copy link,
-// Duplicate, Save as template…, Make it a task, Won't do / Reopen, Delete).
+// this" (call 31), ⤢ full page, and ⋯ (Copy branch name, Copy link, where
+// an import brought it from (TV-U18), Duplicate, Save as template…, Make it a task, Won't do / Reopen, Delete).
 
 import {
   Ban,
@@ -11,6 +11,7 @@ import {
   Copy,
   CornerDownRight,
   Ellipsis,
+  FileInput,
   GitBranch,
   Inbox,
   LayoutTemplate,
@@ -58,6 +59,7 @@ import { branchName } from "../detail-properties";
 import { duplicateFields } from "../duplicate";
 import { isUnfinished } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
+import { importedFromLine } from "../importers/plan";
 import { type Bucket, PRIVATE_PROJECT_LABEL, type Task } from "../model";
 import { alsoInLabel, claimLabel } from "../queue";
 import { ClaimAvatar, useClaimNames, withoutPeopleOnIt } from "./queue-toggle";
@@ -113,6 +115,8 @@ export function TaskDetailHeader({
   // panel renders in isolation (stories, tests) without one.
   const taskKey = useContext(WorkspaceContext)?.selectedWorkspace?.taskKey ?? null;
   const handle = taskHandle(taskKey, task.number);
+  // Where an import brought it from (TV-U18): the source's own id, copyable.
+  const imported = importedFromLine(task.importedFrom);
 
   const copy = (text: string, done: string) => {
     if (!navigator.clipboard) {
@@ -220,6 +224,18 @@ export function TaskDetailHeader({
             <Link2 aria-hidden />
             Copy link
           </DropdownMenuItem>
+          {imported ? (
+            <DropdownMenuItem
+              disabled={!imported.key}
+              onSelect={() => imported.key && copy(imported.key, `Copied ${imported.key}`)}
+            >
+              <FileInput aria-hidden />
+              <span className="min-w-0 break-words">
+                {imported.label}
+                {imported.key ? ` · ${imported.key}` : ""}
+              </span>
+            </DropdownMenuItem>
+          ) : null}
           {onOpenFullPage ? (
             <DropdownMenuItem onSelect={onOpenFullPage}>
               <Maximize2 aria-hidden />
