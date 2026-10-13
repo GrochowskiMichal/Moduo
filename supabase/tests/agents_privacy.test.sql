@@ -176,6 +176,25 @@ BEGIN
               AND test.hears('E', 'notice_deliveries', (SELECT id FROM public.notice_deliveries WHERE task_id = test.id('TO') LIMIT 1)),
     'its person reads (and hears) the OS notice while they see the task');
 
+  -- A reminder and a team notice about a task in PO, while E still sees it.
+  PERFORM test.as_user('O', format($q$SELECT public.teams_op_create(%L, %L::jsonb)$q$, test.id('W'),
+    jsonb_build_object('id', test.id('TM'), 'name', 'Ops', 'members', jsonb_build_array(test.id('E')))));
+  PERFORM test.as_user('O', format($q$SELECT public.tasks_op_create(%L, %L::jsonb)$q$, test.id('W'),
+    jsonb_build_object('id', test.id('TR'), 'title', 'Board routed secret', 'bucket_id', test.id('PO'),
+                       'team_id', test.id('TM'), 'assignee_id', NULL)));
+  r := test.as_user('E', format($q$SELECT * FROM public.tasks_op_reminder_add(%L, %L, 'at', %L)$q$,
+    test.id('W'), test.id('TR'), now() + interval '1 hour'));
+  UPDATE public.task_reminders SET suspended_at = now()
+  WHERE workspace_id <> test.id('W') AND fired_at IS NULL AND suspended_at IS NULL;
+  PERFORM public.tasks__fire_reminders(now() + interval '2 hours', 500);
+  PERFORM test.ok(test.count_as('E', format($q$SELECT count(*)::text FROM public.notifications_list(%L, 500)
+                    WHERE op IN ('tasks.reminder', 'tasks.routed') AND payload ->> 'task_id' = %L$q$, test.id('W'), test.id('TR'))) = 2
+              AND NOT EXISTS (SELECT 1 FROM public.module_activity WHERE op IN ('tasks.reminder', 'tasks.routed')
+                              AND (payload ? 'title' OR payload::text LIKE '%routed secret%')),
+    'E''s reminder and team notice name the task by id only', r);
+  PERFORM test.ok(test.count_as('E', format($q$SELECT count(*)::text FROM public.notice_deliveries WHERE task_id = %L$q$, test.id('TR'))) = 1,
+    'and the reminder''s OS notice is theirs while they see the task');
+
   -- O takes PO away from E.
   DELETE FROM public.resource_grants
   WHERE resource_type = 'bucket' AND resource_id = test.id('PO') AND subject_id = test.id('E');
@@ -194,6 +213,11 @@ BEGIN
                     WHERE op = 'tasks.agent_status' AND payload ->> 'task_id' = %L
                       AND (payload ? 'title' OR payload ? 'note')$q$, test.id('W'), test.id('TO'))) = 0,
     'the bell keeps no title or note of it');
+  PERFORM test.ok(test.count_as('E', format($q$SELECT count(*)::text FROM public.notifications_list(%L, 500)
+                    WHERE payload ->> 'task_id' = %L AND (payload ? 'title' OR payload::text LIKE '%%routed secret%%')$q$,
+                    test.id('W'), test.id('TR'))) = 0
+              AND test.count_as('E', format($q$SELECT count(*)::text FROM public.notice_deliveries WHERE task_id = %L$q$, test.id('TR'))) = 0,
+    'nor of the reminder or team notice, and the reminder''s OS notice is gone for them');
 
   -- ── Import runs: their person's on every path ───────────────────────────
   PERFORM test.as_key('K', format($q$SELECT public.imports_op_begin(%L, 'todoist', 'E run')$q$, test.id('W')));

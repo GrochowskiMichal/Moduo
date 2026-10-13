@@ -186,6 +186,21 @@ Built in tasks-v3 block 31 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §12, �
   - Decision: these three are read on demand by their person (never delta-synced), so they carry `workspace_id` but no `deleted_at` (and `import_rows` no `updated_at`); a run is never deleted by hand, its rows go with it, and a new run replaces a session's summary.
   - Why: #27's columns exist so the delta sync sees every change; nothing syncs these.
   - Rejected: columns nothing reads or writes.
+- **D16-16 · Every agent and import read follows the task** → TV-D16 follow-up (`20261013268000_agents_privacy_fix`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (the orchestrator's audit; the reminder and team notices at the orchestrator's ask).
+  - Decision: the bell's Inbox notices (an agent's state, a reminder, a team notice) name their task by id only, and the app names it through the entity registry, which answers only while the reader can see it (`notificationSubject`, `unnamedTaskTargets`); an OS / browser notice row and a hand-back summary are readable (and sent live) to their person only while they can see the task; a key's trail label names only a key of the row's own workspace; a run's summary answers only the run's person.
+  - Why: a person can lose access to a task after a notice or summary about it was written.
+  - Rejected: copying the task's title into the notice (it outlives the reader's access).
+- **D16-17 · The sibling ops write through the plain ones** → TV-D16 follow-up (`tasks_op_create_with`, `tasks_op_update_with`, `imports_op_project_create` / `_section_create`; `supabase/tests/ops_parity.test.sql`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (the orchestrator's parity ask).
+  - Decision: each "_with" or import op makes its core write through `tasks_op_create`, `tasks_op_update`, `projects_op_create` or `sections_op_create` and only adds its extras, so every check (project edit, section and status of the project, teams, assignees, recurrence bounds, key scopes) is the plain op's; `tasks_op_tag` keeps the app's tag rules (edit access to the task, a tag of this workspace, making tags needs the right). An id that's already there gets the plain op's answer and nothing more: no tags, reminders or work sessions, and never a place in an import run. Both paths file into an archived project alike (the plain op allows it).
+  - Why: two paths to one write drift apart unless one calls the other.
+  - Rejected: re-checking each rule in the sibling.
+- **D16-18 · A key's comment keeps the key's name as its author** → (`comments_op_add`, unchanged)
+  - Who: agent's choice, confirmed by the orchestrator, 2026-10-13.
+  - Decision: a comment written through a key reads "Claude Desktop" as its author, as before.
+  - Why: comments are read only by people who can see their item, the same rule as the trail's "via" label.
+  - Rejected: hiding the key's name on comments.
 
 ## 2026-10-13 · TV-U12 Multi-select and the bottom-bar mode pattern — the agent's choices (deferred to by Maciej)
 
