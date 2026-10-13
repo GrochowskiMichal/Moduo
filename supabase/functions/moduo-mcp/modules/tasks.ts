@@ -191,6 +191,10 @@ function shapeProject(b: Row, names: ReadonlyMap<string, string>): Row {
     ...(b.starts_on ? { starts_on: b.starts_on } : {}),
     ...(b.target_on ? { target_on: b.target_on } : {}),
     ...(b.lead_id ? { lead: { id: b.lead_id, name: names.get(b.lead_id) ?? "Former member" } } : {}),
+    // TV-U16's description (plain text, '' for none); TV-U13b carries it.
+    ...(typeof b.description === "string" && b.description.trim()
+      ? { description: b.description }
+      : {}),
     ...(b.archived_at && !b.is_system ? { archived: true } : {}),
   };
 }
@@ -217,7 +221,7 @@ export const tasksConnectorModule: ConnectorModule = {
     {
       name: "projects_list",
       description:
-        "The projects the key's person can see, in sidebar order: their Inbox (is_inbox), status (active · on_hold · done), area, colour, start and target dates, lead. Archived projects (and their tasks) are left out unless include_archived is true; then they carry archived: true.",
+        "The projects the key's person can see, in sidebar order: their Inbox (is_inbox), status (active · on_hold · done), area, colour, start and target dates, lead, and the project's description (plain text) when it has one. Archived projects (and their tasks) are left out unless include_archived is true; then they carry archived: true.",
       access: "view",
       inputSchema: {
         type: "object",
@@ -1466,7 +1470,7 @@ export const tasksConnectorModule: ConnectorModule = {
     {
       name: "projects_create",
       description:
-        "Create a project, owned by the key's creator and seen by the workspace: name, area, status, start and target dates, colour, lead. Inside an import run (import_id) it's recorded for imports_undo. Look for an existing project first (projects_list): a re-run should reuse it.",
+        "Create a project, owned by the key's creator and seen by the workspace: name, area, status, start and target dates, colour, lead, description. Inside an import run (import_id) it's recorded for imports_undo. Look for an existing project first (projects_list): a re-run should reuse it.",
       access: "edit",
       inputSchema: {
         type: "object",
@@ -1478,13 +1482,14 @@ export const tasksConnectorModule: ConnectorModule = {
           target_on: { type: "string", description: "Target date, YYYY-MM-DD." },
           color: { type: "string", description: "Colour name, as the app's picker has them." },
           lead_id: { type: "string", description: "A member who leads it." },
+          description: { type: "string", description: "What the project is, plain text (up to 20,000 characters)." },
           import_id: { type: "string", description: "The run from imports_begin." },
         },
         required: ["name"],
       },
       handler: async (args, ctx) => {
         const fields: Row = { name: str(args, "name") };
-        for (const k of ["area_id", "status", "starts_on", "target_on", "color", "lead_id"]) {
+        for (const k of ["area_id", "status", "starts_on", "target_on", "color", "lead_id", "description"]) {
           if (typeof args[k] === "string") fields[k] = args[k];
         }
         const ws = ctx.key.workspaceId;
@@ -1504,7 +1509,7 @@ export const tasksConnectorModule: ConnectorModule = {
     {
       name: "projects_update",
       description:
-        "Edit a project you can edit: name, status (active · on_hold · done), area, start and target dates, colour, lead, archived (needs full access). Pass only what changes; null clears a date, the area or the lead.",
+        "Edit a project you can edit: name, status (active · on_hold · done), area, start and target dates, colour, lead, description, archived (needs full access). Pass only what changes; null clears a date, the area, the lead or the description.",
       access: "edit",
       inputSchema: {
         type: "object",
@@ -1517,6 +1522,10 @@ export const tasksConnectorModule: ConnectorModule = {
           target_on: { type: ["string", "null"], description: "YYYY-MM-DD, or null." },
           color: { type: ["string", "null"], description: "Colour name, or null." },
           lead_id: { type: ["string", "null"], description: "Member uuid, or null." },
+          description: {
+            type: ["string", "null"],
+            description: "What the project is, plain text (up to 20,000 characters), or null to clear it.",
+          },
           archived: { type: "boolean", description: "Archive (true) or bring it back (false)." },
         },
         required: ["project_id"],
@@ -1524,7 +1533,7 @@ export const tasksConnectorModule: ConnectorModule = {
       handler: async (args, ctx) => {
         const project = await fetchProject(ctx, str(args, "project_id"));
         const patch: Row = {};
-        for (const k of ["name", "status", "area_id", "starts_on", "target_on", "color", "lead_id"]) {
+        for (const k of ["name", "status", "area_id", "starts_on", "target_on", "color", "lead_id", "description"]) {
           if (k in args) patch[k] = args[k] ?? null;
         }
         if (typeof args.archived === "boolean") patch.archived_at = args.archived ? new Date().toISOString() : null;

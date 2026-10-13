@@ -2,6 +2,7 @@
 // is any of, AND across dimensions, Archived and Done reachable through
 // Status, the stored filters read back safely, and the capture seed.
 
+import { TASK_VIEW_ID_DIMENSIONS, TASK_VIEW_WORD_DIMENSIONS } from "@contracts/vocabularies";
 import { afterEach, beforeEach, describe, expect, it } from "@rstest/core";
 import type { FilterCondition } from "../../components/ui/filter-model";
 import { applyTimeRegion, EMPTY_TIME_REGION } from "../../lib/time-region";
@@ -89,18 +90,61 @@ describe("Filter dimensions", () => {
       "creator",
       "tag",
       "status",
+      "completed",
       "priority",
       "energy",
       "due",
       "scheduled",
       "queued",
       "blocked",
+      "waiting",
       "recurring",
       "subtasks",
       "attachments",
     ]);
     expect(taskFilterShape("blocked")).toMatchObject({ operators: ["is"], multiple: false });
     expect(taskFilterShape("tag").operators).toBeUndefined();
+  });
+
+  it("a saved view keeps exactly the Filter's dimensions (TV-U8, the server's list)", () => {
+    expect([...TASK_FILTER_DIMENSIONS].sort()).toEqual(
+      [...TASK_VIEW_ID_DIMENSIONS, ...TASK_VIEW_WORD_DIMENSIONS].sort(),
+    );
+  });
+
+  it("Completed (TV-U8): today, this week, last week, this month, not completed", () => {
+    // Thursday Oct 8 with a Monday week: this week is Oct 5–8, last week Sep 28 – Oct 4.
+    const done = (offset: number) => task("x", { status: "done", completedAt: day(offset, 15) });
+    expect(taskFilterValues(done(0), "completed", ctx)).toEqual(["today", "week", "month"]);
+    expect(taskFilterValues(done(-3), "completed", ctx)).toEqual(["week", "month"]);
+    expect(taskFilterValues(done(-4), "completed", ctx)).toEqual(["last_week", "month"]);
+    expect(taskFilterValues(done(-10), "completed", ctx)).toEqual(["last_week"]);
+    expect(taskFilterValues(done(-11), "completed", ctx)).toEqual([]);
+    expect(taskFilterValues(task("x"), "completed", ctx)).toEqual(["none"]);
+    // A Sunday week start moves the line: Sunday Oct 4 is this week then.
+    applyTimeRegion({ ...EMPTY_TIME_REGION, weekStart: 0 }, null);
+    expect(taskFilterValues(done(-4), "completed", ctx)).toEqual(["week", "month"]);
+  });
+
+  it("a Completed filter shows done tasks whatever Display says; 'not completed' doesn't", () => {
+    expect(showsDone([is("completed", "last_week")])).toBe(true);
+    expect(showsDone([is("completed", "none")])).toBe(false);
+    expect(showsDone([isNot("completed", "week")])).toBe(false);
+  });
+
+  it("Waiting on (TV-U8): anything, by kind, or not waiting", () => {
+    const waiting: TaskFilterContext = {
+      ...ctx,
+      waitingKindsOf: (id) => (id === "a" ? ["person", "person"] : id === "b" ? ["email"] : []),
+    };
+    expect(taskFilterValues(a, "waiting", waiting)).toEqual(["any", "person"]);
+    expect(taskFilterValues(b, "waiting", waiting)).toEqual(["any", "email"]);
+    expect(taskFilterValues(c, "waiting", waiting)).toEqual(["none"]);
+    const pick = (cond: FilterCondition) => filterTasks(ALL, [cond], waiting).map((t) => t.id);
+    expect(pick(is("waiting", "any"))).toEqual(["a", "b"]);
+    expect(pick(is("waiting", "person"))).toEqual(["a"]);
+    expect(pick(is("waiting", "email", "text"))).toEqual(["b"]);
+    expect(pick(is("waiting", "none"))).toEqual(["c", "d"]);
   });
 
   it("Team (TV-D13): a team's tasks, No team", () => {

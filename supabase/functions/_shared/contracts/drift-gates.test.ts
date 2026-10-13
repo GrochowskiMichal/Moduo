@@ -53,6 +53,9 @@ import {
   TASK_TIME_ADJUSTMENT_REASONS,
   TASK_TIME_ENTRY_KINDS,
   TASK_TIME_STATUSES,
+  TASK_VIEW_ID_DIMENSIONS,
+  TASK_VIEW_SCOPES,
+  TASK_VIEW_WORD_DIMENSIONS,
   TASK_WAITING_KINDS,
   TEMPLATE_KINDS,
   TEMPLATE_LINK_TYPES,
@@ -267,6 +270,18 @@ describe("cross-runtime drift guards", () => {
     const opList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(", ");
     expect(sql).toContain(`coalesce(v_key, '') NOT IN (${opList(STARTER_TEMPLATES)})`);
     for (const key of STARTER_TEMPLATES) expect(sql).toContain(`p_key = '${key}'`);
+  });
+
+  it("saved view scopes match TV-U8's CHECK and op guard", () => {
+    const file = readdirSync(MIGRATIONS_DIR).find((f) => f.endsWith("_task_views.sql"));
+    expect(file).toBeDefined();
+    const sql = readFileSync(resolve(MIGRATIONS_DIR, file as string), "utf8");
+    const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(",");
+    const opList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(", ");
+    expect(sql).toContain(`CHECK (scope IN (${inList(TASK_VIEW_SCOPES)}))`);
+    expect(sql).toContain(`v_scope NOT IN (${opList(TASK_VIEW_SCOPES)})`);
+    expect(sql).toContain(`v_dim NOT IN (${opList(TASK_VIEW_ID_DIMENSIONS)})`);
+    expect(sql).toContain(`v_dim NOT IN (${opList(TASK_VIEW_WORD_DIMENSIONS)})`);
   });
 
   it("the booking busy read leaves out the closed categories (TV-D10-fix)", () => {

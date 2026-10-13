@@ -22,6 +22,7 @@ rs.mock("../assignees", () => ({
 }));
 
 import { TooltipProvider } from "../../../components/ui/tooltip";
+import { resetFoldsForTests } from "../folds";
 import { makeTask } from "../helpers";
 import type { Section, Task } from "../model";
 import { TaskListView } from "./task-list-view";
@@ -37,6 +38,7 @@ beforeAll(() => {
 afterEach(() => {
   cleanup();
   window.localStorage.clear();
+  resetFoldsForTests();
 });
 
 const OLD = "2026-01-01T00:00:00.000Z";

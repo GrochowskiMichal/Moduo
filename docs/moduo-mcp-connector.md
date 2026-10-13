@@ -136,7 +136,7 @@ through the same ops and gates as the app; the rule for all of them:
 
 | Read (View) | What |
 | --- | --- |
-| `projects_list` | projects the person sees: Inbox (`is_inbox`), status, area, colour, dates, lead; `include_archived` |
+| `projects_list` | projects the person sees: Inbox (`is_inbox`), status, area, colour, dates, lead, `description` (plain text, when set; TV-U16 · U13b); `include_archived` |
 | `areas_list`, `sections_list`, `statuses_list`, `teams_list` | structure (a team's default project only when visible) |
 | `templates_list` | own and shared task/project templates: name, kind, counts; never the body or its sources |
 | `tasks_list` | paged (`limit` ≤ 200 + `offset`); filters `category` (or a legacy `status` word: `todo` leaves Backlog out), `project_id`, `section_id`, `area_id`, `team_id`, `assignee`, `completed_from/to`, `top_level`, `include_archived` |
@@ -149,7 +149,7 @@ through the same ops and gates as the app; the rule for all of them:
 
 | Write (Edit) | Op |
 | --- | --- |
-| `tasks_create` | `tasks_op_create_with`: fields + project/section/status/assignee/team/due/estimate/repeat + tags (by name), reminders, work sessions, `imported_from {source, key}`, `import_id`; atomic; a key you already used on a live task **of yours** updates it (a re-run) |
+| `tasks_create` | `tasks_op_create_with`: fields + project/section/status/assignee/team/due/estimate/repeat + tags (by name), reminders, work sessions, `imported_from {source, key}`, `import_id`; atomic; a key you already used on a live task **of yours** updates it (a re-run); an `id` that's already there answers with that task (`action: "existing"`) and writes nothing more, exactly like `tasks_op_create` |
 | `tasks_update` | `tasks_op_update_with`: fields + `tags_add` / `tags_remove` |
 | `tasks_set_status` | `tasks_op_set_status`; finishing a top-level, non-repeating task finishes its open subtasks the person can edit (`also_finished`, call 87) |
 | `tasks_assign`, `tasks_route_team`, `tasks_claim` | `tasks_op_assign`, `tasks_op_update {team_id}`, `tasks_op_claim` |
@@ -157,7 +157,7 @@ through the same ops and gates as the app; the rule for all of them:
 | `tasks_comment` | `comments_op_add` — only when a person asked; **needs Links: Edit too** (`MCP_TOOL_NEEDS`) |
 | `tasks_session_status` | `tasks_op_agent_report` (below) |
 | `tasks_reminder_add/remove`, `tasks_work_session_add/update/remove`, `tasks_move_occurrence` | the D10/D12 ops (reminders are the person's own; a session is theirs or the assignee's) |
-| `projects_create/update/duplicate`, `sections_create`, `areas_create`, `templates_apply` | the D10/U6/D15 ops; `projects_duplicate` asks `templates_can_copy` first; keys can't share, edit or delete templates |
+| `projects_create/update/duplicate`, `sections_create`, `areas_create`, `templates_apply` | the D10/U6/D15 ops; `projects_create` and `projects_update` take `description` (null clears it; the ops check Edit on the project, TV-U13b); `projects_duplicate` asks `templates_can_copy` first; keys can't share, edit or delete templates |
 | `imports_begin/finish/undo` | `imports_op_*` (below) |
 | `tasks_queue_add/remove/reorder`, `tasks_reschedule`, `tasks_unschedule`, `tasks_skip_occurrence` | as before; `tasks_commit/uncommit/skip_today` **deprecated** until TV-D7 |
 

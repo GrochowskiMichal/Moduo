@@ -87,6 +87,101 @@ Built in tasks-v3 block 26 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §6, AC
   - Why: 70; drags are horizontal, so vertical scrolling would only lose your row.
   - Rejected: a fixed speed.
 
+## 2026-10-13 · TV-U13b Follow-ups from landed blocks — the agent's choices (deferred to by Maciej)
+
+The orchestrator's follow-up block after TV-U12, TV-U13, TV-D12, TV-U15, TV-D16 and TV-U16 ([BUILD_ORDER.md](../../specs/BUILD_ORDER.md) "From TV-U13b"), built on the local stack with no migration. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **U13b-1 · A selection dropped on Focus only adds; blocked ones go in and are named** → TV-U13b (`bulkQueue(ids, { mode: "add" })`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (a review of TV-U12's code).
+  - Decision: a drop on the sidebar's Focus row adds the selected open tasks not in Focus yet and never takes any out (the bar's Q stays the toggle). A selection never opens the one-task "Blocked by" offer; a blocked task is added as "Queue anyway" would, and the toast says so ("“Ship it” is blocked by an open task.", or "2 of them are blocked by open tasks.").
+  - Why: a drop is an "add" gesture; the frontier offer is about one task and would stack dialogs for a selection.
+  - Rejected: the toggle (a drop could empty Focus), one frontier dialog per blocked task, leaving blocked ones out silently.
+- **U13b-2 · A partly saved bulk edit is named and undone, never rolled back on its own** → TV-U13b (`bulkWrite`'s `partial`, `BulkRefusal.partial`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: when a task's first op saves (a move, a field) and a later one is refused (status, assignee), it counts as not changed ("3 of 4 changed"), the toast names it ("“X” changed only in part: …"), and the one Undo puts back the part that saved, with the rest of the batch.
+  - Why: each op is the task's own permission check, so a half-change is real; hiding it (the old behaviour) left it un-undoable.
+  - Rejected: an automatic rollback of the saved part (a second write that can fail too, and a surprise), counting it as changed.
+- **U13b-3 · The Inbox's agent chip reads the task's own trail, with no new column** → TV-U13b (`runtime.tasks.listAgentCaptures`, `use-agent-captures.ts`)
+  - Who: agent's choice, deferred to by Maciej (offered by the orchestrator), 2026-10-13.
+  - Decision: "via Claude Desktop" comes from the task's `tasks.create` row in `module_activity` when a key made it (D16 already writes "Alex · via Claude Desktop" there): one batched read of the Inbox's tasks (100 ids a request), once per task while the Inbox is open, kept in memory. Someone else's agent reads "from Mike via Cursor". The trail's read policy answers only tasks the reader can see, so a key's name reaches exactly the people who already see it in the trail (`supabase/tests/agent_followups.test.sql`).
+  - Why: no migration while Maciej tests, one source of truth for "via", no change to `tasks` (every sync path, column grants, templates and Duplicate copying it).
+  - Rejected: a `tasks.created_via` column written by `tasks_op_create_with` and the key path (a migration on the hottest table for one chip; it also freezes the key name on the row a second time).
+- **U13b-4 · The panel's repeat follow-ups sit where the value is** → TV-U13b (`RepeatHistory`, `ReminderValue`, `TaskDetailProperties`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (TV-D12's asks).
+  - Decision: the cycle history is a quiet "n done · last Oct 6" beside the Repeat value, opening the cycles (newest first; who closed each; only your own time), read when opened, so viewers see it too. A paused reminder reads "· Paused" in the Reminder value and list; once the task is To do or In progress the list offers "Restore the reminder", else it says how it comes back. Moving a repeat's Due in the panel asks "Just this one · Change the pattern" through Upcoming's dialog; clearing the date or a one-off saves at once, and like every property edit it has no Undo toast.
+  - Why: each answer belongs to the value it explains; one dialog for every "move a repeat" gesture.
+  - Rejected: the history inside the Repeat picker (editors only), a History row of its own, an Undo toast on the panel's move.
+- **U13b-5 · MCP reads and writes a project's description** → TV-U13b (`moduo-mcp` `shapeProject`, `projects_create`, `projects_update`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (TV-U16's connector follow-up).
+  - Decision: `projects_list` carries `description` (plain text, when set); `projects_create` and `projects_update` take it (null clears); the project ops check Edit, as for the app.
+  - Why: the project read is the list; descriptions are a project's brief and usually short.
+  - Rejected: a separate `projects_get` tool, a shortened description in the list.
+
+## 2026-10-13 · TV-U8 Saved views — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 21 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §3, AC11.1, AC4.8; REPLAN 29b–29e, 29d, §3's role table). Migration `20261013250000_task_views`. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **U8-1 · A view can be shared with the workspace** → TV-U8 (`task_views.shared`, `task_views__sees`)
+  - Who: the orchestrator's brief for this block (2026-10-13), built as the agent's choice; it supersedes the 2026-10-08 call "saved views are personal; sharing later, on top of PERM sharing".
+  - Decision: a view is yours until you share it with the workspace (⋯ → Share with the workspace; needs Tasks edit). A shared view reaches everyone with Tasks there, a project view only people who can see that project, and it reads as gone once its maker leaves the workspace. It keeps a filter, never results: each reader sees only what their own access shows through it, and My tasks and Upcoming are each reader's own.
+  - Why: a team's "Waiting on client" or "Sprint board" is shared work; a boolean share is the templates' proven shape (TV-D15) and leaks nothing a reader couldn't see.
+  - Rejected: sharing with chosen people through PERM grants (more machinery than a lens needs; later if asked); copying a shared view's results.
+- **U8-2 · Only the maker changes a view; the owner or an admin can take a shared one down** → TV-U8 (`task_views_op_update`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (the orchestrator kept the exception).
+  - Decision: the maker renames, saves, re-shares, moves and deletes; anyone else who sees a shared view can pin it, copy its link and "Save as new view…"; the workspace's owner or an admin can also Stop sharing or Delete (and Undo) a shared view they can see.
+  - Why: templates' precedent; a workspace needs a way to tidy shared views.
+  - Rejected: anyone editing a shared view (one person's change rewrites everyone's lens).
+- **U8-3 · A view keeps one place: All, My tasks, Upcoming or a project** → TV-U8 (`TASK_VIEW_SCOPES`, `viewScopeOf`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: "Save as view…" (the toolbar's ⋯) saves the place's Filter and Display (layout, Group by, Board grouping and lanes, order, Completed, subtasks, rows, Show on rows); a view saved in a project keeps that project (29d). The Inbox, Focus, Won't do, Archived and Recently deleted don't save. The selection (multi-select) and the search are never saved.
+  - Why: 29d ("a view saved inside a project simply keeps that project as a filter"); the Inbox is each person's private place.
+  - Rejected: project tabs (29d is no); views of the Inbox.
+- **U8-4 · Changes to an open view wait for Save** → TV-U8 (`use-tasks-display.tsx`, `ViewChangesLine`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: changing an open view's Filter or Display shows "Unsaved changes · Save · Save as new view… · Revert" under the toolbar (someone else's view: no Save). The changes stay while you move around this session, never on the device: a reload, or the view saved on another device, opens as saved. A place (All, a project) still remembers its own Filter and Display on the device.
+  - Why: v2's "Save changes"; a device copy of a view's changes would drift from the view saved elsewhere.
+  - Rejected: saving every change at once (a shared view would change under everyone); keeping drafts on the device.
+- **U8-5 · No counts on view rows** → TV-U8 (`bucket-rail.tsx` `ViewRow`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: a view's row carries its name only; the open view's title counts what it shows ("Done last week" counts its done tasks).
+  - Why: a count per view runs that view's filter over every task on each change (the 10,000-task budget); §3 gives counts to projects and areas.
+  - Rejected: counts on every view row (later as a deferred count if wanted).
+- **U8-6 · The Views group: yours in your order, then the shared ones** → TV-U8 (`sidebarViews`, `task_views_op_move`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: between Pinned and the projects, under a "Views" header only when there's one, collapsible (29e); your views in your order (⋯ → Move up / Move down), then views shared with you by name; no glyphs, an empty icon slot keeps the names in line with the projects' (29c B). Pin puts a view in Pinned beside pinned projects (`preferences.tasksSidebar.pinned[ws]` holds `view:<id>`).
+  - Why: 29b, 29c, 29e as decided.
+  - Rejected: drag to reorder views (Move up/down first); a "Shared" mark (no glyphs).
+- **U8-7 · Seeded views per role, and "Done last week" for everyone** → TV-U8 (`views.ts` `ROLE_SEED_VIEWS`, `seedViewsFor`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: once per person and workspace, after onboarding decided (the role answered or skipped, or the welcome stepped aside), each person gets their role's views: student Today (mine, due today or earlier); developer This week (mine, due this week); PM Waiting (All, waiting on anything) and Due this week (All, by due date); founder Waiting on people; client work Waiting on client (waiting on an email reply or something else); creator Pipeline (All as a Board by status) and Publish dates (All with a due date, by Date); and everyone "Done last week" (All: Status is Done, Completed is Last week). The student's "Upcoming" and the developer's "Mine" aren't seeded: they're sidebar rows now. A seeded view deleted never comes back (the server keeps one per person, workspace and seed key; `preferences.tasksOnboarding.viewsSeeded` stamps it first and only moves forward).
+  - Why: REPLAN §3's column and AC4.8; §3's table predates Upcoming and My tasks as sidebar rows.
+  - Rejected: seeding per workspace for its creator (❓34 seeds views per person); re-seeding when the role changes (a role changes defaults only).
+- **U8-8 · Filter gains Completed and Waiting on** → TV-U8 (`filters.ts`, `day-buckets.ts` `completedFilterValues`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: Completed: Today · This week · Last week · This month · Not completed (the week from Time & region; a Completed day shows done tasks whatever Display → Completed says); Waiting on: Anything · A teammate · An email reply · An agent · Something else · Not waiting.
+  - Why: "Done last week" and the "Waiting on …" seeds need them; spec §2 names Filter → Completed.
+  - Rejected: a date range for Completed (later); Group by Completed (later).
+- **U8-9 · Folds follow the person** → TV-U8 (`folds.ts`, `preferences.tasksFolds`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (TV-U10 handed it over).
+  - Decision: the List's folded groups and the Board's folded columns and lanes live in the synced preferences per workspace, place (or view) and grouping; a burst of folds is one write a moment later; the newest 300 Lists and Boards keep theirs. A saved view keeps its own folds apart from its place. Old per-device folds aren't carried over.
+  - Why: TV-U10's note ("sync them with the views"); TV-U15's snoozes are the precedent (synced, no table).
+  - Rejected: folds in the view row (one person's fold would fold everyone's shared view); a table.
+- **U8-10 · Views sync on the store's reads, not live** → TV-U8 (`SYNC_TABLES` views, read whole)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the store reads `task_views` whole on every sync (opening Tasks, coming back to the window, a reconnect); the table isn't published to Realtime.
+  - Why: who sees a shared view moves with project sharing and membership, which bump no stamp; views change rarely; the local stack has no publication.
+  - Rejected: a Realtime channel for views (a channel naming an unpublished table silences the others).
+- **U8-11 · A view's link** → TV-U8 (`?view=<id>`, `useSavedViews`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: ⋯ → Copy link gives `/tasks?view=<id>`; it opens the view once, then leaves the URL (a reload reopens where you are); a view you can't open says "That view isn't available · It was deleted, or it isn't shared with you", the same words either way.
+  - Why: v2's U8-3; the same answer for hidden and missing.
+  - Rejected: mirroring the open view in the URL all the time (the `?id=` mirror already owns the URL).
+- **U8-12 · A filter keeps only this workspace's ids** → TV-U8 (`task_views__check_filters`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: a saved filter keeps the app's words and only people, teams and tags of the same workspace (a person: a member, or the assignee of a task the saver can see); Display keeps only words. Anything else is refused with one answer.
+  - Why: a shared view must carry nothing a reader couldn't see.
+  - Rejected: storing any string (a view could carry ids from elsewhere).
+
 ## 2026-10-13 · TV-TL1 Timeline rebuild I — the agent's choices (deferred to by Maciej)
 
 Built in tasks-v3 block 25 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §6; REPLAN 67–71, 68a, 46a, 48b; research `.design/tasks-v3/research/timeline-competitors.md`; prototype round-2a frames 4–5) on the local stack, no migration. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to change.
@@ -146,6 +241,7 @@ Built in tasks-v3 block 25 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §6; RE
   - Decision: grey points; the selected one the brightest mark with a ring; late in the muted late tone; done as the accent's check; a repeat with its mark and, with Show repeats, ghost points for the coming ones; a project's hue only on its dot, its bar's 3 px cap, and points when Colour by Project is on.
   - Why: 69 ("accent only for the selection, today's 1 px line and the done check"), the prototype.
   - Rejected: colouring points by project by default.
+
 ## 2026-10-13 · TV-U16 Project overview, the Done prompt, departures — the agent's choices (deferred to by Maciej)
 
 Built in tasks-v3 block 33 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §3, AC5.5–5.6's UI half, AC6.4, AC6.6; REPLAN 16, 17, 78; the carry-forwards from TV-U6, TV-U13, TV-D13, TV-D14 and TV-D15; migration `20261013240000_project_description_team_defaults`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
@@ -271,6 +367,21 @@ Built in tasks-v3 block 31 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §12, �
   - Decision: these three are read on demand by their person (never delta-synced), so they carry `workspace_id` but no `deleted_at` (and `import_rows` no `updated_at`); a run is never deleted by hand, its rows go with it, and a new run replaces a session's summary.
   - Why: #27's columns exist so the delta sync sees every change; nothing syncs these.
   - Rejected: columns nothing reads or writes.
+- **D16-16 · Every agent and import read follows the task** → TV-D16 follow-up (`20261013268000_agents_privacy_fix`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (the orchestrator's audit; the reminder and team notices at the orchestrator's ask).
+  - Decision: the bell's Inbox notices (an agent's state, a reminder, a team notice) name their task by id only, and the app names it through the entity registry, which answers only while the reader can see it (`notificationSubject`, `unnamedTaskTargets`); an OS / browser notice row and a hand-back summary are readable (and sent live) to their person only while they can see the task; a key's trail label names only a key of the row's own workspace; a run's summary answers only the run's person.
+  - Why: a person can lose access to a task after a notice or summary about it was written.
+  - Rejected: copying the task's title into the notice (it outlives the reader's access).
+- **D16-17 · The sibling ops write through the plain ones** → TV-D16 follow-up (`tasks_op_create_with`, `tasks_op_update_with`, `imports_op_project_create` / `_section_create`; `supabase/tests/ops_parity.test.sql`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (the orchestrator's parity ask).
+  - Decision: each "_with" or import op makes its core write through `tasks_op_create`, `tasks_op_update`, `projects_op_create` or `sections_op_create` and only adds its extras, so every check (project edit, section and status of the project, teams, assignees, recurrence bounds, key scopes) is the plain op's; `tasks_op_tag` keeps the app's tag rules (edit access to the task, a tag of this workspace, making tags needs the right). An id that's already there gets the plain op's answer and nothing more: no tags, reminders or work sessions, and never a place in an import run. Both paths file into an archived project alike (the plain op allows it).
+  - Why: two paths to one write drift apart unless one calls the other.
+  - Rejected: re-checking each rule in the sibling.
+- **D16-18 · A key's comment keeps the key's name as its author** → (`comments_op_add`, unchanged)
+  - Who: agent's choice, confirmed by the orchestrator, 2026-10-13.
+  - Decision: a comment written through a key reads "Claude Desktop" as its author, as before.
+  - Why: comments are read only by people who can see their item, the same rule as the trail's "via" label.
+  - Rejected: hiding the key's name on comments.
 
 ## 2026-10-13 · TV-U12 Multi-select and the bottom-bar mode pattern — the agent's choices (deferred to by Maciej)
 

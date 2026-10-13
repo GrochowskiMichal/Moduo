@@ -493,6 +493,52 @@ describe("writes go through the ops, checked before anything is written", () => 
     expect(made.id).toBe("p-new");
   });
 
+  it("projects carry their description: read when set (never a hidden one's), written through the ops (TV-U13b)", async () => {
+    const { ctx, tables, rpcCalls } = setup({
+      rpcs: {
+        projects_op_update: (a) => ({
+          id: P_SHARED,
+          name: "Launch",
+          is_system: false,
+          description: (a.p_patch as Row).description ?? "",
+        }),
+        projects_op_create: (a) => ({
+          id: "p-new",
+          name: (a.p_project as Row).name,
+          is_system: false,
+          description: (a.p_project as Row).description ?? "",
+        }),
+      },
+    });
+    const bucket = (id: string) => tables.buckets!.find((b) => b.id === id)!;
+    bucket(P_SHARED).description = "Ship the beta.";
+    bucket(P_HIDDEN).description = "Bea's private plans";
+    bucket(INBOX).description = "";
+    const listed: Row[] = await call("projects_list", {}, ctx);
+    expect(listed.find((p) => p.id === P_SHARED)?.description).toBe("Ship the beta.");
+    expect(listed.find((p) => p.id === INBOX)).not.toHaveProperty("description");
+    expect(JSON.stringify(listed)).not.toContain("private plans");
+
+    const updated = await call("projects_update", { project_id: P_SHARED, description: "Ship it." }, ctx);
+    expect(rpcCalls.find((c) => c.fn === "projects_op_update")?.args.p_patch).toEqual({ description: "Ship it." });
+    expect(updated.description).toBe("Ship it.");
+    const cleared = await call("projects_update", { project_id: P_SHARED, description: null }, ctx);
+    expect(rpcCalls.filter((c) => c.fn === "projects_op_update")[1]?.args.p_patch).toEqual({ description: null });
+    expect(cleared).not.toHaveProperty("description");
+
+    const made = await call("projects_create", { name: "Docs", description: "Write the docs." }, ctx);
+    expect(rpcCalls.find((c) => c.fn === "projects_op_create")?.args.p_project).toEqual({
+      name: "Docs",
+      description: "Write the docs.",
+    });
+    expect(made.description).toBe("Write the docs.");
+    // A project the person can't see reads as missing, and nothing is sent.
+    await expect(call("projects_update", { project_id: P_HIDDEN, description: "x" }, ctx)).rejects.toThrow(
+      "That project isn't in this workspace.",
+    );
+    expect(rpcCalls.filter((c) => c.fn === "projects_op_update")).toHaveLength(2);
+  });
+
   it("tasks_update to done finishes the open subtasks too (call 87)", async () => {
     const statusCalls: string[] = [];
     const { ctx } = setup({

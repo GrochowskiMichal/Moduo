@@ -41,8 +41,7 @@ export type RoleDefaults = {
   duePerWeek: boolean;
   /** The starter template made for this person (REPLAN 9: templates are in). */
   starter: StarterTemplate | null;
-  /** The saved views TV-U8 seeds for this role (names; not built yet). */
-  views: readonly string[];
+  // The saved views a role starts with are `ROLE_SEED_VIEWS` (views.ts, TV-U8).
 };
 
 /**
@@ -59,7 +58,6 @@ export const ROLE_DEFAULTS: Record<TasksRole, RoleDefaults> = {
     rows: "standard",
     duePerWeek: true,
     starter: null,
-    views: ["Upcoming", "Today"],
   },
   developer: {
     label: "Software",
@@ -68,7 +66,6 @@ export const ROLE_DEFAULTS: Record<TasksRole, RoleDefaults> = {
     rows: "detailed",
     duePerWeek: false,
     starter: null,
-    views: ["This week", "Mine"],
   },
   pm: {
     label: "Projects for a team",
@@ -77,7 +74,6 @@ export const ROLE_DEFAULTS: Record<TasksRole, RoleDefaults> = {
     rows: "standard",
     duePerWeek: false,
     starter: "kickoff",
-    views: ["Waiting", "Due this week"],
   },
   founder: {
     label: "A company or its operations",
@@ -86,7 +82,6 @@ export const ROLE_DEFAULTS: Record<TasksRole, RoleDefaults> = {
     rows: "standard",
     duePerWeek: false,
     starter: "monthly_close",
-    views: ["Waiting on people"],
   },
   client_work: {
     label: "Client work",
@@ -95,7 +90,6 @@ export const ROLE_DEFAULTS: Record<TasksRole, RoleDefaults> = {
     rows: "standard",
     duePerWeek: false,
     starter: "client_onboarding",
-    views: ["Waiting on client"],
   },
   creator: {
     label: "Content",
@@ -104,7 +98,6 @@ export const ROLE_DEFAULTS: Record<TasksRole, RoleDefaults> = {
     rows: "standard",
     duePerWeek: false,
     starter: "episode",
-    views: ["Pipeline", "Publish dates"],
   },
 };
 

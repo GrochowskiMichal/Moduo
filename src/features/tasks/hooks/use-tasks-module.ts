@@ -66,6 +66,7 @@ import {
   type Section,
   type Tag,
   type Task,
+  type TaskCycle,
   type TaskQueueEntry,
   type TaskRelation,
   type TaskReminder,
@@ -107,6 +108,7 @@ import {
   statusSetFor,
 } from "../statuses";
 import { useBulkOps } from "./use-bulk-ops";
+import { useViewOps } from "./use-view-ops";
 
 /** An adjustment `logTimeAdjustment` recorded, as its Undo needs it. */
 export type TimeAdjustment = {
@@ -578,6 +580,16 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     }
     toast.error(e instanceof Error ? e.message : fallback);
   }, []);
+
+  // Saved views (TV-U8): the store's rows and their ops.
+  const viewOps = useViewOps({
+    runtime,
+    store,
+    workspaceId: workspaceId ?? null,
+    userId: userId ?? null,
+    rows: snap.views,
+    failed,
+  });
 
   /** A write that didn't go through: its fields are back to the server's, and it says why. */
   const refused = useCallback(
@@ -1103,6 +1115,48 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
   );
 
   /**
+   * Bring a task's paused reminders back (TV-D12's `tasks_op_reminders_restore`;
+   * the offer below and the panel's Reminder list): once the task is To do or
+   * In progress, only those still ahead, everyone's when you can edit it. Shown
+   * at once; the server's rows settle it (a passed one stays paused, and says so).
+   */
+  const restoreReminders = useCallback(
+    (taskId: string) => {
+      if (!store || !runtime || !workspaceId) return;
+      if (store.isOffline()) {
+        sayOffline();
+        return;
+      }
+      const parked = remindersRef.current.filter(
+        (r) => r.taskId === taskId && r.suspendedAt && !r.firedAt,
+      );
+      if (parked.length === 0) return;
+      const parkedIds = new Set(parked.map((r) => r.id));
+      const write = store.begin(
+        parked.map((r) => ({
+          table: "reminders" as const,
+          patch: { id: r.id, fields: { suspendedAt: null } },
+        })),
+      );
+      void runtime.tasks
+        .restoreReminders({ workspaceId, taskId })
+        .then((mine) => {
+          write.settle({ reminders: mine });
+          const back = mine.filter((r) => parkedIds.has(r.id) && !r.suspendedAt).length;
+          if (back === 0) {
+            toast(
+              parked.length === 1
+                ? "Its time has already passed."
+                : "Their times have already passed.",
+            );
+          }
+        })
+        .catch((e) => refused(write, e, "Couldn’t restore the reminder. Try again."));
+    },
+    [store, runtime, workspaceId, refused],
+  );
+
+  /**
    * "Restore the reminder?" (TV-D12, spec edge cases): moving a task to
    * Backlog or Won't do suspended its reminders; bringing it back to To do or
    * In progress asks, once, whether to restore them (everyone's when you can
@@ -1118,34 +1172,14 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         (r) => r.taskId === task.id && r.suspendedAt && !r.firedAt,
       );
       if (parked.length === 0) return;
-      const rt = runtime;
-      const ws = workspaceId;
       toast(parked.length === 1 ? "Restore the reminder?" : `Restore ${parked.length} reminders?`, {
         description: `Moving it to ${from === "backlog" ? "Backlog" : "Won’t do"} paused ${
           parked.length === 1 ? "it" : "them"
         }.`,
-        action: {
-          label: "Restore",
-          onClick: () => {
-            const parkedIds = new Set(parked.map((r) => r.id));
-            void rt.tasks
-              .restoreReminders({ workspaceId: ws, taskId: task.id })
-              .then((mine) => {
-                const back = mine.filter((r) => parkedIds.has(r.id) && !r.suspendedAt).length;
-                if (back === 0) {
-                  toast(
-                    parked.length === 1
-                      ? "Its time has already passed."
-                      : "Their times have already passed.",
-                  );
-                }
-              })
-              .catch(() => toast.error("Couldn’t restore the reminder. Try again."));
-          },
-        },
+        action: { label: "Restore", onClick: () => restoreReminders(task.id) },
       });
     },
-    [runtime, workspaceId, canEdit],
+    [runtime, workspaceId, canEdit, restoreReminders],
   );
 
   /** "Still in Backlog · Move to To do": the offer after assigning a backlog
@@ -1984,6 +2018,19 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       );
     },
     [applyOp, runtime, workspaceId],
+  );
+
+  /**
+   * A repeat's cycles, newest first (TV-D12's `tasks_op_history`): each done
+   * or skipped one, who closed it and your own time in it (only yours). Read
+   * on demand; empty without a connection.
+   */
+  const taskHistory = useCallback(
+    async (taskId: string): Promise<TaskCycle[]> => {
+      if (!runtime || !workspaceId || isTempId(taskId)) return [];
+      return runtime.tasks.taskHistory({ workspaceId, taskId });
+    },
+    [runtime, workspaceId],
   );
 
   const deleteTask = useCallback(
@@ -3658,6 +3705,9 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
 
   // ── bulk edits on a selection (TV-U12): one write, one Undo ─────────────────
   const bumpActivity = useCallback(() => setActivityStamp((s) => s + 1), []);
+  const blockedIdsRef = useRef(blockedIds);
+  blockedIdsRef.current = blockedIds;
+  const isBlocked = useCallback((id: string) => blockedIdsRef.current.has(id), []);
   const bulk = useBulkOps({
     store,
     runtime,
@@ -3677,6 +3727,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     optimisticEntry,
     backlogToTodo,
     tagContext,
+    isBlocked,
   });
 
   return {
@@ -3712,6 +3763,8 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     sessions: snap.sessions,
     reminders: snap.reminders,
     waiting: snap.waiting,
+    /** TV-U8: saved views (yours, then the ones shared with you) and their ops. */
+    ...viewOps,
     /** Every completion (each cycle of a repeat): the overview's "Done this month" (TV-U16). */
     completions: snap.completions,
     /** TV-D16: agent sessions you can see (yours; teammates' while they share). */
@@ -3721,6 +3774,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     updateSession,
     removeSession,
     addReminder,
+    restoreReminders,
     removeReminder,
     addWaiting,
     removeWaiting,
@@ -3783,6 +3837,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     skipOccurrence,
     /** "Move just this one" on a repeat (TV-D12's op, TV-U15's Upcoming). */
     moveOccurrence,
+    taskHistory,
     reorderQueue,
     deleteTask,
     loadActivity,
