@@ -218,3 +218,8 @@ History moved out of [BUILD_ORDER.md](./BUILD_ORDER.md) so sessions don't re-rea
 
 - [x] **BRAND-1 — Asset pipeline (`brand/` tree, `bun run brand:export`, every export, consumers wired, old files deleted)** · deps: — · 2026-10-08 · `t/maciej/brand-1-asset-pipeline` · PR #278 (merged into maciej)
 - [x] **BRAND-4 — Landing alignment (PR into `prod-landing`)** · deps: BRAND-1 · 2026-10-08 · `t/maciej/brand-4-landing-alignment` · GrochowskiMichal/Moduo#306 (merged into prod-landing, 1c45ca6c) · the lockup artwork in the nav on all four pages, in the footer and in og.png (whose subcopy now lists chat); the footer headline is the brand line; the mark reveals itself on the nav lockup on a first visit; American spelling; `--ai` removed; `landing-agents-readme.md` rewritten to the brief. Checklist: `docs/testing/t-maciej-brand-4-landing-alignment.md` (on prod-landing). **Open:** moduo.app updates only when Mike redeploys 1c45ca6c (the merge commit is authored by En5hi, and Vercel hit its daily limit); not checked in Safari or Firefox.
+
+## Notes refresh — new core, new surface · [`specs/notes-refresh.md`](./notes-refresh.md)
+
+- [x] **NR-1 — Organizing data: stored Inbox, per-user Favorites, full width** · deps: — · lane notes-data · Tier 2 (migration) · ✅ done 2026-10-13 (#354); migration applied to prod 2026-10-13 (version 20261013120000)
+- [x] **NR-2 — New Notes shell + sidebar, behind the switch** · deps: NR-1 · lane notes-ui · ✅ built 2026-10-13 (`t/mike/nr-2-notes-shell`, #356); merged into `mike`; signed-in live check pending (docs/testing/2026-W42/NR-2.md)

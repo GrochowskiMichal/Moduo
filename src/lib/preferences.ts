@@ -16,7 +16,7 @@
 // Only `motion` has a DOM surface (the `data-motion` attribute, layered over the OS
 // prefers-reduced-motion — see tokens.css); the rest are read by their consumers.
 
-import { useCallback, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { z } from "zod";
 import { useDomainSync } from "./prefs-sync";
 
@@ -108,7 +108,12 @@ export interface Preferences {
    *  which reads this value from `AppState` — mirrored there by the `set_confirm_before_quit`
    *  command. See src/lib/confirm-before-quit.ts + src-tauri/src/lib.rs. */
   confirmBeforeQuit: boolean;
+  /** Which Notes UI this person uses while the refresh ships behind a switch
+   *  (specs/notes-refresh.md NR-2). Classic until NR-12 flips the default. */
+  notesExperience: NotesExperience;
 }
+
+export type NotesExperience = "classic" | "next";
 
 export const DEFAULT_PREFERENCES: Preferences = {
   landingView: "home",
@@ -117,6 +122,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   motion: "system",
   notifications: { ...DEFAULT_NOTIFICATION_PREFS },
   confirmBeforeQuit: false,
+  notesExperience: "classic",
 };
 
 const LOCAL_STORAGE_KEY = "moduo.preferences";
@@ -124,6 +130,7 @@ const LAST_ROUTE_KEY = "moduo.lastRoute";
 
 const LANDING_VIEWS = ["home", "tasks", "calendar", "notes", "contacts", "email", "last"] as const;
 const MOTION_PREFS = ["system", "reduced", "full"] as const;
+const NOTES_EXPERIENCES = ["classic", "next"] as const;
 
 const notificationPrefsSchema = z
   .object({
@@ -142,6 +149,7 @@ const preferencesSchema = z.object({
   motion: z.enum(MOTION_PREFS).catch(DEFAULT_PREFERENCES.motion),
   notifications: notificationPrefsSchema,
   confirmBeforeQuit: z.boolean().catch(DEFAULT_PREFERENCES.confirmBeforeQuit),
+  notesExperience: z.enum(NOTES_EXPERIENCES).catch(DEFAULT_PREFERENCES.notesExperience),
 });
 
 export function sanitizeNotificationPrefs(raw: unknown): NotificationPrefs {
@@ -349,6 +357,31 @@ function subscribe(listener: () => void): () => void {
   };
 }
 
+// The syncers' pushes, registered while a usePreferences() is mounted, so a
+// consumer outside Settings can change a synced field without mounting a
+// second reconcile loop (gotchas/supabase.md, "exactly ONE usePreferences()").
+// A stack, not a slot: the Settings pane mounts a second instance, and closing
+// it must leave the app-wide <PreferencesSync/>'s push registered.
+type SyncPush = (syncable: Record<string, unknown>) => void;
+const syncPushes: SyncPush[] = [];
+const currentSyncPush = (): SyncPush | undefined => syncPushes[syncPushes.length - 1];
+
+function commit(patch: Partial<Preferences>): Preferences {
+  const next = sanitizePreferences({ ...store, ...patch });
+  setStore(next);
+  writeLocalMirror(next);
+  applyMotion(next.motion);
+  currentSyncPush()?.(next as unknown as Record<string, unknown>);
+  return next;
+}
+
+/** Change synced preferences from anywhere (e.g. the Notes experience switch).
+ *  Updates the shared store + local mirror at once and hands the value to the
+ *  app-wide syncer, which pushes it to the cloud when signed in. */
+export function updatePreferences(patch: Partial<Preferences>): Preferences {
+  return commit(patch);
+}
+
 export interface UsePreferences {
   preferences: Preferences;
   setPreferences: (patch: Partial<Preferences>) => void;
@@ -385,13 +418,22 @@ export function usePreferences(): UsePreferences {
     apply: applyFromCloud,
   });
 
+  useEffect(() => {
+    syncPushes.push(pushLocalChange);
+    return () => {
+      const i = syncPushes.lastIndexOf(pushLocalChange);
+      if (i !== -1) syncPushes.splice(i, 1);
+    };
+  }, [pushLocalChange]);
+
   const update = useCallback(
     (patch: Partial<Preferences>) => {
-      const next = sanitizePreferences({ ...store, ...patch });
-      setStore(next);
-      writeLocalMirror(next);
-      applyMotion(next.motion);
-      pushLocalChange(next as unknown as Record<string, unknown>);
+      // `commit` pushes through the registered syncer; push here too in case
+      // this instance isn't the registered one (it is idempotent).
+      const next = commit(patch);
+      if (currentSyncPush() !== pushLocalChange) {
+        pushLocalChange(next as unknown as Record<string, unknown>);
+      }
     },
     [pushLocalChange],
   );

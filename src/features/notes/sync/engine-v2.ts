@@ -126,6 +126,16 @@ export class NotesSyncEngineV2 {
   private destroyed = false;
   private detachWindow: (() => void) | null = null;
   private replayingMeta = false;
+  /** Lazy drafts (NR-2): notes that exist only on this device until their
+   * first character. Their sessions don't pull (there is nothing on the
+   * server), and their edits stay out of the push outbox, so an untouched
+   * draft leaves no queued update behind and a typed one never pushes ahead
+   * of its create. */
+  private readonly drafts = new Set<string>();
+  /** Promoted drafts whose create hasn't landed yet: their edits are queued
+   * durably (so nothing typed is lost if the page closes) but not pushed until
+   * `releasePush`, so a push can never reach the server before its create. */
+  private readonly held = new Set<string>();
 
   constructor(
     private readonly runtime: ModuoRuntime | null,
@@ -238,6 +248,9 @@ export class NotesSyncEngineV2 {
       // Ignore what we applied ourselves: remote pulls, the local IDB cache
       // replaying at boot, and awareness/bootstrap application.
       if (origin === "remote" || origin === persistence) return;
+      // A draft's edits live in the doc (and its local cache) only; promoting
+      // it queues the whole state as one update.
+      if (this.drafts.has(noteId)) return;
       void this.enqueueLocalUpdate(s!, update);
     });
 
@@ -251,6 +264,7 @@ export class NotesSyncEngineV2 {
     } catch {
       // cache-less boot is fine
     }
+    if (this.drafts.has(s.noteId)) return; // nothing on the server yet
     await this.pull(s);
     await this.flush(s);
   }
@@ -339,6 +353,7 @@ export class NotesSyncEngineV2 {
 
   private async flush(s: NoteSession): Promise<void> {
     if (!this.runtime || s.destroyed) return;
+    if (this.drafts.has(s.noteId) || this.held.has(s.noteId)) return;
     if (s.flushing) {
       s.dirty = true;
       return;
@@ -457,6 +472,8 @@ export class NotesSyncEngineV2 {
       .filter(
         (s) =>
           s.noteId !== currentNoteId &&
+          !this.drafts.has(s.noteId) &&
+          !this.held.has(s.noteId) &&
           !s.flushing &&
           s.memOutbox.length === 0 &&
           s.flushTimer === null &&
@@ -478,6 +495,67 @@ export class NotesSyncEngineV2 {
       }
       await this.flush(s);
     }
+  }
+
+  /** Open a session for a lazy draft (NR-2): a client-minted id with no
+   * server row yet. Boots from the local cache only and never pushes until
+   * `promoteDraft`. */
+  openDraft(noteId: string): NoteSession {
+    this.drafts.add(noteId);
+    return this.getOrCreateSession(noteId);
+  }
+
+  isDraft(noteId: string): boolean {
+    return this.drafts.has(noteId);
+  }
+
+  /** The draft got its first character: it stops being a draft (every edit
+   * from here on is queued durably, starting with the whole doc so far) but
+   * stays HELD — nothing pushes until `releasePush`, after its create. */
+  async promoteDraft(noteId: string): Promise<void> {
+    if (!this.drafts.delete(noteId)) return;
+    this.held.add(noteId);
+    const s = this.sessions.get(noteId);
+    if (!s || s.destroyed) return;
+    await s.booted.catch(() => {});
+    await this.enqueueLocalUpdate(s, Y.encodeStateAsUpdate(s.doc));
+  }
+
+  /** The server refused a promoted draft's create: drop what it queued (it
+   * can never be accepted) and make it a draft again, so later keystrokes
+   * stay local too. The text stays in the open doc until the page closes. */
+  async revertToDraft(noteId: string): Promise<void> {
+    if (!this.held.delete(noteId)) return;
+    this.drafts.add(noteId);
+    const s = this.sessions.get(noteId);
+    if (s) s.memOutbox = [];
+    const queued = await readDocOutbox(noteId).catch(() => []);
+    const keys = queued.map((e) => e.key).filter((k): k is number => typeof k === "number");
+    if (keys.length > 0) await deleteDocOutboxEntries(keys).catch(() => {});
+    if (this.status === "pending" && !(await this.hasQueuedUpdates())) this.setStatus("synced");
+  }
+
+  /** The note's create landed (or is queued ahead in the FIFO meta-outbox):
+   * push what the held note queued. */
+  releasePush(noteId: string): void {
+    if (!this.held.delete(noteId)) return;
+    const s = this.sessions.get(noteId);
+    if (s && !s.destroyed) this.scheduleFlush(s, 0);
+  }
+
+  /** Drop an untouched draft without a trace: no push, no server call, and
+   * its local document cache is deleted. */
+  async discardDraft(noteId: string): Promise<void> {
+    if (!this.drafts.delete(noteId)) return;
+    const s = this.sessions.get(noteId);
+    if (!s) return;
+    s.destroyed = true;
+    if (s.retryTimer) clearTimeout(s.retryTimer);
+    if (s.flushTimer) clearTimeout(s.flushTimer);
+    this.sessions.delete(noteId);
+    s.provider.awareness.destroy();
+    await s.persistence.clearData().catch(() => {});
+    s.doc.destroy();
   }
 
   async pullNote(noteId: string): Promise<void> {
@@ -547,7 +625,9 @@ export class NotesSyncEngineV2 {
       if (!this.sessions.has(id)) flushes.push(this.flushHeadless(id));
     }
     await Promise.all(flushes);
-    for (const s of this.sessions.values()) void this.pull(s);
+    for (const s of this.sessions.values()) {
+      if (!this.drafts.has(s.noteId)) void this.pull(s);
+    }
     // A meta-only recovery (nothing doc-queued, replay drained) must also
     // clear the offline dot — flush() only heals it when it had work to push.
     if (this.status === "offline") {
@@ -618,6 +698,8 @@ export class NotesSyncEngineV2 {
   async destroy(): Promise<void> {
     this.destroyed = true;
     this.detachWindow?.();
+    // A draft nobody typed into dies with the page that opened it.
+    await Promise.all([...this.drafts].map((id) => this.discardDraft(id)));
     const ids = [...this.sessions.keys()];
     await Promise.all(ids.map((id) => this.closeNote(id)));
     this.statusListeners.clear();

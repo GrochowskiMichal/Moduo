@@ -1,6 +1,6 @@
 # Spec: Notes refresh (new core, new surface)
 
-> Status: **Draft — blocks NR-1 and NR-2 are ready** · Owner: mike (engineer-mode `/s1`, 2026-10-13; 20 product-code calls ratified by Mike) · Supersedes: [specs/notes.md](./notes.md) and [.design/notes/DESIGN_BRIEF.md](../.design/notes/DESIGN_BRIEF.md) wherever they disagree (§2 page anatomy, §2a sidebar, §3c `/mindmap`, quote-comments). Everything else in them (task-line semantics, `@` = people, publish, markdown at every door, offline) still holds · Module contract: [docs/moduo-module-contract.md](../docs/moduo-module-contract.md)
+> Status: **In build — NR-1 done, NR-2 built** · Owner: mike (engineer-mode `/s1`, 2026-10-13; 20 product-code calls ratified by Mike) · Supersedes: [specs/notes.md](./notes.md) and [.design/notes/DESIGN_BRIEF.md](../.design/notes/DESIGN_BRIEF.md) wherever they disagree (§2 page anatomy, §2a sidebar, §3c `/mindmap`, quote-comments). Everything else in them (task-line semantics, `@` = people, publish, markdown at every door, offline) still holds · Module contract: [docs/moduo-module-contract.md](../docs/moduo-module-contract.md)
 
 ## Scope
 

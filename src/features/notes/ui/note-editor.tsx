@@ -13,6 +13,7 @@
 
 import { registerCodeHighlighting } from "@lexical/code-prism";
 import { $createListItemNode, $createListNode, $isListItemNode } from "@lexical/list";
+import { AutoFocusPlugin } from "@lexical/react/LexicalAutoFocusPlugin";
 import { CheckListPlugin } from "@lexical/react/LexicalCheckListPlugin";
 import { LexicalCollaboration } from "@lexical/react/LexicalCollaborationContext";
 import { CollaborationPluginV2__EXPERIMENTAL } from "@lexical/react/LexicalCollaborationPlugin";
@@ -78,6 +79,8 @@ type Props = {
   seedWelcome?: boolean;
   /** Live module data + actions for page-rows and /page (NO-4). */
   bridge: NotesEditorBridge;
+  /** Put the caret in the note on open (a fresh capture, NR-2). */
+  autoFocus?: boolean;
 };
 
 function CodeHighlightingPlugin() {
@@ -316,6 +319,7 @@ export function NoteEditor({
   onTitleDerived,
   seedWelcome = false,
   bridge,
+  autoFocus = false,
 }: Props) {
   const { userId, runtime } = useAuth();
   const session = useMemo(() => engine.getOrCreateSession(noteId), [engine, noteId]);
@@ -461,6 +465,7 @@ export function NoteEditor({
             <SyncFromYjsPlugin doc={session.doc} />
             <TitleDerivationPlugin doc={session.doc} onTitleDerived={onTitleDerived} />
             <WelcomeSeedPlugin enabled={seedWelcome && editable} />
+            {autoFocus && editable ? <AutoFocusPlugin /> : null}
           </LexicalComposer>
         </LexicalCollaboration>
       </NotesEditorBridgeContext.Provider>

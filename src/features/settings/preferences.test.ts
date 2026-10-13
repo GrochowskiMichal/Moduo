@@ -36,6 +36,7 @@ describe("DEFAULT_PREFERENCES", () => {
         overdueTasks: false,
       },
       confirmBeforeQuit: false,
+      notesExperience: "classic",
     });
   });
 });
@@ -73,6 +74,8 @@ describe("sanitizePreferences", () => {
         overdueTasks: false,
       },
       confirmBeforeQuit: true,
+      // Absent → classic (the New Notes switch is off by default, NR-2).
+      notesExperience: "classic",
     });
   });
 
