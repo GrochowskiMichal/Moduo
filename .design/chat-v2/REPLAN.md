@@ -1,10 +1,12 @@
 # Chat v2 — the re-plan
 
-> **Status (2026-10-13): round 5 built and the gap audit landed; its questions sent as group L (CH38–CH72). Waiting on Maciej.**
+> **Status (2026-10-13, evening): every call is decided (CH1–CH72, group L "all ok, go ahead"). §9 steps 1, 2 and 4 are done; step 3 (the database list for Mike) is being written; next is the spec on Fable 5.1.**
 >
-> - **Decided:** everything through CH37 (see group K).
-> - **Open (group L):** CH38–CH72, one line each with a recommendation; "all ok" accepts them. CH72 is a permission to hand requirements to four Tasks v3 blocks now.
-> - **Technical, decided from the audit:** §6 #19 (typing only to the conversation's members) and #23–#28 (notification table, keyboard, MCP tools, v1 conversions, permissions table, the spec's readiness list).
+> - **Decided:** everything through CH72. CH24 stays parked; CH20/CH21 are facts.
+> - **Cross-module (§9 step 4), sent:** Tasks v3 got a "From the Chat re-plan" note in BUILD_ORDER's 🟠 box on the integration branch (CH72; `5b31a723`, `c99968c4`) and pointers on TV-H1 and TV-U16; Notes, Calendar and the hackathon plan got their sections of [proposals.md](./proposals.md) as messages to their sessions.
+> - **§9 step 3, in progress:** [research/round-3-database.md](./research/round-3-database.md): v1 piece by piece, the database change list, migrations per block, in-flight work, the spikes.
+> - **Next:** the spec `specs/chat-v2.md` (Maciej switches the session to Fable 5.1), then decision entries, the supersession banner on `specs/chat.md`, the validator, "Ready to execute".
+> - **Technical, decided from the audit:** §6 #19 (typing only to the conversation's members) and #23–#28.
 > - **Mike's ask:** the tech-stack decision blueprint landed → [research/tech-blueprint.md](./research/tech-blueprint.md), folded into §6 (#2, #3, #6, #7, #18, #19–#22). Open from it: **CH31** (the Supabase plan before the hackathon).
 > - **Research lanes** ([`research/`](./research/)): six landed and folded in (early-decisions audit, role journeys, competitor structure, hackathon, visual audit → §5, current state → §1.3 B and §6 #15–18). **Threads** (→ CH30) and **visual competitors** (→ CH29) landed.
 > - **Research data in the shared local database** (kept for round 2's live checks; remove when the plan is done): workspace **"Chat replan research"** `669be464-0b9a-4d84-8537-544ac04dba5f` (10 channels, 3,032 messages, one task) and a third local user `third@moduo.local`. Full ledger and a cleanup sketch: [current state](./research/current-state.md), last section. `dev@moduo.local`'s plan is back to `free` (checked).
@@ -1142,15 +1144,15 @@ The audit walked every role's week and every view in every state and found 28 ga
 ## 9. What happens next
 
 **The plan from here (2026-10-13), in order:**
-1. **Round 5, every surface and state in one prototype**, built on the decisions so far and my defaults for the details. Maciej skims it and flags only what's wrong:
+1. ✅ **Round 5, every surface and state in one prototype**, built on the decisions so far and my defaults for the details. Maciej skims it and flags only what's wrong:
    - Catch up; search results and ⌘K;
    - new conversation and Browse channels; a channel's Details and settings (managers, announcement switch, notification level, linking);
    - message actions, editing, a failed send, uploading, previews;
    - empty, loading, offline, very large, paused, archived;
    - the Home widgets; notification wording; the key map.
-2. **A gap audit by a separate agent:** every role's week (hackathon team, duo, dev team, PM, agency) against every view in every state; it reports only what's unaddressed, contradictory or too thin. Its findings become calls or fixes.
-3. **Round 3 for Mike:** the list of database changes (tables kept; columns, ops and indexes added; the v1 message conversion; the realtime setup), for his review.
-4. **The cross-module proposals, sent to their owners:** "Mentioned in" on items (CH11, Notes and Tasks); "Make a note" and "Move to a task's comments" (CH30d tidy-up, Notes and Tasks); a status in Tasks' assign picker (CH28d); Focus and quiet hours holding pings (TV-F6, TV-D14); chat's rows in the notification table and its push requirements (TV-D12); one reaction component on comments (CH16a, CH49; TV-U13 and Notes); the past dates in rule 41 (CH29c); decisions on Tasks' project overview (CH13, CH52); Focus shown to teammates (CH47, TV-F6); the grant (CH67, the hackathon plan and TX-9b).
+2. ✅ **A gap audit by a separate agent:** every role's week (hackathon team, duo, dev team, PM, agency) against every view in every state; it reports only what's unaddressed, contradictory or too thin. Its findings become calls or fixes.
+3. **Round 3 for Mike** *(in progress)*: the list of database changes (tables kept; columns, ops and indexes added; the v1 message conversion; the realtime setup), for his review.
+4. ✅ **The cross-module proposals, sent to their owners** ([proposals.md](./proposals.md)): "Mentioned in" on items (CH11, Notes and Tasks); "Make a note" and "Move to a task's comments" (CH30d tidy-up, Notes and Tasks); a status in Tasks' assign picker (CH28d); Focus and quiet hours holding pings (TV-F6, TV-D14); chat's rows in the notification table and its push requirements (TV-D12); one reaction component on comments (CH16a, CH49; TV-U13 and Notes); the past dates in rule 41 (CH29c); decisions on Tasks' project overview (CH13, CH52); Focus shown to teammates (CH47, TV-F6); the grant (CH67, the hackathon plan and TX-9b).
 5. **The spec, `specs/chat-v2.md`, on Fable 5.1** (Maciej switches the model for that step): acceptance criteria as one normal week per role; a test for each; the notification table and the key map; migrations named per block; the five spikes as the first block; the hackathon cut drawn as a line once the date is known.
 6. **Decision entries** in `docs/decisions/chat.md`, a supersession banner on `specs/chat.md`, a validator pass, fixes, "Ready to execute".
 
