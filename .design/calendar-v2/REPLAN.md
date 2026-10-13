@@ -2,7 +2,7 @@
 
 > **Status (2026-10-10): round 1 sent. Waiting on Maciej's answers to C1–C20.**
 >
-> - **Open calls:** C1–C20, all ❓. Load-bearing: ★ C1 (the ceiling), ★ C2 (the shape), ★ C3 (missed sessions), ★ C6 (connected calendars).
+> - **Open calls:** C1–C21, all ❓. Load-bearing: ★ C1 (the ceiling), ★ C2 (the shape), ★ C3 (missed sessions), ★ C6 (connected calendars). C21 (quiet hours) added 2026-10-13 from the Chat re-plan.
 > - **Research lanes:** all six landed and folded in ([`research/`](./research/)): current state (with a live look at the running app), visual audit, early-decisions audit, role journeys, connectivity, competitor structure.
 > - **Research data in the shared local database:** the current-state lane seeded a workspace for its live look; [research/current-state.md](./research/current-state.md) §8 lists every row to remove.
 > - **Prototype:** [`prototypes/structure.html`](./prototypes/structure.html), keys 1–9 switch frames, V cycles variants.
@@ -159,6 +159,7 @@ Tasks' root cause was "a solo-planner assumption stored as a column". Calendar's
 - **One busy-time answer per person:** events on the calendars they choose, expanded repeats, sessions (per-link switch), bookings. Used by the grid's Busy, "Find a time", booking links and MCP.
 - **Contacts (when rebuilt):** "last and next meeting with Anna", from guests matched to contacts (C7).
 - **Email (when rebuilt):** answering an invitation that arrives by email, and "an email thread → a meeting" by drag.
+- **Chat (decided in the Chat re-plan, CH14, 2026-10-13):** `/event` in a message creates an event linked to the conversation, a References link both ways. On Calendar's side that's the ordinary event card and preview; nothing new is needed.
 - **Time (Tasks 75):** a meeting can become a time entry (C20).
 - **Home:** Calendar's widgets (C15).
 
@@ -295,7 +296,7 @@ Round 3 reconciles in-flight work that touches Calendar: these blocks, collectiv
 | Status | Calls |
 | --- | --- |
 | ❓ Open, load-bearing | ★ C1, ★ C2, ★ C3, ★ C6 |
-| ❓ Open | C4, C5, C7–C20 |
+| ❓ Open | C4, C5, C7–C21 |
 
 **★ C1 · The ceiling: Calendar becomes a daily driver, with a line**
 - **The tension.** The goal is "run a normal week without Google or Apple Calendar". The ratified ceiling is "Morgen-lite", with a permanent anti-goal: "no rebuilt provider meeting stack (RSVP, time-zone matrices)". A daily driver needs things that anti-goal rules out; the role lane found no role can switch today for exactly that reason (§3).
@@ -336,7 +337,7 @@ Round 3 reconciles in-flight work that touches Calendar: these blocks, collectiv
   1. **the right panel starts folded below about 1200 px wide**: it's context, not the surface (Tasks 48b); clicking an event still opens its popover, and the bottom-bar toggle (or opening Details) brings the panel back;
   2. **Week shows weekdays only at that size** unless your weekend has something on it;
   3. **the left panel keeps only the mini-month and the calendar list**; creating a calendar or a set moves into the Calendars ⋯ menu;
-  4. in the toolbar, "synced 3m ago" moves into the refresh button's tooltip before the range label shortens.
+  4. in the toolbar, the sync status ("Updated 10:42 AM") moves into the refresh button's tooltip before the range label shortens.
   - My first draft folded the left panel first, to keep the Tasks list beside the week for planning. The audit's measurements and 48b win: planning a week is a bigger-window job, and the Tasks list is one toggle away.
 - *Recommend: yes, this shape.* Rejected: booking links in Settings (they're everyday objects for sales and freelancers, and their bookings live on the grid); People as a panel view (overlaying someone's time is about the grid, so it sits with the calendars).
 - *Outside the target roles?* Yes.
@@ -569,6 +570,15 @@ Round 3 reconciles in-flight work that touches Calendar: these blocks, collectiv
 
 ❓ OK?
 
+**C21 · Quiet hours and your own alerts** *(opening call; added 2026-10-13 from the Chat re-plan)*
+- **Where it comes from:** the Chat re-plan decided quiet hours (CH41): one setting in Time & region (TV-D14) that holds every module's notices during the hours you choose. It left one question to Calendar: do alerts you set for yourself break through?
+- **Recommend:** **alerts you set yourself still arrive during quiet hours**: an event's alert (C13), a task reminder (Tasks 24) and a cue (C12). You asked for that moment, often for something early (a 7:00 AM flight, a dentist before work). Everything that comes from other people (invitations, changes, replies, bookings, mentions) waits until quiet hours end, then arrives as one grouped bell entry.
+- *Recommend: yes.* Rejected: quiet hours silencing everything (the alert you set for an early meeting would arrive after it started); a per-alert "break through" switch (one more choice on every alert, for a rare case).
+- **Note:** this also decides it for task reminders, which Tasks §13 lists as arriving "at its time, on its own"; it keeps that promise.
+- *Outside the target roles?* Yes: everyone who sets a morning alarm.
+
+❓ OK?
+
 ### Consistency pass (round 1)
 
 Checked every call against the others, against Tasks v3, and against the decisions audit's contradiction list:
@@ -582,6 +592,7 @@ Checked every call against the others, against Tasks v3, and against the decisio
 8. **Repeats (C17).** One picker for tasks and events; events add "This and following" because a series is shared with other people's calendars (audit C9).
 9. **No red, no rotated text:** Month's day headers are horizontal, missed sessions are muted, not coloured.
 10. **Docs that still state reversed decisions** (audit C19: PRODUCT_BRIEF §6, ROADMAP lines 49 and 52, BRIEF §3–4, DESIGN_BRIEF §1/§8/§11, the MCP manifest's "read-only" line) get edited when the spec lands, with a supersession banner on the old spec.
+11. **Past dates and times follow the app-wide grammar** (Chat re-plan CH29c, rule 41): "Today · Yesterday · Mon · Oct 9 · Oct 9, 2025", never "2 hours ago", for any history or "last edited" line. In Calendar that covers the activity feed, "last met" on a contact card and the sync status ("Updated 10:42 AM", not "synced 3 min ago"); §5's date-grammar fix follows it.
 
 ---
 
