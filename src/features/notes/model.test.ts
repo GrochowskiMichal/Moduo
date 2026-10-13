@@ -49,6 +49,8 @@ describe("noteRowToModel", () => {
       deletedAt: null,
       shareMode: "custom",
       workspaceShared: false,
+      inInbox: null,
+      fullWidth: false,
     });
   });
 
@@ -74,6 +76,16 @@ describe("noteRowToModel", () => {
     expect(n.isArchived).toBe(true);
     expect(n.deletedAt).toBeNull();
     expect(n.title).toBe("Old note");
+  });
+
+  it("maps the NR-1 columns, and leaves inInbox unknown before they deploy", () => {
+    const filed = noteRowToModel({ ...FULL_ROW, in_inbox: false, full_width: true });
+    expect(filed.inInbox).toBe(false);
+    expect(filed.fullWidth).toBe(true);
+    expect(noteRowToModel({ ...FULL_ROW, in_inbox: true }).inInbox).toBe(true);
+    const undeployed = noteRowToModel(FULL_ROW);
+    expect(undeployed.inInbox).toBeNull();
+    expect(undeployed.fullWidth).toBe(false);
   });
 
   it("maps a trashed row's deletedAt", () => {

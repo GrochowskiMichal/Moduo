@@ -315,6 +315,9 @@ export type ImportRow = {
   docStateB64: string | null;
   bodyText: string;
   bodyMd: string;
+  /** Always `false`: importing files the tree (NR-1) — imported roots land in
+   * Pages, not in the Inbox with fresh captures. */
+  inInbox: false;
 };
 
 /**
@@ -358,6 +361,7 @@ export function buildImportRows(
       // and the MCP connector. The doc carries the rich version.
       bodyText: mdToPlainText(n.md),
       bodyMd: n.md,
+      inInbox: false,
     };
   });
 }

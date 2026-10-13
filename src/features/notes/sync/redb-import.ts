@@ -127,11 +127,20 @@ export async function runRedbImportOnce(
       rows.push(legacyNoteToImportRow(meta, snapshotB64, body));
     }
 
-    const res = await runtime.notesV2.importNotes({ workspaceId, rows });
+    const res = await runtime.notesV2.importNotes({ workspaceId, rows: fileLegacyRows(rows) });
     window.localStorage.setItem(flagKey(workspaceId), "done");
     return { ...res, total: rows.length };
   } catch (e) {
     console.warn("[notes] redb import deferred (will retry next load)", e);
     return null;
   }
+}
+
+/** NR-1: legacy notes keep the section they showed in classic Notes. A root
+ * with children was an organized page (→ Pages); a childless root was a loose
+ * capture and is left to the server's default (→ Inbox). Same rule as the
+ * migration's backfill. */
+export function fileLegacyRows(rows: NotesImportRow[]): NotesImportRow[] {
+  const parents = new Set(rows.map((r) => r.parentId).filter(Boolean));
+  return rows.map((r) => (!r.parentId && r.id && parents.has(r.id) ? { ...r, inInbox: false } : r));
 }

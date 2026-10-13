@@ -156,6 +156,23 @@ _Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
 - **`tokens.css` / `global.css`** — DS-1, DS-2.
 - **Migrations** — D1, D2, D3, F2, F4, U6, U8, AT-1, all with distinct timestamps. Never two sessions altering `tasks` at once: D1, D2 and D3 are sequential for that reason.
 
+## Notes refresh — new core, new surface · [`specs/notes-refresh.md`](./notes-refresh.md)
+
+> **Planned 2026-10-13 (`/s1`, engineer mode, Mike).** Keeps Lexical + the Yjs/`note_updates` model; rebuilds the surface and editor core behind a per-user "New Notes" switch, then flips (NR-12). NR-1 and NR-2 are DoR-ready; NR-7 has no deps and can run beside NR-1. NR-9 waits for AT-1 to reach `develop` (it is held on `maciej`) and is not a flip dependency.
+
+- [x] **NR-1 — Organizing data: stored Inbox, per-user Favorites, full width** · deps: — · lane notes-data · Tier 2 (migration) · ✅ done 2026-10-13 (#354); migration applied to prod 2026-10-13 (version 20261013120000)
+- [ ] **NR-7 — Secure live channel + named presence** · deps: — · lane notes-data · Tier 2 (`realtime.messages` policy)
+- [ ] **NR-2 — New Notes shell + sidebar, behind the switch** · deps: NR-1 · lane notes-ui
+- [ ] **NR-3 — Editor core: schema/view split, one markdown converter, honest provider, meta line + Linked-from footer** · deps: NR-2 · lane notes-editor
+- [ ] **NR-4 — Writing UX: quiet block handles, unified menus, `[[` links, ⌘K link dialog, mindmap drop** · deps: NR-3 · lane notes-editor
+- [ ] **NR-5 — Task lines in the document (no overlay), inline due/schedule/assignee** · deps: NR-3 · lane notes-editor
+- [ ] **NR-6 — Agent writes land live (MCP CRDT path, attribution, Undo)** · deps: NR-3 · lane notes-data · Tier 2 (migration, `moduo-mcp`, contracts) · closes MCP-1's notes half
+- [ ] **NR-8 — Comments anchored to text** · deps: NR-4 · lane notes-editor · Tier 2 (migration on `comments`)
+- [ ] **NR-10 — ⌘K searches everything** · deps: NR-2 · lane notes-ui
+- [ ] **NR-11 — Import hardening (trashed re-import, size cap, honest progress, >1000 notes)** · deps: NR-3 · lane notes-data
+- [ ] **NR-12 — Flip to New Notes + delete classic** · deps: NR-4, NR-5, NR-6, NR-7, NR-8, NR-10, NR-11 · lane notes-ui
+- [ ] **NR-9 — Images & files in notes** · deps: NR-3, AT-1 merged into develop · lane notes-editor · Tier 2 (migration)
+
 ## Brand system · [`.design/brand/BRAND_BRIEF.md`](../.design/brand/BRAND_BRIEF.md) (§16)
 
 > Planned 2026-10-08 (PR #274). Maciej makes every brand call; agents never edit `brand/masters/`. **BRAND-1 supplies TX-1's logo PNGs** (`public/email/`), so TX-1 takes them instead of rasterising its own. BRAND-0 is design work by Maciej; every later block re-exports when it lands.
