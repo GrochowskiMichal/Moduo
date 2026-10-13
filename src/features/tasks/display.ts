@@ -98,21 +98,29 @@ export const TASKS_DISPLAY_DEFAULTS: TasksDisplay = {
  * - a project groups by Section (TV-U10): a plain list until it has
  *   sections, then a group per section;
  * - the Inbox and the Queue don't group.
+ *
+ * `rows` is the row preset a view starts with: the person's role's (TV-U17;
+ * developers start on Detailed), Standard otherwise.
  */
-export function tasksDisplayDefaults(scope: string): TasksDisplay {
-  if (scope === "mine") return { ...TASKS_DISPLAY_DEFAULTS, group: "status" };
+export function tasksDisplayDefaults(scope: string, rows: RowPreset = "standard"): TasksDisplay {
+  const base = { ...TASKS_DISPLAY_DEFAULTS, rows };
+  if (scope === "mine") return { ...base, group: "status" };
   // Upcoming (TV-U15) groups by its days and orders its own rows; dated
   // subtasks show flat, with "↳ Parent" (research §6).
   if (scope === "upcoming") {
-    return { ...TASKS_DISPLAY_DEFAULTS, group: "date", order: "manual", subtasks: "flat" };
+    return { ...base, group: "date", order: "manual", subtasks: "flat" };
   }
-  if (groupsByBucket(scope)) return { ...TASKS_DISPLAY_DEFAULTS, group: "bucket" };
-  if (isProjectScope(scope)) return { ...TASKS_DISPLAY_DEFAULTS, group: "section" };
-  return { ...TASKS_DISPLAY_DEFAULTS };
+  if (groupsByBucket(scope)) return { ...base, group: "bucket" };
+  if (isProjectScope(scope)) return { ...base, group: "section" };
+  return base;
 }
 
-export function tasksViewDefaults(scope: string, layout?: TaskLayout): TasksViewPrefs {
-  const display = tasksDisplayDefaults(scope);
+export function tasksViewDefaults(
+  scope: string,
+  layout?: TaskLayout,
+  rows?: RowPreset,
+): TasksViewPrefs {
+  const display = tasksDisplayDefaults(scope, rows);
   return { ...display, layout: layout ?? display.layout, filters: [] };
 }
 

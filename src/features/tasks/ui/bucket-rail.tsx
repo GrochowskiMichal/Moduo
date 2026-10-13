@@ -155,6 +155,8 @@ type Props = {
     onSaveAsTemplate: (bucket: Bucket) => void;
     onNewFromTemplate: () => void;
   };
+  /** The hairline's ⋯ → "What's in Tasks" reopens Tasks' welcome (TV-U17). */
+  onOpenWelcome?: () => void;
 
   /** The sidebar's <nav>, for the page to hand focus back to it (`focusNavRow`). */
   navRef?: RefObject<HTMLElement | null>;
@@ -230,6 +232,7 @@ export function BucketRail({
   trashCount,
   wontDoCount = 0,
   templates,
+  onOpenWelcome,
   navRef,
   dropAccepts,
 }: Props) {
@@ -424,6 +427,7 @@ export function BucketRail({
             onNewFromTemplate={templates?.onNewFromTemplate}
             onOpenTemplates={templates ? () => onSelect(TEMPLATES_SELECTION) : undefined}
             templatesCurrent={selection === TEMPLATES_SELECTION}
+            onOpenWelcome={onOpenWelcome}
           />
 
           {/* ── Shared ──────────────────────────────────────────────────── */}
@@ -579,6 +583,7 @@ function SidebarHairline({
   onNewFromTemplate,
   onOpenTemplates,
   templatesCurrent,
+  onOpenWelcome,
 }: {
   canEdit: boolean;
   hidden: ReadonlySet<TasksSidebarHideable>;
@@ -598,6 +603,7 @@ function SidebarHairline({
   onNewFromTemplate?: () => void;
   onOpenTemplates?: () => void;
   templatesCurrent: boolean;
+  onOpenWelcome?: () => void;
 }) {
   const rows: TasksSidebarHideable[] = showMine
     ? ["focus", "upcoming", "mine", "all"]
@@ -686,6 +692,15 @@ function SidebarHairline({
             >
               Templates
             </DropdownMenuItem>
+          ) : null}
+          {onOpenWelcome ? (
+            <>
+              <DropdownMenuSeparator />
+              {/* Opens a dialog: wait for the menu to close (gotchas/ui.md). */}
+              <DropdownMenuItem onSelect={afterClose(onOpenWelcome)}>
+                What’s in Tasks
+              </DropdownMenuItem>
+            </>
           ) : null}
         </DropdownMenuContent>
       </DropdownMenu>
