@@ -49,7 +49,8 @@ export function TemplatesView({
   const tasks = templates.filter((t) => t.kind === "task");
   const row = (t: Template) => {
     const mine = t.ownerId === currentUserId;
-    const canShare = mine && canEdit && t.shareable;
+    // The server checks Full on the sources again when you share (D15-5).
+    const canShare = mine && canEdit;
     const canStopSharing = t.shared && (mine || isAdmin);
     const canDelete = mine || (t.shared && isAdmin);
     return (

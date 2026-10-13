@@ -32,7 +32,7 @@
 ## Sharing
 - [ ] **Do:** Templates → ⋯ → **Share with the workspace…** on a template of a project you own → **Expect:** "Shared" badge; the teammate sees it, opens it read-only and can Use… it; it has no ⋯ for them. _(web)_
 - [ ] **Do:** save a template from a private project you own, then share it → **Expect:** "Share “…”? This includes n tasks from a private project…" first. _(web)_
-- [ ] **Do:** as a member with edit (not Full) access to a project, save it as a template and try to share it → **Expect:** no Share item (or, if forced, "Only someone with full access to what this template was saved from can share it."). _(web)_
+- [ ] **Do:** as a member with edit (not Full) access to a project, save it as a template and try to share it → **Expect:** Share with the workspace… answers "Only someone with full access to what this template was saved from can share it." and nothing is shared; once they are given Full on the project, sharing works. _(web)_
 - [ ] **Do:** as a workspace admin, a teammate's shared template → **Expect:** Stop sharing and Delete template work; Edit doesn't. _(web)_
 - [ ] **Do:** Delete template → **Undo** in the toast → **Expect:** it's back in the list. _(web)_
 
