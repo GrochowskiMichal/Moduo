@@ -36,27 +36,39 @@ $$;
 
 -- ── 1. Stored Inbox ──────────────────────────────────────────────────────────
 
-ALTER TABLE public.notes ADD COLUMN IF NOT EXISTS in_inbox boolean NOT NULL DEFAULT false;
+-- The backfill runs only when the column is first added, so a manual re-run
+-- can't push notes someone filed to Pages back into the Inbox.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = 'notes' AND column_name = 'in_inbox'
+  ) THEN
+    ALTER TABLE public.notes ADD COLUMN in_inbox boolean NOT NULL DEFAULT false;
+
+    -- Today's derived Inbox: a live, unarchived ROOT with no live, unarchived
+    -- children. No updated_at bump — a backfill is not an edit (Recents/Home
+    -- order by it). Runs with no actor, so perm_enforce_write lets it through.
+    UPDATE public.notes n
+       SET in_inbox = true
+     WHERE n.parent_id IS NULL
+       AND n.deleted_at IS NULL
+       AND NOT coalesce(n.is_archived, false)
+       AND NOT EXISTS (
+         SELECT 1 FROM public.notes c
+          WHERE c.parent_id = n.id
+            AND c.deleted_at IS NULL
+            AND NOT coalesce(c.is_archived, false));
+
+    -- No default from here on: an INSERT that omits the column arrives NULL
+    -- in the BEFORE trigger, which decides (NOT NULL is checked after BEFORE
+    -- triggers run).
+    ALTER TABLE public.notes ALTER COLUMN in_inbox DROP DEFAULT;
+  END IF;
+END;
+$$;
+
 ALTER TABLE public.notes ADD COLUMN IF NOT EXISTS full_width boolean NOT NULL DEFAULT false;
-
--- Today's derived Inbox: a live, unarchived ROOT with no live, unarchived
--- children. No updated_at bump — a backfill is not an edit (Recents/Home
--- order by it). Runs with no actor, so perm_enforce_write lets it through.
-UPDATE public.notes n
-   SET in_inbox = true
- WHERE n.parent_id IS NULL
-   AND n.deleted_at IS NULL
-   AND NOT coalesce(n.is_archived, false)
-   AND NOT EXISTS (
-     SELECT 1 FROM public.notes c
-      WHERE c.parent_id = n.id
-        AND c.deleted_at IS NULL
-        AND NOT coalesce(c.is_archived, false));
-
--- No default from here on: an INSERT that omits the column arrives NULL in
--- the BEFORE trigger, which decides (NOT NULL is checked after BEFORE
--- triggers run).
-ALTER TABLE public.notes ALTER COLUMN in_inbox DROP DEFAULT;
 
 ALTER TABLE public.notes DROP CONSTRAINT IF EXISTS notes_in_inbox_roots_only;
 ALTER TABLE public.notes
@@ -87,15 +99,37 @@ CREATE TRIGGER notes_in_inbox_default
 
 -- ── 2. Per-user favorites ────────────────────────────────────────────────────
 
-CREATE TABLE IF NOT EXISTS public.note_favorites (
-  workspace_id uuid NOT NULL REFERENCES public.workspaces (id) ON DELETE CASCADE,
-  -- Account erasure: deleting the auth user cascades their favorites.
-  user_id      uuid NOT NULL REFERENCES auth.users (id) ON DELETE CASCADE,
-  note_id      uuid NOT NULL REFERENCES public.notes (id) ON DELETE CASCADE,
-  position     text NOT NULL DEFAULT '',
-  created_at   timestamptz NOT NULL DEFAULT now(),
-  PRIMARY KEY (user_id, note_id)
-);
+-- Created and backfilled in one first-run-only block: a manual re-run can't
+-- bring back a favorite someone removed.
+DO $$
+BEGIN
+  IF to_regclass('public.note_favorites') IS NOT NULL THEN
+    RETURN;
+  END IF;
+
+  CREATE TABLE public.note_favorites (
+    workspace_id uuid NOT NULL REFERENCES public.workspaces (id) ON DELETE CASCADE,
+    -- Account erasure: deleting the auth user cascades their favorites.
+    user_id      uuid NOT NULL REFERENCES auth.users (id) ON DELETE CASCADE,
+    note_id      uuid NOT NULL REFERENCES public.notes (id) ON DELETE CASCADE,
+    position     text NOT NULL DEFAULT '',
+    created_at   timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (user_id, note_id)
+  );
+
+  -- Workspace pins → each member's favorite, for members who can open the note.
+  INSERT INTO public.note_favorites (workspace_id, user_id, note_id, position, created_at)
+  SELECT n.workspace_id, m.user_id, n.id, coalesce(n.position, ''), now()
+    FROM public.notes n
+    JOIN public.workspace_members m ON m.workspace_id = n.workspace_id
+   WHERE coalesce(n.is_pinned, false)
+     AND n.deleted_at IS NULL
+     AND m.user_id IS NOT NULL
+     AND public.can_access('note', n.id, 'view', m.user_id)
+  ON CONFLICT (user_id, note_id) DO NOTHING;
+END;
+$$;
+
 CREATE INDEX IF NOT EXISTS note_favorites_user_ws_idx
   ON public.note_favorites (user_id, workspace_id);
 CREATE INDEX IF NOT EXISTS note_favorites_note_idx
@@ -115,17 +149,6 @@ REVOKE ALL ON public.note_favorites FROM PUBLIC, anon;
 REVOKE INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON public.note_favorites FROM authenticated;
 GRANT SELECT ON public.note_favorites TO authenticated;
 GRANT ALL ON public.note_favorites TO service_role;
-
--- Workspace pins → each member's favorite, for members who can open the note.
-INSERT INTO public.note_favorites (workspace_id, user_id, note_id, position, created_at)
-SELECT n.workspace_id, m.user_id, n.id, coalesce(n.position, ''), now()
-  FROM public.notes n
-  JOIN public.workspace_members m ON m.workspace_id = n.workspace_id
- WHERE coalesce(n.is_pinned, false)
-   AND n.deleted_at IS NULL
-   AND m.user_id IS NOT NULL
-   AND public.can_access('note', n.id, 'view', m.user_id)
-ON CONFLICT (user_id, note_id) DO NOTHING;
 
 -- Someone who leaves a workspace takes their favorites with them (RLS would
 -- only hide the rows, and they'd resurface on a re-invite). Account erasure

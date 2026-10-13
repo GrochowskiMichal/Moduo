@@ -1,0 +1,353 @@
+# NR-1 replica rehearsal output — 2026-10-13T19:18Z
+# server: PostgreSQL 17.11 (Homebrew) on aarch64-apple-darwin25.6.0, compiled by Apple clang version 21.0.0 (clang-2100.1.1.101), 64-bit
+# migration sha256: 27d54d8d528cf1a5439bb44f0b6aa5a7e6031bb06e6f2af8acda23d993c83697  (supabase/migrations/20261013120000_notes_refresh_organize.sql, working tree)
+# setup sha256:     82222769374bf09b9f3b2f41e2474b5a5b44ca0cd05e13cffb9ae5cc8fb2dd3b
+# probe sha256:     bf7097c0c78568b6f2f83e03ee1803f6045d8414823fcec4acdf8494de260a2d
+
+## build: DROP/CREATE DATABASE replica; psql -v ON_ERROR_STOP=1 -f replica-setup.sql
+setup exit=0
+
+## seed as built (before the migration)
+1 P shared root              parent=- custom pinned=false archived=false trashed=false grants=workspace:edit
+2 K child by B               parent=1 inherit pinned=false archived=false trashed=false grants=none
+3 G grandchild by A          parent=2 inherit pinned=false archived=false trashed=false grants=none
+4 L loose root               parent=- custom pinned=false archived=false trashed=false grants=workspace:edit
+5 PIN pinned root            parent=- custom pinned=true archived=false trashed=false grants=workspace:edit
+6 ARC archived root          parent=- custom pinned=false archived=true trashed=false grants=workspace:edit
+7 TR root w/ trashed child   parent=- custom pinned=false archived=false trashed=false grants=workspace:edit
+8 TRC trashed child          parent=7 inherit pinned=false archived=false trashed=true grants=none
+9 PRV private root by C      parent=- custom pinned=true archived=false trashed=false grants=none
+
+## apply #1: psql -v ON_ERROR_STOP=1 -1 -f supabase/migrations/20261013120000_notes_refresh_organize.sql
+SET
+DO
+ALTER TABLE
+ALTER TABLE
+UPDATE 4
+ALTER TABLE
+psql:supabase/migrations/20261013120000_notes_refresh_organize.sql:61: NOTICE:  constraint "notes_in_inbox_roots_only" of relation "notes" does not exist, skipping
+ALTER TABLE
+ALTER TABLE
+CREATE FUNCTION
+REVOKE
+psql:supabase/migrations/20261013120000_notes_refresh_organize.sql:83: NOTICE:  trigger "notes_in_inbox_default" for relation "public.notes" does not exist, skipping
+DROP TRIGGER
+CREATE TRIGGER
+CREATE TABLE
+CREATE INDEX
+CREATE INDEX
+COMMENT
+ALTER TABLE
+psql:supabase/migrations/20261013120000_notes_refresh_organize.sql:107: NOTICE:  policy "note_favorites_own_read" for relation "public.note_favorites" does not exist, skipping
+DROP POLICY
+CREATE POLICY
+REVOKE
+REVOKE
+GRANT
+GRANT
+INSERT 0 4
+CREATE FUNCTION
+REVOKE
+psql:supabase/migrations/20261013120000_notes_refresh_organize.sql:147: NOTICE:  trigger "note_favorites_member_removed" for relation "public.workspace_members" does not exist, skipping
+DROP TRIGGER
+CREATE TRIGGER
+CREATE FUNCTION
+REVOKE
+GRANT
+CREATE FUNCTION
+REVOKE
+GRANT
+CREATE FUNCTION
+REVOKE
+GRANT
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+apply #1 exit=0
+
+## probe: psql -X -f replica-probe.sql
+Null display is "∅".
+Output format is unaligned.
+SET
+CREATE FUNCTION
+CREATE FUNCTION
+
+==== 1. Schema after apply #1
+PASS  notes.in_inbox NOT NULL, no default
+PASS  notes.full_width NOT NULL default false
+PASS  CHECK notes_in_inbox_roots_only present
+PASS  trigger notes_in_inbox_default BEFORE INSERT OR UPDATE OF parent_id
+PASS  RLS enabled on note_favorites
+
+==== 2. Backfill: in_inbox = live, unarchived root with no live, unarchived child; updated_at untouched
+PASS  P shared root              in_inbox=f want=f updated_at=2026-01-01
+PASS  K child by B               in_inbox=f want=f updated_at=2026-01-01
+PASS  G grandchild by A          in_inbox=f want=f updated_at=2026-01-01
+PASS  L loose root               in_inbox=t want=t updated_at=2026-01-01
+PASS  PIN pinned root            in_inbox=t want=t updated_at=2026-01-01
+PASS  ARC archived root          in_inbox=f want=f updated_at=2026-01-01
+PASS  TR root w/ trashed child   in_inbox=t want=t updated_at=2026-01-01
+PASS  TRC trashed child          in_inbox=f want=f updated_at=2026-01-01
+PASS  PRV private root by C      in_inbox=t want=t updated_at=2026-01-01
+
+==== 3. Pins -> favorites for every member who can view (PIN: A,B,C; private PRV: C only)
+  fav 1 -> PIN pinned root pos=a3
+  fav 2 -> PIN pinned root pos=a3
+  fav 3 -> PIN pinned root pos=a3
+  fav 3 -> PRV private root by C pos=a6
+PASS  pins backfilled exactly {A:PIN, B:PIN, C:PIN, C:PRV}
+
+==== 4. notes_op_create (classic create, no in_inbox) as A
+SET
+SET
+PASS  create root -> in_inbox=t share_mode=custom
+PASS  create child under P -> in_inbox=f share_mode=inherit
+PASS  create child under inbox root N1 -> child in_inbox=f
+PASS  parent N1 stays in Inbox after gaining a child (in_inbox=t)
+PASS  notes_op_move inbox root L under P clears it (in_inbox=f)
+PASS  notes_op_move L back to root keeps it in Pages (in_inbox=f)
+
+==== 5. THE SHARING CASE: C (did not create K; edit only via the workspace grant on P) files K into the Inbox
+RESET
+-- control: what plain re-rooting (prod notes_op_move to root, no freeze) would do, rolled back
+BEGIN
+SET
+SET
+control moved K to root as inherit
+  control after plain re-root: A view K=f view G=t
+  control after plain re-root: B view K=t view G=t
+  control after plain re-root: C view K=f view G=f
+ROLLBACK
+SET
+SET
+  before: A view K=t edit K=t view G=t
+  before: B view K=t edit K=t view G=t
+  before: C view K=t edit K=t view G=t
+PASS  notes_op_file(K, true) as C -> parent= in_inbox=t share_mode=custom created_by=B
+  grant on K: member 1 full
+  grant on K: workspace - edit
+PASS  after: A view K=t edit K=t | view G=t edit G=t
+PASS  after: B view K=t edit K=t | view G=t edit G=t
+PASS  after: C view K=t edit K=t | view G=t edit G=t
+PASS  A (creator of ancestor P) keeps full on K
+PASS  C keeps exactly edit on K (not full)
+PASS  K.workspace_shared synced true
+PASS  G still a child of K, inherit
+PASS  activity notes.file to=inbox from_parent=P, actor C
+
+==== 6. notes_op_file(K, false) -> Pages; no-op file writes no activity
+PASS  file K to Pages -> parent= in_inbox=f
+PASS  no-op file(K, false) returns the note
+PASS  no-op wrote no activity (notes.file rows 2 -> 2)
+PASS  two notes.file rows total (inbox, pages)
+PASS  file with NULL target refused -> Say whether the note goes to the Inbox or to Pages.
+PASS  file a trashed note refused -> This note is in the trash.
+SET
+PASS  module perm view cannot file -> You do not have edit access to notes in this workspace.
+RESET
+
+==== 7. CHECK + trigger
+RESET
+RESET
+PASS  CHECK rejects in_inbox=true on a child -> new row for relation "notes" violates check constraint "notes_in_inbox_roots_only"
+INSERT 0 1
+PASS  INSERT child with in_inbox=true is forced false by the trigger
+INSERT 0 1
+PASS  raw INSERT root omitting in_inbox -> true
+INSERT 0 1
+PASS  raw INSERT root in_inbox=false stays false
+UPDATE 1
+PASS  raw UPDATE parent_id on an inbox root clears in_inbox
+
+==== 8. notes_op_import as A (per-row inInbox)
+SET
+SET
+PASS  import returns imported=3 skipped=0
+PASS  import mcp root (no inInbox)  in_inbox=t want=t created_by=A
+PASS  import wizard root            in_inbox=f want=f created_by=A
+PASS  import wizard child           in_inbox=f want=f created_by=A
+PASS  re-import of existing ids skips
+
+==== 9. notes_op_duplicate keeps the section; attributed to the actor
+PASS  A dup P (Pages root) -> in_inbox=f parent= created_by=A title=P shared root (copy)
+PASS  duplicate copied the un-compacted update tail
+PASS  A dup PIN (Inbox root, B's) -> in_inbox=t created_by=A
+PASS  A dup G (child) -> parent=K in_inbox=f share_mode=inherit
+SET
+PASS  C dup own private PRV -> works, in_inbox=t created_by=C
+SET
+PASS  B dup C's private PRV refused -> Note not found in this workspace.
+
+==== 10. notes_op_set_meta fullWidth
+SET
+PASS  fullWidth true -> full_width=t
+PASS  icon-only patch keeps full_width=t, icon=x
+PASS  fullWidth false -> full_width=f
+PASS  isPinned still works -> is_pinned=t
+
+==== 11. notes_op_set_favorite
+
+
+PASS  A appends L then G after PIN: PIN pinned root@a3, L loose root@a3V, G grandchild by A@a3VV
+
+
+PASS  reorder G to front; re-adding L keeps its spot: G grandchild by A@0, PIN pinned root@a3, L loose root@a3V
+
+
+PASS  remove L (twice, idempotent)
+PASS  set_favorite wrote no activity row
+PASS  trashed note refused -> Note not found in this workspace.
+SET
+SET
+
+PASS  viewer (module perm view) can favorite P
+SET
+PASS  module perm none refused -> You do not have access to notes in this workspace.
+RESET
+PASS  B cannot favorite C's private PRV -> You do not have access to this note.
+RESET
+PASS  no actor refused -> Sign in to keep favorites.
+
+==== 12. RLS + table privileges on note_favorites
+RESET
+SET
+SET
+PASS  A sees only own favorites (2 of own 2)
+SET
+PASS  B sees only own favorites (2 of own 2)
+SET
+PASS  C sees only own favorites (2 of own 2)
+RESET
+PASS  no actor sees nothing
+RESET
+-- B makes PIN private: A and C keep their favorite rows but RLS hides them
+DELETE 1
+SET
+SET
+PASS  A no longer sees the PIN favorite once PIN is private
+SET
+PASS  B (creator) still sees the PIN favorite
+RESET
+INSERT 0 1
+SET
+SET
+PASS  authenticated direct INSERT refused -> permission denied for table note_favorites
+PASS  authenticated UPDATE refused -> permission denied for table note_favorites
+PASS  authenticated DELETE refused -> permission denied for table note_favorites
+PASS  authenticated TRUNCATE refused -> permission denied for table note_favorites
+SET
+PASS  anon SELECT refused -> permission denied for table note_favorites
+RESET
+PASS  authenticated SELECT=t INSERT=f UPDATE=f DELETE=f TRUNCATE=f REFERENCES=f TRIGGER=f
+PASS  anon          SELECT=f INSERT=f UPDATE=f DELETE=f TRUNCATE=f REFERENCES=f TRIGGER=f
+PASS  service_role  SELECT=t INSERT=t UPDATE=t DELETE=t TRUNCATE=t REFERENCES=t TRIGGER=t
+  note_favorites relacl = {postgres=arwdDxtm/postgres,authenticated=rm/postgres,service_role=arwdDxtm/postgres}
+
+==== 13. Function grants
+PASS  public.notes_op_file(uuid,uuid,boolean,text)            anon          EXECUTE=f
+PASS  public.notes_op_set_favorite(uuid,uuid,boolean,text)    anon          EXECUTE=f
+PASS  public.notes_op_file(uuid,uuid,boolean,text)            authenticated EXECUTE=t
+PASS  public.notes_op_set_favorite(uuid,uuid,boolean,text)    authenticated EXECUTE=t
+PASS  public.notes_op_file(uuid,uuid,boolean,text)            service_role  EXECUTE=t
+PASS  public.notes_op_set_favorite(uuid,uuid,boolean,text)    service_role  EXECUTE=t
+PASS  public.notes__keep_access_on_reroot(uuid,uuid)          authenticated EXECUTE=f
+PASS  public.notes__keep_access_on_reroot(uuid,uuid)          anon          EXECUTE=f
+PASS  public.notes__keep_access_on_reroot(uuid,uuid)          service_role  EXECUTE=t
+PASS  public.notes_in_inbox_default()                         authenticated EXECUTE=f
+PASS  public.notes_in_inbox_default()                         anon          EXECUTE=f
+PASS  public.note_favorites__member_removed()                 authenticated EXECUTE=f
+PASS  public.note_favorites__member_removed()                 anon          EXECUTE=f
+PASS  public.notes_op_set_meta(uuid,uuid,jsonb)               anon          EXECUTE=f
+PASS  public.notes_op_set_meta(uuid,uuid,jsonb)               authenticated EXECUTE=t
+PASS  public.notes_op_duplicate(uuid,uuid,text)               anon          EXECUTE=f
+PASS  public.notes_op_duplicate(uuid,uuid,text)               authenticated EXECUTE=t
+PASS  public.notes_op_import(uuid,jsonb)                      anon          EXECUTE=f
+PASS  public.notes_op_import(uuid,jsonb)                      authenticated EXECUTE=t
+SET
+PASS  authenticated calling notes__keep_access_on_reroot refused -> permission denied for function notes__keep_access_on_reroot
+RESET
+
+==== 14. Member removal and account erasure
+RESET
+RESET
+PASS  B has 2 favorites in W before removal
+DELETE 1
+PASS  B's favorites in W gone after leaving
+PASS  C has 2 favorites before account deletion
+DELETE 1
+PASS  C's favorites gone after auth.users delete
+PASS  A's favorites untouched
+
+==== 15. Re-apply the migration (single transaction)
+SET
+SET
+
+RESET
+RESET
+SELECT 22
+SELECT 1
+BEGIN
+SET
+DO
+ALTER TABLE
+ALTER TABLE
+UPDATE 9
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+CREATE FUNCTION
+REVOKE
+DROP TRIGGER
+CREATE TRIGGER
+CREATE TABLE
+CREATE INDEX
+CREATE INDEX
+COMMENT
+ALTER TABLE
+DROP POLICY
+CREATE POLICY
+REVOKE
+REVOKE
+GRANT
+GRANT
+INSERT 0 2
+CREATE FUNCTION
+REVOKE
+DROP TRIGGER
+CREATE TRIGGER
+CREATE FUNCTION
+REVOKE
+GRANT
+CREATE FUNCTION
+REVOKE
+GRANT
+CREATE FUNCTION
+REVOKE
+GRANT
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+INSERT 0 1
+COMMIT
+PASS  re-apply committed without error
+PASS  re-apply: still exactly one notes_in_inbox_default trigger and one member trigger
+-- data drift caused by re-running (informational: a migration runs once)
+  in_inbox changed by re-run: L loose root f -> t
+  in_inbox changed by re-run: P shared root (copy) f -> t
+  in_inbox changed by re-run: raw root, false f -> t
+  favorite re-added by re-run: user 1 note PIN pinned root
+  favorite re-added by re-run: user 1 note L loose root
+PASS  re-run left updated_at untouched
+
+==== Summary
+(count PASS/FAIL lines in this output)
+
+## tally
+PASS=108 FAIL=0 (no FAIL lines; every psql statement above succeeded)
+
+## re-run after the first-run-only backfill change — 2026-10-13T19:20Z
+# migration sha256: 94877bb6e60d5168b279904f8894ecfabdee093066394231a391618d62d5cd3c
+# fresh replica → apply once → replica-probe.sql: 108 PASS lines, 0 FAIL (same cases as above)
+# then: every Inbox root manually filed to Pages + every favorite deleted → re-apply the migration
+#   Inbox roots after re-apply: 0 (backfill did not re-run)
+#   favorites after re-apply:   0 (pin backfill did not re-run)
