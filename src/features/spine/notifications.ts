@@ -223,8 +223,17 @@ export function notificationSubject(
   }
   const title = latest.payload.title;
   if (typeof title === "string" && title.trim()) return title.trim();
-  const label = group.targetId ? labels?.get(group.targetId)?.trim() : "";
+  // An agent's notice carries only its task's id (TV-D16): the name comes
+  // from the registry, which answers only while the reader can see the task.
+  const about = group.op === "tasks.agent_status" ? agentNoticeTask(group) : group.targetId;
+  const label = about ? labels?.get(about)?.trim() : "";
   return label || null;
+}
+
+/** The task an agent's notice is about (its payload's `task_id`). */
+function agentNoticeTask(group: NotificationGroup): string | null {
+  const taskId = newestItem(group).payload.task_id;
+  return typeof taskId === "string" && taskId ? taskId : null;
 }
 
 /**
@@ -293,12 +302,19 @@ export function notificationReferences(groups: NotificationGroup[]): ReferenceRe
 
 /**
  * Target ids whose card needs a resolved name: task cards whose event carried
- * no title (comments). The caller looks them up in the entity registry.
+ * no title (comments), and the task an agent's notice names (it carries only
+ * the id). The caller looks them up in the entity registry.
  */
 export function unnamedTaskTargets(groups: NotificationGroup[]): string[] {
   const ids = new Set<string>();
   for (const g of groups) {
-    if (g.targetType === "task" && g.targetId && !notificationSubject(g)) ids.add(g.targetId);
+    if (notificationSubject(g)) continue;
+    if (g.op === "tasks.agent_status") {
+      const taskId = agentNoticeTask(g);
+      if (taskId) ids.add(taskId);
+    } else if (g.targetType === "task" && g.targetId) {
+      ids.add(g.targetId);
+    }
   }
   return [...ids];
 }

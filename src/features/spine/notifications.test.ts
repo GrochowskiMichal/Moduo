@@ -466,6 +466,35 @@ describe("a team notice (TV-D13)", () => {
   });
 });
 
+describe("an agent's notice (TV-D16)", () => {
+  it("names its task only through the registry, which answers only for what the reader sees", () => {
+    const groups = groupNotifications([
+      item({
+        id: "a1",
+        createdAt: "2030-01-01T10:00:00Z",
+        op: "tasks.agent_status",
+        targetType: "bucket",
+        targetId: "inbox-me",
+        actorType: "api_key",
+        actorLabel: "Claude",
+        payload: { task_id: "t5", state: "ready", session_id: "s1" },
+      }),
+    ]);
+    expect(unnamedTaskTargets(groups)).toEqual(["t5"]);
+    expect(notificationSubject(groups[0])).toBeNull();
+    expect(notificationSubject(groups[0], new Map([["t5", "Release notes"]]))).toBe(
+      "Release notes",
+    );
+    // The Inbox it hangs on is never its name.
+    expect(notificationSubject(groups[0], new Map([["inbox-me", "Inbox"]]))).toBeNull();
+    expect(notificationDeepLink(groups[0])).toEqual({
+      route: "/tasks",
+      entityType: "task",
+      entityId: "t5",
+    });
+  });
+});
+
 describe("a project delete notice (TV-U6)", () => {
   it("opens the Inbox its work landed in", () => {
     const [g] = groupNotifications([
