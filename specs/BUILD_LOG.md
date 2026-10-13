@@ -401,6 +401,20 @@ _Built and landed locally on `t/maciej/tasks-v3-build` (🟠 LOCAL BUILD MODE in
 
 **Records:** choices TL1-1…11 in decisions/tasks.md; gotchas in ui.md "The Timeline (TV-TL1)" (6); checklist [docs/testing/t-maciej-tv-tl1-timeline.md](../docs/testing/t-maciej-tv-tl1-timeline.md).
 
+- [x] **TV-U8 — Saved views** · tasks-v3 block 21 · deps: TV-U2, TV-U6 · lane ui · _done 2026-10-13 · `t/maciej/tv-u8-views` → `t/maciej/tasks-v3-build` (local; migration `20261013250000_task_views`, applied to the local stack only)._ AC11.1, AC4.8; REPLAN 29b–29e, 29d, §3's role table.
+
+**The server** (`20261013250000_task_views`): `task_views` (a name, a place: All · My tasks · Upcoming · one project, the Filter's conditions, the Display's words, `shared`, a position, an onboarding `seed`), read through one rule (`task_views__readable`: yours; shared ones while their maker is still a member and, for a project view, while you can see the project), written only by `task_views_op_create` / `_update` / `_move` (keys refused; hidden and missing answer alike; only the maker edits, the owner or an admin can take a shared one down). A filter keeps only the app's dimensions (`TASK_VIEW_ID_DIMENSIONS`, `TASK_VIEW_WORD_DIMENSIONS`, drift gate) with this workspace's people, teams and tags; Display keeps only words. Erasure takes a person's views.
+
+**The app:** the sidebar's Views group between Pinned and the projects (yours in your order, then shared ones; no glyphs; ⋯ Rename · Pin · Share · Move up/down · Copy link · Delete with Undo); Pinned takes views; "Save as view…" in the toolbar's ⋯ (a dialog with the name); an open view's changes show "Unsaved changes · Save · Save as new view… · Revert" (session drafts); `/tasks?view=<id>` opens a view once; the store reads `task_views` whole each sync (`SYNC_TABLES`, `snapshot.views`). Filter gained Completed and Waiting on; onboarding's role views and "Done last week" are seeded once per person and workspace; List and Board folds follow the person (`preferences.tasksFolds`).
+
+**Tests:** `supabase/tests/task_views.test.sql` (87: outsiders, a view of a project you can't see, the read helper, ids from elsewhere, keys, raw writes, shapes, seeds once, move, take-down, a departed maker, erasure), `views.test.ts`, `folds.test.ts`, `filters.test.ts` (Completed, Waiting on, the contracts tie), `bucket-rail.test.tsx` (the Views group, its menus, Pinned views), `preferences.test.ts` (folds, `viewsSeeded`, forward merges), `search.test.ts` (`?view=`), the drift gate; `tests/tasks-views.spec.ts` (2 e2e: save from All, Save changes, Revert, reopen; Pin, the link, Delete + Undo), run serially on the local stack.
+
+**Live-verified** on the local stack (checklist).
+
+**Reviews:** three review passes on the migration from the orchestrator, each answered with outsider SQL tests and a re-apply; one validator round: the MAJOR (seeds were marked done before the server made them) and the MINORs (a take-down's sidebar copy, its gating, a project delete with a view open, folds merged by recency, the Creator check) fixed; the rest are under "Polish later".
+
+**Records:** choices U8-1…U8-12 in decisions/tasks.md; gotchas in ui.md "Saved views (TV-U8)" (2); checklist [docs/testing/t-maciej-tv-u8-views.md](../docs/testing/t-maciej-tv-u8-views.md).
+
 ## Transactional email — every email Moduo sends · [`specs/transactional-email.md`](./transactional-email.md)
 
 - [x] **TX-1 — Email kit (shared templates, palette, plain text, .ics, Storybook gallery, logo image names, `EMAIL_KINDS`)** · deps: — · _2026-10-08 · `t/maciej/tx-1-email-kit`_ (logo PNGs come from BRAND-1's `public/email/` exports under the size contract in `_shared/email/assets.ts`)

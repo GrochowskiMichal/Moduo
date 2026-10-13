@@ -3,7 +3,7 @@
 // menu, and the tasks just checked off in this scope. One hook so the List,
 // the Board and the page's selection backstop read the same rules.
 
-import { type ReactNode, useCallback, useMemo } from "react";
+import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { DisplayMenu } from "../../../components/ui/display-menu";
 import type { FilterCondition } from "../../../components/ui/filter-model";
 import { useViewPrefs } from "../../../lib/view-prefs";
@@ -24,6 +24,15 @@ import {
 import { showsDone } from "../filters";
 import type { Task } from "../model";
 import type { RowPreset } from "../row-layout";
+import { samePrefs } from "../views";
+
+/**
+ * An open saved view (TV-U8): its id and its Filter and Display as saved.
+ * The page works on a copy of them (kept per view for this session, never on
+ * the device: a view saved elsewhere is what opens next time) until it's
+ * saved or reverted.
+ */
+export type SavedViewPrefs = { id: string; prefs: TasksViewPrefs };
 
 /** What List and Board take from Display. */
 export type TasksDisplayProps = {
@@ -60,6 +69,8 @@ export function useTasksDisplay(
   rowsDefault: RowPreset = "standard",
   /** What the person's role changes in the Timeline's defaults (Due per week). */
   timelineRole?: TimelineRoleDefaults,
+  /** An open saved view: its own Filter and Display instead of the place's. */
+  saved: SavedViewPrefs | null = null,
 ): {
   display: TasksDisplay;
   setDisplay: (next: TasksDisplay) => void;
@@ -68,15 +79,54 @@ export function useTasksDisplay(
   displayControl: ReactNode;
   viewProps: TasksDisplayProps;
   isHidden: (task: Task) => boolean;
+  /** The open view's Filter and Display differ from what it saved. */
+  dirty: boolean;
+  /** The Filter and Display as they are now (what "Save" stores). */
+  prefs: TasksViewPrefs;
+  /** Back to the open view's saved Filter and Display. */
+  revert: () => void;
 } {
-  const [prefs, setPrefs] = useViewPrefs<TasksViewPrefs>(
-    tasksDisplayKey(workspaceId, scope),
+  // A place remembers its own on this device; a saved view doesn't (null key).
+  const [placePrefs, setPlacePrefs] = useViewPrefs<TasksViewPrefs>(
+    saved ? null : tasksDisplayKey(workspaceId, scope),
     () => tasksViewDefaults(scope, fallbackLayout, rowsDefault, timelineRole),
     (raw, defaults) => sanitizeTasksView(raw, defaults, scope),
     // A new role's defaults reach a view that remembers none (a view that
     // remembers its choices keeps them: the sanitiser reads them first).
     `${rowsDefault}:${timelineRole?.duePerWeek ? "week" : ""}`,
   );
+  // Each open view's unsaved copy, for this session.
+  const [drafts, setDrafts] = useState<ReadonlyMap<string, TasksViewPrefs>>(() => new Map());
+  const savedId = saved?.id ?? null;
+  const savedPrefs = saved?.prefs ?? null;
+  const prefs = savedId && savedPrefs ? (drafts.get(savedId) ?? savedPrefs) : placePrefs;
+  const setPrefs = useCallback(
+    (next: (prev: TasksViewPrefs) => TasksViewPrefs) => {
+      if (!savedId || !savedPrefs) {
+        setPlacePrefs(next);
+        return;
+      }
+      setDrafts((prev) => {
+        const out = new Map(prev);
+        const value = next(prev.get(savedId) ?? savedPrefs);
+        // Back to what it saved: no draft left.
+        if (samePrefs(value, savedPrefs)) out.delete(savedId);
+        else out.set(savedId, value);
+        return out;
+      });
+    },
+    [savedId, savedPrefs, setPlacePrefs],
+  );
+  const dirty = !!savedId && drafts.has(savedId);
+  const revert = useCallback(() => {
+    if (!savedId) return;
+    setDrafts((prev) => {
+      if (!prev.has(savedId)) return prev;
+      const out = new Map(prev);
+      out.delete(savedId);
+      return out;
+    });
+  }, [savedId]);
   const display = useMemo(() => displayOf(prefs), [prefs]);
   const filters = prefs.filters;
   const setDisplay = useCallback(
@@ -119,6 +169,9 @@ export function useTasksDisplay(
     filters,
     setFilters,
     isHidden,
+    dirty,
+    prefs,
+    revert,
     displayControl: (
       <DisplayMenu
         controls={tasksDisplayControls(scope, display.layout, groupChoices)}

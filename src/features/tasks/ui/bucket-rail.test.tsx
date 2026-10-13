@@ -14,6 +14,7 @@ import { useState } from "react";
 import { TooltipProvider } from "../../../components/ui/tooltip";
 import type { TasksSidebarHideable } from "../../../lib/preferences";
 import type { Area, Bucket } from "../model";
+import type { TaskView } from "../views";
 import {
   ARCHIVED_SELECTION,
   asRailProject,
@@ -89,6 +90,8 @@ function renderRail({
   pinned: initialPinned = [] as string[],
   dnd = false,
   templates = false,
+  views,
+  canModerate = false,
 }: {
   canEdit?: boolean;
   selection?: string;
@@ -101,6 +104,9 @@ function renderRail({
   dnd?: boolean;
   /** Offer Duplicate…, Save as template… and Templates (TV-D15). */
   templates?: boolean;
+  /** Saved views (TV-U8); "u" is the signed-in person. */
+  views?: TaskView[];
+  canModerate?: boolean;
 } = {}) {
   const calls = {
     onSelect: rs.fn(),
@@ -121,6 +127,11 @@ function renderRail({
     onSaveAsTemplate: rs.fn(),
     onNewFromTemplate: rs.fn(),
     onOpenWelcome: rs.fn(),
+    onRenameView: rs.fn(),
+    onShareView: rs.fn(),
+    onDeleteView: rs.fn(),
+    onMoveView: rs.fn(),
+    onCopyViewLink: rs.fn(),
   };
   function Harness() {
     const [selection, setSelection] = useState(initialSelection);
@@ -201,6 +212,17 @@ function renderRail({
             : undefined
         }
         onOpenWelcome={calls.onOpenWelcome}
+        views={views}
+        viewActions={{
+          currentUserId: "u",
+          onRename: calls.onRenameView,
+          onShare: calls.onShareView,
+          onDelete: calls.onDeleteView,
+          onMove: calls.onMoveView,
+          onCopyLink: calls.onCopyViewLink,
+          canShare: canEdit,
+          canModerate,
+        }}
         dropAccepts={dnd ? () => false : undefined}
       />
     );
@@ -362,6 +384,125 @@ describe("Pin (REPLAN 29b)", () => {
     await settle();
     fireEvent.click(screen.getByRole("menuitem", { name: "Unpin from sidebar" }));
     await settle();
+    expect(screen.queryByText("Pinned")).toBeNull();
+  });
+});
+
+function savedView(id: string, name: string, extra: Partial<TaskView> = {}): TaskView {
+  return {
+    id,
+    workspaceId: "w",
+    ownerId: "u",
+    name,
+    scope: "all",
+    projectId: null,
+    filters: [],
+    display: {},
+    shared: false,
+    position: 1,
+    seed: null,
+    createdAt: NOW,
+    updatedAt: NOW,
+    deletedAt: null,
+    ...extra,
+  };
+}
+
+const VIEWS = [
+  savedView("v1", "Due this week", { position: 1 }),
+  savedView("v2", "Waiting on client", { position: 2, shared: true }),
+  savedView("v3", "Mike's board", { ownerId: "mike", shared: true }),
+];
+
+describe("Views (TV-U8, AC11.1; REPLAN 29b–29e)", () => {
+  it("sit between Pinned and the projects, with no glyphs, and open as view:<id>", () => {
+    const calls = renderRail({ views: VIEWS, pinned: ["c-acme"] });
+    expect(order().slice(5, 12)).toEqual([
+      "All",
+      "Pinned",
+      "Acme rebrand",
+      "Views",
+      "Due this week",
+      "Waiting on client",
+      "Mike's board",
+    ]);
+    // An empty slot keeps the names in line with the projects', with no glyph.
+    const row = main(/^Due this week$/).closest('[data-slot="nav-row"]') as HTMLElement;
+    expect(row.querySelector('[data-slot="nav-row-main"] svg')).toBeNull();
+    fireEvent.click(main(/^Due this week$/));
+    expect(calls.onSelect).toHaveBeenCalledWith("view:v1");
+  });
+
+  it("the group collapses like the others", () => {
+    const calls = renderRail({ views: VIEWS });
+    fireEvent.click(screen.getByRole("button", { name: /^Views/ }));
+    expect(calls.onToggleCollapsed).toHaveBeenCalledWith("views");
+    expect(screen.queryByRole("button", { name: /^Due this week$/ })).toBeNull();
+  });
+
+  it("your view's ⋯: Rename · Pin · Share · Move · Copy link · Delete", async () => {
+    const calls = renderRail({ views: VIEWS });
+    await rowMenu(/^Due this week$/);
+    const items = screen.getAllByRole("menuitem").map((i) => i.textContent);
+    expect(items).toEqual([
+      "Rename",
+      "Pin to sidebar",
+      "Share with the workspace",
+      "Move up",
+      "Move down",
+      "Copy link",
+      "Delete view",
+    ]);
+    expect(screen.getByRole("menuitem", { name: "Move up" }).getAttribute("aria-disabled")).toBe(
+      "true",
+    );
+    fireEvent.click(screen.getByRole("menuitem", { name: "Share with the workspace" }));
+    await settle();
+    expect(calls.onShareView).toHaveBeenCalledWith("v1", true);
+  });
+
+  it("someone else's shared view: only Pin and Copy link (an admin can also take it down)", async () => {
+    renderRail({ views: VIEWS });
+    await rowMenu(/^Mike's board$/);
+    expect(screen.getAllByRole("menuitem").map((i) => i.textContent)).toEqual([
+      "Pin to sidebar",
+      "Copy link",
+    ]);
+    cleanup();
+    const calls = renderRail({ views: VIEWS, canModerate: true });
+    await rowMenu(/^Mike's board$/);
+    expect(screen.getAllByRole("menuitem").map((i) => i.textContent)).toEqual([
+      "Pin to sidebar",
+      "Stop sharing",
+      "Copy link",
+      "Delete view",
+    ]);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete view" }));
+    await settle();
+    expect(calls.onDeleteView).toHaveBeenCalledWith("v3");
+  });
+
+  it("a viewer keeps views but can't share them; a shared one can still stop", async () => {
+    renderRail({ views: VIEWS, canEdit: false });
+    await rowMenu(/^Due this week$/);
+    expect(screen.queryByRole("menuitem", { name: "Share with the workspace" })).toBeNull();
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
+    await settle();
+    await rowMenu(/^Waiting on client$/);
+    expect(screen.getByRole("menuitem", { name: "Stop sharing" })).toBeTruthy();
+  });
+
+  it("Pin puts a view in Pinned, in pin order with projects", async () => {
+    const calls = renderRail({ views: VIEWS, pinned: ["c-acme"] });
+    await rowMenu(/^Waiting on client$/);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Pin to sidebar" }));
+    await settle();
+    expect(calls.onTogglePin).toHaveBeenCalledWith("view:v2");
+    expect(order().slice(6, 9)).toEqual(["Pinned", "Acme rebrand", "Waiting on client"]);
+  });
+
+  it("a pinned view that's gone drops out of Pinned", () => {
+    renderRail({ views: VIEWS, pinned: ["view:gone"] });
     expect(screen.queryByText("Pinned")).toBeNull();
   });
 });

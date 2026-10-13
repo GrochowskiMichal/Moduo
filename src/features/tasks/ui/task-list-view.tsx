@@ -56,6 +56,7 @@ import {
 import { type DropNames, dropLabel, type TaskDropWrite, writeFromPlan } from "../dnd/drop-write";
 import { multiDropLabel, multiDropWrites } from "../dnd/multi-drop";
 import { isSideDroppable } from "../dnd/rail-drop";
+import { readFolds, writeFold } from "../folds";
 import {
   canNestUnder,
   type GroupBy,
@@ -208,7 +209,7 @@ type Props = {
   onOpenTask?: (taskId: string) => void;
   /**
    * Where the groups you fold are remembered (per person, view and grouping,
-   * on this device; research §2). Null: not remembered.
+   * following the person: `listFoldKey`, TV-U8). Null: not remembered.
    */
   collapseKey?: string | null;
   /**
@@ -540,12 +541,12 @@ export function TaskListView({
   );
   const [choices, setChoices] = useState(() => ({
     key: collapseKey,
-    folded: readFolded(collapseKey),
+    folded: readFolds(collapseKey),
   }));
   let folded = choices.folded;
   if (choices.key !== collapseKey) {
     // Derive-on-render: the new view's choices replace the old in this render.
-    folded = readFolded(collapseKey);
+    folded = readFolds(collapseKey);
     setChoices({ key: collapseKey, folded });
   }
   const collapsed = useMemo(
@@ -555,7 +556,7 @@ export function TaskListView({
   const setFolded = useCallback((key: string, value: boolean) => {
     setChoices((prev) => {
       const next = { ...prev.folded, [key]: value };
-      writeFolded(prev.key, next);
+      writeFold(prev.key, key, value);
       return { key: prev.key, folded: next };
     });
   }, []);
@@ -2111,30 +2112,6 @@ function toggled<T>(set: ReadonlySet<T>, value: T): Set<T> {
   if (next.has(value)) next.delete(value);
   else next.add(value);
   return next;
-}
-
-/** The folds you chose for a view, from this device ({} when none or unreadable). */
-function readFolded(key: string | null): Record<string, boolean> {
-  if (!key || typeof window === "undefined") return {};
-  try {
-    const raw = window.localStorage.getItem(key);
-    const parsed: unknown = raw ? JSON.parse(raw) : null;
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
-    const out: Record<string, boolean> = {};
-    for (const [k, v] of Object.entries(parsed)) if (typeof v === "boolean") out[k] = v;
-    return out;
-  } catch {
-    return {};
-  }
-}
-
-function writeFolded(key: string | null, folded: Record<string, boolean>): void {
-  if (!key || typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(key, JSON.stringify(folded));
-  } catch {
-    // Quota or disabled storage: the fold still works, it just isn't remembered.
-  }
 }
 
 /** Two hovers that draw the same thing (so a pointer move doesn't re-render). */

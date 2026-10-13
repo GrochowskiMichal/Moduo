@@ -81,6 +81,7 @@ import {
   type TimeBlockMap,
   type TrackTimeInput,
 } from "../features/tasks/model";
+import { type TaskView, taskViewFromRow } from "../features/tasks/view-row";
 import { toMemberPerm, toMemberRole } from "../features/workspaces/workspace-mappers";
 import { clearIgnoredAuthLink, SUPABASE_AUTH_OPTIONS } from "./auth-url";
 import type { EntityLink, EntityRecord } from "./entity-links";
@@ -122,6 +123,7 @@ import { createTasksAgents } from "./runtime.web.agents";
 import { createReferencePreviews } from "./runtime.web.previews";
 import { createTasksStructure } from "./runtime.web.structure";
 import { createTasksTemplates, type TemplateApplyResult } from "./runtime.web.templates";
+import { createTasksViews } from "./runtime.web.views";
 import { deltaCursor } from "./sync/delta-cursor";
 import type {
   AccessChange,
@@ -449,6 +451,9 @@ const tasksAgents = createTasksAgents(supabaseClient, {
 const tasksTemplates = createTasksTemplates(supabaseClient, {
   mapAnswer: (raw) => templateAnswerToModels(raw),
 });
+
+/** TV-U8's saved views (runtime.web.views.ts). */
+const tasksViews = createTasksViews(supabaseClient);
 
 export const webRuntime: ModuoRuntime = {
   capabilities: webCapabilities,
@@ -2298,6 +2303,8 @@ export const webRuntime: ModuoRuntime = {
     ...tasksStructure,
     // TV-D15: templates and "Duplicate project…".
     ...tasksTemplates,
+    // TV-U8: saved views.
+    ...tasksViews,
     ...tasksAgents,
     async list(workspaceId) {
       // Best effort: a Viewer can't create their own Inbox (no tasks.create),
@@ -4081,6 +4088,13 @@ type SyncSource = {
   order?: (q: any) => any;
 };
 
+/** A saved view row, or a throw the reader drops (TV-U8). */
+function taskViewRowToModel(raw: unknown): TaskView {
+  const view = taskViewFromRow(raw);
+  if (!view) throw new Error("An unreadable saved view.");
+  return view;
+}
+
 const SYNC_SOURCES: Record<SyncTableName, SyncSource> = {
   tasks: {
     table: "tasks",
@@ -4215,6 +4229,16 @@ const SYNC_SOURCES: Record<SyncTableName, SyncSource> = {
     cap: READ_CAPS.taskWaiting,
     delta: true,
     scope: "waiting entries",
+  },
+  // TV-U8: read whole every sync (SYNC_TABLES); RLS returns your views and
+  // the shared ones you may see, never a deleted one.
+  views: {
+    table: "task_views",
+    select: "*",
+    map: taskViewRowToModel,
+    cap: READ_CAPS.taskViews,
+    delta: true,
+    scope: "saved views",
   },
   // TV-D16: agent sessions, under RLS (yours, and teammates' they share).
   agentSessions: {

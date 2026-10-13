@@ -8,11 +8,18 @@ import type { Bucket, Task } from "./model";
 
 export type TasksSearch = {
   id?: string;
+  /** A saved view's link (TV-U8): `/tasks?view=<id>`. */
+  view?: string;
 };
+
+const VIEW_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function validateTasksSearch(search: Record<string, unknown>): TasksSearch {
   const id = typeof search.id === "string" && search.id.length > 0 ? search.id : undefined;
-  return id ? { id } : {};
+  // Only a view id: anything else is dropped, never looked up.
+  const view =
+    typeof search.view === "string" && VIEW_ID.test(search.view) ? search.view : undefined;
+  return { ...(id ? { id } : {}), ...(view ? { view } : {}) };
 }
 
 // ── inbound-target resolution ────────────────────────────────────────────────
