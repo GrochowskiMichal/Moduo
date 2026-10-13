@@ -959,6 +959,27 @@ export function normalizeContentAuthorKind(input: unknown): ContentAuthorKind {
 }
 
 // ---------------------------------------------------------------------------
+// Comment reactions (TV-U13, REPLAN 88) — mirrors comment_reactions.reaction's
+// CHECK and comments_op_react in 20261013100000_comment_reactions_edits. Six,
+// fixed, in this order: 👍 ✅ 👀 🙏 ❤️ 😄. Nobody adds their own, and a
+// reaction never notifies anyone.
+// ---------------------------------------------------------------------------
+
+export const COMMENT_REACTIONS = ["thumbs_up", "check", "eyes", "pray", "heart", "smile"] as const;
+export type CommentReaction = (typeof COMMENT_REACTIONS)[number];
+export const commentReactionSchema = z.enum(COMMENT_REACTIONS);
+export function isCommentReaction(value: unknown): value is CommentReaction {
+  return typeof value === "string" && (COMMENT_REACTIONS as readonly string[]).includes(value);
+}
+export function parseCommentReaction(input: unknown): SafeParseResult<CommentReaction> {
+  return parseOrError(commentReactionSchema, input);
+}
+/** Lax read: a reaction this build doesn't know is left out (null), never shown wrong. */
+export function normalizeCommentReaction(input: unknown): CommentReaction | null {
+  return isCommentReaction(input) ? input : null;
+}
+
+// ---------------------------------------------------------------------------
 // Attachments (AT-1, specs/attachments.md) — mirrors the CHECKs on
 // public.attachments in 20261008210500_attachments_storage. `pending` = begun,
 // bytes not confirmed yet; `ready` = finalize checked the stored size;

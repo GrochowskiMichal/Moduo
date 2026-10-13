@@ -154,6 +154,7 @@ describe("sanitizePreferences", () => {
 describe("notificationTypeForOp", () => {
   it("maps each quiet-set op to its governing toggle", () => {
     expect(notificationTypeForOp("comments.add")).toBe("comments");
+    expect(notificationTypeForOp("comments.edit")).toBe("mention");
     expect(notificationTypeForOp("tasks.mentioned")).toBe("mention");
     expect(notificationTypeForOp("notes.mention")).toBe("mention");
     expect(notificationTypeForOp("tasks.assigned")).toBe("assigned");

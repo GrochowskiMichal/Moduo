@@ -28,7 +28,7 @@ Built in tasks-v3 block 22 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §7, §
   - Rejected: the session's time in the pill (it repeats the bottom line).
 - **F6-5 · Claims behind the task gate, polled by the shell** → TV-F6 (`focus_claims`, `features/focus/claims.ts`)
   - Who: agent's choice, deferred to by Maciej, 2026-10-13.
-  - Decision: `focus_claims` answers only for a task the caller sees and the runner still sees (`tasks__visible` / `tasks__visible_to`), only for a running run seen in the last 3 minutes, never the caller's own; Off still claims, paused doesn't. The app shell polls the selected workspace once a minute while visible; `useTaskClaim` + `onThisLabel` are the hook for TV-U13's header slot and TV-F7 (U13 hadn't landed).
+  - Decision: `focus_claims` answers only for a task the caller sees and the runner still sees (`tasks__visible` / `tasks__visible_to`), only for a running run seen in the last 3 minutes, never the caller's own; Off still claims, paused doesn't. The app shell polls the selected workspace once a minute while visible; the detail panel's header shows them (`TaskClaimMark`, small avatars and a quiet dot, the words in the tooltip, in U13's claim slot); `useTaskClaim` + `onThisLabel` are there for TV-F7's rows and screen.
   - Why: "is on this" is about doing, not timing; a runner who lost a task mustn't advertise it.
   - Rejected: Realtime for claims (each person reads only their own runs), polling only while Tasks is open.
 - **F6-6 · The run rules run app-wide** → TV-F6 (`FocusRunFollower`, `followStep`)
@@ -91,11 +91,65 @@ Built in tasks-v3 block 22 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §7, §
   - Decision: only Undo carries the stopped run on; any other start inside the 10 s ends it at once with its own numbers, then starts a new run.
   - Why: a fresh session reusing the stopped run would overwrite its 25 minutes with zeros; a start in another workspace would end it on the server before its final numbers got there.
   - Rejected: continuing the same run for any start inside the window.
-- **Known limits (TV-F6, revisitable):** a dragged session block jumps back until the server answers (no optimistic overlay for sessions yet; U13's sessions UI may add one); signing out inside Stop's Undo window leaves the run open until this device next signs in (it's ended then; teammates stop seeing it after 3 minutes); if Calendar's ▶ can't put the task on Up next, the run rules may move the session to the next lined-up task.
+- **Known limits (TV-F6, revisitable):** signing out inside Stop's Undo window leaves the run open until this device next signs in (it's ended then; teammates stop seeing it after 3 minutes); if Calendar's ▶ can't put the task on Up next, the run rules may move the session to the next lined-up task.
+## 2026-10-13 · TV-U13 Detail panel v3 + full page (tasks-v3 block 17) — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 17 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §9, AC11.7–11.8, AC1.16, AC3.1, AC3.7; REPLAN 32, 56, 65a, 72a, 87, 88, 89, 20a, defaults p and q). Migration `20261013100000_comment_reactions_edits` (local stack only). Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **U13-1 · Who may comment, edit, delete and react: one item gate for every comment op, and for reading** → TV-U13 (`comments__item_level`), TV-D12 (re-cut `comments_op_add` and the comments read policy from the live catalog)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (after two security reviews of the first cut).
+  - Decision: a comment's item is a task (`tasks__visible`, Full through `can_access 'full'`; `task_project` reads as a task but never takes the Full path), a note (`can_access`), or one of the known spine types (seeing it); an unknown type is nobody's. Reading comments (and so their reactions), adding, editing, deleting, restoring and reacting all ask it. Edit: the author only. Delete and Undo: the author, or Full access to the task or note. React: whoever can comment there (the spine guard + seeing the item), so a workspace viewer can't, a view-only share can. An app over an API key comments as its creator but can't edit, delete, restore or react. Hidden and missing answer the same refusal. A mention, and a participant's notice, reach only people who can see the item.
+  - Why: read and write can never disagree; a reaction is a lightweight comment and follows the same rule; the old add op let a member comment on an item hidden from them.
+  - Rejected: per-op checks against `perm_can_see_entity` (it reads an unknown type as visible to the workspace) and reactions for anyone who can read.
+- **U13-2 · Reactions are six words, live through the comment's stamp, and never notify** → TV-U13 (`COMMENT_REACTIONS`, `comment_reactions`, `comments_op_react`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (88 decided the six).
+  - Decision: stored as `thumbs_up · check · eyes · pray · heart · smile` (a closed vocabulary with its CHECK and drift gate), shown as 👍 ✅ 👀 🙏 ❤️ 😄; a react writes no activity row; it moves the comment's `updated_at`, so the store's comment marks change and an open feed re-reads (`commentStamps`), instead of a Realtime channel of its own.
+  - Why: the store already hears comments live; one more published table would mean another channel for six emoji.
+  - Rejected: storing the emoji characters, and a `comment_reactions` Realtime listener.
+- **U13-3 · Delete is soft with an 8 s Undo; edits show "edited"; an edit names only new people** → TV-U13
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: delete sets `deleted_at` (the Undo restores it; no tombstone in the feed); `comments.add/edit/delete/restore` rows stay in the trail; an edit notifies only someone named for the first time (`comments.edit`), and its excerpt is the new text. Editing turns stored references the reader can name back into `@Title` and keeps one they can't (and date chips) as stored, so an edit never loses them.
+  - Why: research §9; nobody hears about the same mention twice.
+  - Rejected: a hard delete (no Undo across a reload) and re-notifying everyone named.
+- **U13-4 · The feed: merged changes, folded runs, All · Comments per person on this device** → TV-U13 (`feed.ts` `shapeFeed`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (default q).
+  - Decision: one person's changes within 10 minutes of the first merge ("changed due, priority and 2 more", click to see each); a run of more than two change lines between comments folds into "Show n earlier changes", and the run after the last comment shows its latest five. The All · Comments switch is remembered per person in local storage.
+  - Why: research §9; the switch is a reading habit, not a setting worth syncing yet.
+  - Rejected: tabs (Jira's All · Comments · History · Work log) and a synced preference.
+- **U13-5 · The panel's anatomy follows the spec's order; the agent line sits under the title** → TV-U13, TV-D16 (fills `AgentSessionSlot`), TV-F7 (fills `claimSlot`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: header (project › section pickers, handle, the claims slot, queue, ⤢, ⋯) · status toggle + title · the agent session line's slot (52's placement, not the spec list's) · Done/Won't do line · properties (Status, Assignee + Team, Priority, Due + time, Tags; "+ Energy · Scheduled · Reminder · Estimate · Repeat · Waiting on") · description · Subtasks · Waiting on · Blocked by · Blocks · Linked (reference cards, five then "Show n more") · the feed. Copy link moved into ⋯ beside Copy branch name; ⋯ shows for viewers too (copying only).
+  - Why: the spec's order with REPLAN 52's decided spot for the agent line.
+  - Rejected: research §7's "description before properties".
+- **U13-6 · Pickers open in place inside their popover** → TV-U13 (`task-detail-pickers.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: Scheduled lists the sessions ("Thu 2:00 PM · 1h", then "+2"); Add and Move show the date panel inside the same popover, with a length and "Mine / the assignee's" (nobody else, TV-D10-fix); resizing keeps the start and the person. Reminder offers 1 hour / 1 day before due (when there's a due date) and "At a time…"; Estimate has 15m · 30m · 45m · 1h · 2h · 4h or typed, plus Tracked. Repeat: presets, Custom (every n days/weeks/months/years, weekdays, a day of the month or the nth weekday, an end, "count from when it's done") and one summary line ("Every 3rd Friday, until Dec 15"); a repeat set on a task with no dates gives it its first occurrence as the due date.
+  - Why: a popover opened from inside another loses its clicks; due and scheduled move together (27c), so due is the repeat's anchor now that sessions are separate.
+  - Rejected: nested DateField popovers, and anchoring a repeat on a session.
+- **U13-7 · Inbox assign asks for a project; "Keep unfiled" just assigns** → TV-U13, TV-D13 (the server move to the assignee's Inbox, 20)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (20a decided; AC5.1).
+  - Decision: picking someone else for a task in your Inbox shows "Assign to Mike · in" with the projects and "Keep unfiled"; a project assigns and files in one edit. Keep unfiled assigns only: the task stays in your Inbox (granted to Mike) until the server moves it.
+  - Why: don't show a move the server doesn't make.
+  - Rejected: moving it client-side.
+- **U13-8 · Call 87 runs in the app for now** → TV-U13 (`finishOpenSubtasks`), TV-D16 (MCP), TV-D7 (a server cascade if wanted)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (87 decided).
+  - Decision: the checkbox, a status pick, a check-off (Focus), a reference chip's check and a Board drop into Done finish the task's open subtasks too, with one toast "Done · also 2 subtasks" whose Undo puts each back to the status it had (only while it's still done). A repeating parent keeps its subtasks open (TV-D12 resets them per cycle); MCP's complete and the Home widget's check-off don't cascade yet (TV-D16, TV-H1).
+  - Why: `tasks__apply_status` is being re-cut by TV-D12; redefining it here would be overwritten.
+  - Rejected: a server cascade in this block.
+- **U13-9 · Project view and the full page** → TV-U13, TV-U16 (the full overview)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (defaults p, 32).
+  - Decision: "Project" registers next to Details; it shows on its own when nothing is selected inside a project and while a task fills the centre (the Details entry then reads "Shown in the centre"). Its content is the project's name, status, dates, lead, progress ("1 of 3 done · 2 open") and sections; TV-U16 builds the rest. The full page is state on the same route: "← List · Acme rebrand", "3 of 18" with ↑ ↓ / k j, ⤡, Esc or ⌘[ back; properties take a 280 px column once the centre is about 900 px wide. No key opens it (b is Move to project).
+  - Why: default p, call 32; the keymap has no free key for it.
+  - Rejected: a route of its own (AGENTS.md rule 7).
+- **U13-10 · Your own avatar without a display name reads your email's name** → TV-U13 (`withOwnName`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (checkpoint 1).
+  - Decision: the member list names you by your email's local part when your profile has no name (the top bar's rule), so every avatar of yours reads two of your initials; someone else without a name reads "?", never "ME" from a "Member" placeholder.
+  - Why: rule 43; the local seed account has no display name.
+  - Rejected: fixing each avatar consumer separately.
 
 ## 2026-10-13 · TV-D12 recurrence a–h, reminders, the notification table — the agent's choices (deferred to by Maciej)
 
-Built in tasks-v3 block 27 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §2 "Reminders" and "Repeats", §13, §Assumptions #5, #16, #26; REPLAN 24, 27 a–i, 73, 80; migrations `20261013110000_notifications_v3`, `20261013111000_recurrence_moves_dst` and `20261013140000_reminders_repeats_fixes`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+Built in tasks-v3 block 27 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §2 "Reminders" and "Repeats", §13, §Assumptions #5, #16, #26; REPLAN 24, 27 a–i, 73, 80; migrations `20261013110000_notifications_v3`, `20261013111000_recurrence_moves_dst` `20261013140000_reminders_repeats_fixes` and `20261013145000_recurrence_edit_checks`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
 
 - **D12-1 · Reminders are delivered by one minute job, and only while they make sense** → TV-D12 (`tasks__fire_reminders`, `tasks__notice`)
   - Who: agent's choice, deferred to by Maciej, 2026-10-13.
@@ -164,7 +218,7 @@ Built in tasks-v3 block 27 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §2 "Re
   - Rejected: Done only.
 - **D12-14 · Move just this one, change the pattern, skip** → TV-D12 (`tasks_op_move_occurrence`, `changePatternRule`, `tasks__rule_changed`, `tasks_op_skip_occurrence`)
   - Who: agent's choice, deferred to by Maciej, 2026-10-13.
-  - Decision: "just this one" moves the due date or the session (the other by the same days) and remembers the pattern's slot (`movedFrom`, `movedDays`), so completing counts from the pattern and the next cycle is back on it; "change the pattern" is the app's rule rewrite (DTSTART, a weekly rule's one weekday, a monthly rule's day) saved through `tasks_op_update`, and any rule change works the pointer out again on the server; skip is worked out on the server (the app's datetimes only for a rule it alone reads). The prompts belong to the drag surfaces (TL2, U15, the Calendar).
+  - Decision: "just this one" moves the due date or the session (the other by the same days) and remembers the pattern's slot (`movedFrom`, `movedDays`), so completing counts from the pattern and the next cycle is back on it; "change the pattern" is the app's rule rewrite (DTSTART, a weekly rule's one weekday, a monthly rule's day) saved through `tasks_op_update`, and any rule change works the pointer out again on the server; skip is worked out on the server (the app's datetimes only for a rule it alone reads); both skip and "just this one" go through `tasks__guard_edit` (edit access on the task, like every other change to one task). The prompts belong to the drag surfaces (TL2, U15, the Calendar).
   - Why: 27 g; the server owns the pointer (D8).
   - Rejected: a second task for a moved occurrence.
 - **D12-15 · A repeat's history is a read** → TV-D12 (`tasks_op_history`), TV-U13 (the panel)

@@ -87,6 +87,8 @@ export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
  *  share the `dueFollowUp` toggle. */
 const OP_TO_NOTIFICATION_TYPE: Record<string, NotificationType> = {
   "comments.add": "comments",
+  // TV-U13: an edit only reaches the people it newly names, so it's a mention.
+  "comments.edit": "mention",
   "notes.mention": "mention",
   "tasks.mentioned": "mention",
   "tasks.assigned": "assigned",

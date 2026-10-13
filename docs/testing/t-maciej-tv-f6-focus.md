@@ -19,7 +19,7 @@
 ## Calendar
 - [ ] **Do:** give a task two work sessions today (the panel's Scheduled, or Calendar drag-create) → **Expect:** two blocks, one per session. _(both)_
 - [ ] **Do:** a task of yours with only a due date today → **Expect:** a chip in the all-day lane; clicking it opens the task. Scheduled tasks, Won't do tasks and teammates' tasks (assigned to them, or theirs and unassigned) don't get one. _(both)_
-- [ ] **Do:** drag one of the task's blocks → **Expect:** only that block moves (the other stays; it jumps into place once the server answers); reload keeps it. _(both)_
+- [ ] **Do:** drag one of the task's blocks → **Expect:** only that block moves (the other stays); reload keeps it. _(both)_
 - [ ] **Do:** on an elapsed block of a task with two sessions, Later, then Remove on the other → **Expect:** each acts on the block you used (Later moves it to the next free slot today; Remove takes only that block off, Undo puts it back). _(both)_
 - [ ] **Do:** click a block → Start focus → **Expect:** the task goes to the top of Up next and the clock starts; the popover, that block and the top bar show the same clock; only one of the task's blocks shows it. _(both)_
 - [ ] **Do:** popover Stop → **Expect:** "Focus stopped · Undo", no "47m logged" toast. _(both)_
@@ -41,7 +41,7 @@
 - [ ] **Do:** with the desktop's Wi-Fi off, take the session over on the web, wait 2 minutes, turn Wi-Fi back on → **Expect:** the desktop stops within seconds; the task's total is the minutes actually worked (the desktop gives back what it saved after the takeover as one negative adjustment). _(both devices)_
 
 ## Claims ("is on this")
-- [ ] **Do:** Mike runs Focus on a task you can see → **Expect:** within a minute your app's claims name him on that task (the words "Mike is on this" appear once TV-U13's header / TV-F7 show them; until then the network tab shows `rpc/focus_claims` answering his id and the task's). _(two people)_
+- [ ] **Do:** Mike runs Focus on a task you can see → **Expect:** within a minute that task's panel header shows his avatar with a quiet dot; hovering it reads "Mike is on this". You never see yourself there. _(two people)_
 - [ ] **Do:** Mike runs a task in a project private to him → **Expect:** you get no claim for it. _(two people)_
 
 ## Edge cases
@@ -56,4 +56,4 @@
 ## Known gaps / not-yet-testable
 - **Verify before release:** two real devices (web + signed desktop) taking a session over; claims between two real people through prod's PostgREST; Realtime on `focus_runs` through prod (local only had it after this migration added it); the desktop app's away prompt after sleep; a desktop build from before TV-F6 against the re-cut (`stopwatch` refused: such builds never shipped #323's run, so nothing should send it).
 - The Focus screen itself (Now card pill, ⋯ menu with Stop, Up next) is TV-F7; today's card keeps its old layout with the three-way Timer in its ⋯.
-- "Is on this" has no UI until TV-U13's header slot / TV-F7 (`useTaskClaim`).
+- "Is on this" shows only in the task panel's header for now; rows and the Focus screen get it in TV-F7 (`useTaskClaim`).

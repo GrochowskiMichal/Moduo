@@ -401,6 +401,12 @@ export const commentRowSchema = z.object({
   created_at: z.string(),
   updated_at: z.string(),
   deleted_at: optStr,
+  // TV-U13: absent before 20261013100000.
+  edited_at: optStr,
+  comment_reactions: z
+    .array(z.object({ user_id: z.string(), reaction: z.string() }))
+    .nullable()
+    .optional(),
 });
 
 export const notificationRowSchema = z.object({

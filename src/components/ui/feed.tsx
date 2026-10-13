@@ -62,12 +62,15 @@ function FeedItem({
   );
 }
 
-/** A comment: the author line, then the body. */
+/** A comment: the author line, then the body (and its reactions, `footer`). */
 function FeedCard({
   avatar,
   author,
   time,
   timeTitle,
+  meta,
+  actions,
+  footer,
   className,
   children,
   ...props
@@ -76,17 +79,23 @@ function FeedCard({
   author: React.ReactNode;
   time?: React.ReactNode;
   timeTitle?: string;
+  /** A quiet word after the time ("edited"). */
+  meta?: React.ReactNode;
+  /** Controls at the end of the author line, shown on hover or focus (react, ⋯). */
+  actions?: React.ReactNode;
+  /** Under the body: the reactions row. */
+  footer?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <article
       data-slot="feed-card"
-      className={cn("rounded-lg border border-hairline px-3 py-2.5", className)}
+      className={cn("group/card rounded-lg border border-hairline px-3 py-2.5", className)}
       {...props}
     >
-      <header className="mb-1 flex min-w-0 items-center gap-2 font-sans text-xs text-muted-foreground">
+      <header className="mb-1 flex min-h-(--ctrl-h-sm) min-w-0 flex-wrap items-center gap-x-2 font-sans text-xs text-muted-foreground">
         {avatar ? <span className="flex shrink-0">{avatar}</span> : null}
-        <span className="min-w-0 break-words font-medium text-foreground">{author}</span>
+        <span className="break-words font-medium text-foreground">{author}</span>
         {time ? (
           <>
             <span aria-hidden className="text-subtle-foreground">
@@ -100,8 +109,17 @@ function FeedCard({
             </time>
           </>
         ) : null}
+        {meta ? <span className="shrink-0 text-subtle-foreground">{meta}</span> : null}
+        {actions ? (
+          // Kept in place and faded, so the line never jumps (R6); always on
+          // for keyboard focus and while one of its menus is open.
+          <span className="ml-auto flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity duration-(--motion-fade) ease-(--ease-out) focus-within:opacity-100 group-hover/card:opacity-100 has-[[aria-expanded=true]]:opacity-100">
+            {actions}
+          </span>
+        ) : null}
       </header>
       {children}
+      {footer}
     </article>
   );
 }

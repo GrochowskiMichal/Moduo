@@ -6,6 +6,7 @@
 import type {
   AttachmentPreviewMime,
   AttachmentStatus,
+  CommentReaction,
   ContentAuthorKind,
 } from "@contracts/vocabularies";
 import type {
@@ -102,7 +103,14 @@ export type SpineComment = {
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
+  /** When its author last edited it (TV-U13); null when never: it reads "edited". */
+  editedAt: string | null;
+  /** Who reacted with which of the six (TV-U13, REPLAN 88), oldest first. */
+  reactions: CommentReactionMark[];
 };
+
+/** One person's reaction on a comment. */
+export type CommentReactionMark = { userId: string; reaction: CommentReaction };
 
 export type RuntimeSession = {
   access_token: string;
@@ -1324,6 +1332,27 @@ export type ModuoRuntime = {
       entityType: string;
       entityId: string;
     }): Promise<SpineComment[]>;
+    /**
+     * Edit your own comment (`comments_op_edit`, TV-U13): only its author, and
+     * only someone named for the first time (`mentionedUserIds`) is notified.
+     */
+    editComment(input: {
+      commentId: string;
+      body: string;
+      mentionedUserIds?: string[];
+    }): Promise<SpineComment>;
+    /** Delete a comment (`comments_op_delete`): yours, or anyone's with Full
+     *  access to the task or note. A soft delete, so the 8 s Undo can restore it. */
+    deleteComment(input: { commentId: string }): Promise<SpineComment>;
+    /** Undo a comment's delete (`comments_op_restore`). */
+    restoreComment(input: { commentId: string }): Promise<SpineComment>;
+    /** Add (`on`) or take back one of the six reactions; answers the comment's
+     *  reactions after the change. Never notifies (REPLAN 88). */
+    reactToComment(input: {
+      commentId: string;
+      reaction: CommentReaction;
+      on: boolean;
+    }): Promise<CommentReactionMark[]>;
     /**
      * The derived notification feed: `module_activity` rows targeting me,
      * overlaid with my read state, newest first (AC10). The NotificationCenter

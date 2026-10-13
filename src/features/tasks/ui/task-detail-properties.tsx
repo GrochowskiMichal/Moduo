@@ -1,63 +1,69 @@
-// The detail panel's properties (tasks-v2 §9, comp §1 + §5 option C). Every
-// value starts at the same x behind a 14px icon slot and edits in place through
-// its own quiet control (no chevrons; hover shows the field). Status, Assignee,
-// Priority, Due and Tags always show; Energy, Scheduled, Time and Repeat show
-// once set, and until then sit in one quiet line that names them. Picking a name
-// there shows its row, empty, with its editor open.
+// The detail panel's properties (Tasks v3 §9, research views-board-detail
+// §8). Every value starts at the same x behind a 14px icon slot and edits in
+// place through one picker (no chevrons; hover shows the field). Status,
+// Assignee + Team, Priority, Due and Tags always show; Energy, Scheduled,
+// Reminder, Estimate, Repeat and Waiting on show once set, and until then
+// sit in one quiet line that names them. Picking a name there shows its row,
+// empty, with its editor open (Waiting on opens its list, below the
+// properties). Values wrap and never truncate; the label column narrows from
+// 96 to 76 px when the panel is under 320 px (the panel is the container).
 
 import {
-  isOpenTask,
   TASK_STATUS_CATEGORIES,
   type TaskStatusCategory,
   taskCategoryOf,
 } from "@contracts/vocabularies";
-import { Clock, Flag, Plus, Repeat, SkipForward, Timer, User, Zap } from "lucide-react";
-import { type ReactNode, useRef, useState } from "react";
+import { Flag, Inbox, Plus, User, Users, Zap } from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
 
 import { TagChip } from "../../../components/tag-chip";
 import { TagPicker } from "../../../components/tag-picker";
+import { TeamMark } from "../../../components/ui/avatar";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+} from "../../../components/ui/command";
 import { DateField } from "../../../components/ui/date-field";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "../../../components/ui/dropdown-menu";
-import { Input } from "../../../components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
 import { PropertyRow, PropertyValue } from "../../../components/ui/property-row";
 import { cn } from "../../../lib/utils";
-import {
-  assigneeLabel,
-  assigneeOptions,
-  fromAssigneeValue,
-  toAssigneeValue,
-} from "../assignee-options";
+import { type Assignee, assigneeLabel } from "../assignee-options";
 import { previewAssign, useAssignees } from "../assignees";
 import {
   OPTIONAL_PROPERTY_LABELS,
   type OptionalProperty,
+  type PropertyExtras,
   quietLineProperties,
   shownOptionalProperties,
 } from "../detail-properties";
 import { LEVEL_OPTIONS } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
-import { type EnergyLevel, estimateOf, isDrifted, type PriorityLevel, type Task } from "../model";
-import {
-  RECURRENCE_PRESETS,
-  type RecurrencePreset,
-  recurrenceFromPreset,
-  recurrenceLabel,
-} from "../parse/recurrence";
+import type { Bucket, EnergyLevel, PriorityLevel, Task } from "../model";
 import { CATEGORY_LABELS, statusesByCategory, statusNameOf } from "../statuses";
-import { formatMinutes, formatTracked, parseMinutes, timeRow } from "../time-format";
 import { AssigneeAvatar } from "./assignee-avatar";
 import { EnergyIcon, PriorityIcon } from "./level-icons";
 import { StatusIcon } from "./status-icon";
+import {
+  DueTimeValue,
+  EstimateValue,
+  ReminderValue,
+  RepeatValue,
+  SessionsValue,
+} from "./task-detail-pickers";
 
 type Props = {
   task: Task;
@@ -65,18 +71,46 @@ type Props = {
   canEdit: boolean;
   /** My share of the task's tracked time (null until known). */
   mySeconds: number | null;
+  /** Projects the task can be filed into ("Assign to Mike · in [Project ▾]"). */
+  projects: Bucket[];
+  /** The task's Waiting on list is shown (it lives below the properties). */
+  waitingShown: boolean;
+  /** "+ Waiting on" was picked: show the list with its picker open. */
+  onRevealWaiting: () => void;
 };
 
-export function TaskDetailProperties({ task, api, canEdit, mySeconds }: Props) {
+export function TaskDetailProperties({
+  task,
+  api,
+  canEdit,
+  mySeconds,
+  projects,
+  waitingShown,
+  onRevealWaiting,
+}: Props) {
   // Rows picked from the quiet line stay while this task is open, even empty.
   const [revealed, setRevealed] = useState<Set<OptionalProperty>>(() => new Set());
   // The row that was just revealed opens its editor once, on mount.
   const [opening, setOpening] = useState<OptionalProperty | null>(null);
-  const shown = shownOptionalProperties(task, revealed);
-  const quiet = canEdit ? quietLineProperties(task, revealed) : [];
+  const sessions = api.sessions.filter((s) => s.taskId === task.id);
+  const reminders = api.reminders.filter((r) => r.taskId === task.id);
+  const extras: PropertyExtras = {
+    sessions: sessions.length,
+    reminders: reminders.length,
+    waiting: waitingShown ? 1 : 0,
+  };
+  const shown = shownOptionalProperties(task, revealed, extras);
+  const quiet = canEdit ? quietLineProperties(task, revealed, extras) : [];
   const autoOpen = (p: OptionalProperty) => opening === p;
+  const { byId, currentUserId } = useAssignees();
+  const me = byId(currentUserId);
+  const assignee = byId(task.assigneeId);
 
   const reveal = (p: OptionalProperty) => {
+    if (p === "waiting") {
+      onRevealWaiting();
+      return;
+    }
     setRevealed((prev) => new Set(prev).add(p));
     setOpening(p);
   };
@@ -86,8 +120,9 @@ export function TaskDetailProperties({ task, api, canEdit, mySeconds }: Props) {
       <PropertyRow label="Status">
         <StatusValue task={task} api={api} canEdit={canEdit} />
       </PropertyRow>
-      <PropertyRow label="Assignee">
-        <AssigneeValue task={task} api={api} canEdit={canEdit} />
+      <PropertyRow label="Assignee" align="start">
+        <AssigneeValue task={task} api={api} canEdit={canEdit} projects={projects} />
+        <TeamValue task={task} api={api} canEdit={canEdit} />
       </PropertyRow>
       <PropertyRow label="Priority">
         <LevelValue
@@ -96,6 +131,22 @@ export function TaskDetailProperties({ task, api, canEdit, mySeconds }: Props) {
           canEdit={canEdit}
           onChange={(v) => api.patchTask(task.id, { priority: v as PriorityLevel | null })}
         />
+      </PropertyRow>
+      <PropertyRow label="Due">
+        <DateField
+          variant="property"
+          value={task.dueDate ? new Date(task.dueDate) : null}
+          onChange={(d) =>
+            api.patchTask(
+              task.id,
+              d ? { dueDate: d.toISOString() } : { dueDate: null, dueTime: null },
+            )
+          }
+          placeholder="Set date"
+          aria-label="Due"
+          disabled={!canEdit}
+        />
+        <DueTimeValue task={task} api={api} canEdit={canEdit} />
       </PropertyRow>
       {shown.has("energy") ? (
         <PropertyRow label="Energy">
@@ -108,43 +159,37 @@ export function TaskDetailProperties({ task, api, canEdit, mySeconds }: Props) {
           />
         </PropertyRow>
       ) : null}
-      <PropertyRow label="Due">
-        <DateField
-          variant="property"
-          value={task.dueDate ? new Date(task.dueDate) : null}
-          onChange={(d) => api.patchTask(task.id, { dueDate: d ? d.toISOString() : null })}
-          placeholder="Set date"
-          aria-label="Due"
-          disabled={!canEdit}
-        />
-      </PropertyRow>
       {shown.has("scheduled") ? (
         <PropertyRow label="Scheduled">
-          <DateField
-            variant="property"
-            withTime
-            icon={<Clock />}
-            value={task.scheduledAt ? new Date(task.scheduledAt) : null}
-            onChange={(d) => api.patchTask(task.id, { scheduledAt: d ? d.toISOString() : null })}
-            placeholder="Set time"
-            aria-label="Scheduled"
-            disabled={!canEdit}
+          <SessionsValue
+            task={task}
+            sessions={sessions}
+            api={api}
+            canEdit={canEdit}
+            me={me}
+            assignee={assignee}
             defaultOpen={autoOpen("scheduled")}
           />
-          {/* Drift stays ambient and factual, never alarming (spec principles 4–5). */}
-          {isDrifted(task) ? (
-            <span className="ml-1.5 shrink-0 font-sans text-xs text-muted-foreground">passed</span>
-          ) : null}
         </PropertyRow>
       ) : null}
-      {shown.has("time") ? (
-        <PropertyRow label="Time">
-          <TimeValue
+      {shown.has("reminder") ? (
+        <PropertyRow label="Reminder">
+          <ReminderValue
+            task={task}
+            reminders={reminders}
+            api={api}
+            defaultOpen={autoOpen("reminder")}
+          />
+        </PropertyRow>
+      ) : null}
+      {shown.has("estimate") ? (
+        <PropertyRow label="Estimate" align="start">
+          <EstimateValue
             task={task}
             api={api}
             canEdit={canEdit}
             mySeconds={mySeconds}
-            defaultOpen={autoOpen("time")}
+            defaultOpen={autoOpen("estimate")}
           />
         </PropertyRow>
       ) : null}
@@ -157,7 +202,7 @@ export function TaskDetailProperties({ task, api, canEdit, mySeconds }: Props) {
         <TagsValue task={task} api={api} canEdit={canEdit} />
       </PropertyRow>
       {quiet.length > 0 ? (
-        <div className="flex h-(--ctrl-h-sm) items-center gap-2 font-sans text-sm text-muted-foreground">
+        <div className="flex min-h-(--ctrl-h-sm) items-center gap-2 font-sans text-sm text-muted-foreground">
           <Plus className="size-icon-sm shrink-0" aria-hidden />
           <span className="flex min-w-0 flex-wrap items-center">
             {quiet.map((p, i) => (
@@ -171,7 +216,7 @@ export function TaskDetailProperties({ task, api, canEdit, mySeconds }: Props) {
                   type="button"
                   onClick={() => reveal(p)}
                   aria-label={`Add ${OPTIONAL_PROPERTY_LABELS[p].toLowerCase()}`}
-                  className="rounded-sm transition-colors duration-(--motion-fade) ease-(--ease-out) hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                  className="rounded-sm whitespace-nowrap transition-colors duration-(--motion-fade) ease-(--ease-out) hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                 >
                   {OPTIONAL_PROPERTY_LABELS[p]}
                 </button>
@@ -234,9 +279,7 @@ function StatusValue({
                   ))}
                 </div>
               ))
-            : // No statuses read (a project you can't see, or a database before
-              // TV-D9, which has no Backlog): the categories every one takes.
-              TASK_STATUS_CATEGORIES.filter((c) => c !== "backlog" || api.statuses.length > 0).map(
+            : TASK_STATUS_CATEGORIES.filter((c) => c !== "backlog" || api.statuses.length > 0).map(
                 (c) => (
                   <DropdownMenuRadioItem key={c} value={c}>
                     <StatusIcon category={c} className="text-muted-foreground" />
@@ -250,23 +293,52 @@ function StatusValue({
   );
 }
 
+/**
+ * The assignee picker: Me · members · Unassigned (viewers greyed). Handing
+ * an unfiled task (in your Inbox) to someone else asks for a project in the
+ * same picker: "Assign to Mike · in [project]", or "Keep unfiled" (20a, AC5.1).
+ */
 function AssigneeValue({
   task,
   api,
   canEdit,
+  projects,
 }: {
   task: Task;
   api: TasksModuleApi;
   canEdit: boolean;
+  projects: Bucket[];
 }) {
-  const { assignees, byId } = useAssignees();
+  const { assignees, byId, currentUserId } = useAssignees();
+  const [open, setOpen] = useState(false);
+  const [filing, setFiling] = useState<Assignee | null>(null);
   const known = byId(task.assigneeId);
   // A former member reads "Former member", so the value never renders blank.
   const label = known ? known.name : assigneeLabel(task.assigneeId, byId);
   const unassigned = task.assigneeId === null;
+  const inInbox = api.inbox?.id === task.bucketId;
+
+  const assign = (id: string | null, bucketId?: string) => {
+    setOpen(false);
+    setFiling(null);
+    if (id === task.assigneeId && !bucketId) return;
+    if (id) {
+      void previewAssign(bucketId ?? task.bucketId, id).then((msg) => {
+        if (msg) toast.message(msg);
+      });
+    }
+    api.patchTask(task.id, bucketId ? { assigneeId: id, bucketId } : { assigneeId: id });
+  };
+
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild disabled={!canEdit}>
+    <Popover
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) setFiling(null);
+      }}
+    >
+      <PopoverTrigger asChild disabled={!canEdit}>
         <PropertyValue
           empty={unassigned}
           icon={known ? <AssigneeAvatar assignee={known} size="icon" /> : <User />}
@@ -274,31 +346,113 @@ function AssigneeValue({
         >
           {label}
         </PropertyValue>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-64 p-0">
+        {filing ? (
+          <Command>
+            <p className="px-3 pt-2.5 font-sans text-xs text-muted-foreground">
+              Assign to {filing.fullName || filing.name} · in
+            </p>
+            <CommandInput placeholder="Project…" />
+            <CommandList>
+              <CommandEmpty>No matching project.</CommandEmpty>
+              <CommandGroup>
+                {projects.map((b) => (
+                  <CommandItem
+                    key={b.id}
+                    value={`${b.name} ${b.id}`}
+                    onSelect={() => assign(filing.userId, b.id)}
+                  >
+                    <span className="min-w-0 flex-1 break-words">{b.name}</span>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+              <CommandSeparator />
+              <CommandGroup>
+                <CommandItem value="keep unfiled" onSelect={() => assign(filing.userId)}>
+                  <Inbox className="text-muted-foreground" aria-hidden />
+                  Keep unfiled
+                </CommandItem>
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        ) : (
+          <Command>
+            <CommandInput placeholder="Assign to…" />
+            <CommandList>
+              <CommandEmpty>Nobody by that name.</CommandEmpty>
+              <CommandGroup>
+                {assignees.map((a) => (
+                  <CommandItem
+                    key={a.userId}
+                    value={`${a.name} ${a.fullName} ${a.userId}`}
+                    disabled={!a.canTakeTasks}
+                    onSelect={() => {
+                      if (inInbox && a.userId !== currentUserId && projects.length > 0) {
+                        setFiling(a);
+                        return;
+                      }
+                      assign(a.userId);
+                    }}
+                  >
+                    <AssigneeAvatar assignee={a} size="icon" />
+                    <span className="min-w-0 flex-1 break-words">
+                      {a.canTakeTasks ? a.name : `${a.name} (view only)`}
+                    </span>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+              <CommandSeparator />
+              <CommandGroup>
+                <CommandItem value="unassigned" onSelect={() => assign(null)}>
+                  <User className="text-muted-foreground" aria-hidden />
+                  Unassigned
+                </CommandItem>
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/** The team a task is routed to, beside its assignee (a rounded square, call 95). */
+function TeamValue({ task, api, canEdit }: { task: Task; api: TasksModuleApi; canEdit: boolean }) {
+  const team = api.teams.find((t) => t.id === task.teamId) ?? null;
+  if (api.teams.length === 0 && !team) return null;
+  if (!team && !canEdit) return null;
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild disabled={!canEdit}>
+        <PropertyValue
+          empty={!team}
+          icon={
+            team ? (
+              <TeamMark name={team.name} id={team.id} letters={team.mark} size="icon" />
+            ) : (
+              <Users />
+            )
+          }
+          aria-label={team ? `Team: ${team.name}` : "Route to a team"}
+          className={cn(!team && "text-muted-foreground")}
+        >
+          {team ? team.name : "Team"}
+        </PropertyValue>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-56">
         <DropdownMenuRadioGroup
-          value={toAssigneeValue(task.assigneeId)}
-          onValueChange={(v) => {
-            const id = fromAssigneeValue(v);
-            if (id === task.assigneeId) return;
-            if (id) {
-              void previewAssign(task.bucketId, id).then((msg) => {
-                if (msg) toast.message(msg);
-              });
-            }
-            api.patchTask(task.id, { assigneeId: id });
-          }}
+          value={task.teamId ?? "none"}
+          onValueChange={(v) => api.patchTask(task.id, { teamId: v === "none" ? null : v })}
         >
-          {assigneeOptions(assignees).map((o) => (
-            <DropdownMenuRadioItem key={o.value} value={o.value} disabled={o.disabled}>
-              {o.assignee ? (
-                <AssigneeAvatar assignee={o.assignee} size="icon" />
-              ) : (
-                <User className="size-4 text-muted-foreground" aria-hidden />
-              )}
-              {o.label}
+          {api.teams.map((t) => (
+            <DropdownMenuRadioItem key={t.id} value={t.id}>
+              <TeamMark name={t.name} id={t.id} letters={t.mark} size="icon" />
+              {t.name}
             </DropdownMenuRadioItem>
           ))}
+          <DropdownMenuSeparator />
+          <DropdownMenuRadioItem value="none">No team</DropdownMenuRadioItem>
         </DropdownMenuRadioGroup>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -353,260 +507,10 @@ function LevelValue({
             </DropdownMenuRadioItem>
           ))}
           <DropdownMenuSeparator />
-          <DropdownMenuRadioItem value="none">No {name.toLowerCase()}</DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="none">None</DropdownMenuRadioItem>
         </DropdownMenuRadioGroup>
       </DropdownMenuContent>
     </DropdownMenu>
-  );
-}
-
-function RepeatValue({
-  task,
-  api,
-  canEdit,
-  defaultOpen,
-}: {
-  task: Task;
-  api: TasksModuleApi;
-  canEdit: boolean;
-  defaultOpen: boolean;
-}) {
-  // The current rule mapped back to a preset; a parsed rule outside the
-  // vocabulary reads as "custom" (spec §5d: presets only, no rule builder).
-  const preset: string = task.recurrence
-    ? (RECURRENCE_PRESETS.find(
-        (p) => recurrenceFromPreset(p.value, task.scheduledAt).rrule === task.recurrence?.rrule,
-      )?.value ?? "custom")
-    : "none";
-  const setPreset = (v: string) => {
-    if (v === "custom" || v === preset) return;
-    if (v === "none") {
-      // Clearing the rule keeps the task and its current occurrence (one-off).
-      api.patchTask(task.id, { recurrence: null });
-      return;
-    }
-    const rec = recurrenceFromPreset(v as RecurrencePreset, task.scheduledAt);
-    // A task without a scheduled time adopts the rule's first occurrence:
-    // the occurrence IS the scheduled time in the single-row model.
-    api.patchTask(
-      task.id,
-      task.scheduledAt ? { recurrence: rec } : { recurrence: rec, scheduledAt: rec.nextOccurrence },
-    );
-  };
-  const label = task.recurrence ? recurrenceLabel(task.recurrence) : "Doesn’t repeat";
-  const canSkip = canEdit && !!task.recurrence && isOpenTask(task);
-  return (
-    <DropdownMenu defaultOpen={defaultOpen && canEdit}>
-      <DropdownMenuTrigger asChild disabled={!canEdit}>
-        <PropertyValue empty={!task.recurrence} icon={<Repeat />} aria-label={`Repeat: ${label}`}>
-          {label}
-        </PropertyValue>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-52">
-        <DropdownMenuRadioGroup value={preset} onValueChange={setPreset}>
-          <DropdownMenuRadioItem value="none">Doesn’t repeat</DropdownMenuRadioItem>
-          {RECURRENCE_PRESETS.map((p) => (
-            <DropdownMenuRadioItem key={p.value} value={p.value}>
-              {p.label}
-            </DropdownMenuRadioItem>
-          ))}
-          {preset === "custom" && task.recurrence ? (
-            <DropdownMenuRadioItem value="custom">
-              {recurrenceLabel(task.recurrence)}
-            </DropdownMenuRadioItem>
-          ) : null}
-        </DropdownMenuRadioGroup>
-        {canSkip ? (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={() => api.skipOccurrence(task.id)}>
-              <SkipForward aria-hidden />
-              Skip this occurrence
-            </DropdownMenuItem>
-          </>
-        ) : null}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
-/** "1h 20m of ~4h", a hairline bar, and "you 50m" for your share (tasks-v2 §5). */
-function TimeValue({
-  task,
-  api,
-  canEdit,
-  mySeconds,
-  defaultOpen,
-}: {
-  task: Task;
-  api: TasksModuleApi;
-  canEdit: boolean;
-  mySeconds: number | null;
-  defaultOpen: boolean;
-}) {
-  const [open, setOpen] = useState(defaultOpen && canEdit);
-  const row = timeRow(task.timeSpentSeconds, estimateOf(task), mySeconds);
-  const hasAny = estimateOf(task) != null || task.timeSpentSeconds > 0;
-  const spoken = [row.tracked, row.estimate, row.mine].filter(Boolean).join(", ");
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild disabled={!canEdit}>
-        <PropertyValue
-          empty={!hasAny}
-          icon={<Timer />}
-          aria-label={hasAny ? `Time: ${spoken}` : "Time: add estimate"}
-          trailing={
-            hasAny ? (
-              <>
-                {row.progress !== null ? (
-                  <span
-                    aria-hidden
-                    className="h-0.5 w-8 shrink-0 overflow-hidden rounded-full bg-hairline"
-                  >
-                    <span
-                      className={cn(
-                        "block h-full bg-muted-foreground",
-                        // The fill is the only proportional value on the row.
-                        progressWidth(row.progress),
-                      )}
-                    />
-                  </span>
-                ) : null}
-                {row.mine ? (
-                  <span className="shrink-0 font-sans text-xs text-muted-foreground tabular-nums">
-                    {row.mine}
-                  </span>
-                ) : null}
-              </>
-            ) : null
-          }
-        >
-          {hasAny ? (
-            <span className="tabular-nums">
-              {row.tracked}
-              {row.estimate ? <span className="text-muted-foreground"> {row.estimate}</span> : null}
-            </span>
-          ) : (
-            "Add estimate"
-          )}
-        </PropertyValue>
-      </PopoverTrigger>
-      <PopoverContent align="start" className="w-64 p-3">
-        <TimeEditor task={task} api={api} onDone={() => setOpen(false)} />
-      </PopoverContent>
-    </Popover>
-  );
-}
-
-/** Snap the bar to twelfths: token-routed widths, no inline style (R10). */
-function progressWidth(progress: number): string {
-  const steps = [
-    "w-0",
-    "w-1/12",
-    "w-2/12",
-    "w-3/12",
-    "w-4/12",
-    "w-5/12",
-    "w-6/12",
-    "w-7/12",
-    "w-8/12",
-    "w-9/12",
-    "w-10/12",
-    "w-11/12",
-    "w-full",
-  ];
-  const i = Math.round(Math.max(0, Math.min(1, progress)) * 12);
-  // A started task never looks empty.
-  return steps[progress > 0 && i === 0 ? 1 : i];
-}
-
-/**
- * Estimate and tracked time. Typing a tracked total records one adjustment
- * that makes the total exactly that (TV-D3 `set_total`); a field left as it was
- * writes nothing, so a glance never rounds away tracked seconds.
- */
-function TimeEditor({
-  task,
-  api,
-  onDone,
-}: {
-  task: Task;
-  api: TasksModuleApi;
-  onDone: () => void;
-}) {
-  // What each field last showed as saved: the value it opened with, then the
-  // value it last wrote. Focus can save while the editor is open, and a field
-  // left as it was must never write back a total it showed earlier (that would
-  // take away the time saved meanwhile).
-  const baseline = useRef({
-    estimate: estimateOf(task) != null ? formatMinutes(estimateOf(task) as number) : "",
-    tracked: formatTracked(task.timeSpentSeconds),
-  });
-  const [estimate, setEstimate] = useState(baseline.current.estimate);
-  const [tracked, setTracked] = useState(baseline.current.tracked);
-
-  const commitEstimate = () => {
-    const typed = estimate.trim();
-    if (typed === baseline.current.estimate) return;
-    const minutes = typed === "" ? null : parseMinutes(typed);
-    if (typed !== "" && minutes === null) {
-      setEstimate(baseline.current.estimate);
-      return;
-    }
-    baseline.current.estimate = typed;
-    const next = minutes && minutes > 0 ? minutes : null;
-    // TV-D10: the estimate has its own field (a scheduled session keeps its length).
-    if (next !== estimateOf(task)) api.patchTask(task.id, { estimateMinutes: next });
-  };
-  const commitTracked = () => {
-    const typed = tracked.trim();
-    if (typed === baseline.current.tracked) return;
-    const minutes = typed === "" ? 0 : parseMinutes(typed);
-    if (minutes === null) {
-      setTracked(baseline.current.tracked);
-      return;
-    }
-    baseline.current.tracked = typed;
-    api.setTimeSpent(task.id, minutes * 60);
-  };
-
-  const onKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      commitEstimate();
-      commitTracked();
-      onDone();
-    }
-  };
-
-  return (
-    <div className="grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-2 font-sans text-sm">
-      <label htmlFor="task-time-estimate" className="text-muted-foreground">
-        Estimate
-      </label>
-      <Input
-        id="task-time-estimate"
-        size="sm"
-        autoFocus
-        value={estimate}
-        placeholder="e.g. 1h 30m"
-        onChange={(e) => setEstimate(e.target.value)}
-        onBlur={commitEstimate}
-        onKeyDown={onKey}
-      />
-      <label htmlFor="task-time-tracked" className="text-muted-foreground">
-        Tracked
-      </label>
-      <Input
-        id="task-time-tracked"
-        size="sm"
-        value={tracked}
-        placeholder="0m"
-        onChange={(e) => setTracked(e.target.value)}
-        onBlur={commitTracked}
-        onKeyDown={onKey}
-      />
-    </div>
   );
 }
 

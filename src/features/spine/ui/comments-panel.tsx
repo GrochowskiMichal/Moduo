@@ -11,7 +11,7 @@
 // reference (`moduo://task/<id>`), never its title, and the body renders it
 // per reader ("Private item" when they can't open it).
 
-import { ArrowUp, AtSign, CalendarDays } from "lucide-react";
+import { ArrowUp, AtSign, CalendarDays, Check } from "lucide-react";
 import {
   type ReactNode,
   useContext,
@@ -59,12 +59,12 @@ export function PersonAvatar({
   person,
   className,
 }: {
-  person: (Pick<CommentPerson, "name" | "avatarUrl"> & { id?: string }) | null;
+  person: (Pick<CommentPerson, "name" | "avatarUrl" | "unnamed"> & { id?: string }) | null;
   className?: string;
 }) {
   return (
     <KitPersonAvatar
-      name={person?.name || "?"}
+      name={person && !person.unnamed ? person.name || "?" : "?"}
       id={person?.id}
       src={person?.avatarUrl}
       size="icon"
@@ -183,6 +183,9 @@ export function CommentCard({
   authorName,
   time,
   timeTitle,
+  meta,
+  actions,
+  footer,
   children,
 }: {
   author: (Pick<CommentPerson, "name" | "avatarUrl"> & { id?: string }) | null;
@@ -190,6 +193,12 @@ export function CommentCard({
   time: string;
   /** The full date, as a tooltip on the relative time. */
   timeTitle?: string;
+  /** After the time ("edited"). */
+  meta?: ReactNode;
+  /** Hover controls on the author line (react, ⋯). */
+  actions?: ReactNode;
+  /** Under the body (the reactions). */
+  footer?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -198,6 +207,9 @@ export function CommentCard({
       author={authorName}
       time={time}
       timeTitle={timeTitle}
+      meta={meta}
+      actions={actions}
+      footer={footer}
     >
       {children}
     </FeedCard>
@@ -228,6 +240,14 @@ type ComposerProps = {
   disabled?: boolean;
   className?: string;
   "aria-label"?: string;
+  /** Editing a comment (TV-U13): the text to start from, with its picked
+   *  people and things, so a save keeps them (`editableComment`). */
+  initial?: { text: string; mentions: PickedMention[]; things: PickedThing[] };
+  /** The send button's name ("Comment", "Save"). */
+  submitLabel?: string;
+  /** Esc with no list open: leave without saving (editing). */
+  onCancel?: () => void;
+  autoFocus?: boolean;
 };
 
 type ListItem =
@@ -262,12 +282,16 @@ export function CommentComposer({
   references,
   disabled = false,
   className,
+  initial,
+  submitLabel = "Comment",
+  onCancel,
+  autoFocus = false,
   ...props
 }: ComposerProps) {
-  const [text, setText] = useState("");
-  const [caret, setCaret] = useState(0);
-  const [mentions, setMentions] = useState<PickedMention[]>([]);
-  const [things, setThings] = useState<PickedThing[]>([]);
+  const [text, setText] = useState(initial?.text ?? "");
+  const [caret, setCaret] = useState(initial?.text.length ?? 0);
+  const [mentions, setMentions] = useState<PickedMention[]>(initial?.mentions ?? []);
+  const [things, setThings] = useState<PickedThing[]>(initial?.things ?? []);
   const [thingResults, setThingResults] = useState<{ query: string; items: ComposerThing[] }>({
     query: "",
     items: [],
@@ -403,13 +427,15 @@ export function CommentComposer({
     try {
       const stored = references ? commentBodyWithReferences(body, things, mentions) : body;
       await onSubmit(stored, keptMentionIds(text, mentions));
+      // An edit closes its box; a new comment's box empties for the next one.
+      if (initial) return;
       setText("");
       setCaret(0);
       setMentions([]);
       setThings([]);
       setDismissedAt(null);
     } catch (e) {
-      toast.error("Couldn’t post the comment", {
+      toast.error(initial ? "Couldn’t save the comment" : "Couldn’t post the comment", {
         description: e instanceof Error ? e.message : undefined,
       });
     } finally {
@@ -436,11 +462,11 @@ export function CommentComposer({
                 onClick={startMention}
               />
               <IconButton
-                icon={ArrowUp}
-                label="Comment"
+                icon={initial ? Check : ArrowUp}
+                label={submitLabel}
                 tooltip={
                   <span>
-                    Comment <span className="text-muted-foreground">⌘↵</span>
+                    {submitLabel} <span className="text-muted-foreground">⌘↵</span>
                   </span>
                 }
                 disabled={!canPost}
@@ -452,6 +478,7 @@ export function CommentComposer({
           <FeedComposerInput
             ref={areaRef}
             value={text}
+            autoFocus={autoFocus}
             disabled={disabled}
             placeholder={placeholder}
             aria-label={props["aria-label"] ?? "Comment"}
@@ -484,6 +511,10 @@ export function CommentComposer({
               if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                 e.preventDefault();
                 void post();
+              } else if (e.key === "Escape" && onCancel) {
+                e.preventDefault();
+                e.stopPropagation();
+                onCancel();
               }
             }}
           />

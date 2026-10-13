@@ -543,11 +543,10 @@ export function CalendarPageView({
       // A block of a work session moves that session (TV-F6); one read from
       // the task row writes its schedule, as before.
       if (sessionId) {
-        api.moveSession(
-          sessionId,
-          new Date(result.startMs).toISOString(),
-          new Date(result.startMs + result.durationMinutes * 60_000).toISOString(),
-        );
+        api.updateSession(sessionId, {
+          startsAt: new Date(result.startMs).toISOString(),
+          endsAt: new Date(result.startMs + result.durationMinutes * 60_000).toISOString(),
+        });
         return;
       }
       api.patchTask(taskId, {
@@ -819,14 +818,16 @@ export function CalendarPageView({
           toast("No open slot left today — it's waiting in the strip below.");
           return;
         }
-        api.moveSession(
-          session.id,
-          new Date(gap).toISOString(),
-          new Date(gap + durMs).toISOString(),
-        );
+        api.updateSession(session.id, {
+          startsAt: new Date(gap).toISOString(),
+          endsAt: new Date(gap + durMs).toISOString(),
+        });
         toast(`Moved to ${formatTimeOfDay(gap)}`, {
           duration: UNDO_TOAST_MS,
-          action: { label: "Undo", onClick: () => api.moveSession(session.id, fromStart, fromEnd) },
+          action: {
+            label: "Undo",
+            onClick: () => api.updateSession(session.id, { startsAt: fromStart, endsAt: fromEnd }),
+          },
         });
         return;
       }
@@ -881,14 +882,21 @@ export function CalendarPageView({
     (taskId: string, sessionId?: string | null) => {
       // A block of a work session removes that session (TV-F6); Undo puts one
       // back at the same times.
-      if (sessionId && api.sessions.some((s) => s.id === sessionId)) {
-        void api.removeSession(sessionId).then((removed) => {
-          if (!removed) return;
-          markWorked(taskId, false);
-          toast("Removed from the calendar", {
-            duration: UNDO_TOAST_MS,
-            action: { label: "Undo", onClick: () => api.restoreSession(removed) },
-          });
+      const session = sessionId ? api.sessions.find((s) => s.id === sessionId) : undefined;
+      if (session) {
+        api.removeSession(session.id);
+        markWorked(taskId, false);
+        toast("Removed from the calendar", {
+          duration: UNDO_TOAST_MS,
+          action: {
+            label: "Undo",
+            onClick: () =>
+              api.addSession(session.taskId, {
+                startsAt: session.startsAt,
+                endsAt: session.endsAt,
+                userId: session.userId,
+              }),
+          },
         });
         return;
       }

@@ -107,6 +107,8 @@ const COMMENTS: SpineComment[] = [
     createdAt: ago(48),
     updatedAt: ago(48),
     deletedAt: null,
+    editedAt: null,
+    reactions: [],
   },
 ];
 

@@ -132,6 +132,14 @@ const api = (t: Task): TasksModuleApi =>
     patchTask: rs.fn(),
     toggleDone: rs.fn(),
     toggleQueue: rs.fn(),
+    // TV-U13: the task's rows and structure from the store.
+    sessions: [],
+    reminders: [],
+    waiting: [],
+    teams: [],
+    areas: [],
+    sections: [],
+    commentStamps: new Map(),
   }) as unknown as TasksModuleApi;
 
 function rec(id: string, over: Partial<AttachmentRecord> = {}): AttachmentRecord {

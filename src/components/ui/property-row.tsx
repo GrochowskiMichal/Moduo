@@ -46,7 +46,9 @@ function PropertyRow({
     >
       <Label
         {...(htmlFor ? { htmlFor } : {})}
-        className="flex min-h-(--ctrl-h-sm) w-24 shrink-0 items-center gap-1.5 font-sans text-sm text-muted-foreground"
+        // 96 px, narrowing to 76 px when its container (the right panel) is
+        // under 320 px (Tasks v3 call 89). Without a container it stays 96.
+        className="flex min-h-(--ctrl-h-sm) w-24 shrink-0 items-center gap-1.5 font-sans text-sm text-muted-foreground @max-xs:w-19"
       >
         {Icon ? <Icon className="size-icon-sm shrink-0 opacity-70" aria-hidden /> : null}
         <span className="min-w-0 break-words">{label}</span>
