@@ -21,7 +21,7 @@
 - [ ] **Do:** Templates → a task template → Use… → pick a project and a date → **Expect:** the task and subtasks in that project; subtasks' due dates by their offsets from the date. _(web)_
 
 ## Capture `/template`
-- [ ] **Do:** ⌘⇧K → More → **Template…** (or type `/template`) → pick a task template saved from a task with a due date → **Expect:** a "Template: …" chip in the destination row, the title filled, the destination switched to the template's project, only Assign and Due pills, and "With its n subtasks, description, tags and priority. Due is the date its dates count from." _(web / desktop)_
+- [ ] **Do:** ⌘⇧K → More → **Template…** (or type `/template`) → pick a task template saved from a task with a due date → **Expect:** a "Template: …" chip in the destination row, the title filled, the destination switched to the template's project, only Assign and Due pills, and "With its n subtasks, description, tags and priority. Pick Due, or it's made without dates." (once Due is set: "Due is the date its dates count from.") _(web / desktop)_
 - [ ] **Do:** set Due and Create → **Expect:** the capture waits a moment, then closes; the task with its subtasks, dated from Due; the toast names the template and opens the task. _(web)_
 - [ ] **Do:** pick a template saved from a task with no due date → **Expect:** no Due pill and "Its dates count from today."; Create dates its subtasks from today. _(web)_
 - [ ] **Do:** with a template picked, type `#urgent` or `/priority high` in the title and Create → **Expect:** "With a template, only the person and Due apply. Remove the other words, or the template."; nothing is made. _(web)_

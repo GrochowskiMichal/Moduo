@@ -1372,7 +1372,9 @@ export function TaskCaptureBody({
             {!template.dated
               ? ""
               : template.anchor === "due"
-                ? " Due is the date its dates count from."
+                ? values.dueDay
+                  ? " Due is the date its dates count from."
+                  : " Pick Due, or it's made without dates."
                 : " Its dates count from today."}
           </p>
         ) : null}
