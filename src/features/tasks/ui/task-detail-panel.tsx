@@ -3,9 +3,10 @@
 // the full page in the centre (call 32). Top to bottom: the header (project
 // › section, handle, a claims slot, queue, ⤢, ⋯), the status toggle and the
 // title, the agent session line's slot, the Done / Won't do line, the
-// properties, the description (folded at ~8 lines in the panel), the
-// collections (Subtasks, Waiting on, Blocked by, Blocks, Linked), then one
-// feed. On the full page the properties take a column of their own on the
+// properties, the description (folded at ~8 lines in the panel) and its
+// attachments (AT-2: files pasted or dropped anywhere on the task attach to
+// it), the collections (Subtasks, Waiting on, Blocked by, Blocks, Linked),
+// then one feed. On the full page the properties take a column of their own on the
 // right once there's room, and the description never folds.
 //
 // States: nothing selected (inside a project the page shows the Project
@@ -18,6 +19,10 @@ import { Ban, Check, Lock, RotateCcw, Trash2 } from "lucide-react";
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import {
+  AttachmentsSection,
+  useAttachmentsSection,
+} from "@/features/attachments/ui/attachments-section";
 import { useEntityHub } from "@/features/spine/hooks/use-entity-hub";
 import { createLinkWithToast } from "@/features/spine/ui/drop-link-toast";
 import type { EntityRef } from "@/lib/entity-links";
@@ -25,6 +30,7 @@ import type { ModuoRuntime } from "@/lib/runtime.types";
 import { Button } from "../../../components/ui/button";
 import { CompleteToggle } from "../../../components/ui/complete-toggle";
 import { detailTitleVariants } from "../../../components/ui/detail-title";
+import { DROP_TARGET } from "../../../components/ui/drag-visuals";
 import { EmptyState } from "../../../components/ui/empty-state";
 import { Kbd } from "../../../components/ui/kbd";
 import { Separator } from "../../../components/ui/separator";
@@ -130,6 +136,20 @@ function DetailBody({
     canEdit && !!bucket && !bucket.isSystem && bucket.ownerId === api.currentUserId;
   const projects = buckets.filter((b) => !b.isSystem && !b.archivedAt);
 
+  // ── attachments (AT-2): one self-contained section ─────────────────────────
+  const files = useAttachmentsSection({
+    runtime,
+    // The task's own workspace: that's where its files live.
+    workspaceId: workspaceId ? task.workspaceId || workspaceId : null,
+    entity: { type: "task", id: task.id },
+    userId: api.currentUserId ?? null,
+    canEdit,
+  });
+  const dropScroll = cn(
+    "pane-scroll min-h-0 flex-1 overflow-y-auto rounded-lg transition-[background-color,box-shadow] duration-(--motion-fade) ease-(--ease-out)",
+    files.dropActive && DROP_TARGET,
+  );
+
   // ── linked items (DF-8, as reference cards since TV-U13) ───────────────────
   const hubFocus: EntityRef = { type: "task", id: task.id };
   const hub = useEntityHub(runtime, workspaceId, hubFocus);
@@ -210,14 +230,18 @@ function DetailBody({
     />
   );
   const description = (
-    <TaskDescription
-      task={task}
-      api={api}
-      canEdit={canEdit}
-      runtime={runtime}
-      workspaceId={workspaceId}
-      foldable={layout === "panel"}
-    />
+    <>
+      <TaskDescription
+        task={task}
+        api={api}
+        canEdit={canEdit}
+        runtime={runtime}
+        workspaceId={workspaceId}
+        foldable={layout === "panel"}
+        onFiles={files.onEditorFiles}
+      />
+      <AttachmentsSection state={files} className="mt-1" />
+    </>
   );
   const collections = (
     <div className="flex flex-col gap-3">
@@ -283,9 +307,19 @@ function DetailBody({
   if (layout === "page") {
     // Two columns once the centre is wide enough (≈880 px); one below.
     return (
-      <div className="@container flex h-full min-h-0 flex-col" data-layout="page">
+      // A drop or paste anywhere on the task attaches the files; the
+      // description editor hands its own to `onFiles` (Lexical owns those).
+      <section
+        aria-label="Task details"
+        className="@container flex h-full min-h-0 flex-col"
+        data-layout="page"
+        {...files.dropZone}
+      >
         {header}
-        <div className="pane-scroll min-h-0 flex-1 overflow-y-auto px-1 pt-3 pb-6">
+        <div
+          data-drop-active={files.dropActive || undefined}
+          className={cn(dropScroll, "px-1 pt-3 pb-6")}
+        >
           <div className="flex flex-col gap-6 @4xl:flex-row @4xl:items-start">
             <div className="flex min-w-0 max-w-180 flex-1 flex-col gap-5">
               <div className="flex flex-col gap-1.5">
@@ -310,15 +344,25 @@ function DetailBody({
             </aside>
           </div>
         </div>
-      </div>
+      </section>
     );
   }
 
   return (
-    <div className="@container flex h-full min-h-0 flex-col" data-layout="panel">
+    // A drop or paste anywhere on the task attaches the files; the description
+    // editor hands its own to `onFiles` (Lexical owns those events).
+    <section
+      aria-label="Task details"
+      className="@container flex h-full min-h-0 flex-col"
+      data-layout="panel"
+      {...files.dropZone}
+    >
       {header}
       {/* px/py inset so a focused field's ring isn't clipped by this scroll box */}
-      <div className="pane-scroll min-h-0 flex-1 overflow-y-auto px-1 pt-2.5 pb-4">
+      <div
+        data-drop-active={files.dropActive || undefined}
+        className={cn(dropScroll, "px-1 pt-2.5 pb-4")}
+      >
         <div className="flex flex-col gap-5">
           <div className="flex flex-col gap-1.5">
             {title}
@@ -332,7 +376,7 @@ function DetailBody({
           {feed}
         </div>
       </div>
-    </div>
+    </section>
   );
 }
 

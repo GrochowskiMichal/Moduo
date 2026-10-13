@@ -31,6 +31,7 @@ export function TaskDescription({
   runtime,
   workspaceId,
   foldable = true,
+  onFiles,
 }: {
   task: Task;
   api: TasksModuleApi;
@@ -39,6 +40,8 @@ export function TaskDescription({
   workspaceId: string | null;
   /** The full page never folds (call 32). */
   foldable?: boolean;
+  /** Files pasted or dropped into the text (AT-2: they attach to the task). */
+  onFiles?: (files: File[]) => void;
 }) {
   const boxRef = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState(false);
@@ -107,10 +110,11 @@ export function TaskDescription({
           ariaLabel="Description"
           placeholder={canEdit ? "Add a description…  @ or / to link" : undefined}
           className="min-h-6 text-base text-foreground/85"
-          placeholderClassName="text-base"
+          placeholderClassName="right-0 truncate text-base"
           onCommit={(html) => {
             if (html !== task.description) api.patchTask(task.id, { description: html });
           }}
+          onFiles={onFiles}
         />
       </div>
       {foldable && !editing && (overflow.folds || expanded) ? (
