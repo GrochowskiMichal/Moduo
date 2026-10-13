@@ -2,6 +2,71 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index.
 
+## 2026-10-13 · TV-U10 List v3 — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 14 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §4, AC11.2–11.5, AC3.5, AC1.5; research views-list-upcoming.md §1–3, §9; defaults i–n). Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **U10-1 · The status icon is the row's lead: a click finishes, on a closed task it reopens** → TV-U10 (`task-row-cells.tsx` `StatusGlyph`, `task-row.tsx` `activateGlyph`), TV-U11 (cards)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the category's icon replaces the checkbox. A click finishes from any open category (In progress and Backlog too); on Done or Won't do it reopens to To do; Space and `x` do the same; right-click, ⇧S and the row menu's "Status…" open the status menu (the project's names by category) at the icon. Done's check is the accent's colour; Backlog and Won't do the quietest.
+  - Why: default k; the server keeps no earlier status to go back to, and To do is where a reopened task usually belongs. It also fixes U2-7 (Space on a Won't do task marked it Done).
+  - Rejected: reopening to "the previous status" (nothing records it); a status menu on click.
+- **U10-2 · Each column is as wide as its widest value in view, shared by rows and headers** → TV-U10 (`row-layout.ts` `columnWidths`, `--tl-col-*`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the list works out each sized column's width in `ch` from the words every listed row will show (never narrower than its header label) and sets it as a CSS variable on the frame; rows and the Detailed header read it, so nothing in a column truncates and a row never redraws for a width. The title is the only flexible track (the checkpoint-1 fix). Project › Section stops growing at 32ch (waiting at 24, a first name at 18): longer words wrap inside the cell.
+  - Why: call 41 (dates, times and counts never truncate) and checkpoint 1 (titles truncating in a mostly empty row came from fixed minimum widths on cells empty in that row).
+  - Rejected: fixed widths per column (truncation or waste); measuring text with a canvas (the `ch` estimate is close and costs nothing).
+- **U10-3 · Detailed drops whole columns to keep the title 200 px; "+n" explains, it doesn't open Display** → TV-U10 (`fitColumns`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: in research §1's order (Updated → time → Next session → waiting → status name → Project › Section → assignee name → handle), measured against the frame in 16 px steps with the face's real `ch`. The header's "+n" tooltip says how many and how to get them back (widen the window, close a panel).
+  - Why: the Display menu can't be opened from outside it; a tooltip says the same thing without a second control.
+  - Rejected: a horizontal scroll (the 3×3 layout has no room for one); opening Display from "+n" (a new seam on the menu for one link).
+- **U10-4 · Sortable headers: ascending → descending → the view's own order** → TV-U10 (`display.ts` `nextHeaderSort`, `orderDir`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: Title, Status, Priority, Due, Next session and Updated sort; the direction is stored in Display beside Order by (and resets when Order by changes in the menu); Order by gains Title and Status. A sort in a project still says "Sorted by … · Back to manual order".
+  - Why: research §3; one sort state for the menu and the headers.
+  - Rejected: sorting by project, assignee, time or waiting (not in Order by; each would need its own rule).
+- **U10-5 · A project groups by section; with no sections it is the plain list ending in "+ Add section"** → TV-U10 (`display.ts`, `helpers.ts`, `task-list-parts.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: Section is every project's default (offered only inside one project); a project without sections shows no headers and takes drops like an ungrouped list; "No section" comes first (Todoist's top of the project); a section's header reads "1 of 4" (done of all) and "· ends Oct 24"; its ⋯ has Rename… and Delete section (its tasks stay, under No section; Undo restores it). Team is offered once the workspace has teams.
+  - Why: stored Display prefs would freeze a "None" default for a project that later gains sections; the "+ Add section" line is the List's way to make the first one.
+  - Rejected: defaulting to Section only once sections exist (the default is read once per scope).
+- **U10-6 · A group's "+" stays visible and opens the one capture with the group's value** → TV-U10 (`list-group-add.ts`), TV-U14's capture seed
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the spec's "stays visible" over research's fade. It fills in the section, status category, priority, person, team or due day (Later and No date: no date; Earlier: no "+"); the capture seed gained `teamId`, `dueDay` and `status`. In All, groups other than projects show the "+" disabled with "Pick a project first" (the task would land in your Inbox, which All doesn't list); My tasks adds to your Inbox, assigned to you; Upcoming adds only in its days.
+  - Why: default n and U14-1 (one capture for every way in); a "+" whose task vanishes from view reads as broken.
+  - Rejected: an inline add row (a second capture); filing All's "+" into a guessed project.
+- **U10-7 · Backlog folds behind a line at each group's end; grouped by status it's its own folded group** → TV-U10
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: "Backlog · n" with a chevron ends each group (or the list); a selected Backlog task opens its line. Everything else starts open; what you fold is remembered per person, workspace, view and grouping on this device.
+  - Why: 53b and research §2 (everything starts open, which fixes "only the first group opens").
+  - Rejected: synced folds now (research says synced; preferences sync is TV-U8's lane), one Backlog line per list only.
+- **U10-8 · A late row's fixes lie over the end of its title on hover or selection** → TV-U10 (`LateFixes`, `break-down.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: Move (the due picker), Won't do, Break down (selects the task and opens the panel's subtask line; a subtask has no Break down). They fade in over the title cell's end on the row's own surface, so nothing reflows and nothing is reserved.
+  - Why: a reserved invisible slot (R6's usual answer) cut late titles short all the time, checkpoint 1's complaint again.
+  - Rejected: a reserved slot; replacing the date column.
+- **U10-9 · Offline: a clock on waiting rows; other edits keep saying "Offline"** → TV-U10 (`store.ts` `pendingTaskIds`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: a 12 px clock in the counts while a capture or check-off of that task waits on the device; edits that can't wait keep TV-D11a's "Offline" toast instead of disabling every control; the top bar already says "Offline · n waiting to sync".
+  - Why: default g; a disabled control hides why, the toast says it.
+  - Rejected: disabling the row's controls with a tooltip each.
+- **U10-10 · States: a still skeleton after 300 ms; "No tasks match · 214 hidden by 2 filters"; read-only "View only"** → TV-U10 (`task-view-states.tsx`, `plan-view-header.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: research §9: nothing for 300 ms, then eight still rows; filtered to nothing names how many are hidden, with Clear filters (no "Edit filters": Filter can't be opened from outside); read-only says "View only" after the title, has no New, and right-click offers Open · Copy link · Copy as text.
+  - Why: AC1.5 and research §9.
+  - Rejected: a shimmer (research: no shimmer).
+- **U10-11 · A long menu fades at its foot while more waits below** → DS-6's kit (`menu-scroll.ts`, `[data-more-below]`, `--menu-fade`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: every dropdown and context menu (and their sub-menus) marks itself while it can scroll further; a mask fades the last 28 px, so the cut-off item reads as "there's more".
+  - Why: checkpoint 1's menu note; a mask needs no colour, so every surface and theme fades the same.
+  - Rejected: a gradient overlay (needs the surface's colour per theme).
+- **U10-12 · Left to their blocks** → TV-U13, TV-U11, TV-U15
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: call 87 (finishing a parent finishes its subtasks) stays TV-U13's per the 🟠 box; the Board keeps ascending sorts (it ignores the List's direction) for TV-U11; My tasks' folded Backlog line needs its scope to include your Backlog tasks (TV-U15); files in the counts wait for AT-3; "Claude · working" for TV-D16.
+  - Why: one block per session; each sits with the block that owns its surface.
+  - Rejected: —
+
 ## 2026-10-11 · TV-D11b virtualization, the 10k fixture, the grant feed — the agent's choices (deferred to by Maciej)
 
 Built in tasks-v3 block 12 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §Assumptions #7, #8, AC12.3, AC12.4; REPLAN 37 and §6.11; the TV-D11a deferrals; migration `20261011120000_tasks_sync_feed_search`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
