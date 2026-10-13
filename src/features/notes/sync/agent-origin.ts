@@ -34,6 +34,17 @@ export function isForeignOrigin(origin: unknown, persistence: unknown): boolean 
   return origin === "remote" || origin === persistence || isAgentOrigin(origin);
 }
 
+/** The origin to apply a live-channel update with: an agent's write (NR-6)
+ * gets an `AgentOrigin` so Undo can track it. The sent name is never
+ * trusted (the channel is public until NR-7); the meta line reads it from
+ * the activity row. */
+export function broadcastOrigin(
+  payload: Record<string, unknown> | undefined,
+): AgentOrigin | "remote" {
+  if (payload?.origin !== "agent") return "remote";
+  return new AgentOrigin(typeof payload.keyId === "string" ? payload.keyId : null, null);
+}
+
 export type AgentUndo = {
   canUndo: () => boolean;
   /** Revert the most recent agent change still on the stack. */

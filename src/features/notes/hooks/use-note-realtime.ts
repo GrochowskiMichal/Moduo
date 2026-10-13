@@ -19,7 +19,7 @@
 import { useEffect, useState } from "react";
 import * as Y from "yjs";
 import { supabaseClient } from "@/lib/runtime.web";
-import { AgentOrigin, isForeignOrigin } from "../sync/agent-origin";
+import { broadcastOrigin, isForeignOrigin } from "../sync/agent-origin";
 import type { NotesSyncEngineV2 } from "../sync/engine-v2";
 import {
   coalesceUpdates,
@@ -140,15 +140,7 @@ export function useNoteRealtime({ engine, noteId, enabled, selfUserId, selfName 
           if (typeof b64 !== "string") return;
           // An MCP write (NR-6) arrives marked as the agent's, so the
           // session's Undo can revert exactly it.
-          const origin =
-            payload?.origin === "agent"
-              ? new AgentOrigin(
-                  typeof payload.keyId === "string" ? payload.keyId : null,
-                  // The channel is public until NR-7: never trust a sent
-                  // name; the meta line reads it from the activity row.
-                  null,
-                )
-              : "remote";
+          const origin = broadcastOrigin(payload);
           try {
             Y.applyUpdate(doc, decodeBase64ToUint8(b64), origin);
           } catch {

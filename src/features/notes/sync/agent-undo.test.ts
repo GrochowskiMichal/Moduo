@@ -14,7 +14,7 @@ import { agentWriteFromLog, applyAgentEdit } from "../editor/agent-write";
 import { deriveNoteBody, NOTES_DOC_ROOT } from "../editor/doc-markdown";
 import { buildDocStateFromMarkdown } from "../editor/materialize";
 import { decodeBase64ToUint8, encodeUint8ToBase64 } from "../utils/base64";
-import { AgentOrigin, createAgentUndo, isForeignOrigin } from "./agent-origin";
+import { AgentOrigin, broadcastOrigin, createAgentUndo, isForeignOrigin } from "./agent-origin";
 
 const NOTE_ID = "6b1f0c5e-2d3a-4e8f-9a01-7c2b4d6e8f10";
 
@@ -164,5 +164,28 @@ describe("agent write from the log", () => {
       edit: { kind: "append", markdown: "Agent line" },
     });
     expect(res.bodyMd).toBe(`${base.bodyMd}\n\nAgent line`);
+  });
+});
+
+describe("live broadcast receive path", () => {
+  it("an agent broadcast applies as an undoable agent change; a peer's does not", () => {
+    const doc = clientDoc("# Plan\n\nHello");
+    const undo = createAgentUndo(doc);
+    const update = agentAppend(doc, "Live from the agent");
+    const payload = {
+      b64: encodeUint8ToBase64(update),
+      origin: "agent",
+      keyId: "k1",
+      label: "Fake",
+    };
+    const origin = broadcastOrigin(payload);
+    expect(origin).toBeInstanceOf(AgentOrigin);
+    expect((origin as AgentOrigin).label).toBeNull();
+    Y.applyUpdate(doc, decodeBase64ToUint8(payload.b64), origin);
+    expect(deriveNoteBody(doc).md).toBe("# Plan\n\nHello\n\nLive from the agent");
+    expect(undo.canUndo()).toBe(true);
+    expect(broadcastOrigin({ b64: "x" })).toBe("remote");
+    expect(broadcastOrigin(undefined)).toBe("remote");
+    undo.destroy();
   });
 });
