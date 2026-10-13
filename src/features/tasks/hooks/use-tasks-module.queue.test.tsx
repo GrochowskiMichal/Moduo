@@ -6,6 +6,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 import type { ModuoRuntime } from "../../../lib/runtime.types";
+import { __resetFocusEngineForTest, attachFocusUser, getFocusSession } from "../../focus/engine";
 import { WorkspaceContext, type WorkspaceContextValue } from "../../workspaces/workspace-context";
 import { makeTask } from "../helpers";
 import type { Task, TaskQueueEntry, TasksModuleBundle } from "../model";
@@ -360,5 +361,51 @@ describe("useTasksModule: my queue (TV-D4)", () => {
     await waitFor(() =>
       expect(hook.result.current.queuedTasks.map((t) => t.id)).toEqual(["t-new"]),
     );
+  });
+});
+
+describe("useTasksModule: Focus on this (call 31, TV-F7)", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    __resetFocusEngineForTest({ alert: () => {} });
+    attachFocusUser(ME);
+  });
+
+  it("puts the task on top of Up next and gives it the one clock", async () => {
+    const { api, hook } = await mount([task("t1"), task("t2")], [row(ME, "t1", "000000mh34")]);
+    let started = false;
+    act(() => {
+      started = hook.result.current.focusOnTask("t2");
+    });
+    expect(started).toBe(true);
+    expect(getFocusSession()).toMatchObject({ taskId: "t2", running: true, tracking: true });
+    await waitFor(() =>
+      expect(api.opQueueAdd).toHaveBeenCalledWith({ workspaceId: "w1", taskId: "t2", at: "top" }),
+    );
+    expect(hook.result.current.focusRefOf("t2")).toEqual({
+      id: "t2",
+      title: "t2",
+      bucketName: "Inbox",
+      workspaceId: "w1",
+    });
+  });
+
+  it("refuses a finished task and a viewer, without a session", async () => {
+    const done = await mount([task("t1", { status: "done" })], []);
+    let started = true;
+    act(() => {
+      started = done.hook.result.current.focusOnTask("t1");
+    });
+    expect(started).toBe(false);
+    expect(done.api.opQueueAdd).not.toHaveBeenCalled();
+    expect(getFocusSession().tracking).toBe(false);
+
+    const viewer = await mount([task("t1")], [], "view");
+    act(() => {
+      started = viewer.hook.result.current.focusOnTask("t1");
+    });
+    expect(started).toBe(false);
+    expect(viewer.api.opQueueAdd).not.toHaveBeenCalled();
+    expect(getFocusSession().tracking).toBe(false);
   });
 });

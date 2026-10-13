@@ -8,10 +8,12 @@ import {
   pillReading,
   scheduledToday,
   upNextLines,
+  upNextMove,
   upNextSummary,
 } from "./focus-screen";
 import { makeTask } from "./helpers";
 import type { Task } from "./model";
+import { queueMove } from "./queue";
 
 const ME = "u-me";
 
@@ -80,6 +82,41 @@ describe("upNextLines: project dividers (62)", () => {
   it("a line-up in one project has no dividers", () => {
     const lines = upNextLines([task("a"), task("b")]);
     expect(lines.every((l) => l.kind === "task")).toBe(true);
+  });
+});
+
+describe("upNextMove: a move inside Up next, as the whole line-up", () => {
+  // The line-up N, X, C, D with the session on X: Up next shows N, C, D.
+  const queue = ["N", "X", "C", "D"];
+  const upNext = ["N", "C", "D"];
+
+  it("to the top of Up next: right before the task it now precedes; Now stays", () => {
+    expect(upNextMove(queue, upNext, "D", 0)).toEqual(["D", "N", "X", "C"]);
+  });
+
+  it("down or up: right after the task it now follows", () => {
+    expect(upNextMove(queue, upNext, "N", 1)).toEqual(["X", "C", "N", "D"]);
+    // Up next then reads N, D, C; Now keeps its place in the line-up.
+    expect(upNextMove(queue, upNext, "D", 1)).toEqual(["N", "D", "X", "C"]);
+    expect(upNextMove(queue, upNext, "C", 0)).toEqual(["C", "N", "X", "D"]);
+  });
+
+  it("each result is one task moved, which reorderQueue can apply", () => {
+    for (const [id, to] of [
+      ["D", 0],
+      ["N", 2],
+      ["C", 0],
+    ] as const) {
+      const next = upNextMove(queue, upNext, id, to);
+      expect(next && queueMove(queue, next)?.taskId).toBe(id);
+    }
+  });
+
+  it("no move, a task not in Up next, or past the ends: null", () => {
+    expect(upNextMove(queue, upNext, "C", 1)).toBeNull();
+    expect(upNextMove(queue, upNext, "X", 0)).toBeNull();
+    expect(upNextMove(queue, upNext, "N", 3)).toBeNull();
+    expect(upNextMove(queue, upNext, "N", -1)).toBeNull();
   });
 });
 

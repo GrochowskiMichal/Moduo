@@ -55,6 +55,33 @@ export function upNextLines(upNext: readonly Task[]): UpNextLine[] {
   return out;
 }
 
+/**
+ * A move inside Up next as the whole line-up's new order, for `reorderQueue`
+ * (which finds the one task that moved). Up next shows the line-up without
+ * Now, and Now can sit anywhere in it while a session runs (a capture at the
+ * top, a drag): so the moved task goes right after the Up next task it now
+ * follows, or, moved to the top of Up next, right before the one it now
+ * precedes. Everything else, Now included, keeps its place. Null when
+ * nothing moved.
+ */
+export function upNextMove(
+  queueIds: readonly string[],
+  upNextIds: readonly string[],
+  taskId: string,
+  to: number,
+): string[] | null {
+  const from = upNextIds.indexOf(taskId);
+  if (from < 0 || to < 0 || to >= upNextIds.length || from === to) return null;
+  const order = upNextIds.filter((id) => id !== taskId);
+  order.splice(to, 0, taskId);
+  const rest = queueIds.filter((id) => id !== taskId);
+  const anchor = to > 0 ? order[to - 1] : order[1];
+  const at = anchor ? rest.indexOf(anchor) : -1;
+  if (at < 0) return null;
+  rest.splice(to > 0 ? at + 1 : at, 0, taskId);
+  return rest;
+}
+
 /** "· 4 · ~1h": how many, and the estimates that are there. */
 export function upNextSummary(upNext: readonly Task[]): string {
   if (upNext.length === 0) return "";

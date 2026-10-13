@@ -11,11 +11,13 @@ import { DEFAULT_FOCUS_PREFS, type FocusPrefs } from "../../../lib/focus-prefs";
 import {
   __resetFocusEngineForTest,
   attachFocusUser,
+  bindFocusTask,
   createFocusEngine,
   FOCUS_STORAGE_PREFIX,
   type FocusEngine,
   getFocusSession,
   setFocusTimer,
+  startFocus,
 } from "../../focus/engine";
 import { setRunNotice } from "../../focus/run";
 import { makeTask } from "../helpers";
@@ -62,6 +64,7 @@ function fakeApi(
     removeFromQueue: rs.fn(),
     reorderQueue: rs.fn(),
     focusOnTask: rs.fn(() => true),
+    toggleQueue: rs.fn(),
   };
   return api as typeof api & TasksModuleApi;
 }
@@ -207,13 +210,33 @@ describe("Focus: the Now card and the session (AC8.2, AC8.3)", () => {
     expect(pill.textContent).toMatch(/^Focus \d+:\d\d$/);
   });
 
-  it("⏎ is Done for the focused task; S is Skip", () => {
+  it("⏎ is Done for the focused task; S is Skip — while the screen holds focus", () => {
+    const api = fakeApi([task("t1"), task("t2")]);
+    renderView(api);
+    const screenRoot = document.querySelector('[data-slot="focus-view"]') as HTMLElement;
+    // Opening with nothing else focused gives the screen focus.
+    expect(document.activeElement).toBe(screenRoot);
+    fireEvent.keyDown(screenRoot, { key: "Enter" });
+    expect(api.markDone).toHaveBeenCalledWith("t1");
+    fireEvent.keyDown(screenRoot, { key: "s" });
+    expect(api.moveQueuedToEnd).toHaveBeenCalledWith("t1");
+  });
+
+  it("keys from outside the screen are never its own (⏎ has no Undo)", () => {
     const api = fakeApi([task("t1"), task("t2")]);
     renderView(api);
     fireEvent.keyDown(document.body, { key: "Enter" });
-    expect(api.markDone).toHaveBeenCalledWith("t1");
     fireEvent.keyDown(document.body, { key: "s" });
-    expect(api.moveQueuedToEnd).toHaveBeenCalledWith("t1");
+    expect(api.markDone).not.toHaveBeenCalled();
+    expect(api.moveQueuedToEnd).not.toHaveBeenCalled();
+  });
+
+  it("Start hands focus back to the screen once its button is gone", () => {
+    renderView(fakeApi([task("t1"), task("t2")]));
+    const startButton = screen.getByRole("button", { name: /^Start/ });
+    startButton.focus();
+    fireEvent.click(startButton);
+    expect(document.activeElement).toBe(document.querySelector('[data-slot="focus-view"]'));
   });
 });
 
@@ -260,6 +283,28 @@ describe("Focus: subtasks open their own details (AC8.5, call 65a)", () => {
 });
 
 describe("Focus: Up next (AC8.2)", () => {
+  it("moves a row with ⌥⇧↑ around a Now that isn't first in the line-up, with Undo", () => {
+    // N, X, C, D lined up; the session is on X (a capture went on top of it).
+    const api = fakeApi([task("n"), task("x"), task("c"), task("d")]);
+    act(() => {
+      bindFocusTask({ id: "x", title: "Task x", bucketName: "Inbox", workspaceId: WS });
+      startFocus();
+    });
+    renderView(api);
+    expect(within(screen.getByRole("region", { name: "Now" })).getByText("Task x")).toBeTruthy();
+    const d = screen.getByRole("button", { name: "Task d" });
+    fireEvent.keyDown(d, { key: "ArrowUp", altKey: true, shiftKey: true });
+    // Up next N, C, D → N, D, C: D goes right after N; Now (X) stays Now.
+    expect(api.reorderQueue).toHaveBeenCalledWith(["n", "d", "x", "c"], expect.any(Function));
+  });
+
+  it("removes a row from Focus, with Undo", () => {
+    const api = fakeApi([task("t1"), task("t2")]);
+    renderView(api);
+    fireEvent.click(screen.getByRole("button", { name: "Remove from Focus" }));
+    expect(api.removeFromQueue).toHaveBeenCalledWith("t2");
+  });
+
   it("numbers the rest of the line-up and sums the estimates", () => {
     renderView(
       fakeApi([
@@ -323,7 +368,8 @@ describe("Focus: the empty state teaches three ways in (AC8.9, call 66)", () => 
     fireEvent.click(within(rows[1]).getByRole("button", { name: /^Task a/ }));
     expect(onSelectTask).toHaveBeenCalledWith("a");
     fireEvent.click(within(rows[1]).getByRole("button", { name: "Add to Focus" }));
-    expect(api.addToQueue).toHaveBeenCalledWith("a", "end");
+    // One "+" goes through the page's guarded toggle (a blocked task offers its frontier).
+    expect(api.toggleQueue).toHaveBeenCalledWith("a");
     fireEvent.click(screen.getByRole("button", { name: "Line up all 2" }));
     expect(api.addToQueue).toHaveBeenCalledWith("b", "end");
   });

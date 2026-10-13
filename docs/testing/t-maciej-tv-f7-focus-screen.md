@@ -31,7 +31,9 @@
 - [ ] **Do:** Done on the last one → **Expect:** the session ends by itself; the screen shows "n done · …" and the empty state. _(both)_
 - [ ] **Do:** Skip → **Expect:** the task goes to the end of Up next; the session moves on (alone, it stays). _(both)_
 - [ ] **Do:** Done or Skip without starting → **Expect:** nothing starts; the next task becomes the Now card. _(both)_
-- [ ] **Do:** click empty space on the screen, press ⏎, then S, then C → **Expect:** Done, Skip, new task at the top of Up next. Typing in the panel or capture never triggers them. _(both)_
+- [ ] **Do:** click empty space on the screen, press ⏎, then S, then C → **Expect:** Done, Skip, new task at the top of Up next. _(both)_
+- [ ] **Do:** Tab to Start and press ⏎, then ⏎ again → **Expect:** the first starts the session; the second finishes the Now task (the screen took focus back from the vanished Start button). _(both)_
+- [ ] **Do:** click in the sidebar or the panel, then press ⏎ or S → **Expect:** nothing happens to the Now card; typing in the panel or capture never triggers them either. _(both)_
 
 ## Subtasks open in the panel (65a)
 - [ ] **Do:** click a subtask on the Now card → **Expect:** the right panel shows that subtask's own details with "← <parent>" and the parent breadcrumb; the row is highlighted. _(both)_
@@ -41,6 +43,7 @@
 ## Up next
 - [ ] **Do:** a line-up across two projects → **Expect:** "Up next · 4 · ~1h", numbered rows, a divider with the project's dot at each project change; one project → no dividers. _(both)_
 - [ ] **Do:** drag a row (or ⌥⇧↑/↓ on a focused row) → **Expect:** it moves, "Moved" with Undo; the Now card stays put. _(both)_
+- [ ] **Do:** with a session running, press C and add a task, then move the last Up next row to the top → **Expect:** it moves there; the Now card doesn't change (the capture went above Now in the line-up). _(both)_
 - [ ] **Do:** hover a row → **Expect:** ▶ (Focus on this) and × (Remove from Focus, with Undo); click the row → its details on the right. _(both)_
 - [ ] **Do:** drag a row onto a project in the sidebar → **Expect:** it moves there (Undo). _(both)_
 

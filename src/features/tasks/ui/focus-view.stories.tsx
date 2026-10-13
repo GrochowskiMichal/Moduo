@@ -102,6 +102,7 @@ function api(queued: Task[], all: Task[], sessions: TaskSession[] = []): TasksMo
     removeFromQueue: noop,
     reorderQueue: noop,
     focusOnTask: () => true,
+    toggleQueue: noop,
   } as unknown as TasksModuleApi;
 }
 

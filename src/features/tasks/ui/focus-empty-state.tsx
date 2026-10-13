@@ -33,7 +33,7 @@ export function FocusEmptyState({
 }: {
   api: Pick<
     TasksModuleApi,
-    "tasks" | "sessions" | "currentUserId" | "queuedTaskIds" | "addToQueue"
+    "tasks" | "sessions" | "currentUserId" | "queuedTaskIds" | "addToQueue" | "toggleQueue"
   >;
   canEdit: boolean;
   bucketNameById: (id: string) => string;
@@ -117,7 +117,13 @@ export function FocusEmptyState({
                   </span>
                 </button>
                 {canEdit ? (
-                  <IconButton icon={Plus} label="Add to Focus" onClick={() => lineUp([row])} />
+                  <IconButton
+                    icon={Plus}
+                    label="Add to Focus"
+                    // One task, like Q: a blocked one offers its unblocked
+                    // tasks first (the page's guarded toggle).
+                    onClick={() => api.toggleQueue(row.task.id)}
+                  />
                 ) : null}
               </li>
             );

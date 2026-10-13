@@ -18,6 +18,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { formatDay } from "../../../lib/time-format";
 import { cn } from "../../../lib/utils";
+import type { TaskRefResolver } from "../../focus/run";
 import { toggleFocusPause, useFocusTimer } from "../../focus/timer";
 import { FocusAwayPrompt } from "../../focus/ui/away-prompt";
 import { TaskClaimMark } from "../../focus/ui/claim-mark";
@@ -43,7 +44,15 @@ export const FOCUS_PILL =
   "inline-flex h-(--ctrl-h-sm) shrink-0 items-center gap-1.5 rounded-full border border-hairline px-2.5 font-sans text-xs tabular-nums text-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50";
 
 /** The Per task pill on the Now card: "⏸ 18:02 of ~45m", "▶ Paused · 18:02". */
-function TaskPill({ task, countdown }: { task: Task; countdown: boolean }) {
+function TaskPill({
+  task,
+  countdown,
+  resolveTask,
+}: {
+  task: Task;
+  countdown: boolean;
+  resolveTask: TaskRefResolver;
+}) {
   const t = useFocusTimer();
   if (!t.active || t.timer !== "per_task" || t.taskId !== task.id) return null;
   const reading = pillReading({
@@ -63,7 +72,7 @@ function TaskPill({ task, countdown }: { task: Task; countdown: boolean }) {
           type="button"
           className={FOCUS_PILL}
           aria-label={`${action} · ${t.running ? text : `Paused · ${reading.clock}`}${where}${unsaved}`}
-          onClick={() => toggleFocusPause()}
+          onClick={() => toggleFocusPause(resolveTask)}
           data-slot="focus-task-pill"
         >
           {t.running ? (
@@ -188,7 +197,7 @@ export function NowCard({
         <TaskClaimMark workspaceId={task.workspaceId} taskId={task.id} />
         {onNow ? (
           timer === "per_task" ? (
-            <TaskPill task={task} countdown={countdown} />
+            <TaskPill task={task} countdown={countdown} resolveTask={api.focusRefOf} />
           ) : null
         ) : canEdit ? (
           <Tooltip>
@@ -217,7 +226,7 @@ export function NowCard({
       </div>
 
       <div className="flex flex-col gap-2">
-        <h2 className="font-display text-2xl leading-snug text-foreground break-words">
+        <h2 className="font-sans text-2xl leading-snug text-foreground break-words">
           {task.title || "Untitled"}
         </h2>
         {task.description ? <FoldedDescription html={task.description} /> : null}
@@ -290,7 +299,7 @@ function FoldedDescription({ html }: { html: string }) {
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
-          className="mt-1 rounded-sm font-sans text-xs text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+          className="hit-min mt-1 rounded-sm font-sans text-xs text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
         >
           {expanded ? "Show less" : "Show more"}
         </button>

@@ -46,7 +46,12 @@ import { type FocusPrefs, useFocusPrefs } from "../../../lib/focus-prefs";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { formatFocusClock } from "../../focus/clock";
 import { previewFocusInterval } from "../../focus/engine";
-import { recordRunDone, setRunNotice, useFocusRunState } from "../../focus/run";
+import {
+  recordRunDone,
+  setRunNotice,
+  type TaskRefResolver,
+  useFocusRunState,
+} from "../../focus/run";
 import { stopFocusWithUndo } from "../../focus/stop-with-undo";
 import {
   changeFocusTimer,
@@ -194,15 +199,15 @@ export function FocusView({
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
       const target = e.target instanceof Element ? e.target : null;
-      const root = rootRef.current;
-      // Ours only from the screen itself, or from nowhere in particular.
-      if (target && target !== document.body && !root?.contains(target)) return;
-      if (target && isTypingTarget(target)) return;
-      if (target?.closest('[role="menu"],[role="dialog"],[role="listbox"]')) return;
+      // Ours only while the screen holds focus: never from the sidebar, the
+      // panel, a field, or nowhere at all (⏎ has no Undo).
+      if (!target || !rootRef.current?.contains(target)) return;
+      if (isTypingTarget(target)) return;
+      if (target.closest('[role="menu"],[role="dialog"],[role="listbox"]')) return;
       const k = keys.current;
       if (e.shiftKey && e.key.toLowerCase() === "f") {
         // ⇧F on a subtask or an Up next row: it becomes the Now card (65a).
-        const id = target?.closest<HTMLElement>("[data-focus-task]")?.dataset.focusTask;
+        const id = target.closest<HTMLElement>("[data-focus-task]")?.dataset.focusTask;
         if (!id || !k.canEdit) return;
         e.preventDefault();
         k.api.focusOnTask(id);
@@ -210,7 +215,7 @@ export function FocusView({
       }
       if (e.shiftKey) return;
       // A focused button keeps its own Enter.
-      const onControl = !!target?.closest("button,a,[role='button'],[role='checkbox']");
+      const onControl = !!target.closest("button,a,[role='button'],[role='checkbox']");
       if (e.key === "Enter" && !onControl) {
         e.preventDefault();
         k.done();
@@ -225,6 +230,16 @@ export function FocusView({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+
+  // The screen takes focus when nothing else holds it: on opening (from the
+  // top bar, a reload), and when the button you used goes away (Start becomes
+  // the pill; Done on the last task). A click on its empty parts focuses it
+  // too (tabIndex -1), so the keys work after any click on the screen.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Now and the session are the cues
+  useEffect(() => {
+    if (typeof document === "undefined" || document.activeElement !== document.body) return;
+    rootRef.current?.focus({ preventScroll: true });
+  }, [now?.id, onNow]);
 
   // ── what this session finished ("2 done · Show") ───────────────────────────
   const sessionRun = run && run.workspaceId === workspaceId ? run : null;
@@ -243,7 +258,7 @@ export function FocusView({
   const header = (
     <div className="mb-3 flex shrink-0 items-center gap-2">
       <h1 className="min-w-0 flex-1 truncate font-display text-lg text-foreground">Focus</h1>
-      {here && focus.timer === "pomodoro" ? <PomodoroPill /> : null}
+      {here && focus.timer === "pomodoro" ? <PomodoroPill resolveTask={refOf} /> : null}
       <FocusMenu
         timer={timerMode}
         prefs={prefs}
@@ -273,7 +288,12 @@ export function FocusView({
     ) : null;
 
   return (
-    <div ref={rootRef} className="flex h-full min-h-0 flex-col" data-slot="focus-view">
+    <div
+      ref={rootRef}
+      tabIndex={-1}
+      className="flex h-full min-h-0 flex-col outline-none"
+      data-slot="focus-view"
+    >
       {header}
       <div className="pane-scroll min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto flex w-full max-w-2xl flex-col gap-5 pb-6">
@@ -298,7 +318,6 @@ export function FocusView({
               />
               <UpNext
                 upNext={upNext}
-                nowId={api.queuedTaskIds.has(now.id) ? now.id : null}
                 api={api}
                 canEdit={canEdit}
                 bucketNameById={bucketNameById}
@@ -349,12 +368,24 @@ function FocusMenu({
   canStop: boolean;
 }) {
   const lengths = `${prefs.workMinutes} / ${prefs.breakMinutes}`;
+  const [openSettings, setOpenSettings] = useState(false);
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <IconButton icon={Ellipsis} label="Focus options" tooltip={null} />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-60">
+      <DropdownMenuContent
+        align="end"
+        className="w-60"
+        onCloseAutoFocus={(event) => {
+          // Settings takes focus: open it once the menu has closed, not while
+          // the menu is still handing focus back (ui.md gotcha).
+          if (!openSettings) return;
+          event.preventDefault();
+          setOpenSettings(false);
+          dispatchOpenSettings({ section: "focus" });
+        }}
+      >
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>
             Timer
@@ -411,12 +442,7 @@ function FocusMenu({
                     ))}
                   </DropdownMenuRadioGroup>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onSelect={() =>
-                      // After the menu closes: Settings takes focus (ui.md gotcha).
-                      window.setTimeout(() => dispatchOpenSettings({ section: "focus" }), 0)
-                    }
-                  >
+                  <DropdownMenuItem onSelect={() => setOpenSettings(true)}>
                     Other lengths…
                   </DropdownMenuItem>
                 </DropdownMenuSubContent>
@@ -439,7 +465,7 @@ function FocusMenu({
 }
 
 /** Pomodoro's rhythm in the header, beside ⋯ ("Focus 18:40", "Break 4:12"). */
-function PomodoroPill() {
+function PomodoroPill({ resolveTask }: { resolveTask: TaskRefResolver }) {
   const t = useFocusTimer();
   if (!t.active || t.timer !== "pomodoro") return null;
   const phase = t.phase === "break" ? (t.longBreak ? "Long break" : "Break") : "Focus";
@@ -453,7 +479,7 @@ function PomodoroPill() {
           type="button"
           className={FOCUS_PILL}
           aria-label={`${action} · ${phase} ${clock}${where}`}
-          onClick={() => toggleFocusPause()}
+          onClick={() => toggleFocusPause(resolveTask)}
           data-slot="focus-pomodoro-pill"
         >
           {t.running ? (
@@ -526,7 +552,7 @@ function DoneLine({
         type="button"
         onClick={onToggle}
         aria-expanded={shown}
-        className="rounded-sm text-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+        className="hit-min rounded-sm text-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
       >
         {shown ? "Hide" : "Show"}
       </button>

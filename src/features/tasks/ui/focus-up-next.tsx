@@ -5,7 +5,7 @@
 
 import type { DraggableSyntheticListeners } from "@dnd-kit/core";
 import { closestCenter } from "@dnd-kit/core";
-import { arrayMove, SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { Play, X } from "lucide-react";
 import { useCallback, useMemo } from "react";
 
@@ -17,7 +17,7 @@ import { formatDuration } from "../../../lib/time-format";
 import { undoToast } from "../../../lib/undo-toast";
 import { cn } from "../../../lib/utils";
 import { TaskClaimMark } from "../../focus/ui/claim-mark";
-import { upNextLines, upNextSummary } from "../focus-screen";
+import { upNextLines, upNextMove, upNextSummary } from "../focus-screen";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import { estimateOf, type Task } from "../model";
 import { bucketDotColor } from "../sidebar";
@@ -32,7 +32,6 @@ import {
 
 export function UpNext({
   upNext,
-  nowId,
   api,
   canEdit,
   bucketNameById,
@@ -41,8 +40,6 @@ export function UpNext({
   dndMode,
 }: {
   upNext: Task[];
-  /** Now, when it's lined up too: a move to the top of Up next goes after it. */
-  nowId: string | null;
   api: TasksModuleApi;
   canEdit: boolean;
   bucketNameById: (id: string) => string;
@@ -63,21 +60,21 @@ export function UpNext({
     return map;
   }, [upNext, api.tasks]);
 
-  // A move inside Up next keeps Now where it is (it's never the drop's anchor).
+  // A move inside Up next as the whole line-up's order: Now and everything
+  // else keep their places (`upNextMove`); Undo puts the line-up back.
   const reorder = useCallback(
-    (previous: string[], next: string[], label: string) => {
-      const full = (list: string[]) => (nowId ? [nowId, ...list] : list);
-      api.reorderQueue(full(next), () =>
-        undoToast(label, { onUndo: () => api.reorderQueue(full(previous)) }),
-      );
+    (taskId: string, to: number, label: string) => {
+      const before = api.queuedTasks.map((t) => t.id);
+      const after = upNextMove(before, ids, taskId, to);
+      if (!after) return;
+      api.reorderQueue(after, () => undoToast(label, { onUndo: () => api.reorderQueue(before) }));
     },
-    [api, nowId],
+    [api, ids],
   );
   const move = (id: string, delta: 1 | -1) => {
     const from = ids.indexOf(id);
-    const to = from + delta;
-    if (from < 0 || to < 0 || to >= ids.length) return;
-    reorder(ids, arrayMove(ids, from, to), delta < 0 ? "Moved up" : "Moved down");
+    if (from < 0) return;
+    reorder(id, from + delta, delta < 0 ? "Moved up" : "Moved down");
   };
 
   if (upNext.length === 0) {
@@ -100,10 +97,9 @@ export function UpNext({
         onDragEnd={(e) => {
           const { active, over } = e;
           if (!over || active.id === over.id) return;
-          const from = ids.indexOf(String(active.id));
           const to = ids.indexOf(String(over.id));
-          if (from < 0 || to < 0) return;
-          reorder(ids, arrayMove(ids, from, to), "Moved");
+          if (to < 0) return;
+          reorder(String(active.id), to, "Moved");
         }}
       >
         <SortableContext items={ids} strategy={verticalListSortingStrategy}>
@@ -114,7 +110,6 @@ export function UpNext({
               line.kind === "divider" ? (
                 <div
                   key={line.key}
-                  aria-hidden
                   className="flex items-center gap-2 px-1.5 pt-2 pb-0.5 font-sans text-xs text-muted-foreground"
                 >
                   <NavRowDot
@@ -122,7 +117,7 @@ export function UpNext({
                     className="size-1.5"
                   />
                   <span className="shrink-0">{bucketNameById(line.projectId)}</span>
-                  <span className="h-px flex-1 bg-hairline" />
+                  <span aria-hidden className="h-px flex-1 bg-hairline" />
                 </div>
               ) : (
                 <SortableTask

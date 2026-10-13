@@ -52,6 +52,7 @@ function emit(): void {
 
 /** Replace a workspace's claims (only while it's the one on screen). */
 export function setRunClaims(workspaceId: string | null, byTask: Map<string, string[]>): void {
+  if (workspaceId !== current.workspaceId) handedOut.clear();
   current = { workspaceId, byTask };
   emit();
 }
