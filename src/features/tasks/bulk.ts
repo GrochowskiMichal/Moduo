@@ -369,7 +369,12 @@ export function repeatsAmong(tasks: readonly Task[]): number {
 // ── the outcome ─────────────────────────────────────────────────────────────
 
 /** A task the server refused, as the toast may name it (it's in the selection). */
-export type BulkRefusal = { title: string; message: string };
+export type BulkRefusal = {
+  title: string;
+  message: string;
+  /** Part of its change saved before this was refused (Undo puts that back). */
+  partial?: boolean;
+};
 
 /** A refusal that means the person can't edit that task. */
 export function isAccessRefusal(message: string): boolean {
@@ -387,17 +392,25 @@ export function bulkResultText(
 ): { title: string; description?: string } {
   const { changed, total, refused } = outcome;
   if (refused.length === 0) return { title: label };
-  const access = refused.every((r) => isAccessRefusal(r.message));
+  const partly = refused.some((r) => r.partial);
+  const access = !partly && refused.every((r) => isAccessRefusal(r.message));
   const description =
     refused.length === 1
-      ? access
-        ? `“${refused[0].title || "Untitled"}” is read-only to you.`
-        : `“${refused[0].title || "Untitled"}” couldn’t change: ${refused[0].message}`
+      ? refused[0].partial
+        ? `“${refused[0].title || "Untitled"}” changed only in part: ${refused[0].message}`
+        : access
+          ? `“${refused[0].title || "Untitled"}” is read-only to you.`
+          : `“${refused[0].title || "Untitled"}” couldn’t change: ${refused[0].message}`
       : access
         ? `${refused.length} are read-only to you.`
-        : `${refused.length} couldn’t change: ${refused[0].message}`;
+        : `${refused.length} ${partly ? "didn’t change fully" : "couldn’t change"}: ${refused[0].message}`;
   return {
-    title: changed === 0 ? "Nothing changed" : `${changed} of ${total} changed`,
+    title:
+      changed > 0
+        ? `${changed} of ${total} changed`
+        : partly
+          ? "Changed only in part"
+          : "Nothing changed",
     description,
   };
 }

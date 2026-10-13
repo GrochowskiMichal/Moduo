@@ -1023,7 +1023,9 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       // A row of a selection carries the selection (TV-U12): one write, one Undo.
       if (multiSelect.ids.size >= 2 && multiSelect.ids.has(task.id)) {
         if (action.kind === "queue") {
-          api.bulkQueue(bulkIds);
+          // A drop only ever adds (the bar's Q is the toggle); blocked ones are
+          // added and named, as "Queue anyway" would.
+          api.bulkQueue(bulkIds, { mode: "add" });
           return;
         }
         const write: TaskDropWrite =

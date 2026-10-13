@@ -102,6 +102,14 @@ export type BulkOpsDeps = {
   /** A backlog task's move to To do (queuing it does that), or null. */
   backlogToTodo: (task: Task) => Partial<Task> | null;
   tagContext: () => TagContext | null;
+  /** Waits on an open task now (spec §5c): the toast names it when queued. */
+  isBlocked: (taskId: string) => boolean;
+};
+
+export type BulkQueueOptions = {
+  /** "toggle" (the bar's Focus, Q): out when every one is in already, else in.
+   *  "add" (a drop on the Focus row): only ever adds. Default "toggle". */
+  mode?: "add" | "toggle";
 };
 
 export type BulkWriteOptions = {
@@ -146,6 +154,7 @@ export function useBulkOps(deps: BulkOpsDeps) {
     optimisticEntry,
     backlogToTodo,
     tagContext,
+    isBlocked,
   } = deps;
 
   const latestBulkWrite = useRef<
@@ -273,12 +282,18 @@ export function useBulkOps(deps: BulkOpsDeps) {
       const shown = store.begin(changes);
       const saved = new Map<string, Task>();
       const changed: Planned[] = [];
+      // Part of the task's change saved before a later op of it was refused
+      // (or the connection went): it's named, and Undo still puts that part back.
+      const partial: Planned[] = [];
+      const statusSaved = new Set<string>();
+      const assignSaved = new Set<string>();
       let offlineError: unknown = null;
       const notRun = await runPool(
         planned,
         async (p) => {
           const { write, before } = p;
           const rows: Task[] = [];
+          let landed = false;
           try {
             if (Object.keys(p.fields).length > 0) {
               // A move is one op: the server moves the subtasks with it and
@@ -300,6 +315,7 @@ export function useBulkOps(deps: BulkOpsDeps) {
                   }),
                 );
               }
+              landed = true;
             }
             if (write.occurrenceOn !== undefined) {
               rows.push(
@@ -309,6 +325,7 @@ export function useBulkOps(deps: BulkOpsDeps) {
                   dueOn: write.occurrenceOn,
                 }),
               );
+              landed = true;
             }
             if (p.category !== undefined) {
               rows.push(
@@ -320,6 +337,8 @@ export function useBulkOps(deps: BulkOpsDeps) {
                   position: write.position,
                 }),
               );
+              statusSaved.add(write.taskId);
+              landed = true;
             }
             if (write.assigneeId !== undefined) {
               rows.push(
@@ -329,11 +348,19 @@ export function useBulkOps(deps: BulkOpsDeps) {
                   assigneeId: write.assigneeId,
                 }),
               );
+              assignSaved.add(write.taskId);
             }
             changed.push(p);
           } catch (e) {
+            if (landed) partial.push(p);
             if (isNetworkError(e)) offlineError = e;
-            else refused.set(write.taskId, { title: before.title, message: messageOf(e) });
+            else {
+              refused.set(write.taskId, {
+                title: before.title,
+                message: messageOf(e),
+                ...(landed ? { partial: true } : {}),
+              });
+            }
           } finally {
             // What saved stays, even when a later op of the same task didn't.
             for (const row of rows) saved.set(row.id, row);
@@ -342,17 +369,23 @@ export function useBulkOps(deps: BulkOpsDeps) {
         () => offlineError !== null,
       );
       shown.settle({ tasks: [...saved.values()] });
+      // What Undo puts back: every task with a part that saved.
+      const undoable = [...changed, ...partial];
       // A refused check-off isn't kept on show in my queue (as one drop's isn't).
       for (const p of planned) {
-        if (p.category !== undefined && !changed.includes(p)) store.unkeep(p.write.taskId);
+        if (p.category !== undefined && !statusSaved.has(p.write.taskId)) {
+          store.unkeep(p.write.taskId);
+        }
       }
-      const forget = changed.flatMap((p) => (p.category !== undefined ? p.queueRows : []));
+      const forget = planned.flatMap((p) =>
+        p.category !== undefined && statusSaved.has(p.write.taskId) ? p.queueRows : [],
+      );
       if (forget.length > 0) store.forget("queue", forget);
       // Someone else's unfiled task handed on into another Inbox is out of my
       // sight now (TV-D13, as `patchTask` does for one).
       const gone: string[] = [];
       for (const p of changed) {
-        if (p.write.assigneeId === undefined) continue;
+        if (p.write.assigneeId === undefined || !assignSaved.has(p.write.taskId)) continue;
         const row = saved.get(p.write.taskId);
         if (
           row &&
@@ -368,7 +401,7 @@ export function useBulkOps(deps: BulkOpsDeps) {
         }
       }
       if (gone.length > 0) store.forget("tasks", gone);
-      if (changed.length > 0) onSaved();
+      if (undoable.length > 0) onSaved();
       if (offlineError) failed(offlineError, "");
 
       const mainChanged = changed.filter((p) => !followers.has(p.write.taskId)).length;
@@ -386,20 +419,20 @@ export function useBulkOps(deps: BulkOpsDeps) {
       });
       if (unsent > 0 && !text.description)
         text.description = `${tasksWord(unsent)} waiting for the connection weren’t sent.`;
-      if (changed.length === 0) {
+      if (undoable.length === 0) {
         if (mainRefused.length > 0) toast.error(text.title, { description: text.description });
         return [];
       }
       if (opts.undoable === false) {
         if (mainRefused.length > 0) toast(text.title, { description: text.description });
-        return changed.map((p) => p.write.taskId);
+        return undoable.map((p) => p.write.taskId);
       }
       undoToast(text.title, {
         description: text.description,
         onUndo: () => {
           const reverse: BulkWrite[] = [];
           let kept = 0;
-          for (const p of changed) {
+          for (const p of undoable) {
             const after = saved.get(p.write.taskId);
             const current = tasksRef.current.find((t) => t.id === p.write.taskId);
             if (!after || !current || current.deletedAt) continue;
@@ -441,15 +474,14 @@ export function useBulkOps(deps: BulkOpsDeps) {
               // Back to open from a check-off that closed it: its queue place too.
               const queuedBefore = new Set(lineupBefore);
               for (const id of back) {
-                const p = changed.find((c) => c.write.taskId === id);
-                if (p?.category !== undefined && queuedBefore.has(id)) {
+                if (statusSaved.has(id) && queuedBefore.has(id)) {
                   restoreQueuePlace(id, lineupBefore);
                 }
               }
             });
         },
       });
-      return changed.map((p) => p.write.taskId);
+      return undoable.map((p) => p.write.taskId);
     },
     [
       store,
@@ -544,40 +576,72 @@ export function useBulkOps(deps: BulkOpsDeps) {
         description: text.description,
         onUndo: () => {
           void (async () => {
+            // Each restore stands alone: one refused (its 30 days ran out,
+            // access changed) never stops the rest or hides what came back.
             const rows: Task[] = [];
+            const notRestored: BulkRefusal[] = [];
+            const restored = new Set<string>();
             await runPool(
               [...done],
               async (id) => {
-                rows.push(
-                  await rt.tasks.updateTask({
-                    workspaceId: ws,
-                    taskId: id,
-                    patch: { deletedAt: null },
-                  }),
-                );
+                try {
+                  rows.push(
+                    await rt.tasks.updateTask({
+                      workspaceId: ws,
+                      taskId: id,
+                      patch: { deletedAt: null },
+                    }),
+                  );
+                  restored.add(id);
+                } catch (e) {
+                  const title = targets.find((t) => t.id === id)?.title ?? "";
+                  notRestored.push({ title, message: messageOf(e) });
+                }
               },
               () => false,
             );
-            // Re-attach the subtasks still at the top level.
+            // Re-attach the subtasks still at the top level, under the parents
+            // that came back.
+            let detached = 0;
             await runPool(
               promoted.filter((c) => {
+                if (!c.parentId || !restored.has(c.parentId)) return false;
                 const now = tasksRef.current.find((t) => t.id === c.id);
                 return !now || now.parentId === null;
               }),
               async (c) => {
-                rows.push(
-                  await rt.tasks.updateTask({
-                    workspaceId: ws,
-                    taskId: c.id,
-                    patch: { parentId: c.parentId },
-                  }),
-                );
+                try {
+                  rows.push(
+                    await rt.tasks.updateTask({
+                      workspaceId: ws,
+                      taskId: c.id,
+                      patch: { parentId: c.parentId },
+                    }),
+                  );
+                } catch {
+                  detached += 1;
+                }
               },
               () => false,
             );
-            store.answer({ tasks: rows });
-            onSaved();
+            if (rows.length > 0) {
+              store.answer({ tasks: rows });
+              onSaved();
+            }
             await reloadTrash();
+            if (notRestored.length === 1) {
+              toast.error(`Couldn’t restore “${notRestored[0].title || "Untitled"}”`, {
+                description: notRestored[0].message,
+              });
+            } else if (notRestored.length > 1) {
+              toast.error(`Couldn’t restore ${tasksWord(notRestored.length)}`, {
+                description: notRestored[0].message,
+              });
+            } else if (detached > 0) {
+              toast.error(
+                `${detached === 1 ? "A subtask" : `${detached} subtasks`} stayed at the top level.`,
+              );
+            }
           })().catch(() => toast.error("Couldn’t restore every task."));
         },
       });
@@ -598,11 +662,13 @@ export function useBulkOps(deps: BulkOpsDeps) {
   /**
    * Focus (Q) on a selection: add the ones not in my line-up yet, at its end,
    * in order; or, when every one is in it already, take them all out. One
-   * queue op, one Undo.
+   * queue op, one Undo. A drop on the Focus row passes `mode: "add"`: it never
+   * takes anything out. A selection never opens the one-task frontier offer;
+   * blocked ones are added as "Queue anyway" would, and the toast names them.
    */
   // biome-ignore lint/correctness/useExhaustiveDependencies: the refs it's handed are read at call time.
   const bulkQueue = useCallback(
-    (ids: readonly string[]) => {
+    (ids: readonly string[], options: BulkQueueOptions = {}) => {
       if (!store) return;
       const mine = new Set(myQueueRef.current.map((e) => e.taskId));
       // What the last add saved and refused (for its toast and Undo).
@@ -612,7 +678,8 @@ export function useBulkOps(deps: BulkOpsDeps) {
         .map((id) => tasksRef.current.find((t) => t.id === id))
         .filter((t): t is Task => !!t && !t.deletedAt && !isTempId(t.id));
       const open = tasks.filter((t) => t.status !== "done" && t.status !== "archived");
-      const removing = open.length > 0 && open.every((t) => mine.has(t.id));
+      const removing =
+        options.mode !== "add" && open.length > 0 && open.every((t) => mine.has(t.id));
       const queueAdd = (list: readonly string[], onSaved: (added: number) => void) => {
         // Queuing a backlog task moves it to To do (the server does it).
         const toTodo = list
@@ -688,7 +755,11 @@ export function useBulkOps(deps: BulkOpsDeps) {
       }
       const list = open.filter((t) => !mine.has(t.id)).map((t) => t.id);
       if (list.length === 0) {
-        toast("Done and Won’t do tasks can’t be added to Focus.");
+        toast(
+          open.length > 0
+            ? `${open.length === 1 ? "It’s" : "They’re"} in Focus already.`
+            : "Done and Won’t do tasks can’t be added to Focus.",
+        );
         return;
       }
       queueAdd(list, (count) => {
@@ -698,13 +769,22 @@ export function useBulkOps(deps: BulkOpsDeps) {
           refused: lastRefusals,
         });
         const added = [...lastAdded];
+        // Blocked ones went in as asked (never a wall), named so it's no surprise.
+        const blocked = added.filter((id) => isBlocked(id));
+        if (blocked.length > 0 && !text.description) {
+          const title = tasksRef.current.find((t) => t.id === blocked[0])?.title || "Untitled";
+          text.description =
+            blocked.length === 1
+              ? `“${title}” is blocked by an open task.`
+              : `${blocked.length} of them are blocked by open tasks.`;
+        }
         undoToast(text.title, {
           description: text.description,
           onUndo: () => queueRemove(added, () => {}),
         });
       });
     },
-    [store, runQueueOp, optimisticEntry, backlogToTodo],
+    [store, runQueueOp, optimisticEntry, backlogToTodo, isBlocked],
   );
 
   /** Waiting on someone or something, for each task: one write, one Undo. */
@@ -797,20 +877,29 @@ export function useBulkOps(deps: BulkOpsDeps) {
         onUndo: () => {
           const back = store.begin(added.map((r) => ({ table: "waiting", remove: r.id })));
           void (async () => {
+            // Each removal stands alone: one refused keeps its entry on show,
+            // the rest still go.
             const left: TaskWaitingEntry[] = [];
+            const removed: string[] = [];
+            let firstError: unknown = null;
             await runPool(
               added,
               async (r) => {
-                left.push(...(await rt.tasks.removeWaiting({ workspaceId: ws, entryId: r.id })));
+                try {
+                  left.push(...(await rt.tasks.removeWaiting({ workspaceId: ws, entryId: r.id })));
+                  removed.push(r.id);
+                } catch (e) {
+                  firstError ??= e;
+                }
               },
               () => false,
             );
-            store.forget(
-              "waiting",
-              added.map((r) => r.id),
-            );
-            back.settle({ waiting: left });
-            onSaved();
+            if (removed.length > 0) store.forget("waiting", removed);
+            const gone = new Set(removed);
+            // What the server still has (a refused entry) shows again.
+            back.settle({ waiting: left.filter((w) => !gone.has(w.id)) });
+            if (removed.length > 0) onSaved();
+            if (firstError) failed(firstError, "Couldn’t undo it for every task.");
           })().catch((e) => {
             back.fail();
             failed(e, "Couldn’t undo it.");

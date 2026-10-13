@@ -3567,6 +3567,9 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
 
   // ── bulk edits on a selection (TV-U12): one write, one Undo ─────────────────
   const bumpActivity = useCallback(() => setActivityStamp((s) => s + 1), []);
+  const blockedIdsRef = useRef(blockedIds);
+  blockedIdsRef.current = blockedIds;
+  const isBlocked = useCallback((id: string) => blockedIdsRef.current.has(id), []);
   const bulk = useBulkOps({
     store,
     runtime,
@@ -3586,6 +3589,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     optimisticEntry,
     backlogToTodo,
     tagContext,
+    isBlocked,
   });
 
   return {
