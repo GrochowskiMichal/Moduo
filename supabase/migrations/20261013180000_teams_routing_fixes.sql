@@ -15,7 +15,9 @@
 --   * comments_op_mention_teams (live body): its author has to still see the
 --     item.
 --
--- Apply after 20261013170000. Re-runnable. Verified by
+-- Apply after 20261013170000, TV-F6's 20261013130000 and TV-D15's
+-- 20261013160000 (the erasure is re-cut from the body those two left).
+-- Re-runnable. Verified by
 -- supabase/tests/teams_routing.test.sql (bun run db:test).
 
 SET LOCAL lock_timeout = '5s';
@@ -25,6 +27,12 @@ BEGIN
   IF to_regprocedure('public.comments_op_mention_teams(uuid, uuid[])') IS NULL
      OR to_regprocedure('public.teams_member_removed()') IS NULL THEN
     RAISE EXCEPTION 'Apply 20261013150000 and 20261013170000 before this migration.';
+  END IF;
+  -- The erasure below is re-cut from the body TV-F6 and TV-D15 left (it
+  -- erases focus runs and templates), so their tables must be there.
+  IF to_regclass('public.focus_runs') IS NULL OR to_regclass('public.task_templates') IS NULL
+     OR to_regclass('public.project_templates') IS NULL THEN
+    RAISE EXCEPTION 'Apply TV-F6 (20261013130000) and TV-D15 (20261013160000) before this migration.';
   END IF;
 END;
 $$;

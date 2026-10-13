@@ -5,7 +5,7 @@
 // only where they could see it anyway. Pure helpers, so My tasks (TV-U15),
 // Upcoming and the Home team-load widget (TV-H1) read teams the same way.
 
-import { isOpenTask } from "@contracts/vocabularies";
+import { isBacklogTask, isOpenTask } from "@contracts/vocabularies";
 import { AVATAR_HUES, type AvatarHue, avatarHue } from "../../components/ui/avatar";
 import type { Task, Team, TeamMember } from "./model";
 
@@ -20,11 +20,14 @@ export function teamIdsOf(
   return ids;
 }
 
-/** A team task nobody has taken yet, still to do. */
+/** A team task nobody has taken yet, still to do (To do or In progress:
+ *  Backlog is parked, like the notices and check-backs treat it). */
 export function isUnclaimed(
   task: Pick<Task, "teamId" | "assigneeId" | "status" | "statusCategory" | "deletedAt">,
 ): boolean {
-  return !!task.teamId && !task.assigneeId && !task.deletedAt && isOpenTask(task);
+  return (
+    !!task.teamId && !task.assigneeId && !task.deletedAt && isOpenTask(task) && !isBacklogTask(task)
+  );
 }
 
 export type UnclaimedGroup = { team: Team; tasks: Task[] };

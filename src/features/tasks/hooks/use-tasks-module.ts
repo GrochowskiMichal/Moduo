@@ -1156,27 +1156,50 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       // any, saves as usual below.
       if (patch.assigneeId !== undefined) {
         const assigneeId = patch.assigneeId;
+        const { assigneeId: _assigned, ...rest } = patch;
+        // Someone else's unfiled task handed on into another Inbox (TV-D13,
+        // call 20) is out of my sight now: drop it and the steps that went
+        // with it, rather than keep them until the next access check.
+        const leaves = (saved: Task) =>
+          saved.bucketId !== existing.bucketId &&
+          !bucketsRef.current.some((b) => b.id === saved.bucketId) &&
+          saved.creatorId !== userId &&
+          saved.assigneeId !== userId
+            ? [
+                saved.id,
+                ...tasksRef.current
+                  .filter((t) => t.parentId === saved.id && t.bucketId === existing.bucketId)
+                  .map((t) => t.id),
+              ]
+            : [];
+        // An Inbox task assigned and edited in one gesture ("Assign to Mike ·
+        // in Bugs", 20a): the edit lands first, then the assignment, so a
+        // hand-over can't take the task away before the edit does.
+        const restFields = editableTaskFields(rest);
+        const inInbox =
+          bucketsRef.current.find((b) => b.id === existing.bucketId)?.isSystem === true;
+        if (inInbox && Object.keys(restFields).length > 0) {
+          applyOp(
+            id,
+            { ...restFields, assigneeId } as Partial<Task>,
+            async () => {
+              await runtime!.tasks.opUpdateTask({
+                workspaceId: workspaceId!,
+                taskId: id,
+                patch: restFields,
+              });
+              return runtime!.tasks.opAssign({ workspaceId: workspaceId!, taskId: id, assigneeId });
+            },
+            { leaves },
+          );
+          return;
+        }
         applyOp(
           id,
           { assigneeId },
           () => runtime!.tasks.opAssign({ workspaceId: workspaceId!, taskId: id, assigneeId }),
-          {
-            // Someone else's unfiled task handed on into another Inbox (TV-D13,
-            // call 20) is out of my sight now: drop it and its steps, rather
-            // than keep it until the next access check.
-            leaves: (saved) =>
-              saved.bucketId !== existing.bucketId &&
-              !bucketsRef.current.some((b) => b.id === saved.bucketId) &&
-              saved.creatorId !== userId &&
-              saved.assigneeId !== userId
-                ? [
-                    saved.id,
-                    ...tasksRef.current.filter((t) => t.parentId === saved.id).map((t) => t.id),
-                  ]
-                : [],
-          },
+          { leaves },
         );
-        const { assigneeId: _assigned, ...rest } = patch;
         // Without edit access applyOp has already said so; don't say it twice.
         if (Object.keys(rest).length === 0 || !canEdit || store?.isOffline()) return;
         patch = rest;
