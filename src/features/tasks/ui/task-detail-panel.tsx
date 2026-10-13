@@ -12,11 +12,10 @@ import { isClosedTask } from "@contracts/vocabularies";
 import { Ban, CircleDashed, ListChecks, Lock, Plus, RotateCcw, X } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { dragHasFiles, filesFromDataTransfer, pastedFiles } from "@/features/attachments/files";
-import { useEntityAttachments } from "@/features/attachments/hooks/use-attachments";
-import { AttachmentStrip } from "@/features/attachments/ui/attachment-strip";
-import { AttachmentViewer } from "@/features/attachments/ui/attachment-viewer";
-import { dispatchOpenSettings } from "@/features/settings/settings-events";
+import {
+  AttachmentsSection,
+  useAttachmentsSection,
+} from "@/features/attachments/ui/attachments-section";
 import { useEntityHub } from "@/features/spine/hooks/use-entity-hub";
 import { createLinkWithToast } from "@/features/spine/ui/drop-link-toast";
 import { EntityHub } from "@/features/spine/ui/entity-hub";
@@ -181,22 +180,14 @@ function DetailBody({
       : undefined;
   const linkedCount = hub.sections.reduce((n, s) => n + s.count, 0);
 
-  // ── attachments (AT-2) ───────────────────────────────────────────────────────
-  const attachments = useEntityAttachments({
+  // ── attachments (AT-2): one self-contained section ───────────────────────────
+  const files = useAttachmentsSection({
     runtime,
     workspaceId,
     entity: { type: "task", id: task.id },
     userId: api.currentUserId ?? null,
     canEdit,
   });
-  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
-  const [dropActive, setDropActive] = useState(false);
-  const dragDepth = useRef(0);
-  const acceptsFiles = canEdit && !!runtime && !!workspaceId;
-  const endDrag = () => {
-    dragDepth.current = 0;
-    setDropActive(false);
-  };
   const linkEntity = (ref: EntityRef, label: string, icon: string | null) => {
     if (!runtime || !workspaceId) return;
     void (async () => {
@@ -234,42 +225,9 @@ function DetailBody({
 
   return (
     // A drop or paste anywhere on the task attaches the files. The description
-    // editor hands its own to `onFiles` (Lexical owns those events), so they're
-    // skipped here.
-    <section
-      aria-label="Task details"
-      className="flex h-full min-h-0 flex-col"
-      onDragEnter={(e) => {
-        if (!acceptsFiles || !dragHasFiles(e.dataTransfer)) return;
-        dragDepth.current += 1;
-        setDropActive(true);
-      }}
-      onDragOver={(e) => {
-        if (!acceptsFiles || !dragHasFiles(e.dataTransfer)) return;
-        e.preventDefault();
-        e.dataTransfer.dropEffect = "copy";
-      }}
-      onDragLeave={() => {
-        if (!dropActive) return;
-        dragDepth.current -= 1;
-        if (dragDepth.current <= 0) endDrag();
-      }}
-      onDrop={(e) => {
-        endDrag();
-        if (!acceptsFiles || inTextEditor(e.target)) return;
-        const files = filesFromDataTransfer(e.dataTransfer);
-        if (files.length === 0) return;
-        e.preventDefault();
-        attachments.addFiles(files);
-      }}
-      onPaste={(e) => {
-        if (!acceptsFiles || inTextEditor(e.target)) return;
-        const files = pastedFiles(e.clipboardData);
-        if (files.length === 0) return;
-        e.preventDefault();
-        attachments.addFiles(files);
-      }}
-    >
+    // editor hands its own to `onFiles` (Lexical owns those events), so the
+    // zone skips them.
+    <section aria-label="Task details" className="flex h-full min-h-0 flex-col" {...files.dropZone}>
       <TaskDetailHeader
         task={task}
         parent={parent}
@@ -281,10 +239,10 @@ function DetailBody({
       />
       {/* px/py inset so a focused field's ring isn't clipped by this scroll box */}
       <div
-        data-drop-active={dropActive || undefined}
+        data-drop-active={files.dropActive || undefined}
         className={cn(
           "pane-scroll min-h-0 flex-1 overflow-y-auto rounded-lg px-1 pt-2.5 pb-4 transition-[background-color,box-shadow] duration-(--motion-fade) ease-(--ease-out)",
-          dropActive && DROP_TARGET,
+          files.dropActive && DROP_TARGET,
         )}
       >
         <div className="flex flex-col gap-5">
@@ -316,27 +274,11 @@ function DetailBody({
                   onCommit={(html) => {
                     if (html !== task.description) api.patchTask(task.id, { description: html });
                   }}
-                  onFiles={acceptsFiles ? attachments.addFiles : undefined}
+                  onFiles={files.onEditorFiles}
                 />
               </div>
             ) : null}
-            {runtime && workspaceId ? (
-              <AttachmentStrip
-                className="mt-1 pl-6"
-                records={attachments.records}
-                previews={attachments.previews}
-                uploads={attachments.uploads}
-                almostFull={attachments.almostFull}
-                canEdit={acceptsFiles}
-                isOwner={attachments.isOwner}
-                onAddFiles={attachments.addFiles}
-                onOpen={setViewerIndex}
-                onRetry={attachments.retry}
-                onDismiss={attachments.dismiss}
-                onDismissAlmostFull={attachments.dismissAlmostFull}
-                onUpgrade={() => dispatchOpenSettings({ section: "billing" })}
-              />
-            ) : null}
+            <AttachmentsSection state={files} className="mt-1 pl-6" />
           </div>
 
           {task.status === "archived" ? (
@@ -401,22 +343,8 @@ function DetailBody({
           <TaskFeed task={task} api={api} runtime={runtime} workspaceId={workspaceId} />
         </div>
       </div>
-      <AttachmentViewer
-        runtime={runtime}
-        records={attachments.records}
-        previews={attachments.previews}
-        index={viewerIndex}
-        onIndexChange={setViewerIndex}
-        canEdit={acceptsFiles}
-        onDelete={attachments.remove}
-      />
     </section>
   );
-}
-
-/** Inside the description's Lexical editor, which routes files itself. */
-function inTextEditor(target: EventTarget | null): boolean {
-  return target instanceof Element && !!target.closest("[data-lexical-editor]");
 }
 
 // ── title ─────────────────────────────────────────────────────────────────────
