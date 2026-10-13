@@ -46,6 +46,8 @@ import {
   TASK_TIME_ENTRY_KINDS,
   TASK_TIME_STATUSES,
   TASK_WAITING_KINDS,
+  TEMPLATE_KINDS,
+  TEMPLATE_LINK_TYPES,
   WAITLIST_ROW_SOURCES,
   WAITLIST_SOURCES,
   WAITLIST_STATUSES,
@@ -221,6 +223,14 @@ describe("cross-runtime drift guards", () => {
     const opList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(", ");
     expect(sql).toContain(`CHECK (reaction IN (${inList(COMMENT_REACTIONS)}))`);
     expect(sql).toContain(`p_reaction NOT IN (${opList(COMMENT_REACTIONS)})`);
+  });
+
+  it("template kinds and link types match TV-D15's op guards", () => {
+    const sql = readFileSync(resolve(MIGRATIONS_DIR, "20261013160000_templates.sql"), "utf8");
+    const opList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(", ");
+    expect(sql).toContain(`p_kind NOT IN (${opList(TEMPLATE_KINDS)})`);
+    expect(sql).toContain(`coalesce(l ->> 'type', '') NOT IN (${opList(TEMPLATE_LINK_TYPES)})`);
+    expect(sql).toContain(`WHERE x.kind IN (${opList(TEMPLATE_LINK_TYPES)})`);
   });
 
   it("the booking busy read leaves out the closed categories (TV-D10-fix)", () => {

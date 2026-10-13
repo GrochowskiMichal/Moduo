@@ -48,7 +48,12 @@ function TokenChip({ token }: { token: CaptureToken }) {
     token.kind === "person" ? (
       <PersonAvatar name={token.label} id={token.userId} />
     ) : token.kind === "team" ? (
-      <TeamMark name={token.label} id={token.teamId} letters={token.letters ?? null} />
+      <TeamMark
+        name={token.label}
+        id={token.teamId}
+        letters={token.letters ?? null}
+        color={token.color ?? null}
+      />
     ) : token.kind === "tag" ? (
       <span
         data-label={token.color ?? "gray"}

@@ -120,6 +120,7 @@ import type {
 } from "./runtime.types";
 import { createReferencePreviews } from "./runtime.web.previews";
 import { createTasksStructure } from "./runtime.web.structure";
+import { createTasksTemplates, type TemplateApplyResult } from "./runtime.web.templates";
 import { deltaCursor } from "./sync/delta-cursor";
 import type {
   AccessChange,
@@ -431,6 +432,11 @@ const tasksStructure = createTasksStructure(supabaseClient, {
   deleteProjectLegacy: (workspaceId, projectId) => legacyDeleteBucket(workspaceId, projectId),
   getTimeBlocksLegacy: (workspaceId) => getWorkspaceTimeBlocks(workspaceId),
   setTimeBlocksLegacy: (workspaceId, blocks) => setWorkspaceTimeBlocks(workspaceId, blocks),
+});
+
+/** TV-D15's templates and "Duplicate project…" (runtime.web.templates.ts). */
+const tasksTemplates = createTasksTemplates(supabaseClient, {
+  mapAnswer: (raw) => templateAnswerToModels(raw),
 });
 
 export const webRuntime: ModuoRuntime = {
@@ -2264,6 +2270,8 @@ export const webRuntime: ModuoRuntime = {
   tasks: {
     // TV-D10: areas, projects, sections, teams, sessions, reminders, waiting.
     ...tasksStructure,
+    // TV-D15: templates and "Duplicate project…".
+    ...tasksTemplates,
     async list(workspaceId) {
       // Best effort: a Viewer can't create their own Inbox (no tasks.create),
       // and that must not stop them reading the shared buckets.
@@ -2837,6 +2845,10 @@ export const webRuntime: ModuoRuntime = {
       return taskRowToModel(row);
     },
 
+    opClaim({ workspaceId, taskId }) {
+      return taskOpRpc("tasks_op_claim", { p_workspace_id: workspaceId, p_task_id: taskId });
+    },
+
     async opReschedule({ workspaceId, taskId, scheduledAt, days }) {
       return taskOpRpc("tasks_op_reschedule", {
         p_workspace_id: workspaceId,
@@ -3126,6 +3138,15 @@ export const webRuntime: ModuoRuntime = {
       const row = Array.isArray(data) ? data[0] : data;
       if (!row) throw new Error("The comment operation returned nothing.");
       return commentRowToModel(row);
+    },
+
+    async mentionTeams({ commentId, teamIds }) {
+      if (teamIds.length === 0) return;
+      const { error } = await supabaseClient.rpc("comments_op_mention_teams", {
+        p_comment_id: commentId,
+        p_team_ids: teamIds,
+      });
+      if (error) throw new Error(error.message);
     },
 
     async restoreComment({ commentId }) {
@@ -4570,6 +4591,37 @@ async function createTaskRow(task: Task): Promise<Task> {
   }
   if (error) throw new Error(error.message);
   return taskRowToModel(data);
+}
+
+/**
+ * What a template apply or a duplicate answered (raw rows per store table,
+ * `templates__bundle`) as the store's rows, through each table's own mapper.
+ * A row this build can't read is left out; the next sync brings it.
+ */
+function templateAnswerToModels(raw: unknown): TemplateApplyResult {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const rows = <T extends "buckets" | "statuses" | "sections" | "tasks" | "tagLinks" | "relations">(
+    name: T,
+  ): SyncRows[T][] => {
+    const list = r[name];
+    if (!Array.isArray(list)) return [];
+    const map = SYNC_SOURCES[name].map as (row: unknown) => SyncRows[T];
+    return list.flatMap((row) => {
+      try {
+        return [map(row)];
+      } catch {
+        return [];
+      }
+    });
+  };
+  return {
+    buckets: rows("buckets"),
+    statuses: rows("statuses"),
+    sections: rows("sections"),
+    tasks: rows("tasks"),
+    tagLinks: rows("tagLinks"),
+    relations: rows("relations"),
+  };
 }
 
 function taskRelationRowToModel(raw: unknown): TaskRelation {

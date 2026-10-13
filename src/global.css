@@ -841,6 +841,15 @@ body,
   scrollbar-gutter: stable;
 }
 
+/* ═══ A menu that scrolls says so (DS-6 follow-up, TV-U10) ═══
+   A menu taller than its room scrolls inside (surface.ts); while more items
+   wait below, its foot fades out, so the cut-off last item reads as "there's
+   more". The menu primitives set `data-more-below` (menu-scroll.ts); a mask
+   fades every surface the same in both themes, no colour involved. */
+[data-more-below] {
+  mask-image: linear-gradient(to bottom, black calc(100% - var(--menu-fade)), transparent);
+}
+
 /* ═══ Hit target (DS-6, visual audit B14) ═══
    A small control (a 16 px checkbox, a queue toggle, an expand chevron) keeps
    its glyph and gets a pointer target of at least --hit-min (24 px) from an

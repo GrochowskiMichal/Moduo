@@ -62,6 +62,7 @@ import {
   type ProjectStatus,
   type QueuePlacement,
   type RecurrenceRule,
+  type Section,
   type Tag,
   type Task,
   type TaskQueueEntry,
@@ -189,6 +190,9 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
   /** The rows as they are now, for a save or an Undo that runs later. */
   const tasksRef = useRef(allTasks);
   tasksRef.current = allTasks;
+  /** The projects (and my Inbox) I can see now, for an answer that arrives later. */
+  const bucketsRef = useRef(allBuckets);
+  bucketsRef.current = allBuckets;
   /** Your own reminders, for the "Restore the reminder?" offer (TV-D12). */
   const remindersRef = useRef(snap.reminders);
   remindersRef.current = snap.reminders;
@@ -612,6 +616,9 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         extra?: OverlayChange[];
         /** Rows the server drops with this op (queue rows of a closed task). */
         forget?: string[];
+        /** Tasks the answer took out of my sight (TV-D13: an unfiled task
+         *  handed into someone else's Inbox): dropped from the copy at once. */
+        leaves?: (saved: Task) => string[];
         offline?: { status: string; recurrence?: RecurrenceRule | null };
       } = {},
     ) => {
@@ -654,6 +661,8 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         .then((saved) => {
           write.settle({ tasks: [saved] });
           if (opts.forget?.length) store.forget("queue", opts.forget);
+          const gone = opts.leaves?.(saved);
+          if (gone?.length) store.forget("tasks", gone);
           setActivityStamp((s) => s + 1);
         })
         .catch((e) => {
@@ -676,6 +685,21 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         });
     },
     [runtime, workspaceId, canEdit, store, backlogToTodo, refused, archivedBlocked],
+  );
+
+  /**
+   * Take a team's unclaimed task (TV-D13, "Take it" on My tasks' team block):
+   * shown as yours at once; the server checks you're in its team and can edit
+   * it, and refuses one somebody took first (the copy goes back and says so).
+   */
+  const claimTask = useCallback(
+    (id: string) => {
+      if (!userId) return;
+      applyOp(id, { assigneeId: userId }, () =>
+        runtime!.tasks.opClaim({ workspaceId: workspaceId!, taskId: id }),
+      );
+    },
+    [applyOp, runtime, workspaceId, userId],
   );
 
   /** Fetch a task's quiet activity trail (newest first). */
@@ -1173,10 +1197,50 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       // any, saves as usual below.
       if (patch.assigneeId !== undefined) {
         const assigneeId = patch.assigneeId;
-        applyOp(id, { assigneeId }, () =>
-          runtime!.tasks.opAssign({ workspaceId: workspaceId!, taskId: id, assigneeId }),
-        );
         const { assigneeId: _assigned, ...rest } = patch;
+        // Someone else's unfiled task handed on into another Inbox (TV-D13,
+        // call 20) is out of my sight now: drop it and the steps that went
+        // with it, rather than keep them until the next access check.
+        const leaves = (saved: Task) =>
+          saved.bucketId !== existing.bucketId &&
+          !bucketsRef.current.some((b) => b.id === saved.bucketId) &&
+          saved.creatorId !== userId &&
+          saved.assigneeId !== userId
+            ? [
+                saved.id,
+                ...tasksRef.current
+                  .filter((t) => t.parentId === saved.id && t.bucketId === existing.bucketId)
+                  .map((t) => t.id),
+              ]
+            : [];
+        // An Inbox task assigned and edited in one gesture ("Assign to Mike ·
+        // in Bugs", 20a): the edit lands first, then the assignment, so a
+        // hand-over can't take the task away before the edit does.
+        const restFields = editableTaskFields(rest);
+        const inInbox =
+          bucketsRef.current.find((b) => b.id === existing.bucketId)?.isSystem === true;
+        if (inInbox && Object.keys(restFields).length > 0) {
+          applyOp(
+            id,
+            { ...restFields, assigneeId } as Partial<Task>,
+            async () => {
+              await runtime!.tasks.opUpdateTask({
+                workspaceId: workspaceId!,
+                taskId: id,
+                patch: restFields,
+              });
+              return runtime!.tasks.opAssign({ workspaceId: workspaceId!, taskId: id, assigneeId });
+            },
+            { leaves },
+          );
+          return;
+        }
+        applyOp(
+          id,
+          { assigneeId },
+          () => runtime!.tasks.opAssign({ workspaceId: workspaceId!, taskId: id, assigneeId }),
+          { leaves },
+        );
         // Without edit access applyOp has already said so; don't say it twice.
         if (Object.keys(rest).length === 0 || !canEdit || store?.isOffline()) return;
         patch = rest;
@@ -1312,6 +1376,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       editBlocked,
       refused,
       archivedBlocked,
+      userId,
     ],
   );
 
@@ -1949,6 +2014,8 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         parentId: write.parentId,
         bucketId: write.bucketId,
         priority: write.priority,
+        sectionId: write.sectionId,
+        teamId: write.teamId,
         // The place rides with the status op when there is one.
         position: status === undefined ? write.position : undefined,
       });
@@ -1999,20 +2066,20 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       const saved: Task[] = [];
       try {
         if (Object.keys(fields).length > 0) {
-          const row = await rt.tasks.updateTask({ workspaceId: ws, taskId, patch: fields });
-          saved.push(row);
-          // Subtasks follow the project the parent really landed in.
-          saved.push(
-            ...(await Promise.all(
-              followers.map((child) =>
-                rt.tasks.updateTask({
-                  workspaceId: ws,
-                  taskId: child.id,
-                  patch: { bucketId: row.bucketId },
-                }),
-              ),
-            )),
-          );
+          if (
+            followers.length > 0 ||
+            (write.bucketId !== undefined && write.bucketId !== existing.bucketId)
+          ) {
+            // A move is one op (TV-D8, as `patchTask`): the server carries the
+            // subtasks it lets you edit in the same transaction and answers
+            // with every row it changed; one you can only view stays where the
+            // server has it, and the drop still lands (TV-U10).
+            saved.push(
+              ...(await rt.tasks.opUpdateTask({ workspaceId: ws, taskId, patch: fields })),
+            );
+          } else {
+            saved.push(await rt.tasks.updateTask({ workspaceId: ws, taskId, patch: fields }));
+          }
         }
         if (category !== undefined) {
           saved.push(
@@ -3065,6 +3132,131 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     [areas, allBuckets, runAreaOp, runtime, workspaceId],
   );
 
+  // ── sections (TV-D10's ops; the List's "+ Add section", TV-U10) ──────────
+  /** Run a section op and take the project's sections it answers. */
+  const runSectionOp = useCallback(
+    (
+      op: () => Promise<Section[]>,
+      changes: OverlayChange[] = [],
+      opts?: { sync?: boolean },
+    ): Promise<Section[] | null> => {
+      if (editBlocked() || !store) return Promise.resolve(null);
+      const write = store.begin(changes);
+      return op().then(
+        async (next) => {
+          if (opts?.sync) await store.syncNow().catch(() => undefined);
+          write.settle({ sections: next });
+          return next;
+        },
+        (e) => {
+          refused(write, e, "Couldn't save the section.");
+          return null;
+        },
+      );
+    },
+    [editBlocked, store, refused],
+  );
+
+  /** A new section at the end of a project; answers with its id. */
+  const createSection = useCallback(
+    async (projectId: string, name: string): Promise<string | null> => {
+      const trimmed = name.trim();
+      if (!trimmed || !runtime || !workspaceId) return null;
+      const id = crypto.randomUUID();
+      const next = await runSectionOp(() =>
+        runtime.tasks.createSection({
+          workspaceId,
+          projectId,
+          id,
+          fields: { name: trimmed },
+        }),
+      );
+      return next ? id : null;
+    },
+    [runSectionOp, runtime, workspaceId],
+  );
+
+  const renameSection = useCallback(
+    (sectionId: string, name: string) => {
+      const trimmed = name.trim();
+      const existing = (bundle.sections ?? []).find((s) => s.id === sectionId);
+      if (!existing || !trimmed || trimmed === existing.name || !runtime || !workspaceId) return;
+      void runSectionOp(
+        () => runtime.tasks.updateSection({ workspaceId, sectionId, patch: { name: trimmed } }),
+        [{ table: "sections", patch: { id: sectionId, fields: { name: trimmed } } }],
+      );
+    },
+    [bundle.sections, runSectionOp, runtime, workspaceId],
+  );
+
+  /**
+   * Delete a section: its tasks stay in the project, under No section (the
+   * op clears their section). Undo restores the section and puts back the
+   * tasks that are still under No section in the same project (one changed
+   * since keeps its newer place).
+   */
+  const deleteSection = useCallback(
+    (sectionId: string) => {
+      const existing = (bundle.sections ?? []).find((s) => s.id === sectionId);
+      if (!existing || !runtime || !workspaceId || !store) return;
+      const members = tasksRef.current
+        .filter((t) => t.sectionId === sectionId && !t.deletedAt)
+        .map((t) => ({ id: t.id, bucketId: t.bucketId }));
+      void runSectionOp(
+        () => runtime.tasks.updateSection({ workspaceId, sectionId, patch: { deleted: true } }),
+        [
+          { table: "sections", remove: sectionId },
+          ...members.map((m) => patchOf(m.id, { sectionId: null })),
+        ],
+        { sync: true },
+      ).then((next) => {
+        if (!next) return;
+        const count = members.length;
+        undoToast(`“${existing.name}” deleted`, {
+          description:
+            count === 0
+              ? undefined
+              : `${count === 1 ? "Its task stays" : `Its ${count} tasks stay`} in the project, under No section.`,
+          onUndo: () => {
+            void runSectionOp(
+              () =>
+                runtime.tasks.updateSection({ workspaceId, sectionId, patch: { deleted: false } }),
+              [],
+              { sync: true },
+            ).then(async (restored) => {
+              if (!restored) return;
+              // Only the ones still where the delete left them.
+              const back = members.filter((m) => {
+                const now = tasksRef.current.find((t) => t.id === m.id);
+                return !!now && !now.deletedAt && !now.sectionId && now.bucketId === m.bucketId;
+              });
+              if (back.length === 0) return;
+              const write = store.begin(back.map((m) => patchOf(m.id, { sectionId })));
+              // Each task goes back on its own: one refused never undoes the others.
+              const results = await Promise.allSettled(
+                back.map((m) =>
+                  runtime.tasks.updateTask({ workspaceId, taskId: m.id, patch: { sectionId } }),
+                ),
+              );
+              const rows = results.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
+              // The saved rows become the copy; a refused one's overlay goes with the op.
+              write.settle({ tasks: rows });
+              const refusal = results.find((r) => r.status === "rejected");
+              if (refusal) {
+                const left = results.length - rows.length;
+                failed(
+                  refusal.reason,
+                  `Couldn't put ${left === 1 ? "a task" : `${left} tasks`} back in the section.`,
+                );
+              }
+            });
+          },
+        });
+      });
+    },
+    [bundle.sections, runSectionOp, runtime, workspaceId, store, failed],
+  );
+
   /**
    * Assign a bucket to a time-of-day slot (or clear it with `slot = null`).
    * Optimistic; persisted per person via the runtime (spec §9). The sidebar no
@@ -3161,6 +3353,8 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     restLoaded: !!store && snap.restLoaded,
     /** Live comments per task (TV-D11a; TV-D5's promised counts). */
     commentCounts: snap.commentCounts,
+    /** Tasks with a capture or check-off waiting on this device (a row's clock). */
+    pendingTaskIds: snap.pendingTaskIds,
     /** Per task, moves on any comment change (TV-U13): the open feed re-reads on it. */
     commentStamps: snap.commentStamps,
     /** TV-D10's structure, live from the store: areas (in sidebar order),
@@ -3214,6 +3408,8 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     createQueuedTask,
     captureToQueue,
     patchTask,
+    /** Take a team's unclaimed task (TV-D13); `unclaimedForMe` in teams.ts lists them. */
+    claimTask,
     toggleDone,
     markDone,
     archiveTask,
@@ -3269,6 +3465,10 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     setAreaColor,
     moveArea,
     deleteArea,
+    /** Sections' ops (TV-D10's; the List's "+ Add section", TV-U10). */
+    createSection,
+    renameSection,
+    deleteSection,
     /** Recently deleted (TV-U6), when read (`includeTrash`); null otherwise. */
     trash,
     restoreFromTrash,

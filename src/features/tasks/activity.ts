@@ -135,7 +135,14 @@ function waitingLine(verb: string, p: Record<string, unknown>): string {
  * (TV-D1) tells a task's creator that a teammate finished it; the trail
  * already says so through `tasks.set_status`.
  */
-const NOTIFICATION_ONLY_OPS = new Set(["tasks.completed", "tasks.reminder"]);
+const NOTIFICATION_ONLY_OPS = new Set([
+  "tasks.completed",
+  "tasks.reminder",
+  // TV-D13: the team's notices (the op's own trail line says it was routed).
+  "tasks.routed",
+  "tasks.team_check_back",
+  "tasks.handed_back",
+]);
 
 export function isTrailEntry(entry: Pick<ActivityEntry, "op">): boolean {
   return !NOTIFICATION_ONLY_OPS.has(entry.op);

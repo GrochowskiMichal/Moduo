@@ -68,6 +68,7 @@ import type {
 import type { EntityLink, EntityRecord, EntityRef, LinkOrigin, RelationKind } from "./entity-links";
 import type { Truncation } from "./paged-select";
 import type { TasksStructureApi } from "./runtime.web.structure";
+import type { TasksTemplatesApi } from "./runtime.web.templates";
 import type {
   SyncAccessResult,
   SyncIdsResult,
@@ -86,6 +87,13 @@ import type { TaskFieldPatch } from "./task-rows";
  * own signatures above.
  */
 export type TasksStructureRuntime = Omit<TasksStructureApi, "getTimeBlocks" | "setTimeBlocks">;
+
+/**
+ * TV-D15's templates and "Duplicate project…" (runtime.web.templates.ts):
+ * reads under RLS, writes as ops; an apply or a duplicate answers with every
+ * row it made. Optional: a runtime without them offers neither.
+ */
+export type TasksTemplatesRuntime = Partial<TasksTemplatesApi>;
 
 /** A comment on any registered entity (spine block CT-5). */
 export type SpineComment = {
@@ -1169,6 +1177,12 @@ export type ModuoRuntime = {
       taskId: string;
       assigneeId: string | null;
     }): Promise<Task>;
+    /**
+     * Take an unclaimed task of a team you're in (TV-D13, `tasks_op_claim`):
+     * it becomes yours and keeps its team. Needs Edit on the task; one someone
+     * else took first is refused ("Someone already took this task.").
+     */
+    opClaim(input: { workspaceId: string; taskId: string }): Promise<Task>;
     opSetStatus(input: {
       workspaceId: string;
       taskId: string;
@@ -1231,7 +1245,8 @@ export type ModuoRuntime = {
        * under module='contacts', not 'tasks'. */
       module?: string;
     }): Promise<ActivityEntry[]>;
-  } & TasksStructureRuntime;
+  } & TasksStructureRuntime &
+    TasksTemplatesRuntime;
 
   /**
    * Connective-tissue spine — the link substrate (specs/connective-tissue.md
@@ -1346,6 +1361,12 @@ export type ModuoRuntime = {
     deleteComment(input: { commentId: string }): Promise<SpineComment>;
     /** Undo a comment's delete (`comments_op_restore`). */
     restoreComment(input: { commentId: string }): Promise<SpineComment>;
+    /**
+     * `@Team` in your own comment (TV-D13, `comments_op_mention_teams`): each
+     * member of those teams who can see the item hears once (never you, nor
+     * anyone the comment already reached). Call it after posting or editing.
+     */
+    mentionTeams(input: { commentId: string; teamIds: string[] }): Promise<void>;
     /** Add (`on`) or take back one of the six reactions; answers the comment's
      *  reactions after the change. Never notifies (REPLAN 88). */
     reactToComment(input: {

@@ -496,3 +496,47 @@ describe("validator round", () => {
     ).toHaveLength(0);
   });
 });
+
+describe("reordering subtasks (TV-U10)", () => {
+  const parent = task({ id: "p", position: "0000000010" });
+  const one = task({ id: "s1", title: "First step", parentId: "p", position: "0000000020" });
+  const two = task({ id: "s2", title: "Second step", parentId: "p", position: "0000000030" });
+  const withSubtasks = () => {
+    const dropTask = rs.fn(async () => true);
+    const a = api(parent, {
+      tasks: [parent, one, two],
+      subtasksByParent: new Map([["p", [one, two]]]),
+      dropTask,
+    } as unknown as Partial<TasksModuleApi>);
+    return { a, dropTask };
+  };
+  const moveUp = (title: string) =>
+    fireEvent.keyDown(screen.getByRole("button", { name: `Open subtask: ${title}` }), {
+      key: "ArrowUp",
+      altKey: true,
+      shiftKey: true,
+    });
+
+  it("⌥⇧↑ moves a subtask up among its siblings, with the drop's Undo label", () => {
+    const { a, dropTask } = withSubtasks();
+    renderPanel(parent, a);
+    moveUp("Second step");
+    const [write, label] = dropTask.mock.calls[0] as unknown as [
+      { taskId: string; position: string },
+      string,
+    ];
+    expect(label).toBe("Moved up");
+    expect(write.taskId).toBe("s2");
+    expect(write.position > parent.position && write.position < one.position).toBe(true);
+    // The first can't go higher.
+    moveUp("First step");
+    expect(dropTask).toHaveBeenCalledTimes(1);
+  });
+
+  it("read-only, the keys move nothing", () => {
+    const { a, dropTask } = withSubtasks();
+    renderPanel(parent, a, null, false);
+    moveUp("Second step");
+    expect(dropTask).not.toHaveBeenCalled();
+  });
+});

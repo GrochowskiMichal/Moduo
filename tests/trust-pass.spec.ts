@@ -117,6 +117,11 @@ function trackWrites(page: Page) {
   return writes;
 }
 
+// The detail panel's Reopen (TV-P0). A listed Won't do row's status icon is
+// named "Reopen" too since TV-U10, so look in the right pane.
+const reopen = (page: Page) =>
+  page.getByTestId("tasks-right").getByRole("button", { name: "Reopen" });
+
 test("AC1.4 — a Won't do task stays reachable and reopens", async ({ page }) => {
   const t = await createTask(dev, { title: `Won't do me ${tag}`, bucketId: ws.inboxId });
   await openTasks(page, t.id);
@@ -126,7 +131,7 @@ test("AC1.4 — a Won't do task stays reachable and reopens", async ({ page }) =
   await page.getByRole("button", { name: "More actions" }).click();
   await page.getByRole("menuitem", { name: "Won’t do" }).click();
   await expect(page.getByRole("button", { name: WONT_DO_STATUS })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Reopen" })).toBeVisible();
+  await expect(reopen(page)).toBeVisible();
   await expect.poll(async () => (await taskById(t.id)).status).toBe("archived");
 
   // A deep link straight to the Won't do task opens it, with Reopen.
@@ -134,7 +139,7 @@ test("AC1.4 — a Won't do task stays reachable and reopens", async ({ page }) =
   await expect(page.getByRole("button", { name: WONT_DO_STATUS })).toBeVisible({
     timeout: 20_000,
   });
-  await page.getByRole("button", { name: "Reopen" }).click();
+  await reopen(page).click();
   await expect(page.getByRole("button", { name: "Status: To do" })).toBeVisible();
   await expect.poll(async () => (await taskById(t.id)).status).toBe("todo");
 });
@@ -161,7 +166,7 @@ test("AC1.4 — Won't do tasks are listed by Filter → Status (TV-U2)", async (
   // Listed once, it opens with TV-P0's Reopen.
   await page.getByRole("button", { name: gone.title }).click();
   await expect(page.getByRole("button", { name: WONT_DO_STATUS })).toBeVisible();
-  await page.getByRole("button", { name: "Reopen" }).click();
+  await reopen(page).click();
   await expect.poll(async () => (await taskById(gone.id)).status).toBe("todo");
   // Leave the shared dev workspace as it was.
   const at = new Date().toISOString();
@@ -276,7 +281,10 @@ test("AC1.10 + AC1.7 — a task in a project you can't see: “Private project�
   page,
 }) => {
   // The owner files a task in their own project and gives it to a teammate,
-  // who can see the task but not the project.
+  // who can see the task but not the project. Assignments from one person
+  // within an hour gather on one unread notice (TV-D12, AC5.7), so the
+  // teammate reads what's there first: this one starts its own.
+  await rpc(mate, "notifications_op_mark_all_read", { p_workspace_id: ws.id });
   const secret = await createPrivateProject(dev, `Owner only ${tag}`);
   const t = await createTask(dev, { title: `Assigned to teammate ${tag}`, bucketId: secret.id });
   await rpc(dev, "tasks_op_assign", {
@@ -301,6 +309,22 @@ test("AC1.10 + AC1.7 — a task in a project you can't see: “Private project�
     .first()
     .click();
   await expect(page.getByText(`assigned “${t.title}” to you`)).toBeVisible({ timeout: 15_000 });
+
+  // A second one within the hour joins it: one card, counted, still naming the first.
+  const t2 = await createTask(dev, { title: `Assigned too ${tag}`, bucketId: secret.id });
+  await rpc(dev, "tasks_op_assign", {
+    p_workspace_id: ws.id,
+    p_task_id: t2.id,
+    p_assignee_id: mate.user.id,
+  });
+  await page.reload();
+  await page
+    .getByRole("button", { name: /notifications/i })
+    .first()
+    .click();
+  await expect(page.getByText(`assigned you 2 tasks · “${t.title}”`)).toBeVisible({
+    timeout: 15_000,
+  });
 });
 
 test("AC1.7 — a comment's notice names its task", async ({ page }) => {

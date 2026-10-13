@@ -429,7 +429,13 @@ function TeamValue({ task, api, canEdit }: { task: Task; api: TasksModuleApi; ca
           empty={!team}
           icon={
             team ? (
-              <TeamMark name={team.name} id={team.id} letters={team.mark} size="icon" />
+              <TeamMark
+                name={team.name}
+                id={team.id}
+                letters={team.mark}
+                color={team.color}
+                size="icon"
+              />
             ) : (
               <Users />
             )
@@ -447,7 +453,7 @@ function TeamValue({ task, api, canEdit }: { task: Task; api: TasksModuleApi; ca
         >
           {api.teams.map((t) => (
             <DropdownMenuRadioItem key={t.id} value={t.id}>
-              <TeamMark name={t.name} id={t.id} letters={t.mark} size="icon" />
+              <TeamMark name={t.name} id={t.id} letters={t.mark} color={t.color} size="icon" />
               {t.name}
             </DropdownMenuRadioItem>
           ))}

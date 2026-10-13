@@ -128,8 +128,10 @@ test("AC11.3 — one Date grouping: Earlier · Today · Tomorrow · five day nam
   await createTask({ title: `Far ${tag}`, bucketId: project.id, dueDate: dayAt(10) });
   await createTask({ title: `Someday ${tag}`, bucketId: project.id });
   await openTasks(page, first.id);
-  // Group by never offers Tag or Energy; Project only across projects.
-  expect(await setGroupBy(page, "Date")).toEqual([
+  // Group by never offers Tag or Energy; Project only across projects;
+  // Section inside one (TV-U10); Team once the workspace has teams.
+  expect((await setGroupBy(page, "Date")).filter((o) => o !== "Team")).toEqual([
+    "Section",
     "Status",
     "Priority",
     "Assignee",

@@ -24,7 +24,7 @@ import { type ParsedCapture, parseCapture } from "./capture-parser";
 /** A recognised token in a capture title. */
 export type CaptureToken =
   | { kind: "person"; userId: string; label: string }
-  | { kind: "team"; teamId: string; label: string; letters?: string | null }
+  | { kind: "team"; teamId: string; label: string; letters?: string | null; color?: string | null }
   /** A tag by id, or a new one to make by name (`tagId: null`). */
   | { kind: "tag"; tagId: string | null; label: string; color?: string | null }
   /** A due day (`YYYY-MM-DD`): `/today`, `/tomorrow`, `/next week`, `/date`, `/due …`. */
@@ -253,7 +253,12 @@ export function captureDates(resolved: ResolvedTitle, manual: ManualDates = {}):
 /** Who and what a typed line's `@` and `#` words can name. */
 export type PlainLineContext = {
   people: ReadonlyArray<{ userId: string; name: string }>;
-  teams: ReadonlyArray<{ id: string; name: string; letters?: string | null }>;
+  teams: ReadonlyArray<{
+    id: string;
+    name: string;
+    letters?: string | null;
+    color?: string | null;
+  }>;
   tags: ReadonlyArray<{ id: string; name: string; color?: string | null }>;
 };
 
@@ -284,7 +289,13 @@ export function segmentsFromLine(line: string, ctx: PlainLineContext): TitleSegm
         token = { kind: "person", userId: people[0].userId, label: people[0].name };
       } else if (teams.length === 1 && people.length === 0) {
         const t = teams[0];
-        token = { kind: "team", teamId: t.id, label: t.name, letters: t.letters ?? null };
+        token = {
+          kind: "team",
+          teamId: t.id,
+          label: t.name,
+          letters: t.letters ?? null,
+          color: t.color ?? null,
+        };
       }
     } else {
       const tag = ctx.tags.find((t) => t.name.toLowerCase() === word.word.toLowerCase());

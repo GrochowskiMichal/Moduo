@@ -29,3 +29,18 @@ export function useToday(): string {
 export function nowOn(_today: string): Date {
   return new Date();
 }
+
+/**
+ * A count that goes up once a minute while `active`, for words that age by
+ * the minute ("5m", "3h": Detailed's Updated and the waiting lines). List it
+ * as a dependency next to `today`; off, it stays put and costs nothing.
+ */
+export function useMinuteTick(active: boolean): number {
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    if (!active) return;
+    const id = window.setInterval(() => setTick((n) => n + 1), 60_000);
+    return () => window.clearInterval(id);
+  }, [active]);
+  return tick;
+}

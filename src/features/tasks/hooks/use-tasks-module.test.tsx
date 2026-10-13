@@ -68,6 +68,13 @@ function fakeRuntime(tasks: Task[]) {
         assigneeId,
       }),
     ),
+    opClaim: rs.fn(async ({ taskId }: { taskId: string }) => ({
+      ...byId(taskId),
+      assigneeId: "u1",
+    })),
+    opUpdateTask: rs.fn(async ({ taskId, patch }: { taskId: string; patch: Partial<Task> }) => [
+      { ...byId(taskId), ...patch },
+    ]),
     upsertTask: rs.fn(async (t: Task) => ({ ...t, id: "t-new" })),
     deleteTask: rs.fn(async ({ taskId }: { taskId: string }) => ({
       ...byId(taskId),
@@ -86,6 +93,82 @@ async function mount(tasks: Task[]) {
   await waitFor(() => expect(hook.result.current.loading).toBe(false));
   return { ...fake, hook };
 }
+
+describe("teams and hand-overs (TV-D13)", () => {
+  it("taking a team's task shows it as mine at once and keeps the server's row", async () => {
+    const { api, hook } = await mount([task("t1", { assigneeId: null, teamId: "team-ds" })]);
+    act(() => hook.result.current.claimTask("t1"));
+    expect(hook.result.current.tasks.find((t) => t.id === "t1")?.assigneeId).toBe("u1");
+    await waitFor(() =>
+      expect(api.opClaim).toHaveBeenCalledWith({ workspaceId: "w1", taskId: "t1" }),
+    );
+    expect(hook.result.current.tasks.find((t) => t.id === "t1")?.teamId).toBe("team-ds");
+  });
+
+  it("taken by someone first: the claim is refused and the task goes back to unclaimed", async () => {
+    const { api, hook } = await mount([task("t1", { assigneeId: null, teamId: "team-ds" })]);
+    api.opClaim.mockImplementationOnce(async () => {
+      throw new Error("Someone already took this task.");
+    });
+    act(() => hook.result.current.claimTask("t1"));
+    await waitFor(() => expect(api.opClaim).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(hook.result.current.tasks.find((t) => t.id === "t1")?.assigneeId).toBeNull(),
+    );
+  });
+
+  it("someone else's unfiled task handed on to another Inbox leaves my copy, with its steps", async () => {
+    const { api, hook } = await mount([
+      task("t1", { creatorId: "u9", assigneeId: "u1" }),
+      task("s1", { creatorId: "u9", assigneeId: null, parentId: "t1" }),
+    ]);
+    api.opAssign.mockImplementationOnce(async ({ taskId }: { taskId: string }) => ({
+      ...task(taskId, { creatorId: "u9" }),
+      assigneeId: "u3",
+      bucketId: "inbox-u3",
+    }));
+    act(() => hook.result.current.patchTask("t1", { assigneeId: "u3" }));
+    await waitFor(() => expect(api.opAssign).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(hook.result.current.tasks.map((t) => t.id)).toEqual([]));
+  });
+
+  it("an Inbox task assigned and filed in one gesture: the move lands first, then the assignment", async () => {
+    const { api, hook } = await mount([task("t1", { creatorId: "u9", assigneeId: "u1" })]);
+    const order: string[] = [];
+    api.opUpdateTask.mockImplementationOnce(
+      async ({ taskId, patch }: { taskId: string; patch: Partial<Task> }) => {
+        order.push("update");
+        return [{ ...task(taskId, { creatorId: "u9" }), ...patch }];
+      },
+    );
+    api.opAssign.mockImplementationOnce(
+      async ({ taskId, assigneeId }: { taskId: string; assigneeId: string | null }) => {
+        order.push("assign");
+        return { ...task(taskId, { creatorId: "u9" }), bucketId: "b2", assigneeId };
+      },
+    );
+    act(() => hook.result.current.patchTask("t1", { assigneeId: "u3", bucketId: "b2" }));
+    await waitFor(() => expect(order).toEqual(["update", "assign"]));
+    expect(api.opUpdateTask).toHaveBeenCalledWith({
+      workspaceId: "w1",
+      taskId: "t1",
+      patch: { bucketId: "b2" },
+    });
+  });
+
+  it("my own task handed on stays in my copy (I made it: Created by me)", async () => {
+    const { api, hook } = await mount([task("t1", { creatorId: "u1", assigneeId: "u1" })]);
+    api.opAssign.mockImplementationOnce(async ({ taskId }: { taskId: string }) => ({
+      ...task(taskId, { creatorId: "u1" }),
+      assigneeId: "u3",
+      bucketId: "inbox-u3",
+    }));
+    act(() => hook.result.current.patchTask("t1", { assigneeId: "u3" }));
+    await waitFor(() =>
+      expect(hook.result.current.tasks.find((t) => t.id === "t1")?.bucketId).toBe("inbox-u3"),
+    );
+  });
+});
 
 describe("useTasksModule saves (TV-D1)", () => {
   beforeEach(() => {
@@ -119,20 +202,21 @@ describe("useTasksModule saves (TV-D1)", () => {
     );
   });
 
-  it("an edit that also reassigns splits into the op plus a field-level save", async () => {
+  it("an Inbox task edited and reassigned at once: the edit through the op first, then the assignment (TV-D13)", async () => {
     const { api, hook } = await mount([task("t1")]);
     act(() => hook.result.current.patchTask("t1", { assigneeId: "u3", title: "New" }));
-    await waitFor(() => expect(api.updateTask).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(api.opAssign).toHaveBeenCalledTimes(1));
+    expect(api.opUpdateTask).toHaveBeenCalledWith({
+      workspaceId: "w1",
+      taskId: "t1",
+      patch: { title: "New" },
+    });
     expect(api.opAssign).toHaveBeenCalledWith({
       workspaceId: "w1",
       taskId: "t1",
       assigneeId: "u3",
     });
-    expect(api.updateTask).toHaveBeenCalledWith({
-      workspaceId: "w1",
-      taskId: "t1",
-      patch: { title: "New" },
-    });
+    expect(api.updateTask).not.toHaveBeenCalled();
   });
 
   it("a new task is the creator's unless an assignee (or Unassigned) is chosen", async () => {

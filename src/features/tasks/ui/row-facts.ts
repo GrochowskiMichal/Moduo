@@ -14,8 +14,9 @@
 
 import { isClosedTask } from "@contracts/vocabularies";
 import { useLayoutEffect, useRef, useState } from "react";
+import { formatAge } from "../../../lib/time-format";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
-import type { Tag, Task } from "../model";
+import type { ProjectStatus, Tag, Task, TaskWaitingEntry } from "../model";
 import { statusNameOf } from "../statuses";
 
 /** Everything a row or card shows that isn't on its task. */
@@ -32,6 +33,14 @@ export type TaskFacts = {
   progress: { done: number; total: number } | null;
   /** The status's own name (Detailed rows). */
   statusName: string;
+  /** Its section's name (Detailed's "Project › Section"); null without one. */
+  sectionName: string | null;
+  /** "on Anna · 2d" while it waits on someone or something (TV-D10). */
+  waiting: string | null;
+  /** Live comments on it (TV-D11a's counts). */
+  comments: number;
+  /** A capture or check-off of it waits on this device to sync (offline). */
+  pending: boolean;
 };
 
 /** The API maps the facts are read from. */
@@ -44,7 +53,14 @@ export type FactsSource = Pick<
   | "tagsByTask"
   | "subtaskProgressByTask"
   | "statusById"
->;
+> & {
+  /** Section id → name (the view builds it once from `api.sections`). */
+  sectionNames?: ReadonlyMap<string, string>;
+  /** Task id → its waiting line (`waitingLabelsOf`). */
+  waitingLabels?: ReadonlyMap<string, string>;
+  commentCounts?: ReadonlyMap<string, number>;
+  pendingTaskIds?: ReadonlySet<string>;
+};
 
 const NONE: readonly never[] = [];
 
@@ -64,8 +80,42 @@ export function taskFactsOf(task: Task, api: FactsSource): TaskFacts {
     blockedLabel: blocked ? blockedLabelOf(api.blockersByTask.get(task.id) ?? NONE) : null,
     tags: api.tagsByTask.get(task.id) ?? NONE,
     progress: api.subtaskProgressByTask.get(task.id) ?? null,
-    statusName: statusNameOf(task, api.statusById),
+    statusName: statusNameOf(task, api.statusById ?? NO_STATUSES),
+    sectionName: task.sectionId ? (api.sectionNames?.get(task.sectionId) ?? null) : null,
+    waiting: api.waitingLabels?.get(task.id) ?? null,
+    comments: api.commentCounts?.get(task.id) ?? 0,
+    pending: api.pendingTaskIds?.has(task.id) ?? false,
   };
+}
+
+const NO_STATUSES: ReadonlyMap<string, ProjectStatus> = new Map<string, ProjectStatus>();
+
+/**
+ * Each waiting task's line, "on Anna · 2d" (TV-D10's Waiting on…): the first
+ * thing it waits on by name ("+1" for more), and how long since the earliest.
+ * People read by name (`nameOf`); an email, an agent or a note reads by its
+ * label.
+ */
+export function waitingLabelsOf(
+  entries: ReadonlyArray<Pick<TaskWaitingEntry, "taskId" | "kind" | "ref" | "label" | "since">>,
+  nameOf: (userId: string) => string | null,
+  now: Date = new Date(),
+): Map<string, string> {
+  const byTask = new Map<string, typeof entries>();
+  for (const e of entries) byTask.set(e.taskId, [...(byTask.get(e.taskId) ?? []), e]);
+  const out = new Map<string, string>();
+  for (const [taskId, list] of byTask) {
+    const sorted = [...list].sort((a, b) => (a.since < b.since ? -1 : a.since > b.since ? 1 : 0));
+    const first = sorted[0];
+    if (!first) continue;
+    const who =
+      (first.kind === "person" && first.ref ? nameOf(first.ref) : null) ??
+      first.label?.trim() ??
+      (first.kind === "email" ? "a reply" : first.kind === "agent" ? "an agent" : "something");
+    const more = sorted.length > 1 ? ` +${sorted.length - 1}` : "";
+    out.set(taskId, `on ${who || "something"}${more} · ${formatAge(first.since, now)}`);
+  }
+  return out;
 }
 
 function sameItems<T>(a: readonly T[], b: readonly T[], same: (x: T, y: T) => boolean): boolean {
@@ -82,6 +132,10 @@ export function sameTaskFacts(a: TaskFacts, b: TaskFacts): boolean {
     a.queued === b.queued &&
     a.blockedLabel === b.blockedLabel &&
     a.statusName === b.statusName &&
+    a.sectionName === b.sectionName &&
+    a.waiting === b.waiting &&
+    a.comments === b.comments &&
+    a.pending === b.pending &&
     (a.progress === b.progress ||
       (!!a.progress &&
         !!b.progress &&
@@ -109,6 +163,7 @@ export type TaskRowActions = Pick<
   | "skipOccurrence"
   | "setTaskParent"
   | "deleteTask"
+  | "setTaskStatus"
 >;
 
 /**
@@ -128,6 +183,8 @@ export function useRowActions(api: TaskRowActions): TaskRowActions {
     skipOccurrence: (...args) => latest.current.skipOccurrence(...args),
     setTaskParent: (...args) => latest.current.setTaskParent(...args),
     deleteTask: (...args) => latest.current.deleteTask(...args),
+    // Optional on the views' stand-in APIs (stories, tests).
+    setTaskStatus: (...args) => latest.current.setTaskStatus?.(...args),
   }));
   return actions;
 }

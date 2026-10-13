@@ -14,19 +14,21 @@
 //     never reach the List, though React bubbles them up to it.
 //
 // Shift isn't a bail-out: letters match case-insensitively (TV-U5 claims ⇧J/⇧K
-// for extending the selection, checked before the lowercase match), and `>` /
-// `<` (nest under the row above, un-nest; default k) match `event.key`,
-// whatever the keyboard needs to type them.
+// for extending the selection, checked before the lowercase match; ⇧S opens
+// the status menu, TV-U10), and `>` / `<` (nest under the row above, un-nest;
+// default k) match `event.key`, whatever the keyboard needs to type them.
 
 export type ListKeyAction =
   | "next"
   | "prev"
   | "toggle-done"
+  | "open"
   | "edit"
   | "capture"
   | "bucket"
   | "schedule"
   | "due"
+  | "status"
   | "queue"
   | "focus-on"
   | "expand"
@@ -43,7 +45,7 @@ type ListKey = Pick<KeyboardEvent, "key" | "metaKey" | "ctrlKey" | "altKey"> &
 /**
  * The attribute a row puts on its title button. Clicking the title is how a
  * row gets selected (and Chromium focuses a clicked button), so on the
- * SELECTED row's title Space/Enter stay the List's keys — complete and edit.
+ * SELECTED row's title Space/Enter stay the List's keys — complete and open.
  */
 export const ROW_TITLE_ATTR = "data-row-title";
 
@@ -101,12 +103,15 @@ export function listKeyAction(
     case " ":
       return "toggle-done";
     case "Enter":
-      return "edit";
+      // ⏎ opens, `e` edits (decision 22, TV-U10).
+      return "open";
     case ">":
       return "nest";
     case "<":
       return "unnest";
   }
+  // ⇧S: the status menu (default k), before `s` (schedule) matches below.
+  if (shiftKey && key.toLowerCase() === "s") return "status";
   // ⇧F "Focus on this" (call 31); a bare f stays Filter's (use-tasks-filters).
   if (shiftKey && key.toLowerCase() === "f") return "focus-on";
   switch (key.toLowerCase()) {

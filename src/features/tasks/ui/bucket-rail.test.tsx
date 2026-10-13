@@ -19,6 +19,7 @@ import {
   asRailProject,
   BucketRail,
   parseCollapsedSections,
+  TEMPLATES_SELECTION,
   TRASH_SELECTION,
   UPCOMING_SELECTION,
 } from "./bucket-rail";
@@ -87,6 +88,7 @@ function renderRail({
   hidden: initialHidden = new Set<TasksSidebarHideable>(),
   pinned: initialPinned = [] as string[],
   dnd = false,
+  templates = false,
 }: {
   canEdit?: boolean;
   selection?: string;
@@ -97,6 +99,8 @@ function renderRail({
   pinned?: string[];
   /** Inside a DndContext, with sortable rows and drop targets. */
   dnd?: boolean;
+  /** Offer Duplicate…, Save as template… and Templates (TV-D15). */
+  templates?: boolean;
 } = {}) {
   const calls = {
     onSelect: rs.fn(),
@@ -113,6 +117,9 @@ function renderRail({
     onCreateBucket: rs.fn(),
     onCreateArea: rs.fn(async () => "new-area"),
     onTriageBucket: rs.fn(),
+    onDuplicate: rs.fn(),
+    onSaveAsTemplate: rs.fn(),
+    onNewFromTemplate: rs.fn(),
   };
   function Harness() {
     const [selection, setSelection] = useState(initialSelection);
@@ -183,6 +190,15 @@ function renderRail({
         onDeleteArea={calls.onDeleteArea}
         archivedCount={2}
         trashCount={5}
+        templates={
+          templates
+            ? {
+                onDuplicate: calls.onDuplicate,
+                onSaveAsTemplate: calls.onSaveAsTemplate,
+                onNewFromTemplate: calls.onNewFromTemplate,
+              }
+            : undefined
+        }
         dropAccepts={dnd ? () => false : undefined}
       />
     );
@@ -363,6 +379,42 @@ describe("the project menu (REPLAN 13–16, 30, 78)", () => {
       "Delete project…",
     ]);
     expect(screen.queryByText(/Open at/)).toBeNull();
+  });
+
+  it("with templates: Duplicate… and Save as template… before Archive (TV-D15)", async () => {
+    const calls = renderRail({ templates: true });
+    await rowMenu(/^Website,/);
+    const items = screen.getAllByRole("menuitem").map((el) => el.textContent);
+    expect(items).toEqual([
+      "Rename",
+      "Colour",
+      "Area",
+      "Pin to sidebar",
+      "Share",
+      "Duplicate…",
+      "Save as template…",
+      "Archive…",
+      "Delete project…",
+    ]);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Duplicate…" }));
+    await settle();
+    expect(calls.onDuplicate).toHaveBeenCalledWith(expect.objectContaining({ id: "b-site" }));
+    await rowMenu(/^Website,/);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Save as template…" }));
+    await settle();
+    expect(calls.onSaveAsTemplate).toHaveBeenCalledWith(expect.objectContaining({ id: "b-site" }));
+  });
+
+  it("with templates: the ⋯ offers New project from template… and Templates (TV-D15)", async () => {
+    const calls = renderRail({ templates: true });
+    await openSidebarMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "New project from template…" }));
+    await settle();
+    expect(calls.onNewFromTemplate).toHaveBeenCalled();
+    await openSidebarMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Templates" }));
+    await settle();
+    expect(calls.onSelect).toHaveBeenCalledWith(TEMPLATES_SELECTION);
   });
 
   it("Archive… and Delete project… ask the page first", async () => {

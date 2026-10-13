@@ -246,28 +246,68 @@ describe("Display → Rows: Standard · Detailed", () => {
     expect(projectShown(rowOf("Task a"))).toBe(false);
   });
 
-  it("Detailed adds the status name, the time and the assignee's name, and the project", () => {
-    renderList(rows, { rows: "detailed" });
+  it("Detailed (TV-U10): Project › Section, status name, Due, time, assignee name, updated", () => {
+    renderList(rows, { rows: "detailed" }, { sections: [{ id: "s1", name: "Design" }] });
     const a = rowOf("Task a");
-    expect(cols(a)).toEqual(["status", "date", "time", "assignee", "queue"]);
+    expect(cols(a)).toEqual(["project", "status", "due", "time", "assignee", "updated", "queue"]);
     const cell = (row: HTMLElement, col: string) =>
       row.querySelector<HTMLElement>(`[data-col="${col}"]`)?.textContent;
     expect(cell(a, "status")).toBe("In progress");
     expect(cell(a, "time")).toBe("1h 20m / ~4h");
     expect(cell(a, "assignee")).toContain("Mike");
+    expect(cell(a, "project")).toBe("Work");
     expect(cell(rowOf("Task b"), "time")).toBe("~45m");
     expect(cell(rowOf("Task c"), "status")).toBe("Won’t do");
-    // The project shows even inside the project.
+    // The project shows even inside the project, in its own column.
     expect(projectShown(a)).toBe(true);
   });
 
-  it("nothing in Detailed's cells truncates: they widen instead", () => {
+  it("Detailed names the section after the project, and the handle before the title", () => {
+    const withSection = [task("a", { sectionId: "s1", number: 142 })];
+    renderList(
+      withSection,
+      { rows: "detailed", taskKey: "MOD" },
+      { sections: [{ id: "s1", name: "Design" }] },
+    );
+    const a = rowOf("Task a");
+    expect(a.querySelector('[data-col="project"]')?.textContent).toBe("Work › Design");
+    const handle = a.querySelector('[data-col="handle"]') as HTMLElement;
+    expect(handle.textContent).toBe("MOD-142");
+    // Before the title, like Linear's ID.
+    const title = a.querySelector('[data-slot="row-title"]') as HTMLElement;
+    expect(handle.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("Detailed has sortable column headers on the rows' widths", () => {
+    const onSort = rs.fn();
+    renderList(rows, { rows: "detailed", onSort });
+    const header = document.querySelector('[data-slot="task-list-header"]') as HTMLElement;
+    expect(header).not.toBeNull();
+    fireEvent.click(within(header).getByRole("button", { name: "Sort by due" }));
+    expect(onSort).toHaveBeenCalledWith("due");
+    fireEvent.click(within(header).getByRole("button", { name: "Sort by title" }));
+    expect(onSort).toHaveBeenCalledWith("title");
+    // The widths are the frame's variables, shared by header and rows.
+    const frame = header.parentElement?.parentElement as HTMLElement;
+    expect(frame.style.getPropertyValue("--tl-col-status")).toMatch(/ch$/);
+  });
+
+  it("nothing in Detailed's cells truncates: they hold the list's width", () => {
     renderList(rows, { rows: "detailed" });
-    for (const col of ["status", "time", "assignee"]) {
+    for (const col of ["status", "time", "assignee", "updated"]) {
       const el = rowOf("Task a").querySelector<HTMLElement>(`[data-col="${col}"]`);
       expect(el?.className).toContain("whitespace-nowrap");
       expect(el?.className).not.toContain("truncate");
+      expect(el?.className).toMatch(/min-w-\(--tl-col-/);
     }
+  });
+
+  it("the title takes the free width (checkpoint 1): the only flexible cell", () => {
+    renderList(rows, { rows: "detailed" });
+    const title = rowOf("Task a").querySelector('[data-slot="row-title"]') as HTMLElement;
+    expect(title.className).toContain("flex-1");
+    const columns = rowOf("Task a").querySelector('[data-slot="row-columns"]') as HTMLElement;
+    expect(columns.className).toContain("shrink-0");
   });
 });
 
@@ -306,7 +346,8 @@ describe("Done and completed (U1-3)", () => {
     expect(screen.getByRole("button", { name: "Task old-done" }).className).toContain(
       "line-through",
     );
-    expect(row.dataset.done).toBe("true");
+    // The kit Row's done state (DS-6).
+    expect(row.dataset.done).toBe("");
   });
 
   it("a selected or deep-linked completed task stays listed (no fallback to another task)", () => {
@@ -335,20 +376,21 @@ describe("Done and completed (U1-3)", () => {
     expect(onSelectTask).not.toHaveBeenCalled();
   });
 
-  it("a done row dims as a whole except its checkbox", () => {
+  it("a done row dims as a whole except its status icon", () => {
     renderList(tasks(), { completed: "all" });
     const row = rowOf("Task old-done");
     const title = row.querySelector('[data-slot="row-title"]') as HTMLElement;
     const columns = row.querySelector('[data-slot="row-columns"]') as HTMLElement;
-    expect(title.className).toContain("opacity-40");
-    expect(columns.className).toContain("opacity-40");
+    // The kit Row's fade: every slot but the lead, keyed on the row's state.
+    expect(title.className).toContain("group-data-[done]/row:opacity-50");
+    expect(columns.className).toContain("group-data-[done]/row:opacity-50");
     // Dimmed once, by opacity: the title keeps its colour (the comp).
     expect(screen.getByRole("button", { name: "Task old-done" }).className).not.toContain(
       "text-muted-foreground",
     );
-    expect(row.className).not.toContain("opacity-40");
-    const check = within(row).getByRole("button", { name: "Mark as not done" });
-    expect(title.contains(check) || columns.contains(check)).toBe(false);
+    expect(row.className).not.toContain("opacity-50");
+    const glyph = within(row).getByRole("button", { name: "Mark as not done" });
+    expect(title.contains(glyph) || columns.contains(glyph)).toBe(false);
   });
 
   it("a done parent with open subtasks stays, so they aren't hidden with it", () => {

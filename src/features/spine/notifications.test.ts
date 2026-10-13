@@ -417,6 +417,55 @@ describe("notificationDeepLink", () => {
   });
 });
 
+describe("a team notice (TV-D13)", () => {
+  it("is one card per notice, names its one task and opens it, not the Inbox it hangs on", () => {
+    const groups = groupNotifications([
+      item({
+        id: "a",
+        createdAt: "2",
+        op: "tasks.routed",
+        targetType: "bucket",
+        targetId: "inbox-me",
+        payload: {
+          task_id: "t9",
+          task_ids: ["t9"],
+          count: 1,
+          title: "Hero image",
+          team_name: "Design",
+        },
+      }),
+      item({
+        id: "b",
+        createdAt: "1",
+        op: "tasks.routed",
+        targetType: "bucket",
+        targetId: "inbox-me",
+        payload: {
+          task_id: "t7",
+          task_ids: ["t7", "t8"],
+          count: 2,
+          title: "Icons",
+          team_name: "Development",
+        },
+      }),
+    ]);
+    expect(groups).toHaveLength(2);
+    expect(notificationSubject(groups[0])).toBe("Hero image");
+    expect(notificationDeepLink(groups[0])).toEqual({
+      route: "/tasks",
+      entityType: "task",
+      entityId: "t9",
+    });
+    // Several routed tasks are counted, not named after the first.
+    expect(notificationSubject(groups[1])).toBeNull();
+    expect(notificationDeepLink(groups[1])).toEqual({
+      route: "/tasks",
+      entityType: "task",
+      entityId: "t7",
+    });
+  });
+});
+
 describe("a project delete notice (TV-U6)", () => {
   it("opens the Inbox its work landed in", () => {
     const [g] = groupNotifications([

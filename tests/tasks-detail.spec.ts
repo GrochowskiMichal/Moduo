@@ -80,6 +80,13 @@ test("AC11.7 — Details ▾ lists Details · Project; the full page keeps the r
   await expect(page.getByRole("button", { name: "Panel view: Project" })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(full).toHaveCount(0);
+
+  // ⏎ on the selected row opens it full too (TV-U10, decision 22).
+  await page.getByRole("grid").focus();
+  await page.keyboard.press("Enter");
+  await expect(full).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(full).toHaveCount(0);
 });
 
 test("AC3.7 — ⋯ copies the branch name", async ({ page, context }) => {
@@ -176,4 +183,50 @@ test("AC1.16 — at 280 and 320 px nothing in the panel truncates; the label col
     if (width < 320) expect(labelWidth).toBeLessThan(80);
     else expect(labelWidth).toBeGreaterThan(90);
   }
+});
+
+test("TV-U10 — the panel's subtasks reorder by drag and by ⌥⇧↑/↓", async ({ page }) => {
+  const parent = await createTask(`Launch kit ${tag}`);
+  for (const title of [`Brief ${tag}`, `Draft ${tag}`, `Review ${tag}`]) {
+    await rpc(dev, "tasks_op_create", {
+      p_workspace_id: ws.id,
+      p_task: { id: crypto.randomUUID(), title, bucket_id: project.id, parent_id: parent.id },
+    });
+  }
+  const order = async () =>
+    (
+      await rest<Array<{ title: string }>>(
+        "service",
+        `tasks?parent_id=eq.${parent.id}&select=title,position&order=position.asc`,
+      )
+    ).map((t) => t.title.replace(` ${tag}`, ""));
+  expect(await order()).toEqual(["Brief", "Draft", "Review"]);
+
+  await openTask(page, parent.id);
+  const row = (title: string) => page.locator("[data-subtask-row]", { hasText: `${title} ${tag}` });
+  // Drag Review above Brief (the whole row drags). The panel settles first:
+  // its sections above load in and move the rows down.
+  await expect(row("Review")).toBeVisible();
+  await page.waitForLoadState("networkidle");
+  // Mid-panel, so the drag doesn't scroll it on the way.
+  await row("Draft").evaluate((el) => el.scrollIntoView({ block: "center" }));
+  const from = await row("Review").boundingBox();
+  if (!from) throw new Error("subtask rows not laid out");
+  const x = from.x + from.width - 40;
+  await page.mouse.move(x, from.y + from.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(x, from.y + from.height / 2 - 10, { steps: 4 });
+  const to = await row("Brief").boundingBox();
+  if (!to) throw new Error("subtask rows not laid out");
+  await page.mouse.move(x, to.y, { steps: 10 });
+  await page.mouse.up();
+  await expect.poll(order).toEqual(["Review", "Brief", "Draft"]);
+  await expect(page.getByText("Moved up")).toBeVisible();
+
+  // ⌥⇧↓ on Review moves it back down one place, and the focus stays on it.
+  const review = page.getByRole("button", { name: `Open subtask: Review ${tag}` });
+  await review.focus();
+  await page.keyboard.press("Alt+Shift+ArrowDown");
+  await expect.poll(order).toEqual(["Brief", "Review", "Draft"]);
+  await expect(review).toBeFocused();
 });
