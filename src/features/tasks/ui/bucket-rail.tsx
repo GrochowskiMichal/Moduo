@@ -54,6 +54,7 @@ import { ShareMenu } from "../../sharing/share-menu";
 import { RAIL_SORT_PREFIX, type RailDropTarget } from "../dnd/rail-drop";
 import type { Area, Bucket } from "../model";
 import { BUCKET_COLOR_OPTIONS, bucketDotColor, sidebarGroups } from "../sidebar";
+import { type TaskView, viewIdOf, viewSelection } from "../views";
 import { type RailDropAccepts, RailDropRow } from "./dnd/rail-drop-row";
 
 /** The sidebar's selections besides projects: the centre views its ⋯ opens. */
@@ -68,6 +69,7 @@ export const WONTDO_SELECTION = "wontdo";
 
 /** The keys collapse is remembered by: Pinned, Views, and each area. */
 export const PINNED_GROUP = "pinned";
+export const VIEWS_GROUP = "views";
 export const areaGroupKey = (areaId: string) => `area:${areaId}`;
 
 // Project rows are sortable inside the page's one DndContext (DF-22). Their
@@ -106,9 +108,17 @@ type Props = {
   /** Customize sidebar (REPLAN 29a): the rows this person hid. */
   hidden: ReadonlySet<TasksSidebarHideable>;
   onToggleHidden: (row: TasksSidebarHideable) => void;
-  /** Pin (REPLAN 29b): this person's pinned projects here, in pin order. */
+  /** Pin (REPLAN 29b): this person's pinned projects and views (`view:<id>`)
+   *  here, in pin order. */
   pinned: readonly string[];
-  onTogglePin: (projectId: string) => void;
+  /** A project id, or a view's `view:<id>`. */
+  onTogglePin: (id: string) => void;
+  /**
+   * Saved views (TV-U8): yours in your order, then the ones shared with you.
+   * Absent: no Views group (a build ahead of its server, stories).
+   */
+  views?: readonly TaskView[];
+  viewActions?: ViewActions;
   /** Collapsed groups (REPLAN 29e): Pinned, Views and each area. */
   collapsed: ReadonlySet<string>;
   onToggleCollapsed: (key: string) => void;
@@ -194,6 +204,21 @@ export function parseCollapsedSections(raw: string | null): Set<string> {
 
 type Adding = { kind: "project"; areaId: string | null } | { kind: "area" } | null;
 
+/** What a view's ⋯ can do (TV-U8). */
+export type ViewActions = {
+  /** Whose views are yours (only the maker changes a view). */
+  currentUserId: string | null;
+  onRename: (viewId: string, name: string) => void;
+  onShare: (viewId: string, shared: boolean) => void;
+  onDelete: (viewId: string) => void;
+  onMove: (viewId: string, direction: "up" | "down") => void;
+  onCopyLink: (viewId: string) => void;
+  /** Sharing a view needs edit access. */
+  canShare: boolean;
+  /** The workspace's owner or an admin: may unshare or delete a shared view. */
+  canModerate: boolean;
+};
+
 export function BucketRail({
   selection,
   onSelect,
@@ -210,6 +235,8 @@ export function BucketRail({
   onToggleHidden,
   pinned,
   onTogglePin,
+  views = NO_VIEWS,
+  viewActions,
   collapsed,
   onToggleCollapsed,
   onCreateBucket,
@@ -254,9 +281,37 @@ export function BucketRail({
   // Drag to reorder needs edit access and the page's DndContext.
   const sortable = canEdit && !!dropAccepts;
   const pinnedIds = new Set(pinned);
-  const pinnedProjects = pinned
-    .map((id) => buckets.find((b) => b.id === id))
-    .filter((b): b is Bucket => !!b);
+  // Pinned projects and views, in pin order (one that's gone drops out).
+  const pinnedEntries = pinned.flatMap((id): PinnedEntry[] => {
+    const viewId = viewIdOf(id);
+    if (viewId) {
+      const view = views.find((v) => v.id === viewId);
+      return view ? [{ kind: "view", view }] : [];
+    }
+    const bucket = buckets.find((b) => b.id === id);
+    return bucket ? [{ kind: "project", bucket }] : [];
+  });
+  const ownViews = views.filter((v) => v.ownerId === viewActions?.currentUserId);
+  const viewRow = (view: TaskView, opts?: { pinnedCopy?: boolean }) => {
+    const selectionKey = viewSelection(view.id);
+    const mine = view.ownerId === viewActions?.currentUserId;
+    const index = ownViews.findIndex((v) => v.id === view.id);
+    return (
+      <ViewRow
+        key={opts?.pinnedCopy ? `pin:${selectionKey}` : selectionKey}
+        view={view}
+        navId={opts?.pinnedCopy ? `pin:${selectionKey}` : selectionKey}
+        current={selection === selectionKey}
+        mine={mine}
+        pinned={pinnedIds.has(selectionKey)}
+        first={index <= 0}
+        last={index === -1 || index === ownViews.length - 1}
+        actions={viewActions}
+        onSelect={() => onSelect(selectionKey)}
+        onTogglePin={() => onTogglePin(selectionKey)}
+      />
+    );
+  };
   const shows = (row: TasksSidebarHideable) => !hidden.has(row);
 
   const projectRow = (bucket: Bucket, opts?: { pinnedCopy?: boolean }) => {
@@ -444,7 +499,7 @@ export function BucketRail({
           ) : null}
 
           {/* Pinned exists only once you pin something yourself (29b). */}
-          {pinnedProjects.length > 0 ? (
+          {pinnedEntries.length > 0 ? (
             <div className="mt-2 flex flex-col gap-px">
               <NavSectionHeader
                 label="Pinned"
@@ -453,11 +508,26 @@ export function BucketRail({
               />
               {collapsed.has(PINNED_GROUP)
                 ? null
-                : pinnedProjects.map((b) => projectRow(b, { pinnedCopy: true }))}
+                : pinnedEntries.map((entry) =>
+                    entry.kind === "view"
+                      ? viewRow(entry.view, { pinnedCopy: true })
+                      : projectRow(entry.bucket, { pinnedCopy: true }),
+                  )}
             </div>
           ) : null}
 
-          {/* Views: TV-U8's saved views join here; no header until there's one. */}
+          {/* Views (TV-U8, 29c–29e): no glyphs (names line up with the
+              projects'), no header until there's one. */}
+          {views.length > 0 ? (
+            <div className="mt-2 flex flex-col gap-px">
+              <NavSectionHeader
+                label="Views"
+                collapsed={collapsed.has(VIEWS_GROUP)}
+                onToggle={() => onToggleCollapsed(VIEWS_GROUP)}
+              />
+              {collapsed.has(VIEWS_GROUP) ? null : views.map((v) => viewRow(v))}
+            </div>
+          ) : null}
 
           {sortable ? <ProjectDndMonitor onMove={onMoveBucket} /> : null}
 
@@ -858,6 +928,87 @@ function SortableProject({
     >
       {children({ isDragging })}
     </div>
+  );
+}
+
+type PinnedEntry = { kind: "project"; bucket: Bucket } | { kind: "view"; view: TaskView };
+
+const NO_VIEWS: readonly TaskView[] = [];
+
+/**
+ * A saved view in the sidebar (TV-U8). Yours: Rename · Pin · Share · Move ·
+ * Copy link · Delete. Someone else's shared view: Pin · Copy link (and, for
+ * the workspace's owner or an admin, Stop sharing · Delete). No glyph: an
+ * empty slot keeps its name in line with the projects' (29c).
+ */
+function ViewRow({
+  view,
+  navId,
+  current,
+  mine,
+  pinned,
+  first,
+  last,
+  actions,
+  onSelect,
+  onTogglePin,
+}: {
+  view: TaskView;
+  navId: string;
+  current: boolean;
+  mine: boolean;
+  pinned: boolean;
+  first: boolean;
+  last: boolean;
+  actions?: ViewActions;
+  onSelect: () => void;
+  onTogglePin: () => void;
+}) {
+  const moderate = !mine && view.shared && !!actions?.canModerate;
+  const menu = (m: MenuKit) => (
+    <>
+      {mine && actions ? <m.Item onSelect={m.rename}>Rename</m.Item> : null}
+      <m.Item onSelect={onTogglePin}>{pinned ? "Unpin from sidebar" : "Pin to sidebar"}</m.Item>
+      {mine && actions && (actions.canShare || view.shared) ? (
+        <m.Item onSelect={() => actions.onShare(view.id, !view.shared)}>
+          {view.shared ? "Stop sharing" : "Share with the workspace"}
+        </m.Item>
+      ) : null}
+      {moderate && actions ? (
+        <m.Item onSelect={() => actions.onShare(view.id, false)}>Stop sharing</m.Item>
+      ) : null}
+      {mine && actions ? (
+        <>
+          <m.Item disabled={first} onSelect={() => actions.onMove(view.id, "up")}>
+            Move up
+          </m.Item>
+          <m.Item disabled={last} onSelect={() => actions.onMove(view.id, "down")}>
+            Move down
+          </m.Item>
+        </>
+      ) : null}
+      {actions ? <m.Item onSelect={() => actions.onCopyLink(view.id)}>Copy link</m.Item> : null}
+      {(mine || moderate) && actions ? (
+        <>
+          <m.Separator />
+          <m.Item variant="destructive" onSelect={() => actions.onDelete(view.id)}>
+            Delete view
+          </m.Item>
+        </>
+      ) : null}
+    </>
+  );
+  return (
+    <NavRow
+      navId={navId}
+      label={view.name}
+      icon={<span aria-hidden />}
+      current={current}
+      onSelect={onSelect}
+      onRename={mine && actions ? (name) => actions.onRename(view.id, name) : undefined}
+      menu={menu}
+      menuLabel={`${view.name} options`}
+    />
   );
 }
 

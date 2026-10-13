@@ -106,6 +106,7 @@ import {
   statusSetFor,
 } from "../statuses";
 import { useBulkOps } from "./use-bulk-ops";
+import { useViewOps } from "./use-view-ops";
 
 /** An adjustment `logTimeAdjustment` recorded, as its Undo needs it. */
 export type TimeAdjustment = {
@@ -577,6 +578,16 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     }
     toast.error(e instanceof Error ? e.message : fallback);
   }, []);
+
+  // Saved views (TV-U8): the store's rows and their ops.
+  const viewOps = useViewOps({
+    runtime,
+    store,
+    workspaceId: workspaceId ?? null,
+    userId: userId ?? null,
+    rows: snap.views,
+    failed,
+  });
 
   /** A write that didn't go through: its fields are back to the server's, and it says why. */
   const refused = useCallback(
@@ -3527,6 +3538,8 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     sessions: snap.sessions,
     reminders: snap.reminders,
     waiting: snap.waiting,
+    /** TV-U8: saved views (yours, then the ones shared with you) and their ops. */
+    ...viewOps,
     restoreTask,
     addSession,
     updateSession,

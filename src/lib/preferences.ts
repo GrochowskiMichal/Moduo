@@ -183,6 +183,18 @@ export interface TasksOnboardingPrefs {
   welcomeSeenAt: string | null;
   /** Workspaces their teaching tasks and starter went into, with when. */
   seeded: Record<string, string>;
+  /** Workspaces their role's saved views went into, with when (TV-U8). */
+  viewsSeeded: Record<string, string>;
+}
+
+/**
+ * What a person folded in one List or Board (TV-U8, following them to every
+ * device): each group's or column's fold choice, and when it last changed.
+ * Keyed `<workspace>:<place>:<group by>` (a Board: `<workspace>:<place>:board:<group by>`).
+ */
+export interface TasksFoldEntry {
+  at: string;
+  folds: Record<string, boolean>;
 }
 
 export interface Preferences {
@@ -211,6 +223,8 @@ export interface Preferences {
   tasksInbox: TasksInboxPrefs;
   /** The role question and Tasks' welcome (TV-U17), following the person. */
   tasksOnboarding: TasksOnboardingPrefs;
+  /** Folded groups and columns in each List and Board (TV-U8), following the person. */
+  tasksFolds: Record<string, TasksFoldEntry>;
 }
 
 export const DEFAULT_PREFERENCES: Preferences = {
@@ -223,7 +237,8 @@ export const DEFAULT_PREFERENCES: Preferences = {
   keepInMenuBar: true,
   tasksSidebar: { hidden: [], pinned: {} },
   tasksInbox: { snoozed: {} },
-  tasksOnboarding: { role: null, roleAt: null, welcomeSeenAt: null, seeded: {} },
+  tasksOnboarding: { role: null, roleAt: null, welcomeSeenAt: null, seeded: {}, viewsSeeded: {} },
+  tasksFolds: {},
 };
 
 const LOCAL_STORAGE_KEY = "moduo.preferences";
@@ -322,24 +337,53 @@ const NO_ONBOARDING: TasksOnboardingPrefs = {
   roleAt: null,
   welcomeSeenAt: null,
   seeded: {},
+  viewsSeeded: {},
 };
+// Workspace → when; a bad entry drops alone, at most 200 workspaces.
+const workspaceStampsSchema = z
+  .record(z.string(), z.unknown())
+  .catch({})
+  .transform((byWs) => {
+    const out: Record<string, string> = {};
+    for (const [ws, at] of Object.entries(byWs).slice(0, 200)) {
+      if (ws && typeof at === "string" && Number.isFinite(Date.parse(at))) out[ws] = at;
+    }
+    return out;
+  });
 const tasksOnboardingSchema = z
   .object({
     role: z.unknown().transform((v) => (isTasksRole(v) ? v : null)),
     roleAt: stampSchema,
     welcomeSeenAt: stampSchema,
-    seeded: z
-      .record(z.string(), z.unknown())
-      .catch({})
-      .transform((byWs) => {
-        const out: Record<string, string> = {};
-        for (const [ws, at] of Object.entries(byWs).slice(0, 200)) {
-          if (ws && typeof at === "string" && Number.isFinite(Date.parse(at))) out[ws] = at;
-        }
-        return out;
-      }),
+    seeded: workspaceStampsSchema,
+    viewsSeeded: workspaceStampsSchema,
   })
   .catch({ ...NO_ONBOARDING });
+/** At most this many Lists and Boards keep their folds (the newest win). */
+export const TASKS_FOLDS_KEEP = 300;
+/** And at most this many folds each. */
+const TASKS_FOLDS_PER_VIEW = 200;
+// A bad entry drops alone; the newest views are kept.
+const tasksFoldsSchema = z
+  .record(z.string(), z.unknown())
+  .catch({})
+  .transform((byKey) => {
+    const entries: [string, TasksFoldEntry][] = [];
+    for (const [key, raw] of Object.entries(byKey)) {
+      const entry = raw as Partial<TasksFoldEntry> | null;
+      if (!key || key.length > 200 || !entry || typeof entry !== "object") continue;
+      if (typeof entry.at !== "string" || !Number.isFinite(Date.parse(entry.at))) continue;
+      const raws = entry.folds;
+      if (!raws || typeof raws !== "object" || Array.isArray(raws)) continue;
+      const folds: Record<string, boolean> = {};
+      for (const [id, v] of Object.entries(raws).slice(0, TASKS_FOLDS_PER_VIEW)) {
+        if (id && id.length <= 200 && typeof v === "boolean") folds[id] = v;
+      }
+      entries.push([key, { at: entry.at, folds }]);
+    }
+    entries.sort((a, b) => Date.parse(b[1].at) - Date.parse(a[1].at));
+    return Object.fromEntries(entries.slice(0, TASKS_FOLDS_KEEP));
+  });
 const preferencesSchema = z.object({
   landingView: z.enum(LANDING_VIEWS).catch(DEFAULT_PREFERENCES.landingView),
   reopenLastWorkspace: z.boolean().catch(DEFAULT_PREFERENCES.reopenLastWorkspace),
@@ -351,6 +395,7 @@ const preferencesSchema = z.object({
   tasksSidebar: tasksSidebarSchema,
   tasksInbox: tasksInboxSchema,
   tasksOnboarding: tasksOnboardingSchema,
+  tasksFolds: tasksFoldsSchema,
 });
 
 export function sanitizeNotificationPrefs(raw: unknown): NotificationPrefs {
@@ -378,6 +423,7 @@ export function mergeOnboardingForward(
     roleAt: answered.roleAt,
     welcomeSeenAt: cloud.welcomeSeenAt ?? local.welcomeSeenAt,
     seeded: { ...local.seeded, ...cloud.seeded },
+    viewsSeeded: { ...local.viewsSeeded, ...cloud.viewsSeeded },
   };
 }
 

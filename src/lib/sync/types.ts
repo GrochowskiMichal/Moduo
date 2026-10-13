@@ -26,6 +26,7 @@ import type {
   Team,
   TeamMember,
 } from "../../features/tasks/model";
+import type { TaskView } from "../../features/tasks/view-row";
 import type { Truncation } from "../paged-select";
 
 /**
@@ -59,6 +60,8 @@ export type SyncRows = {
   /** Only your own (RLS returns nobody else's). */
   reminders: TaskReminder;
   waiting: TaskWaitingEntry;
+  /** TV-U8: your saved views and the ones shared with you (read whole). */
+  views: TaskView;
 };
 
 export type SyncTableName = keyof SyncRows;

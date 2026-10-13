@@ -45,6 +45,8 @@ export const READ_CAPS = {
   taskSessions: 20000,
   taskReminders: 10000,
   taskWaiting: 10000,
+  /** TV-U8: your saved views and the ones shared with you (200 each at most). */
+  taskViews: 2000,
   taskQueue: 5000,
   notes: 5000,
   contacts: 10000,

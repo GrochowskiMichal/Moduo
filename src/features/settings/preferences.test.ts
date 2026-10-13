@@ -43,7 +43,14 @@ describe("DEFAULT_PREFERENCES", () => {
       keepInMenuBar: true,
       tasksSidebar: { hidden: [], pinned: {} },
       tasksInbox: { snoozed: {} },
-      tasksOnboarding: { role: null, roleAt: null, welcomeSeenAt: null, seeded: {} },
+      tasksOnboarding: {
+        role: null,
+        roleAt: null,
+        welcomeSeenAt: null,
+        seeded: {},
+        viewsSeeded: {},
+      },
+      tasksFolds: {},
     });
   });
 });
@@ -88,7 +95,14 @@ describe("sanitizePreferences", () => {
       keepInMenuBar: true,
       tasksSidebar: { hidden: [], pinned: {} },
       tasksInbox: { snoozed: {} },
-      tasksOnboarding: { role: null, roleAt: null, welcomeSeenAt: null, seeded: {} },
+      tasksOnboarding: {
+        role: null,
+        roleAt: null,
+        welcomeSeenAt: null,
+        seeded: {},
+        viewsSeeded: {},
+      },
+      tasksFolds: {},
     });
   });
 
@@ -186,6 +200,7 @@ describe("sanitizePreferences", () => {
           roleAt: "2026-10-13T09:00:00.000Z",
           welcomeSeenAt: "2026-10-13T09:00:01.000Z",
           seeded: { ws1: "2026-10-13T09:00:02.000Z", ws2: "soon", ws3: 4 },
+          viewsSeeded: { ws1: "2026-10-13T09:00:03.000Z", ws2: false },
         },
       }).tasksOnboarding,
     ).toEqual({
@@ -193,15 +208,33 @@ describe("sanitizePreferences", () => {
       roleAt: "2026-10-13T09:00:00.000Z",
       welcomeSeenAt: "2026-10-13T09:00:01.000Z",
       seeded: { ws1: "2026-10-13T09:00:02.000Z" },
+      viewsSeeded: { ws1: "2026-10-13T09:00:03.000Z" },
     });
     expect(
       sanitizePreferences({
         tasksOnboarding: { role: "astronaut", roleAt: "yesterday", welcomeSeenAt: 1 },
       }).tasksOnboarding,
-    ).toEqual({ role: null, roleAt: null, welcomeSeenAt: null, seeded: {} });
+    ).toEqual({ role: null, roleAt: null, welcomeSeenAt: null, seeded: {}, viewsSeeded: {} });
     expect(sanitizePreferences({ tasksOnboarding: "nope" }).tasksOnboarding).toEqual(
       DEFAULT_PREFERENCES.tasksOnboarding,
     );
+  });
+
+  it("keeps each List's and Board's folds, newest first, dropping bad ones (TV-U8)", () => {
+    const folds = sanitizePreferences({
+      tasksFolds: {
+        "ws1:all:bucket": { at: "2026-10-13T09:00:00.000Z", folds: { p1: true, p2: "yes" } },
+        "ws1:mine:status": { at: "not a time", folds: { todo: true } },
+        "ws1:view:abc:board:status": { at: "2026-10-13T10:00:00.000Z", folds: { "col:x": false } },
+        "": { at: "2026-10-13T10:00:00.000Z", folds: {} },
+      },
+    }).tasksFolds;
+    expect(folds).toEqual({
+      "ws1:view:abc:board:status": { at: "2026-10-13T10:00:00.000Z", folds: { "col:x": false } },
+      "ws1:all:bucket": { at: "2026-10-13T09:00:00.000Z", folds: { p1: true } },
+    });
+    expect(Object.keys(folds)[0]).toBe("ws1:view:abc:board:status");
+    expect(sanitizePreferences({ tasksFolds: "nope" }).tasksFolds).toEqual({});
   });
 
   it("defaults confirmBeforeQuit false and coerces to boolean", () => {
@@ -212,12 +245,13 @@ describe("sanitizePreferences", () => {
 });
 
 describe("mergeOnboardingForward (TV-U17: onboarding only moves forward)", () => {
-  const none = { role: null, roleAt: null, welcomeSeenAt: null, seeded: {} };
+  const none = { role: null, roleAt: null, welcomeSeenAt: null, seeded: {}, viewsSeeded: {} };
   const seenHere = {
     role: "pm" as const,
     roleAt: "2026-10-13T09:00:00.000Z",
     welcomeSeenAt: "2026-10-13T09:00:00.000Z",
     seeded: { ws1: "2026-10-13T09:00:00.000Z" },
+    viewsSeeded: { ws1: "2026-10-13T09:01:00.000Z" },
   };
 
   it("keeps what this device already knows when a stale copy comes back", () => {
@@ -230,12 +264,15 @@ describe("mergeOnboardingForward (TV-U17: onboarding only moves forward)", () =>
       roleAt: "2026-10-14T09:00:00.000Z",
       welcomeSeenAt: "2026-10-14T09:00:00.000Z",
       seeded: { ws2: "2026-10-14T09:00:00.000Z" },
+      viewsSeeded: { ws2: "2026-10-14T09:01:00.000Z" },
     };
     expect(mergeOnboardingForward(seenHere, cloud)).toEqual({
       role: "creator",
       roleAt: "2026-10-14T09:00:00.000Z",
       welcomeSeenAt: "2026-10-14T09:00:00.000Z",
       seeded: { ws1: "2026-10-13T09:00:00.000Z", ws2: "2026-10-14T09:00:00.000Z" },
+      // Saved views seeded on either device stay seeded (TV-U8).
+      viewsSeeded: { ws1: "2026-10-13T09:01:00.000Z", ws2: "2026-10-14T09:01:00.000Z" },
     });
   });
 

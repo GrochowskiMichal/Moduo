@@ -53,6 +53,7 @@ import type {
   TaskWaitingEntry,
 } from "../../features/tasks/model";
 import { listenTasksLive, type TasksLiveEvent } from "../../features/tasks/realtime";
+import type { TaskView } from "../../features/tasks/view-row";
 import { splitArchived } from "../bucket-rows";
 import { TAG_LINKS_SCOPE, type Truncation } from "../paged-select";
 import type { ModuoRuntime } from "../runtime.types";
@@ -158,6 +159,8 @@ export type StoreSnapshot = {
   sessions: TaskSession[];
   reminders: TaskReminder[];
   waiting: TaskWaitingEntry[];
+  /** TV-U8: your saved views and the ones shared with you. */
+  views: TaskView[];
 };
 
 const EMPTY_BUNDLE: TasksModuleBundle = {
@@ -195,6 +198,7 @@ export const EMPTY_SNAPSHOT: StoreSnapshot = {
   sessions: [],
   reminders: [],
   waiting: [],
+  views: [],
 };
 
 // ── Tables ──────────────────────────────────────────────────────────────────
@@ -215,6 +219,9 @@ export const SYNC_TABLES: readonly { name: SyncTableName; delta: boolean; phase:
   { name: "areas", delta: false, phase: 1 },
   { name: "teams", delta: false, phase: 1 },
   { name: "teamMembers", delta: false, phase: 1 },
+  // TV-U8: who may read a shared view moves with project sharing and
+  // membership, which bump no stamp; small, so read whole.
+  { name: "views", delta: false, phase: 1 },
   // Hard deletes: stamped and tombstoned since TV-D11b's migration, so they
   // delta too; a database without it answers whole (`whole`).
   { name: "queue", delta: true, phase: 1 },
@@ -2014,6 +2021,7 @@ export class WorkspaceStore {
       sessions: this.rendered("sessions"),
       reminders: this.rendered("reminders"),
       waiting: this.rendered("waiting"),
+      views: this.rendered("views"),
     };
     this.lastSnapshot = { snapshot, bundle, commentsSource: comments };
     return snapshot;

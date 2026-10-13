@@ -72,6 +72,7 @@ import type { EntityLink, EntityRecord, EntityRef, LinkOrigin, RelationKind } fr
 import type { Truncation } from "./paged-select";
 import type { TasksStructureApi } from "./runtime.web.structure";
 import type { TasksTemplatesApi } from "./runtime.web.templates";
+import type { TasksViewsApi } from "./runtime.web.views";
 import type {
   SyncAccessResult,
   SyncIdsResult,
@@ -98,6 +99,13 @@ export type TasksStructureRuntime = Omit<TasksStructureApi, "getTimeBlocks" | "s
  * row it made. Optional: a runtime without them offers neither.
  */
 export type TasksTemplatesRuntime = Partial<TasksTemplatesApi>;
+
+/**
+ * TV-U8's saved views (runtime.web.views.ts): the store reads `task_views`
+ * through `syncRead`; these are the ops. Optional: a runtime without them
+ * offers no views.
+ */
+export type TasksViewsRuntime = Partial<TasksViewsApi>;
 
 /** A comment on any registered entity (spine block CT-5). */
 export type SpineComment = {
@@ -1275,7 +1283,8 @@ export type ModuoRuntime = {
       module?: string;
     }): Promise<ActivityEntry[]>;
   } & TasksStructureRuntime &
-    TasksTemplatesRuntime;
+    TasksTemplatesRuntime &
+    TasksViewsRuntime;
 
   /**
    * Connective-tissue spine — the link substrate (specs/connective-tissue.md

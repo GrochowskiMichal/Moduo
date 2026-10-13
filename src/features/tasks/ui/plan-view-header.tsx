@@ -27,6 +27,8 @@ export type PlanHeaderControls = {
   /** "Sorted by due date · Back to manual order", when a project view is
    *  sorted (`SortedOrderLine`, default m). */
   sortedNote?: ReactNode;
+  /** An open saved view whose Filter or Display changed: Save · Revert (TV-U8). */
+  viewChanges?: ReactNode;
 };
 
 /**
@@ -54,7 +56,7 @@ export function PlanViewHeader({
   canEdit: boolean;
   onRequestCapture: () => void;
 }) {
-  const { count, search, filter, display, more, activeFilters, sortedNote } = controls;
+  const { count, search, filter, display, more, activeFilters, sortedNote, viewChanges } = controls;
   return (
     <div className="mb-3 shrink-0 space-y-1.5">
       <Toolbar gap="snug">
@@ -94,6 +96,7 @@ export function PlanViewHeader({
         ) : null}
       </Toolbar>
       {activeFilters}
+      {viewChanges}
       {sortedNote}
     </div>
   );
