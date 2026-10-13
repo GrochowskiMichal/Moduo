@@ -136,13 +136,15 @@ export function weekTime(rows: readonly TimeReportRow[], today: string): WeekTim
     .map((l) => ({ ...l, seconds: Math.max(0, l.seconds) }))
     .filter((l) => l.seconds > 0)
     .sort((a, b) => b.seconds - a.seconds || a.title.localeCompare(b.title));
+  const weekSeconds = lines.reduce((sum, l) => sum + l.seconds, 0);
   let todaySeconds = 0;
-  for (const s of todayByTask.values()) todaySeconds += Math.max(0, s);
-  return {
-    weekSeconds: lines.reduce((sum, l) => sum + l.seconds, 0),
-    todaySeconds,
-    lines,
-  };
+  // A task's day never counts more than its week (a give-back earlier in the
+  // week nets today's time down with it).
+  for (const [taskId, s] of todayByTask) {
+    const week = byTask.get(taskId)?.seconds ?? 0;
+    todaySeconds += Math.max(0, Math.min(s, week));
+  }
+  return { weekSeconds, todaySeconds, lines };
 }
 
 // ── the Team widget ─────────────────────────────────────────────────────────

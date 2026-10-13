@@ -1,6 +1,14 @@
 import { expect, test } from "@playwright/test";
 
-import { rest, rpc, runTag, type Session, signIn, signInPage, stackKeys } from "./support/local-stack";
+import {
+  rest,
+  rpc,
+  runTag,
+  type Session,
+  signIn,
+  signInPage,
+  stackKeys,
+} from "./support/local-stack";
 
 /**
  * Tasks v3 TV-H1 · "team load" (AC4.5; decision 12; Chat's CH70), on the real
@@ -81,6 +89,11 @@ test.beforeAll(async () => {
   lead = await ensurePerson(LEAD);
   mate = await ensurePerson(MATE);
   tag = runTag();
+  // A run that stopped half-way leaves its workspace; the plan allows one.
+  await rest("service", `workspaces?owner_id=eq.${lead.user.id}&deleted_at=is.null`, {
+    method: "PATCH",
+    body: { deleted_at: new Date().toISOString() },
+  });
   const [created] = await rest<Array<{ id: string }>>(lead, "workspaces", {
     method: "POST",
     body: { name: `Home widgets ${tag}`, owner_id: lead.user.id },

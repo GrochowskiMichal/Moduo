@@ -36,6 +36,7 @@ import type {
   TimeReportRow,
 } from "@/features/tasks/model";
 import { reportRange } from "@/features/tasks/time-report";
+import { useToday } from "@/features/tasks/use-today";
 import { WorkspaceContext } from "@/features/workspaces/workspace-context";
 import { getRuntime } from "@/lib/runtime";
 import type { EmailModuleBundle, HabitRow, ModuoRuntime } from "@/lib/runtime.types";
@@ -281,6 +282,8 @@ export function DashboardDataProvider({
   // teammate's save on a shared task) or Time & region changes.
   const wantsTime = has("timetracking") && tasksVisible;
   const region = useTimeRegion();
+  // A new day (a new week) reads again even when nothing was tracked.
+  const today = useToday();
   const trackedStamp = useMemo(() => {
     if (!wantsTime || !store) return 0;
     let sum = 0;
@@ -301,7 +304,7 @@ export function DashboardDataProvider({
       });
       return res.rows;
     },
-    `${trackedStamp}:${region.weekStartsOn}:${region.timeZone}`,
+    `${trackedStamp}:${today}:${region.weekStartsOn}:${region.timeZone}`,
   );
   const calendar = useSource(has("calendar"), workspaceId, EMPTY_CALENDAR, (rt, ws) =>
     rt.calendar.listModule(ws),

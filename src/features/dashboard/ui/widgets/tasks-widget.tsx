@@ -99,7 +99,7 @@ export function TasksWidget({ widget, size, canWrite }: WidgetComponentProps) {
   const tasks = taskSource.data.tasks;
   const teamMembers = taskSource.data.teamMembers;
   const sessionTaskId = focus.active && focus.workspaceId === workspaceId ? focus.taskId : null;
-  const { rows, heading, nowId } = useMemo(
+  const { rows, heading } = useMemo(
     () =>
       focusOrOpen({
         tasks,
@@ -136,7 +136,9 @@ export function TasksWidget({ widget, size, canWrite }: WidgetComponentProps) {
             subtasks.length > 0 ? `Done · also ${subtaskWord(subtasks.length)}` : "Done";
           undoToast(label, {
             onUndo: () => {
-              const current = (id: string) => latest.current.tasks.find((t) => t.id === id);
+              // The store's own copy: Home may be gone by the time Undo is clicked.
+              const current = (id: string) =>
+                store.getSnapshot().bundle.tasks.find((t) => t.id === id);
               void undoCheckOff(store, [task, ...subtasks], current)
                 .then(async ({ restored, failed }) => {
                   if (failed > 0) toast.error("Couldn’t undo all of that.");
@@ -169,7 +171,7 @@ export function TasksWidget({ widget, size, canWrite }: WidgetComponentProps) {
           <TaskRow
             key={task.id}
             task={task}
-            now={heading === "Focus" && !!sessionTaskId && task.id === nowId}
+            now={heading === "Focus" && !!sessionTaskId && task.id === sessionTaskId}
             canWrite={canWrite}
             onDone={markDone}
           />

@@ -2,6 +2,51 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index.
 
+## 2026-10-14 · TV-H1 Home widgets for Tasks — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 32 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §18, AC4.5; decision 12 below; Chat's CH70 from the 🟠 box) on the local stack, no migration. Plain and functional on the existing grid: the widgets' own visual round comes after all modules (Maciej's call).
+
+- **H1-1 · One "Team" widget, with a slot Chat fills** → `ui/widgets/team-widget.tsx`, `dashboard/team-now.ts`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14 (CH70 is Maciej's).
+  - Decision: each person's row is avatar · name · Chat's "now" line · Tasks' load line. The "now" line is a component Chat registers with `registerTeamNowLine` (props `workspaceId`, `userId`, `size`); until then the row shows the load only.
+  - Why: CH70 ("one Team widget, not two"); a component keeps Chat's presence reads and live updates in Chat, and the widget never learns more about a person than the line says.
+  - Rejected: a data seam (a map of statuses passed in); a second widget.
+- **H1-2 · What a person's load counts** → `features/tasks/home.ts` `teamLoad`, `loadLine`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14 (decision 12's list is Maciej's).
+  - Decision: "Focus 3 · ~2h · 1 in progress · 1 waiting · 2 due this week", zeros left out, "Nothing lined up" when empty. Focus is their open lined-up tasks and the sum of those estimates; in progress, waiting (an open task with any Waiting on… entry) and due this week are tasks assigned to them. Due this week means due by the last day of Time & region's week, late ones included. Backlog never counts. The rows are the members who can take tasks, plus anyone else who still has load, me first, then by name. Every count is over the reader's own copy, so a task the reader can't see adds nothing.
+  - Why: decision 12 (ownership, never surveillance); late work is still this week's load; a viewer with nothing assigned is noise.
+  - Rejected: tracked time or runs per person; counting only tasks due inside the week; listing viewers with no load.
+- **H1-3 · Teams in the Team widget** → `team-widget.tsx`, `config-forms.tsx` `TeamConfig`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: the widget's ⋯ picks Everyone (the default) or one team; a team shows only its members. Teams with unclaimed work follow the people as "Design · 2 unclaimed" (only the picked team's when one is picked). A team that's gone falls back to Everyone.
+  - Why: REPLAN 54 ("the team-load widget can show teams"); D13's routing makes unclaimed work the team's load.
+  - Rejected: a row per team instead of per person.
+- **H1-4 · The time widget reads your task time this week** → `ui/widgets/timetracking-widget.tsx`, `home.ts` `weekTime`, `dashboard-data-context.tsx`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14 (tasks-v2 §17 set "my entries").
+  - Decision: the widget keeps its type id `timetracking`, so placed widgets carry over, and works on web and desktop. It shows "6h 30m · this week · 1h 15m today" and your tasks by time (the project too at L). It reads TV-D14's report for Time & region's week and zone and keeps only your own rows, even for the workspace owner, whose report also carries teammates who share. It reads again when a tracked total in the store moves, on a new day, and when Time & region changes. The desktop window tracker stays dormant.
+  - Why: decision 12 keeps per-person time off Home; the report already hides tasks the reader can't see.
+  - Rejected: a new widget type; an "and 3h shared with you" line for the owner; live unsaved seconds of a running session (polish later).
+- **H1-5 · The Tasks widget says Focus, in Focus's order** → `ui/widgets/tasks-widget.tsx`, `home.ts` `focusOrOpen`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14 (F7-10 left the heading to this block).
+  - Decision: headed "Focus": the task a session is on first, then Up next, in Focus's own order; "Now" marks that row only while a session runs. With nothing lined up it's "Open", as before, without unassigned work routed to a team you're not in (Upcoming's rule).
+  - Why: call 61 ("the Queue is called Focus"); a head-of-line "Now" with no clock running would read as running.
+  - Rejected: always labelling the head "Now"; changing what Open lists beyond the team rule.
+- **H1-6 · Call 87 on Home goes through the store with the module's rule** → `features/tasks/check-off.ts`, `home.ts` `subtasksToFinish`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: Home mounts no Tasks module, so the check-off can't route through it, as TV-U13's note asked. Instead the rule of which subtasks a finishing parent takes along lives once in `subtasksToFinish`; the module's `finishOpenSubtasks` and Home both call it. Home sends each status through `store.sendStatus`. Every check-off on Home gets an Undo, since the row leaves at once: "Done", or "Done · also 2 subtasks". Undo puts back each task that is still done, by its own status, and puts the task back in your Focus where it was. The place comes from the server's answer, not the copy.
+  - Why: one rule, two callers; a check-off from Home should be as reversible as one in Tasks.
+  - Rejected: mounting `useTasksModule` on Home (its catch-up ops and listeners); no Undo for a lone check-off. Known gap: while the write is in flight, the row shows Done with its old status id, and it leaves the widget at once anyway.
+- **H1-7 · Upcoming on Home is Upcoming, as a glance** → `ui/widgets/upcoming-widget.tsx`, `home.ts` `upcomingForHome`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: Upcoming's coverage, order, day groups and "when" words, open tasks only, and only the days with work. Rows open the task; "+n more" opens Tasks.
+  - Why: the spec's Upcoming widget; a widget is read, not dropped onto.
+  - Rejected: empty days; drops; a link straight to Upcoming (it would need a new `/tasks` search param, outside this block).
+- **H1-8 · Widget group labels in people's words are sentence case** → `widget-primitives.tsx` `WidgetGroupLabel`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: a team's name and Upcoming's day names head their groups in sentence case; small caps stay for fixed chrome (`WidgetSectionLabel`: "Focus", "Open").
+  - Why: call 40, which `lint:tw` enforces.
+  - Rejected: adding the expressions to the small-caps allowlist.
+
 ## 2026-10-13 · TV-TL2 Timeline interactions — the agent's choices (deferred to by Maciej)
 
 Built in tasks-v3 block 26 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §6, AC9.6–9.8; REPLAN 70, 68b, 71; research `.design/tasks-v3/research/timeline-competitors.md` §4–5; the carry-forwards from TV-TL1, TV-U12, TV-U15 and RF-1) on the local stack, no migration. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to change.

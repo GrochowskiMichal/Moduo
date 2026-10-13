@@ -6,10 +6,9 @@
 // stays dormant. Rows open the task.
 
 import { useMemo } from "react";
-
-import { todayStr } from "@/features/tasks/helpers";
 import { weekTime } from "@/features/tasks/home";
 import { dayIn } from "@/features/tasks/project-overview";
+import { nowOn, useToday } from "@/features/tasks/use-today";
 import { formatDurationSeconds } from "@/lib/time-format";
 import { useTimeRegion } from "@/lib/time-region";
 
@@ -31,11 +30,12 @@ export function TimetrackingWidget({ size }: WidgetComponentProps) {
   const { timeReport } = useDashboardData();
   const density = useDensity();
   const { timeZone } = useTimeRegion();
+  const today = useToday();
 
   // The report dates entries in Time & region's zone; today is that zone's day.
   const week = useMemo(
-    () => weekTime(timeReport.data, dayIn(new Date().toISOString(), timeZone) ?? todayStr()),
-    [timeReport.data, timeZone],
+    () => weekTime(timeReport.data, dayIn(nowOn(today).toISOString(), timeZone) ?? today),
+    [timeReport.data, timeZone, today],
   );
 
   if (timeReport.loading && timeReport.data.length === 0) return <WidgetLoading />;
