@@ -17,11 +17,13 @@
 // so a tick re-renders today's column only — not the whole week.
 
 import { useDroppable } from "@dnd-kit/core";
-import { Circle, CircleCheck } from "lucide-react";
+import { Circle, CircleCheck, Paperclip } from "lucide-react";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { onCreateNew } from "../../../components/app/create-events";
 import { Button } from "../../../components/ui/button";
+import { MetaCount } from "../../../components/ui/meta-count";
+import { filesLabel } from "../../attachments/files";
 import { isElapsedBlock } from "../elapsed";
 import type { EventChip } from "../events";
 import {
@@ -76,6 +78,8 @@ type Props = {
   dueByDay?: Map<string, DueChip[]>;
   /** A due chip was clicked: open its task. */
   onDueClick?: (taskId: string) => void;
+  /** Task id → its finished files (AT-3's 📎 mark on blocks and due chips). */
+  fileCounts?: ReadonlyMap<string, number>;
   prefs: CalendarPrefs;
   loading: boolean;
   error: string | null;
@@ -172,6 +176,7 @@ export function CalendarGrid({
   allDayByDay,
   dueByDay = NO_DUE,
   onDueClick,
+  fileCounts,
   prefs,
   loading,
   error,
@@ -699,6 +704,11 @@ export function CalendarGrid({
                     >
                       {due.title || "Untitled"}
                     </span>
+                    <MetaCount
+                      icon={Paperclip}
+                      count={fileCounts?.get(due.taskId) ?? 0}
+                      label={filesLabel}
+                    />
                   </button>
                 ))}
               </div>
@@ -753,6 +763,7 @@ export function CalendarGrid({
                 onTriageLonger={onTriageLonger}
                 onTriageRemove={onTriageRemove}
                 focusBlockId={focusBlockId}
+                fileCounts={fileCounts}
                 canEdit={canEdit}
                 onToggleDone={onToggleDone}
                 onBackgroundPointerDown={onBackgroundPointerDown}
@@ -800,6 +811,7 @@ const DayColumn = memo(function DayColumn({
   onTriageLonger,
   onTriageRemove,
   focusBlockId,
+  fileCounts,
   canEdit,
   onToggleDone,
   onBackgroundPointerDown,
@@ -834,6 +846,8 @@ const DayColumn = memo(function DayColumn({
   onTriageLonger: (taskId: string) => void;
   onTriageRemove: (taskId: string, sessionId?: string | null) => void;
   focusBlockId: string | null;
+  /** Task id → its finished files (AT-3's 📎 mark). */
+  fileCounts?: ReadonlyMap<string, number>;
   canEdit: boolean;
   onToggleDone: (taskId: string) => void;
   onBackgroundPointerDown: (e: React.PointerEvent, dayIdx: number) => void;
@@ -960,6 +974,7 @@ const DayColumn = memo(function DayColumn({
                 onRemove={() => onTriageRemove(block.taskId, block.sessionId)}
                 focusing={focusing}
                 focusReadout={focusing ? <FocusReadout /> : null}
+                files={fileCounts?.get(block.taskId) ?? 0}
               />
             </div>
           );

@@ -111,6 +111,7 @@ import type {
   EmailThreadRef,
   HabitRow,
   IntegrationStatusItem,
+  LargestAttachment,
   LocalAuthState,
   ModuoRuntime,
   OtpSendError,
@@ -139,6 +140,7 @@ import { handleSearchPattern, handleWithCurrentKey } from "./task-handle";
 import {
   agentSessionRowToModel,
   areaRowToModel,
+  attachmentMarkRowToModel,
   bucketRowToModel,
   commentMarkRowToModel,
   editableTaskFields,
@@ -397,6 +399,25 @@ function mapAttachmentRow(raw: unknown): AttachmentRecord {
 
 const ATTACHMENT_COLUMNS =
   "id, entity_type, entity_id, uploader_id, file_name, mime, size_bytes, width, height, status, deleted_at, created_at, object_path, preview_path, preview_mime";
+
+/** One row of `attachments_largest` (AT-3, 20261013272000) → the model. */
+function mapLargestAttachmentRow(raw: unknown): LargestAttachment {
+  const r = raw as Record<string, unknown> | null;
+  if (typeof r?.id !== "string" || typeof r.task_id !== "string") {
+    throw new Error("Malformed largest-files row");
+  }
+  return {
+    id: r.id,
+    taskId: r.task_id,
+    taskTitle: typeof r.task_title === "string" ? r.task_title : "",
+    fileName: typeof r.file_name === "string" ? r.file_name : "file",
+    mime: typeof r.mime === "string" ? r.mime : "application/octet-stream",
+    sizeBytes: Number.isFinite(Number(r.size_bytes)) ? Number(r.size_bytes) : 0,
+    uploaderId: typeof r.uploader_id === "string" ? r.uploader_id : null,
+    createdAt: typeof r.created_at === "string" ? r.created_at : "",
+    canDelete: r.can_delete === true,
+  };
+}
 
 /** An attachments op's answer → the record, or AT-1's refusal as a typed error
  *  (machine code in the message, numbers as JSON in `details`). */
@@ -1712,6 +1733,27 @@ export const webRuntime: ModuoRuntime = {
     async restore(id) {
       const { data, error } = await supabaseClient.rpc("attachments_op_restore", { p_id: id });
       return attachmentOpResult(data, error);
+    },
+
+    async abandon(id) {
+      const { error } = await supabaseClient.rpc("attachments_op_abandon", { p_id: id });
+      // A database before AT-3 has no such op: the 24 h sweep frees it there.
+      if (!error || isMissingFunctionError(error, "attachments_op_abandon")) return;
+      const code = (error.message ?? "").trim();
+      if (/^[a-z_]+$/.test(code)) throw new AttachmentOpError(code, parseOpDetail(error.details));
+      throw new Error(error.message ?? "Couldn't let the upload go.");
+    },
+
+    async largest(workspaceId, limit = 50) {
+      const { data, error } = await supabaseClient.rpc("attachments_largest", {
+        p_workspace_id: workspaceId,
+        p_limit: limit,
+      });
+      if (error) {
+        if (isMissingFunctionError(error, "attachments_largest")) return [];
+        throw new Error(error.message);
+      }
+      return mapKnownRows((data ?? []) as unknown[], mapLargestAttachmentRow);
     },
 
     async status(workspaceId) {
@@ -4291,6 +4333,19 @@ const SYNC_SOURCES: Record<SyncTableName, SyncSource> = {
     cap: READ_CAPS.agentSessions,
     delta: true,
     scope: "agent sessions",
+  },
+  // AT-3: finished files on tasks, for the 📎 counts and an open strip's
+  // refresh. Under RLS (the item gate: a file shows only to people who can see
+  // its task); never a name, path or size. A finished file never goes back to
+  // pending, and a trashed one keeps `ready`, so the delta sees every change.
+  attachments: {
+    table: "attachments",
+    select: "id,entity_id,status,updated_at,deleted_at",
+    map: attachmentMarkRowToModel,
+    cap: READ_CAPS.attachmentMarks,
+    delta: true,
+    scope: "attachments",
+    filter: (q) => q.eq("entity_type", "task").eq("status", "ready"),
   },
 };
 

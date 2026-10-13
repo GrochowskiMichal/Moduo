@@ -2,9 +2,11 @@
 // with inline check-off — the one write this widget does, gated by `canWrite`
 // (a "view" member sees disabled checkboxes). Rows open the task in /tasks.
 
-import { Check } from "lucide-react";
+import { Check, Paperclip } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { MetaCount } from "@/components/ui/meta-count";
+import { filesLabel } from "@/features/attachments/files";
 import type { Task } from "@/features/tasks/model";
 import { queueOrOpen } from "@/features/tasks/queue";
 import { getRuntime } from "@/lib/runtime";
@@ -32,10 +34,13 @@ function TaskRow({
   task,
   canWrite,
   onDone,
+  files = 0,
 }: {
   task: Task;
   canWrite: boolean;
   onDone: (task: Task) => void;
+  /** Its finished files (AT-3's 📎 mark; 0 hides it). */
+  files?: number;
 }) {
   return (
     <li className="flex min-h-[var(--row-h)] items-center gap-2 rounded-md px-2 py-1 hover:bg-accent">
@@ -60,12 +65,13 @@ function TaskRow({
       >
         {task.title}
       </button>
+      <MetaCount icon={Paperclip} count={files} label={filesLabel} />
     </li>
   );
 }
 
 export function TasksWidget({ widget, size, canWrite }: WidgetComponentProps) {
-  const { tasks: taskSource, taskQueue, workspaceId } = useDashboardData();
+  const { tasks: taskSource, taskQueue, taskFiles, workspaceId } = useDashboardData();
   const { userId } = useAuth();
   const density = useDensity();
   const [doneIds, setDoneIds] = useState<Set<string>>(() => new Set());
@@ -132,7 +138,13 @@ export function TasksWidget({ widget, size, canWrite }: WidgetComponentProps) {
       ) : null}
       <ul className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto scrollbar-thin p-1.5 pt-0.5">
         {shown.map((task) => (
-          <TaskRow key={task.id} task={task} canWrite={canWrite} onDone={markDone} />
+          <TaskRow
+            key={task.id}
+            task={task}
+            canWrite={canWrite}
+            onDone={markDone}
+            files={taskFiles?.get(task.id) ?? 0}
+          />
         ))}
       </ul>
       <WidgetMore count={overflow} onClick={() => openModuleRoute("/tasks")} />

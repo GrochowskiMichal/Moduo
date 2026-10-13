@@ -6,16 +6,18 @@
 import type { DraggableSyntheticListeners } from "@dnd-kit/core";
 import { closestCenter } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { Play, X } from "lucide-react";
+import { Paperclip, Play, X } from "lucide-react";
 import { useCallback, useMemo } from "react";
 
 import { IconButton } from "../../../components/ui/icon-button";
 import { Kbd } from "../../../components/ui/kbd";
+import { MetaCount } from "../../../components/ui/meta-count";
 import { NavRowDot } from "../../../components/ui/nav-row";
 import { SELECTED_ROW } from "../../../components/ui/selection";
 import { formatDuration } from "../../../lib/time-format";
 import { undoToast } from "../../../lib/undo-toast";
 import { cn } from "../../../lib/utils";
+import { filesLabel } from "../../attachments/files";
 import { TaskClaimMark } from "../../focus/ui/claim-mark";
 import { upNextLines, upNextMove, upNextSummary } from "../focus-screen";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
@@ -134,6 +136,7 @@ export function UpNext({
                       }
                       selected={selectedTaskId === line.task.id}
                       canEdit={canEdit}
+                      files={api.attachmentCounts?.get(line.task.id) ?? 0}
                       onSelect={() => onSelectTask(line.task.id)}
                       onFocusOn={() => api.focusOnTask(line.task.id)}
                       onRemove={() => {
@@ -162,6 +165,7 @@ function UpNextRow({
   parentTitle,
   selected,
   canEdit,
+  files,
   onSelect,
   onFocusOn,
   onRemove,
@@ -174,6 +178,8 @@ function UpNextRow({
   parentTitle: string | null;
   selected: boolean;
   canEdit: boolean;
+  /** Its finished files (AT-3's 📎 mark; 0 hides it). */
+  files: number;
   onSelect: () => void;
   onFocusOn: () => void;
   onRemove: () => void;
@@ -215,6 +221,7 @@ function UpNextRow({
           {parentTitle ? <span className="text-subtle-foreground"> · ↳ {parentTitle}</span> : null}
         </span>
       </button>
+      <MetaCount icon={Paperclip} count={files} label={filesLabel} />
       <TaskClaimMark workspaceId={task.workspaceId} taskId={task.id} />
       {est ? (
         <span className="shrink-0 font-sans text-xs tabular-nums text-muted-foreground">

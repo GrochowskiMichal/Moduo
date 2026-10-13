@@ -25,6 +25,7 @@ import {
   Inbox,
   LayoutTemplate,
   Mail,
+  Paperclip,
   Plus,
   User,
 } from "lucide-react";
@@ -54,6 +55,7 @@ import { undoToast } from "../../../lib/undo-toast";
 import { cn } from "../../../lib/utils";
 import { useAuth } from "../../../providers/auth-provider";
 import { useWorkspace } from "../../../providers/workspace-provider";
+import { dragHasFiles, filesFromDataTransfer, pastedFiles } from "../../attachments/files";
 import type { MenuPickApi } from "../../spine/editor/mention-menu-plugin";
 import { dateCommandDay } from "../../spine/grammar";
 import { resolveEntityIcon } from "../../spine/icon-map";
@@ -125,6 +127,26 @@ let lastTitleWords = "";
 
 /** The open Task capture's way to take a refused capture back ("Restore"). */
 let openBody: ((draft: CaptureDraft) => void) | null = null;
+
+/**
+ * The capture's task as the file seam needs it (AT-3): made on the server,
+ * waiting on this device to sync (offline: the files wait with it), or not
+ * made at all (refused: nothing to attach to).
+ */
+export function taskForFiles(
+  sending: Promise<{ created: readonly Pick<Task, "id">[]; queued: readonly string[] }>,
+  id: string,
+): Promise<{ id: string; queued: boolean } | null> {
+  return sending
+    .then(({ created, queued }) =>
+      created.some((t) => t.id === id)
+        ? { id, queued: false }
+        : queued.includes(id)
+          ? { id, queued: true }
+          : null,
+    )
+    .catch(() => null);
+}
 
 /** The plain words of a title (tokens as their words): what the shell carries between types. */
 function plainText(segments: readonly TitleSegment[]): string {
@@ -896,13 +918,14 @@ export function TaskCaptureBody({
     titleApi.current?.focus();
   };
 
-  /** Save a plan behind the closed capture; answers with what was created. */
+  /** Save a plan behind the closed capture; answers with what was created and
+   *  what waits on this device to sync (offline). */
   const send = async (
     plan: CapturePlan,
     kept: CaptureDraft | null,
     batch: boolean,
-  ): Promise<Task[]> => {
-    if (!runtime) return [];
+  ): Promise<{ created: Task[]; queued: readonly string[] }> => {
+    if (!runtime) return { created: [], queued: [] };
     const deps = { runtime, userId, store };
     let result: CaptureResult;
     try {
@@ -933,7 +956,7 @@ export function TaskCaptureBody({
       } else {
         toast.error(`${landed} of ${plan.tasks.length} saved`, { description: message });
       }
-      return result.created;
+      return { created: result.created, queued: result.queued };
     }
     if (result.queued.length > 0) {
       // Offline: they wait on this device and go once it's back (default g).
@@ -944,15 +967,15 @@ export function TaskCaptureBody({
           : (plan.tasks[0]?.title ?? "Task"),
         { description: plan.tasks.length > 1 ? undefined : `Waiting to sync · ${placeLabel}` },
       );
-      return result.created;
+      return { created: result.created, queued: result.queued };
     }
     if (batch) {
       const n = result.created.length;
       undoToast(`${n} ${n === 1 ? "task" : "tasks"} created`, { onUndo: undoSaved });
-      return result.created;
+      return { created: result.created, queued: result.queued };
     }
     const first = result.created[0];
-    if (!first) return result.created;
+    if (!first) return { created: result.created, queued: result.queued };
     if (result.extrasFailed > 0) {
       toast.error("The task is saved, but a link or reminder didn't save.");
     }
@@ -960,7 +983,7 @@ export function TaskCaptureBody({
       description: summaryText,
       action: { label: "Open", onClick: () => openReferenceFull({ type: "task", id: first.id }) },
     });
-    return result.created;
+    return { created: result.created, queued: result.queued };
   };
 
   const placeLabel = destination.projectId || teamDefault ? destinationLabel : "Inbox";
@@ -1054,12 +1077,11 @@ export function TaskCaptureBody({
       onDone();
     }
     const sending = send(plan, kept, false);
-    // Files go up once the task exists (the AT-2 / AT-3 seam).
-    handler?.({
-      workspaceId,
-      taskId: sending.then((created) => (created.some((t) => t.id === main.id) ? main.id : null)),
-      files: filesNow,
-    });
+    // Files go up once the task exists, or wait with it on this device when
+    // it was made offline (the AT-3 seam): the task is always created first.
+    if (handler && userId) {
+      handler({ workspaceId, userId, task: taskForFiles(sending, main.id), files: filesNow });
+    }
   };
 
   /**
@@ -1101,42 +1123,53 @@ export function TaskCaptureBody({
         : localDayOf(new Date().toISOString());
     const where = placeLabel;
     const madeTitle = title;
+    const handler = files.length > 0 ? captureAttachments() : null;
+    const filesNow = files;
     setApplyingTemplate(true);
-    void templateProvider
-      .apply(
-        { runtime, store, workspaceId, userId },
-        {
-          templateId: choice.id,
-          id: newTaskId(),
-          title: madeTitle,
-          projectId: projectId ?? null,
-          sectionId,
-          date,
-          ...(values.assigneeId !== undefined ? { assigneeId: values.assigneeId } : {}),
-        },
-      )
-      .then((created) => {
-        if (!mounted.current) return;
-        setApplyingTemplate(false);
-        // Refused or offline (the provider said why): the capture stays as it was.
-        if (!created) return;
-        if (more) {
-          setTemplate(null);
-          resetForMore();
-        } else {
-          clearDraft(owner.userId, owner.workspaceId);
-          lastTitleWords = "";
-          onDraftChange("");
-          onDone();
-        }
-        toast(madeTitle, {
-          description: `From “${choice.name}” · ${where}`,
-          action: {
-            label: "Open",
-            onClick: () => openReferenceFull({ type: "task", id: created }),
-          },
-        });
+    const applying = templateProvider.apply(
+      { runtime, store, workspaceId, userId },
+      {
+        templateId: choice.id,
+        id: newTaskId(),
+        title: madeTitle,
+        projectId: projectId ?? null,
+        sectionId,
+        date,
+        ...(values.assigneeId !== undefined ? { assigneeId: values.assigneeId } : {}),
+      },
+    );
+    // The capture's files go on the task the template makes (made on the
+    // server, so never one waiting offline).
+    if (handler && userId) {
+      handler({
+        workspaceId,
+        userId,
+        task: applying.then((id) => (id ? { id, queued: false } : null)).catch(() => null),
+        files: filesNow,
       });
+    }
+    void applying.then((created) => {
+      if (!mounted.current) return;
+      setApplyingTemplate(false);
+      // Refused or offline (the provider said why): the capture stays as it was.
+      if (!created) return;
+      if (more) {
+        setTemplate(null);
+        resetForMore();
+      } else {
+        clearDraft(owner.userId, owner.workspaceId);
+        lastTitleWords = "";
+        onDraftChange("");
+        onDone();
+      }
+      toast(madeTitle, {
+        description: `From “${choice.name}” · ${where}`,
+        action: {
+          label: "Open",
+          onClick: () => openReferenceFull({ type: "task", id: created }),
+        },
+      });
+    });
   };
 
   const pastedList = useMemo(() => (pasted ? parsePastedList(pasted) : null), [pasted]);
@@ -1166,13 +1199,21 @@ export function TaskCaptureBody({
     });
     // Kept, the list comes back if the server refuses it.
     const kept: CaptureDraft = { ...EMPTY_DRAFT, fields, pasted };
+    const handler = files.length > 0 ? captureAttachments() : null;
+    const filesNow = files;
     setPasted(null);
-    if (!more) onDone();
-    void send(
+    if (more) setFiles([]);
+    else onDone();
+    const sending = send(
       { workspaceId, tasks, source: context?.source ?? null, queueTop: Boolean(context?.queueTop) },
       kept,
       true,
     );
+    // Files with a pasted list go on its first task (AT-3).
+    const first = tasks[0]?.id;
+    if (handler && userId && first) {
+      handler({ workspaceId, userId, task: taskForFiles(sending, first), files: filesNow });
+    }
   };
 
   const keepPastedAsOne = () => {
@@ -1263,12 +1304,14 @@ export function TaskCaptureBody({
     <div
       className="flex flex-col"
       onDragOver={(e) => {
-        if (e.dataTransfer.types.includes("Files")) e.preventDefault();
+        if (dragHasFiles(e.dataTransfer)) e.preventDefault();
       }}
       onDrop={(e) => {
-        if (e.dataTransfer.files.length === 0) return;
+        // Folders are left out (AT-3); a drop of only folders does nothing.
+        const dropped = filesFromDataTransfer(e.dataTransfer);
+        if (dropped.length === 0) return;
         e.preventDefault();
-        takeFiles(Array.from(e.dataTransfer.files));
+        takeFiles(dropped);
       }}
     >
       {/* The destination row (91): the type, where it goes, what it came from. */}
@@ -1423,6 +1466,12 @@ export function TaskCaptureBody({
               placeholder="Add a description…"
               aria-label="Description"
               onChange={(e) => setDescription(e.target.value)}
+              onPaste={(e) => {
+                // A screenshot pasted here becomes a file chip too (AT3-2);
+                // text stays a text paste.
+                const pastedHere = pastedFiles(e.clipboardData);
+                if (pastedHere.length > 0 && takeFiles(pastedHere)) e.preventDefault();
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                   e.preventDefault();
@@ -1445,11 +1494,14 @@ export function TaskCaptureBody({
         )}
 
         {files.length > 0 ? (
-          <div className="flex flex-wrap gap-1.5 py-1">
+          // The file chips (AT3-2): each attaches once the task exists, and
+          // keeps trying on the task's strip if it can't yet.
+          <div className="flex flex-wrap gap-1.5 py-1" data-slot="capture-files">
             {files.map((f, i) => (
               <Chip
                 // biome-ignore lint/suspicious/noArrayIndexKey: two files can share a name
                 key={`${f.name}-${i}`}
+                icon={Paperclip}
                 onRemove={() => setFiles((prev) => prev.filter((_, j) => j !== i))}
                 removeLabel={`Remove ${f.name}`}
               >

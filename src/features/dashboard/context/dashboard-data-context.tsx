@@ -63,6 +63,8 @@ export interface DashboardData {
   tasks: WidgetSource<TasksModuleBundle>;
   /** Queue rows I can see (TV-D2): mine, plus others' claims. */
   taskQueue: WidgetSource<TaskQueueEntry[]>;
+  /** Task id → its finished files (AT-3's 📎 counts, from the shared store). */
+  taskFiles?: ReadonlyMap<string, number>;
   calendar: WidgetSource<CalendarModuleBundle>;
   email: WidgetSource<EmailModuleBundle>;
   recentNotes: WidgetSource<RecentNoteRow[]>;
@@ -83,6 +85,7 @@ const EMPTY_TASKS: TasksModuleBundle = {
   truncated: [],
 };
 const NO_QUEUE: TaskQueueEntry[] = [];
+const NO_FILES: ReadonlyMap<string, number> = new Map<string, number>();
 const EMPTY_CALENDAR: CalendarModuleBundle = {
   events: [],
   accounts: [],
@@ -301,11 +304,15 @@ export function DashboardDataProvider({
     },
   );
 
+  // A task's finished files (AT-3's 📎 mark on the widget's rows), live.
+  const taskFiles = store ? snap.attachmentCounts : NO_FILES;
+
   const value = useMemo<DashboardData>(
     () => ({
       workspaceId,
       tasks,
       taskQueue,
+      taskFiles,
       calendar,
       email,
       recentNotes,
@@ -320,6 +327,7 @@ export function DashboardDataProvider({
       workspaceId,
       tasks,
       taskQueue,
+      taskFiles,
       calendar,
       email,
       recentNotes,

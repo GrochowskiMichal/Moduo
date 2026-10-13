@@ -6,18 +6,20 @@
 // its own details in the panel; ⇧F on it makes it the Now card.
 
 import { type FocusTimerMode, isClosedTask } from "@contracts/vocabularies";
-import { Pause, Play } from "lucide-react";
+import { Paperclip, Pause, Play } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "../../../components/ui/button";
 import { CompleteToggle } from "../../../components/ui/complete-toggle";
 import { Kbd } from "../../../components/ui/kbd";
+import { MetaCount } from "../../../components/ui/meta-count";
 import { NavRowDot } from "../../../components/ui/nav-row";
 import { SELECTED_ROW } from "../../../components/ui/selection";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { formatDay } from "../../../lib/time-format";
 import { cn } from "../../../lib/utils";
+import { filesLabel } from "../../attachments/files";
 import type { TaskRefResolver } from "../../focus/run";
 import { toggleFocusPause, useFocusTimer } from "../../focus/timer";
 import { FocusAwayPrompt } from "../../focus/ui/away-prompt";
@@ -154,6 +156,8 @@ export function NowCard({
     : 0;
   const subtasks = api.subtasksByParent.get(task.id) ?? [];
   const saving = task.id.startsWith("tmp-");
+  // The 📎 mark (AT-3), live from the shared store.
+  const files = api.attachmentCounts?.get(task.id) ?? 0;
 
   return (
     <section
@@ -190,6 +194,14 @@ export function NowCard({
                 ·
               </span>
               <span>Blocked by {blocked === 1 ? "1 task" : `${blocked} tasks`}</span>
+            </>
+          ) : null}
+          {files > 0 ? (
+            <>
+              <span aria-hidden className="text-subtle-foreground">
+                ·
+              </span>
+              <MetaCount icon={Paperclip} count={files} label={filesLabel} />
             </>
           ) : null}
           {task.priority === "high" ? <PriorityMark level="high" /> : null}

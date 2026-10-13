@@ -69,6 +69,12 @@ export type UploadItem = {
   attempts: number;
   /** Upload refusals in a row (the pending row moved on); restarts, then stops. */
   refusals: number;
+  /**
+   * The task may not be on the server yet (a capture made offline waits in
+   * the store's outbox, AT-3): until the first begin goes through, "the task
+   * is gone" means "not synced yet" and the file keeps waiting, for a day.
+   */
+  awaitTask?: boolean;
   nextRetryAt: number;
   state: UploadState;
   problem: UploadProblem | null;
@@ -119,7 +125,8 @@ export function memoryUploadStore(initial: UploadItem[] = []): UploadStore & {
 type AttachmentsApi = Pick<
   ModuoRuntime["attachments"],
   "begin" | "uploadObject" | "finalize" | "status"
->;
+> &
+  Partial<Pick<ModuoRuntime["attachments"], "abandon">>;
 
 export type UploadQueueDeps = {
   store: UploadStore;
@@ -160,6 +167,8 @@ const FULL_RETRY_MS = 5 * 60 * 1000;
 const BUSY_RETRY_MS = 60 * 1000;
 const MAX_BACKOFF_MS = 5 * 60 * 1000;
 const MAX_REFUSALS = 2;
+/** How long a file waits for its task to reach the server (an offline capture). */
+const AWAIT_TASK_MS = 24 * 60 * 60 * 1000;
 /** Another tab holds the file: look again after this long. */
 const CLAIMED_ELSEWHERE_MS = 30 * 1000;
 /** Progress repaints at most this often. */
@@ -304,7 +313,9 @@ export class UploadQueue {
     for (const item of this.items.values()) {
       if (
         item.state === "waiting" &&
-        (item.problem?.kind === "offline" || item.problem?.kind === "interrupted")
+        (item.problem?.kind === "offline" ||
+          item.problem?.kind === "interrupted" ||
+          item.problem?.kind === "task_syncing")
       ) {
         item.nextRetryAt = Math.min(item.nextRetryAt, now);
       }
@@ -327,14 +338,17 @@ export class UploadQueue {
    * Prepare and queue files for one target. Checks the pool first (when the
    * status can be read): a file over the per-file limit is refused before any
    * bytes move, one that doesn't fit the pool waits as "storage full".
+   * Answers with the files' queue ids (refused ones included), so a caller
+   * that shows no strip (a row or card drop, AT-3) can say what happened.
    */
   async add(
     files: File[],
     target: UploadTarget,
     userId: string,
     status?: StorageStatus | null,
-  ): Promise<void> {
-    if (files.length === 0) return;
+    opts: { awaitTask?: boolean } = {},
+  ): Promise<string[]> {
+    if (files.length === 0) return [];
     const api = this.api ?? this.deps.getApi();
     const pool =
       status !== undefined
@@ -343,6 +357,7 @@ export class UploadQueue {
           ? await api.status(target.workspaceId).catch(() => null)
           : null;
     const batchId = this.newId();
+    const ids: string[] = [];
     let extra = 0;
     for (const file of files) {
       let prepared: PreparedUpload;
@@ -381,11 +396,13 @@ export class UploadQueue {
         previewSent: false,
         attempts: 0,
         refusals: 0,
+        ...(opts.awaitTask ? { awaitTask: true } : {}),
         nextRetryAt: 0,
         state: "queued",
         problem: null,
         createdAt: now,
       };
+      ids.push(item.id);
       const size = item.sizeBytes + (prepared.preview?.size ?? 0);
       if (item.sizeBytes === 0) {
         this.reject(item, { kind: "empty" });
@@ -426,6 +443,7 @@ export class UploadQueue {
       this.pump();
     }
     this.emit();
+    return ids;
   }
 
   /** Try now (a failed or waiting file). Starts over when the last try failed. */
@@ -443,10 +461,11 @@ export class UploadQueue {
     this.pump();
   }
 
-  /** Forget a file (its server row, if begun, is swept by the purge in 24 h). */
+  /** Forget a file. Its server row, if begun, is let go at once (AT-3). */
   dismiss(id: string): void {
     this.running.get(id)?.abort();
     this.running.delete(id);
+    this.release(this.items.get(id)?.attachmentId ?? null);
     this.items.delete(id);
     this.progress.delete(id);
     this.persisted.delete(id);
@@ -468,7 +487,21 @@ export class UploadQueue {
     if (ok) this.persisted.add(item.id);
   }
 
+  /**
+   * Let go of an upload's server row that will never finish (dismissed,
+   * refused, or about to be begun again): its space in the pool is free at
+   * once instead of after the 24 h sweep (AT-3, `attachments_op_abandon`). A
+   * row that finished meanwhile is left alone by the server. Fire and forget.
+   */
+  private release(attachmentId: string | null) {
+    if (!attachmentId) return;
+    const api = this.api ?? this.deps.getApi();
+    void api?.abandon?.(attachmentId).catch(() => {});
+  }
+
   private reject(item: UploadItem, problem: UploadProblem) {
+    this.release(item.attachmentId);
+    item.attachmentId = null;
     item.state = "rejected";
     item.problem = problem;
     // Nothing to retry: let the bytes go.
@@ -478,7 +511,9 @@ export class UploadQueue {
     void this.deps.store.remove(item.id).catch(() => {});
   }
 
+  /** Start a file over: its old server row (if any) is let go. */
   private restart(item: UploadItem) {
+    this.release(item.attachmentId);
     item.attachmentId = null;
     item.objectPath = null;
     item.previewPath = null;
@@ -592,6 +627,9 @@ export class UploadQueue {
         };
         const rec = await api.begin(input);
         if (ctrl.signal.aborted || this.items.get(item.id) !== item) {
+          // Dismissed (or stopped) while begin was answering: the row it just
+          // made will never be used, so let it go now.
+          this.release(rec.id);
           throw new DOMException("aborted", "AbortError");
         }
         this.restart(item);
@@ -599,6 +637,8 @@ export class UploadQueue {
         item.objectPath = rec.objectPath;
         item.previewPath = rec.previewPath;
         item.begunAt = this.now();
+        // The task is on the server: from here "gone" means gone.
+        delete item.awaitTask;
         await this.save(item);
       }
       if (ctrl.signal.aborted) throw new DOMException("aborted", "AbortError");
@@ -692,6 +732,20 @@ export class UploadQueue {
       }
     }
     const problem = classifyUploadError(e, this.isOnline());
+    if (
+      problem.kind === "task_gone" &&
+      item.awaitTask &&
+      this.now() - item.createdAt < AWAIT_TASK_MS
+    ) {
+      // An offline capture's task hasn't reached the server yet (its outbox
+      // sends it when the network is back, maybe a moment after this woke).
+      item.attempts += 1;
+      item.state = "waiting";
+      item.problem = { kind: "task_syncing" };
+      item.nextRetryAt = this.now() + backoffMs(item.attempts, null, this.random);
+      void this.save(item);
+      return;
+    }
     if (REJECTED_KINDS.has(problem.kind)) {
       this.reject(item, problem);
       return;

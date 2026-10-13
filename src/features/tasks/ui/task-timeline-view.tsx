@@ -1277,6 +1277,11 @@ export function TaskTimelineView({
                                 taskKey={taskKey}
                                 handlers={handlers}
                                 actions={rowActions}
+                                files={
+                                  row.kind === "task"
+                                    ? (api.attachmentCounts?.get(row.task.id) ?? 0)
+                                    : 0
+                                }
                               />
                             )}
                           />

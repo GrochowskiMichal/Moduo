@@ -420,6 +420,7 @@ const DEEP_LINK_NOUN: Record<string, string> = {
   email_thread: "email",
   chat_channel: "conversation",
   bucket: "project",
+  settings: "Storage settings",
 };
 
 export function notificationDeepLinkNoun(entityType: string): string {
@@ -428,6 +429,13 @@ export function notificationDeepLinkNoun(entityType: string): string {
 
 /** Resolve where clicking a card should navigate (best-effort by entity type). */
 export function notificationDeepLink(group: NotificationGroup): NotificationDeepLink | null {
+  // The storage alerts (AT-1, 80% / 95%) open Settings → Storage, where the
+  // largest files can be deleted (AT-3). They hang on the workspace, which no
+  // page opens: `entityType: "settings"` names the section instead (the
+  // entity-open host in app-chrome.tsx opens Settings there).
+  if (group.op === "attachments.storage_80" || group.op === "attachments.storage_95") {
+    return { route: "/settings", entityType: "settings", entityId: "storage" };
+  }
   // A reminder or a team notice opens its task, not the Inbox it hangs on
   // (TV-D12, TV-D13; several routed tasks open the first).
   if (

@@ -49,14 +49,24 @@ export function useAttachmentsSection({
   entity,
   userId,
   canEdit,
+  refreshStamp,
 }: {
   runtime: ModuoRuntime | null;
   workspaceId: string | null;
   entity: { type: "task"; id: string };
   userId: string | null;
   canEdit: boolean;
+  /** The entity's file stamp from the shared store (AT-3): the strip re-reads on it. */
+  refreshStamp?: string | null;
 }): AttachmentsSectionState {
-  const attachments = useEntityAttachments({ runtime, workspaceId, entity, userId, canEdit });
+  const attachments = useEntityAttachments({
+    runtime,
+    workspaceId,
+    entity,
+    userId,
+    canEdit,
+    refreshStamp,
+  });
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
   const [dropActive, setDropActive] = useState(false);
   const dragDepth = useRef(0);
@@ -142,6 +152,8 @@ export function AttachmentsSection({
         onDismiss={a.dismiss}
         onDismissAlmostFull={a.dismissAlmostFull}
         onUpgrade={() => dispatchOpenSettings({ section: "billing" })}
+        // The largest-files list (AT-3): delete what's no longer needed.
+        onFreeUpSpace={() => dispatchOpenSettings({ section: "storage" })}
       />
       <AttachmentViewer
         runtime={state.runtime}
