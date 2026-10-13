@@ -116,20 +116,22 @@ export function TimelineNoDatePanel({
                   from="no-date"
                   disabled={!canEdit}
                   render={({ dragListeners, dragActivatorRef }) => (
-                    <button
-                      ref={dragActivatorRef}
-                      type="button"
-                      data-no-date-task={item.task.id}
-                      {...dragListeners}
-                      onClick={() => onOpen(item.task.id)}
-                      className={cn(
-                        "flex h-(--row-h) w-full items-center rounded-md px-2 text-left font-sans text-sm text-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover",
-                        canEdit && "cursor-grab",
-                        selectedTaskId === item.task.id && "bg-state-selected",
-                      )}
-                    >
-                      <span className="min-w-0 truncate">{item.task.title || "Untitled"}</span>
-                    </button>
+                    // The drag's activator is the row, never the button inside:
+                    // Enter/Space on the button open the task (a keyboard lift
+                    // could never land, the drop is the pointer's; gotchas/ui.md).
+                    <div ref={dragActivatorRef} data-no-date-task={item.task.id} {...dragListeners}>
+                      <button
+                        type="button"
+                        onClick={() => onOpen(item.task.id)}
+                        className={cn(
+                          "flex h-(--row-h) w-full items-center rounded-md px-2 text-left font-sans text-sm text-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover",
+                          canEdit && "cursor-grab",
+                          selectedTaskId === item.task.id && "bg-state-selected",
+                        )}
+                      >
+                        <span className="min-w-0 truncate">{item.task.title || "Untitled"}</span>
+                      </button>
+                    </div>
                   )}
                 />
               )

@@ -16,7 +16,8 @@
 // `use-timeline-writes.tsx` (what's saved), `use-timeline-drop.tsx` (the
 // panel's drop), `timeline-deps-layer.tsx` (the lines), and the marks reading
 // a drag from `timeline-drag-store.ts`. A person who can't edit gets none of
-// the handles: nothing offers a drag that would be refused.
+// the handles (Edit in the workspace and, inside a project, on it; across
+// projects a project shared view-only is refused by the server, TL2-14).
 
 import { CalendarOff } from "lucide-react";
 import {
@@ -84,7 +85,7 @@ import { PlanViewHeader } from "./plan-view-header";
 import { ProjectChoicesProvider, StatusChoicesProvider } from "./project-choices";
 import { useRowActions } from "./row-facts";
 import { activateTask, type TaskCommand } from "./task-context-menu";
-import { TimelineDepsLayer } from "./timeline-deps-layer";
+import { type DepStub, TimelineDepsLayer } from "./timeline-deps-layer";
 import { createCanvasStore, TimelineCanvasContext } from "./timeline-drag-store";
 import { TimelineHeader } from "./timeline-header";
 import {
@@ -696,15 +697,19 @@ export function TaskTimelineView({
       if (other.bucketId !== self.bucketId) return `↗ ${projectName(other.bucketId)} · ${title}`;
       return `↗ ${title}`;
     };
-    const before: string[] = [];
-    const after: string[] = [];
+    const before: DepStub[] = [];
+    const after: DepStub[] = [];
+    const seen = new Set<string>();
     for (const rel of relations) {
       const waitsOn = rel.blockedTaskId === self.id;
       const blocks = rel.blockerTaskId === self.id;
       if (!waitsOn && !blocks) continue;
       const other = taskById.get(waitsOn ? rel.blockerTaskId : rel.blockedTaskId);
       if (!other || other.deletedAt || isHidden(other) || pointDay(other.id) !== null) continue;
-      (waitsOn ? before : after).push(words(other));
+      const id = `${waitsOn ? "before" : "after"}:${other.id}`;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      (waitsOn ? before : after).push({ id, text: words(other) });
     }
     return before.length + after.length > 0 ? { before, after } : null;
   }, [
@@ -1161,7 +1166,7 @@ export function TaskTimelineView({
                       data-timeline=""
                       data-zoom={zoom}
                       data-can-drag={canDrag || undefined}
-                      className="scrollbar-thin h-full overflow-auto overscroll-x-contain focus-visible:outline-none data-dragging:cursor-grabbing data-dragging:**:cursor-grabbing"
+                      className="scrollbar-thin h-full overflow-auto overscroll-x-contain focus-visible:outline-none data-dragging:cursor-grabbing data-dragging:select-none data-dragging:**:cursor-grabbing"
                     >
                       <div className="relative" style={frameStyle}>
                         <div ref={headerRef} className="sticky top-0 z-(--z-header)">

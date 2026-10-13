@@ -11,7 +11,7 @@
 // a bar's and a band's ends carry `data-timeline-edge`. While a drag runs, a
 // mark reads where it's going from the canvas store (`timeline-drag-store.ts`)
 // and says the date beside itself. A person who can't edit gets no grab
-// cursor and no ends to resize: nothing offers a drag that would be refused.
+// cursor and no ends to resize (`editable`, worked out by the view, TL2-14).
 
 import { CircleCheck, Repeat } from "lucide-react";
 import { createContext, useContext, useMemo, useSyncExternalStore } from "react";

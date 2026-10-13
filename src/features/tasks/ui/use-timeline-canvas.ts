@@ -254,15 +254,19 @@ export function useTimelineCanvas({
       e.stopPropagation();
       end(false);
     };
+    // The window lost focus mid-press (⌘-Tab): its pointerup may never come.
+    const onBlur = () => end(false);
     document.addEventListener("pointermove", onMove);
     document.addEventListener("pointerup", onUp);
     document.addEventListener("pointercancel", onCancel);
     document.addEventListener("keydown", onKey, true);
+    window.addEventListener("blur", onBlur);
     return () => {
       document.removeEventListener("pointermove", onMove);
       document.removeEventListener("pointerup", onUp);
       document.removeEventListener("pointercancel", onCancel);
       document.removeEventListener("keydown", onKey, true);
+      window.removeEventListener("blur", onBlur);
       const g = gesture.current;
       if (g) cancelAnimationFrame(g.frame);
     };

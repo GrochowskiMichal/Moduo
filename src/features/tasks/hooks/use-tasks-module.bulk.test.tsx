@@ -175,13 +175,34 @@ describe("bulkWrite — one write for a selection, one Undo (AC4.6, AC11.9)", ()
       scheduledAt: to,
     });
     expect(rows.get("a")?.scheduledAt).toBe(to);
-    expect(followUp).toHaveBeenCalledWith(["a"]);
+    // The follow-up gets the changed ids and this change's own Undo.
+    expect(followUp).toHaveBeenCalledWith(["a"], expect.any(Function));
     const call = toastMock.mock.calls.find((c) => c[0] === "Moved to Fri");
     await act(async () => {
       (call?.[1] as ToastOpts | undefined)?.action?.onClick();
       await new Promise((r) => setTimeout(r, 40));
     });
     await waitFor(() => expect(rows.get("a")?.scheduledAt).toBe(from));
+  });
+
+  it("TV-TL2: a follow-up's Undo puts back the change it followed too (alsoUndo)", async () => {
+    const { hook, rows } = await mount([task("b", { dueDate: null })], "none");
+    const alsoUndo = rs.fn();
+    const due = new Date(2026, 9, 20).toISOString();
+    await act(async () => {
+      await hook.result.current.bulkWrite([{ taskId: "b", dueDate: due }], {
+        label: () => "Also moved",
+        alsoUndo,
+      });
+    });
+    expect(rows.get("b")?.dueDate).toBe(due);
+    const call = toastMock.mock.calls.find((c) => c[0] === "Also moved");
+    await act(async () => {
+      (call?.[1] as ToastOpts | undefined)?.action?.onClick();
+      await new Promise((r) => setTimeout(r, 40));
+    });
+    expect(alsoUndo).toHaveBeenCalledOnce();
+    await waitFor(() => expect(rows.get("b")?.dueDate ?? null).toBeNull());
   });
 
   it("deleting a parent and its selected subtask, then Undo, keeps the subtask under its parent", async () => {

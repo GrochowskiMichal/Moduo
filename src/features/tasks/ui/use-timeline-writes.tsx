@@ -33,7 +33,8 @@ import { RepeatMoveDialog } from "./repeat-move-dialog";
 import type { CanvasCommit } from "./use-timeline-canvas";
 
 type Ask =
-  | { kind: "shift"; taskIds: readonly string[]; shift: number }
+  /** `alsoUndo`: the move this one follows up ("Also move…"), undone with it. */
+  | { kind: "shift"; taskIds: readonly string[]; shift: number; alsoUndo?: () => void }
   | { kind: "day"; taskId: string; day: string };
 
 export type TimelineWrites = {
@@ -69,33 +70,58 @@ export function useTimelineWrites(api: TasksModuleApi, zoom: TimelineZoom): Time
     [],
   );
 
-  /** Save a plan of task moves; a move later offers the ones that wait on them. */
-  const run = useRef<(plan: TaskMovePlan, shift: number) => void>(() => undefined);
-  run.current = (plan, shift) => {
+  // "Also move…" calls `shiftTasks`, which is defined below.
+  const shiftRef = useRef<(tasks: readonly Task[], shift: number, alsoUndo?: () => void) => void>(
+    () => undefined,
+  );
+
+  /**
+   * Save a plan of task moves; a move later offers the ones that wait on them.
+   * `alsoUndo`: the move this one follows up, put back by the same Undo.
+   */
+  const run = useRef<(plan: TaskMovePlan, shift: number, alsoUndo?: () => void) => void>(
+    () => undefined,
+  );
+  run.current = (plan, shift, alsoUndo) => {
     const a = latest.current.api;
     if (plan.writes.length === 0) return;
     void a.bulkWrite(plan.writes, {
       label: (main) => plan.label(main),
+      alsoUndo,
       followUp:
         shift > 0
-          ? (changed) => {
+          ? (changed, undoThis) => {
               const now = latest.current.api;
               const byId = new Map(now.tasks.map((t) => [t.id, t]));
               const waiting = waitingOn(new Set(changed), now.taskRelations ?? [], byId);
               if (waiting.length === 0) return null;
+              const ids = waiting.map((t) => t.id);
               return {
                 label: waitingWords(waiting.length, changed.length),
-                onClick: () =>
-                  run.current(planShift(waiting, shift, "one", engineZone(), new Date()), shift),
+                // As they are when clicked (one may have moved meanwhile); a
+                // repeat among them asks; one Undo puts both moves back.
+                onClick: () => {
+                  const fresh = ids.flatMap((id) => {
+                    const task = latest.current.api.tasks.find((t) => t.id === id);
+                    return task ? [task] : [];
+                  });
+                  shiftRef.current(fresh, shift, () => {
+                    undoThis();
+                    alsoUndo?.();
+                  });
+                },
               };
             }
           : undefined,
     });
   };
 
-  const runShift = useCallback((tasks: readonly Task[], shift: number, choice: RepeatChoice) => {
-    run.current(planShift(tasks, shift, choice, engineZone(), new Date()), shift);
-  }, []);
+  const runShift = useCallback(
+    (tasks: readonly Task[], shift: number, choice: RepeatChoice, alsoUndo?: () => void) => {
+      run.current(planShift(tasks, shift, choice, engineZone(), new Date()), shift, alsoUndo);
+    },
+    [],
+  );
 
   const runDay = useCallback((task: Task, day: string, choice: RepeatChoice) => {
     const from = dueKeyOf(task);
@@ -106,16 +132,17 @@ export function useTimelineWrites(api: TasksModuleApi, zoom: TimelineZoom): Time
   }, []);
 
   const shiftTasks = useCallback(
-    (tasks: readonly Task[], shift: number) => {
+    (tasks: readonly Task[], shift: number, alsoUndo?: () => void) => {
       if (shift === 0 || tasks.length === 0) return;
       if (tasks.some(asksAboutRepeat)) {
-        setAsk({ kind: "shift", taskIds: tasks.map((t) => t.id), shift });
+        setAsk({ kind: "shift", taskIds: tasks.map((t) => t.id), shift, alsoUndo });
         return;
       }
-      runShift(tasks, shift, "one");
+      runShift(tasks, shift, "one", alsoUndo);
     },
     [runShift],
   );
+  shiftRef.current = shiftTasks;
 
   const placeTask = useCallback(
     (taskId: string, day: number) => {
@@ -266,8 +293,9 @@ export function useTimelineWrites(api: TasksModuleApi, zoom: TimelineZoom): Time
       onChoose={(choice) => {
         const current = ask;
         setAsk(null);
-        if (current?.kind === "shift") runShift(askTasks, current.shift, choice);
-        else if (current?.kind === "day" && askTasks[0]) runDay(askTasks[0], current.day, choice);
+        if (current?.kind === "shift") {
+          runShift(askTasks, current.shift, choice, current.alsoUndo);
+        } else if (current?.kind === "day" && askTasks[0]) runDay(askTasks[0], current.day, choice);
       }}
       onClose={() => setAsk(null)}
     />

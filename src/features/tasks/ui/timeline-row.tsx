@@ -22,7 +22,7 @@ import { AssigneeAvatar } from "./assignee-avatar";
 import type { TaskRowActions } from "./row-facts";
 import { type TaskCommand, TaskContextMenu } from "./task-context-menu";
 import { TitleEditor } from "./task-row";
-import { ContradictionMark, DepStubs } from "./timeline-deps-layer";
+import { ContradictionMark, type DepStub, DepStubs } from "./timeline-deps-layer";
 import {
   CreateGhost,
   OffscreenHint,
@@ -41,7 +41,7 @@ import { TimelineTaskCommand } from "./timeline-row-commands";
 export { timelineRowDomId };
 
 /** The selected task's lines' ends the canvas doesn't draw (68b). */
-export type RowStubs = { before: readonly string[]; after: readonly string[] };
+export type RowStubs = { before: readonly DepStub[]; after: readonly DepStub[] };
 
 /** What a row can ask of the view: one object for the life of the view. */
 export type TimelineRowHandlers = {

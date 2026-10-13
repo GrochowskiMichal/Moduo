@@ -135,7 +135,14 @@ export function TimelineDepsLayer({
     };
     const el = scrollerRef.current;
     el?.addEventListener("scroll", later, { passive: true });
-    const off = canvas.subscribe(later);
+    // Only a drag moves points (a hover's ghost or task redraws through props).
+    let drag = canvas.getDrag();
+    const off = canvas.subscribe(() => {
+      const next = canvas.getDrag();
+      if (next === drag) return;
+      drag = next;
+      later();
+    });
     return () => {
       el?.removeEventListener("scroll", later);
       off();
@@ -259,14 +266,17 @@ export function ContradictionMark({
  * "↗ Website · Fix nav", "Fix nav · no date". Those it waits on sit left of
  * its point; those waiting on it, right.
  */
+/** One undrawn end: the other task's id and what the stub says. */
+export type DepStub = { id: string; text: string };
+
 export function DepStubs({
   day,
   before,
   after,
 }: {
   day: number;
-  before: readonly string[];
-  after: readonly string[];
+  before: readonly DepStub[];
+  after: readonly DepStub[];
 }) {
   const { range, dw } = useTimelineGeometry();
   const x = dayCenterX(range, dw, day);
@@ -280,9 +290,9 @@ export function DepStubs({
           className="pointer-events-none absolute top-1/2 z-[2] flex -translate-x-full -translate-y-1/2 gap-1"
           style={{ left: x - 26 }}
         >
-          {before.map((text) => (
-            <span key={text} className={chip}>
-              {text}
+          {before.map((stub) => (
+            <span key={stub.id} className={chip}>
+              {stub.text}
             </span>
           ))}
         </span>
@@ -293,9 +303,9 @@ export function DepStubs({
           className="pointer-events-none absolute top-1/2 z-[2] flex -translate-y-1/2 gap-1"
           style={{ left: x + 26 }}
         >
-          {after.map((text) => (
-            <span key={text} className={chip}>
-              {text}
+          {after.map((stub) => (
+            <span key={stub.id} className={chip}>
+              {stub.text}
             </span>
           ))}
         </span>

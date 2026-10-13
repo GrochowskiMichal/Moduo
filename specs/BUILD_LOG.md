@@ -399,6 +399,30 @@ _Built and landed locally on `t/maciej/tasks-v3-build` (🟠 LOCAL BUILD MODE in
 
 **Records:** choices TL1-1…11 in decisions/tasks.md; gotchas in ui.md "The Timeline (TV-TL1)" (6); checklist [docs/testing/t-maciej-tv-tl1-timeline.md](../docs/testing/t-maciej-tv-tl1-timeline.md).
 
+- [x] **TV-TL2 — Timeline interactions** · tasks-v3 block 26 · deps: TV-TL1 · lane timeline · _done 2026-10-13 · `t/maciej/tv-tl2-timeline` → `t/maciej/tasks-v3-build` (local; no migrations)._ §6, AC9.6–9.8; REPLAN 70, 68b, 71; research §4–5; the carry-forwards from TV-TL1, TV-U12, TV-U15, RF-1.
+
+**Dragging** (`use-timeline-canvas.ts`, plain pointer events on the scroller; marks read the drag from `timeline-drag-store.ts`, so only what moves redraws): a point moves its due date (a hollow point its work session, the time kept), a diamond its section's end, a band its section's range and its ends resize, a bar the project's start and target and its ends resize (an outlined bar gets both dates). The date shows beside the mark while it moves; drags are horizontal only (nothing refiles or reassigns); a press under 4 px is a click; Esc cancels; near the canvas's left or right edge the view scrolls by itself; the day is always the one under the raw pointer. A selection (TV-U12's ⇧/⌘-click, ⇧↑↓, ⌘A, now on the Timeline) moves together.
+
+**Clicking a day:** a row with no date shows a dashed ghost under the pointer ("Set due · Fri, Oct 17", "Ends …", a bar 7/14/30/90 days by zoom); a click dates it, a drag along a section's or project's row draws a range. The empty sentence is call 71's ("Click a day on a row, or open No date.").
+
+**Saving** (`use-timeline-writes.tsx`): one store write and one Undo per change: tasks through `bulkWrite` (now with `scheduledAt` via `tasks_op_reschedule`, the shown session moving with it, and a toast `followUp` link), sections through the module's new `setSectionDates`, projects through `setProjectDates` (Undo keeps a newer change). A repeat asks TV-U15's question; moving a task later offers "Also move the n that wait on this" in its toast.
+
+**Keys** (`timeline-keys.ts`): ⌥←/→ (⌥⇧ a week) on the cursor row (task, section, project) or a selection; `d` the due picker; ⇧D clears; ⇧T fits (never zooms in); ⇧↑↓, ⌘A, Esc (selection, then cursor). With several selected the bulk bar's keys go first except the date and cursor keys.
+
+**Dependencies** (`timeline-deps.ts`, `timeline-deps-layer.tsx`): Display → Dependencies Off · Selected (default: the selected and hovered task's lines) · All; short elbow lines under the rows, measured from the rows on screen; a task due before what it waits on gets a backwards dashed late-tone line and a quiet mark whose popover offers "Move to <day after>"; stubs for the selected task's undrawn ends ("· no date", "↗ Website · …"). A relation to a task outside the reader's copy draws nothing.
+
+**No date** (`timeline-no-date-panel.tsx`, `panel-views.ts` `nodate`): "No date · n" opens the right panel (if closed) on its No date view (alongside, only while the Timeline shows): the place's undated open tasks by project, searchable, virtual; drag one onto the canvas (the page's one `DndContext`, one droppable `timeline-axis`, `use-timeline-drop.tsx`) and it's due that day; a click opens its details. The tray's drag source is now `"no-date"`.
+
+**Who can drag:** Edit in the workspace and, inside a project, on the project (`useProjectEditable`, asked once by the page); without it no grab cursor, ends, ghost, ⌥-move or draggable No date row.
+
+**Tests:** `timeline-drag.test.ts` (11), `timeline-deps.test.ts` (9), `timeline-keys.test.ts` (+1), `timeline-rows.test.ts` (+1, `undatedTasks` = the canvas's count), `use-tasks-module.bulk.test.tsx` (+1: a session moved through the reschedule op, Undo, the follow-up), `display.test.ts`, `panel-registry.test.ts`; `tests/tasks-timeline.spec.ts` "drag, create, keyboard, dependencies" (AC9.6–9.8) on the local stack: a point dragged and undone, ⌥→/⌥⇧→ and back, the backwards line and "Move to …", a blocker dragged and "Also move the one that waits on this", a diamond, a band and the project bar's end (⇧T first), an undated section's ghost and click, No date's panel and a drop onto today. `bun run verify` green.
+
+**Live-verified** on the local stack through that spec, screenshots checked (checklist).
+
+**Reviews:** one validator round (the lighter gate). The MAJOR is fixed: Enter or Space on a No date row started a keyboard drag that could never land and swallowed the click that opens it; the drag's activator is now the row, not its button (`timeline-no-date-panel.test.tsx` proves the keys reach the button). MINORs fixed: "Also move…" reads the waiting tasks as they are when clicked, asks about repeats, and its Undo puts the first move back too (`bulkWrite`'s `followUp` hands its own Undo on, `alsoUndo`); the stale DF-22 and drop-time gotchas are rewritten; the header comments no longer over-promise. NITs fixed: stub keys, a window blur ends a press, the lines re-measure only when a drag moves, no text selection while dragging. Left for the polish batch (checklist): handles at All for a project shared view-only (TL2-14), a drop over the name column, the contradiction mark's keyboard reach, untested paths.
+
+**Records:** choices TL2-1…16 in decisions/tasks.md; gotchas in ui.md "The Timeline's canvas (TV-TL2)" (4); checklist [docs/testing/t-maciej-tv-tl2-timeline.md](../docs/testing/t-maciej-tv-tl2-timeline.md).
+
 ## Transactional email — every email Moduo sends · [`specs/transactional-email.md`](./transactional-email.md)
 
 - [x] **TX-1 — Email kit (shared templates, palette, plain text, .ics, Storybook gallery, logo image names, `EMAIL_KINDS`)** · deps: — · _2026-10-08 · `t/maciej/tx-1-email-kit`_ (logo PNGs come from BRAND-1's `public/email/` exports under the size contract in `_shared/email/assets.ts`)

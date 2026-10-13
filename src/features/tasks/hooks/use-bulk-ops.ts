@@ -114,9 +114,16 @@ export type BulkWriteOptions = {
   /**
    * A quiet follow-up in the toast's body, offered once the change saved
    * (the Timeline's "Also move the 3 that wait on this", TV-TL2). It gets the
-   * ids that changed; clicking it closes the toast without undoing.
+   * ids that changed and this change's own Undo: clicking the link closes this
+   * toast, so the follow-up's write hands that Undo on (`alsoUndo`) and one
+   * Undo puts both back.
    */
-  followUp?: (changed: readonly string[]) => { label: string; onClick: () => void } | null;
+  followUp?: (
+    changed: readonly string[],
+    undoThis: () => void,
+  ) => { label: string; onClick: () => void } | null;
+  /** Undo of this write also undoes this (the change it followed up). */
+  alsoUndo?: () => void;
 };
 
 /** One task's planned write, with the row it started from. */
@@ -451,69 +458,79 @@ export function useBulkOps(deps: BulkOpsDeps) {
         if (mainRefused.length > 0) toast(text.title, { description: text.description });
         return changed.map((p) => p.write.taskId);
       }
-      const followUp = opts.followUp?.(changed.map((p) => p.write.taskId)) ?? undefined;
+      // This change's Undo: what each task changed goes back, unless it changed since.
+      const undoThis = () => {
+        const reverse: BulkWrite[] = [];
+        let kept = 0;
+        for (const p of changed) {
+          const after = saved.get(p.write.taskId);
+          const current = tasksRef.current.find((t) => t.id === p.write.taskId);
+          if (!after || !current || current.deletedAt) continue;
+          const back: BulkWrite = { taskId: p.write.taskId };
+          let keptHere = false;
+          const drop = undoWrite({ write: p.write, before: p.before, after, current });
+          if (drop.write) Object.assign(back, drop.write);
+          if (drop.kept.length > 0) keptHere = true;
+          if (p.write.dueDate !== undefined || p.write.occurrenceOn !== undefined) {
+            const day = dueDayOf(current);
+            if (day !== dueDayOf(after)) keptHere = true;
+            else if (day !== dueDayOf(p.before)) {
+              const was = dueDayOf(p.before);
+              if (p.write.occurrenceOn !== undefined && was) back.occurrenceOn = was;
+              else back.dueDate = p.before.dueDate ?? null;
+            }
+          }
+          if (p.write.recurrence !== undefined && p.category === undefined) {
+            if (current.recurrence?.rrule === after.recurrence?.rrule) {
+              back.recurrence = p.before.recurrence ?? null;
+            } else keptHere = true;
+          }
+          // A moved session goes back, unless it moved again since.
+          if (p.write.scheduledAt !== undefined && p.before.scheduledAt) {
+            if (current.scheduledAt === after.scheduledAt) {
+              if (current.scheduledAt !== p.before.scheduledAt) {
+                back.scheduledAt = p.before.scheduledAt;
+              }
+            } else keptHere = true;
+          }
+          // A status going back takes its repeat rule back too, unless the
+          // rule was edited since (as a drop's Undo does).
+          if (back.status !== undefined) {
+            back.recurrence =
+              JSON.stringify(current.recurrence) === JSON.stringify(after.recurrence)
+                ? (p.before.recurrence ?? null)
+                : (current.recurrence ?? null);
+          }
+          if (keptHere) kept += 1;
+          if (Object.keys(back).length > 1) reverse.push(back);
+        }
+        if (kept > 0) toast(`Undo kept a newer change to ${tasksWord(kept)}.`);
+        if (reverse.length === 0) return;
+        void latestBulkWrite
+          .current(reverse, { label: () => "Undone", undoable: false })
+          .then((back) => {
+            // Back to open from a check-off that closed it: its queue place too.
+            const queuedBefore = new Set(lineupBefore);
+            for (const id of back) {
+              const p = changed.find((c) => c.write.taskId === id);
+              if (p?.category !== undefined && queuedBefore.has(id)) {
+                restoreQueuePlace(id, lineupBefore);
+              }
+            }
+          });
+      };
+      const followUp =
+        opts.followUp?.(
+          changed.map((p) => p.write.taskId),
+          undoThis,
+        ) ?? undefined;
       undoToast(text.title, {
         description: text.description,
         link: followUp,
         onUndo: () => {
-          const reverse: BulkWrite[] = [];
-          let kept = 0;
-          for (const p of changed) {
-            const after = saved.get(p.write.taskId);
-            const current = tasksRef.current.find((t) => t.id === p.write.taskId);
-            if (!after || !current || current.deletedAt) continue;
-            const back: BulkWrite = { taskId: p.write.taskId };
-            let keptHere = false;
-            const drop = undoWrite({ write: p.write, before: p.before, after, current });
-            if (drop.write) Object.assign(back, drop.write);
-            if (drop.kept.length > 0) keptHere = true;
-            if (p.write.dueDate !== undefined || p.write.occurrenceOn !== undefined) {
-              const day = dueDayOf(current);
-              if (day !== dueDayOf(after)) keptHere = true;
-              else if (day !== dueDayOf(p.before)) {
-                const was = dueDayOf(p.before);
-                if (p.write.occurrenceOn !== undefined && was) back.occurrenceOn = was;
-                else back.dueDate = p.before.dueDate ?? null;
-              }
-            }
-            if (p.write.recurrence !== undefined && p.category === undefined) {
-              if (current.recurrence?.rrule === after.recurrence?.rrule) {
-                back.recurrence = p.before.recurrence ?? null;
-              } else keptHere = true;
-            }
-            // A moved session goes back, unless it moved again since.
-            if (p.write.scheduledAt !== undefined && p.before.scheduledAt) {
-              if (current.scheduledAt === after.scheduledAt) {
-                if (current.scheduledAt !== p.before.scheduledAt) {
-                  back.scheduledAt = p.before.scheduledAt;
-                }
-              } else keptHere = true;
-            }
-            // A status going back takes its repeat rule back too, unless the
-            // rule was edited since (as a drop's Undo does).
-            if (back.status !== undefined) {
-              back.recurrence =
-                JSON.stringify(current.recurrence) === JSON.stringify(after.recurrence)
-                  ? (p.before.recurrence ?? null)
-                  : (current.recurrence ?? null);
-            }
-            if (keptHere) kept += 1;
-            if (Object.keys(back).length > 1) reverse.push(back);
-          }
-          if (kept > 0) toast(`Undo kept a newer change to ${tasksWord(kept)}.`);
-          if (reverse.length === 0) return;
-          void latestBulkWrite
-            .current(reverse, { label: () => "Undone", undoable: false })
-            .then((back) => {
-              // Back to open from a check-off that closed it: its queue place too.
-              const queuedBefore = new Set(lineupBefore);
-              for (const id of back) {
-                const p = changed.find((c) => c.write.taskId === id);
-                if (p?.category !== undefined && queuedBefore.has(id)) {
-                  restoreQueuePlace(id, lineupBefore);
-                }
-              }
-            });
+          undoThis();
+          // A follow-up's Undo puts back the change it followed, too.
+          opts.alsoUndo?.();
         },
       });
       return changed.map((p) => p.write.taskId);

@@ -2,6 +2,91 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index.
 
+## 2026-10-13 · TV-TL2 Timeline interactions — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 26 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §6, AC9.6–9.8; REPLAN 70, 68b, 71; research `.design/tasks-v3/research/timeline-competitors.md` §4–5; the carry-forwards from TV-TL1, TV-U12, TV-U15 and RF-1) on the local stack, no migration. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to change.
+
+- **TL2-1 · A selection moves together; spans move one at a time** → `use-timeline-canvas.ts`, `use-timeline-writes.tsx`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: dragging a selected task's point (TV-U12's selection: ⇧/⌘-click, ⇧↑↓, ⌘A) moves every selected task the same number of days, as one write with one Undo ("Moved 3 tasks 3 days later"); ⌥←/→ does the same. Bars, bands and diamonds always move alone.
+  - Why: 70 ("select several and they move together"); a project and a phase are different things to move, and the bulk bar already covers mixed edits.
+  - Rejected: no multi-drag on the Timeline; dragging a mixed selection of tasks, sections and projects.
+- **TL2-2 · The canvas drags with plain pointer events; only No date's drop uses the page's drag context** → `use-timeline-canvas.ts`, `use-timeline-drop.tsx`, `tasks-plan-view.tsx`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: one set of listeners on the scroller finds what a press grabbed by the marks' data attributes; the day is always the one under the raw pointer, read against the canvas as it is (an edge scroll or a grown range can't drift it). A task from the No date view is a dnd-kit drag in the page's one context (DF-22) onto one droppable, the whole canvas; the day comes from the pointer at the drop. The old tray source is now `"no-date"`.
+  - Why: horizontal-only drags with a live date label don't fit dnd-kit's sortable model; a cross-pane drag does.
+  - Rejected: a nested drag context for the Timeline (the panel is outside it); per-day droppables.
+- **TL2-3 · A drag only changes dates** → `use-timeline-canvas.ts`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: drags are horizontal; moving the pointer to another row changes nothing about project, section or assignee. A press that doesn't travel 4 px is a click (it selects).
+  - Why: 70 ("nothing drags between groups, so dragging never reassigns").
+  - Rejected: dropping a point on another section's row to refile it.
+- **TL2-4 · Clicking a day dates only a row that has no date; a ghost shows what it will set** → `timeline-marks.tsx` `CreateGhost`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: a task row with no point (Show → No date), a section with no dates and a project with no bar show a dashed ghost under the pointer ("Set due · Fri, Oct 17", "Ends …", a bar); a click sets the task's due date, the section's end date, or a project bar as long as the zoom suggests (Week 7, Month 14, Quarter 30, Year 90 days); dragging along the row draws a section's range or a project's bar. A row with a date selects on click as before.
+  - Why: 70 and research §4 (Notion's phantom, Jira's 7/14/30 days); on a dated row a click must still select.
+  - Rejected: a click anywhere setting the date (it would fight selection); task start dates.
+- **TL2-5 · Dragging an outlined bar gives the project its dates** → `use-timeline-canvas.ts`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: an outline (worked out from its work) moves or resizes like a solid bar; on drop the project gets both a start and a target and the bar turns solid. Its phases and tasks keep their own dates.
+  - Why: 68a: the outline means "no dates of its own yet"; a drag is the person setting them.
+  - Rejected: an inert outline; moving the work inside with it (silent cascades, 70).
+- **TL2-6 · Every change is one store write and one Undo, through the existing engines** → `hooks/use-bulk-ops.ts`, `hooks/use-tasks-module.ts`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: tasks (one or a selection) save through `bulkWrite`, which gained `scheduledAt` (`tasks_op_reschedule`, the shown session moving with it) and a toast follow-up link; sections through the new `setSectionDates`, projects through `setProjectDates`, each with an Undo that keeps a newer change.
+  - Why: the carry-forward ("one begin/settle and one Undo per drag"); TV-U12's engine already says "3 of 4 changed" and undoes per task.
+  - Rejected: a Timeline-only write path.
+- **TL2-7 · A hollow point moves its work session, time of day kept** → `timeline-drag.ts` `planShift`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: a task with only sessions moves the session it shows by whole days at the same clock time (the reschedule op moves the session that started at the old time; the canvas moves it at once).
+  - Why: TL1's note and gotchas/ui.md (a view placing rows by the session mirror moves it through the reschedule op).
+  - Rejected: giving the task a due date when its hollow point is dragged.
+- **TL2-8 · A repeat asks; "Also move" takes occurrences** → `use-timeline-writes.tsx`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: dragging, ⌥-moving or dating a repeat's point asks TV-U15's question (Just this one · Change the pattern); a selection with repeats asks once for all. The tasks "Also move" brings along move just their occurrence, without asking.
+  - Why: TV-D12's two ways; a follow-up shouldn't open a dialog of its own.
+  - Rejected: always moving the pattern.
+- **TL2-9 · "Also move the n that wait on this" only when a task moves later** → `timeline-deps.ts` `waitingOn`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: after a move later, the toast offers to move its open, dated, direct dependents by the same days (a link in the toast; they're read as they are when clicked, a repeat among them asks). That second write's Undo puts both moves back (the first toast closes when the link is used). Moving earlier offers nothing.
+  - Why: 70 ("never silently moves the ones after it; it offers"); moving earlier can't make anything contradict.
+  - Rejected: research §5's automatic push; chains of dependents.
+- **TL2-10 · Lines for the selected or hovered task; Display → Dependencies: Off · Selected · All** → `display.ts`, `timeline-deps-layer.tsx`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: Selected by default (the selected task's and the hovered one's lines); All draws every line between rows on screen; Off hides lines and marks. A short path from the blocker's point into the waiting one's; a waiting task due first gets it backwards, dashed, in the late tone; the same day is a hook. Lines never reach a task the reader doesn't have: a relation whose other end isn't in their copy draws nothing (not even "Private item": in the copy a hidden blocker can't be told from a deleted one). A finished blocker Show done hides draws nothing.
+  - Why: 70 and 68b; RF-1's rule that nothing reveals what you can't see; research's "lines only for on-screen items" at 2,000 tasks.
+  - Rejected: always-on lines; a "Private item" stub.
+- **TL2-11 · A contradicting date is a quiet mark with one fix** → `timeline-deps-layer.tsx` `ContradictionMark`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: an open task due before an open task it waits on gets a small late-tone mark left of its point; hover: "Waits on “Export logo files”, due Nov 7, after this"; a click offers "Move to Nov 8" (the day after its latest blocker). Someone who can't edit sees the words only. Off with Dependencies → Off.
+  - Why: 68b ("mirrors, not walls").
+  - Rejected: refusing the date; a red mark.
+- **TL2-12 · The selected task's undrawn ends show as stubs** → `timeline-deps-layer.tsx` `DepStubs`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: "Fix nav · no date", "↗ Website · Fix nav" (another project), "↗ Fix nav" (filtered out or folded away): what it waits on left of its point, what waits on it right; only for one selected task.
+  - Why: 68b's table of arrows with nowhere to go.
+  - Rejected: lines to a folded group's header (more drawing for the same fact).
+- **TL2-13 · The keys** → `timeline-keys.ts`, `task-timeline-view.tsx`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: ⌥←/→ (⌥⇧ a week) moves the cursor row's dates (a task, a section's range or end, a project's bar) or a selection's; `d` opens the due picker at the row; ⇧D clears due dates; ⇧T fits the selection (scrolls to it; zooms out only if it doesn't fit, never in); ⇧↑↓ extends and ⌘A selects every task row; Esc clears a selection, then the cursor. With several selected, the bulk bar's keys come first (d its date picker, Space, ⌫…) except the view's date and cursor keys.
+  - Why: keymap.md "Timeline" and rules 1–2.
+  - Rejected: F for fit (Filter's).
+- **TL2-14 · Who sees handles** → `tasks-plan-view.tsx` (`timelineCanDrag`), `task-timeline-view.tsx`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: drags, ghosts, resize ends, ⌥-moves and the No date list's drag need Edit: the workspace's, and inside a project the project's own (one question, D15-11's). Without it nothing offers a drag. Across projects (All, My tasks…) the workspace's Edit decides and the server checks each write.
+  - Why: the carry-forward ("don't let them drag and then get refused"); one access question per project at All would be dozens of calls.
+  - Rejected: asking per project or per task on every place.
+- **TL2-15 · No date is a right-panel view beside the Timeline** → `panel-views.ts`, `timeline-no-date-panel.tsx`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: "No date · n" opens the panel (if closed) on No date (group *alongside*, offered only while the Timeline shows): the place's open tasks with no date and no session, by project (Inbox first), searchable, drawn as a virtual list; drag one onto a day; a click opens its details. Display → Show → No date (rows on the canvas) stays.
+  - Why: 70, 72 and research §4 ("a panel on the right").
+  - Rejected: the bottom tray (48b).
+- **TL2-16 · Edge scroll is horizontal and speeds up** → `timeline-drag.ts` `autoScrollStep`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: within 48 px of the canvas's left or right edge (or past it) the view scrolls by itself, up to 24 px a frame, faster the closer the pointer.
+  - Why: 70; drags are horizontal, so vertical scrolling would only lose your row.
+  - Rejected: a fixed speed.
+
 ## 2026-10-13 · TV-TL1 Timeline rebuild I — the agent's choices (deferred to by Maciej)
 
 Built in tasks-v3 block 25 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §6; REPLAN 67–71, 68a, 46a, 48b; research `.design/tasks-v3/research/timeline-competitors.md`; prototype round-2a frames 4–5) on the local stack, no migration. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to change.
