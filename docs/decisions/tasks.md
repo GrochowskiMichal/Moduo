@@ -2,24 +2,24 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index.
 
-## 2026-10-13 · TV-SEC1 The access check answers only for the caller unless a server function asks — the agent's choices (deferred to by Maciej)
+## 2026-10-13 · TV-SEC1 The access check answers only for the caller unless called from a server function — the agent's choices (deferred to by Maciej)
 
 Built as a follow-up data block (migration `20261013260000_access_check_caller`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to change.
 
-- **SEC1-1 · `public.can_access` is a front door; the rules live in `private.can_access`** → TV-SEC1
+- **SEC1-1 · Two forms of `can_access`: the caller's (three arguments) and the rules (four, server only)** → TV-SEC1
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (shape proposed by the orchestrator).
+  - Decision: `can_access(type, id, min)` is what clients, row-level security policies and any code asking about the caller use; it always answers for `perm_actor_id()` (the signed-in person or a key's person) and takes no person. `can_access(type, id, min, user)` holds the rules; only SECURITY DEFINER functions (as their owner) and the service role call it. It has no default, so a three-argument call always means the caller's form. Policies keep their text and call the three-argument form.
+  - Why: the client surface takes no person at all, so nothing depends on telling a client's request from a server function's; every server helper keeps its call unchanged.
+  - Rejected: one function that decides from `current_user` whether to answer about someone else (an invoker layer over a definer; correct, but every reader has to know who `current_user` is in each context); renaming the server form (about 80 callers re-cut).
+- **SEC1-2 · The caller's form answers false for an item that doesn't exist or isn't theirs; the rules' form refuses a client outright** → TV-SEC1
   - Who: agent's choice, deferred to by Maciej, 2026-10-13.
-  - Decision: `public.can_access(type, id, min, user)` keeps its signature and grants and becomes a SECURITY INVOKER SQL function. Asked in a signed-in client's request, it answers only for that client; a question naming anyone else reads false. Asked by a server function (owned by `postgres` or `supabase_admin`) or the service role, it answers for whoever is named. The rules move unchanged into `private.can_access` (SECURITY DEFINER), which the API doesn't serve; `authenticated` and `service_role` get USAGE on `private` so the front door can reach it.
-  - Why: inside a SECURITY DEFINER function `current_user` is the owner, so only an invoker layer can tell a client's question from a server function's. Keeping the name and signature keeps every policy (they depend on the function's id), op and server helper unchanged.
-  - Rejected: a GUC or call-stack check inside the definer (forgeable or fragile); moving every server helper to a new name (about 50 functions re-cut, and a forgotten one silently reads false); a second exposed self-only definer in `public` (two definer hops per row, and `__` helpers must stay unexposed).
-- **SEC1-2 · Someone else reads false, the same as a missing item** → TV-SEC1
+  - Decision: the three-argument form returns a boolean (policies and `coalesce(…, false)` callers expect one); a client calling the four-argument form gets 42501.
+  - Rejected: answering false on the four-argument form (it would look like a working call).
+- **SEC1-3 · Helpers that answer about a named person are for server functions; the assign warning is for people who can assign** → TV-SEC1
   - Who: agent's choice, deferred to by Maciej, 2026-10-13.
-  - Decision: no error. Policies, `coalesce(…, false)` callers and the app all expect a boolean.
-  - Rejected: raising a refusal (would turn a policy check into a failed read).
-- **SEC1-3 · Person-level helpers are server-only; the assign warning asks only about people in the workspace** → TV-SEC1
-  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
-  - Decision: `share_direct_rank`, `perm_ceiling_rank` and `chat_is_workspace_member` lose client EXECUTE (only definer functions call them; no policy, view or app code does). `share_assign_preview` asks about the person being assigned by design, so it stays callable, now only about someone who works in the project's workspace.
-  - Why: the same rule as the access check, where a helper names a person.
-  - Rejected: a front door for each helper (no client needs them).
+  - Decision: only server functions and the service role call `share_direct_rank`, `perm_ceiling_rank` and `chat_is_workspace_member` (no policy, view or app code does). `share_assign_preview` names a person by design, so it answers to someone with Edit on the project or on a live task in it, about someone who works in the project's workspace.
+  - Why: the same rule as the access check wherever a helper takes a person.
+  - Rejected: removing the assign warning; a caller's form for each helper (no client needs them).
 
 ## 2026-10-13 · TV-D16 Agents and MCP v3 — the agent's choices (deferred to by Maciej)
 
