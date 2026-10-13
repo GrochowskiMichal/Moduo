@@ -2,6 +2,7 @@ import {
   isBacklogTask,
   isClosedTask,
   isOpenTask,
+  type ProjectState,
   type TaskStatusCategory,
 } from "@contracts/vocabularies";
 import {
@@ -268,10 +269,11 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     },
     [sidebarPrefs, workspaceId],
   );
-  // A project's Delete… and Archive… confirms (REPLAN 78), from the sidebar or
-  // Archived projects. The project is kept while the dialog closes.
+  // A project's Delete…, Archive… and Done confirms (REPLAN 78), from the
+  // sidebar, Archived projects or the overview (TV-U16). The project is kept
+  // while the dialog closes.
   const [projectDialog, setProjectDialog] = useState<{
-    kind: "delete" | "archive";
+    kind: "delete" | "archive" | "done";
     bucket: Bucket;
     open: boolean;
   } | null>(null);
@@ -1010,6 +1012,18 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     },
     [api],
   );
+  // A project's state from its overview (TV-U16): Done with open work asks
+  // first, like Archive (REPLAN 78); Active and On hold just save.
+  const requestProjectState = useCallback(
+    (bucket: Bucket, state: ProjectState) => {
+      if (state === "done" && projectOpenWork(api.tasks, bucket.id).open.length > 0) {
+        setProjectDialog({ kind: "done", bucket, open: true });
+        return;
+      }
+      api.setProjectState(bucket.id, state);
+    },
+    [api],
+  );
   const checkProjectAccess = useCallback(
     async (projectId: string) =>
       runtime ? (await runtime.tasks.projectAccess({ projectId })).canManage : true,
@@ -1164,6 +1178,15 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   // task's bucket unless the current scope already shows it. A bucket id (a
   // `project` link) scopes the rail; a stale or archived id clears quietly and
   // the backstop above picks the default (AC: no crash).
+  // What a link can open: live tasks and projects, and archived ones (TV-U16).
+  const linkable = useMemo(
+    () => ({
+      tasks: api.archivedTasks.length > 0 ? [...tasks, ...api.archivedTasks] : tasks,
+      buckets: api.archivedBuckets.length > 0 ? [...buckets, ...api.archivedBuckets] : buckets,
+      inboxId,
+    }),
+    [tasks, buckets, inboxId, api.archivedTasks, api.archivedBuckets],
+  );
   useEffect(() => {
     if (api.loading || api.error) return;
     if (!urlTaskId) {
@@ -1180,7 +1203,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     if (
       !api.restLoaded &&
       !looksLikeHandle(urlTaskId) &&
-      resolveTasksDeepLink(urlTaskId, { tasks, buckets, inboxId }).kind === "none"
+      resolveTasksDeepLink(urlTaskId, linkable).kind === "none"
     ) {
       return;
     }
@@ -1212,7 +1235,9 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     }
     // Won't do tasks open too: the selected one stays in scope with Reopen
     // (see `keptArchivedId`). A task in a project you can't see opens in All.
-    const target = resolveTasksDeepLink(urlTaskId, { tasks, buckets, inboxId });
+    // An archived project's task opens too, in its project, read-only (search
+    // finds it, labelled "Archived": REPLAN 78, TV-U16).
+    const target = resolveTasksDeepLink(urlTaskId, linkable);
     if (target.kind === "none") {
       // A link someone followed (a notification, a chip) to a task you can't
       // open says so, never lands on another task (AC1.10). A stale id that
@@ -1239,8 +1264,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     api.restLoaded,
     urlTaskId,
     tasks,
-    buckets,
-    inboxId,
+    linkable,
     scopeTasksAll,
     onUrlTaskIdChange,
     taskKey,
@@ -1836,10 +1860,28 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   const scopeProject =
     buckets.find((b) => b.id === selection && !b.isSystem) ?? archivedProject ?? null;
   const panelProject = selectedTask
-    ? (buckets.find((b) => b.id === selectedTask.bucketId && !b.isSystem) ?? null)
+    ? (buckets.find((b) => b.id === selectedTask.bucketId && !b.isSystem) ??
+      // A task of an archived project shows that project, read-only (TV-U16).
+      api.archivedBuckets.find((b) => b.id === selectedTask.bucketId) ??
+      null)
     : scopeProject;
   const projectView = panelProject ? (
-    <ProjectPanel project={panelProject} tasks={api.tasks} sections={api.sections} />
+    <ProjectPanel
+      project={panelProject}
+      tasks={panelProject.archivedAt ? api.archivedTasks : api.tasks}
+      sections={api.sections}
+      completions={api.completions}
+      waiting={api.waiting}
+      canEdit={canEdit}
+      onSetState={requestProjectState}
+      onEdit={(id, patch) => void api.updateProjectFields(id, patch)}
+      onOpenTask={(id) => {
+        setPanelView("details");
+        onUrlTaskIdChange(id);
+      }}
+      onArchive={requestArchive}
+      onDuplicate={offersTemplates ? templateActions.requestDuplicate : undefined}
+    />
   ) : null;
   // Nothing selected inside a project, or a task in the centre: the panel
   // shows Project (the one exception to "the panel remembers its view").
@@ -1966,6 +2008,17 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
         onCloseAutoFocus={(event) =>
           restoreNavFocus(event, railNavRef.current, projectDialog?.bucket.id ?? null)
         }
+      />
+      <ArchiveProjectDialog
+        bucket={projectDialog?.kind === "done" ? projectDialog.bucket : null}
+        open={projectDialog?.kind === "done" && projectDialog.open}
+        intent="done"
+        openCount={
+          projectDialog ? projectOpenWork(api.tasks, projectDialog.bucket.id).open.length : 0
+        }
+        projects={buckets}
+        onConfirm={(bucket, openTasks) => api.setProjectState(bucket.id, "done", openTasks)}
+        onClose={() => setProjectDialog((prev) => (prev ? { ...prev, open: false } : prev))}
       />
       <ArchiveProjectDialog
         bucket={projectDialog?.kind === "archive" ? projectDialog.bucket : null}

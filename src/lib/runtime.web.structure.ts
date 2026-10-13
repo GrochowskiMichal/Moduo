@@ -56,6 +56,8 @@ export type ProjectFields = {
   color?: string | null;
   /** TV-U6: archive (true) or unarchive (false). Needs Full access. */
   archived?: boolean;
+  /** TV-U16: plain text, up to 20,000 characters; null or "" clears it. */
+  description?: string | null;
 };
 
 export type SectionFields = {
@@ -117,6 +119,7 @@ const PROJECT_KEYS: Record<Exclude<keyof ProjectFields, "archived">, string> = {
   areaId: "area_id",
   position: "position",
   color: "color",
+  description: "description",
 };
 
 /** Project fields as the ops take them (snake_case, only the keys given).

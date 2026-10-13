@@ -619,6 +619,8 @@ export function bucketRowToModel(raw: unknown): Bucket {
     // TV-U6: the sidebar colour and archiving (absent before its migration).
     color: r.color ?? null,
     archivedAt: r.archived_at ?? null,
+    // TV-U16 (absent before its migration).
+    ...(r.description !== undefined ? { description: r.description ?? "" } : {}),
   };
 }
 

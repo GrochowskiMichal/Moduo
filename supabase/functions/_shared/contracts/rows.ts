@@ -283,6 +283,8 @@ export const bucketRowSchema = z.object({
   deleted_batch_id: optStr,
   /** The open tasks a project's delete sent to Inboxes (REPLAN 78; Restore takes back the untouched ones). */
   trash_moved_task_ids: z.union([z.array(z.string()), z.null()]).optional(),
+  /** TV-U16: the project's description (plain text, '' for none). Absent before its migration. */
+  description: optStr,
 });
 export type BucketRow = z.infer<typeof bucketRowSchema>;
 
