@@ -1216,3 +1216,34 @@ body,
     break-inside: avoid;
   }
 }
+
+/* TV-TL1 · the Timeline's grid (REPLAN 69): one hairline per unit (a day at
+   Week and Month, a week at Quarter) and a faint tint on weekends at Week and
+   Month, painted as a background so an endless canvas costs nothing to draw.
+   The view sets the geometry: --timeline-dw (a day's width), --timeline-unit
+   (the unit's width) and where the first unit line and Saturday fall
+   (--timeline-unit-x, --timeline-weekend-x). Month and year lines are
+   elements (months aren't even). */
+.timeline-grid {
+  background-image: linear-gradient(to right, var(--timeline-grid) 1px, transparent 1px);
+  background-size: var(--timeline-unit) 100%;
+  background-position-x: var(--timeline-unit-x);
+}
+
+.timeline-grid[data-weekends] {
+  background-image:
+    linear-gradient(to right, var(--timeline-grid) 1px, transparent 1px),
+    linear-gradient(
+      to right,
+      var(--timeline-weekend) calc(var(--timeline-dw) * 2),
+      transparent calc(var(--timeline-dw) * 2)
+    );
+  background-size:
+    var(--timeline-unit) 100%,
+    calc(var(--timeline-dw) * 7) 100%;
+  background-position-x: var(--timeline-unit-x), var(--timeline-weekend-x);
+}
+
+.timeline-grid[data-unit="month"] {
+  background-image: none;
+}

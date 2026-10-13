@@ -22,6 +22,13 @@ import {
 import type { Task } from "./model";
 import { DEFAULT_ROW_PROPERTIES, type RowPreset, type RowProperty } from "./row-layout";
 import { statusKeyOf } from "./statuses";
+import {
+  type TimelineGroup,
+  type TimelineScope,
+  type TimelineSubtasks,
+  timelineGroupsFor,
+} from "./timeline-rows";
+import { isTimelineZoom, type TimelineZoom } from "./timeline-scale";
 
 export type TaskLayout = "list" | "board" | "timeline";
 /** The Board's Group by (TV-U11, call 22): a drop on a column sets its
@@ -53,6 +60,11 @@ export type OrderDirection = "asc" | "desc";
 export type SubtaskMode = "nested" | "flat";
 /** Display → Rows (tasks-v3 §4): which facts a row carries. Height is Density's. */
 export type { RowPreset };
+/** The Timeline's Colour by (REPLAN 71): points take the project's hue, or their status's. */
+export type TimelineColorBy = "none" | "project" | "status";
+/** What the Timeline adds when asked (REPLAN 71): undated rows, session ticks,
+ *  repeat ghosts, the Due per week counts. Dependencies join with TV-TL2. */
+export type TimelineShow = "undated" | "sessions" | "repeats" | "duePerWeek";
 
 export type TasksDisplay = {
   layout: TaskLayout;
@@ -72,6 +84,12 @@ export type TasksDisplay = {
   subtasks: SubtaskMode;
   rows: RowPreset;
   properties: RowProperty[];
+  /** The Timeline (TV-TL1): its zoom, Group by, Colour by, extras and subtasks. */
+  timelineZoom: TimelineZoom;
+  timelineGroup: TimelineGroup;
+  colorBy: TimelineColorBy;
+  timelineShow: TimelineShow[];
+  timelineSubtasks: TimelineSubtasks;
 };
 
 /** What one scope remembers: its Display, plus its filters. */
@@ -89,7 +107,40 @@ export const TASKS_DISPLAY_DEFAULTS: TasksDisplay = {
   subtasks: "nested",
   rows: "standard",
   properties: [...DEFAULT_ROW_PROPERTIES],
+  timelineZoom: "month",
+  timelineGroup: "project",
+  colorBy: "none",
+  timelineShow: [],
+  timelineSubtasks: "hidden",
 };
+
+/** Which shape of Timeline rows a scope gets (REPLAN 67). */
+export function timelineScopeOf(scope: string): TimelineScope {
+  if (scope === "all") return { kind: "workspace" };
+  if (isProjectScope(scope)) return { kind: "project", projectId: scope };
+  return { kind: "tasks" };
+}
+
+/** What a person's role changes in the Timeline's defaults (TV-U17's roles). */
+export type TimelineRoleDefaults = { duePerWeek: boolean };
+const NO_ROLE_DEFAULTS: TimelineRoleDefaults = { duePerWeek: false };
+
+/**
+ * A scope's Timeline defaults (REPLAN 67, 69): All opens at Quarter, by area;
+ * a project at Month, by section; the rest at Month, by project. The student
+ * role turns Due per week on (call 34: roles change defaults only).
+ */
+function timelineDefaults(
+  scope: string,
+  role: TimelineRoleDefaults,
+): Pick<TasksDisplay, "timelineZoom" | "timelineGroup" | "timelineShow"> {
+  const kind = timelineScopeOf(scope).kind;
+  return {
+    timelineZoom: kind === "workspace" ? "quarter" : "month",
+    timelineGroup: timelineGroupsFor(kind)[0] ?? "none",
+    timelineShow: role.duePerWeek ? ["duePerWeek"] : [],
+  };
+}
 
 /**
  * A scope's defaults:
@@ -102,8 +153,12 @@ export const TASKS_DISPLAY_DEFAULTS: TasksDisplay = {
  * `rows` is the row preset a view starts with: the person's role's (TV-U17;
  * developers start on Detailed), Standard otherwise.
  */
-export function tasksDisplayDefaults(scope: string, rows: RowPreset = "standard"): TasksDisplay {
-  const base = { ...TASKS_DISPLAY_DEFAULTS, rows };
+export function tasksDisplayDefaults(
+  scope: string,
+  rows: RowPreset = "standard",
+  role: TimelineRoleDefaults = NO_ROLE_DEFAULTS,
+): TasksDisplay {
+  const base = { ...TASKS_DISPLAY_DEFAULTS, rows, ...timelineDefaults(scope, role) };
   if (scope === "mine") return { ...base, group: "status" };
   // Upcoming (TV-U15) groups by its days and orders its own rows; dated
   // subtasks show flat, with "↳ Parent" (research §6).
@@ -119,8 +174,9 @@ export function tasksViewDefaults(
   scope: string,
   layout?: TaskLayout,
   rows?: RowPreset,
+  role?: TimelineRoleDefaults,
 ): TasksViewPrefs {
-  const display = tasksDisplayDefaults(scope, rows);
+  const display = tasksDisplayDefaults(scope, rows, role);
   return { ...display, layout: layout ?? display.layout, filters: [] };
 }
 
@@ -319,12 +375,95 @@ const CARD_PROPERTIES_CONTROL: DisplayControl<TasksDisplay> = {
   label: "Show on cards",
 };
 
+// ── The Timeline's Display (TV-TL1, REPLAN 71) ────────────────────────────────
+
+export const TIMELINE_GROUP_LABELS: Record<TimelineGroup, string> = {
+  area: "Area",
+  section: "Section",
+  project: "Project",
+  assignee: "Assignee",
+  none: "None",
+};
+
+function timelineGroupControl(scope: string): DisplayControl<TasksDisplay> {
+  return {
+    type: "select",
+    id: "timelineGroup",
+    label: "Group by",
+    options: timelineGroupsFor(timelineScopeOf(scope).kind).map((g) => ({
+      value: g,
+      label: TIMELINE_GROUP_LABELS[g],
+    })),
+  };
+}
+
+/** Show done: the List's Completed, named for the Timeline (Hidden · 7 days · All). */
+const SHOW_DONE_CONTROL: DisplayControl<TasksDisplay> = {
+  type: "segmented",
+  id: "completed",
+  label: "Show done",
+  options: [
+    { value: "hidden", label: "Hidden" },
+    { value: "week", label: "7 days" },
+    { value: "all", label: "All" },
+  ],
+};
+
+/** Colour by: Project only across projects (inside one, every point shares its hue). */
+function colorByControl(scope: string): DisplayControl<TasksDisplay> {
+  const across = timelineScopeOf(scope).kind !== "project";
+  return {
+    type: "segmented",
+    id: "colorBy",
+    label: "Colour by",
+    options: [
+      { value: "none", label: "None" },
+      ...(across ? [{ value: "project", label: "Project" }] : []),
+      { value: "status", label: "Status" },
+    ],
+  };
+}
+
+const TIMELINE_SHOW_CONTROL: DisplayControl<TasksDisplay> = {
+  type: "toggles",
+  id: "timelineShow",
+  label: "Show",
+  options: [
+    { value: "undated", label: "No date" },
+    { value: "sessions", label: "Sessions" },
+    { value: "repeats", label: "Repeats" },
+    { value: "duePerWeek", label: "Due per week" },
+  ],
+};
+
+const TIMELINE_SUBTASKS_CONTROL: DisplayControl<TasksDisplay> = {
+  type: "segmented",
+  id: "timelineSubtasks",
+  label: "Subtasks",
+  options: [
+    { value: "hidden", label: "Hidden" },
+    { value: "nested", label: "Nested" },
+  ],
+};
+
+function timelineControls(scope: string): DisplayControl<TasksDisplay>[] {
+  return [
+    timelineGroupControl(scope),
+    SHOW_DONE_CONTROL,
+    colorByControl(scope),
+    TIMELINE_SHOW_CONTROL,
+    TIMELINE_SUBTASKS_CONTROL,
+  ];
+}
+
 /**
  * The controls a scope offers for a layout.
  * - The Queue is one ordered line-up: no grouping, order, Completed choice
  *   (done tasks leave every queue; one you check off there stays until the
  *   next load, TV-D4) or subtask nesting.
- * - The Timeline keeps its own rules: only the layout switch.
+ * - The Timeline has its own (REPLAN 71): Group by, Show done, Colour by,
+ *   Show (No date, Sessions, Repeats, Due per week) and Subtasks; its zoom
+ *   sits on its own bar.
  * - The Board has its own Group by (call 22), Lanes (85), Rows (Standard or
  *   Detailed cards) and the Description preview (AC7.4) (TV-U11).
  */
@@ -333,7 +472,7 @@ export function tasksDisplayControls(
   layout: TaskLayout = "list",
   choices: GroupChoices = ALL_CHOICES,
 ): DisplayControl<TasksDisplay>[] {
-  if (layout === "timeline") return [LAYOUT_CONTROL];
+  if (layout === "timeline") return [LAYOUT_CONTROL, ...timelineControls(scope)];
   // Upcoming's List groups by its days in its own order (TV-U15): no Group
   // by, Order by or nesting to choose.
   if (scope === "upcoming" && layout === "list") {
@@ -381,6 +520,7 @@ function scopeControls(scope: string): DisplayControl<TasksDisplay>[] {
     SUBTASKS_CONTROL,
     ROWS_CONTROL,
     PROPERTIES_CONTROL,
+    ...timelineControls(scope),
   ];
 }
 
@@ -395,6 +535,8 @@ export function sanitizeTasksView(
   const display = sanitizeDisplayValue(raw, scopeControls(scope), displayOf(defaults));
   // The direction has no control of its own (the Detailed headers set it).
   if (display.orderDir !== "asc" && display.orderDir !== "desc") display.orderDir = "asc";
+  // The zoom has no control in the menu either (the Timeline's bar sets it).
+  if (!isTimelineZoom(display.timelineZoom)) display.timelineZoom = defaults.timelineZoom;
   const stored = raw && typeof raw === "object" ? (raw as Record<string, unknown>).filters : null;
   return { ...display, filters: sanitizeTaskFilters(stored) };
 }

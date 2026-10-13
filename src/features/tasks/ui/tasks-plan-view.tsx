@@ -108,13 +108,12 @@ import {
   TEAM_BLOCK_ROWS,
   teamBlocks,
 } from "../my-tasks";
-import { defaultRowsFor, firstViewFor } from "../onboarding";
+import { defaultRowsFor, firstViewFor, timelineRoleFor } from "../onboarding";
 import { showsSortedNote, sortedByLabel } from "../order";
 import { handleLabel } from "../row-layout";
 import { resolveTasksDeepLink, taskIdForHandle } from "../search";
 import { projectDeleteSummary, projectOpenWork } from "../sidebar";
 import { useTemplateActions } from "../templates/ui/use-template-actions";
-import { sanitizeTimelineZoom, type TimelineZoom } from "../timeline-geometry";
 import { ArchivedProjectBanner, ArchivedProjectsView } from "./archived-projects-view";
 import {
   ARCHIVED_SELECTION,
@@ -219,9 +218,6 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   useEffect(() => {
     removeLS(workspaceId, "mode");
   }, [workspaceId]);
-  const [timelineZoom, setTimelineZoom] = useState<TimelineZoom>(() =>
-    sanitizeTimelineZoom(readLS(workspaceId, "timelineZoom")),
-  );
   // Which right-panel view is showing (views: features/tasks/panel-views.ts).
   const [panelView, setPanelView] = useState("details");
   // The task that fills the centre (call 32), or null for the view.
@@ -340,8 +336,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   // Focus time is saved by the app shell's sink (TV-P0, use-focus-time-saver.ts),
   // from any page; the module shows each saved total (FOCUS_TIME_SAVED_EVENT).
 
-  // Persist preferences.
-  useEffect(() => writeLS(workspaceId, "timelineZoom", timelineZoom), [workspaceId, timelineZoom]);
+  // Persist preferences (the Timeline's zoom is per scope now, in Display: TV-TL1).
   useEffect(
     () => writeLS(workspaceId, collapseKey, JSON.stringify([...collapsedGroups])),
     [workspaceId, collapseKey, collapsedGroups],
@@ -573,6 +568,8 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     groupChoices,
     // A view that remembers no Display starts on the role's rows (TV-U17).
     defaultRowsFor(onboardingRole),
+    // …and the Timeline on the role's Due per week (TV-TL1).
+    timelineRoleFor(onboardingRole),
   );
   const isHiddenByDisplay = tasksDisplay.isHidden;
   const view: PlanView = tasksDisplay.display.layout;
@@ -1136,6 +1133,15 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       if (selectedTaskId && !selectedTask) setSelectedTaskId(null);
       return;
     }
+    // The Timeline's rows are projects and sections too (TV-TL1): nothing
+    // selected is a place of its own there (a project row, Esc), never a
+    // task picked for you that the canvas doesn't show.
+    if (view === "timeline") {
+      if (selectedTaskId && !scopeTasks.some((t) => t.id === selectedTaskId)) {
+        setSelectedTaskId(null);
+      }
+      return;
+    }
     if (selectedTaskId && scopeTasks.some((t) => t.id === selectedTaskId)) return;
     if (selectedTask?.parentId && scopeTasks.some((t) => t.id === selectedTask.parentId)) return;
     // Never a completed task Display hides (TV-U1): the Board has no
@@ -1145,6 +1151,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     api.loading,
     inboundPending,
     selection,
+    view,
     selectedTaskId,
     selectedTask,
     scopeTasks,
@@ -1521,7 +1528,19 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
         )}
       />
     ) : view === "timeline" ? (
-      <TaskTimelineView {...sharedViewProps} zoom={timelineZoom} onZoomChange={setTimelineZoom} />
+      <TaskTimelineView
+        {...sharedViewProps}
+        // The Timeline's own wiring (TV-TL1): its Display, Show done, ⏎ to the
+        // full page, a project row's ⏎ to that project.
+        workspaceId={workspaceId}
+        display={tasksDisplay.display}
+        onDisplayChange={setDisplay}
+        completed={displayProps.completed}
+        stayingIds={displayProps.stayingIds}
+        taskKey={taskKey}
+        onOpenTask={setFullPageId}
+        onOpenProject={pickSelection}
+      />
     ) : (
       <TaskListView
         {...sharedViewProps}

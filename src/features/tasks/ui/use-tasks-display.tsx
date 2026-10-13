@@ -15,6 +15,7 @@ import {
   type TaskLayout,
   type TasksDisplay,
   type TasksViewPrefs,
+  type TimelineRoleDefaults,
   tasksDisplayControls,
   tasksDisplayDefaults,
   tasksDisplayKey,
@@ -57,6 +58,8 @@ export function useTasksDisplay(
   groupChoices?: GroupChoices,
   /** The row preset a view starts with (the person's role's, TV-U17). */
   rowsDefault: RowPreset = "standard",
+  /** What the person's role changes in the Timeline's defaults (Due per week). */
+  timelineRole?: TimelineRoleDefaults,
 ): {
   display: TasksDisplay;
   setDisplay: (next: TasksDisplay) => void;
@@ -68,9 +71,11 @@ export function useTasksDisplay(
 } {
   const [prefs, setPrefs] = useViewPrefs<TasksViewPrefs>(
     tasksDisplayKey(workspaceId, scope),
-    () => tasksViewDefaults(scope, fallbackLayout, rowsDefault),
+    () => tasksViewDefaults(scope, fallbackLayout, rowsDefault, timelineRole),
     (raw, defaults) => sanitizeTasksView(raw, defaults, scope),
-    rowsDefault,
+    // A new role's defaults reach a view that remembers none (a view that
+    // remembers its choices keeps them: the sanitiser reads them first).
+    `${rowsDefault}:${timelineRole?.duePerWeek ? "week" : ""}`,
   );
   const display = useMemo(() => displayOf(prefs), [prefs]);
   const filters = prefs.filters;
@@ -124,7 +129,12 @@ export function useTasksDisplay(
           setDisplay(next.order !== display.order ? { ...next, orderDir: "asc" } : next)
         }
         // Reset puts the choices back, not the layout you're looking at.
-        defaultValue={{ ...tasksDisplayDefaults(scope, rowsDefault), layout: display.layout }}
+        defaultValue={{
+          ...tasksDisplayDefaults(scope, rowsDefault, timelineRole),
+          layout: display.layout,
+          // The zoom sits on the Timeline's own bar, not in the menu: Reset keeps it.
+          timelineZoom: display.timelineZoom,
+        }}
       />
     ),
     viewProps: {
