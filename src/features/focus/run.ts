@@ -26,11 +26,13 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 
 import {
   adoptFocusRun,
+  type FocusGiveBack,
   focusClockIsHere,
   getFocusSession,
   relinquishFocus,
   STOP_UNDO_MS,
   subscribeFocusSession,
+  undoStopFocus,
   useFocusSession,
 } from "./engine";
 import type { FocusSession, FocusTaskRef } from "./engine-core";
@@ -139,6 +141,8 @@ let pendingEnd: {
 } | null = null;
 /** This store is stopping the engine itself (another device took over). */
 let relinquishing = false;
+/** Undo of a Stop is under way: the held run carries on (reconcile). */
+let undoingStop = false;
 let windowListening = false;
 let lastRefreshAt = 0;
 
@@ -265,18 +269,34 @@ function inControlOf(run: FocusRun | null): boolean {
   return !!run && run.deviceId === deviceId;
 }
 
-/** Stop this device's clock because another device has the run, without
- *  ending the run (it isn't this device's to end). */
-function stopHere(at: number): void {
+/** Stop this device's clock because another device has the run (or ended
+ *  it), without ending the run here (it isn't this device's to end). With
+ *  `takenOver`, what this device already saved after the takeover is given
+ *  back: the other device counted it too (AC8.11). */
+function stopHere(at: number, takenOver?: { runId: string }): void {
   if (!getFocusSession().tracking) return;
   relinquishing = true;
+  let giveBack: FocusGiveBack | null = null;
   try {
-    relinquishFocus(at);
+    giveBack = relinquishFocus(at);
   } finally {
     relinquishing = false;
   }
   lastSessionKey = "";
   lastSnap = null;
+  if (takenOver && giveBack?.workspaceId && rt) {
+    const runtime = rt;
+    const back = giveBack;
+    const key = `gb-${takenOver.runId}-${Math.round(at)}`.slice(0, 64);
+    queue(() =>
+      runtime.giveBackTime({
+        workspaceId: back.workspaceId ?? "",
+        taskId: back.taskId,
+        seconds: back.seconds,
+        key,
+      }),
+    );
+  }
 }
 
 // ── receiving the server's copy ──────────────────────────────────────────────
@@ -332,7 +352,7 @@ function receive(server: FocusRun | null, opts: { full?: boolean } = {}): void {
   if (!nowMine) {
     // Another device has the run: this device's clock stops, giving back what
     // it credited after the takeover.
-    if (focusClockIsHere()) stopHere(Date.parse(server.controlAt));
+    if (focusClockIsHere()) stopHere(Date.parse(server.controlAt), { runId: server.id });
     const nowTitle = local && local.nowTaskId === server.nowTaskId ? local.nowTitle : null;
     set({
       ...state,
@@ -441,24 +461,36 @@ function scheduleSave(take = false): void {
   saveTimer = setTimeout(
     () => {
       saveTimer = null;
-      const withTake = pendingTake;
-      pendingTake = false;
-      queue(() => saveNow(withTake));
+      queue(() => saveNow());
     },
     take ? 0 : SAVE_DEBOUNCE_MS,
   );
 }
 
-async function saveNow(take: boolean): Promise<void> {
-  const run = state.run;
+/**
+ * Send this device's state of `run` (the current one by default). A takeover
+ * stays owed until a save carrying it gets through: a failed one leaves
+ * `pendingTake` set, so the next save (a heartbeat too) takes control again
+ * instead of handing the run back.
+ */
+async function saveNow(target?: FocusRun): Promise<void> {
+  const run = target ?? state.run;
   if (!run || !rt || run.local) return;
+  const take = pendingTake;
   if (!inControlOf(run) && !take) return;
-  const saved = await rt.saveRun({
-    runId: run.id,
-    deviceId,
-    take,
-    state: snapshotFor(run, Date.now()),
-  });
+  pendingTake = false;
+  let saved: FocusRun | null;
+  try {
+    saved = await rt.saveRun({
+      runId: run.id,
+      deviceId,
+      take,
+      state: snapshotFor(run, Date.now()),
+    });
+  } catch (error) {
+    if (take) pendingTake = true;
+    throw error;
+  }
   receive(saved);
 }
 
@@ -483,13 +515,20 @@ function reconcile(): void {
   const now = Date.now();
   if (s.tracking && s.taskId && s.workspaceId) {
     let run = state.run;
-    // Undo inside the Stop window (or a new start right after): same run.
-    if (pendingEnd && pendingEnd.run.workspaceId === s.workspaceId && !run) {
-      clearTimeout(pendingEnd.handle);
-      run = pendingEnd.run;
-      pendingEnd = null;
-      set({ ...state, run, ended: null });
-      lastSessionKey = "";
+    if (pendingEnd && !run) {
+      if (undoingStop && pendingEnd.run.workspaceId === s.workspaceId) {
+        // Undo inside the Stop window: the same run carries on.
+        clearTimeout(pendingEnd.handle);
+        run = pendingEnd.run;
+        pendingEnd = null;
+        set({ ...state, run, ended: null });
+        lastSessionKey = "";
+      } else {
+        // A new session started meanwhile: the stopped run ends now, with its
+        // own numbers, before the new one starts (one at a time, in order).
+        clearTimeout(pendingEnd.handle);
+        finishEnd();
+      }
     }
     if (!run || run.workspaceId !== s.workspaceId) {
       startRunFrom(s, now);
@@ -591,8 +630,10 @@ function sendStart(localId: string): void {
         state: snapshotFor(current, Date.now()),
       });
     } catch (error) {
-      // Offline or refused for now: send it again on the next look.
-      startRetry = { localId };
+      // Offline or a passing failure: send it again on the next look. A
+      // refusal (no edit access, a bad state) isn't retried.
+      const code = (error as { code?: unknown }).code;
+      if (code !== "42501" && code !== "22023") startRetry = { localId };
       throw error;
     }
     if (!saved) return; // runs aren't on the server yet: it stays on this device
@@ -606,6 +647,8 @@ function sendStart(localId: string): void {
           ...latest,
           id: saved.id,
           local: undefined,
+          // The server's clock from here on: copies are ordered by it.
+          startedAt: saved.startedAt,
           controlAt: saved.controlAt,
           seenAt: saved.seenAt,
         },
@@ -634,7 +677,9 @@ function retryStart(): void {
 function beginEnd(run: FocusRun): void {
   if (saveTimer !== null) clearTimeout(saveTimer);
   saveTimer = null;
-  pendingTake = false;
+  // A takeover still owed goes first, so the other device stops counting now
+  // (and an Undo hands the session back here, not there).
+  if (pendingTake) queue(() => saveNow(run));
   const handle = setTimeout(() => finishEnd(), STOP_UNDO_MS);
   pendingEnd = { run, handle, snap: lastSnap };
   set({ ...state, run: null });
@@ -687,7 +732,7 @@ function finishEnd(): void {
 function heartbeat(): void {
   const run = state.run;
   if (!run || !inControlOf(run) || run.status !== "running" || !focusClockIsHere()) return;
-  queue(() => saveNow(false));
+  queue(() => saveNow());
 }
 
 function onVisible(): void {
@@ -708,8 +753,11 @@ function poll(): void {
 
 function onStorage(event: StorageEvent): void {
   if (!user || event.key !== runKey(user)) return;
-  // Another tab of this browser moved the run: show what it saved.
-  state = { ...state, run: readLocal(user) };
+  // Another tab of this browser moved the run: show what it saved. A copy of
+  // a run this tab is ending (or ended) never comes back that way.
+  const next = readLocal(user);
+  if (next && (endedHere.has(next.id) || pendingEnd?.run.id === next.id)) return;
+  state = { ...state, run: next };
   for (const listener of listeners) listener();
 }
 
@@ -775,6 +823,15 @@ export function attachRunUser(
     return;
   }
   state = { run: readLocal(userId), ended: null, notice: null };
+  // A run started here whose start never got an answer (offline, a reload
+  // mid-request): sent again if this device's clock still runs it, else dropped.
+  if (state.run?.local) {
+    if (getFocusSession().tracking) startRetry = { localId: state.run.id };
+    else {
+      state = { ...state, run: null };
+      writeLocal(null);
+    }
+  }
   for (const listener of listeners) listener();
   listenToWindow();
   lastRefreshAt = Date.now();
@@ -790,6 +847,7 @@ export function attachRunUser(
         () => void refreshRun(),
       );
     }
+    retryStart();
     void refreshRun();
   } else {
     reconcile();
@@ -802,6 +860,19 @@ export function forgetRunUser(userId: string): void {
     storage()?.removeItem(runKey(userId));
   } catch {
     /* nothing to erase */
+  }
+}
+
+/**
+ * Undo a Stop inside its window (62a): the engine's clock comes back as if it
+ * never stopped, and the run it was ending carries on (not a new run).
+ */
+export function undoStopKeepingRun(): boolean {
+  undoingStop = true;
+  try {
+    return undoStopFocus();
+  } finally {
+    undoingStop = false;
   }
 }
 
@@ -845,6 +916,8 @@ export function takeRunControl(resolveTask?: TaskRefResolver): boolean {
 export function recordRunDone(taskId: string): void {
   const run = state.run;
   if (!run || !inControlOf(run) || run.doneTaskIds.includes(taskId)) return;
+  // Only the task the session is on counts (a Done elsewhere isn't this run's).
+  if (run.nowTaskId !== taskId && getFocusSession().taskId !== taskId) return;
   set({ ...state, run: { ...run, doneTaskIds: [...run.doneTaskIds, taskId] } });
   scheduleSave();
 }
@@ -941,9 +1014,7 @@ export async function __flushRunSyncForTest(): Promise<void> {
     if (saveTimer !== null) {
       clearTimeout(saveTimer);
       saveTimer = null;
-      const withTake = pendingTake;
-      pendingTake = false;
-      queue(() => saveNow(withTake));
+      queue(() => saveNow());
     }
     const current = chain;
     await current;

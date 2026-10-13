@@ -269,6 +269,9 @@ export function isFocusRunPhase(value: unknown): value is FocusRunPhase {
 export function normalizeFocusRunPhase(input: unknown): FocusRunPhase {
   return isFocusRunPhase(input) ? input : "work";
 }
+export function parseFocusRunPhase(input: unknown): SafeParseResult<FocusRunPhase> {
+  return parseOrError(focusRunPhaseSchema, input);
+}
 
 // ---------------------------------------------------------------------------
 // Tasks v3 structure (TV-D10) — mirrors buckets.status in

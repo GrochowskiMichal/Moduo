@@ -43,9 +43,9 @@ Built in tasks-v3 block 22 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §7, §
   - Rejected: keeping the Calendar's own stopwatch.
 - **F6-8 · The Calendar lens: my work sessions are blocks; due-only tasks are all-day chips** → TV-F6 (`lens.ts` `taskBlocks`, `dueChipsByDay`; AC2.3, AC7.3)
   - Who: agent's choice, deferred to by Maciej, 2026-10-13.
-  - Decision: each of my sessions is its own block and dragging it moves that session (`tasks_op_session_update`, the person kept); a teammate's session stays in their calendar; a scheduled task with no session known shows from its row as before. A task with a due date and nothing in anyone's calendar is a chip in the all-day lane on its due day (Won't do hidden, done shown done); clicking it opens the task.
+  - Decision: each of my sessions is its own block and dragging it moves that session (`tasks_op_session_update`, the person kept); a teammate's session stays in their calendar; a scheduled task with no session known shows from its row as before. Later and Remove on a session's block act on that session (Remove's Undo puts one back at the same times). Your own due-only tasks (assigned to you, or yours as creator while unassigned; spec §18) with nothing in your calendar are chips in the all-day lane on their due day (Won't do hidden, done shown done; a teammate's session on it is in their calendar, not yours); clicking one opens the task.
   - Why: REPLAN 25 (several blocks per task, each someone's) and 1.3 ("due-only tasks never reach the calendar grid"); the Month view stays Calendar's.
-  - Rejected: one block per task from the mirrored schedule, due chips for scheduled tasks too.
+  - Rejected: one block per task from the mirrored schedule, every visible task's due chip (teammates' would crowd your lane).
 - **F6-9 · Home's pomodoro runs the same session** → TV-F6 (`pomodoro-widget.tsx`, `config-forms.tsx`)
   - Who: agent's choice, deferred to by Maciej, 2026-10-13.
   - Decision: the widget shows and controls the running session (Pause, Stop with Undo); idle, Start runs a Pomodoro on the top of Up next and is off with nothing lined up; its lengths are your Focus lengths (the widget's settings edit them).
@@ -81,6 +81,17 @@ Built in tasks-v3 block 22 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §7, §
   - Decision: on another device the clock and the session's time run on from the record only for the claims window (3 minutes) after the controlling device's last save, then stand still.
   - Why: a laptop that slept or died keeps no clock; never an inflated number.
   - Rejected: counting on forever (#323 capped only the focused time).
+- **F6-16 · Time saved before a takeover was heard is given back** → TV-F6 (`overlapAfter`, `relinquishFocus`, `giveBackTime`; AC8.11)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (from the validator).
+  - Decision: when another device took the run at T, the device that lost it takes back its unsaved time after T (#323) and gives back what it had already saved after T with one negative adjustment through `tasks_op_track_time`, keyed by run and T so a resend counts once; at most 5 minutes (T is the server's clock, the overlap this device's).
+  - Why: the engine saves every minute whether or not it has heard of the takeover; those seconds were counted on both devices.
+  - Rejected: holding saves until control is re-confirmed (a save per minute would wait on a run read), accepting the gap.
+- **F6-17 · A new session inside Stop's Undo window ends the stopped run first** → TV-F6 (`run.ts` `reconcile`, `undoStopKeepingRun`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (from the review).
+  - Decision: only Undo carries the stopped run on; any other start inside the 10 s ends it at once with its own numbers, then starts a new run.
+  - Why: a fresh session reusing the stopped run would overwrite its 25 minutes with zeros; a start in another workspace would end it on the server before its final numbers got there.
+  - Rejected: continuing the same run for any start inside the window.
+- **Known limits (TV-F6, revisitable):** a dragged session block jumps back until the server answers (no optimistic overlay for sessions yet; U13's sessions UI may add one); signing out inside Stop's Undo window leaves the run open until this device next signs in (it's ended then; teammates stop seeing it after 3 minutes); if Calendar's ▶ can't put the task on Up next, the run rules may move the session to the next lined-up task.
 
 ## 2026-10-13 · TV-D12 recurrence a–h, reminders, the notification table — the agent's choices (deferred to by Maciej)
 

@@ -308,8 +308,8 @@ export function CalendarPageView({
     [api.tasks, api.sessions, range, userId],
   );
   const dueByDay = useMemo(
-    () => dueChipsByDay(api.tasks, range, api.sessions),
-    [api.tasks, api.sessions, range],
+    () => dueChipsByDay(api.tasks, range, { list: api.sessions, me: userId }),
+    [api.tasks, api.sessions, range, userId],
   );
   const grouped = useMemo(() => blocksByDay(blocks), [blocks]);
   const eventChips = useMemo(() => eventChipsInRange(shownEvents, range), [shownEvents, range]);
@@ -803,7 +803,33 @@ export function CalendarPageView({
   }, [api.tasks, api.sessions, userId, calendar.events, prefs]);
 
   const onTriageLater = useCallback(
-    (taskId: string) => {
+    (taskId: string, sessionId?: string | null) => {
+      // A block of a work session moves that session (TV-F6), not the one the
+      // task row mirrors.
+      const session = sessionId ? api.sessions.find((s) => s.id === sessionId) : undefined;
+      if (session) {
+        const fromStart = session.startsAt;
+        const fromEnd = session.endsAt;
+        const durMs = Math.max(60_000, Date.parse(fromEnd) - Date.parse(fromStart));
+        const gap = findNextGap({
+          ...buildTodayContext(),
+          durationMinutes: Math.round(durMs / 60_000),
+        });
+        if (gap == null) {
+          toast("No open slot left today — it's waiting in the strip below.");
+          return;
+        }
+        api.moveSession(
+          session.id,
+          new Date(gap).toISOString(),
+          new Date(gap + durMs).toISOString(),
+        );
+        toast(`Moved to ${formatTimeOfDay(gap)}`, {
+          duration: UNDO_TOAST_MS,
+          action: { label: "Undo", onClick: () => api.moveSession(session.id, fromStart, fromEnd) },
+        });
+        return;
+      }
       const task = api.tasks.find((t) => t.id === taskId);
       if (!task?.scheduledAt) return;
       const fromIso = task.scheduledAt;
@@ -852,7 +878,20 @@ export function CalendarPageView({
   );
 
   const onTriageRemove = useCallback(
-    (taskId: string) => {
+    (taskId: string, sessionId?: string | null) => {
+      // A block of a work session removes that session (TV-F6); Undo puts one
+      // back at the same times.
+      if (sessionId && api.sessions.some((s) => s.id === sessionId)) {
+        void api.removeSession(sessionId).then((removed) => {
+          if (!removed) return;
+          markWorked(taskId, false);
+          toast("Removed from the calendar", {
+            duration: UNDO_TOAST_MS,
+            action: { label: "Undo", onClick: () => api.restoreSession(removed) },
+          });
+        });
+        return;
+      }
       const task = api.tasks.find((t) => t.id === taskId);
       if (!task?.scheduledAt) return;
       const fromIso = task.scheduledAt;
@@ -1204,7 +1243,7 @@ export function CalendarPageView({
             setTaskPopover(null);
           }}
           onLater={() => {
-            onTriageLater(taskPopover.block.taskId);
+            onTriageLater(taskPopover.block.taskId, taskPopover.block.sessionId);
             setTaskPopover(null);
           }}
           onLonger={() => {
@@ -1212,7 +1251,7 @@ export function CalendarPageView({
             setTaskPopover(null);
           }}
           onRemove={() => {
-            onTriageRemove(taskPopover.block.taskId);
+            onTriageRemove(taskPopover.block.taskId, taskPopover.block.sessionId);
             setTaskPopover(null);
           }}
           onStartFocus={() => onStartFocus(taskPopover.block.taskId)}

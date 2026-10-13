@@ -18,8 +18,9 @@
 
 ## Calendar
 - [ ] **Do:** give a task two work sessions today (the panel's Scheduled, or Calendar drag-create) → **Expect:** two blocks, one per session. _(both)_
-- [ ] **Do:** a task with only a due date today → **Expect:** a chip in the all-day lane; clicking it opens the task. Scheduled tasks and Won't do tasks don't get one. _(both)_
-- [ ] **Do:** drag one of the task's blocks → **Expect:** only that block moves (the other stays); reload keeps it. _(both)_
+- [ ] **Do:** a task of yours with only a due date today → **Expect:** a chip in the all-day lane; clicking it opens the task. Scheduled tasks, Won't do tasks and teammates' tasks (assigned to them, or theirs and unassigned) don't get one. _(both)_
+- [ ] **Do:** drag one of the task's blocks → **Expect:** only that block moves (the other stays; it jumps into place once the server answers); reload keeps it. _(both)_
+- [ ] **Do:** on an elapsed block of a task with two sessions, Later, then Remove on the other → **Expect:** each acts on the block you used (Later moves it to the next free slot today; Remove takes only that block off, Undo puts it back). _(both)_
 - [ ] **Do:** click a block → Start focus → **Expect:** the task goes to the top of Up next and the clock starts; the popover, that block and the top bar show the same clock; only one of the task's blocks shows it. _(both)_
 - [ ] **Do:** popover Stop → **Expect:** "Focus stopped · Undo", no "47m logged" toast. _(both)_
 
@@ -37,6 +38,7 @@
 - [ ] **Do:** start Focus in the desktop app, open the web app → **Expect:** within a few seconds the web top bar shows the same session (tooltip "on your other device"). _(both devices)_
 - [ ] **Do:** pause or stop it on the web → **Expect:** the web takes it over; the desktop's clock stops within a few seconds; the task's time isn't counted twice (check Time on the panel against the minutes worked). _(both devices)_
 - [ ] **Do:** Stop on one device → **Expect:** after the 10 s Undo the other stops showing it. _(both devices)_
+- [ ] **Do:** with the desktop's Wi-Fi off, take the session over on the web, wait 2 minutes, turn Wi-Fi back on → **Expect:** the desktop stops within seconds; the task's total is the minutes actually worked (the desktop gives back what it saved after the takeover as one negative adjustment). _(both devices)_
 
 ## Claims ("is on this")
 - [ ] **Do:** Mike runs Focus on a task you can see → **Expect:** within a minute your app's claims name him on that task (the words "Mike is on this" appear once TV-U13's header / TV-F7 show them; until then the network tab shows `rpc/focus_claims` answering his id and the task's). _(two people)_

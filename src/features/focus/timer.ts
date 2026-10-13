@@ -29,7 +29,6 @@ import {
   stopFocus,
   subscribeFocusSession,
   toggleFocusRunning,
-  undoStopFocus,
   useFocusSession,
 } from "./engine";
 import {
@@ -38,6 +37,7 @@ import {
   subscribeFocusRun,
   type TaskRefResolver,
   takeRunControl,
+  undoStopKeepingRun,
   useFocusRunState,
   useRunReadThrough,
 } from "./run";
@@ -239,7 +239,7 @@ export function stopFocusSession(resolveTask?: TaskRefResolver): boolean {
 
 /** Undo a Stop inside its window: the clock reads as if it never stopped. */
 export function undoFocusStop(): boolean {
-  return undoStopFocus();
+  return undoStopKeepingRun();
 }
 
 /** Whether "Stopped · Undo" can still bring the session back. */

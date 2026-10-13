@@ -24,6 +24,11 @@ import {
 /** The export reads at most this many of my runs per workspace. */
 const RUNS_EXPORT_CAP = 10_000;
 
+/** An op's refusal, with Postgres's code kept (a refused start isn't retried). */
+function runError(error: { message: string; code?: string }): Error & { code?: string } {
+  return Object.assign(new Error(error.message), { code: error.code });
+}
+
 function one(data: unknown): FocusRun | null {
   return focusRunRowToModel(Array.isArray(data) ? data[0] : data);
 }
@@ -37,7 +42,7 @@ export const webFocusRuntime: FocusRunRuntime = {
       .order("id")
       .limit(1);
     if (isMissingTableError(error, "focus_runs")) return null;
-    if (error) throw new Error(error.message);
+    if (error) throw runError(error);
     return one(data);
   },
 
@@ -49,7 +54,7 @@ export const webFocusRuntime: FocusRunRuntime = {
       p_state: runSnapshotToState(state),
     });
     if (isMissingFunctionError(error, "focus_op_run_start")) return null;
-    if (error) throw new Error(error.message);
+    if (error) throw runError(error);
     return one(data);
   },
 
@@ -61,7 +66,7 @@ export const webFocusRuntime: FocusRunRuntime = {
       p_state: runSnapshotToState(state),
     });
     if (isMissingFunctionError(error, "focus_op_run_save")) return null;
-    if (error) throw new Error(error.message);
+    if (error) throw runError(error);
     return one(data);
   },
 
@@ -72,7 +77,7 @@ export const webFocusRuntime: FocusRunRuntime = {
       p_state: runSnapshotToState(state),
     });
     if (isMissingFunctionError(error, "focus_op_run_end")) return null;
-    if (error) throw new Error(error.message);
+    if (error) throw runError(error);
     return one(data);
   },
 
@@ -81,7 +86,7 @@ export const webFocusRuntime: FocusRunRuntime = {
       p_workspace_id: workspaceId,
     });
     if (isMissingFunctionError(error, "focus_claims")) return [];
-    if (error) throw new Error(error.message);
+    if (error) throw runError(error);
     const rows = Array.isArray(data) ? data : [];
     return rows.flatMap((r: { user_id?: unknown; task_id?: unknown }) =>
       typeof r.user_id === "string" && typeof r.task_id === "string"
@@ -123,12 +128,24 @@ export const webFocusRuntime: FocusRunRuntime = {
     };
   },
 
+  async giveBackTime({ workspaceId, taskId, seconds, key }) {
+    if (!Number.isFinite(seconds) || seconds < 1) return;
+    const { error } = await supabaseClient.rpc("tasks_op_track_time", {
+      p_workspace_id: workspaceId,
+      p_task_id: taskId,
+      p_action: "adjust",
+      p_seconds: -Math.round(seconds),
+      p_client_key: key,
+    });
+    if (error) throw runError(error);
+  },
+
   async keepLineUp(workspaceId) {
     const { data, error } = await supabaseClient.rpc("tasks_op_queue_keep", {
       p_workspace_id: workspaceId,
     });
     if (isMissingFunctionError(error, "tasks_op_queue_keep")) return null;
-    if (error) throw new Error(error.message);
+    if (error) throw runError(error);
     return sortQueueEntries(mapKnownRows(Array.isArray(data) ? data : [], taskQueueRowToModel));
   },
 };

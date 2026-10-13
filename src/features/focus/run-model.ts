@@ -96,6 +96,17 @@ export interface FocusRunRuntime {
   listMyRuns(workspaceId: string): Promise<{ runs: FocusRun[]; truncated: Truncation[] }>;
   /** "Keep all" for a stale line-up: my queue counts as looked at. */
   keepLineUp(workspaceId: string): Promise<TaskQueueEntry[] | null>;
+  /**
+   * Give back seconds this device saved on a task after another device took
+   * the run over (they were counted there too): one negative adjustment
+   * through `tasks_op_track_time`, under `key` so a resend counts once.
+   */
+  giveBackTime(input: {
+    workspaceId: string;
+    taskId: string;
+    seconds: number;
+    key: string;
+  }): Promise<void>;
 }
 
 /** What a device sends: the run's state as its clock has it now. */

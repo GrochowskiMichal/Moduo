@@ -20,7 +20,7 @@ import { useWorkspace } from "../../providers/workspace-provider";
 import { queueEntriesOf } from "../tasks/queue";
 import { useRunClaimsPoll } from "./claims";
 import { bindFocusTask, focusClockIsHere, useFocusSession } from "./engine";
-import { recordRunDone, setRunNotice } from "./run";
+import { noteRunTitle, recordRunDone, setRunNotice, useFocusRunState } from "./run";
 import { followStep } from "./run-model";
 
 export function FocusRunFollower() {
@@ -34,10 +34,13 @@ export function FocusRunFollower() {
   );
   const snap = useStoreSnapshot(store);
   const session = useFocusSession();
+  const { run } = useFocusRunState();
   const claimsLoad = runtime?.focus.listClaims ?? null;
+  // Only a workspace with someone else in it can have a claim to show.
+  const hasTeammates = members.some((m) => m.userId !== userId && !m.removedAt);
   useRunClaimsPoll(
     claimsLoad,
-    modulePermissions.tasks !== "none" ? selectedWorkspaceId : null,
+    modulePermissions.tasks !== "none" && hasTeammates ? selectedWorkspaceId : null,
     userId,
   );
 
@@ -45,6 +48,8 @@ export function FocusRunFollower() {
   const wasQueued = useRef(new Set<string>());
   const membersRef = useRef(members);
   membersRef.current = members;
+  const titleRef = useRef(session.taskTitle);
+  titleRef.current = session.taskTitle;
 
   const nowId = session.tracking ? session.taskId : null;
   const sessionWs = session.workspaceId;
@@ -63,13 +68,14 @@ export function FocusRunFollower() {
         return { id, open: !isClosedTask(t), completedBy: t.completedBy ?? null };
       },
       selfId: userId,
-      complete: snap.restLoaded,
+      // A cut read can't tell a missing task from one it didn't bring.
+      complete: snap.restLoaded && snap.bundle.truncated.length === 0,
       wasQueued: wasQueued.current.has(nowId),
     });
     if (step.kind === "stay") return;
     wasQueued.current.delete(nowId);
     const left = byId.get(step.leftTaskId);
-    const title = left?.title?.trim() || "Untitled";
+    const title = left?.title?.trim() || titleRef.current.trim() || "Untitled";
     if (left && isClosedTask(left) && (left.completedBy ?? userId) === userId) {
       recordRunDone(step.leftTaskId);
     }
@@ -102,6 +108,27 @@ export function FocusRunFollower() {
       workspaceId: snap.workspaceId,
     });
   }, [nowId, sessionWs, snap, userId]);
+
+  // Titles: the server never sends them, and a takeover from the top bar or
+  // Home has no task list at hand. Keep the clock's label and the run's (a
+  // session on another device) as the store has them.
+  const runTaskId = run?.workspaceId === snap.workspaceId ? (run?.nowTaskId ?? null) : null;
+  useEffect(() => {
+    if (!snap.loaded) return;
+    const find = (id: string | null) =>
+      id ? snap.bundle.tasks.find((t) => t.id === id) : undefined;
+    const now = nowId && snap.workspaceId === sessionWs ? find(nowId) : undefined;
+    if (now && focusClockIsHere() && (now.title || "Untitled") !== titleRef.current) {
+      bindFocusTask({
+        id: now.id,
+        title: now.title || "Untitled",
+        bucketName: snap.bundle.buckets.find((b) => b.id === now.bucketId)?.name ?? null,
+        workspaceId: snap.workspaceId,
+      });
+    }
+    const theirs = find(runTaskId);
+    if (theirs) noteRunTitle(theirs.id, theirs.title || "Untitled");
+  }, [nowId, sessionWs, runTaskId, snap]);
 
   return null;
 }

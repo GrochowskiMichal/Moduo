@@ -231,33 +231,57 @@ describe("taskBlocks — work sessions are the blocks (AC2.3, AC7.3)", () => {
   });
 });
 
-describe("dueChipsByDay — due-only tasks as all-day chips (AC2.3, AC7.3)", () => {
+describe("dueChipsByDay — your own due-only tasks as all-day chips (AC2.3, AC7.3)", () => {
   const range = visibleRange("week", TUE, PREFS);
+  const mine = (id: string, patch: Partial<LensTask> = {}, dueOn = "2026-07-02") => ({
+    ...makeLensTask({ id, title: id, ...patch }),
+    dueOn,
+    assigneeId: "me",
+    creatorId: "me",
+  });
+  const none = { list: [], me: "me" };
 
-  it("a task due Thursday with nothing in any calendar shows on Thursday", () => {
-    const due = { ...makeLensTask({ id: "essay", title: "Essay" }), dueOn: "2026-07-02" };
-    const map = dueChipsByDay([due], range);
-    expect(map.get("2026-07-02")).toEqual([
-      { taskId: "essay", title: "Essay", dayKey: "2026-07-02", done: false },
+  it("a task of mine due Thursday with nothing in my calendar shows on Thursday", () => {
+    expect(dueChipsByDay([mine("essay")], range, none).get("2026-07-02")).toEqual([
+      { taskId: "essay", title: "essay", dayKey: "2026-07-02", done: false },
     ]);
   });
 
-  it("a scheduled one, one with a session, a Won't do one and one out of range don't", () => {
+  it("an unassigned task I made is mine; a teammate's (or one assigned to them) isn't", () => {
     const tasks = [
-      {
-        ...makeLensTask({ id: "sched", scheduledAt: new Date(2026, 6, 2, 9).toISOString() }),
-        dueOn: "2026-07-02",
-      },
-      { ...makeLensTask({ id: "sess" }), dueOn: "2026-07-02" },
-      { ...makeLensTask({ id: "wont", status: "archived" }), dueOn: "2026-07-02" },
-      { ...makeLensTask({ id: "later" }), dueOn: "2026-07-20" },
+      { ...mine("made"), assigneeId: null },
+      { ...mine("theirs"), assigneeId: "mike", creatorId: "me" },
+      { ...mine("their-own"), assigneeId: null, creatorId: "mike" },
     ];
-    const map = dueChipsByDay(tasks, range, [{ taskId: "sess" }]);
+    const ids = [...dueChipsByDay(tasks, range, none).values()].flat().map((c) => c.taskId);
+    expect(ids).toEqual(["made"]);
+  });
+
+  it("one in my calendar, a Won't do one and one out of range don't show", () => {
+    const tasks = [
+      mine("sess"),
+      mine("sched", { scheduledAt: new Date(2026, 6, 2, 9).toISOString() }),
+      mine("wont", { status: "archived" }),
+      mine("later", {}, "2026-07-20"),
+    ];
+    const map = dueChipsByDay(tasks, range, {
+      list: [{ taskId: "sess", userId: "me" }],
+      me: "me",
+    });
     expect([...map.values()].flat()).toEqual([]);
   });
 
+  it("a teammate's session on my task is in their calendar: mine still shows due", () => {
+    const task = mine("shared", { scheduledAt: new Date(2026, 6, 2, 9).toISOString() });
+    const map = dueChipsByDay([task], range, {
+      list: [{ taskId: "shared", userId: "mike" }],
+      me: "me",
+    });
+    expect(map.get("2026-07-02")?.map((c) => c.taskId)).toEqual(["shared"]);
+  });
+
   it("a done one shows done", () => {
-    const done = { ...makeLensTask({ id: "pub", status: "done" }), dueOn: "2026-06-30" };
-    expect(dueChipsByDay([done], range).get("2026-06-30")?.[0].done).toBe(true);
+    const map = dueChipsByDay([mine("pub", { status: "done" }, "2026-06-30")], range, none);
+    expect(map.get("2026-06-30")?.[0].done).toBe(true);
   });
 });

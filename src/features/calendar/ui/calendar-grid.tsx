@@ -99,9 +99,10 @@ type Props = {
   // ── the loop (CAL-4) + focus (CAL-5) ──
   /** Tasks whose elapsed block was "took longer"-acknowledged this session. */
   workedTaskIds: ReadonlySet<string>;
-  onTriageLater: (taskId: string) => void;
+  /** A block of a work session acts on that session (`sessionId`). */
+  onTriageLater: (taskId: string, sessionId?: string | null) => void;
   onTriageLonger: (taskId: string) => void;
-  onTriageRemove: (taskId: string) => void;
+  onTriageRemove: (taskId: string, sessionId?: string | null) => void;
   /** The block the focus session shows on (the one time engine; null when idle). */
   focusBlockId: string | null;
 };
@@ -683,8 +684,7 @@ export function CalendarGrid({
                     data-chip="due"
                     onClick={() => onDueClick?.(due.taskId)}
                     aria-label={`${due.title || "Untitled"} · due${due.done ? " · done" : ""}`}
-                    className="flex w-full min-w-0 items-center gap-1 rounded-sm border border-border bg-background px-1.5 text-left text-xs text-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    style={{ height: "var(--ctrl-h-sm)" }}
+                    className="flex h-(--ctrl-h-sm) w-full min-w-0 items-center gap-1 rounded-sm border border-border bg-background px-1.5 text-left text-xs text-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     {due.done ? (
                       <CircleCheck className="size-3 shrink-0 text-muted-foreground" aria-hidden />
@@ -829,9 +829,10 @@ const DayColumn = memo(function DayColumn({
   /** True when this whole day is behind now (past columns are all-elapsed). */
   dayEndPast: boolean;
   workedTaskIds: ReadonlySet<string>;
-  onTriageLater: (taskId: string) => void;
+  /** A block of a work session acts on that session (`sessionId`). */
+  onTriageLater: (taskId: string, sessionId?: string | null) => void;
   onTriageLonger: (taskId: string) => void;
-  onTriageRemove: (taskId: string) => void;
+  onTriageRemove: (taskId: string, sessionId?: string | null) => void;
   focusBlockId: string | null;
   canEdit: boolean;
   onToggleDone: (taskId: string) => void;
@@ -954,9 +955,9 @@ const DayColumn = memo(function DayColumn({
                 elapsed={elapsed}
                 worked={worked}
                 showTriage={awaitingTriage && span.heightMinutes >= TRIAGE_MIN_MINUTES}
-                onLater={() => onTriageLater(block.taskId)}
+                onLater={() => onTriageLater(block.taskId, block.sessionId)}
                 onLonger={() => onTriageLonger(block.taskId)}
-                onRemove={() => onTriageRemove(block.taskId)}
+                onRemove={() => onTriageRemove(block.taskId, block.sessionId)}
                 focusing={focusing}
                 focusReadout={focusing ? <FocusReadout /> : null}
               />

@@ -596,6 +596,30 @@ export function adoptSession(
  * from what isn't saved yet (that time was counted on the other device), held
  * away time is dropped, and the session ends. Earlier time stays to be saved.
  */
+/** The most a takeover gives back that was already saved (a guard against a
+ *  wrong device clock: the take-over moment is the server's). */
+export const MAX_GIVE_BACK_MS = 5 * MINUTE_MS;
+
+/**
+ * The work this device counted on the bound task after another device took
+ * the run at `at`: the part still unsaved (taken back from the credit) and the
+ * part already saved or on its way (given back with a negative adjustment, so
+ * a save that went out before the takeover was heard isn't counted twice).
+ */
+export function overlapAfter(
+  r: FocusRecord,
+  at: number,
+): { taskId: string; workspaceId: string | null; unsavedMs: number; savedMs: number } | null {
+  const task = r.task;
+  if (!task || timerOf(r) === "off") return null;
+  const creditedTo = r.creditedTo ?? r.seenAt;
+  const overlap = Math.min(Math.max(0, creditedTo - at), r.taskMs ?? Number.POSITIVE_INFINITY);
+  if (overlap <= 0) return null;
+  const unsavedMs = Math.min(r.credits[task.id]?.ms ?? 0, overlap);
+  const savedMs = Math.min(MAX_GIVE_BACK_MS, Math.max(0, overlap - unsavedMs));
+  return { taskId: task.id, workspaceId: task.workspaceId, unsavedMs, savedMs };
+}
+
 export function relinquishSession(
   r: FocusRecord,
   at: number,
@@ -606,8 +630,7 @@ export function relinquishSession(
   let credits = r.credits;
   const credit = task ? r.credits[task.id] : undefined;
   if (task && credit) {
-    const creditedTo = r.creditedTo ?? r.seenAt;
-    const overlap = Math.min(credit.ms, Math.max(0, creditedTo - at));
+    const overlap = overlapAfter(r, at)?.unsavedMs ?? 0;
     if (overlap > 0) {
       const next = { ...credit, ms: credit.ms - overlap };
       credits = { ...credits, [task.id]: next };

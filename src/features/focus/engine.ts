@@ -66,6 +66,7 @@ import {
   isRunning,
   OWNER_STALE_MS,
   observe,
+  overlapAfter,
   parseRecord,
   pauseSession,
   previewInterval,
@@ -101,6 +102,13 @@ export type { FocusTimerMode };
 
 /** How long "Stopped · Undo" offers Undo (call 62a). */
 export const STOP_UNDO_MS = 10_000;
+
+/** Seconds this device saved on a task after another device took the run over. */
+export interface FocusGiveBack {
+  taskId: string;
+  workspaceId: string | null;
+  seconds: number;
+}
 
 /** The localStorage key family (`moduo:tasks:*` survives a cache reset). */
 export const FOCUS_STORAGE_PREFIX = "moduo:tasks:focus:";
@@ -181,8 +189,9 @@ export interface FocusEngine {
   setTimer(timer: FocusTimerMode): void;
   /** Take over a run another device was running, as its record says (#323). */
   adopt(run: FocusRunClock): void;
-  /** Another device took control at `at`: stop without crediting twice. */
-  relinquish(at: number): void;
+  /** Another device took control at `at`: stop without crediting twice. Answers
+   *  the part of the overlap already saved (or on its way), to give back. */
+  relinquish(at: number): FocusGiveBack | null;
   /** Whether this tab runs the clock (or may: nobody runs it). Another open
    *  tab of the same browser that runs it is the one that speaks for it. */
   clockIsHere(): boolean;
@@ -650,10 +659,25 @@ export function createFocusEngine(deps: FocusEngineDeps): FocusEngine {
       }),
     adopt: (run) => act((r, now, prefs) => adoptSession(r, run, now, prefs), { flush: true }),
     relinquish: (at) => {
-      if (user === undefined) return;
+      if (user === undefined) return null;
       const r = load();
-      if (!r.tracking && !r.task) return;
-      act((cur, now, prefs) => relinquishSession(cur, at, now, prefs), { flush: true });
+      if (!r.tracking && !r.task) return null;
+      let giveBack: FocusGiveBack | null = null;
+      act(
+        (cur, now, prefs) => {
+          const overlap = overlapAfter(cur, at);
+          if (overlap && overlap.savedMs >= 1000) {
+            giveBack = {
+              taskId: overlap.taskId,
+              workspaceId: overlap.workspaceId,
+              seconds: Math.floor(overlap.savedMs / 1000),
+            };
+          }
+          return relinquishSession(cur, at, now, prefs);
+        },
+        { flush: true },
+      );
+      return giveBack;
     },
     clockIsHere: () => user !== undefined && !disposed && mayRun(load(), deps.now()),
     preview,
@@ -802,10 +826,12 @@ export function adoptFocusRun(run: FocusRunClock): void {
 /**
  * Another device took control of the run at `at` (epoch ms): this device's
  * session stops, and what it credited after `at` is taken back (that time is
- * counted there). Earlier unsaved time is still saved.
+ * counted there). Earlier unsaved time is still saved. Answers the part of the
+ * overlap that was already saved (a save that went out before this device
+ * heard): the caller gives it back with a negative adjustment.
  */
-export function relinquishFocus(at: number): void {
-  engine.relinquish(at);
+export function relinquishFocus(at: number): FocusGiveBack | null {
+  return engine.relinquish(at);
 }
 
 /** Pause / resume. Pausing saves the time tracked so far. */

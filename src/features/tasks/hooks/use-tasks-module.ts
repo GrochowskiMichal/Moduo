@@ -1529,6 +1529,56 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
   );
 
   /**
+   * Take one work session off the calendar (Calendar's Remove on a block of a
+   * task with several). Resolves to what `restoreSession` needs for Undo, or
+   * null when nothing was removed.
+   */
+  const removeSession = useCallback(
+    (sessionId: string): Promise<{ taskId: string; startsAt: string; endsAt: string } | null> => {
+      const session = (storeRef.current?.getSnapshot().sessions ?? []).find(
+        (s) => s.id === sessionId,
+      );
+      if (!runtime || !workspaceId || !canEdit || !session) {
+        toast.error(NO_EDIT);
+        return Promise.resolve(null);
+      }
+      if (store?.isOffline()) {
+        toast.error("You're offline — remove it once you're back.");
+        return Promise.resolve(null);
+      }
+      return runtime.tasks.removeSession({ workspaceId, sessionId }).then(
+        (rows) => {
+          store?.forget("sessions", [sessionId]);
+          store?.answer({ sessions: rows });
+          return { taskId: session.taskId, startsAt: session.startsAt, endsAt: session.endsAt };
+        },
+        (e) => {
+          failed(e, "Couldn't remove that block.");
+          return null;
+        },
+      );
+    },
+    [runtime, workspaceId, canEdit, store, failed],
+  );
+
+  /** Put a removed session back (its Undo): a new session at the same times. */
+  const restoreSession = useCallback(
+    (removed: { taskId: string; startsAt: string; endsAt: string }) => {
+      if (!runtime || !workspaceId) return;
+      void runtime.tasks
+        .addSession({
+          workspaceId,
+          taskId: removed.taskId,
+          startsAt: removed.startsAt,
+          endsAt: removed.endsAt,
+        })
+        .then((rows) => store?.answer({ sessions: rows }))
+        .catch((e) => failed(e, "Couldn't put that block back."));
+    },
+    [runtime, workspaceId, store, failed],
+  );
+
+  /**
    * Add (or take away) time as one adjustment, like Calendar's "Took longer".
    * Resolves to what `undoTimeAdjustment` needs to remove exactly that one, or
    * null when nothing was recorded.
@@ -2865,6 +2915,8 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     archiveTask,
     addTimeSpent,
     moveSession,
+    removeSession,
+    restoreSession,
     logTimeAdjustment,
     undoTimeAdjustment,
     setTimeSpent,

@@ -202,22 +202,32 @@ export type DueChip = {
 };
 
 /**
- * Due-only tasks in the visible days, as all-day chips: a task with a due date
- * and nothing in anyone's calendar (no work session, no schedule) shows on its
- * due day (REPLAN 1.3: "due-only tasks never reach the calendar grid"). A
- * Won't do task doesn't; a done one shows done.
+ * Your own due-only tasks in the visible days, as all-day chips (spec §18): a
+ * task of yours with a due date and nothing in your calendar shows on its due
+ * day (REPLAN 1.3: "due-only tasks never reach the calendar grid"). A Won't do
+ * task doesn't; a done one shows done.
  */
 export function dueChipsByDay(
-  tasks: readonly (LensTask & Partial<Pick<Task, "dueOn">>)[],
+  tasks: readonly (LensTask &
+    Partial<Pick<Task, "dueOn" | "assigneeId" | "creatorId" | "creatorUnknown">>)[],
   range: VisibleRange,
-  sessions: readonly Pick<LensSession, "taskId">[] = [],
+  sessions: { list: readonly Pick<LensSession, "taskId" | "userId">[]; me: string | null },
 ): Map<string, DueChip[]> {
   const dayKeys = new Set(range.days.map(localDayKey));
-  const scheduled = new Set(sessions.map((s) => s.taskId));
+  const known = new Set(sessions.list.map((s) => s.taskId));
+  const mine = new Set(
+    sessions.list.filter((s) => !s.userId || s.userId === sessions.me).map((s) => s.taskId),
+  );
   const out = new Map<string, DueChip[]>();
   for (const t of tasks) {
     if (t.deletedAt || t.status === "archived" || !t.dueOn) continue;
-    if (t.scheduledAt || scheduled.has(t.id)) continue;
+    // Your own (spec §18): assigned to you, or yours as its creator while
+    // nobody is assigned. Teammates' tasks stay out.
+    const owner = t.assigneeId ?? (t.creatorUnknown ? null : (t.creatorId ?? null));
+    if (!sessions.me || owner !== sessions.me) continue;
+    // In your calendar already: a session of yours (or, with no session known
+    // for it, the row's schedule).
+    if (mine.has(t.id) || (!known.has(t.id) && t.scheduledAt)) continue;
     const dayKey = t.dueOn.slice(0, 10);
     if (!dayKeys.has(dayKey)) continue;
     const chip: DueChip = { taskId: t.id, title: t.title, dayKey, done: t.status === "done" };

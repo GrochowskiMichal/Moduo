@@ -16,7 +16,6 @@ import {
   setFocusTimer,
   stopFocus,
   toggleFocusRunning,
-  undoStopFocus,
 } from "./engine";
 import type { FocusTaskRef } from "./engine-core";
 import {
@@ -31,6 +30,7 @@ import {
   refreshFocusRun,
   runDeviceId,
   takeRunControl,
+  undoStopKeepingRun,
 } from "./run";
 import type { FocusRun, FocusRunRuntime, FocusRunSnapshot } from "./run-model";
 
@@ -62,6 +62,8 @@ function fakeServer() {
     ...(s.doneTaskIds ? { doneTaskIds: s.doneTaskIds } : {}),
   });
   const ends: Array<{ runId: string; state: Partial<FocusRunSnapshot> }> = [];
+  const givenBack: Array<{ workspaceId: string; taskId: string; seconds: number; key: string }> =
+    [];
   const rt: FocusRunRuntime = {
     async latestRun() {
       return rows.length ? { ...rows[rows.length - 1] } : null;
@@ -133,8 +135,11 @@ function fakeServer() {
     async keepLineUp() {
       return [];
     },
+    async giveBackTime(input) {
+      givenBack.push(input);
+    },
   };
-  return { rows, rt, ends };
+  return { rows, rt, ends, givenBack };
 }
 
 /** A focus_runs row as Realtime delivers it. */
@@ -265,7 +270,7 @@ describe("the run follows the one engine", () => {
     await settle();
     stopFocus();
     rs.advanceTimersByTime(3000);
-    undoStopFocus();
+    undoStopKeepingRun();
     rs.advanceTimersByTime(STOP_UNDO_MS);
     await settle();
     expect(rows).toHaveLength(1);
@@ -400,5 +405,77 @@ describe("two devices never both count (AC8.11)", () => {
     __finishRunEndForTest();
     await settle();
     expect(rows[0]).toMatchObject({ status: "ended", mode: "off", focusedSeconds: 0 });
+  });
+
+  it("a save that went out before the takeover was heard is given back once", async () => {
+    const { rows, rt, givenBack } = fakeServer();
+    const saved: number[] = [];
+    registerFocusFlushSink(WS, (_taskId, seconds) => {
+      saved.push(seconds);
+      return true;
+    });
+    attach(rt);
+    await settle();
+    focusOnTask(refs.t1, "per_task");
+    await settle();
+    rs.advanceTimersByTime(30_000);
+    toggleFocusRunning(); // pausing saves the 30 s here
+    toggleFocusRunning();
+    await settle();
+    expect(saved.reduce((a, b) => a + b, 0)).toBe(30);
+    // The phone had taken it over 10 s before that save; heard only now.
+    rows[0] = {
+      ...rows[0],
+      deviceId: "phone-12345",
+      controlAt: iso(T0 + 20_000),
+      seenAt: iso(T0 + 31_000),
+    };
+    pushRow?.(dbRow(rows[0]));
+    await settle();
+    expect(getFocusSession().tracking).toBe(false);
+    expect(givenBack).toEqual([
+      expect.objectContaining({ workspaceId: WS, taskId: "t1", seconds: 10 }),
+    ]);
+    expect(givenBack[0]?.key).toMatch(/^gb-srv-1-/);
+  });
+});
+
+describe("Stop, then a new start inside the Undo window", () => {
+  it("the stopped run ends with its own numbers before the new one starts", async () => {
+    const { rows, rt, ends } = fakeServer();
+    attach(rt);
+    await settle();
+    focusOnTask(refs.t1, "per_task");
+    await settle();
+    rs.advanceTimersByTime(25 * 60_000);
+    stopFocus();
+    rs.advanceTimersByTime(2000);
+    focusOnTask(refs.t2, "per_task"); // not Undo: a fresh session
+    await settle();
+    expect(ends).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ status: "ended", focusedSeconds: 25 * 60 });
+    expect(rows[1]).toMatchObject({ status: "running", nowTaskId: "t2", focusedSeconds: 0 });
+    rs.advanceTimersByTime(STOP_UNDO_MS);
+    await settle();
+    expect(ends).toHaveLength(1); // nothing ended twice
+    expect(rows[1].status).toBe("running");
+  });
+
+  it("a refused start isn't sent again on every look", async () => {
+    const { rt } = fakeServer();
+    let calls = 0;
+    rt.startRun = async () => {
+      calls += 1;
+      throw Object.assign(new Error("You don't have edit access to Tasks in this workspace."), {
+        code: "42501",
+      });
+    };
+    attach(rt);
+    await settle();
+    focusOnTask(refs.t1, "per_task");
+    await settle();
+    await refreshFocusRun();
+    await settle();
+    expect(calls).toBe(1);
   });
 });
