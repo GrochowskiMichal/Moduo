@@ -26,6 +26,7 @@ import {
   mapRole,
   mapWorkspace,
   storageKey,
+  withOwnName,
 } from "../features/workspaces/workspace-mappers";
 import {
   isNotificationEnabled,
@@ -58,7 +59,7 @@ function legacyNotificationToItem(n: WorkspaceNotification): NotificationItem {
 }
 
 export function WorkspaceProvider({ children }: PropsWithChildren) {
-  const { runtime, userId } = useAuth();
+  const { runtime, userId, userEmail } = useAuth();
   const [loading, setLoading] = useState(true);
   const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
@@ -244,10 +245,14 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
       Promise.resolve().then(() => runtime.workspace.listRoles(selectedWorkspaceId)),
     ]);
 
-    setMembers(memberResult.status === "fulfilled" ? memberResult.value.map(mapMember) : []);
+    setMembers(
+      memberResult.status === "fulfilled"
+        ? withOwnName(memberResult.value.map(mapMember), userId, userEmail)
+        : [],
+    );
     setInvites(inviteResult.status === "fulfilled" ? inviteResult.value.map(mapInvite) : []);
     setRoles(roleResult.status === "fulfilled" ? roleResult.value.map(mapRole) : []);
-  }, [runtime, selectedWorkspaceId]);
+  }, [runtime, selectedWorkspaceId, userId, userEmail]);
 
   const refreshNotifications = useCallback(async () => {
     if (!runtime || !userId) {

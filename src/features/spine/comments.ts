@@ -6,7 +6,7 @@
 
 import type { SpineComment } from "@/lib/runtime.types";
 import { replaceSlashDates } from "./grammar";
-import { dateUri, referenceUri } from "./references/text";
+import { dateUri, referenceUri, splitReferenceText } from "./references/text";
 import type { ReferenceRef } from "./references/types";
 
 /** A person who can be @mentioned in a comment, or who wrote one. */
@@ -14,6 +14,9 @@ export type CommentPerson = {
   id: string;
   name: string;
   avatarUrl: string | null;
+  /** No name of their own ("Member" is a placeholder): the avatar reads "?",
+   *  never the placeholder's initials (call 43). */
+  unnamed?: boolean;
 };
 
 /** A mention picked in the composer: who, and the label typed into the text. */
@@ -94,6 +97,40 @@ export function commentBodyWithReferences(
     }
   }
   return replaceSlashDates(out, dateUri, now);
+}
+
+/**
+ * A stored comment body back as text to edit (TV-U13): each reference this
+ * reader can name becomes `@Title` again, with its picked thing seeded so a
+ * save stores the same reference; one they can't name (private, deleted,
+ * still loading) and every date chip keep their stored form, so an edit never
+ * loses them. People's mentions are already `@Name`: the members named in the
+ * text come back as picked mentions.
+ */
+export function editableComment(
+  body: string,
+  nameOf: (ref: ReferenceRef) => string | null,
+  people: CommentPerson[],
+): { text: string; things: PickedThing[]; mentions: PickedMention[] } {
+  const things: PickedThing[] = [];
+  let text = "";
+  for (const seg of splitReferenceText(body)) {
+    if (seg.kind === "text") text += seg.text;
+    else if (seg.kind === "date") text += dateUri(seg.day);
+    else {
+      const label = nameOf(seg.ref);
+      if (label) {
+        text += `@${label}`;
+        things.push({ ref: seg.ref, label });
+      } else {
+        text += referenceUri(seg.ref);
+      }
+    }
+  }
+  const mentions = people
+    .filter((p) => mentionStillPresent(text, p.name))
+    .map((p) => ({ id: p.id, label: p.name }));
+  return { text, things, mentions };
 }
 
 /**

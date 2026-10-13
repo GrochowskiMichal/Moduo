@@ -180,6 +180,25 @@ export function mapMember(row: any): WorkspaceMember {
   };
 }
 
+/**
+ * Your own row with no display name reads as your email's name ("dev" for
+ * dev@moduo.local), the rule the top bar's avatar already follows, so every
+ * avatar of yours shows two of your initials (Tasks v3 call 43) instead of
+ * "?" or the "ME" of a "Member" placeholder (TV-U13, checkpoint 1). Other
+ * people without a name stay unnamed (their email isn't readable here).
+ */
+export function withOwnName(
+  members: WorkspaceMember[],
+  userId: string | null,
+  userEmail: string | null,
+): WorkspaceMember[] {
+  const local = userEmail?.trim().split("@")[0]?.replace(/[._-]+/g, " ").trim();
+  if (!userId || !local) return members;
+  return members.map((m) =>
+    m.userId === userId && !m.displayName?.trim() ? { ...m, displayName: local } : m,
+  );
+}
+
 export function mapInvite(row: any): WorkspaceInvite {
   return {
     id: row.id,
