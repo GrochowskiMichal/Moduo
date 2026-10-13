@@ -48,6 +48,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/
 import { taskHandle } from "../../../lib/task-handle";
 import { cn } from "../../../lib/utils";
 import { taskUrl } from "../../../lib/web-origin";
+import { TaskClaimMark } from "../../focus/ui/claim-mark";
 import { WorkspaceContext } from "../../workspaces/workspace-context";
 import { branchName } from "../detail-properties";
 import { duplicateFields } from "../duplicate";
@@ -72,7 +73,7 @@ type Props = {
   onOpenFullPage?: () => void;
   /** ⤡: back to the panel (on the full page). */
   onCloseFullPage?: () => void;
-  /** Who "is on this" (claims): TV-F7 puts its mark here. */
+  /** Who "is on this" (claims). Defaults to the Focus claim mark (TV-F6). */
   claimSlot?: ReactNode;
 };
 
@@ -185,7 +186,7 @@ export function TaskDetailHeader({
         ) : null}
       </nav>
 
-      {claimSlot}
+      {claimSlot ?? <TaskClaimMark workspaceId={task.workspaceId} taskId={task.id} />}
       {open ? <QueueButton task={task} api={api} canEdit={canEdit} /> : null}
       {onOpenFullPage ? (
         <IconButton icon={Maximize2} label="Open full page" onClick={onOpenFullPage} />

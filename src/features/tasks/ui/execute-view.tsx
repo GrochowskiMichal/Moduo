@@ -1,3 +1,4 @@
+import { type FocusTimerMode, isFocusTimerMode } from "@contracts/vocabularies";
 import { Check, Clock, MoreHorizontal, Pause, Play, Plus, Square } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -8,6 +9,7 @@ import { Eyebrow } from "../../../components/ui/eyebrow";
 import { IconButton } from "../../../components/ui/icon-button";
 import { Input, NumberInput } from "../../../components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
+import { SegmentedControl } from "../../../components/ui/segmented-control";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import { type FocusPrefs, useFocusPrefs } from "../../../lib/focus-prefs";
 import { formatDurationSeconds } from "../../../lib/time-format";
@@ -17,12 +19,11 @@ import {
   followFocusTask,
   getFocusSession,
   previewFocusInterval,
-  startFocus,
-  stopFocus,
-  toggleFocusPomodoro,
-  toggleFocusRunning,
   useFocusSession,
 } from "../../focus/engine";
+import { recordRunDone } from "../../focus/run";
+import { stopFocusWithUndo } from "../../focus/stop-with-undo";
+import { changeFocusTimer, focusOn, toggleFocusPause } from "../../focus/timer";
 import { FocusAwayPrompt } from "../../focus/ui/away-prompt";
 import { dispatchOpenSettings } from "../../settings/settings-events";
 import { EntityRichText } from "../../spine/ui/entity-rich-text";
@@ -153,6 +154,8 @@ export function ExecuteView({
               blockedNote={blockedNoteFor(current)}
               onMarkDone={() => {
                 onMarkDone(current.id);
+                // "n done" in the session (the follower only sees Now leave).
+                recordRunDone(current.id);
                 moveSessionPast(current.id);
               }}
               onSkip={() => {
@@ -352,14 +355,14 @@ function NowCard({
                 <span className="track-pulse size-2 rounded-full bg-muted-foreground" aria-hidden />
               ) : null}
               <span className="mr-1 font-sans text-lg tabular-nums text-foreground">
-                {formatClock(isThisTask ? session.bigClock : 0)}
+                {session.timer === "off" ? null : formatClock(isThisTask ? session.bigClock : 0)}
               </span>
               <IconButton
                 icon={running ? Pause : Play}
                 label={running ? "Pause" : "Resume"}
-                onClick={toggleFocusRunning}
+                onClick={() => toggleFocusPause()}
               />
-              <IconButton icon={Square} label="Stop" onClick={stopFocus} />
+              <IconButton icon={Square} label="Stop" onClick={stopFocusWithUndo} />
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span className="ml-0.5 cursor-default font-sans text-xs tabular-nums text-muted-foreground">
@@ -386,8 +389,11 @@ function NowCard({
                 task={task}
                 onAddTime={onAddTime}
                 onSetTime={onSetTime}
-                pomodoro={session.pomodoro}
-                onTogglePomodoro={toggleFocusPomodoro}
+                timer={session.timer}
+                onTimerChange={(timer) => {
+                  onFocusPrefsChange({ timer });
+                  changeFocusTimer(timer);
+                }}
                 prefs={focusPrefs}
                 onPrefsChange={onFocusPrefsChange}
               />
@@ -403,13 +409,10 @@ function NowCard({
                       toast.error("Still saving that task — try again in a moment.");
                       return;
                     }
-                    bindFocusTask({
-                      id: task.id,
-                      title: task.title || "Untitled",
-                      bucketName,
-                      workspaceId,
-                    });
-                    startFocus();
+                    focusOn(
+                      { id: task.id, title: task.title || "Untitled", bucketName, workspaceId },
+                      { timer: focusPrefs.timer },
+                    );
                   }}
                 >
                   <Clock className="size-icon-sm" aria-hidden />
@@ -498,16 +501,16 @@ function TimerMenu({
   task,
   onAddTime,
   onSetTime,
-  pomodoro,
-  onTogglePomodoro,
+  timer,
+  onTimerChange,
   prefs,
   onPrefsChange,
 }: {
   task: Task;
   onAddTime: (taskId: string, deltaSeconds: number) => void;
   onSetTime: (taskId: string, seconds: number) => void;
-  pomodoro: boolean;
-  onTogglePomodoro: () => void;
+  timer: FocusTimerMode;
+  onTimerChange: (timer: FocusTimerMode) => void;
   prefs: FocusPrefs;
   onPrefsChange: (patch: Partial<FocusPrefs>) => void;
 }) {
@@ -587,10 +590,22 @@ function TimerMenu({
                 className="w-14"
               />
             </div>
-            <label className="mt-2 flex cursor-pointer items-center gap-2 font-sans text-sm text-muted-foreground">
-              <input type="checkbox" checked={pomodoro} onChange={onTogglePomodoro} />
-              Pomodoro rhythm
-            </label>
+            {/* Timer (call 62a): Per task · Pomodoro · Off, here until TV-F7's ⋯
+                menu; it changes the running session and your default. */}
+            <SegmentedControl
+              aria-label="Timer"
+              size="sm"
+              className="mt-2"
+              value={timer}
+              onValueChange={(next) => {
+                if (isFocusTimerMode(next)) onTimerChange(next);
+              }}
+              items={[
+                { value: "per_task", label: "Per task" },
+                { value: "pomodoro", label: "Pomodoro" },
+                { value: "off", label: "Off" },
+              ]}
+            />
             <Button
               variant="ghost"
               size="sm"

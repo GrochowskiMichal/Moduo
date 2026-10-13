@@ -1,6 +1,6 @@
-// TV-P0 (tasks-v3 AC1.6): Focus time saves from any page. The shell's sink
-// writes through the track-time op with no Tasks page mounted, keeps the
-// stretch's key, and tells a mounted list the new total.
+// TV-P0 (tasks-v3 AC1.6), TV-F6: Focus time saves from any page. The shell's
+// sink, the only one, writes through the track-time op with no Tasks page
+// mounted, keeps the stretch's key, and hands on the new total.
 import { afterEach, beforeEach, describe, expect, it, rs } from "@rstest/core";
 
 import { DEFAULT_FOCUS_PREFS } from "../../lib/focus-prefs";
@@ -15,12 +15,7 @@ import {
   startFocus,
   stopFocus,
 } from "./engine";
-import {
-  announceFocusTimeSaved,
-  createFocusTimeSink,
-  FOCUS_TIME_SAVED_EVENT,
-  type FocusTimeSaved,
-} from "./time-sink";
+import { createFocusTimeSink, type FocusTimeSaved } from "./time-sink";
 
 const WS = "ws-1";
 
@@ -137,12 +132,29 @@ describe("Focus time saves from any page (AC1.6)", () => {
     expect(getFocusSession().unsaved).toBe(false);
   });
 
-  it("a mounted list hears the saved total", () => {
+  it("hands each saved total on (the shell puts it in the store copy)", async () => {
+    const { trackTime } = fakeTrackTime("saved", 120);
     const heard: FocusTimeSaved[] = [];
-    const listen = (e: Event) => heard.push((e as CustomEvent<FocusTimeSaved>).detail);
-    window.addEventListener(FOCUS_TIME_SAVED_EVENT, listen);
-    announceFocusTimeSaved({ workspaceId: WS, taskId: "t1", totalSeconds: 120 });
-    window.removeEventListener(FOCUS_TIME_SAVED_EVENT, listen);
+    const sink = createFocusTimeSink({
+      workspaceId: WS,
+      canEdit: () => true,
+      trackTime,
+      onGone: () => {},
+      onSaved: (saved) => heard.push(saved),
+    });
+    await expect(sink("t1", 60, ctx())).resolves.toBe(true);
     expect(heard).toEqual([{ workspaceId: WS, taskId: "t1", totalSeconds: 120 }]);
+  });
+
+  it("without edit access the time is kept, never sent", async () => {
+    const { trackTime } = fakeTrackTime();
+    const sink = createFocusTimeSink({
+      workspaceId: WS,
+      canEdit: () => false,
+      trackTime,
+      onGone: () => {},
+    });
+    await expect(sink("t1", 60, ctx())).resolves.toBe(false);
+    expect(trackTime).not.toHaveBeenCalled();
   });
 });
