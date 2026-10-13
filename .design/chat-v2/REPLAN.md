@@ -1,12 +1,11 @@
 # Chat v2 — the re-plan
 
-> **Status (2026-10-13, evening): §9 steps 1–4 are done. Three new calls from round 3 (CH73–CH75, group M) are open; next is the spec on Fable 5.1.**
+> **Status (2026-10-14): every call is decided (CH1–CH75). Writing the spec, `specs/chat-v2.md`, on Fable 5.1 (§9 step 5).**
 >
-> - **Decided:** CH1–CH72. CH24 stays parked; CH20/CH21 are facts.
-> - **Open (group M):** CH73 "Every message" in Catch up · CH74 the email after quiet hours · CH75 a mention added by an edit. One line each, with a recommendation.
-> - **Round 3 for Mike:** [research/round-3-database.md](./research/round-3-database.md): v1 piece by piece (screens retired; the engine kept and re-scoped), the database change list, 20 migrations in 15 data blocks (CV-0 spikes, CV-1…CV-15), no open PR touches chat, the five spikes' pass bars and 13 risks.
-> - **Cross-module (§9 step 4), sent:** Tasks v3 via BUILD_ORDER's 🟠 box (CH72); Notes, Calendar and the hackathon plan via [proposals.md](./proposals.md); Notes answered (N19, recorded there).
-> - **Next:** the spec `specs/chat-v2.md` (Maciej switches the session to Fable 5.1), then decision entries, the supersession banner on `specs/chat.md`, the validator, "Ready to execute".
+> - **Decided:** CH1–CH75. CH24 stays parked; CH20/CH21 are facts.
+> - **Round 3 for Mike:** [research/round-3-database.md](./research/round-3-database.md).
+> - **Cross-module, sent:** Tasks v3 via BUILD_ORDER's 🟠 box (CH72); Notes, Calendar and the hackathon plan via [proposals.md](./proposals.md); Notes answered (N19).
+> - **Next:** the spec, then decision entries, the supersession banner on `specs/chat.md`, the validator, "Ready to execute".
 > - **Mike's ask:** the tech-stack decision blueprint landed → [research/tech-blueprint.md](./research/tech-blueprint.md), folded into §6 (#2, #3, #6, #7, #18, #19–#22). Open from it: **CH31** (the Supabase plan before the hackathon).
 > - **Research lanes** ([`research/`](./research/)): six landed and folded in (early-decisions audit, role journeys, competitor structure, hackathon, visual audit → §5, current state → §1.3 B and §6 #15–18). **Threads** (→ CH30) and **visual competitors** (→ CH29) landed.
 > - **Research data in the shared local database** (kept for round 2's live checks; remove when the plan is done): workspace **"Chat replan research"** `669be464-0b9a-4d84-8537-544ac04dba5f` (10 channels, 3,032 messages, one task) and a third local user `third@moduo.local`. Full ledger and a cleanup sketch: [current state](./research/current-state.md), last section. `dev@moduo.local`'s plan is back to `free` (checked).
@@ -1113,9 +1112,11 @@ The audit walked every role's week and every view in every state and found 28 ga
 
 Writing the server rules for every decided call left three behaviours no call settles.
 
-- **CH73 · Messages in a conversation you set to "Every message": do they land in Catch up?** **(a) One line per conversation ("Acme · 12 new"), cleared when you read it; it's what pinged you (CH6, CH39)** · (b) no: Catch up stays only what's addressed to you, and "Every message" just counts and pings · (c) one line per message. *Option (c) floods Catch up in a busy channel.*
-- **CH74 · Something arrives during quiet hours, do not disturb or a vacation. Does the after-an-hour email (CH43) go out later?** **(a) No: what arrived then waits in Catch up and never emails, matching CH41 ("nothing pings when they end")** · (b) yes, an hour after they end if it's still unread and Moduo is still closed. *Option (b) means coming back from a vacation to an email per conversation.*
-- **CH75 · You fix "@Ana" to "@Anna" by editing. Does Anna hear?** **(a) Yes, once, only the person newly named; everyone else hears nothing about the edit (task comments work the same)** · (b) no, edits never notify (v1, audit D28). *Option (b) means a corrected mention silently never arrives.*
+- **CH73 · Messages in a conversation you set to "Every message": do they land in Catch up?** **(a) One line per conversation ("Acme · 12 new"), cleared when you read it; it's what pinged you (CH6, CH39)** · (b) no: Catch up stays only what's addressed to you, and "Every message" just counts and pings · (c) one line per message. *Option (c) floods Catch up in a busy channel.* ✅ *(a)*
+- **CH74 · Something arrives during quiet hours, do not disturb or a vacation. Does the after-an-hour email (CH43) go out later?** **(a) No: what arrived then waits in Catch up and never emails, matching CH41 ("nothing pings when they end")** · (b) yes, an hour after they end if it's still unread and Moduo is still closed. *Option (b) means coming back from a vacation to an email per conversation.* ✅ *(a)*
+- **CH75 · You fix "@Ana" to "@Anna" by editing. Does Anna hear?** **(a) Yes, once, only the person newly named; everyone else hears nothing about the edit (task comments work the same)** · (b) no, edits never notify (v1, audit D28). *Option (b) means a corrected mention silently never arrives.* ✅ *(a)*
+
+✅ **Decided 2026-10-14:** *"all ok, go"*: CH73 (a), CH74 (a), CH75 (a). Model switched to Fable 5.1 for the spec.
 
 ### F · Visual *(added after round 1 was sent, from the visual audit)*
 
