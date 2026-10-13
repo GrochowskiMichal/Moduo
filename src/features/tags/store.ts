@@ -576,7 +576,9 @@ export async function attachOrDetachMany(
   );
   return {
     changed: results.filter((r) => r.error === null).map((r) => r.entity),
-    failed: results.flatMap((r) => (r.error === null ? [] : [{ entity: r.entity, message: r.error }])),
+    failed: results.flatMap((r) =>
+      r.error === null ? [] : [{ entity: r.entity, message: r.error }],
+    ),
   };
 }
 

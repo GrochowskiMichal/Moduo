@@ -18,6 +18,7 @@ import {
   rowTime,
   updatedLabel,
 } from "../row-layout";
+import { type SelectMods, selectModsOf } from "../selection";
 import { nowOn } from "../use-today";
 import { AssigneeAvatar } from "./assignee-avatar";
 import type { DragActivatorRef } from "./dnd/task-dnd";
@@ -62,8 +63,9 @@ type Props = {
   today: string;
   /** Goes up each minute while the row shows its age (Updated), so it redraws. */
   ageTick?: number;
-  /** Callbacks take the task's id, so one function serves every row. */
-  onSelect: (taskId: string) => void;
+  /** Callbacks take the task's id, so one function serves every row. A
+   *  click passes its ⇧ / ⌘ (a range, one more: multi-select, TV-U12). */
+  onSelect: (taskId: string, mods?: SelectMods) => void;
   onStartEdit: (taskId: string) => void;
   onEndEdit: () => void;
   onClearCommand: () => void;
@@ -223,7 +225,7 @@ function TaskRowView({
       selected={selected}
       done={closed}
       dropTarget={dropTarget}
-      onClick={() => onSelect(task.id)}
+      onClick={(e) => onSelect(task.id, selectModsOf(e))}
       {...(editing ? {} : dragListeners)}
       className={cn(
         // `group` too: the Focus mark and older cells read the unnamed group.
@@ -317,7 +319,7 @@ function TaskRowView({
             )}
             onClick={(e) => {
               e.stopPropagation();
-              onSelect(task.id);
+              onSelect(task.id, selectModsOf(e));
             }}
             onDoubleClick={(e) => {
               e.stopPropagation();

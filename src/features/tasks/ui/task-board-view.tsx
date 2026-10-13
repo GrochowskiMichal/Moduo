@@ -10,7 +10,15 @@ import {
   type SortingStrategy,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { DROP_TARGET, DragOverlaySurface } from "../../../components/ui/drag-visuals";
@@ -43,6 +51,7 @@ import type { GroupAdd } from "../list-group-add";
 import type { Bucket, Task } from "../model";
 import { BACK_TO_MANUAL_ORDER, dragOrderFor, sortedByLabel } from "../order";
 import { DEFAULT_ROW_PROPERTIES, type RowPreset } from "../row-layout";
+import { PLAIN_SELECT, type SelectMods } from "../selection";
 import type { StatusKey } from "../statuses";
 import { useToday } from "../use-today";
 import { boardKeyActionFor, moveInGrid } from "./board-keys";
@@ -72,10 +81,12 @@ import type { GroupMarkContext } from "./task-list-parts";
 import { CompletedLine } from "./task-meta";
 import { TaskBoardSkeleton, TasksNoMatch } from "./task-view-states";
 import { registerBoardDropNames, useBoardFolds } from "./use-board-folds";
+import type { MultiSelect } from "./use-task-selection";
 import { VirtualStack } from "./virtual-stack";
 
 export type { BoardGroupBy };
 
+const NO_SELECTED: ReadonlySet<string> = new Set();
 type Props = {
   tasks: Task[];
   scopeTitle: string;
@@ -98,6 +109,15 @@ type Props = {
   onRequestCapture: (add?: GroupAdd) => void;
   selectedTaskId: string | null;
   onSelectTask: (id: string | null) => void;
+  /** Several selected (TV-U12): ⇧/⌘-click, ⇧↑↓, ⌘A and Esc, in the board's order. */
+  multiSelect?: MultiSelect;
+  /** Filled with the card ids in the order the keys walk them (TV-U12). */
+  orderRef?: { current: readonly string[] };
+  /**
+   * The page's keys asked first (the bulk row's on a selection, TV-U12):
+   * true when it handled the key. Never from a field or a portaled menu.
+   */
+  onViewKey?: (event: React.KeyboardEvent<HTMLDivElement>, selected: Task | null) => boolean;
   /** ⏎ opens the selected task's full page (decision 22). */
   onOpenTask?: (id: string) => void;
   /** The toolbar's search, Filter, Display and count (built by the page). */
@@ -194,6 +214,9 @@ export function TaskBoardView({
   onRequestCapture,
   selectedTaskId,
   onSelectTask,
+  multiSelect,
+  orderRef,
+  onViewKey,
   onOpenTask,
   header,
   filterActive = false,
@@ -510,13 +533,22 @@ export function TaskBoardView({
   // A card's facts and actions: each card redraws only when its own task or
   // facts change. Selecting a card hands the keys to the board.
   const actions = useRowActions(api);
+  // A click's ⇧ / ⌘ go to the page's selection (TV-U12) with the cards in
+  // the order the keys walk them (column by column).
+  const selectionRef = useRef<{ multiSelect?: MultiSelect; order: readonly string[] }>({
+    multiSelect,
+    order: [],
+  });
   const selectCard = useCallback(
-    (id: string) => {
-      onSelectTask(id);
+    (id: string, mods?: SelectMods) => {
+      const { multiSelect: multi, order } = selectionRef.current;
+      if (multi) multi.select(id, mods ?? PLAIN_SELECT, order);
+      else onSelectTask(id);
       boardRef.current?.focus({ preventScroll: true });
     },
     [onSelectTask],
   );
+  const multiIds = multiSelect?.ids ?? NO_SELECTED;
   const endEdit = useCallback(() => {
     setEditingId(null);
     boardRef.current?.focus({ preventScroll: true });
@@ -666,6 +698,11 @@ export function TaskBoardView({
   );
   const selectedTask = selectedTaskId ? (taskById.get(selectedTaskId) ?? null) : null;
   const selectedCell = selectedTaskId ? (cellOfTask.get(selectedTaskId) ?? null) : null;
+  const gridOrder = useMemo(() => grid.flatMap((c) => c.ids), [grid]);
+  useLayoutEffect(() => {
+    selectionRef.current = { multiSelect, order: gridOrder };
+    if (orderRef) orderRef.current = gridOrder;
+  });
 
   /** ⌥⇧←/→: to the next unfolded column that takes it (its field changes). */
   const moveToColumn = (task: Task, step: -1 | 1) => {
@@ -720,15 +757,43 @@ export function TaskBoardView({
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (editingId || activeId) return;
+    // The page's keys first (a selection's bulk row), from the board itself.
+    if (
+      onViewKey &&
+      e.target instanceof Node &&
+      e.currentTarget.contains(e.target) &&
+      !(
+        e.target instanceof HTMLElement && e.target.closest("input, textarea, [contenteditable]")
+      ) &&
+      onViewKey(e, selectedTask)
+    ) {
+      e.preventDefault();
+      return;
+    }
     const action = boardKeyActionFor(e, e.currentTarget);
     if (!action) return;
     if (e.target !== e.currentTarget) e.currentTarget.focus({ preventScroll: true });
     const go = (dir: "up" | "down" | "left" | "right") => {
       e.preventDefault();
+      multiSelect?.clear();
       const next = moveInGrid(grid, selectedTaskId, dir);
       if (next) onSelectTask(next);
     };
     switch (action) {
+      case "extend-next":
+      case "extend-prev":
+        if (!multiSelect) return;
+        e.preventDefault();
+        multiSelect.extend(action === "extend-next" ? 1 : -1, gridOrder);
+        return;
+      case "select-all":
+        if (!multiSelect) return;
+        e.preventDefault();
+        multiSelect.selectAll(gridOrder);
+        return;
+      case "clear-selection":
+        if (multiSelect?.clear()) e.preventDefault();
+        return;
       case "next":
         return go("down");
       case "prev":
@@ -819,7 +884,7 @@ export function TaskBoardView({
     description,
     columnStatus: groupDim === "status" ? cell.column.label : null,
     canEdit,
-    selected: task.id === selectedTaskId,
+    selected: task.id === selectedTaskId || multiIds.has(task.id),
     editing: task.id === editingId,
     command: command?.taskId === task.id ? command.kind : null,
     onSelect: selectCard,

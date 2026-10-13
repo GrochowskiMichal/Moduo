@@ -4,11 +4,7 @@
 // so a partly refused batch keeps what saved and says "3 of 4 changed". Used
 // inside `useTasksModule`, which hands over the store and its helpers.
 
-import {
-  legacyTaskStatus,
-  type TaskStatusCategory,
-  taskStatusWord,
-} from "@contracts/vocabularies";
+import { legacyTaskStatus, type TaskStatusCategory, taskStatusWord } from "@contracts/vocabularies";
 import { useCallback, useRef } from "react";
 import { toast } from "sonner";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
@@ -16,14 +12,8 @@ import { isNetworkError } from "../../../lib/sync/network";
 import type { OverlayChange, WorkspaceStore } from "../../../lib/sync/store";
 import { dueOnToLocalInstant, editableTaskFields, localDayOf } from "../../../lib/task-rows";
 import { undoToast } from "../../../lib/undo-toast";
-import { attachOrDetachMany, type TagContext } from "../../tags/store";
-import {
-  type BulkRefusal,
-  type BulkWrite,
-  bulkResultText,
-  dueDayOf,
-  tasksWord,
-} from "../bulk";
+import { attachOrDetachMany, type TagContext, tagNamed } from "../../tags/store";
+import { type BulkRefusal, type BulkWrite, bulkResultText, dueDayOf, tasksWord } from "../bulk";
 import { undoWrite } from "../dnd/drop-write";
 import { betweenPositions } from "../helpers";
 import type {
@@ -176,6 +166,7 @@ export function useBulkOps(deps: BulkOpsDeps) {
    * show the server's again; then one toast with one Undo. Resolves to the
    * ids that changed.
    */
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the refs it's handed are read at call time.
   const bulkWrite = useCallback(
     async (writes: readonly BulkWrite[], opts: BulkWriteOptions): Promise<string[]> => {
       if (writes.length === 0) return [];
@@ -389,7 +380,8 @@ export function useBulkOps(deps: BulkOpsDeps) {
         total: mainChanged + mainRefused.length,
         refused: mainRefused,
       });
-      if (unsent > 0 && !text.description) text.description = `${tasksWord(unsent)} waiting for the connection weren’t sent.`;
+      if (unsent > 0 && !text.description)
+        text.description = `${tasksWord(unsent)} waiting for the connection weren’t sent.`;
       if (changed.length === 0) {
         if (mainRefused.length > 0) toast.error(text.title, { description: text.description });
         return [];
@@ -439,21 +431,22 @@ export function useBulkOps(deps: BulkOpsDeps) {
           }
           if (kept > 0) toast(`Undo kept a newer change to ${tasksWord(kept)}.`);
           if (reverse.length === 0) return;
-          void latestBulkWrite.current(reverse, { label: () => "Undone", undoable: false }).then((back) => {
-            // Back to open from a check-off that closed it: its queue place too.
-            const queuedBefore = new Set(lineupBefore);
-            for (const id of back) {
-              const p = changed.find((c) => c.write.taskId === id);
-              if (p?.category !== undefined && queuedBefore.has(id)) {
-                restoreQueuePlace(id, lineupBefore);
+          void latestBulkWrite
+            .current(reverse, { label: () => "Undone", undoable: false })
+            .then((back) => {
+              // Back to open from a check-off that closed it: its queue place too.
+              const queuedBefore = new Set(lineupBefore);
+              for (const id of back) {
+                const p = changed.find((c) => c.write.taskId === id);
+                if (p?.category !== undefined && queuedBefore.has(id)) {
+                  restoreQueuePlace(id, lineupBefore);
+                }
               }
-            }
-          });
+            });
         },
       });
       return changed.map((p) => p.write.taskId);
     },
-    // biome-ignore lint/correctness/useExhaustiveDependencies: the refs are read at call time.
     [
       store,
       runtime,
@@ -475,6 +468,7 @@ export function useBulkOps(deps: BulkOpsDeps) {
    * Delete several tasks as one write with one Undo (soft deletes; their
    * subtasks become top-level, as one delete does, and Undo re-attaches them).
    */
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the refs it's handed are read at call time.
   const bulkDelete = useCallback(
     async (ids: readonly string[]) => {
       if (editBlocked() || !store || !runtime || !workspaceId) return;
@@ -580,7 +574,6 @@ export function useBulkOps(deps: BulkOpsDeps) {
         },
       });
     },
-    // biome-ignore lint/correctness/useExhaustiveDependencies: the refs are read at call time.
     [
       editBlocked,
       store,
@@ -599,6 +592,7 @@ export function useBulkOps(deps: BulkOpsDeps) {
    * in order; or, when every one is in it already, take them all out. One
    * queue op, one Undo.
    */
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the refs it's handed are read at call time.
   const bulkQueue = useCallback(
     (ids: readonly string[]) => {
       if (!store) return;
@@ -685,11 +679,11 @@ export function useBulkOps(deps: BulkOpsDeps) {
         }),
       );
     },
-    // biome-ignore lint/correctness/useExhaustiveDependencies: the refs are read at call time.
     [store, runQueueOp, optimisticEntry, backlogToTodo],
   );
 
   /** Waiting on someone or something, for each task: one write, one Undo. */
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the refs it's handed are read at call time.
   const bulkWaiting = useCallback(
     async (
       ids: readonly string[],
@@ -711,7 +705,11 @@ export function useBulkOps(deps: BulkOpsDeps) {
         .map((id) => tasksRef.current.find((t) => t.id === id))
         .filter(
           (t): t is Task =>
-            !!t && !t.deletedAt && !isTempId(t.id) && !isArchived(t.id) && !waitingAlready.has(t.id),
+            !!t &&
+            !t.deletedAt &&
+            !isTempId(t.id) &&
+            !isArchived(t.id) &&
+            !waitingAlready.has(t.id),
         );
       if (tasks.length === 0) return;
       const shownRows = tasks.map(
@@ -795,7 +793,6 @@ export function useBulkOps(deps: BulkOpsDeps) {
         },
       });
     },
-    // biome-ignore lint/correctness/useExhaustiveDependencies: the refs are read at call time.
     [editBlocked, store, runtime, workspaceId, userId, isArchived, failed, onSaved],
   );
 
@@ -803,10 +800,19 @@ export function useBulkOps(deps: BulkOpsDeps) {
    * A tag on every task of a selection, or off every one when they all have
    * it: one toast, one Undo (tags live in the workspace tag store, TV-T1).
    */
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the refs it's handed are read at call time.
   const bulkTag = useCallback(
-    async (ids: readonly string[], tag: { id: string; name: string }, has: (id: string) => boolean) => {
+    async (
+      ids: readonly string[],
+      wanted: { id: string; name: string } | { name: string },
+      has: (id: string) => boolean,
+    ) => {
       const ctx = tagContext();
       if (!ctx) return;
+      // A typed name that matches no tag makes one (shown at once; the links
+      // wait for its row).
+      const tag = "id" in wanted ? wanted : tagNamed(ctx, wanted.name);
+      if (!tag) return;
       const tasks = ids
         .map((id) => tasksRef.current.find((t) => t.id === id))
         .filter((t): t is Task => !!t && !t.deletedAt && !isTempId(t.id) && !isArchived(t.id));
@@ -841,7 +847,6 @@ export function useBulkOps(deps: BulkOpsDeps) {
         },
       });
     },
-    // biome-ignore lint/correctness/useExhaustiveDependencies: the refs are read at call time.
     [tagContext, isArchived],
   );
 

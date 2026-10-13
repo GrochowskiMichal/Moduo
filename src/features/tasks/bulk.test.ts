@@ -36,11 +36,11 @@ const REVIEW: ProjectStatus = {
   projectId: "p1",
   category: "in_progress",
   name: "In review",
-  position: "b",
+  position: 2,
   hidden: false,
+  createdAt: "",
   updatedAt: "",
-  deletedAt: null,
-} as ProjectStatus;
+};
 
 function ctx(all: Task[]): BulkContext {
   return {
@@ -62,7 +62,11 @@ describe("bulk edits (AC4.6, AC11.9)", () => {
   it("Complete finishes the open ones and their open subtasks, once", () => {
     const parent = task("parent");
     const sub = task("sub", { parentId: "parent" });
-    const doneSub = task("done-sub", { parentId: "parent", status: "done", statusCategory: "done" });
+    const doneSub = task("done-sub", {
+      parentId: "parent",
+      status: "done",
+      statusCategory: "done",
+    });
     const other = task("other");
     const all = [parent, sub, doneSub, other];
     const plan = planBulk([parent, other], { kind: "complete" }, ctx(all));
@@ -138,11 +142,7 @@ describe("bulk edits (AC4.6, AC11.9)", () => {
   it("Date +1 day moves each from its own date; a dateless one becomes tomorrow", () => {
     const dated = task("dated", { dueDate: day(20), dueOn: "2026-10-20" });
     const none = task("none");
-    const plan = planBulk(
-      [dated, none],
-      { kind: "date", to: { shift: 1 } },
-      ctx([dated, none]),
-    );
+    const plan = planBulk([dated, none], { kind: "date", to: { shift: 1 } }, ctx([dated, none]));
     expect(plan.writes).toEqual([
       { taskId: "dated", dueDate: day(21) },
       { taskId: "none", dueDate: day(15) },
@@ -153,11 +153,7 @@ describe("bulk edits (AC4.6, AC11.9)", () => {
   it("Date on a repeat moves just this occurrence, unless the patterns are asked for", () => {
     const rule = { rrule: "FREQ=WEEKLY;BYDAY=WE", dtstart: null, nextOccurrence: null };
     const repeat = task("repeat", { dueDate: day(14), dueOn: "2026-10-14", recurrence: rule });
-    const one = planBulk(
-      [repeat],
-      { kind: "date", to: { day: "2026-10-15" } },
-      ctx([repeat]),
-    );
+    const one = planBulk([repeat], { kind: "date", to: { day: "2026-10-15" } }, ctx([repeat]));
     expect(one.writes).toEqual([{ taskId: "repeat", occurrenceOn: "2026-10-15" }]);
     expect(one.label(1, 0)).toBe("1 task due Tomorrow");
     const pattern = planBulk(
@@ -170,7 +166,11 @@ describe("bulk edits (AC4.6, AC11.9)", () => {
   });
 
   it("places several after the task you held, before the next one", () => {
-    const all = [task("a", { position: "a" }), task("b", { position: "b" }), task("c", { position: "c" })];
+    const all = [
+      task("a", { position: "a" }),
+      task("b", { position: "b" }),
+      task("c", { position: "c" }),
+    ];
     const [p1, p2] = positionsAfter("a", 2, all, new Set(["c"]));
     expect(p1 > "a" && p2 > p1 && p2 < "b").toBe(true);
     const ends = endPositions(2, "p1", all, new Set());

@@ -221,8 +221,7 @@ export function planBulk(tasks: readonly Task[], change: BulkChange, ctx: BulkCo
         // A named status goes by id to the tasks whose project has it; the
         // rest take its category (their project's first status of it).
         const own =
-          "statusId" in target &&
-          ctx.statusesFor(t.bucketId).some((s) => s.id === target.statusId);
+          "statusId" in target && ctx.statusesFor(t.bucketId).some((s) => s.id === target.statusId);
         if (own) {
           if (t.statusId === target.statusId) continue;
           writes.push({ taskId: t.id, status: key, statusId: target.statusId });
