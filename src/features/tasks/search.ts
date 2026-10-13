@@ -94,19 +94,24 @@ export function descriptionText(description: string | null | undefined): string 
   if (!description) return "";
   const cached = textCache.get(description);
   if (cached !== undefined) return cached;
-  const text = (
-    /^\s*</.test(description)
-      ? description
-          // A reference's stored text is never searchable: an older chip kept
-          // a title the reader may not be allowed to see (RF-1).
-          .replace(/<span\b[^>]*\bdata-lexical-entity-ref\b[^>]*>[^<]*<\/span>/g, " ")
-          .replace(/<[^>]*>/g, " ")
-          .replace(/&[a-z#0-9]+;/gi, (m) => ENTITIES[m.toLowerCase()] ?? m)
-      : description
-  ).toLowerCase();
+  const text = descriptionWords(description).toLowerCase();
   if (textCache.size > 2000) textCache.clear();
   textCache.set(description, text);
   return text;
+}
+
+/**
+ * A description's words as it shows them (case kept), for a Board card's
+ * preview (AC7.4): tags dropped, entities decoded, a reference's stored text
+ * left out (it may name an item the reader can't see, RF-1).
+ */
+export function descriptionWords(description: string | null | undefined): string {
+  if (!description) return "";
+  if (!/^\s*</.test(description)) return description;
+  return description
+    .replace(/<span\b[^>]*\bdata-lexical-entity-ref\b[^>]*>[^<]*<\/span>/g, " ")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&[a-z#0-9]+;/gi, (m) => ENTITIES[m.toLowerCase()] ?? m);
 }
 
 /**

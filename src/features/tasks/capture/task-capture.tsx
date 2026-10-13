@@ -206,6 +206,10 @@ export function TaskCaptureBody({
           ...(seed.teamId ? { teamId: seed.teamId } : {}),
           ...(seed.dueDay ? { dueDay: seed.dueDay } : {}),
           ...(seed.status ? { status: seed.status } : {}),
+          // A Board column's own status (TV-U11) rides with its category.
+          ...(seed.status && seed.statusId
+            ? { statusId: seed.statusId, statusName: seed.statusName ?? null }
+            : {}),
           tags: (seed.tagIds ?? []).map((id) => ({ id, name: "" })),
         },
       };
@@ -401,6 +405,7 @@ export function TaskCaptureBody({
     tags: tagValues,
     waitingOn: fields.waitingOn,
     status: fields.status ?? null,
+    statusName: fields.statusId ? (fields.statusName ?? null) : null,
   };
 
   // ── where it goes ─────────────────────────────────────────────────────────
@@ -637,8 +642,9 @@ export function TaskCaptureBody({
         setFields((f) => ({ ...f, remindAt: change.value }));
         return;
       case "status":
-        // A List group's "+" set it (TV-U10); its chip's × clears it.
-        setFields((f) => ({ ...f, status: change.value }));
+        // A List group's "+" set it (TV-U10); its chip's × clears it, with
+        // a Board column's own status (TV-U11).
+        setFields((f) => ({ ...f, status: change.value, statusId: null, statusName: null }));
         return;
       case "tag": {
         const { tag, on } = change;
@@ -1013,6 +1019,13 @@ export function TaskCaptureBody({
       remindAt: values.remindAt,
       waitingOn: values.waitingOn,
       status: values.status,
+      // A Board column's own status belongs to the project it was opened
+      // in: filed elsewhere, the task takes that project's first of the
+      // category (TV-U11).
+      statusId:
+        values.status && fields.statusId && projectId === context?.destination?.projectId
+          ? fields.statusId
+          : null,
     };
     const lines = subtasks.map((s) => s.trim()).filter(Boolean);
     const childPositions = positionsAfter(lines.length, []);

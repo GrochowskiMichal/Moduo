@@ -28,6 +28,9 @@ export type DraftFields = {
   remindAt?: string | null;
   /** The status category a List group's "+" opened it with (TV-U10). */
   status?: TaskStatusCategory | null;
+  /** A Board column's own status, and its name for the chip (TV-U11). */
+  statusId?: string | null;
+  statusName?: string | null;
   tags: Array<{ id: string; name: string; color?: string | null }>;
   waitingOn: string[];
 };
@@ -108,6 +111,8 @@ export function storableDraft(draft: CaptureDraft): CaptureDraft {
       // A group's status belongs to where the capture was opened, not to the
       // draft: a restored draft never files a task into a status unasked.
       status: null,
+      statusId: null,
+      statusName: null,
     },
     ...(draft.pasted ? { pasted: draft.pasted } : {}),
   };

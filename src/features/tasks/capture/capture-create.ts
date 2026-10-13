@@ -49,6 +49,8 @@ export type CaptureTaskPlan = {
   waitingOn: string[];
   /** A status category to start in (a List group's "+", TV-U10); absent: To do. */
   status?: TaskStatusCategory | null;
+  /** The project's own status in that category (a Board column, TV-U11). */
+  statusId?: string | null;
 };
 
 export type CapturePlan = {
@@ -91,6 +93,8 @@ export function planToTask(workspaceId: string, plan: CaptureTaskPlan): Task {
     // first status of it is the server's to pick.
     task.statusCategory = plan.status;
     task.status = legacyTaskStatus(plan.status);
+    // A Board column's own status (In review), by id.
+    if (plan.statusId) task.statusId = plan.statusId;
   }
   return task;
 }

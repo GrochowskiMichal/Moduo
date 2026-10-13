@@ -519,6 +519,10 @@
   /* Calendar grid: height of one hour row. Density-scaled so the grid's
      rhythm follows the density axis like rows/controls do. */
   --cal-hour-h: 3.5rem;  /* 56 */
+  /* Board card width (tasks-v3 default o): fixed per density so the board
+     never reflows as you scroll; the column adds its drop-tint inset. */
+  --board-card-w: 18.5rem;  /* 296 */
+  --board-col-w: calc(var(--board-card-w) + 0.5rem);
 }
 
 [data-density="compact"] {
@@ -537,6 +541,8 @@
   --icon:     0.9375rem;   /* 15   */
   --icon-lg:  1.125rem;    /* 18   */
   --cal-hour-h: 3rem;      /* 48   */
+  --board-card-w: 17.5rem; /* 280  */
+  --board-col-w: calc(var(--board-card-w) + 0.5rem);
 }
 
 [data-density="dense"] {
@@ -555,6 +561,8 @@
   --icon:     0.875rem;    /* 14      */
   --icon-lg:  1rem;        /* 16      */
   --cal-hour-h: 2.75rem;   /* 44      */
+  --board-card-w: 16.5rem; /* 264     */
+  --board-col-w: calc(var(--board-card-w) + 0.5rem);
 }
 
 /* ============================================================================
