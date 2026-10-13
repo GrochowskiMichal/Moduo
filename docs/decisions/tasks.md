@@ -91,6 +91,46 @@ Built in tasks-v3 block 27 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §2 "Re
   - Decision: `occurrencesBetween` gives the Calendar its faint future occurrences (none for a repeat after completion); the picker and its summary line are TV-U13's (row 17).
   - Why: the Calendar is rebuilt later; Tasks provides.
   - Rejected: drawing ghosts on today's calendar grid.
+## 2026-10-13 · AT-2 on v3: the attachments section, toasts over dialogs, uploads in a read-only build — the agent's choices (deferred to by Maciej)
+
+Finished in tasks-v3 block 2 ([specs/attachments.md](../../specs/attachments.md) AT2-1–AT2-6, decisions 3, 7–11; REPLAN §8 L, #327) on the local stack. The pipeline's own decision is in [decisions/data.md](data.md) (2026-10-10 · AT-2). Each below is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **AT2V3-1 · The attachments section is one self-contained piece a panel places** → AT-2 (`attachments-section.tsx`), TV-U13, the full-page task (32)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: `useAttachmentsSection` owns the files, the drop/paste zone (spread on the panel root, focusable by a click so ⌘V lands there), the drop highlight state and the viewer; `<AttachmentsSection>` draws the strip and the viewer under the description.
+  - Why: TV-U13 rebuilds the panel in parallel; four touch points are cheaper to carry than forty inline lines.
+  - Rejected: leaving it inline in `task-detail-panel.tsx` (U13 would re-derive it); a context provider (one more layer for one consumer).
+- **AT2V3-2 · A toast is pressable above a modal and never closes it** → AT-2 (`dialog.tsx`, `sonner.tsx`), every dialog
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the Toaster is `pointer-events-auto` and `DialogContent` ignores outside presses on `[data-sonner-toaster]`; so Delete's Undo in the viewer restores the file and the viewer stays open.
+  - Why: a modal sets `pointer-events: none` on the body, so a press on a toast only closed the dialog and the Undo never ran (caught live).
+  - Rejected: closing the viewer on Delete (Undo would work, but deleting the second of three files would throw you out); a guard in the viewer only (every dialog that raises an Undo has the same trap).
+- **AT2V3-3 · In a read-only build, uploads wait** → AT-2 (`queue.ts`, `uploads/index.ts`, `min-build.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: below `min_build` the queue starts nothing and a step refused then leaves the file queued with its server row and sent bytes; the tile reads "Waiting…" and the app's own "Update Moduo" says why. `storage_status` is listed as a read; resumable upload paths count as writes in `isWriteRequest` (classification only: uploads go over XHR, outside the guarded fetch, and begin/finalize are the guarded writes).
+  - Why: "the upload failed · Retry" was wrong there, and every Retry re-began and abandoned a pending row.
+  - Rejected: routing uploads through the guarded fetch (TUS and progress need XHR); a separate read-only caption (the banner already says it).
+- **AT2V3-4 · The panel reads a task's files when it opens; live updates come with AT-3** → AT-2, AT-3
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the strip reads `listForEntity` on open (and after this device's uploads); another person's upload shows on the next open. AT-3 wires `attachments` (in the Realtime publication since TV-D11b) into the store for the 📎 counts and refreshes an open strip from it; capture's file seam (`registerCaptureAttachments`) is AT-3's too (AT3-2).
+  - Why: REPLAN §8 L ("fine, on demand"); one listener for counts and strip belongs with the counts.
+  - Rejected: a per-panel Realtime channel now (a second live path AT-3 would replace).
+- **AT2V3-5 · Preview links are re-checked every minute while a strip is open** → AT-2 (`use-attachments.ts`, `attachment-strip.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: an open strip asks the link cache every minute and when the window comes back; only links within a minute of their hour are signed again, and a broken thumbnail tries again on a fresh link.
+  - Why: a panel can stay open past the hour (desktop), and every thumbnail turned into a file tile for the rest of the session.
+  - Rejected: longer preview links (spec decision 11 keeps them at 1 h); re-signing on every image error (a loop on a file that's really gone).
+- **AT2V3-6 · Begin's pool pre-check weighs the original alone** → AT-2 (`queue.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the device's "storage is full" pre-check compares used + pending + the batch so far + this file's original, as `attachments_op_begin` does; earlier files in the same drop count with their previews.
+  - Why: counting the preview too parked files the server would take for 5 minutes near the limit.
+  - Rejected: no pre-check (a refused begin per file in a big drop).
+- **AT2V3-7 · "Free up space" on a full pool arrives with Settings → Storage (AT-3)** → AT-2 (AT2-4's text), AT-3
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10 (the first AT-2 session), recorded 2026-10-13.
+  - Decision: until AT-3, a full pool's line shows the facts, Upgrade for the owner, and the file retries by itself; the strip's `onFreeUpSpace` is wired when the largest-files list exists.
+  - Why: the action would open a screen that doesn't exist yet.
+  - Rejected: a dead link, or building the Storage list inside AT-2.
+- **Deferred (server, a P1 ops block):** a re-begun, refused or dismissed upload leaves its old pending row counted in `storage__unsettled_bytes` until the 24 h sweep, and `attachments_op_delete` doesn't release it; an op that abandons one's own unfinished upload would free the space at once. Not needed for AT-2's ACs; noted in the 🟠 box ("From AT-2").
 
 ## 2026-10-11 · TV-D11b virtualization, the 10k fixture, the grant feed — the agent's choices (deferred to by Maciej)
 

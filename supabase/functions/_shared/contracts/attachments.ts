@@ -19,3 +19,23 @@ export const ATTACHMENT_LINK_TTL_SECONDS = {
   /** Links handed to an agent over MCP. */
   mcp: 300,
 } as const;
+
+const MiB = 1048576;
+
+/** The hosted project's global upload cap, in bytes: every plan's per-file
+ *  limit is held under it until the org moves to Supabase Pro (AT-1 decision).
+ *  Mirrors `attachments__platform_file_cap()`; attachments.test.ts checks it. */
+export const ATTACHMENT_PLATFORM_FILE_CAP_BYTES = 50 * MiB;
+
+/** Per-file limit by the workspace owner's plan (keys = PLAN_TIERS), in bytes,
+ *  before the platform cap. Mirrors `storage__limits_for_owner` (Free 20 MB ·
+ *  Pro/Duo 200 MB · Team/Founder 500 MB); the server decides, the app only
+ *  words its refusal. Plain object so this file stays import-free; the drift
+ *  test checks the keys against PLAN_TIERS and the numbers against the SQL. */
+export const ATTACHMENT_PER_FILE_BYTES = {
+  free: 20 * MiB,
+  pro: 200 * MiB,
+  duo: 200 * MiB,
+  team: 500 * MiB,
+  founder: 500 * MiB,
+} as const;

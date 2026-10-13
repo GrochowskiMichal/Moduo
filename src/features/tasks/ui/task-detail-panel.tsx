@@ -1,15 +1,21 @@
 // The task detail panel (tasks-v2 §9, comp §1 + §5 option C): one view of the
 // right panel (hosted by Tasks, Calendar, Notes and Email), never the panel
 // itself. Top to bottom: the header (bucket breadcrumb, queue toggle, copy link,
-// ⋯), the checkbox + title, an auto-height description, the properties, the
-// collections (Subtasks, Blocked by, Blocks, Linked: label · count · +), then
-// comments & activity and the metadata line. Edits go through the module api
-// (field-level `patchTask`); comments through the spine's `comments_op_add`.
+// ⋯), the checkbox + title, an auto-height description, the attachment strip
+// (AT-2), the properties, the collections (Subtasks, Blocked by, Blocks,
+// Linked: label · count · +), then comments & activity and the metadata line.
+// Edits go through the module api (field-level `patchTask`); comments through
+// the spine's `comments_op_add`. Files pasted or dropped anywhere on the panel
+// (the description included) attach to the task.
 
 import { isClosedTask } from "@contracts/vocabularies";
 import { Ban, CircleDashed, ListChecks, Lock, Plus, RotateCcw, X } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import {
+  AttachmentsSection,
+  useAttachmentsSection,
+} from "@/features/attachments/ui/attachments-section";
 import { useEntityHub } from "@/features/spine/hooks/use-entity-hub";
 import { createLinkWithToast } from "@/features/spine/ui/drop-link-toast";
 import { EntityHub } from "@/features/spine/ui/entity-hub";
@@ -28,6 +34,7 @@ import {
 } from "../../../components/ui/command";
 import { CompleteToggle } from "../../../components/ui/complete-toggle";
 import { detailTitleVariants } from "../../../components/ui/detail-title";
+import { DROP_TARGET } from "../../../components/ui/drag-visuals";
 import { EmptyState } from "../../../components/ui/empty-state";
 import { IconButton } from "../../../components/ui/icon-button";
 import { Input } from "../../../components/ui/input";
@@ -172,6 +179,16 @@ function DetailBody({
           void runtime.spine.deleteLink({ workspaceId, linkId: link.id }).then(hubReload)
       : undefined;
   const linkedCount = hub.sections.reduce((n, s) => n + s.count, 0);
+
+  // ── attachments (AT-2): one self-contained section ───────────────────────────
+  const files = useAttachmentsSection({
+    runtime,
+    // The task's own workspace: that's where its files live.
+    workspaceId: workspaceId ? task.workspaceId || workspaceId : null,
+    entity: { type: "task", id: task.id },
+    userId: api.currentUserId ?? null,
+    canEdit,
+  });
   const linkEntity = (ref: EntityRef, label: string, icon: string | null) => {
     if (!runtime || !workspaceId) return;
     void (async () => {
@@ -208,7 +225,10 @@ function DetailBody({
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    // A drop or paste anywhere on the task attaches the files. The description
+    // editor hands its own to `onFiles` (Lexical owns those events), so the
+    // zone skips them.
+    <section aria-label="Task details" className="flex h-full min-h-0 flex-col" {...files.dropZone}>
       <TaskDetailHeader
         task={task}
         parent={parent}
@@ -219,7 +239,13 @@ function DetailBody({
         onSelectTask={onSelectTask}
       />
       {/* px/py inset so a focused field's ring isn't clipped by this scroll box */}
-      <div className="pane-scroll min-h-0 flex-1 overflow-y-auto px-1 pt-2.5 pb-4">
+      <div
+        data-drop-active={files.dropActive || undefined}
+        className={cn(
+          "pane-scroll min-h-0 flex-1 overflow-y-auto rounded-lg px-1 pt-2.5 pb-4 transition-[background-color,box-shadow] duration-(--motion-fade) ease-(--ease-out)",
+          files.dropActive && DROP_TARGET,
+        )}
+      >
         <div className="flex flex-col gap-5">
           <div className="flex flex-col gap-1.5">
             <div className="flex items-start gap-2">
@@ -245,10 +271,11 @@ function DetailBody({
                   ariaLabel="Description"
                   placeholder={canEdit ? "Add a description…  @ or / to link" : undefined}
                   className="min-h-6 text-base text-foreground/85"
-                  placeholderClassName="text-base"
+                  placeholderClassName="right-0 truncate text-base"
                   onCommit={(html) => {
                     if (html !== task.description) api.patchTask(task.id, { description: html });
                   }}
+                  onFiles={files.onEditorFiles}
                   // TV-D12: an @person in the description notifies them (people
                   // who can see the task; the server checks). Keep this wiring
                   // when the panel is rebuilt (TV-U13).
@@ -264,6 +291,7 @@ function DetailBody({
                 />
               </div>
             ) : null}
+            <AttachmentsSection state={files} className="mt-1 pl-6" />
           </div>
 
           {task.status === "archived" ? (
@@ -328,7 +356,7 @@ function DetailBody({
           <TaskFeed task={task} api={api} runtime={runtime} workspaceId={workspaceId} />
         </div>
       </div>
-    </div>
+    </section>
   );
 }
 
