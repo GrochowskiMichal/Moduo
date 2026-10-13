@@ -5,11 +5,12 @@
 -- through the ops; a view you can't see answers like one that isn't there.
 --
 -- Cast: O owns workspace W. E and M are members who work on tasks, A an
--- admin, V a viewer, X owns another workspace W2 (the outsider). P is a
--- project the workspace sees; PB is O's private project; PE is E's private
--- project. K is an API key in W.
+-- admin, V a viewer, X owns another workspace W2 (the outsider); Y and Z are
+-- people outside W, D a member who leaves. P is a project the workspace
+-- sees; PB is O's private project; PE is E's private project. K is an API
+-- key in W that edits Tasks, KV one that only reads them.
 
-SELECT test.person(n) FROM unnest(ARRAY['O', 'E', 'M', 'A', 'V', 'X']) AS n;
+SELECT test.person(n) FROM unnest(ARRAY['O', 'E', 'M', 'A', 'V', 'X', 'Y', 'Z', 'D']) AS n;
 INSERT INTO public.workspaces (id, owner_id, name) VALUES
   (test.id('W'), test.id('O'), 'Moduo Labs'),
   (test.id('W2'), test.id('X'), 'Elsewhere');
@@ -236,14 +237,20 @@ BEGIN
               AND NOT has_function_privilege('anon', 'public.task_views_op_move(uuid, uuid, text)', 'EXECUTE')
               AND has_function_privilege('authenticated', 'public.task_views_op_create(uuid, jsonb)', 'EXECUTE'),
     'anon runs no op; signed-in people do');
-  PERFORM test.ok(NOT has_function_privilege('authenticated', 'public.task_views__sees(uuid, boolean, uuid, uuid)', 'EXECUTE')
+  PERFORM test.ok(NOT has_function_privilege('authenticated', 'public.task_views__sees(uuid, uuid, boolean, uuid, uuid)', 'EXECUTE')
               AND NOT has_function_privilege('authenticated', 'public.task_views__actor(uuid)', 'EXECUTE')
-              AND NOT has_function_privilege('authenticated', 'public.task_views__check_filters(uuid, jsonb)', 'EXECUTE')
+              AND NOT has_function_privilege('authenticated', 'public.task_views__check_filters(uuid, uuid, jsonb)', 'EXECUTE')
               AND NOT has_function_privilege('authenticated', 'public.task_views__check_display(jsonb)', 'EXECUTE')
-              AND NOT has_function_privilege('anon', 'public.task_views__sees(uuid, boolean, uuid, uuid)', 'EXECUTE'),
+              AND NOT has_function_privilege('anon', 'public.task_views__sees(uuid, uuid, boolean, uuid, uuid)', 'EXECUTE'),
     'the helpers are service only');
-  r := test.try('M', format($q$SELECT public.task_views__sees(%L, true, %L, %L)$q$, test.id('O'), test.id('PB'), test.id('M')));
+  r := test.try('M', format($q$SELECT public.task_views__sees(%L, %L, true, %L, %L)$q$,
+    test.id('W'), test.id('O'), test.id('PB'), test.id('M')));
   PERFORM test.ok(r LIKE '42501%', 'nobody asks the visibility helper about someone else', r);
+  PERFORM test.ok(has_function_privilege('authenticated', 'public.task_views__readable(uuid)', 'EXECUTE')
+              AND NOT has_function_privilege('anon', 'public.task_views__readable(uuid)', 'EXECUTE')
+              AND test.value_as('M', format('SELECT public.task_views__readable(%L)', test.id('VB'))) = 'false'
+              AND test.value_as('X', format('SELECT public.task_views__readable(%L)', test.id('VB'))) = 'false',
+    'the read helper answers only for the caller, and says no to a view they can''t read');
 
   -- ── Shapes ────────────────────────────────────────────────────────────────
   r := test.try('E', test.create_sql(jsonb_build_object('name', 'Bad',
@@ -280,15 +287,52 @@ BEGIN
   r := test.try('E', test.create_sql(jsonb_build_object('name', 'Leak',
     'filters', jsonb_build_array(jsonb_build_object('dimension', 'tag', 'operator', 'is',
       'values', jsonb_build_array(test.id('TG2')))))));
-  PERFORM test.ok(r LIKE '22023%tag that isn''t in this workspace%', 'another workspace''s tag is refused', r);
+  v_missing := test.try('E', test.create_sql(jsonb_build_object('name', 'Leak',
+    'filters', jsonb_build_array(jsonb_build_object('dimension', 'tag', 'operator', 'is',
+      'values', jsonb_build_array(test.id('no such thing')))))));
+  PERFORM test.ok(r LIKE '22023%' AND r = v_missing,
+    'another workspace''s tag is refused, the same as one that doesn''t exist', r);
   r := test.try('E', test.create_sql(jsonb_build_object('name', 'Leak',
     'filters', jsonb_build_array(jsonb_build_object('dimension', 'team', 'operator', 'is',
       'values', jsonb_build_array(test.id('TM2')))))));
-  PERFORM test.ok(r LIKE '22023%team that isn''t in this workspace%', 'another workspace''s team is refused', r);
+  PERFORM test.ok(r LIKE '22023%' AND r = v_missing, 'another workspace''s team is refused the same way', r);
   r := test.try('E', test.create_sql(jsonb_build_object('name', 'Leak',
     'filters', jsonb_build_array(jsonb_build_object('dimension', 'assignee', 'operator', 'is',
       'values', jsonb_build_array(test.id('X')))))));
-  PERFORM test.ok(r LIKE '22023%someone who isn''t in this workspace%', 'someone from outside is refused', r);
+  PERFORM test.ok(r LIKE '22023%' AND r = v_missing, 'someone from outside is refused the same way', r);
+
+  -- Naming someone tells nothing about tasks you can't see. Y and Z aren't
+  -- members; Y is the assignee of a task in O's private project only, Z of a
+  -- task everyone sees (both made up past the triggers, as old data could be).
+  r := test.as_user('O', format($q$SELECT public.tasks_op_create(%L, %L::jsonb)$q$, test.id('W'),
+    jsonb_build_object('id', test.id('TB'), 'title', 'Due diligence', 'bucket_id', test.id('PB'))));
+  r := test.as_user('O', format($q$SELECT public.tasks_op_create(%L, %L::jsonb)$q$, test.id('W'),
+    jsonb_build_object('id', test.id('TP'), 'title', 'Edit episode 1', 'bucket_id', test.id('P'))));
+  PERFORM set_config('session_replication_role', 'replica', true);
+  UPDATE public.tasks SET assignee_id = test.id('Y') WHERE id = test.id('TB');
+  UPDATE public.tasks SET assignee_id = test.id('Z') WHERE id = test.id('TP');
+  PERFORM set_config('session_replication_role', 'origin', true);
+  PERFORM test.ok(NOT public.tasks__visible_to(test.id('TB'), test.id('E'))
+              AND public.tasks__visible_to(test.id('TB'), test.id('O'))
+              AND public.tasks__visible_to(test.id('TP'), test.id('E')),
+    'E can''t see Y''s task; O can; everyone sees Z''s');
+  r := test.try('E', test.create_sql(jsonb_build_object('name', 'Probe',
+    'filters', jsonb_build_array(jsonb_build_object('dimension', 'assignee', 'operator', 'is',
+      'values', jsonb_build_array(test.id('Y')))))));
+  PERFORM test.ok(r LIKE '22023%' AND r = v_missing,
+    'naming the assignee of a hidden task answers like naming nobody', r);
+  r := test.try('E', test.create_sql(jsonb_build_object('name', 'Probe',
+    'filters', jsonb_build_array(jsonb_build_object('dimension', 'creator', 'operator', 'is',
+      'values', jsonb_build_array(test.id('Y')))))));
+  PERFORM test.ok(r = v_missing, 'and the same as a creator', r);
+  r := test.try('O', test.create_sql(jsonb_build_object('name', 'Y''s',
+    'filters', jsonb_build_array(jsonb_build_object('dimension', 'assignee', 'operator', 'is',
+      'values', jsonb_build_array(test.id('Y')))))));
+  PERFORM test.ok(r LIKE 'ok%', 'someone who sees that task may name its assignee', r);
+  r := test.try('E', test.create_sql(jsonb_build_object('name', 'Z''s',
+    'filters', jsonb_build_array(jsonb_build_object('dimension', 'assignee', 'operator', 'is',
+      'values', jsonb_build_array(test.id('Z')))))));
+  PERFORM test.ok(r LIKE 'ok%', 'and anyone may name the assignee of a task they see', r);
   r := test.try('E', test.create_sql(jsonb_build_object('name', 'Leak',
     'filters', jsonb_build_array(jsonb_build_object('dimension', 'project', 'operator', 'is',
       'values', jsonb_build_array(test.id('PB')))))));
@@ -321,6 +365,18 @@ BEGIN
   PERFORM test.ok(r LIKE '42501%', 'a view-only key can''t save a view', r);
   r := test.as_key('KV', format($q$SELECT public.task_views_op_move(%L, %L, 'up')$q$, test.id('W'), test.id('V1')));
   PERFORM test.ok(r LIKE '42501%', 'or move one', r);
+
+  -- A view shared by someone who has left reads as gone, for everyone.
+  INSERT INTO public.workspace_members (workspace_id, user_id, role) VALUES (test.id('W'), test.id('D'), 'member');
+  PERFORM test.op('D', test.create_sql(jsonb_build_object('id', test.id('VD'), 'name', 'D''s board', 'shared', true)));
+  PERFORM test.ok(test.sees('M', ARRAY[test.id('VD')]) = 1, 'a teammate''s shared view reaches M');
+  DELETE FROM public.workspace_members WHERE workspace_id = test.id('W') AND user_id = test.id('D');
+  PERFORM set_config('share.bypass', '', true);
+  PERFORM test.ok(test.sees('M', ARRAY[test.id('VD')]) = 0 AND test.sees('O', ARRAY[test.id('VD')]) = 0,
+    'once they leave, nobody reads it');
+  r := test.try('A', test.update_sql('W', 'VD', '{"deleted": true}'));
+  PERFORM test.ok(r LIKE '%isn''t here any more%' AND r = test.try('A', test.update_sql('W', 'nothing', '{"deleted": true}')),
+    'and it answers like a view that isn''t there', r);
 
   -- ── Seeds: once per person, workspace and seed ────────────────────────────
   v := test.op('E', test.create_sql(jsonb_build_object('name', 'Done last week', 'seed', 'done_last_week',

@@ -9,7 +9,8 @@
 -- Views are yours until you share one with the workspace (`shared`). A shared
 -- view that keeps a project shows only to people who can see that project:
 -- its name and its filter never reach anyone else. The read policy and every
--- op ask the same question (`task_views__sees`). A filter keeps only the
+-- op ask the same question (`task_views__sees`); a view shared by someone
+-- who has left the workspace reads as gone. A filter keeps only the
 -- app's words and the ids of this workspace's people, teams and tags (never
 -- a project or anything from another workspace); Display keeps only words.
 -- Keeping your own views needs only Tasks view access; sharing one needs
@@ -66,16 +67,31 @@ CREATE TRIGGER zz_stamp_updated_at BEFORE INSERT OR UPDATE ON public.task_views
 
 -- ── 2. Who sees a view ─────────────────────────────────────────────────────
 
--- The maker always; anyone else while it's shared and, for a project view,
--- only while they can see that project. Service only (the policy below asks
--- `projects__visible`, which authenticated callers may run).
+-- The maker always; anyone else while it's shared, its maker still works in
+-- the workspace and, for a project view, only while they can see that
+-- project. Service only.
+DROP FUNCTION IF EXISTS public.task_views__sees(uuid, boolean, uuid, uuid);
 CREATE OR REPLACE FUNCTION public.task_views__sees(
-  p_owner uuid, p_shared boolean, p_project uuid, p_actor uuid)
+  p_workspace_id uuid, p_owner uuid, p_shared boolean, p_project uuid, p_actor uuid)
 RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
   SELECT p_actor IS NOT NULL
      AND (p_owner = p_actor
           OR (coalesce(p_shared, false)
+              AND public.tasks__is_member(p_workspace_id, p_owner)
               AND (p_project IS NULL OR public.projects__visible_to(p_project, p_actor))))
+$$;
+
+-- Whether the caller may read a view: live, Tasks open to them in its
+-- workspace, and `task_views__sees`. The read policy's one question; it
+-- answers only for the caller, about a view by its id.
+CREATE OR REPLACE FUNCTION public.task_views__readable(p_view_id uuid)
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.task_views x
+    WHERE x.id = p_view_id AND x.deleted_at IS NULL
+      AND public.perm_can_view(x.workspace_id, 'tasks')
+      AND public.task_views__sees(x.workspace_id, x.owner_id, x.shared, x.project_id,
+                                  public.perm_actor_id()))
 $$;
 
 -- Read: your own, and the ones shared with the workspace you may see, while
@@ -84,10 +100,7 @@ $$;
 ALTER TABLE public.task_views ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS task_views_read ON public.task_views;
 CREATE POLICY task_views_read ON public.task_views FOR SELECT TO authenticated
-  USING (deleted_at IS NULL
-         AND public.perm_can_view(workspace_id, 'tasks')
-         AND (owner_id = (SELECT auth.uid())
-              OR (shared AND (project_id IS NULL OR public.projects__visible(project_id)))));
+  USING (public.task_views__readable(id));
 
 REVOKE ALL ON public.task_views FROM PUBLIC, anon, authenticated;
 GRANT SELECT ON public.task_views TO authenticated;
@@ -101,11 +114,14 @@ GRANT ALL ON public.task_views TO service_role;
 -- TASK_VIEW_WORD_DIMENSIONS in @contracts/vocabularies). A word dimension
 -- holds short words ("week", "done"); a person, team or tag dimension holds
 -- "none" or the id of someone or something in this same workspace: a person
--- who works here (or is named on one of its tasks), a team or a tag of the
--- workspace. Nothing else is kept, so a view never carries anything a reader
--- of the workspace couldn't see already.
+-- who works here (or the assignee of a task the saver can see), a team or a
+-- tag of the workspace. Nothing else is kept, so a view never carries
+-- anything a reader of the workspace couldn't see already. Every refusal
+-- reads the same, so saving a view tells nothing about an id.
 DROP FUNCTION IF EXISTS public.task_views__check_filters(jsonb);
-CREATE OR REPLACE FUNCTION public.task_views__check_filters(p_workspace_id uuid, p_filters jsonb)
+DROP FUNCTION IF EXISTS public.task_views__check_filters(uuid, jsonb);
+CREATE OR REPLACE FUNCTION public.task_views__check_filters(
+  p_workspace_id uuid, p_actor uuid, p_filters jsonb)
 RETURNS jsonb LANGUAGE plpgsql STABLE SET search_path = '' AS $$
 DECLARE
   c jsonb;
@@ -156,18 +172,16 @@ BEGIN
         RAISE EXCEPTION 'That filter can''t be saved in a view.' USING ERRCODE = '22023';
       END IF;
       v_id := v_text::uuid;
-      IF v_dim IN ('assignee', 'creator') AND NOT (
-           EXISTS (SELECT 1 FROM public.workspace_members m
-                   WHERE m.workspace_id = p_workspace_id AND m.user_id = v_id)
-           OR EXISTS (SELECT 1 FROM public.workspaces w WHERE w.id = p_workspace_id AND w.owner_id = v_id)
-           OR EXISTS (SELECT 1 FROM public.tasks t WHERE t.assignee_id = v_id AND t.workspace_id = p_workspace_id)) THEN
-        RAISE EXCEPTION 'That filter names someone who isn''t in this workspace.' USING ERRCODE = '22023';
-      ELSIF v_dim = 'team' AND NOT EXISTS (
-           SELECT 1 FROM public.teams x WHERE x.id = v_id AND x.workspace_id = p_workspace_id) THEN
-        RAISE EXCEPTION 'That filter names a team that isn''t in this workspace.' USING ERRCODE = '22023';
-      ELSIF v_dim = 'tag' AND NOT EXISTS (
-           SELECT 1 FROM public.tags x WHERE x.id = v_id AND x.workspace_id = p_workspace_id) THEN
-        RAISE EXCEPTION 'That filter names a tag that isn''t in this workspace.' USING ERRCODE = '22023';
+      IF (v_dim IN ('assignee', 'creator') AND NOT (
+            public.tasks__is_member(p_workspace_id, v_id)
+            OR EXISTS (SELECT 1 FROM public.tasks t
+                       WHERE t.assignee_id = v_id AND t.workspace_id = p_workspace_id
+                         AND public.tasks__visible_to(t.id, p_actor))))
+         OR (v_dim = 'team' AND NOT EXISTS (
+            SELECT 1 FROM public.teams x WHERE x.id = v_id AND x.workspace_id = p_workspace_id))
+         OR (v_dim = 'tag' AND NOT EXISTS (
+            SELECT 1 FROM public.tags x WHERE x.id = v_id AND x.workspace_id = p_workspace_id)) THEN
+        RAISE EXCEPTION 'That filter can''t be saved in a view.' USING ERRCODE = '22023';
       END IF;
     END LOOP;
   END LOOP;
@@ -301,7 +315,7 @@ BEGIN
   ELSIF v_fields ? 'project_id' AND jsonb_typeof(v_fields -> 'project_id') <> 'null' THEN
     RAISE EXCEPTION 'Only a project view keeps a project.' USING ERRCODE = '22023';
   END IF;
-  v_filters := public.task_views__check_filters(p_workspace_id, coalesce(v_fields -> 'filters', '[]'::jsonb));
+  v_filters := public.task_views__check_filters(p_workspace_id, v_actor, coalesce(v_fields -> 'filters', '[]'::jsonb));
   v_display := public.task_views__check_display(coalesce(v_fields -> 'display', '{}'::jsonb));
   IF v_fields ? 'shared' THEN
     IF jsonb_typeof(v_fields -> 'shared') <> 'boolean' THEN
@@ -372,7 +386,7 @@ BEGIN
   -- see it (and, for an admin, while its delete can still be undone).
   IF r.id IS NULL
      OR (NOT v_owner
-         AND NOT (public.task_views__sees(r.owner_id, r.shared, r.project_id, v_actor)
+         AND NOT (public.task_views__sees(p_workspace_id, r.owner_id, r.shared, r.project_id, v_actor)
                   AND (r.deleted_at IS NULL OR v_admin))) THEN
     RAISE EXCEPTION 'That view isn''t here any more.' USING ERRCODE = '22023';
   END IF;
@@ -383,7 +397,7 @@ BEGIN
 
   v_name := CASE WHEN v_patch ? 'name' THEN public.tasks__clean_name(v_patch ->> 'name', 'A view', 80)
                  ELSE r.name END;
-  v_filters := CASE WHEN v_patch ? 'filters' THEN public.task_views__check_filters(p_workspace_id, v_patch -> 'filters')
+  v_filters := CASE WHEN v_patch ? 'filters' THEN public.task_views__check_filters(p_workspace_id, v_actor, v_patch -> 'filters')
                     ELSE r.filters END;
   v_display := CASE WHEN v_patch ? 'display' THEN public.task_views__check_display(v_patch -> 'display')
                     ELSE r.display END;
@@ -423,7 +437,7 @@ BEGIN
   END IF;
   SELECT x.* INTO r FROM public.task_views x
   WHERE x.id = p_view_id AND x.workspace_id = p_workspace_id AND x.deleted_at IS NULL;
-  IF r.id IS NULL OR NOT public.task_views__sees(r.owner_id, r.shared, r.project_id, v_actor) THEN
+  IF r.id IS NULL OR NOT public.task_views__sees(p_workspace_id, r.owner_id, r.shared, r.project_id, v_actor) THEN
     RAISE EXCEPTION 'That view isn''t here any more.' USING ERRCODE = '22023';
   END IF;
   IF r.owner_id <> v_actor THEN
@@ -500,13 +514,18 @@ DECLARE
   fn text;
 BEGIN
   FOREACH fn IN ARRAY ARRAY[
-    'task_views__sees(uuid, boolean, uuid, uuid)',
-    'task_views__check_filters(uuid, jsonb)', 'task_views__check_display(jsonb)',
+    'task_views__sees(uuid, uuid, boolean, uuid, uuid)',
+    'task_views__check_filters(uuid, uuid, jsonb)', 'task_views__check_display(jsonb)',
     'task_views__actor(uuid)'] LOOP
     EXECUTE format('REVOKE ALL ON FUNCTION public.%s FROM PUBLIC', fn);
     EXECUTE format('REVOKE ALL ON FUNCTION public.%s FROM anon', fn);
     EXECUTE format('REVOKE ALL ON FUNCTION public.%s FROM authenticated', fn);
     EXECUTE format('GRANT EXECUTE ON FUNCTION public.%s TO service_role', fn);
+  END LOOP;
+  FOREACH fn IN ARRAY ARRAY['task_views__readable(uuid)'] LOOP
+    EXECUTE format('REVOKE ALL ON FUNCTION public.%s FROM PUBLIC', fn);
+    EXECUTE format('REVOKE ALL ON FUNCTION public.%s FROM anon', fn);
+    EXECUTE format('GRANT EXECUTE ON FUNCTION public.%s TO authenticated, service_role', fn);
   END LOOP;
   FOREACH fn IN ARRAY ARRAY[
     'task_views_op_create(uuid, jsonb)',
