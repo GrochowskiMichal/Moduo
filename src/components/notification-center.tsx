@@ -289,7 +289,7 @@ export function NotificationCenter() {
         </Card>
       );
     },
-    [activateGroup, handleDismiss, userId, labels],
+    [activateGroup, handleDismiss, userId, labels, referenceName],
   );
 
   // Cap the passive overdue list so a big backlog never becomes a wall (quiet-core);
