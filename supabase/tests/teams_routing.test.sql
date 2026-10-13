@@ -354,6 +354,20 @@ BEGIN
     'a team newly named tells only its own members', r);
   r := test.try('M', format($q$SELECT public.comments_op_mention_teams(%L, %L::uuid[])$q$, v_notice, ARRAY[test.id('DS')]));
   PERFORM test.ok(r LIKE '%Only its author%', 'only the comment''s author names teams in it', r);
+  -- A comments on E's task naming Design: E, its creator, already hears
+  -- "commented on" for this comment, so the team notice is M's alone.
+  r := test.as_user('A', format($q$SELECT public.comments_op_add(%L, 'task', %L, 'Can Design take it?', '{}'::uuid[], 'Hero image', 'task')$q$,
+    test.id('W'), test.id('T10')));
+  SELECT c.id INTO v_notice FROM public.comments c
+  WHERE c.entity_id = test.id('T10') AND c.created_by = test.id('A') ORDER BY c.created_at DESC LIMIT 1;
+  r := test.as_user('A', format($q$SELECT public.comments_op_mention_teams(%L, %L::uuid[])$q$, v_notice, ARRAY[test.id('DS')]));
+  PERFORM test.ok(EXISTS (SELECT 1 FROM public.module_activity a
+                          WHERE a.op = 'comments.add' AND a.payload ->> 'comment_id' = v_notice::text
+                            AND a.payload -> 'notify_user_ids' @> test.ids('E'))
+              AND EXISTS (SELECT 1 FROM public.module_activity a
+                          WHERE a.op = 'comments.team_mention' AND a.payload ->> 'comment_id' = v_notice::text
+                            AND a.payload -> 'mentioned_user_ids' = test.ids('M')),
+    'someone the comment already told (its task''s creator) hears it once, not again through the team', r);
   r := test.as_user('O', format($q$SELECT public.comments_op_add(%L, 'task', %L, 'Fine as is @Design', '{}'::uuid[], 'Salaries', 'task')$q$,
     test.id('W'), test.id('PT2')));
   SELECT c.id INTO v_notice FROM public.comments c WHERE c.entity_id = test.id('PT2') ORDER BY c.created_at DESC LIMIT 1;

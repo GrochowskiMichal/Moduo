@@ -34,6 +34,7 @@ import { canBeAssignee } from "../../sharing/rules";
 import type { Bucket, Team, TeamMember } from "../../tasks/model";
 import { TEAM_COLOR_OPTIONS, teamHue } from "../../tasks/teams";
 import { ExplainStrip, friendlyError, PaneHeader } from "./access-ui";
+import { memberLabel } from "./person-editor";
 
 const NO_TEAMS: Team[] = [];
 const NO_MEMBERS: TeamMember[] = [];
@@ -319,7 +320,7 @@ export function TeamEditor({ team, teams }: { team: Team; teams: WorkspaceTeams 
         .filter((m) => m.teamId === team.id)
         .map((m) => {
           const member = workspaceMembers.find((w) => w.userId === m.userId);
-          return { userId: m.userId, name: member?.displayName?.trim() || "Former member" };
+          return { userId: m.userId, name: member ? memberLabel(member) : "Former member" };
         })
         .sort((a, b) => a.name.localeCompare(b.name)),
     [teams.members, team.id, workspaceMembers],
@@ -334,7 +335,7 @@ export function TeamEditor({ team, teams }: { team: Team; teams: WorkspaceTeams 
             (m.role === "owner" || canBeAssignee(m.perms)) &&
             !people.some((p) => p.userId === m.userId),
         )
-        .map((m) => ({ userId: m.userId, name: m.displayName?.trim() || "Member" }))
+        .map((m) => ({ userId: m.userId, name: memberLabel(m) }))
         .sort((a, b) => a.name.localeCompare(b.name)),
     [workspaceMembers, people],
   );
