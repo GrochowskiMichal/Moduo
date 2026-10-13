@@ -40,3 +40,8 @@ Written into the 🟠 box of `specs/BUILD_ORDER.md` on the integration branch as
 5. **Capacity** (CH31): Chat's spike 3, a 100-client realtime load test on the local stack, runs before the event; move to Supabase Pro if the expected peak is above ~150 simultaneous connections (Free allows 200).
 6. **Languages** (CH20): about 100 people, Polish and English speakers; the app stays in English.
 - **48a:** the grant mechanism is the same one any comped or founder workspace uses.
+
+## Answers received
+
+- **Notes (2026-10-13, Notes call N19, `.design/notes-v2/REPLAN.md` §1.6 on `t/maciej/notes-replan`, recommended to Maciej in its round 1):** items 1, 6 and 7 adopted. "Mentioned in" (2) and decisions (4) recommended as quiet lines in a note's Details → Linked, visible only to readers of the conversation. "Make a note" (3) lands in the person's Notes Inbox (private until filed), quoting the messages with authors and times, titled with the conversation's name and date.
+- **A boundary Notes asked Chat to record:** dated announcements to everyone ("deadline moved to 2 PM") are Chat's, as a post in an announcement conversation; Notes only marks an edited note "Changed since you last read" and sends no notice for edits. **Chat's side:** inside one workspace that is an announcement channel (CH23a: only managers post, each post pings everyone once). Across the hackathon's team workspaces there is no shared conversation (CH22), and organizer news stays outside Moduo for the first event (CH69), so neither module carries it there.
