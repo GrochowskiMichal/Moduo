@@ -217,6 +217,8 @@ export function useBulkActions({
         remove();
         return true;
       }
+      // ⌥⇧ moves and ⇧F act on one task: not while several are selected.
+      if (e.altKey && e.shiftKey && key.startsWith("Arrow")) return true;
       if (e.metaKey || e.ctrlKey || e.altKey) return false;
       const open = (kind: BulkPickerKind) => {
         setPicker(kind);
@@ -224,7 +226,10 @@ export function useBulkActions({
       };
       if (key === "@") return open("assign");
       if (key === "#") return open("tag");
-      if (e.shiftKey) return key.toLowerCase() === "s" ? open("status") : false;
+      if (e.shiftKey) {
+        if (key.toLowerCase() === "s") return open("status");
+        return key.toLowerCase() === "f";
+      }
       switch (key.toLowerCase()) {
         case " ":
         case "x":
@@ -250,6 +255,10 @@ export function useBulkActions({
           return true;
         case "i":
           assignToMe();
+          return true;
+        // One task's own (schedule, rename): not while several are selected.
+        case "s":
+        case "e":
           return true;
         default:
           return false;

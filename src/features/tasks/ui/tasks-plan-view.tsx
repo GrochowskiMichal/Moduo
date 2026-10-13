@@ -758,6 +758,11 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   useEffect(() => {
     multiSelect.clear();
   }, [selection, view, workspaceId]);
+  useEffect(() => {
+    if (multiSelect.multi && selectedTaskId && !multiSelect.ids.has(selectedTaskId)) {
+      multiSelect.clear();
+    }
+  }, [selectedTaskId, multiSelect]);
   const scopeIdSet = useMemo(() => new Set(scopeTasks.map((t) => t.id)), [scopeTasks]);
   useEffect(() => {
     multiSelect.prune((id) => scopeIdSet.has(id), viewOrderRef.current);
@@ -1517,7 +1522,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
         // The Board's own wiring (TV-U11): handles, ⏎ to the full page, folds.
         taskKey={taskKey}
         onOpenTask={setFullPageId}
-        onViewKey={onViewKey}
+        onViewKey={bulk.onKey}
         foldKey={lsKey(
           workspaceId,
           `folds:${api.currentUserId ?? "anon"}:${selection}:board:${tasksDisplay.display.boardGroup}`,

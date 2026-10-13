@@ -71,3 +71,8 @@ Set up: `bun run local:up`, `bun run env:local`, `bun run dev:web`, sign in as t
 - Triage keys on a selection (Accept and Snooze for several) aren't offered; the Inbox steps aside for the selection's row.
 - Upcoming's day drop moves only the row you hold, not the selection (its Move all… covers many).
 - Visual baselines for the bar's selection row and the panel's Mixed view (no stories yet).
+- (validator MINOR) A task whose field write saved but whose status or assignee op was refused stays half-changed, counted as refused, and Undo doesn't put back the part that saved (only a drag that changes two fields at once can do this).
+- (validator MINOR) Bulk Complete offline says "Offline" instead of queuing the check-offs as a single check-off does.
+- (validator MINOR) Bulk status changes out of Backlog or Won't do don't offer "Restore the reminder?", and a bulk check-off of a repeat doesn't say "Done — next: …".
+- (validator NIT) `@` and `#` typed with ⌥ (AltGr layouts) don't open the pickers; `a` and `l` do.
+- (validator NIT) The page's combined view-key handler is a new function each render (the List's key handler is rebuilt; rows are unaffected).

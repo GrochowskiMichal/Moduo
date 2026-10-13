@@ -342,6 +342,10 @@ export function useBulkOps(deps: BulkOpsDeps) {
         () => offlineError !== null,
       );
       shown.settle({ tasks: [...saved.values()] });
+      // A refused check-off isn't kept on show in my queue (as one drop's isn't).
+      for (const p of planned) {
+        if (p.category !== undefined && !changed.includes(p)) store.unkeep(p.write.taskId);
+      }
       const forget = changed.flatMap((p) => (p.category !== undefined ? p.queueRows : []));
       if (forget.length > 0) store.forget("queue", forget);
       // Someone else's unfiled task handed on into another Inbox is out of my
@@ -498,18 +502,22 @@ export function useBulkOps(deps: BulkOpsDeps) {
       ]);
       const deleted: Task[] = [];
       let offlineError: unknown = null;
-      await runPool(
-        targets,
-        async (t) => {
-          try {
-            deleted.push(await rt.tasks.deleteTask({ workspaceId: ws, taskId: t.id }));
-          } catch (e) {
-            if (isNetworkError(e)) offlineError = e;
-            else refused.set(t.id, { title: t.title, message: messageOf(e) });
-          }
-        },
-        () => offlineError !== null,
-      );
+      const send = async (t: Task) => {
+        try {
+          deleted.push(await rt.tasks.deleteTask({ workspaceId: ws, taskId: t.id }));
+        } catch (e) {
+          if (isNetworkError(e)) offlineError = e;
+          else refused.set(t.id, { title: t.title, message: messageOf(e) });
+        }
+      };
+      // A selected subtask goes before its selected parent: the parent's delete
+      // promotes only live subtasks, so this one keeps its parent and Undo
+      // brings it back under it.
+      const withParent = targets.filter((t) => t.parentId && deleting.has(t.parentId));
+      const rest = targets.filter((t) => !withParent.includes(t));
+      const offline = () => offlineError !== null;
+      await runPool(withParent, send, offline);
+      await runPool(rest, send, offline);
       write.settle({ tasks: deleted });
       const done = new Set(deleted.map((t) => t.id));
       const promoted = children.filter((c) => c.parentId && done.has(c.parentId));
@@ -597,12 +605,15 @@ export function useBulkOps(deps: BulkOpsDeps) {
     (ids: readonly string[]) => {
       if (!store) return;
       const mine = new Set(myQueueRef.current.map((e) => e.taskId));
+      // What the last add saved and refused (for its toast and Undo).
+      let lastRefusals: BulkRefusal[] = [];
+      let lastAdded: string[] = [];
       const tasks = ids
         .map((id) => tasksRef.current.find((t) => t.id === id))
         .filter((t): t is Task => !!t && !t.deletedAt && !isTempId(t.id));
       const open = tasks.filter((t) => t.status !== "done" && t.status !== "archived");
       const removing = open.length > 0 && open.every((t) => mine.has(t.id));
-      const queueAdd = (list: readonly string[], onSaved: () => void) => {
+      const queueAdd = (list: readonly string[], onSaved: (added: number) => void) => {
         // Queuing a backlog task moves it to To do (the server does it).
         const toTodo = list
           .map((id) => tasksRef.current.find((t) => t.id === id))
@@ -611,6 +622,10 @@ export function useBulkOps(deps: BulkOpsDeps) {
             return t && fields ? [patchOf(t.id, fields)] : [];
           });
         const shownTodo = toTodo.length > 0 ? store.begin(toTodo) : null;
+        const added: string[] = [];
+        const refusedAdds: BulkRefusal[] = [];
+        lastRefusals = refusedAdds;
+        lastAdded = added;
         const started = runQueueOp(
           (lineup) => {
             const rest = lineup.filter((e) => !list.includes(e.taskId));
@@ -628,9 +643,12 @@ export function useBulkOps(deps: BulkOpsDeps) {
             for (const id of list) {
               try {
                 last = await rt.tasks.opQueueAdd({ workspaceId: ws, taskId: id, at: "end" });
+                added.push(id);
               } catch (e) {
                 if (isNetworkError(e)) throw e;
                 firstError ??= e;
+                const t = tasksRef.current.find((x) => x.id === id);
+                refusedAdds.push({ title: t?.title ?? "", message: messageOf(e) });
               }
             }
             if (!last) {
@@ -640,7 +658,7 @@ export function useBulkOps(deps: BulkOpsDeps) {
             return last;
           },
           () => {
-            onSaved();
+            onSaved(added.length);
             if (shownTodo) void store.syncNow().finally(() => shownTodo.settle());
           },
         );
@@ -673,11 +691,18 @@ export function useBulkOps(deps: BulkOpsDeps) {
         toast("Done and Won’t do tasks can’t be added to Focus.");
         return;
       }
-      queueAdd(list, () =>
-        undoToast(`Added ${tasksWord(list.length)} to Focus`, {
-          onUndo: () => queueRemove(list, () => {}),
-        }),
-      );
+      queueAdd(list, (count) => {
+        const text = bulkResultText(`Added ${tasksWord(count)} to Focus`, {
+          changed: count,
+          total: list.length,
+          refused: lastRefusals,
+        });
+        const added = [...lastAdded];
+        undoToast(text.title, {
+          description: text.description,
+          onUndo: () => queueRemove(added, () => {}),
+        });
+      });
     },
     [store, runQueueOp, optimisticEntry, backlogToTodo],
   );

@@ -34,6 +34,16 @@ export function multiDropWrites(
   const moving = new Set(chosen.map((t) => t.id));
   const fits = chosen.filter((t) => {
     if (t.id === held.id) return true;
+    // A subtask moving with its parent into another project: the parent's
+    // move carries it (one write per row).
+    if (
+      write.bucketId !== undefined &&
+      t.parentId &&
+      moving.has(t.parentId) &&
+      write.parentId === undefined
+    ) {
+      return false;
+    }
     if (write.parentId) {
       if (t.id === write.parentId || hasChildren.has(t.id)) return false;
       if (byId.get(write.parentId)?.parentId === t.id) return false;

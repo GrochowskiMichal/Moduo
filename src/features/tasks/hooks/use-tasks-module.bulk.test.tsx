@@ -81,6 +81,15 @@ function fakeRuntime(tasks: Task[], readOnly: string) {
     opAssign: rs.fn(({ taskId, assigneeId }: { taskId: string; assigneeId: string | null }) =>
       write(taskId, { assigneeId }),
     ),
+    // As the server: a delete promotes the task's live subtasks to the top.
+    deleteTask: rs.fn(async ({ taskId }: { taskId: string }) => {
+      await new Promise((r) => setTimeout(r, 2));
+      for (const t of rows.values()) {
+        if (t.parentId === taskId && !t.deletedAt) rows.set(t.id, { ...t, parentId: null });
+      }
+      return write(taskId, { deletedAt: new Date().toISOString() });
+    }),
+    listTrash: rs.fn(async () => ({ buckets: [], tasks: [] })),
   };
   return { runtime: { tasks: api } as unknown as ModuoRuntime, api, rows };
 }
@@ -144,5 +153,26 @@ describe("bulkWrite — one write for a selection, one Undo (AC4.6, AC11.9)", ()
       );
     });
     expect(toastMock.mock.calls.some((c) => c[0] === "Completed 2 tasks")).toBe(true);
+  });
+
+  it("deleting a parent and its selected subtask, then Undo, keeps the subtask under its parent", async () => {
+    const { hook, rows } = await mount(
+      [task("parent"), task("sub", { parentId: "parent" }), task("other")],
+      "none",
+    );
+    await act(async () => {
+      await hook.result.current.bulkDelete(["parent", "sub", "other"]);
+    });
+    const call = toastMock.mock.calls.find((c) => c[0] === "Deleted 3 tasks");
+    expect(call).toBeTruthy();
+    // The subtask went first, so the parent's delete didn't promote it.
+    expect(rows.get("sub")?.parentId).toBe("parent");
+    await act(async () => {
+      (call?.[1] as ToastOpts | undefined)?.action?.onClick();
+      await new Promise((r) => setTimeout(r, 40));
+    });
+    await waitFor(() => expect(rows.get("sub")?.deletedAt ?? null).toBeNull());
+    expect(rows.get("sub")?.parentId).toBe("parent");
+    expect(rows.get("parent")?.deletedAt ?? null).toBeNull();
   });
 });

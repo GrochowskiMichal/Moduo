@@ -494,8 +494,11 @@ describe("Group by", () => {
   });
 
   it("Section with no sections yet is the plain list (no headers)", () => {
-    const groups = groupTasks([task("a"), task("b")], "section", { ...ctx, sections: [] });
-    expect(groups).toEqual([{ key: "all", label: "", tasks: [task("a"), task("b")] }]);
+    // The same rows both sides: a task's stamps are the clock's (a millisecond
+    // apart under load).
+    const rows = [task("a"), task("b")];
+    const groups = groupTasks(rows, "section", { ...ctx, sections: [] });
+    expect(groups).toEqual([{ key: "all", label: "", tasks: rows }]);
   });
 
   it("Team: teams by name, a team gone, then No team", () => {
