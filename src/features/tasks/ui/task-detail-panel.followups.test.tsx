@@ -211,6 +211,21 @@ describe("a paused reminder (TV-U13b)", () => {
     expect(a.restoreReminders).toHaveBeenCalledWith("t1");
   });
 
+  it("a paused reminder whose time went by offers no Restore that can't work", () => {
+    const t = task({ status: "todo", statusCategory: "todo" });
+    const a = api(t, {
+      reminders: [
+        reminder({ kind: "at", at: "2026-01-02T09:00:00Z", suspendedAt: "2026-01-01T10:00:00Z" }),
+      ],
+    });
+    renderPanel(t, a);
+    fireEvent.click(screen.getByRole("button", { name: /^Reminder:/ }));
+    expect(screen.queryByRole("button", { name: "Restore the reminder" })).toBeNull();
+    expect(
+      screen.getByText("Its time went by while it was paused. Remove it, or add a new one."),
+    ).toBeTruthy();
+  });
+
   it("while the task sits in Backlog it says why, with no Restore", () => {
     const t = task({ status: "todo", statusCategory: "backlog" });
     const a = api(t, { reminders: [reminder({ suspendedAt: "2026-10-12T10:00:00Z" })] });

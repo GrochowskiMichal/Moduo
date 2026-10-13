@@ -353,8 +353,17 @@ export function useBulkOps(deps: BulkOpsDeps) {
             changed.push(p);
           } catch (e) {
             if (landed) partial.push(p);
-            if (isNetworkError(e)) offlineError = e;
-            else {
+            if (isNetworkError(e)) {
+              offlineError = e;
+              // Cut off after part of it saved: named too, so the count adds up.
+              if (landed) {
+                refused.set(write.taskId, {
+                  title: before.title,
+                  message: "The connection went before the rest saved.",
+                  partial: true,
+                });
+              }
+            } else {
               refused.set(write.taskId, {
                 title: before.title,
                 message: messageOf(e),
@@ -731,26 +740,49 @@ export function useBulkOps(deps: BulkOpsDeps) {
         );
         if (!started) shownTodo?.fail();
       };
-      const queueRemove = (list: readonly string[], onSaved: () => void) => {
+      const queueRemove = (
+        list: readonly string[],
+        onSaved: (removed: string[], refused: BulkRefusal[]) => void,
+      ) => {
+        // Each removal stands alone (as each add does): one refused never
+        // stops the rest; the line-up the server answered last is the truth.
+        const removed: string[] = [];
+        const refusedRemoves: BulkRefusal[] = [];
         runQueueOp(
           (lineup) => lineup.filter((e) => !list.includes(e.taskId)),
           async (rt, ws) => {
-            let last: TaskQueueEntry[] = [];
+            let last: TaskQueueEntry[] | null = null;
+            let firstError: unknown = null;
             for (const id of list) {
-              last = await rt.tasks.opQueueRemove({ workspaceId: ws, taskId: id });
+              try {
+                last = await rt.tasks.opQueueRemove({ workspaceId: ws, taskId: id });
+                removed.push(id);
+              } catch (e) {
+                if (isNetworkError(e)) throw e;
+                firstError ??= e;
+                const t = tasksRef.current.find((x) => x.id === id);
+                refusedRemoves.push({ title: t?.title ?? "", message: messageOf(e) });
+              }
             }
+            if (!last) throw firstError ?? new Error("Couldn’t take them out of Focus.");
             return last;
           },
-          onSaved,
+          () => onSaved(removed, refusedRemoves),
         );
       };
       if (removing) {
         const list = open.map((t) => t.id);
-        queueRemove(list, () =>
-          undoToast(`Removed ${tasksWord(list.length)} from Focus`, {
-            onUndo: () => queueAdd(list, () => {}),
-          }),
-        );
+        queueRemove(list, (removed, refusedRemoves) => {
+          const text = bulkResultText(`Removed ${tasksWord(removed.length)} from Focus`, {
+            changed: removed.length,
+            total: list.length,
+            refused: refusedRemoves,
+          });
+          undoToast(text.title, {
+            description: text.description,
+            onUndo: () => queueAdd(removed, () => {}),
+          });
+        });
         return;
       }
       const list = open.filter((t) => !mine.has(t.id)).map((t) => t.id);
@@ -780,7 +812,12 @@ export function useBulkOps(deps: BulkOpsDeps) {
         }
         undoToast(text.title, {
           description: text.description,
-          onUndo: () => queueRemove(added, () => {}),
+          onUndo: () =>
+            queueRemove(added, (_removed, refusedRemoves) => {
+              if (refusedRemoves.length > 0) {
+                toast.error(`Couldn’t take ${tasksWord(refusedRemoves.length)} out of Focus.`);
+              }
+            }),
         });
       });
     },

@@ -1,6 +1,6 @@
 # Manual test checklist — TV-U13b Follow-ups from landed blocks
 
-> Generated 2026-10-13 · branch `t/maciej/tv-u13b-followups` · **Live-verified:** yes, on the local stack (web), in the workspace "U13b check" made for it (dev@moduo.local): the Inbox's "via Claude Desktop" on a task a key captured, a paused reminder and its Restore, a repeat's history ("1 done · last Oct 6"), and "Just this one" when moving a repeat's Due. The three bulk fixes are proven by unit tests that failed before the fix (`use-tasks-module.bulk.test.tsx`).
+> Generated 2026-10-13 · branch `t/maciej/tv-u13b-followups` · **Live-verified:** yes, on the local stack (web), in the workspace "U13b check" made for it (dev@moduo.local): the Inbox's "via Claude Desktop" on a task a key captured, a paused reminder and its Restore, a repeat's history ("1 done · last Oct 6"), and "Just this one" when moving a repeat's Due. That workspace and everything in it were deleted afterwards (nothing of this block stays on the shared database). The three bulk fixes are proven by unit tests that failed before the fix (`use-tasks-module.bulk.test.tsx`).
 > Run top-to-bottom; check off as you go. Each item is a step → what you should see → where.
 
 No migration.
@@ -36,3 +36,7 @@ No migration.
 - The history popover lists at most the newest 100 cycles (the server's cap) with no "older" link.
 - Reopening a repeat's cycle takes its completion back (D12's rule), so "n done" drops by one; expected, but worth a look.
 - The bulk Undo after a partial change re-sends the reverse write for the part that saved only; if that is refused too, the toast is the generic "n of m changed".
+- (validator NIT) If an Undo's own reverse write moves a task back but its status revert is refused, the task's Focus place is still put back while it stays done.
+- (validator NIT) With one task partly saved and another refused for access, the toast reads "Changed only in part · 2 didn't change fully: <the first message>", which can be the access message.
+- (validator NIT) Only "move saved, status refused" is unit-tested; "status saved, assignee refused" (the `statusSaved` queue branches) is traced by reading only.
+- (validator NIT) The agent chip asks once per task per session: if the first read answers nothing for a task, the chip never shows until the workspace changes.

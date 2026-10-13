@@ -60,6 +60,8 @@ type FakeOptions = {
   refuseRestore?: string;
   /** Its Waiting on entries can't be removed. */
   refuseWaitingRemove?: string;
+  /** Taking it out of Focus is refused. */
+  refuseQueueRemove?: string;
   /** Already in my Focus line-up, in order. */
   queued?: string[];
   relations?: TaskRelation[];
@@ -119,6 +121,7 @@ function fakeRuntime(tasks: Task[], readOnly: string, opts: FakeOptions = {}) {
     }),
     opQueueRemove: rs.fn(async ({ taskId }: { taskId: string }) => {
       await new Promise((r) => setTimeout(r, 2));
+      if (taskId === opts.refuseQueueRemove) throw new Error("That isn't in your Focus.");
       queue = queue.filter((e) => e.taskId !== taskId);
       return [...queue];
     }),
@@ -265,6 +268,28 @@ describe("bulkWrite — one write for a selection, one Undo (AC4.6, AC11.9)", ()
 // TV-U13b — the three bulk bugs a review found in TV-U12's code.
 describe("bulk follow-ups (TV-U13b)", () => {
   const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  it("Q taking a selection out of Focus goes on past a refused one and names it", async () => {
+    const { hook, api } = await mount(
+      [task("a"), task("b", { title: "Stuck" }), task("c")],
+      "none",
+      {
+        queued: ["a", "b", "c"],
+        refuseQueueRemove: "b",
+      },
+    );
+    await waitFor(() => expect(hook.result.current.queuedTaskIds.size).toBe(3));
+    await act(async () => {
+      hook.result.current.bulkQueue(["a", "b", "c"]);
+      await wait(40);
+    });
+    expect(api.opQueueRemove).toHaveBeenCalledTimes(3);
+    await waitFor(() => expect([...hook.result.current.queuedTaskIds]).toEqual(["b"]));
+    const call = toastMock.mock.calls.find((c) => c[0] === "2 of 3 changed");
+    expect((call?.[1] as ToastOpts | undefined)?.description).toBe(
+      "“Stuck” couldn’t change: That isn't in your Focus.",
+    );
+  });
 
   it("a selection dropped on Focus only adds: tasks already in it are never taken out", async () => {
     const { hook, api } = await mount([task("a"), task("b")], "none", { queued: ["a", "b"] });

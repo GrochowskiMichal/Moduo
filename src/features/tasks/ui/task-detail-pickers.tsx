@@ -457,6 +457,11 @@ export function isPausedReminder(r: Pick<TaskReminder, "suspendedAt" | "firedAt"
   return !!r.suspendedAt && !r.firedAt;
 }
 
+/** A paused reminder at a set time that has already gone by: restoring can't bring it back. */
+export function pausedAndPassed(r: Pick<TaskReminder, "kind" | "at">, now = Date.now()): boolean {
+  return r.kind === "at" && !!r.at && Date.parse(r.at) <= now;
+}
+
 /** Why the paused reminders wait, and how they come back. */
 export function pausedNote(
   category: TaskStatusCategory,
@@ -466,6 +471,11 @@ export function pausedNote(
   const them = count === 1 ? "it" : "them";
   if (canRestore)
     return "Paused while it sat in Backlog or Won’t do. Only times still ahead come back.";
+  if (category === "todo" || category === "in_progress") {
+    return count === 1
+      ? "Its time went by while it was paused. Remove it, or add a new one."
+      : "Their times went by while they were paused. Remove them, or add new ones.";
+  }
   if (category === "backlog")
     return `Paused while it’s in Backlog. Move it to To do to restore ${them}.`;
   if (category === "wont_do")
@@ -502,7 +512,9 @@ export function ReminderValue({
   // once the task is To do or In progress again.
   const paused = reminders.filter(isPausedReminder);
   const category = taskCategoryOf(task);
-  const canRestore = paused.length > 0 && (category === "todo" || category === "in_progress");
+  // A paused one at a set time that has gone by can't come back: no Restore for it.
+  const canRestore =
+    paused.some((r) => !pausedAndPassed(r)) && (category === "todo" || category === "in_progress");
   const firstLabel = first
     ? `${reminderLabel(first)}${isPausedReminder(first) ? " · paused" : ""}`
     : null;
