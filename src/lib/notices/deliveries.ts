@@ -5,7 +5,7 @@
 // reach you in any workspace). Browsers that opted in get the same row as a Web
 // Push through the push-send function.
 
-import { normalizeNoticeDeliveryKind, type NoticeDeliveryKind } from "@contracts/vocabularies";
+import { type NoticeDeliveryKind, normalizeNoticeDeliveryKind } from "@contracts/vocabularies";
 
 /** One notice for this person's devices. */
 export type NoticeDelivery = {

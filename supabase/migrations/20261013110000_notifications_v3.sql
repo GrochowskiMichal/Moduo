@@ -19,6 +19,8 @@
 --     workspace: reminders reach you in any workspace). The push sender is
 --     kicked only when its URL and secret are in Vault (never on a local stack
 --     unless someone puts them there), and only sends to known push services.
+--     A subscription stays its maker's: nobody else can take it over or remove
+--     it.
 --   * The notification table (§13) on the server: assignments from one person
 --     to one person within an hour gather on one notice ("assigned you 12
 --     tasks"), while every assignment keeps its own trail line; an @person in a
@@ -254,13 +256,20 @@ BEGIN
      OR p_auth IS NULL OR p_auth !~ '^[A-Za-z0-9_-]{21,24}={0,2}$' THEN
     RAISE EXCEPTION 'The browser sent keys that don''t read.' USING ERRCODE = '22023';
   END IF;
-  -- An endpoint belongs to one browser profile; whoever signs in there last
-  -- gets its notices.
+  -- A subscription belongs to the person who made it, for good: an endpoint
+  -- someone else registered is refused (the app then makes this browser a
+  -- fresh subscription, which only the browser itself can do). The same
+  -- person re-registering refreshes their own row.
+  IF EXISTS (SELECT 1 FROM public.push_subscriptions s
+             WHERE s.endpoint = p_endpoint AND s.user_id <> v_actor) THEN
+    RAISE EXCEPTION 'This browser is set up for someone else.' USING ERRCODE = '23505';
+  END IF;
   INSERT INTO public.push_subscriptions (user_id, endpoint, p256dh, auth, user_agent)
   VALUES (v_actor, p_endpoint, p_p256dh, p_auth, left(p_user_agent, 300))
   ON CONFLICT (endpoint) DO UPDATE SET
-    user_id = v_actor, p256dh = EXCLUDED.p256dh, auth = EXCLUDED.auth,
-    user_agent = EXCLUDED.user_agent, updated_at = now(), failures = 0;
+    p256dh = EXCLUDED.p256dh, auth = EXCLUDED.auth,
+    user_agent = EXCLUDED.user_agent, updated_at = now(), failures = 0
+  WHERE public.push_subscriptions.user_id = v_actor;
   -- At most 10 browsers per person: the oldest go.
   DELETE FROM public.push_subscriptions s
   WHERE s.user_id = v_actor AND s.id NOT IN (
@@ -436,8 +445,10 @@ $$;
 
 -- Up to p_limit deliveries waiting for a push, with each person's browsers.
 -- Claiming counts an attempt, so a delivery that keeps failing stops after 5.
-CREATE OR REPLACE FUNCTION public.notice_deliveries__claim(p_limit integer DEFAULT 100)
-RETURNS TABLE (id uuid, title text, body text, url text, task_id uuid, subscriptions jsonb)
+-- The person's id rides along so a browser shows the words only to them.
+DROP FUNCTION IF EXISTS public.notice_deliveries__claim(integer);
+CREATE FUNCTION public.notice_deliveries__claim(p_limit integer DEFAULT 100)
+RETURNS TABLE (id uuid, user_id uuid, title text, body text, url text, task_id uuid, subscriptions jsonb)
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
@@ -456,7 +467,7 @@ BEGIN
     FROM picked WHERE d.id = picked.id
     RETURNING d.*
   )
-  SELECT b.id, b.title, b.body, b.url, b.task_id,
+  SELECT b.id, b.user_id, b.title, b.body, b.url, b.task_id,
          (SELECT coalesce(jsonb_agg(jsonb_build_object('endpoint', s.endpoint, 'p256dh', s.p256dh, 'auth', s.auth)), '[]'::jsonb)
           FROM public.push_subscriptions s WHERE s.user_id = b.user_id)
   FROM bumped b;
@@ -487,7 +498,8 @@ BEGIN
     WHERE d.id = r.id;
     IF jsonb_typeof(r.gone) = 'array' THEN
       DELETE FROM public.push_subscriptions s
-      WHERE s.endpoint IN (SELECT jsonb_array_elements_text(r.gone));
+      WHERE s.endpoint IN (SELECT jsonb_array_elements_text(r.gone))
+        AND s.user_id = (SELECT d.user_id FROM public.notice_deliveries d WHERE d.id = r.id);
     END IF;
     v_n := v_n + 1;
   END LOOP;

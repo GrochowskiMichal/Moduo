@@ -4,6 +4,10 @@
 // server; reminders then arrive even when Moduo's tab is closed (Safari on a
 // Mac even when Safari is). The desktop app never uses this: it shows OS
 // notifications itself while it runs in the menu bar.
+//
+// A browser's notices are its signed-in person's only: the page tells the
+// worker who that is (`postPushUser`), the worker shows the words only to
+// them, and signing out unsubscribes this browser (`forgetBrowserPush`).
 
 import type { ModuoRuntime } from "../runtime.types";
 
@@ -59,10 +63,28 @@ async function existingSubscription(): Promise<PushSubscription | null> {
   return registration ? registration.pushManager.getSubscription() : null;
 }
 
+/** The server refuses an endpoint someone else registered (TV-D12). */
+export function isTakenEndpointError(error: unknown): boolean {
+  return error instanceof Error && /set up for someone else/i.test(error.message);
+}
+
+/** Tell the push worker who is signed in here (null: nobody). */
+export async function postPushUser(userId: string | null): Promise<void> {
+  if (!pushSupported()) return;
+  try {
+    const registration = await navigator.serviceWorker.getRegistration(PUSH_WORKER_URL);
+    const worker = registration?.active ?? registration?.waiting ?? registration?.installing;
+    worker?.postMessage({ type: "moduo-user", userId });
+  } catch {
+    // No worker: nothing to tell.
+  }
+}
+
 export async function browserPushState(): Promise<BrowserPushState> {
   if (!pushSupported()) return "unsupported";
-  if (!vapidPublicKey()) return "unavailable";
+  // The browser's "no" comes first: only its settings can undo it.
   if (Notification.permission === "denied") return "denied";
+  if (!vapidPublicKey()) return "unavailable";
   if (Notification.permission !== "granted") return "off";
   try {
     return (await existingSubscription()) ? "on" : "off";
@@ -77,27 +99,56 @@ export async function browserPushState(): Promise<BrowserPushState> {
  */
 export async function enableBrowserPush(
   runtime: Pick<ModuoRuntime, "spine">,
+  userId: string,
+  key: string | null = vapidPublicKey(),
 ): Promise<BrowserPushState> {
   if (!pushSupported()) return "unsupported";
-  const key = vapidPublicKey();
   if (!key) return "unavailable";
   const permission = await Notification.requestPermission();
   if (permission !== "granted") return permission === "denied" ? "denied" : "off";
   const registration = await navigator.serviceWorker.register(PUSH_WORKER_URL, { scope: "/" });
   await navigator.serviceWorker.ready;
-  const subscription =
-    (await registration.pushManager.getSubscription()) ??
-    (await registration.pushManager.subscribe({
+  const subscribe = () =>
+    registration.pushManager.subscribe({
       userVisibleOnly: true,
       applicationServerKey: base64UrlToBytes(key),
-    }));
-  await runtime.spine.pushSubscribe({
-    endpoint: subscription.endpoint,
-    p256dh: bytesToBase64Url(subscription.getKey("p256dh")),
-    auth: bytesToBase64Url(subscription.getKey("auth")),
-    userAgent: navigator.userAgent,
-  });
+    });
+  const register = (subscription: PushSubscription) =>
+    runtime.spine.pushSubscribe({
+      endpoint: subscription.endpoint,
+      p256dh: bytesToBase64Url(subscription.getKey("p256dh")),
+      auth: bytesToBase64Url(subscription.getKey("auth")),
+      userAgent: navigator.userAgent,
+    });
+  const subscription = (await registration.pushManager.getSubscription()) ?? (await subscribe());
+  try {
+    await register(subscription);
+  } catch (error) {
+    if (!isTakenEndpointError(error)) throw error;
+    // This browser still holds someone else's subscription (they never
+    // signed out here): drop it and make this person a fresh one.
+    await subscription.unsubscribe().catch(() => false);
+    await register(await subscribe());
+  }
+  await postPushUser(userId);
   return "on";
+}
+
+/**
+ * On sign-out (before the session ends): unsubscribe this browser, tell the
+ * server and the worker. Never holds a sign-out up for long.
+ */
+export async function forgetBrowserPush(
+  runtime: Pick<ModuoRuntime, "spine"> | null,
+  timeoutMs = 2500,
+): Promise<void> {
+  if (!pushSupported()) return;
+  const work = (async () => {
+    await postPushUser(null);
+    if (runtime) await disableBrowserPush(runtime);
+    else await (await existingSubscription().catch(() => null))?.unsubscribe().catch(() => false);
+  })().catch(() => undefined);
+  await Promise.race([work, new Promise((resolve) => setTimeout(resolve, timeoutMs))]);
 }
 
 /** Unsubscribe this browser here and on the server. */

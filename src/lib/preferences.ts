@@ -186,7 +186,10 @@ const notificationPrefsSchema = z
     (raw) => {
       // `unblocked` became `waiting` (TV-D12): carry a saved choice over.
       if (raw && typeof raw === "object" && !("waiting" in raw) && "unblocked" in raw) {
-        return { ...(raw as Record<string, unknown>), waiting: (raw as { unblocked: unknown }).unblocked };
+        return {
+          ...(raw as Record<string, unknown>),
+          waiting: (raw as { unblocked: unknown }).unblocked,
+        };
       }
       return raw;
     },

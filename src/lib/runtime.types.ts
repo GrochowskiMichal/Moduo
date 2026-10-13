@@ -1143,7 +1143,11 @@ export type ModuoRuntime = {
     /** A repeat's cycles, done and skipped, with your own tracked time (TV-D12). */
     taskHistory(input: { workspaceId: string; taskId: string }): Promise<TaskCycle[]>;
     /** Notify the people picked by `@` in a task's description (TV-D12). */
-    mentionInTask(input: { workspaceId: string; taskId: string; userIds: string[] }): Promise<number>;
+    mentionInTask(input: {
+      workspaceId: string;
+      taskId: string;
+      userIds: string[];
+    }): Promise<number>;
     /**
      * Ask the server to roll this workspace's repeats over now (TV-D8): it
      * answers with what changed, plus the tasks named in `items`, as it has

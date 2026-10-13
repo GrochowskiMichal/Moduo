@@ -17,6 +17,8 @@ import type { PushOutcome, PushSubscriptionKeys } from "../_shared/web-push.ts";
 
 export type ClaimedDelivery = {
   id: string;
+  /** Whose it is: the browser shows the words only while they're signed in there. */
+  user_id: string;
   title: string;
   body: string | null;
   url: string | null;
@@ -44,12 +46,17 @@ export type PushDeps = {
 const SECRET_SHAPE = /^[A-Za-z0-9_-]{32,256}$/;
 const BATCH = 100;
 
-/** What a browser shows (public/push-sw.js reads these keys). */
+/**
+ * What a browser gets (public/push-display.js reads these keys): ids and the
+ * task's title, cut short, never a description or comment. The browser shows
+ * it only while its person is signed in there; anyone else sees a plain line.
+ */
 export function pushMessage(delivery: ClaimedDelivery): Record<string, unknown> {
   return {
+    uid: delivery.user_id,
     title: "Reminder",
-    body: delivery.body ?? delivery.title,
-    url: delivery.url && delivery.url.startsWith("/") ? delivery.url : "/",
+    body: delivery.title.slice(0, 80),
+    url: delivery.url && /^\/(?!\/)/.test(delivery.url) ? delivery.url : "/",
     tag: delivery.task_id ? `reminder-${delivery.task_id}` : `notice-${delivery.id}`,
   };
 }

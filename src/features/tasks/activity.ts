@@ -227,7 +227,9 @@ export function activityLine(entry: Pick<ActivityEntry, "op" | "payload">): stri
       if (kind === "reopen")
         return `${to ? `reopened this for ${to}` : "reopened this"} (recurrence)${resetTail}`;
       if (kind === "adopt")
-        return to ? `dated its occurrence, ${to} (recurrence)` : "dated its occurrence (recurrence)";
+        return to
+          ? `dated its occurrence, ${to} (recurrence)`
+          : "dated its occurrence (recurrence)";
       return to ? `caught this up to ${to} (recurrence)` : "caught this up (recurrence)";
     }
     // TV-D12: "move just this one" — the pattern stays.

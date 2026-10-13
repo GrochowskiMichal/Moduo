@@ -1869,7 +1869,8 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
           ? undefined
           : opts.recurrence !== undefined
             ? opts.recurrence
-            : (recurrenceOnStatusChange(existing, legacyTaskStatus(category), now, engineZone()) ?? undefined);
+            : (recurrenceOnStatusChange(existing, legacyTaskStatus(category), now, engineZone()) ??
+              undefined);
       const followers =
         write.bucketId !== undefined && write.bucketId !== existing.bucketId
           ? tasksRef.current.filter(

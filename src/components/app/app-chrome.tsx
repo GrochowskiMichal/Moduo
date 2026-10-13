@@ -41,7 +41,6 @@ import {
 import { useAuth } from "../../providers/auth-provider";
 import { useWorkspace } from "../../providers/workspace-provider";
 import { NotificationCenter } from "../notification-center";
-import { NoticeDeliveries } from "./notice-deliveries";
 import { TrialBanner } from "../trial-banner";
 import { Button } from "../ui/button";
 import { Icon } from "../ui/icon";
@@ -61,6 +60,7 @@ import { GlobalCommandPalette } from "./global-command-palette";
 import { GlobalShortcutsDialog } from "./global-shortcuts-dialog";
 import { HelpMenu } from "./help-menu";
 import { MinBuildBanner } from "./min-build-banner";
+import { NoticeDeliveries } from "./notice-deliveries";
 import { TasksSyncStatus } from "./sync-status";
 import { useUnknownRouteRedirect } from "./use-unknown-route-redirect";
 

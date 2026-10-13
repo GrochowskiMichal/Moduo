@@ -16,17 +16,17 @@ import {
   useAnalyticsConsent,
 } from "../../../lib/analytics";
 import {
-  type LandingView,
-  type MotionPref,
-  type NotificationType,
-  usePreferences,
-} from "../../../lib/preferences";
-import {
   type BrowserPushState,
   browserPushState,
   disableBrowserPush,
   enableBrowserPush,
 } from "../../../lib/notices/browser-push";
+import {
+  type LandingView,
+  type MotionPref,
+  type NotificationType,
+  usePreferences,
+} from "../../../lib/preferences";
 import { isTauriRuntime } from "../../../lib/runtime";
 import { useAuth } from "../../../providers/auth-provider";
 
@@ -262,7 +262,7 @@ const BROWSER_PUSH_COPY: Record<BrowserPushState, string> = {
  *  app in the menu bar, or this browser when you allow it. A reminder has no
  *  switch of its own here: removing the reminder turns it off. */
 function RemindersGroup() {
-  const { runtime } = useAuth();
+  const { runtime, userId } = useAuth();
   const { preferences, setPreferences } = usePreferences();
   const desktop = isTauriRuntime();
   const [push, setPush] = useState<BrowserPushState | null>(null);
@@ -280,10 +280,10 @@ function RemindersGroup() {
   }, [desktop]);
 
   const togglePush = async (on: boolean) => {
-    if (!runtime) return;
+    if (!runtime || !userId) return;
     setBusy(true);
     try {
-      setPush(on ? await enableBrowserPush(runtime) : await disableBrowserPush(runtime));
+      setPush(on ? await enableBrowserPush(runtime, userId) : await disableBrowserPush(runtime));
     } catch {
       toast("Couldn't change browser notifications — try again.");
       setPush(await browserPushState());

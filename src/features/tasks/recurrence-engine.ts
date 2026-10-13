@@ -34,7 +34,11 @@ export function engineZone(): string {
 }
 
 /** Build an RRule in floating time for `zone`. Defensive: invalid input → null. */
-function toRRule(rec: RecurrenceRule, fallbackDtstart: string | null | undefined, zone: string): RRule | null {
+function toRRule(
+  rec: RecurrenceRule,
+  fallbackDtstart: string | null | undefined,
+  zone: string,
+): RRule | null {
   try {
     const options = RRule.parseString(rec.rrule);
     const anchor = rec.dtstart ?? fallbackDtstart;
@@ -108,7 +112,10 @@ export function changePatternRule(rec: RecurrenceRule, to: Date, zone = "UTC"): 
   const DAYS = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
   const wall = toFloating(to, zone);
   const parts = rec.rrule.split(";").filter((p) => p.trim() !== "");
-  const freq = parts.find((p) => p.toUpperCase().startsWith("FREQ="))?.slice(5).toUpperCase();
+  const freq = parts
+    .find((p) => p.toUpperCase().startsWith("FREQ="))
+    ?.slice(5)
+    .toUpperCase();
   const next = parts.map((part) => {
     const [rawKey, value = ""] = part.split("=");
     const key = (rawKey ?? "").trim().toUpperCase();

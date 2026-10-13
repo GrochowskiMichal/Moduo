@@ -1,7 +1,33 @@
 // Moduo's push service worker (TV-D12): shows a reminder the server pushed to
 // this browser, and opens Moduo on the task when it's clicked. Registered only
 // when someone turns on browser notifications (src/lib/notices/browser-push.ts).
-// It does nothing else: no caching, no fetch handling.
+// It does nothing else: no caching of the app, no fetch handling.
+//
+// The page tells the worker who is signed in (a "moduo-user" message, kept in
+// a one-entry cache); a notice for anyone else shows a plain line only
+// (public/push-display.js).
+
+importScripts("/push-display.js");
+
+const USER_CACHE = "moduo-push-user";
+const USER_KEY = "/__moduo_push_user";
+
+async function signedInUser() {
+  try {
+    const cache = await caches.open(USER_CACHE);
+    const hit = await cache.match(USER_KEY);
+    const id = hit ? (await hit.text()).trim() : "";
+    return id || null;
+  } catch {
+    return null;
+  }
+}
+
+async function rememberUser(userId) {
+  const cache = await caches.open(USER_CACHE);
+  if (userId) await cache.put(USER_KEY, new Response(userId));
+  else await cache.delete(USER_KEY);
+}
 
 self.addEventListener("install", () => {
   self.skipWaiting();
@@ -11,6 +37,14 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(self.clients.claim());
 });
 
+self.addEventListener("message", (event) => {
+  const data = event.data;
+  if (!data || data.type !== "moduo-user") return;
+  // Only Moduo's own pages talk to it.
+  if (event.origin && event.origin !== self.location.origin) return;
+  event.waitUntil(rememberUser(typeof data.userId === "string" ? data.userId : null));
+});
+
 self.addEventListener("push", (event) => {
   let data = {};
   try {
@@ -18,23 +52,26 @@ self.addEventListener("push", (event) => {
   } catch {
     data = {};
   }
-  const title = typeof data.title === "string" && data.title ? data.title : "Moduo";
-  const body = typeof data.body === "string" ? data.body : "";
-  // Only a path inside Moduo is ever opened.
-  const url = typeof data.url === "string" && data.url.startsWith("/") ? data.url : "/";
   event.waitUntil(
-    self.registration.showNotification(title, {
-      body,
-      tag: typeof data.tag === "string" ? data.tag : undefined,
-      data: { url },
-      icon: "/icon-192.png",
-    }),
+    (async () => {
+      const shown = self.moduoPushDisplay(data, await signedInUser());
+      await self.registration.showNotification(shown.title, {
+        body: shown.body,
+        tag: shown.tag,
+        data: { url: shown.url },
+        icon: "/icon-192.png",
+      });
+    })(),
   );
 });
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const url = new URL(event.notification.data?.url || "/", self.location.origin).href;
+  const path = event.notification.data?.url;
+  const url = new URL(
+    typeof path === "string" && path.startsWith("/") ? path : "/",
+    self.location.origin,
+  ).href;
   event.waitUntil(
     (async () => {
       const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });

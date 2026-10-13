@@ -307,6 +307,7 @@ BEGIN
   -- E's earlier reminder ("Call Anna") wasn't pushed yet either.
   PERFORM test.ok(jsonb_array_length(v_rows) = 2
               AND v_rows -> 1 ->> 'title' = 'Pay rent'
+              AND v_rows -> 1 ->> 'user_id' = test.id('E')::text
               AND jsonb_array_length(v_rows -> 1 -> 'subscriptions') = 2,
     'the sender claims each waiting delivery with its person''s browsers', v_rows::text);
   PERFORM public.notice_deliveries__settle(jsonb_build_array(
@@ -316,13 +317,38 @@ BEGIN
               AND (SELECT count(*) FROM public.push_subscriptions WHERE user_id = test.id('E')) = 1,
     'settling marks it sent and forgets a browser the push service says is gone');
   PERFORM test.ok(NOT EXISTS (SELECT 1 FROM public.notice_deliveries__claim(10)), 'a sent delivery isn''t claimed again');
-  -- Someone else signing in on that browser takes it over.
-  PERFORM test.as_user('A', format($q$SELECT public.push_op_subscribe('https://fcm.googleapis.com/fcm/send/abc', %L, %L)$q$, v_key, v_auth));
-  PERFORM test.ok((SELECT user_id FROM public.push_subscriptions WHERE endpoint = 'https://fcm.googleapis.com/fcm/send/abc') = test.id('A'),
-    'a browser belongs to whoever signed in there last');
-  PERFORM test.as_user('E', $q$SELECT public.push_op_unsubscribe('https://fcm.googleapis.com/fcm/send/abc')$q$);
+  -- Someone else can't take E's browser over, or remove it.
+  r := test.try('A', format($q$SELECT public.push_op_subscribe('https://fcm.googleapis.com/fcm/send/abc', %L, %L)$q$, v_key, v_auth));
+  PERFORM test.ok(r LIKE '%set up for someone else%'
+              AND (SELECT user_id FROM public.push_subscriptions WHERE endpoint = 'https://fcm.googleapis.com/fcm/send/abc') = test.id('E'),
+    'another person registering E''s browser is refused, and it stays E''s', r);
+  PERFORM test.as_user('A', $q$SELECT public.push_op_unsubscribe('https://fcm.googleapis.com/fcm/send/abc')$q$);
   PERFORM test.ok(EXISTS (SELECT 1 FROM public.push_subscriptions WHERE endpoint = 'https://fcm.googleapis.com/fcm/send/abc'),
     'nobody unsubscribes someone else''s browser');
+  -- E re-registering their own browser just refreshes it.
+  r := test.as_user('E', format($q$SELECT public.push_op_subscribe('https://fcm.googleapis.com/fcm/send/abc', %L, %L, 'Chrome 2')$q$, v_key, v_auth));
+  PERFORM test.ok(r = 'ok 1' AND (SELECT user_agent FROM public.push_subscriptions
+                                  WHERE endpoint = 'https://fcm.googleapis.com/fcm/send/abc') = 'Chrome 2',
+    'the same person re-registering refreshes their own row', r);
+  -- An API key (the MCP connector's path) can't touch subscriptions.
+  INSERT INTO public.workspace_api_keys (id, workspace_id, name, key_prefix, key_hash, scopes, created_by)
+  VALUES (test.id('key'), test.id('W'), 'Agent', 'mdo_test', md5('db-test-push-key'),
+          '{"tasks": "edit"}'::jsonb, test.id('E'));
+  r := test.as_key('key', format($q$SELECT public.push_op_subscribe('https://fcm.googleapis.com/fcm/send/key', %L, %L)$q$, v_key, v_auth));
+  PERFORM test.ok(r LIKE '42501%' AND NOT EXISTS (SELECT 1 FROM public.push_subscriptions WHERE endpoint LIKE '%/key'),
+    'an API key can''t register a browser', r);
+  r := test.as_key('key', $q$SELECT public.push_op_unsubscribe('https://fcm.googleapis.com/fcm/send/abc')$q$);
+  PERFORM test.ok(r LIKE '42501%' AND EXISTS (SELECT 1 FROM public.push_subscriptions WHERE endpoint = 'https://fcm.googleapis.com/fcm/send/abc'),
+    'or remove one', r);
+  r := test.try('E', format($q$SELECT public.push_op_subscribe('https://fcm.googleapis.com@evil.example/x', %L, %L)$q$, v_key, v_auth));
+  PERFORM test.ok(r LIKE '%isn''t supported%', 'a URL that only looks like a push service is refused', r);
+  -- Settling forgets a gone endpoint only for the delivery's own person.
+  INSERT INTO public.push_subscriptions (user_id, endpoint, p256dh, auth)
+  VALUES (test.id('A'), 'https://fcm.googleapis.com/fcm/send/of-a', v_key, v_auth);
+  PERFORM public.notice_deliveries__settle(jsonb_build_array(jsonb_build_object(
+    'id', v_rows -> 1 ->> 'id', 'ok', true, 'gone', jsonb_build_array('https://fcm.googleapis.com/fcm/send/of-a'))));
+  PERFORM test.ok(EXISTS (SELECT 1 FROM public.push_subscriptions WHERE endpoint = 'https://fcm.googleapis.com/fcm/send/of-a'),
+    'a delivery for E never removes A''s browser');
   PERFORM test.ok(NOT public.notice_deliveries__authorize('x') AND NOT public.notice_deliveries__authorize(NULL),
     'the push sender''s secret check refuses without Vault''s secret');
 END;
@@ -359,7 +385,7 @@ DECLARE
 BEGIN
   INSERT INTO public.workspace_members (workspace_id, user_id, role) VALUES (test.id('W2'), test.id('E'), 'member');
   v := public.account_erase_workspace_data(test.id('E'), true);
-  PERFORM test.ok((v ->> 'push_subscriptions_deleted')::integer = 0
+  PERFORM test.ok((v ->> 'push_subscriptions_deleted')::integer = 1
               AND (v ->> 'notice_deliveries_deleted')::integer >= 2,
     'the erasure preview counts E''s browsers and deliveries', v::text);
   v := public.account_erase_workspace_data(test.id('A'), false);

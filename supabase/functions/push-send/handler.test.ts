@@ -13,6 +13,7 @@ function deps(over: Partial<Parameters<typeof handlePushRequest>[1]> = {}) {
   const sent: string[] = [];
   const delivery: ClaimedDelivery = {
     id: "d1",
+    user_id: "u1",
     title: "Call Anna",
     body: null,
     url: "/tasks?id=t1",
@@ -64,10 +65,13 @@ describe("push-send", () => {
     expect(t.sent).toEqual([]);
   });
 
-  it("a browser's notice opens a path inside Moduo only", () => {
-    const base = { id: "d", title: "T", body: null, task_id: null, subscriptions: [] };
+  it("a browser's notice carries ids and a short title, and opens a path inside Moduo only", () => {
+    const base = { id: "d", user_id: "u1", title: "T", body: "a long description", task_id: null, subscriptions: [] };
     expect(pushMessage({ ...base, url: "/tasks?id=1" }).url).toBe("/tasks?id=1");
     expect(pushMessage({ ...base, url: "https://evil.example" }).url).toBe("/");
-    expect(pushMessage({ ...base, url: null }).body).toBe("T");
+    expect(pushMessage({ ...base, url: "//evil.example" }).url).toBe("/");
+    const message = pushMessage({ ...base, url: null });
+    expect(message).toEqual({ uid: "u1", title: "Reminder", body: "T", url: "/", tag: "notice-d" });
+    expect(pushMessage({ ...base, title: "x".repeat(200), url: null }).body).toHaveLength(80);
   });
 });
