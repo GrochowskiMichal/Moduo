@@ -1,10 +1,10 @@
 # Chat v2 — the re-plan
 
-> **Status (2026-10-13): round 2 sent (round 1b re-asks + the look and replies, with prototype round-2). Waiting on Maciej.**
+> **Status (2026-10-13): round 3 being prepared (prototype round-3.html built; tech-stack blueprint for Mike running).**
 >
-> - **Decided:** CH1–CH11, CH13–CH19, CH22 (no event workspace: Team plans per team), CH25, CH27, CH28. CH12 (threads) not accepted → CH30. CH24 parked. Facts: CH20 (≤ ~100 people, Polish + English, app in English, date unknown), CH21.
-> - **Open:** CH3a, CH4a, CH16a, CH16b, CH23a, CH26a, CH28a, CH28b; with round 2's prototype ([`prototypes/round-2.html`](./prototypes/round-2.html)): ★ CH29 the look (+ CH29a 15 px text, CH29b three quick reactions, CH29c past dates), ★ CH30 replies, not threads.
-> - **Maciej on the look:** v1's interface is a placeholder; nothing carries over unconfirmed; he likes Slack's and Discord's looks.
+> - **Decided since round 1:** CH4a; CH29 = A (Slack calm) as the base, with centred dates and a fade at both ends; CH29b (three quick reactions, Reply before Task, agent's choice); tidying up afterwards (CH30, frame 5).
+> - **Open, organized in §8 group H:** CH29d "New" line, CH29e composer, CH29f spacing, CH29a 15 px, CH29c past dates, CH30a replies in the stream, CH30b fold when tangled, CH30c who moves others' messages, CH28a dot colour, CH28c statuses, CH28b where state shows, and the quick confirmations CH3a, CH16a, CH16b, CH23a, CH26a.
+> - **Mike's ask:** a tech-stack decision blueprint → [research/tech-blueprint.md](./research/tech-blueprint.md) (lane running).
 > - **Research lanes** ([`research/`](./research/)): six landed and folded in (early-decisions audit, role journeys, competitor structure, hackathon, visual audit → §5, current state → §1.3 B and §6 #15–18). **Threads** (→ CH30) and **visual competitors** (→ CH29) landed.
 > - **Research data in the shared local database** (kept for round 2's live checks; remove when the plan is done): workspace **"Chat replan research"** `669be464-0b9a-4d84-8537-544ac04dba5f` (10 channels, 3,032 messages, one task) and a third local user `third@moduo.local`. Full ledger and a cleanup sketch: [current state](./research/current-state.md), last section. `dev@moduo.local`'s plan is back to `free` (checked).
 > - **Prototype:** [`prototypes/round-1.html`](./prototypes/round-1.html) (keys 1–7 frames, V variants; serve the folder over http to see the Geist font).
@@ -779,6 +779,99 @@ The hackathon readiness plan (`t/maciej/hackathon-plan`) owns workspaces, invite
 ❓ OK? (prototype round 2, frame "Replies")
 
 💬 **Round 2:** frames 3–4 *"Not sure what I'm looking at, and what the consequences are of each decision, and what use cases it helps with, and what the risks are"* → re-asked as **CH30a–CH30c** with use cases, consequences and risks. Frame 5: ✅ *"I like the option to tidy up by moving messages to a thread after a mistake was made - I had problems with that in the companies I worked with before - someone sent a message outside of a thread, and the only way to move it back in is to delete it and send again, so it doesn't happen and the mess keeps building up."* → tidying up afterwards is decided; who may move others' messages → **CH30c**.
+
+### H · Round 3: the open questions, organized *(2026-10-13; prototype [`round-3.html`](./prototypes/round-3.html))*
+
+Every open question in one place, each readable on its own: the question, the options, the recommendation. Numbers are stable (new ones continue the call they refine).
+
+**The look** (prototype frames 1–3)
+
+**CH29d · How should "new messages since you last looked" be marked?** *(he: "the 'new' line looks like a mistake… just a pure white line")*
+- (a) **"New" centred on a faint accent line**, the same shape as the date separators. *Recommended:* consistent with the centred dates he liked, and quieter than a full line.
+- (b) A hairline with a small accent "New" pill at its right end (Slack's shape, without red).
+- (c) No line: unread messages carry a faint accent wash until read.
+- (d) No line in the stream; only a floating "2 new messages ↓" chip.
+- On the default monochrome accent, "accent" is white; on a coloured accent the mark takes that colour.
+
+❓ a, b, c or d?
+
+**CH29e · The composer: one row or two?**
+- (a) **One row:** attach · text · @ · emoji · send; formatting appears when you select text. *Recommended:* fewer things to look at, which is his main complaint.
+- (b) Two rows (Slack): the text, then a row of tools under it.
+
+❓ One or two?
+
+**CH29f · More space between different people** *(he: "unrelated lines seem to be too close")*
+- Proposed: 24 px before a new person at comfortable (20 compact, 16 dense); 6 px between one person's lines; the hover time sits on the first line's centre. *Recommended:* yes (frame 1).
+
+❓ OK?
+
+**CH29a · Message text stays 15 px at every density** (CH27 said 14). *Recommended:* yes; density changes space and avatars, never the reading size.
+
+❓ OK?
+
+**CH29c · Dates for the recent past, app-wide:** "Today · Yesterday · Mon (last Monday) · Oct 9 · Oct 9, 2025" on separators and reply times; no "2 hours ago". *Recommended:* yes (Notes and Email need it too).
+
+❓ OK?
+
+**Replies** (prototype frames 4–6)
+
+**CH30a · Replies stay in the conversation instead of in hidden threads?**
+- **The use case:** someone asks a question in a busy channel; three people answer at different times.
+- **With Slack threads** (frame 4, first variant): the answers hide behind "3 replies"; people who don't open it answer again in the channel. Half in, half out: the mess he described.
+- **Proposed** (second variant): every answer is a normal message at the bottom with a one-line quote of what it answers; the question gets "3 replies ›" to read them together on the right.
+- **Consequences:** nothing is ever hidden; there's no "which reply button?" choice; unread works like any message.
+- **Risks:** Slack users will look for "Reply in thread" (a tooltip explains); in a busy channel, answers to different questions interleave, which CH30b handles.
+- Options: (a) Slack threads; (b) **replies in the stream with "N replies" grouping** *(recommended)*; (c) replies in the stream with no grouping (WhatsApp).
+
+❓ a, b or c?
+
+**CH30b · When replies get tangled with other talk, fold them into one row?**
+- **The use case:** launch day in a 5-person channel; two conversations run at once and one gets 6 replies mixed with everything else.
+- **The rule:** a chain folds once it has 3+ replies *and* someone posted something unrelated in between. Its replies become one row at the bottom showing the latest reply; clicking opens the whole chain on the right; a new reply moves the row to the bottom again (frame 4, third variant).
+- **Consequences:** busy channels stay readable without anyone choosing anything; quiet channels look exactly like normal chat.
+- **Risks:** the rule is new (no product does exactly this), so the threshold is tuned on real data; a fold never happens above where you're reading; a chain that becomes the whole conversation unfolds again, so nothing big hides in a row.
+- Options: (a) always move replies out of the stream (Slack); (b) **fold only when tangled** *(recommended)*; (c) never fold (also offered as a personal display option).
+
+❓ a, b or c?
+
+**CH30c · Who may move other people's messages when tidying up?** *(tidying up itself is decided)*
+- (a) Anyone in the conversation, visibly, with Undo.
+- (b) **Everyone moves their own messages; channel managers and admins move anyone's** *(recommended)*: fixes the common case (you posted outside the chain) without letting anyone rearrange others' words.
+- (c) Only admins.
+- In every case, a quiet line says who moved what, with Undo, and nothing pings.
+
+❓ a, b or c?
+
+**Presence** (prototype frames 7–8)
+
+**CH28a · Which colour for "here"?** *(he: green is easier to notice, maybe because the grey was too dark)*
+- (a) Green (the convention); needs a darker green on the light theme to stay visible.
+- (b) **White** (frame 7, second variant): the brightest neutral; it becomes near-black on the light theme. *Recommended:* as noticeable as green on dark, no extra hue, works on both themes.
+- (c) Light grey.
+
+❓ a, b or c?
+
+**CH28c · Which statuses?**
+- (a) Active and Away only.
+- (b) **Active, Away, Do not disturb** *(recommended)*: Active is automatic; Away after 10 minutes idle; Do not disturb by hand (1 hour, today, until…) and **on its own during Focus and quiet hours**; plus an optional short status line with an expiry ("Sleeping until 6", useful at the hackathon and across time zones). Frame 8, first variant.
+- (c) Also Slack-style custom statuses with emoji and presets.
+- Offline shows no dot.
+
+❓ a, b or c?
+
+**CH28b · Where someone's state shows** (the person card is fixed: the task gets its own line and a long name gives way; frame 8)
+- (a) **Where you'd message them** (direct-message rows, the person card, the people in Details) **and on Home** (a "team now" line). *Recommended.*
+- (b) Also a row of faces in the top bar, always visible.
+
+❓ a or b?
+
+**Quick confirmations** (each with a recommendation; "ok" is enough)
+- **CH3a** Channel names as typed, spaces and capitals allowed (Slack bans spaces only because you type `#name` into text; Moduo picks channels from the `@` menu). *Recommended: yes.*
+- **CH16a** Each person sets their own quick-reaction row (starting from the six), and comments on tasks and notes use the same row. *Recommended: yes* (this changes Tasks' "six fixed" rule).
+- **CH16b** Custom workspace emoji: build them right after the hackathon cut, not inside it. *Recommended: right after.*
+- **CH23a** Announcement channels (only managers post): keep v1's switch, let managers turn it on later, and have each post ping everyone once. *Recommended: yes.*
+- **CH26a** Build order: chat in the handed-out Team workspaces → messages that reach you outside the app → the new look → files → links and "make a task" → Catch up → replies. Then the rest for teams of 2–5. *Recommended: yes.*
 
 ### F · Visual *(added after round 1 was sent, from the visual audit)*
 

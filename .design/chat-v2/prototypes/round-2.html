@@ -1717,7 +1717,7 @@ html[data-pres="green"] .pd.on { background: var(--label-green); }
   });
   apply();
   function toBottom() { document.querySelectorAll('.msgs').forEach(function (m) { m.scrollTop = m.scrollHeight; }); }
-  toBottom(); document.addEventListener('keydown', function () { setTimeout(toBottom, 0); }); document.addEventListener('click', function () { setTimeout(toBottom, 0); });
+  toBottom(); setTimeout(toBottom, 60); window.addEventListener('load', toBottom); if (document.fonts && document.fonts.ready) document.fonts.ready.then(toBottom); document.addEventListener('keydown', function () { setTimeout(toBottom, 0); }); document.addEventListener('click', function () { setTimeout(toBottom, 0); });
 })();
 </script>
 </body>
