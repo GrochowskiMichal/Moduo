@@ -39,13 +39,65 @@
 
 ## 1. Diagnosis
 
-*Waiting on the research lanes.*
-
 ### 1.1 The root cause
+
+Chat v1 was built in one session on 2026-10-06 from one ask: "Slack/Discord-class messaging… end to end… production ready" ([`specs/chat.md`](../../specs/chat.md)). It came before Tasks v3 decided how the whole app works. So it is **a Slack built beside Moduo instead of inside it.**
+
+Every reversal the [decisions audit](./research/early-decisions-audit.md) found has that one shape: **v1 rebuilt, Slack's way, a piece Moduo now has once for the whole app.**
+
+| v1 built its own… | Moduo's one way (binding) | Audit |
+| --- | --- | --- |
+| `#` to link items (Slack's channel token) | `@` people then things, `#` tags, `/` commands (Tasks 33, RF-1) | D10, D12 |
+| A text box with `**markup**` | The shared editor with chips as you type (TV-U14, Notes) | D8 |
+| Chips with the title frozen at send time | References: live, "Private item", "Deleted …" (RF-1) | D11 |
+| A bot glyph and an "App" badge | "Alex · via Claude", no AI styling (Tasks 52, brand 40) | D15 |
+| Its own right-panel modes with ✕ | The title-row dropdown and "← item" (SH-1, 72a) | D20 |
+| Search as a right-panel mode; a ⌘J switcher | The toolbar grammar, the app search, ⌘K | D19, D21 |
+| "Create task" with no window and no link back | The app's capture with "From:" (TV-U14, Tasks 93) | D33 |
+| Coloured pills meaning two different counts | One count language, NavRow (rule 45, DS-3) | D30 |
+| Its own notification logic: a tab badge, nothing leaves the app | The notification table and its channels (Tasks 73, 80) | D6, D31 |
+| "Star", a notes-to-self DM | "Pin to sidebar" (Tasks 29b), capture (90b: one way per job) | D23, D26 |
+| A confirm toast before deleting | Undo for 8 seconds (DF-5) | D7 |
+| Free emoji | Six fixed reactions on comments (Tasks 88) | D13 |
+
+**A second shape: the island.** A channel knows nothing about a project or a client; a message that mentions a task leaves no trace on the task; conversations aren't in ⌘K; Chat isn't in the panel registry or the capture registry. Chat talks *about* the work but never *with* it, and that's the one place Moduo should beat Slack.
+
+**A third, smaller one: promises the server doesn't keep** (audit D36, D4): the create dialog says "you can add managers later", but nothing adds one; the announcement switch exists only when creating a channel; "Manage any channel" is never read; "Start calls" switches a feature that doesn't exist.
+
+**So the re-plan keeps v1's engine and rebuilds everything a person touches on Tasks v3's pieces**, then adds what makes chat reach you (CH6, CH8) and know the work (CH2, CH10, CH11).
 
 ### 1.2 What is genuinely strong (keep)
 
+**Product:**
+- **Quiet defaults**, already: "Mentions" is the default level; reactions and edits never notify; muted conversations never count; the bell gets only `@you`, `@channel` and thread replies.
+- **Announcement channels, channel managers and a small role grid** (PERM-7): exactly what hackathon organizers need, once the screens catch up.
+- **Threads, pins, Mark unread, the "New" divider, optimistic sends with retry**, resync after sleep: the everyday mechanics are right.
+- **Agents see public channels only, through their own scope** (None by default): the safe default.
+- **⌘7** is Chat's number, and Tasks 90b already uses it for the Message capture type.
+- **The Home widget's job,** "what needs you first", is the right one.
+
+**Platform** (audit D39): every write is a server op that re-checks membership and the plan; reactions and thread counts live on the message row and deletes are soft, so every live change is one Realtime update that respects row-level security; sends are idempotent; the pure logic is unit-tested.
+
+**The engine is sound. What's wrong is that it was built as its own app.**
+
 ### 1.3 What's broken, in five kinds
+
+*From the decisions audit, role journeys, competitors and hackathon lanes; the current-state lane (code + a live look) and the visual audit add their findings here as they land.*
+
+**A · Structure: an island.** Channels and DMs unrelated to anything (CH2); a notes-to-self DM beside capture (CH3); `general` joined per device, so leaving it on one computer doesn't stick and `@channel` misses anyone who hasn't opened Chat yet (audit D24).
+
+**B · Trust: things that make people stop believing it.**
+1. **A direct message reaches you only if you look at the Chat tab.** Nothing leaves the app; the bell shows only the open workspace.
+2. **Linked items go stale:** a chip keeps the title it had when sent and never shows a status.
+3. **Settings that do nothing:** add a manager, turn announcement mode on later, "Manage any channel", "Start calls" (audit D36).
+4. **"Create task from message" makes an Inbox task silently** with no link back; "Open" goes to Tasks, not to the task (audit D33).
+5. **Delete asks first, then can't be undone**, against the app's undo rule (audit D7).
+
+**C · Capability gaps for a normal week** ([gap map](./research/role-journeys.md) §2): nothing leaves the app (#1 for every role); no files; no catch-up across conversations; nothing ties a conversation to a project or client; decisions live only as pins; no reminders or "later"; no quiet hours; for the hackathon, nothing reaches across workspaces, no help desk, invites one email at a time.
+
+**D · Visual seams:** the sidebar is Chat's own markup, not NavRow; coloured pills with two meanings; italics for deleted messages; `#` in front of channel names; the "App" badge (audit D27, D30). The visual audit's measurements go in §5.
+
+**E · No way in.** Solo workspaces see a permanent upgrade tab (CH4); the automatic trial is Pro, which has no chat; hackathon workspaces' owners won't be on Duo (CH25); invites are one email at a time and sign-up is invite-only (the hackathon plan's).
 
 ### 1.4 What Chat adopts from Tasks v3 (binding unless Maciej agrees to change it)
 
@@ -79,7 +131,30 @@
 
 ## 2. The proposed shape
 
-*Round 1.*
+```
+Top bar (global):   modules · Focus timer · Help · bell · you
+┌ Left: conversations ─┬ Centre: the conversation ─────────────────┬ Right: context ─────────────┐
+│ Catch up         4   │ Toolbar: Acme  [● Acme rebrand · Active]   │ [Details ▾]                 │
+│ ───────────────────  │   people 4 … Search · ⋯                    │  about this:                │
+│ Pinned               │ Yesterday                                  │   Details (linked project   │
+│  ● Acme          2   │  Alex: kickoff notes in [▢ Acme kickoff]   │   or client, people, pinned,│
+│ Channels             │ Today                                      │   files, decisions, notify) │
+│  ○ General           │  Sofia: [◐ Collect assets · Fri] is stuck  │  items (← back):            │
+│  ● Launch v1         │    3 replies · last 11:02 AM               │   a thread, a person,       │
+│  ▣ Acme client       │    Became a task: [○ Get logo SVGs · Today]│   a task, a note…           │
+│  DS Design           │  Mike: [card: Draft homepage copy]         │                             │
+│  🔒 Founders         │ ─── New ───                                │                             │
+│ Direct messages      │  Sofia: call moved to [▢ Thu 4:00 PM]      │                             │
+│  SO Sofia Ortiz  1   │ [composer: @ people/things · # tags · /]   │                             │
+└──────────────────────┴────────────────────────────────────────────┴─────────────────────────────┘
+Bottom bar (module tools): ◧ · Shortcuts · Search · Capture · New conversation · ◨
+                           (Catch up swaps the centre for its mode row: Reply R · Done E · Task T · Later H · Open ⏎ · More)
+```
+
+- **Conversations are channels and direct messages** (CH2, CH3). A channel can be **linked** to one project, client or team; then it shows that item's live state, capture files into it, and the item shows the conversation (CH11).
+- **Catch up** is the one list of what's addressed to you, worked like Tasks' Inbox (CH8). It's also where everything that pinged you lands (CH6).
+- **Everything a person touches is Tasks v3's piece:** the grammar and editor (CH14, CH15), References in messages, the capture for tasks (CH10), the panel dropdown, the kit, the notification table.
+- **The hackathon adds two general tools** (if CH22 is C): announcements that reach every workspace you're in (CH23), and a help desk of claimable questions (CH24).
 
 ## 3. One product, every role
 
@@ -115,9 +190,40 @@ From [research/role-journeys.md](./research/role-journeys.md) (a normal week per
 
 ## 6. Technical decisions I'm taking
 
-*Round 1 onward. Each with the alternative I rejected.*
+Per the module-replan rules these are mine to decide. Each lands in `docs/decisions/chat.md` (a new area file) with its rejected alternative. Listed so nothing surprises anyone, and so Mike can follow what changes in his code.
+
+1. **Keep the data shape** (audit D39): every write a `chat_op_*`; reactions and thread counts on the message row; soft deletes; idempotent sends. *Rejected:* child tables for reactions (a Realtime delete carries no row-level security).
+2. **Chat moves onto the shared store pattern** (TV-D11a): a device cache per workspace, newest messages first, delta sync by `updated_at`, the Realtime merge, echo skip, one-field rollback; offline it reads from the cache and queues sends in an outbox. *Rejected:* v1's per-page fetch plus resync.
+3. **One editor and one stored form** (CH15; audit D8, D11): the composer is the shared Lexical editor with RF-1's menus; a message stores references as `moduo://type/id` (RF-1-7's form), never a title; notification excerpts are built on the server from the stored form. v1 bodies are converted once by a migration. *Rejected:* a compatibility parser kept forever.
+4. **References for chat** (RF-1): two new kinds, **message** (chip: author · first words; card: author · time · conversation · two lines; "Deleted message") and **conversation** (chip: icon · name; card: name · linked item · people · last message); "Private item" for anything you can't read.
+5. **Spine links:** a linked channel is an `entity_links` row (conversation → project / company / contact / team, kind "conversation of"); a message that references an item writes one "mentioned in" link per conversation and item, readable only by people who can read the conversation. *Rejected:* one link per message (noise on busy items).
+6. **Notifications through the app's one table and channels** (Tasks 73, 80; TV-D12 builds them): chat adds rows, not its own sender; the OS/browser delivery and the cross-workspace bell come from that work. *Rejected:* a chat-only notifier.
+7. **Search:** messages get a server-side full-text index and join ⌘K's results as "Messages" and "Conversations"; "Search" in a conversation's toolbar finds inside it (audit D19, D21). *Rejected:* v1's substring match in a panel.
+8. **Panel and capture registries:** Chat registers its panel views (Details; items: thread, person) and a **Message** capture type for ⌘7 (its destination is a conversation picker; ⏎ sends). *Rejected:* chat-only panel modes.
+9. **General joins on the server** when someone joins the workspace; leaving is stored on the server (audit D24). *Rejected:* the per-device flag.
+10. **Delete with Undo** (8 s, the body is blanked when the toast closes); a deleted message without replies disappears, one with replies shows "Deleted message" (audit D7, D27). *Rejected:* the confirm toast.
+11. **PERM-7 made honest** (audit D4, D36): the ops read channel managers and "Manage any channel"; Details gets "Add manager" and the announcement switch; "Start calls" hides until Meet ships; chat's switches live once, in the role editor. *Rejected:* keeping two places that decide "who can create a channel".
+12. **Agent posts are authored by the key's creator** with `via` = the key's name, as Tasks 52; mentions by an agent notify like a person's (audit D15). *Rejected:* the null author and "App" badge.
+13. **No history limit.** Everything stays searchable for as long as the workspace exists (Slack's free plan hides older than 90 days and deletes after a year).
+14. **Chat gets its own key table**, collision-checked against Tasks' keymap (audit D22): ⌥↑↓ previous/next conversation, ⌥⇧↑↓ next unread (a listed scope-separated collision), ↑ edits your last message, `R` `E` `T` `H` in Catch up, `T` on a selected message.
 
 ## 7. What Chat waits on from the Tasks v3 build
+
+| Chat needs | From | State (2026-10-13) |
+| --- | --- | --- |
+| The panel dropdown and "← item" stack; the capture shell with ⌘1–7 | SH-1 | Landed |
+| The kit (NavRow, GroupHeader, MetaCount, Chip, EmptyState, Feed) | DS-6 | Landed |
+| References, the grammar, the editor's menus | RF-1, TV-U14 | Landed |
+| The shared store pattern | TV-D11a | Landed (Tasks' store; Chat builds its own on the pattern) |
+| The six fixed reactions component | TV-U13 | Ready, not built |
+| Notification channels (OS, browser, the menu-bar app), the table, reminders | TV-D12 | Ready, not built |
+| `@Team` and claims (the help desk) | TV-D13 | Waits on TV-D12 |
+| Time & region (quiet hours, message times) | TV-D14 | Ready, not built |
+| One time engine (Focus holds pings; "Focusing") | TV-F6 | Ready, not built |
+| Files: the upload pipeline and viewer | AT-2, AT-3 | AT-2 open (attachments session) |
+| Agents' "via <key>" tool surface | TV-D16 | Waits on TV-D13 |
+
+Chat's own blocks can start on what's landed (structure, editor, References, panel, store) while TV-D12, TV-D13 and AT-2 land; the spec orders them so.
 
 ## 8. The calls
 
@@ -403,3 +509,8 @@ The hackathon readiness plan (`t/maciej/hackathon-plan`) owns workspaces, invite
 ❓ OK?
 
 ## 9. What happens next
+
+1. **Round 1** (this): Maciej answers CH1–CH26. The current-state and visual lanes fold into §1.3 and §5 as they land.
+2. **Rounds 2a/2b:** every surface, view by view and state by state (empty, loading, error, read-only, offline, very large); Chat's panel views, capture type, References previews, MCP tools, notification rows, Home widgets, key map; a gap audit by a separate agent.
+3. **Round 3:** v1's code, block by block: keep, re-scope, salvage or retire (for Mike).
+4. **The spec** `specs/chat-v2.md` on Fable 5.1, with the hackathon MVP cut as explicit blocks, then decision entries, the supersession banner on `specs/chat.md`, a validator pass, and "Ready to execute".

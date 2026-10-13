@@ -216,7 +216,7 @@ Items are numbered **D1…** (decisions). Contradictions are numbered **A1…** 
 
 - **v1:** ⌘J, bound only on the Chat page, opens "Jump to a conversation" ([`chat-page.tsx:229-236`](../../../src/routes/pages/chat-page.tsx); [`src/features/chat/ui/chat-dialogs.tsx:537-575`](../../../src/features/chat/ui/chat-dialogs.tsx)). ⌘J isn't in `SHORTCUTS` or the shortcut sheet ([`src/lib/shortcuts.ts`](../../../src/lib/shortcuts.ts)); the ⌘K palette, described as "Search & jump to anything", offers only "Open Chat", not conversations ([`src/components/app/global-shortcuts-dialog.tsx:26`](../../../src/components/app/global-shortcuts-dialog.tsx); [`src/components/app/global-command-palette.tsx:190`](../../../src/components/app/global-command-palette.tsx)).
 - **For a switcher:** Slack users jump with a key all day (Slack's is ⌘K).
-- **Against a second one:** two "jump" surfaces with different contents; ⌘J only works on one page; on the web build ⌘J is the browser's Downloads in Chrome. "One way per job" (90b).
+- **Against a second one:** two "jump" surfaces with different contents; ⌘J only works on one page; on the web build, Ctrl+J is a browser shortcut in Chrome on Windows and Linux. "One way per job" (90b).
 - **Recommendation:** conversations (channels and people) join the ⌘K palette's results, ranked by recent and unread, from anywhere in the app. ⌘J retires, or stays as "⌘K filtered to conversations" if the designer wants a Slack-like muscle-memory key.
 - **Verdict: Adjust.** **Binds:** the key map's conventions. **Who:** Designer (whether ⌘J survives).
 
