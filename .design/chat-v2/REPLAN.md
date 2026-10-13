@@ -1,9 +1,10 @@
 # Chat v2 — the re-plan
 
-> **Status (2026-10-13): round 3 sent (prototype round-3.html; questions in §8 group H) and the tech blueprint for Mike sent. Waiting on Maciej (and Mike's review of the blueprint).**
+> **Status (2026-10-13): round 4 sent (prototype round-4.html; his round 3 observations answered in §8 group J). Waiting on Maciej.**
 >
-> - **Decided since round 1:** CH4a; CH29 = A (Slack calm) as the base, with centred dates and a fade at both ends; CH29b (three quick reactions, Reply before Task, agent's choice); tidying up afterwards (CH30, round 3 frame 6).
-> - **Open, organized in §8 group H:** CH29d "New" line, CH29e composer, CH29f spacing, CH29a 15 px, CH29c past dates, CH30a replies in the stream, CH30b fold when tangled, CH30c who moves others' messages, CH28a dot colour, CH28c statuses, CH28b where state shows, and the quick confirmations CH3a, CH16a, CH16b, CH23a, CH26a.
+> - **Decided since round 1:** CH4a; CH29 = A (Slack calm) as the base, centred dates, a fade at both ends; CH29b; CH29d (a centred "New" pill + a floating chip when scrolled up); tidying up afterwards.
+> - **Open in group J (this pass):** CH29g composer, CH30d replies wrapped by hand, CH28a presence colour, CH28d saved statuses, CH32 channel icons.
+> - **Open in group H (saved for his next pass):** CH29f, CH29a, CH29c, CH30a, CH30c, CH28c, CH28b, CH3a, CH16a, CH16b, CH23a, CH26a; plus CH31. CH29e → CH29g and CH30b → CH30d.
 > - **Mike's ask:** the tech-stack decision blueprint landed → [research/tech-blueprint.md](./research/tech-blueprint.md), folded into §6 (#2, #3, #6, #7, #18, #19–#22). Open from it: **CH31** (the Supabase plan before the hackathon).
 > - **Research lanes** ([`research/`](./research/)): six landed and folded in (early-decisions audit, role journeys, competitor structure, hackathon, visual audit → §5, current state → §1.3 B and §6 #15–18). **Threads** (→ CH30) and **visual competitors** (→ CH29) landed.
 > - **Research data in the shared local database** (kept for round 2's live checks; remove when the plan is done): workspace **"Chat replan research"** `669be464-0b9a-4d84-8537-544ac04dba5f` (10 channels, 3,032 messages, one task) and a third local user `third@moduo.local`. Full ledger and a cleanup sketch: [current state](./research/current-state.md), last section. `dev@moduo.local`'s plan is back to `free` (checked).
@@ -903,6 +904,64 @@ In his words, then what each one changes:
 10. **Presence (CH28a reopened):** *"Green is so easy to understand, and so common, that even white feels off somehow. It also takes away our options to use color to display statuses that are more complex, which we're going to have with the focus mode. We could use green for people that are in chat, and white for those who are active and reachable, but not currently looking at the chat. Not sure if it's a good idea and if it might enable surveillance. Tell me what you think."* → **CH28a** re-asked with that idea weighed.
 11. **Saved statuses:** *"What about saved statuses like out sick, vacation, and other stuff? we should allow people to create those, I think."* → **CH28d**.
 12. *"Not going through the question list in this pass, save those that still need decisions and those that were only partially answered."* → group H stays open as written (minus CH29d, now decided).
+
+### J · Round 4: answers to his round 3 observations *(2026-10-13; prototype [`round-4.html`](./prototypes/round-4.html))*
+
+**Fixed without a call:** equal space above and below media, then a clear gap before the next line; dense no longer breaks text word by word; the "New" pill centred with the floating chip (CH29d, his version); the do-not-disturb dot has a thick bar (two half-circles); the folded row that looked like a reply to Mike is gone (CH30d).
+
+**CH29g · The composer** *(replaces CH29e)*
+- **What it's for:** typing, and making connections without leaving the line. Most messages link nothing, so linking must be easy but not loud.
+- **Options:**
+  - (a) **One row that grows** (frame 3): one line at rest (+ · text · @ · emoji · send). Past one line, the text takes the full width above and the tools drop into a row below, his ChatGPT-style idea. **"+" is the one way in for everything that isn't text:** upload a file; link something (tabs: All · Tasks · Notes · Events · People, recent first); create a linked task, note or event. *Recommended.*
+  - (b) A permanent row of module buttons under the box (File · Task · Note · Event · Contact · Email · Emoji), Claude Code-style. Discoverable, but six buttons on every conversation, every time: the "too many things at once" he flagged; and it duplicates `@` and "+".
+  - (c) Text only: the grammar and a send button.
+- **Every way to connect lands as the same chip:** `@` (people first, then any item); `/task`, `/note`, `/event` (create one, linked here); "+"; pasting a Moduo link (it becomes a chip); dragging an item from the right panel or another module onto the box (the brief's "drag-onto").
+- **Later, off by default:** typing an item's exact name offers "Link Acme rebrand?" (Tab accepts).
+- **48a:** non-technical people get "+" with words; keyboard people keep the grammar.
+
+❓ a, b or c?
+
+**CH30d · Replies, simpler: wrap up by hand instead of folding automatically** *(replaces CH30b; he asked "What am I getting wrong?")*
+- **Nothing:** the round 3 design was at fault. The folded row sat indented under Mike's message, so it read as a reply to him, and automatic folding is hard to predict.
+- **The simpler model** (frame 4):
+  1. **Reply** posts a normal message with a one-line quote (unchanged; he likes it).
+  2. The question shows **"4 replies ›"**; clicking opens the chain on the right.
+  3. **Wrap up, by hand:** a "Wrap up" button in the chain's header (and in the question's ⋯ menu). The replies **leave the main stream**, and the question shows the answer that settled it: "✓ Wrapped up by Sofia: Jana 'Got them…' · 4 replies ›". Undo, and "Reopen" in the chain.
+  4. **Finding chains:** the right panel's dropdown gets **"Reply chains"**: every open chain in this conversation, newest activity first, with "1 new"; wrapped ones below. Catch up lists the chains you're in; Details lists them too.
+  5. **No automatic folding** in v2. It can come back as a setting if busy channels need it.
+- **Who may wrap up:** the person who asked, plus channel managers and admins *(recommended)*.
+- **Options:** (a) **this simpler model** *(recommended)*; (b) automatic folding (rounds 2–3); (c) Slack threads.
+
+❓ a, b or c?
+
+**CH28a · Presence colour, again** *(his idea weighed: "green for people that are in chat, and white for those who are active and reachable, but not currently looking at the chat … might enable surveillance")*
+- **His idea, honestly:** it does lean toward surveillance. It shows teammates when you're reading chat but not answering, and when you're elsewhere in the app: reply pressure, the thing the quiet bar exists to prevent. It also doesn't answer the question you have when you look at a dot: "can I reach them now?"
+- **Recommended:** **green means one thing, "reachable now"** (Moduo open, not idle, not on do not disturb). Everything else is a shape in grey: an outline for away, a thick bar for do not disturb (vacation, sick, by hand), the same bar for Focusing with "Focusing on X · until 3:00 PM" next to it, nothing for offline. Green stays the only presence colour, which leaves room for Focus to get its own mark later.
+- **Options:** (a) **green = reachable, shapes for the rest** *(recommended)*; (b) his split (green in Chat, white elsewhere); (c) no colour at all.
+
+❓ a, b or c?
+
+**CH28d · Saved statuses** *(new, from "out sick, vacation … we should allow people to create those")*
+- **A status** = an emoji + a short text + "clear after" (30 min, 1 h, today, this week, a date, never) + optionally "do not disturb while it's on".
+- **Moduo's presets:** In a meeting (clears in 1 h) · Out sick (do not disturb, today) · On vacation (do not disturb, until a date) · Commuting (30 min). **Yours:** save any status you set ("Sleeping until 6", "At the university") to reuse it (frame 6).
+- **Where it shows:** everywhere you'd contact the person: the direct message's header, a line above the box ("Jana is on vacation until Oct 20. She won't be notified; your message waits in her Catch up"), the person card, the people in Details.
+- **A proposal for Tasks:** the assign picker shows "Jana · on vacation until Oct 20".
+- **Options:** (a) **presets + your own saved statuses** *(recommended)*; (b) presets only; (c) also workspace presets set by admins (later, if teams ask).
+- **48a:** anyone who takes days off.
+
+❓ a, b or c?
+
+**CH32 · Channel icons** *(new, from "the icons that we use for chats, looks messy now")*
+- **Today:** five kinds in one list (a project dot, a company icon, a team mark, a bubble, a lock).
+- **Options** (frame 7):
+  - (a) **One glyph for every channel, a lock for private ones.** What a channel is linked to shows in its header and Details. *Recommended:* the cleanest list to scan.
+  - (b) The same glyph, tinted with the linked project's or client's colour.
+  - (c) Names only, with a small lock after private ones.
+  - (d) Today's mix.
+
+❓ a, b, c or d?
+
+**Still open from group H, saved for his next pass:** CH29f spacing, CH29a 15 px text, CH29c past dates, CH30a replies in the stream, CH30c who moves others' messages, CH28c statuses (Active · Away · Do not disturb, now with CH28d), CH28b where state shows, CH3a, CH16a, CH16b, CH23a, CH26a, and CH31 (the Supabase plan). CH29e is replaced by CH29g and CH30b by CH30d.
 
 ### F · Visual *(added after round 1 was sent, from the visual audit)*
 

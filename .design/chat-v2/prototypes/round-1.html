@@ -1089,6 +1089,7 @@ html:not([data-v7="zero"]) .v7z, html[data-v7="zero"] .v7t { display: none !impo
 .botbadge { height: 18px; display: inline-flex; align-items: center; gap: 4px; padding: 0 5px; border-radius: 4px; font-size: 11px; font-weight: 600; background: var(--state-active); color: var(--text-2); }
 /* frame-specific visibility via data-v attributes */
 .vv { display: none !important; }
+.menu .mlx { position: static; height: 26px; display: flex; align-items: center; padding: 0 8px; font-size: 12px; color: var(--text-3); white-space: nowrap; }
 </style>
 </head>
 <body>
@@ -1239,7 +1240,7 @@ html:not([data-v7="zero"]) .v7z, html[data-v7="zero"] .v7t { display: none !impo
 
     <!-- workspace switcher, open (frame 5 · C) -->
     <div class="menu wsmenu" data-v="5:c">
-      <div class="mlab">Workspaces</div>
+      <div class="mlab mlx">Workspaces</div>
       <div class="mi hl"><span class="tmark" style="background: color-mix(in oklab, var(--label-teal) 50%, var(--card))">BC</span>Byte Club<span class="t3">· your team</span></div>
       <div class="mi"><span class="tmark" style="background: color-mix(in oklab, var(--label-amber) 40%, var(--card))">HX</span>HackX 2026<span class="t3">· the event</span><span class="n num">2</span></div>
       <hr />
@@ -1332,7 +1333,7 @@ html:not([data-v7="zero"]) .v7z, html[data-v7="zero"] .v7t { display: none !impo
 
         <!-- notify menu (frame 7 · menu) -->
         <div class="menu nmenu" data-v="7:menu">
-          <div class="mlab">Notify me</div>
+          <div class="mlab mlx">Notify me</div>
           <div class="mi rad"><span class="rd"></span><span class="rt">Every message<span class="t3">Ping me for each new message here.</span></span></div>
           <div class="mi rad hl"><span class="rd on"></span><span class="rt">Mentions and replies<span class="t3">Default. Only @you, @channel and threads you're in.</span></span></div>
           <div class="mi rad"><span class="rd"></span><span class="rt">Nothing<span class="t3">It still turns bold; never pings or counts.</span></span></div>
@@ -1406,12 +1407,12 @@ html:not([data-v7="zero"]) .v7z, html[data-v7="zero"] .v7t { display: none !impo
         <div class="composer">
           <!-- @ menu (frame 4 · at) -->
           <div class="menu gmenu" data-v="4:at">
-            <div class="mlab">People</div>
+            <div class="mlab mlx">People</div>
             <div class="mi hl"><span class="ava so">SO</span>Sofia Ortiz<span class="meta">in this channel</span></div>
             <div class="mi"><span class="ava mc">MC</span>Mike Chen<span class="meta">in this channel</span></div>
             <div class="mi"><span class="tmark" style="background: color-mix(in oklab, var(--label-blue) 45%, var(--card))">DS</span>Design<span class="meta">team · 3</span></div>
             <hr />
-            <div class="mlab">Things</div>
+            <div class="mlab mlx">Things</div>
             <div class="mi"><span class="dot" style="--c: var(--label-violet)"></span>Acme rebrand<span class="meta">project</span></div>
             <div class="mi"><svg class="sg" aria-hidden="true"><use href="#i-progress"/></svg>Collect assets<span class="meta">task · ACM-28</span></div>
             <div class="mi"><svg class="ic" aria-hidden="true"><use href="#i-note"/></svg>Acme kickoff · Oct 12<span class="meta">note</span></div>
@@ -1420,12 +1421,12 @@ html:not([data-v7="zero"]) .v7z, html[data-v7="zero"] .v7t { display: none !impo
           </div>
           <!-- / menu (frame 4 · slash) -->
           <div class="menu gmenu" data-v="4:slash">
-            <div class="mlab">Create</div>
+            <div class="mlab mlx">Create</div>
             <div class="mi hl"><svg class="ic" aria-hidden="true"><use href="#i-tasks"/></svg>/task<span class="meta">a task from this line, linked here</span></div>
             <div class="mi"><svg class="ic" aria-hidden="true"><use href="#i-note"/></svg>/note<span class="meta">a note, linked here</span></div>
             <div class="mi"><svg class="ic" aria-hidden="true"><use href="#i-cal"/></svg>/event<span class="meta">an event, linked here</span></div>
             <hr />
-            <div class="mlab">Insert</div>
+            <div class="mlab mlx">Insert</div>
             <div class="mi"><svg class="ic" aria-hidden="true"><use href="#i-cal"/></svg>/today · /tomorrow · /date<span class="meta">a date chip</span></div>
             <div class="mi"><svg class="ic" aria-hidden="true"><use href="#i-clock"/></svg>/remind<span class="meta">remind me about this conversation</span></div>
           </div>
