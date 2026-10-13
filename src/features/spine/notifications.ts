@@ -197,33 +197,45 @@ function newestItem(group: NotificationGroup): NotificationItem {
   return group.items.reduce((a, b) => (a.createdAt >= b.createdAt ? a : b));
 }
 
+/** Notices that hang on your own Inbox but are about one task they name by id. */
+const INBOX_TASK_NOTICES = new Set(["tasks.reminder", "tasks.routed", "tasks.agent_status"]);
+
+/**
+ * The one task an Inbox notice is about (its payload's `task_id`): a reminder
+ * (TV-D12), a team notice about one task (TV-D13; several are counted, not
+ * named) or an agent's state (TV-D16). Null for any other card.
+ */
+function inboxNoticeTask(group: NotificationGroup): string | null {
+  if (!INBOX_TASK_NOTICES.has(group.op)) return null;
+  const latest = newestItem(group);
+  if (group.op === "tasks.routed") {
+    const count = typeof latest.payload.count === "number" ? latest.payload.count : 1;
+    if (count > 1) return null;
+  }
+  const taskId = latest.payload.task_id;
+  return typeof taskId === "string" && taskId ? taskId : null;
+}
+
 /**
  * The task a card is about, by name (TV-P0, tasks-v3 AC1.7): the title its
  * event carried (the assigned / completed / unblocked notices store it), else a
- * label the caller resolved for the target (`labels`, keyed by target id — a
- * comment's notice carries only an excerpt). Null when neither is known, or
- * when the card isn't about a task.
+ * label the caller resolved (`labels`): for the target (a comment's notice
+ * carries only an excerpt), or for the task an Inbox notice names (reminders,
+ * team notices and agents carry only its id, so the name comes from the
+ * registry, which answers only while the reader can see the task). Null when
+ * neither is known, or when the card isn't about one task.
  */
 export function notificationSubject(
   group: NotificationGroup,
   labels?: ReadonlyMap<string, string>,
 ): string | null {
-  // A reminder hangs on your Inbox but is about the task it names (TV-D12);
-  // so does a team notice about one task (TV-D13; several are counted).
-  const latest = newestItem(group);
-  if (group.op === "tasks.routed") {
-    const count = typeof latest.payload.count === "number" ? latest.payload.count : 1;
-    if (count > 1) return null;
-  } else if (
-    group.targetType !== "task" &&
-    group.op !== "tasks.reminder" &&
-    group.op !== "tasks.agent_status"
-  ) {
-    return null;
-  }
-  const title = latest.payload.title;
+  const inboxTask = inboxNoticeTask(group);
+  if (INBOX_TASK_NOTICES.has(group.op) ? !inboxTask : group.targetType !== "task") return null;
+  // Notices written before their payloads went ids-only still carry a title.
+  const title = newestItem(group).payload.title;
   if (typeof title === "string" && title.trim()) return title.trim();
-  const label = group.targetId ? labels?.get(group.targetId)?.trim() : "";
+  const about = inboxTask ?? group.targetId;
+  const label = about ? labels?.get(about)?.trim() : "";
   return label || null;
 }
 
@@ -292,13 +304,20 @@ export function notificationReferences(groups: NotificationGroup[]): ReferenceRe
 }
 
 /**
- * Target ids whose card needs a resolved name: task cards whose event carried
- * no title (comments). The caller looks them up in the entity registry.
+ * Task ids whose card needs a resolved name: task cards whose event carried
+ * no title (comments), and the task an Inbox notice names (reminders, team
+ * notices and agents carry only its id). The caller looks them up in the
+ * entity registry.
  */
 export function unnamedTaskTargets(groups: NotificationGroup[]): string[] {
   const ids = new Set<string>();
   for (const g of groups) {
-    if (g.targetType === "task" && g.targetId && !notificationSubject(g)) ids.add(g.targetId);
+    if (notificationSubject(g)) continue;
+    const inboxTask = inboxNoticeTask(g);
+    if (inboxTask) ids.add(inboxTask);
+    else if (!INBOX_TASK_NOTICES.has(g.op) && g.targetType === "task" && g.targetId) {
+      ids.add(g.targetId);
+    }
   }
   return [...ids];
 }

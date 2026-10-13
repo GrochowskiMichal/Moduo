@@ -1125,6 +1125,53 @@ export function normalizeStarterTemplate(input: unknown): StarterTemplate | null
 }
 
 // ---------------------------------------------------------------------------
+// Saved views (TV-U8, REPLAN 29d) — mirrors the CHECK on task_views.scope and
+// task_views_op_create's guard in <stamp>_task_views. A view keeps one base
+// scope: All, My tasks, Upcoming (each reader's own) or one project. Focus
+// has no Filter or Display, and the Inbox is each person's own place.
+// ---------------------------------------------------------------------------
+
+export const TASK_VIEW_SCOPES = ["all", "mine", "upcoming", "project"] as const;
+export type TaskViewScope = (typeof TASK_VIEW_SCOPES)[number];
+export const taskViewScopeSchema = z.enum(TASK_VIEW_SCOPES);
+export function isTaskViewScope(value: unknown): value is TaskViewScope {
+  return typeof value === "string" && (TASK_VIEW_SCOPES as readonly string[]).includes(value);
+}
+export function parseTaskViewScope(input: unknown): SafeParseResult<TaskViewScope> {
+  return parseOrError(taskViewScopeSchema, input);
+}
+/** Lax read: a scope this build doesn't know drops the view (null). */
+export function normalizeTaskViewScope(input: unknown): TaskViewScope | null {
+  return isTaskViewScope(input) ? input : null;
+}
+
+/**
+ * The Filter dimensions a saved view may keep (mirrors
+ * task_views__check_filters). An id dimension holds "none" or the id of a
+ * person, team or tag of the same workspace; a word dimension holds short
+ * words. The app's Filter offers exactly these (TASK_FILTER_DIMENSIONS in
+ * features/tasks/filters.ts, held to them by a test).
+ */
+export const TASK_VIEW_ID_DIMENSIONS = ["assignee", "creator", "team", "tag"] as const;
+export const TASK_VIEW_WORD_DIMENSIONS = [
+  "status",
+  "completed",
+  "priority",
+  "energy",
+  "due",
+  "scheduled",
+  "queued",
+  "blocked",
+  "waiting",
+  "recurring",
+  "subtasks",
+  "attachments",
+] as const;
+export type TaskViewFilterDimension =
+  | (typeof TASK_VIEW_ID_DIMENSIONS)[number]
+  | (typeof TASK_VIEW_WORD_DIMENSIONS)[number];
+
+// ---------------------------------------------------------------------------
 // Attachments (AT-1, specs/attachments.md) — mirrors the CHECKs on
 // public.attachments in 20261008210500_attachments_storage. `pending` = begun,
 // bytes not confirmed yet; `ready` = finalize checked the stored size;

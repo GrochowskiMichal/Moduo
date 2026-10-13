@@ -1,6 +1,7 @@
 // The Inbox on the List (tasks-v3 §8, defaults b and h, 20, 20a, 82b;
 // research §7; TV-U15): newest on top with manual drag (the List's own),
-// "from Mike" on what someone else put here, the triage keys 1 · 2 · 3 · H
+// "from Mike" on what someone else put here, "via Claude Desktop" on what an
+// agent captured (TV-U13b), the triage keys 1 · 2 · 3 · H
 // (also the bottom bar's mode row), "Snoozed · n" at the end, and a calm
 // zero state that says where captures come from. This hook hands the List
 // what differs; the dialogs are mounted by the page.
@@ -68,6 +69,7 @@ import { bucketDotColor } from "../sidebar";
 import { useToday } from "../use-today";
 import { DayPickerDialog } from "./day-picker-dialog";
 import type { ListExtraGroup } from "./list-extensions";
+import { useAgentCaptures } from "./use-agent-captures";
 
 type InboxApi = Pick<
   TasksModuleApi,
@@ -236,13 +238,21 @@ export function useInboxView({
     [snoozedKey, showSnoozed, mySnoozes],
   );
 
+  // "via Claude Desktop" on what an agent captured (TV-U13b).
+  const inboxIds = useMemo(() => inboxOpen.map((t) => t.id), [inboxOpen]);
+  const agentVia = useAgentCaptures(runtime, workspaceId, inboxIds, enabled);
   const sourceOf = useCallback(
     (task: Task) =>
-      inboxSourceLabel(task, me, (id) => {
-        const person = byId(id);
-        return person ? firstName(person.fullName || person.name) : null;
-      }),
-    [me, byId],
+      inboxSourceLabel(
+        task,
+        me,
+        (id) => {
+          const person = byId(id);
+          return person ? firstName(person.fullName || person.name) : null;
+        },
+        agentVia.get(task.id) ?? null,
+      ),
+    [me, byId, agentVia],
   );
 
   // ── the actions ─────────────────────────────────────────────────────────

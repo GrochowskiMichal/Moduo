@@ -466,6 +466,77 @@ describe("a team notice (TV-D13)", () => {
   });
 });
 
+describe("an agent's notice (TV-D16)", () => {
+  it("names its task only through the registry, which answers only for what the reader sees", () => {
+    const groups = groupNotifications([
+      item({
+        id: "a1",
+        createdAt: "2030-01-01T10:00:00Z",
+        op: "tasks.agent_status",
+        targetType: "bucket",
+        targetId: "inbox-me",
+        actorType: "api_key",
+        actorLabel: "Claude",
+        payload: { task_id: "t5", state: "ready", session_id: "s1" },
+      }),
+    ]);
+    expect(unnamedTaskTargets(groups)).toEqual(["t5"]);
+    expect(notificationSubject(groups[0])).toBeNull();
+    expect(notificationSubject(groups[0], new Map([["t5", "Release notes"]]))).toBe(
+      "Release notes",
+    );
+    // The Inbox it hangs on is never its name.
+    expect(notificationSubject(groups[0], new Map([["inbox-me", "Inbox"]]))).toBeNull();
+    expect(notificationDeepLink(groups[0])).toEqual({
+      route: "/tasks",
+      entityType: "task",
+      entityId: "t5",
+    });
+  });
+
+  it("reminders and team notices name their task the same way; several routed stay counted", () => {
+    const groups = groupNotifications([
+      item({
+        id: "r1",
+        createdAt: "2030-01-01T09:00:00Z",
+        op: "tasks.reminder",
+        targetType: "bucket",
+        targetId: "inbox-me",
+        actorType: "agent",
+        actorLabel: "Moduo",
+        payload: { task_id: "t6", reminder_id: "rem1" },
+      }),
+      item({
+        id: "g1",
+        createdAt: "2030-01-01T08:00:00Z",
+        op: "tasks.routed",
+        targetType: "bucket",
+        targetId: "inbox-me",
+        payload: { task_id: "t7", task_ids: ["t7"], count: 1, team_name: "Development" },
+      }),
+      item({
+        id: "g2",
+        createdAt: "2030-01-01T07:00:00Z",
+        op: "tasks.routed",
+        targetType: "bucket",
+        targetId: "inbox-me",
+        actorId: "u3",
+        payload: { task_id: "t8", task_ids: ["t8", "t9"], count: 2, team_name: "Design" },
+      }),
+    ]);
+    expect(unnamedTaskTargets(groups).sort()).toEqual(["t6", "t7"]);
+    const labels = new Map([
+      ["t6", "Call the venue"],
+      ["t7", "Icons"],
+      ["t8", "Never named"],
+    ]);
+    const subjects = groups.map((g) => notificationSubject(g, labels));
+    expect(subjects).toContain("Call the venue");
+    expect(subjects).toContain("Icons");
+    expect(subjects).not.toContain("Never named");
+  });
+});
+
 describe("a project delete notice (TV-U6)", () => {
   it("opens the Inbox its work landed in", () => {
     const [g] = groupNotifications([

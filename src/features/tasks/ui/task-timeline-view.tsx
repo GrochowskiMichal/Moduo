@@ -1,16 +1,28 @@
+// The Timeline (Tasks v3 TV-TL1, spec §6, REPLAN 67–71, 46a, 48b): rows
+// follow the scope (projects across the workspace, tasks inside a project),
+// each date drawn as what it is (tasks are points; projects and sections are
+// spans), a sticky resizable name column, a two-tier sticky time header with
+// the Today pill, a quiet grid, Week · Month · Quarter · Year (⌘-scroll and
+// bare −/= too), and a canvas that scrolls endlessly both ways, drawing only
+// the rows on screen (VirtualStack) over a grid painted as one background.
+//
+// Working on the canvas (TV-TL2, REPLAN 70, 68b): drag a point (its due
+// date; a selection moves together), a diamond, a band or a bar and their
+// ends; click a day on a row with no date; the view scrolls near its edges;
+// every change has one Undo; ⌥←/→ (⇧ a week), d, ⇧D, ⇧T, ⇧↑↓, ⌘A; the
+// selected or hovered task's "waits on" lines, a contradicting date shown
+// with its one fix; "No date · n" opens the right panel's No date view, whose
+// tasks drop onto a day. The pieces: `use-timeline-canvas.ts` (the pointer),
+// `use-timeline-writes.tsx` (what's saved), `use-timeline-drop.tsx` (the
+// panel's drop), `timeline-deps-layer.tsx` (the lines), and the marks reading
+// a drag from `timeline-drag-store.ts`. A person who can't edit gets none of
+// the handles (Edit in the workspace and, inside a project, on it; across
+// projects a project shared view-only is refused by the server, TL2-14).
+
+import { CalendarOff } from "lucide-react";
 import {
-  DndContext,
-  type DragEndEvent,
-  DragOverlay,
-  type DragStartEvent,
-  pointerWithin,
-  useDraggable,
-  useDroppable,
-} from "@dnd-kit/core";
-import { differenceInCalendarDays, startOfDay } from "date-fns";
-import { GripVertical } from "lucide-react";
-import {
-  type ReactNode,
+  type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   useCallback,
   useEffect,
@@ -19,60 +31,90 @@ import {
   useRef,
   useState,
 } from "react";
-import { createPortal } from "react-dom";
 
 import { Button } from "../../../components/ui/button";
-import { CompleteToggle } from "../../../components/ui/complete-toggle";
-import { EmptyState } from "../../../components/ui/empty-state";
-import { Eyebrow } from "../../../components/ui/eyebrow";
-import { GroupHeader } from "../../../components/ui/group-header";
 import { SegmentedControl } from "../../../components/ui/segmented-control";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
+import { useTimeRegion } from "../../../lib/time-region";
 import { cn } from "../../../lib/utils";
+import { useAssignees } from "../assignees";
+import { type CompletedMode, isCompletedHidden } from "../completed";
+import { type TasksDisplay, type TimelineShow, timelineScopeOf } from "../display";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
-import type { Bucket, Task } from "../model";
+import type { Bucket, Task, TaskRelation } from "../model";
+import { PRIVATE_PROJECT_LABEL } from "../model";
+import { contradictions } from "../timeline-deps";
+import { fitZoom } from "../timeline-drag";
 import {
-  type BarDragMode,
-  resolveBarDrag,
-  resolveConnectorDrop,
-  resolveTrayDrop,
-  type TimelineDatePatch,
-} from "../timeline-drag";
+  isTypingTarget,
+  shiftDaysOf,
+  type TimelineKeyAction,
+  timelineKeyAction,
+} from "../timeline-keys";
 import {
-  type AxisWindow,
-  arrowEndpoints,
-  axisTicks,
-  axisWindow,
-  BAR_H,
-  barForTask,
-  barRowTop,
-  buildTimelineRollup,
-  dayAtX,
-  FADE_PX,
-  HEADER_H,
-  LANE_HEADER_H,
-  layoutRows,
-  monthSegments,
+  buildTimelineRows,
+  type DaySpan,
+  type TimelineGroup,
+  type TimelineRow,
+  taskRowKey,
+  timelineGroupsFor,
+} from "../timeline-rows";
+import {
+  DAY_WIDTH,
+  dayCenterX,
+  dayNumOfKey,
+  drawWindow,
+  extendRange,
+  initialRange,
+  scrollLeftFor,
+  stepZoom,
   TIMELINE_ZOOMS,
-  TITLE_INSIDE_MIN_PX,
-  type TimelineBar,
+  type TimelineRange,
   type TimelineZoom,
-  todayLineX,
-  xForDay,
-} from "../timeline-geometry";
-import { asTaskDrag, asTaskDropTarget, taskDrag, useTaskDndSensors } from "./dnd/task-dnd";
+  topTier,
+  visibleDays,
+  weekCounts,
+  weekdayOf,
+  weekStartOf,
+  xOfDay,
+  ZOOM_LABELS,
+} from "../timeline-scale";
+import { useToday } from "../use-today";
 import type { PlanHeaderControls, PlanView } from "./plan-view-header";
 import { PlanViewHeader } from "./plan-view-header";
-import { blockedLabelOf } from "./row-facts";
-import { BlockedMarker } from "./task-row";
+import { ProjectChoicesProvider, StatusChoicesProvider } from "./project-choices";
+import { useRowActions } from "./row-facts";
+import { activateTask, type TaskCommand } from "./task-context-menu";
+import { type DepStub, TimelineDepsLayer } from "./timeline-deps-layer";
+import { createCanvasStore, TimelineCanvasContext } from "./timeline-drag-store";
+import { TimelineHeader } from "./timeline-header";
+import {
+  createViewportStore,
+  type TimelineGeometry,
+  TimelineGeometryContext,
+  TimelineViewportContext,
+  TimelineWindowContext,
+} from "./timeline-marks";
+import {
+  type RowStubs,
+  type TimelineRowHandlers,
+  TimelineRowItem,
+  timelineRowDomId,
+} from "./timeline-row";
+import type { MultiSelect } from "./use-task-selection";
+import { type CanvasLive, useTimelineCanvas } from "./use-timeline-canvas";
+import { useTimelineDrop } from "./use-timeline-drop";
+import { useTimelineWrites } from "./use-timeline-writes";
+import { VirtualStack } from "./virtual-stack";
 
 type Props = {
   tasks: Task[];
   scopeTitle: string;
+  /** The sidebar's place: "all", a project's id, "mine", "upcoming", the Inbox… */
+  selection: string;
   view: PlanView;
   onViewChange: (view: PlanView) => void;
-  zoom: TimelineZoom;
-  onZoomChange: (zoom: TimelineZoom) => void;
+  /** Projects in the sidebar's order (All: area by area). */
   buckets: Bucket[];
   inbox: Bucket | null;
   canEdit: boolean;
@@ -81,42 +123,117 @@ type Props = {
   onSelectTask: (id: string | null) => void;
   /** The toolbar's search, Filter, Display and count (built by the page). */
   header?: PlanHeaderControls;
+  /** Filter or search narrows the scope. */
+  filterActive?: boolean;
   api: TasksModuleApi;
+  workspaceId: string;
+  /** The scope's Display (the zoom, Group by, Colour by, Show, Subtasks). */
+  display: TasksDisplay;
+  onDisplayChange: (next: TasksDisplay) => void;
+  /** Display → Show done, and the tasks that stay listed anyway. */
+  completed: CompletedMode;
+  stayingIds: ReadonlySet<string>;
+  /** The workspace's task key ("MOD"): the menu's Copy link names the handle. */
+  taskKey?: string | null;
+  /** ⏎ opens a task's full page. */
+  onOpenTask?: (id: string) => void;
+  /** ⏎ (or a double-click) on a project at All opens its own Timeline. */
+  onOpenProject?: (id: string) => void;
+  /** The page's selection of several tasks (TV-U12): ⇧/⌘-click, ⇧↑↓, ⌘A; they move together. */
+  multiSelect?: MultiSelect;
+  /** Where the view writes the task rows' order (a range, ⌘A, the bulk bar). */
+  orderRef?: { current: readonly string[] };
+  /** The page's keys on a selection (the bulk bar's), asked before the view's own. */
+  onViewKey?: (event: ReactKeyboardEvent<HTMLDivElement>, selected: Task | null) => boolean;
+  /** "No date · n": open the right panel's No date view (absent: it shows the undated rows). */
+  onOpenNoDate?: () => void;
+  /**
+   * May this person move dates here (TV-TL2): Edit in the workspace, and on
+   * the project when the place is one. False: no drag handles at all.
+   */
+  canDrag?: boolean;
 };
 
-const ZOOM_LABELS: Record<TimelineZoom, string> = {
-  week: "Week",
-  month: "Month",
-  quarter: "Quarter",
-};
+const NO_IDS: ReadonlySet<string> = new Set();
+const NO_RELATIONS: readonly TaskRelation[] = [];
 
-/** Pixels of pointer travel before a bar pointer-down becomes a drag (a plain
- * click still selects). Mirrors the dnd-kit sensors' 6px activation. */
-const BAR_DRAG_SLOP_PX = 5;
+/** The keys the view keeps while several tasks are selected (the rest are the bulk bar's). */
+const VIEW_KEYS_ON_A_SELECTION: ReadonlySet<TimelineKeyAction> = new Set<TimelineKeyAction>([
+  "shift-earlier",
+  "shift-later",
+  "shift-earlier-week",
+  "shift-later-week",
+  "extend-next",
+  "extend-prev",
+  "select-all",
+  "clear",
+  "fit",
+  "next",
+  "prev",
+  "today",
+  "zoom-in",
+  "zoom-out",
+  "name-column",
+  "fold",
+  "unfold",
+]);
 
-/** Shared bar coloring — the solid span and its fade extension match. */
-function barTone(done: boolean): string {
-  return done ? "border-border/60 bg-muted/50" : "border-primary/35 bg-primary/10";
+/** The name column (69): 280 px, 200–480, ⇧[ hides it. Per device. */
+const NAME_W_DEFAULT = 280;
+const NAME_W_MIN = 200;
+const NAME_W_MAX = 480;
+const NAME_COLUMN_KEY = "moduo:tasks:timeline:name-column";
+
+/** A first guess at a row's height (VirtualStack measures each once drawn). */
+const ROW_GUESS = 36;
+const HEADER_ROW_GUESS = 28;
+
+type NameColumn = { width: number; hidden: boolean };
+
+function readNameColumn(): NameColumn {
+  try {
+    const raw = JSON.parse(window.localStorage.getItem(NAME_COLUMN_KEY) ?? "null") as unknown;
+    if (raw && typeof raw === "object") {
+      const { width, hidden } = raw as Partial<NameColumn>;
+      return {
+        width:
+          typeof width === "number" && Number.isFinite(width)
+            ? Math.min(NAME_W_MAX, Math.max(NAME_W_MIN, Math.round(width)))
+            : NAME_W_DEFAULT,
+        hidden: hidden === true,
+      };
+    }
+  } catch {
+    // Storage off or a stray value: the default.
+  }
+  return { width: NAME_W_DEFAULT, hidden: false };
 }
 
-/** An in-flight connector-dot drag (AC8), in canvas coordinates. */
-type ConnectorState = {
-  fromId: string;
-  x1: number;
-  y1: number;
-  x2: number;
-  y2: number;
-  targetId: string | null;
-  valid: boolean;
-};
+function writeNameColumn(value: NameColumn): void {
+  try {
+    window.localStorage.setItem(NAME_COLUMN_KEY, JSON.stringify(value));
+  } catch {
+    /* ignore */
+  }
+}
+
+function readToggled(key: string): ReadonlySet<string> {
+  try {
+    const raw = JSON.parse(window.localStorage.getItem(key) ?? "[]") as unknown;
+    return new Set(Array.isArray(raw) ? raw.filter((k): k is string => typeof k === "string") : []);
+  } catch {
+    return new Set();
+  }
+}
+
+const NO_SHOW: readonly TimelineShow[] = [];
 
 export function TaskTimelineView({
   tasks,
   scopeTitle,
+  selection,
   view,
   onViewChange,
-  zoom,
-  onZoomChange,
   buckets,
   inbox,
   canEdit,
@@ -124,1070 +241,1084 @@ export function TaskTimelineView({
   selectedTaskId,
   onSelectTask,
   header,
+  filterActive = false,
   api,
+  workspaceId,
+  display,
+  onDisplayChange,
+  completed,
+  stayingIds,
+  taskKey = null,
+  onOpenTask,
+  onOpenProject,
+  multiSelect,
+  orderRef,
+  onViewKey,
+  onOpenNoDate,
+  canDrag: canDragProp,
 }: Props) {
-  // Lane collapse + tray visibility are transient view state (per mount);
-  // only the zoom is a persisted preference (spec: Month default, persisted).
-  const [collapsedLanes, setCollapsedLanes] = useState<ReadonlySet<string>>(new Set());
-  const [trayOpen, setTrayOpen] = useState(true);
-  const [hoveredTaskId, setHoveredTaskId] = useState<string | null>(null);
+  const scopeKey = inbox && selection === inbox.id ? "inbox" : selection;
+  const scopeKind = useMemo(() => timelineScopeOf(scopeKey), [scopeKey]);
+  // Drags need Edit (TV-TL2): the page works it out (`canDrag`); without one,
+  // the workspace's Edit decides. The server still checks every write.
+  const canDrag = canEdit && (canDragProp ?? true);
+  const [canvas] = useState(createCanvasStore);
+  const selectedIds = multiSelect?.ids ?? NO_IDS;
+  const zoom = display.timelineZoom;
+  const dw = DAY_WIDTH[zoom];
+  const show = new Set(display.timelineShow ?? NO_SHOW);
+  const groups = timelineGroupsFor(scopeKind.kind);
+  const group: TimelineGroup = groups.includes(display.timelineGroup)
+    ? display.timelineGroup
+    : (groups[0] ?? "none");
+  const todayKey = useToday();
+  const today = dayNumOfKey(todayKey) ?? 0;
+  const { weekStartsOn } = useTimeRegion();
+  const { byId: personById } = useAssignees();
 
-  // Minute tick so the today line drifts through the day like the calendar's.
-  // The heavy geometry only cares about the local DAY — it memoizes on
-  // `today`, so the tick re-renders two style offsets, not the whole rollup.
-  const [now, setNow] = useState(() => new Date());
-  useEffect(() => {
-    const id = window.setInterval(() => setNow(new Date()), 60_000);
-    return () => window.clearInterval(id);
-  }, []);
-  const todayMs = startOfDay(now).getTime();
-  const today = useMemo(() => new Date(todayMs), [todayMs]);
-
-  const win = useMemo(() => axisWindow(tasks, zoom, today), [tasks, zoom, today]);
-
-  const laneDefs = useMemo(() => {
-    const defs = inbox ? [{ id: inbox.id, name: "Inbox" }] : [];
-    return [...defs, ...buckets.map((b) => ({ id: b.id, name: b.name }))];
-  }, [inbox, buckets]);
-
-  const rollup = useMemo(
-    () =>
-      buildTimelineRollup({
-        tasks,
-        laneDefs,
-        collapsedIds: collapsedLanes,
-        window: win,
-        now: today,
-      }),
-    [tasks, laneDefs, collapsedLanes, win, today],
-  );
-  const layout = useMemo(() => layoutRows(rollup.lanes), [rollup.lanes]);
-  const arrows = useMemo(
-    () => arrowEndpoints(api.taskRelations, layout.barsByTask),
-    [api.taskRelations, layout.barsByTask],
-  );
-  const ticks = useMemo(() => axisTicks(win), [win]);
-  const months = useMemo(() => monthSegments(win), [win]);
-  const todayX = todayLineX(win, now);
-  const canvasW = win.totalDays * win.dayWidth;
-  const datedCount = rollup.lanes.reduce((n, lane) => n + lane.count, 0);
-
-  // ── Today recenter ──────────────────────────────────────────────────────────
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const winRef = useRef(win);
-  winRef.current = win;
-  const centerToday = useCallback((smooth = false) => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const x = todayLineX(winRef.current, new Date());
-    el.scrollTo({
-      left: Math.max(0, x - el.clientWidth / 2),
-      behavior: smooth ? "smooth" : "auto",
+  // ── Folds: projects expanded at All, sections folded (per device) ─────────
+  const foldKey = `moduo:tasks:folds:${api.currentUserId ?? "anon"}:${scopeKey}:timeline:${workspaceId}`;
+  const [folds, setFolds] = useState(() => ({ key: foldKey, set: readToggled(foldKey) }));
+  const toggled = folds.key === foldKey ? folds.set : readToggled(foldKey);
+  if (folds.key !== foldKey) setFolds({ key: foldKey, set: toggled });
+  const toggleRow = useCallback((rowKey: string) => {
+    setFolds((prev) => {
+      const next = new Set(prev.set);
+      if (next.has(rowKey)) next.delete(rowKey);
+      else next.add(rowKey);
+      try {
+        window.localStorage.setItem(prev.key, JSON.stringify([...next]));
+      } catch {
+        /* ignore */
+      }
+      return { key: prev.key, set: next };
     });
   }, []);
-  // Anchor the viewport to the same DATE when the window's origin shifts at
-  // constant zoom (a scope/filter change or the midnight rollover moves
-  // `win.start`) — otherwise a preserved pixel scrollLeft silently lands on a
-  // different date range. Declared BEFORE the recenter effect so an absolute
-  // recenter (zoom/load) always wins over the relative adjustment.
-  const prevWinRef = useRef<{ start: Date; dayWidth: number } | null>(null);
-  useLayoutEffect(() => {
-    const el = scrollRef.current;
-    const prev = prevWinRef.current;
-    prevWinRef.current = { start: win.start, dayWidth: win.dayWidth };
-    if (!el || !prev || prev.dayWidth !== win.dayWidth) return;
-    const deltaDays = differenceInCalendarDays(prev.start, win.start);
-    if (deltaDays !== 0) el.scrollLeft += deltaDays * win.dayWidth;
-  }, [win]);
+  const expanded = useMemo(() => {
+    const ids = new Set<string>();
+    for (const k of toggled) if (k.startsWith("project:")) ids.add(k.slice("project:".length));
+    return ids;
+  }, [toggled]);
 
-  // Center on mount, on zoom change, and once the bundle lands (the window's
-  // extent settles then). Not on every task edit — mid-scroll jumps are rude.
-  const loaded = !api.loading;
+  // ── Rows ────────────────────────────────────────────────────────────────
+  const projects = useMemo(
+    () => (scopeKind.kind === "project" ? [...buckets, ...api.archivedBuckets] : buckets),
+    [scopeKind.kind, buckets, api.archivedBuckets],
+  );
+  // A project's bar and progress count all its work, an archived one's too.
+  const allTasks = useMemo(
+    () => (scopeKind.kind === "project" ? [...api.tasks, ...api.archivedTasks] : api.tasks),
+    [scopeKind.kind, api.tasks, api.archivedTasks],
+  );
+  const hueById = useMemo(() => {
+    const map = new Map<string, string | null>();
+    for (const p of projects) map.set(p.id, p.color ?? null);
+    return map;
+  }, [projects]);
+  const isHidden = useCallback(
+    (task: Task) =>
+      isCompletedHidden(task, {
+        mode: completed,
+        now: new Date(),
+        keep: (t) => stayingIds.has(t.id),
+      }),
+    [completed, stayingIds],
+  );
+  const personName = useCallback(
+    (id: string) => personById(id)?.fullName || "Someone",
+    [personById],
+  );
+  const showUndated = show.has("undated");
+  const showSessions = show.has("sessions");
+  const built = useMemo(
+    () =>
+      buildTimelineRows({
+        scope: scopeKind,
+        tasks,
+        allTasks,
+        projects,
+        areas: api.areas,
+        sections: api.sections,
+        sessions: api.sessions,
+        group,
+        subtasks: display.timelineSubtasks,
+        showUndated,
+        showSessions,
+        isHidden,
+        expanded,
+        folded: toggled,
+        today,
+        now: Date.now(),
+        filtering: filterActive,
+        inboxId: inbox?.id ?? null,
+        personName,
+      }),
+    [
+      scopeKind,
+      tasks,
+      allTasks,
+      projects,
+      api.areas,
+      api.sections,
+      api.sessions,
+      group,
+      display.timelineSubtasks,
+      showUndated,
+      showSessions,
+      isHidden,
+      expanded,
+      toggled,
+      today,
+      filterActive,
+      inbox?.id,
+      personName,
+    ],
+  );
+  const { rows } = built;
+  // The task rows in the order drawn: a ⇧-click range, ⇧↑↓, ⌘A (TV-U12).
+  const taskOrder = useMemo(
+    () => rows.flatMap((r) => (r.kind === "task" ? [r.task.id] : [])),
+    [rows],
+  );
   useLayoutEffect(() => {
-    centerToday();
-  }, [zoom, loaded, centerToday]);
+    if (orderRef) orderRef.current = taskOrder;
+  });
+  const stickyIndexes = useMemo(
+    () =>
+      rows.flatMap((r, i) =>
+        r.kind === "area" || r.kind === "group" || r.kind === "section" ? [i] : [],
+      ),
+    [rows],
+  );
+  const duePerWeek = show.has("duePerWeek");
+  const dueCounts = useMemo(
+    () => (duePerWeek ? weekCounts(built.dueDays, weekStartsOn) : null),
+    [duePerWeek, built.dueDays, weekStartsOn],
+  );
 
-  const toggleLane = useCallback((bucketId: string) => {
-    setCollapsedLanes((prev) => {
-      const next = new Set(prev);
-      if (next.has(bucketId)) next.delete(bucketId);
-      else next.add(bucketId);
+  // ── The name column ────────────────────────────────────────────────────
+  const [nameColumn, setNameColumn] = useState<NameColumn>(readNameColumn);
+  const nameW = nameColumn.hidden ? 0 : nameColumn.width;
+  const toggleNameColumn = useCallback(() => {
+    setNameColumn((prev) => {
+      const next = { ...prev, hidden: !prev.hidden };
+      writeNameColumn(next);
       return next;
     });
   }, []);
-
-  const highlightIds = useMemo(() => {
-    const ids = new Set<string>();
-    if (hoveredTaskId) ids.add(hoveredTaskId);
-    if (selectedTaskId) ids.add(selectedTaskId);
-    return ids;
-  }, [hoveredTaskId, selectedTaskId]);
-
-  // ── Writes (AC5/AC6) — everything goes through the optimistic patchTask ────
-  const commitPatch = useCallback(
-    (taskId: string, patch: TimelineDatePatch | null) => {
-      if (patch) api.patchTask(taskId, patch);
-    },
-    [api],
-  );
-
-  // ── Tray → axis drag (dnd-kit; pointerWithin ONLY — an out-of-axis release
-  // is a no-op, never a stray schedule). The drop DAY comes from raw pointer
-  // COORDINATES resolved against a rect measured at that moment, never from
-  // dnd-kit's delta (auto-scroll folds into it — gotchas.md). Keyboard drags
-  // are disabled: they never produce coordinates, so a keyboard "lift" here
-  // could only ever no-op (the detail panel's Schedule field is the
-  // accessible path).
-  const sensors = useTaskDndSensors({ sortable: false, keyboard: false });
-  const [trayDragTask, setTrayDragTask] = useState<Task | null>(null);
-  const [trayHoverDay, setTrayHoverDay] = useState<Date | null>(null);
-  const lastPointerRef = useRef<{ x: number; y: number } | null>(null);
-  const lanesElRef = useRef<HTMLDivElement | null>(null);
-  const trayMoveCleanupRef = useRef<(() => void) | null>(null);
-
-  /** The day under a viewport point, measured against the lanes rect NOW. */
-  const dayAtPoint = useCallback((x: number, y: number): Date | null => {
-    const el = lanesElRef.current;
-    if (!el) return null;
-    const rect = el.getBoundingClientRect();
-    const inside = x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
-    return inside ? dayAtX(winRef.current, x - rect.left) : null;
-  }, []);
-
-  const stopTrayTracking = useCallback(() => {
-    trayMoveCleanupRef.current?.();
-    trayMoveCleanupRef.current = null;
-    lastPointerRef.current = null;
-    setTrayHoverDay(null);
-    setTrayDragTask(null);
-  }, []);
-
-  const onDragStart = useCallback(
-    (e: DragStartEvent) => {
-      const drag = asTaskDrag(e.active.data.current);
-      if (!drag || drag.from !== "tray") return;
-      const task = tasks.find((t) => t.id === drag.taskId) ?? null;
-      setTrayDragTask(task);
-      const onMove = (ev: globalThis.PointerEvent) => {
-        lastPointerRef.current = { x: ev.clientX, y: ev.clientY };
-        const day = dayAtPoint(ev.clientX, ev.clientY);
-        setTrayHoverDay((prev) => (prev?.getTime() === day?.getTime() ? prev : day));
+  const startResize = useCallback(
+    (e: ReactPointerEvent<HTMLElement>) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const startX = e.clientX;
+      const startW = nameColumn.width;
+      let width = startW;
+      const onMove = (ev: PointerEvent) => {
+        width = Math.min(NAME_W_MAX, Math.max(NAME_W_MIN, startW + ev.clientX - startX));
+        setNameColumn((prev) => ({ ...prev, width }));
       };
-      document.addEventListener("pointermove", onMove, { capture: true });
-      trayMoveCleanupRef.current = () =>
-        document.removeEventListener("pointermove", onMove, { capture: true });
+      const onUp = () => {
+        document.removeEventListener("pointermove", onMove);
+        document.removeEventListener("pointerup", onUp);
+        document.removeEventListener("pointercancel", onUp);
+        writeNameColumn({ width, hidden: false });
+      };
+      document.addEventListener("pointermove", onMove);
+      document.addEventListener("pointerup", onUp);
+      document.addEventListener("pointercancel", onUp);
     },
-    [tasks, dayAtPoint],
+    [nameColumn.width],
   );
 
-  const onDragEnd = useCallback(
-    (e: DragEndEvent) => {
-      const target = asTaskDropTarget(e.over?.data.current);
-      // Resolve the day AT DROP TIME with a fresh rect (mid-drag wheel scroll
-      // moved the canvas under the pointer). Fallback for a flick-drop with
-      // no tracked move yet: the activator point + dnd-kit's delta — safe
-      // here because autoScroll is off, so delta is pure pointer travel.
-      let point = lastPointerRef.current;
-      if (!point && e.activatorEvent instanceof PointerEvent) {
-        point = {
-          x: e.activatorEvent.clientX + e.delta.x,
-          y: e.activatorEvent.clientY + e.delta.y,
+  // ── The scroller, its size, the range and the drawn window ─────────────
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const headerRef = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState({ width: 0, height: 0, header: 0 });
+  useLayoutEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const measure = () =>
+      setSize((prev) => {
+        const next = {
+          width: el.clientWidth,
+          height: el.clientHeight,
+          header: headerRef.current?.offsetHeight ?? 0,
         };
-      }
-      const day = point ? dayAtPoint(point.x, point.y) : null;
-      if (canEdit && trayDragTask && target?.type === "timeline-axis" && day) {
-        commitPatch(trayDragTask.id, resolveTrayDrop(trayDragTask, day));
-      }
-      stopTrayTracking();
-    },
-    [canEdit, trayDragTask, commitPatch, stopTrayTracking, dayAtPoint],
-  );
-
-  // ── Connector-dot drag (AC8) — the dot on a blocker bar's end dragged onto
-  // the bar it blocks. A document-level gesture (it crosses lanes); targets
-  // are hit-tested by coordinates, validity comes from the pure resolver, and
-  // self/duplicate/cycle drops are silent no-ops.
-  const [connector, setConnector] = useState<ConnectorState | null>(null);
-  const connectorRef = useRef<ConnectorState | null>(null);
-  const connectorCleanupRef = useRef<(() => void) | null>(null);
-  const relationsRef = useRef(api.taskRelations);
-  relationsRef.current = api.taskRelations;
-  const apiRef = useRef(api);
-  apiRef.current = api;
-
-  const startConnector = useCallback(
-    (fromId: string, e: ReactPointerEvent<HTMLElement>) => {
-      if (!canEdit || e.button !== 0) return;
-      const lanes = lanesElRef.current;
-      if (!lanes) return;
-      e.stopPropagation(); // never also start the bar's own move/resize drag
-      // A second dot press (multi-touch) tears the first gesture down instead
-      // of orphaning its document listeners.
-      connectorCleanupRef.current?.();
-      connectorCleanupRef.current = null;
-
-      const pointerId = e.pointerId;
-      const setBoth = (next: ConnectorState | null) => {
-        connectorRef.current = next;
-        setConnector(next);
-      };
-      const toCanvas = (cx: number, cy: number) => {
-        const rect = lanes.getBoundingClientRect();
-        return { x: cx - rect.left, y: cy - rect.top };
-      };
-      const dotRect = e.currentTarget.getBoundingClientRect();
-      const anchor = toCanvas(dotRect.left + dotRect.width / 2, dotRect.top + dotRect.height / 2);
-      const lastClient = { x: e.clientX, y: e.clientY };
-      setBoth({
-        fromId,
-        x1: anchor.x,
-        y1: anchor.y,
-        x2: anchor.x,
-        y2: anchor.y,
-        targetId: null,
-        valid: false,
+        return prev.width === next.width &&
+          prev.height === next.height &&
+          prev.header === next.header
+          ? prev
+          : next;
       });
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    if (headerRef.current) observer.observe(headerRef.current);
+    return () => observer.disconnect();
+  }, []);
+  const trackWidth = Math.max(0, size.width - nameW);
 
-      const hitTargetAt = (cx: number, cy: number): string | null =>
-        (document.elementFromPoint(cx, cy) as HTMLElement | null)
-          ?.closest?.("[data-timeline-drop]")
-          ?.getAttribute("data-timeline-drop") ?? null;
+  const [range, setRange] = useState<TimelineRange>(() => initialRange(today, built.extent));
+  const [drawn, setDrawn] = useState(() => drawWindow({ from: today - 60, to: today + 60 }));
+  // The days on screen now (whole days), for the off-screen hints only: a
+  // store they subscribe to, so scrolling never redraws the view.
+  const [viewport] = useState(() => createViewportStore({ from: today - 30, to: today + 30 }));
+  const canvasW = range.days * dw;
 
-      const cleanup = () => {
-        connectorCleanupRef.current?.();
-        connectorCleanupRef.current = null;
-      };
-      const cancel = () => {
-        cleanup();
-        setBoth(null);
-      };
-      const onMove = (ev: globalThis.PointerEvent) => {
-        if (ev.pointerId !== pointerId) return;
-        if (ev.buttons === 0) {
-          cancel(); // lost the button outside the window — self-heal
-          return;
-        }
-        lastClient.x = ev.clientX;
-        lastClient.y = ev.clientY;
-        const targetId = hitTargetAt(ev.clientX, ev.clientY);
-        const p = toCanvas(ev.clientX, ev.clientY);
-        setBoth({
-          fromId,
-          x1: anchor.x,
-          y1: anchor.y,
-          x2: p.x,
-          y2: p.y,
-          targetId,
-          valid: !!resolveConnectorDrop(fromId, targetId, relationsRef.current),
-        });
-      };
-      const onUp = (ev: globalThis.PointerEvent) => {
-        if (ev.pointerId !== pointerId) return;
-        const active = connectorRef.current;
-        cancel();
-        if (!active) return;
-        // The browser fires a click after this pointerup (dot and release
-        // point share an ancestor) — swallow it so an aborted or committed
-        // connector gesture never doubles as a selection click.
-        const swallowClick = (ce: MouseEvent) => {
-          ce.stopPropagation();
-          ce.preventDefault();
-          remove();
-        };
-        const remove = () => {
-          document.removeEventListener("click", swallowClick, { capture: true });
-          window.clearTimeout(timer);
-        };
-        document.addEventListener("click", swallowClick, { capture: true });
-        const timer = window.setTimeout(remove, 150);
-        // Re-hit-test AT RELEASE — a wheel scroll can move the canvas under a
-        // stationary pointer without a pointermove (the TL-2 lesson).
-        const targetId = hitTargetAt(ev.clientX ?? lastClient.x, ev.clientY ?? lastClient.y);
-        const res = resolveConnectorDrop(active.fromId, targetId, relationsRef.current);
-        // addBlocker(blockedTaskId, blockerTaskId) — the dot's bar blocks the target.
-        if (res) apiRef.current.addBlocker(res.blockedTaskId, res.blockerTaskId);
-      };
-      const onKey = (ev: globalThis.KeyboardEvent) => {
-        if (ev.key === "Escape") {
-          // The drag consumed this Escape — don't also dismiss overlays.
-          ev.preventDefault();
-          ev.stopPropagation();
-          cancel();
-        }
-      };
-      document.addEventListener("pointermove", onMove, { capture: true });
-      document.addEventListener("pointerup", onUp, { capture: true });
-      document.addEventListener("pointercancel", cancel, { capture: true });
-      window.addEventListener("keydown", onKey, { capture: true });
-      connectorCleanupRef.current = () => {
-        document.removeEventListener("pointermove", onMove, { capture: true });
-        document.removeEventListener("pointerup", onUp, { capture: true });
-        document.removeEventListener("pointercancel", cancel, { capture: true });
-        window.removeEventListener("keydown", onKey, { capture: true });
-      };
-    },
-    [canEdit],
-  );
-
-  // The whole component unmounts mid-drag if the scope switches — drop the
-  // document listeners with it.
-  useEffect(
-    () => () => {
-      trayMoveCleanupRef.current?.();
-      connectorCleanupRef.current?.();
-    },
-    [],
-  );
-
-  const viewControls = (
-    <div className="flex items-center gap-1.5">
-      <Button size="sm" variant="ghost" onClick={() => centerToday(true)}>
-        Today
-      </Button>
-      <SegmentedControl
-        aria-label="Timeline zoom"
-        size="sm"
-        value={zoom}
-        onValueChange={(value) => onZoomChange(value as TimelineZoom)}
-        items={TIMELINE_ZOOMS.map((z) => ({ value: z, label: ZOOM_LABELS[z] }))}
-      />
-    </div>
-  );
-
-  return (
-    <div className="flex h-full min-h-0 flex-col">
-      <PlanViewHeader
-        title={scopeTitle}
-        view={view}
-        onViewChange={onViewChange}
-        viewControls={viewControls}
-        controls={header}
-        canEdit={canEdit}
-        onRequestCapture={onRequestCapture}
-      />
-
-      <DndContext
-        sensors={sensors}
-        collisionDetection={pointerWithin}
-        autoScroll={false}
-        onDragStart={onDragStart}
-        onDragEnd={onDragEnd}
-        onDragCancel={stopTrayTracking}
-      >
-        <div className="relative min-h-0 flex-1">
-          <div ref={scrollRef} className="scrollbar-thin h-full overflow-auto">
-            <div className="relative" style={{ width: canvasW }}>
-              {/* Sticky two-row date header: month bands + ticks + the Today pill. */}
-              <div
-                className="sticky top-0 z-20 border-b border-border bg-background"
-                style={{ height: HEADER_H }}
-              >
-                {/* Month bands: the label sticks to the viewport's left edge
-                    while its band is in view, so month context never scrolls
-                    away mid-month. */}
-                {months.map((m) => (
-                  <div
-                    key={m.x}
-                    className="absolute top-1 flex overflow-hidden"
-                    style={{ left: m.x, width: m.width }}
-                  >
-                    <Eyebrow className="sticky left-1 truncate pl-1">{m.label}</Eyebrow>
-                  </div>
-                ))}
-                {ticks.map((t) => (
-                  <span
-                    key={t.x}
-                    className="absolute bottom-1 font-sans text-2xs tabular-nums text-muted-foreground/70"
-                    style={{ left: t.x + 4 }}
-                  >
-                    {t.label}
-                  </span>
-                ))}
-                <span
-                  className="absolute bottom-0.5 -translate-x-1/2 rounded-full bg-primary px-1.5 py-px font-sans text-2xs font-medium text-primary-foreground"
-                  style={{ left: todayX }}
-                >
-                  Today
-                </span>
-              </div>
-
-              {/* Lanes region — gridlines + today line + swimlanes + arrows.
-                  Also the ONE dnd-kit droppable for tray→axis scheduling. */}
-              <LanesDropRegion
-                lanesElRef={lanesElRef}
-                canEdit={canEdit}
-                minHeight={layout.totalHeight + 8}
-              >
-                {ticks.map((t) => (
-                  <div
-                    key={t.x}
-                    className="absolute inset-y-0 w-px bg-border/40"
-                    style={{ left: t.x }}
-                    aria-hidden
-                  />
-                ))}
-                <div
-                  className="absolute inset-y-0 z-[1] w-px bg-primary/70"
-                  style={{ left: todayX }}
-                  aria-hidden
-                />
-                {/* Day wash under the dragged tray chip — where it will land. */}
-                {trayDragTask && trayHoverDay ? (
-                  <div
-                    className="absolute inset-y-0 z-[1] bg-accent/40"
-                    style={{ left: xForDay(win, trayHoverDay), width: win.dayWidth }}
-                    aria-hidden
-                  />
-                ) : null}
-
-                {rollup.lanes.map((lane) => (
-                  <TimelineLaneBlock
-                    key={lane.bucketId}
-                    name={lane.name}
-                    count={lane.count}
-                    collapsed={lane.collapsed}
-                    bars={lane.bars}
-                    bodyHeight={layout.laneBodyHeights.get(lane.bucketId) ?? 0}
-                    canEdit={canEdit}
-                    win={win}
-                    today={today}
-                    selectedTaskId={selectedTaskId}
-                    onSelectTask={onSelectTask}
-                    onHoverTask={setHoveredTaskId}
-                    onToggle={() => toggleLane(lane.bucketId)}
-                    onCommit={commitPatch}
-                    onConnectorStart={startConnector}
-                    connectorSourceId={connector?.fromId ?? null}
-                    connectorTargetId={connector?.valid ? connector.targetId : null}
-                    api={api}
-                  />
-                ))}
-
-                {/* In-flight connector line — dashed, accent, arrowhead. */}
-                {connector ? (
-                  <svg
-                    className="pointer-events-none absolute left-0 top-0 z-[5]"
-                    width={canvasW}
-                    height={layout.totalHeight}
-                    aria-hidden
-                  >
-                    <defs>
-                      <marker
-                        id="tl-connector-arrow"
-                        viewBox="0 0 8 8"
-                        refX="7"
-                        refY="4"
-                        markerWidth="7"
-                        markerHeight="7"
-                        orient="auto-start-reverse"
-                      >
-                        <path d="M0,0.5 L7.5,4 L0,7.5" fill="none" stroke="var(--primary)" />
-                      </marker>
-                    </defs>
-                    <path
-                      d={`M ${connector.x1} ${connector.y1} C ${connector.x1 + 32} ${connector.y1}, ${connector.x2 - 32} ${connector.y2}, ${connector.x2} ${connector.y2}`}
-                      fill="none"
-                      stroke="var(--primary)"
-                      strokeWidth={1.5}
-                      strokeDasharray={connector.valid ? undefined : "4 3"}
-                      markerEnd="url(#tl-connector-arrow)"
-                    />
-                  </svg>
-                ) : null}
-
-                {/* Dependency arrows — one overlay, subtle at rest, highlighted
-                    when either endpoint is hovered/selected (AC7). */}
-                {arrows.length > 0 ? (
-                  <svg
-                    className="pointer-events-none absolute left-0 top-0 z-[3]"
-                    width={canvasW}
-                    height={layout.totalHeight}
-                    aria-hidden
-                  >
-                    <defs>
-                      <marker
-                        id="tl-arrow"
-                        viewBox="0 0 8 8"
-                        refX="7"
-                        refY="4"
-                        markerWidth="7"
-                        markerHeight="7"
-                        orient="auto-start-reverse"
-                      >
-                        <path d="M0,0.5 L7.5,4 L0,7.5" fill="none" stroke="var(--border)" />
-                      </marker>
-                      <marker
-                        id="tl-arrow-hi"
-                        viewBox="0 0 8 8"
-                        refX="7"
-                        refY="4"
-                        markerWidth="7"
-                        markerHeight="7"
-                        orient="auto-start-reverse"
-                      >
-                        <path d="M0,0.5 L7.5,4 L0,7.5" fill="none" stroke="var(--primary)" />
-                      </marker>
-                    </defs>
-                    {arrows.map((a) => {
-                      const hi = highlightIds.has(a.blockerId) || highlightIds.has(a.blockedId);
-                      const bend = Math.max(24, Math.min(56, Math.abs(a.x2 - a.x1) / 2));
-                      return (
-                        <path
-                          key={`${a.blockerId}:${a.blockedId}`}
-                          d={`M ${a.x1} ${a.y1} C ${a.x1 + bend} ${a.y1}, ${a.x2 - bend} ${a.y2}, ${a.x2} ${a.y2}`}
-                          fill="none"
-                          stroke={hi ? "var(--primary)" : "var(--border)"}
-                          strokeWidth={hi ? 1.5 : 1}
-                          markerEnd={hi ? "url(#tl-arrow-hi)" : "url(#tl-arrow)"}
-                        />
-                      );
-                    })}
-                  </svg>
-                ) : null}
-              </LanesDropRegion>
-            </div>
-          </div>
-
-          {/* Empty axis — quiet hint, the tray below stays prominent (AC10). */}
-          {datedCount === 0 && !api.loading ? (
-            <div className="pointer-events-none absolute inset-x-0 top-16 z-10 flex justify-center">
-              {/* A plate behind the words so the day grid doesn't run through them. */}
-              <EmptyState
-                size="inline"
-                title={
-                  rollup.tray.length > 0
-                    ? "Nothing on the timeline yet — drag a task up from the tray to schedule it."
-                    : "No tasks in this scope yet."
-                }
-                className="rounded-md bg-background/90 py-1.5"
-              />
-            </div>
-          ) : null}
-        </div>
-
-        {/* Unscheduled tray — collapsible bottom strip; chips drag onto a day. */}
-        {rollup.tray.length > 0 ? (
-          <div className="mt-2 shrink-0 rounded-md border border-border bg-card">
-            <GroupHeader
-              label="Unscheduled"
-              count={rollup.tray.length}
-              onToggle={() => setTrayOpen((v) => !v)}
-              collapsed={!trayOpen}
-            />
-            {trayOpen ? (
-              <div className="scrollbar-thin flex max-h-28 flex-wrap gap-1.5 overflow-y-auto px-2 pb-2">
-                {rollup.tray.map((task) => (
-                  <TrayChip
-                    key={task.id}
-                    task={task}
-                    canEdit={canEdit}
-                    selected={task.id === selectedTaskId}
-                    onSelect={() => onSelectTask(task.id)}
-                  />
-                ))}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-
-        {typeof document !== "undefined"
-          ? createPortal(
-              <DragOverlay>
-                {trayDragTask ? (
-                  <div className="flex max-w-56 items-center gap-1 truncate rounded-md border border-border bg-background px-2 py-1 font-sans text-xs text-foreground shadow-lg">
-                    <GripVertical
-                      className="size-3 shrink-0 text-muted-foreground/60"
-                      aria-hidden
-                    />
-                    <span className="truncate">{trayDragTask.title || "Untitled"}</span>
-                  </div>
-                ) : null}
-              </DragOverlay>,
-              document.body,
-            )
-          : null}
-      </DndContext>
-    </div>
-  );
-}
-
-// ── The axis droppable (one region; the drop day comes from the raw pointer) ─
-
-function LanesDropRegion({
-  lanesElRef,
-  canEdit,
-  minHeight,
-  children,
-}: {
-  lanesElRef: React.MutableRefObject<HTMLDivElement | null>;
-  canEdit: boolean;
-  minHeight: number;
-  children: ReactNode;
-}) {
-  const { setNodeRef } = useDroppable({
-    id: "timeline-axis",
-    data: { type: "timeline-axis" },
-    disabled: !canEdit,
+  // The live values the scroll and wheel handlers read.
+  const live = useRef({ range, dw, trackWidth, zoom, nameW });
+  useLayoutEffect(() => {
+    live.current = { range, dw, trackWidth, zoom, nameW };
   });
-  const setRefs = useCallback(
-    (node: HTMLDivElement | null) => {
-      setNodeRef(node);
-      lanesElRef.current = node;
-    },
-    [setNodeRef, lanesElRef],
-  );
-  return (
-    <div ref={setRefs} className="relative" style={{ minHeight }}>
-      {children}
-    </div>
-  );
-}
+  /**
+   * Where the next render puts the scroll: today, a kept day, or an added
+   * start. An ask made with a new range waits for that range to be drawn (a
+   * scope switch can change the zoom in the same render as it asks).
+   */
+  const pending = useRef<
+    | { kind: "today"; range: TimelineRange }
+    | { kind: "day"; day: number; at: number }
+    | { kind: "shift"; days: number; range: TimelineRange }
+    | null
+  >(null);
 
-// ── Tray chip (drag source; grip only when editable) ─────────────────────────
-
-function TrayChip({
-  task,
-  canEdit,
-  selected,
-  onSelect,
-}: {
-  task: Task;
-  canEdit: boolean;
-  selected: boolean;
-  onSelect: () => void;
-}) {
-  // An optimistic `tmp-` id can't be written to the server yet — the chip
-  // becomes draggable the moment the create round-trip mints the real id.
-  const draggable = canEdit && !task.id.startsWith("tmp-");
-  const { setNodeRef, listeners, isDragging } = useDraggable({
-    id: `tray:${task.id}`,
-    data: taskDrag(task.id, "tray"),
-    disabled: !draggable,
-  });
-  // The browser fires a click on the chip after a drag's pointerup (dnd-kit
-  // doesn't cancel it) — an aborted out-of-axis drag must stay a true no-op,
-  // not turn into a surprise selection.
-  const wasDraggedRef = useRef(false);
-  if (isDragging) wasDraggedRef.current = true;
-  return (
-    <button
-      ref={setNodeRef}
-      {...listeners}
-      type="button"
-      onClick={() => {
-        if (wasDraggedRef.current) {
-          wasDraggedRef.current = false;
-          return;
-        }
-        onSelect();
-      }}
-      className={cn(
-        "flex max-w-56 items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-left font-sans text-xs text-foreground",
-        "transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-accent",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-        draggable && "touch-none cursor-grab",
-        isDragging && "opacity-50",
-        selected && "ring-1 ring-ring/60",
-      )}
-    >
-      {draggable ? (
-        <GripVertical className="size-3 shrink-0 text-muted-foreground/60" aria-hidden />
-      ) : null}
-      <span className="truncate">{task.title || "Untitled"}</span>
-    </button>
-  );
-}
-
-// ── Lane block (header row + bar rows) ───────────────────────────────────────
-
-function TimelineLaneBlock({
-  name,
-  count,
-  collapsed,
-  bars,
-  bodyHeight,
-  canEdit,
-  win,
-  today,
-  selectedTaskId,
-  onSelectTask,
-  onHoverTask,
-  onToggle,
-  onCommit,
-  onConnectorStart,
-  connectorSourceId,
-  connectorTargetId,
-  api,
-}: {
-  name: string;
-  count: number;
-  collapsed: boolean;
-  bars: TimelineBar[];
-  bodyHeight: number;
-  canEdit: boolean;
-  win: AxisWindow;
-  today: Date;
-  selectedTaskId: string | null;
-  onSelectTask: (id: string | null) => void;
-  onHoverTask: (id: string | null) => void;
-  onToggle: () => void;
-  onCommit: (taskId: string, patch: TimelineDatePatch | null) => void;
-  onConnectorStart: (taskId: string, e: ReactPointerEvent<HTMLElement>) => void;
-  connectorSourceId: string | null;
-  connectorTargetId: string | null;
-  api: TasksModuleApi;
-}) {
-  return (
-    <div>
-      <div className="flex items-center" style={{ height: LANE_HEADER_H }}>
-        {/* Sticky so the lane label stays readable while scrolling the axis;
-            content-wide (w-fit) so it can stick. The lane's name as typed
-            (a bucket, a person): sentence case, never small caps (call 40). */}
-        <GroupHeader
-          label={name}
-          count={count}
-          onToggle={onToggle}
-          collapsed={collapsed}
-          className="sticky left-0 z-10 h-full w-fit max-w-60 bg-background"
-        />
-      </div>
-      {!collapsed ? (
-        <div className="relative" style={{ height: bodyHeight }}>
-          {bars.map((bar, i) => (
-            <TimelineBarRow
-              key={bar.task.id}
-              bar={bar}
-              top={barRowTop(i)}
-              canEdit={canEdit}
-              win={win}
-              today={today}
-              selected={bar.task.id === selectedTaskId}
-              onSelect={() => onSelectTask(bar.task.id)}
-              onHover={onHoverTask}
-              onCommit={onCommit}
-              onConnectorStart={onConnectorStart}
-              isConnectorSource={bar.task.id === connectorSourceId}
-              isConnectorTarget={bar.task.id === connectorTargetId}
-              api={api}
-            />
-          ))}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-// ── One bar: click selects; body-drag moves; edge-drag adjusts/sets a date ───
-
-type BarDragState = {
-  mode: BarDragMode;
-  pointerId: number;
-  /** The local DAY grabbed at pointerdown — day-based so a mid-drag window
-   * origin shift (midnight tick, a collaborator extending the extent) can't
-   * displace the delta the way canvas pixels would. */
-  grabDay: Date;
-  startClientX: number;
-  /** The lane body — re-measured per move so mid-drag scrolling stays honest. */
-  surface: HTMLElement;
-  started: boolean;
-  deltaDays: number;
-  pointerDay: Date;
-};
-
-function TimelineBarRow({
-  bar,
-  top,
-  canEdit,
-  win,
-  today,
-  selected,
-  onSelect,
-  onHover,
-  onCommit,
-  onConnectorStart,
-  isConnectorSource,
-  isConnectorTarget,
-  api,
-}: {
-  bar: TimelineBar;
-  top: number;
-  canEdit: boolean;
-  win: AxisWindow;
-  today: Date;
-  selected: boolean;
-  onSelect: () => void;
-  onHover: (id: string | null) => void;
-  onCommit: (taskId: string, patch: TimelineDatePatch | null) => void;
-  onConnectorStart: (taskId: string, e: ReactPointerEvent<HTMLElement>) => void;
-  isConnectorSource: boolean;
-  isConnectorTarget: boolean;
-  api: TasksModuleApi;
-}) {
-  const { task } = bar;
-  const blocked = api.blockedTaskIds.has(task.id);
-
-  // ── Pointer drag engine (custom — continuous day-snapped drags fit dnd-kit's
-  // discrete droppables badly; spec §Assumptions). Three exits per gotchas.md:
-  // pointerup, pointercancel, and buttons===0 self-heal on move.
-  const dragRef = useRef<BarDragState | null>(null);
-  const [drag, setDrag] = useState<BarDragState | null>(null);
-  const suppressClickRef = useRef(false);
-
-  const endDrag = useCallback(
-    (commit: boolean) => {
-      const d = dragRef.current;
-      dragRef.current = null;
-      setDrag(null);
-      if (!d?.started) return;
-      // Only a pointerup produces a follow-up click to swallow; a cancelled
-      // drag (pointercancel / lost capture / buttons-0 self-heal) never
-      // clicks, and a stale flag would eat the NEXT genuine click.
-      if (commit) {
-        suppressClickRef.current = true;
-        onCommit(
-          task.id,
-          resolveBarDrag(task, d.mode, { deltaDays: d.deltaDays, pointerDay: d.pointerDay }),
-        );
+  const syncWindow = useCallback(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const { range: r, dw: w, trackWidth: tw } = live.current;
+    if (tw <= 0) return;
+    // A new range is on its way: read nothing against the old one.
+    const ask = pending.current;
+    if (ask && ask.kind !== "day" && ask.range !== r) return;
+    const shown = visibleDays(r, w, el.scrollLeft, tw);
+    const grown = extendRange(r, shown, Math.ceil(tw / w) + 30);
+    if (grown) {
+      if (grown.shift > 0) {
+        pending.current = { kind: "shift", days: grown.shift, range: grown.range };
       }
-    },
-    [onCommit, task],
-  );
-
-  // Escape cancels an in-flight drag (the preview snaps back, nothing writes).
-  useEffect(() => {
-    if (!drag?.started) return;
-    const onKey = (e: globalThis.KeyboardEvent) => {
-      if (e.key === "Escape") endDrag(false);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [drag?.started, endDrag]);
-
-  const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
-    suppressClickRef.current = false; // a fresh press always re-arms the click
-    if (!canEdit || e.button !== 0) return;
-    // The checkbox (and any future in-bar control) owns its own pointer.
-    if ((e.target as HTMLElement).closest("button")) return;
-    const barEl = e.currentTarget;
-    const surface = barEl.offsetParent as HTMLElement | null;
-    if (!surface) return;
-    const rect = barEl.getBoundingClientRect();
-    const offsetX = e.clientX - rect.left;
-    const zone = Math.min(8, rect.width / 3);
-    const mode: BarDragMode =
-      offsetX < zone ? "start" : offsetX > rect.width - zone ? "end" : "move";
-    const surfaceRect = surface.getBoundingClientRect();
-    try {
-      barEl.setPointerCapture(e.pointerId);
-    } catch {
-      // Synthetic pointers (tests) have no active id to capture — the move/up
-      // handlers still receive bubbled events, so the drag works regardless.
+      setRange(grown.range);
     }
-    const state: BarDragState = {
-      mode,
-      pointerId: e.pointerId,
-      grabDay: dayAtX(win, e.clientX - surfaceRect.left),
-      startClientX: e.clientX,
-      surface,
-      started: false,
-      deltaDays: 0,
-      pointerDay: bar.startDay,
-    };
-    dragRef.current = state;
-  };
+    const next = drawWindow(shown);
+    setDrawn((prev) => (prev.from === next.from && prev.to === next.to ? prev : next));
+    viewport.set(shown);
+  }, [viewport]);
 
-  const onPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
-    const d = dragRef.current;
-    if (!d || e.pointerId !== d.pointerId) return;
-    if (e.buttons === 0) {
-      // Lost the button outside the window — self-heal, never a stuck ghost.
-      endDrag(false);
-      return;
-    }
-    if (!d.started && Math.abs(e.clientX - d.startClientX) < BAR_DRAG_SLOP_PX) return;
-    const surfaceRect = d.surface.getBoundingClientRect();
-    // Day-based delta: window-clamped on both ends, immune to origin shifts.
-    const pointerDay = dayAtX(win, e.clientX - surfaceRect.left);
-    const deltaDays = differenceInCalendarDays(pointerDay, d.grabDay);
-    if (
-      !d.started ||
-      deltaDays !== d.deltaDays ||
-      pointerDay.getTime() !== d.pointerDay.getTime()
-    ) {
-      const next = { ...d, started: true, deltaDays, pointerDay };
-      dragRef.current = next;
-      setDrag(next);
-    }
-  };
+  // Open (a new scope, or once the tasks are in) with today a quarter across.
+  const loaded = !api.loading;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new scope or the first load is the cue
+  useLayoutEffect(() => {
+    const next = initialRange(today, built.extent);
+    pending.current = { kind: "today", range: next };
+    setRange(next);
+  }, [scopeKey, loaded]);
 
-  // Preview: render the bar exactly where a release would put it — the preview
-  // task runs through the same resolver + geometry as the commit, clamps
-  // included, so what you see is what gets written.
-  const displayBar = useMemo(() => {
-    if (!drag?.started) return bar;
-    const patch = resolveBarDrag(task, drag.mode, {
-      deltaDays: drag.deltaDays,
-      pointerDay: drag.pointerDay,
+  // Apply what was asked once the range, zoom and size are drawn.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runs after each geometry change
+  useLayoutEffect(() => {
+    const el = scrollerRef.current;
+    const ask = pending.current;
+    if (!el || !ask || trackWidth <= 0) return;
+    // Asked with a range that isn't drawn yet: wait for it.
+    if (ask.kind !== "day" && ask.range !== range) return;
+    pending.current = null;
+    if (ask.kind === "today") el.scrollLeft = scrollLeftFor(range, dw, today, trackWidth);
+    else if (ask.kind === "day") el.scrollLeft = Math.max(0, (ask.day - range.start) * dw - ask.at);
+    else el.scrollLeft += ask.days * dw;
+    syncWindow();
+  }, [range, dw, trackWidth]);
+
+  const onScroll = useRef(0);
+  const handleScroll = useCallback(() => {
+    if (onScroll.current) return;
+    onScroll.current = requestAnimationFrame(() => {
+      onScroll.current = 0;
+      syncWindow();
     });
-    if (!patch) return bar;
-    return barForTask({ ...task, ...patch }, win, today) ?? bar;
-  }, [drag, bar, task, win, today]);
+  }, [syncWindow]);
+  useEffect(() => () => cancelAnimationFrame(onScroll.current), []);
 
-  // The INTERACTIVE element is the solid span only — the fade extension is a
-  // separate pointer-events-none layer, so the visually-empty faded tail is
-  // never an invisible click/drag surface. Dragging the solid span's edge on
-  // the open side is the "faded edge" gesture (sets the missing date).
-  const solidX = displayBar.x + (displayBar.solidLeft ? 0 : FADE_PX);
-  const solidW =
-    displayBar.width - (displayBar.solidLeft ? 0 : FADE_PX) - (displayBar.solidRight ? 0 : FADE_PX);
-  const edgeZonePx = Math.min(8, solidW / 3);
-
-  // Content lives inside the bar only when both edges are solid and the bar
-  // is wide enough; otherwise the whole cluster — checkbox included — renders
-  // beside the bar, past the fade.
-  const labelInside =
-    displayBar.solidLeft && displayBar.solidRight && solidW >= TITLE_INSIDE_MIN_PX;
-
-  // One content cluster for both placements: check-off, title, lock, drift dot.
-  // The checkbox is the row's native keyboard stop (Board parity — bars, like
-  // cards, are mouse-selection surfaces; List remains the keyboard-first view).
-  const meta = (
-    <>
-      <CompleteToggle done={bar.done} disabled={!canEdit} onToggle={() => api.toggleDone(task)} />
-      <span
-        className={cn(
-          "min-w-0 truncate font-sans text-xs",
-          bar.closed
-            ? "text-muted-foreground line-through"
-            : blocked
-              ? "text-muted-foreground"
-              : "text-foreground",
-          labelInside && "flex-1",
-        )}
-      >
-        {task.title || "Untitled"}
-      </span>
-      {blocked ? (
-        <BlockedMarker label={blockedLabelOf(api.blockersByTask.get(task.id) ?? [])} />
-      ) : null}
-      {bar.pastEnd ? (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span
-              className="size-1.5 shrink-0 rounded-full bg-foreground/50"
-              aria-label="Past its date — still open"
-            />
-          </TooltipTrigger>
-          <TooltipContent>Past its date — still open</TooltipContent>
-        </Tooltip>
-      ) : null}
-    </>
+  const scrollToToday = useCallback(
+    (smooth: boolean) => {
+      const el = scrollerRef.current;
+      if (!el) return;
+      el.scrollTo({
+        left: scrollLeftFor(range, dw, today, trackWidth),
+        behavior: smooth ? "smooth" : "auto",
+      });
+    },
+    [range, dw, today, trackWidth],
   );
 
-  const interactive = {
-    onClick: () => {
-      if (suppressClickRef.current) {
-        suppressClickRef.current = false;
+  // Zoom keeps the day under the pointer (or the middle) where it was.
+  const changeZoom = useCallback(
+    (next: TimelineZoom, clientX?: number) => {
+      const el = scrollerRef.current;
+      const { range: r, dw: w, trackWidth: tw, nameW: nw, zoom: z } = live.current;
+      if (next === z) return;
+      if (el) {
+        const left = el.getBoundingClientRect().left + nw;
+        const at = clientX === undefined ? tw / 2 : Math.max(0, Math.min(tw, clientX - left));
+        pending.current = { kind: "day", day: r.start + (el.scrollLeft + at) / w, at };
+      }
+      onDisplayChange({ ...display, timelineZoom: next });
+    },
+    [display, onDisplayChange],
+  );
+  const changeZoomRef = useRef(changeZoom);
+  useLayoutEffect(() => {
+    changeZoomRef.current = changeZoom;
+  });
+
+  // ⌘-scroll (or a pinch) zooms (69). React's wheel listener is passive, so
+  // the page's own zoom is stopped here.
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    let travel = 0;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.metaKey && !e.ctrlKey) return;
+      e.preventDefault();
+      travel += e.deltaY;
+      if (Math.abs(travel) < 40) return;
+      const out = travel > 0;
+      travel = 0;
+      changeZoomRef.current(stepZoom(live.current.zoom, out ? 1 : -1), e.clientX);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
+
+  // ── The cursor (↑↓) and the selection ──────────────────────────────────
+  const [cursorKey, setCursorKey] = useState<string | null>(null);
+  const [scrollTo, setScrollTo] = useState<{ key: string; seq: number } | null>(null);
+  const stops = useMemo(
+    () => rows.filter((r) => r.kind === "project" || r.kind === "section" || r.kind === "task"),
+    [rows],
+  );
+  const rowByKey = useMemo(() => new Map(rows.map((r) => [r.key, r])), [rows]);
+
+  /**
+   * Bring a row into view, up or down only: the canvas never jumps sideways
+   * under the cursor (a mark off to the side shows as a hint at the row's
+   * edge, `OffscreenHint`). A deep link's point is centred by the page's
+   * reveal, which finds the first `[data-task-id]`: the point, not the row.
+   */
+  const reveal = useCallback((row: TimelineRow) => {
+    setScrollTo((prev) => ({ key: row.key, seq: (prev?.seq ?? 0) + 1 }));
+    requestAnimationFrame(() => {
+      const el = scrollerRef.current;
+      const node = document.getElementById(timelineRowDomId(row.key));
+      if (!el || !node) return;
+      const box = el.getBoundingClientRect();
+      const rect = node.getBoundingClientRect();
+      const top = box.top + (headerRef.current?.offsetHeight ?? 0);
+      if (rect.top < top) el.scrollTop -= top - rect.top;
+      else if (rect.bottom > box.bottom) el.scrollTop += rect.bottom - box.bottom;
+    });
+  }, []);
+
+  /** Scroll sideways to a day (a hint's click), a quarter of the way across. */
+  const scrollToDay = useCallback((day: number) => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const { range: r, dw: w, trackWidth: tw } = live.current;
+    el.scrollTo({ left: scrollLeftFor(r, w, day, tw), behavior: "smooth" });
+  }, []);
+
+  // The page's selection (a click, a deep link, the panel) moves the cursor
+  // and brings its row into view.
+  const selectedRow = selectedTaskId ? rowByKey.get(taskRowKey(selectedTaskId)) : undefined;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new selection is the cue
+  useEffect(() => {
+    if (!selectedRow) return;
+    setCursorKey(selectedRow.key);
+    reveal(selectedRow);
+  }, [selectedTaskId, selectedRow !== undefined]);
+
+  const moveCursor = (delta: 1 | -1) => {
+    if (stops.length === 0) return;
+    const at = cursorKey ? stops.findIndex((r) => r.key === cursorKey) : -1;
+    const index =
+      at < 0
+        ? delta > 0
+          ? 0
+          : stops.length - 1
+        : Math.max(0, Math.min(stops.length - 1, at + delta));
+    const row = stops[index];
+    if (!row) return;
+    multiSelect?.clear();
+    setCursorKey(row.key);
+    onSelectTask(row.kind === "task" ? row.task.id : null);
+    reveal(row);
+  };
+
+  // ── Who may move what (TV-TL2) ──────────────────────────────────────────
+  const canDragRow = useCallback(
+    (row: TimelineRow) =>
+      canDrag && (row.kind === "task" || row.kind === "section" || row.kind === "project"),
+    [canDrag],
+  );
+
+  // ── Dependencies (70, 68b) ──────────────────────────────────────────────
+  // Only the reader's own copy: a relation to a task they can't see draws nothing.
+  const taskById = useMemo(() => new Map(api.tasks.map((t) => [t.id, t])), [api.tasks]);
+  const relations = api.taskRelations ?? NO_RELATIONS;
+  const depMode = display.timelineDeps ?? "selected";
+  const lateMarks = useMemo(
+    () => (depMode === "off" ? new Map() : contradictions(relations, taskById)),
+    [depMode, relations, taskById],
+  );
+  /** Where a task's point is on the canvas (null: it has none, or no row). */
+  const pointDay = useCallback(
+    (id: string) => {
+      const row = rowByKey.get(taskRowKey(id));
+      return row?.kind === "task" && row.point ? row.point.day : null;
+    },
+    [rowByKey],
+  );
+  const lineSelection = useMemo(
+    () =>
+      selectedIds.size >= 2 ? selectedIds : selectedTaskId ? new Set([selectedTaskId]) : NO_IDS,
+    [selectedIds, selectedTaskId],
+  );
+  // The selected task's lines whose other end isn't drawn: stubs on its row.
+  const stubs = useMemo<RowStubs | null>(() => {
+    if (depMode === "off" || !selectedTaskId || selectedIds.size >= 2) return null;
+    const self = taskById.get(selectedTaskId);
+    if (!self || pointDay(self.id) === null) return null;
+    const projectName = (id: string) =>
+      id === inbox?.id
+        ? "Inbox"
+        : (buckets.find((b) => b.id === id)?.name ?? PRIVATE_PROJECT_LABEL);
+    const words = (other: Task) => {
+      const title = other.title || "Untitled";
+      if (!other.dueOn && !other.dueDate && !other.scheduledAt) return `${title} · no date`;
+      if (other.bucketId !== self.bucketId) return `↗ ${projectName(other.bucketId)} · ${title}`;
+      return `↗ ${title}`;
+    };
+    const before: DepStub[] = [];
+    const after: DepStub[] = [];
+    const seen = new Set<string>();
+    for (const rel of relations) {
+      const waitsOn = rel.blockedTaskId === self.id;
+      const blocks = rel.blockerTaskId === self.id;
+      if (!waitsOn && !blocks) continue;
+      const other = taskById.get(waitsOn ? rel.blockerTaskId : rel.blockedTaskId);
+      if (!other || other.deletedAt || isHidden(other) || pointDay(other.id) !== null) continue;
+      const id = `${waitsOn ? "before" : "after"}:${other.id}`;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      (waitsOn ? before : after).push({ id, text: words(other) });
+    }
+    return before.length + after.length > 0 ? { before, after } : null;
+  }, [
+    depMode,
+    selectedTaskId,
+    selectedIds,
+    taskById,
+    relations,
+    pointDay,
+    isHidden,
+    buckets,
+    inbox?.id,
+  ]);
+
+  // ── The canvas: drags, clicks on undated rows, the No date drop ─────────
+  const writes = useTimelineWrites(api, zoom);
+  const canvasLive = useRef<CanvasLive>({
+    range,
+    dw,
+    nameW,
+    rowOf: (key) => rowByKey.get(key),
+    canDrag: canDragRow,
+    canEditTask: () => canDrag,
+    selection: selectedIds,
+  });
+  useLayoutEffect(() => {
+    canvasLive.current = {
+      range,
+      dw,
+      nameW,
+      rowOf: (key) => rowByKey.get(key),
+      canDrag: canDragRow,
+      canEditTask: () => canDrag,
+      selection: selectedIds,
+    };
+  });
+  const [dragRowKey, setDragRowKey] = useState<string | null>(null);
+  const pointer = useTimelineCanvas({
+    scrollerRef,
+    store: canvas,
+    live: canvasLive,
+    onCommit: writes.commit,
+    onDragRow: setDragRowKey,
+  });
+  const drop = useTimelineDrop({
+    scrollerRef,
+    store: canvas,
+    geometry: canvasLive,
+    canEdit: canDrag,
+    taskOf: (id) => taskById.get(id) ?? null,
+    onDrop: writes.placeTask,
+  });
+  const { setDropRef } = drop;
+  const setScroller = useCallback(
+    (el: HTMLDivElement | null) => {
+      scrollerRef.current = el;
+      setDropRef(el);
+    },
+    [setDropRef],
+  );
+  /** The task under the pointer: its lines show too (70). */
+  const onCanvasPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    pointer.onPointerMove(e);
+    const key =
+      e.target instanceof Element
+        ? e.target.closest<HTMLElement>("[data-row-key]")?.dataset.rowKey
+        : undefined;
+    const row = key ? rowByKey.get(key) : undefined;
+    canvas.setHoverTask(row?.kind === "task" ? row.task.id : null);
+  };
+  const onCanvasPointerLeave = () => {
+    pointer.onPointerLeave();
+    canvas.setHoverTask(null);
+  };
+
+  // ── What rows ask for ─────────────────────────────────────────────────
+  const [command, setCommand] = useState<{ id: string; command: TaskCommand } | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const refocus = useCallback(() => scrollerRef.current?.focus({ preventScroll: true }), []);
+  const latest = useRef({
+    onSelectTask,
+    onOpenProject,
+    toggleRow,
+    api,
+    canEdit,
+    multiSelect,
+    taskOrder,
+    placeTask: writes.placeTask,
+  });
+  useLayoutEffect(() => {
+    latest.current = {
+      onSelectTask,
+      onOpenProject,
+      toggleRow,
+      api,
+      canEdit,
+      multiSelect,
+      taskOrder,
+      placeTask: writes.placeTask,
+    };
+  });
+  const handlers = useMemo<TimelineRowHandlers>(
+    () => ({
+      activate: (row, mods) => {
+        const { multiSelect: multi, taskOrder: order } = latest.current;
+        if (row.kind === "task" && multi) {
+          // ⇧ a range, ⌘ one more (TV-U12); a plain click is this one alone.
+          multi.select(row.task.id, mods, order);
+          if (!mods.range && !mods.toggle) setCursorKey(row.key);
+        } else {
+          multi?.clear();
+          setCursorKey(row.key);
+          latest.current.onSelectTask(row.kind === "task" ? row.task.id : null);
+        }
+        scrollerRef.current?.focus({ preventScroll: true });
+      },
+      moveTaskTo: (taskId, day) => latest.current.placeTask(taskId, day),
+      toggle: (key) => latest.current.toggleRow(key),
+      openProject: (id) => latest.current.onOpenProject?.(id),
+      openTask: (id) => latest.current.onSelectTask(id),
+      startRename: (id) => setEditingId(id),
+      endRename: (id, title) => {
+        setEditingId(null);
+        const next = title?.trim();
+        const task = latest.current.api.tasks.find((t) => t.id === id);
+        if (next && task && next !== task.title) latest.current.api.patchTask(id, { title: next });
+        refocus();
+      },
+      requestCommand: (id, cmd) => setCommand({ id, command: cmd }),
+      scrollToDay,
+      clearCommand: () => setCommand(null),
+      refocus,
+    }),
+    [refocus, scrollToDay],
+  );
+  const rowActions = useRowActions(api);
+
+  const onKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    const scroller = scrollerRef.current;
+    if (!scroller || !(e.target instanceof Node) || !scroller.contains(e.target)) return;
+    if (isTypingTarget(e.target)) return;
+    const action = timelineKeyAction(e);
+    // A selection's own keys first (TV-U12's bar: d the date picker, Space,
+    // ⌫…); the Timeline's date moves and its cursor keys stay the view's.
+    if (selectedIds.size >= 2 && onViewKey && !(action && VIEW_KEYS_ON_A_SELECTION.has(action))) {
+      const selectedNow = selectedTaskId ? (taskById.get(selectedTaskId) ?? null) : null;
+      if (onViewKey(e, selectedNow)) {
+        e.preventDefault();
         return;
       }
-      onSelect();
-    },
-    onMouseEnter: () => onHover(task.id),
-    onMouseLeave: () => onHover(null),
+    }
+    if (!action) return;
+    const row = cursorKey ? rowByKey.get(cursorKey) : undefined;
+    // A key the view didn't use keeps its native job (←/→ off a header and
+    // Space with no row scroll the canvas).
+    if (runKey(action, row)) e.preventDefault();
   };
 
-  const fadeExtMask = displayBar.solidRight
-    ? "linear-gradient(to right, transparent 0, black 100%)" // fade-in toward the due day
-    : "linear-gradient(to right, black 0, transparent 100%)"; // fade-out past the start
+  /** The selected tasks while two or more are, else none. */
+  const selectedTasks = (): Task[] =>
+    selectedIds.size >= 2
+      ? [...selectedIds].flatMap((id) => {
+          const task = taskById.get(id);
+          return task ? [task] : [];
+        })
+      : [];
+
+  /** ⇧T: bring the selection's marks into view, zooming out only if they don't fit. */
+  const fitSelection = (row: TimelineRow | undefined): boolean => {
+    const days: number[] = [];
+    if (selectedIds.size >= 2) {
+      for (const id of selectedIds) {
+        const day = pointDay(id);
+        if (day !== null) days.push(day);
+      }
+    } else if (row?.kind === "task" && row.point) days.push(row.point.day);
+    else if (row?.kind === "section" && row.band) days.push(row.band.start, row.band.end);
+    else if (row?.kind === "section" && row.milestone !== null) days.push(row.milestone);
+    else if (row?.kind === "project" && row.bar) days.push(row.bar.start, row.bar.end);
+    if (days.length === 0) return false;
+    const span: DaySpan = { start: Math.min(...days), end: Math.max(...days) };
+    const next = fitZoom(span, trackWidth, zoom);
+    const center = (span.start + span.end + 1) / 2;
+    if (next !== zoom) {
+      pending.current = { kind: "day", day: center, at: trackWidth / 2 };
+      onDisplayChange({ ...display, timelineZoom: next });
+    } else {
+      scrollerRef.current?.scrollTo({
+        left: Math.max(0, (center - range.start) * dw - trackWidth / 2),
+        behavior: "smooth",
+      });
+    }
+    return true;
+  };
+
+  /** Run a key's action; false when it did nothing here. */
+  const runKey = (action: TimelineKeyAction, row: TimelineRow | undefined): boolean => {
+    const foldable =
+      row?.kind === "section" || (row?.kind === "project" && row.expandable) ? row : null;
+    const shift = shiftDaysOf(action);
+    if (shift !== 0) {
+      // ⌥←/→ (⇧ a week): the selection, or the row under the cursor (70).
+      if (!canDrag) return false;
+      const several = selectedTasks();
+      if (several.length > 0) writes.shiftTasks(several, shift);
+      else if (row?.kind === "task") writes.shiftTasks([row.task], shift);
+      else if (!row || !writes.shiftRow(row, shift)) return false;
+      return true;
+    }
+    switch (action) {
+      case "date":
+        if (row?.kind !== "task" || !canDrag) return false;
+        setCommand({ id: row.task.id, command: "due" });
+        return true;
+      case "clear-date": {
+        if (!canDrag) return false;
+        const several = selectedTasks();
+        const targets = several.length > 0 ? several : row?.kind === "task" ? [row.task] : [];
+        if (targets.length === 0) return false;
+        writes.clearDue(targets);
+        return true;
+      }
+      case "fit":
+        return fitSelection(row);
+      case "extend-next":
+      case "extend-prev":
+        if (!multiSelect || row?.kind !== "task") return false;
+        multiSelect.extend(action === "extend-next" ? 1 : -1, taskOrder);
+        return true;
+      case "select-all":
+        if (!multiSelect || taskOrder.length === 0) return false;
+        multiSelect.selectAll(taskOrder);
+        return true;
+      case "next":
+        moveCursor(1);
+        return true;
+      case "prev":
+        moveCursor(-1);
+        return true;
+      case "fold":
+      case "unfold": {
+        if (!foldable) return false;
+        const open = foldable.kind === "project" ? foldable.expanded : !foldable.folded;
+        if (open === (action === "fold")) toggleRow(foldable.key);
+        return true;
+      }
+      case "open":
+        if (row?.kind === "task") {
+          onOpenTask?.(row.task.id);
+          return true;
+        }
+        if (row?.kind === "project" && row.expandable && onOpenProject) {
+          onOpenProject(row.project.id);
+          return true;
+        }
+        if (foldable) {
+          toggleRow(foldable.key);
+          return true;
+        }
+        return false;
+      case "toggle":
+        if (row?.kind === "task") {
+          if (canEdit) activateTask(row.task, rowActions);
+          return true;
+        }
+        if (foldable) {
+          toggleRow(foldable.key);
+          return true;
+        }
+        return false;
+      case "today":
+        scrollToToday(true);
+        return true;
+      case "zoom-in":
+        changeZoom(stepZoom(zoom, -1));
+        return true;
+      case "zoom-out":
+        changeZoom(stepZoom(zoom, 1));
+        return true;
+      case "name-column":
+        toggleNameColumn();
+        return true;
+      case "clear":
+        // Esc: a selection of several first, then the cursor.
+        if (multiSelect?.clear()) return true;
+        setCursorKey(null);
+        onSelectTask(null);
+        return true;
+      default:
+        return false;
+    }
+  };
+
+  // ── Geometry for the rows and marks ─────────────────────────────────────
+  const geometry = useMemo<TimelineGeometry>(
+    () => ({
+      range,
+      dw,
+      zoom,
+      today,
+      colorBy: display.colorBy,
+      nameHidden: nameColumn.hidden,
+    }),
+    [range, dw, zoom, today, display.colorBy, nameColumn.hidden],
+  );
+  const topCells = useMemo(() => topTier(zoom, drawn, today), [zoom, drawn, today]);
+  const strong = useMemo(
+    () =>
+      topCells
+        .map((c) => c.start)
+        .filter((d) => d > drawn.from && d >= range.start && d <= drawn.to),
+    [topCells, drawn, range.start],
+  );
+  const unit = zoom === "week" || zoom === "month" ? "day" : zoom === "quarter" ? "week" : "month";
+  const firstWeek = weekStartOf(range.start, weekStartsOn);
+  const unitX =
+    unit === "week" ? xOfDay(range, dw, firstWeek < range.start ? firstWeek + 7 : firstWeek) : 0;
+  const saturdayX = ((6 - weekdayOf(range.start) + 7) % 7) * dw;
+  const yearMonths = useMemo(
+    () => (zoom === "year" ? topTier("month", drawn, today).map((c) => c.start) : []),
+    [zoom, drawn, today],
+  );
+
+  // The grid's geometry sits on the frame: the canvas's grid and a sticky
+  // header row's track (which paints its own over its opaque surface) read it.
+  const frameStyle = {
+    "--timeline-name-w": `${nameW}px`,
+    "--timeline-dw": `${dw}px`,
+    "--timeline-head-h": `${size.header}px`,
+    "--timeline-unit": `${unit === "week" ? dw * 7 : dw}px`,
+    "--timeline-unit-x": `${unitX}px`,
+    "--timeline-weekend-x": `${saturdayX}px`,
+    width: nameW + canvasW,
+  } as CSSProperties;
+  const gridStyle = { left: nameW, width: canvasW } as CSSProperties;
+  const bodyMin = Math.max(0, size.height - size.header);
+  const cursorIndex = cursorKey ? rows.findIndex((r) => r.key === cursorKey) : -1;
+  // The row a drag holds stays drawn while the canvas scrolls under it.
+  const dragIndex = dragRowKey ? rows.findIndex((r) => r.key === dragRowKey) : -1;
+  const pinned = useMemo(
+    () => [cursorIndex, dragIndex].filter((i) => i >= 0),
+    [cursorIndex, dragIndex],
+  );
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const statusesFor = useCallback(
+    (bucketId: string) => api.statusesForBucket?.(bucketId) ?? [],
+    [api.statusesForBucket],
+  );
+  const toggleUndated = () => {
+    const next = showUndated
+      ? display.timelineShow.filter((s) => s !== "undated")
+      : [...display.timelineShow, "undated" as const];
+    onDisplayChange({ ...display, timelineShow: next });
+  };
+  const empty = !built.hasMarks && !api.loading;
 
   return (
-    <>
-      {/* Fade extension — pure paint, never a pointer target. */}
-      {!(displayBar.solidLeft && displayBar.solidRight) ? (
-        <div
-          className={cn(
-            "pointer-events-none absolute z-[2] border",
-            displayBar.solidRight ? "border-r-0" : "border-l-0",
-            barTone(bar.closed),
-          )}
-          style={{
-            left: displayBar.solidLeft ? solidX + solidW : displayBar.x,
-            top,
-            width: FADE_PX,
-            height: BAR_H,
-            maskImage: fadeExtMask,
-            WebkitMaskImage: fadeExtMask,
-          }}
-          aria-hidden
-        />
-      ) : null}
-      <div
-        {...interactive}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={() => endDrag(true)}
-        onPointerCancel={() => endDrag(false)}
-        onLostPointerCapture={() => endDrag(false)}
-        data-timeline-bar={task.id}
-        data-timeline-drop={task.id}
-        data-task-id={task.id}
-        className={cn(
-          "group/bar absolute z-[2] flex select-none items-center gap-1.5 border px-1.5",
-          displayBar.solidLeft ? "rounded-l-md" : "rounded-l-none border-l-0",
-          displayBar.solidRight ? "rounded-r-md" : "rounded-r-none border-r-0",
-          "transition-colors duration-(--motion-fade) ease-(--ease-out)",
-          drag?.started ? "z-[4] cursor-grabbing" : canEdit ? "cursor-grab" : "cursor-pointer",
-          barTone(bar.closed),
-          !bar.closed && "hover:bg-primary/15",
-          selected && "ring-2 ring-ring/60",
-          // A valid connector target lights up quietly; invalid ones stay mute.
-          isConnectorTarget && "ring-2 ring-primary/70",
-        )}
-        style={{ left: solidX, top, width: solidW, height: BAR_H }}
-      >
-        {/* Edge cursor affordances — sized exactly like the drag hit zones. */}
-        {canEdit ? (
-          <>
-            <div
-              className="absolute inset-y-0 left-0 cursor-ew-resize"
-              style={{ width: edgeZonePx }}
-              aria-hidden
+    <ProjectChoicesProvider projects={buckets} inboxId={inbox?.id ?? null}>
+      <StatusChoicesProvider statusesFor={statusesFor} any={(api.statuses?.length ?? 0) > 0}>
+        <TimelineCanvasContext.Provider value={canvas}>
+          <div className="flex h-full min-h-0 flex-col">
+            <PlanViewHeader
+              title={scopeTitle}
+              view={view}
+              onViewChange={onViewChange}
+              controls={header}
+              canEdit={canEdit}
+              onRequestCapture={onRequestCapture}
             />
-            <div
-              className="absolute inset-y-0 right-0 cursor-ew-resize"
-              style={{ width: edgeZonePx }}
-              aria-hidden
-            />
-            {/* Connector dot (AC8) — hover-revealed at the bar's end; drag it
-                onto another bar to make this task block that one. Mouse
-                gesture only (the detail panel's Add blocker is the keyboard
-                path), and never on a done bar — a completed task can't block
-                anything, so offering the gesture would draw inert arrows. */}
-            {!bar.closed ? (
-              <span
-                onPointerDown={(e) => onConnectorStart(task.id, e)}
-                className={cn(
-                  "absolute -right-1.5 top-1/2 z-[5] size-3 -translate-y-1/2 cursor-crosshair rounded-full border border-primary bg-background",
-                  "opacity-0 transition-opacity duration-(--motion-fade) ease-(--ease-out) group-hover/bar:opacity-100",
-                  isConnectorSource && "opacity-100",
-                )}
-                aria-hidden
+            {/* The Timeline's own bar: No date on the left; Today and the zoom on the right. */}
+            <div className="-mt-1 mb-2 flex shrink-0 items-center gap-1.5">
+              {built.undated > 0 || showUndated ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    {onOpenNoDate ? (
+                      // The right panel's No date view (70): drag a task from there onto a day.
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={onOpenNoDate}
+                        className="px-2"
+                        data-timeline-no-date-open=""
+                      >
+                        <CalendarOff aria-hidden />
+                        No date
+                        <span className="tabular-nums text-subtle-foreground">
+                          · {built.undated}
+                        </span>
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        aria-pressed={showUndated}
+                        onClick={toggleUndated}
+                        className={cn("px-2", showUndated && "bg-state-active")}
+                      >
+                        <CalendarOff aria-hidden />
+                        No date
+                        <span className="tabular-nums text-subtle-foreground">
+                          · {built.undated}
+                        </span>
+                      </Button>
+                    )}
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {onOpenNoDate
+                      ? "Open the tasks with no date beside the timeline"
+                      : showUndated
+                        ? "Hide the rows with no date"
+                        : "Show the tasks with no date as rows"}
+                  </TooltipContent>
+                </Tooltip>
+              ) : null}
+              <div className="flex-1" />
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="sm" onClick={() => scrollToToday(true)}>
+                    Today
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Go to today · T</TooltipContent>
+              </Tooltip>
+              <SegmentedControl
+                aria-label="Timeline zoom"
+                size="sm"
+                value={zoom}
+                onValueChange={(value) => changeZoom(value as TimelineZoom)}
+                items={TIMELINE_ZOOMS.map((z) => ({ value: z, label: ZOOM_LABELS[z] }))}
               />
-            ) : null}
-          </>
-        ) : null}
-        {labelInside ? meta : null}
-      </div>
-      {!labelInside ? (
-        <div
-          {...interactive}
-          data-timeline-drop={task.id}
-          className="absolute z-[2] flex max-w-64 cursor-pointer items-center gap-1.5 rounded-md px-1"
-          style={{ left: displayBar.x + displayBar.width + 6, top, height: BAR_H }}
-        >
-          {meta}
-        </div>
-      ) : null}
-    </>
+            </div>
+
+            <div className="relative -mx-(--pad-x) -mb-(--pad-x) min-h-0 flex-1 border-t border-hairline">
+              <TimelineGeometryContext.Provider value={geometry}>
+                <TimelineWindowContext.Provider value={drawn}>
+                  <TimelineViewportContext.Provider value={viewport}>
+                    <div
+                      ref={setScroller}
+                      role="grid"
+                      aria-label={`${scopeTitle} timeline`}
+                      aria-activedescendant={
+                        cursorKey && rowByKey.has(cursorKey)
+                          ? timelineRowDomId(cursorKey)
+                          : undefined
+                      }
+                      aria-multiselectable={multiSelect ? true : undefined}
+                      tabIndex={0}
+                      onKeyDown={onKeyDown}
+                      onScroll={handleScroll}
+                      onPointerDown={pointer.onPointerDown}
+                      onPointerMove={onCanvasPointerMove}
+                      onPointerLeave={onCanvasPointerLeave}
+                      onClickCapture={pointer.onClickCapture}
+                      data-timeline=""
+                      data-zoom={zoom}
+                      data-can-drag={canDrag || undefined}
+                      className="scrollbar-thin h-full overflow-auto overscroll-x-contain focus-visible:outline-none data-dragging:cursor-grabbing data-dragging:select-none data-dragging:**:cursor-grabbing"
+                    >
+                      <div className="relative" style={frameStyle}>
+                        <div ref={headerRef} className="sticky top-0 z-(--z-header)">
+                          <TimelineHeader
+                            topCells={topCells}
+                            weekStartsOn={weekStartsOn}
+                            dueCounts={dueCounts}
+                            onResizeStart={startResize}
+                          />
+                        </div>
+                        <div
+                          ref={bodyRef}
+                          className="relative flex flex-col"
+                          style={{ minHeight: bodyMin }}
+                        >
+                          {/* The canvas under the rows: the grid, month lines, today. */}
+                          <div
+                            aria-hidden
+                            className="timeline-grid pointer-events-none absolute inset-y-0"
+                            data-unit={unit}
+                            data-weekends={unit === "day" ? "" : undefined}
+                            style={gridStyle}
+                          >
+                            {yearMonths.map((day) => (
+                              <span
+                                key={`m${day}`}
+                                className="absolute inset-y-0 w-px bg-timeline-grid"
+                                style={{ left: xOfDay(range, dw, day) }}
+                              />
+                            ))}
+                            {strong.map((day) => (
+                              <span
+                                key={day}
+                                className="absolute inset-y-0 w-px bg-timeline-grid-strong"
+                                style={{ left: xOfDay(range, dw, day) }}
+                              />
+                            ))}
+                            <span
+                              data-timeline-today=""
+                              className="absolute inset-y-0 w-px -translate-x-1/2 bg-primary"
+                              style={{ left: dayCenterX(range, dw, today) }}
+                            />
+                          </div>
+                          {/* The "waits on" lines, under the rows (70, 68b). */}
+                          {depMode !== "off" ? (
+                            <TimelineDepsLayer
+                              relations={relations}
+                              byId={taskById}
+                              mode={depMode}
+                              selected={lineSelection}
+                              isHidden={isHidden}
+                              pointDay={pointDay}
+                              nameW={nameW}
+                              bodyRef={bodyRef}
+                              scrollerRef={scrollerRef}
+                              layoutKey={rows}
+                            />
+                          ) : null}
+                          <VirtualStack
+                            items={rows}
+                            itemKey={(row) => row.key}
+                            estimateSize={(row) =>
+                              row.kind === "area" || row.kind === "group" || row.kind === "section"
+                                ? HEADER_ROW_GUESS
+                                : ROW_GUESS
+                            }
+                            scrollRef={scrollerRef}
+                            scrollMargin={size.header}
+                            stickyIndexes={stickyIndexes}
+                            stickyClassName="top-(--timeline-head-h) z-(--z-sticky)"
+                            pinned={pinned}
+                            scrollTo={scrollTo}
+                            className="relative z-[1]"
+                            render={(row, _index, place) => (
+                              <TimelineRowItem
+                                row={row}
+                                selected={
+                                  row.kind === "task" &&
+                                  (row.task.id === selectedTaskId || selectedIds.has(row.task.id))
+                                }
+                                editable={canDragRow(row)}
+                                contradiction={
+                                  row.kind === "task" ? (lateMarks.get(row.task.id) ?? null) : null
+                                }
+                                stubs={
+                                  row.kind === "task" && row.task.id === selectedTaskId
+                                    ? stubs
+                                    : null
+                                }
+                                cursor={row.key === cursorKey}
+                                sticky={place.sticky}
+                                canEdit={canEdit}
+                                queued={row.kind === "task" && api.queuedTaskIds.has(row.task.id)}
+                                hue={
+                                  row.kind === "project"
+                                    ? (row.project.color ?? null)
+                                    : row.kind === "task"
+                                      ? (hueById.get(row.task.bucketId) ?? null)
+                                      : null
+                                }
+                                showRepeats={show.has("repeats")}
+                                command={
+                                  row.kind === "task" && command?.id === row.task.id
+                                    ? command.command
+                                    : null
+                                }
+                                editing={row.kind === "task" && editingId === row.task.id}
+                                taskKey={taskKey}
+                                handlers={handlers}
+                                actions={rowActions}
+                              />
+                            )}
+                          />
+                          {/* Below the last row the name column runs on (its edge, its surface). */}
+                          <div aria-hidden className="relative z-[1] flex flex-1">
+                            <div
+                              className={cn(
+                                "sticky left-0 w-(--timeline-name-w) shrink-0 bg-card",
+                                !nameColumn.hidden && "border-r border-hairline",
+                              )}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </TimelineViewportContext.Provider>
+                </TimelineWindowContext.Provider>
+              </TimelineGeometryContext.Provider>
+              {empty ? (
+                <div
+                  className="pointer-events-none absolute z-(--z-sticky) rounded-md bg-card/90 px-3 py-2"
+                  style={{ left: nameW + 24, top: size.header + 16 }}
+                >
+                  {/* The rows stay listed, with today's line and one sentence (71). */}
+                  <p className="font-sans text-sm text-foreground">
+                    {tasks.length === 0 ? "No tasks here yet." : "Nothing has a date yet."}
+                  </p>
+                  <p className="font-sans text-xs text-muted-foreground">
+                    {tasks.length === 0
+                      ? "Tasks you give a date show up on the timeline."
+                      : canDrag
+                        ? "Click a day on a row, or open No date."
+                        : "Tasks show up here once they have a date."}
+                  </p>
+                </div>
+              ) : null}
+            </div>
+          </div>
+          {writes.dialog}
+          {drop.overlay}
+        </TimelineCanvasContext.Provider>
+      </StatusChoicesProvider>
+    </ProjectChoicesProvider>
   );
 }

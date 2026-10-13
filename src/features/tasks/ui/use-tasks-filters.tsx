@@ -6,6 +6,7 @@
 
 import {
   Ban,
+  CalendarCheck,
   CalendarDays,
   Circle,
   CircleCheck,
@@ -14,6 +15,7 @@ import {
   Clock,
   Flag,
   Hash,
+  Hourglass,
   ListChecks,
   ListTree,
   Paperclip,
@@ -43,6 +45,7 @@ import {
   type TaskFilterContext,
   type TaskFilterDimension,
   taskFilterShape,
+  WAITING_ANY,
 } from "../filters";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { Tag, Task, Team } from "../model";
@@ -59,12 +62,14 @@ const DIMENSION_ICONS: Record<TaskFilterDimension, FilterDimension["icon"]> = {
   creator: UserPen,
   tag: Hash,
   status: CircleDot,
+  completed: CalendarCheck,
   priority: Flag,
   energy: Zap,
   due: CalendarDays,
   scheduled: Clock,
   queued: ListChecks,
   blocked: CircleDashed,
+  waiting: Hourglass,
   recurring: Repeat,
   subtasks: ListTree,
   attachments: Paperclip,
@@ -121,6 +126,23 @@ const OPTIONS: Partial<Record<TaskFilterDimension, FilterOption[]>> = {
     { value: "week", label: "This week" },
     { value: "drifted", label: "Drifted", keywords: ["passed"] },
     { value: NONE_VALUE, label: "Not scheduled" },
+  ],
+  // When a task was finished (TV-U8; the week follows Time & region).
+  completed: [
+    { value: "today", label: "Today" },
+    { value: "week", label: "This week" },
+    { value: "last_week", label: "Last week" },
+    { value: "month", label: "This month" },
+    { value: NONE_VALUE, label: "Not completed" },
+  ],
+  // Who or what a task waits on (TV-U8): any entry, or one kind.
+  waiting: [
+    { value: WAITING_ANY, label: "Anything", keywords: ["waiting"] },
+    { value: "person", label: "A teammate", keywords: ["person", "people"] },
+    { value: "email", label: "An email reply", keywords: ["client", "reply"] },
+    { value: "agent", label: "An agent" },
+    { value: "text", label: "Something else", keywords: ["client"] },
+    { value: NONE_VALUE, label: "Not waiting" },
   ],
   queued: YES_NO,
   blocked: YES_NO,
@@ -391,6 +413,17 @@ export function useTasksFilters({
   const attachmentsOn = conditions.some((c) => c.dimension === "attachments");
   const attachmentCount = useAttachmentCounts(runtime, workspaceId, attachmentsOn);
 
+  // Each task's Waiting on… kinds (the Waiting on filter).
+  const waitingKinds = useMemo(() => {
+    const out = new Map<string, string[]>();
+    for (const w of api.waiting ?? []) {
+      const list = out.get(w.taskId);
+      if (list) list.push(w.kind);
+      else out.set(w.taskId, [w.kind]);
+    }
+    return out;
+  }, [api.waiting]);
+
   // Today's date keys the context, so "Today" and "This week" roll over at
   // midnight.
   const today = useToday();
@@ -402,9 +435,11 @@ export function useTasksFilters({
       isBlocked: (id) => api.blockedTaskIds.has(id),
       hasSubtasks: (id) => (api.subtasksByParent.get(id)?.length ?? 0) > 0,
       attachmentCount,
+      waitingKindsOf: (id) => waitingKinds.get(id) ?? [],
     }),
     [
       today,
+      waitingKinds,
       api.tagsByTask,
       api.queuedTaskIds,
       api.blockedTaskIds,

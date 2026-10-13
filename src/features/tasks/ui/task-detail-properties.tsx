@@ -40,9 +40,12 @@ import {
 } from "../../../components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
 import { PropertyRow, PropertyValue } from "../../../components/ui/property-row";
+import { localDayOf } from "../../../lib/task-rows";
+import { formatDay } from "../../../lib/time-format";
 import { cn } from "../../../lib/utils";
 import { type Assignee, assigneeLabel } from "../assignee-options";
 import { previewAssign, useAssignees } from "../assignees";
+import { dueDayOf } from "../bulk";
 import {
   OPTIONAL_PROPERTY_LABELS,
   type OptionalProperty,
@@ -53,14 +56,17 @@ import {
 import { LEVEL_OPTIONS } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { Bucket, EnergyLevel, PriorityLevel, Task } from "../model";
+import { changePatternRule, engineZone } from "../recurrence-engine";
 import { CATEGORY_LABELS, statusesByCategory, statusNameOf } from "../statuses";
 import { AssigneeAvatar } from "./assignee-avatar";
 import { EnergyIcon, PriorityIcon } from "./level-icons";
+import { RepeatMoveDialog } from "./repeat-move-dialog";
 import { StatusIcon } from "./status-icon";
 import {
   DueTimeValue,
   EstimateValue,
   ReminderValue,
+  RepeatHistory,
   RepeatValue,
   SessionsValue,
 } from "./task-detail-pickers";
@@ -106,6 +112,33 @@ export function TaskDetailProperties({
   const me = byId(currentUserId);
   const assignee = byId(task.assigneeId);
 
+  // A repeat's due day moved here asks, as Upcoming's drag does (TV-D12's two
+  // ways, TV-U13b): just this one (the next is back on the pattern), or the
+  // pattern from here on. Clearing the date, or a one-off, saves at once.
+  const [repeatMoveTo, setRepeatMoveTo] = useState<Date | null>(null);
+  const setDue = (d: Date | null) => {
+    const day = dueDayOf(task);
+    if (d && task.recurrence && day && localDayOf(d.toISOString()) !== day) {
+      setRepeatMoveTo(d);
+      return;
+    }
+    api.patchTask(task.id, d ? { dueDate: d.toISOString() } : { dueDate: null, dueTime: null });
+  };
+  const chooseRepeatMove = (choice: "one" | "pattern") => {
+    const to = repeatMoveTo;
+    setRepeatMoveTo(null);
+    if (!to || !task.recurrence) return;
+    const day = localDayOf(to.toISOString());
+    if (choice === "one") {
+      if (day) api.moveOccurrence(task.id, { dueOn: day });
+      return;
+    }
+    api.patchTask(task.id, {
+      recurrence: changePatternRule(task.recurrence, to, engineZone()),
+      dueDate: to.toISOString(),
+    });
+  };
+
   const reveal = (p: OptionalProperty) => {
     if (p === "waiting") {
       onRevealWaiting();
@@ -136,17 +169,19 @@ export function TaskDetailProperties({
         <DateField
           variant="property"
           value={task.dueDate ? new Date(task.dueDate) : null}
-          onChange={(d) =>
-            api.patchTask(
-              task.id,
-              d ? { dueDate: d.toISOString() } : { dueDate: null, dueTime: null },
-            )
-          }
+          onChange={setDue}
           placeholder="Set date"
           aria-label="Due"
           disabled={!canEdit}
         />
         <DueTimeValue task={task} api={api} canEdit={canEdit} />
+        <RepeatMoveDialog
+          open={repeatMoveTo !== null}
+          tasks={[task]}
+          dayLabel={repeatMoveTo ? formatDay(repeatMoveTo) : ""}
+          onChoose={chooseRepeatMove}
+          onClose={() => setRepeatMoveTo(null)}
+        />
       </PropertyRow>
       {shown.has("energy") ? (
         <PropertyRow label="Energy">
@@ -196,6 +231,7 @@ export function TaskDetailProperties({
       {shown.has("repeat") ? (
         <PropertyRow label="Repeat">
           <RepeatValue task={task} api={api} canEdit={canEdit} defaultOpen={autoOpen("repeat")} />
+          {task.recurrence ? <RepeatHistory task={task} api={api} /> : null}
         </PropertyRow>
       ) : null}
       <PropertyRow label="Tags" align="start">

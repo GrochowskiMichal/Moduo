@@ -38,7 +38,13 @@
 - [ ] **Do:** ask Claude for this month's time report by day → **Expect:** your entries (and, as the owner, teammates who share theirs), totals per day. _(Claude)_
 - [ ] **Do:** ask Claude for a task by handle in lower case ("mod-142") and for a task in a project you can't see → **Expect:** the first works; the second says "Task not found in this workspace." exactly like a made-up handle. _(Claude)_
 
+## Notices after access changes (follow-up)
+- [ ] **Do:** have a reminder fire and an agent report "needs you" on a task in a project someone shares with you, then have them take the project away → **Expect:** the bell keeps the cards but no longer names the task ("this"); no OS notice arrives for it; the agent's summary and line on it are gone for you. _(web, two accounts)_
+- [ ] **Do:** route a task to a team you're in while you can see it → **Expect:** the bell names it ("routed “…” to Ops"); after losing access it reads "routed this to Ops". _(web, two accounts)_
+- [ ] **Do:** ask Claude to create a task with the id of a task that's already there (an import resent) → **Expect:** the existing task comes back unchanged (`"action": "existing"`), with no new tags or reminders, and Undo of that import never removes it. _(Claude)_
+
 ## Verify before release
+- [ ] Apply `20261013268000_agents_privacy_fix` after `20261013220000` (anchored replaces: probe prod's bodies of `module_activity_log`, `tasks_op_agent_report`, `tasks__fire_reminders`, `tasks_notify_spine`, `tasks_op_create_with` and the `notice_deliveries` read policy first).
 - [ ] Apply `20261013220000_agents_imports_mcp` after every v3 migration before it (it re-cuts `module_activity_log`, `tasks_search` and `notice_deliveries__claim` in full and `tasks_op_create`, `account_erase_workspace_data` and the notice gate by anchored replace: probe the live bodies on prod first).
 - [ ] Deploy `moduo-mcp` and `push-send` from a build with this block (push-send reads the delivery's kind; an older one says "Reminder" for an agent's notice).
 - [ ] The real check (74): Claude with Todoist's own connector importing a real project end to end, then re-run and Undo.

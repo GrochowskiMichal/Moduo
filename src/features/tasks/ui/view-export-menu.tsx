@@ -1,11 +1,11 @@
-// The view's ⋯ in the toolbar (TV-D14, default f): Copy as text · Export view
-// as CSV · Print. Each takes the tasks the view shows right now (its scope,
-// filter and Display), in their order. The print layout is mounted only while
-// printing.
+// The view's ⋯ in the toolbar (TV-D14, default f): Save as view… (TV-U8),
+// then Copy as text · Export view as CSV · Print. Each export takes the tasks
+// the view shows right now (its scope, filter and Display), in their order.
+// The print layout is mounted only while printing.
 
 import { isClosedTask } from "@contracts/vocabularies";
 import { MoreHorizontal } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { PrintRoot } from "../../../components/app/print-root";
@@ -13,6 +13,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "../../../components/ui/dropdown-menu";
 import { IconButton } from "../../../components/ui/icon-button";
@@ -37,13 +38,19 @@ export function ViewExportMenu({
   tasks,
   title,
   context,
+  saveAsView,
 }: {
   /** What the view shows, in its order. Read when an item is picked. */
   tasks: () => Task[];
   title: string;
   context: ListExportContext;
+  /** Save this place's (or this view's) Filter and Display as a new view (TV-U8). */
+  saveAsView?: { label: string; onSelect: () => void };
 }) {
   const [printing, setPrinting] = useState<Task[] | null>(null);
+  // Save as view… opens its dialog once the menu has closed, so the menu's
+  // focus return doesn't land on the trigger over the dialog's field.
+  const openAfterClose = useRef<(() => void) | null>(null);
 
   // Print once the layout is in the page; take it away when printing is done.
   useEffect(() => {
@@ -97,7 +104,29 @@ export function ViewExportMenu({
         <DropdownMenuTrigger asChild>
           <IconButton icon={MoreHorizontal} label="More view options" tooltip={null} />
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-52">
+        <DropdownMenuContent
+          align="end"
+          className="w-52"
+          onCloseAutoFocus={(event) => {
+            const open = openAfterClose.current;
+            if (!open) return;
+            openAfterClose.current = null;
+            event.preventDefault();
+            open();
+          }}
+        >
+          {saveAsView ? (
+            <>
+              <DropdownMenuItem
+                onSelect={() => {
+                  openAfterClose.current = saveAsView.onSelect;
+                }}
+              >
+                {saveAsView.label}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+            </>
+          ) : null}
           <DropdownMenuItem onSelect={copy}>Copy as text</DropdownMenuItem>
           <DropdownMenuItem onSelect={csv}>Export view as CSV</DropdownMenuItem>
           <DropdownMenuItem onSelect={() => setPrinting(tasks())}>Print…</DropdownMenuItem>

@@ -66,6 +66,19 @@ BEGIN
   SET LOCAL session_replication_role = origin;
 END;
 $$;
+-- A run's summary as its person's key reads it (the helper answers no one else).
+CREATE FUNCTION test.summary_as_key(p_key text, p_import uuid) RETURNS jsonb LANGUAGE plpgsql AS $$
+DECLARE
+  v jsonb;
+BEGIN
+  PERFORM set_config('request.jwt.claims', '{"role": "service_role"}', true);
+  PERFORM set_config('request.headers', json_build_object('x-moduo-key-id', test.id(p_key))::text, true);
+  SELECT public.imports__summary(x) INTO v FROM public.imports x WHERE x.id = p_import;
+  PERFORM set_config('request.jwt.claims', '{}', true);
+  PERFORM set_config('request.headers', '{}', true);
+  RETURN v;
+END;
+$$;
 CREATE FUNCTION test.search_as(p_who text, p_query text, p_key boolean DEFAULT false) RETURNS text LANGUAGE sql AS $$
   SELECT CASE WHEN p_key THEN test.as_key(p_who, format($q$SELECT * FROM public.tasks_search(%L, %L, 50)$q$, test.id('W'), p_query))
               ELSE test.as_user(p_who, format($q$SELECT * FROM public.tasks_search(%L, %L, 50)$q$, test.id('W'), p_query)) END
@@ -168,7 +181,7 @@ BEGIN
 
   -- ── Finish; a re-run updates ────────────────────────────────────────────
   r := test.as_key('K', format($q$SELECT public.imports_op_finish(%L, %L)$q$, test.id('W'), i1));
-  v := public.imports__summary((SELECT x FROM public.imports x WHERE x.id = i1));
+  v := test.summary_as_key('K', i1);
   PERFORM test.ok(r = 'ok 1' AND (v ->> 'tasks_created')::int = 3 AND (v ->> 'projects_created')::int = 1
               AND (v ->> 'sections_created')::int = 1 AND v ->> 'finished_at' IS NOT NULL,
     'finishing answers what the run made', v::text);

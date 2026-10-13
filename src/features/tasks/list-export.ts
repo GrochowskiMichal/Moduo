@@ -99,6 +99,8 @@ export function projectOverviewText(
   facts: { done: number; total: number; open: number },
   openTasks: readonly Task[],
   ctx: ListExportContext,
+  /** TV-U16: the overview's description and its "Done this month · 14 · 22h" line. */
+  extra?: { description?: string; doneThisMonth?: string },
 ): string {
   const now = ctx.now ?? new Date();
   const day = (d: string | null | undefined) => (d ? formatDate(`${d}T12:00:00`, now) : null);
@@ -109,8 +111,13 @@ export function projectOverviewText(
   const state = { active: "Active", on_hold: "On hold", done: "Done" }[project.status ?? "active"];
   const head = [project.name, [state, dates].filter(Boolean).join(" · ")].filter(Boolean);
   head.push(`${facts.done} of ${facts.total} done · ${facts.open} open`);
+  if (extra?.doneThisMonth) head.push(extra.doneThisMonth);
+  const blocks = [head.join("\n")];
+  const about = extra?.description?.trim();
+  if (about) blocks.push(about);
   const list = tasksAsText(openTasks, ctx);
-  return list ? `${head.join("\n")}\n\n${list}` : head.join("\n");
+  if (list) blocks.push(list);
+  return blocks.join("\n\n");
 }
 
 /** "Export view as CSV": the tasks the view shows, one row each. */
