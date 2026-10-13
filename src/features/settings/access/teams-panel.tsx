@@ -50,13 +50,17 @@ export type TeamFieldsPatch = {
 export type WorkspaceTeams = {
   /** The workspace's Tasks can be read here (teams live with Tasks). */
   available: boolean;
-  /** Tasks at Edit: make teams and change their people (default t). */
+  /** Tasks at Edit: make teams, add people to them and leave them (default t). */
   canEdit: boolean;
   teams: Team[];
   members: TeamMember[];
   /** Live projects a team can name as its default (no Inbox, nothing archived). */
   projects: Bucket[];
-  canDelete: (team: Team) => boolean;
+  /**
+   * The team's creator, the workspace owner or an admin: change its name,
+   * letters, colour and default project, take someone else out, delete it.
+   */
+  canManage: (team: Team) => boolean;
   create: (name: string) => Promise<Team | null>;
   update: (team: Team, patch: TeamFieldsPatch) => Promise<boolean>;
   remove: (team: Team) => void;
@@ -91,7 +95,7 @@ export function useWorkspaceTeams(): WorkspaceTeams {
     [bundle.buckets],
   );
   const isOwner = selectedWorkspace?.role === "owner";
-  const canDelete = useCallback(
+  const canManage = useCallback(
     (team: Team) =>
       canEdit && (team.createdBy === userId || isOwner || myPerms.includes("ws.manage_roles")),
     [canEdit, userId, isOwner, myPerms],
@@ -233,7 +237,7 @@ export function useWorkspaceTeams(): WorkspaceTeams {
     teams,
     members,
     projects,
-    canDelete,
+    canManage,
     create,
     update,
     remove,
@@ -312,6 +316,8 @@ export function TeamEditor({ team, teams }: { team: Team; teams: WorkspaceTeams 
   const { userId } = useAuth();
   const { members: workspaceMembers } = useWorkspace();
   const editable = teams.canEdit;
+  const manages = teams.canManage(team);
+  const creator = workspaceMembers.find((w) => w.userId === team.createdBy && !w.removedAt);
   // What's being typed (null: not editing), so a change a teammate made while
   // the pane was open shows, and leaving a field untouched never saves it.
   const [nameDraft, setNameDraft] = useState<string | null>(null);
@@ -344,6 +350,9 @@ export function TeamEditor({ team, teams }: { team: Team; teams: WorkspaceTeams 
     [workspaceMembers, people],
   );
   const defaultProject = teams.projects.find((p) => p.id === team.defaultProjectId) ?? null;
+  // Anyone may name a default while there's none; replacing one is for those
+  // who manage the team (or, on the server, can edit the project it names).
+  const projectEditable = editable && (manages || !defaultProject);
   const autoHue = teamHue({ ...team, color: null });
   const autoColor = (
     TEAM_COLOR_OPTIONS.find((o) => o.value === autoHue)?.label ?? autoHue
@@ -377,7 +386,7 @@ export function TeamEditor({ team, teams }: { team: Team; teams: WorkspaceTeams 
         title={<span className="truncate">{team.name}</span>}
         subtitle={`${people.length} ${people.length === 1 ? "person" : "people"}`}
         actions={
-          teams.canDelete(team) ? (
+          manages ? (
             <Button
               type="button"
               variant="ghost"
@@ -392,6 +401,13 @@ export function TeamEditor({ team, teams }: { team: Team; teams: WorkspaceTeams 
         }
       />
       <ExplainStrip>{WHAT_TEAMS_DO}</ExplainStrip>
+      {editable && !manages ? (
+        <p className="text-xs text-muted-foreground">
+          Only {creator ? memberLabel(creator) : "its creator"}, the workspace owner or an admin
+          renames {team.name}, changes its colour or default project, or takes people out. You can
+          add people, or leave it.
+        </p>
+      ) : null}
 
       <div className="flex gap-3">
         <div className="flex min-w-0 flex-1 flex-col gap-1.5">
@@ -400,7 +416,7 @@ export function TeamEditor({ team, teams }: { team: Team; teams: WorkspaceTeams 
             id={`team-name-${team.id}`}
             value={name}
             maxLength={60}
-            disabled={!editable}
+            disabled={!manages}
             onChange={(e) => setNameDraft(e.target.value)}
             onBlur={saveName}
             onKeyDown={(e) => {
@@ -415,7 +431,7 @@ export function TeamEditor({ team, teams }: { team: Team; teams: WorkspaceTeams 
             id={`team-mark-${team.id}`}
             value={letters}
             maxLength={2}
-            disabled={!editable}
+            disabled={!manages}
             placeholder={teamLettersOf(team.name)}
             onChange={(e) => setLettersDraft(e.target.value.toUpperCase())}
             onBlur={saveLetters}
@@ -433,7 +449,7 @@ export function TeamEditor({ team, teams }: { team: Team; teams: WorkspaceTeams 
           <ColorChoice
             label="Automatic"
             selected={!team.color}
-            disabled={!editable}
+            disabled={!manages}
             onPick={() => void teams.update(team, { color: null })}
           >
             <TeamMark name={team.name} id={team.id} letters={team.mark} color={autoHue} />
@@ -443,7 +459,7 @@ export function TeamEditor({ team, teams }: { team: Team; teams: WorkspaceTeams 
               key={option.value}
               label={option.label}
               selected={team.color === option.value}
-              disabled={!editable}
+              disabled={!manages}
               onPick={() => void teams.update(team, { color: option.value })}
             >
               <span
@@ -463,7 +479,7 @@ export function TeamEditor({ team, teams }: { team: Team; teams: WorkspaceTeams 
         <Label htmlFor={`team-project-${team.id}`}>Default project</Label>
         <Select
           value={team.defaultProjectId ?? NONE}
-          disabled={!editable}
+          disabled={!projectEditable}
           onValueChange={(v) =>
             void teams.update(team, { defaultProjectId: v === NONE ? null : v })
           }
@@ -506,7 +522,15 @@ export function TeamEditor({ team, teams }: { team: Team; teams: WorkspaceTeams 
                     <span className="text-muted-foreground"> · You</span>
                   ) : null}
                 </span>
-                {editable ? (
+                {p.userId === userId ? (
+                  editable ? (
+                    <IconButton
+                      icon={X}
+                      label={`Leave ${team.name}`}
+                      onClick={() => teams.removeMember(team, p.userId)}
+                    />
+                  ) : null
+                ) : manages ? (
                   <IconButton
                     icon={X}
                     label={`Take ${p.name} out of ${team.name}`}

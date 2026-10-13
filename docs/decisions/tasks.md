@@ -2,6 +2,21 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index.
 
+## 2026-10-13 · TV-D13 follow-up: who changes a team
+
+Migration `20261013210000_teams_access_fix` (redefines `teams_op_update` and `teams_op_remove_member` only); tests `supabase/tests/teams_access.test.sql`. Supersedes the "edits teams and their members" half of TV-D10's teams entry and D13-1's "change their people".
+
+- **D13-11 · A team's creator, the owner or an admin changes it** → TV-D13 follow-up (`teams_op_update`, `teams_op_remove_member`, `canManage` in `teams-panel.tsx`)
+  - Who: the orchestrator's call for Maciej after a review of the landed block, 2026-10-13; the default-project detail is the agent's choice (below).
+  - Decision: renaming a team, changing its letters or colour, and taking someone else out of it are for the team's creator, the workspace owner or an admin. Anyone who works on tasks still makes teams and adds people (default t, ratified), and anyone in a team can leave it. Settings shows the fields read-only to everyone else, with one line saying who can change them.
+  - Why: a team is someone's setup; letting any editor rename it or take people out of it lets one person quietly undo another's. Adding people stays open because a team grants nothing (D13-1).
+  - Rejected: keeping every edit open (TV-D10's choice); admin-only teams (TV-D10 rejected it; it blocks "any member sets up a team").
+- **D13-12 · A team's default project** → TV-D13 follow-up (`teams_op_update`)
+  - Who: agent's choice, confirmed for building, revisitable, 2026-10-13.
+  - Decision: the new default must be a project the person can edit (as before). While a team has none, anyone who can edit a project may name it; replacing or clearing one that's set needs the creator, the owner or an admin, or Edit on the project it names now. A default whose project was deleted counts as none. Settings enables the picker for those who manage the team, or while there's no default.
+  - Why: otherwise someone with Edit on an unrelated project could point a team's routing at it. Routing itself still files a task into the default only when the router can edit it, else it's refused without naming the project (TV-D10).
+  - Rejected: default changes for managers only (it blocks a member setting up a new team's project); Edit on the new project alone (the redirect above).
+
 ## 2026-10-13 · TV-D13 Teams: routing, marks, settings — the agent's choices (deferred to by Maciej)
 
 Built in tasks-v3 block 28 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §1, §13, §15, §17, AC5.1's server half, AC5.2, AC5.6's server half, AC5.7; REPLAN 20, 20a, 54, 94, 95, defaults s and t; migrations `20261013150000_teams_routing` and `20261013170000_teams_mention_once`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
