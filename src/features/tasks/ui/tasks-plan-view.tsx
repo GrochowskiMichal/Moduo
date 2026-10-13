@@ -487,7 +487,7 @@ export function TasksPlanView({
           : null,
       }),
     );
-  }, [api.loading, workspaceId, inboxId, buckets, inboundPending, onboardingRole]);
+  }, [api.loading, workspaceId, inboxId, buckets, api.views, inboundPending, onboardingRole]);
 
   // My tasks is always in the sidebar (tasks-v3 §3; TV-U15 retires
   // tasks-v2's "two or more members" rule): its status groups answer "what am
