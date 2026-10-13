@@ -25,8 +25,15 @@ function fakeStore(opts: { offline?: boolean } = {}) {
     isOffline: () => Boolean(opts.offline),
     wentOffline: () => log.push("offline"),
     getSnapshot: () => ({
-      bundle: { buckets: [{ position: "a0", deletedAt: null }], archivedBuckets: [] },
+      bundle: {
+        buckets: [{ position: "a0", deletedAt: null }],
+        archivedBuckets: [],
+        tags: [{ id: "g-known" }],
+      },
     }),
+    syncNow: async () => {
+      log.push("sync");
+    },
     begin: (changes: unknown[]) => {
       begun.push(changes);
       log.push("begin");
@@ -136,6 +143,22 @@ describe("copies through the shared store (TV-D15)", () => {
     );
     expect(log).toEqual(["begin", "fail", "offline"]);
     expect(outcome).toMatchObject({ ok: false, offline: true });
+  });
+
+  it("a tag the apply made (not in the store yet) is read right after", async () => {
+    const { store, log } = fakeStore();
+    const runtime = runtimeWith({
+      applyTaskTemplate: async () =>
+        result({
+          buckets: [],
+          tagLinks: [{ tagId: "g-known" } as never, { tagId: "g-new" } as never],
+        }),
+    });
+    await applyTaskTemplate({ runtime, store, workspaceId: "ws", userId: "u1" }, "tt", {
+      id: "t1",
+      date: null,
+    });
+    expect(log).toEqual(["begin", "settle", "sync"]);
   });
 
   it("a runtime without templates offers none", async () => {

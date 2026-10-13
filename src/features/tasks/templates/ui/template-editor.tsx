@@ -404,7 +404,12 @@ function ProjectTemplateFields({
                 disabled={disabled}
                 maxLength={60}
                 className="h-(--ctrl-h-sm) max-w-64 border-transparent bg-transparent px-1.5 shadow-none hover:border-hairline"
-                onBlur={(e) => onChange(renameTemplateStatus(body, i, e.target.value))}
+                onBlur={(e) => {
+                  const next = renameTemplateStatus(body, i, e.target.value);
+                  // A name another status has (or an empty one) goes back.
+                  if (next === body) e.target.value = s.name;
+                  else onChange(next);
+                }}
               />
               {s.hidden ? (
                 <span className="font-sans text-xs text-muted-foreground">Hidden</span>

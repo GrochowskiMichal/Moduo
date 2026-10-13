@@ -54,6 +54,20 @@ function optimisticProject(
   };
 }
 
+/**
+ * Settle a copy in one step. A tag the apply made (one of the template's
+ * names this workspace didn't have) isn't in the answer: read it now.
+ */
+function settleCopy(
+  deps: CopyDeps,
+  write: { settle: (a: TemplateApplyResult) => void },
+  result: TemplateApplyResult,
+) {
+  write.settle(result);
+  const known = new Set((deps.store.getSnapshot().bundle.tags ?? []).map((t) => t.id));
+  if (result.tagLinks.some((l) => !known.has(l.tagId))) void deps.store.syncNow();
+}
+
 function outcomeOf(result: TemplateApplyResult): CopyOutcome {
   return {
     ok: true,
@@ -86,7 +100,7 @@ async function copyProject(
   ]);
   try {
     const result = await send();
-    write.settle(result);
+    settleCopy(deps, write, result);
     return outcomeOf(result);
   } catch (e) {
     write.fail();
@@ -191,7 +205,7 @@ export async function applyTaskTemplate(
   const write = deps.store.begin([]);
   try {
     const result = await op({ workspaceId: deps.workspaceId, templateId, ...choice });
-    write.settle(result);
+    settleCopy(deps, write, result);
     return outcomeOf(result);
   } catch (e) {
     write.fail();

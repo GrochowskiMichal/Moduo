@@ -168,6 +168,83 @@ Built in tasks-v3 block 22 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §7, §
   - Rejected: continuing the same run for any start inside the window.
 - **Known limits (TV-F6, revisitable):** signing out inside Stop's Undo window leaves the run open until this device next signs in (it's ended then; teammates stop seeing it after 3 minutes); if Calendar's ▶ can't put the task on Up next, the run rules may move the session to the next lined-up task.
 
+## 2026-10-13 · TV-D15 Templates and Duplicate project (tasks-v3 block 30) — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 30 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §15, AC4.4, AC7.2; REPLAN 9 and 79; §Assumptions #19 and #26). Migration `20261013160000_templates` (local stack only). Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **D15-1 · A template is a saved body, and the template is edited as itself in the centre** → TV-D15 (`task_templates`, `project_templates`, `templates/ui/template-editor.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: per §Assumptions #19, two tables holding the keep-set as a jsonb body. "Edit template" opens it in the centre the way a task's full page opens (call 32), marked *Template*, with dates as days from the start. A task template shows its task (title, project, due, priority, estimate, tags, description) and its subtasks. A project template shows its statuses (rename), sections (name, start and end in days) and tasks (title, section, due in days, subtasks). Changes are kept until Save. Editing never changes what was made from it.
+  - Why: hidden template rows in `tasks`/`buckets` would get handles, show up in search, `@` and counts, send notices and fire reminders, and every reader would need an exclusion. A body has none of that and can be applied in any workspace.
+  - Rejected: template projects and tasks as hidden live rows, and feeding the live task panel a fake task.
+- **D15-2 · One copy engine, with the target workspace as its seam** → TV-D15 (`project_templates__body_of` → `project_templates__apply_body`; app `templates/ops.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (the hackathon ask: dependable, fast copies, and a later "copy into N workspaces").
+  - Decision:
+    - "Duplicate project…" reads the live project the way a project template would, then applies the result.
+    - The body uses positions, not row ids, for its own statuses, sections, tasks and parents. People, teams, tags and links are resolved again on every apply: a tag by name when its id isn't in the target workspace; anyone or anything that isn't there is left out.
+    - `apply_body` takes the target workspace and is the server's own: an op, or later a provisioning job, calls it once per workspace, as a person who may add projects there.
+    - Every task goes through `tasks_op_create`, so handles, the registry and activity all hold. One op makes the whole copy, and the app settles it in one `store.begin` → `settle`. Locally, 200 tasks take about 240 ms.
+  - Why: one tested path for both features, and the next step (N workspaces) is a loop, not a rewrite.
+  - Rejected: building a multi-workspace copy now (it has its own planning session); a client-side copy task by task (slow, not atomic).
+- **D15-3 · What a copy keeps and what stays with the original** → TV-D15
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13, within REPLAN 9 and 79.
+  - Decision: these come along:
+    - from a project (Duplicate or a project template): its statuses (names, categories, hidden), sections with their dates, and the open tasks (Backlog, To do, In progress) with their open subtasks. An In progress task starts again at the first To do status.
+    - from a task template: the task and every subtask, all open.
+    - on every copied task: description, priority, energy, estimate, due date and time as offsets, tags, dependencies among the copied tasks, and links to notes and contacts the whole workspace can see.
+    These never come along: comments, activity, files (AT-2's attachments, per REPLAN 9 "files in v1"), tracked time, work sessions, reminders, Waiting on, queue places, completions, claims, grants and person shares, and repeats. A repeat's pointer and history belong to its run, and a copied repeat would start firing for whoever it's assigned to.
+  - Why: the template keeps the work and drops the run (REPLAN 9); a copy must not notify or remind anyone on the original's behalf (TV-D12's rule).
+  - Rejected: copying repeats with a reset pointer; copying files.
+- **D15-4 · People on a copy** → TV-D15
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: "Keep who's assigned" (on by default, shown only when someone is assigned) keeps a person only where they can take tasks; otherwise the copy is unassigned, never yours by default. A task routed to a team keeps its team and starts unclaimed with a fresh routing (TV-D13's columns reset by its trigger). A task template's subtasks keep their people; the task itself takes capture's Assign when one is picked.
+  - Why: a hackathon's organizer must not end up assigned in every team's copy; a "next season" copy wants the same people.
+  - Rejected: always keeping people, and assigning everything to the copier.
+- **D15-5 · Who sees templates and copies** → TV-D15 (`templates_op_update`, `templates__sources_full`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (after a security review of the first cut).
+  - Decision:
+    - A template is its maker's until shared with the workspace. Saving one needs Tasks edit in the workspace and only takes what the saver can see; a hidden task's title or description never reaches a body.
+    - Sharing a template, and changing a shared one, check again that the person has Full access to every project or task it was saved from and that each is still there (`source_ids`, which readers can't see).
+    - A template saved from a project the workspace can't see asks before it's shared ("This includes n tasks from a private project. Share?"). While it stays private, a project made from it is private.
+    - A copy of a project the workspace can't see is private.
+    - Only the maker edits a template; the workspace's owner or an admin can also stop sharing or delete a shared one. An API key can save and use templates but never shares, edits or deletes them.
+    - A hidden template and a missing one get the same answer, and so do a hidden project and a missing one.
+  - Why: a shared template shows its contents to every Tasks reader, so sharing one is sharing what it copied (§15's edge case and REPLAN 79's "never shares its contents by itself").
+  - Rejected: trusting a flag set at save time; copying the source's sharing onto the copy.
+- **D15-6 · One date** → TV-D15
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision:
+    - A project's dates count from its start, or from its first date when it has no start. Duplicate and New project from template ask one "Starts on", today by default, and only when there are dates.
+    - A task template counts from its task's due date, or from the day it was saved when it had none. The one date asked is Due; in capture that's the Due pill.
+    - With no date, nothing is dated.
+  - Why: REPLAN 9 ("asks for one date") and 79 ("shifts every date from a new start date you pick").
+  - Rejected: a date per section.
+- **D15-7 · Where it all lives** → TV-D15, Settings rebuild
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision:
+    - A project's ⋯: Duplicate… and Save as template…, before Archive.
+    - The task panel's ⋯: Save as template…, under Duplicate.
+    - The sidebar's hairline ⋯: New project from template… beside New project, and Templates beside Archived projects. Templates is a centre page listing project and task templates, with Use… and a ⋯ for share, stop sharing and delete (Undo).
+    - Capture: `/template` and More → Template… pick a task template. It shows as a "Template: …" chip, fills the title and the template's project, and leaves only Assign and Due. Create makes it on the server.
+    - The page moves to Settings → Tasks → Templates when that section exists.
+  - Why: no Settings → Tasks yet (D9's precedent: the default statuses open from the Inbox's ⋯); no gallery (REPLAN 9).
+  - Rejected: a template gallery, and capture filling only the title, description and subtask lines (that would lose the keep-set).
+- **D15-8 · Templates aren't in the shared store** → TV-D15 (`templates/templates-store.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: one small list per workspace, shared by every surface, read when a picker or the page opens and after each template op, wiped on sign-out; a body is read only when a template is opened. The `updated_at`/`deleted_at` columns make a synced table cheap later.
+  - Why: templates aren't work items, bodies can be large, and nobody needs another person's template edits live.
+  - Rejected: a `SyncRows` table for templates.
+- **D15-9 · Small rules** → TV-D15
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision:
+    - Deleting a template is soft, with Undo; templates deleted more than 30 days ago go for good on their owner's next save.
+    - A template or a copy holds up to 2,000 open tasks, with a body up to 2 MB. Over the limit, it says so, counting only what you can see.
+    - Projects have no description column yet, so a project template's body carries its own description (empty from a project) for TV-U16 to show.
+    - A resend (same client-minted id) answers only with something the caller made.
+    - Erasure deletes a person's templates, shared ones too. The data export carries yours and the shared ones with their bodies.
+  - Why: the same shapes as the rest of v3 (Recently deleted, idempotent ops, §Assumptions #26).
+  - Rejected: a hard delete without Undo.
+
 ## 2026-10-13 · TV-U13 Detail panel v3 + full page (tasks-v3 block 17) — the agent's choices (deferred to by Maciej)
 
 Built in tasks-v3 block 17 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §9, AC11.7–11.8, AC1.16, AC3.1, AC3.7; REPLAN 32, 56, 65a, 72a, 87, 88, 89, 20a, defaults p and q). Migration `20261013100000_comment_reactions_edits` (local stack only). Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
