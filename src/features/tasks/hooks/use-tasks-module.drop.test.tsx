@@ -83,19 +83,17 @@ function fakeRuntime(tasks: Task[], opts: { failStatus?: boolean } = {}) {
     ),
     // The move op (TV-D8): the server carries the subtasks with their parent
     // in one transaction and answers with every row it changed.
-    opUpdateTask: rs.fn(
-      async ({ taskId, patch }: { taskId: string; patch: Partial<Task> }) => {
-        const parent = await write(`op:${taskId}`, taskId, patch);
-        const carried = [...rows.values()]
-          .filter((t) => t.parentId === taskId)
-          .map((t) => {
-            const next = { ...t, bucketId: parent.bucketId };
-            rows.set(t.id, next);
-            return next;
-          });
-        return [parent, ...carried];
-      },
-    ),
+    opUpdateTask: rs.fn(async ({ taskId, patch }: { taskId: string; patch: Partial<Task> }) => {
+      const parent = await write(`op:${taskId}`, taskId, patch);
+      const carried = [...rows.values()]
+        .filter((t) => t.parentId === taskId)
+        .map((t) => {
+          const next = { ...t, bucketId: parent.bucketId };
+          rows.set(t.id, next);
+          return next;
+        });
+      return [parent, ...carried];
+    }),
     opSetStatus: rs.fn(
       async ({
         taskId,

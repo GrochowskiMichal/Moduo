@@ -339,11 +339,11 @@ describe("TaskRow read-only", () => {
     fireEvent.contextMenu(rowOf("Beta"));
     await settle();
     const menu = screen.getByRole("menu");
-    expect(within(menu).getAllByRole("menuitem").map((i) => i.textContent)).toEqual([
-      "Open",
-      "Copy link",
-      "Copy as text",
-    ]);
+    expect(
+      within(menu)
+        .getAllByRole("menuitem")
+        .map((i) => i.textContent),
+    ).toEqual(["Open", "Copy link", "Copy as text"]);
   });
 
   it("the status icon is inert", async () => {
