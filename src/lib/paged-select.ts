@@ -158,3 +158,34 @@ export function describeTruncation(t: Truncation): string {
   if (t.total == null) return `${shown} ${t.scope} (of more)`;
   return `${shown} of ${t.total.toLocaleString()} ${t.scope}`;
 }
+
+/**
+ * Read an append-only log past a cursor, to the end (NR-3: the notes update
+ * log). Keyset paging (`id > cursor`), not offsets: rows appended mid-read
+ * land after the cursor and are picked up, never shifted or re-read. No cap —
+ * a log must be read whole or not at all, so the first error returns it with
+ * no rows (the caller's cursor must not move past rows it never applied).
+ */
+export async function readAfterCursor<T, E>(args: {
+  after: number;
+  /** Rows with id > `after`, ascending, at most `limit`. */
+  page: (after: number, limit: number) => Promise<PageResult<T, E>>;
+  idOf: (row: T) => number;
+  /** Override the per-request page size (tests). Clamped to PGRST_MAX_ROWS. */
+  pageSize?: number;
+}): Promise<{ rows: T[]; error: E | null }> {
+  const pageSize = Math.max(1, Math.min(args.pageSize ?? PGRST_MAX_ROWS, PGRST_MAX_ROWS));
+  const rows: T[] = [];
+  let cursor = args.after;
+  for (;;) {
+    const res = await args.page(cursor, pageSize);
+    if (res.error) return { rows: [], error: res.error };
+    const batch = res.data ?? [];
+    rows.push(...batch);
+    if (batch.length < pageSize) return { rows, error: null };
+    const next = args.idOf(batch[batch.length - 1]!);
+    // A page that doesn't advance the cursor would loop forever.
+    if (!(next > cursor)) return { rows, error: null };
+    cursor = next;
+  }
+}

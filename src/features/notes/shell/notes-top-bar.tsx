@@ -10,6 +10,7 @@ import { MoreHorizontal, PanelRight, PanelRightClose, Undo2 } from "lucide-react
 import type { ReactNode } from "react";
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
@@ -39,6 +40,7 @@ export function NotesTopBar({
   onOpenSection,
   onAction,
   onSwitchToClassic,
+  onFullWidthChange,
 }: {
   crumbs: Crumb[];
   /** The open note, or null for a draft / nothing open (the menu hides). */
@@ -55,6 +57,8 @@ export function NotesTopBar({
   onOpenSection: (section: CrumbSection) => void;
   onAction: (action: RowAction, note: Note) => void;
   onSwitchToClassic: () => void;
+  /** Per-note Full width (NR-3); editors only. */
+  onFullWidthChange: (note: Note, fullWidth: boolean) => void;
 }) {
   const items = note && !note.deletedAt ? rowMenuItems({ canEdit, favorite }) : [];
   return (
@@ -99,6 +103,14 @@ export function NotesTopBar({
                 )
               : null}
             {items.length > 0 ? <DropdownMenuSeparator /> : null}
+            {note && !note.deletedAt && canEdit ? (
+              <DropdownMenuCheckboxItem
+                checked={note.fullWidth}
+                onCheckedChange={(checked) => onFullWidthChange(note, checked === true)}
+              >
+                Full width
+              </DropdownMenuCheckboxItem>
+            ) : null}
             <DropdownMenuItem onSelect={onSwitchToClassic}>
               <Undo2 aria-hidden />
               Switch back to classic Notes

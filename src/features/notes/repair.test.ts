@@ -10,10 +10,10 @@
 
 import { describe, expect, it, rs } from "@rstest/core";
 import * as Y from "yjs";
+import { deriveNoteBody } from "./editor/doc-markdown";
 import { buildDocStateFromMarkdown, NOTES_DOC_ROOT } from "./editor/materialize";
 import { buildImportRows, planMdZipImport } from "./import";
 import { emptyRepairSummary, repairNote, repairUnmaterializedNotes, tallyRepair } from "./repair";
-import { deriveBody } from "./sync/doc-text";
 import { decodeBase64ToUint8 } from "./utils/base64";
 
 const WS = "11111111-2222-3333-4444-555555555555";
@@ -25,7 +25,7 @@ function renderStored(docStateB64: string | null): string {
   const doc = new Y.Doc();
   doc.get(NOTES_DOC_ROOT, Y.XmlElement);
   if (docStateB64) Y.applyUpdate(doc, decodeBase64ToUint8(docStateB64), "remote");
-  return deriveBody(doc).md;
+  return deriveNoteBody(doc).md;
 }
 
 /** A fake `notes_op_seed_doc`: once-only PER NOTE, exactly like the SQL guard
@@ -117,11 +117,10 @@ describe("imported notes render without an in-memory seed (AC1)", () => {
     expect(rows[0]!.bodyMd).toContain("# A"); // content preserved, never dropped
   });
 
-  it("stores the RAW file markdown, never the lossy doc-derived body", () => {
-    // `deriveBody` drops link URLs, inline emphasis markers and intra-block
-    // line breaks. body_md feeds search, .md export, the published page and
-    // the MCP connector, so storing a derivation would quietly degrade the
-    // only faithful copy — and the sweep would do it to existing notes.
+  it("stores the RAW file markdown, never the doc-derived body", () => {
+    // The derived body is faithful since NR-3 but it is a re-serialization
+    // (normalized markers and spacing); an import keeps the user's own bytes
+    // until someone edits the note.
     const md = "Owner: **Anna**\nDue: 2026-09-30\n\nSee [pricing](https://x.test/p).\n";
     const plan = planMdZipImport([{ path: "A.md", content: md }]);
     const rows = buildImportRows(plan.nodes, (t) => `id-${t}`, buildDocStateFromMarkdown);
@@ -131,9 +130,11 @@ describe("imported notes render without an in-memory seed (AC1)", () => {
     expect(rows[0]!.bodyMd).toContain("https://x.test/p");
     expect(rows[0]!.bodyMd).toContain("**Anna**");
 
-    // Guard the premise: the derivation really does lose these.
+    // Since NR-3 the derivation keeps the content too, but as a
+    // re-serialization: the raw bytes (trailing newline) are only in bodyMd.
     const derived = buildDocStateFromMarkdown("id-n0", md)!.bodyMd;
-    expect(derived).not.toContain("https://x.test/p");
+    expect(derived).toBe(md.trim());
+    expect(derived).not.toBe(md);
   });
 });
 

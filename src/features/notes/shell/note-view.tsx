@@ -1,12 +1,14 @@
 /**
  * The center of the refreshed shell (specs/notes-refresh.md NR-2, AC5): the
- * top bar over one centred reading column. Today's `NoteEditor` mounts there
- * unchanged at `--width-prose-max` (a note's Full width opts out); the meta
- * line and the Linked-from footer arrive with NR-3.
+ * top bar over one centred reading column at `--width-prose-max` (a note's
+ * Full width opts out). NR-3 adds the meta line under the title and the
+ * "Linked from" footer under the document.
  */
 
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
+import type { EntityRef } from "@/lib/entity-links";
+import type { ModuoRuntime } from "@/lib/runtime.types";
 import { cn } from "@/lib/utils";
 import type { NotesEditorBridge } from "../editor/notes-editor-bridge";
 import type { Note } from "../model";
@@ -14,9 +16,13 @@ import type { NotesSyncEngineV2 } from "../sync/engine-v2";
 import { displayTitle } from "../title";
 import { NoteEditor } from "../ui/note-editor";
 import { NotesEditorDropZone } from "../ui/notes-editor-drop-zone";
+import { LinkedFromFooter } from "./linked-from-footer";
+import { NoteMetaLineView } from "./note-meta-line";
+import { useNoteLinks } from "./use-note-links";
 
 export function NoteView({
   topBar,
+  runtime,
   engine,
   workspaceId,
   editorNoteId,
@@ -30,8 +36,11 @@ export function NoteView({
   bridge,
   onTitleDerived,
   onRestore,
+  onOpenEntity,
+  onOpenDetail,
 }: {
   topBar: ReactNode;
+  runtime: ModuoRuntime | null;
   engine: NotesSyncEngineV2 | null;
   workspaceId: string;
   /** The note the editor shows: a live note or the open draft. */
@@ -47,7 +56,12 @@ export function NoteView({
   bridge: NotesEditorBridge;
   onTitleDerived: (title: string) => void;
   onRestore: (id: string) => void;
+  onOpenEntity: (ref: EntityRef) => void;
+  /** Open the right panel on its Detail variant (a count chip's target). */
+  onOpenDetail: () => void;
 }) {
+  const liveNote = note && !note.deletedAt && !isDraft ? note : null;
+  const links = useNoteLinks({ runtime, workspaceId, note: liveNote });
   let body: ReactNode;
   if (note?.deletedAt) {
     body = (
@@ -85,6 +99,19 @@ export function NoteView({
             seedWelcome={seedWelcome}
             bridge={bridge}
             autoFocus={isDraft}
+            bare
+            belowTitle={
+              liveNote && (links.line.chips.length > 0 || links.line.edited) ? (
+                <NoteMetaLineView
+                  line={links.line}
+                  onOpenEntity={onOpenEntity}
+                  onOpenDetail={onOpenDetail}
+                />
+              ) : null
+            }
+            footer={
+              liveNote ? <LinkedFromFooter groups={links.backlinks} onOpen={onOpenEntity} /> : null
+            }
           />
         </div>
       </NotesEditorDropZone>

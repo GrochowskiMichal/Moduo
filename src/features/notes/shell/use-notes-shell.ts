@@ -11,6 +11,7 @@ import { useAuth } from "../../../providers/auth-provider";
 import { useWorkspace } from "../../../providers/workspace-provider";
 import { dispatchLayoutPanelsSet, useFeaturePanelState } from "../../layout/panel-events";
 import { type Draft, type DraftEvent, draftReducer, hasDraftContent } from "../draft-note";
+import { tryDeriveNoteBody } from "../editor/doc-markdown";
 import { useNotesModule } from "../hooks/use-notes-module";
 import type { Note } from "../model";
 import {
@@ -21,7 +22,6 @@ import {
 } from "../panel-prefs";
 import type { NotesSearch } from "../search";
 import { buildSidebarSections } from "../sections";
-import { deriveBody } from "../sync/doc-text";
 
 export type NotesShellState = ReturnType<typeof useNotesShell>;
 
@@ -111,7 +111,8 @@ export function useNotesShell() {
     if (!draftId || !engine || !engine.isDraft(draftId)) return;
     const doc = engine.getOrCreateSession(draftId).doc;
     const onUpdate = () => {
-      if (hasDraftContent(deriveBody(doc).text)) dispatchDraft({ type: "content", id: draftId });
+      if (hasDraftContent(tryDeriveNoteBody(doc)?.text ?? ""))
+        dispatchDraft({ type: "content", id: draftId });
     };
     doc.on("update", onUpdate);
     return () => doc.off("update", onUpdate);

@@ -223,6 +223,7 @@ export function NotesShell() {
       onOpenNote={(id) => shell.select(id)}
       onOpenSection={openSection}
       onAction={actions.onAction}
+      onFullWidthChange={(note, fullWidth) => module.setFullWidth(note.id, fullWidth)}
       onSwitchToClassic={() =>
         void setExperience(
           "classic",
@@ -275,6 +276,7 @@ export function NotesShell() {
           center={
             <NoteView
               topBar={topBar}
+              runtime={runtime}
               engine={engine}
               workspaceId={workspaceId}
               editorNoteId={editorNoteId}
@@ -291,6 +293,8 @@ export function NotesShell() {
                 else if (editorNoteId) module.renameNote(editorNoteId, title);
               }}
               onRestore={module.restoreNote}
+              onOpenEntity={openEntity}
+              onOpenDetail={() => shell.showPanelVariant("detail")}
             />
           }
           right={

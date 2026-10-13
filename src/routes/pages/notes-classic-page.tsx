@@ -20,6 +20,7 @@ import { truncationNotice } from "../../components/app/truncation-notice";
 import { Button } from "../../components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../components/ui/tooltip";
 import { HubDropZone } from "../../features/contacts/ui/hub-drop-zone";
+import { tryDeriveNoteBody } from "../../features/notes/editor/doc-markdown";
 import {
   INSERT_PAGE_ROW_EVENT,
   type NotesEditorBridge,
@@ -48,7 +49,6 @@ import {
   scrollEditorToHeading,
   scrollEditorToQuote,
 } from "../../features/notes/shell/editor-dom";
-import { deriveBody } from "../../features/notes/sync/doc-text";
 import { nameFromEmail } from "../../features/notes/sync/notes-realtime";
 import { displayTitle } from "../../features/notes/title";
 import {
@@ -316,7 +316,7 @@ export function NotesClassicPage() {
       let md = "";
       if (engine && id === selectedId) {
         // The open note derives freshest from its live doc; others read body_md.
-        md = deriveBody(engine.getOrCreateSession(id).doc).md;
+        md = tryDeriveNoteBody(engine.getOrCreateSession(id).doc)?.md ?? "";
       }
       // Fall back to the server body_md when the note isn't open OR its live doc
       // is still empty (e.g. a just-imported note not yet materialized) — M2/m3.

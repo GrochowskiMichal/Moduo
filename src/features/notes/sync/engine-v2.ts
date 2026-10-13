@@ -14,14 +14,21 @@
  * Status contract (the quiet dot): "synced" — nothing while healthy;
  * "pending" — local edits queued/flushing; "offline" — a push/pull failed,
  * everything is saved locally and will sync.
+ *
+ * An honest provider (NR-3): a session is usable the moment its local cache
+ * has loaded (`cacheReady`), so the editor paints and takes typing from the
+ * cached doc at once. The provider reports `sync` to Lexical only after the
+ * first pull has settled (Lexical's bootstrap writes an empty paragraph into a
+ * doc that looks empty at sync time, so an early `sync` raced the remote
+ * content), and the session counts as `synced` only once a pull succeeded.
  */
 
 import { IndexeddbPersistence } from "y-indexeddb";
 import { Awareness } from "y-protocols/awareness";
 import * as Y from "yjs";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
+import { tryDeriveNoteBody } from "../editor/doc-markdown";
 import { decodeBase64ToUint8, encodeUint8ToBase64 } from "../utils/base64";
-import { deriveBody } from "./doc-text";
 import {
   type DocOutboxEntry,
   deleteDocOutboxEntries,
@@ -87,7 +94,19 @@ type NoteSession = {
   persistence: IndexeddbPersistence;
   provider: NoteProviderStub;
   state: NoteSyncState;
+  /** The local IndexedDB copy has loaded: safe to mount the editor. */
+  cacheReady: Promise<void>;
+  /** Cache loaded, first pull settled, first flush done. */
   booted: Promise<void>;
+  /** A pull has completed against the server this session (a draft is
+   * synced from the start: its local doc is the whole note). */
+  synced: boolean;
+  /** A push went out without bodies (before the first pull); the next flush
+   * after a pull owes the server one body-only save. */
+  bodyOwed: boolean;
+  /** The provider has told Lexical `sync` (after the first pull settled). */
+  syncReported: boolean;
+  syncListeners: Set<(isSynced: boolean) => void>;
   flushTimer: ReturnType<typeof setTimeout> | null;
   retryTimer: ReturnType<typeof setTimeout> | null;
   retryMs: number;
@@ -209,17 +228,26 @@ export class NotesSyncEngineV2 {
     );
     const awareness = new Awareness(doc);
     const listeners = new Map<string, Set<(...args: any[]) => void>>();
+    const syncListeners = new Set<(isSynced: boolean) => void>();
     const provider: NoteProviderStub = {
       awareness,
       connect: () => {},
       disconnect: () => {},
       on: (event, cb) => {
+        if (event === "sync") {
+          // Honest: `sync` fires once the first pull has settled, never
+          // before (a late subscriber hears it straight away).
+          syncListeners.add(cb);
+          if (s?.syncReported) queueMicrotask(() => cb(true));
+          return;
+        }
         if (!listeners.has(event)) listeners.set(event, new Set());
         listeners.get(event)!.add(cb);
-        // Lexical waits for a sync event before treating the doc as ready.
-        if (event === "sync") queueMicrotask(() => cb(true));
       },
-      off: (event, cb) => listeners.get(event)?.delete(cb),
+      off: (event, cb) => {
+        if (event === "sync") syncListeners.delete(cb);
+        else listeners.get(event)?.delete(cb);
+      },
     };
 
     s = {
@@ -228,7 +256,12 @@ export class NotesSyncEngineV2 {
       persistence,
       provider,
       state: emptyNoteState(noteId),
+      cacheReady: Promise.resolve(),
       booted: Promise.resolve(),
+      synced: false,
+      bodyOwed: false,
+      syncReported: false,
+      syncListeners,
       flushTimer: null,
       retryTimer: null,
       retryMs: RETRY_BASE_MS,
@@ -241,7 +274,11 @@ export class NotesSyncEngineV2 {
     };
     this.sessions.set(noteId, s);
     this.evictIdleSessions(noteId);
-    s.booted = this.boot(s);
+    let markCacheReady: () => void = () => {};
+    s.cacheReady = new Promise<void>((resolve) => {
+      markCacheReady = resolve;
+    });
+    s.booted = this.boot(s, markCacheReady);
 
     doc.on("update", (update: Uint8Array, origin: unknown) => {
       if (s!.destroyed) return;
@@ -257,16 +294,33 @@ export class NotesSyncEngineV2 {
     return s;
   }
 
-  private async boot(s: NoteSession): Promise<void> {
+  private async boot(s: NoteSession, markCacheReady: () => void): Promise<void> {
     try {
       s.state = (await readNoteState(s.noteId)) ?? emptyNoteState(s.noteId);
       await s.persistence.whenSynced;
     } catch {
       // cache-less boot is fine
+    } finally {
+      markCacheReady();
     }
-    if (this.drafts.has(s.noteId)) return; // nothing on the server yet
+    if (this.drafts.has(s.noteId)) {
+      // Nothing on the server yet: the local doc is the whole truth.
+      s.synced = true;
+      this.reportSync(s);
+      return;
+    }
     await this.pull(s);
+    // Reported even when the pull failed (offline): the editor must still be
+    // able to bootstrap an empty doc to type into. `synced` stays false.
+    this.reportSync(s);
     await this.flush(s);
+  }
+
+  /** Tell Lexical the doc is as complete as it is going to get for now. */
+  private reportSync(s: NoteSession) {
+    if (s.syncReported || s.destroyed) return;
+    s.syncReported = true;
+    for (const cb of s.syncListeners) cb(true);
   }
 
   /** Pull the snapshot + log since our cursor and merge into the live doc.
@@ -305,10 +359,13 @@ export class NotesSyncEngineV2 {
       }
       s.state = advanceCursor(s.state, ids);
       await writeNoteState(s.state);
+      s.synced = true;
       this.recoveredFromOffline(s);
+      if (s.bodyOwed) this.scheduleFlush(s, 0);
       return ids.length;
     } catch (e) {
       if (isNetworkError(e)) this.setStatus("offline");
+      else console.warn("[notes-sync] pull failed", e);
       return 0;
     }
   }
@@ -361,19 +418,45 @@ export class NotesSyncEngineV2 {
     s.flushing = true;
     try {
       const clientId = await this.resolveClientId();
+      let pushed = false;
       for (;;) {
         const durable = await readDocOutbox(s.noteId);
         const queue = [...durable, ...s.memOutbox];
-        if (queue.length === 0) break;
+        if (queue.length === 0) {
+          // Pushes before the first pull went out bodiless: now that the doc
+          // is complete, write its body once (an update-free save).
+          if (s.bodyOwed && s.synced) {
+            const owed = tryDeriveNoteBody(s.doc);
+            if (owed) {
+              await this.runtime.notesV2.pushUpdates({
+                workspaceId: this.workspaceId,
+                noteId: s.noteId,
+                clientId,
+                updates: [],
+                bodyText: owed.text,
+                bodyMd: owed.md,
+              });
+              s.bodyOwed = false;
+              pushed = true;
+            }
+          }
+          break;
+        }
+        pushed = true;
         const batch = planPushBatch(queue);
-        const body = deriveBody(s.doc);
+        // Before the first pull lands, the doc may lack other devices' edits:
+        // push the update alone (null bodies keep the server's last ones),
+        // or search, export and MCP would hold a stale body.
+        const body = s.synced ? tryDeriveNoteBody(s.doc) : null;
+        if (!body) s.bodyOwed = true;
+        else s.bodyOwed = false;
         const res = await this.runtime.notesV2.pushUpdates({
           workspaceId: this.workspaceId,
           noteId: s.noteId,
           clientId,
           updates: toPushPayload(batch),
-          bodyText: body.text,
-          bodyMd: body.md,
+          bodyText: body?.text ?? null,
+          bodyMd: body?.md ?? null,
         });
         await deleteDocOutboxEntries(ackedKeys(batch));
         const ackedSeqs = new Set(batch.map((e) => e.clientSeq));
@@ -384,7 +467,9 @@ export class NotesSyncEngineV2 {
         };
         await writeNoteState(s.state);
       }
-      this.recoveredFromOffline(s);
+      // Only a push that reached the server proves we're back online; an
+      // empty flush after a failed pull must not clear the offline dot.
+      if (pushed) this.recoveredFromOffline(s);
       if (shouldCompact(s.state)) await this.compact(s);
       if (s.dirty) {
         s.dirty = false;
@@ -438,14 +523,14 @@ export class NotesSyncEngineV2 {
       await this.pull(s);
       if (s.compactVeto) return; // the pull we just did may have tripped it
       const snapshot = encodeUint8ToBase64(Y.encodeStateAsUpdate(s.doc));
-      const body = deriveBody(s.doc);
+      const body = tryDeriveNoteBody(s.doc);
       await this.runtime.notesV2.saveSnapshot({
         workspaceId: this.workspaceId,
         noteId: s.noteId,
         snapshotB64: snapshot,
         uptoUpdateId: s.state.lastPulledUpdateId,
-        bodyText: body.text,
-        bodyMd: body.md,
+        bodyText: body?.text ?? null,
+        bodyMd: body?.md ?? null,
       });
       s.state = { ...s.state, updatesSinceCompact: 0 };
       await writeNoteState(s.state);
@@ -484,6 +569,12 @@ export class NotesSyncEngineV2 {
       const victim = idle.shift()!;
       void this.closeNote(victim.noteId);
     }
+  }
+
+  /** Has this note pulled from the server at least once this session? A
+   * cached doc renders and edits before that; it just isn't "synced". */
+  isSynced(noteId: string): boolean {
+    return this.sessions.get(noteId)?.synced ?? false;
   }
 
   async flushNote(noteId: string): Promise<void> {

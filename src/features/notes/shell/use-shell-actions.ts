@@ -11,9 +11,9 @@ import { toast } from "sonner";
 import { shareFollowParent } from "../../sharing/follow-parent";
 import { noteIsPrivate } from "../../sharing/rules";
 import { betweenPositions, endPosition } from "../../tasks/helpers";
+import { tryDeriveNoteBody } from "../editor/doc-markdown";
 import { downloadTextFile, noteFileName } from "../export";
 import type { Note } from "../model";
-import { deriveBody } from "../sync/doc-text";
 import { displayTitle } from "../title";
 import { descendantIds } from "../tree";
 import { type DropIntent, type DropTarget, resolveDropIntent } from "./drop-intent";
@@ -45,7 +45,7 @@ export function useShellActions(
       // The open note derives freshest from its live doc; others read body_md.
       let md =
         engine && note.id === selectedId
-          ? deriveBody(engine.getOrCreateSession(note.id).doc).md
+          ? (tryDeriveNoteBody(engine.getOrCreateSession(note.id).doc)?.md ?? "")
           : "";
       if (!md && runtime && workspaceId) {
         try {
