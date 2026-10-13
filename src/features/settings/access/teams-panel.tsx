@@ -429,9 +429,7 @@ export function TeamEditor({ team, teams }: { team: Team; teams: WorkspaceTeams 
 
       <div className="flex flex-col gap-1.5">
         <Label>Colour</Label>
-        <div
-          className="flex flex-wrap items-center gap-1.5"
-        >
+        <div className="flex flex-wrap items-center gap-1.5">
           <ColorChoice
             label="Automatic"
             selected={!team.color}
