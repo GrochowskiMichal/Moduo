@@ -1,9 +1,10 @@
 # Chat v2 — the re-plan
 
-> **Status (2026-10-13): every call so far is decided ("all ok" on group K). Now: round 5 (every surface and state in one prototype, built on the decisions plus the agent's defaults) and a gap audit by a separate agent, both started.**
+> **Status (2026-10-13): round 5 built and the gap audit landed; its questions sent as group L (CH38–CH72). Waiting on Maciej.**
 >
-> - **Decided:** CH1–CH19, CH22, CH25, CH27, CH28 (a–d), CH29 (A base, a, b, c, d, f, g), CH30 (a, c, d; b retired), CH31 (b), CH32, CH33–CH37, CH3a, CH4a, CH16a, CH16b, CH23a, CH26a. Facts: CH20, CH21. Parked: CH24.
-> - **Running:** the gap audit ([research/gap-audit.md](./research/gap-audit.md)); round 5 prototype (`prototypes/round-5.html`).
+> - **Decided:** everything through CH37 (see group K).
+> - **Open (group L):** CH38–CH72, one line each with a recommendation; "all ok" accepts them. CH72 is a permission to hand requirements to four Tasks v3 blocks now.
+> - **Technical, decided from the audit:** §6 #19 (typing only to the conversation's members) and #23–#28 (notification table, keyboard, MCP tools, v1 conversions, permissions table, the spec's readiness list).
 > - **Mike's ask:** the tech-stack decision blueprint landed → [research/tech-blueprint.md](./research/tech-blueprint.md), folded into §6 (#2, #3, #6, #7, #18, #19–#22). Open from it: **CH31** (the Supabase plan before the hackathon).
 > - **Research lanes** ([`research/`](./research/)): six landed and folded in (early-decisions audit, role journeys, competitor structure, hackathon, visual audit → §5, current state → §1.3 B and §6 #15–18). **Threads** (→ CH30) and **visual competitors** (→ CH29) landed.
 > - **Research data in the shared local database** (kept for round 2's live checks; remove when the plan is done): workspace **"Chat replan research"** `669be464-0b9a-4d84-8537-544ac04dba5f` (10 channels, 3,032 messages, one task) and a third local user `third@moduo.local`. Full ledger and a cleanup sketch: [current state](./research/current-state.md), last section. `dev@moduo.local`'s plan is back to `free` (checked).
@@ -156,8 +157,8 @@ Top bar (global):   modules · Focus timer · Help · bell · you
 │ Channels             │ Today                                      │   files, decisions, notify) │
 │  ○ General           │  Sofia: [◐ Collect assets · Fri] is stuck  │  items (← back):            │
 │  ● Launch v1         │    3 replies · last 11:02 AM               │   a thread, a person,       │
-│  ▣ Acme client       │    Became a task: [○ Get logo SVGs · Today]│   a task, a note…           │
-│  DS Design           │  Mike: [card: Draft homepage copy]         │                             │
+│  ○ Acme client       │    Became a task: [○ Get logo SVGs · Today]│   a task, a note…           │
+│  ○ Design            │  Mike: [card: Draft homepage copy]         │                             │
 │  🔒 Founders         │ ─── New ───                                │                             │
 │ Direct messages      │  Sofia: call moved to [▢ Thu 4:00 PM]      │                             │
 │  SO Sofia Ortiz  1   │ [composer: @ people/things · # tags · /]   │                             │
@@ -183,7 +184,7 @@ From [research/role-journeys.md](./research/role-journeys.md) (a normal week per
 | **Developer team of 3–5** | Once catch-up, notifications, files and integrations exist | CH6, CH8, CH17; integrations and huddles later |
 | **PM** | Inside the team; not toward a stakeholder who lives in Slack or Teams | CH2 (conversations on projects), CH8, CH13; guests later (CH19) |
 | **Agency with clients** | Internal chat, yes; client chat, no (clients won't log in; guests don't exist) | Guests (CH19); until then, email in Moduo and Meet's guest join |
-| **Solo founder + a contractor** | Chat isn't the tool at 1 + 1: comments, email and Meet cover it | Nothing to build; Chat stays out of one-person workspaces (CH4) |
+| **Solo founder + a contractor** | Chat isn't the tool at 1 + 1: comments, email and Meet cover it | Nothing to build: Chat appears only from two members (CH4), so a founder plus a contractor sees it; a member whose Chat permission is "none" doesn't |
 
 **The two themes behind most gaps:**
 1. **Chat doesn't reach you.** In v1 a direct message reaches you only if you're looking at the Chat tab: nothing leaves the app, and the bell only shows the workspace you're in. This is gap #1 for every role.
@@ -228,7 +229,7 @@ Per the module-replan rules these are mine to decide. Each lands in `docs/decisi
 5. **Spine links:** a linked channel is an `entity_links` row (conversation → project / company / contact / team, kind "conversation of"); a message that references an item writes one "mentioned in" link per conversation and item, readable only by people who can read the conversation. *Rejected:* one link per message (noise on busy items).
 6. **Notifications through the app's one table and channels** (Tasks 73, 80; TV-D12 builds them; blueprint §8): chat adds rows, not its own sender, and hands TV-D12 two requirements: push within seconds (not only on a schedule) and **only one device rings** when you have several open; Focus and quiet hours are known to the server. Dock and taskbar badges through Tauri; the tab title and icon on the web. *Rejected:* a chat-only notifier; polling.
 7. **Search** (blueprint §7): Postgres full-text search with the `simple` configuration and an `unaccent` wrapper (Polish has no built-in configuration; "zolw" finds "żółw"), prefix matching and a GIN index, through one `chat_search` function used by ⌘K ("Messages" and "Conversations"), the conversation's own Search and MCP (audit D19, D21). *Rejected:* v1's substring match; `pg_trgm` (later, for typos); PGroonga (the upgrade path); ParadeDB (not on Supabase); an external engine; searching on the device.
-8. **Panel and capture registries:** Chat registers its panel views (Details; items: thread, person) and a **Message** capture type for ⌘7 (its destination is a conversation picker; ⏎ sends). *Rejected:* chat-only panel modes.
+8. **Panel and capture registries:** Chat registers its panel views (*about this:* Details, Reply chains, Files; items: a reply chain, a person, a message in context with the lines around it and "Open in conversation", any reference; pinned and decisions stay sections of Details; gap audit G24) and a **Message** capture type for ⌘7 (its destination is a conversation picker; ⏎ sends). *Rejected:* chat-only panel modes.
 9. **General joins on the server** when someone joins the workspace; leaving is stored on the server (audit D24). *Rejected:* the per-device flag.
 10. **Delete with Undo** (8 s, the body is blanked when the toast closes); a deleted message without replies disappears, one with replies shows "Deleted message" (audit D7, D27). *Rejected:* the confirm toast.
 11. **PERM-7 made honest** (audit D4, D36): the ops read channel managers and "Manage any channel"; Details gets "Add manager" and the announcement switch; "Start calls" hides until Meet ships; chat's switches live once, in the role editor. *Rejected:* keeping two places that decide "who can create a channel".
@@ -239,10 +240,16 @@ Per the module-replan rules these are mine to decide. Each lands in `docs/decisi
 16. **Chat joins the lossless export** (the brief's launch-day promise): every conversation you can read, with threads, reactions and file links, as JSON plus a readable Markdown per conversation. *Rejected:* leaving chat out (v1).
 17. **Reading is what you saw:** the read mark moves to the last message that was on screen, not to "now"; pages fetch by (time, id) so equal timestamps can't fall between pages; after a reconnect the store fills every gap before showing the window; a failed send stays in the conversation as "Not sent · Retry" from the outbox. *Rejected:* v1's 600 ms "mark all read" and 50-message resync.
 18. **The message list is TanStack Virtual**, already in the stack, which has had chat anchoring built in since May 2026 (`anchorTo: 'end'`, `followOnAppend`), in a chat-only `MessageStream` with id keys, a per-conversation measurement cache (switching back is instant), sticky date separators, deep jumps that load a window around the target, and the accessible "feed" pattern (blueprint §1). **Runner-up: Legend List 3's web build** (stable since May 2026), if spike 1 shows TanStack jumping in the Mac webview where Legend List doesn't. *Rejected:* FlashList (React Native; on the web it needs react-native-web, against AGENTS.md's direction); VirtuosoMessageList (a commercial licence key in a public repo); react-virtuoso, virtua, react-window, plain DOM with `content-visibility`, a hand-written list, inverted lists.
-19. **Realtime** (blueprint §4): Postgres Changes for rows now, applied from the event itself with **zero requests per incoming message** (v1 made 10); typing over Broadcast and online over Presence on one private channel per workspace; database-triggered Broadcast "pokes" per person as the measured way to scale. *Rejected:* full rows over Broadcast; a channel per conversation; third-party realtime services.
+19. **Realtime** (blueprint §4): Postgres Changes for rows now, applied from the event itself with **zero requests per incoming message** (v1 made 10); **typing travels only to the people in that conversation** (one topic per conversation, joined only by its members, the sender taken from their session, never from the client); online over Presence for the workspace; database-triggered Broadcast "pokes" per person as the measured way to scale. *Rejected:* full rows over Broadcast; a channel per conversation; third-party realtime services.
 20. **Emoji** (blueprint §6): the Frimousse picker with self-hosted Emojibase data; native emoji (plus a flag font on Windows, which has none); custom emoji in a private bucket, cached on the device by hash, a still frame until hover, no SVG uploads. *Rejected:* emoji-mart (stale), an image set for all emoji (a visual change nobody asked for).
 21. **No end-to-end encryption** (blueprint §12): it would break server-side "addressed to you" (CH6, CH8), search, agents (CH18), export, link previews and the spine links; Slack, Teams and Discord don't encrypt chat text end to end either. Transport encryption, encryption at rest and row-level security stay. *Rejected:* end-to-end everywhere; opt-in secret DMs.
-22. **Performance budgets** (blueprint §13): open a conversation (warm) ≤ 100 ms; your message visible ≤ 50 ms after ⏎; someone else's p95 ≤ 500 ms; 0 requests per incoming message; ≤ ~3,000 elements in the stream; the anchor moves ≤ 1 px on prepends and folds; search p95 ≤ 150 ms at 100,000 messages. `bun run perf` gets a 10,000-message chat fixture. **Five spikes** settle the risky parts before the store migration is final (blueprint §C): the list in the real webviews, the store and device copy, Realtime delivery and plan quotas, the stored-form round trip, search at 100,000 messages.
+22. **Performance budgets** (blueprint §13): open a conversation (warm) ≤ 100 ms; your message visible ≤ 50 ms after ⏎; someone else's p95 ≤ 500 ms; 0 requests per incoming message; ≤ ~3,000 elements in the stream; the anchor moves ≤ 1 px on prepends, edits and Wrap up; search p95 ≤ 150 ms at 100,000 messages. `bun run perf` gets a 10,000-message chat fixture. **Five spikes** settle the risky parts before the store migration is final (blueprint §C): the list in the real webviews, the store and device copy, Realtime delivery and plan quotas, the stored-form round trip, search at 100,000 messages.
+23. **The notification table** (gap audit G2): the spec carries every Chat row in Tasks' §13 format (event · who hears · where · when · turned off by), including adds and removals, `@channel`, `@Team`, a reply to your own message, a mention added by an edit, agent mentions, decisions, wrap-ups and moves (silent), the Focus summary, archived and renamed channels, and announcements during quiet hours or a status; with each switch named. *Rejected:* leaving the rules in CH6's prose.
+24. **The keyboard** (G19): typing anywhere in a conversation goes to the composer; ↑ in an empty composer edits your last message; Esc in an empty composer moves focus to the newest message, ↑↓ step through messages, and single letters act there (`R` reply, `E` edit, `+` react, `P` pin, `T` task, `⇧D` decision, `H` remind, `⌫` delete); an unbound letter or ⏎ returns to the composer. A multi-select gets Tasks' 82b mode row (Move · Task · Delete · More). Esc order: menu → edit or reply quote → selection → panel item → close the panel. `D` alone stays unbound (it's Date in Tasks). *Rejected:* letters that only work with the composer unfocused and no way to get there.
+25. **MCP tools for v2** (G25): list conversations, read a conversation or a chain, search, post, reply (with the quote), react, what's addressed to me (never direct messages), mark a decision, wrap up, create a channel (scopes in KEYS-1's None · View · Edit; "Include private channels I'm in" is an option of View/Edit). Posts made through a key count as new for their creator, and replies to them reach the creator only through that key's notification switch unless they mention the creator; a per-key rate limit; `@channel` and announcement channels only if the creator may. *Rejected:* treating a key's posts as the person's own for unread and replies.
+26. **Converting v1's live data** (G27): notes-to-self conversations become a private note "Notes to self (from Chat)"; channel slugs stay until someone renames them; channel levels reset to "Mentions and replies" with one quiet Catch up line saying so (v1 forced "Every message" on creators), direct messages keep notifying; v1 thread replies become chain replies at their own times, read for whoever had read the parent; only people joining after the migration are added to General. *Rejected:* deleting notes-to-self; renaming slugs automatically.
+27. **Permissions table** (G18): the spec carries one table (action × owner/admin · channel manager · author · member · viewer) covering post, react, pin, mark a decision, link, rename, topic, archive, delete, add people, managers, `@channel`, custom emoji, move, wrap up, and the last manager leaving, with the PERM-7 switches it adds named. *Rejected:* deciding them in code.
+28. **The spec's Definition-of-Ready list** (G28): closed vocabularies with their CHECKs (the "conversation of" link kind, presence states, status "clear after", decision and wrap-up states, the Message capture type, Chat's notification kinds, the grant); a named migration per block; limits (message length now counting references, files per message, reactions per message, custom emoji per workspace, status text, saved statuses, "Remind me" horizon, pins); erasure and export for every new user-keyed table, exporting files rather than expiring links; the kit additions (avatar size by density, filled composer with a 15 px input, NavRow unread weight, media size cap, a neutral avatar badge); copy for key lines; where each setting lives; screen-reader announcements.
 
 ## 7. What Chat waits on from the Tasks v3 build
 
@@ -360,14 +367,14 @@ Chat's own blocks can start on what's landed (structure, editor, References, pan
 ### B · Quiet by design
 
 **★ CH6 · What reaches you, and where** (audit D6, D31; Tasks 73, 80)
-- **The rule: you're pinged only by what's addressed to you:** a direct message, an `@you`, a reply in a thread you're in, and an announcement (CH23). Nothing else ever leaves its conversation: other messages just make the name bold.
+- **The rule: you're pinged only by what's addressed to you:** a direct message, an `@you`, a reply in a chain you're in (CH30d), and an announcement (CH23a). Nothing else ever leaves its conversation: other messages just make the name bold.
 - **Where it reaches you:**
 
   | What | OS notification (desktop) / browser notification (web, opt-in) | Bell | Chat tab | Catch up |
   | --- | --- | --- | --- | --- |
   | Direct message | Yes, one per conversation per burst ("Sofia · 3 messages") | No: the bell is for work items | Number | Yes |
   | `@you` in a channel | Yes | Yes (like `@you` in a comment) | Number | Yes |
-  | Reply in a thread you're in | Yes, grouped per thread | Yes | Number | Yes |
+  | Reply in a chain you're in | Yes, grouped per chain | Yes | Number | Yes |
   | Announcement | Yes, once | Yes | Number | Yes |
   | Any other message | No | No | Bold name only (a dot on the tab for "Every message" channels) | No |
   | A reaction | No | No | No | No |
@@ -584,7 +591,7 @@ The hackathon readiness plan (`t/maciej/hackathon-plan`) owns workspaces, invite
 - **What it means for Chat:** each team gets its own workspace on a Team plan; organizers don't run an event space in Moduo. Chat needs nothing that reaches across workspaces for the event (CH6's "in any workspace" stays, for people in several workspaces).
 - **Consequences:** CH23 and CH24 lose their hackathon reason (re-asked below); CH25 is how the Team plans are handed out; the hackathon plan records the structure.
 
-**CH23 · Announcements that can't be missed**
+**CH23 · Announcements that can't be missed** *(superseded by CH23a: no event workspace, no "Seen by", no scheduled posts for now)*
 - **An announcement channel** (v1's "Only managers can post", kept) pings everyone once per post, **even on "Mentions and replies"**; only "Nothing" silences it. It reaches people in any workspace (CH6, CH22 C).
 - **Organizers see a quiet "Seen by 38 of 41"** under their own post; nobody else sees counts, and there are no per-person read receipts.
 - **Scheduled posts** ("Submissions close in 1 hour" written the night before): should-have for the event.
@@ -1035,11 +1042,68 @@ In his words, then what each one changes:
 
 ✅ **Decided 2026-10-13:** a ("all ok").
 
+### L · From the gap audit *(2026-10-13; [research/gap-audit.md](./research/gap-audit.md); prototype [`round-5.html`](./prototypes/round-5.html))*
+
+The audit walked every role's week and every view in every state and found 28 gaps (20 product, 8 technical) and 16 contradictions. The technical ones are decided in §6 #19 and #23–#28; stale text was fixed in place (CH6, CH23, CH27, CH28, §2, §3, §6 #8, §6 #22). Each question below is one line: the recommendation first, then the alternatives. "All ok" accepts every recommendation.
+
+**Notifications and Catch up**
+- **CH38 · The bell and Catch up show the same mention.** **(a) One shared state: clear it in either, it's gone from both** · (b) Catch up only; the bell shows "3 waiting in Catch up" · (c) both, cleared separately.
+- **CH39 · Does "Every message" ping?** **(a) Yes, one notice per burst, only when Moduo isn't in front of you** · (b) no, it only counts (renamed "Count every message").
+- **CH40 · An `@you` in a conversation set to "Nothing"?** **(a) It waits silently in Catch up (no ping, no count)** · (b) nothing at all.
+- **CH41 · When quiet hours, do not disturb or a vacation end?** **(a) Nothing pings; everything waits in Catch up; announcements don't break through either** · (b) one summary notice, like Focus.
+- **CH42 · Focusing with no end time?** **(a) Just "Focusing"; "until" appears only with a Pomodoro phase or an estimate** · (b) "Focusing since 1:10 PM".
+- **CH43 · Email when Moduo is closed.** **(a) Yes, on by default: an unread direct message or `@you`, after 1 hour with no Moduo open, at most one email per conversation per hour (text follows CH33's switch)** · (b) yes, off by default · (c) never. *(The only channel that reaches a phone until there's a mobile app.)*
+- **CH44 · When does the web app ask to show notifications?** **(a) Once, the first time you open Chat in a browser: "Get a notice when someone messages you · Allow · Not now"; if refused, Catch up says notifications are off in this browser** · (b) only in Settings · (c) the first time a message arrives while you're elsewhere.
+- **CH45 · Is a status (vacation, do not disturb) one for all your workspaces?** **(a) Yes** · (b) per workspace.
+- **CH46 · Pause one workspace's notifications** (e.g. a client's)? **(a) Yes, from the workspace switcher** · (b) no, mute conversations one by one.
+
+**Presence privacy**
+- **CH47 · How much of your Focus do teammates see?** **(a) "Focusing" for everyone; the task's title only if you turn on "Show what I'm focusing on" and they can see that task** · (b) the title by default for anyone who can see the task · (c) the title for everyone (round 4). *(Tasks keeps work sessions private; this keeps chat consistent with it.)*
+- **CH48 · "Away" with or without a time?** **(a) Without** ("Away since 1:10 PM" tells people when you stopped) · (b) with.
+
+**Reactions and announcements**
+- **CH49 · What can people react with on task and note comments?** **(a) The same as chat: your quick row, any emoji, the workspace's custom emoji** · (b) your quick row only · (c) six fixed (reverses CH16a).
+- **CH50 · Replying to a post in an announcement channel?** **(a) Members react, or "Reply privately" opens a direct message to the author with the post quoted** · (b) replies stay in the chain on the right, never in the stream · (c) replies in the stream.
+
+**Replies, decisions and tidying up**
+- **CH51 · "Remind me" on any message?** **(a) Yes; at its time it comes back into your Catch up with one notice** · (b) only on what's in Catch up.
+- **CH52 · Should a decision show on the items it mentions, even from a direct message?** **(a) Yes, to the people who can read that conversation** ("Decided with Mike · Oct 12: …" on Anna's hub) · (b) only from linked channels.
+- **CH53 · Is a wrap-up's answer a decision?** **(a) Wrap up asks "Which reply settled it?" and offers "Also mark as decision" (ticked in linked channels)** · (b) always · (c) never.
+- **CH54 · A new reply to a wrapped-up chain?** **(a) Reopens it, visibly ("Reopened by Mike")** · (b) starts a new chain quoting the old one.
+- **CH55 · Moving messages to a conversation with different people?** **(a) Freely when everyone there could already read them; otherwise only your own, after a warning ("2 people who aren't in Founders will see this")** · (b) only within the same audience · (c) anywhere, with Undo.
+
+**Channels and who may do what**
+- **CH56 · What does "Start a conversation for X" create?** **(a) A channel named after X: private with X's people when X is private, public otherwise** · (b) always public · (c) always ask.
+- **CH57 · Does linking a team add its members?** **(a) A one-time "Add the team's 4 people?" offer, never kept in sync** · (b) kept in sync · (c) a label only.
+- **CH58 · Who adds people to a private channel?** **(a) Its managers** · (b) anyone in it.
+- **CH59 · Can a public channel become private later?** **(a) Yes, by its managers; never the other way** · (b) never (v1).
+- **CH60 · Can viewers react?** **(a) Yes (they still never post)** · (b) no.
+- **CH61 · Someone removes you from a channel.** **(a) A quiet line in Catch up, no ping; the channel leaves your sidebar** · (b) nothing (v1).
+- **CH62 · Can a channel be deleted?** **(a) By its managers and admins, into Recently deleted for 30 days** · (b) archive only (v1).
+
+**The composer and capture**
+- **CH63 · Does ⌘J stay as a conversation switcher?** **(a) No; conversations are in ⌘K** · (b) yes, as ⌘K filtered to conversations.
+- **CH64 · Pressing ⏎ while offline?** **(a) The message waits in place as "Waiting to send" and sends itself in order when you're back; Retry only if the server refuses it** (round 5, frame 6) · (b) it fails at once with Retry · (c) the box is disabled offline.
+- **CH65 · Where does a ⌘7 message go if you don't pick?** **(a) Nowhere: you must pick, recent conversations and people first; after sending, "Sent to Acme · Open · Undo"** · (b) the last conversation you were in.
+- **CH66 · Does a typed task number (`MOD-142`) become a live chip?** **(a) Yes, as you type, like a date chip; Esc or ⌘Z keeps the text** · (b) only through `@`.
+
+**The hackathon** (shared with the hackathon plan, which has no spec yet)
+- **CH67 · What does a handed-out hackathon grant include?** **(a) A dated Team plan on the workspace: seats for the whole team, chat, Team's file limits; at its end everything stays readable, chat pauses (CH4a), no new invites** · (b) chat only · (c) organizers own every workspace on a comped plan. *(A chat-only grant leaves a Free owner's one seat and 20 MB file limit.)*
+- **CH68 · If the date comes before server push (TV-D12) or uploads (AT-2) are built?** **(a) A stop-gap: notices only from an open desktop app or browser tab, and files as task attachments or links** · (b) keep v1's screens for the event · (c) ship without notices and files.
+- **CH69 · How does event news ("submissions close in 1 hour") reach the teams?** **(a) Outside Moduo for the first event (the organizers' email, venue screens); Chat builds nothing** · (b) an organizer seat in every team workspace with an announcement channel · (c) later, a channel followed into every workspace.
+
+**Home and later**
+- **CH70 · Two per-person widgets on Home** (Chat's "Team now" and Tasks' team load)? **(a) One "Team" widget: a "now" line per person plus Tasks' load rows** · (b) two widgets (CH35 as decided).
+- **CH71 · Scheduled send?** **(a) Later, listed in the spec's out-of-scope** · (b) in the teams-of-2–5 cut.
+
+**One permission, not a product call**
+- **CH72 · May I add short "From the Chat re-plan" requirement notes to four Tasks v3 blocks that are ready but not built, on the integration branch now?** TV-D12 (push within seconds, not only on a schedule; only one device rings; the server knows Focus and quiet hours; a click lands on the message), TV-U13 (reactions per CH16a and CH49), TV-F6 (teammates can read "Focusing", per CH47), TV-D14 (quiet hours live in Time & region); plus TX-9b (grants) in §7. **(a) Yes, requirements only, no design changes** · (b) no, wait for the Chat spec (those blocks may be built first and then reworked).
+
 ### F · Visual *(added after round 1 was sent, from the visual audit)*
 
 **CH27 · How dense a conversation is**
 - **v1:** one fixed layout; the app's density setting doesn't reach messages.
-- **Proposed:** one layout (avatar and name once per group of messages, like Slack's default), that the app's density setting tightens like everything else (rule 44): avatar 32 → 24 px, the gutter and row padding narrower, body text 14 px at every step. **No chat-only "compact" toggle**: density stays one setting app-wide.
+- **Proposed:** one layout (avatar and name once per group of messages, like Slack's default), that the app's density setting tightens like everything else (rule 44): avatar 32 → 24 px, the gutter and row padding narrower, body text 14 px at every step *(superseded by CH29a: 15 px)*. **No chat-only "compact" toggle**: density stays one setting app-wide.
 - **48a:** dense-UI people get it through the one setting they already use.
 - *Recommend: yes.* · changes v1
 
@@ -1049,7 +1113,7 @@ In his words, then what each one changes:
 
 **CH28 · Mentions and the "New" line: one accent each** (rule 46)
 - **v1:** a mention stacks a row tint, a bar and a pill (and the row stops showing hover); five accent marks can show at rest on one screen.
-- **Proposed:** in a conversation only two things use the accent: the `@you` mark in the text, and the "New" line. No row tint, no bar. In the sidebar, unread is weight and the count is neutral (CH5). Presence dots stay neutral grey, not green.
+- **Proposed:** in a conversation only two things use the accent: the `@you` mark in the text, and the "New" line. No row tint, no bar. In the sidebar, unread is weight and the count is neutral (CH5). Presence dots stay neutral grey, not green *(superseded by CH28a: green = reachable)*.
 - **48a:** calmer for everyone; mentions still stand out because they're the only accent in the text.
 - *Recommend: yes.* · changes v1
 
@@ -1078,7 +1142,7 @@ In his words, then what each one changes:
    - the Home widgets; notification wording; the key map.
 2. **A gap audit by a separate agent:** every role's week (hackathon team, duo, dev team, PM, agency) against every view in every state; it reports only what's unaddressed, contradictory or too thin. Its findings become calls or fixes.
 3. **Round 3 for Mike:** the list of database changes (tables kept; columns, ops and indexes added; the v1 message conversion; the realtime setup), for his review.
-4. **The cross-module proposals, sent to their owners:** "Mentioned in" on items (CH11, Notes and Tasks); "Make a note" and "Move to a task's comments" (CH30d tidy-up, Notes and Tasks); a status in Tasks' assign picker (CH28d); Focus and quiet hours holding pings (TV-F6, TV-D14); chat's rows in the notification table (TV-D12).
+4. **The cross-module proposals, sent to their owners:** "Mentioned in" on items (CH11, Notes and Tasks); "Make a note" and "Move to a task's comments" (CH30d tidy-up, Notes and Tasks); a status in Tasks' assign picker (CH28d); Focus and quiet hours holding pings (TV-F6, TV-D14); chat's rows in the notification table and its push requirements (TV-D12); one reaction component on comments (CH16a, CH49; TV-U13 and Notes); the past dates in rule 41 (CH29c); decisions on Tasks' project overview (CH13, CH52); Focus shown to teammates (CH47, TV-F6); the grant (CH67, the hackathon plan and TX-9b).
 5. **The spec, `specs/chat-v2.md`, on Fable 5.1** (Maciej switches the model for that step): acceptance criteria as one normal week per role; a test for each; the notification table and the key map; migrations named per block; the five spikes as the first block; the hackathon cut drawn as a line once the date is known.
 6. **Decision entries** in `docs/decisions/chat.md`, a supersession banner on `specs/chat.md`, a validator pass, fixes, "Ready to execute".
 
