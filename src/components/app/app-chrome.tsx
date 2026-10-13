@@ -30,6 +30,7 @@ import { PROFILE_UPDATED_EVENT } from "../../features/profile/profile-storage";
 import { dispatchOpenSettings } from "../../features/settings/settings-events";
 import { SettingsModal } from "../../features/settings/settings-modal";
 import { ReferencesProvider } from "../../features/spine/references/provider";
+import { requestTasksWelcome } from "../../features/tasks/welcome-request";
 import { UpdateOnLaunch } from "../../features/updater/update-on-launch";
 import { ENTITY_OPEN_EVENT, entityOpenTarget, markEntityOpenIntent } from "../../lib/entity-open";
 import { initialsOf } from "../../lib/initials";
@@ -545,7 +546,17 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
             <FocusRunFollower />
             {/* Global, so top bar (call 96): the running Focus timer, then Help. */}
             <FocusSessionChip />
-            <HelpMenu />
+            <HelpMenu
+              onWhatsInTasks={
+                modulePermissions.tasks === "none"
+                  ? undefined
+                  : () => {
+                      // Tasks' welcome (TV-U17), on /tasks or once it opens.
+                      requestTasksWelcome();
+                      if (pathname !== "/tasks") void navigate({ to: "/tasks" });
+                    }
+              }
+            />
             <NotificationCenter />
             <NoticeDeliveries />
             <UserMenu

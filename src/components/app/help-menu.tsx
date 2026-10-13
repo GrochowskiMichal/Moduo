@@ -1,9 +1,9 @@
 // The top bar's Help button (tasks-v3 call 96), between the Focus timer and the
-// bell: Docs, Keyboard shortcuts, Contact support and Report a bug. Help is
-// global, so it lives in the top bar (principle 48b), and it stays for the
-// alpha and beta. The shortcuts dialog keeps its own `?` key.
+// bell: Docs, Keyboard shortcuts, What’s in Tasks (TV-U17), Contact support and
+// Report a bug. Help is global, so it lives in the top bar (principle 48b), and
+// it stays for the alpha and beta. The shortcuts dialog keeps its own `?` key.
 
-import { BookOpen, Bug, CircleQuestionMark, Keyboard, LifeBuoy } from "lucide-react";
+import { BookOpen, Bug, CircleQuestionMark, Keyboard, LifeBuoy, ListChecks } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -25,7 +25,12 @@ import { DOCS_URL, mailtoUrl, SUPPORT_EMAIL } from "./help-links";
 
 const helpShortcut = SHORTCUTS.find((s) => s.id === "help");
 
-export function HelpMenu() {
+export function HelpMenu({
+  onWhatsInTasks,
+}: {
+  /** "What's in Tasks": reopens Tasks' welcome (TV-U17). Absent without Tasks access. */
+  onWhatsInTasks?: () => void;
+}) {
   const { runtime } = useAuth();
   const [bugReportOpen, setBugReportOpen] = useState(false);
   // An item that opens a dialog waits for the menu to close, or the closing
@@ -94,6 +99,16 @@ export function HelpMenu() {
               <DropdownMenuShortcut>{formatShortcut(helpShortcut)}</DropdownMenuShortcut>
             ) : null}
           </DropdownMenuItem>
+          {onWhatsInTasks ? (
+            <DropdownMenuItem
+              onSelect={() => {
+                afterClose.current = onWhatsInTasks;
+              }}
+            >
+              <ListChecks aria-hidden />
+              What’s in Tasks
+            </DropdownMenuItem>
+          ) : null}
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={() => void contactSupport()}>
             <LifeBuoy aria-hidden />

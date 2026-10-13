@@ -18,7 +18,8 @@
 
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { z } from "zod";
-import { useDomainSync } from "./prefs-sync";
+import { isTasksRole, type TasksRole } from "../features/tasks/onboarding";
+import { getSyncMeta, isDomainReconciled, subscribeReconciled, useDomainSync } from "./prefs-sync";
 
 export type LandingView = "home" | "tasks" | "calendar" | "notes" | "contacts" | "email" | "last";
 
@@ -168,6 +169,22 @@ export interface TasksInboxPrefs {
   snoozed: Record<string, Record<string, TasksInboxSnooze>>;
 }
 
+/**
+ * Onboarding (TV-U17): the person's answer to "What will you run in Moduo?"
+ * and whether they've seen Tasks' welcome. Once per person, so it lives here
+ * and follows them to every device.
+ */
+export interface TasksOnboardingPrefs {
+  /** The role they picked; null until answered, or when they skipped it. */
+  role: TasksRole | null;
+  /** When the role question was answered or skipped (it's asked once). */
+  roleAt: string | null;
+  /** When Tasks' welcome first showed (it opens by itself only once). */
+  welcomeSeenAt: string | null;
+  /** Workspaces their teaching tasks and starter went into, with when. */
+  seeded: Record<string, string>;
+}
+
 export interface Preferences {
   /** Which surface opens on launch. `last` = the last visited module route. */
   landingView: LandingView;
@@ -192,6 +209,8 @@ export interface Preferences {
   tasksSidebar: TasksSidebarPrefs;
   /** Snoozed Inbox tasks (TV-U15), following the person. */
   tasksInbox: TasksInboxPrefs;
+  /** The role question and Tasks' welcome (TV-U17), following the person. */
+  tasksOnboarding: TasksOnboardingPrefs;
 }
 
 export const DEFAULT_PREFERENCES: Preferences = {
@@ -204,6 +223,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   keepInMenuBar: true,
   tasksSidebar: { hidden: [], pinned: {} },
   tasksInbox: { snoozed: {} },
+  tasksOnboarding: { role: null, roleAt: null, welcomeSeenAt: null, seeded: {} },
 };
 
 const LOCAL_STORAGE_KEY = "moduo.preferences";
@@ -293,6 +313,33 @@ const tasksInboxSchema = z
       }),
   })
   .catch({ snoozed: {} });
+// A stamp is any parseable moment; a bad one reads as "not yet".
+const stampSchema = z
+  .unknown()
+  .transform((v) => (typeof v === "string" && Number.isFinite(Date.parse(v)) ? v : null));
+const NO_ONBOARDING: TasksOnboardingPrefs = {
+  role: null,
+  roleAt: null,
+  welcomeSeenAt: null,
+  seeded: {},
+};
+const tasksOnboardingSchema = z
+  .object({
+    role: z.unknown().transform((v) => (isTasksRole(v) ? v : null)),
+    roleAt: stampSchema,
+    welcomeSeenAt: stampSchema,
+    seeded: z
+      .record(z.string(), z.unknown())
+      .catch({})
+      .transform((byWs) => {
+        const out: Record<string, string> = {};
+        for (const [ws, at] of Object.entries(byWs).slice(0, 200)) {
+          if (ws && typeof at === "string" && Number.isFinite(Date.parse(at))) out[ws] = at;
+        }
+        return out;
+      }),
+  })
+  .catch({ ...NO_ONBOARDING });
 const preferencesSchema = z.object({
   landingView: z.enum(LANDING_VIEWS).catch(DEFAULT_PREFERENCES.landingView),
   reopenLastWorkspace: z.boolean().catch(DEFAULT_PREFERENCES.reopenLastWorkspace),
@@ -303,6 +350,7 @@ const preferencesSchema = z.object({
   keepInMenuBar: z.boolean().catch(DEFAULT_PREFERENCES.keepInMenuBar),
   tasksSidebar: tasksSidebarSchema,
   tasksInbox: tasksInboxSchema,
+  tasksOnboarding: tasksOnboardingSchema,
 });
 
 export function sanitizeNotificationPrefs(raw: unknown): NotificationPrefs {
@@ -311,6 +359,26 @@ export function sanitizeNotificationPrefs(raw: unknown): NotificationPrefs {
 
 export function sanitizePreferences(raw: unknown): Preferences {
   return preferencesSchema.parse(raw && typeof raw === "object" ? raw : {});
+}
+
+/**
+ * Onboarding only moves forward (TV-U17). Preferences sync as one blob, last
+ * write wins, so another device that hadn't heard yet can push a copy where
+ * the welcome was never seen or the role never asked. Taking the cloud's
+ * value must not undo either on a device that already knows: a "seen" or an
+ * answer stays, and seeded workspaces add up. Only ever for the same person.
+ */
+export function mergeOnboardingForward(
+  local: TasksOnboardingPrefs,
+  cloud: TasksOnboardingPrefs,
+): TasksOnboardingPrefs {
+  const answered = cloud.roleAt ? cloud : local.roleAt ? local : cloud;
+  return {
+    role: answered.role,
+    roleAt: answered.roleAt,
+    welcomeSeenAt: cloud.welcomeSeenAt ?? local.welcomeSeenAt,
+    seeded: { ...local.seeded, ...cloud.seeded },
+  };
 }
 
 /** Top-level module routes the app can land on (and remember as "last used").
@@ -466,6 +534,12 @@ export function consumeLandingRedirect(pathname: string, searchStr: string): str
 
 // ── Imperative reads for non-React consumers ──────────────────────────────────
 
+/** The shared store's value right now, for a write that patches one group
+ *  from an async callback (a render's snapshot may be stale by then). */
+export function currentPreferences(): Preferences {
+  return store;
+}
+
 /** Master sound gate, read imperatively by the Focus chime (features/focus/phase-alert). */
 export function areSoundsEnabled(): boolean {
   return store.soundEnabled;
@@ -541,6 +615,19 @@ export function usePreferencesValue(): Preferences {
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
 
+/**
+ * Whether this person's synced preferences have been read this session
+ * (TV-U17). Until then the store may hold a new device's defaults, so
+ * anything that acts once per person (Tasks' welcome) waits for it.
+ */
+export function usePreferencesReady(userId: string | null): boolean {
+  return useSyncExternalStore(
+    subscribeReconciled,
+    () => isDomainReconciled("preferences", userId),
+    () => isDomainReconciled("preferences", userId),
+  );
+}
+
 export function usePreferences(opts?: {
   /** The one app-wide instance that also pushes `updatePreferences` changes. */
   syncOwner?: boolean;
@@ -549,8 +636,17 @@ export function usePreferences(opts?: {
 
   // A value won from the cloud (another device) lands in the shared store, so every
   // mounted instance re-renders; keep the localStorage mirror + DOM warm too.
-  const applyFromCloud = useCallback((value: Record<string, unknown>) => {
-    const next = sanitizePreferences(value);
+  const applyFromCloud = useCallback((value: Record<string, unknown>, userId?: string) => {
+    const cloud = sanitizePreferences(value);
+    // The local copy is this person's (not a previous account's on a shared
+    // browser): what they've already done in onboarding stays done.
+    const mine = !!userId && getSyncMeta("preferences").userId === userId;
+    const next = mine
+      ? {
+          ...cloud,
+          tasksOnboarding: mergeOnboardingForward(store.tasksOnboarding, cloud.tasksOnboarding),
+        }
+      : cloud;
     setStore(next);
     writeLocalMirror(next);
     applyMotion(next.motion);

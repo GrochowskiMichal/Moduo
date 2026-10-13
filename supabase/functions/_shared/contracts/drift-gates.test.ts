@@ -37,6 +37,7 @@ import {
   PLAN_TIERS,
   PROJECT_STATES,
   RECURRENCE_MODES,
+  STARTER_TEMPLATES,
   SYNC_TOMBSTONE_TABLES,
   TASK_CLOSED_CATEGORIES,
   TASK_REMINDER_KINDS,
@@ -231,6 +232,16 @@ describe("cross-runtime drift guards", () => {
     expect(sql).toContain(`p_kind NOT IN (${opList(TEMPLATE_KINDS)})`);
     expect(sql).toContain(`coalesce(l ->> 'type', '') NOT IN (${opList(TEMPLATE_LINK_TYPES)})`);
     expect(sql).toContain(`WHERE x.kind IN (${opList(TEMPLATE_LINK_TYPES)})`);
+  });
+
+  it("starter templates match TV-U17's op guard and bodies", () => {
+    const sql = readFileSync(
+      resolve(MIGRATIONS_DIR, "20261013230000_templates_starter.sql"),
+      "utf8",
+    );
+    const opList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(", ");
+    expect(sql).toContain(`coalesce(v_key, '') NOT IN (${opList(STARTER_TEMPLATES)})`);
+    for (const key of STARTER_TEMPLATES) expect(sql).toContain(`p_key = '${key}'`);
   });
 
   it("the booking busy read leaves out the closed categories (TV-D10-fix)", () => {

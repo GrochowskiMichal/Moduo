@@ -120,6 +120,7 @@ function renderRail({
     onDuplicate: rs.fn(),
     onSaveAsTemplate: rs.fn(),
     onNewFromTemplate: rs.fn(),
+    onOpenWelcome: rs.fn(),
   };
   function Harness() {
     const [selection, setSelection] = useState(initialSelection);
@@ -199,6 +200,7 @@ function renderRail({
               }
             : undefined
         }
+        onOpenWelcome={calls.onOpenWelcome}
         dropAccepts={dnd ? () => false : undefined}
       />
     );
@@ -415,6 +417,14 @@ describe("the project menu (REPLAN 13–16, 30, 78)", () => {
     fireEvent.click(screen.getByRole("menuitem", { name: "Templates" }));
     await settle();
     expect(calls.onSelect).toHaveBeenCalledWith(TEMPLATES_SELECTION);
+  });
+
+  it("the ⋯ reopens Tasks' welcome: What's in Tasks, once the menu closes (TV-U17)", async () => {
+    const calls = renderRail();
+    await openSidebarMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "What’s in Tasks" }));
+    await settle();
+    expect(calls.onOpenWelcome).toHaveBeenCalledTimes(1);
   });
 
   it("Archive… and Delete project… ask the page first", async () => {

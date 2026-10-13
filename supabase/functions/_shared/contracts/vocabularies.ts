@@ -1016,6 +1016,27 @@ export function normalizeTemplateLinkType(input: unknown): TemplateLinkType | nu
 }
 
 // ---------------------------------------------------------------------------
+// Starter templates (TV-U17, REPLAN 34) — mirrors the key guard of
+// project_templates_op_starter in 20261013230000_templates_starter. The role
+// question offers one of these; the server builds its body from the key, so
+// the app never sends one.
+// ---------------------------------------------------------------------------
+
+export const STARTER_TEMPLATES = ["kickoff", "monthly_close", "client_onboarding", "episode"] as const;
+export type StarterTemplate = (typeof STARTER_TEMPLATES)[number];
+export const starterTemplateSchema = z.enum(STARTER_TEMPLATES);
+export function isStarterTemplate(value: unknown): value is StarterTemplate {
+  return typeof value === "string" && (STARTER_TEMPLATES as readonly string[]).includes(value);
+}
+export function parseStarterTemplate(input: unknown): SafeParseResult<StarterTemplate> {
+  return parseOrError(starterTemplateSchema, input);
+}
+/** Lax read: a starter this build doesn't know is left out (null). */
+export function normalizeStarterTemplate(input: unknown): StarterTemplate | null {
+  return isStarterTemplate(input) ? input : null;
+}
+
+// ---------------------------------------------------------------------------
 // Attachments (AT-1, specs/attachments.md) — mirrors the CHECKs on
 // public.attachments in 20261008210500_attachments_storage. `pending` = begun,
 // bytes not confirmed yet; `ready` = finalize checked the stored size;

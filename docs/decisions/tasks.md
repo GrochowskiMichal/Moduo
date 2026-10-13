@@ -2,6 +2,56 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index.
 
+## 2026-10-13 · TV-U17 Onboarding and welcome (tasks-v3 block 34) — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 34 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §16, AC2–AC7 defaults, AC11.1; REPLAN 34, 9, 30, 61, 66, 48b). Migration `20261013230000_templates_starter` (local stack only). Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **U17-1 · The role question opens Tasks' welcome, not workspace setup** → TV-U17 (`ui/tasks-welcome-dialog.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: "What will you run in Moduo?" is the welcome's first page, asked once per person the first time Tasks opens (six answers and Skip; closing it counts as Skip). Then the basics. Everyone gets it, including people who join a prepared workspace.
+  - Why: REPLAN 34 ("the role question first, then Tasks' welcome"); every default it sets is a Tasks default; the workspace setup screen stays one step.
+  - Rejected: asking on the workspace setup screen (only people who create a workspace would see it, never someone joining a prepared one).
+- **U17-2 · Once per person: synced preferences, read before deciding, only ever forward** → TV-U17 (`preferences.ts` `tasksOnboarding`, `prefs-sync.ts`, `ui/use-tasks-welcome.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the role, when it was answered, when the welcome first showed and which workspaces were seeded live in the synced preferences. The welcome decides only after this session has read the person's preferences (`usePreferencesReady`) and the task store has reached the server; it counts as seen the moment it shows; taking the cloud's copy never undoes "seen" or an answer this device knows (`mergeOnboardingForward`, same person only).
+  - Why: "per person, never per device"; a new device's mirror holds defaults until the account's copy arrives, and the preferences sync as one blob, last write wins.
+  - Rejected: localStorage (per device); a table (a migration for four fields).
+- **U17-3 · Someone who already made tasks here never gets the welcome** → TV-U17 (`onboarding.ts` `welcomeDecision`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: if the person created any task in this workspace, the welcome is marked seen quietly and the role isn't asked. Anyone can open it from the sidebar's ⋯ or Help.
+  - Why: "stay out of the way for experienced people": everyone using Tasks today would otherwise get a first-run dialog for a module they know.
+  - Rejected: showing it to everyone once at release.
+- **U17-4 · Teaching tasks only for the owner of an empty workspace** → TV-U17 (`onboarding.ts` `shouldSeedWorkspace`, `teachingTaskTitles`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: when the welcome first opens for someone who owns this workspace and it holds no tasks and no projects, three tasks go into their Inbox, once per workspace: "Press ⌘⇧K anywhere to capture a task", "Type @, # or / in a task's name to assign, tag or date it", "Press Q on this task to line it up in Focus" (the capture keys as this device writes them).
+  - Why: REPLAN 34 ("seeded once, for whoever creates the workspace"); the empty states already teach each view's gesture (TV-U15), these are the gestures to try.
+  - Rejected: seeding for everyone (it would fill every hackathon attendee's Inbox in a prepared workspace).
+- **U17-5 · Starter templates are built on the server from a key** → TV-U17 (`20261013230000_templates_starter`, `STARTER_TEMPLATES` in `@contracts/vocabularies`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (the key, not a body, was the orchestrator's ask).
+  - Decision: `project_templates_op_starter(workspace, {id, starter})` makes Project kickoff (a PM), Monthly close (a founder or ops), Client onboarding (client work) or Episode (a creator, with Ideas · Planned · Drafting · Editing · Published) from a body the server writes. It's the caller's, private, never shareable, needs Tasks edit, refuses API keys, and a resend makes nothing twice. The welcome says where it is ("… is in your templates: the sidebar's ⋯, then New project from template…").
+  - Why: REPLAN 9 is yes, so the role's starter template is in; a body the server writes can't point at anyone's items.
+  - Rejected: an op that stores a body the app sends; saving a template from a throwaway project and deleting it (activity and a Recently deleted row for nothing).
+- **U17-6 · What a role sets** → TV-U17 (`onboarding.ts` `ROLE_DEFAULTS`, `default-view.ts`, `display.ts`, `view-prefs.ts`), TV-U8
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: REPLAN §3's table. The first view opens on answering and on any first open later (nothing remembered on that device): Upcoming (student), the Inbox (developer, founder), the first project as its Board (PM, creator; All while there's none), All (client work: every project's tasks, project by project). Developers start on Detailed rows wherever a view remembers no Display of its own. The seeded saved views wait for TV-U8 (`ROLE_DEFAULTS[role].views`).
+  - Why: defaults only, never a feature on or off (REPLAN 34).
+  - Rejected: writing Detailed into every view's saved Display (a later role change couldn't tell a choice from a default).
+- **U17-7 · The welcome's pages and words** → TV-U17 (`ui/tasks-welcome-dialog.tsx`, `ui/focus-empty-state.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the basics: "Welcome to Tasks" and three lines (⌘⇧K captures from anywhere and lands in your Inbox; click a task or press ⏎ to open it; Focus works through what's next, one task at a time) with Explore on my own and Learn more. Then three steps, each a clip, a title and a sentence or two: "Above the line is yours", "Line things up in Focus" (the Focus empty state's own words, `FOCUS_WHAT_IT_IS` and `FocusKeyHints`), "@, # and / work everywhere" (Maciej's line). Back · Next (Done on the last) · three dots · Close always · Esc. The dialog takes focus itself, so no answer looks picked. No celebration.
+  - Why: REPLAN 34 as decided 2026-10-10; under a minute for someone new.
+  - Rejected: a fourth step; a toast or confetti on Done.
+- **U17-8 · Clips are frames of the whole window, recorded by script** → TV-U17 (`tests/clips/welcome-clips.spec.ts`, `public/welcome/`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: a Playwright script drives the real app in a tidy sample workspace and saves 3–4 frames per step (the whole 1280 × 720 window, bottom bar included, shrunk to 960 px JPEGs, ~55 KB each); the dialog cross-fades them every 1.8 s and shows the first frame under reduced motion; a frame that won't load hides the clip, not the words. Re-run the script when the UI changes.
+  - Why: REPLAN 34 ("recorded from the real app by script") and 48b (show the 3×3 with the bottom bar); still frames play in every webview.
+  - Rejected: Playwright's WebM video (no ffmpeg here to make MP4, and WebM in the desktop app's WebKit is unproven); drawn illustrations (they go stale).
+- **U17-9 · Reopening it** → TV-U17 (`bucket-rail.tsx`, `help-menu.tsx`, `welcome-request.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: "What's in Tasks" at the end of the sidebar hairline's ⋯ and in Help (after Keyboard shortcuts, only with Tasks access; from another page it opens Tasks first). Both open the basics, never the role question.
+  - Why: REPLAN 34 ("reopened from the module's ⋯ menu and from Help"); SH-0's Help is global.
+  - Rejected: a Settings switch to "show the welcome again".
+
 ## 2026-10-13 · TV-U15 Upcoming, Inbox, My tasks, All (tasks-v3 block 20) — the agent's choices (deferred to by Maciej)
 
 Built in tasks-v3 block 20 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §8, AC2.2, AC2.1, AC3.3, AC5.2, AC11.3, AC11.5; REPLAN 83, 84, 20, 20a, 29, 82b, defaults b, h, r–t; research views-list-upcoming.md §6–9; prototype round-2b frames 2, 3, 7). No migration. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.

@@ -142,12 +142,47 @@ export async function ensureTeammate(workspaceId: string): Promise<Session> {
   return signIn(TEAMMATE);
 }
 
-/** Sign the browser in as `session` before the app boots, in `workspaceId`. */
+/**
+ * Mark Tasks' welcome as seen for someone (TV-U17), in their synced
+ * preferences, so it doesn't open over a spec that isn't about it. The
+ * preferences are one jsonb blob: read, merge, write, and stamp it newer so
+ * the app takes the cloud's copy.
+ */
+export async function markWelcomeSeen(userId: string): Promise<void> {
+  const [row] = await rest<Array<{ preferences: Record<string, unknown> }>>(
+    "service",
+    `user_preferences?user_id=eq.${userId}&select=preferences`,
+  );
+  const prefs = row?.preferences ?? {};
+  const onboarding = (prefs.tasksOnboarding ?? {}) as Record<string, unknown>;
+  if (typeof onboarding.welcomeSeenAt === "string") return;
+  const at = new Date().toISOString();
+  await rest("service", "user_preferences?on_conflict=user_id", {
+    method: "POST",
+    prefer: "resolution=merge-duplicates,return=minimal",
+    body: {
+      user_id: userId,
+      preferences: {
+        ...prefs,
+        tasksOnboarding: { ...onboarding, welcomeSeenAt: at, roleAt: onboarding.roleAt ?? at },
+      },
+      preferences_updated_at: at,
+    },
+  });
+}
+
+/**
+ * Sign the browser in as `session` before the app boots, in `workspaceId`.
+ * Tasks' welcome is marked seen first unless `welcome: true` (the onboarding
+ * spec), so it never opens over a spec that isn't about it.
+ */
 export async function signInPage(
   page: Page,
   session: Session,
   workspaceId?: string,
+  opts: { welcome?: boolean } = {},
 ): Promise<void> {
+  if (!opts.welcome) await markWelcomeSeen(session.user.id);
   const host = new URL(stackKeys().url).hostname.split(".")[0];
   const entries: Array<[string, string]> = [[`sb-${host}-auth-token`, JSON.stringify(session)]];
   if (workspaceId) entries.push([`moduo:selected-workspace:${session.user.id}`, workspaceId]);

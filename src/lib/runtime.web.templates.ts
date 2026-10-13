@@ -8,6 +8,7 @@
 // A database before the migration reads as "no templates", and the writes
 // say what's missing instead of failing quietly.
 
+import type { StarterTemplate } from "@contracts/vocabularies";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
   Bucket,
@@ -258,6 +259,26 @@ export function createTasksTemplates(
         "project_templates_op_save",
         { p_workspace_id: input.workspaceId, p_project_id: input.projectId, p_fields: fields },
         "Saving a template",
+      );
+      const t = templateFromRow(data, "project");
+      if (!t) throw new Error("The template saved, but its answer couldn't be read.");
+      return t;
+    },
+
+    /**
+     * A starter template Moduo ships (TV-U17, the role question): the server
+     * builds its body from the key. Yours, kept to yourself. `id` is minted by
+     * the app, so a resend makes nothing twice.
+     */
+    async createStarterTemplate(input: {
+      workspaceId: string;
+      id: string;
+      starter: StarterTemplate;
+    }): Promise<Template> {
+      const data = await rpc(
+        "project_templates_op_starter",
+        { p_workspace_id: input.workspaceId, p_fields: { id: input.id, starter: input.starter } },
+        "Adding a starter template",
       );
       const t = templateFromRow(data, "project");
       if (!t) throw new Error("The template saved, but its answer couldn't be read.");
