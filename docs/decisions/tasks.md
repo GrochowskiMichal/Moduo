@@ -2,6 +2,86 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index.
 
+## 2026-10-13 · TV-F6 Focus salvage + one time engine — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 22 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §7, §Assumptions #11, #26; REPLAN 62a, 63, 66, §6.10, round 3 §L; migrations `20261008235243_focus_runs` (#323's, history) and `20261013130000_focus_runs_v3`) on the local stack. Salvaged from #323 (`origin/t/maciej/tv-f2-queue-run`): the run's server record, cross-device takeover, claims, the run rules. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to change.
+
+- **F6-1 · #323's migration is history under prod's version; the re-cut is a new file** → TV-F6 (`20261008235243_focus_runs.sql`, `20261013130000_focus_runs_v3.sql`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (the orchestrator's correction to round 3: the file was applied to prod on 2026-10-09).
+  - Decision: #323's file goes in byte-for-byte as `20261008235243_focus_runs.sql` (every function matches the local catalog); the Timer re-cut, the task gate on claims, the publication and grants, and erasure are a new migration. AC13.4's "its migration never applied as written" can't hold any more; the salvage list stands.
+  - Why: applied migrations are history (AGENTS.md rule 5); prod's version keeps local replays and prod in one order.
+  - Rejected: editing the old file, a fresh `focus_runs` table.
+- **F6-2 · Timer: Per task · Pomodoro · Off on the run, changeable mid-run** → TV-F6 (`focus_runs.mode`, `FOCUS_TIMER_MODES`, `focus_runs__apply`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: `mode` is `per_task | pomodoro | off` (default Per task), a save can change it, a new timer starts its rhythm over (only Pomodoro has phases); a Stopwatch run reads as Per task. Off records nothing and shows no clock, but the session is on: Done, Skip and "is on this" still work.
+  - Why: 62a and 63 ("off means off"); one schema reversal, made before anything reads the column.
+  - Rejected: Elapsed · Countdown · Off (63's first wording; Countdown is the client option "Count down the estimate" under Per task).
+- **F6-3 · The run follows the one engine; Stop waits out its Undo** → TV-F6 (`features/focus/run.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: whatever starts a session (Focus, ⇧F, Calendar's ▶, Home's pomodoro) starts or continues the run in that task's workspace; the timer, pauses, phases and Now are saved as they change and every minute; Stop ends the run everywhere only after the 10 s "Focus stopped · Undo", and Undo inside it keeps the same run. A run this device holds that no clock here runs (Stop, then a reload inside the window) ends instead of coming back. Only the tab that runs the clock speaks for a browser.
+  - Why: one clock for every surface (§6.10); 62a's Undo; a run that resurrects after a reload would count time nobody tracked.
+  - Rejected: #323's explicit "Start run" (the only entry point), ending at once on Stop.
+- **F6-4 · Per task's clock is the Now task's time this session** → TV-F6 (`FocusSession.taskSeconds`, `bigClock`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the top-bar timer, the Calendar block and Focus show one number per job (62): Pomodoro's countdown, the Now task's own clock (from 0 when another task becomes Now; carried to another device through `phase_started_at`), or "Focus" with no clock under Off. The task's saved total stays the task's `timeSpentSeconds`; TV-F7 composes "18:02 of ~45m" and the countdown option.
+  - Why: the pill is "this task" and the bottom line "the whole session" (62).
+  - Rejected: the session's time in the pill (it repeats the bottom line).
+- **F6-5 · Claims behind the task gate, polled by the shell** → TV-F6 (`focus_claims`, `features/focus/claims.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: `focus_claims` answers only for a task the caller sees and the runner still sees (`tasks__visible` / `tasks__visible_to`), only for a running run seen in the last 3 minutes, never the caller's own; Off still claims, paused doesn't. The app shell polls the selected workspace once a minute while visible; `useTaskClaim` + `onThisLabel` are the hook for TV-U13's header slot and TV-F7 (U13 hadn't landed).
+  - Why: "is on this" is about doing, not timing; a runner who lost a task mustn't advertise it.
+  - Rejected: Realtime for claims (each person reads only their own runs), polling only while Tasks is open.
+- **F6-6 · The run rules run app-wide** → TV-F6 (`FocusRunFollower`, `followStep`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: when Now is finished (by anyone), Won't do, deleted, unshared or taken out of Up next, the session moves to the next open task with its rhythm, or ends when Up next runs out; someone else finishing it, or it going away, says so in a quiet toast (and the run's notice for TV-F7); finishing it yourself counts in "n done". A task that was never in Up next isn't moved for being absent from it, and a missing task waits while closed tasks may still be loading.
+  - Why: #323's rules ran only while Tasks was open; 62 "a session also ends by itself when Up next runs out".
+  - Rejected: moving on only while the Focus view is open.
+- **F6-7 · Calendar's ▶ is "Focus on this"** → TV-F6 (`calendar-page-view.tsx`, `use-block-focus.ts` deleted)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: ▶ puts the task on top of Up next and gives it the one clock (a running session moves to it with its rhythm; none starts with your default timer); its Pause and Stop are the engine's, Stop with Undo instead of "47m logged to …"; the clock shows on the task's block that holds now, else its nearest.
+  - Why: call 66 ("the same one clock"); three clocks lost time (P0 #6).
+  - Rejected: keeping the Calendar's own stopwatch.
+- **F6-8 · The Calendar lens: my work sessions are blocks; due-only tasks are all-day chips** → TV-F6 (`lens.ts` `taskBlocks`, `dueChipsByDay`; AC2.3, AC7.3)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: each of my sessions is its own block and dragging it moves that session (`tasks_op_session_update`, the person kept); a teammate's session stays in their calendar; a scheduled task with no session known shows from its row as before. A task with a due date and nothing in anyone's calendar is a chip in the all-day lane on its due day (Won't do hidden, done shown done); clicking it opens the task.
+  - Why: REPLAN 25 (several blocks per task, each someone's) and 1.3 ("due-only tasks never reach the calendar grid"); the Month view stays Calendar's.
+  - Rejected: one block per task from the mirrored schedule, due chips for scheduled tasks too.
+- **F6-9 · Home's pomodoro runs the same session** → TV-F6 (`pomodoro-widget.tsx`, `config-forms.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the widget shows and controls the running session (Pause, Stop with Undo); idle, Start runs a Pomodoro on the top of Up next and is off with nothing lined up; its lengths are your Focus lengths (the widget's settings edit them).
+  - Why: one clock; a pomodoro with no task records nothing anywhere.
+  - Rejected: a task-less pomodoro, per-widget lengths.
+- **F6-10 · The Timer setting lives in the synced Focus prefs** → TV-F6 (`FocusPrefs.timer`, `countdownEstimate`; the execute view's ⋯)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: `timer` (default Per task) and `countdownEstimate` join the synced Focus prefs; a new session starts with `timer`; changing it changes your default and the running session (63). Until TV-F7's ⋯ menu and Settings → Tasks → Focus, today's Focus card ⋯ has the three-way Timer.
+  - Why: "the menu changes them everywhere" (63).
+  - Rejected: a per-run choice only (#323).
+- **F6-11 · The run records the task, not the calendar block** → TV-F6
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: no `now_session_id` on `focus_runs`; the Calendar marks the task's nearest block.
+  - Why: nothing reads it yet; ▶ needs the task.
+  - Rejected: a session column now.
+- **F6-12 · Capture's default (P0 #9) is already built** → TV-P0 (P0-7), TV-U14 (`queueTop`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: New in Focus lands in Up next (P0-7, U14's `queueTop`); #323's "during a run, a capture anywhere queues" (F2-5) is dropped for call 90 (⌘N files where you are).
+  - Why: call 90 decides it; two rules would disagree in a project.
+  - Rejected: queueing every capture while a session runs.
+- **F6-13 · One sink; saved totals go into the store copy** → TV-F6 (`time-sink.ts`, `use-focus-time-saver.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the Tasks module's unregistered sink (kept since P0-13) is deleted; the app shell's sink puts each saved total straight into the workspace's store copy (`patchCopy`) instead of a window event a mounted list listens for.
+  - Why: the D11a note ("time totals land through `store.patchCopy`"); every surface reads the store.
+  - Rejected: keeping two sinks.
+- **F6-14 · Focus runs are erased and exported** → TV-F6 (`account_erase_workspace_data`, `readTasksExport`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: erasure deletes a person's runs in workspaces they don't own (counted in the preview as `focus_runs_deleted`); leaving a workspace already takes them; the export carries your own runs as `focusRuns`.
+  - Why: §Assumptions #26.
+  - Rejected: relying on the profile cascade alone (the preview wouldn't say so).
+- **F6-15 · A run read through stops counting three minutes past its device's last save** → TV-F6 (`readRunClock`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: on another device the clock and the session's time run on from the record only for the claims window (3 minutes) after the controlling device's last save, then stand still.
+  - Why: a laptop that slept or died keeps no clock; never an inflated number.
+  - Rejected: counting on forever (#323 capped only the focused time).
+
 ## 2026-10-13 · TV-D12 recurrence a–h, reminders, the notification table — the agent's choices (deferred to by Maciej)
 
 Built in tasks-v3 block 27 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §2 "Reminders" and "Repeats", §13, §Assumptions #5, #16, #26; REPLAN 24, 27 a–i, 73, 80; migrations `20261013110000_notifications_v3`, `20261013111000_recurrence_moves_dst` and `20261013140000_reminders_repeats_fixes`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.

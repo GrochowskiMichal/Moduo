@@ -22,6 +22,7 @@ import {
   useFocusSession,
 } from "../../focus/engine";
 import { stopFocusWithUndo } from "../../focus/stop-with-undo";
+import { recordRunDone } from "../../focus/run";
 import { changeFocusTimer, focusOn, toggleFocusPause } from "../../focus/timer";
 import { FocusAwayPrompt } from "../../focus/ui/away-prompt";
 import { dispatchOpenSettings } from "../../settings/settings-events";
@@ -153,6 +154,8 @@ export function ExecuteView({
               blockedNote={blockedNoteFor(current)}
               onMarkDone={() => {
                 onMarkDone(current.id);
+                // "n done" in the session (the follower only sees Now leave).
+                recordRunDone(current.id);
                 moveSessionPast(current.id);
               }}
               onSkip={() => {
