@@ -2,7 +2,7 @@
 
 > **Status (2026-10-13): round 1 sent. Waiting on Maciej's answers to N1–N23.**
 >
-> - **Open calls:** N1–N23, all ❓. Load-bearing: ★ N1 (the ceiling), ★ N2 (the hackathon's date, teams and team size, and the cut), ★ N3 (where notes live), ★ N4 (a way in), ★ N5 (the grammar), ★ N6 (task lines). N20–N23 are opening calls.
+> - **Open calls:** N1–N23, all ❓. Load-bearing: ★ N1 (the ceiling), ★ N2 (the hackathon cut, ranked until the date is known, and the guide published once; facts already answered in Chat CH20–CH22), ★ N3 (where notes live), ★ N4 (a way in), ★ N5 (the grammar), ★ N6 (task lines). N20–N23 are opening calls.
 > - **Research lanes:** four landed and folded in (decisions audit, competitor structure, role journeys, connectivity). Two still running: current state (live walkthrough) and visual audit; they fold into §1.3 and §5 when they land, without changing the calls unless they find something that should.
 > - **Received:** seven proposals from the Chat re-plan (§1.6), answered in N19.
 > - **Research data in the shared local database:** none yet; the current-state lane lists what it seeds in `research/current-state.md`.
@@ -231,9 +231,8 @@ From the [role-journeys lane](./research/role-journeys.md) (a normal week per ro
 
 **The hackathon, in particular** ([role journeys §3](./research/role-journeys.md), [competitor structure §3](./research/competitor-structure.md)):
 - **Copying a prepared workspace per team freezes the rules.** Mid-event fixes to deadlines and rules are the normal case (Devpost's update feeds are full of them), and a copy never receives them.
-- **So the organisers' guide should exist once.** Two ways, both the hackathon plan's choice (proposal flagged there, N2):
-  - **one workspace for the event:** the guide sits under Workspace, view only; each team's note sits under Shared with that team, linked to the team's project in Tasks; nothing is copied, and every fix reaches everyone;
-  - **a workspace per team:** the guide is published once and each team's start page links to it (works today; readers can't comment on the guide).
+- **Decided in Chat's round** (Chat CH20–CH22, 2026-10-13, Maciej): the date is unknown; at most about 100 people, so about 20–25 teams of 4–5; **no event workspace: each team gets its own workspace on a Team plan**; organisers' news goes out by email and venue screens for the first event (Chat CH69).
+- **So the guide lives once, outside the team workspaces:** the organisers keep it in their own workspace and publish it; each team workspace starts with a prepared start page that links to the guide's sections, plus the team's own starting notes (idea, research, pitch outline, submission). The guide itself is never copied, so a fix reaches every team on their next look (N2).
 - **The minimum Notes must provide** is in N2's MVP cut.
 
 ## 4. The views — today and their target
@@ -321,21 +320,25 @@ Prototype: [`prototypes/structure.html`](./prototypes/structure.html), keys 1–
 
 ❓ OK?
 
-**★ N2 · The hackathon: three facts, and the cut they set**
-- **I need:** the **date**, the **number of teams**, and the **team size**. Also helpful: how many organisers, mentors and judges; in person or online.
-- **Why:** the date sets the MVP cut inside the spec. My provisional cut, by how far away it is:
+**★ N2 · The hackathon: the cut, and the guide published once**
+- **Already known** (your answers in Chat's round, CH20–CH22): the date is unknown; at most about 100 people, about 20–25 teams of 4–5; each team in its own workspace, no event workspace. I won't ask these again; the **date** is the one fact still open, and the cut below is ranked so it can be drawn as soon as you know it.
+- **The cut, by how far away the hackathon is:**
 
   | If the hackathon is… | Notes ships before it |
   | --- | --- |
-  | **4 weeks or less** | **Must:** the Inbox fix and the sections (N3) · the start page and a way in (N4) · task lines that land where the team sees them (N6) · published pages that keep their formatting (N14) · "Edited by" (N8, first part) · Duplicate with the notes inside (N9, first part) · agent edits that land (N20, if organisers write with Claude) · one technical item, told in chat |
-  | **5–8 weeks** | the above, plus **pleasant:** images (N10) · changed since you read (N8) · comments on the app's feed (N7) · the `@ # /` grammar (N5) · collapsible headings (N17) |
+  | **4 weeks or less** | **Must:** the Inbox fix and the sections (N3) · the start page and a way in (N4) · task lines that land where the team sees them (N6) · published pages that keep their formatting and show "Updated …" (N14) · "Edited by" (N8, first part) · copying a prepared set of notes, with the notes inside, into each team's workspace (N9, first part; the hackathon plan runs the copy) · agent edits that land (N20, if organisers write with Claude) · one technical item, told in chat |
+  | **5–8 weeks** | the above, plus **pleasant:** images (N10) · "Changed since you last read", in a team's own notes and on the published guide (N8, N14) · comments on the app's feed (N7) · the `@ # /` grammar (N5) · collapsible headings (N17) |
   | **more than 8 weeks** | the whole first wave in §9 |
 
-- **Not Notes' to decide (flagged for the hackathon plan):** one workspace for the event vs a workspace per team. Notes recommends **one workspace**: the guide lives once under Workspace (view only), each team's note sits under Shared with that team and links to the team's project, so every fix reaches everyone and nothing is copied (§3; frame 2). With a workspace per team, the guide is published once and each start page links to it.
-- *Outside the target roles?* The cut is event-specific; everything in it is wanted by every team.
-- Prototype frame 2.
+- **The guide, published once** (a proposal for the hackathon plan, which owns the setup):
+  - the organisers write Brief, Rules, Schedule, Judging criteria, Resources and FAQ in their own workspace and publish them as one site (frame 2, variant 2);
+  - each team's workspace starts with a prepared **Start here** linking to the guide's sections, plus the team's own notes (Idea, Research, Pitch outline, Submission with Devpost's headings) and its milestone tasks;
+  - the guide is never copied into team workspaces: copies would miss every mid-event fix.
+- *Recommend: yes.* Rejected: copying the guide into each team workspace (stale by the first rule fix). Rejected: an event workspace (you decided against it in Chat CH22).
+- *Outside the target roles?* The cut is event-specific; everything in it is wanted by every team. A published guide plus a prepared starting set is also how agencies onboard clients.
+- Prototype frame 2 (variants: a team's first open · the published guide).
 
-❓ The date, the number of teams and the team size? And the cut's shape?
+❓ OK with the ranked cut and the guide published once?
 
 **★ N3 · Where notes live: one tree, sectioned by who sees it**
 - **Today:** one tree; the "Inbox" is worked out from the tree (any top-level note with nothing inside it, shared with everyone); pins are shared; Published, Archive and Trash are always there; nothing shows who can see a note.
@@ -465,6 +468,7 @@ Prototype: [`prototypes/structure.html`](./prototypes/structure.html), keys 1–
   - **Share** already offers Private · Can view · Can edit for the workspace and per person (October's sharing work), so an organiser can make the rules read-only today (view includes commenting). It gains one thing: it names where a note's sharing comes from ("Everyone in Moduo Studio · Can edit · from Workspace", or "· from Handbook").
   - **Publish to the web** sits in the same menu: a link, "Include the notes inside it" (on), "Let search engines find it" (off). The public page shows a contents column for the notes inside, "Updated …", and keeps the note's formatting.
   - **References on a public page:** a reference to another published note links to its public page; anything else shows only its kind ("a task", "a contact"), never its title.
+  - **"Changed since your last visit" on public pages:** the visitor's browser remembers what it last saw, so a returning reader sees the same quiet line and bars as N8, with no account (the hackathon's guide; an agency's client page).
 - *Recommend: yes.* Rejected: a public page that reveals referenced items' titles.
 - *Outside the target roles?* Yes: agencies' client pages, creators' public notes.
 - (a). Prototype frame 8 (variants: Share · the public page).
