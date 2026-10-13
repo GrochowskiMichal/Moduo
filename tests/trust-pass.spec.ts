@@ -3,6 +3,7 @@ import { expect, type Page, type Request, test } from "@playwright/test";
 import {
   DEV,
   devWorkspace,
+  endFocusRuns,
   ensureTeammate,
   rest,
   rpc,
@@ -89,6 +90,16 @@ async function openTasks(page: Page, taskId?: string) {
   await signInPage(page, dev, ws.id);
   await page.goto(taskId ? `/tasks?id=${taskId}` : "/tasks");
   await expect(page.getByRole("navigation", { name: "Location" })).toBeVisible({ timeout: 20_000 });
+}
+
+/** The sidebar's Focus (TV-F7: the Plan · Focus switch is gone). */
+async function openFocus(page: Page) {
+  await page
+    .getByRole("navigation", { name: "Tasks" })
+    .getByRole("button", { name: /^Focus\b/ })
+    .first()
+    .click();
+  await expect(page.locator('[data-slot="focus-view"]')).toBeVisible();
 }
 
 /** Writes the page sends for a task: field saves and intent ops. */
@@ -197,9 +208,11 @@ test("AC1.5 — a skeleton while loading, never “Nothing here yet”", async (
 test("AC1.6 — Focus time is saved while you're on Notes", async ({ page }) => {
   const t = await createTask(dev, { title: `Focus on me ${tag}`, bucketId: ws.inboxId });
   await rpc(dev, "tasks_op_queue_add", { p_workspace_id: ws.id, p_task_id: t.id, p_at: "top" });
+  // A session another test left would be the Now card instead (TV-F7).
+  await endFocusRuns(dev.user.id);
   await openTasks(page, t.id);
-  await page.getByRole("radio", { name: "Focus", exact: true }).click();
-  await page.getByRole("button", { name: "Track time" }).click();
+  await openFocus(page);
+  await page.getByRole("button", { name: /^Start/ }).click();
   // Leave Tasks: the save must not wait for it.
   await page.getByRole("button", { name: /^Notes/ }).click();
   await expect(page).toHaveURL(/\/notes/);
@@ -250,7 +263,7 @@ test("AC1.9 — New in Focus lands in Up next", async ({ page }) => {
     p_at: "top",
   });
   await openTasks(page, anchor.id);
-  await page.getByRole("radio", { name: "Focus", exact: true }).click();
+  await openFocus(page);
   await page.getByRole("button", { name: "Create new (⌘N)" }).click();
   const title = `Captured in Focus ${tag}`;
   await page.getByRole("textbox").first().fill(title);

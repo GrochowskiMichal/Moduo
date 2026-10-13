@@ -1134,6 +1134,12 @@ export function TaskListView({
           e.preventDefault();
           api.toggleQueue(selectedTask.id);
           return;
+        case "focus-on":
+          // ⇧F: on top of Up next, with the one clock (call 31).
+          if (!selectedTask || !canEdit) return;
+          e.preventDefault();
+          api.focusOnTask(selectedTask.id);
+          return;
         case "expand":
           // expand the selected parent's subtasks
           if (!selectedTask || !nest) return;

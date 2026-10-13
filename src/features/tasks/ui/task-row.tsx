@@ -11,6 +11,7 @@ import {
   ContextMenuRadioGroup,
   ContextMenuRadioItem,
   ContextMenuSeparator,
+  ContextMenuShortcut,
   ContextMenuSub,
   ContextMenuSubContent,
   ContextMenuSubTrigger,
@@ -621,9 +622,16 @@ function TaskRowView({
           Status…
         </ContextMenuItem>
         {!closed && task.status !== "archived" ? (
-          <ContextMenuItem onSelect={() => actions.toggleQueue(task.id)}>
-            {queued ? "Remove from queue" : "Add to queue"}
-          </ContextMenuItem>
+          <>
+            <ContextMenuItem onSelect={() => actions.focusOnTask(task.id)}>
+              Focus on this
+              <ContextMenuShortcut>⇧F</ContextMenuShortcut>
+            </ContextMenuItem>
+            <ContextMenuItem onSelect={() => actions.toggleQueue(task.id)}>
+              {queued ? "Remove from Focus" : "Add to Focus"}
+              <ContextMenuShortcut>Q</ContextMenuShortcut>
+            </ContextMenuItem>
+          </>
         ) : null}
         {task.recurrence && !closed ? (
           <ContextMenuItem onSelect={() => actions.skipOccurrence(task.id)}>

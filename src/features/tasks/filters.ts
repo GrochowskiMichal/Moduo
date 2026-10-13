@@ -6,7 +6,7 @@
 // they need the workspace's members and tags.
 //
 // Operators: is / is not / any of, AND across dimensions. Yes/no dimensions
-// (In my queue, Blocked, …) offer only "is".
+// (In my Focus, Blocked, …) offer only "is".
 
 import { TASK_STATUSES } from "@contracts/vocabularies";
 import {
@@ -61,7 +61,7 @@ export const TASK_FILTER_LABELS: Record<TaskFilterDimension, string> = {
   energy: "Energy",
   due: "Due date",
   scheduled: "Scheduled",
-  queued: "In my queue",
+  queued: "In my Focus",
   blocked: "Blocked",
   recurring: "Recurring",
   subtasks: "Has subtasks",

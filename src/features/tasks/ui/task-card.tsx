@@ -164,9 +164,14 @@ function TaskCardView({
           {task.status === "done" ? "Mark not done" : "Mark done"}
         </ContextMenuItem>
         {!isClosedTask(task) ? (
-          <ContextMenuItem onSelect={() => actions.toggleQueue(task.id)}>
-            {facts.queued ? "Remove from queue" : "Add to queue"}
-          </ContextMenuItem>
+          <>
+            <ContextMenuItem onSelect={() => actions.focusOnTask(task.id)}>
+              Focus on this
+            </ContextMenuItem>
+            <ContextMenuItem onSelect={() => actions.toggleQueue(task.id)}>
+              {facts.queued ? "Remove from Focus" : "Add to Focus"}
+            </ContextMenuItem>
+          </>
         ) : null}
         {task.recurrence && isOpenTask(task) ? (
           <ContextMenuItem onSelect={() => actions.skipOccurrence(task.id)}>

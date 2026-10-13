@@ -113,7 +113,7 @@ export function useInboxView({
   api: InboxApi;
   runtime: ModuoRuntime | null;
   workspaceId: string;
-  /** The Inbox is the place open (in Plan): its keys and the bar's mode apply. */
+  /** The Inbox is the place open: its keys and the bar's mode apply. */
   enabled: boolean;
   canEdit: boolean;
   selectedTaskId: string | null;
