@@ -1,9 +1,9 @@
 # Chat v2 — the re-plan
 
-> **Status (2026-10-13): round 1 sent. Waiting on Maciej's answers to CH1–CH26.**
+> **Status (2026-10-13): round 1 sent. Waiting on Maciej's answers to CH1–CH28** (CH27–CH28 added after the visual audit landed).
 >
-> - **Open calls:** CH1–CH26, all ❓. Load-bearing: ★ CH1 (the bar), ★ CH2 (the shape), ★ CH6 (what reaches you), ★ CH8 (Catch up), ★ CH20 (the hackathon's facts), ★ CH22 (the hackathon's structure, shared with the hackathon plan).
-> - **Research lanes** ([`research/`](./research/)): four landed and folded in (early-decisions audit, role journeys, competitor structure, hackathon). Two still running: **current state** (code + a live look; folds into §1.3 B) and **visual audit** (folds into §5).
+> - **Open calls:** CH1–CH28, all ❓. Load-bearing: ★ CH1 (the bar), ★ CH2 (the shape), ★ CH6 (what reaches you), ★ CH8 (Catch up), ★ CH20 (the hackathon's facts), ★ CH22 (the hackathon's structure, shared with the hackathon plan).
+> - **Research lanes** ([`research/`](./research/)): five landed and folded in (early-decisions audit, role journeys, competitor structure, hackathon, visual audit → §5). One still running: **current state** (code + a live look; folds into §1.3 B).
 > - **Research data in the shared local database** (the current-state lane; its file's last section will list every row): workspace **"Chat replan research"** `669be464-0b9a-4d84-8537-544ac04dba5f` with ~3,000 seeded messages; a third local user (`third@moduo.local`); **`dev@moduo.local`'s `plan_tier` was changed from `free` and must be put back** (the lane restores it when it finishes; check).
 > - **Prototype:** [`prototypes/round-1.html`](./prototypes/round-1.html) (keys 1–7 frames, V variants; serve the folder over http to see the Geist font).
 > - **Uncommitted:** nothing.
@@ -186,7 +186,21 @@ From [research/role-journeys.md](./research/role-journeys.md) (a normal week per
 
 ## 5. The visual north star, applied to Chat
 
-*From the visual audit.*
+From the [visual audit](./research/visual-audit.md): 38 issues measured in the chat stories (dark, dense, light, blue accent) and a read-only look at the live app.
+
+**The headline.** Chat v1 is calm and mostly token-clean: no blur, no raw hex, reveals that fade, the accent kept off the rail. But it predates DS-6 and the Tasks v3 rules, and in four places it would teach the wrong thing if another module copied it:
+1. **Its right panel isn't the shared one:** switched by toggles in the centre header, closed with ×, not in the registry (→ §6 #8).
+2. **The message column ignores density:** at dense the rail and buttons shrink, but every message, avatar, reaction and divider stays the same size (→ CH27).
+3. **A second avatar system:** grey for everyone, its own initials rule, so a self-DM shows "M" for "Me" (rule 43; → the kit's avatar).
+4. **Five date formats**, none from the shared grammar (rule 41).
+
+Under those: four hover languages, three focus recipes (rail rows show the browser's own blue outline), two hand-built floating surfaces, a mention that stacks four accent marks and loses its hover (→ CH28), five count styles, small caps in the rail and panels, 18 inline size overrides, hit targets under 24 px, and the loading and locked screens showing the shell's placeholder text "Feature tools panel".
+
+**Every fix-list item breaks a rule that already exists**, so it goes into the rebuild with no call. The audit's §3 maps each chat piece to the kit (NavRow, GroupHeader, PersonAvatar, Chip for reactions, Toolbar, FeedComposer, EmptyState, PropertyRow, the date grammar).
+
+**Chat-only pieces that need their own north-star definition** (round 2b, like Tasks' Timeline and run surfaces): the message row, the composer, the reaction bar, the thread line, the "New" line, the day divider, the typing line, the presence dot, jumbo emoji.
+
+**What would spread if copied** (the audit's §4): panels switched from the centre header; fixed-size content inside a density-aware shell; a module-local avatar helper; ad-hoc date formatters; status accents that stack; the inverted pill as a count; border hover on pills and cards; a search field in the rail; a message row that isn't a Row.
 
 ## 6. Technical decisions I'm taking
 
@@ -277,7 +291,7 @@ Chat's own blocks can start on what's landed (structure, editor, References, pan
 
 **CH4 · Who sees Chat** (audit D2)
 - **v1:** every workspace shows the Chat tab; below Duo it's an upgrade explainer.
-- **Proposed:** Chat appears when a workspace has a **second member**. A one-person workspace never shows it (there's nobody to talk to). The upgrade lives where the need starts: inviting a second person, and Settings → Plans. A multi-person workspace below Duo (after a downgrade) keeps a locked tab with "Ask the owner".
+- **Proposed:** Chat appears when a workspace has a **second member**. A one-person workspace never shows it (there's nobody to talk to). The upgrade lives where the need starts: inviting a second person, and Settings → Plans. A multi-person workspace below Duo (after a downgrade) keeps a locked tab: a plain empty state with one line and "Ask the owner", not v1's four-card marketing page.
 - ⌘7 stays Chat's number (Tasks 90b uses it in the capture). When Chat is hidden, the numbers follow the visible tabs, as today.
 - **48a:** solo people never wanted the tab; teams lose nothing.
 - *Recommend: yes.* · changes v1
@@ -405,6 +419,7 @@ Chat's own blocks can start on what's landed (structure, editor, References, pan
 **CH15 · One editor: what you type is what you'll see**
 - **v1:** a plain text box with `**bold**`-style markup; a picked item reads as raw words until sent.
 - **Proposed:** the composer is the app's shared editor (the one capture and notes use): references appear as chips while you type, formatting shows as you type, and markdown shortcuts still work (`**`, `` ` ``, `>`). ⏎ sends, ⇧⏎ makes a new line. Pasting stays clean text.
+- **Formatting buttons appear only when you select text** (⌘B, ⌘I, ⌘E as today); at rest the composer shows attach · `@` · emoji · send. v1 shows ten icons always, which fills the thread panel's whole width.
 - **Why it's a call:** you'd feel it every message. The rest (storage, the one grammar) is technical and in §6.
 - **48a:** people who never type markup get formatting they can see; people who do keep their shortcuts.
 - *Recommend: yes.* · changes v1
@@ -503,6 +518,24 @@ The hackathon readiness plan (`t/maciej/hackathon-plan`) owns workspaces, invite
 - **Proposed:** keep the owner's-plan rule, and add a second way in: a workspace can carry its own chat entitlement **with an end date**, set by Moduo staff (an event or a comp). After it ends, history stays readable, posting stops, and the owner sees "Keep chatting on Duo or Team".
 - **Rejected:** ungating chat in "event" workspaces with no end (a loophole), and spending each team owner's one trial on the event.
 - **48a:** the same dated grant serves classes, bootcamps and comps for early users.
+- *Recommend: yes.* · changes v1
+
+❓ OK?
+
+### F · Visual *(added after round 1 was sent, from the visual audit)*
+
+**CH27 · How dense a conversation is**
+- **v1:** one fixed layout; the app's density setting doesn't reach messages.
+- **Proposed:** one layout (avatar and name once per group of messages, like Slack's default), that the app's density setting tightens like everything else (rule 44): avatar 32 → 24 px, the gutter and row padding narrower, body text 14 px at every step. **No chat-only "compact" toggle**: density stays one setting app-wide.
+- **48a:** dense-UI people get it through the one setting they already use.
+- *Recommend: yes.* · changes v1
+
+❓ OK?
+
+**CH28 · Mentions and the "New" line: one accent each** (rule 46)
+- **v1:** a mention stacks a row tint, a bar and a pill (and the row stops showing hover); five accent marks can show at rest on one screen.
+- **Proposed:** in a conversation only two things use the accent: the `@you` mark in the text, and the "New" line. No row tint, no bar. In the sidebar, unread is weight and the count is neutral (CH5). Presence dots stay neutral grey, not green.
+- **48a:** calmer for everyone; mentions still stand out because they're the only accent in the text.
 - *Recommend: yes.* · changes v1
 
 ❓ OK?
