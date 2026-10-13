@@ -607,16 +607,7 @@ export function EstimateValue({
           <PropertyValue
             empty={!hasAny}
             icon={<Timer />}
-            // "you 50m" takes a second line before the value would break (AC1.16).
-            className="flex-wrap"
             aria-label={hasAny ? `Estimate: ${spoken}` : "Estimate: add one"}
-            trailing={
-              row.mine ? (
-                <span className="shrink-0 font-sans text-xs text-muted-foreground tabular-nums">
-                  {row.mine}
-                </span>
-              ) : null
-            }
           >
             {value}
           </PropertyValue>
@@ -625,12 +616,22 @@ export function EstimateValue({
           <EstimateEditor task={task} api={api} onDone={() => setOpen(false)} />
         </PopoverContent>
       </Popover>
-      {timed && row.progress !== null ? (
-        <span
-          aria-hidden
-          className="mt-0.5 mb-1 ml-6 block h-0.5 w-16 overflow-hidden rounded-full bg-hairline"
-        >
-          <span className={cn("block h-full bg-muted-foreground", progressWidth(row.progress))} />
+      {/* The bar and "you 50m" share a line of their own under the value, so
+          the value never breaks (checkpoint 1, AC1.16). */}
+      {timed && (row.progress !== null || row.mine) ? (
+        <span className="mb-1 ml-6 flex items-center gap-2">
+          {row.progress !== null ? (
+            <span aria-hidden className="block h-0.5 w-16 overflow-hidden rounded-full bg-hairline">
+              <span
+                className={cn("block h-full bg-muted-foreground", progressWidth(row.progress))}
+              />
+            </span>
+          ) : null}
+          {row.mine ? (
+            <span aria-hidden className="font-sans text-xs text-muted-foreground tabular-nums">
+              {row.mine}
+            </span>
+          ) : null}
         </span>
       ) : null}
     </div>

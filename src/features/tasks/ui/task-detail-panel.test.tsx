@@ -277,7 +277,9 @@ describe("the comp layout and property rule C (U3-1)", () => {
     expect(time.querySelector(".whitespace-nowrap")?.textContent).toBe("1h 20m of ~4h");
     expect(time.textContent).toContain("1h 20m");
     expect(time.textContent).toContain("of ~4h");
-    await waitFor(() => expect(time.textContent).toContain("you 50m"));
+    // My share sits on the line under the value, with the bar (never inside it).
+    await waitFor(() => expect(screen.getByText("you 50m")).toBeTruthy());
+    expect(time.textContent).not.toContain("you 50m");
   });
 
   it("view-only members see the values but no quiet line, and ⋯ only copies", async () => {
