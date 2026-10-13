@@ -7,10 +7,13 @@
 --    stored as words; COMMENT_REACTIONS in @contracts/vocabularies). Read by
 --    whoever can read the comment (its own RLS); written only by the op.
 -- 3. One gate for the item a comment is on, `comments__item_level`: a task's
---    (tasks__visible; can_access … 'full'), a note's (can_access), or for any
---    other item whether you can see it (perm_can_see_entity). Every op asks it:
+--    (tasks__visible; can_access … 'full'), a note's (can_access), the other
+--    known types' (comments__item_visible_to), and nobody for an unknown type.
+--    The comments read policy is redefined onto it, so reading and every op
+--    agree. Mentions and participant notices reach only people who can see
+--    the item (comments__item_visible_to). Every op asks it:
 --    - comments_op_add (redefined from its live body): you comment only on
---      what you can see;
+--      what you can see; the same refusal for hidden and missing;
 --    - comments_op_edit:    the author only, while they can see the item; a
 --                           person named for the first time is notified
 --                           (`comments.edit`), nobody else;
@@ -86,10 +89,57 @@ BEGIN
     IF NOT public.can_access('note', p_id, 'view') THEN RETURN 'none'; END IF;
     IF public.can_access('note', p_id, 'full') THEN RETURN 'full'; END IF;
     RETURN 'view';
+  ELSIF p_type IN ('bucket', 'contact', 'company', 'event', 'email_thread', 'email_account', 'calendar_account') THEN
+    RETURN CASE WHEN public.comments__item_visible_to(p_workspace_id, p_type, p_id, public.perm_actor_id())
+                THEN 'view' ELSE 'none' END;
   END IF;
-  RETURN CASE WHEN public.perm_can_see_entity(p_workspace_id, p_type, p_id) THEN 'view' ELSE 'none' END;
+  -- Any other type: nobody (never "everyone in the workspace").
+  RETURN 'none';
 END;
 $$;
+
+-- Whether a given person can see the item a comment is on: who a mention or
+-- a participant notice may reach. The same rules as comments__item_level,
+-- asked for someone else (can_access takes the person; owner-only items are
+-- their owner's).
+CREATE OR REPLACE FUNCTION public.comments__item_visible_to(p_workspace_id uuid, p_type text, p_id uuid, p_user uuid)
+RETURNS boolean
+LANGUAGE plpgsql
+STABLE SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+BEGIN
+  IF p_user IS NULL THEN RETURN false; END IF;
+  IF p_type IN ('task', 'task_project') THEN
+    RETURN EXISTS (SELECT 1 FROM public.tasks t WHERE t.id = p_id AND t.workspace_id = p_workspace_id)
+       AND public.tasks__visible_to(p_id, p_user);
+  ELSIF p_type IN ('note', 'bucket', 'contact', 'company', 'event') THEN
+    RETURN public.can_access(p_type, p_id, 'view', p_user)
+       AND CASE p_type
+             WHEN 'note' THEN EXISTS (SELECT 1 FROM public.notes n WHERE n.id = p_id AND n.workspace_id = p_workspace_id)
+             WHEN 'bucket' THEN EXISTS (SELECT 1 FROM public.buckets b WHERE b.id = p_id AND b.workspace_id = p_workspace_id)
+             WHEN 'contact' THEN EXISTS (SELECT 1 FROM public.contacts c WHERE c.id = p_id AND c.workspace_id = p_workspace_id)
+             WHEN 'company' THEN EXISTS (SELECT 1 FROM public.companies c WHERE c.id = p_id AND c.workspace_id = p_workspace_id)
+             ELSE EXISTS (SELECT 1 FROM public.calendar_events e WHERE e.id = p_id AND e.workspace_id = p_workspace_id)
+           END;
+  ELSIF p_type = 'email_thread' THEN
+    RETURN EXISTS (SELECT 1 FROM public.email_refs r WHERE r.id = p_id AND r.owner_id = p_user AND r.workspace_id = p_workspace_id);
+  ELSIF p_type = 'email_account' THEN
+    RETURN EXISTS (SELECT 1 FROM public.email_accounts a WHERE a.id = p_id AND a.owner_id = p_user AND a.workspace_id = p_workspace_id);
+  ELSIF p_type = 'calendar_account' THEN
+    RETURN EXISTS (SELECT 1 FROM public.calendar_accounts a WHERE a.id = p_id AND a.owner_id = p_user AND a.workspace_id = p_workspace_id);
+  END IF;
+  RETURN false;
+END;
+$$;
+
+-- Comments read through the same gate the ops use, so reading and writing
+-- can never disagree (and their reactions follow, through their own policy).
+DROP POLICY IF EXISTS comments_workspace_read ON public.comments;
+CREATE POLICY comments_workspace_read ON public.comments
+  FOR SELECT TO authenticated
+  USING (public.tasks_module_can_access_workspace(workspace_id)
+         AND public.comments__item_level(workspace_id, entity_type, entity_id) <> 'none');
 
 -- A person (never an app over a key), a member of the comment's workspace
 -- who can comment there and can see the item: the comment, locked. Anyone
@@ -141,7 +191,7 @@ AS $function$
 DECLARE
   v_comment public.comments;
   v_body text := coalesce(p_body, '');
-  v_mentions jsonb := to_jsonb(coalesce(p_mentioned_user_ids, '{}'::uuid[]));
+  v_mentions jsonb;
   v_owner uuid;
   v_creator uuid;  -- tasks: the creator, when known (TV-D1)
   v_notify jsonb;
@@ -156,6 +206,10 @@ BEGIN
   IF public.comments__item_level(p_workspace_id, p_entity_type, p_entity_id) = 'none' THEN
     RAISE EXCEPTION 'That item isn''t there any more.' USING ERRCODE = 'P0002';
   END IF;
+  -- TV-U13: a mention reaches only someone who can see the item.
+  SELECT coalesce(jsonb_agg(DISTINCT u::text), '[]'::jsonb) INTO v_mentions
+  FROM unnest(coalesce(p_mentioned_user_ids, '{}'::uuid[])) AS u
+  WHERE public.comments__item_visible_to(p_workspace_id, p_entity_type, p_entity_id, u);
 
   -- Ensure the target exists in the registry (satisfies the FK) without
   -- reviving a tombstone or clobbering an authoritative label.
@@ -211,7 +265,9 @@ BEGIN
     SELECT v_creator
     WHERE v_creator IS NOT NULL
   ) s
-  WHERE v_key IS NOT NULL OR s.uid IS DISTINCT FROM public.perm_actor_id();
+  WHERE (v_key IS NOT NULL OR s.uid IS DISTINCT FROM public.perm_actor_id())
+    -- TV-U13: and only someone who can still see the item.
+    AND public.comments__item_visible_to(p_workspace_id, p_entity_type, p_entity_id, s.uid);
 
   PERFORM public.module_activity_log(
     p_workspace_id, 'comments', p_entity_type, p_entity_id, 'comments.add',
@@ -270,7 +326,8 @@ BEGIN
   SELECT coalesce(jsonb_agg(DISTINCT u::text), '[]'::jsonb) INTO v_new
   FROM unnest(coalesce(p_mentioned_user_ids, '{}'::uuid[])) AS u
   WHERE NOT (v_before @> jsonb_build_array(u::text))
-    AND u IS DISTINCT FROM auth.uid();
+    AND u IS DISTINCT FROM auth.uid()
+    AND public.comments__item_visible_to(v.workspace_id, v.entity_type, v.entity_id, u);
 
   UPDATE public.comments
      SET body = v_body, edited_at = now(), updated_at = now()
@@ -383,10 +440,14 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.comments__item_level(uuid, text, uuid) FROM PUBLIC, anon, authenticated;
+-- The read policy asks comments__item_level as the reader: callable by members
+-- (it answers only for the caller), never anonymously.
+REVOKE ALL ON FUNCTION public.comments__item_level(uuid, text, uuid) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.comments__item_visible_to(uuid, text, uuid, uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.comments__item_visible_to(uuid, text, uuid, uuid) TO service_role;
 REVOKE ALL ON FUNCTION public.comments__can_remove(public.comments) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.comments__find(uuid) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.comments__item_level(uuid, text, uuid) TO service_role;
+GRANT EXECUTE ON FUNCTION public.comments__item_level(uuid, text, uuid) TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.comments__can_remove(public.comments) TO service_role;
 GRANT EXECUTE ON FUNCTION public.comments__find(uuid) TO service_role;
 

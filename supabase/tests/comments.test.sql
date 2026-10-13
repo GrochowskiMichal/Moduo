@@ -309,6 +309,97 @@ BEGIN
   PERFORM test.ok(r NOT LIKE 'ok%', 'add: a task from another workspace isn''t this workspace''s', r);
 END $$;
 
+-- ── Reading follows the same gate; mentions and notices only reach viewers ──
+DO $$
+DECLARE
+  r text;
+  r2 text;
+BEGIN
+  -- A private task's comments: nobody else reads them (type 'task' or 'task_project').
+  PERFORM test.as_user('O', format($q$SELECT public.comments_op_add(%L, 'task_project', %L, 'Old-type secret', '{}'::uuid[], 'x', 'task')$q$,
+    test.id('W'), test.id('TP')));
+  PERFORM test.ok(test.value_as('M', format($q$SELECT count(*)::text FROM public.comments WHERE entity_id = %L$q$,
+                   test.id('TP'))) = '0',
+    'read: no comment on a private task reaches someone who can''t see it (task and task_project)');
+  PERFORM test.ok(test.value_as('O', format($q$SELECT count(*)::text FROM public.comments WHERE entity_id = %L$q$,
+                   test.id('TP'))) = '2',
+    'read: its owner reads both');
+
+  -- An unknown item type: nobody, not even the workspace.
+  INSERT INTO public.entities (workspace_id, entity_type, entity_id, label)
+  VALUES (test.id('W'), 'widget', test.id('WG'), 'A widget');
+  INSERT INTO public.comments (workspace_id, entity_type, entity_id, body, created_by)
+  VALUES (test.id('W'), 'widget', test.id('WG'), 'On a widget', test.id('O'));
+  PERFORM test.ok(test.value_as('E', format($q$SELECT count(*)::text FROM public.comments WHERE entity_id = %L$q$,
+                   test.id('WG'))) = '0'
+              AND test.value_as('O', format($q$SELECT count(*)::text FROM public.comments WHERE entity_id = %L$q$,
+                   test.id('WG'))) = '0',
+    'read: a comment on an unknown type is nobody''s to read');
+  r := test.as_user('O', format($q$SELECT public.comments_op_add(%L, 'widget', %L, 'more', '{}'::uuid[], 'x', 'x')$q$,
+    test.id('W'), test.id('WG')));
+  PERFORM test.ok(r LIKE 'P0002%', 'add: nobody comments on an unknown type', r);
+
+  -- One refusal for hidden and missing.
+  r := test.as_user('M', format($q$SELECT public.comments_op_add(%L, 'task', %L, 'x', '{}'::uuid[], 'x', 'task')$q$,
+    test.id('W'), test.id('TP')));
+  r2 := test.as_user('M', format($q$SELECT public.comments_op_add(%L, 'task', %L, 'x', '{}'::uuid[], 'x', 'task')$q$,
+    test.id('W'), test.id('no-such-task')));
+  PERFORM test.ok(r = r2 AND r LIKE 'P0002%', 'add: a hidden task and a missing one answer alike', r || ' / ' || r2);
+  r := test.as_user('M', format($q$SELECT * FROM public.comments_op_react(%L, 'eyes')$q$, test.id('CP')));
+  r2 := test.as_user('M', format($q$SELECT * FROM public.comments_op_react(%L, 'eyes')$q$, test.id('no-such-comment')));
+  PERFORM test.ok(r = r2 AND r LIKE 'P0002%', 'react: a hidden comment and a missing one answer alike', r || ' / ' || r2);
+  r := test.as_user('M', format($q$SELECT public.comments_op_edit(%L, 'x')$q$, test.id('CP')));
+  r2 := test.as_user('M', format($q$SELECT public.comments_op_edit(%L, 'x')$q$, test.id('no-such-comment')));
+  PERFORM test.ok(r = r2 AND r LIKE 'P0002%', 'edit: a hidden comment and a missing one answer alike', r || ' / ' || r2);
+
+  -- Mentions: only people who can see the item are stored (and so notified).
+  PERFORM test.as_user('O', format($q$SELECT public.comments_op_add(%L, 'task', %L, 'For @E and @F', %L::uuid[], 'x', 'task')$q$,
+    test.id('W'), test.id('TP'), ARRAY[test.id('E'), test.id('F')]));
+  PERFORM test.ok((SELECT payload -> 'mentioned_user_ids' FROM public.module_activity
+                   WHERE op = 'comments.add' AND payload ->> 'excerpt' = 'For @E and @F') = '[]'::jsonb,
+    'mentions: nobody who can''t see the task is named (no notice, no excerpt)');
+  PERFORM test.as_user('O', format($q$SELECT public.comments_op_add(%L, 'task', %L, 'Shared: @E', %L::uuid[], 'x', 'task')$q$,
+    test.id('W'), test.id('T'), ARRAY[test.id('E'), test.id('M')]));
+  PERFORM test.ok((SELECT payload -> 'mentioned_user_ids' FROM public.module_activity
+                   WHERE op = 'comments.add' AND payload ->> 'excerpt' = 'Shared: @E')
+                  @> jsonb_build_array(test.id('E')::text, test.id('M')::text),
+    'mentions: people who can see it are named');
+  PERFORM test.comment('O', 'CM', 'TP', 'Draft for me');
+  PERFORM test.as_user('O', format($q$SELECT public.comments_op_edit(%L, 'Draft for me and @E', %L::uuid[])$q$,
+    test.id('CM'), ARRAY[test.id('E')]));
+  PERFORM test.ok((SELECT payload -> 'mentioned_user_ids' FROM public.module_activity
+                   WHERE op = 'comments.edit' AND payload ->> 'comment_id' = test.id('CM')::text) = '[]'::jsonb,
+    'mentions: an edit doesn''t name someone who can''t see the task either');
+
+  -- Participants: someone whose share was taken back hears nothing more.
+  PERFORM test.as_user('O', format($q$SELECT public.comments_op_add(%L, 'task', %L, 'After S left', '{}'::uuid[], 'x', 'task')$q$,
+    test.id('W'), test.id('TS')));
+  PERFORM test.ok(NOT ((SELECT payload -> 'notify_user_ids' FROM public.module_activity
+                        WHERE op = 'comments.add' AND payload ->> 'excerpt' = 'After S left')
+                       @> jsonb_build_array(test.id('S')::text)),
+    'notices: a past commenter who can''t see the task any more isn''t notified');
+
+  -- A note shared view-only, then taken back.
+  INSERT INTO public.notes (id, workspace_id, created_by, title, share_mode)
+  VALUES (test.id('NO'), test.id('W'), test.id('O'), 'Plan', 'custom');
+  DELETE FROM public.resource_grants WHERE resource_type = 'note' AND resource_id = test.id('NO');
+  INSERT INTO public.resource_grants (workspace_id, resource_type, resource_id, subject_type, subject_id, level, created_by)
+  VALUES (test.id('W'), 'note', test.id('NO'), 'member', test.id('N'), 'view', test.id('O'));
+  r := test.as_user('O', format($q$SELECT public.comments_op_add(%L, 'note', %L, 'Note thoughts', '{}'::uuid[], 'Plan', 'note')$q$,
+    test.id('W'), test.id('NO')));
+  PERFORM test.ok(r LIKE 'ok%', 'note: its owner comments', r);
+  PERFORM test.ok(test.value_as('N', format($q$SELECT count(*)::text FROM public.comments WHERE entity_id = %L$q$,
+                   test.id('NO'))) = '1',
+    'note: a view share reads its comments');
+  PERFORM test.ok(test.value_as('E', format($q$SELECT count(*)::text FROM public.comments WHERE entity_id = %L$q$,
+                   test.id('NO'))) = '0',
+    'note: someone it isn''t shared with reads none');
+  DELETE FROM public.resource_grants WHERE resource_type = 'note' AND resource_id = test.id('NO');
+  PERFORM test.ok(test.value_as('N', format($q$SELECT count(*)::text FROM public.comments WHERE entity_id = %L$q$,
+                   test.id('NO'))) = '0',
+    'note: once taken back, its comments are gone for N');
+END $$;
+
 -- ── Erasure: a person's reactions go with their profile ──────────────────────
 DO $$
 BEGIN
