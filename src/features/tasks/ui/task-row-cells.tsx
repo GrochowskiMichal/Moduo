@@ -308,9 +308,12 @@ export function DateCell({
   onRequestCommand,
   onClearCommand,
   actions,
+  label = null,
 }: {
   task: Task;
   kind: DateCellKind;
+  /** The view's own words for Standard's date (Upcoming's "3:00 PM · 45m"). */
+  label?: string | null;
   canEdit: boolean;
   /** The editor the keyboard or the menu asked for, if any. */
   command: "schedule" | "due" | null;
@@ -321,7 +324,7 @@ export function DateCell({
   actions: Pick<TaskRowActions, "patchTask">;
 }) {
   const now = nowOn(today);
-  const shown = cellDate(task, kind, now);
+  const shown = cellDate(task, kind, now, label);
   const col = kind === "row" ? "date" : kind;
   const width =
     kind === "row"
@@ -418,12 +421,17 @@ function cellDate(
   task: Task,
   kind: DateCellKind,
   now: Date,
+  viewLabel: string | null = null,
 ): { mark: React.ReactNode; description: string; edit: "schedule" | "due" } | null {
   if (kind === "row") {
     const date: RowDate | null = rowDate(task, now);
-    if (!date) return null;
+    if (!date) {
+      // A view's own words for a dateless row (a snoozed task's "until Fri").
+      if (!viewLabel) return null;
+      return { mark: <DateText>{viewLabel}</DateText>, description: viewLabel, edit: "due" };
+    }
     return {
-      mark: <DateMark date={date} />,
+      mark: <DateMark date={viewLabel ? { ...date, label: viewLabel } : date} />,
       description: date.description,
       edit: date.kind === "due" ? "due" : "schedule",
     };

@@ -62,8 +62,10 @@ export type TasksMode = "plan" | "execute";
 /** The sidebar's selections besides projects: the centre views its ⋯ opens. */
 export const ARCHIVED_SELECTION = "archived";
 export const TRASH_SELECTION = "trash";
-/** Upcoming (REPLAN 29): its own screen is TV-U15's; until then a dated scope. */
+/** Upcoming (REPLAN 29, TV-U15's screen). */
 export const UPCOMING_SELECTION = "upcoming";
+/** Won't do: the reachable list with Reopen (tasks-v3 §2), from the ⋯ (TV-U15). */
+export const WONTDO_SELECTION = "wontdo";
 
 /** The keys collapse is remembered by: Pinned, Views, and each area. */
 export const PINNED_GROUP = "pinned";
@@ -144,6 +146,8 @@ type Props = {
   /** Archived projects and Recently deleted: from the ⋯, never rows (98). */
   archivedCount: number;
   trashCount: number;
+  /** Won't do tasks (TV-U15): from the ⋯ too. */
+  wontDoCount?: number;
 
   /** The sidebar's <nav>, for the page to hand focus back to it (`focusNavRow`). */
   navRef?: RefObject<HTMLElement | null>;
@@ -219,6 +223,7 @@ export function BucketRail({
   onDeleteArea,
   archivedCount,
   trashCount,
+  wontDoCount = 0,
   navRef,
   dropAccepts,
 }: Props) {
@@ -405,6 +410,9 @@ export function BucketRail({
             trashCount={trashCount}
             onOpenArchived={() => onSelect(ARCHIVED_SELECTION)}
             onOpenTrash={() => onSelect(TRASH_SELECTION)}
+            wontDoCount={wontDoCount}
+            onOpenWontDo={() => onSelect(WONTDO_SELECTION)}
+            wontDoCurrent={selection === WONTDO_SELECTION}
             archivedCurrent={selection === ARCHIVED_SELECTION}
             trashCurrent={selection === TRASH_SELECTION}
           />
@@ -581,6 +589,9 @@ function SidebarHairline({
   onOpenTrash,
   archivedCurrent,
   trashCurrent,
+  wontDoCount,
+  onOpenWontDo,
+  wontDoCurrent,
 }: {
   canEdit: boolean;
   hidden: ReadonlySet<TasksSidebarHideable>;
@@ -594,6 +605,9 @@ function SidebarHairline({
   onOpenTrash: () => void;
   archivedCurrent: boolean;
   trashCurrent: boolean;
+  wontDoCount: number;
+  onOpenWontDo: () => void;
+  wontDoCurrent: boolean;
 }) {
   const rows: TasksSidebarHideable[] = showMine
     ? ["focus", "upcoming", "mine", "all"]
@@ -661,6 +675,10 @@ function SidebarHairline({
             {archivedCount > 0 ? (
               <DropdownMenuShortcut>{archivedCount}</DropdownMenuShortcut>
             ) : null}
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={onOpenWontDo} data-current={wontDoCurrent || undefined}>
+            Won’t do
+            {wontDoCount > 0 ? <DropdownMenuShortcut>{wontDoCount}</DropdownMenuShortcut> : null}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={onOpenTrash} data-current={trashCurrent || undefined}>
             Recently deleted

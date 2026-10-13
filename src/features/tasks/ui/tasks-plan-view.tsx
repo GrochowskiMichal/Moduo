@@ -28,6 +28,7 @@ import { onCreateNew } from "../../../components/app/create-events";
 import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell";
 import { type PanelItem, RightPanel, usePanelStack } from "../../../components/app/right-panel";
 import { truncationNotice } from "../../../components/app/truncation-notice";
+import { TeamMark } from "../../../components/ui/avatar";
 import { Button } from "../../../components/ui/button";
 import { EmptyState } from "../../../components/ui/empty-state";
 import { restoreNavFocus } from "../../../components/ui/nav-row";
@@ -69,7 +70,7 @@ import {
 import { createLinkWithToast } from "../../spine/ui/drop-link-toast";
 import { WorkspaceContext } from "../../workspaces/workspace-context";
 import { useAssignees } from "../assignees";
-import { myTasksScope, openCount, resolveDefaultSelection, showsMyTasks } from "../default-view";
+import { myTasksScope, openCount, resolveDefaultSelection } from "../default-view";
 import { nextHeaderSort, type TaskLayout, tasksDisplayDefaults } from "../display";
 import {
   asRailDropTarget,
@@ -81,10 +82,20 @@ import {
   railDropAction,
   railSortCollision,
 } from "../dnd/rail-drop";
-import { type CaptureSeed, showsArchived, showsBacklog, statusesLetThrough } from "../filters";
+import { type CaptureSeed, showsArchived, statusesLetThrough } from "../filters";
+import { todayStr } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { GroupAdd } from "../list-group-add";
 import { type Bucket, isDrifted, PRIVATE_PROJECT_LABEL, type Task } from "../model";
+import {
+  allProjectOrder,
+  allView,
+  myTasksView,
+  orderMyTasks,
+  startsFolded,
+  TEAM_BLOCK_ROWS,
+  teamBlocks,
+} from "../my-tasks";
 import { showsSortedNote, sortedByLabel } from "../order";
 import { resolveTasksDeepLink, taskIdForHandle } from "../search";
 import { projectDeleteSummary, projectOpenWork } from "../sidebar";
@@ -99,12 +110,15 @@ import {
   type TasksMode,
   TRASH_SELECTION,
   UPCOMING_SELECTION,
+  WONTDO_SELECTION,
 } from "./bucket-rail";
 import { ArchiveProjectDialog, DeleteBucketDialog } from "./delete-bucket-dialog";
 import { asTaskDrag, taskDragAnnouncements, useTaskDndSensors } from "./dnd/task-dnd";
 import { DriftTriageDialog } from "./drift-triage-dialog";
 import { ExecuteView } from "./execute-view";
 import { FrontierOfferDialog } from "./frontier-offer-dialog";
+import { useInboxView } from "./inbox-view";
+import type { ListExtraGroup } from "./list-extensions";
 import { type PlanHeaderControls, type PlanView, SortedOrderLine } from "./plan-view-header";
 import { ProjectPanel } from "./project-panel";
 import { RecentlyDeletedView } from "./recently-deleted-view";
@@ -114,8 +128,10 @@ import { TASK_DETAIL_REFRESH_EVENT, TaskDetailPanel, TaskGonePanel } from "./tas
 import { TaskFullPage } from "./task-full-page";
 import { TaskListView } from "./task-list-view";
 import { TaskTimelineView } from "./task-timeline-view";
+import { useUpcomingView } from "./upcoming-view";
 import { useTasksDisplay } from "./use-tasks-display";
 import { useTasksFilters } from "./use-tasks-filters";
+import { AllEmpty, MyTasksEmpty, UpcomingEmpty, WontDoEmpty } from "./view-empty-states";
 
 type Props = {
   api: TasksModuleApi;
@@ -131,6 +147,7 @@ type Props = {
 const URL_MIRROR_DEBOUNCE_MS = 250;
 
 const EMPTY_IDS: readonly string[] = [];
+const NO_EXTRAS: readonly ListExtraGroup[] = [];
 
 // Per-workspace UI state (selection / mode / zoom) persisted locally — these
 // are view preferences, not synced data. Layout, grouping and filters are
@@ -319,7 +336,12 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   // Remember where you were, so the next open lands back on it (REPLAN 30);
   // Archived projects and Recently deleted aren't places to reopen.
   useEffect(() => {
-    if (selection === ARCHIVED_SELECTION || selection === TRASH_SELECTION) return;
+    if (
+      selection === ARCHIVED_SELECTION ||
+      selection === TRASH_SELECTION ||
+      selection === WONTDO_SELECTION
+    )
+      return;
     if (api.archivedBuckets.some((b) => b.id === selection)) return;
     writeLS(workspaceId, "lastBucket", selection);
   }, [workspaceId, selection, api.archivedBuckets]);
@@ -364,13 +386,13 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     );
   }, [api.loading, workspaceId, inboxId, buckets, inboundPending]);
 
-  // "My tasks" is only in the rail of workspaces with two or more members
-  // (tasks-v2 §1): with fewer, every task is yours, so All says the same.
+  // My tasks is always in the sidebar (tasks-v3 §3; TV-U15 retires
+  // tasks-v2's "two or more members" rule): its status groups answer "what am
+  // I on" even alone.
   const { assignees, currentUserId } = useAssignees();
   // Owners and admins edit the workspace's default statuses (TV-D9). Read
   // without useWorkspace so the page renders where no provider is mounted.
   const canManageWorkspace = useContext(WorkspaceContext)?.canManageWorkspace ?? false;
-  const showMyTasks = showsMyTasks(assignees.length);
 
   // Keep selection valid; "inbox" resolves against the seeded Inbox bucket.
   useEffect(() => {
@@ -379,20 +401,17 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       selection === "inbox" ||
       selection === "today" ||
       selection === UPCOMING_SELECTION ||
+      selection === WONTDO_SELECTION ||
+      selection === "mine" ||
       selection === ARCHIVED_SELECTION ||
       selection === TRASH_SELECTION
     )
       return;
-    if (selection === "mine") {
-      // Members load with the workspace; wait for them before ruling.
-      if (!showMyTasks && assignees.length > 0) setSelection("inbox");
-      return;
-    }
     if (inboxId && selection === inboxId) return;
     // An archived project opens read-only from Archived projects (TV-U6).
     if (api.archivedBuckets.some((b) => b.id === selection)) return;
     if (!buckets.some((b) => b.id === selection)) setSelection("inbox");
-  }, [selection, buckets, inboxId, showMyTasks, assignees.length, api.archivedBuckets]);
+  }, [selection, buckets, inboxId, api.archivedBuckets]);
   /** The archived project open now (read-only), if any. */
   const archivedProject = useMemo(
     () => api.archivedBuckets.find((b) => b.id === selection) ?? null,
@@ -465,60 +484,155 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   // Won't do tasks join a scope when Filter → Status asks for them (TV-U2,
   // AC1.4), besides the one kept above.
   const withArchived = showsArchived(tasksDisplay.filters);
-  // Backlog sits out of My tasks unless a Status filter asks for it (TV-D9).
-  const withBacklog = showsBacklog(tasksDisplay.filters);
   const statusFilter = useMemo(
     () => statusesLetThrough(tasksDisplay.filters),
     [tasksDisplay.filters],
+  );
+
+  // The views built on the List (TV-U15): Upcoming's days, the Inbox's
+  // triage, My tasks' team block. Each hands the List what differs.
+  const isInboxScope = selection === "inbox" || (inboxId !== null && selection === inboxId);
+  const projectIds = useMemo(() => buckets.map((b) => b.id), [buckets]);
+  const upcoming = useUpcomingView({ api, canEdit, inboxId, projectIds });
+  const inboxView = useInboxView({
+    api,
+    runtime,
+    workspaceId,
+    enabled: mode === "plan" && isInboxScope,
+    canEdit,
+    selectedTaskId,
+    onSelectTask: setSelectedTaskId,
+  });
+  // My tasks' team block (54): your teams' tasks nobody has taken yet.
+  const blocks = useMemo(
+    () => teamBlocks(tasks, api.teams, api.teamMembers, currentUserId),
+    [tasks, api.teams, api.teamMembers, currentUserId],
+  );
+  const waitingIds = useMemo(
+    () => new Set((api.waiting ?? []).map((w) => w.taskId)),
+    [api.waiting],
+  );
+  const myOrder = tasksDisplay.display.order;
+  const takeableIds = useMemo(
+    () => new Set(blocks.flatMap((b) => b.tasks.map((t) => t.id))),
+    [blocks],
+  );
+  const mineExtraGroups = useMemo<readonly ListExtraGroup[]>(
+    () =>
+      blocks.map((b) => ({
+        key: `team:${b.team.id}`,
+        place: "lead" as const,
+        label: `For ${b.team.name}`,
+        leading: <TeamMark name={b.team.name} id={b.team.id} />,
+        sub: `· ${b.tasks.length} unclaimed`,
+        count: null,
+        taskIds: b.tasks.map((t) => t.id),
+        limit: TEAM_BLOCK_ROWS,
+        add: canEdit
+          ? { kind: "add" as const, add: { seed: { teamId: b.team.id } } }
+          : { kind: "none" as const },
+      })),
+    [blocks, canEdit],
+  );
+  // Take it (54): the task becomes yours and keeps its team, with Undo.
+  // TV-D13's claim op refuses one somebody took first; until it's here the
+  // assignment goes through the assign op.
+  const takeRef = useRef({ api, currentUserId });
+  useLayoutEffect(() => {
+    takeRef.current = { api, currentUserId };
+  });
+  const takeTask = useCallback((id: string) => {
+    const { api: moduleApi, currentUserId: me } = takeRef.current;
+    if (!me) return;
+    const claim = (moduleApi as { claimTask?: (taskId: string) => void }).claimTask;
+    if (claim) {
+      claim(id);
+      undoToast("Taken · it’s yours", {
+        onUndo: () => moduleApi.patchTask(id, { assigneeId: null }),
+      });
+      return;
+    }
+    void moduleApi.dropTask({ taskId: id, assigneeId: me }, "Taken · it’s yours");
+  }, []);
+  // All (research §8): projects in the sidebar's order, area by area; a
+  // project's header names its area and an On hold or Done state, and those
+  // start folded (never hidden, 16).
+  const allBuckets = useMemo(() => {
+    const order = allProjectOrder(
+      buckets,
+      api.areas.map((a) => a.id),
+    );
+    const byId = new Map(buckets.map((b) => [b.id, b]));
+    return order.flatMap((id) => {
+      const b = byId.get(id);
+      return b ? [b] : [];
+    });
+  }, [buckets, api.areas]);
+  const allFolded = useCallback(
+    (key: string) => startsFolded(buckets.find((b) => b.id === key)),
+    [buckets],
+  );
+  const allGroupSub = useCallback(
+    (key: string) => {
+      const bucket = buckets.find((b) => b.id === key);
+      if (!bucket) return undefined;
+      const area = bucket.areaId ? api.areas.find((a) => a.id === bucket.areaId)?.name : null;
+      const state =
+        bucket.status === "on_hold" ? "On hold" : bucket.status === "done" ? "Done" : null;
+      const parts = [area, state].filter((p): p is string => !!p);
+      return parts.length > 0 ? `· ${parts.join(" · ")}` : undefined;
+    },
+    [buckets, api.areas],
   );
 
   const scopeTasksAll = useMemo(() => {
     if (selection === "today") return api.queuedTasks;
     if (selection === ARCHIVED_SELECTION || selection === TRASH_SELECTION) return [];
     const live = (t: Task) => t.status !== "archived" || withArchived || t.id === keptArchivedId;
-    if (selection === "all") return tasks.filter(live);
+    // All: every task in projects you can see, never your Inbox (20).
+    if (selection === "all") return allView(tasks, inboxId, live);
+    // Won't do, reachable, each with Reopen (§2).
+    if (selection === WONTDO_SELECTION) return tasks.filter((t) => t.status === "archived");
     if (selection === UPCOMING_SELECTION) {
-      // Until TV-U15's Upcoming: your dated tasks and unassigned ones, by date
-      // (spec §8). Backlog and finished ones sit out.
-      return tasks.filter(
-        (t) =>
-          (t.dueDate || t.scheduledAt) &&
-          (t.assigneeId === null || t.assigneeId === currentUserId) &&
-          !isClosedTask(t) &&
-          !isBacklogTask(t),
-      );
+      // One just marked Won't do here stays until the scope changes (TV-U1).
+      const kept = keptArchivedId ? tasks.find((t) => t.id === keptArchivedId) : undefined;
+      return kept && !upcoming.scope.includes(kept) ? [...upcoming.scope, kept] : upcoming.scope;
     }
     if (archivedProject) {
       return api.archivedTasks.filter((t) => t.bucketId === archivedProject.id && live(t));
     }
     if (selection === "mine") {
-      if (!withArchived && !withBacklog && !keptArchivedId)
-        return myTasksScope(tasks, currentUserId);
-      if (!currentUserId) return myTasksScope(tasks, currentUserId);
-      // My tasks' rule (assigned to me, not Won't do, not Backlog), plus the
-      // Won't do and Backlog ones a Status filter asks for, plus the kept one.
-      return tasks.filter(
-        (t) =>
-          t.assigneeId === currentUserId &&
-          live(t) &&
-          (!isBacklogTask(t) || withBacklog || t.id === selectedTaskId),
+      // Yours, Backlog in (the List folds it behind its line), in its own
+      // order: date, then priority, waiting at the end (call 84). The team
+      // block's tasks lead (they're in no status group).
+      const mine = myTasksView(
+        tasks,
+        currentUserId,
+        (t) => withArchived || t.id === keptArchivedId,
       );
+      const ordered = myOrder === "manual" ? orderMyTasks(mine, waitingIds) : mine;
+      return [...blocks.flatMap((b) => b.tasks), ...ordered];
     }
-    const bucketId = selection === "inbox" ? inboxId : selection;
+    const bucketId = isInboxScope ? inboxId : selection;
     if (!bucketId) return [];
-    return tasks.filter((t) => t.bucketId === bucketId && live(t));
+    const inProject = tasks.filter((t) => t.bucketId === bucketId && live(t));
+    return isInboxScope ? inboxView.scope(inProject) : inProject;
   }, [
     selection,
     tasks,
     inboxId,
+    isInboxScope,
     api.queuedTasks,
     currentUserId,
     keptArchivedId,
     withArchived,
-    withBacklog,
-    selectedTaskId,
     archivedProject,
     api.archivedTasks,
+    upcoming.scope,
+    inboxView.scope,
+    blocks,
+    waitingIds,
+    myOrder,
   ]);
   // Search in All also finds archived projects' tasks, labelled (REPLAN 78).
   const archivedSearchTasks = useMemo(
@@ -568,11 +682,13 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
           ? "Focus"
           : selection === UPCOMING_SELECTION
             ? "Upcoming"
-            : selection === "inbox"
-              ? "Inbox"
-              : archivedProject
-                ? archivedProject.name
-                : bucketNameById(selection);
+            : selection === WONTDO_SELECTION
+              ? "Won’t do"
+              : selection === "inbox"
+                ? "Inbox"
+                : archivedProject
+                  ? archivedProject.name
+                  : bucketNameById(selection);
 
   // The Queue is one ordered line-up, so its List view is never grouped.
   const effectiveGroupBy = selection === "today" ? "none" : tasksDisplay.display.group;
@@ -595,9 +711,10 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
 
   const totalOpenCount = useMemo(() => tasks.filter((t) => isOpenTask(t)).length, [tasks]);
   const myOpenCount = useMemo(
-    () => (showMyTasks ? openCount(myTasksScope(tasks, currentUserId)) : 0),
-    [showMyTasks, tasks, currentUserId],
+    () => openCount(myTasksScope(tasks, currentUserId)),
+    [tasks, currentUserId],
   );
+  const wontDoCount = useMemo(() => tasks.filter((t) => t.status === "archived").length, [tasks]);
 
   // Drifted tasks for the bucket currently being triaged (recomputed live so the
   // dialog empties as the user triages).
@@ -623,10 +740,16 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       dispatchOpenCapture({
         destination: projectId ? { projectId, sectionId } : undefined,
         queueTop,
-        seed: { ...captureSeed, ...at?.seed },
+        seed: {
+          ...captureSeed,
+          // Upcoming's New dates the task today, so it lands where you are
+          // looking (TV-U15); a day's "+" names its own day.
+          ...(selection === UPCOMING_SELECTION && !at ? { dueDay: todayStr() } : {}),
+          ...at?.seed,
+        },
       });
     },
-    [canEdit, captureHere, selectedTaskId, tasks, captureSeed],
+    [canEdit, captureHere, selectedTaskId, tasks, captureSeed, selection],
   );
 
   // cmd+n / global "+" → capture (this listener is only mounted on /tasks).
@@ -794,7 +917,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       driftCountByBucket={api.driftCountByBucket}
       totalOpenCount={totalOpenCount}
       queueCount={api.queueCount}
-      myTasksCount={showMyTasks ? myOpenCount : null}
+      myTasksCount={myOpenCount}
       canEdit={canEdit}
       hidden={hiddenRows}
       onToggleHidden={toggleHiddenRow}
@@ -828,6 +951,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       onDeleteArea={api.deleteArea}
       archivedCount={api.archivedBuckets.length}
       trashCount={trashCount}
+      wontDoCount={wontDoCount}
       navRef={railNavRef}
       dropAccepts={railAccepts}
     />
@@ -1011,8 +1135,21 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     () => setDisplay({ ...display, order: "manual" }),
     [setDisplay, display],
   );
+  // The view's extra groups (My tasks' team block, the Inbox's snoozed) are
+  // around the view, not in its count (TV-U15).
+  const viewExtraGroups: readonly ListExtraGroup[] =
+    selection === "mine" ? mineExtraGroups : isInboxScope ? inboxView.extraGroups : NO_EXTRAS;
+  const extraTaskIds = new Set(viewExtraGroups.flatMap((g) => g.taskIds));
   const header: PlanHeaderControls = {
-    count: openCount(scopeTasksAll),
+    // Won't do counts what it lists (none of it is open).
+    count:
+      selection === WONTDO_SELECTION
+        ? scopeTasksAll.length
+        : openCount(
+            extraTaskIds.size === 0
+              ? scopeTasksAll
+              : scopeTasksAll.filter((t) => !extraTaskIds.has(t.id)),
+          ),
     search: filtering.search,
     filter: filtering.filter,
     display: tasksDisplay.displayControl,
@@ -1029,7 +1166,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     selection,
     view,
     onViewChange: setView,
-    buckets,
+    buckets: selection === "all" ? allBuckets : buckets,
     inbox,
     bucketNameById,
     // An archived project is read-only until it's unarchived (TV-U6).
@@ -1076,6 +1213,42 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       `folds:${api.currentUserId ?? "anon"}:${selection}:${effectiveGroupBy}`,
     ),
   };
+
+  // What each view built on the List hands it (TV-U15): Upcoming its days and
+  // keys, the Inbox its triage and snoozed, My tasks its team block, All its
+  // area words and folds; each its own teaching empty state.
+  const viewExtras =
+    selection === UPCOMING_SELECTION
+      ? {
+          grouping: upcoming.grouping,
+          onViewKey: upcoming.onViewKey,
+          subtasks: "flat" as const,
+          emptyState: <UpcomingEmpty canEdit={canEdit} onAddToday={() => openCapture()} />,
+        }
+      : isInboxScope
+        ? {
+            extraGroups: inboxView.extraGroups,
+            onViewKey: inboxView.onViewKey,
+            sourceOf: inboxView.sourceOf,
+            note: inboxView.note,
+            emptyState: inboxView.emptyState,
+          }
+        : selection === "mine"
+          ? {
+              extraGroups: mineExtraGroups,
+              onTake: takeTask,
+              takeableIds,
+              emptyState: <MyTasksEmpty canEdit={canEdit} onAdd={() => openCapture()} />,
+            }
+          : selection === "all"
+            ? {
+                defaultFolded: allFolded,
+                groupSub: allGroupSub,
+                emptyState: <AllEmpty hasProjects={buckets.length > 0} />,
+              }
+            : selection === WONTDO_SELECTION
+              ? { countEvery: true, emptyState: <WontDoEmpty /> }
+              : {};
 
   // Execute mode is enclosed in the center panel (rails stay visible).
   // Archived projects and Recently deleted open from the sidebar's ⋯ (98).
@@ -1148,6 +1321,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
         onManualOrder={backToManualOrder}
         revealRequest={revealRequest}
         {...listExtras}
+        {...viewExtras}
       />
     );
 
@@ -1560,6 +1734,8 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
           right={right}
         />
       </DndContext>
+      {upcoming.dialogs}
+      {inboxView.dialogs}
       <StatusesDialog
         open={statusesEditor !== null}
         projectName={statusesEditor?.projectId ? bucketNameById(statusesEditor.projectId) : null}

@@ -41,6 +41,16 @@ export type TaskFacts = {
   comments: number;
   /** A capture or check-off of it waits on this device to sync (offline). */
   pending: boolean;
+  /**
+   * What the date column says in this view, when the view words it its own
+   * way (Upcoming's "3:00 PM · 45m", "missed 2:00 PM"; TV-U15). Absent: the
+   * List's own date.
+   */
+  when?: string | null;
+  /** A team's unclaimed task you can take (My tasks' team block, TV-U15). */
+  takeable?: boolean;
+  /** Where an Inbox task came from ("from Mike"; TV-U15). */
+  source?: string | null;
 };
 
 /** The API maps the facts are read from. */
@@ -60,6 +70,12 @@ export type FactsSource = Pick<
   waitingLabels?: ReadonlyMap<string, string>;
   commentCounts?: ReadonlyMap<string, number>;
   pendingTaskIds?: ReadonlySet<string>;
+  /** The view's own date words for a row (TV-U15). */
+  whenOf?: (task: Task) => string | null;
+  /** Tasks a row offers "Take it" on (TV-U15). */
+  takeableIds?: ReadonlySet<string>;
+  /** Where a row's task came from (the Inbox's source words, TV-U15). */
+  sourceOf?: (task: Task) => string | null;
 };
 
 const NONE: readonly never[] = [];
@@ -85,6 +101,9 @@ export function taskFactsOf(task: Task, api: FactsSource): TaskFacts {
     waiting: api.waitingLabels?.get(task.id) ?? null,
     comments: api.commentCounts?.get(task.id) ?? 0,
     pending: api.pendingTaskIds?.has(task.id) ?? false,
+    ...(api.whenOf ? { when: api.whenOf(task) } : {}),
+    ...(api.takeableIds?.has(task.id) ? { takeable: true } : {}),
+    ...(api.sourceOf ? { source: api.sourceOf(task) } : {}),
   };
 }
 
@@ -136,6 +155,9 @@ export function sameTaskFacts(a: TaskFacts, b: TaskFacts): boolean {
     a.waiting === b.waiting &&
     a.comments === b.comments &&
     a.pending === b.pending &&
+    (a.when ?? null) === (b.when ?? null) &&
+    !!a.takeable === !!b.takeable &&
+    (a.source ?? null) === (b.source ?? null) &&
     (a.progress === b.progress ||
       (!!a.progress &&
         !!b.progress &&

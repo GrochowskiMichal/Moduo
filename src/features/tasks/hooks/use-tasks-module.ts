@@ -24,7 +24,7 @@ import type { ProjectFields } from "../../../lib/runtime.web.structure";
 import { isNetworkError } from "../../../lib/sync/network";
 import { useStoreSnapshot, useWorkspaceStore } from "../../../lib/sync/react";
 import type { OverlayChange, PendingWrite } from "../../../lib/sync/store";
-import { editableTaskFields } from "../../../lib/task-rows";
+import { dueOnToLocalInstant, editableTaskFields } from "../../../lib/task-rows";
 import { undoToast } from "../../../lib/undo-toast";
 import {
   createOrAttachByName,
@@ -1746,6 +1746,25 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     [bundle.tasks, applyOp, runtime, workspaceId, store],
   );
 
+  /**
+   * "Move just this one" on a repeat (TV-D12's op; TV-U15's Upcoming drag and
+   * day keys): this cycle's due date or its work session's start moves, the
+   * other date by the same days, and the rule stays (the next cycle is back on
+   * the pattern). Shown at once; the server's row settles it.
+   */
+  const moveOccurrence = useCallback(
+    (id: string, to: { dueOn: string } | { startsAt: string }) => {
+      const optimistic: Partial<Task> =
+        "dueOn" in to
+          ? { dueOn: to.dueOn, dueDate: dueOnToLocalInstant(to.dueOn) }
+          : { scheduledAt: to.startsAt };
+      applyOp(id, optimistic, () =>
+        runtime!.tasks.opMoveOccurrence({ workspaceId: workspaceId!, taskId: id, ...to }),
+      );
+    },
+    [applyOp, runtime, workspaceId],
+  );
+
   const deleteTask = useCallback(
     (id: string) => {
       const existing = bundle.tasks.find((t) => t.id === id);
@@ -3316,6 +3335,8 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     removeFromQueue,
     moveQueuedToEnd,
     skipOccurrence,
+    /** "Move just this one" on a repeat (TV-D12's op, TV-U15's Upcoming). */
+    moveOccurrence,
     reorderQueue,
     deleteTask,
     loadActivity,

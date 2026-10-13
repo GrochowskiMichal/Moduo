@@ -122,6 +122,11 @@ type Props = {
   dropTarget?: boolean;
   /** False in My tasks, where every row is mine (D4-4). */
   showAssignee?: boolean;
+  /**
+   * "Take it" on a team's unclaimed task (My tasks' team block, TV-U15): the
+   * row shows the button while its facts say `takeable`.
+   */
+  onTake?: (taskId: string) => void;
 };
 
 /**
@@ -187,6 +192,7 @@ function TaskRowView({
   dragActivatorRef,
   dropTarget = false,
   showAssignee = true,
+  onTake,
   facts,
   actions,
   today,
@@ -364,6 +370,15 @@ function TaskRowView({
             tagNames={detailed}
             waitingColumn={columns.waiting}
           />
+          {facts.source ? (
+            // Where an Inbox task came from (research §7): quiet, after the counts.
+            <span
+              data-slot="row-source"
+              className="shrink-0 font-sans text-xs whitespace-nowrap text-muted-foreground"
+            >
+              {facts.source}
+            </span>
+          ) : null}
           {parentTitle ? (
             <span className="flex min-w-0 shrink-3 items-center gap-1 truncate font-sans text-xs text-muted-foreground">
               <CornerDownRight className="size-icon-xs shrink-0 opacity-70" aria-hidden />
@@ -371,6 +386,21 @@ function TaskRowView({
             </span>
           ) : null}
           {projectVariant && (showBucket || canEdit) ? projectMenu(projectVariant) : null}
+          {facts.takeable && onTake && canEdit ? (
+            // The team block's one action (TV-U15): always shown, so the
+            // block says what to do with it.
+            <button
+              type="button"
+              data-slot="row-take"
+              onClick={(e) => {
+                e.stopPropagation();
+                onTake(task.id);
+              }}
+              className="shrink-0 rounded-sm px-1.5 font-sans text-xs whitespace-nowrap text-muted-foreground ring-1 ring-border transition-colors duration-(--motion-fade) ease-(--ease-out) ring-inset hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+            >
+              Take it
+            </button>
+          ) : null}
           {/* A late row's fixes, over the cell's end on hover or selection:
               they fade in and take no room from the title (R6: nothing
               reflows), on the row's own surface so the title doesn't show
@@ -429,6 +459,7 @@ function TaskRowView({
           <DateCell
             task={task}
             kind="row"
+            label={facts.when ?? null}
             canEdit={canEdit}
             command={dateCommand}
             today={today}

@@ -78,11 +78,12 @@ export function ListGroupHeader({
   addState,
   onAdd,
   section,
+  extraAction,
   className,
 }: {
   groupKey: string;
   label: string;
-  count: ReactNode;
+  count?: ReactNode;
   sub?: ReactNode;
   leading?: ReactNode;
   collapsed: boolean;
@@ -91,6 +92,8 @@ export function ListGroupHeader({
   onAdd: (add: GroupAdd) => void;
   /** A section's own edits (Section groups inside an editable project). */
   section?: { onRename: (name: string) => void; onDelete: () => void } | null;
+  /** Something the header always offers before its "+" (Upcoming's Earlier: "Move all…"). */
+  extraAction?: ReactNode;
   className?: string;
 }) {
   const [renaming, setRenaming] = useState(false);
@@ -147,8 +150,48 @@ export function ListGroupHeader({
           </DropdownMenu>
         ) : undefined
       }
-      persistentActions={add}
+      persistentActions={
+        extraAction ? (
+          <>
+            {extraAction}
+            {add}
+          </>
+        ) : (
+          add
+        )
+      }
     />
+  );
+}
+
+/**
+ * The line under an extra group's first rows (My tasks' team block, research
+ * §8): "Show 3 more", then "Show fewer".
+ */
+export function ShowMoreLine({
+  count,
+  shown,
+  onToggle,
+}: {
+  count: number;
+  shown: boolean;
+  onToggle: () => void;
+}) {
+  if (count <= 0) return null;
+  return (
+    <div className="flex min-h-(--row-h-sm) items-center px-2.5 font-sans text-xs text-muted-foreground">
+      <button
+        type="button"
+        aria-expanded={shown}
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggle();
+        }}
+        className="rounded-sm tabular-nums transition-colors duration-(--motion-fade) ease-(--ease-out) hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+      >
+        {shown ? "Show fewer" : `Show ${count} more`}
+      </button>
+    </div>
   );
 }
 

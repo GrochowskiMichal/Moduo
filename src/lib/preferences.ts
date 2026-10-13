@@ -142,6 +142,21 @@ export interface TasksSidebarPrefs {
   pinned: Record<string, string[]>;
 }
 
+/**
+ * One snoozed Inbox task (TV-U15, the triage key H): hidden until `until`
+ * (a day, "2026-10-20"), or until its comments move past `stamp` (the
+ * task's comment stamp when it was snoozed).
+ */
+export interface TasksInboxSnooze {
+  until: string;
+  stamp: string | null;
+}
+
+/** A person's Inbox triage state (TV-U15): what they snoozed, per workspace and task. */
+export interface TasksInboxPrefs {
+  snoozed: Record<string, Record<string, TasksInboxSnooze>>;
+}
+
 export interface Preferences {
   /** Which surface opens on launch. `last` = the last visited module route. */
   landingView: LandingView;
@@ -164,6 +179,8 @@ export interface Preferences {
   keepInMenuBar: boolean;
   /** The Tasks sidebar's Customize and Pin choices (TV-U6), following the person. */
   tasksSidebar: TasksSidebarPrefs;
+  /** Snoozed Inbox tasks (TV-U15), following the person. */
+  tasksInbox: TasksInboxPrefs;
 }
 
 export const DEFAULT_PREFERENCES: Preferences = {
@@ -175,6 +192,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   confirmBeforeQuit: false,
   keepInMenuBar: true,
   tasksSidebar: { hidden: [], pinned: {} },
+  tasksInbox: { snoozed: {} },
 };
 
 const LOCAL_STORAGE_KEY = "moduo.preferences";
@@ -236,6 +254,33 @@ const tasksSidebarSchema = z
       }),
   })
   .catch({ hidden: [], pinned: {} });
+// A bad entry drops alone; a workspace keeps at most 500 snoozed tasks.
+const DAY_KEY = /^\d{4}-\d{2}-\d{2}$/;
+const tasksInboxSchema = z
+  .object({
+    snoozed: z
+      .record(z.string(), z.unknown())
+      .catch({})
+      .transform((byWs) => {
+        const out: Record<string, Record<string, TasksInboxSnooze>> = {};
+        for (const [ws, entries] of Object.entries(byWs)) {
+          if (!entries || typeof entries !== "object" || Array.isArray(entries)) continue;
+          const clean: Record<string, TasksInboxSnooze> = {};
+          for (const [taskId, raw] of Object.entries(entries).slice(0, 500)) {
+            const entry = raw as Partial<TasksInboxSnooze> | null;
+            if (!taskId || !entry || typeof entry.until !== "string" || !DAY_KEY.test(entry.until))
+              continue;
+            clean[taskId] = {
+              until: entry.until,
+              stamp: typeof entry.stamp === "string" ? entry.stamp : null,
+            };
+          }
+          if (Object.keys(clean).length > 0) out[ws] = clean;
+        }
+        return out;
+      }),
+  })
+  .catch({ snoozed: {} });
 const preferencesSchema = z.object({
   landingView: z.enum(LANDING_VIEWS).catch(DEFAULT_PREFERENCES.landingView),
   reopenLastWorkspace: z.boolean().catch(DEFAULT_PREFERENCES.reopenLastWorkspace),
@@ -245,6 +290,7 @@ const preferencesSchema = z.object({
   confirmBeforeQuit: z.boolean().catch(DEFAULT_PREFERENCES.confirmBeforeQuit),
   keepInMenuBar: z.boolean().catch(DEFAULT_PREFERENCES.keepInMenuBar),
   tasksSidebar: tasksSidebarSchema,
+  tasksInbox: tasksInboxSchema,
 });
 
 export function sanitizeNotificationPrefs(raw: unknown): NotificationPrefs {
