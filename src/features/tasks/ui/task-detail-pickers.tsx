@@ -33,7 +33,11 @@ import { cn } from "../../../lib/utils";
 import type { Assignee } from "../assignee-options";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import { estimateOf, type Task, type TaskReminder, type TaskSession } from "../model";
-import { RECURRENCE_PRESETS, type RecurrencePreset, recurrenceFromPreset } from "../parse/recurrence";
+import {
+  RECURRENCE_PRESETS,
+  type RecurrencePreset,
+  recurrenceFromPreset,
+} from "../parse/recurrence";
 import {
   defaultSpec,
   type RepeatFrequency,
@@ -84,7 +88,9 @@ export function DueTimeValue({
           onValueChange={(hhmm) => save(hhmm)}
           aria-label="Due time"
         />
-        {time ? <IconButton icon={X} label="Clear the due time" onClick={() => save(null)} /> : null}
+        {time ? (
+          <IconButton icon={X} label="Clear the due time" onClick={() => save(null)} />
+        ) : null}
       </PopoverContent>
     </Popover>
   );
@@ -98,12 +104,18 @@ const sessionMinutes = (s: Pick<TaskSession, "startsAt" | "endsAt">) =>
   Math.max(1, Math.round((Date.parse(s.endsAt) - Date.parse(s.startsAt)) / 60000));
 
 /** "Thu 2:00 PM · 1h": a session in the one grammar. */
-export function sessionLabel(s: Pick<TaskSession, "startsAt" | "endsAt">, now = new Date()): string {
+export function sessionLabel(
+  s: Pick<TaskSession, "startsAt" | "endsAt">,
+  now = new Date(),
+): string {
   return `${formatDayTime(s.startsAt, now)} · ${formatDuration(sessionMinutes(s))}`;
 }
 
 /** The session the row shows: the next one not ended, else the latest. */
-export function shownSession(sessions: readonly TaskSession[], now = Date.now()): TaskSession | null {
+export function shownSession(
+  sessions: readonly TaskSession[],
+  now = Date.now(),
+): TaskSession | null {
   const sorted = [...sessions].sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt));
   return sorted.find((s) => Date.parse(s.endsAt) > now) ?? sorted[sorted.length - 1] ?? null;
 }
@@ -230,9 +242,7 @@ function SessionRow({
             ))}
         </SelectContent>
       </Select>
-      {someoneElse ? (
-        <span className="text-xs text-muted-foreground">assignee’s</span>
-      ) : null}
+      {someoneElse ? <span className="text-xs text-muted-foreground">assignee’s</span> : null}
       <span className="flex-1" />
       {canEdit ? (
         <IconButton
@@ -827,7 +837,10 @@ function CustomRepeat({
             set({ interval: Number.isFinite(n) && n > 0 ? Math.min(n, 999) : 1 });
           }}
         />
-        <Select value={spec.frequency} onValueChange={(v) => set({ frequency: v as RepeatFrequency })}>
+        <Select
+          value={spec.frequency}
+          onValueChange={(v) => set({ frequency: v as RepeatFrequency })}
+        >
           <SelectTrigger size="sm" aria-label="Frequency" className="w-auto">
             <SelectValue />
           </SelectTrigger>
@@ -945,7 +958,10 @@ function CustomRepeat({
             set({
               end:
                 v === "until"
-                  ? { kind: "until", day: new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10) }
+                  ? {
+                      kind: "until",
+                      day: new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10),
+                    }
                   : v === "count"
                     ? { kind: "count", count: 10 }
                     : { kind: "never" },

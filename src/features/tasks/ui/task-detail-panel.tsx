@@ -184,7 +184,12 @@ function DetailBody({
         onToggle={() => api.toggleDone(task)}
         className="mt-1"
       />
-      <TitleField task={task} canEdit={canEdit} api={api} size={layout === "page" ? "page" : "lead"} />
+      <TitleField
+        task={task}
+        canEdit={canEdit}
+        api={api}
+        size={layout === "page" ? "page" : "lead"}
+      />
     </div>
   );
   const closedLine =
@@ -415,7 +420,7 @@ function DoneLine({ task }: { task: Task }) {
   const by = task.completedBy
     ? task.completedBy === currentUserId
       ? "you"
-      : (byId(task.completedBy)?.fullName || byId(task.completedBy)?.name) ?? null
+      : ((byId(task.completedBy)?.fullName || byId(task.completedBy)?.name) ?? null)
     : null;
   const when = task.completedAt ? formatDate(task.completedAt) : null;
   return (

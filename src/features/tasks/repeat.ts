@@ -173,12 +173,15 @@ export function repeatSummary(rule: RecurrenceRule, now: Date = new Date()): str
     case "weekly": {
       const days = [...spec.weekdays].sort((a, b) => WEEKDAYS.indexOf(a) - WEEKDAYS.indexOf(b));
       const weekdaysOnly =
-        days.length === 5 && ["MO", "TU", "WE", "TH", "FR"].every((d) => days.includes(d as WeekdayCode));
+        days.length === 5 &&
+        ["MO", "TU", "WE", "TH", "FR"].every((d) => days.includes(d as WeekdayCode));
       if (n === 1 && weekdaysOnly) line = "Every weekday";
-      else if (n === 1 && days.length === 1) line = `Every ${WEEKDAY_NAMES[days[0] as WeekdayCode]}`;
+      else if (n === 1 && days.length === 1)
+        line = `Every ${WEEKDAY_NAMES[days[0] as WeekdayCode]}`;
       else {
         const base = n === 1 ? "Every week" : `Every ${plural(n, "week")}`;
-        line = days.length > 0 ? `${base} on ${days.map((d) => WEEKDAY_SHORT[d]).join(", ")}` : base;
+        line =
+          days.length > 0 ? `${base} on ${days.map((d) => WEEKDAY_SHORT[d]).join(", ")}` : base;
       }
       break;
     }

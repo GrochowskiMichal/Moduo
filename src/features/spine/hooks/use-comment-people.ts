@@ -44,7 +44,12 @@ export function useCommentPeople(): {
       personOf: (id) => {
         const p = byId.get(id);
         return p
-          ? { id: p.id, name: p.name, avatarUrl: p.avatarUrl, ...(p.unnamed ? { unnamed: true } : {}) }
+          ? {
+              id: p.id,
+              name: p.name,
+              avatarUrl: p.avatarUrl,
+              ...(p.unnamed ? { unnamed: true } : {}),
+            }
           : null;
       },
     };

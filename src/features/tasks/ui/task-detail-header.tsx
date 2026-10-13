@@ -142,7 +142,13 @@ export function TaskDetailHeader({
         {sections.length > 0 && !parent ? (
           <>
             <ChevronRight className="size-icon-xs shrink-0 text-muted-foreground/60" aria-hidden />
-            <SectionCrumb task={task} section={section} sections={sections} canEdit={canEdit} api={api} />
+            <SectionCrumb
+              task={task}
+              section={section}
+              sections={sections}
+              canEdit={canEdit}
+              api={api}
+            />
           </>
         ) : null}
         {parent ? (
@@ -295,11 +301,13 @@ function ProjectCrumb({
           <CommandList>
             <CommandEmpty>No matching project.</CommandEmpty>
             {[...groups].map(([area, list]) => (
-              <CommandGroup key={area || "none"} heading={area || undefined}>
+              // People name areas, so an area reads in sentence case beside
+              // each project, never as a small-caps heading (call 40).
+              <CommandGroup key={area || "none"}>
                 {list.map((b) => (
                   <CommandItem
                     key={b.id}
-                    value={`${b.name} ${b.id}`}
+                    value={`${b.name} ${area} ${b.id}`}
                     onSelect={() => {
                       setOpen(false);
                       if (b.id !== task.bucketId) api.patchTask(task.id, { bucketId: b.id });
@@ -307,6 +315,11 @@ function ProjectCrumb({
                   >
                     {b.isSystem ? <Inbox className="text-muted-foreground" aria-hidden /> : null}
                     <span className="min-w-0 flex-1 break-words">{b.name}</span>
+                    {area ? (
+                      <span className="shrink-0 font-sans text-xs text-muted-foreground">
+                        {area}
+                      </span>
+                    ) : null}
                   </CommandItem>
                 ))}
               </CommandGroup>

@@ -73,13 +73,18 @@ describe("v3 properties: core always, the rest once set (TV-U13)", () => {
 describe("Copy branch name (AC3.7)", () => {
   it("is the handle and the title, lower case, joined by dashes", () => {
     expect(branchName("MOD-142", "Logo concepts")).toBe("mod-142-logo-concepts");
-    expect(branchName("MOD-7", "Fix: the “login” page (again)!")).toBe("mod-7-fix-the-login-page-again");
+    expect(branchName("MOD-7", "Fix: the “login” page (again)!")).toBe(
+      "mod-7-fix-the-login-page-again",
+    );
     expect(branchName(null, "Café menu")).toBe("cafe-menu");
     expect(branchName(null, "!!!")).toBe("task");
   });
 
   it("stops at 60 characters, at a word", () => {
-    const name = branchName("MOD-1", "a very long title that keeps going and going past sixty characters");
+    const name = branchName(
+      "MOD-1",
+      "a very long title that keeps going and going past sixty characters",
+    );
     expect(name.length).toBeLessThanOrEqual(60);
     expect(name.startsWith("mod-1-a-very-long")).toBe(true);
     expect(name.endsWith("-")).toBe(false);

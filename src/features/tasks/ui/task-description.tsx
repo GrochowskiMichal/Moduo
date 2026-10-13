@@ -21,9 +21,7 @@ export function hiddenCounts(types: readonly string[]): string {
     const noun = referenceNoun(referenceKind(type));
     counts.set(noun, (counts.get(noun) ?? 0) + 1);
   }
-  return [...counts]
-    .map(([noun, n]) => `${n} ${n === 1 ? noun : `${noun}s`}`)
-    .join(" · ");
+  return [...counts].map(([noun, n]) => `${n} ${n === 1 ? noun : `${noun}s`}`).join(" · ");
 }
 
 export function TaskDescription({

@@ -65,13 +65,13 @@ import {
   type Tag,
   type Task,
   type TaskQueueEntry,
-  type TaskReminder,
   type TaskRelation,
+  type TaskReminder,
   type TaskSession,
   type TaskStatus,
   type TasksTrash,
-  type TaskWaitingEntry,
   type TaskTimeResult,
+  type TaskWaitingEntry,
   type TimeBlockMap,
   type TimeBlockSlot,
   type TrackTimeInput,
@@ -1378,7 +1378,10 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
             statusCategory: taskCategoryOf(before),
             status: legacyTaskStatus(taskCategoryOf(before)),
           }
-        : { statusCategory: taskCategoryOf(before), status: legacyTaskStatus(taskCategoryOf(before)) },
+        : {
+            statusCategory: taskCategoryOf(before),
+            status: legacyTaskStatus(taskCategoryOf(before)),
+          },
     [],
   );
 
@@ -2341,7 +2344,10 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
 
   /** Waiting on… someone or something (a person, or a typed note). */
   const addWaiting = useCallback(
-    (taskId: string, entry: { kind: TaskWaitingEntry["kind"]; ref?: string | null; label?: string | null }) => {
+    (
+      taskId: string,
+      entry: { kind: TaskWaitingEntry["kind"]; ref?: string | null; label?: string | null },
+    ) => {
       if (editBlocked() || !store || !runtime || !workspaceId) return;
       if (isTempId(taskId)) {
         toast.error(STILL_SAVING);

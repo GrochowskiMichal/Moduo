@@ -3,11 +3,7 @@
  * Implementations live in runtime.tauri.ts (desktop) and runtime.web.ts (web).
  */
 
-import type {
-  AttachmentStatus,
-  CommentReaction,
-  ContentAuthorKind,
-} from "@contracts/vocabularies";
+import type { AttachmentStatus, CommentReaction, ContentAuthorKind } from "@contracts/vocabularies";
 import type {
   CalendarAccountModel,
   CalendarEventModel,

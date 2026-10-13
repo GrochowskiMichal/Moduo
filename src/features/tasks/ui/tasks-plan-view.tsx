@@ -29,6 +29,7 @@ import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell
 import { type PanelItem, RightPanel, usePanelStack } from "../../../components/app/right-panel";
 import { truncationNotice } from "../../../components/app/truncation-notice";
 import { Button } from "../../../components/ui/button";
+import { EmptyState } from "../../../components/ui/empty-state";
 import { restoreNavFocus } from "../../../components/ui/nav-row";
 import {
   asDragPayload,
@@ -104,10 +105,12 @@ import { DriftTriageDialog } from "./drift-triage-dialog";
 import { ExecuteView } from "./execute-view";
 import { FrontierOfferDialog } from "./frontier-offer-dialog";
 import { type PlanHeaderControls, type PlanView, SortedOrderLine } from "./plan-view-header";
+import { ProjectPanel } from "./project-panel";
 import { RecentlyDeletedView } from "./recently-deleted-view";
 import { StatusesDialog } from "./statuses-dialog";
 import { TaskBoardView } from "./task-board-view";
-import { PrivateItemPanel, TASK_DETAIL_REFRESH_EVENT, TaskDetailPanel } from "./task-detail-panel";
+import { TASK_DETAIL_REFRESH_EVENT, TaskDetailPanel, TaskGonePanel } from "./task-detail-panel";
+import { TaskFullPage } from "./task-full-page";
 import { TaskListView } from "./task-list-view";
 import { TaskTimelineView } from "./task-timeline-view";
 import { useTasksDisplay } from "./use-tasks-display";
@@ -173,6 +176,8 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   );
   // Which right-panel view is showing (views: features/tasks/panel-views.ts).
   const [panelView, setPanelView] = useState("details");
+  // The task that fills the centre (call 32), or null for the view.
+  const [fullPageId, setFullPageId] = useState<string | null>(null);
   // Sidebar groups you collapsed (Pinned and each area) stay collapsed,
   // remembered per person on this device (REPLAN 29e; Customize and Pin
   // follow the person everywhere, in preferences).
@@ -1305,6 +1310,12 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     [pushPanel, referenceStore, canEdit],
   );
 
+  // A task opened from the panel (a subtask, a blocker, the parent) stacks on
+  // top as "← item" (call 65a), never moving the page's selection.
+  const openTaskInPanel = useCallback(
+    (id: string) => pushPanel({ key: `task:${id}`, type: "task", id }),
+    [pushPanel],
+  );
   const detailPanel = (
     <TaskDetailPanel
       task={selectedTask}
@@ -1313,6 +1324,8 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       canEdit={panelCanEdit}
       onRequestCapture={openCapture}
       onSelectTask={setSelectedTaskId}
+      onOpenTask={openTaskInPanel}
+      onOpenFullPage={selectedTask ? () => setFullPageId(selectedTask.id) : undefined}
       api={viewApi}
       runtime={runtime}
       workspaceId={workspaceId}
@@ -1322,7 +1335,12 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   // The hub is a drop target within the ONE page-level DndContext (below); no
   // own context — that's exactly what let center rows reach it (DF-22).
   const details = privateLinkId ? (
-    <PrivateItemPanel onBack={() => setPrivateLinkId(null)} />
+    <TaskGonePanel
+      taskId={privateLinkId}
+      api={api}
+      canEdit={canEdit}
+      onBack={() => setPrivateLinkId(null)}
+    />
   ) : selectedTask ? (
     <HubDropZone target={{ type: "task", id: selectedTask.id }} disabled={!panelCanEdit}>
       {detailPanel}
@@ -1354,7 +1372,8 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
             inbox={inbox}
             canEdit={canEdit}
             onRequestCapture={openCapture}
-            onSelectTask={(id) => pushPanel({ key: `task:${id}`, type: "task", id })}
+            onSelectTask={openTaskInPanel}
+            onOpenTask={openTaskInPanel}
             api={viewApi}
             runtime={runtime}
             workspaceId={workspaceId}
@@ -1372,18 +1391,96 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     };
   });
 
+  // ── the full page (call 32) ───────────────────────────────────────────────
+  const fullPageTask = fullPageId ? (taskById.get(fullPageId) ?? null) : null;
+  // A task that left (deleted, moved out of reach) or a new scope closes it.
+  useEffect(() => {
+    if (fullPageId && !api.loading && !taskById.has(fullPageId)) setFullPageId(null);
+  }, [fullPageId, api.loading, taskById]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new scope is the cue
+  useEffect(() => {
+    setFullPageId(null);
+  }, [selection]);
+  const pageOrder = scopeTasks.filter((t) => !t.parentId && !isHiddenByDisplay(t));
+  const pageIndex = fullPageTask ? pageOrder.findIndex((t) => t.id === fullPageTask.id) : -1;
+  const goToPage = (index: number) => {
+    const next = pageOrder[index];
+    if (!next) return;
+    setFullPageId(next.id);
+    setSelectedTaskId(next.id);
+  };
+  const viewName = view === "board" ? "Board" : view === "timeline" ? "Timeline" : "List";
+
+  // ── the Project view (default p) ────────────────────────────────────────────
+  // Its project: the open task's, else the project open in the sidebar.
+  const scopeProject =
+    buckets.find((b) => b.id === selection && !b.isSystem) ?? archivedProject ?? null;
+  const panelProject = selectedTask
+    ? (buckets.find((b) => b.id === selectedTask.bucketId && !b.isSystem) ?? null)
+    : scopeProject;
+  const projectView = panelProject ? (
+    <ProjectPanel project={panelProject} tasks={api.tasks} sections={api.sections} />
+  ) : null;
+  // Nothing selected inside a project, or a task in the centre: the panel
+  // shows Project (the one exception to "the panel remembers its view").
+  const panelActive =
+    projectView && (fullPageTask || (!selectedTask && !privateLinkId && scopeProject))
+      ? "project"
+      : panelView;
+
   // The right panel's title row names and switches its views (SH-1): Details
-  // today; Project, In flight and No date register in panel-views.ts later.
+  // and Project (TV-U13); In flight and No date register later.
   const right = (
     <RightPanel
       module="tasks"
-      views={{ details: () => details }}
-      activeId={panelView}
+      views={{
+        details: () =>
+          fullPageTask ? (
+            <EmptyState
+              title="Shown in the centre"
+              description="This task fills the centre. Esc goes back."
+            />
+          ) : (
+            details
+          ),
+        project: projectView ? () => projectView : undefined,
+      }}
+      activeId={panelActive}
       onChange={setPanelView}
       items={panelItems}
       onBack={panelStack.back}
       onClearItems={panelStack.clear}
     />
+  );
+  const centre = fullPageTask ? (
+    <TaskFullPage
+      backLabel={`${viewName} · ${scopeTitle}`}
+      position={pageIndex >= 0 ? { index: pageIndex, total: pageOrder.length } : null}
+      onPrev={pageIndex > 0 ? () => goToPage(pageIndex - 1) : null}
+      onNext={
+        pageIndex >= 0 && pageIndex < pageOrder.length - 1 ? () => goToPage(pageIndex + 1) : null
+      }
+      onClose={() => setFullPageId(null)}
+    >
+      <TaskDetailPanel
+        key={fullPageTask.id}
+        task={fullPageTask}
+        buckets={buckets}
+        inbox={inbox}
+        canEdit={canEdit}
+        onRequestCapture={openCapture}
+        onSelectTask={setSelectedTaskId}
+        onOpenTask={openTaskInPanel}
+        onCloseFullPage={() => setFullPageId(null)}
+        layout="page"
+        api={viewApi}
+        runtime={runtime}
+        workspaceId={workspaceId}
+        onOpenEntity={handleOpenEntity}
+      />
+    </TaskFullPage>
+  ) : (
+    center
   );
 
   return (
@@ -1402,7 +1499,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
           feature="tasks"
           notice={truncationNotice(api.truncated)}
           left={left}
-          center={center}
+          center={centre}
           right={right}
         />
       </DndContext>

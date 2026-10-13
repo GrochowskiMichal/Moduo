@@ -179,7 +179,12 @@ function mergeRun(items: FeedItem[]): FeedRow[] {
       });
     } else if (group.length > 1) {
       const last = group[group.length - 1] as ActivityEntry;
-      rows.push({ kind: "merged", id: `merged:${group[0]?.id}`, entries: group, at: last.createdAt });
+      rows.push({
+        kind: "merged",
+        id: `merged:${group[0]?.id}`,
+        entries: group,
+        at: last.createdAt,
+      });
     }
     group = [];
   };

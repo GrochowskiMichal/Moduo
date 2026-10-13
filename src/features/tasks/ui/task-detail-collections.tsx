@@ -34,8 +34,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/
 import { formatDate, formatDay } from "../../../lib/time-format";
 import { cn } from "../../../lib/utils";
 import { EntityLinkPicker } from "../../contacts/ui/entity-link-picker";
-import type { HubRow } from "../../spine/rollup";
 import { Reference } from "../../spine/references/ui/reference";
+import type { HubRow } from "../../spine/rollup";
 import { useAssignees } from "../assignees";
 import { wouldCreateCycle } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
@@ -146,7 +146,9 @@ function SubtaskRow({
   const closed = isClosedTask(subtask);
   // The avatar only when it isn't the parent's assignee (research §11).
   const assignee =
-    subtask.assigneeId && subtask.assigneeId !== parent.assigneeId ? byId(subtask.assigneeId) : null;
+    subtask.assigneeId && subtask.assigneeId !== parent.assigneeId
+      ? byId(subtask.assigneeId)
+      : null;
   return (
     <div className="group flex min-h-(--row-h) items-center gap-2 rounded-md px-1 transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover">
       <CompleteToggle done={done} disabled={!canEdit} onToggle={() => api.toggleDone(subtask)} />
@@ -235,7 +237,9 @@ export function WaitingSection({
                             }}
                           >
                             <AssigneeAvatar assignee={a} size="icon" />
-                            <span className="min-w-0 flex-1 break-words">{a.fullName || a.name}</span>
+                            <span className="min-w-0 flex-1 break-words">
+                              {a.fullName || a.name}
+                            </span>
                           </CommandItem>
                         ))}
                     </CommandGroup>
@@ -269,7 +273,7 @@ export function WaitingSection({
         const person = entry.kind === "person" ? byId(entry.ref) : null;
         const label =
           entry.kind === "person"
-            ? (person?.fullName || person?.name) ?? "Former member"
+            ? ((person?.fullName || person?.name) ?? "Former member")
             : entry.kind === "text"
               ? (entry.label ?? "Something")
               : entry.kind === "email"
@@ -509,7 +513,12 @@ export function LinkedSection({
       <div className="flex flex-col gap-1.5">
         {shown.map((row) => (
           <div key={row.link.id} className="group relative">
-            <Reference type={row.other.type} id={row.other.id} display="card" fallbackLabel={row.title} />
+            <Reference
+              type={row.other.type}
+              id={row.other.id}
+              display="card"
+              fallbackLabel={row.title}
+            />
             {canEdit ? (
               <IconButton
                 icon={X}

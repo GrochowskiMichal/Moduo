@@ -14,10 +14,10 @@
 // reaction, a delete elsewhere).
 
 import type { CommentReaction } from "@contracts/vocabularies";
+import { COMMENT_REACTIONS } from "@contracts/vocabularies";
 import { Ellipsis, Pencil, SmilePlus, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -33,13 +33,12 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import type { ModuoRuntime, SpineComment } from "@/lib/runtime.types";
 import { undoToast } from "@/lib/undo-toast";
 import { cn } from "@/lib/utils";
-import { COMMENT_REACTIONS } from "@contracts/vocabularies";
 import { commentAuthorName, editableComment } from "../../spine/comments";
 import { useCommentPeople } from "../../spine/hooks/use-comment-people";
 import { type CommentThread, useCommentThread } from "../../spine/hooks/use-comment-thread";
+import { groupReactions, REACTION_GLYPHS, REACTION_NAMES, reactedBy } from "../../spine/reactions";
 import { useReferences } from "../../spine/references/context";
 import { referencesInText } from "../../spine/references/text";
-import { groupReactions, REACTION_GLYPHS, REACTION_NAMES, reactedBy } from "../../spine/reactions";
 import {
   CommentBody,
   CommentCard,
@@ -395,7 +394,10 @@ function CommentItem({
     comment.authorKind === "user" && !!currentUserId && comment.createdBy === currentUserId;
   const canRemove = mine || canRemoveAny;
   // What the body names, so an edit starts from `@Title` (not a stored URI).
-  const refs = useMemo(() => (editing ? referencesInText(comment.body) : []), [editing, comment.body]);
+  const refs = useMemo(
+    () => (editing ? referencesInText(comment.body) : []),
+    [editing, comment.body],
+  );
   const stateOf = useReferences(refs);
 
   const remove = () => {
@@ -423,7 +425,9 @@ function CommentItem({
 
   const groups = groupReactions(comment.reactions, currentUserId, people.nameOf);
   const author =
-    comment.authorKind === "api_key" || !comment.createdBy ? null : people.personOf(comment.createdBy);
+    comment.authorKind === "api_key" || !comment.createdBy
+      ? null
+      : people.personOf(comment.createdBy);
 
   if (editing) {
     const initial = editableComment(
@@ -460,10 +464,7 @@ function CommentItem({
       meta={comment.editedAt ? <span title={formatTimestamp(comment.editedAt)}>edited</span> : null}
       actions={
         <>
-          <ReactionPicker
-            groups={groups}
-            onPick={(reaction, on) => react(reaction, on)}
-          />
+          <ReactionPicker groups={groups} onPick={(reaction, on) => react(reaction, on)} />
           {mine || canRemove ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

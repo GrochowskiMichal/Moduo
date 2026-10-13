@@ -192,7 +192,11 @@ export function withOwnName(
   userId: string | null,
   userEmail: string | null,
 ): WorkspaceMember[] {
-  const local = userEmail?.trim().split("@")[0]?.replace(/[._-]+/g, " ").trim();
+  const local = userEmail
+    ?.trim()
+    .split("@")[0]
+    ?.replace(/[._-]+/g, " ")
+    .trim();
   if (!userId || !local) return members;
   return members.map((m) =>
     m.userId === userId && !m.displayName?.trim() ? { ...m, displayName: local } : m,
