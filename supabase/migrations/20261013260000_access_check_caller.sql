@@ -24,6 +24,8 @@
 
 -- One transaction: the policies are set aside and put back inside it.
 BEGIN;
+-- The policy swap locks 16 tables briefly; give up rather than queue.
+SET LOCAL lock_timeout = '5s';
 
 -- ── 0. Preflight ────────────────────────────────────────────────────────────
 DO $pre$
@@ -112,7 +114,13 @@ $set_aside$;
 DROP FUNCTION IF EXISTS public.can_access(text, uuid, text);
 DROP FUNCTION IF EXISTS public.can_access(text, uuid, text, uuid);
 DROP FUNCTION IF EXISTS private.can_access(text, uuid, text, uuid);
-REVOKE USAGE ON SCHEMA private FROM authenticated, service_role;
+DO $private$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'private') THEN
+    REVOKE USAGE ON SCHEMA private FROM authenticated, service_role;
+  END IF;
+END
+$private$;
 
 -- The rules. No default for p_user: server code names the person (or NULL
 -- for the caller); clients and policies use the three-argument form.

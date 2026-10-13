@@ -1,17 +1,22 @@
 -- TV-SEC1 · The access check answers only for the caller unless called from
 -- a server function (supabase/migrations/20261013260000_access_check_caller.sql).
 --
--- Cast: O owns workspace W. E and M are members. X owns W2. SB is a shared
--- project; PE is O's project shared with E only (Edit); PV is O's project
--- shared with M at View. T1 sits in PE, T2 in SB. KE is E's API key, KM is M's.
+-- Cast: O owns workspace W. E, M, N, Q and V are members. X owns W2. SB is a
+-- shared project; PE is O's project shared with E only (Edit); PV is O's
+-- project shared with M at View. T1 sits in PE, T2 in SB, T3 in PV. Q may edit
+-- T1 and V may view it (task-level shares); N has no share in PE. KE is E's
+-- API key, KM is M's.
 
-SELECT test.person(n) FROM unnest(ARRAY['O', 'E', 'M', 'X']) AS n;
+SELECT test.person(n) FROM unnest(ARRAY['O', 'E', 'M', 'N', 'Q', 'V', 'X']) AS n;
 INSERT INTO public.workspaces (id, owner_id, name) VALUES
   (test.id('W'), test.id('O'), 'Moduo Labs'),
   (test.id('W2'), test.id('X'), 'Elsewhere');
 INSERT INTO public.workspace_members (workspace_id, user_id, role) VALUES
   (test.id('W'), test.id('E'), 'member'),
-  (test.id('W'), test.id('M'), 'member');
+  (test.id('W'), test.id('M'), 'member'),
+  (test.id('W'), test.id('N'), 'member'),
+  (test.id('W'), test.id('Q'), 'member'),
+  (test.id('W'), test.id('V'), 'member');
 INSERT INTO public.buckets (id, workspace_id, owner_id, name, is_system) VALUES
   (test.id('SB'), test.id('W'), test.id('O'), 'Shared', false),
   (test.id('PE'), test.id('W'), test.id('O'), 'Brand vault', false),
@@ -24,6 +29,9 @@ INSERT INTO public.tasks (id, workspace_id, bucket_id, owner_id, title, status) 
   (test.id('T1'), test.id('W'), test.id('PE'), test.id('O'), 'Vault task', 'todo'),
   (test.id('T2'), test.id('W'), test.id('SB'), test.id('O'), 'Shared task', 'todo'),
   (test.id('T3'), test.id('W'), test.id('PV'), test.id('O'), 'Board task', 'todo');
+INSERT INTO public.resource_grants (workspace_id, resource_type, resource_id, subject_type, subject_id, level, created_by)
+VALUES (test.id('W'), 'task', test.id('T1'), 'member', test.id('Q'), 'edit', test.id('O')),
+       (test.id('W'), 'task', test.id('T1'), 'member', test.id('V'), 'view', test.id('O'));
 INSERT INTO public.workspace_api_keys (id, workspace_id, name, key_prefix, key_hash, scopes, created_by) VALUES
   (test.id('KE'), test.id('W'), 'E agent', 'mdo_ke', md5('db-test-ke'), '{"tasks": "edit"}'::jsonb, test.id('E')),
   (test.id('KM'), test.id('W'), 'M agent', 'mdo_km', md5('db-test-km'), '{"tasks": "edit"}'::jsonb, test.id('M'));
@@ -112,6 +120,29 @@ BEGIN
     AND (SELECT count(DISTINCT d.objid) FROM pg_depend d
          WHERE d.classid = 'pg_policy'::regclass AND d.refclassid = 'pg_proc'::regclass AND d.refobjid = v_three) >= 17,
     'every policy uses the caller''s form');
+  -- No function a client can run as itself (SECURITY INVOKER) names a person
+  -- to the access check or calls a helper that does; no view does either.
+  SELECT string_agg(p.oid::regprocedure::text, ', ') INTO r
+  FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+  WHERE n.nspname NOT IN ('pg_catalog', 'information_schema', 'test')
+    AND NOT p.prosecdef
+    AND (has_function_privilege('authenticated', p.oid, 'EXECUTE') OR has_function_privilege('anon', p.oid, 'EXECUTE'))
+    AND (p.prosrc ~ '\m(share_direct_rank|perm_ceiling_rank|chat_is_workspace_member)\s*\('
+         OR p.prosrc ~ 'can_access\s*\((\s*[^(),]*(\([^()]*\))?[^(),]*,){3}');
+  PERFORM test.ok(r IS NULL, 'no client-run invoker function names a person to the access check or its helpers', r);
+  PERFORM test.ok(NOT EXISTS (
+      SELECT 1 FROM pg_depend d
+      WHERE d.classid = 'pg_rewrite'::regclass AND d.refclassid = 'pg_proc'::regclass
+        AND d.refobjid IN (v_four, 'public.share_direct_rank(text, uuid, uuid)'::regprocedure,
+                           'public.perm_ceiling_rank(uuid, uuid, text)'::regprocedure,
+                           'public.chat_is_workspace_member(uuid, uuid)'::regprocedure))
+    AND NOT EXISTS (
+      SELECT 1 FROM pg_depend d
+      WHERE d.classid = 'pg_policy'::regclass AND d.refclassid = 'pg_proc'::regclass
+        AND d.refobjid IN ('public.share_direct_rank(text, uuid, uuid)'::regprocedure,
+                           'public.perm_ceiling_rank(uuid, uuid, text)'::regprocedure,
+                           'public.chat_is_workspace_member(uuid, uuid)'::regprocedure)),
+    'no view or policy uses the four-argument form or the three helpers');
 
   -- ── A client asking about itself ─────────────────────────────────────────
   r := test.can('E', 'task', 'T1', 'view');
@@ -170,6 +201,11 @@ BEGIN
   PERFORM test.ok(r IS NULL, 'no answer to someone who sees the project but cannot assign in it', r);
   r := test.value_as('O', format('SELECT public.share_assign_preview(%L, %L)', test.id('PV'), test.id('E')));
   PERFORM test.ok(r LIKE 'E can''t see "Board notes"%', 'while its owner gets the warning', r);
+  r := test.value_as('Q', format('SELECT public.share_assign_preview(%L, %L)', test.id('PE'), test.id('N')));
+  PERFORM test.ok(r = 'N can''t see "this bucket" — they''ll only see this task.',
+    'someone who can edit only a task in the project gets the warning without its name', r);
+  r := test.value_as('V', format('SELECT public.share_assign_preview(%L, %L)', test.id('PE'), test.id('N')));
+  PERFORM test.ok(r IS NULL, 'someone who can only view a task in it gets nothing', r);
 
   -- Mentions answer only to someone who can edit the task.
   r := test.try('M', format('SELECT public.tasks_op_mention(%L, %L, ARRAY[%L]::uuid[])', test.id('W'), test.id('T1'), test.id('E')));
