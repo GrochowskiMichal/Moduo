@@ -297,6 +297,20 @@ describe("tasks are points (AC9.2, AC2.3)", () => {
     );
     expect(shape(nested.rows)).toEqual(["project:north", "task:parent", "task:kid"]);
     expect(taskRow(nested.rows, "kid").depth).toBe(1);
+    // A parent with no row (undated): its subtask sits at its level, not under the row above.
+    const orphan = buildTimelineRows(
+      input({
+        scope: { kind: "project", projectId: "north" },
+        tasks: [
+          task("before", "north", { dueOn: key(19), position: "a" }),
+          task("parent", "north", { position: "b" }),
+          task("kid", "north", { parentId: "parent", dueOn: key(21) }),
+        ],
+        subtasks: "nested",
+      }),
+    );
+    expect(shape(orphan.rows)).toEqual(["project:north", "task:before", "task:kid"]);
+    expect(taskRow(orphan.rows, "kid").depth).toBe(0);
   });
 
   it("Show sessions lists a task's other sessions as ticks", () => {
@@ -316,10 +330,22 @@ describe("tasks are points (AC9.2, AC2.3)", () => {
   });
 
   it("collects the open due days (Due per week) and the extent", () => {
-    const result = buildTimelineRows(input({ scope: { kind: "project", projectId: "acme" } }));
+    const acme = TASKS.filter((t) => t.bucketId === "acme");
+    const result = buildTimelineRows(
+      input({ scope: { kind: "project", projectId: "acme" }, tasks: acme }),
+    );
     expect(result.dueDays.sort()).toEqual([d(9), d(14), d(7, 10)].sort());
     expect(result.extent?.min).toBe(d(1));
     expect(result.hasMarks).toBe(true);
+    // Folded away, still counted: the counts are the scope's, not the drawn rows'.
+    const folded = buildTimelineRows(
+      input({
+        scope: { kind: "project", projectId: "acme" },
+        tasks: acme,
+        folded: new Set([sectionRowKey("acme", "design"), sectionRowKey("acme", "build")]),
+      }),
+    );
+    expect(folded.dueDays.sort()).toEqual(result.dueDays.sort());
   });
 });
 

@@ -68,4 +68,11 @@ Set up: `bun run local:up`, `bun run env:local`, `bun run dev:web`, sign in as t
 - Light theme (not tuned: out of scope).
 
 ## Polish later
-- (filled in after the validator's round)
+- **The header's month name slides out under the name column's edge:** it fades there, but a fragment ("…ber") can still show for a moment. Hide a label whose month is narrower on screen than its name (needs the scroll position, or a CSS trick).
+- **A phase's name shows only from the segment's start:** a phase that began off screen is an unnamed segment until you scroll back. Keeping the name in view needs `overflow-clip` segments with a sticky label that doesn't leave a fragment (gotchas/ui.md).
+- **Indent and the hint offset are inline styles** (`paddingInlineStart` per depth, `calc(var(--timeline-name-w) + 0.375rem)`), as the notes tree does; move them to classes if the kit grows a tree-indent token.
+- **Year zoom's frame time isn't measured:** the perf spec scrolls at Month (median 16.7 ms); at Year the drawn window (header, ghosts) moves more often per pixel.
+- **The menu's date picker opens at the end of the name cell,** not at the point; TV-TL2's D key may want it at the mark.
+- **Project rows have no context menu** (Open project, Expand, Set dates…): TV-TL2 or the project panel.
+- **A selection carried over from the List** can be a task inside a folded project at All: the panel shows it while the canvas doesn't; expanding its project when you arrive would fix it.
+- **Visual baselines** for the five stories are uncaptured (see "Verify before release").

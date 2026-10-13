@@ -370,7 +370,7 @@ _Built and landed locally on `t/maciej/tasks-v3-build` (🟠 LOCAL BUILD MODE in
 
 **Live-verified** on the local stack (checklist).
 
-**Reviews:** REVIEW_PLACEHOLDER
+**Reviews:** one validator round (the lighter gate): no BLOCKER. The MAJOR, today landing months off after a switch between places that also changes the zoom (the scroll ask was spent against the old range), is fixed (an ask waits for its own range) and the e2e now fails without the fix. MINORs fixed too: an archived project's bar and progress count its tasks; a stuck header row paints the grid; Due per week counts folded-away work; a nested subtask of a parent with no row sits at the parent's level; ←/→ and Space scroll the canvas when there's nothing to fold; the off-screen hints read a store, so a scroll never redraws the view. NITs fixed: the grid's active row when it's gone, the orphaned workspace zoom key, a doubled comment. AC9.5 (the 200–480 clamp, ⇧[) and AC2.7 (the header row) are in the e2e now; the rest is under "Polish later" in the checklist.
 
 **Records:** choices TL1-1…11 in decisions/tasks.md; gotchas in ui.md "The Timeline (TV-TL1)" (6); checklist [docs/testing/t-maciej-tv-tl1-timeline.md](../docs/testing/t-maciej-tv-tl1-timeline.md).
 

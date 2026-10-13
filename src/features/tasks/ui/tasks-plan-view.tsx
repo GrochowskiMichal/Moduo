@@ -217,6 +217,8 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   );
   useEffect(() => {
     removeLS(workspaceId, "mode");
+    // The Timeline's zoom is per scope in Display since TV-TL1.
+    removeLS(workspaceId, "timelineZoom");
   }, [workspaceId]);
   // Which right-panel view is showing (views: features/tasks/panel-views.ts).
   const [panelView, setPanelView] = useState("details");

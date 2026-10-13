@@ -91,7 +91,7 @@ function TimelineRowView(props: TimelineRowProps) {
   // Dates redraw when Time & region changes (TV-D14; the row is memoised).
   useTimeRegion();
   const { row, selected, cursor, sticky, canEdit, handlers } = props;
-  const { nameHidden } = useTimelineGeometry();
+  const { nameHidden, zoom } = useTimelineGeometry();
   const header = row.kind === "area" || row.kind === "group" || row.kind === "section";
   const expandable = row.kind === "project" ? row.expandable : row.kind === "section";
   const expanded =
@@ -115,11 +115,20 @@ function TimelineRowView(props: TimelineRowProps) {
         "group/row relative flex w-full cursor-default select-none",
         header ? "h-(--row-h-sm)" : "h-(--row-h)",
         // A row stuck under the header covers the ones passing beneath.
-        sticky && "timeline-grid bg-card",
+        sticky && "bg-card",
       )}
     >
       <NameCell {...props} expandable={expandable} expanded={!!expanded} />
-      <div role="gridcell" className="relative min-w-0 flex-1">
+      <div
+        role="gridcell"
+        // Stuck, the row is opaque: its track paints the canvas's grid itself
+        // (the frame holds the grid's geometry).
+        className={cn("relative min-w-0 flex-1", sticky && "timeline-grid")}
+        data-unit={
+          sticky ? (zoom === "year" ? "month" : zoom === "quarter" ? "week" : "day") : undefined
+        }
+        data-weekends={sticky && (zoom === "week" || zoom === "month") ? "" : undefined}
+      >
         {/* Hover and selection tint the whole row (69: accent only for the selection). */}
         <span
           aria-hidden

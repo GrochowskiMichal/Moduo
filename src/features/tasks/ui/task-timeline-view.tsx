@@ -38,7 +38,7 @@ import { type CompletedMode, isCompletedHidden } from "../completed";
 import { type TasksDisplay, type TimelineShow, timelineScopeOf } from "../display";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { Bucket, Task } from "../model";
-import { isTypingTarget, timelineKeyAction } from "../timeline-keys";
+import { isTypingTarget, type TimelineKeyAction, timelineKeyAction } from "../timeline-keys";
 import {
   buildTimelineRows,
   type TimelineGroup,
@@ -74,6 +74,7 @@ import { useRowActions } from "./row-facts";
 import { activateTask, type TaskCommand } from "./task-context-menu";
 import { TimelineHeader } from "./timeline-header";
 import {
+  createViewportStore,
   type TimelineGeometry,
   TimelineGeometryContext,
   TimelineViewportContext,
@@ -233,6 +234,11 @@ export function TaskTimelineView({
     () => (scopeKind.kind === "project" ? [...buckets, ...api.archivedBuckets] : buckets),
     [scopeKind.kind, buckets, api.archivedBuckets],
   );
+  // A project's bar and progress count all its work, an archived one's too.
+  const allTasks = useMemo(
+    () => (scopeKind.kind === "project" ? [...api.tasks, ...api.archivedTasks] : api.tasks),
+    [scopeKind.kind, api.tasks, api.archivedTasks],
+  );
   const hueById = useMemo(() => {
     const map = new Map<string, string | null>();
     for (const p of projects) map.set(p.id, p.color ?? null);
@@ -258,7 +264,7 @@ export function TaskTimelineView({
       buildTimelineRows({
         scope: scopeKind,
         tasks,
-        allTasks: api.tasks,
+        allTasks,
         projects,
         areas: api.areas,
         sections: api.sections,
@@ -279,7 +285,7 @@ export function TaskTimelineView({
     [
       scopeKind,
       tasks,
-      api.tasks,
+      allTasks,
       projects,
       api.areas,
       api.sections,
@@ -376,8 +382,9 @@ export function TaskTimelineView({
 
   const [range, setRange] = useState<TimelineRange>(() => initialRange(today, built.extent));
   const [drawn, setDrawn] = useState(() => drawWindow({ from: today - 60, to: today + 60 }));
-  // The days on screen now (whole days): the off-screen hints read it.
-  const [viewport, setViewport] = useState({ from: today - 30, to: today + 30 });
+  // The days on screen now (whole days), for the off-screen hints only: a
+  // store they subscribe to, so scrolling never redraws the view.
+  const [viewport] = useState(() => createViewportStore({ from: today - 30, to: today + 30 }));
   const canvasW = range.days * dw;
 
   // The live values the scroll and wheel handlers read.
@@ -385,11 +392,15 @@ export function TaskTimelineView({
   useLayoutEffect(() => {
     live.current = { range, dw, trackWidth, zoom, nameW };
   });
-  /** Where the next render puts the scroll: today, a kept day, or an added start. */
+  /**
+   * Where the next render puts the scroll: today, a kept day, or an added
+   * start. An ask made with a new range waits for that range to be drawn (a
+   * scope switch can change the zoom in the same render as it asks).
+   */
   const pending = useRef<
-    | { kind: "today" }
+    | { kind: "today"; range: TimelineRange }
     | { kind: "day"; day: number; at: number }
-    | { kind: "shift"; days: number }
+    | { kind: "shift"; days: number; range: TimelineRange }
     | null
   >(null);
 
@@ -398,23 +409,29 @@ export function TaskTimelineView({
     if (!el) return;
     const { range: r, dw: w, trackWidth: tw } = live.current;
     if (tw <= 0) return;
+    // A new range is on its way: read nothing against the old one.
+    const ask = pending.current;
+    if (ask && ask.kind !== "day" && ask.range !== r) return;
     const shown = visibleDays(r, w, el.scrollLeft, tw);
     const grown = extendRange(r, shown, Math.ceil(tw / w) + 30);
     if (grown) {
-      if (grown.shift > 0) pending.current = { kind: "shift", days: grown.shift };
+      if (grown.shift > 0) {
+        pending.current = { kind: "shift", days: grown.shift, range: grown.range };
+      }
       setRange(grown.range);
     }
     const next = drawWindow(shown);
     setDrawn((prev) => (prev.from === next.from && prev.to === next.to ? prev : next));
-    setViewport((prev) => (prev.from === shown.from && prev.to === shown.to ? prev : shown));
-  }, []);
+    viewport.set(shown);
+  }, [viewport]);
 
   // Open (a new scope, or once the tasks are in) with today a quarter across.
   const loaded = !api.loading;
   // biome-ignore lint/correctness/useExhaustiveDependencies: a new scope or the first load is the cue
   useLayoutEffect(() => {
-    setRange(initialRange(today, built.extent));
-    pending.current = { kind: "today" };
+    const next = initialRange(today, built.extent);
+    pending.current = { kind: "today", range: next };
+    setRange(next);
   }, [scopeKey, loaded]);
 
   // Apply what was asked once the range, zoom and size are drawn.
@@ -423,6 +440,8 @@ export function TaskTimelineView({
     const el = scrollerRef.current;
     const ask = pending.current;
     if (!el || !ask || trackWidth <= 0) return;
+    // Asked with a range that isn't drawn yet: wait for it.
+    if (ask.kind !== "day" && ask.range !== range) return;
     pending.current = null;
     if (ask.kind === "today") el.scrollLeft = scrollLeftFor(range, dw, today, trackWidth);
     else if (ask.kind === "day") el.scrollLeft = Math.max(0, (ask.day - range.start) * dw - ask.at);
@@ -500,11 +519,11 @@ export function TaskTimelineView({
   );
   const rowByKey = useMemo(() => new Map(rows.map((r) => [r.key, r])), [rows]);
 
-  /** Bring a row into view: vertically, and its point when it's off to the side. */
   /**
    * Bring a row into view, up or down only: the canvas never jumps sideways
    * under the cursor (a mark off to the side shows as a hint at the row's
-   * edge, `OffscreenHint`; a deep link's point is centred by the page).
+   * edge, `OffscreenHint`). A deep link's point is centred by the page's
+   * reveal, which finds the first `[data-task-id]`: the point, not the row.
    */
   const reveal = useCallback((row: TimelineRow) => {
     setScrollTo((prev) => ({ key: row.key, seq: (prev?.seq ?? 0) + 1 }));
@@ -596,55 +615,69 @@ export function TaskTimelineView({
     const action = timelineKeyAction(e);
     if (!action) return;
     const row = cursorKey ? rowByKey.get(cursorKey) : undefined;
-    e.preventDefault();
+    // A key the view didn't use keeps its native job (←/→ off a header and
+    // Space with no row scroll the canvas).
+    if (runKey(action, row)) e.preventDefault();
+  };
+
+  /** Run a key's action; false when it did nothing here. */
+  const runKey = (action: TimelineKeyAction, row: TimelineRow | undefined): boolean => {
+    const foldable =
+      row?.kind === "section" || (row?.kind === "project" && row.expandable) ? row : null;
     switch (action) {
       case "next":
         moveCursor(1);
-        return;
+        return true;
       case "prev":
         moveCursor(-1);
-        return;
+        return true;
       case "fold":
       case "unfold": {
-        if (!row) return;
-        const open =
-          row.kind === "project" ? row.expanded : row.kind === "section" ? !row.folded : null;
-        const can = row.kind === "project" ? row.expandable : row.kind === "section";
-        if (can && open !== null && open === (action === "fold")) toggleRow(row.key);
-        return;
+        if (!foldable) return false;
+        const open = foldable.kind === "project" ? foldable.expanded : !foldable.folded;
+        if (open === (action === "fold")) toggleRow(foldable.key);
+        return true;
       }
       case "open":
-        if (!row) return;
-        if (row.kind === "task") onOpenTask?.(row.task.id);
-        else if (row.kind === "project" && row.expandable && onOpenProject)
-          onOpenProject(row.project.id);
-        else if (row.kind === "section" || (row.kind === "project" && row.expandable))
-          toggleRow(row.key);
-        return;
-      case "toggle":
-        if (!row) return;
-        if (row.kind === "task") {
-          if (canEdit) activateTask(row.task, rowActions);
-        } else if (row.kind === "section" || (row.kind === "project" && row.expandable)) {
-          toggleRow(row.key);
+        if (row?.kind === "task") {
+          onOpenTask?.(row.task.id);
+          return true;
         }
-        return;
+        if (row?.kind === "project" && row.expandable && onOpenProject) {
+          onOpenProject(row.project.id);
+          return true;
+        }
+        if (foldable) {
+          toggleRow(foldable.key);
+          return true;
+        }
+        return false;
+      case "toggle":
+        if (row?.kind === "task") {
+          if (canEdit) activateTask(row.task, rowActions);
+          return true;
+        }
+        if (foldable) {
+          toggleRow(foldable.key);
+          return true;
+        }
+        return false;
       case "today":
         scrollToToday(true);
-        return;
+        return true;
       case "zoom-in":
         changeZoom(stepZoom(zoom, -1));
-        return;
+        return true;
       case "zoom-out":
         changeZoom(stepZoom(zoom, 1));
-        return;
+        return true;
       case "name-column":
         toggleNameColumn();
-        return;
+        return true;
       case "clear":
         setCursorKey(null);
         onSelectTask(null);
-        return;
+        return true;
     }
   };
 
@@ -678,19 +711,18 @@ export function TaskTimelineView({
     [zoom, drawn, today],
   );
 
+  // The grid's geometry sits on the frame: the canvas's grid and a sticky
+  // header row's track (which paints its own over its opaque surface) read it.
   const frameStyle = {
     "--timeline-name-w": `${nameW}px`,
     "--timeline-dw": `${dw}px`,
     "--timeline-head-h": `${size.header}px`,
-    width: nameW + canvasW,
-  } as CSSProperties;
-  const gridStyle = {
-    left: nameW,
-    width: canvasW,
     "--timeline-unit": `${unit === "week" ? dw * 7 : dw}px`,
     "--timeline-unit-x": `${unitX}px`,
     "--timeline-weekend-x": `${saturdayX}px`,
+    width: nameW + canvasW,
   } as CSSProperties;
+  const gridStyle = { left: nameW, width: canvasW } as CSSProperties;
   const bodyMin = Math.max(0, size.height - size.header);
   const cursorIndex = cursorKey ? rows.findIndex((r) => r.key === cursorKey) : -1;
   const pinned = useMemo(() => (cursorIndex >= 0 ? [cursorIndex] : []), [cursorIndex]);
@@ -768,7 +800,9 @@ export function TaskTimelineView({
                     ref={scrollerRef}
                     role="grid"
                     aria-label={`${scopeTitle} timeline`}
-                    aria-activedescendant={cursorKey ? timelineRowDomId(cursorKey) : undefined}
+                    aria-activedescendant={
+                      cursorKey && rowByKey.has(cursorKey) ? timelineRowDomId(cursorKey) : undefined
+                    }
                     tabIndex={0}
                     onKeyDown={onKeyDown}
                     onScroll={handleScroll}

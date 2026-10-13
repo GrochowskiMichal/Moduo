@@ -33,7 +33,13 @@ const dated = { id: crypto.randomUUID(), name: "" };
 const undated = { id: crypto.randomUUID(), name: "" };
 const design = crypto.randomUUID();
 const build = crypto.randomUUID();
-const ids = { logo: crypto.randomUUID(), guide: crypto.randomUUID(), loose: crypto.randomUUID() };
+const ids = {
+  logo: crypto.randomUUID(),
+  late: crypto.randomUUID(),
+  guide: crypto.randomUUID(),
+  loose: crypto.randomUUID(),
+  old: crypto.randomUUID(),
+};
 
 /** A date key `days` from today, in this machine's calendar. */
 function dayKey(days: number): string {
@@ -83,7 +89,11 @@ test.beforeAll(async () => {
     });
   await make(ids.logo, `Logo concepts ${tag}`, dated.id, { section_id: design, due_on: dayKey(3) });
   await make(ids.guide, `Guidelines ${tag}`, dated.id, { section_id: build, due_on: dayKey(18) });
+  await make(ids.late, `Brand assets ${tag}`, dated.id, { section_id: design, due_on: dayKey(-3) });
   await make(ids.loose, `API contract ${tag}`, undated.id, { due_on: dayKey(5) });
+  // Long ago: All's canvas starts months before the dated project's, so a
+  // scroll worked out against the wrong one lands far from today.
+  await make(ids.old, `Kickoff notes ${tag}`, undated.id, { due_on: dayKey(-220) });
 });
 
 test.afterAll(async () => {
@@ -100,6 +110,19 @@ test.afterAll(async () => {
     await rest("service", `buckets?id=eq.${id}`, { method: "PATCH", body: { deleted_at: at } });
   }
 });
+
+/** Where today's line sits across the canvas (0 = its left edge, 1 = its right). */
+async function todayAcross(page: Page): Promise<number> {
+  return page.evaluate(() => {
+    const scroller = document.querySelector<HTMLElement>("[data-timeline]");
+    const line = document.querySelector<HTMLElement>("[data-timeline-today]");
+    const name = document.querySelector<HTMLElement>('[data-timeline] [role="rowheader"]');
+    if (!scroller || !line || !name) return Number.NaN;
+    const box = scroller.getBoundingClientRect();
+    const left = box.left + name.getBoundingClientRect().width;
+    return (line.getBoundingClientRect().left - left) / (box.right - left);
+  });
+}
 
 /** Open a sidebar place and switch it to the Timeline. */
 async function openTimeline(page: Page, place: string) {
@@ -123,6 +146,7 @@ test("rows follow scope; points and spans", async ({ page }) => {
 
   // ── All: one row per project, bars, no task rows (AC9.1, AC9.4, AC4.3) ──
   const all = await openTimeline(page, "All");
+  await expect(all).toHaveAttribute("data-zoom", "quarter");
   // The shared workspace holds many projects: search lists only this run's
   // (All shows the projects with a match).
   await page.getByRole("button", { name: "Search", exact: true }).click();
@@ -149,6 +173,10 @@ test("rows follow scope; points and spans", async ({ page }) => {
 
   // ── Inside the project: sections as bands and diamonds, tasks as points (AC9.2, AC9.3, AC2.3) ──
   await openTimeline(page, dated.name);
+  // It opens at Month (All was at Quarter) with today a quarter of the way across.
+  await expect(page.locator("[data-timeline]")).toHaveAttribute("data-zoom", "month");
+  await expect.poll(() => todayAcross(page)).toBeGreaterThan(0.15);
+  expect(await todayAcross(page)).toBeLessThan(0.35);
   const designRow = row(page, `section:${dated.id}:${design}`);
   const buildRow = row(page, `section:${dated.id}:${build}`);
   await expect(designRow).toContainText(`Design ${tag}`);
@@ -162,6 +190,50 @@ test("rows follow scope; points and spans", async ({ page }) => {
   await expect(logo.locator('[data-timeline-mark="band"]')).toHaveCount(1);
   await logo.locator('[role="rowheader"]').click();
   await expect(page.getByLabel("Task title")).toHaveValue(`Logo concepts ${tag}`);
+
+  // An open task past its day keeps its place, in the late tone (never moved).
+  await expect(
+    row(page, `task:${ids.late}`).locator('[data-timeline-mark="point"]'),
+  ).toHaveAttribute("data-late", "true");
+
+  // ── The name column: resizable from 200 to 480 px, ⇧[ hides it (AC9.5) ──
+  const nameCell = logo.locator('[role="rowheader"]');
+  const drag = async (dx: number) => {
+    const edge = await page.locator("[data-timeline-resize]").boundingBox();
+    if (!edge) throw new Error("no resize edge");
+    await page.mouse.move(edge.x + edge.width / 2, edge.y + edge.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(edge.x + dx / 2, edge.y + edge.height / 2, { steps: 4 });
+    await page.mouse.move(edge.x + dx, edge.y + edge.height / 2, { steps: 4 });
+    await page.mouse.up();
+  };
+  await drag(400);
+  await expect.poll(async () => (await nameCell.boundingBox())?.width).toBe(480);
+  await drag(-400);
+  await expect.poll(async () => (await nameCell.boundingBox())?.width).toBe(200);
+  await page.locator("[data-timeline]").focus();
+  await page.keyboard.press("Shift+BracketLeft");
+  await expect.poll(async () => (await nameCell.boundingBox())?.width ?? 0).toBe(0);
+  await page.keyboard.press("Shift+BracketLeft");
+  await expect.poll(async () => (await nameCell.boundingBox())?.width).toBe(200);
+
+  // ── Due per week: a third header row of counts (AC2.7) ──
+  await page.getByRole("button", { name: "Display", exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Due per week" }).click();
+  await page.keyboard.press("Escape");
+  const perWeek = page.locator("[data-timeline-due-per-week]");
+  await expect(perWeek).toBeVisible();
+  await expect(perWeek.locator("[data-week]").filter({ hasText: /^\d+$/ }).first()).toBeVisible();
+
+  // Back to All and into the project again, the Timeline staying open (each
+  // place remembers it): the zoom changes with the place, and today is still
+  // a quarter across.
+  await page.locator("nav").getByText("All", { exact: true }).first().click();
+  await expect(page.locator("[data-timeline]")).toHaveAttribute("data-zoom", "quarter");
+  await page.locator("nav").getByText(dated.name, { exact: true }).first().click();
+  await expect(page.locator("[data-timeline]")).toHaveAttribute("data-zoom", "month");
+  await expect.poll(() => todayAcross(page)).toBeGreaterThan(0.15);
+  expect(await todayAcross(page)).toBeLessThan(0.35);
 
   // ── Nothing is rotated (46a) ──
   const rotated = await page.evaluate(() =>

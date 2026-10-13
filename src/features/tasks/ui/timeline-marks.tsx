@@ -10,7 +10,7 @@
 // `data-project-id`), so a drag finds what it grabbed without new markup.
 
 import { CircleCheck, Repeat } from "lucide-react";
-import { createContext, useContext, useMemo } from "react";
+import { createContext, useContext, useMemo, useSyncExternalStore } from "react";
 
 import { normalizeLabelColor } from "../../../components/tag-colors";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
@@ -64,11 +64,42 @@ export function useTimelineGeometry(): TimelineGeometry {
   return useContext(TimelineGeometryContext);
 }
 
-/** The whole days on screen now (the off-screen hints). */
-export const TimelineViewportContext = createContext<{ from: number; to: number }>({
+type DaysOnScreen = { from: number; to: number };
+
+/**
+ * The whole days on screen now, as a store the off-screen hints subscribe to:
+ * the view sets it on every scroll frame, and only a hint whose side flips
+ * redraws (never the view or its rows).
+ */
+export type ViewportStore = {
+  get: () => DaysOnScreen;
+  set: (next: DaysOnScreen) => void;
+  subscribe: (listener: () => void) => () => void;
+};
+
+export function createViewportStore(initial: DaysOnScreen): ViewportStore {
+  let value = initial;
+  const listeners = new Set<() => void>();
+  return {
+    get: () => value,
+    set: (next) => {
+      if (next.from === value.from && next.to === value.to) return;
+      value = next;
+      for (const listener of listeners) listener();
+    },
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
+}
+
+const EVERYTHING_ON_SCREEN = createViewportStore({
   from: Number.NEGATIVE_INFINITY,
   to: Number.POSITIVE_INFINITY,
 });
+
+export const TimelineViewportContext = createContext<ViewportStore>(EVERYTHING_ON_SCREEN);
 
 /**
  * A row whose mark is off to one side says so at that edge (research §3:
@@ -86,8 +117,14 @@ export function OffscreenHint({
   onGo: (day: number) => void;
 }) {
   const viewport = useContext(TimelineViewportContext);
-  const before = end < viewport.from;
-  const after = start > viewport.to;
+  // -1: off to the left, 1: off to the right, 0: on screen (a number, so the
+  // hint redraws only when its side changes).
+  const side = useSyncExternalStore(viewport.subscribe, () => {
+    const shown = viewport.get();
+    return end < shown.from ? -1 : start > shown.to ? 1 : 0;
+  });
+  const before = side < 0;
+  const after = side > 0;
   if (!before && !after) return null;
   const day = before ? end : start;
   const label = formatDate(dateOfDay(day));

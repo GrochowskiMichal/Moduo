@@ -158,7 +158,7 @@ export type TimelineRowsResult = {
   rows: TimelineRow[];
   /** The earliest and latest day anything is drawn on (the first range). */
   extent: { min: number; max: number } | null;
-  /** Due days of the open tasks shown (the Due per week counts). */
+  /** Due days of the scope's open tasks, folded away or not (the Due per week counts). */
   dueDays: number[];
   /** Open tasks with no date and no session (the "No date · n" count). */
   undated: number;
@@ -307,12 +307,14 @@ function taskRows(
   const sorted = sortTasks(ctx, tops, order);
   const rows: TimelineRow[] = [];
   for (const task of sorted) {
-    if (shows(ctx, task)) rows.push(taskRow(ctx, task, depth, band));
+    const shown = shows(ctx, task);
+    if (shown) rows.push(taskRow(ctx, task, depth, band));
     if (subtasks !== "nested") continue;
     const kids = childrenOf.get(task.id);
     if (!kids) continue;
+    // Under their parent; at its level when it has no row (undated, done).
     for (const kid of [...kids].sort(byPosition)) {
-      if (shows(ctx, kid)) rows.push(taskRow(ctx, kid, depth + 1, band));
+      if (shows(ctx, kid)) rows.push(taskRow(ctx, kid, shown ? depth + 1 : depth, band));
     }
   }
   return rows;
@@ -336,7 +338,6 @@ function taskRow(ctx: Ctx, task: Task, depth: number, band: DaySpan | null): Tim
   const point = pointFor(ctx, task);
   if (point) {
     widen(ctx, point.day);
-    if (point.kind === "due" && !point.closed) ctx.dueDays.push(point.day);
   }
   let sessionDays: number[] = [];
   if (ctx.input.showSessions) {
@@ -617,10 +618,14 @@ export function buildTimelineRows(input: TimelineRowsInput): TimelineRowsResult 
     rows.push(...taskScopeRows(ctx));
   }
 
+  // The open work of the whole scope, drawn or folded away: "No date · n"
+  // and the Due per week counts (which weeks are crowded).
   let undated = 0;
   for (const task of input.tasks) {
-    if (!isOpenTask(task) || parentInScope(ctx, task)) continue;
-    if (!pointFor(ctx, task)) undated += 1;
+    if (!isOpenTask(task)) continue;
+    const point = pointFor(ctx, task);
+    if (point?.kind === "due") ctx.dueDays.push(point.day);
+    if (!point && !parentInScope(ctx, task)) undated += 1;
   }
   return { rows, extent: ctx.extent, dueDays: ctx.dueDays, undated, hasMarks: ctx.hasMarks };
 }
