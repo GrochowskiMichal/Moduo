@@ -175,7 +175,7 @@ function TimelineRowView(props: TimelineRowProps) {
         />
         {sticky ? <TrackLines /> : null}
         <Track {...props} />
-        {nameHidden ? <TrackLabel row={row} /> : null}
+        {nameHidden ? <TrackLabel row={row} files={props.files} /> : null}
       </div>
     </div>
   );
@@ -503,12 +503,21 @@ function Track({
  * ⇧[ hid the name column (research §3): the title sits right of its mark, a
  * header's name at the left edge of the canvas.
  */
-function TrackLabel({ row }: { row: TimelineRow }) {
+function TrackLabel({ row, files = 0 }: { row: TimelineRow; files?: number }) {
   const { range, dw } = useTimelineGeometry();
   let text: ReactNode = null;
   let at: number | null = null;
   if (row.kind === "task") {
-    text = row.task.title || "Untitled";
+    // With the name column folded, the 📎 mark (AT-3) rides beside the title.
+    text =
+      files > 0 ? (
+        <span className="inline-flex items-center gap-1.5">
+          {row.task.title || "Untitled"}
+          <MetaCount icon={Paperclip} count={files} label={filesLabel} />
+        </span>
+      ) : (
+        row.task.title || "Untitled"
+      );
     at = row.point ? (row.point.day - range.start + 1) * dw + 8 : null;
   } else if (row.kind === "project") {
     text = row.project.name;

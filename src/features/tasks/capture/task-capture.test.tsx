@@ -621,6 +621,22 @@ describe("Files on a capture (AT-3, AT3-2)", () => {
     await expect(handled[0]?.task).resolves.toEqual({ id: fake.saved[0]?.id, queued: false });
   });
 
+  it("a capture the server refuses keeps its files: they come back with it", async () => {
+    fake.runtime.tasks.upsertTask.mockImplementationOnce(async () => {
+      throw new Error("You can't add tasks here.");
+    });
+    await openWithTitle();
+    fireEvent.paste(description(), clipboard([shot()]));
+    await screen.findByRole("button", { name: "Remove shot.png" });
+    fireEvent.click(screen.getByRole("button", { name: /^Create\s*⏎$/ }));
+    await waitFor(() => expect(loadDraft(ME, WS, "refused")).not.toBeNull());
+    // Nothing was made, so nothing is attached anywhere.
+    await expect(handled[0]?.task).resolves.toBeNull();
+    cleanup();
+    renderBody();
+    expect(await screen.findByRole("button", { name: "Remove shot.png" })).toBeTruthy();
+  });
+
   it("text pasted into the description stays text", async () => {
     await openWithTitle();
     fireEvent.paste(description(), clipboard([], "notes"));

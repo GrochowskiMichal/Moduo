@@ -126,7 +126,27 @@ const SOURCE_ICON: Record<CaptureSourceKind, typeof Mail> = {
 let lastTitleWords = "";
 
 /** The open Task capture's way to take a refused capture back ("Restore"). */
-let openBody: ((draft: CaptureDraft) => void) | null = null;
+let openBody: ((draft: CaptureDraft, files: File[]) => void) | null = null;
+
+/**
+ * A refused capture's files (AT-3): the draft slot on the device keeps words
+ * and ids only, so its files wait here, in memory, for its Restore (or the
+ * next capture that opens with it) — per person and workspace.
+ */
+let refusedFiles: { key: string; files: File[]; restoring?: boolean } | null = null;
+
+function takeRefusedFiles(
+  userId: string | null,
+  workspaceId: string | null,
+  onlyRestoring = false,
+): File[] {
+  const key = `${userId ?? ""}:${workspaceId ?? ""}`;
+  if (!refusedFiles || refusedFiles.key !== key) return [];
+  if (onlyRestoring && !refusedFiles.restoring) return [];
+  const { files } = refusedFiles;
+  refusedFiles = null;
+  return files;
+}
 
 /**
  * The capture's task as the file seam needs it (AT-3): made on the server,
@@ -209,7 +229,8 @@ export function TaskCaptureBody({
         : refused && draftHasContent(refused)
           ? refused
           : null;
-    if (restored === refused) clearDraft(owner.userId, owner.workspaceId, "refused");
+    const refusedNow = restored === refused;
+    if (refusedNow) clearDraft(owner.userId, owner.workspaceId, "refused");
     let start: CaptureDraft = restored ?? EMPTY_DRAFT;
     // Typed under another type (⌘2, then back): those words come along.
     if (shellDraft.trim() && shellDraft !== lastTitleWords) {
@@ -236,7 +257,17 @@ export function TaskCaptureBody({
         },
       };
     }
-    return { draft: start, restored: Boolean(restored) };
+    return {
+      draft: start,
+      restored: Boolean(restored),
+      // A refused capture opened again (or by its Restore) brings its files
+      // back too (AT-3).
+      files: refusedNow
+        ? takeRefusedFiles(owner.userId, owner.workspaceId)
+        : restored
+          ? takeRefusedFiles(owner.userId, owner.workspaceId, true)
+          : [],
+    };
   });
   const [segments, setSegments] = useState<TitleSegment[]>(initial.draft.segments);
   const [segmentKeys, setSegmentKeys] = useState<Array<NodeKey | null>>([]);
@@ -261,7 +292,7 @@ export function TaskCaptureBody({
   const [hint, setHint] = useState<string | null>(null);
   const [openPill, setOpenPill] = useState<OpenPill>(null);
   const [destinationOpen, setDestinationOpen] = useState(false);
-  const [files, setFiles] = useState<File[]>([]);
+  const [files, setFiles] = useState<File[]>(initial.files);
   // A task template picked (`/template`, More → Template…, TV-D15).
   const templateProvider = runtime?.tasks.applyTaskTemplate ? captureTemplates() : null;
   const [template, setTemplate] = useState<CaptureTemplateChoice | null>(null);
@@ -849,13 +880,14 @@ export function TaskCaptureBody({
   useEffect(() => {
     segmentsRef.current = segments;
   });
-  const fill = (kept: CaptureDraft) => {
+  const fill = (kept: CaptureDraft, keptFiles: File[] = []) => {
     titleApi.current?.setSegments(kept.segments);
     setKeep(kept.keep);
     setDescription(kept.description);
     setSubtasks(kept.subtasks);
     setFields(kept.fields);
     setPasted(kept.pasted ?? null);
+    setFiles(keptFiles);
     setRestoredNotice(false);
     titleApi.current?.focus();
   };
@@ -864,22 +896,25 @@ export function TaskCaptureBody({
     fillRef.current = fill;
   });
   useEffect(() => {
-    const restore = (kept: CaptureDraft) => fillRef.current(kept);
+    const restore = (kept: CaptureDraft, keptFiles: File[]) => fillRef.current(kept, keptFiles);
     openBody = restore;
     return () => {
       mounted.current = false;
       if (openBody === restore) openBody = null;
     };
   }, []);
-  const putBack = (kept: CaptureDraft, message: string) => {
+  const putBack = (kept: CaptureDraft, message: string, keptFiles: File[] = []) => {
     const empty = segmentsRef.current.every((x) => "text" in x && !x.text.trim());
     if (mounted.current && empty && !pastedRef.current) {
-      fill(kept);
+      fill(kept, keptFiles);
       toast.error(message, { description: "Your capture is back: change it and try again." });
       return;
     }
     const { userId: who, workspaceId: where } = owner;
     saveDraft(who, where, kept, "refused");
+    // Its files can't go in the device slot: they wait in memory for Restore.
+    refusedFiles =
+      keptFiles.length > 0 ? { key: `${who ?? ""}:${where ?? ""}`, files: keptFiles } : null;
     toast.error(message, {
       description: "Your capture is kept on this device.",
       action: {
@@ -888,8 +923,10 @@ export function TaskCaptureBody({
           const waiting = loadDraft(who, where, "refused");
           if (!waiting) return;
           clearDraft(who, where, "refused");
-          if (openBody) openBody(waiting);
+          if (openBody) openBody(waiting, takeRefusedFiles(who, where));
           else {
+            // The capture that opens takes the files with the draft.
+            if (refusedFiles) refusedFiles.restoring = true;
             saveDraft(who, where, waiting);
             lastTitleWords = "";
             dispatchOpenCapture();
@@ -924,6 +961,8 @@ export function TaskCaptureBody({
     plan: CapturePlan,
     kept: CaptureDraft | null,
     batch: boolean,
+    /** The capture's files: they come back with it if nothing was made. */
+    keptFiles: File[] = [],
   ): Promise<{ created: Task[]; queued: readonly string[] }> => {
     if (!runtime) return { created: [], queued: [] };
     const deps = { runtime, userId, store };
@@ -945,7 +984,7 @@ export function TaskCaptureBody({
       const message =
         result.error instanceof Error ? result.error.message : "Couldn't create the task.";
       if (landed === 0) {
-        if (kept) putBack(kept, message);
+        if (kept) putBack(kept, message, keptFiles);
         else toast.error(message);
       } else if (batch && result.created.length > 0) {
         // Part of a list: what saved can go again with one Undo.
@@ -1076,7 +1115,7 @@ export function TaskCaptureBody({
       onDraftChange("");
       onDone();
     }
-    const sending = send(plan, kept, false);
+    const sending = send(plan, kept, false, filesNow);
     // Files go up once the task exists, or wait with it on this device when
     // it was made offline (the AT-3 seam): the task is always created first.
     if (handler && userId) {
@@ -1208,6 +1247,7 @@ export function TaskCaptureBody({
       { workspaceId, tasks, source: context?.source ?? null, queueTop: Boolean(context?.queueTop) },
       kept,
       true,
+      filesNow,
     );
     // Files with a pasted list go on its first task (AT-3).
     const first = tasks[0]?.id;
