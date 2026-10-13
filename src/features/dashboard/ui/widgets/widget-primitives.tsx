@@ -56,6 +56,22 @@ export function WidgetSectionLabel({ children, count }: { children: ReactNode; c
   );
 }
 
+/**
+ * A group's header in sentence case (TV-H1): for words people chose (a team's
+ * name) and day names, which never go into small caps (call 40). Small caps
+ * stay for fixed chrome (`WidgetSectionLabel`).
+ */
+export function WidgetGroupLabel({ children, count }: { children: ReactNode; count?: number }) {
+  return (
+    <div className="flex items-center gap-2 px-3.5 pb-0.5 pt-2 first:pt-1">
+      <span className="min-w-0 truncate text-xs font-medium text-muted-foreground">{children}</span>
+      {typeof count === "number" ? (
+        <span className="text-2xs tabular-nums text-muted-foreground/70">{count}</span>
+      ) : null}
+    </div>
+  );
+}
+
 export interface WidgetRowProps {
   /** Leading icon (muted). Omit for a custom `leading` node. */
   icon?: LucideIcon;

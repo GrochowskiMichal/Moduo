@@ -25,8 +25,9 @@ import { groupFieldPatch } from "./dnd/drop-mode";
 import { undoWrite } from "./dnd/drop-write";
 import { statusesLetThrough, type TaskFilterContext, taskFilterValues } from "./filters";
 import { blockedTaskIds, groupTasks, isUnfinished, makeTask } from "./helpers";
+import { focusOrOpen } from "./home";
 import { isDrifted, type ProjectStatus, type Task } from "./model";
-import { openQueueCount, queueOrOpen } from "./queue";
+import { openQueueCount } from "./queue";
 import {
   firstStatusOf,
   optimisticStatus,
@@ -93,7 +94,7 @@ describe("backlog is out of counts and views (AC4.2, AC11.6)", () => {
   });
 
   it("sits out of Focus suggestions (the Open list when the queue is empty)", () => {
-    const { rows, heading } = queueOrOpen([open, parked], [], ME);
+    const { rows, heading } = focusOrOpen({ tasks: [open, parked], queue: [], userId: ME });
     expect(heading).toBe("Open");
     expect(rows.map((t) => t.id)).toEqual(["open"]);
   });

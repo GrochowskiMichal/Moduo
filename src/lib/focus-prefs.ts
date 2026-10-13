@@ -40,6 +40,11 @@ export interface FocusPrefs {
   timer: FocusTimerMode;
   /** Per task: count down the task's estimate instead of up (62a, client only). */
   countdownEstimate: boolean;
+  /** "Offer quick tasks along the way" (TV-F8, call 59a): one quick task from
+   *  the project you're leaving, between two tasks. On by default. */
+  alongTheWay: boolean;
+  /** "≈ 7h 30m at your usual pace" in Up next's header (TV-F8, call 10). */
+  usualPace: boolean;
 }
 
 export const DEFAULT_FOCUS_PREFS: FocusPrefs = {
@@ -51,6 +56,8 @@ export const DEFAULT_FOCUS_PREFS: FocusPrefs = {
   soundEnabled: true,
   timer: "per_task",
   countdownEstimate: false,
+  alongTheWay: true,
+  usualPace: true,
 };
 
 const LOCAL_STORAGE_KEY = "moduo.focus";
@@ -73,6 +80,8 @@ const focusPrefsSchema = z.object({
   soundEnabled: z.boolean().catch(DEFAULT_FOCUS_PREFS.soundEnabled),
   timer: z.unknown().transform(normalizeFocusTimerMode),
   countdownEstimate: z.boolean().catch(DEFAULT_FOCUS_PREFS.countdownEstimate),
+  alongTheWay: z.boolean().catch(DEFAULT_FOCUS_PREFS.alongTheWay),
+  usualPace: z.boolean().catch(DEFAULT_FOCUS_PREFS.usualPace),
 });
 
 function sanitize(raw: unknown): FocusPrefs {
@@ -96,6 +105,8 @@ function sanitize(raw: unknown): FocusPrefs {
     soundEnabled: parsed.soundEnabled,
     timer: parsed.timer,
     countdownEstimate: parsed.countdownEstimate,
+    alongTheWay: parsed.alongTheWay,
+    usualPace: parsed.usualPace,
   };
 }
 
