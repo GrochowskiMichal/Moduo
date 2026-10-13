@@ -38,6 +38,7 @@ import {
   TABLE_TRANSFORMER,
 } from "./markdown";
 import { buildDocStateFromMarkdown } from "./materialize";
+import { $isPartialWithinOneBlock } from "./plugins/markdown-clipboard-plugin";
 
 /** The REAL node set (the live editor's), so these tests can't pass against a
  * registration the app doesn't have. */
@@ -354,6 +355,38 @@ describe("single dialect (NR-3, AC9)", () => {
 
   it("the old doc-text walker is gone", () => {
     expect(existsSync(resolve(__dirname, "../sync/doc-text.ts"))).toBe(false);
+  });
+});
+
+describe("copy guard: a few words inside one block stay plain (NR-3)", () => {
+  function partial(md: string, word: string): boolean {
+    const editor = makeEditor();
+    editor.update(() => $convertFromMarkdownString(md, NOTES_TRANSFORMERS), { discrete: true });
+    let result = false;
+    editor.update(
+      () => {
+        const node = $getRoot()
+          .getAllTextNodes()
+          .find((t) => t.getTextContent().includes(word))!;
+        const at = node.getTextContent().indexOf(word);
+        const sel = $createRangeSelection();
+        sel.anchor.set(node.getKey(), at, "text");
+        sel.focus.set(node.getKey(), at + word.length, "text");
+        result = $isPartialWithinOneBlock(sel);
+      },
+      { discrete: true },
+    );
+    return result;
+  }
+
+  it("a word in a heading, a checklist item or a table cell falls through", () => {
+    expect(partial("## Q3 planning notes", "planning")).toBe(true);
+    expect(partial("- [ ] buy milk today", "milk")).toBe(true);
+    expect(partial("| a | b |\n| --- | --- |\n| xy | z |", "xy")).toBe(true);
+  });
+
+  it("a whole block is not partial (it copies as markdown)", () => {
+    expect(partial("## planning", "planning")).toBe(false);
   });
 });
 

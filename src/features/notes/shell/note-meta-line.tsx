@@ -23,13 +23,13 @@ export function NoteMetaLineView({
   return (
     <p
       data-note-meta-line
-      className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 font-sans text-sm text-muted-foreground"
+      className="flex min-w-0 flex-nowrap items-center gap-1.5 overflow-hidden whitespace-nowrap font-sans text-sm text-muted-foreground"
     >
       {line.chips.map((chip) => (
-        <span key={chip.key} className="flex items-center gap-1.5">
+        <span key={chip.key} className="flex min-w-0 shrink items-center gap-1.5">
           <button
             type="button"
-            className={CHIP}
+            className={`${CHIP} max-w-48 truncate`}
             onClick={() => (chip.kind === "entity" ? onOpenEntity(chip.ref) : onOpenDetail())}
           >
             {chip.label}

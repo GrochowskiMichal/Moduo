@@ -418,7 +418,10 @@ export class NotesSyncEngineV2 {
         if (queue.length === 0) break;
         pushed = true;
         const batch = planPushBatch(queue);
-        const body = tryDeriveNoteBody(s.doc);
+        // Before the first pull lands, the doc may lack other devices' edits:
+        // push the update alone (null bodies keep the server's last ones),
+        // or search, export and MCP would hold a stale body.
+        const body = s.synced ? tryDeriveNoteBody(s.doc) : null;
         const res = await this.runtime.notesV2.pushUpdates({
           workspaceId: this.workspaceId,
           noteId: s.noteId,

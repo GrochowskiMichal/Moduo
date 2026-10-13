@@ -1,7 +1,7 @@
 /**
  * EmbedNode: a block embed (today only mindmaps; legacy "task" embeds import
  * and render nothing). Schema only (NR-3): the view lives in
- * `../views/embed-view.tsx`, installed through the node-view registry.
+ * `../views/index.tsx`, installed through the node-view registry.
  */
 
 import { DecoratorNode, type NodeKey, type SerializedLexicalNode, type Spread } from "lexical";

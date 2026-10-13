@@ -21,12 +21,31 @@ import {
   $getRoot,
   $getSelection,
   $isRangeSelection,
+  $isRootNode,
   COMMAND_PRIORITY_HIGH,
   COPY_COMMAND,
+  type LexicalNode,
   PASTE_COMMAND,
+  type RangeSelection,
 } from "lexical";
 import { useEffect } from "react";
 import { looksLikeMarkdown, NOTES_TRANSFORMERS } from "../markdown";
+
+/** The top-level block a node sits in (root's direct child). */
+function $topBlock(node: LexicalNode): LexicalNode | null {
+  let top: LexicalNode | null = node;
+  while (top && top.getParent() && !$isRootNode(top.getParent())) top = top.getParent();
+  return top && !$isRootNode(top) ? top : null;
+}
+
+/** Both ends in the same top-level block, and less than all of its text. */
+export function $isPartialWithinOneBlock(selection: RangeSelection): boolean {
+  const a = $topBlock(selection.anchor.getNode());
+  const b = $topBlock(selection.focus.getNode());
+  if (!a || !b || !a.is(b)) return false;
+  const norm = (s: string) => s.replace(/\s+/g, "");
+  return norm(selection.getTextContent()) !== norm(a.getTextContent());
+}
 
 export function MarkdownClipboardPlugin() {
   const [editor] = useLexicalComposerContext();
@@ -69,6 +88,10 @@ export function MarkdownClipboardPlugin() {
         editor.getEditorState().read(() => {
           const selection = $getSelection();
           if (!$isRangeSelection(selection) || selection.isCollapsed()) return;
+          // A few words inside ONE block copy as plain text (Lexical's own
+          // copy): markdown there would drag the block's markers along
+          // ("## planning", "- [ ] milk", a whole table for two letters).
+          if ($isPartialWithinOneBlock(selection)) return;
           const md = $convertSelectionToMarkdownString(NOTES_TRANSFORMERS, selection).trim();
           if (md === "") return;
           const html = $getHtmlContent(editor);

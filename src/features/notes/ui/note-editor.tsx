@@ -49,7 +49,7 @@ import { $createEntityRefNode } from "@/features/spine/editor/entity-ref-node";
 import { MentionMenuPlugin } from "@/features/spine/editor/mention-menu-plugin";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
-import { NOTES_DOC_ROOT, tryDeriveNoteBody } from "../editor/doc-markdown";
+import { $noteText, NOTES_DOC_ROOT } from "../editor/doc-markdown";
 import { NOTES_TRANSFORMERS } from "../editor/markdown";
 import {
   INSERT_ENTITY_CHIP_EVENT,
@@ -149,8 +149,8 @@ function ListTabIndentationPlugin() {
   return null;
 }
 
-/** Debounced first-line-title derivation straight off the Y.Doc — editor-
- * independent, so remote edits retitle too. */
+/** Debounced first-line-title derivation on every doc change (remote edits
+ * retitle too). */
 function TitleDerivationPlugin({
   doc,
   onTitleDerived,
@@ -161,6 +161,7 @@ function TitleDerivationPlugin({
   // The callback rides a ref: an inline prop would re-run the effect on every
   // page re-render (sync-status flips…), tearing down the pending debounce
   // timer before it can ever fire (caught in NO-3 live-verify).
+  const [editor] = useLexicalComposerContext();
   const callbackRef = useRef(onTitleDerived);
   callbackRef.current = onTitleDerived;
   useEffect(() => {
@@ -168,9 +169,9 @@ function TitleDerivationPlugin({
     const onUpdate = () => {
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
-        // A failed derivation must not retitle the note to "".
-        const body = tryDeriveNoteBody(doc);
-        if (body) callbackRef.current(firstLineTitle(body.text));
+        // The live editor already holds the doc's state (the binding applies
+        // remote edits too): read its text, no clone, no markdown conversion.
+        callbackRef.current(firstLineTitle(editor.getEditorState().read($noteText)));
       }, TITLE_DEBOUNCE_MS);
     };
     doc.on("update", onUpdate);

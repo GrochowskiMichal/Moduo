@@ -6,6 +6,7 @@
 //   - the session counts as synced only when a pull succeeded.
 
 import { afterEach, describe, expect, it, rs } from "@rstest/core";
+import * as Y from "yjs";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { NotesSyncEngineV2 } from "./engine-v2";
 
@@ -105,5 +106,24 @@ describe("honest provider (NR-3)", () => {
     await tick();
     expect(onSync).toHaveBeenCalledWith(true);
     expect(runtime.notesV2.pullDoc).not.toHaveBeenCalled();
+  });
+
+  it("a save during the first pull pushes the update but no body (no stale body_md)", async () => {
+    const { runtime, settle } = heldPullRuntime();
+    engine = new NotesSyncEngineV2(runtime, "ws1");
+    const session = engine.getOrCreateSession("n4");
+    await session.cacheReady;
+    const root = session.doc.get("root-v2", Y.XmlElement);
+    const run = new Y.XmlText();
+    run.insert(0, "typed before the pull");
+    const p = new Y.XmlElement("paragraph");
+    p.insert(0, [run]);
+    root.insert(0, [p]);
+    await engine.flushNote("n4");
+    const push = runtime.notesV2.pushUpdates as unknown as { mock: { calls: unknown[][] } };
+    expect(push.mock.calls.length).toBeGreaterThan(0);
+    expect(push.mock.calls[0]![0]).toMatchObject({ bodyText: null, bodyMd: null });
+    settle("ok");
+    await session.booted;
   });
 });
