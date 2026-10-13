@@ -149,7 +149,7 @@ through the same ops and gates as the app; the rule for all of them:
 
 | Write (Edit) | Op |
 | --- | --- |
-| `tasks_create` | `tasks_op_create_with`: fields + project/section/status/assignee/team/due/estimate/repeat + tags (by name), reminders, work sessions, `imported_from {source, key}`, `import_id`; atomic; a key you already used on a live task **of yours** updates it (a re-run) |
+| `tasks_create` | `tasks_op_create_with`: fields + project/section/status/assignee/team/due/estimate/repeat + tags (by name), reminders, work sessions, `imported_from {source, key}`, `import_id`; atomic; a key you already used on a live task **of yours** updates it (a re-run); an `id` that's already there answers with that task (`action: "existing"`) and writes nothing more, exactly like `tasks_op_create` |
 | `tasks_update` | `tasks_op_update_with`: fields + `tags_add` / `tags_remove` |
 | `tasks_set_status` | `tasks_op_set_status`; finishing a top-level, non-repeating task finishes its open subtasks the person can edit (`also_finished`, call 87) |
 | `tasks_assign`, `tasks_route_team`, `tasks_claim` | `tasks_op_assign`, `tasks_op_update {team_id}`, `tasks_op_claim` |
