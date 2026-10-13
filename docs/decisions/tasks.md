@@ -382,6 +382,11 @@ Built in tasks-v3 block 31 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §12, �
   - Decision: a comment written through a key reads "Claude Desktop" as its author, as before.
   - Why: comments are read only by people who can see their item, the same rule as the trail's "via" label.
   - Rejected: hiding the key's name on comments.
+- **D16-19 · Every bell notice names its item by id** → TV-D16 follow-up (`20261013269000_notice_ids_only`; `withNoticeDetails`, `useNotificationDetails`, `runtime.spine.getCommentExcerpts`)
+  - Who: agent's choice, at the orchestrator's ask, 2026-10-14.
+  - Decision: no notice carries a task's title, a note's title or a comment's text: assigned, completed, unblocked (the finished task by `blocker_id`), team check-back, waiting resolved, mentioned, a note's mention, and the comment notices (`comment_id`), as reminders, team notices and agents' notices already did (D16-16). The bell and Home's Activity widget name tasks through the entity registry and quote a comment through the comments' read policy, each for the reader, so a card about something they can no longer see reads "assigned this to you", "left a comment", "unblocked this". A deleted project's name stays on its notice (`tasks.project_deleted`: its readers could see it when it was deleted). The task trail shows "unblocked this" without the other task's name.
+  - Why: a notice outlives its reader's access to what it's about; an unblocking task can be one its reader never saw.
+  - Rejected: re-checking access in the bell's read for each kind (every new kind would have to remember it).
 
 ## 2026-10-13 · TV-U12 Multi-select and the bottom-bar mode pattern — the agent's choices (deferred to by Maciej)
 

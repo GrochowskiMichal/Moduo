@@ -8,7 +8,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../../providers/auth-provider";
 import { useWorkspace } from "../../../providers/workspace-provider";
 import {
+  type NoticeDetails,
   type NotificationGroup,
+  noticeCommentIds,
   notificationReferences,
   unnamedTaskTargets,
 } from "../notifications";
@@ -60,4 +62,44 @@ export function useNotificationLabels(groups: NotificationGroup[]): ReadonlyMap<
   }, [runtime, selectedWorkspaceId, key]);
 
   return labels;
+}
+
+const NO_EXCERPTS: ReadonlyMap<string, string> = new Map();
+
+/**
+ * A comment's opening words for the notices that name it (TV-D16: notices
+ * carry the comment's id, never its text). Read through the comments' own
+ * policy, so a comment on something the reader can no longer see, or one
+ * that was deleted, has none and its card says "left a comment".
+ */
+export function useNotificationExcerpts(groups: NotificationGroup[]): ReadonlyMap<string, string> {
+  const { runtime } = useAuth();
+  const { selectedWorkspaceId } = useWorkspace();
+  const key = useMemo(() => noticeCommentIds(groups).sort().join(","), [groups]);
+  const [excerpts, setExcerpts] = useState<ReadonlyMap<string, string>>(NO_EXCERPTS);
+
+  useEffect(() => {
+    const read = runtime?.spine.getCommentExcerpts;
+    if (!read || !selectedWorkspaceId || !key) return;
+    let cancelled = false;
+    read({ workspaceId: selectedWorkspaceId, commentIds: key.split(",") })
+      .then((rows) => {
+        if (!cancelled) setExcerpts(new Map(rows.map((r) => [r.id, r.excerpt])));
+      })
+      .catch(() => {
+        // Quiet: a card without the text says "left a comment".
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [runtime, selectedWorkspaceId, key]);
+
+  return excerpts;
+}
+
+/** Everything the cards name, per reader: task names and comment texts. */
+export function useNotificationDetails(groups: NotificationGroup[]): NoticeDetails {
+  const labels = useNotificationLabels(groups);
+  const excerpts = useNotificationExcerpts(groups);
+  return useMemo(() => ({ labels, excerpts }), [labels, excerpts]);
 }

@@ -39,6 +39,9 @@
 - [ ] **Do:** ask Claude for a task by handle in lower case ("mod-142") and for a task in a project you can't see → **Expect:** the first works; the second says "Task not found in this workspace." exactly like a made-up handle. _(Claude)_
 
 ## Notices after access changes (follow-up)
+- [ ] **Do:** with a teammate, get one of each notice about their project (assigned, completed, unblocked, mentioned, a comment naming you, a team mention, a note mention), open the bell and Home's Activity widget → **Expect:** every card names its task or note and quotes the comment as before. _(web, two accounts)_
+- [ ] **Do:** have them take the project and the note away, then open the bell again → **Expect:** the cards are still there, reading "assigned this to you", "left a comment", "unblocked this", with no title or comment text. _(web, two accounts)_
+- [ ] **Do:** finish a task in your private project that blocks a teammate's task → **Expect:** their card reads "unblocked this", never your task's name. _(web, two accounts)_
 - [ ] **Do:** have a reminder fire and an agent report "needs you" on a task in a project someone shares with you, then have them take the project away → **Expect:** the bell keeps the cards but no longer names the task ("this"); no OS notice arrives for it; the agent's summary and line on it are gone for you. _(web, two accounts)_
 - [ ] **Do:** route a task to a team you're in while you can see it → **Expect:** the bell names it ("routed “…” to Ops"); after losing access it reads "routed this to Ops". _(web, two accounts)_
 - [ ] **Do:** ask Claude to create a task with the id of a task that's already there (an import resent) → **Expect:** the existing task comes back unchanged (`"action": "existing"`), with no new tags or reminders, and Undo of that import never removes it. _(Claude)_
