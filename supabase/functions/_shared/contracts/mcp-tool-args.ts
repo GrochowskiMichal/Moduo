@@ -73,6 +73,12 @@ export const TOOL_ARG_SCHEMAS: Record<string, z.ZodType<Record<string, unknown>>
   tasks_search: z.object({ q: nonempty, limit }),
   tasks_get: z.object({ task_id: nonempty }),
   tasks_history: z.object({ task_id: nonempty }),
+  tasks_time_report: z.object({
+    from: ymd,
+    to: ymd,
+    project_id: nonempty.optional(),
+    by: z.enum(["task", "day"]).optional(),
+  }),
   tasks_attachments_list: z.object({ task_id: nonempty }),
   tasks_activity: z.object({ task_id: nonempty.optional(), limit }),
   tasks_queue_add: z.object({ task_id: nonempty, at: z.enum(["end", "top"]).optional() }),

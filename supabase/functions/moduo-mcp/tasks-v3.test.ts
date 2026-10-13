@@ -342,6 +342,37 @@ describe("reads never show or count what the key's person can't see", () => {
     expect(JSON.stringify(listed)).not.toContain("Record");
   });
 
+  it("tasks_time_report sums the gated rows, by task or by day; a hidden project reads as missing", async () => {
+    const report = [
+      { entry_id: "e1", task_id: "t-open", task_title: "t-open", project_name: "Launch", entry_day: "2030-01-02", seconds: 600 },
+      { entry_id: "e2", task_id: "t-open", task_title: "t-open", project_name: "Launch", entry_day: "2030-01-03", seconds: 300 },
+      { entry_id: "e3", task_id: "t-team", task_title: "t-team", project_name: null, entry_day: "2030-01-03", seconds: 60 },
+    ];
+    const { ctx, rpcCalls } = setup({ rpcs: { tasks_time_report: () => report } });
+    const byTask = await call("tasks_time_report", { from: "2030-01-01", to: "2030-01-31" }, ctx);
+    expect(byTask).toEqual({
+      from: "2030-01-01",
+      to: "2030-01-31",
+      total_seconds: 960,
+      rows: [
+        { task_id: "t-open", title: "t-open", project: "Launch", seconds: 900 },
+        { task_id: "t-team", title: "t-team", project: null, seconds: 60 },
+      ],
+    });
+    const byDay = await call("tasks_time_report", { from: "2030-01-01", to: "2030-01-31", by: "day" }, ctx);
+    expect(byDay.rows).toEqual([
+      { day: "2030-01-02", seconds: 600 },
+      { day: "2030-01-03", seconds: 360 },
+    ]);
+    expect(rpcCalls.find((c) => c.fn === "tasks_time_report")?.args).toMatchObject({
+      p_project_ids: null,
+      p_client_contact_id: null,
+    });
+    await expect(
+      call("tasks_time_report", { from: "2030-01-01", to: "2030-01-31", project_id: P_HIDDEN }, ctx),
+    ).rejects.toThrow("That project isn't in this workspace.");
+  });
+
   it("tasks_activity drops rows about tasks the person can't see", async () => {
     const { ctx } = setup();
     const rows = await call("tasks_activity", {}, ctx);

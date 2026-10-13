@@ -629,6 +629,57 @@ export const tasksConnectorModule: ConnectorModule = {
       },
     },
     {
+      name: "tasks_time_report",
+      description:
+        "Tracked time for a period (up to a year), by task or by day, with the total: the key person's own entries, plus teammates' who share their time with the workspace owner when the person is the owner. Only tasks they can see; a project they can't see has no name. Optional: one project.",
+      access: "view",
+      inputSchema: {
+        type: "object",
+        properties: {
+          from: { type: "string", description: "First day, YYYY-MM-DD." },
+          to: { type: "string", description: "Last day, YYYY-MM-DD." },
+          project_id: { type: "string", description: "Only this project." },
+          by: { type: "string", enum: ["task", "day"], description: "Group by task (default) or by day." },
+        },
+        required: ["from", "to"],
+      },
+      handler: async (args, ctx) => {
+        const from = dayOrThrow(str(args, "from"), "from");
+        const to = dayOrThrow(str(args, "to"), "to");
+        const projectId = str(args, "project_id", false);
+        const project = projectId ? await fetchProject(ctx, projectId) : null;
+        const found = await unwrap<Row[] | null>(ctx.db.rpc("tasks_time_report", {
+          p_workspace_id: ctx.key.workspaceId,
+          p_from: from,
+          p_to: to,
+          p_project_ids: project ? [project.id] : null,
+          p_client_contact_id: null,
+          p_zone: null,
+          p_limit: 5001,
+        }));
+        const cut = (found ?? []).length > 5000;
+        const entries = (found ?? []).slice(0, 5000);
+        const total = entries.reduce((sum, e) => sum + Number(e.seconds ?? 0), 0);
+        const groups = new Map<string, Row>();
+        for (const e of entries) {
+          const key = args.by === "day" ? String(e.entry_day) : String(e.task_id);
+          const g = groups.get(key)
+            ?? (args.by === "day"
+              ? { day: e.entry_day, seconds: 0 }
+              : { task_id: e.task_id, title: e.task_title, project: e.project_name ?? null, seconds: 0 });
+          g.seconds = Number(g.seconds) + Number(e.seconds ?? 0);
+          groups.set(key, g);
+        }
+        return {
+          from,
+          to,
+          total_seconds: total,
+          ...(cut ? { cut: true } : {}),
+          rows: [...groups.values()],
+        };
+      },
+    },
+    {
       name: "tasks_attachments_list",
       description:
         "A task's files (AT-1): name, type, size, when added, and a download link that works for 5 minutes. Links are made for the key's creator; ask again for fresh ones.",
