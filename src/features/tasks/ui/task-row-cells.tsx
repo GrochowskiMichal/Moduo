@@ -56,7 +56,7 @@ export function glyphLabel(task: Pick<Task, "status" | "statusCategory">): strin
  * finishes the task from any open category (Backlog and In progress too); on a
  * Done or Won't do task it reopens it (to To do: the server keeps no earlier
  * status). Right-click, ⇧S or "Status…" open the status menu, anchored here.
- * Read-only, it shows the status and does nothing.
+ * Read-only, it names the status (tooltip and screen reader) and does nothing.
  */
 export function StatusGlyph({
   task,
@@ -77,6 +77,26 @@ export function StatusGlyph({
 }) {
   const category = taskCategoryOf(task);
   const tone = glyphTone(category);
+  if (!canEdit) {
+    // Read-only: the status, named and shown, with nothing to press.
+    return (
+      <span className="relative flex size-icon shrink-0 items-center justify-center">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span
+              role="img"
+              data-slot="row-status"
+              aria-label={statusName}
+              className={cn("hit-min flex size-icon-sm items-center justify-center", tone)}
+            >
+              <StatusIcon category={category} />
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>{statusName}</TooltipContent>
+        </Tooltip>
+      </span>
+    );
+  }
   return (
     <span className="relative flex size-icon shrink-0 items-center justify-center">
       <Tooltip>
@@ -84,7 +104,6 @@ export function StatusGlyph({
           <button
             type="button"
             data-slot="row-status"
-            disabled={!canEdit}
             aria-pressed={isClosedTask(task)}
             aria-label={glyphLabel(task)}
             onClick={(e) => {
@@ -92,7 +111,6 @@ export function StatusGlyph({
               onActivate();
             }}
             onContextMenu={(e) => {
-              if (!canEdit) return;
               // The status menu, not the row's menu.
               e.preventDefault();
               e.stopPropagation();
@@ -104,8 +122,7 @@ export function StatusGlyph({
               "transition-colors duration-(--motion-fade) ease-(--ease-out)",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
               tone,
-              canEdit && !isClosedTask(task) && "hover:text-foreground",
-              !canEdit && "cursor-default",
+              !isClosedTask(task) && "hover:text-foreground",
             )}
           >
             <StatusIcon category={category} />
@@ -113,25 +130,23 @@ export function StatusGlyph({
         </TooltipTrigger>
         <TooltipContent>{statusName}</TooltipContent>
       </Tooltip>
-      {canEdit ? (
-        // Not modal, like the row's other menus: a trapped focus scope would
-        // pull focus back from the list when Esc hands it there.
-        <DropdownMenu open={menuOpen} onOpenChange={onMenuOpenChange} modal={false}>
-          <DropdownMenuTrigger asChild>
-            {/* The menu's anchor: the glyph's box, out of sight and reach (a
+      {/* Not modal, like the row's other menus: a trapped focus scope would
+          pull focus back from the list when Esc hands it there. */}
+      <DropdownMenu open={menuOpen} onOpenChange={onMenuOpenChange} modal={false}>
+        <DropdownMenuTrigger asChild>
+          {/* The menu's anchor: the glyph's box, out of sight and reach (a
                 click on the glyph finishes, it never opens the menu). */}
-            <span aria-hidden className="pointer-events-none absolute inset-0" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            className="w-56"
-            align="start"
-            onClick={(e) => e.stopPropagation()}
-            onCloseAutoFocus={keepListFocus}
-          >
-            <StatusMenuItems task={task} onPick={onPickStatus} />
-          </DropdownMenuContent>
-        </DropdownMenu>
-      ) : null}
+          <span aria-hidden className="pointer-events-none absolute inset-0" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          className="w-56"
+          align="start"
+          onClick={(e) => e.stopPropagation()}
+          onCloseAutoFocus={keepListFocus}
+        >
+          <StatusMenuItems task={task} onPick={onPickStatus} />
+        </DropdownMenuContent>
+      </DropdownMenu>
     </span>
   );
 }

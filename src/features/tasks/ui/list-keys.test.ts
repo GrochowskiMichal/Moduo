@@ -190,6 +190,9 @@ describe("the v3 keys (TV-U10)", () => {
       add: { projectId: "p1", seed: { status: "in_progress" } },
     });
     expect(inProject("status", "backlog")).toMatchObject({ add: { seed: { status: "backlog" } } });
+    // A new task is never made finished: Done and Won't do have no "+".
+    expect(inProject("status", "done")).toEqual({ kind: "none" });
+    expect(inProject("status", "archived")).toEqual({ kind: "none" });
     expect(inProject("priority", "high")).toMatchObject({ add: { seed: { priority: "high" } } });
     expect(inProject("priority", "unset")).toMatchObject({ add: { seed: { priority: null } } });
     expect(inProject("assignee", "u2")).toMatchObject({ add: { seed: { assigneeId: "u2" } } });

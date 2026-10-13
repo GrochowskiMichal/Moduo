@@ -34,6 +34,11 @@ const draft = (over: Partial<CaptureDraft> = {}): CaptureDraft => ({
 afterEach(() => window.localStorage.clear());
 
 describe("the capture draft", () => {
+  it("never keeps the status a group's + opened it with", () => {
+    saveDraft("u1", "w1", draft({ fields: { ...EMPTY_FIELDS, status: "wont_do" } }));
+    expect(loadDraft("u1", "w1")?.fields.status).toBeNull();
+  });
+
   it("belongs to one person in one workspace", () => {
     saveDraft("u1", "w1", draft());
     expect(loadDraft("u1", "w1")?.description).toBe("My own words");

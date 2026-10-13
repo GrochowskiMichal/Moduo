@@ -440,9 +440,12 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   const linkedTaskId =
     revealRequest && revealRequest.id === selectedTaskId ? revealRequest.id : null;
   const groupChoices = useMemo(() => ({ teams: api.teams.length > 0 }), [api.teams.length]);
+  // The Inbox opened by its id is still the Inbox: its Display (no Section
+  // grouping, its own saved choices) is the Inbox's.
+  const displayScope = inboxId && selection === inboxId ? "inbox" : selection;
   const tasksDisplay = useTasksDisplay(
     workspaceId,
-    selection,
+    displayScope,
     tasks,
     linkedTaskId,
     legacyLayout,

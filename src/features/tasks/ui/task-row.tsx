@@ -1,4 +1,4 @@
-import { isClosedTask } from "@contracts/vocabularies";
+import { isClosedTask, taskCategoryOf } from "@contracts/vocabularies";
 import type { DraggableSyntheticListeners } from "@dnd-kit/core";
 import { ChevronDown, ChevronRight, CornerDownRight } from "lucide-react";
 import { memo, useEffect, useRef, useState } from "react";
@@ -80,6 +80,8 @@ type Props = {
    * late against it, so a row left open over midnight redraws then.
    */
   today: string;
+  /** Goes up each minute while the row shows its age (Updated), so it redraws. */
+  ageTick?: number;
   /** Callbacks take the task's id, so one function serves every row. */
   onSelect: (taskId: string) => void;
   onStartEdit: (taskId: string) => void;
@@ -155,7 +157,7 @@ export function activateGlyph(task: Task, actions: TaskRowActions): void {
     return;
   }
   // Done goes back the way it always has; Won't do reopens to To do too.
-  if (task.status === "done") actions.toggleDone(task);
+  if (taskCategoryOf(task) === "done") actions.toggleDone(task);
   else actions.setTaskStatus(task.id, { category: "todo" });
 }
 
@@ -189,7 +191,7 @@ function TaskRowView({
   actions,
   today,
 }: Props) {
-  const done = task.status === "done";
+  const done = taskCategoryOf(task) === "done";
   // A Won't do task kept in view (TV-P0) reads closed, like a done one.
   const closed = isClosedTask(task);
   const queued = facts.queued;

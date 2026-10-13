@@ -2756,31 +2756,65 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     [bundle.sections, runSectionOp, runtime, workspaceId],
   );
 
-  /** Delete a section: its tasks stay in the project, under No section; Undo restores it. */
+  /**
+   * Delete a section: its tasks stay in the project, under No section (the
+   * op clears their section). Undo restores the section and puts back the
+   * tasks that are still under No section in the same project (one changed
+   * since keeps its newer place).
+   */
   const deleteSection = useCallback(
     (sectionId: string) => {
       const existing = (bundle.sections ?? []).find((s) => s.id === sectionId);
-      if (!existing || !runtime || !workspaceId) return;
+      if (!existing || !runtime || !workspaceId || !store) return;
+      const members = tasksRef.current
+        .filter((t) => t.sectionId === sectionId && !t.deletedAt)
+        .map((t) => ({ id: t.id, bucketId: t.bucketId }));
       void runSectionOp(
         () => runtime.tasks.updateSection({ workspaceId, sectionId, patch: { deleted: true } }),
-        [{ table: "sections", remove: sectionId }],
+        [
+          { table: "sections", remove: sectionId },
+          ...members.map((m) => patchOf(m.id, { sectionId: null })),
+        ],
         { sync: true },
       ).then((next) => {
         if (!next) return;
+        const count = members.length;
         undoToast(`“${existing.name}” deleted`, {
-          description: "Its tasks stay in the project, under No section.",
+          description:
+            count === 0
+              ? undefined
+              : `${count === 1 ? "Its task stays" : `Its ${count} tasks stay`} in the project, under No section.`,
           onUndo: () => {
             void runSectionOp(
               () =>
                 runtime.tasks.updateSection({ workspaceId, sectionId, patch: { deleted: false } }),
               [],
               { sync: true },
-            );
+            ).then(async (restored) => {
+              if (!restored) return;
+              // Only the ones still where the delete left them.
+              const back = members.filter((m) => {
+                const now = tasksRef.current.find((t) => t.id === m.id);
+                return !!now && !now.deletedAt && !now.sectionId && now.bucketId === m.bucketId;
+              });
+              if (back.length === 0) return;
+              const write = store.begin(back.map((m) => patchOf(m.id, { sectionId })));
+              try {
+                const rows = await Promise.all(
+                  back.map((m) =>
+                    runtime.tasks.updateTask({ workspaceId, taskId: m.id, patch: { sectionId } }),
+                  ),
+                );
+                write.settle({ tasks: rows });
+              } catch (e) {
+                refused(write, e, "Couldn't put the tasks back in the section.");
+              }
+            });
           },
         });
       });
     },
-    [bundle.sections, runSectionOp, runtime, workspaceId],
+    [bundle.sections, runSectionOp, runtime, workspaceId, store, refused],
   );
 
   /**

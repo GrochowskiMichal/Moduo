@@ -39,7 +39,7 @@ const NONE: GroupAddState = { kind: "none" };
  *   groups other than projects say "Pick a project first" (the spec's rule
  *   for a cross-project board); Upcoming adds only in its days;
  * - Earlier adds nothing (a new task isn't late), Later and No date add with
- *   no date;
+ *   no date; Done and Won't do add nothing (a new task isn't finished);
  * - My tasks and the Inbox add to your Inbox (assigned to you), a project to
  *   itself.
  */
@@ -67,11 +67,12 @@ export function groupAddState(input: {
   switch (groupBy) {
     case "section":
       return { kind: "add", add: { ...base, sectionId: key === NO_KEY ? null : key } };
-    case "status":
-      return {
-        kind: "add",
-        add: { ...base, seed: { status: statusKeyCategory(key as StatusKey) } },
-      };
+    case "status": {
+      // A new task is never made finished: Done and Won't do have no "+".
+      const category = statusKeyCategory(key as StatusKey);
+      if (category === "done" || category === "wont_do") return NONE;
+      return { kind: "add", add: { ...base, seed: { status: category } } };
+    }
     case "priority":
       return {
         kind: "add",

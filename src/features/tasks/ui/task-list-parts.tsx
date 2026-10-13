@@ -111,9 +111,9 @@ export function ListGroupHeader({
     addState.kind === "none" ? null : (
       <IconButton
         icon={Plus}
-        label={
-          addState.kind === "disabled" ? addState.reason : `Add a task to ${label || "this group"}`
-        }
+        label={`Add a task to ${label || "this group"}`}
+        tooltip={addState.kind === "disabled" ? addState.reason : undefined}
+        aria-description={addState.kind === "disabled" ? addState.reason : undefined}
         aria-disabled={addState.kind === "disabled" || undefined}
         className={cn(addState.kind === "disabled" && "opacity-50")}
         onClick={(e) => {

@@ -374,6 +374,7 @@ export function TaskCaptureBody({
     remindAt: resolved.single.remind?.at ?? fields.remindAt ?? null,
     tags: tagValues,
     waitingOn: fields.waitingOn,
+    status: fields.status ?? null,
   };
 
   // ── where it goes ─────────────────────────────────────────────────────────
@@ -607,6 +608,10 @@ export function TaskCaptureBody({
       case "remind":
         words("remind");
         setFields((f) => ({ ...f, remindAt: change.value }));
+        return;
+      case "status":
+        // A List group's "+" set it (TV-U10); its chip's × clears it.
+        setFields((f) => ({ ...f, status: change.value }));
         return;
       case "tag": {
         const { tag, on } = change;
@@ -961,7 +966,7 @@ export function TaskCaptureBody({
       fromSource: sourceOn && Boolean(context?.source),
       remindAt: values.remindAt,
       waitingOn: values.waitingOn,
-      status: fields.status ?? null,
+      status: values.status,
     };
     const lines = subtasks.map((s) => s.trim()).filter(Boolean);
     const childPositions = positionsAfter(lines.length, []);

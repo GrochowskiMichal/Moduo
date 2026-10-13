@@ -6,6 +6,7 @@
 
 import { afterEach, beforeAll, describe, expect, it, rs } from "@rstest/core";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { useState } from "react";
 
 rs.mock("../assignees", () => ({
   useAssignees: () => ({
@@ -91,8 +92,10 @@ function renderList(tasks: Task[], extra: ListProps = {}) {
     dropTask: rs.fn(async () => true),
   };
   const onRequestCapture = rs.fn();
-  const view = render(
-    <TooltipProvider>
+  // The page keeps the selection: a j or a click moves it, like the real one.
+  function Page() {
+    const [selected, setSelected] = useState<string | null>(extra.selectedTaskId ?? null);
+    return (
       <TaskListView
         tasks={tasks}
         scopeTitle="Work"
@@ -105,11 +108,19 @@ function renderList(tasks: Task[], extra: ListProps = {}) {
         bucketNameById={() => "Work"}
         canEdit
         onRequestCapture={onRequestCapture}
-        selectedTaskId={null}
-        onSelectTask={() => {}}
         api={api as never}
         {...extra}
+        selectedTaskId={selected}
+        onSelectTask={(id) => {
+          setSelected(id);
+          extra.onSelectTask?.(id);
+        }}
       />
+    );
+  }
+  const view = render(
+    <TooltipProvider>
+      <Page />
     </TooltipProvider>,
   );
   return { api, onRequestCapture, view };
@@ -163,6 +174,26 @@ describe("Backlog (53b)", () => {
     const line = screen.getByRole("button", { name: /Backlog, 1 task, show/ });
     fireEvent.click(line);
     expect(screen.getByRole("button", { name: "Task b" })).toBeTruthy();
+  });
+
+  it("j walks an opened Backlog in order: a selected Backlog task stays in its line", () => {
+    const onSelectTask = rs.fn();
+    renderList(
+      [
+        task("a"),
+        task("x", { statusCategory: "backlog" }),
+        task("y", { statusCategory: "backlog" }),
+        task("z", { statusCategory: "backlog" }),
+      ],
+      { selectedTaskId: "a", onSelectTask },
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Backlog, 3 tasks, show/ }));
+    const grid = screen.getByRole("grid");
+    grid.focus();
+    for (let i = 0; i < 3; i++) fireEvent.keyDown(grid, { key: "j" });
+    expect(onSelectTask.mock.calls.map((c) => c[0])).toEqual(["x", "y", "z"]);
+    // The line still counts all three: none was pulled out above it.
+    expect(screen.getByRole("button", { name: /Backlog, 3 tasks, hide/ })).toBeTruthy();
   });
 
   it("grouped by status, Backlog is its own group, folded", () => {

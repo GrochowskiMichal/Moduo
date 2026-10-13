@@ -6,18 +6,27 @@
 
 export const BREAK_DOWN_EVENT = "moduo:tasks:break-down";
 
-let waiting: string | null = null;
+/** An ask nobody takes soon (the panel never opened) is dropped. */
+const ASK_LIFETIME_MS = 5_000;
+
+let waiting: { taskId: string; at: number } | null = null;
 
 /** Ask the panel showing `taskId` to start adding a subtask. */
 export function requestBreakDown(taskId: string): void {
-  waiting = taskId;
+  waiting = { taskId, at: Date.now() };
   if (typeof window === "undefined") return;
   window.dispatchEvent(new CustomEvent<string>(BREAK_DOWN_EVENT, { detail: taskId }));
 }
 
 /** Whether an ask waits for this task; taking it clears it. */
 export function takeBreakDown(taskId: string): boolean {
-  if (waiting !== taskId) return false;
+  const ask = waiting;
+  if (!ask) return false;
+  if (Date.now() - ask.at > ASK_LIFETIME_MS) {
+    waiting = null;
+    return false;
+  }
+  if (ask.taskId !== taskId) return false;
   waiting = null;
   return true;
 }

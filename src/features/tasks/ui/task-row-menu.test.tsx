@@ -349,8 +349,9 @@ describe("TaskRow read-only", () => {
   it("the status icon is inert", async () => {
     const { api } = renderList({ canEdit: false });
     await settle();
-    const glyph = within(rowOf("Beta")).getByRole("button", { name: "Mark as done" });
-    expect((glyph as HTMLButtonElement).disabled).toBe(true);
+    // Read-only, it names the status and offers nothing to press.
+    expect(within(rowOf("Beta")).queryByRole("button", { name: "Mark as done" })).toBeNull();
+    const glyph = within(rowOf("Beta")).getByRole("img", { name: "To do" });
     fireEvent.click(glyph);
     expect(api.toggleDone).not.toHaveBeenCalled();
   });

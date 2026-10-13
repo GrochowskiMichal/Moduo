@@ -86,7 +86,7 @@ import {
   updatedLabel,
 } from "../row-layout";
 import { statusNameOf } from "../statuses";
-import { nowOn, useToday } from "../use-today";
+import { nowOn, useMinuteTick, useToday } from "../use-today";
 import {
   asTaskDrag,
   DndBoundary,
@@ -376,9 +376,14 @@ export function TaskListView({
       (api.subtasksByParent.get(t.id) ?? []).some(isUnfinished);
     // `all` keeps every task of the group in order, hidden ones included:
     // a drop is placed among them (TV-U1's rule, since `position` orders both).
+    // Backlog stays in its line even when selected (the line opens for it
+    // instead, so j/k walk the opened line in order); only a task checked off
+    // here, or a parent with open subtasks, comes out of it.
+    const keepOutOfBacklog = (t: Task) =>
+      stayingIds.has(t.id) || (api.subtasksByParent.get(t.id) ?? []).some(isUnfinished);
     return all.map((g) => {
       const backlog =
-        groupBy === "status" ? [] : g.tasks.filter((t) => isBacklogTask(t) && !keep(t));
+        groupBy === "status" ? [] : g.tasks.filter((t) => isBacklogTask(t) && !keepOutOfBacklog(t));
       const rest = backlog.length === 0 ? g.tasks : g.tasks.filter((t) => !backlog.includes(t));
       const { shown, hidden } = partitionCompleted(rest, { mode: completed, now, keep });
       return {
@@ -463,6 +468,10 @@ export function TaskListView({
     () => new Map((api.sections ?? []).map((s) => [s.id, s.name])),
     [api.sections],
   );
+  // Ages ("5m", "3h") move on by the minute where they show: Detailed's
+  // Updated and the waiting lines.
+  const ageTick = useMinuteTick(detailed || (api.waiting?.length ?? 0) > 0);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: ageTick re-reads the ages each minute.
   const waitingLabels = useMemo(
     () =>
       waitingLabelsOf(
@@ -473,7 +482,7 @@ export function TaskListView({
         },
         nowOn(today),
       ),
-    [api.waiting, byId, today],
+    [api.waiting, byId, today, ageTick],
   );
   const factsSource = useMemo<FactsSource>(
     () => ({
@@ -551,7 +560,17 @@ export function TaskListView({
   // biome-ignore lint/correctness/useExhaustiveDependencies: each dep is what the cached words depend on; a change starts a new cache.
   const textCache = useMemo(
     () => new WeakMap<Task, RowTexts>(),
-    [today, detailed, byId, taskKey, bucketNameById, sectionNames, api.statusById, waitingLabels],
+    [
+      today,
+      ageTick,
+      detailed,
+      byId,
+      taskKey,
+      bucketNameById,
+      sectionNames,
+      api.statusById,
+      waitingLabels,
+    ],
   );
   const widths = useMemo(() => {
     const now = nowOn(today);
@@ -1045,6 +1064,7 @@ export function TaskListView({
     facts: taskFactsOf(t, factsSource),
     actions,
     today,
+    ageTick: fitted.updated ? ageTick : 0,
     onSelect: setSelectedId,
     onStartEdit: setEditingId,
     onEndEdit: endEdit,

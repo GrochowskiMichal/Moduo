@@ -31,16 +31,16 @@ const COLUMNS = [
   { key: "c3", cards: ROWS.slice(5, 6) },
 ];
 
-/** The List's eight placeholder rows (research §9): title bars at 62 / 48 / 71 / 55 %. */
+/** The List's eight placeholder rows (research §9): title bars of uneven lengths. */
 const LIST_ROWS = [
-  { key: "l1", width: "w-[62%]" },
-  { key: "l2", width: "w-[48%]" },
-  { key: "l3", width: "w-[71%]" },
-  { key: "l4", width: "w-[55%]" },
-  { key: "l5", width: "w-[62%]" },
-  { key: "l6", width: "w-[48%]" },
-  { key: "l7", width: "w-[71%]" },
-  { key: "l8", width: "w-[55%]" },
+  { key: "l1", width: "w-3/5" },
+  { key: "l2", width: "w-1/2" },
+  { key: "l3", width: "w-2/3" },
+  { key: "l4", width: "w-5/12" },
+  { key: "l5", width: "w-3/5" },
+  { key: "l6", width: "w-1/2" },
+  { key: "l7", width: "w-2/3" },
+  { key: "l8", width: "w-5/12" },
 ];
 
 /** How long a load may take before the skeleton shows (research §9). */

@@ -4,11 +4,13 @@
 // hand wins over a token, which then falls back to words (research §2). What
 // More holds joins the row once set, as a chip with ×.
 
+import type { TaskStatusCategory } from "@contracts/vocabularies";
 import {
   Bell,
   CalendarClock,
   CalendarDays,
   Check,
+  CircleDot,
   Flag,
   Hash,
   Hourglass,
@@ -32,6 +34,7 @@ import { formatDay, formatDayTime } from "../../../lib/time-format";
 import { isoDay } from "../../spine/grammar";
 import type { PriorityLevel, RecurrenceRule, Tag, Team } from "../model";
 import { RECURRENCE_PRESETS, recurrenceFromPreset, recurrenceLabel } from "../parse/recurrence";
+import { CATEGORY_LABELS } from "../statuses";
 import { estimateLabel } from "./capture-menus";
 
 export type PillPerson = { userId: string; name: string; isMe: boolean; canTakeTasks: boolean };
@@ -49,6 +52,8 @@ export type PillValues = {
   remindAt: string | null;
   tags: Array<{ id: string | null; name: string; color?: string | null }>;
   waitingOn: string[];
+  /** The status a List group's "+" opened it with (TV-U10); null: To do. */
+  status?: TaskStatusCategory | null;
 };
 
 /** A hand pick, by field. */
@@ -61,6 +66,7 @@ export type PillChange =
   | { field: "priority"; value: PriorityLevel | null }
   | { field: "estimate"; value: number | null }
   | { field: "remind"; value: string | null }
+  | { field: "status"; value: TaskStatusCategory | null }
   | { field: "tag"; tag: { id: string; name: string; color?: string | null }; on: boolean }
   | { field: "waiting"; userId: string; on: boolean };
 
@@ -307,6 +313,14 @@ function MoreChips({
   onChange: (change: PillChange) => void;
 }) {
   const chips: Array<{ key: string; icon: typeof Bell; label: string; clear: () => void }> = [];
+  // A status set by a List group's "+" is said out loud, and × drops it.
+  if (values.status && values.status !== "todo")
+    chips.push({
+      key: "status",
+      icon: CircleDot,
+      label: CATEGORY_LABELS[values.status],
+      clear: () => onChange({ field: "status", value: null }),
+    });
   if (values.scheduledAt)
     chips.push({
       key: "schedule",
