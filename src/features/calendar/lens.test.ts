@@ -4,6 +4,7 @@ import {
   addDays,
   blocksByDay,
   DEFAULT_BLOCK_MINUTES,
+  dueChipsByDay,
   type LensTask,
   localDayKey,
   parseDayKey,
@@ -168,5 +169,95 @@ describe("addDays", () => {
   it("crosses month boundaries on local calendar days", () => {
     expect(localDayKey(addDays(new Date(2026, 5, 30), 2))).toBe("2026-07-02");
     expect(localDayKey(addDays(new Date(2026, 0, 1), -1))).toBe("2025-12-31");
+  });
+});
+
+// TV-F6 (AC2.3, AC7.3): the Calendar lens reads work sessions as blocks and
+// due dates as all-day chips.
+describe("taskBlocks — work sessions are the blocks (AC2.3, AC7.3)", () => {
+  const range = visibleRange("week", TUE, PREFS);
+  /** A one-hour session at a local day/hour (month is 0-based, like Date). */
+  const session = (
+    id: string,
+    taskId: string,
+    month: number,
+    day: number,
+    hour: number,
+    userId: string | null,
+  ) => ({
+    id,
+    taskId,
+    userId,
+    startsAt: new Date(2026, month, day, hour).toISOString(),
+    endsAt: new Date(2026, month, day, hour + 1).toISOString(),
+  });
+  const at = (day: number, hour: number) => new Date(2026, 5, day, hour, 0).toISOString();
+
+  it("each of my sessions is its own block; a teammate's stays in their calendar", () => {
+    const task = makeLensTask({ id: "a", scheduledAt: at(30, 9), durationMinutes: 60 });
+    const blocks = taskBlocks([task], range, {
+      list: [
+        session("s1", "a", 5, 30, 9, "me"),
+        session("s2", "a", 6, 1, 14, "me"),
+        session("s3", "a", 5, 30, 11, "mike"),
+      ],
+      me: "me",
+    });
+    expect(
+      blocks.map((b) => [b.blockId, b.sessionId, b.taskId, b.dayKey, b.durationMinutes]),
+    ).toEqual([
+      ["s1", "s1", "a", "2026-06-30", 60],
+      ["s2", "s2", "a", "2026-07-01", 60],
+    ]);
+  });
+
+  it("a scheduled task with no session known shows from its row, once", () => {
+    const task = makeLensTask({ id: "b", scheduledAt: at(30, 9), durationMinutes: 30 });
+    const [block] = taskBlocks([task], range, { list: [], me: "me" });
+    expect(block).toMatchObject({ blockId: "b", sessionId: null, taskId: "b" });
+  });
+
+  it("a deleted or Won't do task's sessions don't show", () => {
+    const tasks = [
+      makeLensTask({ id: "d", deletedAt: "2026-06-30T00:00:00Z" }),
+      makeLensTask({ id: "w", status: "archived" }),
+    ];
+    expect(
+      taskBlocks(tasks, range, {
+        list: [session("s1", "d", 5, 30, 9, "me"), session("s2", "w", 5, 30, 10, "me")],
+        me: "me",
+      }),
+    ).toEqual([]);
+  });
+});
+
+describe("dueChipsByDay — due-only tasks as all-day chips (AC2.3, AC7.3)", () => {
+  const range = visibleRange("week", TUE, PREFS);
+
+  it("a task due Thursday with nothing in any calendar shows on Thursday", () => {
+    const due = { ...makeLensTask({ id: "essay", title: "Essay" }), dueOn: "2026-07-02" };
+    const map = dueChipsByDay([due], range);
+    expect(map.get("2026-07-02")).toEqual([
+      { taskId: "essay", title: "Essay", dayKey: "2026-07-02", done: false },
+    ]);
+  });
+
+  it("a scheduled one, one with a session, a Won't do one and one out of range don't", () => {
+    const tasks = [
+      {
+        ...makeLensTask({ id: "sched", scheduledAt: new Date(2026, 6, 2, 9).toISOString() }),
+        dueOn: "2026-07-02",
+      },
+      { ...makeLensTask({ id: "sess" }), dueOn: "2026-07-02" },
+      { ...makeLensTask({ id: "wont", status: "archived" }), dueOn: "2026-07-02" },
+      { ...makeLensTask({ id: "later" }), dueOn: "2026-07-20" },
+    ];
+    const map = dueChipsByDay(tasks, range, [{ taskId: "sess" }]);
+    expect([...map.values()].flat()).toEqual([]);
+  });
+
+  it("a done one shows done", () => {
+    const done = { ...makeLensTask({ id: "pub", status: "done" }), dueOn: "2026-06-30" };
+    expect(dueChipsByDay([done], range).get("2026-06-30")?.[0].done).toBe(true);
   });
 });

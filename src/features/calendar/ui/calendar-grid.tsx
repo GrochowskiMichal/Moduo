@@ -17,6 +17,7 @@
 // so a tick re-renders today's column only — not the whole week.
 
 import { useDroppable } from "@dnd-kit/core";
+import { Circle, CircleCheck } from "lucide-react";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { onCreateNew } from "../../../components/app/create-events";
@@ -31,7 +32,7 @@ import {
   minutesIntoDay,
   wallClockToRealMinutes,
 } from "../grid-layout";
-import { type CalendarView, localDayKey, type TaskBlock } from "../lens";
+import { type CalendarView, type DueChip, localDayKey, type TaskBlock } from "../lens";
 import type { CalendarPrefs } from "../prefs";
 import { EventChipView } from "./event-chip";
 import {
@@ -52,6 +53,8 @@ const TRIAGE_MIN_MINUTES = 55;
 /** Stable identities for empty columns so memoized DayColumns can bail out. */
 const EMPTY_BLOCKS: TaskBlock[] = [];
 const EMPTY_EVENTS: EventChip[] = [];
+const EMPTY_DUE: DueChip[] = [];
+const NO_DUE = new Map<string, DueChip[]>();
 /** Pointer travel below this is a click, not a drag (px). */
 const CLICK_SLOP_PX = 4;
 /** Chip edge band that means "resize" instead of "move" (px). */
@@ -69,6 +72,10 @@ type Props = {
   blocksByDay: Map<string, TaskBlock[]>;
   eventsByDay: Map<string, EventChip[]>;
   allDayByDay: Map<string, EventChip[]>;
+  /** Due-only tasks per day, in the all-day lane (TV-F6, AC2.3/AC7.3). */
+  dueByDay?: Map<string, DueChip[]>;
+  /** A due chip was clicked: open its task. */
+  onDueClick?: (taskId: string) => void;
   prefs: CalendarPrefs;
   loading: boolean;
   error: string | null;
@@ -80,8 +87,9 @@ type Props = {
   createCalendars: QuickCreateCalendar[];
   /** Occurrence-level drag/resize result — the page maps it onto the series. */
   onMoveEvent: (eventId: string, deltas: MoveEventDeltas) => void;
-  /** Task-block drag/resize writes the task's schedule/duration (AC6). */
-  onMoveTask: (taskId: string, result: MoveTaskResult) => void;
+  /** Task-block drag/resize writes the task's schedule/duration (AC6); a
+   *  block from a work session moves that session (`sessionId`). */
+  onMoveTask: (taskId: string, result: MoveTaskResult, sessionId: string | null) => void;
   onEventClick: (chip: EventChip, rect: DOMRect) => void;
   onTaskClick: (block: TaskBlock, rect: DOMRect) => void;
   selectedOccurrenceKey: string | null;
@@ -94,10 +102,8 @@ type Props = {
   onTriageLater: (taskId: string) => void;
   onTriageLonger: (taskId: string) => void;
   onTriageRemove: (taskId: string) => void;
-  /** The single focus session's task + readout clock (null when idle). */
+  /** The focus session's task (the one time engine; null when idle). */
   focusTaskId: string | null;
-  focusRunningSinceMs: number | null;
-  focusBaseSeconds: number;
 };
 
 /** Re-render tick for the now-line; catches up on tab wake. */
@@ -163,6 +169,8 @@ export function CalendarGrid({
   blocksByDay,
   eventsByDay,
   allDayByDay,
+  dueByDay = NO_DUE,
+  onDueClick,
   prefs,
   loading,
   error,
@@ -183,8 +191,6 @@ export function CalendarGrid({
   onTriageLonger,
   onTriageRemove,
   focusTaskId,
-  focusRunningSinceMs,
-  focusBaseSeconds,
 }: Props) {
   const now = useNowTick(30_000);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -209,8 +215,12 @@ export function CalendarGrid({
     [blocksByDay, eventsByDay],
   );
   const hasAllDay = useMemo(
-    () => days.some((d) => (allDayByDay.get(localDayKey(d)) ?? []).length > 0),
-    [days, allDayByDay],
+    () =>
+      days.some((d) => {
+        const key = localDayKey(d);
+        return (allDayByDay.get(key) ?? []).length > 0 || (dueByDay.get(key) ?? []).length > 0;
+      }),
+    [days, allDayByDay, dueByDay],
   );
 
   const [pending, setPending] = useState<PendingCreate | null>(null);
@@ -382,13 +392,17 @@ export function CalendarGrid({
           // day-clipped (a 23:00+2h block draws as 1h), so deriving duration
           // from the visual would silently truncate it. Only a RESIZE takes
           // the visual span (that's what the user is stating).
-          p.onMoveTask(g.target.block.taskId, {
-            startMs: geomTo.dayStartMs + v.startMin * 60_000,
-            durationMinutes:
-              g.kind === "move"
-                ? g.target.block.durationMinutes
-                : Math.max(Math.round(v.endMin - v.startMin), 15),
-          });
+          p.onMoveTask(
+            g.target.block.taskId,
+            {
+              startMs: geomTo.dayStartMs + v.startMin * 60_000,
+              durationMinutes:
+                g.kind === "move"
+                  ? g.target.block.durationMinutes
+                  : Math.max(Math.round(v.endMin - v.startMin), 15),
+            },
+            g.target.block.sessionId,
+          );
         }
       }
     } else if (g.target.type === "event") {
@@ -661,6 +675,32 @@ export function CalendarGrid({
                     />
                   </button>
                 ))}
+                {/* Due-only tasks: due that day, in nobody's calendar (AC2.3). */}
+                {(dueByDay.get(key) ?? EMPTY_DUE).map((due) => (
+                  <button
+                    key={`due:${due.taskId}`}
+                    type="button"
+                    data-chip="due"
+                    onClick={() => onDueClick?.(due.taskId)}
+                    aria-label={`${due.title || "Untitled"} · due${due.done ? " · done" : ""}`}
+                    className="flex w-full min-w-0 items-center gap-1 rounded-sm border border-border bg-background px-1.5 text-left text-xs text-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    style={{ height: "var(--ctrl-h-sm)" }}
+                  >
+                    {due.done ? (
+                      <CircleCheck className="size-3 shrink-0 text-muted-foreground" aria-hidden />
+                    ) : (
+                      <Circle className="size-3 shrink-0 text-muted-foreground" aria-hidden />
+                    )}
+                    <span
+                      className={cn(
+                        "min-w-0 truncate",
+                        due.done && "text-muted-foreground line-through",
+                      )}
+                    >
+                      {due.title || "Untitled"}
+                    </span>
+                  </button>
+                ))}
               </div>
             );
           })}
@@ -713,8 +753,6 @@ export function CalendarGrid({
                 onTriageLonger={onTriageLonger}
                 onTriageRemove={onTriageRemove}
                 focusTaskId={focusTaskId}
-                focusRunningSinceMs={focusRunningSinceMs}
-                focusBaseSeconds={focusBaseSeconds}
                 canEdit={canEdit}
                 onToggleDone={onToggleDone}
                 onBackgroundPointerDown={onBackgroundPointerDown}
@@ -762,8 +800,6 @@ const DayColumn = memo(function DayColumn({
   onTriageLonger,
   onTriageRemove,
   focusTaskId,
-  focusRunningSinceMs,
-  focusBaseSeconds,
   canEdit,
   onToggleDone,
   onBackgroundPointerDown,
@@ -797,8 +833,6 @@ const DayColumn = memo(function DayColumn({
   onTriageLonger: (taskId: string) => void;
   onTriageRemove: (taskId: string) => void;
   focusTaskId: string | null;
-  focusRunningSinceMs: number | null;
-  focusBaseSeconds: number;
   canEdit: boolean;
   onToggleDone: (taskId: string) => void;
   onBackgroundPointerDown: (e: React.PointerEvent, dayIdx: number) => void;
@@ -836,12 +870,12 @@ const DayColumn = memo(function DayColumn({
   const layout = useMemo(
     () =>
       layoutDayChips([
-        ...blocks.map((b) => ({ id: b.taskId, startMs: b.startMs, endMs: b.endMs })),
+        ...blocks.map((b) => ({ id: b.blockId, startMs: b.startMs, endMs: b.endMs })),
         ...events.map((c) => ({ id: c.occurrenceKey, startMs: c.startMs, endMs: c.endMs })),
       ]),
     [blocks, events],
   );
-  const blockById = useMemo(() => new Map(blocks.map((b) => [b.taskId, b])), [blocks]);
+  const blockById = useMemo(() => new Map(blocks.map((b) => [b.blockId, b])), [blocks]);
   const eventByKey = useMemo(() => new Map(events.map((c) => [c.occurrenceKey, c])), [events]);
   // Wall-clock prefs → real minutes (DST-correct wash bounds).
   const washTop = wallClockToRealMinutes(prefs.workStartMinute, geom);
@@ -924,14 +958,7 @@ const DayColumn = memo(function DayColumn({
                 onLonger={() => onTriageLonger(block.taskId)}
                 onRemove={() => onTriageRemove(block.taskId)}
                 focusing={focusing}
-                focusReadout={
-                  focusing ? (
-                    <FocusReadout
-                      runningSinceMs={focusRunningSinceMs}
-                      baseSeconds={focusBaseSeconds}
-                    />
-                  ) : null
-                }
+                focusReadout={focusing ? <FocusReadout /> : null}
               />
             </div>
           );

@@ -99,6 +99,7 @@ import {
 } from "./prefs-columns";
 import { createRequestCache } from "./request-cache";
 import { webChatRuntime } from "./runtime.chat.web";
+import { webFocusRuntime } from "./runtime.focus.web";
 import type {
   AttachmentRecord,
   AuthChangeEvent,
@@ -435,6 +436,10 @@ export const webRuntime: ModuoRuntime = {
   // Chat (specs/chat.md): ops + RLS reads live in runtime.chat.web.ts. Only this
   // file imports it — importing it first elsewhere would hit the module cycle.
   chat: webChatRuntime,
+
+  // Focus runs and claims (TV-F6): ops + own-row reads live in
+  // runtime.focus.web.ts, which only this file imports (the same module cycle).
+  focus: webFocusRuntime,
 
   auth: {
     async getLocalAuthState() {

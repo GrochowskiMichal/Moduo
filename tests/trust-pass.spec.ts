@@ -106,8 +106,6 @@ function trackWrites(page: Page) {
   return writes;
 }
 
-const panel = (page: Page) => page.locator("aside, [data-panel]").last();
-
 test("AC1.4 — a Won't do task stays reachable and reopens", async ({ page }) => {
   const t = await createTask(dev, { title: `Won't do me ${tag}`, bucketId: ws.inboxId });
   await openTasks(page, t.id);

@@ -18,6 +18,7 @@
 //    the gap are caught up from timestamps, and a work block never starts by
 //    itself while away (F1-4).
 
+import { FOCUS_TIMER_MODES, type FocusTimerMode } from "@contracts/vocabularies";
 import { z } from "zod";
 import type { FocusPrefs } from "../../lib/focus-prefs";
 
@@ -128,6 +129,21 @@ export interface FocusRecord {
   sitMs: number;
   credits: Record<string, FocusCredit>;
   away: FocusAwayBlock[];
+  /** The timer (TV-F6, call 62a): per_task, pomodoro or off. Missing on
+   *  records written before, where `pomodoro` decides (see timerOf). */
+  timer?: FocusTimerMode;
+  /** Work time on the bound task this sitting: the Per task clock. Starts
+   *  over when another task is bound. Missing on records written before. */
+  taskMs?: number;
+  /** The end of the last stretch credited to the task as live work: a device
+   *  that took the run over at T gets back what was credited here after T
+   *  (#323, TV-F6). Missing on records written before. */
+  creditedTo?: number;
+}
+
+/** The record's timer. Records from before TV-F6 carry only `pomodoro`. */
+export function timerOf(r: Pick<FocusRecord, "timer" | "pomodoro">): FocusTimerMode {
+  return r.timer ?? (r.pomodoro ? "pomodoro" : "per_task");
 }
 
 export interface FocusAwaySummary {
@@ -141,6 +157,8 @@ export interface FocusAwaySummary {
  *  the chrome chip read it unchanged. */
 export interface FocusSession {
   taskId: string | null;
+  /** The workspace of the bound task (its time is saved there). */
+  workspaceId: string | null;
   taskTitle: string;
   bucketName: string | null;
   tracking: boolean;
@@ -162,10 +180,17 @@ export interface FocusSession {
   away: FocusAwaySummary | null;
   /** Saving some tracked time failed and is being retried: "not saved yet" (F1-7). */
   unsaved: boolean;
+  /** The timer (62a). `pomodoro` above is `timer === "pomodoro"`. */
+  timer: FocusTimerMode;
+  /** The Per task clock: work seconds on the bound task this sitting. */
+  taskSeconds: number;
+  /** Length of the current pomodoro phase, seconds. */
+  phaseSeconds: number;
 }
 
 export const REST_SESSION: FocusSession = {
   taskId: null,
+  workspaceId: null,
   taskTitle: "",
   bucketName: null,
   tracking: false,
@@ -181,6 +206,9 @@ export const REST_SESSION: FocusSession = {
   bigClock: 0,
   away: null,
   unsaved: false,
+  timer: "per_task",
+  taskSeconds: 0,
+  phaseSeconds: 0,
 };
 
 export function blankRecord(now: number): FocusRecord {
@@ -302,15 +330,18 @@ function runUntil(rec: FocusRecord, until: number, p: FocusRhythm, away: boolean
   return { rec: r, workMs, ends };
 }
 
+/** Credit a stretch's work time to the bound task. Off records nothing (63):
+ *  no credit and no session clock. */
 function creditRun(base: FocusRecord, run: Run, at: number): Run {
   const task = base.task;
-  if (!task || run.workMs <= 0) return run;
+  if (!task || run.workMs <= 0 || timerOf(base) === "off") return run;
   return {
     ...run,
     rec: {
       ...run.rec,
       credits: addCredit(run.rec.credits, task.id, task.workspaceId, run.workMs, at),
       sitMs: run.rec.sitMs + run.workMs,
+      taskMs: (run.rec.taskMs ?? 0) + run.workMs,
     },
   };
 }
@@ -333,17 +364,18 @@ export function observe(rec: FocusRecord, now: number, p: FocusRhythm): Observed
     // The wall clock moved backwards: keep what was seen, restart the stretch here.
     const seen = creditRun(rec, runUntil(rec, rec.seenAt, p, false), rec.seenAt);
     const restarted = seen.rec.since === null ? seen.rec : { ...seen.rec, since: now };
-    return { rec: { ...restarted, seenAt: now }, liveEnds: seen.ends };
+    return { rec: { ...restarted, seenAt: now, creditedTo: rec.seenAt }, liveEnds: seen.ends };
   }
   if (now - rec.seenAt <= AWAY_GAP_MS) {
     const live = creditRun(rec, runUntil(rec, now, p, false), now);
-    return { rec: { ...live.rec, seenAt: now }, liveEnds: live.ends };
+    return { rec: { ...live.rec, seenAt: now, creditedTo: now }, liveEnds: live.ends };
   }
   // Away. Credit up to the last look, then replay the gap with its work held.
   const before = creditRun(rec, runUntil(rec, rec.seenAt, p, false), rec.seenAt);
   const gap = runUntil(before.rec, now, p, true);
-  let next: FocusRecord = { ...gap.rec, seenAt: now };
-  const held = rec.task ? gap.workMs : 0;
+  let next: FocusRecord = { ...gap.rec, seenAt: now, creditedTo: rec.seenAt };
+  // Off holds nothing: there's no time to keep or discard (63).
+  const held = rec.task && timerOf(rec) !== "off" ? gap.workMs : 0;
   if (held > 0 || gap.ends.length > 0) {
     next = {
       ...next,
@@ -380,6 +412,8 @@ export function startSession(r: FocusRecord, now: number, p: FocusRhythm): Focus
     phaseMs: workLength(p),
     phaseDoneMs: 0,
     sitMs: 0,
+    taskMs: 0,
+    creditedTo: now,
     away: [],
   };
 }
@@ -406,7 +440,40 @@ export function stopSession(r: FocusRecord, now: number, p: FocusRhythm): FocusR
     phaseMs: workLength(p),
     phaseDoneMs: 0,
     sitMs: 0,
+    taskMs: 0,
     away: [],
+  };
+}
+
+/**
+ * Undo a Stop (62a: "Stopped · Undo" for 10 s): the session as it was at
+ * `stoppedAt`, as if Stop never happened (a running clock counts the seconds
+ * in between). The time Stop saved stays saved; nothing is credited twice.
+ * A session started since wins: Undo then changes nothing.
+ */
+export function undoStopSession(
+  current: FocusRecord,
+  before: FocusRecord,
+  stoppedAt: number,
+  now: number,
+): FocusRecord {
+  if (current.tracking || !before.tracking || !before.task) return current;
+  return {
+    ...current,
+    task: before.task,
+    tracking: true,
+    timer: timerOf(before),
+    pomodoro: before.pomodoro,
+    phase: before.phase,
+    longBreak: before.longBreak,
+    blocks: before.blocks,
+    phaseMs: before.phaseMs,
+    phaseDoneMs: before.phaseDoneMs,
+    sitMs: before.sitMs,
+    taskMs: before.taskMs ?? 0,
+    since: before.since === null ? null : Math.min(stoppedAt, now),
+    seenAt: now,
+    creditedTo: now,
   };
 }
 
@@ -424,7 +491,9 @@ export function bindTask(
 ): FocusRecord {
   if (task === null) return { ...stopSession(r, now, p), task: null };
   if (r.task && sameTaskRef(r.task, task)) return r;
-  return { ...r, task };
+  // A new task starts its own Per task clock; a rename keeps it.
+  if (r.task?.id === task.id) return { ...r, task };
+  return { ...r, task, taskMs: 0 };
 }
 
 /** Same task, same label: binding it again changes nothing. */
@@ -437,11 +506,29 @@ export function sameTaskRef(a: FocusTaskRef, b: FocusTaskRef): boolean {
   );
 }
 
-/** Switch stopwatch ↔ pomodoro; the rhythm starts over with a work block. */
+/** Switch Per task ↔ Pomodoro; the rhythm starts over with a work block. */
 export function togglePomodoro(r: FocusRecord, now: number, p: FocusRhythm): FocusRecord {
+  return setTimer(r, r.pomodoro ? "per_task" : "pomodoro", now, p);
+}
+
+/**
+ * Set the timer (62a: Per task · Pomodoro · Off), mid-session too. Into or out
+ * of Pomodoro the rhythm starts over with a work block; Per task ↔ Off only
+ * changes whether time is recorded from now on.
+ */
+export function setTimer(
+  r: FocusRecord,
+  timer: FocusTimerMode,
+  now: number,
+  p: FocusRhythm,
+): FocusRecord {
+  if (timerOf(r) === timer && r.timer === timer) return r;
+  const pomodoro = timer === "pomodoro";
+  if (pomodoro === r.pomodoro) return { ...r, timer };
   return {
     ...r,
-    pomodoro: !r.pomodoro,
+    timer,
+    pomodoro,
     phase: "work",
     longBreak: false,
     blocks: 0,
@@ -449,6 +536,87 @@ export function togglePomodoro(r: FocusRecord, now: number, p: FocusRhythm): Foc
     phaseDoneMs: 0,
     since: isRunning(r) ? now : r.since,
   };
+}
+
+/** A run as its shared record has it (focus_runs), read at `now`. */
+export interface FocusRunClock {
+  task: FocusTaskRef | null;
+  timer: FocusTimerMode;
+  running: boolean;
+  phase: FocusPhase;
+  longBreak: boolean;
+  blocks: number;
+  /** The current phase's length (Pomodoro). */
+  phaseMs: number;
+  /** How much of the current phase has run (Pomodoro). */
+  phaseDoneMs: number;
+  /** The Per task clock: work time on the Now task this sitting. */
+  taskMs: number;
+  /** Focused time in the run so far. */
+  sitMs: number;
+}
+
+/**
+ * Take over a run another device was running (#323: "takes control when you
+ * act on it"): this device's session becomes the run as its record says it is
+ * now, rhythm and all, and its clock runs from here. Unsaved credits stay; an
+ * away block from before is dropped (that time was the other device's).
+ */
+export function adoptSession(
+  r: FocusRecord,
+  run: FocusRunClock,
+  now: number,
+  p: FocusRhythm,
+): FocusRecord {
+  const pomodoro = run.timer === "pomodoro";
+  const phaseMs = pomodoro ? Math.max(MINUTE_MS, run.phaseMs) : workLength(p);
+  return {
+    ...r,
+    task: run.task,
+    tracking: true,
+    timer: run.timer,
+    pomodoro,
+    phase: pomodoro ? run.phase : "work",
+    longBreak: pomodoro && run.phase === "break" && run.longBreak,
+    blocks: Math.max(0, Math.floor(run.blocks)),
+    phaseMs,
+    phaseDoneMs: pomodoro ? Math.min(phaseMs, Math.max(0, run.phaseDoneMs)) : 0,
+    since: run.running ? now : null,
+    seenAt: now,
+    creditedTo: now,
+    sitMs: Math.max(0, run.sitMs),
+    taskMs: Math.max(0, run.taskMs),
+    away: [],
+  };
+}
+
+/**
+ * Another device took control of the run at `at` (#323): stop here without
+ * counting twice. Work credited to the bound task after `at` is taken back
+ * from what isn't saved yet (that time was counted on the other device), held
+ * away time is dropped, and the session ends. Earlier time stays to be saved.
+ */
+export function relinquishSession(
+  r: FocusRecord,
+  at: number,
+  now: number,
+  p: FocusRhythm,
+): FocusRecord {
+  const task = r.task;
+  let credits = r.credits;
+  const credit = task ? r.credits[task.id] : undefined;
+  if (task && credit) {
+    const creditedTo = r.creditedTo ?? r.seenAt;
+    const overlap = Math.min(credit.ms, Math.max(0, creditedTo - at));
+    if (overlap > 0) {
+      const next = { ...credit, ms: credit.ms - overlap };
+      credits = { ...credits, [task.id]: next };
+      if (next.ms <= 0 && next.inFlightMs <= 0) {
+        credits = Object.fromEntries(Object.entries(credits).filter(([id]) => id !== task.id));
+      }
+    }
+  }
+  return { ...stopSession({ ...r, credits }, now, p), task: null };
 }
 
 /** While paused, show edited intervals right away (Settings → Focus, the ⋯ menu). */
@@ -482,6 +650,8 @@ export function resolveAway(
         ...next,
         credits: addCredit(next.credits, block.taskId, block.workspaceId, block.workMs, now),
         sitMs: next.sitMs + block.workMs,
+        taskMs: block.taskId === next.task?.id ? (next.taskMs ?? 0) + block.workMs : next.taskMs,
+        creditedTo: Math.max(next.creditedTo ?? next.seenAt, block.to),
       };
     }
   } else if (choice === "break" && r.tracking && r.pomodoro) {
@@ -688,8 +858,11 @@ export function snapshotOf(rec: FocusRecord, now: number, p: FocusRhythm): Focus
   const credit = r.task ? r.credits[r.task.id] : undefined;
   const pomoLeft = Math.round(Math.max(0, r.phaseMs - r.phaseDoneMs) / 1000);
   const sitElapsed = Math.round(r.sitMs / 1000);
+  const timer = timerOf(r);
+  const taskSeconds = Math.round((r.taskMs ?? 0) / 1000);
   return {
     taskId: r.task?.id ?? null,
+    workspaceId: r.task?.workspaceId ?? null,
     taskTitle: r.task?.title ?? "",
     bucketName: r.task?.bucketName ?? null,
     tracking: r.tracking,
@@ -703,9 +876,14 @@ export function snapshotOf(rec: FocusRecord, now: number, p: FocusRhythm): Focus
     // A save waiting to be sent again isn't in the task's saved total yet.
     accrued: Math.floor(((credit?.ms ?? 0) + (credit ? parkedMs(credit) : 0)) / 1000),
     phaseLabel: phaseLabelOf(r.phase, r.longBreak),
-    bigClock: r.pomodoro ? pomoLeft : sitElapsed,
+    // One number per job (62): the rhythm's countdown, the task's own clock,
+    // or nothing at all (Off).
+    bigClock: timer === "pomodoro" ? pomoLeft : timer === "per_task" ? taskSeconds : 0,
     away: awaySummary(r.away),
     unsaved: hasFailedSaves(r),
+    timer,
+    taskSeconds,
+    phaseSeconds: Math.round(r.phaseMs / 1000),
   };
 }
 
@@ -726,6 +904,7 @@ function sameAway(a: FocusAwaySummary | null, b: FocusAwaySummary | null): boole
 export function sameSession(a: FocusSession, b: FocusSession): boolean {
   return (
     a.taskId === b.taskId &&
+    a.workspaceId === b.workspaceId &&
     a.taskTitle === b.taskTitle &&
     a.bucketName === b.bucketName &&
     a.tracking === b.tracking &&
@@ -738,6 +917,9 @@ export function sameSession(a: FocusSession, b: FocusSession): boolean {
     a.sitElapsed === b.sitElapsed &&
     a.accrued === b.accrued &&
     a.unsaved === b.unsaved &&
+    a.timer === b.timer &&
+    a.taskSeconds === b.taskSeconds &&
+    a.phaseSeconds === b.phaseSeconds &&
     sameAway(a.away, b.away)
   );
 }
@@ -796,6 +978,11 @@ const recordSchema = z.object({
       parked: z.boolean(),
     }),
   ),
+  // TV-F6. Optional, so a record written before still parses (a live session
+  // survives the upgrade); an unknown timer reads as missing.
+  timer: z.enum(FOCUS_TIMER_MODES).optional().catch(undefined),
+  taskMs: z.number().nonnegative().optional().catch(undefined),
+  creditedTo: z.number().optional().catch(undefined),
 });
 
 /** Parse a stored record; anything malformed or from another version is null. */

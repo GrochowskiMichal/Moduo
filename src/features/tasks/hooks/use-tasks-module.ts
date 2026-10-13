@@ -25,9 +25,6 @@ import { useStoreSnapshot, useWorkspaceStore } from "../../../lib/sync/react";
 import type { OverlayChange, PendingWrite } from "../../../lib/sync/store";
 import { editableTaskFields } from "../../../lib/task-rows";
 import { undoToast } from "../../../lib/undo-toast";
-import { formatAwaySpan } from "../../focus/away-copy";
-import type { FocusSaveContext } from "../../focus/engine";
-import { FOCUS_TIME_SAVED_EVENT, type FocusTimeSaved } from "../../focus/time-sink";
 import {
   createOrAttachByName,
   deleteTag as deleteWorkspaceTag,
@@ -1411,18 +1408,8 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     [runtime, store],
   );
 
-  // Focus time is saved by the app shell's sink, from any page (TV-P0): show
-  // each saved total here as it lands.
-  useEffect(() => {
-    if (!workspaceId || !store) return;
-    const onSaved = (event: Event) => {
-      const saved = (event as CustomEvent<FocusTimeSaved>).detail;
-      if (!saved || saved.workspaceId !== workspaceId) return;
-      store.patchCopy("tasks", saved.taskId, { timeSpentSeconds: saved.totalSeconds });
-    };
-    window.addEventListener(FOCUS_TIME_SAVED_EVENT, onSaved);
-    return () => window.removeEventListener(FOCUS_TIME_SAVED_EVENT, onSaved);
-  }, [workspaceId, store]);
+  // Focus time is saved by the one time engine's app-shell sink, from any
+  // page (TV-P0, TV-F6): it puts each saved total straight into the store copy.
 
   /** Why a time write can't be sent right now, or null. */
   const timeWriteBlocked = useCallback(
@@ -1456,6 +1443,30 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       return true;
     },
     [timeWriteBlocked, workspaceId, writeTime, failed],
+  );
+
+  /**
+   * Move or resize one work session: Calendar's block of it (TV-F6, sessions
+   * as blocks). The op keeps its person; the server answers with the task's
+   * sessions and the copy takes them (the task's mirrored schedule follows
+   * through its own live row).
+   */
+  const moveSession = useCallback(
+    (sessionId: string, startsAt: string, endsAt: string) => {
+      if (!runtime || !workspaceId || !canEdit) {
+        toast.error(NO_EDIT);
+        return;
+      }
+      if (store?.isOffline()) {
+        toast.error("You're offline — move it once you're back.");
+        return;
+      }
+      void runtime.tasks
+        .updateSession({ workspaceId, sessionId, patch: { startsAt, endsAt } })
+        .then((rows) => store?.answer({ sessions: rows }))
+        .catch((e) => failed(e, "Couldn't move that block."));
+    },
+    [runtime, workspaceId, canEdit, store, failed],
   );
 
   /**
@@ -1496,54 +1507,6 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       }).catch((e) => failed(e, "Couldn't undo that."));
     },
     [timeWriteBlocked, workspaceId, writeTime, failed],
-  );
-
-  /**
-   * The module's own Focus sink (TV-F1, saving through time entries since
-   * TV-D3). Since TV-P0 the engine saves through the app shell's sink
-   * (features/focus/time-sink.ts) so time saves from any page; this one is no
-   * longer registered and stays, with its tests, until TV-F6's one time engine
-   * replaces both. It records `seconds` of focus that ended at `earnedAt` as one stretch,
-   * under the save's key, so a resend after a reload or a lost answer counts
-   * once. Only the task's time changes.
-   *  - `false` right away: not now (no workspace yet, a task still being
-   *    created, or another workspace's time handed over mid-switch).
-   *  - a promise: `true` saved (or already saved), `false` failed or no edit
-   *    access (kept, "not saved yet", retried with the same key), `"gone"` the
-   *    task was deleted for good or isn't shared any more: the seconds are
-   *    dropped and the person is told.
-   */
-  const persistFocusTime = useCallback(
-    (
-      id: string,
-      seconds: number,
-      context: FocusSaveContext,
-    ): boolean | "gone" | Promise<boolean | "gone"> => {
-      if (!Number.isFinite(seconds) || seconds < 1) return true;
-      if (!runtime || !workspaceId || isTempId(id) || context.workspaceId !== workspaceId) {
-        return false;
-      }
-      if (!canEdit) return Promise.resolve(false);
-      return writeTime(id, seconds, {
-        workspaceId,
-        taskId: id,
-        action: "focus",
-        seconds: Math.round(seconds),
-        endedAt: context.earnedAt > 0 ? new Date(context.earnedAt).toISOString() : null,
-        key: context.key,
-      }).then(
-        (result) => {
-          if (result.status !== "gone") return true;
-          toast(`${formatAwaySpan(seconds)} of focus time couldn't be saved`, {
-            description:
-              "The task it was tracked on was deleted or isn't shared with you any more.",
-          });
-          return "gone" as const;
-        },
-        () => false,
-      );
-    },
-    [runtime, workspaceId, canEdit, writeTime],
   );
 
   /** Set the tracked total to a typed value: one adjustment makes it exactly that. */
@@ -2839,9 +2802,9 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     markDone,
     archiveTask,
     addTimeSpent,
+    moveSession,
     logTimeAdjustment,
     undoTimeAdjustment,
-    persistFocusTime,
     setTimeSpent,
     rescheduleScheduledAt,
     unscheduleTask,

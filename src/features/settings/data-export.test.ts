@@ -284,4 +284,20 @@ describe("the tasks export carries every new tasks table (TV-D8, §Assumptions #
     expect(data.waiting).toEqual([{ id: "w1", kind: "text", label: "Feedback" }]);
     expect(data.truncated).toEqual([sessionsCut]);
   });
+
+  it("carries your own Focus runs (TV-F6), and says when they were cut", async () => {
+    const run = { id: "run-1", mode: "per_task", focusedSeconds: 1200 };
+    const runsCut = { scope: "Focus runs", shown: 10000, total: 10002 };
+    const data = await readTasksExport(
+      {
+        list: async () => ({ tasks: [], buckets: [], truncated: [] }),
+        listCompletions: async () => ({ completions: [], truncated: [] }),
+        ...noD10Reads,
+      },
+      "ws-1",
+      { listMyRuns: async () => ({ runs: [run], truncated: [runsCut] }) },
+    );
+    expect(data.focusRuns).toEqual([run]);
+    expect(data.truncated).toEqual([runsCut]);
+  });
 });

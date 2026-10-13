@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 import { attachFocusUser } from "../features/focus/engine";
+import { attachRunUser } from "../features/focus/run";
 import { attachTagUser } from "../features/tags/store";
 import { forgetCaptureDrafts, keepCaptureDraftsOf } from "../features/tasks/capture/capture-draft";
 import { forgetRememberedWorkspaces } from "../features/workspaces/remembered-workspaces";
@@ -215,6 +216,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
     // Another person's kept capture drafts go too (TV-U14).
     if (sessionUserId) keepCaptureDraftsOf(sessionUserId);
   }, [loading, sessionUserId]);
+  // The session's shared record follows the engine, after it (TV-F6, run.ts).
+  useEffect(() => {
+    if (loading) return;
+    attachRunUser(sessionUserId, rt);
+  }, [loading, sessionUserId, rt]);
 
   const signOut = async () => {
     if (!rt) return;
