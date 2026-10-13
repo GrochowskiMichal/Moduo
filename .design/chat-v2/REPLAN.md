@@ -8,7 +8,7 @@
 > - **Mike's ask:** the tech-stack decision blueprint landed → [research/tech-blueprint.md](./research/tech-blueprint.md), folded into §6 (#2, #3, #6, #7, #18, #19–#22). Open from it: **CH31** (the Supabase plan before the hackathon).
 > - **Research lanes** ([`research/`](./research/)): six landed and folded in (early-decisions audit, role journeys, competitor structure, hackathon, visual audit → §5, current state → §1.3 B and §6 #15–18). **Threads** (→ CH30) and **visual competitors** (→ CH29) landed.
 > - **Research data in the shared local database** (kept for round 2's live checks; remove when the plan is done): workspace **"Chat replan research"** `669be464-0b9a-4d84-8537-544ac04dba5f` (10 channels, 3,032 messages, one task) and a third local user `third@moduo.local`. Full ledger and a cleanup sketch: [current state](./research/current-state.md), last section. `dev@moduo.local`'s plan is back to `free` (checked).
-> - **Prototype:** [`prototypes/round-1.html`](./prototypes/round-1.html) (keys 1–7 frames, V variants; serve the folder over http to see the Geist font).
+> - **Prototypes:** newest [`prototypes/round-5.html`](./prototypes/round-5.html) (every surface and state on the decisions so far; keys 1–9 frames, V variants); earlier rounds 1–4 in the same folder. Serve the folder over http to see the Geist font.
 > - **Uncommitted:** nothing.
 >
 > **Numbering:** Chat calls are **CH1, CH2, …**, numbered once and never renumbered. Tasks v3 calls are cited as "Tasks 64", "Tasks default r"; Calendar's as "Calendar C7". The decisions audit's contradiction list uses its own "A1…"; here those are cited as "audit A1".
