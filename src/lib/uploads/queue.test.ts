@@ -187,6 +187,37 @@ describe("UploadQueue", () => {
     expect(t.uploaded.map((r) => r.id)).toEqual(["a1"]);
   });
 
+  it("a step refused because the build turned read-only leaves the file waiting, not failed", async () => {
+    let readOnly = false;
+    const api = fakeApi({
+      finalize: [
+        () => {
+          readOnly = true;
+          return new Error("This version of Moduo is too old to make changes.");
+        },
+      ],
+    });
+    const t = setup({ api, readOnly: () => readOnly });
+    await t.queue.start("u1");
+    await t.queue.add([png()], TARGET, "u1", status());
+    await settle();
+    const [item] = t.queue.getSnapshot().items;
+    expect(item?.state).toBe("queued");
+    expect(item?.problem).toBeNull();
+    // The server row and the sent bytes are kept: an updated app only finalizes.
+    readOnly = false;
+    t.queue.wake();
+    await settle();
+    expect(t.api.calls.map((c) => c.step)).toEqual([
+      "begin",
+      "upload",
+      "upload",
+      "finalize",
+      "finalize",
+    ]);
+    expect(t.uploaded.map((r) => r.id)).toEqual(["a1"]);
+  });
+
   it("stops moving bytes when stopped (signed out), and resumes on start", async () => {
     const t = setup();
     await t.queue.start("u1");

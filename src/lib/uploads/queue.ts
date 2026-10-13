@@ -402,7 +402,9 @@ export class UploadQueue {
         this.emit();
         continue;
       }
-      if (pool && pool.usedBytes + pool.pendingBytes + extra + size > pool.totalBytes) {
+      // Begin weighs the original alone; the batch's earlier files count whole
+      // (their previews join the pending bytes once sent).
+      if (pool && pool.usedBytes + pool.pendingBytes + extra + item.sizeBytes > pool.totalBytes) {
         item.state = "waiting";
         item.problem = {
           kind: "storage_full",
@@ -494,7 +496,10 @@ export class UploadQueue {
     const api = this.api ?? this.deps.getApi();
     if (!userId || !api) return;
     // Every op would be refused; the files wait for an updated app.
-    if (this.deps.isReadOnly?.()) return;
+    if (this.deps.isReadOnly?.()) {
+      this.emit();
+      return;
+    }
     const now = this.now();
     let next = Number.POSITIVE_INFINITY;
     for (const item of [...this.items.values()].sort((a, b) => a.createdAt - b.createdAt)) {
@@ -655,6 +660,14 @@ export class UploadQueue {
   }
 
   private fail(item: UploadItem, e: unknown) {
+    if (this.deps.isReadOnly?.()) {
+      // Refused because this build may only read: keep the file and its
+      // server row as they are; an updated app picks it up.
+      item.state = "queued";
+      item.problem = null;
+      void this.save(item);
+      return;
+    }
     const code = e instanceof AttachmentOpError ? e.code : null;
     if (code === "not_uploaded") {
       // Finalize didn't find the bytes: send them again, after a short wait.

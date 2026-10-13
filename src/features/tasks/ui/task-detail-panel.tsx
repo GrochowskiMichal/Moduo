@@ -183,7 +183,8 @@ function DetailBody({
   // ── attachments (AT-2): one self-contained section ───────────────────────────
   const files = useAttachmentsSection({
     runtime,
-    workspaceId,
+    // The task's own workspace: that's where its files live.
+    workspaceId: workspaceId ? task.workspaceId || workspaceId : null,
     entity: { type: "task", id: task.id },
     userId: api.currentUserId ?? null,
     canEdit,

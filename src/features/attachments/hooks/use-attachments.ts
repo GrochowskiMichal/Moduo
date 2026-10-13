@@ -164,6 +164,13 @@ export function useEntityAttachments({
     }
   }, [runtime, workspaceId, entity.type, entity.id, signPreviews]);
 
+  // Another entity: never show (or act on) the previous one's files meanwhile.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runs when the entity changes
+  useEffect(() => {
+    setRecords((prev) => (prev.length > 0 ? [] : prev));
+    setLoadState("loading");
+  }, [key]);
+
   useEffect(() => {
     void reload();
     return () => {

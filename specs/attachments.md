@@ -209,7 +209,7 @@ The storage layer is polymorphic (`entity_type`), so Notes, comments and Chat ca
 | --- | --- | --- | --- | --- |
 | 1 | **AT-1** Storage, limits, trash *(start now)* | bucket + policies, `attachments` + ops (begin/finalize/delete/restore), ledger + limits + status RPC, alerts, trash triggers, `purge-deleted` function (+ pending sweep), erasure/workspace-delete hooks, MCP list tool, export manifest; hosted upload-limit check | AT1-1–8 | — |
 | 2 | **AT-2** Upload pipeline + panel | `src/lib/uploads` (pipeline, TUS, queue, errors), `dragDropEnabled:false`, Lexical paste/drop handler, panel strip + viewer + tile states | AT2-1–6 | AT-1, TV-U3 |
-| 3 | **AT-3** Everywhere + Storage settings | row/card drop targets, capture paste chip, 📎 mark on every surface, Settings → Storage; wires the strip's "Free up space" (storage-full line, `onFreeUpSpace`) to Settings → Storage; `attachments` joins the Realtime publication for live 📎 counts | AT3-1–4 | AT-2, TV-U1, TV-U7 |
+| 3 | **AT-3** Everywhere + Storage settings | row/card drop targets, capture paste chip, 📎 mark on every surface, Settings → Storage; wires the strip's "Free up space" (storage-full line, `onFreeUpSpace`) to Settings → Storage; live 📎 counts from the `attachments` Realtime feed (published since TV-D11b) and the shared store, which also refreshes an open panel's strip | AT3-1–4 | AT-2, TV-U1, TV-U7 |
 
 ## Out of scope
 

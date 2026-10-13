@@ -271,6 +271,19 @@ describe("TaskDetailPanel — attachments (AT-2)", () => {
     expect(fakeQueue.add).toHaveBeenCalledTimes(1);
   });
 
+  it("takes a paste after a click on blank panel space (the panel holds focus)", async () => {
+    const { runtime } = fakeRuntime([]);
+    renderPanel(runtime);
+    await screen.findByRole("list", { name: "Attachments" });
+    const panel = screen.getByRole("region", { name: "Task details" });
+    // Focusable by a click, outside the Tab order.
+    expect(panel.tabIndex).toBe(-1);
+    panel.focus();
+    expect(document.activeElement).toBe(panel);
+    fireEvent.paste(panel, { clipboardData: fileTransfer([png()]) });
+    expect(fakeQueue.add).toHaveBeenCalledTimes(1);
+  });
+
   it("picks files through the + tile", async () => {
     const { runtime } = fakeRuntime([]);
     const { container } = renderPanel(runtime);

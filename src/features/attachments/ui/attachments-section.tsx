@@ -19,7 +19,7 @@ import { AttachmentViewer } from "./attachment-viewer";
 
 export type AttachmentsDropZone = Pick<
   React.HTMLAttributes<HTMLElement>,
-  "onDragEnter" | "onDragOver" | "onDragLeave" | "onDrop" | "onPaste"
+  "onDragEnter" | "onDragOver" | "onDragLeave" | "onDrop" | "onPaste" | "tabIndex"
 >;
 
 export type AttachmentsSectionState = {
@@ -68,6 +68,9 @@ export function useAttachmentsSection({
   };
 
   const dropZone: AttachmentsDropZone = {
+    // A click on blank space focuses the zone (not the page body), so ⌘V
+    // right after reaches it. Out of the Tab order.
+    tabIndex: -1,
     onDragEnter: (e) => {
       if (!acceptsFiles || !dragHasFiles(e.dataTransfer)) return;
       dragDepth.current += 1;
