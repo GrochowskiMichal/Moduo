@@ -3,9 +3,9 @@
 > **Status (2026-10-13): round 1 answered; round 1b sent (re-asks), two research lanes running for round 2.**
 >
 > - **Decided:** CH1–CH11, CH13–CH19, CH22 (no event workspace: Team plans per team), CH25, CH27, CH28. CH12 (threads) not accepted → CH30. CH24 parked. Facts: CH20 (≤ ~100 people, Polish + English, app in English, date unknown), CH21.
-> - **Open:** CH3a, CH4a, CH16a, CH16b, CH23a, CH26a, CH28a, CH28b; with round 2's prototype: ★ CH29 (the look, waiting on its research lane), ★ CH30 (replies, not threads: proposal written).
+> - **Open:** CH3a, CH4a, CH16a, CH16b, CH23a, CH26a, CH28a, CH28b; with round 2's prototype ([`prototypes/round-2.html`](./prototypes/round-2.html)): ★ CH29 the look (+ CH29a 15 px text, CH29b three quick reactions, CH29c past dates), ★ CH30 replies, not threads.
 > - **Maciej on the look:** v1's interface is a placeholder; nothing carries over unconfirmed; he likes Slack's and Discord's looks.
-> - **Research lanes** ([`research/`](./research/)): six landed and folded in (early-decisions audit, role journeys, competitor structure, hackathon, visual audit → §5, current state → §1.3 B and §6 #15–18). **Threads** landed (→ CH30). Running: **visual competitors** (→ CH29).
+> - **Research lanes** ([`research/`](./research/)): six landed and folded in (early-decisions audit, role journeys, competitor structure, hackathon, visual audit → §5, current state → §1.3 B and §6 #15–18). **Threads** (→ CH30) and **visual competitors** (→ CH29) landed.
 > - **Research data in the shared local database** (kept for round 2's live checks; remove when the plan is done): workspace **"Chat replan research"** `669be464-0b9a-4d84-8537-544ac04dba5f` (10 channels, 3,032 messages, one task) and a third local user `third@moduo.local`. Full ledger and a cleanup sketch: [current state](./research/current-state.md), last section. `dev@moduo.local`'s plan is back to `free` (checked).
 > - **Prototype:** [`prototypes/round-1.html`](./prototypes/round-1.html) (keys 1–7 frames, V variants; serve the folder over http to see the Geist font).
 > - **Uncommitted:** nothing.
@@ -694,7 +694,54 @@ The hackathon readiness plan (`t/maciej/hackathon-plan`) owns workspaces, invite
 
 ❓ (b) and (c)?
 
-**CH29 · The look** *(new topic; the next round's prototype answers it)* — Slack/Discord-grade visuals on Tasks' kit. A research lane is measuring Slack, Discord, Teams, Google Chat, Linear, Campfire, Zulip, Telegram, Element and Mattermost; the next prototype shows 2–3 complete variants, and lists every place a Tasks rule would have to bend.
+**★ CH29 · The look** *(new; [research/visual-competitors.md](./research/visual-competitors.md); prototype round 2, frames 1–2)*
+- **What makes Slack and Discord look good** (measured or read from their docs and open-source clients):
+  1. **Reading-size text:** nobody ships message text under 14 px; Slack is 15/22, Discord 16/22. v1 is 13.
+  2. **Hierarchy by weight, not grey:** the name is the body's size, just heavier (Slack 15/900, Discord 16/500); only the time is small and grey.
+  3. **Two speeds of space:** about 4 px between one person's lines, 17–21 px before the next person. That alternation is most of the "rhythm".
+  4. **One left edge** for text, reactions, files and reply lines.
+  5. **Flat rows, not bubbles** (Google added a compact mode to escape bubbles); **hover is a see-through fill**, never a border; the hover toolbar floats over the row's top edge.
+  6. **Colour only where it means something:** avatars, emoji, one mention colour, one "new" line. The text column is monochrome.
+  7. Both 2023 (Slack) and 2025 (Discord) redesigns moved to panels sitting on a frame, which is Moduo's shell already.
+- **Three complete variants, all on Tasks' tokens and kit** (frame 1, V):
+
+  | | **C · Moduo hybrid** (recommended) | **A · Slack calm** | **B · Discord depth** |
+  | --- | --- | --- | --- |
+  | Avatars | 32 round, two initials, a stable colour | 32 round | 40 round |
+  | Text | 15 / 22.5, names 15/600, times 12 grey | same | same, names 15/500 |
+  | Space before a new person | 18 px (4 px inside a group) | 18 | 22 |
+  | Rows | rounded, inset from the panel edge (Tasks' rows) | rounded | full width, square |
+  | Day headers | on the left, like every Tasks group header | centred on a line | centred on a line |
+  | Reactions | the kit's chip (rounded rectangle) | pills | chip |
+  | Composer | one row, filled | two rows (tools under the text) | one row, filled |
+  | New messages | an accent line + "New" | same | same + a floating "2 new" bar |
+
+- **Recommended: C.** It keeps everything Tasks decided (rounded rows, sentence-case left headers, the chip, the composer recipe, NavRow) and takes the four things that actually make Slack and Discord feel good: reading-size text, hierarchy by weight, the two-speed rhythm and one left edge. None costs a colour. A's centred dividers and two-row composer would be the only centred headers and the only two-row field in Moduo: Slack habits, not why Slack looks good. B's 40 px avatars suit busy public servers with photos; for 2–5 people with initials, they read heavy and spend width the text needs.
+- **Links stay monochrome** (underlined, not blue); **mentions of others** are a light grey mark; **`@you`** is the one solid accent mark in the text (CH28).
+- **48a:** reading-size text and calm rhythm suit everyone; heavy users get density (CH27).
+
+❓ C, A or B?
+
+**CH29a · Message text is 15 px at every density** *(bends CH27's "body text 14 px at every step")*
+- 15 px is on Moduo's type ladder (a Tasks title is 15); Slack is 15, Discord 16; 14 is where v1's "looks bad" starts. Density changes space and avatar size, never the reading size (frame 2 shows comfortable, compact, dense).
+- *Recommend: yes.*
+
+❓ OK?
+
+**CH29b · Hover shows three quick reactions, not six** *(bends CH16)*
+- The hover toolbar holds the first three of your quick reactions (CH16a), any emoji, then Reply · Task · ⋯. Six reactions plus the verbs is ten controls (≈280 px): it doesn't fit a reply chain in the 320 px right panel, and it's wider than Slack's or Discord's whole toolbar. All six stay at the top of the picker and of the right-click menu (frame 6).
+- *Recommend: three.*
+
+❓ OK?
+
+**CH29c · The past in the date grammar** *(an app-wide addition to rule 41)*
+- Today the grammar's weekday names mean the coming week ("Mon" = next Monday). Chat looks back: day headers and "last reply" times need **Today · Yesterday · Mon (last Monday, up to six days back) · Oct 9 · Oct 9, 2025**.
+- Notes' and Email's history need the same, so it's added to the grammar once, for the whole app. Still no "2 hours ago" (the grammar has no relative times).
+- *Recommend: yes.*
+
+❓ OK?
+
+*Technical, recorded in §6 rather than asked:* an avatar size that follows density (32/28/24), a filled composer with a 15 px input, an "unread" weight on NavRow, a size cap for images in messages. Each is a kit or token addition, made once for every module.
 
 **★ CH30 · Replies, not threads** *(rethought from CH12; [research/threads.md](./research/threads.md), prototype round 2)*
 - **What the research found:** his complaint is the oldest known problem with chat threads, and Slack's own team wrote it up first (2017): it was unclear when to start a thread, so they "did both interchangeably". Replies shown *in* the channel made busy channels unreadable; replies taken *out* stopped marking anything unread, so Slack had to invent an "All Threads" view. Google Chat and Teams moved toward Slack's model in 2023–25 and still get the same complaint (a June 2026 Google forum post). Discord's separate threads keep the up-front choice. **Nobody has solved "people don't pick the right place up front".** The tools that cope best **remove the choice** (every answer is just a reply; the app shows the structure: iMessage, WhatsApp) or **let anyone fix it afterwards** (Zulip moves messages between topics).

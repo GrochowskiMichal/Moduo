@@ -88,7 +88,7 @@ All [css] unless tagged. Class names stripped of hashes.
 | **Composer** | `channelTextArea`: 1 px `--border-muted` (4% grey on dark), **radius 8 px**, filled with the input colour; on focus the border steps to `--border-subtle`. Icons 20 px (`--chat-input-icon-size`). One row: + (attach) on the left, gift / GIF / sticker / emoji on the right; it grows with the text |
 | **Sidebar** | Channel rows ≈32 px; an unread channel gets a **4 × 8 px white pill** at the rail's left edge (`.unreadPill`) and a bright, bolder name; mentions get a red number badge; muted channels dim [css for the pill, approx for the rest] |
 | **Header** | 48 px title bar: # name · topic (truncated, muted) · icons (threads, notifications, pins, members) · search [approx] |
-| **Surfaces (resolved per theme)** | **Ash:** base L 0.30 → 0.34, chat 0.35, body text 0.96, muted 0.75. **Dark:** base 0.18 → 0.25, chat 0.26, body 0.95, muted 0.68. **Onyx:** base pure black, chat 0.17, surfaces 0.15–0.18, body **0.87** (deliberately dimmed on black), names 0.90, muted 0.61. **Light:** chat white, body 0.30. Hover and borders are translucent grey (12%), so they re-resolve on every theme |
+| **Surfaces (resolved per theme; the stylesheet's classes are `theme-dark`, `theme-darker`, `theme-midnight`; mapping them to Ash, Dark and Onyx is my inference from their lightness and the "Midnight is now Onyx" note)** | **Ash:** base L 0.30 → 0.34, chat 0.35, body text 0.96, muted 0.75. **Dark:** base 0.18 → 0.25, chat 0.26, body 0.95, muted 0.68. **Onyx:** base pure black, chat 0.17, surfaces 0.15–0.18, body **0.87** (deliberately dimmed on black), names 0.90, muted 0.61. **Light:** chat white, body 0.30. Hover and borders are translucent grey (12%), so they re-resolve on every theme |
 
 ### 1.3 Microsoft Teams (new Teams, 2024–26)
 
@@ -152,7 +152,7 @@ All [src] (`basecamp/once-campfire`, `app/assets/stylesheets/messages.css`, `mod
 | **Sidebar** | Channel rows **27.4 px**, 16 px labels, unread counts as plain numbers on a pill [live for rows] |
 | **Header** | 40 px [live] |
 | **Composer** | Collapsed into "Start new conversation" / "Reply" buttons until clicked (spectators can't post) [live] |
-| **Density** | "Information density" settings: font size and line spacing [doc] |
+| **Density** | Font size 12–20 from the profile menu, plus a separate line-spacing setting [doc] |
 | **Take-away** | Strong structure, but heavy: three text weights in one line, a coloured bar per topic, time far from the name. Proves that a 40 px rounded-square avatar plus 16 px body reads well; also proves that too many bars feel bureaucratic |
 
 ### 1.8 Telegram Desktop (open source)
@@ -306,4 +306,276 @@ Round 1 (`prototypes/round-1.html`, measured at 1440 × 900):
   - **14.5 px isn't a token** (the ladder has 14 and 15).
   - **The composer recipe is ad hoc** (a 3% fill and a 14% border nobody else uses); the kit's FeedComposer is hairline-only.
   - **Reactions are a third chip look:** 22 px full pills with a hairline and 12 px text, not the kit's Chip.
-  - **The hover toolbar is ten controls** (six reactions, any emoji, Reply, "Task", ⋯) at 26 px: about 270 px, more than a 320 px thread panel can spare beside a message.
+  - **The hover toolbar is ten controls** (six reactions, any emoji, Reply, "Task", ⋯) at 26 px: about 270 px, more than the 320 px right panel can spare when a reply chain is open there.
+
+---
+
+## 4. Moduo's best chat look (the recommended variant, C)
+
+Expressed only in Moduo's tokens and kit. "New" in a cell means the kit or the tokens need an addition; §6 lists each one as a tension for the designer.
+
+### 4.1 Eight principles, taken from §3 and fitted to Moduo
+
+1. **Reading-size content:** messages at `text-md` 15 px / `--leading-normal` 1.5 (22.5 px), the same size as a Tasks title. Not 13 (v1), not 14.5 (round 1).
+2. **Hierarchy by weight:** name 15 / 600, body 15 / 400, meta 12 in the tertiary level. Three readable levels (rule 38), nothing fainter.
+3. **One anchor per group:** PersonAvatar + name once; continuation lines bare.
+4. **Two speeds of space, bound to density:** 4 px between lines of a group at every density; 18 / 15 / 12 px before a new group (comfortable / compact / dense).
+5. **One content inset** for body, reactions, files, reply lines, system lines and the hover time.
+6. **Chrome on demand, one floating surface:** the hover toolbar, gutter time and add-reaction chip fade in in reserved space; the toolbar is `FLOATING_SURFACE`.
+7. **One accent mark per fact** (CH28, rule 46): the `@you` mark and the "New" line; selection and Send are the accent's other two uses. Everything else is the state layer.
+8. **Everything translucent:** `state-*` fills and `hairline`, so the whole module follows shades, accents and light/dark with no chat-only colour.
+
+### 4.2 The message row (`MessageRow`, chat-only)
+
+A chat-only primitive, like Tasks' Timeline (re-plan §5: "the message row needs its own north-star definition"). It isn't the kit's `Row` because messages vary in height; it uses Row's language (rounded inset, fill hover, the selection recipe).
+
+| Part | Token / component | Comfortable | Compact | Dense |
+| --- | --- | --- | --- | --- |
+| List side padding | `px-2` | 8 | 8 | 8 |
+| Row radius | `rounded-md` | 8 | 8 | 8 |
+| Row padding, inline | `--pad-x-sm` | 12 | 10 | 8 |
+| Row padding, block (every row) | `py-0.5` | 2 | 2 | 2 |
+| Group start: extra space above | `margin-top: --pad-y` + `padding-top: --pad-y-sm` | 10 + 6 | 8 + 5 | 6 + 4 |
+| → text-to-text gap inside a group / before a group | — | **4 / 18** | **4 / 15** | **4 / 12** |
+| Avatar | `PersonAvatar`, round (`rounded-avatar`), hue via `bg-label-fill`, two initials; **new** density-bound size `--avatar-row` | 32 | 28 | 24 |
+| Avatar initials | `personFill`: `text-xs` / `text-2xs` / `text-2xs`, 600 | 12 | 11 | 11 |
+| Avatar position | top-aligned with the name line | — | — | — |
+| Avatar → text gap | `--pad-x-sm` | 12 | 10 | 8 |
+| **Content inset** (row edge → text; add 8 for the panel edge: 64 / 56 / 48, Slack's 64 at comfortable) | sum of the above | **56** | **48** | **40** |
+| Name | `font-sans text-md font-semibold text-foreground`, line `--leading-normal` | 15 / 600 | 15 / 600 | 15 / 600 |
+| "via Claude" (CH18) | `text-xs text-muted-foreground` after the name | 12 | 12 | 12 |
+| Time by the name | `font-sans text-xs text-subtle-foreground tabular-nums`, `formatTime` ("3:00 PM"), tooltip `formatStamp` ("Oct 6, 12:07 PM"), `gap-2` after the name, baseline-aligned | 12 | 12 | 12 |
+| Body | `font-sans text-md text-foreground`, `--leading-normal`; paragraphs `mt-1.5` | 15 / 22.5 | 15 / 22.5 | 15 / 22.5 |
+| Continuation time (gutter) | `text-2xs text-subtle-foreground tabular-nums`, right-aligned in the inset, `opacity-0 → 100` on row hover / focus-within over `--motion-fade` | 11, shown | 11, shown | **hidden** (the inset is too narrow for "12:59 PM"; the time stays in the row's tooltip) |
+| Hover | `bg-state-hover` (5%), `--motion-fade` | — | — | — |
+| Keyboard-selected message (↑/↓, `R`, `T`) | `SELECTED_ROW` (accent tint + edge); focus ring `ring-2 ring-ring/50` inset | — | — | — |
+| Landing from a link | `SELECTED_ROW` for 2 s, then fades over `--motion-slow` | — | — | — |
+
+**Grouping rule (no product documents a better one):** same author, nobody else in between, the same day, no "New" line between, and **at most 5 minutes** since their previous message (Mattermost and Campfire's window; Telegram's 15 min is for 1:1; Zulip's "no window" works only because topics split the stream).
+
+### 4.3 Hover toolbar
+
+| Part | Token / component | Value |
+| --- | --- | --- |
+| Surface | `FLOATING_SURFACE` + `shadow-md`, `p-0.5` | popover fill, 1 px hairline, `rounded-md` |
+| Position | absolute, top = −(half a small control + 2 px), right = `--pad-x-sm`; overlaps the row's top edge like Slack, Discord and Element | ≈ −15 / −14 / −13 px |
+| Buttons | `IconButton size="sm"` (`--ctrl-h-sm` 26 / 24 / 22); emoji buttons on the same rung with emoji at `--icon` (16 / 15 / 14) | — |
+| Separator | `w-px h-4 bg-hairline mx-1` | — |
+| Contents (recommended) | **3 quick reactions** (the first three of your personal row, CH16a) · ☺+ (any emoji) · │ · Reply (CH30's one action) · Make a task · ⋯ | 7 controls ≈ 196 px at comfortable |
+| Contents (CH16 as decided) | the six reactions · ☺+ · │ · Reply · Task · ⋯ | 10 controls ≈ 280 px; doesn't fit the 320 px right panel (§6 #13) |
+| Arrival | opacity over `--motion-fade`, no movement; stays while its ⋯ menu is open | — |
+| Same verbs elsewhere | right-click opens the same items with a quick-reaction row on top (v1's good idea, kept) | — |
+
+### 4.4 Reactions
+
+| Part | Token / component | Comfortable | Compact | Dense |
+| --- | --- | --- | --- | --- |
+| Row | `mt-1`, `flex flex-wrap gap-1` under the body | 4 | 4 | 4 |
+| Chip | `ChipButton size="xs"` (`--ctrl-h-xs`), `shape="md"` (radius 8, the kit's chip shape and Discord's) | 24 | 22 | 20 |
+| Emoji | `--icon` | 16 | 15 | 14 |
+| Count | Chip xs text: `text-sm tabular-nums text-muted-foreground` | 13 | 13 | 13 |
+| You reacted | `active` → `bg-state-active`; count `text-foreground font-medium`. **Neutral, not the accent** (rule 46) | — | — | — |
+| Hover | the chip's own `hover:bg-state-hover` / `hover:bg-state-active-hover` | — | — | — |
+| Who reacted | tooltip on `FLOATING_SURFACE`: "Sofia, Alex and you" | — | — | — |
+| Add reaction | `ChipButton xs` with `SmilePlus`, muted; fades in at the end of the row on hover (reserved slot); only when reactions exist | — | — | — |
+| Custom emoji (CH16b) | a 16 px image inside the same chip | — | — | — |
+| Hit target | `.hit-min` keeps 24 px at dense | — | — | — |
+
+### 4.5 Replies (styled for CH30's proposal: replies, not threads)
+
+CH30 proposes one action, Reply: a reply posts in the stream with a quote line; a message with replies gets a reply line; a tangled chain folds into one row. These are the looks, in the same tokens.
+
+| Part | Token / component | Value |
+| --- | --- | --- |
+| **Quote line** (above a reply's body) | one line, height 20: `CornerUpLeft` at `--icon-xs` in `text-subtle-foreground` · `PersonAvatar size="icon"` · the author `text-sm font-medium text-foreground` · the quoted words `text-sm text-muted-foreground`, truncated (people's words give way, rule 42); hover `bg-state-hover rounded-sm`; click jumps to the original. Discord's reply preview, without its curved spine | 13 |
+| **Reply line** (under a message with replies): "2 replies · Alex, Mike ›" | `mt-1`, height `--ctrl-h-sm` (26 / 24 / 22), `-ms-1 px-1 rounded-md gap-2`: `AvatarGroup` of up to 3 `PersonAvatar size="icon"` (`ring-2 ring-card`, `-space-x-1`) · "2 replies" `text-sm font-medium text-foreground` · the names `text-sm text-muted-foreground` · `ChevronRight` `--icon-xs` tertiary. New replies: "2 new" in the count's style (no dot, no colour). Hover `bg-state-hover`; the chain open in the panel: `bg-state-active` | 13 / 500 |
+| **Folded chain row** (CH30 item 3) | one row at the content inset, height `--row-h-sm` (28 / 26 / 24), `rounded-md`, hover `bg-state-hover`: `CornerDownRight` `--icon-sm` tertiary · "Sofia's" `font-medium` + the quoted start in `text-muted-foreground` · "6 replies" `font-medium` · "Anna: Sent them…" muted · the time `text-xs` tertiary (`formatWhen`); all `text-sm`; the quote gives way first | 13 |
+| **Wrapped-up chain** (CH30 item 4) | the folded row with a `Check` at `--icon-xs` and the settling reply's words instead of the latest; no colour (the done check's accent is Tasks' alone) | — |
+| Times | `formatWhen` ("3:40 PM", "Mon, 3:40 PM"); no "2 hours ago", the grammar has no relative form | 12 |
+
+### 4.6 Text marks inside a message
+
+| Mark | Token / component |
+| --- | --- |
+| `@person` | inline, `font-medium text-foreground bg-state-active rounded-sm px-0.5`; hover `bg-state-active-hover`; opens the person card |
+| **`@you`, `@channel`, `@everyone`** | inline, **`bg-primary text-primary-foreground font-medium rounded-sm px-0.5`**: the one accent mark in the text. On the default mono accent it's a white mark with near-black text, the strongest contrast on the screen, so it's found without a row tint (§6 #4) |
+| `#tag` (CH14) | the Tasks tag chip (shared tag store), inline at Chip `xs` |
+| References (RF-1) | `EntityRefChip` inline; a reference alone on a line becomes its RF-1 card |
+| Links | `text-foreground underline underline-offset-2 decoration-muted-foreground`, hover `decoration-foreground`. Not blue: the text column stays monochrome |
+| Inline code | `font-mono text-sm bg-state-active rounded-sm px-1` |
+| Code block | `font-mono text-sm` / `--leading-normal`, `bg-state-hover ring-1 ring-inset ring-hairline rounded-md px-3 py-2`, horizontal scroll; over 20 lines → "Show more" (`Button ghost sm`); Copy `IconButton sm` fades in at top-right |
+| Quote | `border-s-2 border-hairline ps-3 text-muted-foreground` |
+| Emoji, four sizes | inline in text 1.375em (≈20 px; Discord's ratio) · reactions and toolbar `--icon` · picker grid `--icon-lg` (20 / 18 / 16) · jumbo (≤ 3 emoji alone) `text-4xl` 36 |
+
+### 4.7 Files, images, previews
+
+| Item | Token / component | Value |
+| --- | --- | --- |
+| One image | `max-w-[…]` is banned (R10), so a **new** layout token `--media-max` (400 × 300, both densities); `rounded-md`, `ring-1 ring-inset ring-hairline` over the image so dark images separate from the card; ⋯ `IconButton sm` on `FLOATING_SURFACE` in the corner on hover; click → the AT-3 viewer | 400 × 300 |
+| Several images | 2-column grid, `gap-1`, square crops at half `--media-max`; outer corners `rounded-md`, inner square (R3) | — |
+| File | the kit `Card` in its compact form: `px-3 py-2 gap-3`, max width 360; a 32 px tile (`rounded-md bg-state-active`, `FileText` at `--icon`, muted) · name `text-base font-medium` (truncates in the middle) · "PDF · 2.4 MB" `text-xs text-subtle-foreground`; hover `bg-state-hover`; Download `IconButton sm` fades in | 48 tall |
+| PDF (CH17 previews inline) | first-page thumbnail 200 × 260, `rounded-md ring-hairline`, the file line under it | — |
+| Uploading | a neutral `Progress` inside the file card; failure "Not uploaded · Retry" | — |
+| Link preview (outside sites; "Later" per CH26) | `Card`: `rounded-lg border-hairline p-3`, max 520; site `text-xs` tertiary · title `text-base font-medium` · description `text-sm text-muted-foreground`, 2-line clamp · a 64 px thumbnail at the right or an image (max height 240) below. **No coloured side bar** (Slack's grey bar and Discord's coloured bar both left out) | — |
+
+### 4.8 States and system lines
+
+| State | Treatment |
+| --- | --- |
+| Edited | "(edited)" `text-xs text-subtle-foreground` after the last line; tooltip "Edited Oct 6, 12:07 PM" |
+| Editing in place | the composer recipe (§4.10) replaces the body in the row; "Esc to cancel · ⏎ to save" in `text-xs` tertiary with `Kbd`. No legacy fill |
+| Sending | the body at a state fade (`opacity-60`, ≈7:1, as v1); a spinner only after 2 s |
+| Not sent | under the body: `CircleAlert` (`--icon-sm`, muted) · "Not sent" `text-xs text-foreground` · `Button ghost sm` "Retry" · "Discard" (24 px hits). Neutral: no red |
+| Deleted with replies | "Deleted message" in `text-muted-foreground`; reactions go, the reply line stays (tech decision 10) |
+| Pinned | `Pin` at `--icon-xs` + "Pinned" `text-xs` tertiary after the time. No row tint |
+| Joins, leaves, renames, topic, links (CH2) | `FeedItem` at the content inset: `PersonAvatar icon` · `text-xs text-muted-foreground` with the actor in `font-medium` · the time tertiary. Height `--row-h-sm`. Consecutive joins collapse: "Alex, Sofia and 2 others joined" |
+| Start of a conversation | `EmptyState size="inline"` with the conversation's icon: "This is the start of Acme" + the linked item's card when there is one |
+
+### 4.9 Dividers
+
+| Divider | Token / component | Value |
+| --- | --- | --- |
+| **Day** | `GroupHeader sticky` (`--row-h-sm`: 28 / 26 / 24; label `text-sm font-medium` sentence case) followed by a `flex-1 h-px bg-hairline` rule; `bg-card` while stuck; `mt-(--pad-y)`. Label from the grammar: **Today · Yesterday · Mon · Oct 9 · Oct 9, 2025** (the past weekday needs a grammar addition, §6 #7). Left-aligned, like every Tasks group header | 28 / 26 / 24 |
+| **New** | a 1 px `bg-primary` rule from the content inset to the row's end, with "New" in `text-xs font-medium text-primary` at the right end on a `bg-card` pad; 16 px tall, `my-1`. The one accent line (CH28) | 16 |
+| Unread above the view | a floating `ChipButton sm` on `FLOATING_SURFACE` at the top centre: "12 new · Mark read" | — |
+| Scrolled up | "↓ Jump to latest" `ChipButton sm` on `FLOATING_SURFACE` at the bottom centre | — |
+
+### 4.10 Composer
+
+| Part | Token / component | Comfortable | Compact | Dense |
+| --- | --- | --- | --- | --- |
+| Surface | `FeedComposer` with a **new `filled` look**: `bg-state-hover` + `border-hairline` at rest, `focus-within:border-border` (FeedComposer's own focus step); `rounded-lg` | — | — | — |
+| Placement | bottom of the centre panel, `mx-2 mb-2` so it lines up with the rows' rounded inset | 8 | 8 | 8 |
+| Min height | `--ctrl-h-lg` | 40 | 36 | 32 |
+| Text | the shared editor (CH15) at the **message size**: `font-sans text-md`, `--leading-normal` ("what you type is what you'll see"); FeedComposerInput is `text-sm` today, so it needs a size option | 15 / 22.5 | 15 / 22.5 | 15 / 22.5 |
+| Max height | `max-h-60`, then scrolls | 240 | 240 | 240 |
+| Placeholder | "Message Acme" · "Message Sofia Ortiz" · in the panel's chain: "Reply to Sofia" | — | — | — |
+| At rest (CH15) | one row, Discord's shape: `IconButton sm` Attach on the left · text · `@` · Emoji · Send on the right | 26 | 24 | 22 |
+| Send | `IconButton sm`, ghost and `text-subtle-foreground` while empty; `variant="default"` (`bg-primary`) once there's text: the surface's one primary | — | — | — |
+| Selected text | a mini `Toolbar` (`gap="tight"`) on `FLOATING_SURFACE` above the selection: Bold · Italic · Strike · Code · Link │ Quote · List · Code block | — | — | — |
+| Suggestions (`@` `#` `/` `:`) | the editor's RF-1 menus: `Command` on `FLOATING_SURFACE`, `state-active` highlight | — | — | — |
+| Attachments waiting | the `leading` slot: 56 px thumbnails (`rounded-md ring-hairline`, × with `.hit-min`) and file `Chip sm` with `onRemove`; `gap-1.5`; a neutral `Progress` under each while uploading | — | — | — |
+| Typing | a reserved `h-5` line under the composer, `text-xs text-subtle-foreground`, "Sofia is typing…", text aligned with the composer's text; fades over `--motion-fade` | 20 | 20 | 20 |
+| Can't post (archived, announcements) | a plain `text-sm text-muted-foreground` line in the composer's place, no well | — | — | — |
+
+### 4.11 Left panel (CH5 decided the shape)
+
+| Part | Token / component | Comfortable | Compact | Dense |
+| --- | --- | --- | --- | --- |
+| Row | `NavRow` (`--row-h`, `font-display text-base font-medium`) | 36 | 32 | 28 |
+| Catch up | `NavRow` + count, then the hairline split (Tasks' rail divider) | — | — | — |
+| Sections | `NavSectionHeader` ("Channels", "Direct messages", "Pinned"), sentence case, collapsible and remembered, hover + ("New channel", "New message") | 28 | 26 | 24 |
+| Channel icon (CH3) | the 16 px slot: project `NavRowDot` · company icon · `TeamMark size="icon"` · `Lock` · `MessageCircle` | — | — | — |
+| Direct message | `PersonAvatar size="icon"` + a **neutral** presence dot: 6 px, filled `bg-muted-foreground` = active, a ring = away, nothing = offline; `ring-2 ring-card`. `AvatarBadge` is `bg-primary` today, so it needs a neutral option | 16 | 15 | 14 |
+| Group DM | two 11 px discs in the two people's hues, overlapped, **no letters** (two initials can't fit 11 px; §6 #15) | — | — | — |
+| Unread | label `text-foreground font-semibold` (CH5 "unread is weight"); **new** `unread` prop on NavRow, which today sets every label to 500 | — | — | — |
+| Count (only what's addressed to you) | NavRow's count, `text-xs tabular-nums`; `text-foreground font-medium` for mentions and DMs, muted for "Every message" channels | — | — | — |
+| Muted conversation | label `text-subtle-foreground` (not `opacity-60`, which measured 3.47:1), `BellOff` at `--icon-xs` as the indicator, never bold | — | — | — |
+| Current | `NavRow current` → `bg-state-active text-foreground` | — | — | — |
+
+### 4.12 Conversation header (the centre panel's title row)
+
+- **The Tasks toolbar recipe:** `pt-3 pe-3 pb-2 ps-4`; title `font-display text-lg font-semibold tracking-tight` (18 / 600).
+- **Left to right:** the conversation's icon (`--icon`) or, for a DM, `PersonAvatar size="sm"` (24) · the name · the linked item as a `Chip xs` with its dot (CH2) · faces: `AvatarGroup` of 3 `PersonAvatar size="icon"` + the count in `text-sm text-subtle-foreground` (opens Details) · `Toolbar.Spacer` · Search `IconButton sm` · ⋯ `IconButton sm` (Notifications ▸, Pin to sidebar, Mark as read, Leave).
+- **No topic line** (Slack moved it to details in 2023; it keeps the header one line, like Tasks): the topic lives in Details.
+- **No panel toggles here** (48b, 72a): the right panel opens from the bottom bar and switches in its own title row.
+
+### 4.13 Right panel (a reply chain, Details)
+
+- **Header:** the shared right-panel title row (44 px, view name 13 / 600, the dropdown).
+- **A reply chain** (CH30 item 2, opened as an item with a back arrow): the first `MessageRow`, then `GroupHeader` "3 replies" with a hairline, the replies in order, the filled composer.
+- **Geometry:** same type (15 / 22.5), but `PersonAvatar size="sm"` (24) and a 40 px inset at every density, because the panel is 320–340 px wide (§6 #14).
+- **Hover toolbar in the panel:** 3 reactions · ☺+ · ⋯.
+
+### 4.14 Surfaces and colour
+
+| Layer | Dark (default black shade) | Light |
+| --- | --- | --- |
+| Frame | `--background` black | `--background` neutral-50 |
+| Chat panels | `--card` (L 0.14), 1 px hairline edge, `rounded-lg` (the shell's panels) | white card |
+| Floating (toolbar, menus, tooltips) | `--popover` (L 0.18) + hairline + `shadow-md` | white + shadow |
+| Hover / pressed / selected | 5% / 9% foreground / 13% accent | same formulas |
+| Text | foreground ≈19:1 on the card; secondary ≈8:1; tertiary ≈6:1 (audit measurements) | secondary 4.29:1 on light: a token issue, out of scope |
+| Colour in a conversation | avatar hues (`bg-label-fill`), emoji, project dots, tag colours, the accent for `@you` / New / selection / Send. Nothing else | same |
+
+**Against the competition:** Moduo's chat surface (L 0.14 under 0.985 text) is darker than Discord's Onyx chat (0.17, body text dimmed to 0.87) and Slack's dark (≈0.21), and its text is brighter than either. The shades (warm, cool, slate, plum, forest) re-tint everything for free because chat uses only translucent tokens, the same move as Discord's Ash / Dark / Onyx ladders.
+
+### 4.15 Motion
+
+- Hover fills, the toolbar, the gutter time and the add-reaction chip: opacity or colour over `--motion-fade` (100 ms), `--ease-out`. Nothing moves.
+- Someone else's message arriving while you're at the bottom: `.motion-row` (height + opacity). Your own sent message appears at once.
+- The "New" line fades out over `--motion-slow` once read.
+- Reduced motion: opacity only (R6). No blur anywhere.
+
+---
+
+## 5. Three variants worth prototyping
+
+Each should be built as a frame in the round-2 prototype on the round-2b shell, at **comfortable and dense**, on **mono and blue** accents (the `@you` mark behaves differently on each), with the same conversation content.
+
+| | **A · Slack calm** | **B · Discord depth** | **C · Moduo hybrid** (recommended) |
+| --- | --- | --- | --- |
+| Avatar | 32 / 28 / 24, round | **40** (`lg`) / 32 / 24, round | 32 / 28 / 24, round |
+| Content inset | 56 / 48 / 40 | **64** / 52 / 40 | 56 / 48 / 40 |
+| Name | 15 / 600 | 15 / **500** (Discord's weight) | 15 / 600 |
+| Body | 15 / 22.5 | 15 / 22.5 | 15 / 22.5 |
+| Space before a group | 18 / 15 / 12 | **22 / 18 / 14** (Discord's 21; no token gives it exactly, so it would take a chat spacing token) | 18 / 15 / 12 |
+| Row hover | rounded inset rows | **full-bleed** fill, square left edge | rounded inset rows |
+| Day divider | **centred** label on a hairline, sticky | **centred** label on a hairline | left `GroupHeader` + hairline (Tasks' grammar) |
+| Reactions | Chip xs, **`shape="full"`** (pills) | Chip xs, `shape="md"`, 24 at every density with 16 px emoji | Chip xs, `shape="md"`, density-bound |
+| Composer | **two rows**: text, then a tools row (Attach · Aa · @ · Emoji … Send) | one row, filled | one row, filled (FeedComposer `filled`) |
+| Hover toolbar | 3 reactions + verbs | 3 reactions + verbs | 3 reactions + verbs |
+| New messages | accent line + "New" | accent line + "New" **+ a floating "12 new" bar at the top** | accent line + "New"; the floating chip only when the line is off-screen |
+| Feels like | Slack's 2023 calm | Discord's spacious, avatar-led look | Tasks' language with Slack's and Discord's reading rhythm |
+
+**Recommendation: C.**
+- **It keeps everything Tasks decided** (rounded inset rows, sentence-case left-aligned group headers, Chip md, FeedComposer, NavRow) and **takes the four things that actually make Slack and Discord feel good**: reading-size text, hierarchy by weight, the two-speed rhythm, and one inset. None of the four costs a new colour.
+- **A's centred pill dividers and two-row composer** would be the only centred headers and the only two-row field in Moduo; they're Slack habits, not why Slack looks good.
+- **B's 40 px avatars** suit Discord's busy public servers with photo avatars. For 2–5 people whose avatars are mostly two initials on a hue, a 40 px disc reads heavy, and a 64 px inset in an ≈800 px centre panel spends width the text needs. Worth prototyping because Maciej named Discord, to see it side by side.
+
+---
+
+## 6. Where a Tasks rule or a round-1 decision would have to bend
+
+Each row: the rule, what Slack and Discord do, and my recommendation. ★ = it changes something already decided.
+
+| # | Rule or decision | Slack / Discord | What would bend | Recommendation |
+| --- | --- | --- | --- | --- |
+| 1 ★ | **CH27: "body text 14 px at every step"** | 15 / 16 px | Messages at `text-md` 15 / 22.5 | **Bend: 15 px at every density.** It's on the ladder (Tasks titles are 15), it's the size Maciej's two favourites sit at, and 14 is where v1's "looks bad" starts. Density changes space and avatars, not the reading size |
+| 2 | **Avatar rungs are fixed** (16 / 24 / 32 / 40; only `icon` scales); rule 44 says density applies to everything | one size | A density-bound **`--avatar-row`** token (32 / 28 / 24) and a `size="row"` on Avatar: a token edit is a system edit (R10) | **Add it.** Fallback without a token: 32 / 32 / 24 |
+| 3 | **People round, teams square** (calls 43, 95) | Slack: rounded squares; Discord: circles | Nothing, if kept | **Keep round.** Discord proves a round avatar looks as good; square stays the team signal |
+| 4 | **The `@you` mark** (CH28; R5 lists "mention tint") | Slack: yellow highlight; Discord: yellow row tint + 2 px bar + blurple pill | A **solid** `bg-primary` mark instead of a 14% tint | **Solid.** On the default mono accent a 14–22% white tint sits within a few percent of other people's 9% neutral mention, so only a solid mark is found at a glance |
+| 5 | **No row tint or bar for mentions** (CH28, decided) | Both rely on it | Nothing: it's decided | **Keep.** The rail count and Catch up carry the "find my mentions" job instead |
+| 6 | **"New" line in the accent, no red** (CH28, brand) | red everywhere | Nothing | **Keep.** On mono it's a white line, still the only full-width accent mark |
+| 7 | **Date grammar (rule 41)** has weekdays only for the coming week ("Mon" means next Monday) | "Friday, October 10th" / "October 10, 2025" | Add a **past** form: "Yesterday", then "Mon"–"Sat" for the last six days, then "Oct 9" | **Add it, app-wide.** Day headers, "Last reply Mon, 3:40 PM", Notes' and Email's history all need it |
+| 8 | **No "how long ago" in the grammar** | Slack: "Last reply 2 hours ago" | Nothing if kept | **Keep the grammar:** "Last reply 3:40 PM" / "Mon, 3:40 PM" |
+| 9 | **R4 puts `text-2xs` (11 px) on eyebrows only; rule 41 says times never truncate** | Discord's gutter time is 11 px; Slack drops "AM/PM" in the gutter | Gutter time at 11 px; at dense it's **hidden** (tooltip only) rather than shortened | **Allow 11 px for the gutter time;** hide it at dense |
+| 10 | **FeedComposer is hairline-only, text 13 px** | filled or clearly bordered, body-size text | A `filled` look and a `size` on FeedComposerInput | **Add both to the kit;** Tasks' comment box can stay hairline |
+| 11 | **NavRow sets every label to 14 / 500 muted** | bold white unread names | An `unread` prop (foreground + 600) | **Add it** (CH5 already decided "unread is weight") |
+| 12 | **Accent budget (rule 46)**: "you reacted" isn't on the list | brand-blue / blurple | Nothing if kept | **Keep neutral** (`state-active`); your reactions are a fact about you, not a status |
+| 13 ★ | **CH16: "the six fixed reactions are the one-click row on hover"** (CH16a, open, makes the row personal) | 3 quick reactions | 3 on hover (the first three of your row); all six at the top of the ☺ picker and the right-click menu | **Bend to 3.** Ten controls (≈280 px) don't fit the 320 px right panel and are wider than Slack's or Discord's whole bar |
+| 14 | **Rule 44: density applies to everything** | thread panels use the same rows | The right panel's chain uses `sm` avatars and a 40 px inset at every density | **Bend for the panel only.** At 320 px, a 56 px inset leaves ≈230 px for text |
+| 15 | **Rule 43: two initials** | — | Group-DM marks are two 11 px colour discs without letters | **Allow it in the 16 px rail slot only;** the header and Details show full avatars |
+| 16 | **Monochrome text column** | blue links | Links stay `text-foreground` + underline | **Keep;** no bend, just a visible difference from Slack |
+| 17 | **Three text levels (rule 38)** | Discord dims the body a step below the names (`--text-default` under `--text-strong`) | A fourth "reading" tone | **Keep three levels.** Weight already separates names; revisit only if long threads glare on black |
+| 18 | **Presence dot** (CH28 neutral; CH28a still open) | green | Nothing if kept | **Neutral filled / ring.** Green measured 2.17:1 on light; neutral passes both themes |
+| 19 | **Day header alignment** (GroupHeader left, sentence case) | centred over a hairline | Variants A and B test centred | **Keep left** in C; let the prototype show both |
+| 20 | **`max-w-[…]` banned (R10)** | images capped at ≈360–400 px | A layout token `--media-max` | **Add it** (Notes will want it too) |
+
+**Not tensions, for the record:** a chat-only `MessageRow` beside the kit's `Row` (allowed; re-plan §5 lists it as chat-only); the toolbar's `shadow-md` (FLOATING_SURFACE leaves the shadow to each primitive); 600 for names (brand weights 400 / 500 / 600; never 700); Geist only.
+
+---
+
+## 7. Sources
+
+- Slack: [Change your message display (Clean / Compact)](https://slack.com/help/articles/213893898) · [Change the font in Slack](https://slack.com/help/articles/33702041349395) · [An overview of Slack's new design](https://slack.com/intl/en-au/help/articles/16764236868755-An-overview-of-Slacks-new-design) · [Show members' full names](https://slack.com/intl/en-gb/help/articles/115004686586-Show-members-full-names-in-your-workspace) · [Stanford's notes on the 2023 redesign](https://uit.stanford.edu/service/slack/redesign2023)
+- Discord: shipped CSS read from the logged-out [discord.com/login](https://discord.com/login) (message, reaction, divider, composer and theme rules; resolved per theme in the page) · [Mobile Visual Refresh: what's changing](https://support.discord.com/hc/en-us/articles/42383370736023-Mobile-Visual-Refresh-What-s-Changing) · coverage of the March 2025 desktop refresh ([Beebom](https://beebom.com/discord-desktop-update-new-themes-game-overlay-rolling-out/amp/), [Yahoo Tech](https://tech.yahoo.com/general/article/discords-redesigned-pc-app-has-multiple-dark-modes-a-new-overlay-and-more-160019822.html)) · [community post on the grouping window](https://support.discord.com/hc/vi/community/posts/360030111231-Update-to-messages-layout-for-chats)
+- Teams: [Change the spacing of your chat messages](https://support.microsoft.com/en-US/teams/chat/change-the-spacing-of-your-chat-messages-in-microsoft-teams) · [Chat density settings](https://support.microsoft.com/en-gb/office/customize-your-teams-chat-interface-with-chat-density-settings-c93fd71d-4a35-4712-961a-be76bad50925)
+- Google Chat: [New density setting in Google Chat (Oct 2024)](https://workspaceupdates.googleblog.com/2024/10/new-density-setting-in-google-chat.html)
+- Linear: [How we redesigned the Linear UI](https://linear.app/blog/how-we-redesigned-the-linear-ui) · [New Linear UI changelog, Mar 2024](https://linear.app/changelog/2024-03-20-new-linear-ui)
+- Campfire: [basecamp/once-campfire](https://github.com/basecamp/once-campfire) (`app/assets/stylesheets/messages.css`, `app/javascript/models/message_formatter.js`)
+- Zulip: live on [chat.zulip.org](https://chat.zulip.org/#narrow/channel/2-general) (public view) · [Font size help](https://zulip.com/help/font-size) · [zulip/zulip](https://github.com/zulip/zulip) (`web/styles/message_row.css`, `web/src/message_list_view.ts`)
+- Telegram Desktop: [telegramdesktop/tdesktop](https://github.com/telegramdesktop/tdesktop) (`Telegram/SourceFiles/ui/chat/chat.style`, `history/history_item.cpp`)
+- Element: [element-hq/element-web](https://github.com/element-hq/element-web) (`packages/shared-components/src/room/timeline/event-tile/EventTileView/EventTileView.module.css`)
+- Mattermost: [mattermost/mattermost](https://github.com/mattermost/mattermost) (`webapp/channels/src/sass/components/_post.scss`, `webapp/channels/src/utils/constants.tsx`)
+- Moduo: `.design/tasks-v3/REPLAN.md` §5 and group F, `specs/tasks-v3.md` §19, `src/styles/tokens.css`, `docs/DESIGN_RULES.md`, `src/components/ui/` (kit), `.design/brand/DECISIONS.md`, `.design/chat-v2/REPLAN.md`, `research/visual-audit.md`, `prototypes/round-1.html` (measured live)
