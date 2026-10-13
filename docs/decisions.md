@@ -139,6 +139,8 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Notes, Lexical, Yjs, Notion import → [decisions/notes.md](decisions/notes.md)
 
+- 2026-10-13 · NR-3 built — one markdown converter reads the CRDT back through the real binding, node schemas load without React, and an open note paints from its cache.
+- 2026-10-13 · NR-2 built — New Notes ships behind a synced per-user switch, and a new note is a device-only draft until its first character.
 - 2026-10-13 · NR-1 built — the Inbox is stored, favorites are per user, and filing a sub-note never hides it.
 - 2026-10-13 · Notes refresh planned: keep Lexical and the CRDT model, rebuild the surface and editor core behind a per-user switch.
 - 2026-07-29 · 🔎 Notion ships a ZIP INSIDE A ZIP — the shipped notes importer silently imports nothing from a real export.

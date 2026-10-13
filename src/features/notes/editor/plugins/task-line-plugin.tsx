@@ -55,8 +55,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { formatDue, formatScheduled } from "@/features/tasks/helpers";
 import type { Task } from "@/features/tasks/model";
 import type { TaskLineSnapshot } from "../../tasks/detach";
-import { $createTaskLineNode, $isTaskLineNode, type TaskLineNode } from "../nodes/task-line-node";
 import { type NotesTaskBridge, useNotesEditorBridge } from "../notes-editor-bridge";
+import { $createTaskLineNode, $isTaskLineNode, type TaskLineNode } from "../schema/task-line-node";
 
 /** Our own programmatic updates — the deletion detector skips these. */
 export const TASK_LINE_TAG = "moduo-task-line";

@@ -7,8 +7,8 @@
 
 import { useEffect, useState } from "react";
 import type * as Y from "yjs";
+import { tryDeriveNoteBody } from "../editor/doc-markdown";
 import { extractOutline, type OutlineHeading } from "../outline";
-import { deriveBody } from "../sync/doc-text";
 
 type Props = {
   doc: Y.Doc | null;
@@ -23,7 +23,7 @@ export function NoteOutlinePanel({ doc, onNavigate }: Props) {
       setHeadings([]);
       return;
     }
-    const recompute = () => setHeadings(extractOutline(deriveBody(doc).md));
+    const recompute = () => setHeadings(extractOutline(tryDeriveNoteBody(doc)?.md ?? ""));
     recompute();
     let timer: ReturnType<typeof setTimeout> | null = null;
     const onUpdate = () => {

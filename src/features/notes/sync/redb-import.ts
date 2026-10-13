@@ -11,9 +11,9 @@
 
 import * as Y from "yjs";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
+import { tryDeriveNoteBody } from "../editor/doc-markdown";
 import type { NotesImportRow } from "../model";
 import { decodeBase64ToUint8, encodeUint8ToBase64 } from "../utils/base64";
-import { deriveBody } from "./doc-text";
 
 const FLAG_PREFIX = "moduo:notes:redb-imported:v1:";
 
@@ -88,7 +88,7 @@ export function mergeLegacyDoc(
   if (!applied) return { snapshotB64: null, body: { text: "", md: "" } };
   return {
     snapshotB64: encodeUint8ToBase64(Y.encodeStateAsUpdate(doc)),
-    body: deriveBody(doc),
+    body: tryDeriveNoteBody(doc) ?? { text: "", md: "" },
   };
 }
 

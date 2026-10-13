@@ -35,3 +35,21 @@ export function writeNotesPanelVariant(
     // ignore — a lost panel preference is not worth surfacing
   }
 }
+
+// The refreshed shell (NR-2) opens with the right panel CLOSED: the first time
+// someone uses it, it closes the Notes right panel once; after that the panel
+// stays wherever they leave it (the shared per-feature panel state).
+function nextPanelDefaultKey(userId: string): string {
+  return `moduo:notes-next:panel-closed-default:v1:${userId}`;
+}
+
+/** True exactly once per user: the shell should close the right panel now. */
+export function consumeNotesNextPanelDefault(userId: string): boolean {
+  try {
+    if (localStorage.getItem(nextPanelDefaultKey(userId)) === "done") return false;
+    localStorage.setItem(nextPanelDefaultKey(userId), "done");
+    return true;
+  } catch {
+    return false;
+  }
+}
