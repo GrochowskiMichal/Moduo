@@ -157,7 +157,7 @@ One role question per person ("What will you run in Moduo?") sets defaults only:
 
 ### 17. Settings → Tasks
 
-Statuses (workspace default), Templates, Focus (Timer · Offer quick tasks along the way · usual pace on/off), Show my agent work to teammates, Share my tracked time with the workspace owner, Time & region (General), Notifications (the table's switches), Members → Teams (any member creates; creator/owner/admin deletes).
+Statuses (workspace default), Templates, Focus (Timer · Offer quick tasks along the way · usual pace on/off), Show my agent work to teammates, Share my tracked time with the workspace owner, Time & region (General), Notifications (the table's switches), Members → Teams (any member creates and adds people; creator/owner/admin renames, takes people out and deletes).
 
 ### 18. Calendar, Home and the top bar: the contracts (26, 12, 96, default r, re-plan §4)
 
@@ -314,7 +314,7 @@ Layers: **unit** (Rstest, `src/**/*.test.ts`), **SQL** (rolled-back probes on th
 | `tests/focus.spec.ts` · "meeting divider, arrange, along the way" | AC8.6–8.8 | An event at 2:30 PM shows as a divider inside Up next; Arrange appears only when ≥2 switches are saved and undoes; the offer appears once between projects and never with the switch off. |
 | `src/features/focus/pace.test.ts` · "usual pace after ~10 tasks" | AC8.10 | Nine timed tasks show nothing; the tenth shows "≈ … at your usual pace"; the setting hides it. |
 | `tests/visual/focus.spec.ts` · "the three screens" | AC8.2, AC8.9 | Running, Pomodoro, Off and the empty state match the round-2a frames in structure. |
-| `supabase/tests/teams.test.sql` + `teams_routing.test.sql` · "routing, claims, defaults" | AC5.2, AC5.7 | A task with a team and no project is refused unless the team has a default; claiming assigns; team mentions produce one notice per member; the 3-day check-back fires once. |
+| `supabase/tests/teams.test.sql` + `teams_routing.test.sql` + `teams_access.test.sql` · "routing, claims, defaults" | AC5.2, AC5.7 | A task with a team and no project is refused unless the team has a default; claiming assigns; team mentions produce one notice per member; the 3-day check-back fires once. |
 | `tests/visual/avatars.spec.ts` · "people round, teams square" | AC1.15 | Two initials with a stable colour for people; DS/DV rounded squares for teams. |
 | `supabase/tests/notifications.test.sql` · "the table, row by row" | AC5.7, AC1.7, AC2.4 | Each event in §13 produces exactly the listed notice (grouping, channel, mute); twelve assignments make one; a passed due date makes none; the reminder on a backlogged task is cancelled. |
 | `tests/reminders.spec.ts` · "desktop menu bar and browser channel" | AC2.4 | With the window closed the desktop app delivers; with browser permission granted the web delivers; denied shows "Not allowed by the browser" and the bell still shows it. |

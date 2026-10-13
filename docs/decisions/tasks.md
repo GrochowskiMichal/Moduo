@@ -63,6 +63,21 @@ Built in tasks-v3 block 20 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §8, AC
   - Why: 82b's one pattern for every mode.
   - Rejected: Tasks drawing its own bar (the 3×3 layout has one bottom bar).
 
+## 2026-10-13 · TV-D13 follow-up: who changes a team
+
+Migration `20261013210000_teams_access_fix` (redefines `teams_op_update` and `teams_op_remove_member` only); tests `supabase/tests/teams_access.test.sql`. Supersedes the "edits teams and their members" half of TV-D10's teams entry and D13-1's "change their people".
+
+- **D13-11 · A team's creator, the owner or an admin changes it** → TV-D13 follow-up (`teams_op_update`, `teams_op_remove_member`, `canManage` in `teams-panel.tsx`)
+  - Who: the orchestrator's call for Maciej after a review of the landed block, 2026-10-13; the default-project detail is the agent's choice (below).
+  - Decision: renaming a team, changing its letters or colour, and taking someone else out of it are for the team's creator, the workspace owner or an admin (a team whose creator's account was erased: the owner or an admin). Anyone who works on tasks still makes teams and adds people (default t, ratified), and anyone in a team can leave it. Settings shows the fields read-only to everyone else, with one line saying who can change them.
+  - Why: a team is someone's setup; letting any editor rename it or take people out of it lets one person quietly undo another's. Adding people stays open because a team grants nothing (D13-1).
+  - Rejected: keeping every edit open (TV-D10's choice); admin-only teams (TV-D10 rejected it; it blocks "any member sets up a team").
+- **D13-12 · A team's default project** → TV-D13 follow-up (`teams_op_update`)
+  - Who: agent's choice, confirmed for building, revisitable, 2026-10-13.
+  - Decision: the new default must be a project the person can edit (as before). While a team has none, anyone who can edit a project may name it; replacing or clearing one that's set needs the creator, the owner or an admin, or Edit on the project it names now. A default whose project was deleted counts as none. Settings enables the picker for those who manage the team, or while there's no default; it can't tell a project the person can't open from a deleted one, so there a set default reads "Not available" and stays locked for everyone else (stricter than the server, never looser).
+  - Why: otherwise someone with Edit on an unrelated project could point a team's routing at it. Routing itself still files a task into the default only when the router can edit it, else it's refused without naming the project (TV-D10).
+  - Rejected: default changes for managers only (it blocks a member setting up a new team's project); Edit on the new project alone (the redirect above).
+
 ## 2026-10-13 · TV-F7 Focus screen v3 — the agent's choices (deferred to by Maciej)
 
 Built in tasks-v3 block 23 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §7, AC8.1–8.5, AC8.9; REPLAN 31, 61–66, 62a, 63, 65a; prototype round-2a frames 1–3) on TV-F6's one time engine. No migration. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to change.
@@ -160,7 +175,7 @@ Built in tasks-v3 block 28 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §1, §
 - **D13-1 · Routing grants no access** → TV-D13 (`can_access` unchanged for teams, `tasks_op_claim`)
   - Who: agent's choice, deferred to by Maciej (agreed with the orchestrator), 2026-10-13.
   - Decision: a team member sees a task routed to the team only where they could see it anyway (a project shared with them, an assignment); being in a team, joining one, or having a task routed to it opens nothing. Taking a team's task needs Edit on it already. Settings says so where the default project is picked ("Pick one the team can open").
-  - Why: spec §54 and §Out of scope: "teams here only route"; sharing a project with a whole team is its own Tier-2 permissions spec. It also keeps default t safe: since a team grants nothing, any member may make teams and change their people.
+  - Why: spec §54 and §Out of scope: "teams here only route"; sharing a project with a whole team is its own Tier-2 permissions spec. It also keeps default t safe: since a team grants nothing, any member may make teams and change their people. (Narrowed 2026-10-13 by D13-11: renaming and taking people out are now for the creator, the owner or an admin.)
   - Rejected: a team rule in `can_access` (Edit for live members), and team-origin grants on each routed task; both turn membership into a share that bypasses project privacy.
 - **D13-2 · Taking a team's task** → TV-D13 (`tasks_op_claim`, `claimTask`, `unclaimedForMe`)
   - Who: agent's choice, deferred to by Maciej, 2026-10-13.
@@ -1010,7 +1025,7 @@ Built in tasks-v3 block 10 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §Assum
   - Rejected: a free label on every entry.
 - **D10-12 · Teams: members who can work on tasks; any editor makes one; a team task never sits in an Inbox** → TV-D10 (`teams`, `team_members`, `tasks__team_check`, `teams__route_project`), TV-D13 (claims, settings, marks UI)
   - Who: agent's choice, deferred to by Maciej, 2026-10-11 (defaults s–t, REPLAN 94–95).
-  - Decision: Tasks at Edit makes and edits teams and their members; members must be able to work on tasks; only the creator, the owner or an admin deletes (and restores) one, which takes it off its tasks; names are unique per workspace in any case; the mark is the initials of the first two words, else the first letter and the next consonant (Design DS, Development DV), editable to one or two letters; colour optional (TV-D13 picks the stable default). A team's default project is one the setter can edit; routing a task in an Inbox (or with no project) files it into the team's default project when the router can edit it, else it's refused ("needs a project", never a word about the project); a team task moved into an Inbox (by hand, today's project delete, an old build, erasure) leaves its team. Removing a member changes no task.
+  - Decision: Tasks at Edit makes and edits teams and their members; members must be able to work on tasks; only the creator, the owner or an admin deletes (and restores) one, which takes it off its tasks; names are unique per workspace in any case; the mark is the initials of the first two words, else the first letter and the next consonant (Design DS, Development DV), editable to one or two letters; colour optional (TV-D13 picks the stable default). A team's default project is one the setter can edit; routing a task in an Inbox (or with no project) files it into the team's default project when the router can edit it, else it's refused ("needs a project", never a word about the project); a team task moved into an Inbox (by hand, today's project delete, an old build, erasure) leaves its team. Removing a member changes no task. (Narrowed 2026-10-13 by TV-D13 follow-up D13-11 and D13-12: editing a team and taking people out are for the creator, the owner or an admin; replacing a set default needs one of them or Edit on it.)
   - Why: routing hides nothing, so the bar to make a team is low, and a viewer can't take a routed task.
   - Rejected: auto-adding the creator as a member, allowing team tasks in an Inbox (the team couldn't see them), and refusing a move into an Inbox (a project's delete would fail over one team task).
 - **D10-13 · Time blocks move to each person's preferences, in their own column** → TV-D10 (`user_preferences.task_time_blocks`, `tasks_op_set_time_blocks`), TV-D7 (drops `task_time_blocks`)
