@@ -271,6 +271,22 @@ _Built and landed locally on `t/maciej/tasks-v3-build` (🟠 LOCAL BUILD MODE in
 
 **Records:** choices D15-1…10 in decisions/tasks.md; gotchas in spine.md (resend ids, seeded statuses); checklist [docs/testing/t-maciej-tv-d15-templates.md](../docs/testing/t-maciej-tv-d15-templates.md).
 
+- [x] **TV-U15 — Upcoming, Inbox, My tasks, All** · tasks-v3 block 20 · deps: TV-U10, TV-D10 · lane ui · _done 2026-10-13 · `t/maciej/tv-u15-views` → `t/maciej/tasks-v3-build` (local; no migrations)._ AC2.2, AC2.1, AC3.3, AC5.2, AC11.3, AC11.5; calls 83, 84, 20, 20a, 29, 82b, defaults b, h, r–t; research views-list-upcoming.md §6–9.
+
+**The List's seams** (`ui/list-extensions.ts`, `task-list-view.tsx`): a view's own `grouping` (groups in order with empty ones kept, a header line and action, `accepts`/`onDrop`, its "+", `whenOf` row words), `extraGroups` (on top or at the end, `limit` → "Show n more", folded), `onViewKey` (asked before the List's keys, never from a field or a portaled menu), `onTake` + `takeableIds`, `sourceOf`, `emptyState`, `note`, `defaultFolded`, `groupSub`, `countEvery`; row words are facts (`when`, `takeable`, `source`), so rows stay memoised.
+
+**Upcoming** (`upcoming.ts`, `ui/upcoming-view.tsx`): your dated tasks and unassigned ones, minus Backlog, Won't do and unassigned tasks routed to a team you're not in; one row at its next session or due date; Earlier · Today · Tomorrow · five short day names · Later, the seven days always drawn; headers "Today · Tue, Oct 13 · 3 · ~1h"; rows "9:00 AM · 45m", "due Thu", "missed 2:00 PM", "Oct 8 · late"; timed first, then priority, then the sidebar's project order. Drops on another day, Earlier's "Move all…", ⌥←/→, ⌥⇧←/→ and `t` move the row's own date (a session keeps its time and length, through the reschedule op), never before today; Later opens a day picker; a repeat asks "Just this one · Change the pattern" (the module's new `moveOccurrence` on TV-D12's op, or `changePatternRule`); one Undo per move. New dates today; a day's "+" names its day.
+
+**Inbox** (`inbox-triage.ts`, `ui/inbox-view.tsx`): the note line; "from Mike"; keys 1 · 2 · 3 · H and the bottom bar's "Accept 1 · Decline 2 · Duplicate 3 · Snooze H" while a task is selected (`components/app/bottom-bar-mode.ts`, 82b): File in… (assigned to you, Undo), Decline (own → Won't do; someone else's → a note, a comment, back to its maker), Duplicate of… (comments copied into one comment, links moved, the two linked, then Won't do), Snooze (Tomorrow · Next week · Pick a day…, synced in `preferences.tasksInbox`, back on top on its day or with a new comment, "Snoozed · n" folded at the end, H brings one back); the cursor moves on; a calm zero state ("Inbox is clear", Capture a task, ⌘⇧K, "n snoozed · show").
+
+**My tasks and All** (`my-tasks.ts`): My tasks in every workspace, yours by status with your Backlog folded, ordered by date then priority with waiting last, the team block on top ("For Design · 2 unclaimed", five rows then "Show n more", Take it with Undo through D13's claim when present); All never lists your Inbox (its count too), projects in sidebar order with "· Area · On hold" in the header, On hold/Done folded. **Won't do** opens from the sidebar ⋯ (by project, counting all, Reopen). Each view's empty state teaches its one gesture (`ui/view-empty-states.tsx`).
+
+**Tests:** `upcoming.test.ts` "day groups and one row per task" (9), `inbox-triage.test.ts` (6), `my-tasks.test.ts` (6), `task-list-view.views.test.tsx` (7: a view's groups and words, its keys first, the team block with Show n more and Take it, a folded trail group, the empty state and note), `preferences.test.ts` (snoozes); e2e `tests/inbox.spec.ts` "triage keys 1 · 2 · 3 · H" 5/5 on the local stack (the cached Chromium through a scratch config); verify green (3,610).
+
+**Live-verified** on the local stack (checklist).
+
+**Records:** choices U15-1…11 in decisions/tasks.md; gotchas in ui.md "The views on the List (TV-U15)" (2); checklist [docs/testing/t-maciej-tv-u15-views.md](../docs/testing/t-maciej-tv-u15-views.md).
+
 ## Transactional email — every email Moduo sends · [`specs/transactional-email.md`](./transactional-email.md)
 
 - [x] **TX-1 — Email kit (shared templates, palette, plain text, .ics, Storybook gallery, logo image names, `EMAIL_KINDS`)** · deps: — · _2026-10-08 · `t/maciej/tx-1-email-kit`_ (logo PNGs come from BRAND-1's `public/email/` exports under the size contract in `_shared/email/assets.ts`)
