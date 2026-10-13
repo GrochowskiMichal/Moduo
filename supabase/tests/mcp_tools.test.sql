@@ -87,8 +87,14 @@ BEGIN
     jsonb_build_object('id', test.id('TS'), 'title', 'Ship notes (private)', 'bucket_id', test.id('PB'))));
   PERFORM test.ok(test.as_key('K', format($q$SELECT * FROM public.tasks_search(%L, 'ship', 50)$q$, test.id('W'))) = 'ok 1',
     'tasks_search finds a key''s matches and leaves out the private one (2 matches, 1 seen)');
+  PERFORM test.ok(test.as_key('K', format($q$SELECT * FROM public.tasks_search(%L, 'Ship notes (private)', 50)$q$, test.id('W'))) = 'ok 0',
+    'a key whose person can''t see a task finds nothing by its exact title');
   PERFORM test.ok(test.as_key('KV', format($q$SELECT * FROM public.tasks_search(%L, 'ship', 50)$q$, test.id('W'))) = 'ok 1',
-    'a view-only key searches too');
+    'a view-only key searches too, and gets only the matches its person sees');
+  INSERT INTO public.workspace_api_keys (id, workspace_id, name, key_prefix, key_hash, scopes, created_by, revoked_at)
+  VALUES (test.id('KR'), test.id('W'), 'Revoked', 'mdo_kr', md5('db-test-kr'), '{"tasks": "edit"}'::jsonb, test.id('O'), now());
+  PERFORM test.ok(test.as_key('KR', format($q$SELECT * FROM public.tasks_search(%L, 'ship', 50)$q$, test.id('W'))) = 'ok 0',
+    'a revoked key (no person behind it) finds nothing, even what its person could see');
 
   -- A disallowed write is refused whole.
   r := test.as_key('K', format($q$SELECT public.tasks_op_create_with(%L, %L::jsonb, %L::jsonb)$q$, test.id('W'),
