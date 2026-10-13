@@ -6,7 +6,7 @@
  */
 
 import { ArchiveRestore, ArrowLeft, FileText, Globe, RotateCcw, Trash2 } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { type CSSProperties, type ReactNode, useState } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -112,11 +112,12 @@ export function FooterSubView({
         <div
           className={cn(
             "group/row flex h-(--row-h) min-w-0 items-center gap-1.5 rounded-md pr-1 font-sans text-sm",
+            "ps-[calc(var(--spacing)*2+var(--tree-depth)*var(--tree-indent))]",
             selectedId === note.id
               ? `${SELECTED_ROW} text-foreground`
               : "text-muted-foreground hover:bg-state-hover hover:text-foreground",
           )}
-          style={{ paddingInlineStart: 8 + depth * 14 }}
+          style={{ "--tree-depth": depth } as CSSProperties}
         >
           <button
             type="button"

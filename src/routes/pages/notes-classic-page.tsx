@@ -6,20 +6,10 @@
  * arrives with NO-7 (hidden until then). Selection is URL-held (?id=).
  */
 
-import {
-  DndContext,
-  type DragEndEvent,
-  PointerSensor,
-  pointerWithin,
-  useDndMonitor,
-  useDroppable,
-  useSensor,
-  useSensors,
-} from "@dnd-kit/core";
+import { DndContext, PointerSensor, pointerWithin, useSensor, useSensors } from "@dnd-kit/core";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { CloudOff, Sparkles } from "lucide-react";
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { toast } from "sonner";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { onCreateNew } from "../../components/app/create-events";
 import { FeaturePanelsShell } from "../../components/app/feature-panels-shell";
 import {
@@ -30,12 +20,8 @@ import { truncationNotice } from "../../components/app/truncation-notice";
 import { Button } from "../../components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../components/ui/tooltip";
 import { HubDropZone } from "../../features/contacts/ui/hub-drop-zone";
-import { findQuoteOffset } from "../../features/notes/comments/quote";
 import {
-  INSERT_ENTITY_CHIP_EVENT,
   INSERT_PAGE_ROW_EVENT,
-  type InsertEntityChipDetail,
-  NOTE_DETAIL_REFRESH_EVENT,
   type NotesEditorBridge,
 } from "../../features/notes/editor/notes-editor-bridge";
 import { useNotesExperience } from "../../features/notes/experience";
@@ -46,19 +32,24 @@ import {
   noteFileName,
   safeFileStem,
 } from "../../features/notes/export";
+import { useNoteLinkDrop } from "../../features/notes/hooks/use-note-link-drop";
 import { useNoteRealtime } from "../../features/notes/hooks/use-note-realtime";
 import { useNotesModule } from "../../features/notes/hooks/use-notes-module";
 import { useNotesTaskBridge } from "../../features/notes/hooks/use-notes-task-bridge";
-import type { OutlineHeading } from "../../features/notes/outline";
+import { useTrashWithTaskDetach } from "../../features/notes/hooks/use-trash-with-task-detach";
 import {
   type NotesPanelVariantId,
   readNotesPanelVariant,
   writeNotesPanelVariant,
 } from "../../features/notes/panel-prefs";
 import { type NotesSearch, shapeNoteSearchResults } from "../../features/notes/search";
-import { deriveBody, extractTaskLineIds } from "../../features/notes/sync/doc-text";
+import {
+  getEditorSelectionQuote,
+  scrollEditorToHeading,
+  scrollEditorToQuote,
+} from "../../features/notes/shell/editor-dom";
+import { deriveBody } from "../../features/notes/sync/doc-text";
 import { nameFromEmail } from "../../features/notes/sync/notes-realtime";
-import { taskLinksForNote } from "../../features/notes/tasks/detach";
 import { displayTitle } from "../../features/notes/title";
 import {
   buildNoteSections,
@@ -74,19 +65,14 @@ import { NoteOutlinePanel } from "../../features/notes/ui/note-outline-panel";
 import { NotePresenceAvatars } from "../../features/notes/ui/note-presence-avatars";
 import { NotePublishControl } from "../../features/notes/ui/note-publish-control";
 import { NoteTreeSidebar } from "../../features/notes/ui/note-tree-sidebar";
+import { NotesEditorDropZone } from "../../features/notes/ui/notes-editor-drop-zone";
 import { noteIsPrivate } from "../../features/sharing/rules";
 import { ShareMenu } from "../../features/sharing/share-menu";
-import { createLinkWithToast } from "../../features/spine/ui/drop-link-toast";
 import { betweenPositions, endPosition } from "../../features/tasks/helpers";
 import { useTasksModule } from "../../features/tasks/hooks/use-tasks-module";
-import {
-  TASK_DETAIL_REFRESH_EVENT,
-  TaskDetailPanel,
-} from "../../features/tasks/ui/task-detail-panel";
-import { asDragPayload, asDropLinkTarget, isSelfDrop, targetAccepts } from "../../lib/drag-payload";
-import type { EntityLink, EntityRef } from "../../lib/entity-links";
+import { TaskDetailPanel } from "../../features/tasks/ui/task-detail-panel";
+import type { EntityRef } from "../../lib/entity-links";
 import { supabaseClient } from "../../lib/runtime.web";
-import { cn } from "../../lib/utils";
 import { useAuth } from "../../providers/auth-provider";
 import { useWorkspace } from "../../providers/workspace-provider";
 
@@ -241,88 +227,12 @@ export function NotesClassicPage() {
     [module, selectedId, select],
   );
 
-  // Trashing a note with task lines: tasks soft-detach and survive, folded
-  // into the ONE trash toast (AC4) — the note↔task links are dropped (real
-  // detach, not just copy) and the toast's Undo restores note AND links.
-  // The docs are read via the sync engine so unopened notes work too —
-  // gesture note + descendants (capped) — best-effort: a slow boot falls
-  // back to the plain trash toast, never blocks the gesture.
-  const trashWithTaskDetach = useCallback(
-    async (id: string) => {
-      const noteIds = [id, ...descendantIds(notes, id)].slice(0, 20);
-      const taskIdsByNote = new Map<string, string[]>();
-      if (engine) {
-        for (const noteId of noteIds) {
-          try {
-            const session = engine.getOrCreateSession(noteId);
-            await Promise.race([
-              session.booted,
-              new Promise((resolve) => setTimeout(resolve, 800)),
-            ]);
-            const ids = extractTaskLineIds(session.doc);
-            if (ids.length > 0) taskIdsByNote.set(noteId, ids);
-          } catch {
-            // skip this doc — honest undercount beats blocking the gesture
-          }
-        }
-      }
-      const allTaskIds = [...new Set([...taskIdsByNote.values()].flat())];
-
-      // Drop the note↔task links (the actual detach); remember them so the
-      // toast's Undo can put them back (links_op_create is idempotent).
-      const dropped: {
-        source: { type: string; id: string };
-        target: { type: string; id: string };
-        relationKind: EntityLink["relationKind"];
-        origin: EntityLink["origin"];
-      }[] = [];
-      if (runtime && selectedWorkspaceId && taskIdsByNote.size > 0) {
-        try {
-          for (const [noteId, ids] of taskIdsByNote) {
-            const links = await runtime.spine.listLinks({
-              workspaceId: selectedWorkspaceId,
-              entityType: "note",
-              entityId: noteId,
-            });
-            const toDrop = taskLinksForNote(links, noteId, new Set(ids));
-            for (const l of toDrop) {
-              await runtime.spine.deleteLink({
-                workspaceId: selectedWorkspaceId,
-                linkId: l.id,
-              });
-              dropped.push({
-                source: { type: l.sourceType, id: l.sourceId },
-                target: { type: l.targetType, id: l.targetId },
-                relationKind: l.relationKind,
-                origin: l.origin,
-              });
-            }
-          }
-        } catch {
-          // link drop is best-effort; trash itself must never fail on it
-        }
-      }
-
-      module.trashNote(
-        id,
-        allTaskIds.length > 0
-          ? {
-              detachedTaskIds: allTaskIds,
-              onDeleteTasks: (ids) => {
-                ids.forEach((taskId) => void tasksApi.deleteTask(taskId));
-              },
-              onUndo: () => {
-                if (!runtime || !selectedWorkspaceId) return;
-                for (const l of dropped) {
-                  void runtime.spine.createLink({ workspaceId: selectedWorkspaceId, ...l });
-                }
-              },
-            }
-          : undefined,
-      );
-    },
-    [engine, module, tasksApi, notes, runtime, selectedWorkspaceId],
-  );
+  const trashWithTaskDetach = useTrashWithTaskDetach({
+    runtime,
+    workspaceId: selectedWorkspaceId,
+    module,
+    deleteTask: tasksApi.deleteTask,
+  });
 
   const onDropRow = useCallback(
     (dragId: string, targetId: string, zone: DropZone) => {
@@ -382,59 +292,7 @@ export function NotesClassicPage() {
   const notesSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
   );
-  const onNotesDragEnd = useCallback(
-    (event: DragEndEvent) => {
-      // Editor-chip + reorder are owned by their own consumers; here we only act
-      // on a drop onto a link target (the Detail hub) → create a spine link.
-      const payload = asDragPayload(event.active.data.current);
-      const target = asDropLinkTarget(event.over?.data.current);
-      if (!payload || !target) return;
-      if (!runtime || !selectedWorkspaceId || !canEdit) return;
-      if (isSelfDrop(payload, target)) {
-        toast("You can’t link a note to itself");
-        return;
-      }
-      if (!targetAccepts(target, payload)) return;
-      void (async () => {
-        // Guard a pre-existing edge: links_op_create is idempotent, but a fresh
-        // "Undo" toast on an already-linked pair would delete a link the user
-        // didn't make in THIS gesture (mirrors the FX-9 already-linked guard).
-        try {
-          const links = await runtime.spine.listLinks({
-            workspaceId: selectedWorkspaceId,
-            entityType: target.entityType,
-            entityId: target.entityId,
-          });
-          const already = links.some(
-            (l) =>
-              (l.sourceType === payload.entityType && l.sourceId === payload.entityId) ||
-              (l.targetType === payload.entityType && l.targetId === payload.entityId),
-          );
-          if (already) {
-            toast("Already linked");
-            return;
-          }
-        } catch {
-          // a failed pre-check must not block a legitimate link
-        }
-        await createLinkWithToast({
-          runtime,
-          workspaceId: selectedWorkspaceId,
-          source: payload,
-          target,
-          origin: "drag",
-          onChanged: () => {
-            window.dispatchEvent(new CustomEvent(NOTE_DETAIL_REFRESH_EVENT));
-            // A note→task drop must also refresh the embedded task hub (DF-8).
-            if (target.entityType === "task") {
-              window.dispatchEvent(new CustomEvent(TASK_DETAIL_REFRESH_EVENT));
-            }
-          },
-        });
-      })();
-    },
-    [runtime, selectedWorkspaceId, canEdit],
-  );
+  const onNotesDragEnd = useNoteLinkDrop({ runtime, workspaceId: selectedWorkspaceId, canEdit });
 
   // Detail hub "open" — notes select in place; other entities deep-link out.
   const handleOpenEntity = useCallback(
@@ -449,38 +307,6 @@ export function NotesClassicPage() {
     },
     [select],
   );
-
-  // Quote-comments (AC9): grab the editor's current selection; scroll the editor
-  // to a quoted snippet (best-effort — edited-away text degrades quietly).
-  const getSelectionQuote = useCallback((): string | null => {
-    const sel = window.getSelection();
-    if (!sel || sel.isCollapsed || sel.rangeCount === 0) return null;
-    const editorEl = document.querySelector(".notes-editor-v2");
-    const anchor = sel.anchorNode;
-    if (!editorEl || !anchor || !editorEl.contains(anchor)) return null;
-    return sel.toString().trim() || null;
-  }, []);
-  const scrollToQuote = useCallback((quote: string) => {
-    const editorEl = document.querySelector(".notes-editor-v2");
-    if (!editorEl) return;
-    if (findQuoteOffset(editorEl.textContent ?? "", quote) === null) {
-      toast.info("That text isn’t in the note anymore.");
-      return;
-    }
-    const firstWord = quote.trim().split(/\s+/)[0]?.toLowerCase() ?? "";
-    for (const b of editorEl.querySelectorAll("p, h1, h2, h3, h4, li, blockquote")) {
-      if ((b.textContent ?? "").toLowerCase().includes(firstWord)) {
-        b.scrollIntoView({ behavior: "smooth", block: "center" });
-        return;
-      }
-    }
-  }, []);
-  const outlineNavigate = useCallback((h: OutlineHeading) => {
-    const editorEl = document.querySelector(".notes-editor-v2");
-    if (!editorEl) return;
-    const headings = editorEl.querySelectorAll("h1, h2, h3, h4, h5, h6");
-    headings[h.index - 1]?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, []);
 
   // Markdown interchange (NO-8): import wizard + per-note / subtree export.
   const [importOpen, setImportOpen] = useState(false);
@@ -754,8 +580,8 @@ export function NotesClassicPage() {
                 noteLabel={displayTitle(noteForPanel.title)}
                 canComment={modulePermissions.notes !== "none"}
                 currentUserId={userId}
-                getSelectionQuote={getSelectionQuote}
-                onScrollToQuote={scrollToQuote}
+                getSelectionQuote={getEditorSelectionQuote}
+                onScrollToQuote={scrollEditorToQuote}
               />
             ),
           },
@@ -763,7 +589,10 @@ export function NotesClassicPage() {
             id: "outline",
             label: "Outline",
             render: () => (
-              <NoteOutlinePanel doc={panelSession?.doc ?? null} onNavigate={outlineNavigate} />
+              <NoteOutlinePanel
+                doc={panelSession?.doc ?? null}
+                onNavigate={scrollEditorToHeading}
+              />
             ),
           },
         ]
@@ -853,79 +682,5 @@ export function NotesClassicPage() {
           .map((n) => n.position)}
       />
     </>
-  );
-}
-
-const NOTES_EDITOR_DROP_ID = "notes-editor-drop";
-
-/**
- * Wraps the editor pane as a drop target (NO-7b): dropping an entity here fires
- * the chip-insert event (a reference chip, no `entity_links` write). The chip
- * lands at the release coordinates — tracked via a raw pointer listener (the
- * TL-2 lesson: dnd-kit's `delta` folds auto-scroll, unreliable for a point).
- */
-function NotesEditorDropZone({
-  noteId,
-  editable,
-  children,
-}: {
-  noteId: string | null;
-  editable: boolean;
-  children: ReactNode;
-}) {
-  const pointer = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
-  const active = editable && !!noteId;
-  const {
-    setNodeRef,
-    isOver,
-    active: dragActive,
-  } = useDroppable({
-    id: NOTES_EDITOR_DROP_ID,
-    data: { kind: "note-editor" },
-    disabled: !active,
-  });
-  const overWithPayload = isOver && !!asDragPayload(dragActive?.data?.current);
-
-  // Track the pointer only WHILE a drag is in flight (parity with the sidebar's
-  // gated tracker) — the release coords give the chip its drop point.
-  const isDragging = !!dragActive;
-  useEffect(() => {
-    if (!isDragging) return;
-    const onMove = (e: PointerEvent) => {
-      pointer.current = { x: e.clientX, y: e.clientY };
-    };
-    document.addEventListener("pointermove", onMove, { capture: true });
-    return () => document.removeEventListener("pointermove", onMove, { capture: true });
-  }, [isDragging]);
-
-  useDndMonitor({
-    onDragEnd: (event) => {
-      if (!active || !noteId) return;
-      if (event.over?.id !== NOTES_EDITOR_DROP_ID) return;
-      const payload = asDragPayload(event.active.data.current);
-      if (!payload) return;
-      const detail: InsertEntityChipDetail = {
-        noteId,
-        entityType: payload.entityType,
-        entityId: payload.entityId,
-        label: payload.label ?? payload.entityType,
-        icon: payload.icon ?? null,
-        clientX: pointer.current.x,
-        clientY: pointer.current.y,
-      };
-      window.dispatchEvent(new CustomEvent(INSERT_ENTITY_CHIP_EVENT, { detail }));
-    },
-  });
-
-  return (
-    <div
-      ref={setNodeRef}
-      className={cn(
-        "h-full min-h-0",
-        overWithPayload && "rounded-lg ring-2 ring-inset ring-primary/40",
-      )}
-    >
-      {children}
-    </div>
   );
 }

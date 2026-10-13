@@ -5,7 +5,7 @@
  */
 
 import { FileText, FolderOpen, Inbox } from "lucide-react";
-import { useMemo } from "react";
+import { type CSSProperties, useMemo } from "react";
 import {
   CommandDialog,
   CommandEmpty,
@@ -92,7 +92,10 @@ export function MoveToDialog({
                 onSelect={() => pick(d.target)}
               >
                 <FileText aria-hidden />
-                <span className="truncate" style={{ paddingInlineStart: d.depth * 12 }}>
+                <span
+                  className="truncate ps-[calc(var(--tree-depth)*var(--tree-indent))]"
+                  style={{ "--tree-depth": d.depth } as CSSProperties}
+                >
                   {d.label}
                 </span>
               </CommandItem>

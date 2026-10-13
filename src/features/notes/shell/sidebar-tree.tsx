@@ -36,10 +36,6 @@ import type { NoteTreeNode } from "../tree";
 import type { SidebarSection } from "./drop-intent";
 import { type RowAction, rowMenuItems } from "./row-menu";
 
-/** One tree level's indent, px (geometry, like the drag kit's `indent`). */
-const LEVEL_INDENT = 14;
-const BASE_INDENT = 4;
-
 export type RowHover = { key: string; zone: "before" | "after" | "into" } | null;
 
 export type TreeCtx = {
@@ -121,7 +117,6 @@ export function TreeRow({
   const hover = ctx.hover?.key === key ? ctx.hover : null;
   const favorite = ctx.favoriteIds.has(note.id);
   const items = isDraft ? [] : rowMenuItems({ canEdit: ctx.canEdit, favorite, section });
-  const indent = BASE_INDENT + depth * LEVEL_INDENT;
 
   const row = (
     <div
@@ -144,6 +139,7 @@ export function TreeRow({
       }}
       className={cn(
         "group/row relative flex h-(--row-h) min-w-0 cursor-default items-center gap-1.5 rounded-md pr-1.5 font-sans text-sm outline-none select-none",
+        "ps-[calc(var(--spacing)+var(--tree-depth)*var(--tree-indent))]",
         "transition-[color,background-color,box-shadow] duration-(--motion-fade) ease-(--ease-out)",
         "focus-visible:ring-2 focus-visible:ring-ring/50",
         selected && !hover
@@ -151,10 +147,10 @@ export function TreeRow({
           : "text-muted-foreground hover:bg-state-hover hover:text-foreground",
         hover?.zone === "into" && [DROP_TARGET, "text-foreground"],
       )}
-      style={{ paddingInlineStart: indent }}
+      style={{ "--tree-depth": depth } as React.CSSProperties}
     >
       {hover && hover.zone !== "into" ? (
-        <InsertionLine edge={hover.zone === "before" ? "top" : "bottom"} indent={indent} />
+        <InsertionLine edge={hover.zone === "before" ? "top" : "bottom"} />
       ) : null}
       <button
         type="button"
