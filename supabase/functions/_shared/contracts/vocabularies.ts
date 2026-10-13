@@ -980,6 +980,42 @@ export function normalizeCommentReaction(input: unknown): CommentReaction | null
 }
 
 // ---------------------------------------------------------------------------
+// Templates (TV-D15, REPLAN 9 and 79) — mirrors the op guards in
+// 20261013160000_templates.sql. A template is a task template or a project
+// template (two tables, one `templates_op_update(…, p_kind, …)`); what a
+// template's task keeps a link to is a lasting thing only: a note or a
+// contact (emails and events belong to one run of the work).
+// ---------------------------------------------------------------------------
+
+export const TEMPLATE_KINDS = ["task", "project"] as const;
+export type TemplateKind = (typeof TEMPLATE_KINDS)[number];
+export const templateKindSchema = z.enum(TEMPLATE_KINDS);
+export function isTemplateKind(value: unknown): value is TemplateKind {
+  return typeof value === "string" && (TEMPLATE_KINDS as readonly string[]).includes(value);
+}
+export function parseTemplateKind(input: unknown): SafeParseResult<TemplateKind> {
+  return parseOrError(templateKindSchema, input);
+}
+/** Lax read: a kind this build doesn't know is left out (null). */
+export function normalizeTemplateKind(input: unknown): TemplateKind | null {
+  return isTemplateKind(input) ? input : null;
+}
+
+export const TEMPLATE_LINK_TYPES = ["note", "contact"] as const;
+export type TemplateLinkType = (typeof TEMPLATE_LINK_TYPES)[number];
+export const templateLinkTypeSchema = z.enum(TEMPLATE_LINK_TYPES);
+export function isTemplateLinkType(value: unknown): value is TemplateLinkType {
+  return typeof value === "string" && (TEMPLATE_LINK_TYPES as readonly string[]).includes(value);
+}
+export function parseTemplateLinkType(input: unknown): SafeParseResult<TemplateLinkType> {
+  return parseOrError(templateLinkTypeSchema, input);
+}
+/** Lax read: a link to anything else is dropped (null). */
+export function normalizeTemplateLinkType(input: unknown): TemplateLinkType | null {
+  return isTemplateLinkType(input) ? input : null;
+}
+
+// ---------------------------------------------------------------------------
 // Attachments (AT-1, specs/attachments.md) — mirrors the CHECKs on
 // public.attachments in 20261008210500_attachments_storage. `pending` = begun,
 // bytes not confirmed yet; `ready` = finalize checked the stored size;

@@ -83,6 +83,14 @@ type Props = {
   onOpenChange: (open: OpenPill) => void;
   /** "Template…" in More, when templates exist (TV-D15). */
   onTemplate?: () => void;
+  /**
+   * A template was picked (TV-D15): only Assign (the task's own person) and
+   * Due (the date its dates count from) apply; its tags, priority and the
+   * rest come from the template.
+   */
+  templateMode?: boolean;
+  /** With a template: Due shows only when the template counts from its due date. */
+  templateDue?: boolean;
 };
 
 const PRIORITIES: Array<{ level: PriorityLevel; label: string }> = [
@@ -109,6 +117,8 @@ export function CapturePills({
   open,
   onOpenChange,
   onTemplate,
+  templateMode = false,
+  templateDue = false,
 }: Props) {
   const team = teams.find((t) => t.id === values.teamId) ?? null;
   const assigneeId = values.assigneeId === undefined ? me : values.assigneeId;
@@ -194,110 +204,118 @@ export function CapturePills({
           </>
         }
       />
-      <Popover
-        open={open === "due"}
-        onOpenChange={(next) => (next ? onOpenChange("due") : dueDraft.close())}
-      >
-        <PopoverTrigger asChild>
-          <ChipButton
-            icon={CalendarDays}
-            active={Boolean(values.dueDay)}
-            className={values.dueDay ? undefined : "text-muted-foreground"}
-          >
-            {values.dueDay ? (
+      {templateMode && !templateDue ? null : (
+        <Popover
+          open={open === "due"}
+          onOpenChange={(next) => (next ? onOpenChange("due") : dueDraft.close())}
+        >
+          <PopoverTrigger asChild>
+            <ChipButton
+              icon={CalendarDays}
+              active={Boolean(values.dueDay)}
+              className={values.dueDay ? undefined : "text-muted-foreground"}
+            >
+              {values.dueDay ? (
+                <>
+                  <span className="sr-only">Due: </span>
+                  {formatDay(dayDate(values.dueDay))}
+                </>
+              ) : (
+                "Due"
+              )}
+            </ChipButton>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start" onEscapeKeyDown={dueDraft.cancel}>
+            <DatePickerPanel draft={dueDraft} />
+          </PopoverContent>
+        </Popover>
+      )}
+      {templateMode ? null : (
+        <>
+          <PickerPill
+            label="Tags"
+            icon={Hash}
+            value={
+              tagNames.length
+                ? tagNames.slice(0, 2).join(", ") +
+                  (tagNames.length > 2 ? ` +${tagNames.length - 2}` : "")
+                : null
+            }
+            open={open === "tags"}
+            onOpenChange={toggle("tags")}
+            contentClassName="min-w-48"
+            content={
+              tags.length === 0 ? (
+                <p className="px-2 py-1.5 text-sm text-muted-foreground">
+                  Type # in the title to make a tag.
+                </p>
+              ) : (
+                tags.map((t) => {
+                  const on = values.tags.some((x) => x.id === t.id);
+                  return (
+                    <DropdownMenuCheckboxItem
+                      key={t.id}
+                      checked={on}
+                      onSelect={(e) => e.preventDefault()}
+                      onCheckedChange={(checked) =>
+                        onChange({
+                          field: "tag",
+                          tag: { id: t.id, name: t.name, color: t.color },
+                          on: checked === true,
+                        })
+                      }
+                    >
+                      <span
+                        data-label={t.color ?? "gray"}
+                        className="tag-dot size-2 shrink-0 rounded-full"
+                        aria-hidden
+                      />
+                      <span className="truncate">{t.name}</span>
+                    </DropdownMenuCheckboxItem>
+                  );
+                })
+              )
+            }
+          />
+          <PickerPill
+            label="Priority"
+            icon={Flag}
+            value={
+              values.priority ? PRIORITIES.find((p) => p.level === values.priority)?.label : null
+            }
+            open={open === "priority"}
+            onOpenChange={toggle("priority")}
+            content={
               <>
-                <span className="sr-only">Due: </span>
-                {formatDay(dayDate(values.dueDay))}
+                {PRIORITIES.map((p) => (
+                  <DropdownMenuItem
+                    key={p.level}
+                    onSelect={() => onChange({ field: "priority", value: p.level })}
+                  >
+                    <Flag className="text-muted-foreground" aria-hidden />
+                    {p.label}
+                    {values.priority === p.level ? <Check className="ms-auto" aria-hidden /> : null}
+                  </DropdownMenuItem>
+                ))}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={() => onChange({ field: "priority", value: null })}>
+                  No priority
+                </DropdownMenuItem>
               </>
-            ) : (
-              "Due"
-            )}
-          </ChipButton>
-        </PopoverTrigger>
-        <PopoverContent className="w-auto p-0" align="start" onEscapeKeyDown={dueDraft.cancel}>
-          <DatePickerPanel draft={dueDraft} />
-        </PopoverContent>
-      </Popover>
-      <PickerPill
-        label="Tags"
-        icon={Hash}
-        value={
-          tagNames.length
-            ? tagNames.slice(0, 2).join(", ") +
-              (tagNames.length > 2 ? ` +${tagNames.length - 2}` : "")
-            : null
-        }
-        open={open === "tags"}
-        onOpenChange={toggle("tags")}
-        contentClassName="min-w-48"
-        content={
-          tags.length === 0 ? (
-            <p className="px-2 py-1.5 text-sm text-muted-foreground">
-              Type # in the title to make a tag.
-            </p>
-          ) : (
-            tags.map((t) => {
-              const on = values.tags.some((x) => x.id === t.id);
-              return (
-                <DropdownMenuCheckboxItem
-                  key={t.id}
-                  checked={on}
-                  onSelect={(e) => e.preventDefault()}
-                  onCheckedChange={(checked) =>
-                    onChange({
-                      field: "tag",
-                      tag: { id: t.id, name: t.name, color: t.color },
-                      on: checked === true,
-                    })
-                  }
-                >
-                  <span
-                    data-label={t.color ?? "gray"}
-                    className="tag-dot size-2 shrink-0 rounded-full"
-                    aria-hidden
-                  />
-                  <span className="truncate">{t.name}</span>
-                </DropdownMenuCheckboxItem>
-              );
-            })
-          )
-        }
-      />
-      <PickerPill
-        label="Priority"
-        icon={Flag}
-        value={values.priority ? PRIORITIES.find((p) => p.level === values.priority)?.label : null}
-        open={open === "priority"}
-        onOpenChange={toggle("priority")}
-        content={
-          <>
-            {PRIORITIES.map((p) => (
-              <DropdownMenuItem
-                key={p.level}
-                onSelect={() => onChange({ field: "priority", value: p.level })}
-              >
-                <Flag className="text-muted-foreground" aria-hidden />
-                {p.label}
-                {values.priority === p.level ? <Check className="ms-auto" aria-hidden /> : null}
-              </DropdownMenuItem>
-            ))}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={() => onChange({ field: "priority", value: null })}>
-              No priority
-            </DropdownMenuItem>
-          </>
-        }
-      />
-      <MorePill
-        values={values}
-        people={people}
-        me={me}
-        onChange={onChange}
-        open={open === "more"}
-        onOpenChange={toggle("more")}
-        onTemplate={onTemplate}
-      />
-      <MoreChips values={values} people={people} onChange={onChange} />
+            }
+          />
+          <MorePill
+            values={values}
+            people={people}
+            me={me}
+            onChange={onChange}
+            open={open === "more"}
+            onOpenChange={toggle("more")}
+            onTemplate={onTemplate}
+          />
+          <MoreChips values={values} people={people} onChange={onChange} />
+        </>
+      )}
     </div>
   );
 }

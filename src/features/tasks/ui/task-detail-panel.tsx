@@ -83,6 +83,8 @@ type Props = {
   layout?: "panel" | "page";
   /** Who "is on this" (claims): TV-F7 fills it. */
   claimSlot?: ReactNode;
+  /** ⋯ → Save as template… (TV-D15). Absent: not offered. */
+  onSaveAsTemplate?: (task: Task) => void;
 };
 
 /**
@@ -114,6 +116,7 @@ function DetailBody({
   onCloseFullPage,
   layout = "panel",
   claimSlot,
+  onSaveAsTemplate,
 }: Props & { task: Task }) {
   // Subtasks are one level (spec §1): a live parent makes this a subtask, and
   // only top-level tasks have a Subtasks collection.
@@ -301,6 +304,7 @@ function DetailBody({
       onOpenFullPage={onOpenFullPage}
       onCloseFullPage={onCloseFullPage}
       claimSlot={claimSlot}
+      onSaveAsTemplate={onSaveAsTemplate ? () => onSaveAsTemplate(task) : undefined}
     />
   );
 

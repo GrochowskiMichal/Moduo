@@ -62,6 +62,8 @@ export type TasksMode = "plan" | "execute";
 /** The sidebar's selections besides projects: the centre views its ⋯ opens. */
 export const ARCHIVED_SELECTION = "archived";
 export const TRASH_SELECTION = "trash";
+/** Templates (TV-D15): opened from the hairline's ⋯ until Settings → Tasks → Templates exists. */
+export const TEMPLATES_SELECTION = "templates";
 /** Upcoming (REPLAN 29, TV-U15's screen). */
 export const UPCOMING_SELECTION = "upcoming";
 /** Won't do: the reachable list with Reopen (tasks-v3 §2), from the ⋯ (TV-U15). */
@@ -148,6 +150,16 @@ type Props = {
   trashCount: number;
   /** Won't do tasks (TV-U15): from the ⋯ too. */
   wontDoCount?: number;
+  /**
+   * Templates (TV-D15): a project's ⋯ → Duplicate… and Save as template…, the
+   * hairline's ⋯ → New project from template… and Templates. Absent: none of
+   * them (a build ahead of its server, stories).
+   */
+  templates?: {
+    onDuplicate: (bucket: Bucket) => void;
+    onSaveAsTemplate: (bucket: Bucket) => void;
+    onNewFromTemplate: () => void;
+  };
 
   /** The sidebar's <nav>, for the page to hand focus back to it (`focusNavRow`). */
   navRef?: RefObject<HTMLElement | null>;
@@ -224,6 +236,7 @@ export function BucketRail({
   archivedCount,
   trashCount,
   wontDoCount = 0,
+  templates,
   navRef,
   dropAccepts,
 }: Props) {
@@ -275,6 +288,8 @@ export function BucketRail({
         onCapture={canEdit && onCaptureInto ? () => onCaptureInto(bucket.id) : undefined}
         onTriage={() => onTriageBucket(bucket.id)}
         onEditStatuses={onEditStatuses ? () => onEditStatuses(bucket.id) : undefined}
+        onDuplicate={templates ? () => templates.onDuplicate(bucket) : undefined}
+        onSaveAsTemplate={templates ? () => templates.onSaveAsTemplate(bucket) : undefined}
         onShareCloseAutoFocus={returnFocus(bucket.id)}
         onInputExit={() => focusRowSoon(bucket.id)}
         dropAccepts={dropAccepts}
@@ -415,6 +430,9 @@ export function BucketRail({
             wontDoCurrent={selection === WONTDO_SELECTION}
             archivedCurrent={selection === ARCHIVED_SELECTION}
             trashCurrent={selection === TRASH_SELECTION}
+            onNewFromTemplate={templates?.onNewFromTemplate}
+            onOpenTemplates={templates ? () => onSelect(TEMPLATES_SELECTION) : undefined}
+            templatesCurrent={selection === TEMPLATES_SELECTION}
           />
 
           {/* ── Shared ──────────────────────────────────────────────────── */}
@@ -592,6 +610,9 @@ function SidebarHairline({
   wontDoCount,
   onOpenWontDo,
   wontDoCurrent,
+  onNewFromTemplate,
+  onOpenTemplates,
+  templatesCurrent,
 }: {
   canEdit: boolean;
   hidden: ReadonlySet<TasksSidebarHideable>;
@@ -608,6 +629,9 @@ function SidebarHairline({
   wontDoCount: number;
   onOpenWontDo: () => void;
   wontDoCurrent: boolean;
+  onNewFromTemplate?: () => void;
+  onOpenTemplates?: () => void;
+  templatesCurrent: boolean;
 }) {
   const rows: TasksSidebarHideable[] = showMine
     ? ["focus", "upcoming", "mine", "all"]
@@ -666,6 +690,11 @@ function SidebarHairline({
             <>
               <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={afterClose(onNewProject)}>New project</DropdownMenuItem>
+              {onNewFromTemplate ? (
+                <DropdownMenuItem onSelect={afterClose(onNewFromTemplate)}>
+                  New project from template…
+                </DropdownMenuItem>
+              ) : null}
               <DropdownMenuItem onSelect={afterClose(onNewArea)}>New area…</DropdownMenuItem>
             </>
           ) : null}
@@ -684,6 +713,14 @@ function SidebarHairline({
             Recently deleted
             {trashCount > 0 ? <DropdownMenuShortcut>{trashCount}</DropdownMenuShortcut> : null}
           </DropdownMenuItem>
+          {onOpenTemplates ? (
+            <DropdownMenuItem
+              onSelect={onOpenTemplates}
+              data-current={templatesCurrent || undefined}
+            >
+              Templates
+            </DropdownMenuItem>
+          ) : null}
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
@@ -875,6 +912,8 @@ function ProjectRow({
   onCapture,
   onTriage,
   onEditStatuses,
+  onDuplicate,
+  onSaveAsTemplate,
   onShareCloseAutoFocus,
   onInputExit,
   dropAccepts,
@@ -900,6 +939,9 @@ function ProjectRow({
   onCapture?: () => void;
   onTriage: () => void;
   onEditStatuses?: () => void;
+  /** Duplicate… and Save as template… (TV-D15). */
+  onDuplicate?: () => void;
+  onSaveAsTemplate?: () => void;
   onShareCloseAutoFocus: (event: Event) => void;
   /** The New area input closed by Enter/Esc: focus goes back to the row. */
   onInputExit: () => void;
@@ -923,7 +965,18 @@ function ProjectRow({
   const pinItem = (m: MenuKit) => (
     <m.Item onSelect={onTogglePin}>{pinned ? "Unpin from sidebar" : "Pin to sidebar"}</m.Item>
   );
-  // Rename · Colour · Area · Pin · Share · Statuses · Triage · Archive · Delete
+  // Rename · Colour · Area · Pin · Share · Statuses · Triage · Duplicate ·
+  // Save as template · Archive · Delete
+  const templateItems = (m: MenuKit) =>
+    onDuplicate || onSaveAsTemplate ? (
+      <>
+        <m.Separator />
+        {onDuplicate ? <m.Item onSelect={m.afterClose(onDuplicate)}>Duplicate…</m.Item> : null}
+        {onSaveAsTemplate ? (
+          <m.Item onSelect={m.afterClose(onSaveAsTemplate)}>Save as template…</m.Item>
+        ) : null}
+      </>
+    ) : null;
   const menu = (m: MenuKit) =>
     canEdit ? (
       <>
@@ -955,6 +1008,7 @@ function ProjectRow({
         {drift > 0 ? (
           <m.Item onSelect={m.afterClose(onTriage)}>Triage {drift} drifted…</m.Item>
         ) : null}
+        {templateItems(m)}
         <m.Separator />
         <m.Item onSelect={m.afterClose(onArchive)}>Archive…</m.Item>
         <m.Item variant="destructive" onSelect={m.afterClose(onDelete)}>
