@@ -223,13 +223,10 @@ test("AC1.8 — moving a parent moves its subtasks", async ({ page }) => {
   });
   await openTasks(page, parent.id);
   await page.getByRole("button", { name: /^Project: .*Move to another project$/ }).click();
-  // Pick by typing: the dev workspace's project list outgrows the window,
-  // and the menu doesn't scroll (a primitive gap, noted for DS-6).
-  const item = page.getByRole("menuitemradio", { name: `Move here ${tag}` });
-  await expect(item).toHaveCount(1);
-  await page.keyboard.type(`Move here ${tag}`);
-  await expect(item).toBeFocused();
-  await page.keyboard.press("Enter");
+  // Pick by typing: the dev workspace's project list is long (TV-U13's
+  // picker filters as you type).
+  await page.getByPlaceholder("Move to…").fill(`Move here ${tag}`);
+  await page.getByRole("option", { name: new RegExp(`Move here ${tag}`) }).click();
   await expect.poll(async () => (await taskById(a.id)).bucket_id).toBe(project.id);
   await expect.poll(async () => (await taskById(b.id)).bucket_id).toBe(project.id);
   expect((await taskById(parent.id)).bucket_id).toBe(project.id);
