@@ -27,6 +27,7 @@ import {
   getFocusSession,
   STOP_UNDO_MS,
   setFocusTimer,
+  skipFocusBreak,
   stopFocus,
   subscribeFocusSession,
   toggleFocusRunning,
@@ -251,6 +252,17 @@ export function toggleFocusPause(resolveTask?: TaskRefResolver): void {
   if (!getFocusSession().tracking && !run) return;
   takeOverIfElsewhere(resolveTask);
   toggleFocusRunning();
+}
+
+/**
+ * Skip Pomodoro's break (Focus's between-tasks offer, TV-F8): a work block
+ * starts now. Takes the run over first when another device has it.
+ */
+export function skipFocusBreakHere(resolveTask?: TaskRefResolver): void {
+  const { run } = getFocusRunState();
+  if (!getFocusSession().tracking && !run) return;
+  takeOverIfElsewhere(resolveTask);
+  skipFocusBreak();
 }
 
 /**

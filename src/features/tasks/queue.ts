@@ -142,6 +142,45 @@ export function movedPosition(
   return betweenPositions(before, after);
 }
 
+/**
+ * The single moves (`opQueueReorder`'s shape) that turn `current` into
+ * `target` (TV-F8's "Arrange by project", and its Undo): walking the target,
+ * each task out of place moves right after the one before it. Ids in only one
+ * of the two lists are left alone.
+ */
+export function queueMoves(
+  current: readonly string[],
+  target: readonly string[],
+): { taskId: string; afterTaskId: string | null }[] {
+  const shared = new Set(current);
+  const goal = target.filter((id) => shared.has(id));
+  const inGoal = new Set(goal);
+  const order = current.filter((id) => inGoal.has(id));
+  const moves: { taskId: string; afterTaskId: string | null }[] = [];
+  goal.forEach((id, i) => {
+    if (order[i] === id) return;
+    order.splice(order.indexOf(id), 1);
+    order.splice(i, 0, id);
+    moves.push({ taskId: id, afterTaskId: i > 0 ? goal[i - 1] : null });
+  });
+  return moves;
+}
+
+/** My line-up after `moves`, each placed like a drag would place it (shown until the server answers). */
+export function applyQueueMoves(
+  mine: readonly TaskQueueEntry[],
+  moves: readonly { taskId: string; afterTaskId: string | null }[],
+): TaskQueueEntry[] {
+  const byPosition = (a: TaskQueueEntry, b: TaskQueueEntry) =>
+    a.position < b.position ? -1 : a.position > b.position ? 1 : 0;
+  let rows = [...mine].sort(byPosition);
+  for (const m of moves) {
+    const position = movedPosition(rows, m.taskId, m.afterTaskId);
+    rows = rows.map((e) => (e.taskId === m.taskId ? { ...e, position } : e)).sort(byPosition);
+  }
+  return rows;
+}
+
 function possessive(name: string): string {
   return `${name}’s`;
 }
@@ -166,31 +205,4 @@ export function claimLabel(names: string[]): string {
 export function alsoInLabel(names: string[]): string {
   if (names.length === 0) return "";
   return `Also in ${possessives(names)} Focus`;
-}
-
-/**
- * The Home Tasks widget's rows (tasks-v2 decision 17): my queue's open tasks
- * in order, headed "Queue"; when that's empty, the open tasks in list order,
- * headed "Open". `bucketIds` narrows both to the widget's chosen buckets
- * (empty = all).
- */
-export function queueOrOpen(
-  tasks: Task[],
-  entries: TaskQueueEntry[],
-  userId: string | null,
-  bucketIds: string[] = [],
-): { rows: Task[]; heading: "Queue" | "Open" } {
-  const open = tasks.filter(
-    (t) =>
-      !t.deletedAt && isOpenTask(t) && (bucketIds.length === 0 || bucketIds.includes(t.bucketId)),
-  );
-  const byId = new Map(open.map((t) => [t.id, t]));
-  const queued = queueEntriesOf(entries, userId)
-    .map((e) => byId.get(e.taskId))
-    .filter((t): t is Task => t !== undefined);
-  if (queued.length > 0) return { rows: queued, heading: "Queue" };
-  return {
-    rows: open.slice().sort((a, b) => bytewise(a.position, b.position)),
-    heading: "Open",
-  };
 }

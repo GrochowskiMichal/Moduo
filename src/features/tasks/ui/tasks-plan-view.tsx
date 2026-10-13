@@ -99,6 +99,7 @@ import {
   railSortCollision,
 } from "../dnd/rail-drop";
 import { type CaptureSeed, showsArchived, statusesLetThrough } from "../filters";
+import type { InFlightItem } from "../focus-screen";
 import { boardFoldKey, listFoldKey } from "../folds";
 import { todayStr } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
@@ -117,7 +118,7 @@ import {
 } from "../my-tasks";
 import { defaultRowsFor, firstViewFor, timelineRoleFor } from "../onboarding";
 import { showsSortedNote, sortedByLabel } from "../order";
-import { NO_DATE_PANEL_VIEW } from "../panel-views";
+import { IN_FLIGHT_PANEL_VIEW, NO_DATE_PANEL_VIEW } from "../panel-views";
 import { handleLabel } from "../row-layout";
 import { resolveTasksDeepLink, taskIdForHandle } from "../search";
 import { inViewOrder } from "../selection";
@@ -141,8 +142,10 @@ import { BulkPanel } from "./bulk-panel";
 import { ArchiveProjectDialog, DeleteBucketDialog } from "./delete-bucket-dialog";
 import { asTaskDrag, taskDragAnnouncements, useTaskDndSensors } from "./dnd/task-dnd";
 import { DriftTriageDialog } from "./drift-triage-dialog";
+import { checkBackAt } from "./focus-hand-off";
 import { FocusView } from "./focus-view";
 import { FrontierOfferDialog } from "./frontier-offer-dialog";
+import { InFlightPanel } from "./in-flight-panel";
 import { useInboxView } from "./inbox-view";
 import type { ListExtraGroup } from "./list-extensions";
 import { type PlanHeaderControls, type PlanView, SortedOrderLine } from "./plan-view-header";
@@ -160,6 +163,7 @@ import { TimelineNoDatePanel } from "./timeline-no-date-panel";
 import { useUpcomingView } from "./upcoming-view";
 import { boardDropName } from "./use-board-folds";
 import { useBulkActions } from "./use-bulk-actions";
+import { useInFlight } from "./use-in-flight";
 import { useProjectEditable } from "./use-project-overview-data";
 import { useSavedViews } from "./use-saved-views";
 import { useTaskSelection } from "./use-task-selection";
@@ -1669,6 +1673,45 @@ export function TasksPlanView({
     const state = readFeaturePanelState("tasks");
     if (!state.right) dispatchLayoutPanelsSet({ feature: "tasks", left: state.left, right: true });
   }, []);
+  // Focus's "2 in flight" opens In flight the same way (TV-F8).
+  const openInFlight = useCallback(() => {
+    setPanelView(IN_FLIGHT_PANEL_VIEW);
+    const state = readFeaturePanelState("tasks");
+    if (!state.right) dispatchLayoutPanelsSet({ feature: "tasks", left: state.left, right: true });
+  }, []);
+  // The offer's Shrink shows the task's Details (TV-F8).
+  const showDetails = useCallback((id: string) => {
+    setPanelView("details");
+    setSelectedTaskId(id);
+  }, []);
+  // In flight (TV-F8): what I'm waiting on, and my agents' work.
+  const inFlight = useInFlight(api);
+  // Pick up: the wait is over, the task goes back to the top of Focus.
+  const pickUpInFlight = useCallback(
+    (item: InFlightItem) => {
+      const id = item.task.id;
+      const waits = item.waiting;
+      const wasQueued = api.queuedTaskIds.has(id);
+      for (const w of waits) api.removeWaiting(w.id);
+      api.addToQueue(id, "top");
+      undoToast("Back in Focus", {
+        onUndo: () => {
+          for (const w of waits) api.addWaiting(id, { kind: w.kind, ref: w.ref, label: w.label });
+          if (!wasQueued) api.removeFromQueue(id);
+        },
+      });
+    },
+    [api],
+  );
+  // Still waiting: check back tomorrow morning (a new check-back un-brightens the card).
+  const checkBackLater = useCallback(
+    (item: InFlightItem) => {
+      const at = checkBackAt("tomorrow", new Date());
+      if (!at) return;
+      if (api.addReminder(item.task.id, "at", at.toISOString())) toast("Checking back tomorrow");
+    },
+    [api],
+  );
   // The place's open tasks with no date and no session (the button's count).
   const undated = useMemo(
     () =>
@@ -1733,6 +1776,8 @@ export function TasksPlanView({
         onOpenTask={openTaskInPanel}
         panelTaskId={panelTopTaskId}
         onRequestCapture={openCapture}
+        onShowInFlight={openInFlight}
+        onShowDetails={showDetails}
       />
     ) : view === "board" ? (
       <TaskBoardView
@@ -2151,8 +2196,7 @@ export function TasksPlanView({
         : panelView;
 
   // The right panel's title row names and switches its views (SH-1): Details
-  // and Project (TV-U13), No date beside the Timeline (TV-TL2); In flight
-  // registers later (TV-F8).
+  // and Project (TV-U13), In flight (TV-F8), No date beside the Timeline (TV-TL2).
   const right = (
     <RightPanel
       module="tasks"
@@ -2170,6 +2214,17 @@ export function TasksPlanView({
         // Inbox task) it says so.
         project: () =>
           projectView ?? <ProjectPanel project={null} tasks={api.tasks} sections={api.sections} />,
+        // Always listed (an alongside view): hand-offs and my agents' work.
+        [IN_FLIGHT_PANEL_VIEW]: () => (
+          <InFlightPanel
+            items={inFlight.items}
+            canEdit={canEdit}
+            bucketNameById={bucketNameById}
+            onOpenTask={openTaskInPanel}
+            onPickUp={pickUpInFlight}
+            onLater={checkBackLater}
+          />
+        ),
         // Listed only while the Timeline shows (the registry hides a view a
         // page can't render).
         [NO_DATE_PANEL_VIEW]: timelineShown

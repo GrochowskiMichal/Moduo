@@ -32,12 +32,15 @@ export function AgentSessionLines({
   sessions,
   userId,
   runtime,
+  className,
 }: {
   taskId: string;
   workspaceId: string;
   sessions: readonly AgentSession[] | undefined;
   userId: string | null;
   runtime: ModuoRuntime | null;
+  /** The panel indents the line under its title; Focus's card doesn't (TV-F8). */
+  className?: string;
 }) {
   const mine = useMemo(
     () =>
@@ -52,7 +55,11 @@ export function AgentSessionLines({
   const { byId } = useAssignees();
   if (mine.length === 0) return null;
   return (
-    <div data-slot="agent-sessions" className="flex flex-col gap-1 pl-6" data-tick={tick}>
+    <div
+      data-slot="agent-sessions"
+      className={cn("flex flex-col gap-1 pl-6", className)}
+      data-tick={tick}
+    >
       {mine.map((s) => (
         <AgentSessionLine
           key={s.id}

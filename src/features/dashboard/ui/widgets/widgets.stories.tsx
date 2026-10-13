@@ -7,7 +7,7 @@ import type { ReconnectItem } from "@/features/contacts/reconnect";
 import type { RecentNoteRow } from "@/features/notes/recent";
 import type { NotificationItem } from "@/features/spine/notifications";
 import type { RecentLinkItem } from "@/features/spine/recent";
-import type { TasksModuleBundle } from "@/features/tasks/model";
+import type { TasksModuleBundle, TimeReportRow } from "@/features/tasks/model";
 import type { HabitRow } from "@/lib/runtime.types";
 
 import {
@@ -114,6 +114,8 @@ const SAMPLE_TASKS = {
       id: "t1",
       title: "Ship the dashboard",
       status: "todo",
+      assigneeId: null,
+      dueDate: ISO,
       committedFor: null,
       commitOrder: 0,
       position: "a0",
@@ -173,7 +175,26 @@ const SAMPLE_HABITS: HabitRow[] = [
   },
 ];
 
+// TV-H1: the time widget's week (your own rows are what the widget shows).
+const SAMPLE_TIME = [
+  { taskId: "t1", taskTitle: "Ship the dashboard", seconds: 5400 },
+  { taskId: "t2", taskTitle: "Review the widget PR", seconds: 1800 },
+].map((r, i) => ({
+  entryId: `e${i}`,
+  projectId: "b1",
+  projectName: "Moduo",
+  projectIsInbox: false,
+  userId: "u1",
+  isMine: true,
+  day: "2026-07-09",
+  kind: "manual",
+  reason: null,
+  note: null,
+  ...r,
+})) as unknown as TimeReportRow[];
+
 const MOCK_DATA: DashboardData = makeMockDashboardData({
+  timeReport: loadedSource(SAMPLE_TIME),
   recentLinks: loadedSource(SAMPLE_LINKS),
   needsAttention: loadedSource(SAMPLE_NEEDS_ATTENTION),
   reconnect: loadedSource(SAMPLE_RECONNECT),
@@ -215,6 +236,10 @@ function Gallery({ density }: { density: WidgetDensity }) {
     ["notes", "M"],
     ["email", "M"],
     ["timetracking", "S"],
+    // TV-H1:
+    ["timetracking", "M"],
+    ["team", "M"],
+    ["upcoming", "M"],
     // DB-6 / DB-7:
     ["habits", "L"],
     ["clock", "S"],

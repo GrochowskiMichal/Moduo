@@ -319,7 +319,8 @@ export type FollowStep =
  * whether a missing task can be told apart from a closed one not loaded yet
  * (closed tasks arrive after the open ones). `wasQueued`: Now was in my Up
  * next at some point this session, so its leaving it is a Remove (a session
- * on a task that was never lined up isn't moved for that).
+ * on a task that was never lined up isn't moved for that). `inFlight`: lined-up
+ * tasks waiting on someone or something (TV-F8), never the next one.
  */
 export function followStep(input: {
   nowTaskId: string;
@@ -328,8 +329,9 @@ export function followStep(input: {
   selfId: string | null;
   complete: boolean;
   wasQueued: boolean;
+  inFlight?: ReadonlySet<string>;
 }): FollowStep {
-  const { nowTaskId, myQueue, task, selfId, complete, wasQueued } = input;
+  const { nowTaskId, myQueue, task, selfId, complete, wasQueued, inFlight } = input;
   const now = task(nowTaskId);
   const queued = myQueue.includes(nowTaskId);
   if (now?.open && (queued || !wasQueued)) return { kind: "stay" };
@@ -340,7 +342,10 @@ export function followStep(input: {
     : !now.open && now.completedBy && now.completedBy !== selfId
       ? "completed"
       : null;
-  const next = myQueue.find((id) => id !== nowTaskId && !id.startsWith("tmp-") && task(id)?.open);
+  const next = myQueue.find(
+    (id) =>
+      id !== nowTaskId && !id.startsWith("tmp-") && !inFlight?.has(id) && task(id)?.open === true,
+  );
   if (next) return { kind: "move", taskId: next, left, leftTaskId: nowTaskId };
   return { kind: "end", left, leftTaskId: nowTaskId };
 }

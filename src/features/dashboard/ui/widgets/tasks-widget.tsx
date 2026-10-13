@@ -1,21 +1,25 @@
-// DB-5 — "Tasks" widget. My queue (TV-D4; falls back to the open tasks),
-// with inline check-off — the one write this widget does, gated by `canWrite`
-// (a "view" member sees disabled checkboxes). Rows open the task in /tasks.
+// DB-5 → TV-H1 — "Tasks" widget. My Focus line-up in Focus's order (Now
+// first), or, when nothing is lined up, the open tasks ("Open"). Inline
+// check-off is the one write, gated by `canWrite` (a "view" member sees
+// disabled checkboxes); it goes through the shared store with call 87's rule,
+// so a parent's open subtasks finish too, with one Undo. Rows open the task.
 
 import { Check } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
 import { toast } from "sonner";
+import { useFocusTaskState } from "@/features/focus/timer";
+import { checkOffWithSubtasks, restoreFocusPlace, undoCheckOff } from "@/features/tasks/check-off";
+import { focusOrOpen } from "@/features/tasks/home";
 import type { Task } from "@/features/tasks/model";
-import { queueOrOpen } from "@/features/tasks/queue";
+import { queueEntriesOf } from "@/features/tasks/queue";
+import { teamIdsOf } from "@/features/tasks/teams";
 import { getRuntime } from "@/lib/runtime";
 import { findWorkspaceStore } from "@/lib/sync/store";
+import { undoToast } from "@/lib/undo-toast";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 
-import {
-  requestDashboardDataRefresh,
-  useDashboardData,
-} from "../../context/dashboard-data-context";
+import { useDashboardData } from "../../context/dashboard-data-context";
 import { useDensity } from "../../hooks/use-density";
 import type { WidgetComponentProps } from "../../registry/types";
 import { widgetRowBudget } from "../../widget-density";
@@ -30,15 +34,21 @@ import {
 
 function TaskRow({
   task,
+  now,
   canWrite,
   onDone,
 }: {
   task: Task;
+  /** The task a Focus session is on right now. */
+  now: boolean;
   canWrite: boolean;
   onDone: (task: Task) => void;
 }) {
   return (
-    <li className="flex min-h-[var(--row-h)] items-center gap-2 rounded-md px-2 py-1 hover:bg-accent">
+    <li
+      className="flex min-h-[var(--row-h)] items-center gap-2 rounded-md px-2 py-1 hover:bg-accent"
+      data-now={now ? "" : undefined}
+    >
       <button
         type="button"
         disabled={!canWrite}
@@ -56,19 +66,25 @@ function TaskRow({
       <button
         type="button"
         onClick={() => openEntity("task", task.id)}
-        className="min-w-0 flex-1 truncate rounded-sm text-left text-sm text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className={cn(
+          "min-w-0 flex-1 truncate rounded-sm text-left text-sm text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          now && "font-medium",
+        )}
       >
         {task.title}
       </button>
+      {now ? <span className="shrink-0 text-2xs text-muted-foreground">Now</span> : null}
     </li>
   );
 }
+
+const subtaskWord = (n: number) => (n === 1 ? "1 subtask" : `${n} subtasks`);
 
 export function TasksWidget({ widget, size, canWrite }: WidgetComponentProps) {
   const { tasks: taskSource, taskQueue, workspaceId } = useDashboardData();
   const { userId } = useAuth();
   const density = useDensity();
-  const [doneIds, setDoneIds] = useState<Set<string>>(() => new Set());
+  const focus = useFocusTaskState();
 
   const projectIds = useMemo(
     () =>
@@ -80,59 +96,85 @@ export function TasksWidget({ widget, size, canWrite }: WidgetComponentProps) {
     [widget.config.projectIds],
   );
 
+  const tasks = taskSource.data.tasks;
+  const teamMembers = taskSource.data.teamMembers;
+  const sessionTaskId = focus.active && focus.workspaceId === workspaceId ? focus.taskId : null;
   const { rows, heading } = useMemo(
-    () => queueOrOpen(taskSource.data.tasks, taskQueue.data, userId, projectIds),
-    [taskSource.data.tasks, taskQueue.data, userId, projectIds],
+    () =>
+      focusOrOpen({
+        tasks,
+        queue: taskQueue.data,
+        userId,
+        projectIds,
+        sessionTaskId,
+        myTeams: teamIdsOf(teamMembers ?? [], userId),
+      }),
+    [tasks, taskQueue.data, userId, projectIds, sessionTaskId, teamMembers],
   );
+
+  // The newest copy and line-up, for an Undo that runs from a toast later.
+  const latest = useRef({ tasks, queue: taskQueue.data });
+  useLayoutEffect(() => {
+    latest.current = { tasks, queue: taskQueue.data };
+  });
 
   const markDone = useCallback(
     (task: Task) => {
       const runtime = getRuntime();
       if (!canWrite || !workspaceId || !runtime) return;
-      setDoneIds((prev) => new Set(prev).add(task.id));
-      // Through the shared store (TV-D11a): every surface shows it done at
-      // once, and offline it waits on the device like any check-off.
+      // Home's tasks are the shared store's copy (TV-D11a): no store, no rows.
       const store = findWorkspaceStore(runtime, workspaceId);
-      const sent = store
-        ? store.sendStatus({
-            taskId: task.id,
-            status: "done",
-            fields: { status: "done", statusCategory: "done" },
-          })
-        : runtime.tasks.opSetStatus({ workspaceId, taskId: task.id, status: "done" });
-      void sent
-        .then(() => requestDashboardDataRefresh())
-        .catch(() => {
-          setDoneIds((prev) => {
-            const next = new Set(prev);
-            next.delete(task.id);
-            return next;
+      if (!store) return;
+      // Finishing takes it out of my Focus on the server; Undo puts it back there.
+      const lineupBefore = queueEntriesOf(latest.current.queue, userId).map((e) => e.taskId);
+      void checkOffWithSubtasks(store, task, latest.current.tasks)
+        .then(({ subtasks, refused }) => {
+          if (refused > 0) toast.error(`Couldn’t finish ${subtaskWord(refused)}.`);
+          // Call 87: "Done · also 2 subtasks", one Undo for all of them. The
+          // row leaves the widget at once, so a lone check-off has an Undo too.
+          const label =
+            subtasks.length > 0 ? `Done · also ${subtaskWord(subtasks.length)}` : "Done";
+          undoToast(label, {
+            onUndo: () => {
+              // The store's own copy: Home may be gone by the time Undo is clicked.
+              const current = (id: string) =>
+                store.getSnapshot().bundle.tasks.find((t) => t.id === id);
+              void undoCheckOff(store, [task, ...subtasks], current)
+                .then(async ({ restored, failed }) => {
+                  if (failed > 0) toast.error("Couldn’t undo all of that.");
+                  if (!restored.includes(task.id) || !lineupBefore.includes(task.id)) return;
+                  await restoreFocusPlace(store, runtime.tasks, workspaceId, task.id, lineupBefore);
+                })
+                .catch(() => toast.error("Couldn’t put it back in Focus."));
+            },
           });
-          toast.error("Couldn't complete that task.");
-        });
+        })
+        .catch(() => toast.error("Couldn’t complete that task."));
     },
-    [canWrite, workspaceId],
+    [canWrite, workspaceId, userId],
   );
 
-  const visible = rows.filter((t) => !doneIds.has(t.id));
-
   if ((taskSource.loading || taskQueue.loading) && rows.length === 0) return <WidgetLoading />;
-  if (visible.length === 0) {
+  if (rows.length === 0) {
     return <WidgetEmpty>No open tasks. Enjoy the calm.</WidgetEmpty>;
   }
 
   const budget = widgetRowBudget(size, density);
-  const shown = visible.slice(0, budget);
-  const overflow = visible.length - shown.length;
+  const shown = rows.slice(0, budget);
+  const overflow = rows.length - shown.length;
 
   return (
     <WidgetBodyRoot>
-      {size !== "S" ? (
-        <WidgetSectionLabel count={visible.length}>{heading}</WidgetSectionLabel>
-      ) : null}
+      {size !== "S" ? <WidgetSectionLabel count={rows.length}>{heading}</WidgetSectionLabel> : null}
       <ul className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto scrollbar-thin p-1.5 pt-0.5">
         {shown.map((task) => (
-          <TaskRow key={task.id} task={task} canWrite={canWrite} onDone={markDone} />
+          <TaskRow
+            key={task.id}
+            task={task}
+            now={heading === "Focus" && !!sessionTaskId && task.id === sessionTaskId}
+            canWrite={canWrite}
+            onDone={markDone}
+          />
         ))}
       </ul>
       <WidgetMore count={overflow} onClick={() => openModuleRoute("/tasks")} />

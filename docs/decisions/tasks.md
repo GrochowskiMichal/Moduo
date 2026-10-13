@@ -52,6 +52,111 @@ Built in tasks-v3 block 35 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §15, �
   - Why: the header is full; the id is for finding and copying, not for every glance.
   - Rejected: a property row in the panel.
 
+## 2026-10-14 · TV-H1 Home widgets for Tasks — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 32 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §18, AC4.5; decision 12 below; Chat's CH70 from the 🟠 box) on the local stack, no migration. Plain and functional on the existing grid: the widgets' own visual round comes after all modules (Maciej's call).
+
+- **H1-1 · One "Team" widget, with a slot Chat fills** → `ui/widgets/team-widget.tsx`, `dashboard/team-now.ts`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14 (CH70 is Maciej's).
+  - Decision: each person's row is avatar · name · Chat's "now" line · Tasks' load line. The "now" line is a component Chat registers with `registerTeamNowLine` (props `workspaceId`, `userId`, `size`); until then the row shows the load only.
+  - Why: CH70 ("one Team widget, not two"); a component keeps Chat's presence reads and live updates in Chat, and the widget never learns more about a person than the line says.
+  - Rejected: a data seam (a map of statuses passed in); a second widget.
+- **H1-2 · What a person's load counts** → `features/tasks/home.ts` `teamLoad`, `loadLine`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14 (decision 12's list is Maciej's).
+  - Decision: "Focus 3 · ~2h · 1 in progress · 1 waiting · 2 due this week", zeros left out, "Nothing lined up" when empty. Focus is their open lined-up tasks and the sum of those estimates; in progress, waiting (an open task with any Waiting on… entry) and due this week are tasks assigned to them. Due this week means due by the last day of Time & region's week, late ones included. Backlog never counts. The rows are the members who can take tasks, plus anyone else who still has load, me first, then by name. Every count is over the reader's own copy, so a task the reader can't see adds nothing.
+  - Why: decision 12 (ownership, never surveillance); late work is still this week's load; a viewer with nothing assigned is noise.
+  - Rejected: tracked time or runs per person; counting only tasks due inside the week; listing viewers with no load.
+- **H1-3 · Teams in the Team widget** → `team-widget.tsx`, `config-forms.tsx` `TeamConfig`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: the widget's ⋯ picks Everyone (the default) or one team; a team shows only its members. Teams with unclaimed work follow the people as "Design · 2 unclaimed" (only the picked team's when one is picked). A team that's gone falls back to Everyone.
+  - Why: REPLAN 54 ("the team-load widget can show teams"); D13's routing makes unclaimed work the team's load.
+  - Rejected: a row per team instead of per person.
+- **H1-4 · The time widget reads your task time this week** → `ui/widgets/timetracking-widget.tsx`, `home.ts` `weekTime`, `dashboard-data-context.tsx`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14 (tasks-v2 §17 set "my entries").
+  - Decision: the widget keeps its type id `timetracking`, so placed widgets carry over, and works on web and desktop. It shows "6h 30m · this week · 1h 15m today" and your tasks by time (the project too at L). It reads TV-D14's report for Time & region's week and zone and keeps only your own rows, even for the workspace owner, whose report also carries teammates who share. It reads again when a tracked total in the store moves, on a new day, and when Time & region changes. The desktop window tracker stays dormant.
+  - Why: decision 12 keeps per-person time off Home; the report already hides tasks the reader can't see.
+  - Rejected: a new widget type; an "and 3h shared with you" line for the owner; live unsaved seconds of a running session (polish later).
+- **H1-5 · The Tasks widget says Focus, in Focus's order** → `ui/widgets/tasks-widget.tsx`, `home.ts` `focusOrOpen`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14 (F7-10 left the heading to this block).
+  - Decision: headed "Focus": the task a session is on first, then Up next, in Focus's own order; "Now" marks that row only while a session runs. With nothing lined up it's "Open", as before, without unassigned work routed to a team you're not in (Upcoming's rule).
+  - Why: call 61 ("the Queue is called Focus"); a head-of-line "Now" with no clock running would read as running.
+  - Rejected: always labelling the head "Now"; changing what Open lists beyond the team rule.
+- **H1-6 · Call 87 on Home goes through the store with the module's rule** → `features/tasks/check-off.ts`, `home.ts` `subtasksToFinish`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: Home mounts no Tasks module, so the check-off can't route through it, as TV-U13's note asked. Instead the rule of which subtasks a finishing parent takes along lives once in `subtasksToFinish`; the module's `finishOpenSubtasks` and Home both call it. Home sends each status through `store.sendStatus`. Every check-off on Home gets an Undo, since the row leaves at once: "Done", or "Done · also 2 subtasks". Undo puts back each task that is still done, by its own status, and puts the task back in your Focus where it was. The place comes from the server's answer, not the copy.
+  - Why: one rule, two callers; a check-off from Home should be as reversible as one in Tasks.
+  - Rejected: mounting `useTasksModule` on Home (its catch-up ops and listeners); no Undo for a lone check-off. Known gap: while the write is in flight, the row shows Done with its old status id, and it leaves the widget at once anyway.
+- **H1-7 · Upcoming on Home is Upcoming, as a glance** → `ui/widgets/upcoming-widget.tsx`, `home.ts` `upcomingForHome`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: Upcoming's coverage, order, day groups and "when" words, open tasks only, and only the days with work. Rows open the task; "+n more" opens Tasks.
+  - Why: the spec's Upcoming widget; a widget is read, not dropped onto.
+  - Rejected: empty days; drops; a link straight to Upcoming (it would need a new `/tasks` search param, outside this block).
+- **H1-8 · Widget group labels in people's words are sentence case** → `widget-primitives.tsx` `WidgetGroupLabel`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: a team's name and Upcoming's day names head their groups in sentence case; small caps stay for fixed chrome (`WidgetSectionLabel`: "Focus", "Open").
+  - Why: call 40, which `lint:tw` enforces.
+  - Rejected: adding the expressions to the small-caps allowlist.
+
+## 2026-10-14 · TV-F8 Along the way, meeting divider, pace, In flight — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 24 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §7, AC8.6–8.8, AC8.10, AC3.4's line in Focus; REPLAN 10, 52, 57, 59a, 62a, 63, 64, call 5's reshape of TV-F4) on TV-F7's screen and TV-F6's one engine. No migration. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to change.
+
+- **F8-1 · A check-back is one of my reminders; no new notice kind** → TV-F8 (`focus-hand-off.tsx` `checkBackAt`, `inFlightItems`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14 (TV-D12's note expected "a delivery kind").
+  - Decision: Hand off's check-back is a personal `at` reminder on the task (`addReminder`), so it arrives on its own through TV-D12's sender (bell, OS, browser; ids only; held back in Backlog/Won't do) and is turned off by removing it (§13's "Turned off by: the check-back"). In flight reads a check-back as any reminder of mine on the task timed after the wait began; the card brightens once one has passed with none ahead; "Check back tomorrow" adds the next one.
+  - Why: §13's check-back row has the reminder's exact shape (you, OS/browser/bell, at its time, on its own, no switch); a new kind meant a migration on the shared sender for a notice that reads the same.
+  - Rejected: a `check_back_at` column on `task_waiting` with its own cron and `notice_deliveries` kind. Known limit: the bell and OS notice say "Reminder", not "Check back" (Polish later).
+- **F8-2 · Hand off W = Waiting on…; the task stays lined up and sits in In flight until the wait clears** → TV-F8 (`HandOffPopover`, `focusLineup(…, inFlight)`, `followStep`'s `inFlight`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14 (call 5: "In flight becomes the run's view of hand-offs").
+  - Decision: W (or the card's Hand off) asks who or what you're waiting on (a member, or typed text), an optional check-back (None · 30m · 2h · Tomorrow 9:00 · Next week 9:00, by Time & region's week start) and where you left off (a comment "Where I left off: …"); the task keeps its place in Focus, but any lined-up task with a Waiting on… entry leaves Now and Up next (the session's own task excepted) and the run follower never picks one as next; the session moves on; "Waiting on … · In flight" with Undo (the entry and the check-back go; the session comes back).
+  - Why: when the wait clears by itself (D12-9) the task is back in Up next where it was; Undo is just removing the entry.
+  - Rejected: taking it out of Focus (a cleared wait would lose it), a person picker only (most waits are on "the client's files").
+- **F8-3 · In flight lists my hand-offs, my lined-up tasks that wait, and my agents' work** → TV-F8 (`inFlightItems`, `in-flight-panel.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14 (52, the prototype's frame 1).
+  - Decision: open tasks with a Waiting on… entry I added (from Focus or the panel's field), my lined-up tasks that wait on anything, and tasks my own live agent sessions are on ("Claude · Writing tests · 2m ago"); cards that need me first (a passed check-back, my agent needs me / is ready / failed), then the longest-waiting. A click opens the task as "← In flight"; Pick up ends the wait (every entry on it) and puts it at the top of Focus, with Undo; a due card offers "Check back tomorrow".
+  - Why: hand-offs and delegated agent runs are the same "out of my hands" state (decision 6).
+  - Rejected: a teammate's hand-offs, a count badge in colour (rule 45).
+- **F8-4 · In flight is chosen, not forced: Focus keeps Now's Details; a line opens it** → TV-F8 (`InFlightLine`, `openInFlight`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14 (F7-6 kept Details until In flight existed).
+  - Decision: In flight is the panel's alongside view (⌥3, before No date's ⌥4). Focus keeps showing Now's Details; under Up next "2 in flight · 1 to check" opens the panel on In flight (the panel too, if it's closed).
+  - Why: switching the panel on entering Focus would hide Now's comments and files, and a click on an Up next row would land on a panel that doesn't show it.
+  - Rejected: In flight as Focus's default view (the prototype's frame 1).
+- **F8-5 · The moment between two tasks: one offer in Now's place, the break first** → TV-F8 (`focus-between.tsx`, `betweenOffers`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14 (57, 59a, 62, 62a).
+  - Decision: after Done or Hand off, when the next task is in another project and the switch is on, one task from the project you're leaving: open, To do/In progress, 15 minutes or less, yours or nobody's, not lined up, not blocked, not waiting; high priority, then soonest due, then smallest. Once per change (leaving Acme for the same next task never asks twice); never with nothing next. Take it ⏎ lines it up on top (with a session, it gets the clock); Not now Esc. Under Pomodoro, when a work block has ended (the break waits, paused) "Take a 5-minute break ⏎ · Skip Esc" comes first; Skip starts a fresh work block (`skipFocusBreak`, in the one engine). The session already moved to the next task, so a few seconds of reading land on it.
+  - Why: "only in the moment between two tasks, never a standing line"; one answer each.
+  - Rejected: holding the clock while the offer shows (a second clock state), offering at Skip (you chose to move on).
+- **F8-6 · Three Not-nows: Shrink · Move · Let go** → TV-F8 (`along-the-way.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14 (57; Mike's research: "shrink it, give it a new place, or let it go").
+  - Decision: Not now is counted per task on this device (per person and workspace); from the third, the next offer of that task reads Shrink (its Details open, to split off a first step) · Move (to Backlog, Undo) · Let go (Won't do, Undo) · Not now. Any of them resets the count.
+  - Why: a skip count is nobody else's business; losing it on another device costs one more plain offer.
+  - Rejected: synced counts, "never offer again" as Let go (it would hide the task, not decide it).
+- **F8-7 · Arrange by project: Now's project first, then high priority, your order inside** → TV-F8 (`arrangeByProject`, `arrangedQueue`, `queueMoves`, module `arrangeQueue`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14 (57, 62).
+  - Decision: Up next grouped by project; the group of Now's project first (no switch at all), then groups holding a high-priority task, then the rest as they first appear; order kept inside each group; Now and anything else lined up keep their slots. The header offers "Arrange by project · n fewer switches" from two saved, ⋯ whenever it saves one; "Arranged by project" with Undo. It's saved as single moves through the existing queue op, chained.
+  - Why: "groups your line-up by project, keeps your order inside each, puts high priority first, explains itself, can be undone".
+  - Rejected: sorting high priority to the very top across projects (it would add switches back), a new bulk-reorder op (a migration for a rare action).
+- **F8-8 · The meeting divider: my own timed events, within two hours or the line-up** → TV-F8 (`nextMeeting`, `meetingSlot`, `use-next-meeting.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14 (64).
+  - Decision: the next timed, not cancelled event on my own calendar (owner = me; a shared calendar's aren't mine to attend) starting within two hours, or within the line-up's estimates when they run longer; "── 2:30 PM · Acme call ──" after the tasks that fit by their estimates (Now's remaining estimate first); an unknown estimate stops the count there (no estimates: the top). Calendar is read on opening Focus and every five minutes; a failed read means no divider.
+  - Why: 64's rules; owner-only stands in for "attending" until events carry attendance.
+  - Rejected: a line above the task (64 removed it), every meeting of the day.
+- **F8-9 · Your usual pace: the last 30 tasks you finished, from ten** → TV-F8 (`features/focus/pace.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14 (10, 63).
+  - Decision: the ratio of tracked time to estimate over the newest 30 tasks you finished that had an estimate and at least a minute tracked (clamped to ⅕–5×); from ten, Up next's header adds "≈ 1h 20m at your usual pace" for its estimates (rounded to 5 minutes). Never under Timer: Off; Settings turns it off. It reads the task's whole tracked total (yours and anyone's), which is a person's own on a personal task.
+  - Why: personal, never changes an estimate (10).
+  - Rejected: the done line too (the same number twice on one screen), a server read of your own entries (one more round trip per Focus open).
+- **F8-10 · Settings → Focus: the Timer and the two switches, then Pomodoro** → TV-F8 (`focus-section.tsx`, F7-17)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: "Timer and offers" (Timer Per task · Pomodoro · Off; Count down the estimate, Per task only; Offer quick tasks along the way; Show my usual pace), then "Pomodoro" (lengths, auto-start, sound). Settings sets the defaults; Focus's ⋯ changes them and the running session (63). It stays under Personal until the Settings rebuild makes Tasks → Focus.
+  - Why: one section, built once (F7-17).
+  - Rejected: a new Settings → Tasks section now (the rebuild's).
+- **F8-11 · New in Focus (C) with no session becomes the Now card: right as is** → TV-F8 (TV-F7's open question)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: without a session, the Now card *is* the head of Up next shown big, so "new at the top of Up next" landing on the card is what the key promises; with a session it lands right after Now (Up next reorders around Now since F7). Nothing is plumbed into capture.
+  - Why: the alternative (insert after Now) needs the Now id through the capture context for no visible difference.
+  - Rejected: plumbing the Now id into `capture-create.ts`.
+
 ## 2026-10-13 · TV-TL2 Timeline interactions — the agent's choices (deferred to by Maciej)
 
 Built in tasks-v3 block 26 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §6, AC9.6–9.8; REPLAN 70, 68b, 71; research `.design/tasks-v3/research/timeline-competitors.md` §4–5; the carry-forwards from TV-TL1, TV-U12, TV-U15 and RF-1) on the local stack, no migration. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to change.
