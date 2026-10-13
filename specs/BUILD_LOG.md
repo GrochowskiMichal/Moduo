@@ -447,7 +447,7 @@ _Built and landed locally on `t/maciej/tasks-v3-build` (🟠 LOCAL BUILD MODE in
 
 **Tests:** `focus-screen.test.ts` (meeting, arrange + moves, the offer's rules, In flight, the lineup), `features/focus/pace.test.ts` (AC8.10), `engine.test.ts` (skip the break), `focus-view.test.tsx` (7 new: the offer, three Not-nows, the switch, Arrange, W hand-off, In flight out of Up next), `panel-registry.test.ts` (⌥3 · ⌥4); e2e `tests/focus.spec.ts` AC8.6, AC8.7, AC8.8 and Hand off → In flight, each in a workspace of its own; `tests/tasks-detail.spec.ts` AC11.7 now lists In flight. All green serially on installed Chrome.
 
-**Live-verified** on the local stack (checklist). **Reviews:** one validator round (lighter gate); see the checklist's Polish later.
+**Live-verified** on the local stack (checklist). **Reviews:** one validator round (lighter gate): its two MAJOR fixed (the screen lost its keys after an answered offer; Arrange refused partway left screen and server apart with no Undo: the saved moves stand, "Arranged only in part · Undo") and four MINOR; the rest is in the checklist's Polish later.
 
 **Records:** choices F8-1…F8-11 in decisions/tasks.md (the check-back is a reminder: no migration); gotchas ui.md; checklist [docs/testing/t-maciej-tv-f8-focus-extras.md](../docs/testing/t-maciej-tv-f8-focus-extras.md).
 

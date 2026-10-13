@@ -1046,10 +1046,14 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
   /**
    * Put my whole line-up in `orderedIds`' order (Focus's "Arrange by project"
    * and its Undo, TV-F8): shown at once, then sent as single moves, one after
-   * another, behind any queue op already on its way. False when nothing moves.
+   * another, behind any queue op already on its way. When a later move is
+   * refused (the network went, a task left the line-up meanwhile), the moves
+   * already saved stand and the line-up shows the server's order: `onSaved`
+   * still runs, with `partial`, so the caller's Undo can walk it back. A first
+   * move that fails changes nothing (the usual error). False when nothing moves.
    */
   const arrangeQueue = useCallback(
-    (orderedIds: readonly string[], onSaved?: () => void): boolean => {
+    (orderedIds: readonly string[], onSaved?: (partial: boolean) => void): boolean => {
       if (!canEdit) return false;
       const moves = queueMoves(
         myQueueRef.current.map((e) => e.taskId),
@@ -1060,20 +1064,29 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         toast.error(STILL_SAVING);
         return false;
       }
+      let partial = false;
       return runQueueOp(
         (mine) => applyQueueMoves(mine, moves),
         async (rt, ws) => {
-          let answer: TaskQueueEntry[] = [];
+          let answer: TaskQueueEntry[] | null = null;
           for (const m of moves) {
-            answer = await rt.tasks.opQueueReorder({
-              workspaceId: ws,
-              taskId: m.taskId,
-              afterTaskId: m.afterTaskId,
-            });
+            try {
+              answer = await rt.tasks.opQueueReorder({
+                workspaceId: ws,
+                taskId: m.taskId,
+                afterTaskId: m.afterTaskId,
+              });
+            } catch (e) {
+              // Nothing saved yet: the usual refusal. Else the server's order
+              // after the moves that went through becomes the line-up.
+              if (!answer) throw e;
+              partial = true;
+              break;
+            }
           }
-          return answer;
+          return answer ?? [];
         },
-        onSaved,
+        () => onSaved?.(partial),
       );
     },
     [canEdit, runQueueOp],
@@ -2629,17 +2642,18 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     [editBlocked, store, runtime, workspaceId, refused],
   );
 
-  /** One of my reminders: at a time, or a day / an hour before due. */
+  /** One of my reminders: at a time, or a day / an hour before due. True once
+   *  it's on its way (offline or a task still saving says why and answers false). */
   const addReminder = useCallback(
-    (taskId: string, kind: TaskReminder["kind"], at: string | null = null) => {
-      if (!store || !runtime || !workspaceId || !userId) return;
+    (taskId: string, kind: TaskReminder["kind"], at: string | null = null): boolean => {
+      if (!store || !runtime || !workspaceId || !userId) return false;
       if (store.isOffline()) {
         sayOffline();
-        return;
+        return false;
       }
       if (isTempId(taskId)) {
         toast.error(STILL_SAVING);
-        return;
+        return false;
       }
       const shown: TaskReminder = {
         id: `tmp-${crypto.randomUUID()}`,
@@ -2657,6 +2671,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         .addReminder({ workspaceId, taskId, kind, at })
         .then((rows) => write.settle({ reminders: rows }))
         .catch((e) => refused(write, e, "Couldn’t set the reminder."));
+      return true;
     },
     [store, runtime, workspaceId, userId, refused],
   );

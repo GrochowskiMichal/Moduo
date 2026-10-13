@@ -20,6 +20,8 @@ import {
   startFocus,
 } from "../../focus/engine";
 import { setRunNotice } from "../../focus/run";
+import type { AgentSession } from "../../spine/agent-session";
+import { WorkspaceContext, type WorkspaceContextValue } from "../../workspaces/workspace-context";
 import { makeTask } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { Task, TaskSession, TaskWaitingEntry } from "../model";
@@ -43,6 +45,7 @@ function fakeApi(
     sessions?: TaskSession[];
     subtasks?: Map<string, Task[]>;
     waiting?: TaskWaitingEntry[];
+    agentSessions?: AgentSession[];
   } = {},
 ) {
   const all = over.all ?? queued;
@@ -56,7 +59,7 @@ function fakeApi(
     sessions: over.sessions ?? [],
     waiting: over.waiting ?? [],
     reminders: [],
-    agentSessions: [],
+    agentSessions: over.agentSessions ?? [],
     addWaiting: rs.fn(() => "w-new"),
     removeWaiting: rs.fn(),
     addReminder: rs.fn(),
@@ -92,24 +95,30 @@ function renderView(
   } = {},
 ) {
   return render(
-    <TooltipProvider>
-      <FocusView
-        api={api}
-        workspaceId={WS}
-        runtime={null}
-        canEdit
-        bucketNameById={() => "Inbox"}
-        selectedTaskId={null}
-        onSelectTask={handlers.onSelectTask ?? (() => {})}
-        onOpenTask={handlers.onOpenTask ?? (() => {})}
-        panelTaskId={null}
-        onRequestCapture={() => {}}
-        dndMode="internal"
-        onShowInFlight={handlers.onShowInFlight}
-      />
-    </TooltipProvider>,
+    <WorkspaceContext.Provider value={{ members: MEMBERS } as unknown as WorkspaceContextValue}>
+      <TooltipProvider>
+        <FocusView
+          api={api}
+          workspaceId={WS}
+          runtime={null}
+          canEdit
+          bucketNameById={() => "Inbox"}
+          selectedTaskId={null}
+          onSelectTask={handlers.onSelectTask ?? (() => {})}
+          onOpenTask={handlers.onOpenTask ?? (() => {})}
+          panelTaskId={null}
+          onRequestCapture={() => {}}
+          dndMode="internal"
+          onShowInFlight={handlers.onShowInFlight}
+        />
+      </TooltipProvider>
+    </WorkspaceContext.Provider>,
   );
 }
+
+const MEMBERS = [
+  { userId: USER, displayName: "Maciej", isActive: true, removedAt: null, perms: ["tasks.edit"] },
+];
 
 let otherTab: FocusEngine | null = null;
 
@@ -421,6 +430,40 @@ describe("Focus: along the way, Arrange, Hand off (TV-F8)", () => {
     expect(screen.getByRole("region", { name: "Now" })).toBeTruthy();
   });
 
+  it("after Esc on the offer the screen keeps the keys: S skips the new Now", () => {
+    const invoice = acme("invoice", { estimateMinutes: 5 });
+    const api = fakeApi([acme("logo"), web("site"), web("nav")], {
+      all: [acme("logo"), web("site"), web("nav"), invoice],
+    });
+    renderView(api);
+    fireEvent.click(screen.getByRole("button", { name: /^Done/ }));
+    const offer = screen.getByRole("region", { name: "Along the way" });
+    expect(document.activeElement).toBe(within(offer).getByRole("button", { name: /^Take it/ }));
+    fireEvent.keyDown(document.activeElement ?? offer, { key: "Escape" });
+    expect(screen.queryByRole("region", { name: "Along the way" })).toBeNull();
+    // Focus went back to the screen, not to <body>.
+    const root = document.querySelector('[data-slot="focus-view"]') as HTMLElement;
+    expect(root.contains(document.activeElement)).toBe(true);
+    fireEvent.keyDown(document.activeElement ?? root, { key: "s" });
+    expect(api.moveQueuedToEnd).toHaveBeenCalled();
+  });
+
+  it("⏎ never takes the Shrink · Move · Let go ask", () => {
+    const invoice = acme("invoice", { estimateMinutes: 5 });
+    localStorage.setItem("moduo:tasks:along:u1:ws-1", JSON.stringify({ invoice: 3 }));
+    const api = fakeApi([acme("logo"), web("site")], {
+      all: [acme("logo"), web("site"), invoice],
+    });
+    renderView(api);
+    fireEvent.click(screen.getByRole("button", { name: /^Done/ }));
+    expect(screen.getByRole("button", { name: "Let go" })).toBeTruthy();
+    const root = document.querySelector('[data-slot="focus-view"]') as HTMLElement;
+    root.focus();
+    fireEvent.keyDown(root, { key: "Enter" });
+    expect(api.addToQueue).not.toHaveBeenCalled();
+    expect(screen.getByRole("region", { name: "Along the way" })).toBeTruthy();
+  });
+
   it("Esc is Not now; three Not-nows turn the next offer into Shrink · Move · Let go", () => {
     const invoice = acme("invoice", { title: "Send invoice", estimateMinutes: 5 });
     for (let i = 0; i < 4; i++) {
@@ -496,6 +539,50 @@ describe("Focus: along the way, Arrange, Hand off (TV-F8)", () => {
     });
     expect(api.addReminder).not.toHaveBeenCalled();
     expect(getFocusSession().taskId).toBe("t2");
+  });
+
+  it("after ten timed tasks Up next says your usual pace (AC8.10)", () => {
+    const finished = Array.from({ length: 10 }, (_, i) =>
+      task(`d${i}`, {
+        status: "done",
+        completedBy: USER,
+        completedAt: "2026-10-01T10:00:00Z",
+        estimateMinutes: 30,
+        timeSpentSeconds: 45 * 60,
+      }),
+    );
+    const queued = [task("t1", { estimateMinutes: 20 }), task("t2", { estimateMinutes: 40 })];
+    renderView(fakeApi(queued, { all: [...queued, ...finished] }));
+    // Up next is t2 (40m) at a 1.5× pace.
+    expect(document.querySelector('[data-slot="focus-pace"]')?.textContent).toContain(
+      "≈ 1h at your usual pace",
+    );
+  });
+
+  it("an agent on the Now task shows as one status line under its title (52, AC3.4)", () => {
+    const now = new Date().toISOString();
+    const session: AgentSession = {
+      id: "s1",
+      workspaceId: WS,
+      taskId: "t1",
+      userId: USER,
+      agent: "Claude",
+      state: "working",
+      note: "Writing tests",
+      step: 3,
+      steps: 5,
+      links: [],
+      earlier: [],
+      summaryAt: null,
+      summaryPostedAt: null,
+      startedAt: now,
+      updatedAt: now,
+      stoppedAt: null,
+    };
+    renderView(fakeApi([task("t1"), task("t2")], { agentSessions: [session] }));
+    const card = screen.getByRole("region", { name: "Now" });
+    // Status, not conversation: "Claude · Writing tests · step 3 of 5 · just now".
+    expect(within(card).getByText("Claude · Writing tests · step 3 of 5 · just now")).toBeTruthy();
   });
 
   it("a lined-up task that waits is In flight, not Up next; the line opens the panel", () => {

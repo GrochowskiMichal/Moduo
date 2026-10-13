@@ -326,8 +326,12 @@ export function FocusView({
       upNext.map((t) => t.id),
       arrangement.order.map((t) => t.id),
     );
-    api.arrangeQueue(after, () =>
-      undoToast("Arranged by project", { onUndo: () => apiRef.current.arrangeQueue(before) }),
+    // A move refused partway keeps what went through: say so, and Undo still
+    // walks the line-up back.
+    api.arrangeQueue(after, (partial) =>
+      undoToast(partial ? "Arranged only in part" : "Arranged by project", {
+        onUndo: () => apiRef.current.arrangeQueue(before),
+      }),
     );
   }, [canEdit, arrangement, api, upNext]);
 
@@ -445,6 +449,7 @@ export function FocusView({
     takeOffer,
     declineOffer,
     openHandOff: () => setHandOffOpen(true),
+    dropOffers: () => setBetween([]),
     hasNow: !!now,
   });
   useLayoutEffect(() => {
@@ -458,6 +463,7 @@ export function FocusView({
       takeOffer,
       declineOffer,
       openHandOff: () => setHandOffOpen(true),
+      dropOffers: () => setBetween([]),
       hasNow: !!now,
     };
   });
@@ -476,6 +482,8 @@ export function FocusView({
         const id = target.closest<HTMLElement>("[data-focus-task]")?.dataset.focusTask;
         if (!id || !k.canEdit) return;
         e.preventDefault();
+        // A new Now card: whatever was offered between tasks is moot.
+        k.dropOffers();
         k.api.focusOnTask(id);
         return;
       }
@@ -483,8 +491,10 @@ export function FocusView({
       // A focused button keeps its own Enter.
       const onControl = !!target.closest("button,a,[role='button'],[role='checkbox']");
       if (k.offer) {
-        // Between tasks the offer holds Now's place: ⏎ takes it, Esc declines.
-        if (e.key === "Enter" && !onControl) {
+        // Between tasks the offer holds Now's place: ⏎ takes it (the
+        // Shrink · Move · Let go ask has no ⏎ of its own), Esc declines.
+        const plainTake = k.offer.kind === "break" || !k.offer.ask;
+        if (e.key === "Enter" && !onControl && plainTake) {
           e.preventDefault();
           k.takeOffer();
         } else if (e.key === "Escape") {
@@ -520,7 +530,10 @@ export function FocusView({
   // last task). Start becoming the pill hands focus to the pill, so a second
   // ⏎ pauses (undoable) rather than finishing the task. A click on the
   // screen's empty parts focuses it too (tabIndex -1).
-  // biome-ignore lint/correctness/useExhaustiveDependencies: Now and the session are the cues
+  // An answered offer (Not now, the break) takes its focused button with it,
+  // so the screen takes focus back and the keys keep working (TV-F8).
+  const offerShown = between.length > 0;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Now, the session and the offer are the cues
   useEffect(() => {
     if (typeof document === "undefined" || document.activeElement !== document.body) return;
     const root = rootRef.current;
@@ -528,7 +541,7 @@ export function FocusView({
       '[data-slot="focus-task-pill"],[data-slot="focus-pomodoro-pill"]',
     );
     (pill ?? root)?.focus({ preventScroll: true });
-  }, [now?.id, onNow]);
+  }, [now?.id, onNow, offerShown]);
 
   // ── what this session finished ("2 done · Show") ───────────────────────────
   const sessionRun = run && run.workspaceId === workspaceId ? run : null;

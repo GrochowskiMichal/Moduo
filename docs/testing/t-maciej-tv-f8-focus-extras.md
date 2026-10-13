@@ -66,3 +66,11 @@
 - The offer shows while the session already runs on the next task, so a few seconds of reading land there.
 - List rows' `w` (keymap row letters) still isn't bound; Hand off lives in Focus only.
 - Hand-off's people list shows everyone in the workspace, not only those who can see the task.
+- Hand-off's Undo (validator MINOR): an Undo before the check-back reached the server leaves the check-back (a `tmp-` reminder can't be removed yet); a very fast Undo can race the wait's own save; the "Where I left off" comment stays; with nothing left to move to, the ended session isn't restarted.
+- Pick up ends every wait on the task, a teammate's too; its Undo re-adds them as new entries (yours, "since" now).
+- "Once per change" is remembered while Focus is open: leaving Focus and coming back can offer the same project change again.
+
+## Validator round (lighter gate)
+- MAJOR fixed: after Not now / the break's answer, focus fell to the page and the screen's keys stopped (the screen takes focus back now; test "after Esc on the offer the screen keeps the keys").
+- MAJOR fixed: Arrange by project refused partway left the screen and the server apart with no Undo (the saved moves stand, the line-up shows the server's order, "Arranged only in part · Undo"; module tests).
+- MINOR fixed: ⏎ no longer takes the Shrink · Move · Let go ask; ⇧F drops a showing offer; "Checking back tomorrow" only when the check-back went out; a stray doc comment in engine-core.

@@ -1693,8 +1693,7 @@ export function TasksPlanView({
     (item: InFlightItem) => {
       const at = checkBackAt("tomorrow", new Date());
       if (!at) return;
-      api.addReminder(item.task.id, "at", at.toISOString());
-      toast("Checking back tomorrow");
+      if (api.addReminder(item.task.id, "at", at.toISOString())) toast("Checking back tomorrow");
     },
     [api],
   );
