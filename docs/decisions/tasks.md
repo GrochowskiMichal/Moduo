@@ -2,6 +2,61 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index.
 
+## 2026-10-13 · TV-U11 Board v3 — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 15 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §5, AC4.2, AC7.1, AC7.4, AC11.6; REPLAN 22, 22a, 53a, 53b, 85, 86, defaults n and o; research views-board-detail.md §1–6). No migration. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **U11-1 · Which status columns a board shows** → TV-U11 (`board-columns.ts` `statusColumns`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: one project's board (and the Inbox's, on the workspace default set) shows the project's own statuses in category order, each with its category's icon; Backlog is always there (folded), Won't do and hidden statuses only while a card needs them or Filter → Status asks. Boards across projects show the five categories (Backlog and Won't do only when they have cards), or the shared names when every project in view has exactly the same set (and it isn't just the five usual names). A task whose status isn't read yet sits in its category's first.
+  - Why: 53a ("+ Add status", names per project, categories across projects) and U2-4 (Won't do shows only when asked); a status set nobody has read must never lose a card.
+  - Rejected: always five category columns on a project board (In review would vanish into In progress); a Won't do column on every board.
+- **U11-2 · Folding: any column, a 32 px button, remembered per device** → TV-U11 (`FoldedColumn`, `use-board-folds.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: every column's ⋯ has Fold; a folded column is the 53b button (mark · count · chevron, hover names it), never a drop target; Backlog and Won't do start folded; a section's button shows two letters. A folded column opens while the selected card is in it (a deep link, the panel), without changing what you chose. Folds are remembered per person, workspace, scope and grouping on this device (the List's U10-7 rule).
+  - Why: 53b, research §2; "Fold" sits in the prototype's ⋯.
+  - Rejected: synced folds now (preferences sync is TV-U8's lane); a folded column that still takes drops (53b says unfold first).
+- **U11-3 · Group by and which columns hide** → TV-U11 (`display.ts` `boardGroupsFor`, `board-columns.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: Status (always the default, 86) · Section (inside a project) · Assignee · Team (once there are teams) · Priority · Project and Area (across projects, Area once there are areas), remembered per scope. Statuses, sections and priorities always show; people, teams, projects and areas hide when empty behind "n hidden · Show" at the board's end. Column order is the List's (No section first; Unassigned, No team last). An area column takes no drops (the area is the project's); a viewer's or a former member's column takes none either.
+  - Why: call 22 and default o; one order for List and Board.
+  - Rejected: Waiting on as a grouping now (a drop there adds a Waiting on entry, not a field through `dropTask`; → TV-U12 with the bulk Waiting edit); "No assignee" first (the List puts it last).
+- **U11-4 · Lanes** → TV-U11 (`buildBoardLanes`, `LaneBoard`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: Display → Lanes: None · Assignee · Priority · Project (across projects) · Team; only lanes with cards; each lane header folds; the column headers stay on top and the board scrolls as one; a cell draws 20 cards, then "+ n more". A drop into another lane writes the lane's field, into another lane and column both, with one Undo; Project lanes never move a task to another project.
+  - Why: call 85 and research §3 (a move between projects stays a deliberate Move).
+  - Rejected: virtualizing lane cells (20 per cell bounds them); Section lanes (85 didn't list them).
+- **U11-5 · The card** → TV-U11 (`task-card.tsx` on the kit `ItemCard`, `--board-card-w`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: one width per density (296 / 280 / 264 px, a token); the status icon leads (U10-1's click and ⇧S); Standard: title and one meta line (project where not implied, priority, one date, counts, the status's own name where the column doesn't say it, the Focus mark on hover, the avatar, or a team's mark on a task nobody has taken yet); Detailed adds the handle above the title and a second line (tag names, time, Waiting on); Display → Description: Hidden · Preview shows two lines of plain text (a reference's stored title left out).
+  - Why: research §1 and default o; the team mark is TV-D13's "routed, waiting for a claim".
+  - Rejected: flexing widths (the board reflowed); the description as rich text (cards stay one face).
+- **U11-6 · One context menu, and its commands on a card** → TV-U11 (`task-context-menu.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the List row's menu moved into one component used by rows and cards (Timeline bars join with TV-TL1); on a card, Rename edits the title in place, Status… opens at the icon, Schedule… / Set due date… at the card's date, Move to project… at its project (an anchor that takes no width when the project is implied).
+  - Why: §5 "one context menu for rows, cards and bars".
+  - Rejected: the old card menu (no Rename, Status, dates or Copy link).
+- **U11-7 · The Board's keys** → TV-U11 (`board-keys.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the List's map with the arrows sideways: ↑↓ (j/k) in a column, ←→ to the nearest card of the next column with cards; ⌥⇧↑/↓ reorder in the cell (manual order in one project only, else "Sorted by … · Back to manual order"); ⌥⇧←/→ move the card to the next unfolded column that takes it, keeping its place, with Undo; ⏎ opens the full page, `e` edits, Space finishes, `c` opens the capture with the selected card's column value (else the first column that adds). A key that moves the selection off screen scrolls its column into view. `>` / `<` stay the List's.
+  - Why: research §4 and U4's carry-forward (⌥⇧←→ were TV-U11's).
+  - Rejected: h/l for columns (not in the keymap).
+- **U11-8 · A column's "+" files into its own status** → TV-U11 (`statusAdd`, the capture seed's `statusId`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the "+" follows U10-6's rule (All: "Pick a project first"; Done and Won't do: none); on one project's status that isn't its category's first (In review), the capture carries the status by id with a chip naming it, used only if the task is still filed into that project (else that project's first of the category), never kept in a draft.
+  - Why: default n ("adds with the group's value filled in"); a new task in In review must not land in In progress.
+  - Rejected: a status picker in the capture (the chip is enough; More → Status is TV-U13's panel).
+- **U11-9 · Undo puts a status back by id** → TV-U11 (`drop-write.ts` `undoWrite`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: Undo compares the exact status (key and id), so In progress → In review (one category) is undone; a newer change by someone else is still kept.
+  - Why: found live: Undo of a same-category move did nothing.
+  - Rejected: —
+- **U11-10 · Board tests find the Board's own columns** → TV-U11 (`data-board-column` on each column's section)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: each column's section carries its name; the perf gate and the dnd e2e locate `section[data-board-column="…"]`. This fixes AC12.4's "a card drags out of a 1,200-card column", which failed since TV-U13 because the panel is a section that also says "To do".
+  - Why: the orchestrator's carry-over from TV-U15 (the test failed with and without U15).
+  - Rejected: renaming the panel's landmark (the panel's semantics are right).
+
 ## 2026-10-13 · TV-U15 Upcoming, Inbox, My tasks, All (tasks-v3 block 20) — the agent's choices (deferred to by Maciej)
 
 Built in tasks-v3 block 20 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §8, AC2.2, AC2.1, AC3.3, AC5.2, AC11.3, AC11.5; REPLAN 83, 84, 20, 20a, 29, 82b, defaults b, h, r–t; research views-list-upcoming.md §6–9; prototype round-2b frames 2, 3, 7). No migration. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
