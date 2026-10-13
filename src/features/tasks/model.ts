@@ -17,6 +17,8 @@ import type {
   TaskStatus,
   TaskStatusCategory,
   TaskTimeAction,
+  TaskTimeAdjustmentReason,
+  TaskTimeEntryKind,
   TaskTimeStatus,
   TaskWaitingKind,
 } from "@contracts/vocabularies";
@@ -33,6 +35,8 @@ export type {
   TaskStatus,
   TaskStatusCategory,
   TaskTimeAction,
+  TaskTimeAdjustmentReason,
+  TaskTimeEntryKind,
   TaskTimeStatus,
   TaskWaitingKind,
 } from "@contracts/vocabularies";
@@ -377,9 +381,71 @@ export type TrackTimeInput = {
   /** When the stretch ended (now when left out). */
   endedAt?: string | null;
   key?: string | null;
-  /** The adjustment an Undo removes. */
+  /** The adjustment an Undo removes; the entry an edit or remove changes. */
   entryId?: string | null;
+  /** "Add time…" / an edit: the day the logged time is for (YYYY-MM-DD). */
+  on?: string | null;
+  /** "Add time…" / an edit: the note ("" clears it on an edit). */
+  note?: string | null;
+  /** A Focus save or a give-back: the run it came from (TV-D14). */
+  runId?: string | null;
+  /** An adjustment's label: `give_back` after a Focus takeover (TV-F6). */
+  reason?: TaskTimeAdjustmentReason | null;
 };
+
+/** One of your own time entries on a task (TV-D3; TV-D14's day, note, label). */
+export type TaskTimeEntry = {
+  id: string;
+  taskId: string;
+  kind: TaskTimeEntryKind;
+  /** Signed for an adjustment (a give-back is negative). */
+  seconds: number;
+  startedAt: string | null;
+  endedAt: string | null;
+  /** The day a logged entry is for (YYYY-MM-DD); null for the others. */
+  entryOn: string | null;
+  note: string | null;
+  reason: TaskTimeAdjustmentReason | null;
+  runId: string | null;
+  createdAt: string;
+};
+
+/** What the time report reads (TV-D14): a period of days in `zone`, scoped to
+ *  projects, a client, or the whole workspace. */
+export type TimeReportQuery = {
+  workspaceId: string;
+  /** First and last day, inclusive (YYYY-MM-DD); at most a year apart. */
+  from: string;
+  to: string;
+  projectIds?: readonly string[] | null;
+  clientContactId?: string | null;
+  /** The reader's zone for the days (Time & region's); else the saved one. */
+  zone?: string | null;
+};
+
+/** One entry in the time report: on a task the reader can see, yours or (for
+ *  the workspace owner) a teammate's who shares their time. */
+export type TimeReportRow = {
+  entryId: string;
+  taskId: string;
+  taskTitle: string;
+  projectId: string | null;
+  /** Null when the reader can't see the project ("Private project"). */
+  projectName: string | null;
+  projectIsInbox: boolean;
+  userId: string;
+  isMine: boolean;
+  /** YYYY-MM-DD in the report's zone. */
+  day: string;
+  /** Signed: a give-back is negative; sum them. */
+  seconds: number;
+  kind: TaskTimeEntryKind;
+  reason: TaskTimeAdjustmentReason | null;
+  note: string | null;
+};
+
+/** A report read: its rows, and whether there were more than it holds. */
+export type TimeReportResult = { rows: TimeReportRow[]; truncated: boolean };
 
 /** What a time write answered. Totals are null when the task is gone. */
 export type TaskTimeResult = {

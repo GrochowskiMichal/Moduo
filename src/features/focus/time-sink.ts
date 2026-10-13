@@ -25,6 +25,8 @@ export function createFocusTimeSink(deps: {
   /** May this person edit Tasks here? Read at each save (roles change). */
   canEdit: () => boolean;
   trackTime: (input: TrackTimeInput) => Promise<TaskTimeResult>;
+  /** The Focus run the save belongs to, if one is going here (TV-D14). */
+  runId?: () => string | null;
   /** The task can never take these seconds (deleted, not shared any more). */
   onGone: (seconds: number) => void;
   onSaved?: (saved: FocusTimeSaved) => void;
@@ -35,6 +37,7 @@ export function createFocusTimeSink(deps: {
     // Without edit access the time is kept for later, as before (an edge case:
     // a viewer only gets here with a task queued before a role change).
     if (!deps.canEdit()) return Promise.resolve(false);
+    const runId = deps.runId?.() ?? null;
     return deps
       .trackTime({
         workspaceId: deps.workspaceId,
@@ -43,6 +46,7 @@ export function createFocusTimeSink(deps: {
         seconds: Math.round(seconds),
         endedAt: context.earnedAt > 0 ? new Date(context.earnedAt).toISOString() : null,
         key: context.key,
+        ...(runId ? { runId } : {}),
       })
       .then(
         (result): boolean | "gone" => {

@@ -16,6 +16,7 @@ import {
   CALENDAR_ACCOUNT_STATUSES,
   COMMENT_REACTIONS,
   CONTENT_AUTHOR_KINDS,
+  DATE_ORDERS,
   EMAIL_KINDS,
   EMAIL_OUTBOX_STATUSES,
   EMAIL_STREAMS,
@@ -31,6 +32,7 @@ import {
   FOCUS_TIMER_MODES,
   GRANT_LEVELS,
   GRANT_ORIGINS,
+  HOUR_CYCLES,
   MEMBER_DB_PERMISSIONS,
   MEMBER_DB_ROLES,
   NOTICE_DELIVERY_KINDS,
@@ -43,6 +45,7 @@ import {
   TASK_STATUS_CATEGORIES,
   TASK_STATUSES,
   TASK_TIME_ACTIONS,
+  TASK_TIME_ADJUSTMENT_REASONS,
   TASK_TIME_ENTRY_KINDS,
   TASK_TIME_STATUSES,
   TASK_WAITING_KINDS,
@@ -124,15 +127,33 @@ describe("cross-runtime drift guards", () => {
     );
   });
 
-  it("time entry kinds, actions and answers match the TV-D3 migration", () => {
-    const sql = readFileSync(
+  it("time entry kinds, actions and answers match the TV-D14 re-cut of the TV-D3 migration", () => {
+    const base = readFileSync(
       resolve(MIGRATIONS_DIR, "20261008225500_tasks_time_entries.sql"),
       "utf8",
     );
+    const recutFile = readdirSync(MIGRATIONS_DIR).find((f) => f.endsWith("_time_entries_add.sql"));
+    expect(recutFile).toBeDefined();
+    const sql = readFileSync(resolve(MIGRATIONS_DIR, recutFile ?? ""), "utf8");
     const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(",");
     expect(sql).toContain(`kind IN (${inList(TASK_TIME_ENTRY_KINDS)})`);
     expect(sql).toContain(`v_action NOT IN (${inList(TASK_TIME_ACTIONS)})`);
-    for (const status of TASK_TIME_STATUSES) expect(sql).toContain(`'${status}'`);
+    expect(sql).toContain(`reason IN (${inList(TASK_TIME_ADJUSTMENT_REASONS)})`);
+    expect(sql).toContain(`p_reason NOT IN (${inList(TASK_TIME_ADJUSTMENT_REASONS)})`);
+    for (const status of TASK_TIME_STATUSES) expect(base).toContain(`'${status}'`);
+  });
+
+  it("Time & region's clock and date order match the user_preferences CHECKs (TV-D14)", () => {
+    const file = readdirSync(MIGRATIONS_DIR).find((f) =>
+      f.endsWith("_user_preferences_time_region.sql"),
+    );
+    expect(file).toBeDefined();
+    const sql = readFileSync(resolve(MIGRATIONS_DIR, file ?? ""), "utf8");
+    const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(",");
+    expect(sql).toContain(`hour_cycle IN (${inList(HOUR_CYCLES)})`);
+    expect(sql).toContain(`date_order IN (${inList(DATE_ORDERS)})`);
+    expect(sql).toContain(`v_hour NOT IN (${inList(HOUR_CYCLES)})`);
+    expect(sql).toContain(`v_order NOT IN (${inList(DATE_ORDERS)})`);
   });
 
   it("Focus run vocabularies match the focus_runs CHECKs (#323 + the TV-F6 re-cut)", () => {

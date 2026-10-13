@@ -23,14 +23,16 @@
 import { isOpenTaskStatus } from "@contracts/vocabularies";
 import { RRule } from "rrule";
 
-import { deviceTimeZone } from "../../lib/device-time-zone";
+import { getResolvedTimeRegion } from "../../lib/time-region";
 import { fromFloating, toFloating } from "../../lib/zoned-time";
 import { todayStr } from "./helpers";
 import type { RecurrenceRule, Task, TaskStatus } from "./model";
 
-/** The zone the app reads rules in: the device's (UTC when unknown). */
+/** The zone the app reads rules in: Time & region's (TV-D14), the one the
+ *  server rolls the person's repeats over in; the device's until it's known,
+ *  UTC when neither is. */
 export function engineZone(): string {
-  return deviceTimeZone() ?? "UTC";
+  return getResolvedTimeRegion().timeZone;
 }
 
 /** Build an RRule in floating time for `zone`. Defensive: invalid input → null. */

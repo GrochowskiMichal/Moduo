@@ -160,13 +160,17 @@ import {
   taskRowToModel,
   taskSessionRowToModel,
   taskTimeAnswerToModel,
+  taskTimeEntryRowToModel,
   taskTimeTotalsRowToModel,
+  timeReportRowToModel,
+  trackTimeExtras,
   taskWaitingRowToModel,
   teamMemberRowToModel,
   teamRowToModel,
   withFieldFallback,
   withoutTvD9Fields,
 } from "./task-rows";
+import { timeRegionPatchToRow, timeRegionRowToModel } from "./time-region";
 import { AttachmentOpError, parseOpDetail } from "./uploads/errors";
 import { uploadObject } from "./uploads/transport";
 
@@ -1554,6 +1558,21 @@ export const webRuntime: ModuoRuntime = {
         throw new Error(error.message);
       }
     },
+    async getTimeRegion() {
+      const { data, error } = await supabaseClient.rpc("user_time_region");
+      // Before TV-D14's migration there is no Time & region to read.
+      if (isMissingFunctionError(error, "user_time_region")) return null;
+      if (error) throw new Error(error.message);
+      return data ? timeRegionRowToModel(data) : null;
+    },
+    async setTimeRegion(patch) {
+      const { data, error } = await supabaseClient.rpc("user_op_set_time_region", {
+        p_patch: timeRegionPatchToRow(patch),
+      });
+      if (isMissingFunctionError(error, "user_op_set_time_region")) return null;
+      if (error) throw new Error(error.message);
+      return data ? timeRegionRowToModel(data) : null;
+    },
     async getMinBuild() {
       const { data, error } = await supabaseClient
         .from("app_settings")
@@ -2795,10 +2814,16 @@ export const webRuntime: ModuoRuntime = {
           p_workspace_id: input.workspaceId,
           p_task_id: input.taskId,
           p_action: input.action,
-          p_seconds: input.action === "undo" ? null : Math.round(input.seconds ?? 0),
+          p_seconds:
+            input.action === "undo" || input.action === "remove" || input.seconds === undefined
+              ? null
+              : Math.round(input.seconds),
           p_ended_at: input.endedAt ?? null,
           p_client_key: input.key ?? null,
           p_entry_id: input.entryId ?? null,
+          // TV-D14: sent only when used, so a database before it still takes
+          // every older save.
+          ...trackTimeExtras(input),
         })
         .abortSignal(AbortSignal.timeout(TIME_WRITE_TIMEOUT_MS));
       // Until the migration reaches the database there are no entries: write
@@ -2816,6 +2841,59 @@ export const webRuntime: ModuoRuntime = {
       if (isMissingFunctionError(error, "tasks_time_totals")) return [];
       if (error) throw new Error(error.message);
       return mapKnownRows(Array.isArray(data) ? data : [], taskTimeTotalsRowToModel);
+    },
+
+    async listMyTimeEntries(workspaceId, taskId) {
+      // RLS answers only your own entries, on a task you can see (TV-D14).
+      const { data, error } = await supabaseClient
+        .from("task_time_entries")
+        .select(
+          "id, task_id, kind, seconds, started_at, ended_at, entry_on, note, reason, run_id, created_at",
+        )
+        .eq("workspace_id", workspaceId)
+        .eq("task_id", taskId)
+        .neq("kind", "legacy")
+        .order("created_at", { ascending: false })
+        .order("id")
+        .limit(MY_TIME_ENTRIES_CAP);
+      // Before TV-D14's migration the entries have no day or note to show.
+      if (error && (error.code === "42703" || error.code === "42P01")) return [];
+      if (error) throw new Error(error.message);
+      return mapKnownRows(Array.isArray(data) ? data : [], taskTimeEntryRowToModel);
+    },
+
+    async timeReport(query) {
+      const res = await readPaged<Record<string, unknown>, { message: string; code?: string }>({
+        scope: "time entries",
+        cap: TIME_REPORT_CAP,
+        page: async (offset, limit) => {
+          // The function orders its rows totally (day, task, entry), so pages
+          // never skip or repeat one.
+          const { data, error } = await supabaseClient
+            .rpc("tasks_time_report", {
+              p_workspace_id: query.workspaceId,
+              p_from: query.from,
+              p_to: query.to,
+              p_project_ids: query.projectIds ? [...query.projectIds] : null,
+              p_client_contact_id: query.clientContactId ?? null,
+              p_zone: query.zone ?? null,
+              p_limit: TIME_REPORT_CAP + 1,
+            })
+            .range(offset, offset + limit - 1);
+          return { data: (data ?? null) as Record<string, unknown>[] | null, error };
+        },
+        keyOf: (row) => String(row.entry_id),
+      });
+      if (res.error) {
+        if (isMissingFunctionError(res.error, "tasks_time_report")) {
+          return { rows: [], truncated: false };
+        }
+        throw new Error(res.error.message);
+      }
+      return {
+        rows: mapKnownRows(res.rows, timeReportRowToModel),
+        truncated: res.truncation !== null,
+      };
     },
 
     async opSetStatus({ workspaceId, taskId, status, recurrence, position }) {
@@ -3715,6 +3793,10 @@ async function taskOpRpc(fn: string, args: Record<string, unknown>): Promise<Tas
 
 /** How long a time write may take before it counts as failed. */
 const TIME_WRITE_TIMEOUT_MS = 30_000;
+/** Your own entries listed on one task (TV-D14): the newest this many. */
+const MY_TIME_ENTRIES_CAP = 200;
+/** Entries one time report reads (TV-D14); a longer one says it was cut. */
+const TIME_REPORT_CAP = 20_000;
 
 /**
  * Tracked time on a database without TV-D3's entries: read the task's total and

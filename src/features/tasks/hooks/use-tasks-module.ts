@@ -68,6 +68,7 @@ import {
   type TaskSession,
   type TaskStatus,
   type TasksTrash,
+  type TaskTimeEntry,
   type TaskTimeResult,
   type TaskWaitingEntry,
   type TimeBlockMap,
@@ -1662,6 +1663,107 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       }).catch((e) => failed(e, "Couldn't save the time."));
     },
     [timeWriteBlocked, workspaceId, writeTime, failed],
+  );
+
+  /**
+   * "Add time…" (TV-D14): log `seconds` on a day (YYYY-MM-DD) with an optional
+   * note, as your own entry. Resolves true once saved; a resend after a lost
+   * answer counts once (the key).
+   */
+  const logTime = useCallback(
+    (id: string, entry: { seconds: number; on: string; note?: string | null }): Promise<boolean> => {
+      const blocked = timeWriteBlocked(id);
+      if (blocked || !workspaceId) {
+        toast.error(blocked ?? "Couldn't log the time.");
+        return Promise.resolve(false);
+      }
+      const seconds = Math.round(entry.seconds);
+      return writeTime(id, seconds, {
+        workspaceId,
+        taskId: id,
+        action: "add",
+        seconds,
+        on: entry.on,
+        note: entry.note?.trim() ? entry.note.trim() : null,
+        key: `add-${crypto.randomUUID()}`.slice(0, 64),
+      }).then(
+        (result) => result.status === "saved" || result.status === "duplicate",
+        (e) => {
+          failed(e, "Couldn't log the time.");
+          return false;
+        },
+      );
+    },
+    [timeWriteBlocked, workspaceId, writeTime, failed],
+  );
+
+  /**
+   * Change one of your own logged or Focus entries (TV-D14): its length, a
+   * logged entry's day, its note ("" clears it). `delta` is the length's
+   * change, for the total shown until the server answers.
+   */
+  const editTimeEntry = useCallback(
+    (
+      id: string,
+      entryId: string,
+      change: { seconds?: number; on?: string; note?: string },
+      delta = 0,
+    ): Promise<boolean> => {
+      const blocked = timeWriteBlocked(id);
+      if (blocked || !workspaceId) {
+        toast.error(blocked ?? "Couldn't change the entry.");
+        return Promise.resolve(false);
+      }
+      return writeTime(id, delta, {
+        workspaceId,
+        taskId: id,
+        action: "edit",
+        entryId,
+        seconds: change.seconds,
+        on: change.on ?? null,
+        note: change.note ?? null,
+      }).then(
+        (result) => result.status === "saved",
+        (e) => {
+          failed(e, "Couldn't change the entry.");
+          return false;
+        },
+      );
+    },
+    [timeWriteBlocked, workspaceId, writeTime, failed],
+  );
+
+  /** Remove one of your own logged or Focus entries (TV-D14). */
+  const removeTimeEntry = useCallback(
+    (id: string, entryId: string, seconds: number): Promise<boolean> => {
+      const blocked = timeWriteBlocked(id);
+      if (blocked || !workspaceId) {
+        toast.error(blocked ?? "Couldn't remove the entry.");
+        return Promise.resolve(false);
+      }
+      return writeTime(id, -seconds, {
+        workspaceId,
+        taskId: id,
+        action: "remove",
+        entryId,
+      }).then(
+        (result) => result.status === "saved",
+        (e) => {
+          failed(e, "Couldn't remove the entry.");
+          return false;
+        },
+      );
+    },
+    [timeWriteBlocked, workspaceId, writeTime, failed],
+  );
+
+  /** Your own time entries on a task, newest first (TV-D14). */
+  const listMyTimeEntries = useCallback(
+    (id: string): Promise<TaskTimeEntry[]> => {
+      if (!runtime || !workspaceId || isTempId(id)) return Promise.resolve([]);
+      return runtime.tasks.listMyTimeEntries(workspaceId, id);
+    },
+    [runtime, workspaceId],
   );
 
   /**
@@ -3308,6 +3410,10 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     logTimeAdjustment,
     undoTimeAdjustment,
     setTimeSpent,
+    logTime,
+    editTimeEntry,
+    removeTimeEntry,
+    listMyTimeEntries,
     rescheduleScheduledAt,
     unscheduleTask,
     scheduleTaskAt,

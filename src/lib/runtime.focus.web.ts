@@ -128,7 +128,7 @@ export const webFocusRuntime: FocusRunRuntime = {
     };
   },
 
-  async giveBackTime({ workspaceId, taskId, seconds, key }) {
+  async giveBackTime({ workspaceId, taskId, seconds, key, runId }) {
     if (!Number.isFinite(seconds) || seconds < 1) return;
     const { error } = await supabaseClient.rpc("tasks_op_track_time", {
       p_workspace_id: workspaceId,
@@ -136,6 +136,9 @@ export const webFocusRuntime: FocusRunRuntime = {
       p_action: "adjust",
       p_seconds: -Math.round(seconds),
       p_client_key: key,
+      // TV-D14: the entry says it's a give-back, from which run.
+      p_reason: "give_back",
+      ...(runId ? { p_run_id: runId } : {}),
     });
     if (error) throw runError(error);
   },

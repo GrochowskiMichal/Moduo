@@ -305,6 +305,7 @@ function stopHere(at: number, takenOver?: { runId: string }): void {
       taskId: giveBack.taskId,
       seconds: giveBack.seconds,
       key: `gb-${takenOver.runId}-${Math.round(at)}`.slice(0, 64),
+      runId: takenOver.runId,
     });
   }
 }
