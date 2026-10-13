@@ -8,7 +8,7 @@ import type { ReactNode } from "react";
 import { PropertyRow, PropertyValue } from "../../../components/ui/property-row";
 import { useAssignees } from "../assignees";
 import { dayWordOf, dueDayOf, type Shared, sharedValue, singleProject, tasksWord } from "../bulk";
-import { PRIORITY_LABELS } from "../helpers";
+import { LEVEL_OPTIONS } from "../helpers";
 import type { ProjectStatus, Section, Tag, Task, Team } from "../model";
 import { statusNameOf } from "../statuses";
 import { StatusIcon } from "./status-icon";
@@ -103,7 +103,9 @@ export function BulkPanel({
           })}
         </PropertyRow>
         <PropertyRow label="Priority">
-          {value("priority", priority, (level) => (level ? PRIORITY_LABELS[level] : null))}
+          {value("priority", priority, (level) =>
+            level ? (LEVEL_OPTIONS.find((o) => o.value === level)?.label ?? level) : null,
+          )}
         </PropertyRow>
         <PropertyRow label="Due">
           {value("date", due, (day) => (day ? dayWordOf(day, now) : null))}

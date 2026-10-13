@@ -34,7 +34,7 @@ import {
   tasksWord,
 } from "../bulk";
 import { daysLeftInWeek } from "../day-buckets";
-import { PRIORITY_LABELS, todayStr } from "../helpers";
+import { LEVEL_OPTIONS, todayStr } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { PriorityLevel, Task } from "../model";
 import { engineZone } from "../recurrence-engine";
@@ -512,7 +512,9 @@ export function useBulkActions({
           placeholder: "Priority…",
           items: levels.map((level) => ({
             key: level ?? "none",
-            label: level ? PRIORITY_LABELS[level] : "No priority",
+            label: level
+              ? (LEVEL_OPTIONS.find((o) => o.value === level)?.label ?? level)
+              : "No priority",
             onPick: () => {
               close();
               apply({ kind: "priority", priority: level });
