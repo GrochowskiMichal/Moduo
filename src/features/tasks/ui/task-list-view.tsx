@@ -32,6 +32,7 @@ import {
 import { formatDate } from "../../../lib/time-format";
 import { undoToast } from "../../../lib/undo-toast";
 import { cn } from "../../../lib/utils";
+import { type AgentSession, agentRowMarks, agentWho } from "../../spine/agent-session";
 import { useAssignees } from "../assignees";
 import { type CompletedMode, partitionCompleted } from "../completed";
 import {
@@ -118,6 +119,8 @@ import { activateGlyph, type RowCommand, TaskRow } from "./task-row";
 import { TaskListSkeleton, TasksEmptyScope, TasksNoMatch } from "./task-view-states";
 import type { MultiSelect } from "./use-task-selection";
 import { VirtualStack } from "./virtual-stack";
+
+const NO_AGENT_SESSIONS: readonly AgentSession[] = [];
 
 type Props = {
   tasks: Task[];
@@ -369,7 +372,7 @@ export function TaskListView({
   const showBucketTag = !detailed && showBucketPill(selection, chosenGroupBy);
   // In My tasks every row is mine, so rows leave the avatar out (D4-4).
   const showAssignee = selection !== "mine";
-  const { assignees, byId } = useAssignees();
+  const { assignees, byId, currentUserId } = useAssignees();
 
   // Section grouping reads this project's sections; Team grouping the teams.
   const projectSections = useMemo(
@@ -629,6 +632,17 @@ export function TaskListView({
       return viewWhen ? viewWhen(t, now) : null;
     };
   }, [grouping, extraGroups, today, whenTick]);
+  // TV-D16: "Claude · working" on the rows an agent session you can see works
+  // on ("Anna's Claude · working" when it's a teammate's, first name only).
+  const agentMarks = useMemo(
+    () =>
+      agentRowMarks(
+        api.agentSessions ?? NO_AGENT_SESSIONS,
+        (id) => taskById.get(id) ?? null,
+        (s) => agentWho(s, currentUserId, (id) => byId(id)?.fullName.trim().split(/\s+/)[0]),
+      ),
+    [api.agentSessions, taskById, currentUserId, byId],
+  );
   const factsSource = useMemo<FactsSource>(
     () => ({
       queuedTaskIds: api.queuedTaskIds,
@@ -645,8 +659,10 @@ export function TaskListView({
       whenOf,
       takeableIds,
       sourceOf,
+      agentMarks,
     }),
     [
+      agentMarks,
       whenOf,
       takeableIds,
       sourceOf,

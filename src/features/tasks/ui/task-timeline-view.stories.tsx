@@ -1,156 +1,232 @@
 import type { Meta, StoryObj } from "@storybook/react";
-import { addDays } from "date-fns";
+import { addDays, format } from "date-fns";
+import { useState } from "react";
 
+import { tasksDisplayDefaults } from "../display";
 import { makeTask } from "../helpers";
-import type { TasksModuleApi } from "../hooks/use-tasks-module";
-import type { Bucket, Task, TaskRelation } from "../model";
+import type { Area, Bucket, Section, Task, TaskSession } from "../model";
 import { TaskTimelineView } from "./task-timeline-view";
+import { bucket, INBOX, stubApi, TeamWorkspace } from "./tasks-stories-fixtures";
 
-// Timeline baselines (specs/tasks-timeline.md TL-1: AC1–AC4, AC7 render, AC9,
-// AC10). Visual captures are a deliberate human run (gotchas: Storybook render
-// is blocked in worktrees; visual diffs are stop-and-ask). Dates are relative
-// to "now" so the bars keep their position against the today line.
+// The Timeline (TV-TL1, REPLAN 67–71): the prototype's two frames (round-2a
+// frames 4 and 5) as stories — All at Quarter, one project row per project
+// under its area with its phases and progress, and one project at Month with
+// its sections as bands and diamonds and its tasks as points. Dates are
+// relative to today so the marks keep their place against the today line.
+// Visual captures are a deliberate human run (tests/visual/tasks-timeline.spec.ts).
 
-function bucket(id: string, name: string, position: string): Bucket {
-  return {
-    id,
+const key = (offset: number) => format(addDays(new Date(), offset), "yyyy-MM-dd");
+
+const AREAS: Area[] = [
+  {
+    id: "clients",
     workspaceId: "w1",
-    ownerId: "u1",
-    name,
-    isSystem: id === "inbox",
-    group: null,
-    position,
+    name: "Clients",
+    color: null,
+    position: 0,
+    shared: true,
+    createdBy: null,
     createdAt: "",
     updatedAt: "",
-    deletedAt: null,
-  };
-}
+  },
+  {
+    id: "product",
+    workspaceId: "w1",
+    name: "Product",
+    color: null,
+    position: 1,
+    shared: true,
+    createdBy: null,
+    createdAt: "",
+    updatedAt: "",
+  },
+];
 
-function day(offset: number, hour = 9): string {
-  const d = addDays(new Date(), offset);
-  d.setHours(hour, 0, 0, 0);
-  return d.toISOString();
-}
+const project = (id: string, name: string, over: Partial<Bucket>): Bucket => ({
+  ...bucket(id, name, id),
+  ...over,
+});
+
+const ACME = project("acme", "Acme rebrand", {
+  areaId: "clients",
+  color: "violet",
+  startsOn: key(-11),
+  targetOn: key(25),
+});
+const NORTH = project("north", "Northwind app", { areaId: "clients", color: "green" });
+const WEBSITE = project("website", "Website", {
+  areaId: "product",
+  color: "teal",
+  startsOn: key(-13),
+  targetOn: key(38),
+});
+const VIDEOS = project("videos", "Studio videos", {
+  areaId: "product",
+  color: "blue",
+  startsOn: key(9),
+  targetOn: key(23),
+});
+const PROJECTS = [ACME, NORTH, WEBSITE, VIDEOS];
+
+const section = (
+  id: string,
+  projectId: string,
+  name: string,
+  position: number,
+  over: Partial<Section>,
+): Section => ({
+  id,
+  workspaceId: "w1",
+  projectId,
+  name,
+  position,
+  startsOn: null,
+  endsOn: null,
+  createdAt: "",
+  updatedAt: "",
+  ...over,
+});
+
+const SECTIONS: Section[] = [
+  section("discovery", "acme", "Discovery", 0, { startsOn: key(-11), endsOn: key(-2) }),
+  section("design", "acme", "Design", 1, { startsOn: key(1), endsOn: key(12) }),
+  section("build", "acme", "Build", 2, { endsOn: key(25) }),
+];
 
 let n = 0;
-function task(fields: Partial<Task> & { title: string }): Task {
+function task(title: string, bucketId: string, over: Partial<Task> = {}): Task {
   n += 1;
   return {
-    ...makeTask({
-      workspaceId: "w1",
-      bucketId: fields.bucketId ?? "b-work",
-      title: fields.title,
-      position: String(n).padStart(10, "0"),
-    }),
-    id: fields.id ?? `t${n}`,
-    ...fields,
+    ...makeTask({ workspaceId: "w1", bucketId, title, position: String(n).padStart(6, "0") }),
+    id: over.id ?? `t${n}`,
+    assigneeId: n % 3 === 0 ? "u2" : "u1",
+    statusCategory: "todo",
+    ...over,
   };
 }
 
-const BUCKETS = [bucket("b-work", "Deep work", "a"), bucket("b-admin", "Admin", "b")];
-const INBOX = bucket("inbox", "Inbox", "0");
-
-// All four date shapes + done + blocked + past-end drift + tray (AC2/AC7/AC9).
 const TASKS: Task[] = [
-  task({ id: "spec", title: "Write the launch spec", scheduledAt: day(-2), dueDate: day(3, 0) }),
-  task({ id: "build", title: "Build the landing page", scheduledAt: day(4), dueDate: day(9, 0) }),
-  task({ id: "kickoff", title: "Kickoff prep — start known, end open", scheduledAt: day(1) }),
-  task({ id: "review", title: "Review pass due", dueDate: day(7, 0) }),
-  task({
-    id: "shipped",
-    title: "Already shipped",
-    scheduledAt: day(-6),
-    dueDate: day(-4, 0),
+  task("Interview notes", "acme", {
+    sectionId: "discovery",
+    dueOn: key(-8),
     status: "done",
+    statusCategory: "done",
   }),
-  task({ id: "overdue", title: "Slipping quietly", dueDate: day(-3, 0) }),
-  task({ id: "admin-1", title: "Expense report", bucketId: "b-admin", scheduledAt: day(2) }),
-  task({ id: "tray-1", title: "Someday: rewrite onboarding" }),
-  task({ id: "tray-2", title: "Collect testimonials" }),
+  task("Logo concepts round 2", "acme", { id: "logo", sectionId: "design", dueOn: key(2) }),
+  task("Collect brand assets from client", "acme", { sectionId: "design", dueOn: key(-3) }),
+  task("Moodboard v2 for the packaging", "acme", { id: "moodboard", sectionId: "design" }),
+  task("Brand guidelines PDF", "acme", { sectionId: "build", dueOn: key(25) }),
+  task("Export logo files", "acme", { sectionId: "build", dueOn: key(24) }),
+  task("Business card print files", "acme", { sectionId: "build", dueOn: key(23) }),
+  task("Handover call with Anna", "acme", {
+    sectionId: "build",
+    dueOn: key(25),
+    recurrence: { rrule: "FREQ=WEEKLY;INTERVAL=1", dtstart: null, nextOccurrence: null },
+  }),
+  task("Icon set: first pass", "acme", { sectionId: "design" }),
+  task("API contract", "north", { dueOn: key(-7) }),
+  task("Onboarding screens", "north", { dueOn: key(18) }),
+  task("Pricing page copy", "website", { dueOn: key(6) }),
+  task("Episode 4 edit", "videos", { dueOn: key(16) }),
 ];
 
-const RELATIONS: TaskRelation[] = [
-  { id: "r1", workspaceId: "w1", blockerTaskId: "spec", blockedTaskId: "build", createdAt: "" },
+const SESSIONS: TaskSession[] = [
+  {
+    id: "s1",
+    workspaceId: "w1",
+    taskId: "moodboard",
+    userId: "u1",
+    startsAt: addDays(new Date(), 3).toISOString(),
+    endsAt: addDays(new Date(), 3).toISOString(),
+    updatedAt: "",
+  },
 ];
 
-function stubApi(tasks: Task[], relations: TaskRelation[]): TasksModuleApi {
-  const blockedIds = new Set(relations.map((r) => r.blockedTaskId));
-  const byId = new Map(tasks.map((t) => [t.id, t]));
-  const blockersByTask = new Map<string, Task[]>();
-  for (const rel of relations) {
-    const blocker = byId.get(rel.blockerTaskId);
-    if (!blocker) continue;
-    const list = blockersByTask.get(rel.blockedTaskId);
-    if (list) list.push(blocker);
-    else blockersByTask.set(rel.blockedTaskId, [blocker]);
-  }
-  return {
-    loading: false,
-    loaded: true,
-    taskRelations: relations,
-    blockedTaskIds: blockedIds,
-    blockersByTask,
-    toggleDone: () => {},
-    patchTask: () => {},
-  } as unknown as TasksModuleApi;
+function api(tasks: Task[] = TASKS) {
+  return stubApi(tasks, {
+    areas: AREAS,
+    sections: SECTIONS,
+    sessions: SESSIONS,
+    archivedBuckets: [],
+    currentUserId: "u1",
+  });
 }
 
-const baseArgs = {
-  tasks: TASKS,
-  scopeTitle: "All",
-  view: "timeline" as const,
-  onViewChange: () => {},
-  zoom: "month" as const,
-  onZoomChange: () => {},
-  buckets: BUCKETS,
-  inbox: INBOX,
-  canEdit: true,
-  onRequestCapture: () => {},
-  selectedTaskId: null,
-  onSelectTask: () => {},
-  api: stubApi(TASKS, RELATIONS),
-};
+/** The view with its Display in state, so the zoom and the menu work in the story. */
+function Harness({
+  scope,
+  tasks = TASKS,
+  canEdit = true,
+  duePerWeek = false,
+}: {
+  scope: string;
+  tasks?: Task[];
+  canEdit?: boolean;
+  duePerWeek?: boolean;
+}) {
+  const [display, setDisplay] = useState(() =>
+    tasksDisplayDefaults(scope, "standard", { duePerWeek }),
+  );
+  const [selected, setSelected] = useState<string | null>(null);
+  const scoped = scope === "all" ? tasks : tasks.filter((t) => t.bucketId === scope);
+  return (
+    <TeamWorkspace>
+      <TaskTimelineView
+        tasks={scoped}
+        scopeTitle={scope === "all" ? "All" : (PROJECTS.find((p) => p.id === scope)?.name ?? "")}
+        selection={scope}
+        view="timeline"
+        onViewChange={() => {}}
+        buckets={PROJECTS}
+        inbox={INBOX}
+        canEdit={canEdit}
+        onRequestCapture={() => {}}
+        selectedTaskId={selected}
+        onSelectTask={setSelected}
+        api={api(tasks)}
+        workspaceId="w1"
+        display={display}
+        onDisplayChange={setDisplay}
+        completed={display.completed}
+        stayingIds={new Set()}
+      />
+    </TeamWorkspace>
+  );
+}
 
 const meta = {
   title: "Tasks/TaskTimelineView",
-  component: TaskTimelineView,
+  component: Harness,
   parameters: { layout: "fullscreen" },
   decorators: [
     (Story) => (
-      <div style={{ height: 560, padding: 16 }}>
+      <div className="bg-card p-4" style={{ height: 640 }}>
         <Story />
       </div>
     ),
   ],
-  args: baseArgs,
-} satisfies Meta<typeof TaskTimelineView>;
+  args: { scope: "all" },
+} satisfies Meta<typeof Harness>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-/** The four bar shapes, a done bar, a blocked bar + arrow, the drift dot, tray. */
-export const Populated: Story = {};
+/** All at Quarter (frame 4): projects under their areas; ▸ expands one. */
+export const AllProjects: Story = {};
 
-export const WeekZoom: Story = {
-  args: { zoom: "week" },
-};
+/** All with Due per week (the student's default, AC2.7). */
+export const DuePerWeek: Story = { args: { duePerWeek: true } };
 
-export const QuarterZoom: Story = {
-  args: { zoom: "quarter" },
-};
+/** Inside a project at Month (frame 5): sections as bands and diamonds, tasks as points. */
+export const InsideAProject: Story = { args: { scope: "acme" } };
 
-/** No dated tasks → hint + prominent tray (AC10). */
+/** Nothing dated: the rows stay, with the today line and one sentence (71). */
 export const Empty: Story = {
   args: {
-    tasks: TASKS.filter((t) => !t.scheduledAt && !t.dueDate),
-    api: stubApi(
-      TASKS.filter((t) => !t.scheduledAt && !t.dueDate),
-      [],
-    ),
+    scope: "north",
+    tasks: TASKS.map((t) => ({ ...t, dueOn: null, dueDate: null })),
   },
 };
 
-/** Everything visible, nothing editable (AC10). */
-export const ReadOnly: Story = {
-  args: { canEdit: false },
-};
+/** Everything visible, nothing editable. */
+export const ReadOnly: Story = { args: { scope: "acme", canEdit: false } };

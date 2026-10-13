@@ -359,6 +359,8 @@ export function TeamEditor({ team, teams }: { team: Team; teams: WorkspaceTeams 
   const defaultProject =
     [...teams.projects, ...teams.archivedProjects].find((p) => p.id === team.defaultProjectId) ??
     null;
+  // An archived default counts as none when a task is routed (TV-U16): say so.
+  const defaultArchived = !!defaultProject?.archivedAt;
   // The store can't tell a project this person can't open from a deleted one,
   // so any default counts as set here (the server lets anyone replace one
   // whose project is gone: stricter here, never looser).
@@ -501,7 +503,11 @@ export function TeamEditor({ team, teams }: { team: Team; teams: WorkspaceTeams 
         >
           <SelectTrigger id={`team-project-${team.id}`}>
             <SelectValue placeholder="None">
-              {defaultProject?.name ?? (hasDefault ? "Not available" : "None")}
+              {defaultProject
+                ? `${defaultProject.name}${defaultArchived ? " (archived)" : ""}`
+                : hasDefault
+                  ? "Not available"
+                  : "None"}
             </SelectValue>
           </SelectTrigger>
           <SelectContent>
@@ -514,8 +520,9 @@ export function TeamEditor({ team, teams }: { team: Team; teams: WorkspaceTeams 
           </SelectContent>
         </Select>
         <span className="text-xs text-muted-foreground">
-          A task for {team.name} with no project goes here. Without one, whoever routes it picks a
-          project. Pick one the team can open.
+          {defaultArchived
+            ? `“${defaultProject?.name}” is archived, so a task for ${team.name} needs a project picked. Pick a live one, or unarchive it.`
+            : `A task for ${team.name} with no project goes here. Without one, whoever routes it picks a project. Pick one the team can open.`}
         </span>
       </div>
 

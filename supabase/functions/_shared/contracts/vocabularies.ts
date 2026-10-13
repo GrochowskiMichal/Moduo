@@ -367,8 +367,9 @@ export function normalizeRecurrenceMode(input: unknown): RecurrenceMode | undefi
   return isRecurrenceMode(input) ? input : undefined;
 }
 
-/** What a notice to a person's devices is about (TV-D12, `notice_deliveries.kind`). */
-export const NOTICE_DELIVERY_KINDS = ["reminder"] as const;
+/** What a notice to a person's devices is about (TV-D12, `notice_deliveries.kind`):
+ *  a reminder, or an agent's needs you · ready for review · failed (TV-D16). */
+export const NOTICE_DELIVERY_KINDS = ["reminder", "agent"] as const;
 export type NoticeDeliveryKind = (typeof NOTICE_DELIVERY_KINDS)[number];
 export const noticeDeliveryKindSchema = z.enum(NOTICE_DELIVERY_KINDS);
 export function isNoticeDeliveryKind(value: unknown): value is NoticeDeliveryKind {
@@ -377,9 +378,57 @@ export function isNoticeDeliveryKind(value: unknown): value is NoticeDeliveryKin
 export function parseNoticeDeliveryKind(input: unknown): SafeParseResult<NoticeDeliveryKind> {
   return parseOrError(noticeDeliveryKindSchema, input);
 }
-/** Lax read: an unknown kind reads as a reminder (the only kind so far). */
+/** Lax read: an unknown kind reads as a reminder (a plain notice about a task). */
 export function normalizeNoticeDeliveryKind(input: unknown): NoticeDeliveryKind {
   return isNoticeDeliveryKind(input) ? input : "reminder";
+}
+
+/** An agent session's state (TV-D16, spec §12, §Assumptions #15): working,
+ *  waiting on its person, ready for review, or failed. Postgres:
+ *  `agent_sessions.state` CHECK and `tasks_op_agent_report`. */
+export const AGENT_SESSION_STATES = ["working", "needs_you", "ready", "failed"] as const;
+export type AgentSessionState = (typeof AGENT_SESSION_STATES)[number];
+export const agentSessionStateSchema = z.enum(AGENT_SESSION_STATES);
+export function isAgentSessionState(value: unknown): value is AgentSessionState {
+  return typeof value === "string" && (AGENT_SESSION_STATES as readonly string[]).includes(value);
+}
+export function parseAgentSessionState(input: unknown): SafeParseResult<AgentSessionState> {
+  return parseOrError(agentSessionStateSchema, input);
+}
+/** Lax read: a state this build doesn't know reads as working. */
+export function normalizeAgentSessionState(input: unknown): AgentSessionState {
+  return isAgentSessionState(input) ? input : "working";
+}
+/** The states that notify the person who started the agent (spec §13). */
+export const AGENT_LOUD_STATES = ["needs_you", "ready", "failed"] as const satisfies readonly AgentSessionState[];
+
+/** What an import run records for "Undo this import" (TV-D16, `import_rows`). */
+export const IMPORT_ENTITY_TYPES = ["task", "bucket", "section"] as const;
+export type ImportEntityType = (typeof IMPORT_ENTITY_TYPES)[number];
+export const importEntityTypeSchema = z.enum(IMPORT_ENTITY_TYPES);
+export function isImportEntityType(value: unknown): value is ImportEntityType {
+  return typeof value === "string" && (IMPORT_ENTITY_TYPES as readonly string[]).includes(value);
+}
+export function parseImportEntityType(input: unknown): SafeParseResult<ImportEntityType> {
+  return parseOrError(importEntityTypeSchema, input);
+}
+/** Lax read: a type this build doesn't know reads as null (the row is skipped). */
+export function normalizeImportEntityType(input: unknown): ImportEntityType | null {
+  return isImportEntityType(input) ? input : null;
+}
+/** What a run did to a row: made it, or updated it by its "imported from" key. */
+export const IMPORT_ROW_ACTIONS = ["created", "updated"] as const;
+export type ImportRowAction = (typeof IMPORT_ROW_ACTIONS)[number];
+export const importRowActionSchema = z.enum(IMPORT_ROW_ACTIONS);
+export function isImportRowAction(value: unknown): value is ImportRowAction {
+  return typeof value === "string" && (IMPORT_ROW_ACTIONS as readonly string[]).includes(value);
+}
+export function parseImportRowAction(input: unknown): SafeParseResult<ImportRowAction> {
+  return parseOrError(importRowActionSchema, input);
+}
+/** Lax read: an action this build doesn't know reads as "updated" (never undone). */
+export function normalizeImportRowAction(input: unknown): ImportRowAction {
+  return isImportRowAction(input) ? input : "updated";
 }
 
 /** What a Waiting on… entry waits on (default q): a person, an email thread,

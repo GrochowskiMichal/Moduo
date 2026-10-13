@@ -1165,6 +1165,12 @@ function ProjectRow({
         count={count}
         countLabel={`${count} open`}
         current={current}
+        // On hold and Done read one step quieter (REPLAN 16); never hidden.
+        className={
+          !current && (bucket.status === "on_hold" || bucket.status === "done")
+            ? "text-subtle-foreground"
+            : undefined
+        }
         onSelect={onSelect}
         indicator={
           drift > 0 ? (

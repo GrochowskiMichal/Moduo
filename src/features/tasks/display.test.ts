@@ -48,6 +48,12 @@ describe("Tasks Display — stored value", () => {
       subtasks: "nested",
       rows: "standard",
       properties: ["priority", "date", "assignee"],
+      // TV-TL1: the Timeline's own (REPLAN 67, 69, 71).
+      timelineZoom: "month",
+      timelineGroup: "project",
+      colorBy: "none",
+      timelineShow: [],
+      timelineSubtasks: "hidden",
     });
     expect(tasksDisplayDefaults("all").group).toBe("bucket");
     // Call 84: My tasks answers "what am I in the middle of".
@@ -55,6 +61,19 @@ describe("Tasks Display — stored value", () => {
     // TV-U10: a project groups by section (a plain list until it has some).
     expect(tasksDisplayDefaults("b-42").group).toBe("section");
     expect(tasksDisplayDefaults("inbox").group).toBe("none");
+  });
+
+  it("the Timeline opens All at Quarter by area, a project at Month by section (TV-TL1)", () => {
+    const all = tasksDisplayDefaults("all");
+    expect([all.timelineZoom, all.timelineGroup]).toEqual(["quarter", "area"]);
+    const project = tasksDisplayDefaults("b-42");
+    expect([project.timelineZoom, project.timelineGroup]).toEqual(["month", "section"]);
+    const mine = tasksDisplayDefaults("mine");
+    expect([mine.timelineZoom, mine.timelineGroup]).toEqual(["month", "project"]);
+    // The student role turns Due per week on (call 34: roles change defaults only).
+    expect(tasksDisplayDefaults("b-42", "standard", { duePerWeek: true }).timelineShow).toEqual([
+      "duePerWeek",
+    ]);
   });
 
   it("a scope without a stored layout starts with the old workspace-wide one", () => {
@@ -76,12 +95,18 @@ describe("Tasks Display — stored value", () => {
       subtasks: "flat",
       rows: "detailed",
       properties: ["energy", "priority"],
+      timelineZoom: "year",
+      timelineGroup: "none",
+      colorBy: "project",
+      timelineShow: ["repeats", "undated"],
+      timelineSubtasks: "nested",
       filters: [{ dimension: "priority", operator: "is", values: ["high"] }],
     };
     expect(sanitizeTasksView(stored, tasksViewDefaults("all"), "all")).toEqual({
       ...stored,
       // Toggles come back in the menu's order.
       properties: ["priority", "energy"],
+      timelineShow: ["undated", "repeats"],
     });
   });
 
@@ -95,11 +120,17 @@ describe("Tasks Display — stored value", () => {
       subtasks: "deep",
       rows: "compact",
       properties: ["priority", "mood"],
+      timelineZoom: "decade",
+      // Area only at All; Colour by Project only across projects.
+      timelineGroup: "area",
+      colorBy: "project",
+      timelineShow: ["gantt"],
       filters: [{ dimension: "mood", operator: "is", values: ["happy"] }, "junk"],
     };
     expect(sanitizeTasksView(stored, tasksViewDefaults("b1"), "b1")).toEqual({
       ...TASKS_DISPLAY_DEFAULTS,
       group: "section",
+      timelineGroup: "section",
       properties: ["priority"],
       filters: [],
     });
@@ -268,8 +299,15 @@ describe("Tasks Display — controls per scope and layout", () => {
     ]);
   });
 
-  it("the Timeline keeps its own rules", () => {
-    expect(controlIds("inbox", "timeline")).toEqual(["layout"]);
+  it("the Timeline has its own (REPLAN 71): Group by, Show done, Colour by, Show, Subtasks", () => {
+    expect(controlIds("inbox", "timeline")).toEqual([
+      "layout",
+      "timelineGroup",
+      "completed",
+      "colorBy",
+      "timelineShow",
+      "timelineSubtasks",
+    ]);
   });
 });
 

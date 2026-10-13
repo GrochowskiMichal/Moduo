@@ -37,6 +37,7 @@ describe("DEFAULT_PREFERENCES", () => {
         dueFollowUp: true,
         waiting: true,
         teams: true,
+        agents: true,
         overdueTasks: false,
         storage: true,
       },
@@ -89,6 +90,7 @@ describe("sanitizePreferences", () => {
         dueFollowUp: false,
         waiting: true,
         teams: true,
+        agents: true,
         overdueTasks: false,
         storage: true,
       },
@@ -137,6 +139,7 @@ describe("sanitizePreferences", () => {
       // A saved `unblocked: false` (before TV-D12) carries over to `waiting`.
       waiting: false,
       teams: true,
+      agents: true,
       overdueTasks: false,
       storage: true,
     });
@@ -355,6 +358,7 @@ describe("isNotificationEnabled", () => {
       dueFollowUp: true,
       waiting: false,
       teams: false,
+      agents: false,
       overdueTasks: false,
       storage: false,
     };
@@ -364,6 +368,9 @@ describe("isNotificationEnabled", () => {
     expect(isNotificationEnabled("tasks.completed", prefs)).toBe(false);
     expect(isNotificationEnabled("email.follow_up_due", prefs)).toBe(true);
     expect(isNotificationEnabled("tasks.unblocked", prefs)).toBe(false);
+    // TV-D16: "Your agents" mutes an agent's needs you · ready · failed.
+    expect(isNotificationEnabled("tasks.agent_status", prefs)).toBe(false);
+    expect(isNotificationEnabled("tasks.agent_status", DEFAULT_NOTIFICATION_PREFS)).toBe(true);
   });
 
   it("splits a comment notice: naming you is a mention, anything else is comments (TV-D12)", () => {
@@ -386,6 +393,7 @@ describe("isNotificationEnabled", () => {
       dueFollowUp: false,
       waiting: false,
       teams: false,
+      agents: false,
       overdueTasks: false,
       storage: false,
     };

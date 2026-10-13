@@ -40,6 +40,7 @@
 // resend never makes a second task. Other edits say "Offline" (the hook).
 
 import { toast } from "sonner";
+import type { AgentSession } from "../../features/spine/agent-session";
 import { applyLiveTags, seedTags } from "../../features/tags/store";
 import { isNewer, type LiveChange, timestampMicros } from "../../features/tasks/live";
 import type {
@@ -161,6 +162,8 @@ export type StoreSnapshot = {
   waiting: TaskWaitingEntry[];
   /** TV-U8: your saved views and the ones shared with you. */
   views: TaskView[];
+  /** TV-D16: agent sessions you can see (yours; teammates' while they share). */
+  agentSessions: AgentSession[];
 };
 
 const EMPTY_BUNDLE: TasksModuleBundle = {
@@ -199,6 +202,7 @@ export const EMPTY_SNAPSHOT: StoreSnapshot = {
   reminders: [],
   waiting: [],
   views: [],
+  agentSessions: [],
 };
 
 // ── Tables ──────────────────────────────────────────────────────────────────
@@ -237,6 +241,8 @@ export const SYNC_TABLES: readonly { name: SyncTableName; delta: boolean; phase:
   { name: "sessions", delta: true, phase: 2 },
   { name: "reminders", delta: true, phase: 2 },
   { name: "waiting", delta: true, phase: 2 },
+  // TV-D16: the access check drops a session its person stops sharing.
+  { name: "agentSessions", delta: true, phase: 2 },
 ];
 
 /**
@@ -257,6 +263,7 @@ const TASK_ROWS: readonly SyncTableName[] = [
   "sessions",
   "reminders",
   "waiting",
+  "agentSessions",
 ];
 
 type TableState = {
@@ -302,6 +309,7 @@ const LIVE_TO_TABLE: Record<LiveChange["table"], SyncTableName> = {
   task_sessions: "sessions",
   task_reminders: "reminders",
   task_waiting: "waiting",
+  agent_sessions: "agentSessions",
   task_completions: "completions",
 };
 
@@ -2022,6 +2030,7 @@ export class WorkspaceStore {
       reminders: this.rendered("reminders"),
       waiting: this.rendered("waiting"),
       views: this.rendered("views"),
+      agentSessions: this.rendered("agentSessions"),
     };
     this.lastSnapshot = { snapshot, bundle, commentsSource: comments };
     return snapshot;

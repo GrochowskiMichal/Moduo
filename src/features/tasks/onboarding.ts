@@ -37,6 +37,8 @@ export type RoleDefaults = {
   firstView: FirstView;
   /** Display → Rows for every view that doesn't remember its own (REPLAN 61). */
   rows: RowPreset;
+  /** The Timeline's "Due per week" counts start on (REPLAN 67: the term at a glance). */
+  duePerWeek: boolean;
   /** The starter template made for this person (REPLAN 9: templates are in). */
   starter: StarterTemplate | null;
   // The saved views a role starts with are `ROLE_SEED_VIEWS` (views.ts, TV-U8).
@@ -54,6 +56,7 @@ export const ROLE_DEFAULTS: Record<TasksRole, RoleDefaults> = {
     hint: "Courses, assignments, exams",
     firstView: { kind: "scope", scope: "upcoming" },
     rows: "standard",
+    duePerWeek: true,
     starter: null,
   },
   developer: {
@@ -61,6 +64,7 @@ export const ROLE_DEFAULTS: Record<TasksRole, RoleDefaults> = {
     hint: "Issues, bugs, releases",
     firstView: { kind: "scope", scope: "inbox" },
     rows: "detailed",
+    duePerWeek: false,
     starter: null,
   },
   pm: {
@@ -68,6 +72,7 @@ export const ROLE_DEFAULTS: Record<TasksRole, RoleDefaults> = {
     hint: "Plans, milestones, who does what",
     firstView: { kind: "project-board" },
     rows: "standard",
+    duePerWeek: false,
     starter: "kickoff",
   },
   founder: {
@@ -75,6 +80,7 @@ export const ROLE_DEFAULTS: Record<TasksRole, RoleDefaults> = {
     hint: "Everything that keeps it running",
     firstView: { kind: "scope", scope: "inbox" },
     rows: "standard",
+    duePerWeek: false,
     starter: "monthly_close",
   },
   client_work: {
@@ -82,6 +88,7 @@ export const ROLE_DEFAULTS: Record<TasksRole, RoleDefaults> = {
     hint: "Clients, deliverables, time",
     firstView: { kind: "scope", scope: "all" },
     rows: "standard",
+    duePerWeek: false,
     starter: "client_onboarding",
   },
   creator: {
@@ -89,6 +96,7 @@ export const ROLE_DEFAULTS: Record<TasksRole, RoleDefaults> = {
     hint: "Ideas, episodes, publishing",
     firstView: { kind: "project-board" },
     rows: "standard",
+    duePerWeek: false,
     starter: "episode",
   },
 };
@@ -96,6 +104,14 @@ export const ROLE_DEFAULTS: Record<TasksRole, RoleDefaults> = {
 /** The row preset a view starts with when it remembers none. */
 export function defaultRowsFor(role: TasksRole | null): RowPreset {
   return role ? ROLE_DEFAULTS[role].rows : "standard";
+}
+
+const NO_DUE_PER_WEEK = { duePerWeek: false } as const;
+const DUE_PER_WEEK = { duePerWeek: true } as const;
+
+/** What a role changes in the Timeline's defaults (one stable object per answer). */
+export function timelineRoleFor(role: TasksRole | null): { duePerWeek: boolean } {
+  return role && ROLE_DEFAULTS[role].duePerWeek ? DUE_PER_WEEK : NO_DUE_PER_WEEK;
 }
 
 /**

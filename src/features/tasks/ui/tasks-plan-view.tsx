@@ -2,6 +2,7 @@ import {
   isBacklogTask,
   isClosedTask,
   isOpenTask,
+  type ProjectState,
   type TaskStatusCategory,
 } from "@contracts/vocabularies";
 import {
@@ -112,14 +113,13 @@ import {
   TEAM_BLOCK_ROWS,
   teamBlocks,
 } from "../my-tasks";
-import { defaultRowsFor, firstViewFor } from "../onboarding";
+import { defaultRowsFor, firstViewFor, timelineRoleFor } from "../onboarding";
 import { showsSortedNote, sortedByLabel } from "../order";
 import { handleLabel } from "../row-layout";
 import { resolveTasksDeepLink, taskIdForHandle } from "../search";
 import { inViewOrder } from "../selection";
 import { projectDeleteSummary, projectOpenWork } from "../sidebar";
 import { useTemplateActions } from "../templates/ui/use-template-actions";
-import { sanitizeTimelineZoom, type TimelineZoom } from "../timeline-geometry";
 import { viewIdOf, viewPlace, viewPrefsOf, viewSelection } from "../views";
 import { ArchivedProjectBanner, ArchivedProjectsView } from "./archived-projects-view";
 import {
@@ -240,10 +240,9 @@ export function TasksPlanView({
   );
   useEffect(() => {
     removeLS(workspaceId, "mode");
+    // The Timeline's zoom is per scope in Display since TV-TL1.
+    removeLS(workspaceId, "timelineZoom");
   }, [workspaceId]);
-  const [timelineZoom, setTimelineZoom] = useState<TimelineZoom>(() =>
-    sanitizeTimelineZoom(readLS(workspaceId, "timelineZoom")),
-  );
   // Which right-panel view is showing (views: features/tasks/panel-views.ts).
   const [panelView, setPanelView] = useState("details");
   // The task that fills the centre (call 32), or null for the view.
@@ -289,10 +288,11 @@ export function TasksPlanView({
     },
     [sidebarPrefs, workspaceId],
   );
-  // A project's Delete… and Archive… confirms (REPLAN 78), from the sidebar or
-  // Archived projects. The project is kept while the dialog closes.
+  // A project's Delete…, Archive… and Done confirms (REPLAN 78), from the
+  // sidebar, Archived projects or the overview (TV-U16). The project is kept
+  // while the dialog closes.
   const [projectDialog, setProjectDialog] = useState<{
-    kind: "delete" | "archive";
+    kind: "delete" | "archive" | "done";
     bucket: Bucket;
     open: boolean;
   } | null>(null);
@@ -367,8 +367,7 @@ export function TasksPlanView({
   // Focus time is saved by the app shell's sink (TV-P0, use-focus-time-saver.ts),
   // from any page; the module shows each saved total (FOCUS_TIME_SAVED_EVENT).
 
-  // Persist preferences.
-  useEffect(() => writeLS(workspaceId, "timelineZoom", timelineZoom), [workspaceId, timelineZoom]);
+  // Persist preferences (the Timeline's zoom is per scope now, in Display: TV-TL1).
   useEffect(
     () => writeLS(workspaceId, collapseKey, JSON.stringify([...collapsedGroups])),
     [workspaceId, collapseKey, collapsedGroups],
@@ -628,6 +627,8 @@ export function TasksPlanView({
     groupChoices,
     // A view that remembers no Display starts on the role's rows (TV-U17).
     viewRows,
+    // …and the Timeline on the role's Due per week (TV-TL1).
+    timelineRoleFor(onboardingRole),
     savedView,
   );
   const isHiddenByDisplay = tasksDisplay.isHidden;
@@ -1146,6 +1147,18 @@ export function TasksPlanView({
     },
     [api],
   );
+  // A project's state from its overview (TV-U16): Done with open work asks
+  // first, like Archive (REPLAN 78); Active and On hold just save.
+  const requestProjectState = useCallback(
+    (bucket: Bucket, state: ProjectState) => {
+      if (state === "done" && projectOpenWork(api.tasks, bucket.id).open.length > 0) {
+        setProjectDialog({ kind: "done", bucket, open: true });
+        return;
+      }
+      api.setProjectState(bucket.id, state);
+    },
+    [api],
+  );
   const checkProjectAccess = useCallback(
     async (projectId: string) =>
       runtime ? (await runtime.tasks.projectAccess({ projectId })).canManage : true,
@@ -1274,6 +1287,15 @@ export function TasksPlanView({
       if (selectedTaskId && !selectedTask) setSelectedTaskId(null);
       return;
     }
+    // The Timeline's rows are projects and sections too (TV-TL1): nothing
+    // selected is a place of its own there (a project row, Esc), never a
+    // task picked for you that the canvas doesn't show.
+    if (view === "timeline") {
+      if (selectedTaskId && !scopeTasks.some((t) => t.id === selectedTaskId)) {
+        setSelectedTaskId(null);
+      }
+      return;
+    }
     if (selectedTaskId && scopeTasks.some((t) => t.id === selectedTaskId)) return;
     if (selectedTask?.parentId && scopeTasks.some((t) => t.id === selectedTask.parentId)) return;
     // Never a completed task Display hides (TV-U1): the Board has no
@@ -1283,6 +1305,7 @@ export function TasksPlanView({
     api.loading,
     inboundPending,
     place,
+    view,
     selectedTaskId,
     selectedTask,
     scopeTasks,
@@ -1302,6 +1325,15 @@ export function TasksPlanView({
   // task's bucket unless the current scope already shows it. A bucket id (a
   // `project` link) scopes the rail; a stale or archived id clears quietly and
   // the backstop above picks the default (AC: no crash).
+  // What a link can open: live tasks and projects, and archived ones (TV-U16).
+  const linkable = useMemo(
+    () => ({
+      tasks: api.archivedTasks.length > 0 ? [...tasks, ...api.archivedTasks] : tasks,
+      buckets: api.archivedBuckets.length > 0 ? [...buckets, ...api.archivedBuckets] : buckets,
+      inboxId,
+    }),
+    [tasks, buckets, inboxId, api.archivedTasks, api.archivedBuckets],
+  );
   useEffect(() => {
     if (api.loading || api.error) return;
     if (!urlTaskId) {
@@ -1318,7 +1350,7 @@ export function TasksPlanView({
     if (
       !api.restLoaded &&
       !looksLikeHandle(urlTaskId) &&
-      resolveTasksDeepLink(urlTaskId, { tasks, buckets, inboxId }).kind === "none"
+      resolveTasksDeepLink(urlTaskId, linkable).kind === "none"
     ) {
       return;
     }
@@ -1350,7 +1382,9 @@ export function TasksPlanView({
     }
     // Won't do tasks open too: the selected one stays in scope with Reopen
     // (see `keptArchivedId`). A task in a project you can't see opens in All.
-    const target = resolveTasksDeepLink(urlTaskId, { tasks, buckets, inboxId });
+    // An archived project's task opens too, in its project, read-only (search
+    // finds it, labelled "Archived": REPLAN 78, TV-U16).
+    const target = resolveTasksDeepLink(urlTaskId, linkable);
     if (target.kind === "none") {
       // A link someone followed (a notification, a chip) to a task you can't
       // open says so, never lands on another task (AC1.10). A stale id that
@@ -1377,8 +1411,7 @@ export function TasksPlanView({
     api.restLoaded,
     urlTaskId,
     tasks,
-    buckets,
-    inboxId,
+    linkable,
     scopeTasksAll,
     onUrlTaskIdChange,
     taskKey,
@@ -1672,7 +1705,19 @@ export function TasksPlanView({
         foldKey={boardFoldKey(workspaceId, selection, tasksDisplay.display.boardGroup)}
       />
     ) : view === "timeline" ? (
-      <TaskTimelineView {...sharedViewProps} zoom={timelineZoom} onZoomChange={setTimelineZoom} />
+      <TaskTimelineView
+        {...sharedViewProps}
+        // The Timeline's own wiring (TV-TL1): its Display, Show done, ⏎ to the
+        // full page, a project row's ⏎ to that project.
+        workspaceId={workspaceId}
+        display={tasksDisplay.display}
+        onDisplayChange={setDisplay}
+        completed={displayProps.completed}
+        stayingIds={displayProps.stayingIds}
+        taskKey={taskKey}
+        onOpenTask={setFullPageId}
+        onOpenProject={pickSelection}
+      />
     ) : (
       <TaskListView
         {...sharedViewProps}
@@ -2003,10 +2048,28 @@ export function TasksPlanView({
   const scopeProject =
     buckets.find((b) => b.id === place && !b.isSystem) ?? archivedProject ?? null;
   const panelProject = selectedTask
-    ? (buckets.find((b) => b.id === selectedTask.bucketId && !b.isSystem) ?? null)
+    ? (buckets.find((b) => b.id === selectedTask.bucketId && !b.isSystem) ??
+      // A task of an archived project shows that project, read-only (TV-U16).
+      api.archivedBuckets.find((b) => b.id === selectedTask.bucketId) ??
+      null)
     : scopeProject;
   const projectView = panelProject ? (
-    <ProjectPanel project={panelProject} tasks={api.tasks} sections={api.sections} />
+    <ProjectPanel
+      project={panelProject}
+      tasks={panelProject.archivedAt ? api.archivedTasks : api.tasks}
+      sections={api.sections}
+      completions={api.completions}
+      waiting={api.waiting}
+      canEdit={canEdit}
+      onSetState={requestProjectState}
+      onEdit={(id, patch) => void api.updateProjectFields(id, patch)}
+      onOpenTask={(id) => {
+        setPanelView("details");
+        onUrlTaskIdChange(id);
+      }}
+      onArchive={requestArchive}
+      onDuplicate={offersTemplates ? templateActions.requestDuplicate : undefined}
+    />
   ) : null;
   // Nothing selected inside a project, or a task in the centre: the panel
   // shows Project (the one exception to "the panel remembers its view").
@@ -2136,6 +2199,17 @@ export function TasksPlanView({
         onCloseAutoFocus={(event) =>
           restoreNavFocus(event, railNavRef.current, projectDialog?.bucket.id ?? null)
         }
+      />
+      <ArchiveProjectDialog
+        bucket={projectDialog?.kind === "done" ? projectDialog.bucket : null}
+        open={projectDialog?.kind === "done" && projectDialog.open}
+        intent="done"
+        openCount={
+          projectDialog ? projectOpenWork(api.tasks, projectDialog.bucket.id).open.length : 0
+        }
+        projects={buckets}
+        onConfirm={(bucket, openTasks) => api.setProjectState(bucket.id, "done", openTasks)}
+        onClose={() => setProjectDialog((prev) => (prev ? { ...prev, open: false } : prev))}
       />
       <ArchiveProjectDialog
         bucket={projectDialog?.kind === "archive" ? projectDialog.bucket : null}

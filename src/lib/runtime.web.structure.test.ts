@@ -113,6 +113,11 @@ describe("project fields (AC4.1)", () => {
       projectFieldsToOp({ status: "on_hold", targetOn: "2026-12-18", leadId: null, areaId: "a1" }),
     ).toEqual({ status: "on_hold", target_on: "2026-12-18", lead_id: null, area_id: "a1" });
     expect(projectFieldsToOp({})).toEqual({});
+    // TV-U16: the description goes as typed; null clears it.
+    expect(projectFieldsToOp({ description: "For the hackathon" })).toEqual({
+      description: "For the hackathon",
+    });
+    expect(projectFieldsToOp({ description: null })).toEqual({ description: null });
   });
 
   it("map back from the row, status read laxly", async () => {

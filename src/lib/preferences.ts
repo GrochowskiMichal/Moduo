@@ -55,6 +55,7 @@ export type NotificationType =
   | "dueFollowUp"
   | "waiting"
   | "teams"
+  | "agents"
   | "overdueTasks"
   | "storage";
 export type NotificationPrefs = Record<NotificationType, boolean>;
@@ -67,6 +68,7 @@ const NOTIFICATION_TYPES: ReadonlyArray<NotificationType> = [
   "dueFollowUp",
   "waiting",
   "teams",
+  "agents",
   "overdueTasks",
   "storage",
 ];
@@ -79,6 +81,8 @@ export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
   dueFollowUp: true,
   waiting: true,
   teams: true,
+  // TV-D16: your agent needs you, is ready for review, or failed.
+  agents: true,
   // Opt-in: overdue work otherwise lives in Tasks/Home, not the bell (AC9).
   overdueTasks: false,
   // Only a workspace owner ever gets these (AT-1: the pool passed 80% / 95%).
@@ -109,6 +113,8 @@ const OP_TO_NOTIFICATION_TYPE: Record<string, NotificationType> = {
   "tasks.routed": "teams",
   "tasks.team_check_back": "teams",
   "comments.team_mention": "teams",
+  // TV-D16: an agent you started needs you · is ready for review · failed.
+  "tasks.agent_status": "agents",
   // Tasks of yours that came back from someone who left (AC5.6).
   "tasks.handed_back": "assigned",
   "attachments.storage_80": "storage",
@@ -267,6 +273,7 @@ const notificationPrefsSchema = z
       dueFollowUp: z.boolean().catch(true),
       waiting: z.boolean().catch(true),
       teams: z.boolean().catch(true),
+      agents: z.boolean().catch(true),
       overdueTasks: z.boolean().catch(false),
       storage: z.boolean().catch(true),
     }),

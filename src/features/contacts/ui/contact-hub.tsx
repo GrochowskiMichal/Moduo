@@ -900,12 +900,14 @@ export function ContactHub(props: ContactHubProps) {
           />
         ) : null}
 
-        {/* The client's time report, when they're a project's client (TV-D14). */}
+        {/* The client's work and time, when they're a project's client
+            (TV-D14's report; TV-U16's rollup, AC6.4). */}
         {!editing && workspaceId ? (
           <ClientTimeReport
             workspaceId={workspaceId}
             contactId={contact.id}
             contactName={contact.name || "Client"}
+            onOpen={onOpenEntity}
           />
         ) : null}
 

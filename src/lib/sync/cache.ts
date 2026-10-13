@@ -18,8 +18,9 @@ import type { SyncTableName } from "./types";
 
 /** Bumped when the persisted shape changes: an older copy's rows are dropped (its waiting captures are kept).
  *  3: projects carry their colour and archive stamp (TV-U6).
- *  4: reminders carry their suspension (TV-D12). */
-export const CACHE_VERSION = 4;
+ *  4: reminders carry their suspension (TV-D12).
+ *  5: agent sessions join the copy (TV-D16). */
+export const CACHE_VERSION = 5;
 
 /** One table's rows and its delta cursor. */
 export type CachedTable = { rows: unknown[]; cursor: string | null };

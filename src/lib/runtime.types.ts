@@ -70,6 +70,7 @@ import type {
 } from "../features/tasks/model";
 import type { EntityLink, EntityRecord, EntityRef, LinkOrigin, RelationKind } from "./entity-links";
 import type { Truncation } from "./paged-select";
+import type { TasksAgentsApi } from "./runtime.web.agents";
 import type { TasksStructureApi } from "./runtime.web.structure";
 import type { TasksTemplatesApi } from "./runtime.web.templates";
 import type { TasksViewsApi } from "./runtime.web.views";
@@ -106,6 +107,13 @@ export type TasksTemplatesRuntime = Partial<TasksTemplatesApi>;
  * offers no views.
  */
 export type TasksViewsRuntime = Partial<TasksViewsApi>;
+
+/**
+ * TV-D16's agent work and import runs (runtime.web.agents.ts): a session's
+ * summary, posting or clearing it, the share switch, and your import runs.
+ * Optional: a runtime without them shows no agent work.
+ */
+export type TasksAgentsRuntime = Partial<TasksAgentsApi>;
 
 /** A comment on any registered entity (spine block CT-5). */
 export type SpineComment = {
@@ -1284,7 +1292,8 @@ export type ModuoRuntime = {
     }): Promise<ActivityEntry[]>;
   } & TasksStructureRuntime &
     TasksTemplatesRuntime &
-    TasksViewsRuntime;
+    TasksViewsRuntime &
+    TasksAgentsRuntime;
 
   /**
    * Connective-tissue spine — the link substrate (specs/connective-tissue.md

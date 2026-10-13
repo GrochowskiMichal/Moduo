@@ -142,10 +142,25 @@ const NOTIFICATION_ONLY_OPS = new Set([
   "tasks.routed",
   "tasks.team_check_back",
   "tasks.handed_back",
+  // TV-D16: an agent's state, to whoever started it (on their Inbox).
+  "tasks.agent_status",
 ]);
 
 export function isTrailEntry(entry: Pick<ActivityEntry, "op">): boolean {
   return !NOTIFICATION_ONLY_OPS.has(entry.op);
+}
+
+/** "tagged this “exam”" · "untagged “week1”" · both. */
+function tagLine(p: Record<string, unknown>): string {
+  const names = (v: unknown) =>
+    Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && x.length > 0) : [];
+  const quote = (list: string[]) => list.map((n) => `“${n}”`).join(", ");
+  const added = names(p.added);
+  const removed = names(p.removed);
+  const parts: string[] = [];
+  if (added.length) parts.push(`tagged this ${quote(added)}`);
+  if (removed.length) parts.push(`untagged ${quote(removed)}`);
+  return parts.length ? parts.join(" and ") : "changed the tags";
 }
 
 /**
@@ -216,6 +231,9 @@ export function activityLine(entry: Pick<ActivityEntry, "op" | "payload">): stri
     }
     case "tasks.session_remove":
       return "removed a session";
+    // TV-D16: tags by name (an agent's tasks_create / tasks_update).
+    case "tasks.tag":
+      return tagLine(p);
     case "tasks.waiting_add":
       return waitingLine("is waiting on", p);
     case "tasks.waiting_remove":

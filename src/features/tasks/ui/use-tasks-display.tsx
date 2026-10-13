@@ -15,6 +15,7 @@ import {
   type TaskLayout,
   type TasksDisplay,
   type TasksViewPrefs,
+  type TimelineRoleDefaults,
   tasksDisplayControls,
   tasksDisplayDefaults,
   tasksDisplayKey,
@@ -66,6 +67,8 @@ export function useTasksDisplay(
   groupChoices?: GroupChoices,
   /** The row preset a view starts with (the person's role's, TV-U17). */
   rowsDefault: RowPreset = "standard",
+  /** What the person's role changes in the Timeline's defaults (Due per week). */
+  timelineRole?: TimelineRoleDefaults,
   /** An open saved view: its own Filter and Display instead of the place's. */
   saved: SavedViewPrefs | null = null,
 ): {
@@ -86,9 +89,11 @@ export function useTasksDisplay(
   // A place remembers its own on this device; a saved view doesn't (null key).
   const [placePrefs, setPlacePrefs] = useViewPrefs<TasksViewPrefs>(
     saved ? null : tasksDisplayKey(workspaceId, scope),
-    () => tasksViewDefaults(scope, fallbackLayout, rowsDefault),
+    () => tasksViewDefaults(scope, fallbackLayout, rowsDefault, timelineRole),
     (raw, defaults) => sanitizeTasksView(raw, defaults, scope),
-    rowsDefault,
+    // A new role's defaults reach a view that remembers none (a view that
+    // remembers its choices keeps them: the sanitiser reads them first).
+    `${rowsDefault}:${timelineRole?.duePerWeek ? "week" : ""}`,
   );
   // Each open view's unsaved copy, for this session.
   const [drafts, setDrafts] = useState<ReadonlyMap<string, TasksViewPrefs>>(() => new Map());
@@ -177,7 +182,12 @@ export function useTasksDisplay(
           setDisplay(next.order !== display.order ? { ...next, orderDir: "asc" } : next)
         }
         // Reset puts the choices back, not the layout you're looking at.
-        defaultValue={{ ...tasksDisplayDefaults(scope, rowsDefault), layout: display.layout }}
+        defaultValue={{
+          ...tasksDisplayDefaults(scope, rowsDefault, timelineRole),
+          layout: display.layout,
+          // The zoom sits on the Timeline's own bar, not in the menu: Reset keeps it.
+          timelineZoom: display.timelineZoom,
+        }}
       />
     ),
     viewProps: {

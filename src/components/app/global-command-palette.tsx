@@ -19,6 +19,7 @@ import type { EntityRecord } from "../../lib/entity-links";
 import { ENTITY_OPEN_EVENT } from "../../lib/entity-open";
 import { groupPaletteResults, PALETTE_ENTITY_TYPES } from "../../lib/palette-search";
 import { formatShortcut, onShortcut, SHORTCUTS } from "../../lib/shortcuts";
+import { findWorkspaceStore } from "../../lib/sync/store";
 import { useAuth } from "../../providers/auth-provider";
 import { useWorkspace } from "../../providers/workspace-provider";
 import {
@@ -137,6 +138,17 @@ export function GlobalCommandPalette() {
   }, [open, trimmed, runtime, selectedWorkspaceId]);
 
   const resultGroups = useMemo(() => groupPaletteResults(results), [results]);
+  // Archived projects stay findable, labelled (REPLAN 78, TV-U16): the
+  // workspace's Tasks copy knows which projects and tasks are archived.
+  const archivedIds = useMemo(() => {
+    if (!runtime || !selectedWorkspaceId || results.length === 0) return null;
+    const bundle = findWorkspaceStore(runtime, selectedWorkspaceId)?.getSnapshot().bundle;
+    if (!bundle?.archivedBuckets?.length) return null;
+    return new Set([
+      ...bundle.archivedBuckets.map((b) => b.id),
+      ...(bundle.archivedTasks ?? []).map((t) => t.id),
+    ]);
+  }, [runtime, selectedWorkspaceId, results]);
 
   const go = useCallback(
     (to: string) => () => {
@@ -314,6 +326,11 @@ export function GlobalCommandPalette() {
                     <Eyebrow className="shrink-0" tone="tag">
                       {TYPE_LABEL[record.type] ?? record.type}
                     </Eyebrow>
+                    {archivedIds?.has(record.id) ? (
+                      <Eyebrow className="shrink-0" tone="tag">
+                        Archived
+                      </Eyebrow>
+                    ) : null}
                   </CommandItem>
                 );
               })}
