@@ -157,7 +157,7 @@ One role question per person ("What will you run in Moduo?") sets defaults only:
 
 ### 17. Settings → Tasks
 
-Statuses (workspace default), Templates, Focus (Timer · Offer quick tasks along the way · usual pace on/off), Show my agent work to teammates, Share my tracked time with the workspace owner, Time & region (General), Notifications (the table's switches), Members → Teams (any member creates; creator/owner/admin deletes).
+Statuses (workspace default), Templates, Focus (Timer · Offer quick tasks along the way · usual pace on/off), Show my agent work to teammates, Share my tracked time with the workspace owner, Time & region (General), Notifications (the table's switches), Members → Teams (any member creates and adds people; creator/owner/admin renames, takes people out and deletes).
 
 ### 18. Calendar, Home and the top bar: the contracts (26, 12, 96, default r, re-plan §4)
 

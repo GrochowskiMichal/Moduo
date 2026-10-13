@@ -36,7 +36,7 @@
 
 ## Migrations / data
 - [ ] **Do:** Confirm `20261013150000_teams_routing`, `20261013170000_teams_mention_once` and `20261013180000_teams_routing_fixes` are applied in that order (local stack) and `bun run db:test teams_routing` passes → **Expect:** 87 checks green _(local)_
-- [ ] **Do:** Confirm `20261013210000_teams_access_fix` is applied and `bun run db:test teams_access` passes → **Expect:** 39 checks green _(local)_
+- [ ] **Do:** Confirm `20261013210000_teams_access_fix` is applied and `bun run db:test teams_access` passes → **Expect:** 48 checks green _(local)_
 
 ## Known gaps / not-yet-testable
 - The 3-day / day-before check-back is proven by the SQL test with set clocks; a live one needs a task routed 3 days ago (or a due date tomorrow and 9:00 your time).

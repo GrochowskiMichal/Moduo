@@ -54,8 +54,10 @@ export type WorkspaceTeams = {
   canEdit: boolean;
   teams: Team[];
   members: TeamMember[];
-  /** Live projects a team can name as its default (no Inbox, nothing archived). */
+  /** Live projects a team can name as its default (no Inbox, nothing deleted). */
   projects: Bucket[];
+  /** Projects known to be deleted: a team's default there counts as none. */
+  goneProjectIds: ReadonlySet<string>;
   /**
    * The team's creator, the workspace owner or an admin: change its name,
    * letters, colour and default project, take someone else out, delete it.
@@ -92,6 +94,10 @@ export function useWorkspaceTeams(): WorkspaceTeams {
       bundle.buckets
         .filter((b) => !b.isSystem && !b.deletedAt)
         .sort((a, b) => a.name.localeCompare(b.name)),
+    [bundle.buckets],
+  );
+  const goneProjectIds = useMemo(
+    () => new Set(bundle.buckets.filter((b) => b.deletedAt).map((b) => b.id)),
     [bundle.buckets],
   );
   const isOwner = selectedWorkspace?.role === "owner";
@@ -237,6 +243,7 @@ export function useWorkspaceTeams(): WorkspaceTeams {
     teams,
     members,
     projects,
+    goneProjectIds,
     canManage,
     create,
     update,
@@ -352,9 +359,13 @@ export function TeamEditor({ team, teams }: { team: Team; teams: WorkspaceTeams 
     [workspaceMembers, people],
   );
   const defaultProject = teams.projects.find((p) => p.id === team.defaultProjectId) ?? null;
+  // A default set on a project this person can't open is still set (only a
+  // deleted one counts as none).
+  const hasDefault = !!team.defaultProjectId && !teams.goneProjectIds.has(team.defaultProjectId);
   // Anyone may name a default while there's none; replacing one is for those
   // who manage the team (or, on the server, can edit the project it names).
-  const projectEditable = editable && (manages || !defaultProject);
+  const projectEditable = editable && (manages || !hasDefault);
+  const inTeam = people.some((p) => p.userId === userId);
   const autoHue = teamHue({ ...team, color: null });
   const autoColor = (
     TEAM_COLOR_OPTIONS.find((o) => o.value === autoHue)?.label ?? autoHue
@@ -406,8 +417,9 @@ export function TeamEditor({ team, teams }: { team: Team; teams: WorkspaceTeams 
       {editable && !manages ? (
         <p className="text-xs text-muted-foreground">
           Only {creatorName || "its creator"}, the workspace owner or an admin renames {team.name},
-          changes its colour or default project, or takes people out. You can add people, or leave
-          it.
+          changes its colour, replaces its default project or takes people out. You can add people
+          {hasDefault ? "" : " or pick its default project"}
+          {inTeam ? ", or leave it" : ""}.
         </p>
       ) : null}
 
@@ -487,7 +499,9 @@ export function TeamEditor({ team, teams }: { team: Team; teams: WorkspaceTeams 
           }
         >
           <SelectTrigger id={`team-project-${team.id}`}>
-            <SelectValue placeholder="None">{defaultProject?.name ?? "None"}</SelectValue>
+            <SelectValue placeholder="None">
+              {defaultProject?.name ?? (hasDefault ? "A project you can't open" : "None")}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value={NONE}>None</SelectItem>

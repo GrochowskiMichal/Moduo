@@ -8,7 +8,7 @@
 -- Cast: O owns workspace W. E, M and N are members who work on tasks, A is an
 -- admin, V a viewer, X belongs to another workspace. E makes Design (DS) with
 -- M in it. SB is a shared project; PE is one only E (and N, at Edit) can
--- change; PD one only E can change, later deleted.
+-- change; PN one only N can change; PD one only E can change, later deleted.
 
 SELECT test.person(n) FROM unnest(ARRAY['O', 'E', 'M', 'N', 'A', 'V', 'X']) AS n;
 INSERT INTO public.workspaces (id, owner_id, name) VALUES
@@ -23,12 +23,14 @@ INSERT INTO public.workspace_members (workspace_id, user_id, role) VALUES
 INSERT INTO public.buckets (id, workspace_id, owner_id, name, is_system) VALUES
   (test.id('SB'), test.id('W'), test.id('O'), 'Shared', false),
   (test.id('PE'), test.id('W'), test.id('O'), 'Brand vault', false),
+  (test.id('PN'), test.id('W'), test.id('O'), 'Dev scratch', false),
   (test.id('PD'), test.id('W'), test.id('O'), 'Old site', false);
 DELETE FROM public.resource_grants
-WHERE resource_type = 'bucket' AND resource_id IN (test.id('PE'), test.id('PD'));
+WHERE resource_type = 'bucket' AND resource_id IN (test.id('PE'), test.id('PN'), test.id('PD'));
 INSERT INTO public.resource_grants (workspace_id, resource_type, resource_id, subject_type, subject_id, level, created_by)
 VALUES (test.id('W'), 'bucket', test.id('PE'), 'member', test.id('E'), 'edit', test.id('O')),
        (test.id('W'), 'bucket', test.id('PE'), 'member', test.id('N'), 'edit', test.id('O')),
+       (test.id('W'), 'bucket', test.id('PN'), 'member', test.id('N'), 'edit', test.id('O')),
        (test.id('W'), 'bucket', test.id('PD'), 'member', test.id('E'), 'edit', test.id('O'));
 
 CREATE FUNCTION test.team(p_name text) RETURNS public.teams LANGUAGE sql STABLE AS $$
@@ -154,7 +156,37 @@ BEGIN
   r := test.edit_team('M', jsonb_build_object('default_project_id', test.id('SB')));
   PERFORM test.ok(r = 'ok 1' AND (test.team('DS')).default_project_id = test.id('SB'),
     'a default whose project is gone counts as none', r);
+  PERFORM test.edit_team('E', '{"default_project_id": null}');
+  r := test.edit_team('N', jsonb_build_object('default_project_id', test.id('PN')));
+  PERFORM test.ok(r = 'ok 1' AND (test.team('DS')).default_project_id = test.id('PN'),
+    'N names a project only N can edit while there''s none', r);
+  r := test.edit_team('E', jsonb_build_object('default_project_id', test.id('SB')));
+  PERFORM test.ok(r = 'ok 1' AND (test.team('DS')).default_project_id = test.id('SB'),
+    'its creator replaces a default they can''t edit', r);
+  PERFORM test.edit_team('N', jsonb_build_object('default_project_id', test.id('PN')));
+  r := test.edit_team('A', '{"default_project_id": null}');
+  PERFORM test.ok(r = 'ok 1' AND (test.team('DS')).default_project_id IS NULL,
+    'an admin clears one they can''t edit', r);
+  PERFORM test.edit_team('N', jsonb_build_object('default_project_id', test.id('PN')));
+  r := test.edit_team('O', jsonb_build_object('default_project_id', test.id('SB')));
+  PERFORM test.ok(r = 'ok 1' AND (test.team('DS')).default_project_id = test.id('SB'), 'so does the owner', r);
   PERFORM test.edit_team('E', jsonb_build_object('default_project_id', test.id('PE')));
+
+  -- ── A team whose creator's account was erased: the owner or an admin ─────
+  PERFORM test.as_user('N', format($q$SELECT public.teams_op_create(%L, %L::jsonb)$q$, test.id('W'),
+    jsonb_build_object('id', test.id('DV'), 'name', 'Development', 'members', jsonb_build_array(test.id('N'), test.id('M')))));
+  UPDATE public.teams SET created_by = NULL WHERE id = test.id('DV');
+  r := test.try('M', format($q$SELECT public.teams_op_update(%L, %L, '{"name": "Dev"}'::jsonb)$q$, test.id('W'), test.id('DV')));
+  PERFORM test.ok(r LIKE '42501%' AND (SELECT name FROM public.teams WHERE id = test.id('DV')) = 'Development',
+    'a team with no creator: a member can''t rename it', r);
+  r := test.try('M', format($q$SELECT * FROM public.teams_op_remove_member(%L, %L, %L)$q$, test.id('W'), test.id('DV'), test.id('N')));
+  PERFORM test.ok(r LIKE '42501%', 'nor take someone out', r);
+  r := test.try('N', format($q$SELECT public.teams_op_update(%L, %L, '{"deleted_at": "now"}'::jsonb)$q$, test.id('W'), test.id('DV')));
+  PERFORM test.ok(r LIKE '42501%', 'nor delete it, even the person who made it before', r);
+  r := test.as_user('O', format($q$SELECT public.teams_op_update(%L, %L, '{"name": "Dev"}'::jsonb)$q$, test.id('W'), test.id('DV')));
+  PERFORM test.ok(r = 'ok 1' AND (SELECT name FROM public.teams WHERE id = test.id('DV')) = 'Dev', 'the owner can', r);
+  r := test.as_user('A', format($q$SELECT * FROM public.teams_op_remove_member(%L, %L, %L)$q$, test.id('W'), test.id('DV'), test.id('M')));
+  PERFORM test.ok(r = 'ok 1', 'and an admin', r);
 
   -- ── Routing through a default the router can't edit (94) ─────────────────
   PERFORM test.as_user('M', format($q$SELECT public.tasks_op_create(%L, %L::jsonb)$q$, test.id('W'),
