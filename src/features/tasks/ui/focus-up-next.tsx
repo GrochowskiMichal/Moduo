@@ -54,6 +54,14 @@ export function UpNext({
   const ids = useMemo(() => upNext.map((t) => t.id), [upNext]);
   const lines = useMemo(() => upNextLines(upNext), [upNext]);
   const projects = useMemo(() => new Map(api.buckets.map((b) => [b.id, b])), [api.buckets]);
+  // A lined-up subtask says whose it is ("· ↳ parent").
+  const parentTitles = useMemo(() => {
+    const wanted = new Set(upNext.map((t) => t.parentId).filter(Boolean));
+    const map = new Map<string, string>();
+    if (wanted.size === 0) return map;
+    for (const t of api.tasks) if (wanted.has(t.id)) map.set(t.id, t.title || "Untitled");
+    return map;
+  }, [upNext, api.tasks]);
 
   // A move inside Up next keeps Now where it is (it's never the drop's anchor).
   const reorder = useCallback(
@@ -99,10 +107,12 @@ export function UpNext({
         }}
       >
         <SortableContext items={ids} strategy={verticalListSortingStrategy}>
-          <ol className="flex flex-col">
+          {/* Rows, not a list: each sortable wrapper sits between them and the
+              container, and the numbers already say the order. */}
+          <div className="flex flex-col">
             {lines.map((line) =>
               line.kind === "divider" ? (
-                <li
+                <div
                   key={line.key}
                   aria-hidden
                   className="flex items-center gap-2 px-1.5 pt-2 pb-0.5 font-sans text-xs text-muted-foreground"
@@ -113,7 +123,7 @@ export function UpNext({
                   />
                   <span className="shrink-0">{bucketNameById(line.projectId)}</span>
                   <span className="h-px flex-1 bg-hairline" />
-                </li>
+                </div>
               ) : (
                 <SortableTask
                   key={line.key}
@@ -125,9 +135,7 @@ export function UpNext({
                       task={line.task}
                       number={line.number}
                       parentTitle={
-                        line.task.parentId
-                          ? (api.tasks.find((t) => t.id === line.task.parentId)?.title ?? null)
-                          : null
+                        line.task.parentId ? (parentTitles.get(line.task.parentId) ?? null) : null
                       }
                       selected={selectedTaskId === line.task.id}
                       canEdit={canEdit}
@@ -146,7 +154,7 @@ export function UpNext({
                 />
               ),
             )}
-          </ol>
+          </div>
         </SortableContext>
       </DndBoundary>
     </section>
@@ -180,7 +188,7 @@ function UpNextRow({
 }) {
   const est = estimateOf(task);
   return (
-    <li
+    <div
       ref={dragActivatorRef}
       {...(canEdit ? dragListeners : {})}
       data-task-id={task.id}
@@ -209,9 +217,7 @@ function UpNextRow({
       >
         <span className="min-w-0 flex-1 truncate font-sans text-sm text-foreground">
           {task.title || "Untitled"}
-          {parentTitle ? (
-            <span className="text-subtle-foreground"> · ↳ {parentTitle || "Untitled"}</span>
-          ) : null}
+          {parentTitle ? <span className="text-subtle-foreground"> · ↳ {parentTitle}</span> : null}
         </span>
       </button>
       <TaskClaimMark workspaceId={task.workspaceId} taskId={task.id} />
@@ -245,6 +251,6 @@ function UpNextRow({
           />
         </span>
       ) : null}
-    </li>
+    </div>
   );
 }
