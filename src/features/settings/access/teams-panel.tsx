@@ -155,29 +155,29 @@ export function useWorkspaceTeams(): WorkspaceTeams {
     [ready, store, runtime, workspaceId],
   );
 
+  // A delete takes the team off its tasks on the server, so it waits for the
+  // Undo window to close (a deferred commit): Undo then brings back the team
+  // and its tasks' routing exactly as they were.
   const remove = useCallback(
     (team: Team) => {
       if (!ready || !store || !runtime || !workspaceId) return;
       const write = store.begin([{ table: "teams", remove: team.id }]);
-      runtime.tasks
-        .updateTeam({ workspaceId, teamId: team.id, patch: { deleted: true } })
-        .then(() => {
-          write.settle();
-          store.forget("teams", [team.id]);
-          undoToast(`Deleted ${team.name}`, {
-            description: "Its tasks keep their people; they're just not for the team any more.",
-            onUndo: () => {
-              runtime.tasks
-                .updateTeam({ workspaceId, teamId: team.id, patch: { deleted: false } })
-                .then((saved) => store.answer({ teams: [saved] }))
-                .catch((e) => toast.error(friendlyError(e)));
-            },
-          });
-        })
-        .catch((e) => {
-          write.fail();
-          toast.error(friendlyError(e));
-        });
+      undoToast(`Deleted ${team.name}`, {
+        description: "Its tasks keep their people; they're just not for a team any more.",
+        onUndo: () => write.fail(),
+        onCommit: () => {
+          runtime.tasks
+            .updateTeam({ workspaceId, teamId: team.id, patch: { deleted: true } })
+            .then(() => {
+              write.settle();
+              store.forget("teams", [team.id]);
+            })
+            .catch((e) => {
+              write.fail();
+              toast.error(friendlyError(e));
+            });
+        },
+      });
     },
     [ready, store, runtime, workspaceId],
   );
