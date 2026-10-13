@@ -23,6 +23,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Permissions, sharing, privacy and erasure → [decisions/permissions.md](decisions/permissions.md)
 
+- 2026-10-13 · SEC2: workspaces are created only for the signed-in person, and the free plan's one-workspace limit is enforced in the database.
 - 2026-10-10 · A project's owner, workspace and Inbox flag and a tag's owner are fixed, rows never change workspace, tags and dependencies follow the items they're on, and the Edit an assignment gives goes when it ends.
 - 2026-10-08 · SECURITY DEFINER functions that hand out an item's data check the item, not just its type or module: `links_suggest`, `notes_list_unmaterialized`, `notes_op_duplicate`, `notes_op_mention`, `share_assign_preview`.
 - 2026-10-08 · A contact can point only at a company you can open, and the refusal never says whether a private company exists.
