@@ -7,6 +7,7 @@
 
 import type { BulkWrite } from "../bulk";
 import { endPositions, positionsAfter, tasksWord } from "../bulk";
+import { PRIORITY_LABELS } from "../helpers";
 import type { Task } from "../model";
 import { STATUS_KEY_LABELS, statusKeyOf } from "../statuses";
 import type { DropNames, TaskDropWrite } from "./drop-write";
@@ -110,6 +111,11 @@ export function multiDropLabel(write: TaskDropWrite, n: number, names: DropNames
     return write.assigneeId
       ? `Assigned ${many} to ${names.assigneeName(write.assigneeId)}`
       : `Unassigned ${many}`;
+  }
+  if (write.priority !== undefined) {
+    return write.priority
+      ? `Set ${many} to ${PRIORITY_LABELS[write.priority]}`
+      : `Cleared the priority of ${many}`;
   }
   if (write.sectionId !== undefined) {
     return `Moved ${many} to ${names.sectionName?.(write.sectionId) ?? "a section"}`;
