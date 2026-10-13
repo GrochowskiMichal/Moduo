@@ -348,10 +348,12 @@ function TaskRowView({
             </span>
           ) : null}
           {facts.source ? (
-            // Where an Inbox task came from (research §7): quiet, after the counts.
+            // Where an Inbox task came from (research §7): quiet, after the
+            // counts; it gives way before the title does ("via Claude Desktop"
+            // is long, TV-U13b).
             <span
               data-slot="row-source"
-              className="shrink-0 font-sans text-xs whitespace-nowrap text-muted-foreground"
+              className="min-w-0 shrink-3 truncate font-sans text-xs whitespace-nowrap text-muted-foreground"
             >
               {facts.source}
             </span>
