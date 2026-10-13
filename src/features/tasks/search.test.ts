@@ -26,6 +26,15 @@ describe("validateTasksSearch", () => {
   it("drops unknown params", () => {
     expect(validateTasksSearch({ id: "t1", junk: "x" })).toEqual({ id: "t1" });
   });
+
+  it("keeps a saved view's id (TV-U8), and only an id", () => {
+    const id = "0b6a7c64-1111-4222-8333-944455556666";
+    expect(validateTasksSearch({ view: id })).toEqual({ view: id });
+    expect(validateTasksSearch({ id: "t1", view: id })).toEqual({ id: "t1", view: id });
+    expect(validateTasksSearch({ view: "all" })).toEqual({});
+    expect(validateTasksSearch({ view: `${id}'` })).toEqual({});
+    expect(validateTasksSearch({ view: 7 })).toEqual({});
+  });
 });
 
 describe("resolveTasksDeepLink", () => {

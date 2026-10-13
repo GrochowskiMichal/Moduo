@@ -376,7 +376,8 @@ const tasksFoldsSchema = z
       const raws = entry.folds;
       if (!raws || typeof raws !== "object" || Array.isArray(raws)) continue;
       const folds: Record<string, boolean> = {};
-      for (const [id, v] of Object.entries(raws).slice(0, TASKS_FOLDS_PER_VIEW)) {
+      // The newest folds are the last written: keep those.
+      for (const [id, v] of Object.entries(raws).slice(-TASKS_FOLDS_PER_VIEW)) {
         if (id && id.length <= 200 && typeof v === "boolean") folds[id] = v;
       }
       entries.push([key, { at: entry.at, folds }]);
@@ -425,6 +426,23 @@ export function mergeOnboardingForward(
     seeded: { ...local.seeded, ...cloud.seeded },
     viewsSeeded: { ...local.viewsSeeded, ...cloud.viewsSeeded },
   };
+}
+
+/**
+ * Folds from the cloud and this device (TV-U8): each List's or Board's
+ * newest entry wins, so a device with an older copy of the preferences
+ * never folds back what another device changed since.
+ */
+export function mergeFoldsForward(
+  local: Record<string, TasksFoldEntry>,
+  cloud: Record<string, TasksFoldEntry>,
+): Record<string, TasksFoldEntry> {
+  const out: Record<string, TasksFoldEntry> = { ...cloud };
+  for (const [key, entry] of Object.entries(local)) {
+    const other = out[key];
+    if (!other || Date.parse(entry.at) > Date.parse(other.at)) out[key] = entry;
+  }
+  return tasksFoldsSchema.parse(out);
 }
 
 /** Top-level module routes the app can land on (and remember as "last used").
@@ -691,6 +709,7 @@ export function usePreferences(opts?: {
       ? {
           ...cloud,
           tasksOnboarding: mergeOnboardingForward(store.tasksOnboarding, cloud.tasksOnboarding),
+          tasksFolds: mergeFoldsForward(store.tasksFolds, cloud.tasksFolds),
         }
       : cloud;
     setStore(next);

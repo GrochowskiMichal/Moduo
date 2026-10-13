@@ -16,10 +16,12 @@
 -- Keeping your own views needs only Tasks view access; sharing one needs
 -- edit access and that you still see its project. Only the maker renames,
 -- edits, re-shares or moves a view; the workspace's owner or an admin can
--- also unshare or delete (and restore) a shared one they can see, so a view
--- left by someone who has gone can still be taken down. API keys can't call
--- the ops, whatever their scope. Writes go through the ops only, and a view
--- you can't see answers like one that doesn't exist.
+-- also unshare or delete (and restore) a shared one they can see, to tidy
+-- what the workspace shares (a view shared by someone who has left reads as
+-- gone for everyone, admins too). API keys can't call the ops, whatever their
+-- scope. Writes go through the ops only, and a view you can't see answers
+-- like one that doesn't exist (a create that names an id someone else's view
+-- already has is refused: that says only that a random id is taken).
 --
 -- `seed` names a view onboarding made for someone (TV-U17's role defaults):
 -- one per person, workspace and seed, deleted ones included, so a resend or a
@@ -172,10 +174,17 @@ BEGIN
         RAISE EXCEPTION 'That filter can''t be saved in a view.' USING ERRCODE = '22023';
       END IF;
       v_id := v_text::uuid;
-      IF (v_dim IN ('assignee', 'creator') AND NOT (
+      -- A former member counts while they're on a task the saver can see:
+      -- its assignee for Assignee, its maker (`owner_id`) for Creator.
+      IF (v_dim = 'assignee' AND NOT (
             public.tasks__is_member(p_workspace_id, v_id)
             OR EXISTS (SELECT 1 FROM public.tasks t
                        WHERE t.assignee_id = v_id AND t.workspace_id = p_workspace_id
+                         AND public.tasks__visible_to(t.id, p_actor))))
+         OR (v_dim = 'creator' AND NOT (
+            public.tasks__is_member(p_workspace_id, v_id)
+            OR EXISTS (SELECT 1 FROM public.tasks t
+                       WHERE t.owner_id = v_id AND t.workspace_id = p_workspace_id
                          AND public.tasks__visible_to(t.id, p_actor))))
          OR (v_dim = 'team' AND NOT EXISTS (
             SELECT 1 FROM public.teams x WHERE x.id = v_id AND x.workspace_id = p_workspace_id))

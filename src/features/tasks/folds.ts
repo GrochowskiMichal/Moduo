@@ -54,7 +54,10 @@ export function flushFolds(): void {
   const at = new Date().toISOString();
   const next: Record<string, TasksFoldEntry> = { ...currentPreferences().tasksFolds };
   for (const [key, folds] of pending) {
-    next[key] = { at, folds: { ...(next[key]?.folds ?? {}), ...folds } };
+    // A changed fold moves to the end: the newest are the ones kept.
+    const kept = { ...(next[key]?.folds ?? {}) };
+    for (const id of Object.keys(folds)) delete kept[id];
+    next[key] = { at, folds: { ...kept, ...folds } };
   }
   pending.clear();
   // The newest views keep theirs (the preferences keep at most this many).

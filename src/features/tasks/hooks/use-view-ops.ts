@@ -37,8 +37,13 @@ export type ViewOps = {
   /** Delete, with Undo. */
   deleteView: (viewId: string) => void;
   moveView: (viewId: string, direction: "up" | "down") => void;
-  /** Make onboarding's views (each once per person; the server skips the rest). */
-  seedViews: (seeds: readonly SeedView[]) => Promise<void>;
+  /**
+   * Make onboarding's views (each once per person; the server answers with
+   * one already made). True once the server answered for every seed; false
+   * when it couldn't be asked (offline, an older server, an error), so the
+   * caller tries again another time.
+   */
+  seedViews: (seeds: readonly SeedView[]) => Promise<boolean>;
 };
 
 function sayOffline(): void {
@@ -177,6 +182,23 @@ export function useViewOps(input: {
 
   const shareView = useCallback(
     (viewId: string, shared: boolean) => {
+      const existing = rows.find((v) => v.id === viewId);
+      if (!existing) return;
+      // The workspace's owner or an admin taking down someone else's shared
+      // view: it leaves their sidebar too (it's no longer shared with them).
+      if (!shared && existing.ownerId !== userId) {
+        void run(
+          [{ table: "views", remove: viewId }],
+          () =>
+            runtime!.tasks.updateView!({ workspaceId: workspaceId!, viewId, patch: { shared } }),
+          (view, write) =>
+            write.settle({ views: [{ ...view, deletedAt: view.deletedAt ?? view.updatedAt }] }),
+          "Couldn't change who sees the view.",
+        ).then((view) => {
+          if (view) toast(`“${view.name}” is no longer shared`);
+        });
+        return;
+      }
       void update(
         viewId,
         { shared },
@@ -194,7 +216,7 @@ export function useViewOps(input: {
         );
       });
     },
-    [update],
+    [rows, userId, run, runtime, workspaceId, update],
   );
 
   const deleteView = useCallback(
@@ -231,9 +253,10 @@ export function useViewOps(input: {
   );
 
   const seedViews = useCallback(
-    async (seeds: readonly SeedView[]) => {
-      if (!runtime?.tasks.createView || !store || !workspaceId || store.isOffline()) return;
+    async (seeds: readonly SeedView[]): Promise<boolean> => {
+      if (!runtime?.tasks.createView || !store || !workspaceId || store.isOffline()) return false;
       const made: TaskView[] = [];
+      let answered = true;
       for (const seed of seeds) {
         try {
           made.push(
@@ -248,10 +271,13 @@ export function useViewOps(input: {
             }),
           );
         } catch {
-          // A default, not something they asked for: no error toast.
+          // A default, not something they asked for: no error toast; the
+          // caller tries again another time (the server makes each once).
+          answered = false;
         }
       }
       if (made.length > 0) store.begin([]).settle({ views: made });
+      return answered;
     },
     [runtime, store, workspaceId],
   );

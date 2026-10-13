@@ -257,12 +257,19 @@ BEGIN
     'filters', '[{"dimension": "due", "operator": "is_maybe", "values": ["week"]}]'::jsonb)));
   PERFORM test.ok(r LIKE '22023%', 'an unknown operator is refused', r);
   r := test.try('E', test.create_sql(jsonb_build_object('name', 'Bad',
-    'filters', '[{"dimension": "due", "operator": "is", "values": [], "extra": 1}]'::jsonb)));
-  PERFORM test.ok(r LIKE '22023%', 'a malformed condition is refused', r);
+    'filters', '[{"dimension": "due", "operator": "is", "values": []}]'::jsonb)));
+  PERFORM test.ok(r LIKE '22023%', 'a condition with no values is refused', r);
   r := test.try('E', test.create_sql(jsonb_build_object('name', 'Bad',
-    'filters', jsonb_build_array(jsonb_build_object('dimension', 'tag', 'operator', 'any_of',
-      'values', (SELECT jsonb_agg(g::text) FROM generate_series(1, 101) g))))));
-  PERFORM test.ok(r LIKE '22023%', 'a condition with too many values is refused', r);
+    'filters', '[{"dimension": "due", "operator": "is", "values": ["week"], "extra": 1}]'::jsonb)));
+  PERFORM test.ok(r LIKE '22023%', 'a condition with a key of its own is refused', r);
+  r := test.try('E', test.create_sql(jsonb_build_object('name', 'Fine',
+    'filters', jsonb_build_array(jsonb_build_object('dimension', 'status', 'operator', 'any_of',
+      'values', (SELECT jsonb_agg('done'::text) FROM generate_series(1, 100) g))))));
+  PERFORM test.ok(r LIKE 'ok%', 'a condition with 100 values saves', r);
+  r := test.try('E', test.create_sql(jsonb_build_object('name', 'Bad',
+    'filters', jsonb_build_array(jsonb_build_object('dimension', 'status', 'operator', 'any_of',
+      'values', (SELECT jsonb_agg('done'::text) FROM generate_series(1, 101) g))))));
+  PERFORM test.ok(r LIKE '22023%', 'a condition with 101 values is refused', r);
   r := test.try('E', test.create_sql(jsonb_build_object('name', 'Bad', 'display', '{"layout": {"nested": true}}'::jsonb)));
   PERFORM test.ok(r LIKE '22023%', 'a Display that isn''t one level of words is refused', r);
   r := test.try('E', test.create_sql(jsonb_build_object('name', 'Bad', 'scope', 'today')));
@@ -309,8 +316,8 @@ BEGIN
   r := test.as_user('O', format($q$SELECT public.tasks_op_create(%L, %L::jsonb)$q$, test.id('W'),
     jsonb_build_object('id', test.id('TP'), 'title', 'Edit episode 1', 'bucket_id', test.id('P'))));
   PERFORM set_config('session_replication_role', 'replica', true);
-  UPDATE public.tasks SET assignee_id = test.id('Y') WHERE id = test.id('TB');
-  UPDATE public.tasks SET assignee_id = test.id('Z') WHERE id = test.id('TP');
+  UPDATE public.tasks SET assignee_id = test.id('Y'), owner_id = test.id('Y') WHERE id = test.id('TB');
+  UPDATE public.tasks SET assignee_id = test.id('Z'), owner_id = test.id('Z') WHERE id = test.id('TP');
   PERFORM set_config('session_replication_role', 'origin', true);
   PERFORM test.ok(NOT public.tasks__visible_to(test.id('TB'), test.id('E'))
               AND public.tasks__visible_to(test.id('TB'), test.id('O'))
@@ -325,6 +332,10 @@ BEGIN
     'filters', jsonb_build_array(jsonb_build_object('dimension', 'creator', 'operator', 'is',
       'values', jsonb_build_array(test.id('Y')))))));
   PERFORM test.ok(r = v_missing, 'and the same as a creator', r);
+  r := test.try('E', test.create_sql(jsonb_build_object('name', 'Z made',
+    'filters', jsonb_build_array(jsonb_build_object('dimension', 'creator', 'operator', 'is',
+      'values', jsonb_build_array(test.id('Z')))))));
+  PERFORM test.ok(r LIKE 'ok%', 'the maker of a task you see can be a Creator', r);
   r := test.try('O', test.create_sql(jsonb_build_object('name', 'Y''s',
     'filters', jsonb_build_array(jsonb_build_object('dimension', 'assignee', 'operator', 'is',
       'values', jsonb_build_array(test.id('Y')))))));

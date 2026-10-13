@@ -6,6 +6,7 @@ import {
   DEFAULT_NOTIFICATION_PREFS,
   DEFAULT_PREFERENCES,
   isNotificationEnabled,
+  mergeFoldsForward,
   mergeOnboardingForward,
   notificationTypeForOp,
   readLastRoute,
@@ -241,6 +242,37 @@ describe("sanitizePreferences", () => {
     expect(sanitizePreferences({}).confirmBeforeQuit).toBe(false);
     expect(sanitizePreferences({ confirmBeforeQuit: true }).confirmBeforeQuit).toBe(true);
     expect(sanitizePreferences({ confirmBeforeQuit: "yes" }).confirmBeforeQuit).toBe(false);
+  });
+});
+
+describe("mergeFoldsForward (TV-U8: each List's newest folds win)", () => {
+  it("keeps this device's newer folds and the cloud's newer ones", () => {
+    const local = {
+      "w:all:bucket": { at: "2026-10-13T10:00:00.000Z", folds: { p1: true } },
+      "w:mine:status": { at: "2026-10-13T08:00:00.000Z", folds: { todo: true } },
+    };
+    const cloud = {
+      "w:all:bucket": { at: "2026-10-13T09:00:00.000Z", folds: { p1: false } },
+      "w:mine:status": { at: "2026-10-13T09:00:00.000Z", folds: { todo: false } },
+      "w:p9:section": { at: "2026-10-13T07:00:00.000Z", folds: { s1: true } },
+    };
+    expect(mergeFoldsForward(local, cloud)).toEqual({
+      "w:all:bucket": { at: "2026-10-13T10:00:00.000Z", folds: { p1: true } },
+      "w:mine:status": { at: "2026-10-13T09:00:00.000Z", folds: { todo: false } },
+      "w:p9:section": { at: "2026-10-13T07:00:00.000Z", folds: { s1: true } },
+    });
+  });
+
+  it("keeps a List's newest 200 folds", () => {
+    const folds = Object.fromEntries(Array.from({ length: 205 }, (_, i) => [`g${i}`, true]));
+    const merged = mergeFoldsForward(
+      { "w:all:bucket": { at: "2026-10-13T10:00:00.000Z", folds } },
+      {},
+    );
+    const kept = Object.keys(merged["w:all:bucket"]?.folds ?? {});
+    expect(kept).toHaveLength(200);
+    expect(kept[0]).toBe("g5");
+    expect(kept.at(-1)).toBe("g204");
   });
 });
 

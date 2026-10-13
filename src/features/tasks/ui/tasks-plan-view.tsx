@@ -426,7 +426,8 @@ export function TasksPlanView({
   // Tasks' welcome and the role question (TV-U17). A role's first view can
   // be a project's Board: that project's Display remembers Board, then it
   // opens.
-  const isWorkspaceOwner = useContext(WorkspaceContext)?.selectedWorkspace?.role === "owner";
+  const workspaceRole = useContext(WorkspaceContext)?.selectedWorkspace?.role ?? null;
+  const isWorkspaceOwner = workspaceRole === "owner";
   const openFirstView = useCallback(
     ({ selection: place, board }: { selection: string; board: boolean }) => {
       if (board) {
@@ -931,7 +932,7 @@ export function TasksPlanView({
     urlViewId,
     onUrlViewConsumed: onUrlViewConsumed ?? NO_OP,
     canShare: canEdit,
-    canModerate: canManageWorkspace,
+    canModerate: workspaceRole === "owner" || workspaceRole === "admin",
   });
 
   // ⌘N, "+ New" and `c` capture "here" (tasks-v3 call 90, TV-U14): in a
@@ -2128,7 +2129,8 @@ export function TasksPlanView({
           // Pinned shows live projects only: a deleted one leaves it, a
           // refused delete or a Restore keeps (or brings back) its pin.
           api.deleteBucket(bucket.id);
-          if (selection === bucket.id) setSelection("inbox");
+          // A saved view of it goes too (its place is gone).
+          if (place === bucket.id) setSelection("inbox");
         }}
         onClose={() => setProjectDialog((prev) => (prev ? { ...prev, open: false } : prev))}
         onCloseAutoFocus={(event) =>
@@ -2145,7 +2147,7 @@ export function TasksPlanView({
         checkAccess={checkProjectAccess}
         onConfirm={(bucket, openTasks) => {
           api.archiveBucket(bucket.id, openTasks);
-          if (selection === bucket.id) setSelection("inbox");
+          if (place === bucket.id) setSelection("inbox");
         }}
         onClose={() => setProjectDialog((prev) => (prev ? { ...prev, open: false } : prev))}
         onCloseAutoFocus={(event) =>

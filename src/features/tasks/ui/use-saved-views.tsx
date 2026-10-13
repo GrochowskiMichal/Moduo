@@ -18,6 +18,7 @@ import {
   seedViewsFor,
   shouldSeedViews,
   type TaskView,
+  viewPlace,
   viewScopeOf,
   viewSelection,
 } from "../views";
@@ -129,12 +130,22 @@ export function useSavedViews({
     );
   }, []);
 
+  const deleteView = useCallback(
+    (viewId: string) => {
+      // Deleting the view you're on lands on its place (a refused delete
+      // brings the view back in the sidebar; you stay where you are).
+      if (openView?.id === viewId) onOpen(viewPlace(openView));
+      api.deleteView(viewId);
+    },
+    [api, openView, onOpen],
+  );
+
   const viewActions = useMemo<ViewActions>(
     () => ({
       currentUserId: userId,
       onRename: api.renameView,
       onShare: api.shareView,
-      onDelete: api.deleteView,
+      onDelete: deleteView,
       onMove: api.moveView,
       onCopyLink: copyLink,
       canShare,
@@ -144,7 +155,7 @@ export function useSavedViews({
       userId,
       api.renameView,
       api.shareView,
-      api.deleteView,
+      deleteView,
       api.moveView,
       copyLink,
       canShare,
@@ -186,16 +197,20 @@ export function useSavedViews({
   useEffect(() => {
     if (!seedNow || seedingRef.current === workspaceId) return;
     seedingRef.current = workspaceId;
-    // Stamped first: a second device or a reload never seeds again (the
-    // server also makes each seed once per person).
-    const now = currentPreferences().tasksOnboarding;
-    updatePreferences({
-      tasksOnboarding: {
-        ...now,
-        viewsSeeded: { ...now.viewsSeeded, [workspaceId]: new Date().toISOString() },
-      },
+    const role = currentPreferences().tasksOnboarding.role;
+    // Stamped once the server answered for every seed: an older server or a
+    // lost connection leaves it for the next open. Two devices at once make
+    // nothing twice (the server keeps one per person, workspace and seed).
+    void api.seedViews(seedViewsFor(role)).then((done) => {
+      if (!done) return;
+      const now = currentPreferences().tasksOnboarding;
+      updatePreferences({
+        tasksOnboarding: {
+          ...now,
+          viewsSeeded: { ...now.viewsSeeded, [workspaceId]: new Date().toISOString() },
+        },
+      });
     });
-    void api.seedViews(seedViewsFor(now.role));
   }, [seedNow, workspaceId, api]);
 
   const canSaveInto = !!openView && openView.ownerId === userId;
