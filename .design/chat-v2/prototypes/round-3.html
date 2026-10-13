@@ -1453,7 +1453,7 @@ html[data-pres="light"] .pd.on { background: color-mix(in oklab, var(--foregroun
               <div class="rcard"><svg class="sg ip" aria-hidden="true"><use href="#i-progress"/></svg><span class="t1">Draft homepage copy<span class="hdl">ACM-31</span></span><button type="button" class="btn sm act"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg>Complete</button>
                 <span class="rm"><span>Acme rebrand › Copy</span><span>Due Fri</span><span>2 of 5</span></span></div>
               <div class="rxs"><span class="rx mine"><span class="e">✅</span>1</span><span class="rx"><span class="e">🙏</span>1</span><span class="rx add"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-smileplus"/></svg></span></div></div>
-            <div class="mtools" data-f="1">
+            <div class="mtools" data-f="9">
               <button type="button" title="👍">👍</button><button type="button" title="✅">✅</button><button type="button" title="👀">👀</button><button type="button" title="Any emoji, including the workspace's own"><svg class="ic" aria-hidden="true"><use href="#i-smileplus"/></svg></button>
               <span class="tsep"></span>
               <button type="button" title="Reply  R"><svg class="ic" aria-hidden="true"><use href="#i-reply"/></svg></button>
@@ -1710,7 +1710,7 @@ html[data-pres="light"] .pd.on { background: color-mix(in oklab, var(--foregroun
   var FRAMES = 8;
   var VARS = {
     1: { lab: 'Density', opts: [['comfortable', 'Comfortable'], ['compact', 'Compact'], ['dense', 'Dense']] },
-    2: { lab: '"New" line', opts: [['center', 'Centred "New" (recommended)'], ['pill', 'Line + pill'], ['tint', 'Unread rows tinted'], ['chip', 'Only a floating chip']] },
+    2: { lab: '"New" line', opts: [['pill', 'Line + pill (recommended)'], ['center', 'Centred "New"'], ['tint', 'Unread rows tinted'], ['chip', 'Only a floating chip']] },
     3: { lab: 'Composer', opts: [['one', 'One row (recommended)'], ['two', 'Two rows (Slack)']] },
     4: { lab: 'Replies', opts: [['slack', 'Slack today: the mess'], ['stream', 'Proposed: replies in the stream'], ['chainrow', 'Proposed: a tangled chain folds'], ['every', 'Display option: never chainrow']] },
     5: { lab: 'Chain', opts: [['chain', 'Read the chain on the right'], ['main', 'Reply from the main box']] },
@@ -1761,11 +1761,11 @@ html[data-pres="light"] .pd.on { background: color-mix(in oklab, var(--foregroun
     html.dataset.frame = f;
     html.dataset.look = 'a';
     html.dataset.dens = f === 1 ? v : 'comfortable';
-    html.dataset.newl = f === 2 ? v : 'center';
+    html.dataset.newl = f === 2 ? v : 'pill';
     html.dataset.comp = f === 3 ? v : 'one';
     html.dataset.pres = f === 7 ? v : 'white';
     document.querySelectorAll('[data-f], [data-v]').forEach(function (el) { el.hidden = !visible(el, f, v); });
-    document.getElementById('mMike').classList.toggle('hov', f === 1);
+    document.getElementById('mMike').classList.toggle('hov', false);
     document.querySelectorAll('#frameSw [data-go]').forEach(function (b) { b.classList.toggle('on', +b.dataset.go === f); });
     var def = VARS[f];
     document.getElementById('varLab').textContent = def ? def.lab : '';

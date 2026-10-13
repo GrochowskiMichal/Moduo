@@ -2,7 +2,7 @@
 
 > **Status (2026-10-13): round 3 being prepared (prototype round-3.html built; tech-stack blueprint for Mike running).**
 >
-> - **Decided since round 1:** CH4a; CH29 = A (Slack calm) as the base, with centred dates and a fade at both ends; CH29b (three quick reactions, Reply before Task, agent's choice); tidying up afterwards (CH30, frame 5).
+> - **Decided since round 1:** CH4a; CH29 = A (Slack calm) as the base, with centred dates and a fade at both ends; CH29b (three quick reactions, Reply before Task, agent's choice); tidying up afterwards (CH30, round 3 frame 6).
 > - **Open, organized in §8 group H:** CH29d "New" line, CH29e composer, CH29f spacing, CH29a 15 px, CH29c past dates, CH30a replies in the stream, CH30b fold when tangled, CH30c who moves others' messages, CH28a dot colour, CH28c statuses, CH28b where state shows, and the quick confirmations CH3a, CH16a, CH16b, CH23a, CH26a.
 > - **Mike's ask:** a tech-stack decision blueprint → [research/tech-blueprint.md](./research/tech-blueprint.md) (lane running).
 > - **Research lanes** ([`research/`](./research/)): six landed and folded in (early-decisions audit, role journeys, competitor structure, hackathon, visual audit → §5, current state → §1.3 B and §6 #15–18). **Threads** (→ CH30) and **visual competitors** (→ CH29) landed.
@@ -787,13 +787,13 @@ Every open question in one place, each readable on its own: the question, the op
 **The look** (prototype frames 1–3)
 
 **CH29d · How should "new messages since you last looked" be marked?** *(he: "the 'new' line looks like a mistake… just a pure white line")*
-- (a) **"New" centred on a faint accent line**, the same shape as the date separators. *Recommended:* consistent with the centred dates he liked, and quieter than a full line.
-- (b) A hairline with a small accent "New" pill at its right end (Slack's shape, without red).
+- (a) "New" centred on a faint accent line, the same shape as the date separators. On the default monochrome accent this is still a white line, only dimmer, so it doesn't really answer his note.
+- (b) **A grey hairline with a small "New" pill at its right end** (Slack's shape, without red). *Recommended:* the line itself stays neutral like every other separator; only the small pill carries the accent, so it reads as a label, not a stray white line.
 - (c) No line: unread messages carry a faint accent wash until read.
 - (d) No line in the stream; only a floating "2 new messages ↓" chip.
 - On the default monochrome accent, "accent" is white; on a coloured accent the mark takes that colour.
 
-❓ a, b, c or d?
+❓ a, b, c or d? (recommended: b)
 
 **CH29e · The composer: one row or two?**
 - (a) **One row:** attach · text · @ · emoji · send; formatting appears when you select text. *Recommended:* fewer things to look at, which is his main complaint.
