@@ -66,6 +66,7 @@ describe("copying needs Edit (D15-11)", () => {
     );
     expect(screen.getByText("You need edit access to this project to copy it.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Duplicate" })).toBeNull();
+    expect(screen.getAllByRole("button", { name: "Close" }).length).toBeGreaterThan(1);
   });
 
   it("Duplicate is offered with Edit", () => {

@@ -87,7 +87,7 @@ export function SaveTemplateDialog({
               : "Keeps the statuses, sections and open tasks, with their dates as days from the start. Nothing done, commented or tracked."}
           </DialogDescription>
         </DialogHeader>
-        <div className={FIELD}>
+        <div className={access === false ? "hidden" : FIELD}>
           <Label htmlFor={nameId} className={LABEL}>
             Name
           </Label>

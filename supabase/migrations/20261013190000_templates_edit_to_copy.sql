@@ -217,7 +217,7 @@ BEGIN
   PERFORM public.templates__check_body('task', v_body);
   DELETE FROM public.task_templates y
   WHERE y.owner_id = v_actor AND y.deleted_at < now() - interval '30 days';
-  -- What it copied: the task and the subtasks this person can see.
+  -- What it copied: the task and the subtasks this person can edit.
   v_sources := ARRAY[r.id] || coalesce((
     SELECT array_agg(y.id ORDER BY y.id) FROM public.tasks y
     WHERE y.parent_id = r.id AND y.deleted_at IS NULL AND public.tasks__editable_to(y.id, v_actor)), '{}');

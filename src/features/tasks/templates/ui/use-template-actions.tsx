@@ -20,12 +20,13 @@ import type { ModuoRuntime } from "../../../../lib/runtime.types";
 import type { WorkspaceStore } from "../../../../lib/sync/store";
 import { undoToast } from "../../../../lib/undo-toast";
 import type { Area, Bucket, Section, Task } from "../../model";
-import type { Template, TemplatePatchable, TemplateWithBody } from "../model";
+import type { Template, TemplateKind, TemplatePatchable, TemplateWithBody } from "../model";
 import { applyProjectTemplate, applyTaskTemplate, duplicateProject, newCopyId } from "../ops";
 import { forgetTemplate, rememberTemplate, useTemplates } from "../templates-store";
 import { CopyProjectDialog, SaveTemplateDialog, UseTaskTemplateDialog } from "./template-dialogs";
 import { TemplateEditor } from "./template-editor";
 import { TemplatesView } from "./templates-view";
+import { useCopyAccess } from "./use-copy-access";
 
 type Dialogs =
   | { kind: "save-task"; task: Task }
@@ -71,9 +72,6 @@ export function useTemplateActions({
   const supported = Boolean(runtime?.tasks.duplicateProject && runtime.tasks.listTemplates);
   const [dialog, setDialog] = useState<Dialogs>(null);
   const [busy, setBusy] = useState(false);
-  // May you copy what the open dialog copies (Edit on it, D15-11)? Asked
-  // when it opens; null while asking. The server decides again on the copy.
-  const [copyAccess, setCopyAccess] = useState<boolean | null>(null);
   const [editing, setEditing] = useState<{ template: Template } | null>(null);
   const [editorTemplate, setEditorTemplate] = useState<TemplateWithBody | null>(null);
   const [editorLoading, setEditorLoading] = useState(false);
@@ -96,31 +94,24 @@ export function useTemplateActions({
     attemptId.current = null;
   }, []);
 
-  const copySource: { kind: "task" | "project"; id: string } | null =
+  // May you copy what the open dialog copies (Edit on it, D15-11)?
+  const copyKind: TemplateKind | null =
     dialog?.kind === "save-task"
-      ? { kind: "task", id: dialog.task.id }
+      ? "task"
       : dialog?.kind === "save-project" || dialog?.kind === "duplicate"
-        ? { kind: "project", id: dialog.bucket.id }
+        ? "project"
         : null;
-  const copyKind = copySource?.kind ?? null;
-  const copyId = copySource?.id ?? null;
-  useEffect(() => {
-    if (!copyKind || !copyId) return;
-    const ask = runtime?.tasks.canCopyTemplateSource;
-    if (!ask) {
-      setCopyAccess(true);
-      return;
-    }
-    let live = true;
-    setCopyAccess(null);
-    ask({ kind: copyKind, id: copyId })
-      .then((ok) => live && setCopyAccess(ok))
-      // Unknown: let the server decide (it refuses with a clear message).
-      .catch(() => live && setCopyAccess(true));
-    return () => {
-      live = false;
-    };
-  }, [runtime, copyKind, copyId]);
+  const copyId =
+    dialog?.kind === "save-task"
+      ? dialog.task.id
+      : dialog?.kind === "save-project" || dialog?.kind === "duplicate"
+        ? dialog.bucket.id
+        : null;
+  const copySource = useMemo(
+    () => (copyKind && copyId ? { kind: copyKind, id: copyId } : null),
+    [copyKind, copyId],
+  );
+  const copyAccess = useCopyAccess(runtime, copySource);
 
   // ── saving ──────────────────────────────────────────────────────────────
   const saveAs = async (
