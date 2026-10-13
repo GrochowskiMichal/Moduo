@@ -428,15 +428,37 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   // project reads "Private project", never "Inbox" (TV-P0, AC1.10).
   // An archived project's tasks show only when you open it or search, and
   // its name says so (REPLAN 78: search finds them, labelled "Archived").
+  // A task you made that sits in someone else's Inbox (TV-D13, 20a: you keep
+  // it while it's there, the Inbox itself stays theirs) reads "Mike's Inbox":
+  // a task you can see in a project you can't, made by you and assigned to
+  // someone else, can only be that.
+  const handedInboxes = useMemo(() => {
+    const known = new Set([
+      ...(inbox ? [inbox.id] : []),
+      ...buckets.map((b) => b.id),
+      ...api.archivedBuckets.map((b) => b.id),
+    ]);
+    const out = new Map<string, string>();
+    for (const t of tasks) {
+      if (known.has(t.bucketId) || out.has(t.bucketId)) continue;
+      if (!currentUserId || t.creatorId !== currentUserId) continue;
+      if (!t.assigneeId || t.assigneeId === currentUserId) continue;
+      const person = assignees.find((a) => a.userId === t.assigneeId);
+      const name = (person?.fullName || person?.name || "").trim().split(/\s+/)[0];
+      if (name) out.set(t.bucketId, `${name}’s Inbox`);
+    }
+    return out;
+  }, [tasks, buckets, inbox, api.archivedBuckets, currentUserId, assignees]);
   const bucketNameById = useCallback(
     (id: string) => {
       if (inbox && id === inbox.id) return "Inbox";
       const live = buckets.find((b) => b.id === id);
       if (live) return live.name;
       const archived = api.archivedBuckets.find((b) => b.id === id);
-      return archived ? `${archived.name} · Archived` : PRIVATE_PROJECT_LABEL;
+      if (archived) return `${archived.name} · Archived`;
+      return handedInboxes.get(id) ?? PRIVATE_PROJECT_LABEL;
     },
-    [buckets, inbox, api.archivedBuckets],
+    [buckets, inbox, api.archivedBuckets, handedInboxes],
   );
 
   // Won't do (archived) tasks leave every scope, except the one you're looking
@@ -566,14 +588,16 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   const takeTask = useCallback((id: string) => {
     const { api: moduleApi, currentUserId: me } = takeRef.current;
     if (!me) return;
-    moduleApi.claimTask(id);
-    undoToast("Taken · it’s yours", {
-      onUndo: () => {
-        // Never over a newer change: only while it's still yours.
-        const now = takeRef.current.api.tasks.find((t) => t.id === id);
-        if (now?.assigneeId === me) takeRef.current.api.patchTask(id, { assigneeId: null });
-      },
-    });
+    // The toast once the server took it (a refused claim says so instead).
+    moduleApi.claimTask(id, () =>
+      undoToast("Taken · it’s yours", {
+        onUndo: () => {
+          // Never over a newer change: only while it's still yours.
+          const now = takeRef.current.api.tasks.find((t) => t.id === id);
+          if (now?.assigneeId === me) takeRef.current.api.patchTask(id, { assigneeId: null });
+        },
+      }),
+    );
   }, []);
   // All (research §8): projects in the sidebar's order, area by area; a
   // project's header names its area and an On hold or Done state, and those

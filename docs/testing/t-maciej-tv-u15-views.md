@@ -28,13 +28,14 @@ Set up: `bun run local:up`, `bun run env:local`, `bun run dev:web`, sign in as t
 - [ ] **Do:** press H → Tomorrow → **Expect:** the row leaves, "Snoozed until Tomorrow · Undo"; "Snoozed 1" sits folded at the end, its row reading "until Tomorrow"; H on it brings it back at once _(both)_
 - [ ] **Do:** snooze a task, then comment on it from the panel (or have someone else) → **Expect:** it comes back on top of the Inbox _(both)_
 - [ ] **Do:** a task someone else put in your Inbox → **Expect:** "from <their first name>" after its title _(both)_
+- [ ] **Do:** assign one of your own Inbox tasks to a teammate with Keep unfiled, then find it (All, or search) → **Expect:** its project reads "<their name>'s Inbox", not "Private project" _(both)_
 - [ ] **Do:** clear the Inbox (file or finish everything) → **Expect:** "Inbox is clear · New captures from anywhere, email and your agents land here, newest on top." with Capture a task and "⌘⇧K captures from anywhere in Moduo"; with snoozed tasks, "2 snoozed · show" _(both)_
 - [ ] **Do:** type in the search field or the capture while in the Inbox, press 1/2/3/h → **Expect:** the letters type; no triage happens _(both)_
 
 ## My tasks
 - [ ] **Do:** open My tasks (it's in the sidebar even in a workspace of one) → **Expect:** In progress · To do, each by date then priority, tasks waiting on someone at the end of their group; your Backlog folded at the end _(both)_
 - [ ] **Do:** be in a team (Settings → Members → Teams once TV-D13 is in; the local seed script otherwise) with unclaimed tasks → **Expect:** "For Design · 2 unclaimed" on top with the team's square mark; up to five rows then "Show 3 more"; each row has Take it _(both)_
-- [ ] **Do:** Take it → **Expect:** "Taken · it's yours · Undo"; the row moves into To do and the block's count drops; Undo gives it back to the team _(both)_
+- [ ] **Do:** Take it → **Expect:** "Taken · it's yours · Undo" once it saved (a task someone took first says so instead); the row moves into To do and the block's count drops; Undo gives it back to the team (its other members hear once, TV-D13's rule) _(both)_
 - [ ] **Do:** the team block's "+" → **Expect:** the capture routes the new task to that team _(both)_
 - [ ] **Do:** Display → Group by → Date → **Expect:** date groups instead of status; the team block stays on top _(both)_
 

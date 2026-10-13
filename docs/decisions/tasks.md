@@ -43,12 +43,13 @@ Built in tasks-v3 block 20 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §8, AC
   - Rejected: a celebration or a streak on zero Inbox (research §7).
 - **U15-8 · My tasks: always there, by status in its own order, the team block on top** → TV-U15 (`my-tasks.ts`, `bucket-rail.tsx`), TV-D13
   - Who: agent's choice, deferred to by Maciej, 2026-10-13.
-  - Decision: My tasks shows in every workspace (tasks-v3 §3; tasks-v2's two-member rule retired); its scope includes your Backlog (folded behind its group, U10-12); under Order by: Manual it orders by date, then priority, waiting tasks last in each group. On top, per team you're in, "For Design · 2 unclaimed" with the team's mark: up to five rows then "Show n more", each with Take it (TV-D13's claim op, which refuses a task somebody took first), with Undo while it's still yours; its "+" routes a new task to the team; it folds like any group and is absent when nothing is unclaimed.
+  - Decision: My tasks shows in every workspace (tasks-v3 §3; tasks-v2's two-member rule retired); its scope includes your Backlog (folded behind its group, U10-12); under Order by: Manual it orders by date, then priority, waiting tasks last in each group. On top, per team you're in, "For Design · 2 unclaimed" with the team's mark: up to five rows then "Show n more", each with Take it (TV-D13's claim op, which refuses a task somebody took first; "Taken · it's yours" only once the server took it), with Undo while it's still yours (Undo gives it back to the team, which tells its other members once, D13's rule); its "+" routes a new task to the team; it folds like any group and is absent when nothing is unclaimed.
   - Why: call 84 and 54, research §8.
   - Rejected: Created and Subscribed tabs (a filter chip says "Created by me").
 - **U15-9 · All: your projects, never your Inbox, area by area** → TV-U15 (`my-tasks.ts` `allView`, `allProjectOrder`)
   - Who: agent's choice, deferred to by Maciej, 2026-10-13.
   - Decision: All lists every task in projects you can see and never your Inbox (its sidebar count too), project by project in the sidebar's order; a project's header names its area and "On hold" / "Done" ("Acme rebrand · Client work · On hold"), and On hold and Done projects start folded. One sticky level.
+  - Also (TV-D13's ask): a task you made that sits in someone else's Inbox reads "Mike's Inbox" where its project shows (rows, All's group), never "Private project": a task you see in a project you can't, made by you and assigned to someone else, can only be that (20a).
   - Why: research §8 and 20.
   - Rejected: Area › Project as two sticky header levels (the virtual stack pins one header; a nested sticky is its own block).
 - **U15-10 · Won't do is a list in the sidebar's ⋯** → TV-U15 (`bucket-rail.tsx` `WONTDO_SELECTION`)

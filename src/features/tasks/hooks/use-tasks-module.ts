@@ -617,6 +617,8 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
          *  handed into someone else's Inbox): dropped from the copy at once. */
         leaves?: (saved: Task) => string[];
         offline?: { status: string; recurrence?: RecurrenceRule | null };
+        /** Once the server took it (a caller's own toast, say "Taken", TV-U15). */
+        onSaved?: (saved: Task) => void;
       } = {},
     ) => {
       if (!runtime || !workspaceId || !canEdit || !store) {
@@ -661,6 +663,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
           const gone = opts.leaves?.(saved);
           if (gone?.length) store.forget("tasks", gone);
           setActivityStamp((s) => s + 1);
+          opts.onSaved?.(saved);
         })
         .catch((e) => {
           if (queueing && isNetworkError(e)) {
@@ -690,10 +693,14 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
    * it, and refuses one somebody took first (the copy goes back and says so).
    */
   const claimTask = useCallback(
-    (id: string) => {
+    (id: string, onClaimed?: () => void) => {
       if (!userId) return;
-      applyOp(id, { assigneeId: userId }, () =>
-        runtime!.tasks.opClaim({ workspaceId: workspaceId!, taskId: id }),
+      applyOp(
+        id,
+        { assigneeId: userId },
+        () => runtime!.tasks.opClaim({ workspaceId: workspaceId!, taskId: id }),
+        // Only a claim the server took says so (TV-U15's "Taken" toast).
+        { onSaved: onClaimed ? () => onClaimed() : undefined },
       );
     },
     [applyOp, runtime, workspaceId, userId],
