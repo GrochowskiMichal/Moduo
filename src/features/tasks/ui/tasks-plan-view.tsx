@@ -111,7 +111,6 @@ import { defaultRowsFor, firstViewFor } from "../onboarding";
 import { showsSortedNote, sortedByLabel } from "../order";
 import { resolveTasksDeepLink, taskIdForHandle } from "../search";
 import { projectDeleteSummary, projectOpenWork } from "../sidebar";
-import { STATUS_KEY_LABELS, type StatusKey } from "../statuses";
 import { useTemplateActions } from "../templates/ui/use-template-actions";
 import { sanitizeTimelineZoom, type TimelineZoom } from "../timeline-geometry";
 import { ArchivedProjectBanner, ArchivedProjectsView } from "./archived-projects-view";
@@ -144,6 +143,7 @@ import { TaskTimelineView } from "./task-timeline-view";
 import { TaskListSkeleton } from "./task-view-states";
 import { TasksWelcomeDialog } from "./tasks-welcome-dialog";
 import { useUpcomingView } from "./upcoming-view";
+import { boardDropName } from "./use-board-folds";
 import { useTasksDisplay } from "./use-tasks-display";
 import { useTasksFilters } from "./use-tasks-filters";
 import { useTasksWelcome } from "./use-tasks-welcome";
@@ -554,7 +554,10 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   // the one selected.
   const linkedTaskId =
     revealRequest && revealRequest.id === selectedTaskId ? revealRequest.id : null;
-  const groupChoices = useMemo(() => ({ teams: api.teams.length > 0 }), [api.teams.length]);
+  const groupChoices = useMemo(
+    () => ({ teams: api.teams.length > 0, areas: api.areas.length > 0 }),
+    [api.teams.length, api.areas.length],
+  );
   // The Inbox opened by its id is still the Inbox: its Display (no Section
   // grouping, its own saved choices) is the Inbox's.
   const displayScope = inboxId && selection === inboxId ? "inbox" : selection;
@@ -1473,6 +1476,8 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
         {...displayProps}
         dndMode="external"
         boardGroupBy={tasksDisplay.display.boardGroup}
+        lanes={tasksDisplay.display.boardLanes}
+        description={tasksDisplay.display.cardDescription === "preview"}
         statusFilter={statusFilter}
         onManualOrder={backToManualOrder}
         onAddStatus={
@@ -1482,6 +1487,18 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
             ? () => setStatusesEditor({ projectId: selection, addingTo: "in_progress" })
             : undefined
         }
+        onEditStatuses={
+          canEdit && buckets.some((b) => b.id === selection)
+            ? () => setStatusesEditor({ projectId: selection, addingTo: null })
+            : undefined
+        }
+        // The Board's own wiring (TV-U11): handles, ⏎ to the full page, folds.
+        taskKey={taskKey}
+        onOpenTask={setFullPageId}
+        foldKey={lsKey(
+          workspaceId,
+          `folds:${api.currentUserId ?? "anon"}:${selection}:board:${tasksDisplay.display.boardGroup}`,
+        )}
       />
     ) : view === "timeline" ? (
       <TaskTimelineView {...sharedViewProps} zoom={timelineZoom} onZoomChange={setTimelineZoom} />
@@ -1593,10 +1610,8 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       if (id === `${RAIL_DROP_PREFIX}queue`) return "Focus";
       if (id === `${RAIL_DROP_PREFIX}mine`) return "My tasks";
       if (id.startsWith("link:")) return "the open task, to link them";
-      if (id.startsWith("col:status:")) {
-        return STATUS_KEY_LABELS[id.slice("col:status:".length) as StatusKey] ?? null;
-      }
-      if (id.startsWith("col:bucket:")) return bucketNameById(id.slice("col:bucket:".length));
+      // A Board column or lane cell: the name the board registered (TV-U11).
+      if (id.startsWith("col:")) return boardDropName(id);
       return taskName(id);
     };
     return taskDragAnnouncements({ taskName: (id) => taskName(id) ?? "the task", targetName });

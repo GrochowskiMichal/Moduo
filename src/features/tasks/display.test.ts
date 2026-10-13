@@ -39,6 +39,9 @@ describe("Tasks Display — stored value", () => {
       layout: "list",
       group: "none",
       boardGroup: "status",
+      // TV-U11: lanes off and no description on cards until asked (85, AC7.4).
+      boardLanes: "none",
+      cardDescription: "hidden",
       order: "manual",
       orderDir: "asc",
       completed: "hidden",
@@ -65,6 +68,8 @@ describe("Tasks Display — stored value", () => {
       layout: "board",
       group: "date",
       boardGroup: "bucket",
+      boardLanes: "assignee",
+      cardDescription: "preview",
       order: "priority",
       orderDir: "desc",
       completed: "week",
@@ -191,29 +196,74 @@ describe("Tasks Display — controls per scope and layout", () => {
     }
   });
 
-  it("the Board says Group by, never Columns (across projects only)", () => {
+  it("the Board says Group by, never Columns; Lanes, Rows and Description too (TV-U11)", () => {
     expect(controlIds("all", "board")).toEqual([
       "layout",
       "boardGroup",
+      "boardLanes",
       "order",
       "completed",
       "subtasks",
+      "rows",
       "properties",
+      "cardDescription",
     ]);
-    const control = tasksDisplayControls("all", "board").find((c) => c.id === "boardGroup");
-    expect(control?.label).toBe("Group by");
-    expect(control?.options.map((o) => o.label)).toEqual(["Status", "Project"]);
-    expect(controlIds("b1", "board")).not.toContain("boardGroup");
+    const option = (scope: string, id: string, teams = true, areas = true) =>
+      tasksDisplayControls(scope, "board", { teams, areas })
+        .find((c) => c.id === id)
+        ?.options.map((o) => o.label);
+    // Call 22: across projects, Project and Area; one project, Section.
+    expect(option("all", "boardGroup")).toEqual([
+      "Status",
+      "Assignee",
+      "Team",
+      "Priority",
+      "Project",
+      "Area",
+    ]);
+    expect(option("b1", "boardGroup")).toEqual([
+      "Status",
+      "Section",
+      "Assignee",
+      "Team",
+      "Priority",
+    ]);
+    expect(option("b1", "boardGroup", false)).not.toContain("Team");
+    expect(option("all", "boardGroup", true, false)).not.toContain("Area");
+    // Call 85: Lanes none · assignee · priority · project (across) · team.
+    expect(option("all", "boardLanes")).toEqual([
+      "None",
+      "Assignee",
+      "Priority",
+      "Project",
+      "Team",
+    ]);
+    expect(option("b1", "boardLanes", false)).toEqual(["None", "Assignee", "Priority"]);
+    expect(option("all", "cardDescription")).toEqual(["Hidden", "Preview"]);
     const labels = (scope: string, layout: "list" | "board") =>
       tasksDisplayControls(scope, layout).map((c) => c.label);
     for (const layout of ["list", "board"] as const) {
       expect(labels("all", layout)).not.toContain("Columns");
     }
+    expect(labels("b1", "board")).toContain("Show on cards");
+  });
+
+  it("a stored Board grouping a scope can't offer falls back to Status (call 86)", () => {
+    const stored = { boardGroup: "section", boardLanes: "bucket" };
+    const all = sanitizeTasksView(stored, tasksViewDefaults("all"), "all");
+    expect([all.boardGroup, all.boardLanes]).toEqual(["status", "bucket"]);
+    const one = sanitizeTasksView(stored, tasksViewDefaults("b1"), "b1");
+    expect([one.boardGroup, one.boardLanes]).toEqual(["section", "none"]);
   });
 
   it("the Queue is a line-up (no Completed choice: done leaves the queue)", () => {
     expect(controlIds("today", "list")).toEqual(["layout", "rows", "properties"]);
-    expect(controlIds("today", "board")).toEqual(["layout", "properties"]);
+    expect(controlIds("today", "board")).toEqual([
+      "layout",
+      "rows",
+      "properties",
+      "cardDescription",
+    ]);
   });
 
   it("the Timeline keeps its own rules", () => {

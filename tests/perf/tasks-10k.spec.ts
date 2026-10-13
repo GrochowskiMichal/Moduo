@@ -251,10 +251,10 @@ test("AC12.4 — long lists and columns draw only what's on screen", async ({ pa
 test("AC12.4 — a card drags out of a 1,200-card column", async ({ page }) => {
   await openAll(page);
   await page.getByRole("radio", { name: "Board view" }).click();
-  const todo = page.locator("section").filter({ has: page.getByText("To do", { exact: true }) });
-  const progress = page
-    .locator("section")
-    .filter({ has: page.getByText("In progress", { exact: true }) });
+  // The Board's own columns (TV-U11): the panel's section also says "To do"
+  // once a task is selected there.
+  const todo = page.locator('section[data-board-column="To do"]');
+  const progress = page.locator('section[data-board-column="In progress"]');
   // Scroll the To do column well down, then drag a card from there.
   const scroller = todo.locator("> div").last();
   await scroller.evaluate((el) => el.scrollTo({ top: 20_000 }));

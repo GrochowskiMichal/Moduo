@@ -54,6 +54,8 @@ export type PillValues = {
   waitingOn: string[];
   /** The status a List group's "+" opened it with (TV-U10); null: To do. */
   status?: TaskStatusCategory | null;
+  /** A Board column's own status name (TV-U11), for the chip. */
+  statusName?: string | null;
 };
 
 /** A hand pick, by field. */
@@ -334,11 +336,11 @@ function MoreChips({
 }) {
   const chips: Array<{ key: string; icon: typeof Bell; label: string; clear: () => void }> = [];
   // A status set by a List group's "+" is said out loud, and × drops it.
-  if (values.status && values.status !== "todo")
+  if (values.status && (values.status !== "todo" || values.statusName))
     chips.push({
       key: "status",
       icon: CircleDot,
-      label: CATEGORY_LABELS[values.status],
+      label: values.statusName ?? CATEGORY_LABELS[values.status],
       clear: () => onChange({ field: "status", value: null }),
     });
   if (values.scheduledAt)

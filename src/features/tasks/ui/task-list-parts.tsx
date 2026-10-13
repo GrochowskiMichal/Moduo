@@ -276,7 +276,7 @@ export function AddSectionLine({ onAdd }: { onAdd: (name: string) => void }) {
 }
 
 /** A one-line name field: Enter saves, Esc or leaving it cancels an empty one. */
-function NameInput({
+export function NameInput({
   initial,
   label,
   placeholder,

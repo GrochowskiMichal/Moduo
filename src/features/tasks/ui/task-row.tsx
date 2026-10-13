@@ -1,22 +1,8 @@
-import { isClosedTask, taskCategoryOf } from "@contracts/vocabularies";
+import { isClosedTask } from "@contracts/vocabularies";
 import type { DraggableSyntheticListeners } from "@dnd-kit/core";
 import { ChevronDown, ChevronRight, CornerDownRight } from "lucide-react";
 import { memo, useEffect, useRef, useState } from "react";
-import { toast } from "sonner";
 import { Button } from "../../../components/ui/button";
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuRadioGroup,
-  ContextMenuRadioItem,
-  ContextMenuSeparator,
-  ContextMenuShortcut,
-  ContextMenuSub,
-  ContextMenuSubContent,
-  ContextMenuSubTrigger,
-  ContextMenuTrigger,
-} from "../../../components/ui/context-menu";
 import { Input } from "../../../components/ui/input";
 import { Row, RowColumn, RowColumns as RowColumnsSlot } from "../../../components/ui/row";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
@@ -24,8 +10,7 @@ import { cn } from "../../../lib/utils";
 import { assigneeLabel } from "../assignee-options";
 import { useAssignees } from "../assignees";
 import { requestBreakDown } from "../break-down";
-import { LEVEL_OPTIONS } from "../helpers";
-import { type EnergyLevel, isLate, type PriorityLevel, type Task } from "../model";
+import { isLate, type Task } from "../model";
 import {
   ALL_ROW_COLUMNS,
   handleLabel,
@@ -34,28 +19,21 @@ import {
   updatedLabel,
 } from "../row-layout";
 import { nowOn } from "../use-today";
-import { AssignContextMenu } from "./assign-context-menu";
 import { AssigneeAvatar } from "./assignee-avatar";
 import type { DragActivatorRef } from "./dnd/task-dnd";
 import { EnergyMark, PriorityMark } from "./level-icons";
 import { ROW_TITLE_ATTR } from "./list-keys";
 import { QueueToggle } from "./queue-toggle";
 import { sameTaskFacts, sameValues, type TaskFacts, type TaskRowActions } from "./row-facts";
+import { activateTask, type TaskCommand, TaskContextMenu } from "./task-context-menu";
 import { TaskCounts } from "./task-meta";
-import {
-  DateCell,
-  glyphAction,
-  HandleCell,
-  LateFixes,
-  ProjectMenu,
-  StatusGlyph,
-} from "./task-row-cells";
+import { DateCell, HandleCell, LateFixes, ProjectMenu, StatusGlyph } from "./task-row-cells";
 
 // The blocked marker moved to task-meta; the Timeline still imports it here.
 export { BlockedMarker } from "./task-meta";
 
 /** Which inline menu or popover the keyboard asked to open on this row. */
-export type RowCommand = "bucket" | "schedule" | "due" | "status" | null;
+export type RowCommand = TaskCommand | null;
 
 type Props = {
   task: Task;
@@ -158,15 +136,7 @@ function sameRowProps(a: Props, b: Props): boolean {
 }
 
 /** Finish an open task, or reopen a closed one (To do): the glyph, Space, `x`. */
-export function activateGlyph(task: Task, actions: TaskRowActions): void {
-  if (glyphAction(task) === "finish") {
-    actions.toggleDone(task);
-    return;
-  }
-  // Done goes back the way it always has; Won't do reopens to To do too.
-  if (taskCategoryOf(task) === "done") actions.toggleDone(task);
-  else actions.setTaskStatus(task.id, { category: "todo" });
-}
+export const activateGlyph: (task: Task, actions: TaskRowActions) => void = activateTask;
 
 function TaskRowView({
   task,
@@ -199,19 +169,9 @@ function TaskRowView({
   actions,
   today,
 }: Props) {
-  const done = taskCategoryOf(task) === "done";
   // A Won't do task kept in view (TV-P0) reads closed, like a done one.
   const closed = isClosedTask(task);
-  const queued = facts.queued;
   const late = isLate(task, today);
-  // Menu items that hand focus to something in the row (the title editor, a
-  // chip's popover) run once the context menu has closed: Radix returns focus
-  // to the list a tick after the menu unmounts, and whatever opened sooner
-  // reads that as focus leaving it and closes again.
-  const pendingMenuAction = useRef<(() => void) | null>(null);
-  const afterMenuClose = (action: () => void) => {
-    pendingMenuAction.current = action;
-  };
   // Blocked — computed, ambient: dim + a quiet icon, never red (spec §5c).
   const blocked = facts.blockedLabel !== null;
   const { assignees, byId } = useAssignees();
@@ -569,154 +529,36 @@ function TaskRowView({
     </Row>
   );
 
-  const copyLink = () => {
-    const target = handle ?? task.id;
-    const url = `${window.location.origin}/tasks?id=${encodeURIComponent(target)}`;
-    void navigator.clipboard?.writeText(url).then(
-      () => toast("Link copied"),
-      () => toast.error("Couldn’t copy."),
-    );
-  };
-  const copyText = () => {
-    const text = handle ? `${task.title || "Untitled"} (${handle})` : task.title || "Untitled";
-    void navigator.clipboard?.writeText(text).then(
-      () => toast("Copied"),
-      () => toast.error("Couldn’t copy."),
-    );
-  };
-
-  if (!canEdit) {
-    // Read-only (research §9): open it, or take it elsewhere.
-    return (
-      <ContextMenu>
-        <ContextMenuTrigger asChild>{row}</ContextMenuTrigger>
-        <ContextMenuContent className="w-48">
-          <ContextMenuItem onSelect={() => onSelect(task.id)}>Open</ContextMenuItem>
-          <ContextMenuItem onSelect={copyLink}>Copy link</ContextMenuItem>
-          <ContextMenuItem onSelect={copyText}>Copy as text</ContextMenuItem>
-        </ContextMenuContent>
-      </ContextMenu>
-    );
-  }
-
+  // The one menu for rows, cards and bars (TV-U11): Open selects the row.
   return (
-    <ContextMenu>
-      <ContextMenuTrigger asChild>{row}</ContextMenuTrigger>
-      <ContextMenuContent
-        className="w-48"
-        onCloseAutoFocus={(e) => {
-          const action = pendingMenuAction.current;
-          if (!action) return;
-          pendingMenuAction.current = null;
-          e.preventDefault(); // the editor or popover takes focus, not the list
-          action();
-        }}
-      >
-        <ContextMenuItem onSelect={() => afterMenuClose(() => onStartEdit(task.id))}>
-          Rename
-        </ContextMenuItem>
-        <ContextMenuItem onSelect={() => activateGlyph(task, actions)}>
-          {done ? "Mark not done" : closed ? "Reopen" : "Mark done"}
-        </ContextMenuItem>
-        <ContextMenuItem onSelect={() => afterMenuClose(() => onRequestCommand(task.id, "status"))}>
-          Status…
-        </ContextMenuItem>
-        {!closed && task.status !== "archived" ? (
-          <>
-            <ContextMenuItem onSelect={() => actions.focusOnTask(task.id)}>
-              Focus on this
-              <ContextMenuShortcut>⇧F</ContextMenuShortcut>
-            </ContextMenuItem>
-            <ContextMenuItem onSelect={() => actions.toggleQueue(task.id)}>
-              {queued ? "Remove from Focus" : "Add to Focus"}
-              <ContextMenuShortcut>Q</ContextMenuShortcut>
-            </ContextMenuItem>
-          </>
-        ) : null}
-        {task.recurrence && !closed ? (
-          <ContextMenuItem onSelect={() => actions.skipOccurrence(task.id)}>
-            Skip occurrence
-          </ContextMenuItem>
-        ) : null}
-        <ContextMenuSeparator />
-        <ContextMenuItem
-          onSelect={() => afterMenuClose(() => onRequestCommand(task.id, "schedule"))}
-        >
-          Schedule…
-        </ContextMenuItem>
-        <ContextMenuItem onSelect={() => afterMenuClose(() => onRequestCommand(task.id, "due"))}>
-          Set due date…
-        </ContextMenuItem>
-        <ContextMenuItem onSelect={() => afterMenuClose(() => onRequestCommand(task.id, "bucket"))}>
-          Move to project…
-        </ContextMenuItem>
-        {task.parentId ? (
-          <ContextMenuItem onSelect={() => actions.setTaskParent(task.id, null)}>
-            Detach from parent
-          </ContextMenuItem>
-        ) : null}
-        <ContextMenuSeparator />
-        <AssignContextMenu task={task} api={actions} />
-        <ContextMenuSub>
-          <ContextMenuSubTrigger>Priority</ContextMenuSubTrigger>
-          <ContextMenuSubContent>
-            <ContextMenuRadioGroup
-              value={task.priority ?? "none"}
-              onValueChange={(v) =>
-                actions.patchTask(task.id, {
-                  priority: v === "none" ? null : (v as PriorityLevel),
-                })
-              }
-            >
-              <ContextMenuRadioItem value="none">None</ContextMenuRadioItem>
-              {LEVEL_OPTIONS.map((l) => (
-                <ContextMenuRadioItem key={l.value} value={l.value}>
-                  {l.label}
-                </ContextMenuRadioItem>
-              ))}
-            </ContextMenuRadioGroup>
-          </ContextMenuSubContent>
-        </ContextMenuSub>
-        <ContextMenuSub>
-          <ContextMenuSubTrigger>Energy</ContextMenuSubTrigger>
-          <ContextMenuSubContent>
-            <ContextMenuRadioGroup
-              value={task.energyLevel ?? "none"}
-              onValueChange={(v) =>
-                actions.patchTask(task.id, {
-                  energyLevel: v === "none" ? null : (v as EnergyLevel),
-                })
-              }
-            >
-              <ContextMenuRadioItem value="none">None</ContextMenuRadioItem>
-              {LEVEL_OPTIONS.map((l) => (
-                <ContextMenuRadioItem key={l.value} value={l.value}>
-                  {l.label}
-                </ContextMenuRadioItem>
-              ))}
-            </ContextMenuRadioGroup>
-          </ContextMenuSubContent>
-        </ContextMenuSub>
-        <ContextMenuSeparator />
-        <ContextMenuItem onSelect={copyLink}>Copy link</ContextMenuItem>
-        <ContextMenuItem variant="destructive" onSelect={() => actions.deleteTask(task.id)}>
-          Delete
-        </ContextMenuItem>
-      </ContextMenuContent>
-    </ContextMenu>
+    <TaskContextMenu
+      task={task}
+      facts={facts}
+      canEdit={canEdit}
+      taskKey={taskKey}
+      actions={actions}
+      onOpen={onSelect}
+      onRename={onStartEdit}
+      onRequestCommand={onRequestCommand}
+    >
+      {row}
+    </TaskContextMenu>
   );
 }
 
 // ── inline title editor ───────────────────────────────────────────────────────
 
-function TitleEditor({
+export function TitleEditor({
   initial,
   onCommit,
   onCancel,
+  className = "font-sans text-md",
 }: {
   initial: string;
   onCommit: (value: string) => void;
   onCancel: () => void;
+  /** The title's own face and size (a Board card's is smaller). */
+  className?: string;
 }) {
   const [value, setValue] = useState(initial);
   const ref = useRef<HTMLInputElement>(null);
@@ -749,7 +591,7 @@ function TitleEditor({
       // change when editing starts (content, not chrome: R4).
       variant="bare"
       size="sm"
-      className="font-sans text-md"
+      className={className}
     />
   );
 }

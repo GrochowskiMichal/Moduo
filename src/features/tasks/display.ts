@@ -24,10 +24,21 @@ import { DEFAULT_ROW_PROPERTIES, type RowPreset, type RowProperty } from "./row-
 import { statusKeyOf } from "./statuses";
 
 export type TaskLayout = "list" | "board" | "timeline";
-/** The Board's Group by: a drop on a group sets its field. Assignee,
- *  priority and the rest join with the Board rebuild (TV-U11), on the drop
- *  writes TV-U4 built; "bucket" is Project. */
-export type BoardGroupBy = "status" | "bucket";
+/** The Board's Group by (TV-U11, call 22): a drop on a column sets its
+ *  field. Section only inside one project; Project and Area only across
+ *  projects; Team once the workspace has teams. "bucket" is Project. */
+export type BoardGroupBy =
+  | "status"
+  | "section"
+  | "assignee"
+  | "team"
+  | "priority"
+  | "bucket"
+  | "area";
+/** The Board's lanes (call 85): one level, off by default. */
+export type BoardLanes = "none" | "assignee" | "priority" | "bucket" | "team";
+/** Display → Description on cards (AC7.4): hidden, or a two-line preview. */
+export type CardDescription = "hidden" | "preview";
 export type TaskOrder =
   | "manual"
   | "due"
@@ -49,6 +60,10 @@ export type TasksDisplay = {
   group: GroupBy;
   /** The Board's Group by (it always opens by status, call 86). */
   boardGroup: BoardGroupBy;
+  /** The Board's lanes (call 85). */
+  boardLanes: BoardLanes;
+  /** The Board's description preview (AC7.4). */
+  cardDescription: CardDescription;
   order: TaskOrder;
   /** The sort's direction; "asc" is each order's natural one (dates
    *  earliest first, Created/Updated newest first). Manual ignores it. */
@@ -66,6 +81,8 @@ export const TASKS_DISPLAY_DEFAULTS: TasksDisplay = {
   layout: "list",
   group: "none",
   boardGroup: "status",
+  boardLanes: "none",
+  cardDescription: "hidden",
   order: "manual",
   orderDir: "asc",
   completed: "hidden",
@@ -135,10 +152,12 @@ export const GROUP_LABELS: Record<GroupBy, string> = {
 export type GroupChoices = {
   /** The workspace has teams: Team is offered. */
   teams: boolean;
+  /** The workspace has areas: the Board across projects offers Area. */
+  areas?: boolean;
 };
 
 /** The sanitiser keeps every grouping a scope could offer (teams may load late). */
-const ALL_CHOICES: GroupChoices = { teams: true };
+const ALL_CHOICES: GroupChoices = { teams: true, areas: true };
 
 function groupControl(
   scope: string,
@@ -160,12 +179,80 @@ function groupControl(
   };
 }
 
-/** The Board's Group by: "Group by" too, never "Columns" (call 22a). */
-function boardGroupControl(scope: string): DisplayControl<TasksDisplay> {
-  const options = [{ value: "status", label: "Status" }];
-  if (groupsByBucket(scope)) options.push({ value: "bucket", label: "Project" });
-  return { type: "select", id: "boardGroup", label: "Group by", options };
+/** The Board's Group by choices, in the menu's order. */
+export const BOARD_GROUP_LABELS: Record<BoardGroupBy, string> = {
+  status: "Status",
+  section: "Section",
+  assignee: "Assignee",
+  team: "Team",
+  priority: "Priority",
+  bucket: "Project",
+  area: "Area",
+};
+
+/** What the Board can be grouped by in a scope (TV-U11, call 22). */
+export function boardGroupsFor(scope: string, choices: GroupChoices = ALL_CHOICES): BoardGroupBy[] {
+  const across = groupsByBucket(scope);
+  return (Object.keys(BOARD_GROUP_LABELS) as BoardGroupBy[]).filter(
+    (g) =>
+      (g !== "section" || isProjectScope(scope)) &&
+      (g !== "team" || choices.teams) &&
+      (g !== "bucket" || across) &&
+      (g !== "area" || (across && choices.areas !== false)),
+  );
 }
+
+/** The Board's Group by: "Group by" too, never "Columns" (call 22a). */
+function boardGroupControl(
+  scope: string,
+  choices: GroupChoices = ALL_CHOICES,
+): DisplayControl<TasksDisplay> {
+  return {
+    type: "select",
+    id: "boardGroup",
+    label: "Group by",
+    options: boardGroupsFor(scope, choices).map((g) => ({
+      value: g,
+      label: BOARD_GROUP_LABELS[g],
+    })),
+  };
+}
+
+/** The lanes' choices, in the menu's order (call 85). */
+export const BOARD_LANE_LABELS: Record<BoardLanes, string> = {
+  none: "None",
+  assignee: "Assignee",
+  priority: "Priority",
+  bucket: "Project",
+  team: "Team",
+};
+
+/** Display → Lanes: one level, off by default; Project only across projects. */
+function boardLanesControl(
+  scope: string,
+  choices: GroupChoices = ALL_CHOICES,
+): DisplayControl<TasksDisplay> {
+  const lanes = (Object.keys(BOARD_LANE_LABELS) as BoardLanes[]).filter(
+    (l) => (l !== "bucket" || groupsByBucket(scope)) && (l !== "team" || choices.teams),
+  );
+  return {
+    type: "select",
+    id: "boardLanes",
+    label: "Lanes",
+    options: lanes.map((l) => ({ value: l, label: BOARD_LANE_LABELS[l] })),
+  };
+}
+
+/** Display → Description: the card's two-line preview (AC7.4), off by default. */
+const DESCRIPTION_CONTROL: DisplayControl<TasksDisplay> = {
+  type: "segmented",
+  id: "cardDescription",
+  label: "Description",
+  options: [
+    { value: "hidden", label: "Hidden" },
+    { value: "preview", label: "Preview" },
+  ],
+};
 
 const ROWS_CONTROL: DisplayControl<TasksDisplay> = {
   type: "segmented",
@@ -226,14 +313,20 @@ const PROPERTIES_CONTROL: DisplayControl<TasksDisplay> = {
   ],
 };
 
+/** The same choices on the Board, named for what it shows. */
+const CARD_PROPERTIES_CONTROL: DisplayControl<TasksDisplay> = {
+  ...PROPERTIES_CONTROL,
+  label: "Show on cards",
+};
+
 /**
  * The controls a scope offers for a layout.
  * - The Queue is one ordered line-up: no grouping, order, Completed choice
  *   (done tasks leave every queue; one you check off there stays until the
  *   next load, TV-D4) or subtask nesting.
  * - The Timeline keeps its own rules: only the layout switch.
- * - The Board has its own Group by (Project only across projects) and no
- *   Rows preset: cards get theirs with the Board rebuild (TV-U11).
+ * - The Board has its own Group by (call 22), Lanes (85), Rows (Standard or
+ *   Detailed cards) and the Description preview (AC7.4) (TV-U11).
  */
 export function tasksDisplayControls(
   scope: string,
@@ -248,18 +341,20 @@ export function tasksDisplayControls(
   }
   if (scope === "today") {
     return layout === "board"
-      ? [LAYOUT_CONTROL, PROPERTIES_CONTROL]
+      ? [LAYOUT_CONTROL, ROWS_CONTROL, CARD_PROPERTIES_CONTROL, DESCRIPTION_CONTROL]
       : [LAYOUT_CONTROL, ROWS_CONTROL, PROPERTIES_CONTROL];
   }
   if (layout === "board") {
-    const grouping = groupsByBucket(scope) ? [boardGroupControl(scope)] : [];
     return [
       LAYOUT_CONTROL,
-      ...grouping,
+      boardGroupControl(scope, choices),
+      boardLanesControl(scope, choices),
       ORDER_CONTROL,
       COMPLETED_CONTROL,
       SUBTASKS_CONTROL,
-      PROPERTIES_CONTROL,
+      ROWS_CONTROL,
+      CARD_PROPERTIES_CONTROL,
+      DESCRIPTION_CONTROL,
     ];
   }
   return [
@@ -279,6 +374,8 @@ function scopeControls(scope: string): DisplayControl<TasksDisplay>[] {
     LAYOUT_CONTROL,
     groupControl(scope),
     boardGroupControl(scope),
+    boardLanesControl(scope),
+    DESCRIPTION_CONTROL,
     ORDER_CONTROL,
     COMPLETED_CONTROL,
     SUBTASKS_CONTROL,
