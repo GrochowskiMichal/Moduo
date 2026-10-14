@@ -203,7 +203,12 @@ export function TaskImportDialog(props: TaskImportDialogProps) {
         onOpenChange(next);
       }}
     >
-      <DialogContent className="max-w-lg" data-testid="task-import-dialog">
+      {/* While it runs, Stop is the one way out: no × that does nothing. */}
+      <DialogContent
+        className="max-w-lg"
+        data-testid="task-import-dialog"
+        showCloseButton={!running}
+      >
         <DialogHeader>
           <DialogTitle>Import tasks</DialogTitle>
           <DialogDescription>

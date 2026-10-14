@@ -239,6 +239,7 @@ export function TaskPointMark({
             data-task-id={taskId}
             data-late={point.late || undefined}
             data-label={!done && colorBy === "project" && tone.hue ? tone.hue : undefined}
+            data-editable={editable || undefined}
             aria-hidden
             className={cn(
               POINT,

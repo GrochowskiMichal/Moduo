@@ -3,6 +3,7 @@ import { expect, type Page, test } from "@playwright/test";
 import {
   DEV,
   devWorkspace,
+  ensureTeammate,
   rest,
   rpc,
   runTag,
@@ -28,6 +29,8 @@ import {
  *     with "Move to …"; moving a blocker offers to move what waits on it;
  *   - "No date · n" opens the panel's No date view, and a task dragged from
  *     there onto the canvas is due that day.
+ * And TV-POLISH: ⇧L opens a late task's mark from the keyboard; at All, a
+ * project shared with you view-only shows no handles (your own still do).
  * Run it like the other Tasks specs:
  *   bun run local:up && bun run env:local
  *   MODUO_TARGET=web ./node_modules/.bin/rsbuild dev --host 127.0.0.1 --port 8131
@@ -379,6 +382,14 @@ test("drag, create, keyboard, dependencies", async ({ page }) => {
   // backwards, and its mark offers the day after.
   const line = page.locator(`[data-timeline-dep="${ids.guide}>${ids.logo}"]`);
   await expect(line).toHaveAttribute("data-backwards", "true");
+  // ⇧L opens the same mark from the keyboard; Esc hands the keys back (TV-POLISH).
+  await row(page, `task:${ids.logo}`).locator('[role="rowheader"]').click();
+  await page.keyboard.press("Shift+L");
+  const moveByKey = page.getByRole("button", { name: /^Move to / });
+  await expect(moveByKey).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(moveByKey).toHaveCount(0);
+  await expect(page.locator("[data-timeline]")).toBeFocused();
   await row(page, `task:${ids.logo}`).locator("[data-timeline-contradiction]").click();
   await page.getByRole("button", { name: /^Move to / }).click();
   await expect.poll(() => dueOf(ids.logo)).toBe(dayKey(19));
@@ -459,4 +470,79 @@ test("drag, create, keyboard, dependencies", async ({ page }) => {
       return rows[0]?.target_on ?? null;
     })
     .toBe(dayKey(31));
+});
+
+test("at All, a project shared with you view-only has no handles; yours do", async ({ page }) => {
+  const mate = await ensureTeammate(ws.id);
+  const theirs = { id: crypto.randomUUID(), name: `Their plan ${tag}` };
+  const theirTask = crypto.randomUUID();
+  await rpc(mate, "projects_op_create", {
+    p_workspace_id: ws.id,
+    p_project: {
+      id: theirs.id,
+      name: theirs.name,
+      position: `zz${tag}c`,
+      starts_on: dayKey(-5),
+      target_on: dayKey(25),
+    },
+  });
+  await rpc(mate, "tasks_op_create", {
+    p_workspace_id: ws.id,
+    p_task: { id: theirTask, title: `Their task ${tag}`, bucket_id: theirs.id, due_on: dayKey(4) },
+  });
+  // Shared with the dev to view only, not through the workspace's grant.
+  await rest("service", `resource_grants?resource_type=eq.bucket&resource_id=eq.${theirs.id}`, {
+    method: "DELETE",
+  });
+  await rest("service", "resource_grants", {
+    method: "POST",
+    body: {
+      workspace_id: ws.id,
+      resource_type: "bucket",
+      resource_id: theirs.id,
+      subject_type: "member",
+      subject_id: dev.user.id,
+      level: "view",
+      created_by: mate.user.id,
+    },
+  });
+  try {
+    await signInPage(page, dev, ws.id);
+    await page.goto("/tasks");
+    await expect(page.locator("nav").getByText(dated.name, { exact: true })).toBeVisible({
+      timeout: 20_000,
+    });
+    await openTimeline(page, "All");
+    await page.getByRole("button", { name: "Search", exact: true }).click();
+    await page.getByLabel("Search tasks").fill(tag);
+    const theirsRow = row(page, `project:${theirs.id}`);
+    const oursRow = row(page, `project:${dated.id}`);
+    await expect(theirsRow).toBeVisible();
+    // Their bar has no ends to drag; yours does.
+    await expect(oursRow.locator("[data-timeline-edge]")).toHaveCount(2);
+    await expect(theirsRow.locator("[data-timeline-edge]")).toHaveCount(0);
+    // Unfolded: their task's point has no handle; yours have.
+    await theirsRow.getByRole("button", { name: "Unfold" }).click();
+    await oursRow.getByRole("button", { name: "Unfold" }).click();
+    const point = '[data-timeline-mark="point"]';
+    await expect(row(page, `task:${theirTask}`).locator(point)).toHaveCount(1);
+    await expect(row(page, `task:${theirTask}`).locator(point)).not.toHaveAttribute(
+      "data-editable",
+      /.*/,
+    );
+    await expect(row(page, `task:${ids.guide}`).locator(point)).toHaveAttribute(
+      "data-editable",
+      "true",
+    );
+  } finally {
+    const at = new Date().toISOString();
+    await rest("service", `tasks?bucket_id=eq.${theirs.id}`, {
+      method: "PATCH",
+      body: { deleted_at: at },
+    });
+    await rest("service", `buckets?id=eq.${theirs.id}`, {
+      method: "PATCH",
+      body: { deleted_at: at },
+    });
+  }
 });

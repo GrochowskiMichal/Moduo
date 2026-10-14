@@ -12,6 +12,7 @@
 
 import { type ReactNode, useCallback, useLayoutEffect, useRef, useState } from "react";
 
+import { undoToast } from "../../../lib/undo-toast";
 import { dayWordOf, dueDayOf as dueKeyOf, tasksWord } from "../bulk";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { Section, Task } from "../model";
@@ -297,7 +298,18 @@ export function useTimelineWrites(api: TasksModuleApi, zoom: TimelineZoom): Time
           runShift(askTasks, current.shift, choice, current.alsoUndo);
         } else if (current?.kind === "day" && askTasks[0]) runDay(askTasks[0], current.day, choice);
       }}
-      onClose={() => setAsk(null)}
+      onClose={() => {
+        const current = ask;
+        setAsk(null);
+        // A cancelled "Also move…": the first move keeps its Undo (its toast
+        // closed when the link was used).
+        if (current?.kind === "shift" && current.alsoUndo) {
+          undoToast("Moved", {
+            description: "The ones that wait on it stay where they are.",
+            onUndo: current.alsoUndo,
+          });
+        }
+      }}
     />
   );
 

@@ -273,6 +273,12 @@ export function StorageSectionView({ runtime, workspaceId, role, userId, members
             })}
           </ul>
         )}
+        {files !== null && files.length >= LARGEST_SHOWN ? (
+          // The list is capped: say so, so a file that isn't here isn't missing.
+          <p className="text-xs text-muted-foreground">
+            Showing the {LARGEST_SHOWN} largest files.
+          </p>
+        ) : null}
       </Group>
     </SettingsSectionShell>
   );

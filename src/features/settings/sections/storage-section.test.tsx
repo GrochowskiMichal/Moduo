@@ -9,6 +9,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { TooltipProvider } from "../../../components/ui/tooltip";
 import type { LargestAttachment, StorageStatus } from "../../../lib/runtime.types";
 import {
+  LARGEST_SHOWN,
   meterLine,
   poolCaption,
   StorageSectionView,
@@ -166,6 +167,16 @@ describe("the largest files", () => {
   it("says so when there are none", async () => {
     renderView(fakeRuntime({ files: [] }), "editor");
     expect(await screen.findByText("No files on the tasks you can see yet.")).toBeTruthy();
+  });
+
+  it("says the list stops at the largest 50", async () => {
+    const many = Array.from({ length: LARGEST_SHOWN }, (_, i) => file(`f${i}`));
+    renderView(fakeRuntime({ files: many }), "editor");
+    expect(await screen.findByText(`Showing the ${LARGEST_SHOWN} largest files.`)).toBeTruthy();
+    cleanup();
+    renderView(fakeRuntime({ files: [file("one")] }), "editor");
+    await screen.findByText("one.png");
+    expect(screen.queryByText(/largest files\./)).toBeNull();
   });
 });
 

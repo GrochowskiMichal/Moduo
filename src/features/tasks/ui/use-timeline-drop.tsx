@@ -52,6 +52,8 @@ export function useTimelineDrop({
     disabled: !canEdit,
   });
   const [dragging, setDragging] = useState<string | null>(null);
+  // Over the name column: no day there, so the preview says where to let go.
+  const [overNames, setOverNames] = useState(false);
   const pointer = useRef<{ x: number; y: number } | null>(null);
   const latest = useRef({ onDrop, taskOf });
   useEffect(() => {
@@ -72,19 +74,35 @@ export function useTimelineDrop({
     [scrollerRef, geometry],
   );
 
+  /** The pointer is over the canvas's name column (left of the days). */
+  const overNameColumn = useCallback(
+    (at: { x: number; y: number }): boolean => {
+      const el = scrollerRef.current;
+      const geo = geometry.current;
+      if (!el || !geo || geo.nameW <= 0) return false;
+      const box = el.getBoundingClientRect();
+      return (
+        at.x >= box.left && at.x < box.left + geo.nameW && at.y >= box.top && at.y <= box.bottom
+      );
+    },
+    [scrollerRef, geometry],
+  );
+
   // While a No date drag runs, follow the raw pointer and show its day.
   useEffect(() => {
     if (!dragging) return;
     const onMove = (e: PointerEvent) => {
       pointer.current = { x: e.clientX, y: e.clientY };
       store.setDrop(dayAt(pointer.current));
+      setOverNames(overNameColumn(pointer.current));
     };
     document.addEventListener("pointermove", onMove, true);
     return () => {
       document.removeEventListener("pointermove", onMove, true);
       store.setDrop(null);
+      setOverNames(false);
     };
-  }, [dragging, dayAt, store]);
+  }, [dragging, dayAt, overNameColumn, store]);
 
   const fromNoDate = (event: { active: { data: { current?: unknown } } }) => {
     const drag = asTaskDrag(event.active.data.current);
@@ -113,7 +131,7 @@ export function useTimelineDrop({
     typeof document !== "undefined"
       ? createPortal(
           <DragOverlay modifiers={dragging ? [overlayBesideCursor] : undefined}>
-            {task ? <NoDateOverlay title={task.title || "Untitled"} /> : null}
+            {task ? <NoDateOverlay title={task.title || "Untitled"} overNames={overNames} /> : null}
           </DragOverlay>,
           document.body,
         )
@@ -121,8 +139,11 @@ export function useTimelineDrop({
   return { setDropRef: setNodeRef, overlay };
 }
 
-/** The dragged task, and the day it would land on once it's over the canvas. */
-function NoDateOverlay({ title }: { title: string }) {
+/**
+ * The dragged task, and the day it would land on once it's over the canvas.
+ * Over the name column, where nothing lands, it says to move onto a day.
+ */
+function NoDateOverlay({ title, overNames }: { title: string; overNames: boolean }) {
   const day = useDropDay();
   return (
     <DragOverlaySurface className="w-64">
@@ -131,6 +152,8 @@ function NoDateOverlay({ title }: { title: string }) {
         <span className="shrink-0 font-sans text-xs text-muted-foreground">
           Due {formatWeekdayDate(dateOfDay(day))}
         </span>
+      ) : overNames ? (
+        <span className="shrink-0 font-sans text-xs text-muted-foreground">Drop on a day</span>
       ) : null}
     </DragOverlaySurface>
   );
