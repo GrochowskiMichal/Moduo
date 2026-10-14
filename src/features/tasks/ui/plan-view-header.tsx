@@ -216,7 +216,12 @@ function ProjectMenu({ project }: { project: NonNullable<PlanHeaderControls["pro
 }
 
 function ToolbarSeparator() {
-  return <Separator orientation="vertical" className="mx-1 h-4 bg-hairline" />;
+  return (
+    <Separator
+      orientation="vertical"
+      className="mx-1 bg-hairline data-[orientation=vertical]:h-4"
+    />
+  );
 }
 
 /** Segmented List/Board/Timeline toggle — the shared SegmentedControl primitive. */

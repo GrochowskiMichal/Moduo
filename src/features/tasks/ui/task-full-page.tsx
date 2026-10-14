@@ -104,7 +104,10 @@ export function TaskFullPage({
           disabled={!onNext}
           onClick={() => onNext?.()}
         />
-        <Separator orientation="vertical" className="mx-1 h-4 bg-hairline" />
+        <Separator
+          orientation="vertical"
+          className="mx-1 bg-hairline data-[orientation=vertical]:h-4"
+        />
         <div
           ref={setActionsSlot}
           data-slot="full-page-actions"

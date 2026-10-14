@@ -606,6 +606,10 @@ describe("the task's actions sit in the panel's title row (MOD-118 follow-up, ro
     const header = screen.getByRole("button", { name: "Next task" }).parentElement as HTMLElement;
     const slot = header.querySelector("[data-slot=full-page-actions]") as HTMLElement;
     expect(labels(slot)).toEqual(["Add to Focus", "Back to the panel", "More actions"]);
+    // The hairline before them is 16 px tall, not the primitive's h-full (0 px in a row).
+    const hairline = header.querySelector("[data-slot=separator]") as HTMLElement;
+    expect(hairline.className).toContain("data-[orientation=vertical]:h-4");
+    expect(hairline.className).not.toContain("h-full");
     const nav = screen.getByRole("navigation", { name: "Location" });
     expect([...(nav.parentElement as HTMLElement).children]).toEqual([
       nav,
