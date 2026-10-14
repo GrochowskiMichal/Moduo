@@ -96,6 +96,22 @@ BEGIN
   PERFORM test.ok(test.activity_rows('A', 'P') = 2 AND test.activity_rows('A', 'D') = 1,
     'activity: A, who acted, reads their own rows');
 
+  -- A makes a second private channel P2 with B and leaves it: the row A wrote
+  -- about P2 stays A's to read; C still reads nothing about P2.
+  PERFORM test.ok(test.as_user('A', format(
+      $q$SELECT public.chat_op_create_channel(%L, 'left-behind', '', true, ARRAY[%L]::uuid[])$q$,
+      test.id('W'), test.id('B'))) LIKE 'ok %', 'setup: A makes the private channel P2 with B');
+  INSERT INTO test.ids SELECT 'P2', id FROM public.chat_channels
+    WHERE workspace_id = test.id('W') AND name = 'left-behind';
+  PERFORM test.ok(test.as_user('A', format($q$SELECT public.chat_op_leave(%L)$q$, test.ref('P2'))) LIKE 'ok %',
+    'setup: A leaves P2');
+  PERFORM test.ok(test.value_as('A', format($q$SELECT count(*)::text FROM public.chat_channels WHERE id = %L$q$,
+      test.ref('P2'))) = '0',
+    'activity: A no longer reads P2 itself');
+  PERFORM test.ok(test.activity_rows('A', 'P2') = 1, 'activity: A still reads the row they wrote about P2');
+  PERFORM test.ok(test.activity_rows('B', 'P2') = 1, 'activity: B, in P2, reads it');
+  PERFORM test.ok(test.activity_rows('C', 'P2') = 0, 'activity: C reads nothing about P2');
+
   PERFORM test.ok(test.value_as('C', format(
       $q$SELECT count(*)::text FROM public.entities WHERE entity_type = 'chat_channel' AND entity_id = %L$q$,
       test.ref('P'))) = '0',
@@ -283,6 +299,11 @@ BEGIN
     AND test.realtime_reads('B', 'notes:' || test.id('W')::text) = 0,
     'realtime: other topic shapes are not chat''s');
 
+  PERFORM test.ok(
+    NOT has_function_privilege('service_role', 'public.chat_op_typing(uuid, uuid, boolean)', 'EXECUTE')
+    AND test.as_key('K', format($q$SELECT public.chat_op_typing(%L, NULL, false)$q$, test.ref('Q')))
+      = '42501 permission denied for function chat_op_typing',
+    'typing: a key cannot say anyone is typing (people only)');
   PERFORM test.ok(
     NOT has_function_privilege('anon', 'public.chat_op_typing(uuid, uuid, boolean)', 'EXECUTE')
     AND has_function_privilege('authenticated', 'public.chat_op_typing(uuid, uuid, boolean)', 'EXECUTE')

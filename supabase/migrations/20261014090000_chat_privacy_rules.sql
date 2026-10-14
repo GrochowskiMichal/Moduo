@@ -21,6 +21,9 @@
 -- Every existing body is redefined from the live catalog (2026-10-14). Same
 -- signatures keep their grants; every grant is re-stated and asserted below.
 
+-- Fail fast instead of queueing the app behind this migration's policy locks.
+SET LOCAL lock_timeout = '5s';
+
 -- ── 1. Conversations in the registry and the activity feed ──────────────────
 
 CREATE OR REPLACE FUNCTION public.perm_can_see_entity(p_workspace_id uuid, p_type text, p_id uuid)
@@ -192,6 +195,16 @@ BEGIN
       RAISE EXCEPTION 'Grants on public.% are not as intended: signed-in people, never anon.', fn;
     END IF;
   END LOOP;
+  -- Typing is a person's act: neither a key (service_role) nor anon may call it.
+  IF has_function_privilege('service_role', 'public.chat_op_typing(uuid, uuid, boolean)', 'EXECUTE') THEN
+    RAISE EXCEPTION 'chat_op_typing must be callable by signed-in people only.';
+  END IF;
+  -- realtime.send inserts as the op's owner and turns a refusal into a warning,
+  -- so the owner must bypass RLS on realtime.messages for typing to arrive.
+  IF NOT (SELECT r.rolbypassrls FROM pg_proc p JOIN pg_roles r ON r.oid = p.proowner
+          WHERE p.oid = 'public.chat_op_typing(uuid, uuid, boolean)'::regprocedure) THEN
+    RAISE EXCEPTION 'chat_op_typing must be owned by a role that bypasses RLS (postgres).';
+  END IF;
   IF (SELECT count(*) FROM pg_policies
       WHERE schemaname = 'realtime' AND tablename = 'messages'
         AND policyname IN ('chat_realtime_read', 'chat_realtime_write')) <> 2 THEN

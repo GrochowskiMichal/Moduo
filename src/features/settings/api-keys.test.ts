@@ -243,11 +243,6 @@ describe("cross-module needs: the connector, the SQL and the key card agree", ()
       "perm_actor_id", // defines the fallback itself
       "module_activity_log", // `IF auth.uid() IS NOT NULL` → the user branch; keys go to the api_key branch
       "perm_can_view_entity", // reached only for types without a module (true for everyone)
-      // Chat rows in the spine (perm_can_see_entity's chat branches) are read
-      // inside a people-only block: a key returns false before these run.
-      "chat_can_read_channel",
-      "chat_can_access_workspace",
-      "perm_can_view",
     ]);
     const bodies = latestSqlFunctionBodies();
     const roots = new Set<string>();
@@ -258,11 +253,14 @@ describe("cross-module needs: the connector, the SQL and the key card agree", ()
       for (const tool of tools) for (const m of tool.source.matchAll(RPC_CALL)) roots.add(m[1]);
     }
     const reached = new Set<string>();
+    // Blocks under `IF module_api_key_id() IS NULL` are people-only (see
+    // keyLanes): a key never reaches what they call.
     const walk = (fn: string) => {
       const body = bodies.get(fn);
       if (body === undefined || reached.has(fn)) return;
       reached.add(fn);
-      for (const [, callee] of body.toLowerCase().matchAll(/\b(\w+)\s*\(/g)) walk(callee);
+      const keyPath = body.toLowerCase().replace(PEOPLE_ONLY, "");
+      for (const [, callee] of keyPath.matchAll(/\b(\w+)\s*\(/g)) walk(callee);
     };
     for (const rpc of roots) walk(rpc);
     expect(reached.size).toBeGreaterThan(40);

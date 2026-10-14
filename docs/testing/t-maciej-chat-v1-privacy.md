@@ -1,6 +1,6 @@
 # Manual test checklist — Chat v1 privacy rules (`t/maciej/chat-v1-privacy`)
 
-> Generated 2026-10-14 · branch `t/maciej/chat-v1-privacy` · **Live-verified:** partial — every rule proven on the local stack (`bun run db:test chat_privacy`, 52 checks, and a websocket probe with three throwaway accounts: a member joins a conversation's typing topic, an outsider cannot, a client's own broadcast never reaches anyone, and a server-written typing event arrives with the session's sender). Not yet seen in the running app with two browsers.
+> Generated 2026-10-14 · branch `t/maciej/chat-v1-privacy` · **Live-verified:** partial — every rule proven on the local stack (`bun run db:test chat_privacy`, 60 checks, and a websocket probe with three throwaway accounts: a member joins a conversation's typing topic, an outsider cannot, a client's own broadcast never reaches anyone, and a server-written typing event arrives with the session's sender). Not yet seen in the running app with two browsers.
 > Run top-to-bottom; check off as you go. Each item is a step → what you should see → where. Needs a Duo/Team workspace with two members (A and B) and a third member C who is not in the private channel.
 
 ## Typing (one private topic per conversation, written by the server)
@@ -29,8 +29,9 @@
 - [ ] **Do:** As a Free-plan workspace member → **Expect:** nothing changes (chat stays off) _(web)_
 
 ## Migrations / data
-- [ ] **Do:** `supabase/migrations/20261014090000_chat_privacy_rules.sql` on prod → **Expect:** `select to_regprocedure('public.chat_op_typing(uuid, uuid, boolean)')` is not null; `pg_policies` on `realtime.messages` shows `chat_realtime_read` (SELECT) and `chat_realtime_write` (INSERT, presence only); `has_function_privilege('anon', 'public.chat_op_typing(uuid, uuid, boolean)', 'EXECUTE')` is false _(prod)_
-- [ ] **Do:** `bun run db:test chat_privacy` on the local stack → **Expect:** 52 checks pass _(local)_
+- [ ] **Do:** `supabase/migrations/20261014090000_chat_privacy_rules.sql` on prod → **Expect:** `select to_regprocedure('public.chat_op_typing(uuid, uuid, boolean)')` is not null; `pg_policies` on `realtime.messages` shows `chat_realtime_read` (SELECT) and `chat_realtime_write` (INSERT, presence only); `has_function_privilege('anon', …)` and `has_function_privilege('service_role', …)` on `chat_op_typing` are both false; the migration's own self-checks passed (owner bypasses RLS) _(prod)_
+- [ ] **Do:** After the app carries this branch: B types in a channel A has open on prod → **Expect:** A sees the line; the `realtime.messages` partition for today has a row on `chat:typing:<channel id>` with B as `userId` _(prod)_
+- [ ] **Do:** `bun run db:test chat_privacy` on the local stack → **Expect:** 60 checks pass _(local)_
 
 ## Known gaps / not-yet-testable
 - The app-level pass (two browsers) waits for the web app to carry this branch; until then typing lines are off everywhere once the migration is on prod (clients no longer broadcast, and the old listener hears nothing).
