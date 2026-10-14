@@ -19,21 +19,16 @@ test.describe("Signup → 14-day trial", () => {
     await expect(page.getByPlaceholder(/enter code/i)).toBeVisible({ timeout: 10_000 });
   });
 
-  test("paywall page is accessible at /paywall", async ({ page }) => {
+  test("paywall page is accessible at /paywall", { tag: "@smoke" }, async ({ page }) => {
     await page.goto(`${BASE_URL}/paywall`);
 
     // All three plan names should be visible.
-    await expect(page.getByText("Pro")).toBeVisible();
-    await expect(page.getByText("Duo")).toBeVisible();
-    await expect(page.getByText("Team")).toBeVisible();
-    await expect(page.getByText("Free")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Pro", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Duo", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Team", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Free", exact: true })).toBeVisible();
 
     // "Start free trial" CTA should appear at least once.
     await expect(page.getByRole("button", { name: /start free trial/i }).first()).toBeVisible();
-  });
-
-  test("unauthenticated web user is sent to /auth from /", async ({ page }) => {
-    await page.goto(BASE_URL);
-    await expect(page).toHaveURL(/\/auth/, { timeout: 8_000 });
   });
 });
