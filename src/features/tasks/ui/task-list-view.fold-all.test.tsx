@@ -151,7 +151,7 @@ describe("folding every group that holds tasks (MOD-122)", () => {
     cleanup();
     const again = renderPage();
     expect(screen.queryByRole("button", { name: "Task a" })).toBeNull();
-    expect(again.picks.length).toBeLessThanOrEqual(2);
+    expect(again.picks.length).toBe(1);
     expect(again.picks.at(-1)).toBe("a");
   });
 });
