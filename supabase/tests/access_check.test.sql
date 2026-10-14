@@ -280,5 +280,31 @@ BEGIN
   PERFORM test.ok(r = 'ok 1', 'share_op_set (calls perm_ceiling_rank) still shares PE with M', r);
   r := test.can('M', 'bucket', 'PE', 'view');
   PERFORM test.ok(r = 'true', 'and M now sees PE', r);
+
+  -- ── Workspace helpers: signed-in callers only ────────────────────────────
+  FOREACH v_sql IN ARRAY ARRAY[
+    format('SELECT public.profile_plan_tier_text(%L)', test.id('O')),
+    format('SELECT public.workspaces_owned_count_for_user(%L)', test.id('O')),
+    format('SELECT public.tasks_module_can_access_workspace(%L)', test.id('W'))
+  ] LOOP
+    r := test.as_anon(v_sql);
+    PERFORM test.ok(r LIKE '42501 permission denied for function%', 'an anonymous visitor cannot call ' || split_part(split_part(v_sql, '(', 1), '.', 2), r);
+  END LOOP;
+  r := test.value_as('E', format('SELECT public.tasks_module_can_access_workspace(%L)', test.id('W')));
+  PERFORM test.ok(r = 'true', 'a member can: tasks_module_can_access_workspace', r);
+  r := test.value_as('X', format('SELECT public.tasks_module_can_access_workspace(%L)', test.id('W')));
+  PERFORM test.ok(r = 'false', 'and it answers no to someone outside', r);
+  r := test.value_as('O', format('SELECT public.profile_plan_tier_text(%L)', test.id('O')));
+  PERFORM test.ok(r = 'free', 'a signed-in person can: profile_plan_tier_text', r);
+  r := test.value_as('O', format('SELECT public.workspaces_owned_count_for_user(%L)', test.id('O')));
+  PERFORM test.ok(r = '1', 'a signed-in person can: workspaces_owned_count_for_user', r);
+  r := test.value_as('E', format('SELECT count(*) FROM public.entity_links WHERE workspace_id = %L', test.id('W')));
+  PERFORM test.ok(r = '0', 'a policy using them still reads for signed-in people (entity_links)', r);
+  FOREACH v_sql IN ARRAY ARRAY['SELECT count(*) FROM public.entity_links',
+                               'SELECT count(*) FROM public.link_suggestion_declines',
+                               'SELECT count(*) FROM public.exposed_slot_links'] LOOP
+    r := test.as_anon(v_sql);
+    PERFORM test.ok(r = 'ok', 'an anonymous read is an empty result, not an error: ' || split_part(v_sql, '.', 2), r);
+  END LOOP;
 END;
 $$;

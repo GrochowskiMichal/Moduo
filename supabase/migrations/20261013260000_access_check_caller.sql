@@ -15,6 +15,9 @@
 --     for server functions only (no policy, view or app code calls them).
 --   * share_assign_preview (the assign warning) answers to someone who can
 --     assign in the project, about someone who works in its workspace.
+--   * profile_plan_tier_text, workspaces_owned_count_for_user and
+--     tasks_module_can_access_workspace are for signed-in callers and server
+--     code; the read policies that use them are for signed-in readers.
 --
 -- Re-runnable: it accepts the TV-D13 body, the earlier draft of this file
 -- (a front door over private.can_access) or its own result, and leaves the
@@ -370,5 +373,31 @@ $function$;
 
 REVOKE ALL ON FUNCTION public.share_assign_preview(uuid, uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.share_assign_preview(uuid, uuid) TO authenticated, service_role;
+
+-- ── 6. Workspace helpers: signed-in callers only ───────────────────────────
+-- Signed-out pages (booking, published notes) go through Edge Functions. The
+-- three read policies for every role that call tasks_module_can_access_workspace
+-- are for signed-in readers, so a signed-out read stays an empty result.
+DO $signed_in$
+DECLARE
+  r record;
+BEGIN
+  FOR r IN SELECT * FROM (VALUES ('entity_links', 'entity_links_workspace_read'),
+                                 ('link_suggestion_declines', 'link_suggestion_declines_workspace_read'),
+                                 ('exposed_slot_links', 'exposed_slot_links_host')) AS x(tbl, pol)
+  LOOP
+    IF EXISTS (SELECT 1 FROM pg_policy p WHERE p.polrelid = to_regclass('public.' || r.tbl) AND p.polname = r.pol) THEN
+      EXECUTE format('ALTER POLICY %I ON public.%I TO authenticated', r.pol, r.tbl);
+    END IF;
+  END LOOP;
+END
+$signed_in$;
+
+REVOKE ALL ON FUNCTION public.profile_plan_tier_text(uuid) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.workspaces_owned_count_for_user(uuid) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.tasks_module_can_access_workspace(uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.profile_plan_tier_text(uuid) TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.workspaces_owned_count_for_user(uuid) TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.tasks_module_can_access_workspace(uuid) TO authenticated, service_role;
 
 COMMIT;
