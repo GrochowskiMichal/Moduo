@@ -14,7 +14,7 @@
 -- 4. The host cancels by deleting the booked event in Moduo (native events) or
 --    in Google (the mirror sync tombstones the row): the booking is released,
 --    its reminders cancelled, and C6 (booking_guest_host_cancelled) is queued
---    2 minutes later. Undo in Moduo within those 2 minutes restores the
+--    for just after the 2-minute undo window (2 min 10 s). Undo in Moduo within those 2 minutes restores the
 --    booking and cancels C6. A guest cancel goes through booking_op_release,
 --    which now marks its booking cancelled first, so it never reads as the
 --    host's. Disconnecting a calendar account tombstones its events too: the
@@ -141,7 +141,7 @@ BEGIN
 END;
 $$;
 
--- Queues C6 two minutes from now (the undo window) for the booker and each extra guest.
+-- Queues C6 for the booker and each extra guest, 10 s after the 2-minute undo window.
 CREATE OR REPLACE FUNCTION public.booking__queue_host_cancel(p_booking_id uuid)
 RETURNS integer
 LANGUAGE plpgsql
@@ -169,7 +169,7 @@ BEGIN
           'recipient', r.recipient
         ),
         format('C6:%s:%s:%s', b.id, (extract(epoch FROM b.host_cancelled_at) * 1000000)::bigint, r.email),
-        b.host_cancelled_at + interval '2 minutes'
+        b.host_cancelled_at + interval '2 minutes 10 seconds'
       );
       v_count := v_count + 1;
     EXCEPTION WHEN OTHERS THEN
@@ -254,9 +254,6 @@ BEGIN
    ORDER BY created_at DESC
    LIMIT 1;
   IF b.id IS NULL THEN RETURN NULL; END IF;
-  -- A meeting that already started is history: a sync dropping it from its
-  -- window (it fetches 30 days back) or a late delete changes nothing.
-  IF b.start_at <= now() THEN RETURN NULL; END IF;
   PERFORM public.booking__follow_event(NEW.id, b.id);
   RETURN NULL;
 END;
@@ -281,6 +278,9 @@ BEGIN
 
   IF v_gone THEN
     IF b.status <> 'confirmed' THEN RETURN; END IF;
+    -- A meeting that already started is history: a sync dropping it from its
+    -- window (it fetches 30 days back) or a late delete changes nothing.
+    IF b.start_at <= now() THEN RETURN; END IF;
     -- Disconnecting the calendar account tombstones its events: not a cancel.
     IF e.source_account_id IS NOT NULL THEN
       SELECT a.deleted_at IS NOT NULL INTO v_account_gone
@@ -294,10 +294,11 @@ BEGIN
     RETURN;
   END IF;
 
-  -- Back within the undo window: the booking stands again and C6 never goes.
-  -- 110 s, inside C6's 2-minute delay, so an undo can't race the worker's claim.
+  -- Back within the 2-minute undo window: the booking stands again and C6
+  -- never goes (C6 is due 10 s past the window, so an undo can't race the
+  -- worker's claim).
   IF b.status = 'cancelled' AND b.host_cancelled_at IS NOT NULL
-     AND b.host_cancelled_at > now() - interval '110 seconds' THEN
+     AND b.host_cancelled_at > now() - interval '2 minutes' THEN
     BEGIN
       UPDATE public.slot_bookings
          SET status = 'confirmed', host_cancelled_at = NULL,

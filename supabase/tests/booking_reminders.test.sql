@@ -103,9 +103,9 @@ SET CONSTRAINTS ALL DEFERRED;
 SELECT test.ok(test.booking_status('1') = 'cancelled', 'host delete releases the booking (its slot opens)');
 SELECT test.ok(test.cancelled('booking_guest_reminder', '1') = 2, 'host delete cancels the reminders');
 SELECT test.ok(test.queued('booking_guest_host_cancelled', '1') = 2, 'C6 queued for the booker and the extra guest');
-SELECT test.ok((SELECT bool_and(send_after = now() + interval '2 minutes') FROM public.email_outbox
+SELECT test.ok((SELECT bool_and(send_after = now() + interval '2 minutes 10 seconds') FROM public.email_outbox
                   WHERE kind = 'booking_guest_host_cancelled' AND payload->>'bookingId' = test.id('B1')::text),
-  'C6 waits 2 minutes');
+  'C6 waits until just after the 2-minute undo window');
 
 UPDATE public.calendar_events SET deleted_at = NULL WHERE id = test.id('E1');
 SET CONSTRAINTS ALL IMMEDIATE;
@@ -125,6 +125,26 @@ SET CONSTRAINTS ALL IMMEDIATE;
 SET CONSTRAINTS ALL DEFERRED;
 SELECT test.ok(test.booking_status('5') = 'cancelled', 'undo after 2 minutes leaves the booking cancelled');
 SELECT test.ok(test.queued('booking_guest_host_cancelled', '5') = 2, 'undo after 2 minutes keeps C6');
+
+-- The window's edges: 1:50 after the delete still restores; 2:01 doesn't.
+SELECT test.booking('18', 'slot-L', date_trunc('minute', now()) + interval '18 days');
+UPDATE public.calendar_events SET deleted_at = now() WHERE id = test.id('E18');
+SET CONSTRAINTS ALL IMMEDIATE;
+SET CONSTRAINTS ALL DEFERRED;
+UPDATE public.slot_bookings SET host_cancelled_at = now() - interval '110 seconds' WHERE id = test.id('B18');
+UPDATE public.calendar_events SET deleted_at = NULL WHERE id = test.id('E18');
+SET CONSTRAINTS ALL IMMEDIATE;
+SET CONSTRAINTS ALL DEFERRED;
+SELECT test.ok(test.booking_status('18') = 'confirmed', 'an undo 1:50 after the delete restores the booking');
+SELECT test.booking('19', 'slot-L', date_trunc('minute', now()) + interval '19 days');
+UPDATE public.calendar_events SET deleted_at = now() WHERE id = test.id('E19');
+SET CONSTRAINTS ALL IMMEDIATE;
+SET CONSTRAINTS ALL DEFERRED;
+UPDATE public.slot_bookings SET host_cancelled_at = now() - interval '121 seconds' WHERE id = test.id('B19');
+UPDATE public.calendar_events SET deleted_at = NULL WHERE id = test.id('E19');
+SET CONSTRAINTS ALL IMMEDIATE;
+SET CONSTRAINTS ALL DEFERRED;
+SELECT test.ok(test.booking_status('19') = 'cancelled', 'an undo 2:01 after the delete leaves it cancelled');
 
 -- ---- AC32: the meeting moves --------------------------------------------------
 
@@ -226,6 +246,16 @@ SET CONSTRAINTS ALL DEFERRED;
 SELECT test.ok(test.booking_status('15') = 'cancelled' AND test.queued('booking_guest_host_cancelled', '15') = 1
   AND (SELECT deleted_at IS NOT NULL FROM public.calendar_events WHERE id = test.id('E15')),
   'an unusable guest address skips only that email; the delete and the booker''s C6 go through');
+
+-- ---- a meeting that already started can still be moved -------------------------
+
+SELECT test.booking('20', 'slot-LOFF', date_trunc('minute', now()) - interval '5 minutes');
+UPDATE public.calendar_events SET start_time = date_trunc('minute', now()) + interval '20 days',
+  end_time = date_trunc('minute', now()) + interval '20 days 30 minutes' WHERE id = test.id('E20');
+SET CONSTRAINTS ALL IMMEDIATE;
+SET CONSTRAINTS ALL DEFERRED;
+SELECT test.ok((SELECT start_at FROM public.slot_bookings WHERE id = test.id('B20')) = date_trunc('minute', now()) + interval '20 days',
+  'moving a no-show to a later day moves the booking too');
 
 -- ---- account erasure takes the booking's emails with it -------------------------
 
