@@ -5,6 +5,7 @@ import {
   describeTruncation,
   type PageResult,
   PGRST_MAX_ROWS,
+  readAfterCursor,
   readPaged,
 } from "./paged-select";
 
@@ -176,5 +177,60 @@ describe("describeTruncation", () => {
     expect(describeTruncation({ scope: "events", shown: 5000, total: null })).toBe(
       "5,000 events (of more)",
     );
+  });
+});
+
+describe("readAfterCursor (NR-3: the notes update log, paged to the end)", () => {
+  /** A log with ids 1..total that honours `id > after LIMIT n` and PostgREST's
+   * per-request ceiling. */
+  function fakeLog(total: number) {
+    const calls: number[] = [];
+    const page = async (
+      after: number,
+      limit: number,
+    ): Promise<PageResult<{ id: number }, string>> => {
+      calls.push(after);
+      const size = Math.min(limit, PGRST_MAX_ROWS);
+      const rows: { id: number }[] = [];
+      for (let id = after + 1; id <= Math.min(after + size, total); id += 1) rows.push({ id });
+      return { data: rows, error: null };
+    };
+    return { page, calls };
+  }
+
+  it("reads 2,500 rows in three requests, not the 1,000 a single select stops at", async () => {
+    const log = fakeLog(2500);
+    const res = await readAfterCursor({ after: 0, page: log.page, idOf: (r) => r.id });
+    expect(res.error).toBeNull();
+    expect(res.rows).toHaveLength(2500);
+    expect(res.rows.at(-1)!.id).toBe(2500);
+    expect(log.calls).toEqual([0, 1000, 2000]);
+  });
+
+  it("starts after the cursor and stops on a short page", async () => {
+    const log = fakeLog(1200);
+    const res = await readAfterCursor({ after: 1100, page: log.page, idOf: (r) => r.id });
+    expect(res.rows.map((r) => r.id)).toEqual(Array.from({ length: 100 }, (_, i) => 1101 + i));
+    expect(log.calls).toEqual([1100]);
+  });
+
+  it("an error on any page returns no rows, so the caller's cursor cannot skip", async () => {
+    let n = 0;
+    const page = async (after: number, limit: number) => {
+      n += 1;
+      if (n === 2) return { data: null, error: "boom" };
+      return {
+        data: Array.from({ length: limit }, (_, i) => ({ id: after + i + 1 })),
+        error: null,
+      };
+    };
+    const res = await readAfterCursor({
+      after: 0,
+      page,
+      idOf: (r: { id: number }) => r.id,
+      pageSize: 10,
+    });
+    expect(res.error).toBe("boom");
+    expect(res.rows).toEqual([]);
   });
 });

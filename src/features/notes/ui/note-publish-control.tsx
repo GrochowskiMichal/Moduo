@@ -23,6 +23,9 @@ type Props = {
   /** Returns the fresh token, or null on failure. */
   onPublish: () => Promise<string | null>;
   onUnpublish: () => Promise<void>;
+  /** Controlled popover (the refreshed shell opens it from a `⋯ → Publish…`). */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 };
 
 export function NotePublishControl({
@@ -32,8 +35,15 @@ export function NotePublishControl({
   publishedUrl,
   onPublish,
   onUnpublish,
+  open: openProp,
+  onOpenChange,
 }: Props) {
-  const [open, setOpen] = useState(false);
+  const [openState, setOpenState] = useState(false);
+  const open = openProp ?? openState;
+  const setOpen = (next: boolean) => {
+    setOpenState(next);
+    onOpenChange?.(next);
+  };
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
 

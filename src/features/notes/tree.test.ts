@@ -23,6 +23,8 @@ function note(partial: Partial<Note> & { id: string }): Note {
     ...partial,
     shareMode: partial.shareMode ?? "custom",
     workspaceShared: partial.workspaceShared ?? false,
+    inInbox: partial.inInbox ?? null,
+    fullWidth: partial.fullWidth ?? false,
   };
 }
 

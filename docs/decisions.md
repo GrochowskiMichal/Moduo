@@ -63,8 +63,6 @@ One line per locked product or architecture decision, grouped by area, newest fi
 - 2026-07-13 · DF-19f-quit LIVE-VERIFIED on a real desktop build — the fix works; gate closed.
 - 2026-07-13 · Desktop bundle frontend builds with `MODUO_TARGET=desktop` → `dist/`
 - 2026-07-13 · DF-19f-quit FIXED — it was shipping non-functional (both the ⌘Q *and* window-close confirmations never fired).
-- 2026-07-13 · DF-19f-quit ⌘Q coverage (macOS) landed
-- 2026-07-13 · DF-19f-quit (desktop confirm-before-quit) built
 - 2026-07-11 · Proposal C executed — dead Rust graph/embeddings sidecar pruned; `sync` feature-gated behind `lite`.
 - 2026-07-09 · Desktop distribution = macOS-first; hands-off updater deferred.
 - 2026-07-03 · Calendar CAL-8b landed — CalDAV/ICS connect UX + rail grouping; Wave-2 CalDAV/ICS fast-follow COMPLETE (migration APPLIED to prod + round-tripped same day; live-verify is the designer's desktop pass).
@@ -112,6 +110,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## MCP connector → [decisions/mcp.md](decisions/mcp.md)
 
+- 2026-10-09 · API keys can expire (optional, 90 days by default in the picker) and Settings flags expired and unused keys; no per-key rate limit.
 - 2026-10-08 · The "Moduo for Claude Code" mod was dropped; the connector improvements it came with stay.
 - 2026-10-08 · A key's tool list is honest per module: tools that also touch another module need it too, and None means none across modules.
 - 2026-07-04 · Notes NO-9 + NO-10 landed — publish-to-web + the DoD (MCP manifest/connector + Recent-notes widget); Wave 3 (Notes) COMPLETE.
@@ -144,6 +143,10 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Notes, Lexical, Yjs, Notion import → [decisions/notes.md](decisions/notes.md)
 
+- 2026-10-13 · NR-3 built — one markdown converter reads the CRDT back through the real binding, node schemas load without React, and an open note paints from its cache.
+- 2026-10-13 · NR-2 built — New Notes ships behind a synced per-user switch, and a new note is a device-only draft until its first character.
+- 2026-10-13 · NR-1 built — the Inbox is stored, favorites are per user, and filing a sub-note never hides it.
+- 2026-10-13 · Notes refresh planned: keep Lexical and the CRDT model, rebuild the surface and editor core behind a per-user switch.
 - 2026-07-29 · 🔎 Notion ships a ZIP INSIDE A ZIP — the shipped notes importer silently imports nothing from a real export.
 - 2026-07-29 · NOTE-FIX-1 — imported notes materialize their CRDT at IMPORT time; the headless Yjs builder is no longer deferred.
 - 2026-07-11 · DF-23 (@mention + /ref beyond Notes) landed — the LAST spine-lane block

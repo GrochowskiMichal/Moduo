@@ -105,6 +105,8 @@ _Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
 
 ## Tasks v3 — the re-planned module · [`specs/tasks-v3.md`](./tasks-v3.md)
 
+> **Released 2026-10-14: v3 migrations applied to prod and merged into develop; local build mode ended.**
+>
 > **🟠 LOCAL BUILD MODE — read this before anything else in this section (Maciej, 2026-10-10; updated 2026-10-11 for the handoff).** Every Tasks v3 block is built against a **local** Supabase stack; nothing touches the cloud project until Maciej says "release". **Since 2026-10-11 the integration branch lives on origin and is merged into `maciej`**, so Maciej and Mike can both run the build: start from [docs/agents/tasks-v3-build.md](../docs/agents/tasks-v3-build.md) (state, set-up, orchestrator prompt, helper brief). `maciej` now carries v3 migrations that are not on prod: **no `maciej` → `develop` sync until the release.**
 > 1. **The local Supabase stack is "prod".** Apply each block's migrations to it (`bun run local:up` once; then `supabase migration up` against the local stack, or `bun run local:reset` when a clean rebuild is needed). `.env.local` points at the local stack (`bun run env:local`). Never use the Supabase MCP or the CLI against the cloud project. Everything is migrated to the real prod at once when the module is done.
 > 2. **The integration branch is `t/maciej/tasks-v3-build` on origin.** Start each block from it: `git fetch origin && git switch -c t/<owner>/<block-kebab> origin/t/maciej/tasks-v3-build`. Land a finished block by fast-forwarding it: `git merge origin/t/maciej/tasks-v3-build` into your block branch (merge commit, never rebase), re-run `bun run verify`, then `git push origin HEAD:t/maciej/tasks-v3-build` (if it's refused because another lane landed first, fetch, merge again and retry). Never check the integration branch out in a worktree. It is merged into `maciej` by a merge-commit PR at hand-over points.
@@ -337,6 +339,20 @@ _Finished blocks of this section (and the v2 blocks that landed): [BUILD_LOG.md]
 - **`src/features/focus/`** — SH-0, F6, F7, F8.
 - **Shell registries** (`src/lib/panel-registry.ts`, `src/lib/capture-registry.ts`) — SH-1 creates them; U13, U14, F8 and AT-3 register into them.
 - **`tokens.css` / `global.css`** — SH-1 (motion tokens), DS-6.
+
+## Notes refresh — new core, new surface · [`specs/notes-refresh.md`](./notes-refresh.md)
+
+> **Planned 2026-10-13 (`/s1`, engineer mode, Mike).** Keeps Lexical + the Yjs/`note_updates` model; rebuilds the surface and editor core behind a per-user "New Notes" switch, then flips (NR-12). NR-1, NR-2 and NR-3 are done (see BUILD_LOG); NR-4, NR-5 and NR-6 can now run in parallel, and NR-7 beside them. NR-9 waits for AT-1 to reach `develop` (it is held on `maciej`) and is not a flip dependency.
+
+- [ ] **NR-7 — Secure live channel + named presence** · deps: — · lane notes-data · Tier 2 (`realtime.messages` policy)
+- [ ] **NR-4 — Writing UX: quiet block handles, unified menus, `[[` links, ⌘K link dialog, mindmap drop** · deps: NR-3 · lane notes-editor
+- [ ] **NR-5 — Task lines in the document (no overlay), inline due/schedule/assignee** · deps: NR-3 · lane notes-editor
+- [ ] **NR-6 — Agent writes land live (MCP CRDT path, attribution, Undo)** · deps: NR-3 · lane notes-data · Tier 2 (migration, `moduo-mcp`, contracts) · closes MCP-1's notes half
+- [ ] **NR-8 — Comments anchored to text** · deps: NR-4 · lane notes-editor · Tier 2 (migration on `comments`)
+- [ ] **NR-10 — ⌘K searches everything** · deps: NR-2 · lane notes-ui
+- [ ] **NR-11 — Import hardening (trashed re-import, size cap, honest progress, >1000 notes)** · deps: NR-3 · lane notes-data
+- [ ] **NR-12 — Flip to New Notes + delete classic** · deps: NR-4, NR-5, NR-6, NR-7, NR-8, NR-10, NR-11 · lane notes-ui
+- [ ] **NR-9 — Images & files in notes** · deps: NR-3, AT-1 merged into develop · lane notes-editor · Tier 2 (migration)
 
 ## Brand system · [`.design/brand/BRAND_BRIEF.md`](../.design/brand/BRAND_BRIEF.md) (§16)
 

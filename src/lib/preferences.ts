@@ -231,7 +231,12 @@ export interface Preferences {
   tasksOnboarding: TasksOnboardingPrefs;
   /** Folded groups and columns in each List and Board (TV-U8), following the person. */
   tasksFolds: Record<string, TasksFoldEntry>;
+  /** Which Notes UI this person uses while the refresh ships behind a switch
+   *  (specs/notes-refresh.md NR-2). Classic until NR-12 flips the default. */
+  notesExperience: NotesExperience;
 }
+
+export type NotesExperience = "classic" | "next";
 
 export const DEFAULT_PREFERENCES: Preferences = {
   landingView: "home",
@@ -245,6 +250,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   tasksInbox: { snoozed: {} },
   tasksOnboarding: { role: null, roleAt: null, welcomeSeenAt: null, seeded: {}, viewsSeeded: {} },
   tasksFolds: {},
+  notesExperience: "classic",
 };
 
 const LOCAL_STORAGE_KEY = "moduo.preferences";
@@ -252,6 +258,7 @@ const LAST_ROUTE_KEY = "moduo.lastRoute";
 
 const LANDING_VIEWS = ["home", "tasks", "calendar", "notes", "contacts", "email", "last"] as const;
 const MOTION_PREFS = ["system", "reduced", "full"] as const;
+const NOTES_EXPERIENCES = ["classic", "next"] as const;
 
 const notificationPrefsSchema = z
   .preprocess(
@@ -404,6 +411,7 @@ const preferencesSchema = z.object({
   tasksInbox: tasksInboxSchema,
   tasksOnboarding: tasksOnboardingSchema,
   tasksFolds: tasksFoldsSchema,
+  notesExperience: z.enum(NOTES_EXPERIENCES).catch(DEFAULT_PREFERENCES.notesExperience),
 });
 
 export function sanitizeNotificationPrefs(raw: unknown): NotificationPrefs {
@@ -655,20 +663,24 @@ function subscribe(listener: () => void): () => void {
   };
 }
 
-// A change made outside Settings (the Tasks sidebar's Customize and Pin)
-// reaches the cloud through the one mounted sync owner (<PreferencesSync/>),
-// never a second reconcile loop (gotchas/supabase.md, Prefs sync).
+// A change made outside Settings (the Tasks sidebar's Customize and Pin, the
+// Notes experience switch) reaches the cloud through the one mounted sync
+// owner (<PreferencesSync/>, `usePreferences({ syncOwner: true })`), never a
+// second reconcile loop (gotchas/supabase.md, Prefs sync). Only the owner
+// registers, so the Settings pane's own instance mounting and unmounting never
+// drops it (gotchas/notes.md, the "current syncer" slot).
 const localPushers = new Set<(next: Preferences) => void>();
 
 /** Change preferences from anywhere (not only Settings): the shared store,
  *  the local mirror and, through the sync owner, the cloud. */
-export function updatePreferences(patch: Partial<Preferences>): void {
+export function updatePreferences(patch: Partial<Preferences>): Preferences {
   const next = sanitizePreferences({ ...store, ...patch });
   setStore(next);
   writeLocalMirror(next);
   applyMotion(next.motion);
   const [push] = localPushers;
   push?.(next);
+  return next;
 }
 
 export interface UsePreferences {
@@ -745,6 +757,8 @@ export function usePreferences(opts?: {
 
   const update = useCallback(
     (patch: Partial<Preferences>) => {
+      // This instance pushes through its own syncer (not `updatePreferences`,
+      // which would push a second time through the owner when this is it).
       const next = sanitizePreferences({ ...store, ...patch });
       setStore(next);
       writeLocalMirror(next);

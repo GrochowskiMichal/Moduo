@@ -6,6 +6,7 @@
  * reconnect. Pure classification here; the runner lives in engine-v2.ts.
  */
 
+import type { ModuoRuntime } from "../../../lib/runtime.types";
 import type { MetaOutboxEntry } from "./idb";
 
 /** True when an error smells like "no network", not "the server said no".
@@ -40,4 +41,38 @@ export function replayDecision(entry: MetaOutboxEntry, error: unknown | null): R
 /** FIFO order for replay: strictly by queue time, then insertion key. */
 export function replayOrder(entries: MetaOutboxEntry[]): MetaOutboxEntry[] {
   return [...entries].sort((a, b) => a.queuedAt - b.queuedAt || (a.key ?? 0) - (b.key ?? 0));
+}
+
+/** Dispatch one queued (or live) meta intent to its runtime op. Every op is
+ * idempotent server-side (create dedupes on the PK; file/favorite are
+ * set-to-value), so a replay after a lost response never doubles anything. */
+export function callMetaOp(
+  rt: Pick<ModuoRuntime, "notesV2">,
+  kind: MetaOutboxEntry["kind"],
+  args: any,
+): Promise<unknown> {
+  switch (kind) {
+    case "create":
+      return rt.notesV2.create(args);
+    case "rename":
+      return rt.notesV2.rename(args);
+    case "move":
+      return rt.notesV2.move(args);
+    case "setMeta":
+      return rt.notesV2.setMeta(args);
+    case "duplicate":
+      return rt.notesV2.duplicate(args);
+    case "archive":
+      return rt.notesV2.archive(args);
+    case "unarchive":
+      return rt.notesV2.unarchive(args);
+    case "trash":
+      return rt.notesV2.trash(args);
+    case "restore":
+      return rt.notesV2.restore(args);
+    case "file":
+      return rt.notesV2.fileNote(args);
+    case "setFavorite":
+      return rt.notesV2.setFavorite(args);
+  }
 }

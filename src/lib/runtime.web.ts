@@ -23,6 +23,7 @@ import {
   habitRowSchema,
   linkSuggestionRowSchema,
   mapKnownRows,
+  noteFavoriteRowSchema,
   noteRowSchema,
   noteUpdateRowSchema,
   notificationRowSchema,
@@ -84,12 +85,15 @@ import {
 import { type TaskView, taskViewFromRow } from "../features/tasks/view-row";
 import { toMemberPerm, toMemberRole } from "../features/workspaces/workspace-mappers";
 import { clearIgnoredAuthLink, SUPABASE_AUTH_OPTIONS } from "./auth-url";
+// Any missing table (develop's deploy-gap guard); task-rows' version names the table.
+import { isMissingTableError as isAnyTableMissing, selectFirstDeployedTier } from "./deploy-tiers";
 import type { EntityLink, EntityRecord } from "./entity-links";
 import { readOnlyFetch } from "./min-build";
 import {
   collectTruncations,
   PGRST_MAX_ROWS,
   READ_CAPS,
+  readAfterCursor,
   readPaged,
   TAG_LINKS_SCOPE,
   type Truncation,
@@ -995,14 +999,21 @@ export const webRuntime: ModuoRuntime = {
     // MCP connector keys (docs/moduo-mcp-connector.md). Explicit column list —
     // key_hash is never client-readable (column-level grant excludes it).
     async listApiKeys(workspaceId) {
-      const { data, error } = await supabaseClient
-        .from("workspace_api_keys")
-        .select("id, workspace_id, name, key_prefix, scopes, created_by, created_at, last_used_at")
-        .eq("workspace_id", workspaceId)
-        .is("revoked_at", null)
-        .order("created_at", { ascending: false });
+      const columns =
+        "id, workspace_id, name, key_prefix, scopes, created_by, created_at, last_used_at";
+      const list = (select: string) =>
+        supabaseClient
+          .from("workspace_api_keys")
+          .select(select)
+          .eq("workspace_id", workspaceId)
+          .is("revoked_at", null)
+          .order("created_at", { ascending: false });
+      let { data, error } = await list(`${columns}, expires_at`);
+      // 42703 = expires_at isn't on this backend yet (migration 20261009210000
+      // not applied): list the keys without it rather than lose the whole list.
+      if (error?.code === "42703") ({ data, error } = await list(columns));
       if (error) throw new Error(error.message);
-      return (data ?? []).map((row) => ({
+      return ((data ?? []) as unknown as Array<Record<string, any>>).map((row) => ({
         id: row.id,
         workspaceId: row.workspace_id,
         name: row.name,
@@ -1011,13 +1022,15 @@ export const webRuntime: ModuoRuntime = {
         createdBy: row.created_by ?? null,
         createdAt: row.created_at,
         lastUsedAt: row.last_used_at ?? null,
+        expiresAt: row.expires_at ?? null,
       }));
     },
-    async createApiKey({ workspaceId, name, scopes }) {
+    async createApiKey({ workspaceId, name, scopes, expiresInDays }) {
       const { data, error } = await supabaseClient.rpc("workspace_api_keys_create", {
         p_workspace_id: workspaceId,
         p_name: name,
         p_scopes: scopes,
+        ...(expiresInDays != null ? { p_expires_in_days: expiresInDays } : {}),
       });
       if (error) throw new Error(error.message);
       const row = Array.isArray(data) ? data[0] : data;
@@ -1031,6 +1044,7 @@ export const webRuntime: ModuoRuntime = {
         createdBy: (await getAuthedUser())?.id ?? null,
         createdAt: row.created_at,
         lastUsedAt: null,
+        expiresAt: row.expires_at ?? null,
         secret: row.secret,
       };
     },
@@ -1097,6 +1111,9 @@ export const webRuntime: ModuoRuntime = {
     async listMeta(workspaceId) {
       const V2_COLS =
         "id, workspace_id, created_by, parent_id, title, icon, is_pinned, position, is_archived, published_at, publish_token, doc_version, share_mode, workspace_shared, created_at, updated_at, deleted_at";
+      // NR-1 columns ride on top of v2; until that migration is applied the
+      // v2 read still works fully (not degraded) and sections derive Inbox.
+      const NR1_COLS = `${V2_COLS}, in_inbox, full_width`;
       const LEGACY_COLS =
         "id, workspace_id, created_by, parent_id, title, icon, is_pinned, position, is_archived, created_at, updated_at, deleted_at";
       const cutoff = trashWindowCutoffIso(new Date());
@@ -1112,23 +1129,14 @@ export const webRuntime: ModuoRuntime = {
               .or(`deleted_at.is.null,deleted_at.gt.${cutoff}`),
           order: (q) => q.order("position").order("id"),
         });
-      const res = await query(V2_COLS);
-      if (!res.error) {
-        return {
-          notes: mapKnownRows(res.rows, mapNoteRow),
-          degraded: false,
-          truncated: collectTruncations(res.truncation),
-        };
-      }
+      const { res, tier } = await selectFirstDeployedTier([NR1_COLS, V2_COLS, LEGACY_COLS], query);
       // Degrade ONLY on the deploy gap (missing v2 columns = 42703). An
       // outage/auth error must surface as an error, not an empty module.
-      if (res.error.code !== "42703") throw new Error(res.error.message);
-      const legacy = await query(LEGACY_COLS);
-      if (legacy.error) throw new Error(legacy.error.message);
+      if (res.error) throw new Error(res.error.message);
       return {
-        notes: mapKnownRows(legacy.rows, mapNoteRow),
-        degraded: true,
-        truncated: collectTruncations(legacy.truncation),
+        notes: mapKnownRows(res.rows, mapNoteRow),
+        degraded: tier === 2,
+        truncated: collectTruncations(res.truncation),
       };
     },
 
@@ -1137,13 +1145,23 @@ export const webRuntime: ModuoRuntime = {
       // reads then only ever makes the snapshot NEWER than the log we hold —
       // applying both stays lossless (Yjs is idempotent). The reverse order
       // could pair a stale snapshot with a log missing its folded tail.
-      const updRes = await supabaseClient
-        .from("note_updates")
-        .select("id, client_id, client_seq, update_b64")
-        .eq("note_id", noteId)
-        .gt("id", sinceUpdateId ?? 0)
-        .order("id", { ascending: true });
-      const updates = updRes.error ? [] : mapKnownRows(updRes.data ?? [], mapNoteUpdateRow);
+      // Paged to the end (NR-3): one select stops at PostgREST's 1,000-row
+      // ceiling, so a long log silently lost its tail. A failed page fails
+      // the pull rather than returning a partial log the cursor would skip.
+      const updRes = await readAfterCursor({
+        after: sinceUpdateId ?? 0,
+        idOf: (row: { id: number | string }) => Number(row.id),
+        page: async (after, limit) =>
+          supabaseClient
+            .from("note_updates")
+            .select("id, client_id, client_seq, update_b64")
+            .eq("note_id", noteId)
+            .gt("id", after)
+            .order("id", { ascending: true })
+            .limit(limit),
+      });
+      if (updRes.error) throw new Error(updRes.error.message);
+      const updates = mapKnownRows(updRes.rows, mapNoteUpdateRow);
 
       const noteRes = await supabaseClient
         .from("notes")
@@ -1213,6 +1231,45 @@ export const webRuntime: ModuoRuntime = {
       });
       if (error) throw new Error(error.message);
       return mapNoteRow(firstRow(data, "notes_op_set_meta"));
+    },
+
+    async fileNote({ workspaceId, noteId, inInbox, position }) {
+      const { data, error } = await supabaseClient.rpc("notes_op_file", {
+        p_workspace_id: workspaceId,
+        p_note_id: noteId,
+        p_in_inbox: inInbox,
+        p_position: position ?? "",
+      });
+      if (error) throw new Error(error.message);
+      return mapNoteRow(firstRow(data, "notes_op_file"));
+    },
+
+    async listFavorites(workspaceId) {
+      const { data, error } = await supabaseClient
+        .from("note_favorites")
+        .select("note_id, position, created_at")
+        .eq("workspace_id", workspaceId)
+        .order("position")
+        .order("created_at");
+      if (error) {
+        // Deploy gap (table not created yet) → no favorites, never a wall.
+        if (isAnyTableMissing(error)) return [];
+        throw new Error(error.message);
+      }
+      return mapKnownRows(data ?? [], (raw) => {
+        const r = requireRow(noteFavoriteRowSchema, raw, "note favorite");
+        return { noteId: r.note_id, position: r.position, createdAt: r.created_at };
+      });
+    },
+
+    async setFavorite({ workspaceId, noteId, value, position }) {
+      const { error } = await supabaseClient.rpc("notes_op_set_favorite", {
+        p_workspace_id: workspaceId,
+        p_note_id: noteId,
+        p_value: value,
+        p_position: position ?? null,
+      });
+      if (error) throw new Error(error.message);
     },
 
     async duplicate({ workspaceId, sourceNoteId, position }) {
@@ -1428,6 +1485,8 @@ export const webRuntime: ModuoRuntime = {
         docStateB64: r.docStateB64 ?? null,
         bodyText: r.bodyText ?? "",
         bodyMd: r.bodyMd ?? "",
+        // Omitted (undefined → dropped by JSON) lets the server decide.
+        inInbox: r.inInbox,
       }));
       const { data, error } = await supabaseClient.rpc("notes_op_import", {
         p_workspace_id: workspaceId,
@@ -1807,7 +1866,7 @@ export const webRuntime: ModuoRuntime = {
       // The habits table is deploy-gated — a missing relation degrades to [] (a
       // widget must never wall), like notesV2.recent's 42703 guard.
       if (error) {
-        if (error.code === "42P01" || error.code === "PGRST205") return [];
+        if (isAnyTableMissing(error)) return [];
         throw new Error(error.message);
       }
       return mapKnownRows(data, mapHabitRow);
