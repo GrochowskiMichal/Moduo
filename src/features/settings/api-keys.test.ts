@@ -243,6 +243,11 @@ describe("cross-module needs: the connector, the SQL and the key card agree", ()
       "perm_actor_id", // defines the fallback itself
       "module_activity_log", // `IF auth.uid() IS NOT NULL` → the user branch; keys go to the api_key branch
       "perm_can_view_entity", // reached only for types without a module (true for everyone)
+      // Chat rows in the spine (perm_can_see_entity's chat branches) are read
+      // inside a people-only block: a key returns false before these run.
+      "chat_can_read_channel",
+      "chat_can_access_workspace",
+      "perm_can_view",
     ]);
     const bodies = latestSqlFunctionBodies();
     const roots = new Set<string>();

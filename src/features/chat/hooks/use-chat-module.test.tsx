@@ -3,6 +3,7 @@ import { renderHook, waitFor } from "@testing-library/react";
 import type { ModuoRuntime } from "@/lib/runtime.types";
 import type { ChatChannel, ChatMember, ChatRuntime } from "../model";
 
+const typingWatches: { channelId: string; open: boolean }[] = [];
 const fakeLink = {
   subscribe: () => () => {},
   subscribePresence: () => () => {},
@@ -10,6 +11,13 @@ const fakeLink = {
   getOnline: () => new Set<string>(),
   getTyping: () => [],
   sendTyping: () => {},
+  watchTyping: (channelId: string) => {
+    const watch = { channelId, open: true };
+    typingWatches.push(watch);
+    return () => {
+      watch.open = false;
+    };
+  },
 };
 rs.mock("../realtime", () => ({
   acquireChatLink: () => ({ link: fakeLink, release: () => {} }),
@@ -79,6 +87,45 @@ describe("useChatModule", () => {
     await waitFor(() => expect(result.current.state.messages[general.id]?.loaded).toBe(true));
     expect(result.current.state.people[ME]?.name).toBe("Mike");
     expect(runtime.chat.listMessages).toHaveBeenCalledTimes(1);
+  });
+
+  it("follows typing in the open conversation only: joins on open, leaves on switch and unmount", async () => {
+    typingWatches.length = 0;
+    const runtime = fakeRuntime(true);
+    const other = "22222222-2222-4222-8222-222222222222";
+    const { result, rerender, unmount } = renderHook(
+      ({ channelId }: { channelId: string | null }) =>
+        useChatModule({
+          runtime,
+          workspaceId: WS,
+          userId: ME,
+          activeChannelId: channelId,
+          activeThreadId: null,
+        }),
+      { initialProps: { channelId: general.id as string | null } },
+    );
+    await waitFor(() => expect(result.current.state.status).toBe("ready"));
+    await waitFor(() =>
+      expect(typingWatches.map((w) => [w.channelId, w.open])).toEqual([[general.id, true]]),
+    );
+
+    rerender({ channelId: other });
+    await waitFor(() =>
+      expect(typingWatches.map((w) => [w.channelId, w.open])).toEqual([
+        [general.id, false],
+        [other, true],
+      ]),
+    );
+
+    rerender({ channelId: null });
+    await waitFor(() => expect(typingWatches.every((w) => !w.open)).toBe(true));
+
+    rerender({ channelId: general.id });
+    await waitFor(() =>
+      expect(typingWatches.at(-1)).toEqual({ channelId: general.id, open: true }),
+    );
+    unmount();
+    expect(typingWatches.every((w) => !w.open)).toBe(true);
   });
 
   it("reports a locked workspace without loading anything", async () => {
