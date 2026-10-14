@@ -2,7 +2,7 @@
 
 > Written 2026-10-14 by the TV-POLISH batch (`t/maciej/tv-polish`). Every "Polish later" line in the `docs/testing/t-maciej-*.md` checklists and every known item was either fixed in that batch (see [t-maciej-tv-polish.md](./t-maciej-tv-polish.md)) or is listed here: one line each, with a recommendation.
 > **Why deferred:** 🧭 needs a product or design call · 🗄 needs a migration · 🔧 engineering that isn't quick or safe enough for a polish batch (data flow, sync, performance) · 🖼 the visual round · 🧪 test debt.
-> **2026-10-14, polish batch 2** (`t/maciej/tv-polish-2`): the lines it fixed are gone from this file (see [t-maciej-tv-polish-2.md](./t-maciej-tv-polish-2.md) and decisions/tasks.md PL2-…); every 🗄 line now says "→ next release train (needs a migration)".
+> **2026-10-14, polish batch 2** (`t/maciej/tv-polish-2`): the lines it fixed are gone from this file (one, the view-only overview, was found already so) (see [t-maciej-tv-polish-2.md](./t-maciej-tv-polish-2.md) and decisions/tasks.md PL2-…); every 🗄 line now says "→ next release train (needs a migration)".
 
 ## Attachments everywhere (AT-3)
 - 🔧 Calendar's day columns redraw on every file change (the whole counts map is passed in); ⌘K reads counts only when results change; your own upload re-reads the strip twice. **Recommend:** pass each column its own counts; debounce the strip's re-read.

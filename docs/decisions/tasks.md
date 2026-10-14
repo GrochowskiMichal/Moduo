@@ -57,6 +57,7 @@ Screen-only, no migration: the seven Tasks gaps the local walkthrough found (`do
   - "Done this month" in the saved zone: the time report's own month is the device's too; changing one breaks "the two always agree". Do both together.
   - `TASKS_ROLES` → `@contracts`: a contracts change is a Tier-2 review path, not a polish diff.
   - The rest stay in the deferred file with their recommendation; 🗄 lines are marked for the next release train.
+  - Removed without a change: "a view-only reader's overview is briefly editable-looking". Found already so: every overview control waits for the access answer (`access === true` in `project-panel.tsx` since TV-U16).
 
 ## 2026-10-14 · TV-POLISH Tasks v3 polish batch — the agent's choices (deferred to by Maciej)
 
