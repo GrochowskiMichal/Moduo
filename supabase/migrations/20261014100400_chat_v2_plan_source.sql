@@ -11,10 +11,14 @@
 --   public.plan_grant_effective_tier(p_workspace_id uuid) → the plan tier an active
 --   dated grant gives that workspace now, or null when none is active.
 --
--- It is looked up by name on every call (`to_regprocedure`) and called through EXECUTE,
--- so this file applies before or after TX-9b in any order. While it doesn't exist the
+-- It is looked up by name on every call (`to_regprocedure`) and only called when it
+-- exists (plpgsql prepares the call on its first run, so the body never needs it), so
+-- this file applies before or after TX-9b in any order. While it doesn't exist the
 -- owner's plan decides, exactly as v1 did. The owner's plan is checked first, so a
--- workspace whose owner has chat never calls the grant function.
+-- workspace whose owner has chat never calls the grant function. A grant function that
+-- fails reads as no grant (a WARNING in the log): it can pause a granted workspace, but
+-- never turns its error into one for every caller (the realtime topic policies and the
+-- unread counts ask this function too).
 --
 -- Callers pick this up by name and are unchanged: chat_op__guard (posting and the other
 -- plan-gated writes), chat_op_agent_post, chat_can_access_workspace (the workspace
@@ -52,12 +56,17 @@ BEGIN
   END IF;
 
   -- A dated grant (TX-9b), when its function exists. `::text` takes a text or a
-  -- plan_tier result alike; an unknown tier ranks 0.
+  -- plan_tier result alike; null or an unknown tier ranks 0.
   IF to_regprocedure('public.plan_grant_effective_tier(uuid)') IS NULL THEN
     RETURN false;
   END IF;
-  EXECUTE 'SELECT public.plan_grant_effective_tier($1)::text' INTO v_grant USING p_workspace_id;
-  RETURN coalesce(public.plan_tier_rank(v_grant) >= public.plan_tier_rank('duo'), false);
+  BEGIN
+    v_grant := public.plan_grant_effective_tier(p_workspace_id)::text;
+  EXCEPTION WHEN OTHERS THEN
+    RAISE WARNING 'chat_workspace_enabled: plan_grant_effective_tier failed (%), read as no grant', SQLSTATE;
+    RETURN false;
+  END;
+  RETURN public.plan_tier_rank(v_grant) >= public.plan_tier_rank('duo');
 END;
 $function$;
 

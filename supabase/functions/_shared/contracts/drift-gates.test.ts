@@ -141,8 +141,15 @@ describe("cross-runtime drift guards", () => {
 
   it("CHAT_PLAN_TIERS are plan_tier_rank's tiers at Duo or above; the plan source reads TX-9b's grant (CV-4)", () => {
     const read = (file: string) => readFileSync(resolve(MIGRATIONS_DIR, file), "utf8");
-    const rankSql = read("20261006120000_entitlements_from_stripe_sync.sql");
-    const body = rankSql.slice(rankSql.indexOf("function public.plan_tier_rank"));
+    const migrations = readdirSync(MIGRATIONS_DIR)
+      .filter((f) => f.endsWith(".sql"))
+      .sort();
+    // The newest body of plan_tier_rank (a later migration may redefine it).
+    const defines = /create\s+(?:or\s+replace\s+)?function\s+public\.plan_tier_rank\s*\(/i;
+    const rankFile = migrations.filter((f) => defines.test(read(f))).at(-1);
+    expect(rankFile).toBeDefined();
+    const rankSql = read(rankFile ?? "");
+    const body = rankSql.slice(rankSql.search(defines));
     const rank = new Map(
       [...body.slice(0, body.indexOf("$$;")).matchAll(/when '(\w+)' then (\d+)/g)].map(
         (m) => [m[1], Number(m[2])] as const,
@@ -158,6 +165,21 @@ describe("cross-runtime drift guards", () => {
     const sql = read(file ?? "");
     expect(sql).toContain("to_regprocedure('public.plan_grant_effective_tier(uuid)')");
     expect(sql).toContain(">= public.plan_tier_rank('duo')");
+
+    // TX-9b's grant function, once a migration defines it, must keep the signature
+    // chat_workspace_enabled looks up, or handed-out workspaces silently lose chat.
+    const grantDefs = migrations.flatMap((f) =>
+      [
+        ...read(f).matchAll(/create\s+(?:or\s+replace\s+)?function\s+([\w."]*plan_grant_effective_tier)\s*\(([^)]*)\)/gi),
+      ].map((m) => ({ file: f, name: m[1], args: m[2].trim() })),
+    );
+    for (const def of grantDefs) {
+      expect({ file: def.file, name: def.name, uuidOnly: /^(\w+\s+)?uuid$/i.test(def.args) }).toEqual({
+        file: def.file,
+        name: "public.plan_grant_effective_tier",
+        uuidOnly: true,
+      });
+    }
   });
 
   it("content author kinds match the chat_messages and comments CHECKs", () => {

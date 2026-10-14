@@ -4,8 +4,9 @@
  *
  * Reads are direct SELECTs under RLS (`chat_can_read_channel`); every write is
  * a `chat_op_*` SECURITY DEFINER op that re-checks access and the plan gate
- * server-side (`chat_workspace_enabled`: the owner's plan or a dated grant). supabase-js reports failures on `error`, never by throwing
- * — every call checks it (gotchas §Supabase).
+ * server-side (`chat_workspace_enabled`: the owner's plan or a dated grant).
+ * supabase-js reports failures on `error`, never by throwing — every call
+ * checks it (gotchas §Supabase).
  */
 
 import { mapChannel, mapMember, mapMessage, mapRows, mapUnread } from "../features/chat/mappers";
@@ -33,7 +34,8 @@ function likeLiteral(q: string): string {
 
 export const webChatRuntime: ChatRuntime = {
   /** Chat is on: the owner's plan includes it or the workspace holds a dated grant
-   *  (decided server-side, CV-4). Off is the paused state: reading still works. */
+   *  (decided server-side, CV-4). Off means paused: the server still serves
+   *  reads, but v1's screens show ChatLocked until CV-8a's paused state. */
   async isEnabled(workspaceId) {
     const { data, error } = await supabaseClient.rpc("chat_workspace_enabled", {
       p_workspace_id: workspaceId,

@@ -149,18 +149,26 @@ BEGIN
 END;
 $$;
 
--- ── The owner's plan is asked first: a broken grant function can't take chat
---    from a paying workspace, and is never called for one ───────────────────
+-- ── The owner's plan is asked first: a grant function is never called for a paying
+--    workspace, and one that fails reads as no grant (not an error for every caller) ──
 DROP FUNCTION public.plan_grant_effective_tier(uuid);
+CREATE SEQUENCE test.grant_calls;
 CREATE FUNCTION public.plan_grant_effective_tier(p_workspace_id uuid) RETURNS text
-LANGUAGE plpgsql STABLE AS $$ BEGIN RAISE EXCEPTION 'grant function called'; END; $$;
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+BEGIN
+  PERFORM nextval('test.grant_calls');
+  RAISE EXCEPTION 'grant function called';
+END;
+$$;
 DO $$
 DECLARE
   v text;
 BEGIN
-  PERFORM test.ok(test.on('W2'), 'owner on Duo: chat on without calling the grant function');
+  PERFORM test.ok(test.on('W2') AND NOT (SELECT is_called FROM test.grant_calls),
+    'owner on Duo: chat on without calling the grant function');
   v := test.as_op('A', format('SELECT public.chat_workspace_enabled(%L)', test.id('W')));
-  PERFORM test.ok(v LIKE '%grant function called%', 'owner on Free: the grant function''s error is not swallowed', v);
+  PERFORM test.ok(v = 'ok 1' AND NOT test.on('W') AND (SELECT is_called FROM test.grant_calls),
+    'owner on Free: a failing grant function is called and reads as no grant, not an error', v);
 END;
 $$;
 
