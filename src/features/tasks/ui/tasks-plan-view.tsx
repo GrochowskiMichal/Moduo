@@ -1541,17 +1541,37 @@ export function TasksPlanView({
   const viewExtraGroups: readonly ListExtraGroup[] =
     place === "mine" ? mineExtraGroups : isInboxScope ? inboxView.extraGroups : NO_EXTRAS;
   const extraTaskIds = new Set(viewExtraGroups.flatMap((g) => g.taskIds));
+  // The "← item" stack (SH-1) for references opened from the panel (RF-1).
+  // Up here: the views opened from the centre (the title, No date, In flight)
+  // clear it, or the item on top would still cover the view they ask for.
+  const panelStack = usePanelStack<{ key: string; type: string; id: string }>();
+  const { push: pushPanel, clear: clearPanel } = panelStack;
   // A project's title opens Project details in the right panel (MOD-95), the
   // way the panel shows it when nothing is selected, the panel too if it's
   // closed. A saved view's title is the view's name, so it stays plain.
   const titleProjectId = !openView
     ? (buckets.find((b) => b.id === place && !b.isSystem)?.id ?? archivedProject?.id ?? null)
     : null;
+  // What the title asked for: that project's overview, over an item stacked
+  // in the panel and over a multi-selection's bulk panel, until the cursor or
+  // the place moves (then the panel follows the selection again).
+  const [projectAsk, setProjectAsk] = useState<{
+    projectId: string;
+    taskId: string | null;
+    place: string;
+  } | null>(null);
+  const askedProjectId =
+    projectAsk && projectAsk.taskId === selectedTaskId && projectAsk.place === place
+      ? projectAsk.projectId
+      : null;
   const openProjectDetails = useCallback(() => {
+    if (!titleProjectId) return;
+    clearPanel();
+    setProjectAsk({ projectId: titleProjectId, taskId: selectedTaskId, place });
     setPanelView("project");
     const state = readFeaturePanelState("tasks");
     if (!state.right) dispatchLayoutPanelsSet({ feature: "tasks", left: state.left, right: true });
-  }, []);
+  }, [titleProjectId, selectedTaskId, place, clearPanel]);
   const header: PlanHeaderControls = {
     // Won't do counts what it lists (none of it is open); a saved view, the
     // tasks it shows ("Done last week" counts its done ones).
@@ -1765,16 +1785,18 @@ export function TasksPlanView({
   );
   // "No date · n" opens the panel on that view (the panel too, if it's closed).
   const openNoDate = useCallback(() => {
+    clearPanel();
     setPanelView(NO_DATE_PANEL_VIEW);
     const state = readFeaturePanelState("tasks");
     if (!state.right) dispatchLayoutPanelsSet({ feature: "tasks", left: state.left, right: true });
-  }, []);
+  }, [clearPanel]);
   // Focus's "2 in flight" opens In flight the same way (TV-F8).
   const openInFlight = useCallback(() => {
+    clearPanel();
     setPanelView(IN_FLIGHT_PANEL_VIEW);
     const state = readFeaturePanelState("tasks");
     if (!state.right) dispatchLayoutPanelsSet({ feature: "tasks", left: state.left, right: true });
-  }, []);
+  }, [clearPanel]);
   // The offer's Shrink shows the task's Details (TV-F8).
   const showDetails = useCallback((id: string) => {
     setPanelView("details");
@@ -1817,10 +1839,8 @@ export function TasksPlanView({
     [timelineShown, scopeTasks, api.sessions],
   );
 
-  // The "← item" stack (SH-1) for references opened from the panel (RF-1). A
-  // new selection is a new context, so the stack starts over.
-  const panelStack = usePanelStack<{ key: string; type: string; id: string }>();
-  const { push: pushPanel, clear: clearPanel } = panelStack;
+  // The "← item" stack's reset: a new selection is a new context, so the
+  // stack starts over.
   // biome-ignore lint/correctness/useExhaustiveDependencies: a new selection is the cue
   useEffect(() => {
     clearPanel();
@@ -2258,12 +2278,20 @@ export function TasksPlanView({
   // Its project: the open task's, else the project open in the sidebar.
   const scopeProject =
     buckets.find((b) => b.id === place && !b.isSystem) ?? archivedProject ?? null;
-  const panelProject = selectedTask
-    ? (buckets.find((b) => b.id === selectedTask.bucketId && !b.isSystem) ??
-      // A task of an archived project shows that project, read-only (TV-U16).
-      api.archivedBuckets.find((b) => b.id === selectedTask.bucketId) ??
+  // The title's ask wins (MOD-95): the project the centre is titled with.
+  const askedProject = askedProjectId
+    ? (buckets.find((b) => b.id === askedProjectId) ??
+      api.archivedBuckets.find((b) => b.id === askedProjectId) ??
       null)
-    : scopeProject;
+    : null;
+  const panelProject =
+    askedProject ??
+    (selectedTask
+      ? (buckets.find((b) => b.id === selectedTask.bucketId && !b.isSystem) ??
+        // A task of an archived project shows that project, read-only (TV-U16).
+        api.archivedBuckets.find((b) => b.id === selectedTask.bucketId) ??
+        null)
+      : scopeProject);
   const projectView = panelProject ? (
     <ProjectPanel
       project={panelProject}
@@ -2285,13 +2313,14 @@ export function TasksPlanView({
   // Nothing selected inside a project, or a task in the centre: the panel
   // shows Project (the one exception to "the panel remembers its view").
   // The Timeline's No date stays open while you work the canvas (TV-TL2).
-  const panelActive = multiSelect.multi
-    ? "details"
-    : panelView === NO_DATE_PANEL_VIEW && timelineShown && !fullPageTask
-      ? NO_DATE_PANEL_VIEW
-      : projectView && (fullPageTask || (!selectedTask && !privateLinkId && scopeProject))
-        ? "project"
-        : panelView;
+  const panelActive =
+    multiSelect.multi && !(askedProject && panelView === "project")
+      ? "details"
+      : panelView === NO_DATE_PANEL_VIEW && timelineShown && !fullPageTask
+        ? NO_DATE_PANEL_VIEW
+        : projectView && (fullPageTask || (!selectedTask && !privateLinkId && scopeProject))
+          ? "project"
+          : panelView;
 
   // The right panel's title row names and switches its views (SH-1): Details
   // and Project (TV-U13), In flight (TV-F8), No date beside the Timeline (TV-TL2).
