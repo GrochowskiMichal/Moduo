@@ -23,10 +23,11 @@ How the Chat v2 build runs, so anyone can pick it up. The spec is [specs/chat-v2
 ## The local stack
 
 - It runs under **OrbStack** at `127.0.0.1:54322` (Postgres) and `:54321` (API); the default Docker context on this Mac is Docker Desktop, so run Supabase CLI commands with `DOCKER_CONTEXT=orbstack` and **never `bun run local:up` or `local:reset`** (the stack is up, and a reset wipes local-only data, the research workspace included).
-- `psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres"` reaches it. The local stack keeps no migration history table: apply files with `psql -v ON_ERROR_STOP=1 -f`.
+- `psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres"` reaches it. The local stack keeps no migration history table: apply files as below.
 - A fresh worktree has no `.env.local`, and then `dev:web` and e2e talk to the **prod** project: run `bun run env:local` first and confirm the app's Supabase URL is `127.0.0.1`.
 - The stack is shared: while another block holds the migration turn, database-backed tests in `verify` (e.g. `chat_privacy.test.sql` via `privacy-rules.test.ts`) can fail on a branch that doesn't touch them. Say so in the hand-back; don't chase it.
-- The research workspace "Chat replan research" (`669be464-0b9a-4d84-8537-544ac04dba5f`, 3,032 messages) is the v1 fixture: read it, never write it.
+- The research workspace "Chat replan research" (`669be464-0b9a-4d84-8537-544ac04dba5f`, 3,032 messages) was converted to v2 by CV-1's conversion migration on 2026-10-14 (Maciej's OK); the v1 dump is in the gitignored `docs/local/chat-v1-fixture/`. Read the workspace freely; don't delete or bulk-rewrite it.
+- Apply a migration as the stack's own role and in one transaction: `psql "postgresql://supabase_admin:postgres@127.0.0.1:54322/postgres" -1 -v ON_ERROR_STOP=1 -f <file>` (functions created by `scripts/local/stack.sh` are owned by `supabase_admin`, and `SET LOCAL lock_timeout` only works inside a transaction).
 
 ## A builder's run
 
@@ -39,7 +40,7 @@ How the Chat v2 build runs, so anyone can pick it up. The spec is [specs/chat-v2
    - run only your block's own e2e specs; the full e2e suite runs at checkpoints, serially;
    - live-check UI with `read_page` / `get_page_text`; take a screenshot only for a visual you must see;
    - at about 250 k tokens of context, stop: write a handoff section in your record file, push, and hand back "handoff"; the orchestrator starts a fresh builder for the rest.
-4. **Migration:** write it in `supabase/migrations/` with a provisional stamp, starting every redefined function from its **live body** (`select pg_get_functiondef(…)`). Apply it to the local stack with `psql -v ON_ERROR_STOP=1 -f` **only when your brief says you hold the migration turn**; otherwise hand back with "migration ready" and the orchestrator applies it in order. Run `bun run db:test chat` after applying. Never `supabase migration up`, never `local:reset`, never the cloud project.
+4. **Migration:** write it in `supabase/migrations/` with a provisional stamp, starting every redefined function from its **live body** (`select pg_get_functiondef(…)`). Apply it to the local stack with `psql … -1 -v ON_ERROR_STOP=1 -f` as `supabase_admin` (above) **only when your brief says you hold the migration turn**; otherwise hand back with "migration ready" and the orchestrator applies it in order. Run `bun run db:test chat` after applying. Never `supabase migration up`, never `local:reset`, never the cloud project.
 5. **Review:** one `validator` round on your diff, giving it your brief's path and the range. Fix every BLOCKER and MAJOR; if anything was fixed, a second round on the delta only, with the first findings. Tier-2 blocks (migrations, RLS, contracts, `moduo-mcp`): one `/code-review high` and one security scan of the block's diff, at the end.
 6. **Record:** fill `docs/build/chat-v2/<ID>.md` from the [template](../build/chat-v2/_template.md): what you delivered, the tests proving each AC, your agent's choices (who · what · why · rejected), gotchas, notes for later blocks, the manual checklist, anything to verify before release. Edit no other record file.
 7. **Hand back:** commit (trailer `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`), `gh auth switch --user En5hi && git push origin t/maciej/cv-<id>-<kebab>` (in one command: another session keeps switching `gh` to an account that can't push here), and return at most 150 words: the branch and head, verify result, validator result, migration state, what's deferred and to which block.
@@ -71,4 +72,4 @@ On a usage-limit error the orchestrator notes the reset time, sleeps in the back
 
 ## Where it stands
 
-Kept current by the orchestrator. **2026-10-14:** the build branch is cut; the kit is in (`scripts/agent/quiet.sh`, this runbook, the record template); the v1 privacy rules are merged in (217d1a62); CV-0 (all five spikes) and the briefs CV-1…CV-23 are landed; checkpoint 1 folded spikes 2–5 (spike 1 folds at checkpoint 2); CV-1 holds the migration turn.
+Kept current by the orchestrator. **2026-10-14:** the build branch is cut; the kit is in (`scripts/agent/quiet.sh`, this runbook, the record template); the v1 privacy rules are merged in (217d1a62); CV-0 (all five spikes), the briefs, the e2e isolation fix and CV-1 are landed, with CV-1's two migrations applied to the local stack; checkpoint 1 folded spikes 2–5. CV-2a and CV-4 are building (migration turns: CV-2a, then CV-4). A v1 hotfix (per-person sending and typing limits) goes to prod first; it joins the build branch with the next `maciej` merge and is applied locally before CV-2a's migration.
