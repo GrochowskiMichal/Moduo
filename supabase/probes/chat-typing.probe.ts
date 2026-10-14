@@ -3,7 +3,8 @@
 // reaches anyone, and a server-written typing event (chat_op_typing through
 // realtime.send) arrives with the session's sender. Three throwaway accounts
 // and one workspace, removed at the end. Needs `bun run local:up` and the
-// chat privacy rules applied (20261014090000_chat_privacy_rules.sql).
+// chat privacy rules and the sending and typing limits applied
+// (20261014090000_chat_privacy_rules.sql, 20261014155205_chat_send_limits.sql).
 //
 //   bun supabase/probes/chat-typing.probe.ts
 import { execFileSync } from "node:child_process";
@@ -153,18 +154,28 @@ try {
   await wait(500);
   ok(receivedB.length === before, "nothing reached B from X");
 
-  // B stops typing; A (also on the topic) receives the stop.
+  // B starts and then stops typing; A (also on the topic) receives both. A
+  // stop goes out once, to close a start that went out, so B's second stop
+  // reaches nobody.
+  const fromB = (stop: boolean) =>
+    receivedA.filter((p) => {
+      const q = p as Record<string, unknown>;
+      return q.userId === B.id && q.stop === stop;
+    });
+  r = await B.client.rpc("chat_op_typing", { p_channel_id: P, p_parent_id: null, p_stop: false });
+  ok(!r.error, "B calls chat_op_typing (start)", r.error?.message);
+  for (let i = 0; i < 50 && fromB(false).length === 0; i++) await wait(100);
+  ok(fromB(false).length === 1, "A received B's typing event", JSON.stringify(receivedA));
   r = await B.client.rpc("chat_op_typing", { p_channel_id: P, p_parent_id: null, p_stop: true });
   ok(!r.error, "B calls chat_op_typing (stop)", r.error?.message);
-  const fromB = () =>
-    receivedA.find((p) => (p as Record<string, unknown>).userId === B.id) as
-      | Record<string, unknown>
-      | undefined;
-  for (let i = 0; i < 50 && !fromB(); i++) await wait(100);
-  const gotA = fromB();
+  for (let i = 0; i < 50 && fromB(true).length === 0; i++) await wait(100);
   const ownEcho = receivedA.find((p) => (p as Record<string, unknown>).userId === A.id);
   ok(Boolean(ownEcho), "A also received their own server-written event (the client drops it as self)");
-  ok(gotA?.stop === true, "A received B's stop event", JSON.stringify(receivedA));
+  ok(fromB(true).length === 1, "A received B's stop event", JSON.stringify(receivedA));
+  r = await B.client.rpc("chat_op_typing", { p_channel_id: P, p_parent_id: null, p_stop: true });
+  ok(!r.error, "B's second stop is answered quietly", r.error?.message);
+  await wait(1_000);
+  ok(fromB(true).length === 1, "B's second stop reaches nobody", JSON.stringify(receivedA));
 
   for (const c of [b.channel, x.channel, a.channel, a2.channel]) await c.unsubscribe();
 } catch (e) {
