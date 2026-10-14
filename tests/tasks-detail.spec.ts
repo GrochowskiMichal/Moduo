@@ -141,7 +141,7 @@ test("AC11.8 — a comment edits, takes a reaction and deletes with Undo", async
   ]);
 });
 
-test("AC1.16 — at 280 and 320 px nothing in the panel truncates; the label column narrows under 320", async ({
+test("AC1.16 — at 280 and 320 px no value in the panel truncates; the label column narrows under 320", async ({
   page,
 }) => {
   const task = await createTask(`A long title that has to wrap in a narrow panel ${tag}`);
