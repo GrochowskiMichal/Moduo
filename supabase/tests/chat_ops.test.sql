@@ -162,9 +162,9 @@ BEGIN
 
   PERFORM test.ok(test.all_acts() = v_acts, 'send: a plain send logs no activity row');
   PERFORM test.ok((test.msg('b1')).format_version = 2 AND (test.msg('b1')).kind = 'message'
-                  AND (test.msg('b1')).author_id = test.id('B') AND (test.msg('b1')).client_id IS NULL
+                  AND (test.msg('b1')).author_id = test.id('B') AND (test.msg('b1')).client_id = test.mid('b1')
                   AND (test.msg('b1')).body_text = 'from a member',
-    'send: the row is v2, a message, B''s, keyed by its own id (no client id)');
+    'send: the row is v2, a message, B''s, keyed by its own id (client_id = id while the v1 wrappers live)');
 END;
 $$;
 
@@ -354,6 +354,17 @@ BEGIN
   PERFORM test.ok(EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'chat-blank-deleted' AND schedule = '* * * * *'),
     'blank job: chat-blank-deleted runs every minute');
 
+  -- An app's message (no author): only "Delete others' messages" deletes it.
+  SET LOCAL session_replication_role = replica;
+  INSERT INTO public.chat_messages (id, workspace_id, channel_id, author_id, author_kind, author_label, body)
+  VALUES (test.mid('app'), test.id('W'), test.ref('Q'), NULL, 'api_key', 'Claude Desktop', 'deployed');
+  SET LOCAL session_replication_role = origin;
+  PERFORM test.ok(public.chat__may_delete(test.msg('app'), test.id('B')) IS FALSE
+                  AND test.as_user('B', format($q$SELECT public.chat_op_delete(%L::uuid)$q$, test.mid('app')))
+                        = '42501 You can only delete your own messages.'
+                  AND test.as_user('D', format($q$SELECT public.chat_op_delete(%L::uuid)$q$, test.mid('app'))) = 'ok 1',
+    'delete: an app''s message is deleted by an admin, not by a member');
+
   -- A deleted root keeps its chain.
   v := test.as_user('A', format($q$SELECT public.chat_op_delete(%L::uuid)$q$, test.mid('root')));
   PERFORM test.ok(v = 'ok 1' AND (test.msg('root')).reply_count = 2
@@ -418,12 +429,13 @@ BEGIN
   -- Deleted: gone for everyone.
   UPDATE public.chat_channels SET deleted_at = now(), deleted_by = test.id('A') WHERE id = test.ref('OLD');
   PERFORM test.ok(test.as_user('B', format($q$SELECT public.chat_op_restore(%L::uuid)$q$, test.mid('old1')))
-                        = '42501 You''re not a member of this conversation.'
+                        = 'P0002 That conversation no longer exists.'
                   AND test.as_user('C', format($q$SELECT public.chat_op_delete(%L::uuid)$q$, test.mid('old2')))
-                        = '42501 You''re not a member of this conversation.'
-                  AND test.as_user('D', format($q$SELECT public.chat_op_delete(%L::uuid)$q$, test.mid('old2')))
-                        = '42501 You''re not a member of this conversation.',
-    'deleted channel: nobody writes there, an admin included');
+                        = 'P0002 That conversation no longer exists.'
+                  AND test.as_user('D', format($q$SELECT public.chat_op_react(%L::uuid, '👍'::text, true)$q$, test.mid('old2')))
+                        = 'P0002 That conversation no longer exists.'
+                  AND test.send('D', 'OLD', 'old6', 'hello?') = 'P0002 That conversation no longer exists.',
+    'deleted channel: it is gone for everyone, an admin included');
 END;
 $$;
 
@@ -546,6 +558,14 @@ BEGIN
   PERFORM test.ok(test.as_user('B', format($q$SELECT public.chat_op_pin(%L::uuid, false)$q$, test.mid('pin1'))) = 'ok 1'
                   AND test.as_user('B', format($q$SELECT public.chat_op_pin(%L::uuid, true)$q$, test.mid('b1'))) = 'ok 1',
     'pin: after one is unpinned there is room again');
+  -- Undo of a pinned message's delete doesn't take the conversation past 100.
+  PERFORM test.ok(test.as_user('B', format($q$SELECT public.chat_op_delete(%L::uuid)$q$, test.mid('b1'))) = 'ok 1'
+                  AND test.as_user('B', format($q$SELECT public.chat_op_pin(%L::uuid, true)$q$, test.mid('pin1'))) = 'ok 1'
+                  AND test.as_user('B', format($q$SELECT public.chat_op_restore(%L::uuid)$q$, test.mid('b1'))) = 'ok 1'
+                  AND (test.msg('b1')).pinned_at IS NULL
+                  AND (SELECT count(*) FROM public.chat_messages
+                        WHERE channel_id = test.ref('Q') AND pinned_at IS NOT NULL AND deleted_at IS NULL) = 100,
+    'pin: a message restored into a full conversation comes back unpinned');
 END;
 $$;
 

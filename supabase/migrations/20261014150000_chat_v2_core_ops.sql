@@ -122,7 +122,7 @@ AS $function$
 declare v_channel public.chat_channels;
 begin
   select * into v_channel from public.chat_channels where id = p_channel_id;
-  if v_channel.id is null then
+  if v_channel.id is null or v_channel.deleted_at is not null then
     raise exception 'That conversation no longer exists.' using errcode = 'P0002';
   end if;
   perform public.chat_op__guard(v_channel.workspace_id);
@@ -145,7 +145,7 @@ AS $function$
 declare v_channel public.chat_channels;
 begin
   select * into v_channel from public.chat_channels where id = p_channel_id;
-  if v_channel.id is null then
+  if v_channel.id is null or v_channel.deleted_at is not null then
     raise exception 'That conversation no longer exists.' using errcode = 'P0002';
   end if;
   if auth.uid() is null or not public.chat_is_workspace_member(v_channel.workspace_id, auth.uid()) then
@@ -455,7 +455,7 @@ $fn$;
 -- Who a v2 body mentions: its blocks as chat__body_text reads them (nothing in
 -- a fenced block counts; a quote's and a list item's markers go), each run of
 -- inline content read by chat__mentions_inline. Agreement with the client's
--- mentionsOf(parseStored(·)) was checked on 7,300+ bodies
+-- mentionsOf(parseStored(·)) was checked on 23,367 bodies
 -- (docs/build/chat-v2/CV-2a.md).
 CREATE OR REPLACE FUNCTION public.chat__mentions(
   p_body text, OUT people uuid[], OUT teams uuid[], OUT everyone boolean)
@@ -756,12 +756,14 @@ BEGIN
   ON CONFLICT (channel_id, user_id) DO UPDATE SET left_at = NULL
    WHERE public.chat_members.left_at IS NOT NULL;
 
+  -- client_id = id while the v1 wrappers live: v1 screens and old builds match
+  -- their optimistic row by it (CV-23 stops writing it).
   BEGIN
     INSERT INTO public.chat_messages
-      (id, workspace_id, channel_id, parent_id, reply_to_id, author_id, body, format_version,
+      (id, client_id, workspace_id, channel_id, parent_id, reply_to_id, author_id, body, format_version,
        mentioned_user_ids, mentioned_team_ids, mentions_everyone)
     VALUES
-      (p_id, v_channel.workspace_id, p_channel_id, v_root.id, v_quoted.id, v_me, v_body, 2,
+      (p_id, p_id, v_channel.workspace_id, p_channel_id, v_root.id, v_quoted.id, v_me, v_body, 2,
        v_people, v_teams, v_everyone)
     RETURNING * INTO v_msg;
   EXCEPTION WHEN unique_violation THEN
@@ -910,7 +912,7 @@ LANGUAGE sql
 STABLE
 SET search_path = ''
 AS $fn$
-  SELECT (p_msg.author_id = p_user AND public.chat_has_cap(p_msg.workspace_id, p_user, 'post'))
+  SELECT coalesce(p_msg.author_id = p_user AND public.chat_has_cap(p_msg.workspace_id, p_user, 'post'), false)
       OR public.chat_has_cap(p_msg.workspace_id, p_user, 'delete_others')
 $fn$;
 
@@ -959,6 +961,7 @@ CREATE OR REPLACE FUNCTION public.chat_op_restore(p_message_id uuid)
 AS $function$
 DECLARE
   v_msg public.chat_messages;
+  v_unpin boolean;
 BEGIN
   SELECT * INTO v_msg FROM public.chat_messages WHERE id = p_message_id FOR UPDATE;
   IF v_msg.id IS NULL THEN
@@ -973,14 +976,22 @@ BEGIN
   END IF;
   -- The Undo is the deleter's (while they may still delete it), or anyone's who
   -- may delete others' messages: an author can't undo a delete by someone else.
-  IF NOT ((v_msg.deleted_by = auth.uid() AND public.chat__may_delete(v_msg, auth.uid()))
+  IF NOT (coalesce(v_msg.deleted_by = auth.uid(), false) AND public.chat__may_delete(v_msg, auth.uid())
           OR public.chat_has_cap(v_msg.workspace_id, auth.uid(), 'delete_others')) THEN
     RAISE EXCEPTION 'Only the person who deleted it can undo that.' USING ERRCODE = '42501';
   END IF;
   IF clock_timestamp() - v_msg.deleted_at > interval '10 seconds' THEN
     RAISE EXCEPTION 'It''s too late to undo that delete.' USING ERRCODE = '22023';
   END IF;
-  UPDATE public.chat_messages SET deleted_at = NULL, deleted_by = NULL
+  -- Back unpinned if its conversation filled its 100 pins meanwhile.
+  v_unpin := v_msg.pinned_at IS NOT NULL
+             AND (SELECT count(*) FROM public.chat_messages p
+                   WHERE p.channel_id = v_msg.channel_id AND p.pinned_at IS NOT NULL
+                     AND p.deleted_at IS NULL) >= 100;
+  UPDATE public.chat_messages
+     SET deleted_at = NULL, deleted_by = NULL,
+         pinned_at = CASE WHEN v_unpin THEN NULL ELSE pinned_at END,
+         pinned_by = CASE WHEN v_unpin THEN NULL ELSE pinned_by END
    WHERE id = p_message_id
   RETURNING * INTO v_msg;
   IF v_msg.parent_id IS NOT NULL THEN
@@ -1201,8 +1212,9 @@ BEGIN
 END;
 $function$;
 
--- v1 edit: converts v1 markup and edits through the v2 op. Its third argument
--- has no default any more, so a two-argument call means the v2 op.
+-- v1 edit: converts v1 markup and edits through the v2 op (text that already
+-- holds v2 references goes as it is). Its third argument has no default any
+-- more, so a two-argument call means the v2 op.
 DROP FUNCTION IF EXISTS public.chat_op_edit(uuid, text, uuid[]);
 CREATE FUNCTION public.chat_op_edit(p_message_id uuid, p_body text, p_mentioned_user_ids uuid[])
  RETURNS chat_messages
@@ -1211,6 +1223,11 @@ CREATE FUNCTION public.chat_op_edit(p_message_id uuid, p_body text, p_mentioned_
  SET search_path TO 'public'
 AS $function$
 BEGIN
+  -- v1's composer opens an edit with the stored text; once it holds a v2
+  -- reference (`moduo://…`, which v1 markup never has) it is v2 already.
+  IF coalesce(p_body, '') ~ 'moduo://[a-z]' THEN
+    RETURN public.chat_op_edit(p_message_id, p_body);
+  END IF;
   RETURN public.chat_op_edit(p_message_id, public.chat__v1_to_v2(coalesce(p_body, '')));
 END;
 $function$;

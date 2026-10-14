@@ -62,6 +62,8 @@ BEGIN
                   AND m.body = format('hi moduo://person/%s *soon* @channel', test.id('C'))
                   AND m.body_text = 'hi  soon @channel',
     'send v1: the v1 markup is converted and stored as v2, keyed by the v1 client id', v);
+  PERFORM test.ok(m.client_id = test.id('client:one'),
+    'send v1: the row carries the v1 client id, so v1 screens match their optimistic row');
   PERFORM test.ok(m.mentioned_user_ids = ARRAY[test.id('C')] AND m.mentions_everyone,
     'send v1: who it mentions is read from the text, not from the list or the switch the client passed');
   PERFORM test.ok((SELECT payload ->> 'excerpt' FROM public.module_activity
@@ -122,6 +124,12 @@ BEGIN
     'edit: two named arguments mean the v2 op (no conversion, no ambiguity)', v);
   v := test.as_user('B', format($q$SELECT public.chat_op_edit(%L::uuid, 'positional'::text)$q$, v_id));
   PERFORM test.ok(v = 'ok 1', 'edit: two positional arguments mean the v2 op', v);
+  -- v1's composer opens an edit with the stored (v2) text: it isn't converted twice.
+  v := test.as_user('B', format($q$SELECT public.chat_op_edit(p_message_id => %L, p_body => %L, p_mentioned_user_ids => '{}')$q$,
+    v_id, format('ping moduo://person/%s *now*', test.id('C'))));
+  PERFORM test.ok(v = 'ok 1' AND (test.msg(v_id)).body = format('ping moduo://person/%s *now*', test.id('C'))
+                  AND (test.msg(v_id)).mentioned_user_ids = ARRAY[test.id('C')],
+    'edit v1: text that already holds a v2 reference is kept as it is', v);
 
   v := test.as_user('C', format($q$SELECT public.chat_op_react(p_message_id => %L, p_emoji => '👍')$q$, v_id));
   PERFORM test.ok(v = 'ok 1' AND (test.msg(v_id)).reactions -> '👍' = jsonb_build_array(test.id('C')::text),

@@ -13,8 +13,8 @@
 - **`chat_op_pin(message, pinned)`**: messages only, ≤ 100 live pins per conversation, posters (managers in an announcement channel) and holders of "Manage any channel".
 - **`chat_op_typing`** (live signature): the sender must be a member of the conversation who hasn't left; people only (no service role).
 - **Activity (#15):** one attributed row with ids only for `chat.message_edit`, `chat.message_delete`, `chat.message_restore`, `chat.react`, `chat.pin`, written only when something changed; a plain send and typing write none.
-- **Guards with codes:** `chat_op__guard` / `chat_op__channel` answer `42501` (not allowed, the plan included) and `P0002` (gone); input errors are `22023`.
-- **`chat_has_cap`:** capabilities belong to the workspace's people: anyone without a membership row (and not the owner) has none; a custom role still reads as member.
+- **Guards with codes:** `chat_op__guard` / `chat_op__channel` answer `42501` (not allowed, the plan included) and `P0002` (gone, a deleted conversation included); input errors are `22023`.
+- **`chat_has_cap`** restated: the owner, then members by their role (a custom role reads as member).
 - **`share_chat_message_guard`** reads the parsed `mentions_everyone` flag, not the words.
 - **The v1 signatures, one release:** `chat_op_send` (7 arguments), `chat_op_edit` (3, its default dropped) and `chat_op_react` (2, a toggle) convert v1 markup with `chat__v1_to_v2` and call the v2 ops. `chat_op_agent_post` (live body) converts its v1 markup and writes v2 rows. v1's screens keep working with no client change.
 - **Tests:** `supabase/tests/chat_ops.test.sql` (messages half, 122 checks), `supabase/tests/chat_wrappers.test.sql` (19); CV-1's `chat_foundation`, `chat_privacy` and `chat_convert` files updated for the new truth (codes, v2 rows, members-only typing, the default).
@@ -38,7 +38,9 @@
 - **Mentions read by a SQL twin of the client's parser** · agent · `chat__mentions` walks blocks as `chat__body_text` does and scans inline runs as `parseInline` does (code spans, escapes, titled references, link targets, emphasis pairing on the line, a reference ending a word), proven at 0 differences on 23,367 bodies · rejected: a regex over the raw text (counts code and escaped text), trusting the client's list.
 - **`@channel` without "Mention everyone" is stored as typed, flag off, no error** · agent (brief: "stored as plain text") · the composer says so; v1 refused the send · rejected: refusing, rewriting the text.
 - **A resent id answers only its author, in its conversation, while they can read it**; any other use of an existing id is `22023 That message id is already used.` and returns nothing · agent.
-- **The v1 send wrapper uses v1's client id as the message id**; a row sent before the release is found by `(author, client_id, channel)` · agent · one idempotency key from now on · rejected: writing `client_id` on new rows.
+- **The v1 send wrapper uses v1's client id as the message id**; a row sent before the release is found by `(author, client_id, channel)` · agent · one idempotency key from now on.
+- **Every send writes `client_id = id` while the wrappers live** · agent (validator) · v1 screens and old builds match their optimistic row by `client_id`; without it each v1 send showed twice · rejected: stopping at once (round-3 §2.3's "new sends stop writing it" moves to CV-23).
+- **The v1 edit wrapper passes text that already holds a v2 reference (`moduo://…`) through unconverted** · agent (validator) · v1's composer opens an edit with the stored text, and converting it again would escape its references · rejected: converting always.
 - **The 2-argument `chat_op_react` stays as a toggle wrapper too** (the brief named send and edit) · agent · v1 screens and old desktop builds keep reacting for the release; CV-23 drops it · rejected: dropping it (reactions fail on old builds).
 - **The 3-argument `chat_op_edit` lost its default** (DROP + CREATE, grants re-stated) · agent · otherwise a 2-argument call is ambiguous in SQL and in PostgREST.
 - **The bell rings as v1 rang it until CV-5** (mentioned people, the conversation on `@channel`, the chain's people and the quoted message's author on a reply), only people who can read the conversation, never the sender; teams aren't expanded (CV-5) · agent.
@@ -52,6 +54,7 @@
 - **Someone a manager removed doesn't post their way back** into a public channel (`42501 You were removed from this conversation.`); someone who left on their own posts and is back in · agent · CV-2b's join decides whether a removed person may rejoin.
 - **Who pins:** whoever can post there (managers only in an announcement channel) and holders of "Manage any channel" · agent (round-3 "Poster").
 - **Edit needs the author's role to still post** · agent.
+- **A restored pinned message comes back unpinned when its conversation filled its 100 pins meanwhile** · agent.
 - **Activity rows only on a change** (a resent react, pin, delete or restore writes none); entity `chat_channel`, payload `message_id` (+ `key`/`on`, `pinned`) · agent.
 - **`chat_op_agent_post`: one change** · agent · the default flipped to v2, so it converts its v1 markup and writes `format_version = 2` (and quotes its thread root); CV-21 redefines it.
 - **Excerpt:** the stored form's first 140 characters without half a reference (CV-1's format, drawn by CV-11) · agent.
@@ -67,7 +70,7 @@
 ## For later blocks
 
 - **CV-2b:** `chat_op_remove_member` must stamp `removed_by` (send reads it to refuse a removed person); `chat_op__reader(channel)` is the plan-free guard for mark_read / mark_unread / set_prefs / leave; the guards now raise `42501` / `P0002`; extend `chat_ops.test.sql` (cast and helpers are there; `test.msg`/`test.acts` are VOLATILE on purpose). `chat_unread_counts` should count replies (they are stream messages now).
-- **CV-3:** v2 send is `chat_op_send(p_id, p_channel_id, p_body, p_reply_to_id)`; a resend returns the stored row; `22023 That message id is already used.` means the id is someone else's; a length refusal carries `DETAIL` `{"length":…,"max":8000}`. `client_id` is no longer written.
+- **CV-3:** v2 send is `chat_op_send(p_id, p_channel_id, p_body, p_reply_to_id)`; a resend returns the stored row; `22023 That message id is already used.` means the id is someone else's; a length refusal carries `DETAIL` `{"length":…,"max":8000}`; a deleted conversation answers `P0002`. `client_id` equals `id` on new rows until CV-23; don't read it.
 - **CV-5:** replace the bell block at the end of `chat_op_send` (and add edit's first-time mentions there); team mentions are stored, not expanded.
 - **CV-7a:** draw the `@channel` pill only when `mentions_everyone` (otherwise it is the typed text); a deleted row's body is blank after the window.
 - **CV-7c:** the key check of `chat_op_react(uuid, text, boolean)` becomes `reactions__key_ok`; the 2-argument wrapper calls it.
@@ -75,7 +78,7 @@
 - **CV-10:** `chat__mentions_inline` collects only people and teams; "Mentioned in" needs the other references too.
 - **CV-12:** a new reply reopens a wrapped chain inside `chat_op_send`.
 - **CV-21:** `chat_op_agent_post` now writes v2 rows; redefine from its live body.
-- **CV-23:** drop the wrappers `chat_op_send(uuid, text, uuid, uuid[], boolean, uuid, text)`, `chat_op_edit(uuid, text, uuid[])`, `chat_op_react(uuid, text)`.
+- **CV-23:** drop the wrappers `chat_op_send(uuid, text, uuid, uuid[], boolean, uuid, text)`, `chat_op_edit(uuid, text, uuid[])`, `chat_op_react(uuid, text)`, and stop writing `client_id` in `chat_op_send`.
 - **Orchestrator:** this migration redefines `chat_op_typing` and `chat_op_send` from their live bodies and must apply after the v1 hotfix; when its stamp is re-cut, update `MIGRATION` in `src/features/chat/privacy-rules.test.ts`.
 
 ## Manual checklist (step → expect → surface)
