@@ -53,12 +53,17 @@ const SKIP_TAGS = new Set([
   "TITLE",
 ]);
 
+/** RF-1's chip marker (`ENTITY_REF_ATTR` in spine/references/reference-node.tsx, kept free of React here). */
+const ENTITY_REF_ATTR = "data-lexical-entity-ref";
+
 /** Characters a paste never keeps: zero-width spaces and byte-order marks. */
-const INVISIBLE = /[​﻿]/g;
+const INVISIBLE = /[\u200b\ufeff]/g;
+/** A no-break space (pasted text keeps the space, not the glyph). */
+const NBSP = /\u00a0/g;
 
 /** Plain text as the composer would hold it: one paragraph, a line break per line. */
 export function plainTextToBlocks(text: string): Block[] {
-  const lines = text.replace(/\r\n?/g, "\n").replace(INVISIBLE, "").replace(/ /g, " ").split("\n");
+  const lines = text.replace(/\r\n?/g, "\n").replace(INVISIBLE, "").replace(NBSP, " ").split("\n");
   const c: Inline[] = [];
   lines.forEach((line, i) => {
     if (i > 0) c.push({ t: "br" });
@@ -85,7 +90,7 @@ class Lines {
       v = v.replace(/[ \t\n\r\f]+/g, " ");
       if (this.atSpace()) v = v.replace(/^ /, "");
     }
-    v = v.replace(/ /g, " ");
+    v = v.replace(NBSP, " ");
     if (!v) return;
     const last = this.c[this.c.length - 1];
     if (last?.t === "text" && last.m === 0) last.v += v;
@@ -141,6 +146,25 @@ function preText(node: Node): string {
   return out;
 }
 
+/**
+ * RF-1's chips in pasted HTML (what the shared editor puts on the clipboard):
+ * the reference or the day, never the chip's text, which may be an old
+ * stored title (`reference-node.tsx` exportDOM) or just the type's word.
+ */
+function chipLeaf(el: Element): Inline | null {
+  if (el.nodeName === "SPAN" && el.hasAttribute(ENTITY_REF_ATTR)) {
+    return {
+      t: "ref",
+      type: el.getAttribute("data-entity-type") ?? "",
+      id: el.getAttribute("data-entity-id") ?? "",
+    };
+  }
+  if (el.nodeName === "TIME" && el.hasAttribute("data-moduo-date")) {
+    return { t: "date", day: el.getAttribute("data-moduo-date") ?? "" };
+  }
+  return null;
+}
+
 /** What an image stands for in text: an emoji's character or `:name:`; nothing else. */
 function imageText(img: Element): string {
   const named =
@@ -174,6 +198,11 @@ class Builder {
     const el = child as Element;
     const tag = el.nodeName;
     if (SKIP_TAGS.has(tag)) return;
+    const chip = chipLeaf(el);
+    if (chip) {
+      lines.push(chip);
+      return;
+    }
     if (tag === "BR") {
       lines.br();
       return;
@@ -279,6 +308,11 @@ class Builder {
     const el = child as Element;
     const tag = el.nodeName;
     if (SKIP_TAGS.has(tag)) return;
+    const chip = chipLeaf(el);
+    if (chip) {
+      this.para.push(chip);
+      return;
+    }
     if (tag === "UL" || tag === "OL") {
       this.list(el);
       return;

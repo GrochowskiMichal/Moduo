@@ -1,5 +1,5 @@
 -- DRAFT (CV-0 spike 4) — not a migration. CV-1's `…_chat_v2_convert_v1`
--- adopts these two functions; see docs/build/chat-v2/CV-0-S4.md.
+-- adopts these three functions; see docs/build/chat-v2/CV-0-S4.md.
 --
 -- chat__v1_to_v2(body): a v1 chat body → the v2 stored form (specs/chat-v2.md
 -- Assumptions #3, #27; round-3 §2.6). IMMUTABLE, pure text in, text out.
@@ -16,11 +16,16 @@
 --                            blank line (v1 drew a mid-line fence as a block);
 --                            a one-line ```x``` keeps x as the code (v1 took
 --                            it for the language of an empty block: a bug)
---   `code`, URLs           → kept; inside code nothing changes
+--   `code`                 → the same code; re-fenced so v2 reads it the same
+--                            (outer spaces kept, two spans in a row joined)
+--   URLs                   → kept; where v2 would cut a bare URL elsewhere
+--                            (a trailing `_*~}`, unbalanced brackets, glued
+--                            to a word, a backslash) it becomes `[url](url)`
 --   anything v1 drew as plain text but v2 would read as syntax is escaped:
---   a stray `*`, `` ` `` or `~`, a backslash before punctuation, a literal
---   `moduo://`. Not escaped, on purpose (accepted as better formatting,
---   round-3 §2.6): lines starting "- ", "* ", "+ ", "1. " and `[text](url)`.
+--   a stray `*`, `` ` `` or `~`, every backslash, a literal `moduo://`, a
+--   `>` after 1–3 spaces at a line start. Not escaped, on purpose (accepted
+--   as better formatting, round-3 §2.6): lines starting "- ", "+ ", "1. "
+--   and `[text](url)` (a line starting "* " stays text: its `*` is escaped).
 --
 -- Tokens inside code spans and fences stay literal (they were literal in v1).
 -- `set search_path from current`: CV-1 creates them in `public`; the spike
@@ -39,6 +44,11 @@ declare
   v_inner text;
   v_lead text;
   v_trail text;
+  v_code text;
+  v_code_prev text;
+  v_code_start integer := -1;
+  v_code_end integer := -1;
+  v_url text;
 begin
   if p_text is null or p_text = '' then
     return p_text;
@@ -58,13 +68,26 @@ begin
       || '|~~((?:[^~\n]|~(?!~))+)~~'                                                   -- 8 strike
       || '|(?<![A-Za-z0-9_*])\*((?![[:space:]])[^*\n]+?(?<![[:space:]]))\*(?![A-Za-z0-9_*])' -- 9 *italic*
       || '|(?<![A-Za-z0-9_])_((?![[:space:]])[^_\n]+?(?<![[:space:]]))_(?![A-Za-z0-9_])'   -- 10 _italic_
-      || '|(\\)(?=[!-/:-@\[-`{-~])'                                                    -- 11 a backslash v2 would read as an escape
+      || '|(\\)'                                                                       -- 11 a backslash (v2 reads \ as an escape)
       || '|([^`<h*~_\\]+|.)',                                                          -- 12 plain text
       'g'
     ) as x
   loop
     if m[1] is not null then
-      v_out := v_out || m[1];
+      -- v2 pairs backtick runs by length and trims one padding space each
+      -- side: pad spans that start and end with a space, and join two spans
+      -- in a row (`a``b` was two spans in v1; v2 would read one `a``b`).
+      v_code := substr(m[1], 2, length(m[1]) - 2);
+      if v_code_end = length(v_out) then
+        v_code := v_code_prev || v_code;
+        v_out := left(v_out, v_code_start);
+      end if;
+      v_code_prev := v_code;
+      v_code_start := length(v_out);
+      v_out := v_out || '`'
+        || case when v_code ~ '^ .* $' and v_code !~ '^ +$' then ' ' || v_code || ' ' else v_code end
+        || '`';
+      v_code_end := length(v_out);
     elsif m[2] is not null then
       v_out := v_out || 'moduo://person/' || lower(m[2]);
     elsif m[3] is not null then
@@ -75,8 +98,21 @@ begin
     elsif m[4] is not null then
       v_out := v_out || 'moduo://' || m[4] || '/' || lower(m[5]);
     elsif m[6] is not null then
-      -- v1 drew the whole URL as a link: v2 must not read emphasis inside it.
-      v_out := v_out || regexp_replace(m[6], '([*`~])', '\\\1', 'g');
+      -- v1 drew the whole URL as a link: v2 must not read syntax inside it,
+      -- and must link exactly these characters. Where v2's bare-URL rule would
+      -- cut elsewhere, write the link out: `[url](url)`.
+      v_url := regexp_replace(m[6], '([\\*`~\[\]])', '\\\1', 'g');
+      if m[6] ~ '[*_~}]$'
+        or m[6] ~ '\\'
+        or v_out ~ '[A-Za-z0-9]$'
+        or length(m[6]) - length(replace(m[6], '(', '')) <> length(m[6]) - length(replace(m[6], ')', ''))
+        or length(m[6]) - length(replace(m[6], '[', '')) <> length(m[6]) - length(replace(m[6], ']', ''))
+        or length(m[6]) - length(replace(m[6], '{', '')) <> length(m[6]) - length(replace(m[6], '}', ''))
+      then
+        v_out := v_out || '[' || v_url || '](' || regexp_replace(m[6], '([\\()<>])', '\\\1', 'g') || ')';
+      else
+        v_out := v_out || v_url;
+      end if;
     elsif m[7] is not null or m[8] is not null then
       v_inner := coalesce(m[7], m[8]);
       v_lead := substring(v_inner from '^[[:space:]]*');
@@ -102,6 +138,18 @@ begin
   end loop;
   return v_out;
 end
+$fn$;
+
+-- Prose between fences: inline conversion, then a `>` after 1–3 spaces at a
+-- line start is escaped (v1 drew it as text; v2 would start a quote).
+create or replace function chat__v1_prose(p_text text)
+returns text
+language sql
+immutable
+parallel safe
+set search_path from current
+as $fn$
+  select regexp_replace(chat__v1_inline(p_text), '(^|\n)( {1,3})>', '\1\2\\>', 'g')
 $fn$;
 
 create or replace function chat__v1_to_v2(p_body text)
@@ -130,10 +178,10 @@ begin
       '^((?:[^`]|`(?!``))*)```([a-zA-Z0-9_+-]*)(\n?)((?:[^`]|`(?!``))*)```(.*)$'
     );
     exit when m is null;
-    -- Text next to a fence: v1 dropped the blank lines; the spaces go too.
-    v_prose := regexp_replace(m[1], case when v_parts = '{}' then '^\n+|[[:space:]]+$' else '^[[:space:]]+|[[:space:]]+$' end, '', 'g');
+    -- Text before a fence: v1 dropped its blank lines; trailing spaces hang invisibly.
+    v_prose := regexp_replace(m[1], '^\n+|[[:space:]]+$', '', 'g');
     if v_prose <> '' then
-      v_parts := v_parts || chat__v1_inline(v_prose);
+      v_parts := v_parts || chat__v1_prose(v_prose);
     end if;
     -- `` ```code``` `` (no line break after the fence): v1 read "code" as the
     -- language (a v1 bug); the person meant the code, so it is the content.
@@ -153,11 +201,11 @@ begin
     v_rest := m[5];
   end loop;
   if v_parts = '{}' then
-    v_out := chat__v1_inline(p_body);
+    v_out := chat__v1_prose(p_body);
   else
-    v_prose := regexp_replace(v_rest, '^[[:space:]]+|\n+$', '', 'g');
+    v_prose := regexp_replace(v_rest, '^\n+|\n+$', '', 'g');
     if v_prose <> '' then
-      v_parts := v_parts || chat__v1_inline(v_prose);
+      v_parts := v_parts || chat__v1_prose(v_prose);
     end if;
     v_out := array_to_string(v_parts, E'\n\n');
   end if;

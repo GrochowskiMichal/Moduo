@@ -15,7 +15,7 @@
 // See docs/build/chat-v2/CV-0-S4.md §Constructs.
 
 import { isAllowedHref } from "./canonical";
-import { splitTextTokens } from "./tokens";
+import { tokenizeLeaves } from "./tokens";
 import {
   type Block,
   BOLD,
@@ -357,7 +357,11 @@ export function parseInline(src: string): Inline[] {
       const plainLabel = label.every((a) => a.k === "text" || a.k === "delim" || a.k === "code");
       if (dest && plainLabel && label.length > 0) {
         const uri = WHOLE_URI.exec(dest.href);
-        if (uri || isAllowedHref(dest.href)) {
+        // A Moduo target must be a real reference or day; any other link http(s) or mailto.
+        const ok = uri
+          ? uri[2] !== undefined || isIsoDay(uri[1] as string)
+          : isAllowedHref(dest.href);
+        if (ok) {
           atoms.length = lb;
           // An earlier `[` can't open a link around this one: it's text now.
           atoms.forEach((a, k) => {
@@ -406,7 +410,7 @@ export function parseInline(src: string): Inline[] {
   }
   // Merge text the atoms split, then find URLs, `@channel` and `:name:` in it.
   const leaves = atomsToLeaves(atoms);
-  return leaves.flatMap((leaf): Inline[] => (leaf.t === "text" ? splitTextTokens(leaf) : [leaf]));
+  return tokenizeLeaves(leaves);
 }
 
 // ── blocks ──────────────────────────────────────────────────────────────────

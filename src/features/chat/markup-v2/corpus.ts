@@ -505,6 +505,12 @@ const hand: EditorCase[] = [
     canonical: true,
   },
   {
+    name: "link with a control character keeps its text only",
+    doc: [P(link("https://x.com/\u0001y", t("ctl")))],
+    stored: "ctl",
+    canonical: true,
+  },
+  {
     name: "auto-link node is text",
     doc: [P(t("see "), autolink("https://moduo.app"))],
     stored: "see https://moduo.app",
@@ -847,6 +853,21 @@ export const PASTE_CASES: PasteCase[] = [
     html: `<style>p{color:red}</style><script>alert(1)</script><p><span style="color:red;font-family:Comic Sans">red</span> <img src="cat.png" alt="a cat"> <u>under</u> <mark>hi</mark></p>`,
     stored: "red under hi",
   },
+  {
+    name: "Moduo: copied chips come back as references, never their text",
+    html: `<p dir="ltr"><span>see </span><span data-lexical-entity-ref="true" data-entity-type="task" data-entity-id="${ID.task}">Secret launch plan</span><span> and </span><span data-lexical-entity-ref="true" data-entity-type="note" data-entity-id="${ID.note}" data-ref-v="2">note</span><span> by </span><time data-moduo-date="2026-10-20" datetime="2026-10-20">Oct 20</time></p>`,
+    stored: `see moduo://task/${ID.task} and moduo://note/${ID.note} by moduo://date/2026-10-20`,
+  },
+  {
+    name: "Moduo: a broken chip leaves nothing, not its text",
+    html: `<p>a <span data-lexical-entity-ref="true" data-entity-type="task" data-entity-id="nope">Secret</span> b</p>`,
+    stored: "a  b",
+  },
+  {
+    name: "web: a numbered list near the 9-digit limit keeps every item",
+    html: `<ol start="999999999"><li>a</li><li>b</li></ol>`,
+    stored: "999999998. a\n999999999. b",
+  },
 ];
 
 // ── 5. stored text written elsewhere (v1 leftovers, agents): read leniently ────
@@ -906,4 +927,14 @@ export const STORED_CASES: StoredCase[] = [
   },
   { name: "nested emphasis from an agent", input: "***a** b*", canonical: "***a** b*" },
   { name: "single tilde is text", input: "~a~", canonical: "~a~" },
+  {
+    name: "a Moduo link target that isn't a real day is text",
+    input: "[x](moduo://date/2026-02-30)",
+    canonical: "\\[x](moduo\\://date/2026-02-30)",
+  },
+  {
+    name: "@channel glued to a word across marks is text",
+    input: "a**@channel**",
+    canonical: "a**@channel**",
+  },
 ];

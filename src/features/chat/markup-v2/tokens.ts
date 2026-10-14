@@ -3,7 +3,7 @@
 // split them out of text leaves with this one function, so the two always
 // agree on where a token starts and ends.
 
-import type { ChannelLeaf, EmojiLeaf, Marks, TextLeaf, UrlLeaf } from "./types";
+import type { ChannelLeaf, EmojiLeaf, Inline, Marks, TextLeaf, UrlLeaf } from "./types";
 
 /** A custom emoji name: 2–32 of `a-z 0-9 _ + -` with at least one letter. */
 export const EMOJI_NAME_RE = /^(?=[a-z0-9_+-]*[a-z])[a-z0-9_+-]{2,32}$/;
@@ -123,6 +123,35 @@ export function splitTextTokens(
     last = f.end;
   }
   if (last < text.length) out.push({ t: "text", v: text.slice(last), m });
+  return out;
+}
+
+/** Whether a leaf's last character is whitespace (so `@channel` after it starts a token). */
+function endsInSpace(leaf: Inline): boolean {
+  if (leaf.t === "text" || leaf.t === "code" || leaf.t === "url") return /\s$/.test(leaf.v);
+  return false;
+}
+
+/**
+ * Split every text leaf into its tokens, then hold `@channel` to the grammar
+ * across leaves too: glued to what comes before (`a**@channel**`) it is text,
+ * so it never reaches everyone by accident. The parser and the canonical tree
+ * both finish with this, so they agree.
+ */
+export function tokenizeLeaves(leaves: readonly Inline[]): Inline[] {
+  const out: Inline[] = [];
+  for (const leaf of leaves.flatMap((l): Inline[] => (l.t === "text" ? splitTextTokens(l) : [l]))) {
+    const prev = out[out.length - 1];
+    const item: Inline =
+      leaf.t === "channel" && prev && prev.t !== "br" && !endsInSpace(prev)
+        ? { t: "text", v: "@channel", m: leaf.m }
+        : leaf;
+    if (item.t === "text" && prev?.t === "text" && prev.m === item.m) {
+      out[out.length - 1] = { ...prev, v: prev.v + item.v };
+    } else {
+      out.push(item);
+    }
+  }
   return out;
 }
 

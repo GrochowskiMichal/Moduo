@@ -1,4 +1,4 @@
-// The hand-made v1 fixture of spike 4 and what the drafted `chat__v1_to_v2`
+// The hand-made v1 fixture of spike 4 (65 bodies) and what the drafted `chat__v1_to_v2`
 // (docs/build/chat-v2/drafts/chat_v1_to_v2.sql) made of each body on the local
 // stack, 2026-10-14: [id, v1 body, v2 body]. CV-1 asserts its migration's
 // function against these pairs; ./v1-compare.test.ts checks every pair draws
@@ -38,18 +38,18 @@ export const V1_FIXTURE: ReadonlyArray<readonly [string, string, string]> = [
     "`<@11111111-1111-4111-8111-111111111111>` and `_x_`",
   ],
   ["f13", "```\n<!channel> _x_ **y**\n```", "```\n<!channel> _x_ **y**\n```"],
-  ["f14", "see ```code``` here", "see\n\n```\ncode\n```\n\nhere"],
+  ["f14", "see ```code``` here", "see\n\n```\ncode\n```\n\n here"],
   ["f15", "```js\nconst a = 1;\n```", "```js\nconst a = 1;\n```"],
   ["f16", "2*3*4 = 24 and 5 * 3", "2\\*3\\*4 = 24 and 5 \\* 3"],
   ["f17", "a `` b", "a \\`\\` b"],
   ["f18", "~5 min ~~ maybe", "\\~5 min \\~\\~ maybe"],
-  ["f19", "C:\\Users\\me and \\*", "C:\\Users\\me and \\\\\\*"],
+  ["f19", "C:\\Users\\me and \\*", "C:\\\\Users\\\\me and \\\\\\*"],
   [
     "f20",
     "moduo://task/d037b0b7-4125-415d-bef9-72662d6b58e6",
     "moduo\\://task/d037b0b7-4125-415d-bef9-72662d6b58e6",
   ],
-  ["f21", "https://x.com/a_b_*c*", "https://x.com/a_b_\\*c\\*"],
+  ["f21", "https://x.com/a_b_*c*", "[https://x.com/a_b_\\*c\\*](https://x.com/a_b_*c*)"],
   ["f22", "Plan:\n- one\n- two", "Plan:\n- one\n- two"],
   ["f23", "1. first\n2. second", "1. first\n2. second"],
   ["f24", "[docs](https://moduo.app)", "[docs](https://moduo.app)"],
@@ -84,11 +84,30 @@ export const V1_FIXTURE: ReadonlyArray<readonly [string, string, string]> = [
   ["f45", "> line one\n> <!channel> line two", "> line one\n> @channel line two"],
   ["f46", "```spacing: 12px\nradius: 8px```", "```\nspacing: 12px\nradius: 8px\n```"],
   ["f47", "```js \nx```", "```js\nx\n```"],
-  ["f48", "text ```a``` and ```b``` end", "text\n\n```\na\n```\n\nand\n\n```\nb\n```\n\nend"],
+  ["f48", "text ```a``` and ```b``` end", "text\n\n```\na\n```\n\n and\n\n```\nb\n```\n\n end"],
   [
     "f49",
     "**bold _and italic <@11111111-1111-4111-8111-111111111111>_**",
     "**bold *and italic moduo://person/11111111-1111-4111-8111-111111111111***",
   ],
   ["f50", "ping <!channel>, <!channel>!", "ping @channel, @channel!"],
+  ["f51", "**C:\\Users\\**", "**C:\\\\Users\\\\**"],
+  ["f52", "_a\\_", "*a\\\\*"],
+  ["f53", "~~a\\~~", "~~a\\\\~~"],
+  ["f54", "**\\**", "**\\\\**"],
+  ["f55", "*a\\*", "*a\\\\*"],
+  ["f56", "`a``b`", "`ab`"],
+  ["f57", "` a `", "`  a  `"],
+  ["f58", "  > x", "  \\> x"],
+  ["f59", "see https://x.com/a_ ok", "see [https://x.com/a_](https://x.com/a_) ok"],
+  ["f60", "go https://x.com/a} ok", "go [https://x.com/a}](https://x.com/a}) ok"],
+  ["f61", "xhttps://x.com/a", "x[https://x.com/a](https://x.com/a)"],
+  [
+    "f62",
+    "https://en.wikipedia.org/wiki/Mars_(planet)",
+    "[https://en.wikipedia.org/wiki/Mars_(planet](https://en.wikipedia.org/wiki/Mars_\\(planet))",
+  ],
+  ["f63", "see https://x.com/[a] ok", "see [https://x.com/\\[a](https://x.com/[a)] ok"],
+  ["f64", "a\n  > b", "a\n  \\> b"],
+  ["f65", "**bold https://x.com/a* x**", "**bold [https://x.com/a\\*](https://x.com/a*) x**"],
 ];

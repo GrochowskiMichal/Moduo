@@ -88,6 +88,19 @@ describe("inline constructs", () => {
     expect(parseInline("x@channel @channels")).toEqual([
       { t: "text", v: "x@channel @channels", m: 0 },
     ]);
+    // Glued to a word across a mark boundary it is text too, so nobody is pinged.
+    const glued = parseStored("a**@channel**");
+    expect(glued).toEqual([
+      {
+        t: "p",
+        c: [
+          { t: "text", v: "a", m: 0 },
+          { t: "text", v: "@channel", m: BOLD },
+        ],
+      },
+    ]);
+    expect(mentionsOf(glued).channel).toBe(false);
+    expect(mentionsOf(parseStored("**@channel** now")).channel).toBe(true);
   });
 
   it(":custom: emoji, never inside times", () => {

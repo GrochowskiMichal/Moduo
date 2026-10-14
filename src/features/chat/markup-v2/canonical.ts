@@ -16,7 +16,7 @@
 // 6. a code block's language is one word or nothing; ids are lower case.
 
 import { type MarkLeaf, type MarkStep, maskOf, planMarks } from "./plan";
-import { splitTextTokens, tokenText } from "./tokens";
+import { tokenizeLeaves, tokenText } from "./tokens";
 import {
   ALL_MARKS,
   type Block,
@@ -26,14 +26,20 @@ import {
   LANG_RE,
   type LinkLeaf,
   type TextLeaf,
+  UUID_SOURCE,
 } from "./types";
 
-/** Link targets the stored form keeps. */
+/** A reference id: exactly a uuid, as the parser reads it. */
+const UUID = new RegExp(`^${UUID_SOURCE}$`);
+
+/** Link targets the stored form keeps: http(s) and mailto, no whitespace or control characters. */
 export function isAllowedHref(href: string): boolean {
+  for (const ch of href) {
+    const code = ch.charCodeAt(0);
+    if (code < 0x20 || code === 0x7f) return false;
+  }
   return /^(https?:\/\/[^\s]+|mailto:[^\s]+)$/i.test(href);
 }
-
-const _WS = /\s/;
 
 type Flat = Inline;
 
@@ -137,7 +143,7 @@ export function canonicalInline(input: readonly Inline[]): Inline[] {
   let leaves: Flat[] = splitBreaks(input.map(untokenize));
   leaves = leaves.flatMap((leaf): Inline[] => {
     if (leaf.t === "ref") {
-      return /^[a-z][a-z_]{0,31}$/.test(leaf.type) && /^[0-9a-f-]{36}$/i.test(leaf.id)
+      return /^[a-z][a-z_-]{0,31}$/.test(leaf.type) && UUID.test(leaf.id)
         ? [{ t: "ref", type: leaf.type, id: leaf.id.toLowerCase() }]
         : [];
     }
@@ -146,7 +152,7 @@ export function canonicalInline(input: readonly Inline[]): Inline[] {
     return [leaf];
   });
   leaves = stripEdgeSpace(merge(leaves));
-  return leaves.flatMap((leaf): Inline[] => (leaf.t === "text" ? splitTextTokens(leaf) : [leaf]));
+  return tokenizeLeaves(leaves);
 }
 
 /** A link: its target checked, its label canonical; a bad target leaves the label as text. */
@@ -228,5 +234,11 @@ export function canonicalBlocks(input: readonly Block[]): Block[] {
   if (blocks[0]?.t === "p" && (blocks[0] as { c: Inline[] }).c.length === 0) blocks.shift();
   const tail = blocks[blocks.length - 1];
   if (tail?.t === "p" && tail.c.length === 0) blocks.pop();
+  // A numbered list's last number stays within 9 digits (the parser reads no more).
+  for (const block of blocks) {
+    if (block.t === "list" && block.ordered) {
+      block.start = Math.max(0, Math.min(block.start, 999_999_999 - (block.items.length - 1)));
+    }
+  }
   return blocks;
 }

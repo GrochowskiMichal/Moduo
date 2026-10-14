@@ -1,7 +1,7 @@
 // DRAFT (CV-0 spike 4) — the conversion check CV-1 reruns.
 // Input: JSON files of [{ id, v1, v2 }] where v2 = chat__v1_to_v2(v1), exported
 // with psql (see docs/build/chat-v2/CV-0-S4.md §Converter run). For each row:
-// v2 parses (and is a fixed point of the serializer), no v1 token or entity
+// v2 parses (how many are already canonical; re-saving settles), no v1 token or entity
 // label is left, and v2 draws what v1 drew; rows that differ are listed with
 // the accepted Markdown changes counted on their own.
 //
@@ -20,8 +20,10 @@ for (const file of process.argv.slice(2)) {
   const counts = {
     rows: rows.length,
     changedText: 0,
-    parsed: 0,
-    fixedPoint: 0,
+    /** The converted text is already what the serializer writes (editing it changes nothing). */
+    canonicalText: 0,
+    /** Re-saving once settles: serialize(parse(·)) of the converted text is a fixed point. */
+    settlesInOne: 0,
     tokenLeft: 0,
     labelLeft: 0,
     sameDrawing: 0,
@@ -31,10 +33,9 @@ for (const file of process.argv.slice(2)) {
   const different: string[] = [];
   for (const row of rows) {
     if (row.v1 !== row.v2) counts.changedText += 1;
-    const tree = parseStored(row.v2);
-    counts.parsed += 1;
-    if (serializeBlocks(parseStored(serializeBlocks(tree))) === serializeBlocks(tree))
-      counts.fixedPoint += 1;
+    const once = serializeBlocks(parseStored(row.v2));
+    if (once === row.v2) counts.canonicalText += 1;
+    if (serializeBlocks(parseStored(once)) === once) counts.settlesInOne += 1;
     const c = compareConversion(row.v1, row.v2);
     if (c.tokenLeft) counts.tokenLeft += 1;
     if (c.labelLeft) counts.labelLeft += 1;

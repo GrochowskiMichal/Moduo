@@ -64,7 +64,7 @@ export type Block =
 export const UUID_SOURCE =
   "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}";
 /** A reference's type: the registry's word (`task`, `bucket`, `email_thread`, `person`…). */
-export const REF_TYPE_SOURCE = "[a-z][a-z_]{0,31}";
+export const REF_TYPE_SOURCE = "[a-z][a-z_-]{0,31}";
 /** `moduo://type/uuid` or `moduo://date/YYYY-MM-DD`, anchored (sticky use). */
 export const URI_RE = new RegExp(
   `moduo://(?:date/(\\d{4}-\\d{2}-\\d{2})|(${REF_TYPE_SOURCE})/(${UUID_SOURCE}))`,
