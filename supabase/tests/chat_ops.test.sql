@@ -350,6 +350,9 @@ BEGIN
                   AND (test.msg('m1')).reactions = '{}'::jsonb AND (test.msg('m1')).pinned_at IS NULL
                   AND (test.msg('m1')).deleted_at IS NOT NULL,
     'blank job: after the window the text, mentions, reactions and pin are blanked');
+  PERFORM test.ok((SELECT payload ->> 'excerpt' FROM public.module_activity
+                    WHERE payload ->> 'message_id' = test.mid('m1')::text AND op = 'chat.mention') = '',
+    'blank job: the bell''s excerpt of the deleted message is blanked too');
   PERFORM test.ok(public.chat__blank_deleted() = 0, 'blank job: a second run blanks nothing');
   PERFORM test.ok(EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'chat-blank-deleted' AND schedule = '* * * * *'),
     'blank job: chat-blank-deleted runs every minute');
@@ -396,6 +399,12 @@ BEGIN
   PERFORM test.ok(v = '42501 You were removed from this conversation.' AND test.msg('old3') IS NULL
                   AND (SELECT left_at FROM public.chat_members WHERE channel_id = test.ref('OLD') AND user_id = test.id('C')) IS NOT NULL,
     'removed: C, removed from the public OLD, can''t post their way back in', v);
+  PERFORM test.ok(test.as_user('C', format($q$SELECT public.chat_op_edit(%L::uuid, 'edited after removal'::text)$q$, test.mid('old2')))
+                        = '42501 You were removed from this conversation.'
+                  AND test.as_user('C', format($q$SELECT public.chat_op_pin(%L::uuid, true)$q$, test.mid('old2')))
+                        = '42501 Your role can''t pin messages here.'
+                  AND test.as_user('C', format($q$SELECT public.chat_op_react(%L::uuid, '👀'::text, true)$q$, test.mid('old2'))) = 'ok 1',
+    'removed: C can''t edit or pin in OLD any more; reading it, C may still react');
   UPDATE public.chat_members SET left_at = now() WHERE channel_id = test.ref('OLD') AND user_id = test.id('B');
   v := test.send('B', 'OLD', 'old4', 'back again');
   PERFORM test.ok(v = 'ok 1'
@@ -559,13 +568,16 @@ BEGIN
                   AND test.as_user('B', format($q$SELECT public.chat_op_pin(%L::uuid, true)$q$, test.mid('b1'))) = 'ok 1',
     'pin: after one is unpinned there is room again');
   -- Undo of a pinned message's delete doesn't take the conversation past 100.
-  PERFORM test.ok(test.as_user('B', format($q$SELECT public.chat_op_delete(%L::uuid)$q$, test.mid('b1'))) = 'ok 1'
-                  AND test.as_user('B', format($q$SELECT public.chat_op_pin(%L::uuid, true)$q$, test.mid('pin1'))) = 'ok 1'
-                  AND test.as_user('B', format($q$SELECT public.chat_op_restore(%L::uuid)$q$, test.mid('b1'))) = 'ok 1'
+  v := test.as_user('B', format($q$SELECT public.chat_op_delete(%L::uuid)$q$, test.mid('b1')))
+       || test.as_user('B', format($q$SELECT public.chat_op_pin(%L::uuid, true)$q$, test.mid('pin1')))
+       || test.as_user('B', format($q$SELECT public.chat_op_restore(%L::uuid)$q$, test.mid('b1')));
+  PERFORM test.ok(v = 'ok 1ok 1ok 1'
                   AND (test.msg('b1')).pinned_at IS NULL
                   AND (SELECT count(*) FROM public.chat_messages
-                        WHERE channel_id = test.ref('Q') AND pinned_at IS NOT NULL AND deleted_at IS NULL) = 100,
-    'pin: a message restored into a full conversation comes back unpinned');
+                        WHERE channel_id = test.ref('Q') AND pinned_at IS NOT NULL AND deleted_at IS NULL) = 100
+                  AND (SELECT count(*) FROM public.module_activity WHERE op = 'chat.pin'
+                        AND payload ->> 'message_id' = test.mid('b1')::text AND payload ->> 'pinned' = 'false') = 1,
+    'pin: a message restored into a full conversation comes back unpinned (and says so)', v);
 END;
 $$;
 

@@ -113,10 +113,10 @@ DECLARE
   v_id uuid := test.id('client:one');
 BEGIN
   v := test.as_user('B', format($q$SELECT public.chat_op_edit(p_message_id => %L, p_body => %L, p_mentioned_user_ids => '{}')$q$,
-    v_id, format('now <@%s> _later_', test.id('A'))));
+    v_id, format('now <@%s> *later*', test.id('A'))));
   PERFORM test.ok(v = 'ok 1' AND (test.msg(v_id)).body = format('now moduo://person/%s *later*', test.id('A'))
                   AND (test.msg(v_id)).mentioned_user_ids = ARRAY[test.id('A')] AND NOT (test.msg(v_id)).mentions_everyone,
-    'edit v1: converted, mentions read again', v);
+    'edit v1: a v2 message keeps its text, its v1 tokens become references, mentions are read again', v);
   v := test.as_user('C', format($q$SELECT public.chat_op_edit(p_message_id => %L, p_body => 'not mine', p_mentioned_user_ids => '{}')$q$, v_id));
   PERFORM test.ok(v = '42501 You can only edit your own messages.', 'edit v1: the v2 rules hold (only the author edits)', v);
   v := test.as_user('B', format($q$SELECT public.chat_op_edit(p_message_id => %L, p_body => 'v2 _as typed_')$q$, v_id));
@@ -124,12 +124,18 @@ BEGIN
     'edit: two named arguments mean the v2 op (no conversion, no ambiguity)', v);
   v := test.as_user('B', format($q$SELECT public.chat_op_edit(%L::uuid, 'positional'::text)$q$, v_id));
   PERFORM test.ok(v = 'ok 1', 'edit: two positional arguments mean the v2 op', v);
-  -- v1's composer opens an edit with the stored (v2) text: it isn't converted twice.
+  -- v1's composer opens an edit with the stored (v2) text: it isn't converted
+  -- twice, and the tokens its pickers add become references.
   v := test.as_user('B', format($q$SELECT public.chat_op_edit(p_message_id => %L, p_body => %L, p_mentioned_user_ids => '{}')$q$,
-    v_id, format('ping moduo://person/%s *now*', test.id('C'))));
-  PERFORM test.ok(v = 'ok 1' AND (test.msg(v_id)).body = format('ping moduo://person/%s *now*', test.id('C'))
-                  AND (test.msg(v_id)).mentioned_user_ids = ARRAY[test.id('C')],
-    'edit v1: text that already holds a v2 reference is kept as it is', v);
+    v_id, format('ping moduo://person/%s *now* and <@%s>', test.id('C'), test.id('A'))));
+  PERFORM test.ok(v = 'ok 1'
+                  AND (test.msg(v_id)).body = format('ping moduo://person/%s *now* and moduo://person/%s', test.id('C'), test.id('A'))
+                  AND (test.msg(v_id)).mentioned_user_ids = ARRAY[test.id('C'), test.id('A')],
+    'edit v1: a v2 message''s text is kept, a person picked in v1 becomes a mention', v);
+  v := test.as_user('C', format($q$SELECT public.chat_op_edit(p_message_id => %L, p_body => 'from _after_', p_mentioned_user_ids => '{}')$q$,
+    test.id('old')));
+  PERFORM test.ok(v = 'ok 1' AND (test.msg(test.id('old'))).body = 'from *after*' AND (test.msg(test.id('old'))).format_version = 2,
+    'edit v1: a v1 message''s text is converted whole', v);
 
   v := test.as_user('C', format($q$SELECT public.chat_op_react(p_message_id => %L, p_emoji => '👍')$q$, v_id));
   PERFORM test.ok(v = 'ok 1' AND (test.msg(v_id)).reactions -> '👍' = jsonb_build_array(test.id('C')::text),

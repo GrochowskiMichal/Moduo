@@ -487,7 +487,7 @@ BEGIN
   people := '{}';
   teams := '{}';
   everyone := false;
-  IF p_body IS NULL OR p_body = '' THEN
+  IF p_body IS NULL OR p_body !~ '(moduo|@channel)' THEN
     RETURN;
   END IF;
   -- The block walk is chat__body_text's; it collects the inline runs.
@@ -631,6 +631,62 @@ AS $fn$
          IS DISTINCT FROM (s.n, s.last_at, s.people);
 $fn$;
 
+-- A message's text: not empty, at most 8,000 stored characters (references
+-- included), refused with the count and nothing kept.
+CREATE OR REPLACE FUNCTION public.chat__check_body(p_body text)
+RETURNS void
+LANGUAGE plpgsql IMMUTABLE
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_len integer := char_length(coalesce(p_body, ''));
+BEGIN
+  IF btrim(coalesce(p_body, ''), E' \n\t') = '' THEN
+    RAISE EXCEPTION 'A message can''t be empty.' USING ERRCODE = '22023';
+  END IF;
+  IF v_len > 8000 THEN
+    RAISE EXCEPTION 'That message is % characters long; the most is 8,000.', to_char(v_len, 'FM999,999')
+      USING ERRCODE = '22023', DETAIL = json_build_object('length', v_len, 'max', 8000)::text;
+  END IF;
+END
+$fn$;
+
+-- Who a message in this conversation mentions, as stored: people who can read
+-- the conversation, live teams of its workspace, and @channel only when the
+-- writer may mention everyone.
+CREATE OR REPLACE FUNCTION public.chat__read_mentions(
+  p_channel public.chat_channels, p_body text, p_actor uuid,
+  OUT people uuid[], OUT teams uuid[], OUT everyone boolean)
+LANGUAGE plpgsql STABLE
+SET search_path = ''
+AS $fn$
+BEGIN
+  SELECT mt.people, mt.teams, mt.everyone INTO people, teams, everyone
+    FROM public.chat__mentions(p_body) mt;
+  SELECT coalesce(array_agg(u ORDER BY o), '{}') INTO people
+    FROM unnest(people) WITH ORDINALITY t(u, o)
+   WHERE public.chat__can_read_channel_as(p_channel.id, u);
+  SELECT coalesce(array_agg(u ORDER BY o), '{}') INTO teams
+    FROM unnest(teams) WITH ORDINALITY t(u, o)
+   WHERE EXISTS (SELECT 1 FROM public.teams tm
+                  WHERE tm.id = u AND tm.workspace_id = p_channel.workspace_id AND tm.deleted_at IS NULL);
+  everyone := everyone AND public.chat_has_cap(p_channel.workspace_id, p_actor, 'mention_everyone');
+END
+$fn$;
+
+-- Whether a manager removed this person from the conversation (CV-2b's
+-- chat_op_remove_member stamps removed_by): they still read a public one, but
+-- don't post, edit or pin there.
+CREATE OR REPLACE FUNCTION public.chat__was_removed(p_channel_id uuid, p_user uuid)
+RETURNS boolean
+LANGUAGE sql STABLE
+SET search_path = ''
+AS $fn$
+  SELECT EXISTS (SELECT 1 FROM public.chat_members mb
+                  WHERE mb.channel_id = p_channel_id AND mb.user_id = p_user
+                    AND mb.left_at IS NOT NULL AND mb.removed_by IS NOT NULL)
+$fn$;
+
 -- ── 5. The ops ──────────────────────────────────────────────────────────────
 
 -- The share guard reads the parsed @channel flag, not words: "@channel" from a
@@ -677,7 +733,6 @@ DECLARE
   v_me uuid := auth.uid();
   v_channel public.chat_channels;
   v_body text := coalesce(p_body, '');
-  v_len integer;
   v_quoted public.chat_messages;
   v_root public.chat_messages;
   v_msg public.chat_messages;
@@ -709,14 +764,10 @@ BEGIN
   IF v_channel.archived_at IS NOT NULL THEN
     RAISE EXCEPTION 'This channel is archived.' USING ERRCODE = '42501';
   END IF;
-  IF btrim(v_body, E' \n\t') = '' THEN
-    RAISE EXCEPTION 'A message can''t be empty.' USING ERRCODE = '22023';
+  IF public.chat__was_removed(p_channel_id, v_me) THEN
+    RAISE EXCEPTION 'You were removed from this conversation.' USING ERRCODE = '42501';
   END IF;
-  v_len := char_length(v_body);
-  IF v_len > 8000 THEN
-    RAISE EXCEPTION 'That message is % characters long; the most is 8,000.', to_char(v_len, 'FM999,999')
-      USING ERRCODE = '22023', DETAIL = json_build_object('length', v_len, 'max', 8000)::text;
-  END IF;
+  PERFORM public.chat__check_body(v_body);
 
   -- A reply posts in the conversation and joins the chain of what it answers.
   IF p_reply_to_id IS NOT NULL THEN
@@ -731,26 +782,11 @@ BEGIN
      WHERE id = coalesce(v_quoted.parent_id, v_quoted.id) FOR UPDATE;
   END IF;
 
-  -- Who it mentions is read from the text, here: people who can read the
-  -- conversation, live teams of this workspace, @channel only with the switch.
+  -- Who it mentions is read from the text, here.
   SELECT mt.people, mt.teams, mt.everyone INTO v_people, v_teams, v_everyone
-    FROM public.chat__mentions(v_body) mt;
-  SELECT coalesce(array_agg(u ORDER BY o), '{}') INTO v_people
-    FROM unnest(v_people) WITH ORDINALITY t(u, o)
-   WHERE public.chat__can_read_channel_as(p_channel_id, u);
-  SELECT coalesce(array_agg(u ORDER BY o), '{}') INTO v_teams
-    FROM unnest(v_teams) WITH ORDINALITY t(u, o)
-   WHERE EXISTS (SELECT 1 FROM public.teams tm
-                  WHERE tm.id = u AND tm.workspace_id = v_channel.workspace_id AND tm.deleted_at IS NULL);
-  v_everyone := v_everyone AND public.chat_has_cap(v_channel.workspace_id, v_me, 'mention_everyone');
+    FROM public.chat__read_mentions(v_channel, v_body, v_me) mt;
 
-  -- Posting in a public channel joins it, or back after leaving it; someone a
-  -- manager removed doesn't post their way back in.
-  IF EXISTS (SELECT 1 FROM public.chat_members mb
-              WHERE mb.channel_id = p_channel_id AND mb.user_id = v_me
-                AND mb.left_at IS NOT NULL AND mb.removed_by IS NOT NULL) THEN
-    RAISE EXCEPTION 'You were removed from this conversation.' USING ERRCODE = '42501';
-  END IF;
+  -- Posting in a public channel joins it, or back after leaving it.
   INSERT INTO public.chat_members (channel_id, user_id, workspace_id)
   VALUES (p_channel_id, v_me, v_channel.workspace_id)
   ON CONFLICT (channel_id, user_id) DO UPDATE SET left_at = NULL
@@ -758,22 +794,22 @@ BEGIN
 
   -- client_id = id while the v1 wrappers live: v1 screens and old builds match
   -- their optimistic row by it (CV-23 stops writing it).
-  BEGIN
-    INSERT INTO public.chat_messages
-      (id, client_id, workspace_id, channel_id, parent_id, reply_to_id, author_id, body, format_version,
-       mentioned_user_ids, mentioned_team_ids, mentions_everyone)
-    VALUES
-      (p_id, p_id, v_channel.workspace_id, p_channel_id, v_root.id, v_quoted.id, v_me, v_body, 2,
-       v_people, v_teams, v_everyone)
-    RETURNING * INTO v_msg;
-  EXCEPTION WHEN unique_violation THEN
+  INSERT INTO public.chat_messages
+    (id, client_id, workspace_id, channel_id, parent_id, reply_to_id, author_id, body, format_version,
+     mentioned_user_ids, mentioned_team_ids, mentions_everyone)
+  VALUES
+    (p_id, p_id, v_channel.workspace_id, p_channel_id, v_root.id, v_quoted.id, v_me, v_body, 2,
+     v_people, v_teams, v_everyone)
+  ON CONFLICT DO NOTHING
+  RETURNING * INTO v_msg;
+  IF v_msg.id IS NULL THEN
     -- The same id sent twice at once: the first one won.
     SELECT * INTO v_msg FROM public.chat_messages WHERE id = p_id;
     IF v_msg.author_id = v_me AND v_msg.channel_id = p_channel_id THEN
       RETURN v_msg;
     END IF;
     RAISE EXCEPTION 'That message id is already used.' USING ERRCODE = '22023';
-  END;
+  END IF;
 
   IF v_root.id IS NOT NULL THEN
     UPDATE public.chat_messages
@@ -846,7 +882,6 @@ DECLARE
   v_msg public.chat_messages;
   v_channel public.chat_channels;
   v_body text := coalesce(p_body, '');
-  v_len integer;
   v_people uuid[];
   v_teams uuid[];
   v_everyone boolean;
@@ -865,29 +900,17 @@ BEGIN
   IF NOT public.chat_has_cap(v_channel.workspace_id, v_me, 'post') THEN
     RAISE EXCEPTION 'Your role can''t post in chat.' USING ERRCODE = '42501';
   END IF;
-  IF btrim(v_body, E' \n\t') = '' THEN
-    RAISE EXCEPTION 'A message can''t be empty.' USING ERRCODE = '22023';
+  IF public.chat__was_removed(v_msg.channel_id, v_me) THEN
+    RAISE EXCEPTION 'You were removed from this conversation.' USING ERRCODE = '42501';
   END IF;
-  v_len := char_length(v_body);
-  IF v_len > 8000 THEN
-    RAISE EXCEPTION 'That message is % characters long; the most is 8,000.', to_char(v_len, 'FM999,999')
-      USING ERRCODE = '22023', DETAIL = json_build_object('length', v_len, 'max', 8000)::text;
-  END IF;
+  PERFORM public.chat__check_body(v_body);
   -- The same text again changes nothing (a resent edit).
   IF v_msg.format_version = 2 AND v_msg.body = v_body THEN
     RETURN v_msg;
   END IF;
 
   SELECT mt.people, mt.teams, mt.everyone INTO v_people, v_teams, v_everyone
-    FROM public.chat__mentions(v_body) mt;
-  SELECT coalesce(array_agg(u ORDER BY o), '{}') INTO v_people
-    FROM unnest(v_people) WITH ORDINALITY t(u, o)
-   WHERE public.chat__can_read_channel_as(v_msg.channel_id, u);
-  SELECT coalesce(array_agg(u ORDER BY o), '{}') INTO v_teams
-    FROM unnest(v_teams) WITH ORDINALITY t(u, o)
-   WHERE EXISTS (SELECT 1 FROM public.teams tm
-                  WHERE tm.id = u AND tm.workspace_id = v_channel.workspace_id AND tm.deleted_at IS NULL);
-  v_everyone := v_everyone AND public.chat_has_cap(v_channel.workspace_id, v_me, 'mention_everyone');
+    FROM public.chat__read_mentions(v_channel, v_body, v_me) mt;
 
   UPDATE public.chat_messages
      SET body = v_body,
@@ -984,6 +1007,9 @@ BEGIN
     RAISE EXCEPTION 'It''s too late to undo that delete.' USING ERRCODE = '22023';
   END IF;
   -- Back unpinned if its conversation filled its 100 pins meanwhile.
+  IF v_msg.pinned_at IS NOT NULL THEN
+    PERFORM pg_advisory_xact_lock(hashtext('chat_pin:' || v_msg.channel_id::text));
+  END IF;
   v_unpin := v_msg.pinned_at IS NOT NULL
              AND (SELECT count(*) FROM public.chat_messages p
                    WHERE p.channel_id = v_msg.channel_id AND p.pinned_at IS NOT NULL
@@ -999,12 +1025,17 @@ BEGIN
   END IF;
   PERFORM public.module_activity_log(v_msg.workspace_id, 'chat', 'chat_channel', v_msg.channel_id,
     'chat.message_restore', jsonb_build_object('message_id', v_msg.id));
+  IF v_unpin THEN
+    PERFORM public.module_activity_log(v_msg.workspace_id, 'chat', 'chat_channel', v_msg.channel_id,
+      'chat.pin', jsonb_build_object('message_id', v_msg.id, 'pinned', false));
+  END IF;
   RETURN v_msg;
 END;
 $function$;
 
--- The minute job: blanks what a deleted message held once its window passed.
--- Its rows reach clients as updates (updated_at moves).
+-- The minute job: blanks what a deleted message held once its window passed,
+-- and the bell's excerpt of it. Its rows reach clients as updates (updated_at
+-- moves).
 CREATE OR REPLACE FUNCTION public.chat__blank_deleted(p_limit integer DEFAULT 5000)
 RETURNS integer
 LANGUAGE plpgsql
@@ -1023,18 +1054,30 @@ BEGIN
      ORDER BY m.deleted_at
      LIMIT greatest(coalesce(p_limit, 5000), 1)
      FOR UPDATE SKIP LOCKED
+  ), blanked AS (
+    UPDATE public.chat_messages m
+       SET body = '',
+           mentioned_user_ids = '{}',
+           mentioned_team_ids = '{}',
+           mentions_everyone = false,
+           reactions = '{}'::jsonb,
+           pinned_at = NULL,
+           pinned_by = NULL
+      FROM due
+     WHERE m.id = due.id
+    RETURNING m.id, m.workspace_id, m.channel_id
+  ), bell AS (
+    -- The bell's excerpt of a deleted message goes with its text.
+    UPDATE public.module_activity a
+       SET payload = jsonb_set(a.payload, '{excerpt}', '""'::jsonb)
+      FROM blanked b
+     WHERE a.workspace_id = b.workspace_id AND a.module = 'chat'
+       AND a.entity_type = 'chat_channel' AND a.entity_id = b.channel_id
+       AND a.payload ->> 'message_id' = b.id::text
+       AND coalesce(a.payload ->> 'excerpt', '') <> ''
+    RETURNING 1
   )
-  UPDATE public.chat_messages m
-     SET body = '',
-         mentioned_user_ids = '{}',
-         mentioned_team_ids = '{}',
-         mentions_everyone = false,
-         reactions = '{}'::jsonb,
-         pinned_at = NULL,
-         pinned_by = NULL
-    FROM due
-   WHERE m.id = due.id;
-  GET DIAGNOSTICS v_count = ROW_COUNT;
+  SELECT count(*) INTO v_count FROM blanked;
   RETURN v_count;
 END
 $fn$;
@@ -1126,6 +1169,7 @@ BEGIN
   END IF;
   IF NOT public.chat_has_cap(v_channel.workspace_id, v_me, 'manage_any')
      AND NOT (public.chat_has_cap(v_channel.workspace_id, v_me, 'post')
+              AND NOT public.chat__was_removed(v_channel.id, v_me)
               AND (NOT v_channel.managers_only
                    OR EXISTS (SELECT 1 FROM public.chat_channel_managers cm
                                WHERE cm.channel_id = v_channel.id AND cm.user_id = v_me))) THEN
@@ -1134,6 +1178,8 @@ BEGIN
   IF p_pinned = (v_msg.pinned_at IS NOT NULL) THEN
     RETURN v_msg;
   END IF;
+  -- One pin at a time per conversation, so the cap holds.
+  PERFORM pg_advisory_xact_lock(hashtext('chat_pin:' || v_msg.channel_id::text));
   IF p_pinned AND (SELECT count(*) FROM public.chat_messages p
                     WHERE p.channel_id = v_msg.channel_id AND p.pinned_at IS NOT NULL
                       AND p.deleted_at IS NULL) >= 100 THEN
@@ -1212,8 +1258,24 @@ BEGIN
 END;
 $function$;
 
--- v1 edit: converts v1 markup and edits through the v2 op (text that already
--- holds v2 references goes as it is). Its third argument has no default any
+-- The v1 composer's tokens in otherwise v2 text: `<@id>` → a person,
+-- `<!channel>` → @channel, `<moduo:type:id|label>` → the reference.
+CREATE OR REPLACE FUNCTION public.chat__v1_tokens(p_body text)
+RETURNS text
+LANGUAGE sql IMMUTABLE PARALLEL SAFE
+SET search_path = ''
+AS $fn$
+  SELECT regexp_replace(
+           regexp_replace(
+             regexp_replace(p_body,
+               '<@([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})>',
+               'moduo://person/\1', 'g'),
+             '<!channel>', '@channel', 'g'),
+           '<moduo:([a-z_]{1,32}):([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\|[^>\n]{0,200}>',
+           'moduo://\1/\2', 'g')
+$fn$;
+
+-- v1 edit: edits through the v2 op. Its third argument has no default any
 -- more, so a two-argument call means the v2 op.
 DROP FUNCTION IF EXISTS public.chat_op_edit(uuid, text, uuid[]);
 CREATE FUNCTION public.chat_op_edit(p_message_id uuid, p_body text, p_mentioned_user_ids uuid[])
@@ -1223,12 +1285,13 @@ CREATE FUNCTION public.chat_op_edit(p_message_id uuid, p_body text, p_mentioned_
  SET search_path TO 'public'
 AS $function$
 BEGIN
-  -- v1's composer opens an edit with the stored text; once it holds a v2
-  -- reference (`moduo://…`, which v1 markup never has) it is v2 already.
-  IF coalesce(p_body, '') ~ 'moduo://[a-z]' THEN
-    RETURN public.chat_op_edit(p_message_id, p_body);
+  -- v1's composer opens an edit with the stored text: a v1 row's text is v1
+  -- markup (converted whole); a v2 row's text is v2 already, and only the v1
+  -- tokens its composer adds (a person picked, @channel, an item) are rewritten.
+  IF (SELECT m.format_version FROM public.chat_messages m WHERE m.id = p_message_id) = 1 THEN
+    RETURN public.chat_op_edit(p_message_id, public.chat__v1_to_v2(coalesce(p_body, '')));
   END IF;
-  RETURN public.chat_op_edit(p_message_id, public.chat__v1_to_v2(coalesce(p_body, '')));
+  RETURN public.chat_op_edit(p_message_id, public.chat__v1_tokens(coalesce(p_body, '')));
 END;
 $function$;
 
@@ -1373,6 +1436,10 @@ BEGIN
     'chat__mentions_inline(text)',
     'chat__mentions_ref_at(text)',
     'chat__excerpt(text)',
+    'chat__check_body(text)',
+    'chat__read_mentions(public.chat_channels, text, uuid)',
+    'chat__was_removed(uuid, uuid)',
+    'chat__v1_tokens(text)',
     'chat__chain_refresh(uuid)',
     'chat__may_delete(public.chat_messages, uuid)',
     'chat__blank_deleted(integer)',
