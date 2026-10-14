@@ -39,10 +39,12 @@ export const e2ePort = resolvePort();
 export const e2eAppUrl = `http://127.0.0.1:${e2ePort}`;
 
 /**
- * Whether a `playwright test` run will include `name`: true when no `--project`
- * was given (Playwright then runs every project), else only when it was named.
- * Playwright starts every `webServer` entry whatever the projects, so the config
- * uses this to leave Storybook alone for an e2e-only run.
+ * Whether a `playwright test` run may include project `name`: true when no
+ * `--project` was given (Playwright then runs every project) or one is a
+ * wildcard, else only when it was named (Playwright matches names
+ * case-insensitively). Playwright starts every `webServer` entry whatever the
+ * projects, so the config uses this to leave Storybook alone for an e2e-only
+ * run and the app server alone for a visual-only one.
  */
 export function runsProject(name: string, argv: string[] = process.argv): boolean {
   const named: string[] = [];
@@ -53,7 +55,8 @@ export function runsProject(name: string, argv: string[] = process.argv): boolea
       for (let j = i + 1; j < argv.length && !argv[j].startsWith("-"); j++) named.push(argv[j]);
     }
   }
-  return named.length === 0 || named.includes(name);
+  const wanted = name.toLowerCase();
+  return named.length === 0 || named.some((n) => /[*?]/.test(n) || n.toLowerCase() === wanted);
 }
 
 if (import.meta.main) {

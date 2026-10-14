@@ -47,19 +47,8 @@ if [ -z "${E2E_BASE_URL:-}" ] && [ "$(bun scripts/local/env.ts which 2>/dev/null
   say "this worktree's .env.local points at the cloud project. Run 'bun run env:local' first (DOCKER_CONTEXT=orbstack if it can't find the stack)."
   exit 2
 fi
-# The config starts this worktree's own dev server and never reuses one, so a
-# listener already on its port (a leftover of yours, or a path-hash collision
-# with another worktree) would fail the run late. Say so now; never kill it.
-if [ -z "${E2E_BASE_URL:-}" ]; then
-  appurl="$(bun scripts/agent/e2e-env.ts 2>/dev/null | head -n 1)"
-  port="${appurl#http://127.0.0.1:}"; port="${port%% *}"
-  holder_pid="$(lsof -nP -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null | head -n 1)"
-  if [ -n "$holder_pid" ]; then
-    say "port $port (this worktree's dev server) is already in use by pid $holder_pid: $(ps -o command= -p "$holder_pid" 2>/dev/null | cut -c1-100)"
-    say "stop it only if you started it, or pick another port with E2E_PORT=<free port>."
-    exit 2
-  fi
-fi
+appurl="$(bun scripts/agent/e2e-env.ts 2>/dev/null | head -n 1)"
+port="${appurl#http://127.0.0.1:}"; port="${port%% *}"
 
 # ---- the machine-wide lock ----
 now() { date +%s; }
@@ -67,29 +56,48 @@ mtime() { stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null || echo 0; 
 proc_start() { ps -o lstart= -p "$1" 2>/dev/null | sed 's/^ *//'; }
 nice_tree() { case "$1" in */worktrees/*) echo "${1#*/worktrees/}" ;; *) echo "$1" ;; esac; }
 
-# 0 alive · 1 dead · 2 no pid file yet (being created, or abandoned)
+# alive PID WANTED_START: the process exists and is the one that began then (a
+# reused pid has another start time). If `ps` shows nothing, trust `kill -0`.
+alive() {
+  local got
+  kill -0 "$1" 2>/dev/null || return 1
+  got="$(proc_start "$1")"
+  [ -z "$2" ] || [ -z "$got" ] || [ "$got" = "$2" ]
+}
+
+# 0 alive · 1 dead · 2 no pid file yet (being created, or abandoned). The lock
+# is alive while the wrapper or the run it started (`tree`) is: a wrapper killed
+# with SIGKILL leaves quiet.sh and Playwright running on the stack.
 holder_state() {
-  local pid start
+  local pid tree
   pid="$(cat "$LOCK/pid" 2>/dev/null)"
   [ -n "$pid" ] || return 2
-  start="$(cat "$LOCK/start" 2>/dev/null)"
-  [ -n "$start" ] && [ "$(proc_start "$pid")" = "$start" ] && return 0
+  alive "$pid" "$(cat "$LOCK/start" 2>/dev/null)" && return 0
+  tree="$(cat "$LOCK/tree" 2>/dev/null)"
+  [ -n "$tree" ] && alive "$tree" "$(cat "$LOCK/tree.start" 2>/dev/null)" && return 0
   return 1
 }
 
 reclaim_if_stale() {
-  # Only one waiter at a time judges a lock, so nobody deletes a lock another
-  # waiter just took after the old holder died.
+  # Only one waiter at a time judges a lock, and it removes only the lock it
+  # judged (the holder may have released and another waiter taken the lock
+  # since), so nobody deletes a live lock.
+  local rborn judged st born
   if ! mkdir "$RECLAIM" 2>/dev/null; then
-    [ $(( $(now) - $(mtime "$RECLAIM") )) -gt 30 ] && rmdir "$RECLAIM" 2>/dev/null # its owner died mid-judgement
+    rborn="$(mtime "$RECLAIM")"
+    # its owner died mid-judgement
+    [ "$rborn" -gt 0 ] && [ $(( $(now) - rborn )) -gt 30 ] && rmdir "$RECLAIM" 2>/dev/null
     return 1
   fi
+  judged="$(cat "$LOCK/pid" 2>/dev/null)"
   holder_state
-  local st=$? born
+  st=$?
   born="$(mtime "$LOCK")"
   if [ "$st" -eq 1 ] || { [ "$st" -eq 2 ] && [ "$born" -gt 0 ] && [ $(( $(now) - born )) -gt "$STALE_UNSET" ]; }; then
-    say "removing a stale lock (held by $(nice_tree "$(cat "$LOCK/worktree" 2>/dev/null)"), its process is gone)"
-    rm -rf "$LOCK"
+    if [ "$(cat "$LOCK/pid" 2>/dev/null)" = "$judged" ] && [ "$(mtime "$LOCK")" = "$born" ]; then
+      say "removing a stale lock (held by $(nice_tree "$(cat "$LOCK/worktree" 2>/dev/null)"), its process is gone)"
+      rm -rf "$LOCK"
+    fi
   fi
   rmdir "$RECLAIM" 2>/dev/null
 }
@@ -112,7 +120,8 @@ acquire() {
     fi
     holder="$(cat "$LOCK/worktree" 2>/dev/null)"
     if [ -n "$holder" ] && [ "$(now)" -ge "$next_notice" ]; then
-      since="$(cat "$LOCK/since" 2>/dev/null || now)"
+      since="$(cat "$LOCK/since" 2>/dev/null)"
+      [ -n "$since" ] || since="$(now)" # still being written
       say "waiting for $(nice_tree "$holder")'s e2e run ($(cat "$LOCK/cmd" 2>/dev/null), running $(( ($(now) - since) / 60 ))m)"
       next_notice=$(( $(now) + NOTICE ))
     fi
@@ -132,10 +141,20 @@ kill_tree() {
 }
 
 child=""
-on_signal() { [ -n "$child" ] && kill_tree "$child"; release; exit "$1"; }
+on_signal() {
+  local i=0
+  if [ -n "$child" ]; then
+    kill_tree "$child"
+    # let the run wind down (up to 10s) before the lock goes
+    while [ "$i" -lt 20 ] && kill -0 "$child" 2>/dev/null; do sleep 0.5; i=$((i + 1)); done
+  fi
+  release
+  exit "$1"
+}
 trap release EXIT
 trap 'on_signal 130' INT
-trap 'on_signal 143' TERM HUP
+trap 'on_signal 143' TERM
+trap 'on_signal 129' HUP
 
 args=("$@")
 has_project=0
@@ -145,9 +164,26 @@ done
 [ "$has_project" -eq 1 ] || args+=("--project=e2e")
 
 acquire "$@"
-say "lock taken ($(bun scripts/agent/e2e-env.ts 2>/dev/null | head -n 1 | sed 's/^/this worktree: /'))"
+
+# The config starts this worktree's own dev server and never reuses one, so a
+# listener already on its port fails the run late. Checked now, holding the
+# lock: no other e2e.sh run is on the stack, so this is a leftover, a server
+# you started, or another worktree whose path hashes to the same port. Never
+# kill it for them. (`exit` here releases the lock through the EXIT trap.)
+if [ -z "${E2E_BASE_URL:-}" ]; then
+  holder_pid="$(lsof -nP -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null | head -n 1)"
+  if [ -n "$holder_pid" ]; then
+    say "port $port (this worktree's dev server) is already in use by pid $holder_pid: $(ps -o command= -p "$holder_pid" 2>/dev/null | cut -c1-100)"
+    say "no e2e.sh run holds the lock, so it is a leftover or someone else's server: stop it only if you started it, or pick another port with E2E_PORT=<free port>."
+    exit 2
+  fi
+fi
+
+say "lock taken (this worktree: $appurl)"
 "$here/quiet.sh" e2e bunx playwright test "${args[@]}" &
 child=$!
+printf '%s\n' "$child" >"$LOCK/tree"
+proc_start "$child" >"$LOCK/tree.start"
 wait "$child"
 code=$?
 exit "$code"

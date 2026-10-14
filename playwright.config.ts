@@ -76,17 +76,21 @@ export default defineConfig({
   webServer: E2E_BASE_URL
     ? []
     : [
-        {
-          // Rsbuild directly (not `bun run dev:web`): that script pins
-          // --port 8081 on the command line, which would beat the port here.
-          command: `./node_modules/.bin/rsbuild dev --host 127.0.0.1 --port ${e2ePort}`,
-          env: { MODUO_TARGET: "web" },
-          url: APP_URL,
-          reuseExistingServer: false,
-          timeout: 120_000,
-        },
-        // Playwright starts every entry whatever `--project` says, so
-        // Storybook boots only when the visual project is part of the run.
+        // Playwright starts every entry whatever `--project` says, so each
+        // server boots only when a project that needs it is part of the run.
+        ...(["e2e", "perf", "clips"].some((name) => runsProject(name))
+          ? [
+              {
+                // Rsbuild directly (not `bun run dev:web`): that script pins
+                // --port 8081 on the command line, which would beat the port here.
+                command: `./node_modules/.bin/rsbuild dev --host 127.0.0.1 --port ${e2ePort}`,
+                env: { MODUO_TARGET: "web" },
+                url: APP_URL,
+                reuseExistingServer: false,
+                timeout: 120_000,
+              },
+            ]
+          : []),
         ...(runsProject("visual")
           ? [
               {
