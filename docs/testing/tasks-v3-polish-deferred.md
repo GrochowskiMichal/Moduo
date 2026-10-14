@@ -107,6 +107,9 @@
 - 🔧 Copy link on the desktop app may need the hosted web origin. **Recommend:** verify on a signed desktop build; use `app.moduo.app` there.
 - 🖼 Visual baselines for the Views group and the unsaved-changes line.
 
+## Database hygiene (→ next release train, needs a migration)
+- 🔧 `tasks__editable(uuid)` and `projects__editable(uuid)` are executable by signed-in users, though no policy, view or app code calls them any more (rehearsal §5). **Recommend:** revoke both from `authenticated`.
+
 ## e2e and SQL tests (known items 1–2)
 - 🔧 Every e2e spec signs in as `dev@moduo.local` in one shared workspace, so the e2e project now runs one spec at a time (`workers: 1`, about 5 minutes). **Recommend:** if the suite grows past ~10 minutes, give each spec its own workspace (a `workspaceFor(spec)` helper in `tests/support/local-stack.ts`, with cleanup that soft-deletes) and lift the limit.
 - 🖼 `bun run e2e` also runs the visual project, whose screenshot specs have no baselines yet (they fail until the visual round captures them), and the perf project (its own gate: `bun run perf`).

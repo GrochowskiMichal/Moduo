@@ -529,6 +529,14 @@ _Built and landed locally on `t/maciej/tasks-v3-build` (🟠 LOCAL BUILD MODE in
 
 **Records:** choices PL2-1…PL2-9 in decisions/tasks.md; gotchas: ui.md (a first place set by an effect lands on the Inbox), supabase.md (the CLI follows the Docker context; use OrbStack's socket); checklist [docs/testing/t-maciej-tv-polish-2.md](../docs/testing/t-maciej-tv-polish-2.md).
 
+- [x] **Tasks v3 release** · _done 2026-10-14 · Maciej's go._
+  - **Prod database:** 33 migrations (the 32 in [the rehearsal](../docs/testing/tasks-v3-release-rehearsal.md) §4, with TV-SEC1's `20261013260000` as the 29th) went to prod in one `supabase db push`. Prod's history records them under their file versions.
+  - **Before the push:** a fresh rehearsal on a newly refreshed prod schema, and 22 read-only checks of prod's data against every constraint the release adds, all at 0.
+  - **After the push:** checks of the access check's two forms, the 18 policies, the new tables, task numbers and workspace keys.
+  - **Functions:** `moduo-mcp` (the v3 tools) and the new `push-send`. `push-send` stays dormant until the VAPID secrets and the two Vault entries exist.
+  - **Merges:** #361 (v3 → `maciej`), #363 (`develop` → `maciej`), #364 (TV-SEC1), #362 and #367 (→ `develop`). `prod-app` was promoted the same day.
+  - **Still open:** TV-D7 (not before 2026-10-28, and two desktop releases), and the deferred items that need migrations (next release train).
+
 ## Transactional email — every email Moduo sends · [`specs/transactional-email.md`](./transactional-email.md)
 
 - [x] **TX-1 — Email kit (shared templates, palette, plain text, .ics, Storybook gallery, logo image names, `EMAIL_KINDS`)** · deps: — · _2026-10-08 · `t/maciej/tx-1-email-kit`_ (logo PNGs come from BRAND-1's `public/email/` exports under the size contract in `_shared/email/assets.ts`)
