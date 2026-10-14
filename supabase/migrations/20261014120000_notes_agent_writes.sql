@@ -18,7 +18,7 @@
 
 -- Fail fast instead of queueing every note push and pull behind a long
 -- transaction while these take their table locks.
-SET lock_timeout = '5s';
+SET LOCAL lock_timeout = '5s';
 
 ALTER TABLE public.note_updates
   ADD COLUMN IF NOT EXISTS origin text NOT NULL DEFAULT 'user',
@@ -26,8 +26,6 @@ ALTER TABLE public.note_updates
   ADD COLUMN IF NOT EXISTS user_id uuid NULL;
 
 ALTER TABLE public.note_updates DROP CONSTRAINT IF EXISTS note_updates_origin_check;
--- NOT VALID, then VALIDATE: the scan of existing rows runs without the
--- exclusive lock the ADD takes.
 ALTER TABLE public.note_updates
   ADD CONSTRAINT note_updates_origin_check CHECK (origin IN ('user','api_key')) NOT VALID;
 ALTER TABLE public.note_updates VALIDATE CONSTRAINT note_updates_origin_check;
