@@ -40,6 +40,7 @@ describe("DEFAULT_PREFERENCES", () => {
         agents: true,
         overdueTasks: false,
         storage: true,
+        bookings: true,
       },
       confirmBeforeQuit: false,
       keepInMenuBar: true,
@@ -94,6 +95,7 @@ describe("sanitizePreferences", () => {
         agents: true,
         overdueTasks: false,
         storage: true,
+        bookings: true,
       },
       confirmBeforeQuit: true,
       keepInMenuBar: true,
@@ -145,6 +147,7 @@ describe("sanitizePreferences", () => {
       agents: true,
       overdueTasks: false,
       storage: true,
+      bookings: true,
     });
     expect(
       sanitizePreferences({ notifications: { unblocked: false, waiting: true } }).notifications
@@ -337,6 +340,8 @@ describe("notificationTypeForOp", () => {
     expect(notificationTypeForOp("tasks.reminder")).toBeNull();
     expect(notificationTypeForOp("attachments.storage_80")).toBe("storage");
     expect(notificationTypeForOp("attachments.storage_95")).toBe("storage");
+    expect(notificationTypeForOp("calendar.booking_create")).toBe("bookings");
+    expect(notificationTypeForOp("calendar.booking_cancel")).toBe("bookings");
     // TV-D13: your team's mute; tasks back from someone who left are yours.
     expect(notificationTypeForOp("tasks.routed")).toBe("teams");
     expect(notificationTypeForOp("tasks.team_check_back")).toBe("teams");
@@ -364,9 +369,11 @@ describe("isNotificationEnabled", () => {
       agents: false,
       overdueTasks: false,
       storage: false,
+      bookings: false,
     };
     expect(isNotificationEnabled("comments.add", prefs)).toBe(true);
     expect(isNotificationEnabled("attachments.storage_95", prefs)).toBe(false);
+    expect(isNotificationEnabled("calendar.booking_create", prefs)).toBe(false);
     expect(isNotificationEnabled("tasks.assigned", prefs)).toBe(false);
     expect(isNotificationEnabled("tasks.completed", prefs)).toBe(false);
     expect(isNotificationEnabled("email.follow_up_due", prefs)).toBe(true);
@@ -399,6 +406,7 @@ describe("isNotificationEnabled", () => {
       agents: false,
       overdueTasks: false,
       storage: false,
+      bookings: false,
     };
     expect(isNotificationEnabled("tasks.reminder", allOff)).toBe(true);
     expect(isNotificationEnabled("workspace.invite_accepted", allOff)).toBe(true);
