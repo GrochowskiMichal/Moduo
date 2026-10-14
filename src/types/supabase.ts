@@ -2312,6 +2312,7 @@ export type Database = {
         Row: {
           created_at: string
           created_by: string | null
+          expires_at: string | null
           id: string
           key_hash: string
           key_prefix: string
@@ -2324,6 +2325,7 @@ export type Database = {
         Insert: {
           created_at?: string
           created_by?: string | null
+          expires_at?: string | null
           id?: string
           key_hash: string
           key_prefix: string
@@ -2336,6 +2338,7 @@ export type Database = {
         Update: {
           created_at?: string
           created_by?: string | null
+          expires_at?: string | null
           id?: string
           key_hash?: string
           key_prefix?: string
@@ -4912,9 +4915,15 @@ export type Database = {
         Returns: boolean
       }
       workspace_api_keys_create: {
-        Args: { p_name: string; p_scopes?: Json; p_workspace_id: string }
+        Args: {
+          p_expires_in_days?: number
+          p_name: string
+          p_scopes?: Json
+          p_workspace_id: string
+        }
         Returns: {
           created_at: string
+          expires_at: string
           id: string
           key_prefix: string
           name: string

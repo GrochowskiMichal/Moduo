@@ -49,6 +49,14 @@ describe("notes manifest (AC13)", () => {
     );
   });
 
+  it("keeps NR-1's personal organizing ops off the agent surface (AC18)", () => {
+    // Favorites are per human and filing is a sidebar gesture: agents create
+    // (roots land in the Inbox) and move, they don't curate someone's sidebar.
+    const rpcs = notesModuleManifest.ops.map((o) => o.rpc);
+    expect(rpcs).not.toContain("notes_op_set_favorite");
+    expect(rpcs).not.toContain("notes_op_file");
+  });
+
   it("every op is workspace-scoped and well-formed", () => {
     for (const op of notesModuleManifest.ops) {
       expect(op.op).toMatch(/^[a-z_]+\.[a-z_]+$/);

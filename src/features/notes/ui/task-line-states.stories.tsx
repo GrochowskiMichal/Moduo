@@ -74,7 +74,7 @@ type Story = StoryObj;
 
 export const AllStates: Story = {
   render: () => (
-    <div className="notes-editor-v2 max-w-xl space-y-1 bg-background p-4">
+    <div className="notes-editor-v2 max-w-xl space-y-1 bg-card p-4">
       <TaskLineMock title="An open task line" />
       <TaskLineMock title="A completed task line" done />
       <TaskLineMock title="Scheduled work" chip="Tomorrow 09:00" />

@@ -35,6 +35,7 @@ import type { DashboardLayout } from "../features/dashboard/engine/types";
 import type { FocusRunRuntime } from "../features/focus/run-model";
 import type {
   NoteDocPull,
+  NoteFavorite,
   NotesImportRow,
   NotesV2Bundle,
   Note as NoteV2,
@@ -205,6 +206,8 @@ export type WorkspaceApiKey = {
   createdBy: string | null;
   createdAt: string;
   lastUsedAt: string | null;
+  /** When the key stops working; null = never. An expired key stays listed until revoked. */
+  expiresAt: string | null;
 };
 
 /**
@@ -463,6 +466,8 @@ export type ModuoRuntime = {
       workspaceId: string;
       name: string;
       scopes: Record<string, string>;
+      /** Days until the key expires; omitted or null = never. */
+      expiresInDays?: number | null;
     }): Promise<WorkspaceApiKey & { secret: string }>;
     /**
      * Change a live key's per-module scopes without rotating its secret;
@@ -518,8 +523,26 @@ export type ModuoRuntime = {
     setMeta(input: {
       workspaceId: string;
       noteId: string;
-      patch: { icon?: string | null; isPinned?: boolean };
+      patch: { icon?: string | null; isPinned?: boolean; fullWidth?: boolean };
     }): Promise<NoteV2>;
+    /** NR-1: move a note between the stored Inbox and Pages. Filing INTO the
+     * Inbox re-roots a nested note (Inbox only holds roots). */
+    fileNote(input: {
+      workspaceId: string;
+      noteId: string;
+      inInbox: boolean;
+      position?: string;
+    }): Promise<NoteV2>;
+    /** NR-1: the viewer's own favorites in this workspace. Degrades to []
+     * while the table isn't deployed (a sidebar never walls). */
+    listFavorites(workspaceId: string): Promise<NoteFavorite[]>;
+    /** NR-1: add/remove/reorder one of the viewer's favorites. */
+    setFavorite(input: {
+      workspaceId: string;
+      noteId: string;
+      value: boolean;
+      position?: string | null;
+    }): Promise<void>;
     duplicate(input: {
       workspaceId: string;
       sourceNoteId: string;

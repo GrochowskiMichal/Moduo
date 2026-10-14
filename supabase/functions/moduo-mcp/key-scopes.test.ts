@@ -6,6 +6,8 @@
  * docs/testing/t-maciej-api-key-module-scopes.md.
  */
 
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it, rs } from "@rstest/core";
 
 import { MCP_TOOL_NEEDS } from "../_shared/contracts/mcp-key-scopes.ts";
@@ -334,6 +336,26 @@ describe("links_search_entities", () => {
     const { db } = fakeDb({ entities: [...notes, task] }, shared({}));
     expect(await search.handler({}, ctx({ tasks: "view", links: "view" }, db))).toEqual([]);
   });
+
+  it("never returns a conversation, even with Chat on the key: apps read chat through the chat tools", async () => {
+    const channel = {
+      workspace_id: WS,
+      deleted_at: null,
+      entity_type: "chat_channel",
+      entity_id: "channel-1",
+      label: "secret-plans",
+      icon: null,
+    };
+    const { db, queries } = fakeDb({ entities: [channel, task] }, shared({ task: [TASK] }));
+    const found = await search.handler({}, ctx({ chat: "view", tasks: "view", links: "view" }, db));
+    expect(found).toEqual([{ type: "task", id: TASK, label: "zz the task", icon: null }]);
+    const typesAsked = queries[0]?.filters.find((f) => f.column === "entity_type")?.value;
+    expect(typesAsked).not.toContain("chat_channel");
+    expect(typesAsked).not.toContain("chat_message");
+    const chatOnly = fakeDb({ entities: [channel] }, shared({}));
+    expect(await search.handler({ types: ["chat_channel"] }, ctx({ chat: "edit", links: "view" }, chatOnly.db))).toEqual([]);
+    expect(chatOnly.queries).toEqual([]);
+  });
 });
 
 describe("calendar_day", () => {
@@ -388,5 +410,12 @@ describe("calendar_day", () => {
     )) as Row;
     expect(none.blocks).toEqual([]);
     expect(none.strip).toEqual([]);
+  });
+});
+
+describe("connector wiring", () => {
+  it("refuses an expired key in authenticate()", () => {
+    const source = readFileSync(new URL("./index.ts", import.meta.url), "utf8");
+    expect(source).toContain("apiKeyExpired(data.expires_at)");
   });
 });

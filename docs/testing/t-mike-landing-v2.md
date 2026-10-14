@@ -1,10 +1,10 @@
 # Manual test — Moduo landing v2 (`t/mike/landing-v2`)
 
-Surface: **web** — https://www.moduo.app (served from `landing/index.html` on `prod-landing`). Preview locally first with `bun run preview:landing` → http://127.0.0.1:8765.
+Surface: **web** — https://moduo.app (served from `landing/index.html` on `prod-landing`). Preview locally first with `bun run preview:landing` → http://127.0.0.1:8765.
 
 ## Deploy
 
-- [ ] `https://moduo.app` → redirects to `https://www.moduo.app/`
+- [ ] `https://moduo.app` → redirects to `https://moduo.app/` (apex is canonical; www redirects to it)
 - [ ] Page title reads "Moduo — Fire five apps. Keep the work."
 - [ ] No mention of finance, invoices or money anywhere on the page
 - [ ] `https://staging.moduo.app` still shows the staging portal

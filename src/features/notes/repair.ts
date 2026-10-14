@@ -72,13 +72,12 @@ export async function repairNote(
       workspaceId,
       noteId,
       docStateB64: built.docStateB64,
-      // DELIBERATELY null. The stored `body_md` is the FAITHFUL source (the
-      // raw imported file, or what the connector wrote); `deriveBody` is a
-      // lossy walker — it drops link URLs, inline bold/italic markers, line
-      // breaks within a block, and flattens tables. Writing the derivation
-      // back would silently degrade the only good copy, and `body_md` feeds
-      // search (`search_tsv`), the published page, `.md` export and the MCP
-      // connector. The op's `coalesce(p_body_md, body_md)` keeps it intact.
+      // DELIBERATELY null. The stored `body_md` is the source this doc was
+      // built from (the raw imported file, or what the connector wrote). The
+      // derived body is faithful since NR-3, but it is a re-serialization
+      // (normalized markers, spacing), and nothing here changed the content,
+      // so there is no reason to rewrite it. The op's
+      // `coalesce(p_body_md, body_md)` keeps it as is.
       bodyText: null,
       bodyMd: null,
     });

@@ -11,9 +11,9 @@
  */
 
 import { $createCodeNode } from "@lexical/code";
+import { $createHorizontalRuleNode } from "@lexical/extension";
 import { $insertList } from "@lexical/list";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
-import { $createHorizontalRuleNode } from "@lexical/react/LexicalHorizontalRuleNode";
 import { $createHeadingNode, $createQuoteNode } from "@lexical/rich-text";
 import { $setBlocksType } from "@lexical/selection";
 import { $createTableNodeWithDimensions } from "@lexical/table";
@@ -66,10 +66,10 @@ import type { EntityRef } from "@/lib/entity-links";
 import type { ModuoRuntime } from "@/lib/runtime.types";
 import { filterTaskCandidates, shouldOfferCreate } from "../../tasks/task-line";
 import { displayTitle } from "../../title";
-import { $createEmbedNode } from "../nodes/EmbedNode";
-import { $createPageRowNode } from "../nodes/page-row-node";
-import { $createTaskLineNode } from "../nodes/task-line-node";
 import { useNotesEditorBridge } from "../notes-editor-bridge";
+import { $createEmbedNode } from "../schema/embed-node";
+import { $createPageRowNode } from "../schema/page-row-node";
+import { $createTaskLineNode } from "../schema/task-line-node";
 import { filterSlashCommands, type SlashCommandDef, type SlashCommandId } from "../slash-commands";
 import { degradePendingLine, stampMintedTask } from "./task-line-plugin";
 
