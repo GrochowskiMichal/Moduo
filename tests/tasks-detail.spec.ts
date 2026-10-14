@@ -224,14 +224,15 @@ test("AC1.16 — at 280 and 320 px no value in the panel truncates; the label co
   await panel.evaluate((el) => {
     (el.closest("[data-panel-module]") as HTMLElement).style.width = "280px";
   });
-  // The "+" line: whole names, then "+n", inside its own width.
-  const names = await panel.locator("[data-slot=add-property-names]").evaluate((el) => ({
-    scroll: el.scrollWidth,
-    client: el.clientWidth,
-    text: el.textContent ?? "",
-  }));
-  expect(names.scroll, "the + line's names fit").toBeLessThanOrEqual(names.client + 1);
-  expect(names.text).toMatch(/\+\d/);
+  // The "+" line: whole names, then "+n", inside its own width. It re-counts
+  // on its ResizeObserver, a frame after the panel narrows, so wait for it.
+  const namesLine = panel.locator("[data-slot=add-property-names]");
+  await expect
+    .poll(() => namesLine.evaluate((el) => el.scrollWidth <= el.clientWidth + 1), {
+      message: "the + line's names fit",
+    })
+    .toBe(true);
+  await expect(namesLine).toHaveText(/\+\d/);
   // The breadcrumb: one control tall, however long the names.
   const crumbs = await panel.locator('nav[aria-label="Location"]').evaluate((el) => {
     const first = el.querySelector("button");
@@ -242,15 +243,18 @@ test("AC1.16 — at 280 and 320 px no value in the panel truncates; the label co
   });
   expect(crumbs.crumb).toBeGreaterThan(0);
   expect(crumbs.nav, "the breadcrumb is one line").toBeLessThanOrEqual(crumbs.crumb + 1);
-  // The panel's scroll box, with the agent's long line in it.
-  const scroller = await panel.evaluate((el) => {
-    const box = el.querySelector<HTMLElement>(".pane-scroll");
-    return box ? { scroll: box.scrollWidth, client: box.clientWidth } : null;
-  });
-  expect(scroller).not.toBeNull();
-  expect(scroller?.scroll ?? 0, "the panel never scrolls sideways").toBeLessThanOrEqual(
-    (scroller?.client ?? 0) + 1,
-  );
+  // The panel's scroll box, with the agent's long line in it. That line
+  // reflows after the panel narrows too, so wait for it as well.
+  await expect
+    .poll(
+      () =>
+        panel.evaluate((el) => {
+          const box = el.querySelector<HTMLElement>(".pane-scroll");
+          return box ? box.scrollWidth <= box.clientWidth + 1 : false;
+        }),
+      { message: "the panel never scrolls sideways" },
+    )
+    .toBe(true);
 });
 
 test("TV-U10 — the panel's subtasks reorder by drag and by ⌥⇧↑/↓", async ({ page }) => {
