@@ -123,6 +123,35 @@ export function agentLineParts(s: AgentSession, now: Date, who: string = s.agent
   return parts;
 }
 
+/** What the line's chip says (round-1c `.agent`): "Claude · needs you", "Claude · no update for 40m". */
+export type AgentChipTone = "quiet" | "loud" | "stale" | "ready" | "failed";
+
+export function agentChip(
+  s: AgentSession,
+  now: Date,
+  who: string = s.agent,
+): { words: string; tone: AgentChipTone } {
+  if (s.stoppedAt) return { words: `${who} · stopped`, tone: "stale" };
+  const silent = silenceWords(s, now);
+  if (silent) {
+    return { words: `${who} · ${silent.charAt(0).toLowerCase()}${silent.slice(1)}`, tone: "stale" };
+  }
+  const tone: AgentChipTone =
+    s.state === "needs_you"
+      ? "loud"
+      : s.state === "ready"
+        ? "ready"
+        : s.state === "failed"
+          ? "failed"
+          : "quiet";
+  return { words: `${who} · ${STATE_WORDS[s.state]}`, tone };
+}
+
+/** The sentence after the chip: the line without its "who" ("Needs you: … · step 3 of 5 · 2m ago"). */
+export function agentSentence(s: AgentSession, now: Date): string {
+  return agentLineParts(s, now).slice(1).join(" · ");
+}
+
 /** The line as text (screen readers, tests). */
 export function agentLineText(s: AgentSession, now: Date, who: string = s.agent): string {
   return agentLineParts(s, now, who).join(" · ");

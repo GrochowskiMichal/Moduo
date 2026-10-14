@@ -7,10 +7,12 @@ import { describe, expect, it } from "@rstest/core";
 
 import {
   type AgentSession,
+  agentChip,
   agentLineParts,
   agentLineText,
   agentRowMark,
   agentRowMarks,
+  agentSentence,
   agentWho,
   isOwnSession,
   linkWords,
@@ -73,6 +75,23 @@ describe("the one line under the title", () => {
   it("reads 'Stopped (key revoked)' once the key is gone", () => {
     expect(agentLineText(session({ stoppedAt: ago(1) }), NOW)).toBe(
       "Claude · Stopped (key revoked)",
+    );
+  });
+
+  it("splits into a chip and one sentence (round-1c `.lr`)", () => {
+    const needs = session({ state: "needs_you", note: "Which branch?", step: null, steps: null });
+    expect(agentChip(needs, NOW)).toEqual({ words: "Claude · needs you", tone: "loud" });
+    expect(agentSentence(needs, NOW)).toBe("Needs you: Which branch? · 2m ago");
+    expect(agentChip(session(), NOW)).toEqual({ words: "Claude · working", tone: "quiet" });
+    expect(agentSentence(session(), NOW)).toBe("Writing tests · step 3 of 5 · 2m ago");
+    expect(agentChip(session({ state: "ready" }), NOW).tone).toBe("ready");
+    expect(agentChip(session({ state: "failed" }), NOW).words).toBe("Claude · failed");
+    expect(agentChip(session({ updatedAt: ago(40) }), NOW)).toEqual({
+      words: "Claude · no update for 40m",
+      tone: "stale",
+    });
+    expect(agentChip(session({ stoppedAt: ago(1) }), NOW, "Anna's Claude").words).toBe(
+      "Anna's Claude · stopped",
     );
   });
 

@@ -1,9 +1,11 @@
 // The detail panel's header (Tasks v3 §9, research views-board-detail §7):
-// the breadcrumb "● Project › Section" (each part a picker that moves the
-// task; a subtask goes on to "↳ parent"), the handle (click to copy), a slot
-// for who "is on this" (claims, TV-F7), the Focus toggle and ▶ "Focus on
-// this" (call 31), ⤢ full page, and ⋯ (Copy branch name, Copy link, where
-// an import brought it from (TV-U18), Duplicate, Save as template…, Make it a task, Won't do / Reopen, Delete).
+// the breadcrumb "● Project › Section" on one line (each part a picker that
+// moves the task; a subtask goes on to "↳ parent"), the handle at the line's
+// end (click to copy), a slot for who "is on this" (claims, TV-F7), the
+// Focus toggle and ▶ "Focus on this" (call 31), ⤢ full page, and ⋯ (Copy
+// branch name, Copy link, where an import brought it from (TV-U18), Attach
+// files… (MOD-115), Duplicate, Save as template…, Make it a task, Won't do /
+// Reopen, Delete).
 
 import {
   Ban,
@@ -20,6 +22,7 @@ import {
   Lock,
   Maximize2,
   Minimize2,
+  Paperclip,
   Play,
   RotateCcw,
   Trash2,
@@ -83,6 +86,8 @@ type Props = {
   claimSlot?: ReactNode;
   /** ⋯ → Save as template… (TV-D15). Absent: not offered. */
   onSaveAsTemplate?: () => void;
+  /** ⋯ → Attach files…: the strip's file picker, there even with no files yet (MOD-115). */
+  onAttachFiles?: () => void;
 };
 
 const crumb =
@@ -101,6 +106,7 @@ export function TaskDetailHeader({
   onCloseFullPage,
   claimSlot,
   onSaveAsTemplate,
+  onAttachFiles,
 }: Props) {
   const bucketOptions = inbox ? [inbox, ...buckets.filter((b) => b.id !== inbox.id)] : buckets;
   const bucket = bucketOptions.find((b) => b.id === task.bucketId) ?? null;
@@ -141,8 +147,9 @@ export function TaskDetailHeader({
 
   return (
     <div className="flex min-h-(--ctrl-h) shrink-0 items-center gap-1">
-      {/* Names wrap, never truncate (AC1.16). */}
-      <nav aria-label="Location" className="flex min-w-0 flex-1 flex-wrap items-center gap-0.5">
+      {/* One line (MOD-118, round-2b `.dcrumb`): the project and section
+          names shorten with an ellipsis, full names on hover (AC1.16). */}
+      <nav aria-label="Location" className="flex min-w-0 flex-1 flex-nowrap items-center gap-0.5">
         <ProjectCrumb
           task={task}
           bucket={bucket}
@@ -166,36 +173,41 @@ export function TaskDetailHeader({
         {parent ? (
           <>
             <ChevronRight className="size-icon-xs shrink-0 text-muted-foreground/60" aria-hidden />
-            <button
-              type="button"
-              onClick={() => onOpenTask(parent.id)}
-              aria-label={`Parent task: ${parent.title || "Untitled"}`}
-              className={crumb}
-            >
-              <CornerDownRight className="size-icon-xs shrink-0" aria-hidden />
-              <span className="min-w-0 break-words text-left">{parent.title || "Untitled"}</span>
-            </button>
-          </>
-        ) : null}
-        {handle ? (
-          <>
-            <ChevronRight className="size-icon-xs shrink-0 text-muted-foreground/60" aria-hidden />
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  onClick={() => copy(handle, `Copied ${handle}`)}
-                  aria-label={`Copy ${handle}`}
-                  className={cn(crumb, "shrink-0 whitespace-nowrap tabular-nums")}
-                >
-                  {handle}
-                </button>
-              </TooltipTrigger>
-              <TooltipContent>Copy {handle}</TooltipContent>
-            </Tooltip>
+            <CrumbTip label={parent.title || "Untitled"}>
+              <button
+                type="button"
+                onClick={() => onOpenTask(parent.id)}
+                aria-label={`Parent task: ${parent.title || "Untitled"}`}
+                className={crumb}
+              >
+                <CornerDownRight className="size-icon-xs shrink-0" aria-hidden />
+                <span className="min-w-0 truncate text-left">{parent.title || "Untitled"}</span>
+              </button>
+            </CrumbTip>
           </>
         ) : null}
       </nav>
+      {/* The handle is the task's own, not a place: it sits at the line's
+          end, quieter (round-2b `.dcrumb .hdl`), and never shortens. The
+          crumbs' nav grows to fill the line, which pushes it there. */}
+      {handle ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={() => copy(handle, `Copied ${handle}`)}
+              aria-label={`Copy ${handle}`}
+              className={cn(
+                crumb,
+                "shrink-0 whitespace-nowrap text-subtle-foreground tabular-nums",
+              )}
+            >
+              {handle}
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>Copy {handle}</TooltipContent>
+        </Tooltip>
+      ) : null}
 
       {claimSlot ?? <TaskClaimMark workspaceId={task.workspaceId} taskId={task.id} />}
       {open ? <QueueButton task={task} api={api} canEdit={canEdit} /> : null}
@@ -245,6 +257,12 @@ export function TaskDetailHeader({
           {canEdit ? (
             <>
               <DropdownMenuSeparator />
+              {onAttachFiles ? (
+                <DropdownMenuItem onSelect={onAttachFiles}>
+                  <Paperclip aria-hidden />
+                  Attach files…
+                </DropdownMenuItem>
+              ) : null}
               <DropdownMenuItem onSelect={duplicate}>
                 <Copy aria-hidden />
                 Duplicate
@@ -285,6 +303,29 @@ export function TaskDetailHeader({
   );
 }
 
+/**
+ * A crumb's full name on hover, since the breadcrumb shortens it (MOD-118):
+ * the kit tooltip, like the handle's beside it. A disabled crumb (view only)
+ * never opens one, so it carries a native title instead.
+ */
+function CrumbTip({
+  label,
+  disabled = false,
+  children,
+}: {
+  label: string;
+  disabled?: boolean;
+  children: ReactNode;
+}) {
+  if (disabled) return <>{children}</>;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 /** "● Acme rebrand": moves the task to another project (by area, Inbox first). */
 function ProjectCrumb({
   task,
@@ -310,22 +351,26 @@ function ProjectCrumb({
   }
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild disabled={!canEdit}>
-        <button
-          type="button"
-          aria-label={`Project: ${label}. Move to another project`}
-          className={cn(crumb, "-ml-1.5")}
-        >
-          {bucket?.isSystem ? (
-            <Inbox className="size-icon-xs shrink-0" aria-hidden />
-          ) : bucket ? (
-            <span aria-hidden className="size-2 shrink-0 rounded-full bg-muted-foreground/60" />
-          ) : (
-            <Lock className="size-icon-xs shrink-0" aria-hidden />
-          )}
-          <span className="min-w-0 break-words text-left">{label}</span>
-        </button>
-      </PopoverTrigger>
+      <CrumbTip label={label} disabled={!canEdit}>
+        <PopoverTrigger asChild disabled={!canEdit}>
+          <button
+            type="button"
+            aria-label={`Project: ${label}. Move to another project`}
+            // A disabled button never opens a tooltip: the native one stands in.
+            title={canEdit ? undefined : label}
+            className={cn(crumb, "-ml-1.5")}
+          >
+            {bucket?.isSystem ? (
+              <Inbox className="size-icon-xs shrink-0" aria-hidden />
+            ) : bucket ? (
+              <span aria-hidden className="size-2 shrink-0 rounded-full bg-muted-foreground/60" />
+            ) : (
+              <Lock className="size-icon-xs shrink-0" aria-hidden />
+            )}
+            <span className="min-w-0 truncate text-left">{label}</span>
+          </button>
+        </PopoverTrigger>
+      </CrumbTip>
       <PopoverContent align="start" className="w-64 p-0">
         <Command>
           <CommandInput placeholder="Move to…" />
@@ -379,15 +424,19 @@ function SectionCrumb({
   const [open, setOpen] = useState(false);
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild disabled={!canEdit}>
-        <button
-          type="button"
-          aria-label={`Section: ${section?.name ?? "No section"}. Move to another section`}
-          className={crumb}
-        >
-          <span className="min-w-0 break-words text-left">{section?.name ?? "No section"}</span>
-        </button>
-      </PopoverTrigger>
+      <CrumbTip label={section?.name ?? "No section"} disabled={!canEdit}>
+        <PopoverTrigger asChild disabled={!canEdit}>
+          <button
+            type="button"
+            aria-label={`Section: ${section?.name ?? "No section"}. Move to another section`}
+            // A disabled button never opens a tooltip: the native one stands in.
+            title={canEdit ? undefined : (section?.name ?? "No section")}
+            className={crumb}
+          >
+            <span className="min-w-0 truncate text-left">{section?.name ?? "No section"}</span>
+          </button>
+        </PopoverTrigger>
+      </CrumbTip>
       <PopoverContent align="start" className="w-56 p-0">
         <Command>
           <CommandInput placeholder="Section…" />

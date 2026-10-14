@@ -17,6 +17,7 @@ import {
   sanitizeConditions,
   toggleFilterValue,
 } from "./filter-model";
+import { TooltipProvider } from "./tooltip";
 
 beforeAll(() => {
   globalThis.ResizeObserver ??= class {
@@ -168,8 +169,9 @@ function Harness({
     setValue(next);
     onChange?.(next);
   };
+  // FilterButton carries a tooltip (its icon-only state in a narrow toolbar).
   return (
-    <>
+    <TooltipProvider>
       <FilterButton dimensions={DIMENSIONS} value={value} onValueChange={update} />
       <FilterBar
         dimensions={DIMENSIONS}
@@ -179,7 +181,7 @@ function Harness({
         totalCount={76}
       />
       <output data-testid="state">{JSON.stringify(value)}</output>
-    </>
+    </TooltipProvider>
   );
 }
 
@@ -293,7 +295,7 @@ describe("FilterMenu", () => {
       const [open, setOpen] = useState(true);
       const [value, setValue] = useState<FilterCondition[]>([]);
       return (
-        <>
+        <TooltipProvider>
           <button type="button" onClick={() => setOpen((o) => !o)}>
             toggle
           </button>
@@ -304,7 +306,7 @@ describe("FilterMenu", () => {
             open={open}
             onOpenChange={setOpen}
           />
-        </>
+        </TooltipProvider>
       );
     }
     render(<Controlled />);
