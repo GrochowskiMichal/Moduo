@@ -508,6 +508,11 @@ describe("the task's actions sit in the panel's title row (MOD-118 follow-up, ro
     const t = task({ number: 142 });
     renderInRightPanel(t, api(t), { onOpenFullPage: () => {} });
     expect(labels(titleActions())).toEqual(["Add to Focus", "Open full page", "More actions"]);
+    // All three on one rung, the small control size (the toggle was 32 px).
+    const heights = within(titleActions())
+      .getAllByRole("button")
+      .map((b) => [b.style.height, b.style.width]);
+    expect(heights).toEqual(Array(3).fill(["var(--ctrl-h-sm)", "var(--ctrl-h-sm)"]));
     // ▶ "Focus on this" went into ⋯: no icon of its own.
     expect(screen.queryByRole("button", { name: "Focus on this" })).toBeNull();
 

@@ -34,7 +34,6 @@ import { type ReactNode, useContext, useState } from "react";
 import { toast } from "sonner";
 
 import { TitleActions } from "../../../components/app/title-actions";
-import { Button } from "../../../components/ui/button";
 import {
   Command,
   CommandEmpty,
@@ -555,27 +554,23 @@ function QueueButton({
   return (
     <>
       {claimMark}
-      <Tooltip>
-        <TooltipTrigger asChild>
-          {/* An icon, like ⤢ and ⋯ beside it in the title row: it shows its
-              state ("In Focus"), and "Details ▾" keeps the room (280 px). */}
-          <Button
-            type="button"
-            variant={queued ? "secondary" : "ghost"}
-            size="icon"
-            aria-pressed={queued}
-            aria-label={queued ? "In Focus" : "Add to Focus"}
-            onClick={() => api.toggleQueue(task.id)}
-            className="shrink-0"
-          >
-            <ListChecks className={queued ? "text-primary" : "text-muted-foreground"} aria-hidden />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>
-          {queued ? "In Focus · " : ""}
-          {action} <Kbd>Q</Kbd>
-        </TooltipContent>
-      </Tooltip>
+      {/* An icon on the same rung as ↗ and ⋯ beside it in the title row: it
+          shows its state ("In Focus"), and "Details ▾" keeps the room. The
+          glyph takes the button's colour, the accent while it's in Focus. */}
+      <IconButton
+        icon={ListChecks}
+        label={queued ? "In Focus" : "Add to Focus"}
+        tooltip={
+          <>
+            {queued ? "In Focus · " : ""}
+            {action} <Kbd>Q</Kbd>
+          </>
+        }
+        variant={queued ? "secondary" : "ghost"}
+        aria-pressed={queued}
+        onClick={() => api.toggleQueue(task.id)}
+        className={cn("shrink-0", queued ? "text-primary" : "text-muted-foreground")}
+      />
     </>
   );
 }

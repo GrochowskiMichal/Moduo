@@ -13,8 +13,8 @@ Screen-only, no migration. The prototype is [round-2b](../../.design/tasks-v3/pr
   - Rejected: an `actions` field on each view's registration or on `PanelItem` (the task's ⋯ needs its attachments' file picker, which lives in the body, and four hosts would each wire it).
 - **▶ Focus on this moves into ⋯; the Focus toggle stays an icon** → `task-detail-header.tsx` `FocusOnThisItem`, `QueueButton`
   - Who: agent's choice, flagged for Maciej, 2026-10-14.
-  - Decision: ⋯ opens with "Focus on this ⇧F" (open tasks, people who can edit; hidden while my session is on it), as in the row's menu; the Focus toggle keeps its icon, its "In Focus" state, others' avatars and the view-only "In Focus" label.
-  - Why: frame 5 shows ↗ and ⋯ at 280 px and frames 2–3 the Focus toggle, while no frame has ▶. Inside a 280 px panel the row has ~254 px: "Details ▾" and four 26 px icons take ~196, so a three-person "is on this" mark (~60) overflows it; with three icons there are ~88 px left, room for that mark and a "lined up" avatar.
+  - Decision: ⋯ opens with "Focus on this ⇧F" (open tasks, people who can edit; hidden while my session is on it), as in the row's menu; the Focus toggle keeps its icon, its "In Focus" state, others' avatars and the view-only "In Focus" label, on the same small rung as ↗ and ⋯ (`IconButton`, `--ctrl-h-sm`).
+  - Why: frame 5 shows ↗ and ⋯ at 280 px and frames 2–3 the Focus toggle, while no frame has ▶. Inside a 280 px panel the row has ~254 px. "Details ▾" (~76) and four 26 px icons with their gaps take ~196, so a three-person "is on this" mark (~60) overflows it; three icons take ~166, leaving ~88 for that mark and a "lined up" avatar.
   - Rejected: all four as icons (overflows once people are on the task, and squeezes an item's name), and the Focus toggle in ⋯ too (its state would hide in a menu).
 
 ## 2026-10-14 · Task details match the approved prototypes (dogfood MOD-116, MOD-114, MOD-118, MOD-115, MOD-119, MOD-95)
