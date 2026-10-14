@@ -53,6 +53,14 @@ ALTER TABLE public.slot_bookings
   ADD COLUMN IF NOT EXISTS email_context jsonb,
   ADD COLUMN IF NOT EXISTS host_cancelled_at timestamptz;
 
+-- A booking finds its link by slot_id, and the reminder triggers act on every
+-- booking of a link's slot_id, so one host's link must never share it with
+-- another's. Prod has had this unique index since before the repo's
+-- migrations (same name, so this is a no-op there); a database built from
+-- the repo gets it here.
+CREATE UNIQUE INDEX IF NOT EXISTS exposed_slot_links_slot_id_key
+  ON public.exposed_slot_links (slot_id);
+
 CREATE INDEX IF NOT EXISTS slot_bookings_calendar_event_id
   ON public.slot_bookings (calendar_event_id)
   WHERE calendar_event_id IS NOT NULL;
