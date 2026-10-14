@@ -1,7 +1,7 @@
 # CV-2a — Message ops v2 (server)
 
 > Branch `t/maciej/cv-2a-message-ops` · head: the commit carrying this line · status: built, not landed
-> Migration: `supabase/migrations/20261014150000_chat_v2_core_ops.sql` · applied to the local stack: **no** (waiting for its turn; it applies after CV-1's two migrations and after the v1 hotfix that adds per-person sending and typing limits). Proven in rolled-back transactions: every file of `supabase/tests/` run as `BEGIN; \i <migration>; _setup; <test>; _finish` (ROLLBACK), 44 files green. Stamp provisional.
+> Migration: `supabase/migrations/20261014150000_chat_v2_core_ops.sql` · applied to the local stack: **yes** (as `supabase_admin`, `-1`, on its turn, after CV-1's two migrations and `20261014155205_chat_send_limits.sql`). Before that it was proven in rolled-back transactions (every `supabase/tests/` file as `BEGIN; \i <migration>; _setup; <test>; _finish`, 45 green). Stamp provisional: it must stay after `20261014155205`.
 
 ## Delivered against the row
 
@@ -11,25 +11,27 @@
 - **`chat_op_delete(message)`** hides at once (`deleted_at`, `deleted_by`), keeps the text for Undo; **`chat_op_restore(message)`** inside the window, by whoever deleted it or anyone with "Delete others' messages"; the minute job **`chat-blank-deleted`** (`chat__blank_deleted`) blanks text, mentions, reactions and pin once the window passed. Delete: the author while they can post, or anyone with "Delete others' messages". Chain counters follow (`chat__chain_refresh`).
 - **`chat_op_react(message, key, on)`**: explicit on/off, idempotent, never notifies, readers including viewers, works while chat is paused (`chat_op__reader`, no plan check). The live key check and 20-kind cap kept for CV-7c.
 - **`chat_op_pin(message, pinned)`**: messages only, ≤ 100 live pins per conversation, posters (managers in an announcement channel) and holders of "Manage any channel".
-- **`chat_op_typing`** (live signature): the sender must be a member of the conversation who hasn't left; people only (no service role).
+- **`chat_op_typing`** from its live body (`20261014155205`: one "typing" per 2.5 s per person and conversation, a "stopped" only to close an open one, for its thread): the sender must also be a member of the conversation who hasn't left; refusals carry codes; people only (no service role).
+- **The sending limits** (`chat_send_limit`, from its live body; same numbers and `PT429`): event lines are neither limited nor counted; a row with `api_key_id` counts against that key's own budget (new partial index `chat_messages_api_key_recent_idx`) and not against its person's; an app row without a key id (today's `chat_op_agent_post`) keeps the workspace's shared apps budget.
 - **Activity (#15):** one attributed row with ids only for `chat.message_edit`, `chat.message_delete`, `chat.message_restore`, `chat.react`, `chat.pin`, written only when something changed; a plain send and typing write none.
 - **Guards with codes:** `chat_op__guard` / `chat_op__channel` answer `42501` (not allowed, the plan included) and `P0002` (gone, a deleted conversation included); input errors are `22023`.
 - **`chat_has_cap`** restated: the owner, then members by their role (a custom role reads as member).
 - **`share_chat_message_guard`** reads the parsed `mentions_everyone` flag, not the words.
 - **The v1 signatures, one release:** `chat_op_send` (7 arguments), `chat_op_edit` (3, its default dropped) and `chat_op_react` (2, a toggle) convert v1 markup with `chat__v1_to_v2` and call the v2 ops. `chat_op_agent_post` (live body) converts its v1 markup and writes v2 rows. v1's screens keep working with no client change.
-- **Tests:** `supabase/tests/chat_ops.test.sql` (messages half, 136 checks), `supabase/tests/chat_wrappers.test.sql` (23); CV-1's `chat_foundation`, `chat_privacy` and `chat_convert` files updated for the new truth (codes, v2 rows, members-only typing, the default).
+- **Tests:** `supabase/tests/chat_ops.test.sql` (messages half, 143 checks), `supabase/tests/chat_wrappers.test.sql` (23); CV-1's `chat_foundation`, `chat_privacy` and `chat_convert` files updated for the new truth (codes, v2 rows, members-only typing, the default).
 
 ## Acceptance criteria proven
 
 | AC | Test or live check |
 | --- | --- |
 | AC12.1 | `chat_ops.test.sql` · send / edit / delete / restore / react / pin / typing as owner, admin, manager, member, custom role, viewer, outsider and a key, and in archived, deleted, left and removed conversations; the plan (react works paused, the rest refuse); a resent id returns the stored row; each logged op writes one attributed row with ids only; a plain send and typing write none |
-| AC12.4 | `chat_ops.test.sql` · "typing": members only, sender from the session, a key refused; `chat_privacy.test.sql` · a reader who isn't a member is refused |
+| AC12.4 | `chat_ops.test.sql` · "typing": members only, sender from the session, a key refused; `chat_privacy.test.sql` · a reader who isn't a member is refused; `chat_send_limits.test.sql` · the pace and the marks hold on the redefined op (its typers made members of #general) |
+| Sending limits | `chat_send_limits.test.sql` (54 checks) against the redefined ops; `chat_ops.test.sql` · "Sending limits": twelve event lines aren't held back and don't count, a key's eleventh post in 10 s is refused, the key's posts don't use its person's budget, another key has its own |
 | AC1.4 (server half) | `chat_ops.test.sql` · "resend": a retried id returns the stored row, never a second message; concurrent same-id sends collapse to one (unique_violation path). The page-boundary half is the store's (CV-3) |
 | AC12.9 (server half) | `chat_wrappers.test.sql` · v1 send/edit/react convert and succeed; v2 calls resolve to v2; the app's post writes v2. The client half (`src/lib/min-build.test.ts`) is unchanged; `min_build` is raised at the release (CV-23) |
 | Edge cases | `chat_ops.test.sql` · reply to a reply joins the root's chain; 8,001 characters refused with the count; `@channel` without the switch stored as text, nobody pinged; delete → Undo → too late after the window → blanked; a deleted root keeps its chain |
 
-`bun run db:test chat` against the stack **without** this migration: the two new files fail (their ops don't exist) and so do the updated checks in `chat_foundation` / `chat_privacy` / `chat_convert`; that run proves only that nothing else broke. With the migration (rolled back): all 7 chat files and the other 37 pass. `bun run verify` green (`privacy-rules.test.ts` skips until the stack carries this migration).
+With the migration applied to the local stack: `bun run db:test chat` passes all 8 chat files (`chat_send_limits` included, against the redefined ops), and every other `supabase/tests` file passed in the rolled-back runs before it. `bun run verify` green, `privacy-rules.test.ts` now running against the applied migration.
 
 **Mentions parity:** `chat__mentions` against the client's `mentionsOf(parseStored(·))` on 23,367 bodies (the 3,032 converted research messages, spike 4's 238 editor and 26 stored cases, 45 hand edge cases, 20,000 fuzzed strings over the meaningful tokens): 0 differences. Crafted 8,000-character bodies take ≤ ~32 ms.
 
@@ -39,6 +41,8 @@
 - **`@channel` without "Mention everyone" is stored as typed, flag off, no error** · agent (brief: "stored as plain text") · the composer says so; v1 refused the send · rejected: refusing, rewriting the text.
 - **A resent id answers only its author, in its conversation, while they can read it**; any other use of an existing id is `22023 That message id is already used.` and returns nothing · agent.
 - **The v1 send wrapper uses v1's client id as the message id**; a row sent before the release is found by `(author, client_id, channel)` · agent · one idempotency key from now on.
+- **Event lines don't count toward the sending limits** · agent (orchestrator's question) · they are written by ops (a move's "moved here"), not sent by a person; a move of many messages must not lock its mover out · rejected: counting every row.
+- **A message posted through an API key has its own budget per key** (same numbers), apart from its person's · orchestrator · one busy app can't silence its person or the workspace's other apps. v1's app rows (no key id) still share the workspace's apps budget until CV-21 writes `api_key_id`.
 - **Every send writes `client_id = id` while the wrappers live** · agent (validator) · v1 screens and old builds match their optimistic row by `client_id`; without it each v1 send showed twice · rejected: stopping at once (round-3 §2.3's "new sends stop writing it" moves to CV-23).
 - **The v1 edit wrapper reads the stored row's format:** a v1 row's text is converted whole; a v2 row's text (every row after the release) is kept, and only the tokens v1's pickers add (`<@id>`, `<!channel>`, `<moduo:type:id|label>`) become references (`chat__v1_tokens`) · agent (validator, code review) · v1's composer opens an edit with the stored text, so converting it again would escape it · rejected: converting always; guessing from the text. v1 emphasis typed during such an edit (`_x_`) stays literal: a transition loss on v1 screens only.
 - **The 2-argument `chat_op_react` stays as a toggle wrapper too** (the brief named send and edit) · agent · v1 screens and old desktop builds keep reacting for the release; CV-23 drops it · rejected: dropping it (reactions fail on old builds).
@@ -69,6 +73,7 @@
 - **(supabase)** Inside one transaction `now()` is frozen; a window measured with `clock_timestamp()` needs its stamp from `clock_timestamp()` too, or a slow test (or op) drifts out of it.
 - **(chat)** `perm_enforce_write` fires before `share_chat_message_guard` (trigger names sort): a viewer's insert reads "Your role can't add messages" unless the op checks "post" first.
 - **(chat)** `chat__is_iso_day(NULL)` is false, not NULL.
+- **(supabase)** A plain subquery inside a `PERFORM test.ok(…)` expression reads the expression's snapshot: an op called earlier in the same expression isn't seen. Run the op into a variable first.
 
 ## For later blocks
 
@@ -80,9 +85,10 @@
 - **CV-9:** delete/restore send files to and from the trash clock; the blank job is `chat__blank_deleted`.
 - **CV-10:** `chat__mentions_inline` collects only people and teams; "Mentioned in" needs the other references too.
 - **CV-12:** a new reply reopens a wrapped chain inside `chat_op_send`.
-- **CV-21:** `chat_op_agent_post` now writes v2 rows; redefine from its live body. Still v1 there: a reply doesn't move `last_message_at` or `reply_user_ids`, and its mentions come from the `<@id>` regex filtered by workspace membership, not by `chat__can_read_channel_as` (use `chat__read_mentions`).
+- **CV-21:** write `api_key_id` on the app's posts: the per-key sending budget applies from then on (until then they share the workspace's apps budget). `chat_op_agent_post` now writes v2 rows; redefine from its live body. Still v1 there: a reply doesn't move `last_message_at` or `reply_user_ids`, and its mentions come from the `<@id>` regex filtered by workspace membership, not by `chat__can_read_channel_as` (use `chat__read_mentions`).
 - **CV-23:** drop the wrappers `chat_op_send(uuid, text, uuid, uuid[], boolean, uuid, text)`, `chat_op_edit(uuid, text, uuid[])`, `chat_op_react(uuid, text)`, and stop writing `client_id` in `chat_op_send`.
-- **Orchestrator:** this migration redefines `chat_op_typing` and `chat_op_send` from their live bodies and must apply after the v1 hotfix; when its stamp is re-cut, update `MIGRATION` in `src/features/chat/privacy-rules.test.ts`.
+- **CV-14:** event lines (`kind = 'event'`) are not counted by `chat_send_limit`; write them inside ops as usual.
+- **Orchestrator:** this migration redefines `chat_op_typing` and `chat_send_limit` from `20261014155205`'s bodies and must stay after it; when its stamp is re-cut, update `MIGRATION` in `src/features/chat/privacy-rules.test.ts`. `chat_send_limits.test.sql` now makes its typers members of #general (typing is the members').
 
 ## Manual checklist (step → expect → surface)
 

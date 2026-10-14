@@ -1,18 +1,17 @@
 -- Chat v2 · CV-2a message ops (specs/chat-v2.md §Assumptions #3, #4, #12, #15, #25;
 -- .design/chat-v2/research/round-3-database.md §2.3, §2.25 c and l). The stamp is
--- provisional: re-cut on the day it applies, after …_chat_v2_convert_v1 and after
--- every live change to chat_op_typing / chat_op_send landed by then (this file
--- redefines both from their live bodies).
+-- provisional: re-cut on the day it applies, after …_chat_v2_convert_v1 and
+-- 20261014155205_chat_send_limits (this file redefines chat_op_typing and
+-- chat_send_limit from the bodies that one left).
 --
 -- What it does:
 --   1. New rows are v2: format_version defaults to 2 (the conversion refuses from
 --      here on). A message records who deleted it (deleted_by): the Undo is theirs.
---   2. chat_has_cap: a person who isn't in the workspace has no chat capability.
---   3. The ops' guards answer with codes the client can tell from a lost
+--   2. The ops' guards answer with codes the client can tell from a lost
 --      connection: 42501 (not allowed), P0002 (gone), 22023 (bad input).
---   4. The stored form is read on the server: chat__mentions (people, teams,
+--   3. The stored form is read on the server: chat__mentions (people, teams,
 --      @channel, never inside code), chat__excerpt (the bell's excerpt).
---   5. chat_op_send(id, channel, body, reply_to_id): the client-minted id is the
+--   4. chat_op_send(id, channel, body, reply_to_id): the client-minted id is the
 --      idempotency key; replies join their root's chain; the sender's read mark
 --      moves to the message. chat_op_edit(message, body). chat_op_delete hides at
 --      once, chat_op_restore undoes it within the window, and the minute job
@@ -21,7 +20,10 @@
 --      message can still be deleted); someone a manager removed doesn't post
 --      their way back in. Each of edit, delete, restore, react and pin
 --      logs one attributed activity row with ids only; a plain send and typing
---      log none.
+--      log none. Typing keeps its per-person pace and is its members'.
+--   5. The sending limits (chat_send_limit) count messages, not the event lines
+--      ops write, and a message posted through an API key counts against that
+--      key's own budget.
 --   6. The v1 signatures of send, edit and react stay one release as wrappers
 --      (old desktop builds keep working; CV-23 drops them). The app's post
 --      converts its v1 markup and writes v2 rows.
@@ -53,7 +55,7 @@ CREATE INDEX IF NOT EXISTS chat_messages_blank_due_idx
          OR mentioned_user_ids <> '{}'::uuid[] OR mentioned_team_ids <> '{}'::uuid[]
          OR mentions_everyone);
 
--- ── 2. Capabilities belong to the workspace's people ─────────────────────────
+-- ── 2. Capabilities ─────────────────────────────────────────────────────────
 
 -- The owner has every capability; a member reads their role's row (a custom
 -- role reads as member, a read-only one as viewer); anyone else has none.
@@ -1196,8 +1198,10 @@ BEGIN
 END;
 $function$;
 
--- chat_op_typing: the live signature (20261014090000) and body; the sender must
--- be a member of the conversation who hasn't left (the typing topic's readers).
+-- chat_op_typing: the live body (20261014155205: "typing" at most once per 2.5 s
+-- per person and conversation, "stopped" only to close an open "typing", for
+-- its thread). The sender must be a member of the conversation who hasn't left
+-- (the typing topic's readers); refusals carry codes.
 CREATE OR REPLACE FUNCTION public.chat_op_typing(p_channel_id uuid, p_parent_id uuid DEFAULT NULL::uuid, p_stop boolean DEFAULT false)
  RETURNS void
  LANGUAGE plpgsql
@@ -1206,6 +1210,8 @@ CREATE OR REPLACE FUNCTION public.chat_op_typing(p_channel_id uuid, p_parent_id 
 AS $function$
 DECLARE
   v_channel public.chat_channels := public.chat_op__channel(p_channel_id);
+  v_send boolean;
+  v_parent uuid := p_parent_id;
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM public.chat_members m
                   WHERE m.channel_id = v_channel.id AND m.user_id = auth.uid() AND m.left_at IS NULL) THEN
@@ -1218,15 +1224,117 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'That thread no longer exists.' USING ERRCODE = 'P0002';
   END IF;
+  IF NOT coalesce(p_stop, false) THEN
+    -- Moves the mark only when the last start is old enough; a row back means send.
+    INSERT INTO public.chat_typing_marks AS t (user_id, channel_id, sent_at, parent_id, open)
+    VALUES (auth.uid(), v_channel.id, now(), p_parent_id, true)
+    ON CONFLICT (user_id, channel_id) DO UPDATE
+      SET sent_at = EXCLUDED.sent_at, parent_id = EXCLUDED.parent_id, open = true
+      WHERE t.sent_at <= EXCLUDED.sent_at - interval '2.5 seconds'
+    RETURNING true INTO v_send;
+  ELSE
+    -- Closes an open start, never moving its time; a row back means send, for
+    -- the thread that start was in.
+    UPDATE public.chat_typing_marks SET open = false
+     WHERE user_id = auth.uid() AND channel_id = v_channel.id AND open
+    RETURNING true, parent_id INTO v_send, v_parent;
+  END IF;
+  IF v_send IS NULL THEN
+    RETURN;
+  END IF;
   PERFORM realtime.send(
     jsonb_build_object(
       'userId', auth.uid(),
       'channelId', v_channel.id,
-      'parentId', p_parent_id,
+      'parentId', v_parent,
       'stop', coalesce(p_stop, false)),
     'typing',
     'chat:typing:' || v_channel.id::text,
     true);
+END;
+$function$;
+
+-- The sending limits (live body, 20261014155205; same numbers, same PT429):
+-- event lines an op writes are not sends and don't count; a message posted
+-- through an API key (api_key_id) counts against that key's own budget, and
+-- not against its person's; an app's message without a key id (v1's
+-- chat_op_agent_post) still shares the workspace's apps budget.
+CREATE INDEX IF NOT EXISTS chat_messages_api_key_recent_idx
+  ON public.chat_messages (api_key_id, created_at) WHERE api_key_id IS NOT NULL;
+
+CREATE OR REPLACE FUNCTION public.chat_send_limit()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+ SET lock_timeout TO '2s'
+AS $function$
+DECLARE
+  v_in_10s integer;
+  v_in_60s integer;
+BEGIN
+  -- Only what a signed-in person or an API key writes.
+  IF auth.uid() IS NULL AND public.module_api_key_id() IS NULL THEN
+    RETURN NEW;
+  END IF;
+  -- An event line ("moved here") is written by an op, not sent.
+  IF NEW.kind = 'event' THEN
+    RETURN NEW;
+  END IF;
+
+  -- One send per sender and workspace at a time, so each count includes the
+  -- send before it. A send still waiting after 2 s is refused like any other.
+  BEGIN
+    PERFORM pg_advisory_xact_lock(hashtextextended(
+      'chat_send_limit:'
+      || CASE WHEN NEW.api_key_id IS NOT NULL THEN 'key:' || NEW.api_key_id::text
+              ELSE coalesce(NEW.author_id::text, 'apps') END
+      || ':' || NEW.workspace_id::text, 0));
+  EXCEPTION WHEN lock_not_available THEN
+    RAISE EXCEPTION 'You''re sending messages too quickly. Wait a moment and try again.'
+      USING ERRCODE = 'PT429';
+  END;
+
+  -- The newest 30 in the last minute are all either limit needs.
+  IF NEW.api_key_id IS NOT NULL THEN
+    SELECT count(*), count(*) FILTER (WHERE r.created_at > now() - interval '10 seconds')
+      INTO v_in_60s, v_in_10s
+      FROM (SELECT m.created_at FROM public.chat_messages m
+             WHERE m.api_key_id = NEW.api_key_id
+               AND m.kind = 'message'
+               AND m.created_at > now() - interval '60 seconds'
+             ORDER BY m.created_at DESC
+             LIMIT 30) r;
+  ELSIF NEW.author_id IS NOT NULL THEN
+    SELECT count(*), count(*) FILTER (WHERE r.created_at > now() - interval '10 seconds')
+      INTO v_in_60s, v_in_10s
+      FROM (SELECT m.created_at FROM public.chat_messages m
+             WHERE m.author_id = NEW.author_id
+               AND m.workspace_id = NEW.workspace_id
+               AND m.api_key_id IS NULL
+               AND m.kind = 'message'
+               AND m.created_at > now() - interval '60 seconds'
+             ORDER BY m.created_at DESC
+             LIMIT 30) r;
+  ELSE
+    SELECT count(*), count(*) FILTER (WHERE r.created_at > now() - interval '10 seconds')
+      INTO v_in_60s, v_in_10s
+      FROM (SELECT m.created_at FROM public.chat_messages m
+             WHERE m.author_id IS NULL
+               AND m.workspace_id = NEW.workspace_id
+               AND m.author_kind = 'api_key'
+               AND m.api_key_id IS NULL
+               AND m.kind = 'message'
+               AND m.created_at > now() - interval '60 seconds'
+             ORDER BY m.created_at DESC
+             LIMIT 30) r;
+  END IF;
+
+  IF v_in_10s >= 10 OR v_in_60s >= 30 THEN
+    RAISE EXCEPTION 'You''re sending messages too quickly. Wait a moment and try again.'
+      USING ERRCODE = 'PT429';
+  END IF;
+  RETURN NEW;
 END;
 $function$;
 
@@ -1477,8 +1585,13 @@ BEGIN
   -- Typing: people only, never a key (the service role) or anon.
   REVOKE ALL ON FUNCTION public.chat_op_typing(uuid, uuid, boolean) FROM PUBLIC, anon, service_role;
   GRANT EXECUTE ON FUNCTION public.chat_op_typing(uuid, uuid, boolean) TO authenticated;
-  -- The share guard is a trigger function: nobody calls it directly.
+  -- The share guard and the limits are trigger functions: nobody calls them directly.
   REVOKE ALL ON FUNCTION public.share_chat_message_guard() FROM PUBLIC, anon, authenticated;
+  REVOKE ALL ON FUNCTION public.chat_send_limit() FROM PUBLIC, anon, authenticated, service_role;
+  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgrelid = 'public.chat_messages'::regclass
+                  AND tgname = 'chat_send_limit' AND tgenabled = 'O') THEN
+    RAISE EXCEPTION 'The chat_send_limit trigger is not in place on chat_messages.';
+  END IF;
   -- The app's post: the service role only (the connector), as before.
   REVOKE ALL ON FUNCTION public.chat_op_agent_post(uuid, uuid, text, uuid) FROM PUBLIC, anon, authenticated;
   GRANT EXECUTE ON FUNCTION public.chat_op_agent_post(uuid, uuid, text, uuid) TO service_role;

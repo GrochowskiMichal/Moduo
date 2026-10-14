@@ -581,6 +581,66 @@ BEGIN
 END;
 $$;
 
+-- ── Sending limits (20261014155205): event lines and API keys ──────────────
+-- F and H are fresh members, so earlier sends here don't count against them;
+-- KH is H's key. The file is one transaction: every row has the same now().
+DO $$
+DECLARE
+  v text;
+  v_bad text := '';
+  i int;
+  c_limited constant text := 'PT429 You''re sending messages too quickly. Wait a moment and try again.';
+BEGIN
+  PERFORM test.person('F');
+  PERFORM test.person('H');
+  INSERT INTO public.workspace_members (workspace_id, user_id, role)
+  SELECT test.id('W'), test.id(n), 'member' FROM unnest(ARRAY['F', 'H']) AS n
+  ON CONFLICT (workspace_id, user_id) DO NOTHING;
+  INSERT INTO public.workspace_api_keys (id, workspace_id, name, key_prefix, key_hash, scopes, created_by)
+  VALUES (test.id('KH'), test.id('W'), 'H''s app', 'mdo_tsth', md5('db-test-key-cv2a-h'), '{"chat": "edit"}'::jsonb, test.id('H'));
+
+  -- Event lines an op writes in F's name are not sends.
+  FOR i IN 1 .. 12 LOOP
+    v := test.as_op('F', format(
+      $q$INSERT INTO public.chat_messages (workspace_id, channel_id, author_id, body, kind, event)
+         VALUES (%L, %L, %L, '', 'event', '{"type": "moved_in"}'::jsonb)$q$,
+      test.id('W'), test.ref('Q'), test.id('F')));
+    IF v <> 'ok 1' THEN v_bad := v; END IF;
+  END LOOP;
+  PERFORM test.ok(v_bad = '', 'limits: twelve event lines in a moment are not held back', v_bad);
+  FOR i IN 1 .. 10 LOOP
+    v := test.send('F', 'Q', 'f' || i, 'message ' || i);
+    IF v NOT LIKE 'ok %' THEN v_bad := v; END IF;
+  END LOOP;
+  PERFORM test.ok(v_bad = '', 'limits: and don''t count: F still sends ten messages', v_bad);
+  v := test.send('F', 'Q', 'f11', 'one too many');
+  PERFORM test.ok(v = c_limited, 'limits: F''s eleventh message in 10 s is refused with PT429', v);
+
+  -- A message posted through a key counts against that key, not its person.
+  v_bad := '';
+  FOR i IN 1 .. 10 LOOP
+    v := test.as_key('KH', format(
+      $q$INSERT INTO public.chat_messages (workspace_id, channel_id, author_id, author_kind, author_label, body, api_key_id)
+         VALUES (%L, %L, %L, 'api_key', 'H''s app', 'from the app', %L)$q$,
+      test.id('W'), test.ref('Q'), test.id('H'), test.id('KH')));
+    IF v <> 'ok 1' THEN v_bad := v; END IF;
+  END LOOP;
+  PERFORM test.ok(v_bad = '', 'limits: H''s key posts ten messages in a moment', v_bad);
+  v := test.as_key('KH', format(
+    $q$INSERT INTO public.chat_messages (workspace_id, channel_id, author_id, author_kind, author_label, body, api_key_id)
+       VALUES (%L, %L, %L, 'api_key', 'H''s app', 'one too many', %L)$q$,
+    test.id('W'), test.ref('Q'), test.id('H'), test.id('KH')));
+  PERFORM test.ok(v = c_limited, 'limits: the key''s eleventh in 10 s is refused with PT429', v);
+  PERFORM test.ok(test.send('H', 'Q', 'h1', 'and me, by hand') LIKE 'ok %',
+    'limits: H''s own budget is H''s: the key''s posts don''t use it');
+  PERFORM test.ok(test.as_key('K', format(
+      $q$INSERT INTO public.chat_messages (workspace_id, channel_id, author_id, author_kind, author_label, body, api_key_id)
+         VALUES (%L, %L, NULL, 'api_key', 'Claude Desktop', 'another app', %L)$q$,
+      test.id('W'), test.ref('Q'), test.id('K'))) = 'ok 1',
+    'limits: another key has its own budget');
+END;
+$$;
+
 -- ── Typing: members only, sender from the session, quiet ───────────────────
 DO $$
 DECLARE
@@ -673,7 +733,7 @@ BEGIN
   PERFORM test.ok(v_bad IS NULL, 'definers: search_path pinned, no PUBLIC or anon EXECUTE', v_bad);
   SELECT string_agg(f, ', ') INTO v_bad
     FROM unnest(ARRAY['chat__mentions(text)', 'chat__mentions_inline(text)', 'chat__mentions_ref_at(text)',
-                      'share_chat_message_guard()',
+                      'share_chat_message_guard()', 'chat_send_limit()',
                       'chat__excerpt(text)', 'chat__chain_refresh(uuid)', 'chat__may_delete(public.chat_messages, uuid)',
                       'chat__blank_deleted(integer)', 'chat_op__guard(uuid)', 'chat_op__channel(uuid)',
                       'chat_op__reader(uuid)', 'chat_has_cap(uuid, uuid, text)', 'chat_op_agent_post(uuid, uuid, text, uuid)']) AS f

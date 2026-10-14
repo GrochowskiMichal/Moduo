@@ -233,6 +233,13 @@ CREATE FUNCTION test.marks(p_who text, p_conv text) RETURNS int LANGUAGE sql AS 
   WHERE user_id = test.id(p_who) AND channel_id = test.ref(p_conv)
 $$;
 
+-- Chat v2 (CV-2a): typing is a conversation's members', so the people who type
+-- below are in #general, and B in Q.
+INSERT INTO public.chat_members (channel_id, user_id, workspace_id)
+SELECT test.ref('G'), test.id(n), test.id('W') FROM unnest(ARRAY['A', 'B', 'C', 'T']) AS n
+UNION ALL SELECT test.ref('Q'), test.id('B'), test.id('W')
+ON CONFLICT (channel_id, user_id) DO NOTHING;
+
 DO $$
 DECLARE
   v text;
@@ -305,9 +312,9 @@ BEGIN
 
   -- Refusals are unchanged.
   v := test.typing('C', 'P');
-  PERFORM test.ok(v = 'P0001 You''re not a member of this conversation.', 'typing: C, not in P, is still refused', v);
+  PERFORM test.ok(v = '42501 You''re not a member of this conversation.', 'typing: C, not in P, is still refused', v);
   v := test.typing('A', 'Q', false, test.id('no-such-thread'));
-  PERFORM test.ok(v = 'P0001 That thread no longer exists.', 'typing: a missing thread is still refused', v);
+  PERFORM test.ok(v = 'P0002 That thread no longer exists.', 'typing: a missing thread is still refused', v);
 
   -- The marks are the server's alone.
   v := test.as_user('B', 'SELECT count(*) FROM public.chat_typing_marks');
