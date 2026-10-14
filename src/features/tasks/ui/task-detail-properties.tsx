@@ -302,14 +302,16 @@ function AddPropertyLine({
     const names = namesRef.current;
     const measure = measureRef.current;
     if (!box || !button || !names || !measure) return;
+    // Fractional widths: offsetWidth rounds, and six rounded names can add
+    // up to a pixel or two past the line.
+    const width = (el: Element | null) => el?.getBoundingClientRect().width ?? 0;
     const run = () => {
-      const widths = [...measure.querySelectorAll<HTMLElement>("[data-name]")].map(
-        (el) => el.offsetWidth,
-      );
-      const more = measure.querySelector<HTMLElement>("[data-more]")?.offsetWidth ?? 0;
+      const widths = [...measure.querySelectorAll("[data-name]")].map(width);
+      const more = width(measure.querySelector("[data-more]"));
       // The "+" and the button's padding take the rest of the line.
-      const chrome = button.offsetWidth - names.offsetWidth;
-      const room = box.clientWidth > 0 ? box.clientWidth - chrome : 0;
+      const chrome = width(button) - width(names);
+      const line = width(box);
+      const room = line > 0 ? line - chrome : 0;
       const next = namesThatFit(room, widths, more);
       if (next !== fitRef.current) {
         fitRef.current = next;
