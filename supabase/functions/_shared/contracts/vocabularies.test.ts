@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it } from "@rstest/core";
 
 import { Constants } from "@/types/supabase";
@@ -52,6 +54,9 @@ import {
   planTierSchema,
   relationKindSchema,
   taskStatusSchema,
+  GUEST_REMINDER_MINUTES,
+  normalizeGuestReminderMinutes,
+  parseGuestReminderMinutes,
 } from "./index.ts";
 
 // ---------------------------------------------------------------------------
@@ -63,6 +68,21 @@ describe("vocabulary value sets", () => {
     expect(TASK_STATUSES).toEqual(["todo", "in_progress", "done", "archived"]);
     expect(ENERGY_LEVELS).toEqual(["low", "medium", "high"]);
     expect(PRIORITY_LEVELS).toEqual(["low", "medium", "high"]);
+  });
+
+  it("guest reminder minutes mirror the exposed_slot_links CHECK (TX-6)", () => {
+    expect(GUEST_REMINDER_MINUTES).toEqual([60, 1440]);
+    const sql = readFileSync(
+      new URL("../../../migrations/20261014170000_tx6_booking_reminders.sql", import.meta.url),
+      "utf8",
+    );
+    expect(sql).toContain(
+      `CHECK (guest_reminder_minutes IS NULL OR guest_reminder_minutes IN (${GUEST_REMINDER_MINUTES.join(", ")}))`,
+    );
+    expect(normalizeGuestReminderMinutes(null)).toBeNull();
+    expect(normalizeGuestReminderMinutes(30)).toBe(1440);
+    expect(parseGuestReminderMinutes(60)).toBe(60);
+    expect(() => parseGuestReminderMinutes(30)).toThrow();
   });
 
   it("actor types mirror the module_activity CHECK", () => {

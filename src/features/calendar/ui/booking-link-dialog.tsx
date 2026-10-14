@@ -82,6 +82,11 @@ const REMINDER_OPTIONS: { value: string; minutes: GuestReminderMinutes; label: s
   })),
 ];
 
+/** The select's value ("off", "60", "1440") as the minutes the link saves; anything unknown is off. */
+export function reminderFromOption(value: string): GuestReminderMinutes {
+  return REMINDER_OPTIONS.find((option) => option.value === value)?.minutes ?? null;
+}
+
 const NOTICE_OPTIONS = [
   { minutes: 0, label: "No minimum" },
   { minutes: 60, label: "1 hour" },
@@ -674,9 +679,7 @@ export function BookingLinkDialog({
                       onValueChange={(value) =>
                         onChange({
                           ...draft,
-                          guestReminderMinutes:
-                            REMINDER_OPTIONS.find((option) => option.value === value)?.minutes ??
-                            null,
+                          guestReminderMinutes: reminderFromOption(value),
                         })
                       }
                     >

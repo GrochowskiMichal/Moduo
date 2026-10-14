@@ -6,6 +6,7 @@ import {
   BookingLinkDialog,
   DEFAULT_GUEST_REMINDER_MINUTES,
   type LinkDraft,
+  reminderFromOption,
 } from "./booking-link-dialog";
 import { isMissingReminderColumn, reminderFromRow } from "./booking-links";
 
@@ -71,6 +72,13 @@ describe("booking link editor · Remind guests (AC31)", () => {
   it("shows Off when the link sends no reminder", () => {
     open(draft({ guestReminderMinutes: null }));
     expect(screen.getByRole("combobox", { name: "Remind guests" }).textContent).toContain("Off");
+  });
+
+  it("saves Off as null, and 1 hour / 24 hours as 60 / 1440", () => {
+    expect(reminderFromOption("off")).toBeNull();
+    expect(reminderFromOption("60")).toBe(60);
+    expect(reminderFromOption("1440")).toBe(1440);
+    expect(reminderFromOption("30")).toBeNull();
   });
 
   it("reads a saved reminder, and an absent column as the default", () => {

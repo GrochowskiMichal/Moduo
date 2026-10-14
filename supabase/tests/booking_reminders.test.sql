@@ -8,7 +8,9 @@
 -- which runs it there and then.
 
 SELECT test.person('O');
-INSERT INTO public.workspaces (id, owner_id, name) VALUES (test.id('W'), test.id('O'), 'Northwind Studio');
+INSERT INTO public.workspaces (id, owner_id, name) VALUES
+  (test.id('W'), test.id('O'), 'Northwind Studio'),
+  (test.id('W-other'), test.id('O'), 'Elsewhere');
 
 INSERT INTO public.exposed_slot_links (id, slot_id, slug, owner_user_id, workspace_id, name, guest_reminder_minutes)
 VALUES
@@ -173,8 +175,8 @@ SELECT test.booking('10', 'slot-LOFF', date_trunc('minute', now()) - interval '1
 UPDATE public.calendar_events SET deleted_at = now() WHERE id = test.id('E10');
 SET CONSTRAINTS ALL IMMEDIATE;
 SET CONSTRAINTS ALL DEFERRED;
-SELECT test.ok(test.booking_status('10') = 'cancelled' AND test.queued('booking_guest_host_cancelled', '10') = 0,
-  'deleting a meeting that already started releases it but emails nobody');
+SELECT test.ok(test.booking_status('10') = 'confirmed' AND test.queued('booking_guest_host_cancelled', '10') = 0,
+  'a meeting that already started is history: a delete (or a sync dropping it) changes nothing and emails nobody');
 
 -- ---- undo after someone took the freed time ----------------------------------
 
@@ -224,6 +226,22 @@ SET CONSTRAINTS ALL DEFERRED;
 SELECT test.ok(test.booking_status('15') = 'cancelled' AND test.queued('booking_guest_host_cancelled', '15') = 1
   AND (SELECT deleted_at IS NOT NULL FROM public.calendar_events WHERE id = test.id('E15')),
   'an unusable guest address skips only that email; the delete and the booker''s C6 go through');
+
+-- ---- account erasure takes the booking's emails with it -------------------------
+
+SELECT test.booking('16', 'slot-L', date_trunc('minute', now()) + interval '16 days');
+SELECT test.ok(test.queued('booking_guest_reminder', '16') = 2, 'erasure setup: reminders queued');
+DELETE FROM public.slot_bookings WHERE id = test.id('B16');
+SELECT test.ok(NOT EXISTS (SELECT 1 FROM public.email_outbox WHERE payload->>'bookingId' = test.id('B16')::text),
+  'deleting a booking (account erasure) deletes its queued emails and their details');
+
+-- ---- a guest cancel in another workspace's name does nothing ---------------------
+
+SELECT test.booking('17', 'slot-L', date_trunc('minute', now()) + interval '17 days');
+SELECT public.booking_op_release(test.id('W-other'), test.id('O'), test.id('E17'));
+SET CONSTRAINTS ALL IMMEDIATE;
+SET CONSTRAINTS ALL DEFERRED;
+SELECT test.ok(test.booking_status('17') = 'confirmed', 'release scoped to another workspace leaves the booking alone');
 
 -- ---- internals stay internal ---------------------------------------------------
 

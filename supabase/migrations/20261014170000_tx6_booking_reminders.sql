@@ -28,7 +28,7 @@
 -- Dedupe keys carry the moment they were queued, so a re-queue (an undo, a
 -- move) never collides with the cancelled row before it, which would make
 -- email_enqueue a silent no-op: C7:<booking>:<queued µs>:<email>,
--- C6:<booking>:<cancel epoch>:<email>. email_cancel('C7:<booking>') /
+-- C6:<booking>:<cancel µs>:<email>. email_cancel('C7:<booking>') /
 -- ('C6:<booking>') cancel every version.
 
 -- ---- 1 + 2: columns and the index -----------------------------------------
@@ -168,7 +168,7 @@ BEGIN
           'at', public.booking__iso(b.host_cancelled_at),
           'recipient', r.recipient
         ),
-        format('C6:%s:%s:%s', b.id, extract(epoch FROM b.host_cancelled_at)::bigint, r.email),
+        format('C6:%s:%s:%s', b.id, (extract(epoch FROM b.host_cancelled_at) * 1000000)::bigint, r.email),
         b.host_cancelled_at + interval '2 minutes'
       );
       v_count := v_count + 1;
@@ -210,10 +210,60 @@ CREATE TRIGGER slot_bookings_email_follow
   WHEN (OLD.status IS DISTINCT FROM NEW.status)
   EXECUTE FUNCTION public.slot_bookings__email_follow();
 
+-- A deleted booking (account erasure deletes them outright) takes its booking
+-- emails with it: queued ones would still go, and every row carries the host's
+-- and guests' details.
+CREATE OR REPLACE FUNCTION public.slot_bookings__email_forget()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  DELETE FROM public.email_outbox o
+   WHERE o.kind LIKE 'booking\_%'
+     AND o.dedupe_key ~ ('^C[1-7]:' || OLD.id::text || '(:|$)');
+  RETURN NULL;
+EXCEPTION WHEN OTHERS THEN
+  RAISE WARNING 'slot_bookings__email_forget(%): % %', OLD.id, SQLSTATE, SQLERRM;
+  RETURN NULL;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS slot_bookings_email_forget ON public.slot_bookings;
+CREATE TRIGGER slot_bookings_email_forget
+  AFTER DELETE ON public.slot_bookings
+  FOR EACH ROW
+  EXECUTE FUNCTION public.slot_bookings__email_forget();
+
 -- ---- 4 + 5: the booked event ----------------------------------------------
 
 CREATE OR REPLACE FUNCTION public.calendar_events__booking_follow()
 RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  b public.slot_bookings;
+BEGIN
+  -- Most events aren't booked: look first, outside the guarded block in the
+  -- helper (each entry into it is a savepoint, and syncs touch many rows).
+  SELECT * INTO b FROM public.slot_bookings
+   WHERE calendar_event_id = NEW.id
+   ORDER BY created_at DESC
+   LIMIT 1;
+  IF b.id IS NULL THEN RETURN NULL; END IF;
+  -- A meeting that already started is history: a sync dropping it from its
+  -- window (it fetches 30 days back) or a late delete changes nothing.
+  IF b.start_at <= now() THEN RETURN NULL; END IF;
+  PERFORM public.booking__follow_event(NEW.id, b.id);
+  RETURN NULL;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.booking__follow_event(p_event_id uuid, p_booking_id uuid)
+RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
@@ -224,34 +274,30 @@ DECLARE
   v_gone boolean;
   v_account_gone boolean := false;
 BEGIN
-  SELECT * INTO b FROM public.slot_bookings
-   WHERE calendar_event_id = NEW.id
-   ORDER BY created_at DESC
-   LIMIT 1;
-  IF b.id IS NULL THEN RETURN NULL; END IF;
-
+  SELECT * INTO b FROM public.slot_bookings WHERE id = p_booking_id;
   -- Deferred to commit: read the event as the transaction leaves it.
-  SELECT * INTO e FROM public.calendar_events WHERE id = NEW.id;
+  SELECT * INTO e FROM public.calendar_events WHERE id = p_event_id;
   v_gone := e.id IS NULL OR e.deleted_at IS NOT NULL OR e.status = 'cancelled';
 
   IF v_gone THEN
-    IF b.status <> 'confirmed' THEN RETURN NULL; END IF;
+    IF b.status <> 'confirmed' THEN RETURN; END IF;
     -- Disconnecting the calendar account tombstones its events: not a cancel.
     IF e.source_account_id IS NOT NULL THEN
       SELECT a.deleted_at IS NOT NULL INTO v_account_gone
         FROM public.calendar_accounts a WHERE a.id = e.source_account_id;
-      IF coalesce(v_account_gone, true) THEN RETURN NULL; END IF;
+      IF coalesce(v_account_gone, true) THEN RETURN; END IF;
     END IF;
     UPDATE public.slot_bookings
        SET status = 'cancelled', host_cancelled_at = now(), updated_at = now()
      WHERE id = b.id;
     PERFORM public.booking__queue_host_cancel(b.id);
-    RETURN NULL;
+    RETURN;
   END IF;
 
   -- Back within the undo window: the booking stands again and C6 never goes.
+  -- 110 s, inside C6's 2-minute delay, so an undo can't race the worker's claim.
   IF b.status = 'cancelled' AND b.host_cancelled_at IS NOT NULL
-     AND b.host_cancelled_at > now() - interval '2 minutes' THEN
+     AND b.host_cancelled_at > now() - interval '110 seconds' THEN
     BEGIN
       UPDATE public.slot_bookings
          SET status = 'confirmed', host_cancelled_at = NULL,
@@ -263,7 +309,7 @@ BEGIN
       -- cancelled, and its C6 still goes.
       NULL;
     END;
-    RETURN NULL;
+    RETURN;
   END IF;
 
   -- The meeting moved: the booking follows, and so do its reminders.
@@ -275,17 +321,17 @@ BEGIN
        WHERE id = b.id;
     EXCEPTION WHEN unique_violation THEN
       -- Another booking holds that start on the same link; the slot record stays put.
-      RETURN NULL;
+      RETURN;
     END;
     PERFORM public.email_cancel('C7:' || b.id::text);
     PERFORM public.booking__queue_reminders(b.id);
   END IF;
-  RETURN NULL;
+  RETURN;
 EXCEPTION WHEN OTHERS THEN
   -- Deferred to commit: an error here would roll back the host's calendar edit
   -- or a whole calendar sync. The booking keeps its state; nothing is emailed.
-  RAISE WARNING 'calendar_events__booking_follow(%): % %', NEW.id, SQLSTATE, SQLERRM;
-  RETURN NULL;
+  RAISE WARNING 'booking__follow_event(%): % %', p_event_id, SQLSTATE, SQLERRM;
+  RETURN;
 END;
 $$;
 
@@ -357,9 +403,11 @@ DECLARE
   v_guest_email text;
 BEGIN
   -- TX-6: a guest cancel, so the event's deferred trigger never takes it for the host's.
-  UPDATE public.slot_bookings
+  UPDATE public.slot_bookings b
      SET status = 'cancelled', updated_at = now()
-   WHERE calendar_event_id = p_event_id AND status = 'confirmed';
+   WHERE b.calendar_event_id = p_event_id AND b.status = 'confirmed'
+     AND EXISTS (SELECT 1 FROM public.calendar_events e
+                 WHERE e.id = p_event_id AND e.workspace_id = p_workspace_id);
 
   SELECT e.title, e.start_time
     INTO v_title, v_start
@@ -412,5 +460,7 @@ REVOKE ALL ON FUNCTION public.booking__queue_host_cancel(uuid) FROM PUBLIC, anon
 REVOKE ALL ON FUNCTION public.slot_bookings__email_follow() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.calendar_events__booking_follow() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.exposed_slot_links__reminder_follow() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.slot_bookings__email_forget() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.booking__follow_event(uuid, uuid) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.booking__queue_reminders(uuid) TO service_role;
 GRANT EXECUTE ON FUNCTION public.booking__queue_host_cancel(uuid) TO service_role;

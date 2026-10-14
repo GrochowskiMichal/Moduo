@@ -549,6 +549,20 @@ Deno.serve(async (req: Request) => {
     // Google's invite: only Google can take it back, and our calendar file can't.
     const googleCreated = row.meeting_id != null;
     if (row.status !== "confirmed") return json({ ok: true, status: row.status, googleInvites: googleCreated });
+    // Marked first, before Google and Zoom are touched: a calendar sync that
+    // lands in between then sees a cancelled booking, never a host's cancel
+    // (TX-6's event trigger would otherwise email the guests "<host> canceled").
+    const cancelledAt = new Date();
+    const claimed = await db
+      .from("slot_bookings")
+      .update({ status: "cancelled", updated_at: cancelledAt.toISOString() })
+      .eq("id", row.id)
+      .eq("status", "confirmed")
+      .select("id");
+    if (!claimed.error && (claimed.data ?? []).length === 0) {
+      // Another cancel got there first.
+      return json({ ok: true, status: "cancelled", googleInvites: googleCreated });
+    }
     const access = link ? await googleAccess(db, link.owner_user_id).catch(() => null) : null;
     let googleDropped = false;
     if (access && row.meeting_id) {
@@ -566,11 +580,12 @@ Deno.serve(async (req: Request) => {
         p_event_id: row.calendar_event_id,
       });
     }
-    const cancelledAt = new Date();
-    await db
-      .from("slot_bookings")
-      .update({ status: "cancelled", updated_at: cancelledAt.toISOString() })
-      .eq("id", row.id);
+    if (claimed.error) {
+      await db
+        .from("slot_bookings")
+        .update({ status: "cancelled", updated_at: cancelledAt.toISOString() })
+        .eq("id", row.id);
+    }
     // Whether the guest gets our calendar update (not after the meeting started,
     // and only for an event Google didn't create).
     let emailed = false;
