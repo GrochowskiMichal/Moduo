@@ -17,6 +17,11 @@
 --   X  a direct message A + C where only A is left (not notes to self)
 -- plus three of the bell's v1 rows. The conversion runs for W only, twice.
 
+-- The fixture is v1 rows: since CV-2a new rows default to format_version 2, so
+-- this test writes them as v1 explicitly by putting v1's default back (rolled
+-- back with the rest).
+ALTER TABLE public.chat_messages ALTER COLUMN format_version SET DEFAULT 1;
+
 -- fixture:begin
 SELECT test.person(n) FROM unnest(ARRAY['O', 'A', 'B', 'C']) AS n;
 INSERT INTO public.workspaces (id, owner_id, name) VALUES (test.id('W'), test.id('O'), 'Conversion fixture');

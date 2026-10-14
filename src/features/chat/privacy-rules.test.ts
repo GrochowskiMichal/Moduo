@@ -10,7 +10,9 @@ import { describe, expect, it } from "@rstest/core";
 
 const DB_URL =
   process.env.MODUO_DB_URL ?? "postgresql://supabase_admin:postgres@127.0.0.1:54322/postgres";
-const MIGRATION = "20261014090000_chat_privacy_rules.sql";
+// The newest migration whose behaviour chat_privacy.test.sql expects (typing for
+// members only, the ops' error codes: CV-2a), found by a function it adds.
+const MIGRATION = "20261014150000_chat_v2_core_ops.sql";
 const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 const TESTS = `${ROOT}supabase/tests/`;
 
@@ -22,7 +24,7 @@ function stackState(): "ready" | string {
       "-X",
       "-At",
       "-c",
-      "select to_regprocedure('public.chat_op_typing(uuid, uuid, boolean)') is not null",
+      "select to_regprocedure('public.chat_op_restore(uuid)') is not null",
     ],
     { encoding: "utf8", timeout: 10_000 },
   );
