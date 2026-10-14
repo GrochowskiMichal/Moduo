@@ -10,6 +10,12 @@
 -- The whole file is one transaction, so now() never moves: every message sent
 -- here is stamped with the same moment. "Time passing" is the test moving the
 -- earlier rows back (test.age).
+--
+-- Not here, because it takes a second session: a send that waits on the
+-- sender's previous send for more than 2 s is refused with PT429, and the
+-- caller's own lock_timeout is unchanged afterwards. Checked by hand on the
+-- local stack (2026-10-14): one session held the sender's lock
+-- (pg_advisory_lock on the key chat_send_limit builds) while this file ran.
 
 SELECT test.person(n) FROM unnest(ARRAY['O', 'O2', 'A', 'B', 'C', 'T']) AS n;
 UPDATE public.profiles SET plan_tier = 'duo' WHERE id IN (test.id('O'), test.id('O2'));
@@ -285,6 +291,17 @@ BEGIN
   v := test.typing('B', 'G', true);
   PERFORM test.ok(v LIKE 'ok %' AND test.typing_rows('G', 'B', true) = 2,
     'typing: a second stop sends nothing', v);
+
+  -- A stop names the thread of the start it closes.
+  v := test.typing('C', 'G', false, test.sent_with('first-of-burst'));
+  PERFORM test.ok(v LIKE 'ok %' AND test.typing_rows('G', 'C', false) = 1, 'typing: C starts in a thread', v);
+  v := test.typing('C', 'G', true);
+  PERFORM test.ok(v LIKE 'ok %' AND (
+      SELECT payload ->> 'parentId' FROM realtime.messages
+      WHERE topic = 'chat:typing:' || test.ref('G')::text AND event = 'typing'
+        AND payload ->> 'userId' = test.id('C')::text AND (payload ->> 'stop')::boolean
+    ) = test.sent_with('first-of-burst')::text,
+    'typing: C''s stop, sent without a thread, closes the thread''s typing', v);
 
   -- Refusals are unchanged.
   v := test.typing('C', 'P');

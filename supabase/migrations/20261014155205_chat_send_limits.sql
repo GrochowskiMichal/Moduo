@@ -26,8 +26,9 @@
 --      "stopped typing" only to end a "typing" that went out, once. Every
 --      other call returns quietly. So a conversation hears at most one start
 --      and one stop per person per 2.5 s. The last start per person and
---      conversation, and whether it is still open, is kept in
---      chat_typing_marks: no client reads or writes it, and it goes with the
+--      conversation (its time, its thread, whether it is still open) is kept
+--      in chat_typing_marks, and a stop names the thread of the start it
+--      closes. No client reads or writes the marks, and they go with the
 --      person's account and with the conversation.
 --   3. Account erasure counts and removes the person's typing marks.
 --
@@ -106,15 +107,19 @@ CREATE TRIGGER chat_send_limit
 
 -- ── 2. Typing ────────────────────────────────────────────────────────────────
 
--- When each person last told a conversation they were typing, and whether
--- that "typing" is still open (no "stopped" sent for it yet). Server-only.
+-- When each person last told a conversation they were typing, in which
+-- thread (NULL: the conversation itself), and whether that "typing" is still
+-- open (no "stopped" sent for it yet). Server-only.
 CREATE TABLE IF NOT EXISTS public.chat_typing_marks (
   user_id    uuid NOT NULL REFERENCES auth.users (id) ON DELETE CASCADE,
   channel_id uuid NOT NULL REFERENCES public.chat_channels (id) ON DELETE CASCADE,
   sent_at    timestamptz NOT NULL,
+  parent_id  uuid,
   open       boolean NOT NULL DEFAULT false,
   PRIMARY KEY (user_id, channel_id)
 );
+ALTER TABLE public.chat_typing_marks ADD COLUMN IF NOT EXISTS parent_id uuid;
+ALTER TABLE public.chat_typing_marks ADD COLUMN IF NOT EXISTS open boolean NOT NULL DEFAULT false;
 CREATE INDEX IF NOT EXISTS chat_typing_marks_channel_idx ON public.chat_typing_marks (channel_id);
 ALTER TABLE public.chat_typing_marks ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE public.chat_typing_marks FROM PUBLIC, anon, authenticated;
@@ -132,6 +137,7 @@ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE
   v_channel public.chat_channels := public.chat_op__channel(p_channel_id);
   v_send boolean;
+  v_parent uuid := p_parent_id;
 BEGIN
   IF p_parent_id IS NOT NULL AND NOT EXISTS (
     SELECT 1 FROM public.chat_messages m
@@ -142,16 +148,18 @@ BEGIN
   END IF;
   IF NOT coalesce(p_stop, false) THEN
     -- Moves the mark only when the last start is old enough; a row back means send.
-    INSERT INTO public.chat_typing_marks AS t (user_id, channel_id, sent_at, open)
-    VALUES (auth.uid(), v_channel.id, now(), true)
-    ON CONFLICT (user_id, channel_id) DO UPDATE SET sent_at = EXCLUDED.sent_at, open = true
+    INSERT INTO public.chat_typing_marks AS t (user_id, channel_id, sent_at, parent_id, open)
+    VALUES (auth.uid(), v_channel.id, now(), p_parent_id, true)
+    ON CONFLICT (user_id, channel_id) DO UPDATE
+      SET sent_at = EXCLUDED.sent_at, parent_id = EXCLUDED.parent_id, open = true
       WHERE t.sent_at <= EXCLUDED.sent_at - interval '2.5 seconds'
     RETURNING true INTO v_send;
   ELSE
-    -- Closes an open start, never moving its time; a row back means send.
+    -- Closes an open start, never moving its time; a row back means send, for
+    -- the thread that start was in.
     UPDATE public.chat_typing_marks SET open = false
      WHERE user_id = auth.uid() AND channel_id = v_channel.id AND open
-    RETURNING true INTO v_send;
+    RETURNING true, parent_id INTO v_send, v_parent;
   END IF;
   IF v_send IS NULL THEN
     RETURN;
@@ -160,7 +168,7 @@ BEGIN
     jsonb_build_object(
       'userId', auth.uid(),
       'channelId', v_channel.id,
-      'parentId', p_parent_id,
+      'parentId', v_parent,
       'stop', coalesce(p_stop, false)),
     'typing',
     'chat:typing:' || v_channel.id::text,
@@ -227,10 +235,10 @@ BEGIN
                    WHERE oid = 'public.chat_send_limit()'::regprocedure), false) THEN
     RAISE EXCEPTION 'chat_send_limit must bound its wait with its own lock_timeout.';
   END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_attribute
-                 WHERE attrelid = 'public.chat_typing_marks'::regclass AND attname = 'open'
-                   AND attnotnull AND NOT attisdropped) THEN
-    RAISE EXCEPTION 'chat_typing_marks needs its open column.';
+  IF (SELECT count(*) FROM pg_attribute
+      WHERE attrelid = 'public.chat_typing_marks'::regclass AND NOT attisdropped
+        AND ((attname = 'open' AND attnotnull) OR attname = 'parent_id')) <> 2 THEN
+    RAISE EXCEPTION 'chat_typing_marks needs its open and parent_id columns.';
   END IF;
   -- Both definer functions count and write past RLS as their owner.
   IF EXISTS (SELECT 1 FROM pg_proc p JOIN pg_roles r ON r.oid = p.proowner
