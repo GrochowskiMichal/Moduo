@@ -76,7 +76,18 @@ async function openFocus(page: Page) {
     .getByRole("button", { name: /^Focus\b/ })
     .first()
     .click();
-  await expect(page.locator('[data-slot="focus-view"]')).toBeVisible({ timeout: 20_000 });
+  await focusLoaded(page);
+}
+
+/**
+ * The Focus view draws a skeleton with the same `data-slot` and `aria-busy`
+ * until the store has loaded, so "the view is visible" is true before its Now
+ * card exists; wait for it to stop being busy, then read the card.
+ */
+async function focusLoaded(page: Page) {
+  await expect(page.locator('[data-slot="focus-view"]:not([aria-busy="true"])')).toBeVisible({
+    timeout: 20_000,
+  });
 }
 
 test("AC8.1–8.3 — the sidebar's Focus, Start, one pill with Pause, Stop in ⋯ with Undo", async ({
@@ -201,7 +212,7 @@ async function openFocusIn(page: Page, place: Place) {
     .getByRole("button", { name: /^Focus\b/ })
     .first()
     .click();
-  await expect(page.locator('[data-slot="focus-view"]')).toBeVisible({ timeout: 20_000 });
+  await focusLoaded(page);
 }
 
 /** Up next as the screen draws it: task titles and "@meeting". */

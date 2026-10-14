@@ -99,7 +99,10 @@ async function openFocus(page: Page) {
     .getByRole("button", { name: /^Focus\b/ })
     .first()
     .click();
-  await expect(page.locator('[data-slot="focus-view"]')).toBeVisible();
+  // Not the loading skeleton (same data-slot, aria-busy): its Now card comes after.
+  await expect(page.locator('[data-slot="focus-view"]:not([aria-busy="true"])')).toBeVisible({
+    timeout: 20_000,
+  });
 }
 
 /** Writes the page sends for a task: field saves and intent ops. */
