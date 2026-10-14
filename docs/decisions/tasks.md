@@ -2,6 +2,51 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index.
 
+## 2026-10-14 · TV-POLISH Tasks v3 polish batch — the agent's choices (deferred to by Maciej)
+
+The one polish batch after the module's blocks (no migration): the known items from the orchestrator and the quick, safe lines of every checklist's "Polish later". What wasn't quick or needs a call is in [docs/testing/tasks-v3-polish-deferred.md](../testing/tasks-v3-polish-deferred.md). Each is the agent's choice, deferred to by Maciej: confirmed for building, open to change.
+
+- **PL-1 · The e2e specs run one at a time** → `playwright.config.ts` (`projects[e2e].workers = 1`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: the e2e project runs one spec file at a time (about five minutes for the 65 tests); no retries.
+  - Why: every spec signs in as the seed person in one workspace, so parallel files read each other's rows (a bell's newest 50 notices, a project's order, the offline queue's sync line); serially the suite passes together. Retries would hide exactly that.
+  - Rejected: a workspace per spec (every spec's setup and cleanup rewritten; worth it only if the serial run grows past ~10 minutes, listed in the deferred file); retries.
+- **PL-2 · SQL tests set the shared stack's other rows aside** → `supabase/tests/notifications.test.sql`, `ops_parity.test.sql`, `agent_sessions.test.sql`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: a test that runs a whole-database job (the reminder sender, the push claim) suspends everyone else's pending reminders and deliveries inside its rolled-back run, the way `sessions.test.sql` already did; a check that nothing was written looks only at the test's own workspaces.
+  - Why: the local stack is shared (Maciej's own reminders, e2e imports); a test must pass whatever else is on it.
+  - Rejected: asserting global counts after cleaning the database first (never touch other people's rows).
+- **PL-3 · At All and My tasks, each project asks for its own Edit** → `use-project-overview-data.ts` `useEditableProjects`, `tasks-plan-view.tsx`, `task-timeline-view.tsx` (`canDragIn`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14 (closes TL2's "Polish later").
+  - Decision: when the Timeline shows several projects, the page asks `templates_can_copy('project', id)` once per project you don't own (all at once, kept while the page stays); a project you can only view has no handles on its bar, its sections or its tasks, its No date rows don't drag, and ⌥←/→, `d`, ⇧D skip its tasks. Your own projects and Inboxes aren't asked (a task you handed on stays yours to move; the server decides). Unanswered = no handle, like inside a project.
+  - Why: the server refuses those saves ("Couldn't save the project."); no migration means no batched access read, and a workspace has tens of projects, not thousands.
+  - Rejected: a per-task question (hundreds of calls); a new batched RPC (a migration, out of this batch).
+- **PL-4 · ⇧L opens a late task's mark** → `timeline-keys.ts`, `timeline-deps-layer.tsx` `ContradictionMark`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: with the cursor on a late-marked task you can edit, ⇧L opens the mark's popover (why, and "Move to …"); Esc or the move hands the keys back to the canvas. The mark itself stays out of the tab order.
+  - Why: the canvas is one roving-cursor grid; a tab stop per mark would break ↑↓. L for "late"; ⇧ because bare `l` is the rows' Tags letter (keymap.md).
+  - Rejected: a tab stop on each mark; folding it into `d`'s date picker (two jobs in one popover).
+- **PL-5 · A No date drag over the name column says "Drop on a day"** → `use-timeline-drop.tsx`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: the drag preview reads "Drop on a day" while it's over the name column, where nothing lands; letting go there still does nothing.
+  - Why: the drop has no day there; saying so is clearer than a silent no-op.
+  - Rejected: landing on the first visible day (a guess the person didn't make); a droppable narrowed to the track (no visible difference).
+- **PL-6 · A reference's tick outside Tasks finishes open subtasks** → `check-off.ts` `finishOutsideTasks`, `spine/references/provider.tsx`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14 (call 87 everywhere).
+  - Decision: ticking a task's reference card in Notes, the bell or Home goes through the workspace's shared store with Home's helper (now shared): the open subtasks finish too and "Done · also 2 subtasks" offers one Undo that restores the Focus place; a lone tick says nothing (the card shows it and can be unticked). Reopening stays the task alone. Without the store or the task in it, the old op runs.
+  - Why: the Tasks page and Home already finish subtasks; one rule everywhere.
+  - Rejected: a toast for every lone tick (noise on a card that already shows Done).
+- **PL-7 · A storage alert opens Settings → Storage in the workspace that raised it; a drop's toast offers the owner Upgrade** → `spine/notifications.ts`, `app-chrome.tsx`, `attachments/attach-to-task.ts`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14 (closes AT-3's two MINORs).
+  - Decision: the notice's link carries its workspace and the app switches to it first when it's one of yours; a row or card drop reads the pool once before queueing, and when a bigger plan would take the files the owner gets "Upgrade" beside "Free up space" (or "Open"), as the task's strip offers it.
+  - Why: the pool is the workspace owner's; the toast didn't know who owned it.
+  - Rejected: Upgrade as the toast's main button (Free up space is the step that works on any plan).
+- **PL-8 · Small ones** → `import-dialog.tsx`, `use-timeline-writes.tsx`, `storage-section.tsx`, `use-bulk-actions.tsx`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: the import dialog shows no × while an import runs (Stop is the way out); cancelling the repeat question that "Also move…" raised gives the first move its Undo back ("Moved · The ones that wait on it stay where they are."); Settings → Storage says "Showing the 50 largest files." when the list is full; `@` and `#` open the selection's pickers however they're typed (⌥/AltGr layouts), only ⌘ keeps them the app's.
+  - Why: each is a dead end or a missing Undo the checklists named.
+  - Rejected: making × act as Stop (a close button that keeps the dialog open reads as broken).
+
 ## 2026-10-14 · TV-U18 Native importers — the agent's choices (deferred to by Maciej)
 
 Built in tasks-v3 block 35 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §15, §Assumptions #20; REPLAN 28, 35, 74; AC2.6, AC3.6, AC4.7; the engine from TV-D16) on the local stack, no migration. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to change.

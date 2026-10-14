@@ -219,13 +219,15 @@ export function useBulkActions({
       }
       // ⌥⇧ moves and ⇧F act on one task: not while several are selected.
       if (e.altKey && e.shiftKey && key.startsWith("Arrow")) return true;
-      if (e.metaKey || e.ctrlKey || e.altKey) return false;
       const open = (kind: BulkPickerKind) => {
         setPicker(kind);
         return true;
       };
-      if (key === "@") return open("assign");
-      if (key === "#") return open("tag");
+      // @ and # are the characters, however they're typed (⌥ on a Mac's
+      // European layouts, AltGr on Windows): only ⌘ keeps them the app's.
+      if (key === "@" && !e.metaKey) return open("assign");
+      if (key === "#" && !e.metaKey) return open("tag");
+      if (e.metaKey || e.ctrlKey || e.altKey) return false;
       if (e.shiftKey) {
         if (key.toLowerCase() === "s") return open("status");
         return key.toLowerCase() === "f";
